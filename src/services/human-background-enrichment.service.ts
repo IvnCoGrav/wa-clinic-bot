@@ -434,6 +434,12 @@ export class HumanBackgroundEnrichmentService {
       }
 
       if (customer.lat != null && customer.lng != null && customer.distance_km != null) {
+        // RC-4 (Fase 3): pelanggan SUDAH punya lokasi. Namun bila teks masuk adalah
+        // alamat jalan SPESIFIK, tempelkan sebagai TEKS ke kartu rumah yang benar
+        // (rumah sama → perbarui teks; rumah beda → kartu sekunder) TANPA menyentuh
+        // koordinat presisi (anti data hibrida). Bukan teks spesifik → perilaku lama.
+        const attach = await this.attachSpecificAddressText(customer, tid, textForEnrich);
+        if (attach.attached) return { enriched: true, reason: attach.reason };
         return { enriched: false, reason: 'already_has_location' };
       }
 
@@ -492,6 +498,10 @@ export class HumanBackgroundEnrichmentService {
       }
 
       if (customer.share_location_sent) {
+        // RC-4: GPS pin asli sudah ada. Teks jalan spesifik ditempel sebagai TEKS ke
+        // kartu rumah yang benar; DILARANG menimpa pin presisi dengan hasil geocode.
+        const attach = await this.attachSpecificAddressText(customer, tid, textForEnrich);
+        if (attach.attached) return { enriched: true, reason: attach.reason };
         console.log(`[HUMAN ENRICH] text location skipped for ${customer.phone} — GPS pin already exists`);
         return { enriched: false, reason: 'gps_pin_guard' };
       }
@@ -525,6 +535,55 @@ export class HumanBackgroundEnrichmentService {
     } catch (err: any) {
       console.warn('[HUMAN ENRICH] failed:', err?.message || err);
       return { enriched: false, reason: 'error' };
+    }
+  }
+
+  /**
+   * RC-4 (Fase 3): tempelkan teks alamat jalan SPESIFIK ke kartu rumah yang benar
+   * via seam kanonis `upsertSavedAddress`, TANPA menyentuh koordinat presisi.
+   *  - rumah SAMA (`addressesMatch`) → perbarui TEKS kartu (koordinat dipertahankan domain).
+   *  - rumah BEDA → kartu sekunder (isPrimary:false) TANPA relink reservasi aktif.
+   * Bukan teks jalan spesifik → tidak ada aksi (perilaku lama dipertahankan).
+   */
+  private async attachSpecificAddressText(
+    customer: any,
+    tid: string,
+    incomingText: string,
+  ): Promise<{ attached: boolean; reason: string }> {
+    try {
+      const { isSpecificStreetAddress } = await import('./staff-reservation.service');
+      if (!isSpecificStreetAddress(incomingText)) return { attached: false, reason: 'not_specific' };
+
+      const { customerService } = await import('./customer.service');
+      const { addressesMatch } = await import('../domain/customer-address');
+
+      const card: any = await customerService.resolveActiveSavedAddress(customer.id, tid);
+      const sameHouse = card
+        ? addressesMatch(
+            { address: card.address, kelurahan: card.kelurahan, kecamatan: card.kecamatan, kota: card.kota, lat: card.lat, lng: card.lng },
+            { address: incomingText },
+          )
+        : false;
+
+      const entry = await customerService.upsertSavedAddress(customer.id, {
+        address: incomingText.trim(),
+        kelurahan: customer.kelurahan ?? card?.kelurahan ?? null,
+        kecamatan: customer.kecamatan ?? card?.kecamatan ?? null,
+        kota: customer.kota ?? card?.kota ?? null,
+        lat: sameHouse ? (card?.lat ?? customer.lat ?? null) : null,
+        lng: sameHouse ? (card?.lng ?? customer.lng ?? null) : null,
+        distanceKm: sameHouse ? (card?.distanceKm ?? customer.distance_km ?? null) : null,
+        ongkir: sameHouse ? (card?.ongkir ?? customer.ongkir ?? null) : null,
+        locationSource: sameHouse ? (card?.locationSource ?? customer.location_source ?? null) : null,
+        isPrimary: card ? (sameHouse ? (card?.isPrimary ?? true) : false) : false,
+      }, tid);
+
+      if (!entry) return { attached: false, reason: 'address_upsert_failed' };
+      console.log(`[HUMAN ENRICH] specific address text attached (${sameHouse ? 'same' : 'new'} house) for ${customer.phone}: ${incomingText.slice(0, 50)}`);
+      return { attached: true, reason: sameHouse ? 'address_text_same_house' : 'address_text_new_house' };
+    } catch (e: any) {
+      console.warn('[HUMAN ENRICH] attach specific address failed:', e?.message);
+      return { attached: false, reason: 'attach_error' };
     }
   }
 }

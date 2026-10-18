@@ -93,6 +93,11 @@ function toCell(value: string | null | undefined): string {
 
 /** Lokasi: kelurahan saja; fallback ke kecamatan/kota bila kelurahan kosong.
  * Prioritas KANONIS: customerAddress (alamat spesifik reservasi) -> customer (alamat profil).
+ *
+ * CERMIN dari kanon `buildEffectiveTaskAddress` (staff-reservation.service):
+ * kartu reservasi = alamat yang disepakati booking. Override "profil lebih baru bila
+ * rumah SAMA" TIDAK diterapkan di sini karena (a) sel hanya butuh kelurahan, dan
+ * (b) tipe SheetRow* tidak membawa koordinat/timestamp. Dicatat di docs/KNOWN_ISSUES.md.
  */
 export function resolveLocation(
   customer?: SheetRowCustomer | null,

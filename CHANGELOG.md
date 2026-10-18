@@ -5,6 +5,42 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+#### 2026-10-18 - Fixed: Hasil Audit Sistem Berlapis atas Implementasi Alamat Kedua (A-010..A-018)
+
+- **Audit read-only** (`audit-sistem-berlapis` Tahap 0–6) menemukan 4 bug TERBUKTI + 2 risiko di implementasi Fase RC-1..RC-5. Semua fix menyentuh akar lapisan kode/state, bukan tambal prompt:
+  - **A-010 (bug, RPN 168)**: blok RC-1 di `src/routes/admin/reservation-dispatch.route.ts` membaca field camelCase dari baris Prisma (snake_case) → koreksi teks alamat pada kartu SEKUNDER selalu mempromosikannya jadi primary (dan `distanceKm`/`locationSource` salah sumber). Kini membaca `is_primary`/`distance_km`/`location_source` dengan fallback camelCase. Test adversarial baru: fixture `is_primary:false` → tetap sekunder.
+  - **A-012 (privasi, RPN 168)**: fallback `areaLine` di pre-visit brief Telegram (`staff-notification.service.ts`) memotong alamat jalan pada koma → alamat tanpa koma membocorkan jalan + no rumah (melanggar kontrak G2=B). Fallback DIHAPUS: bila kelurahan/kecamatan kosong, baris Area Kunjungan dihilangkan. 2 test baru.
+  - **A-013 (performa, RPN 63)**: seam sinkronisasi jadwal di `goal-tracker.ts` berjalan SETIAP turn berlokasi walau tak ada perubahan → kini gated `locationChanged` (sudah tersedia di scope). Test baru `tests/unit/goal-tracker-address-sync-gate.test.ts` (4 skenario, terbukti merah pre-fix).
+  - **A-011 (edge, RPN 70)**: `customerAddressId: null` EKSPLISIT kini dihormati sebagai niat detach (RC-1 tidak jalan); field absen tetap auto-resolve. Test baru.
+  - **A-016 (observabilitas)**: kegagalan per-reservasi kini mencetak event terstruktur `ADDR_SYNC_RESERVATION_FAILED` (reservationId + targetAddressId) di `reservation-address-sync.service.ts`, bukan warn generik.
+  - **A-014 (hardcode)**: `heal-firda-active-address.ts` tidak lagi menyimpan default ID reservasi — `--reservation=<id>` WAJIB.
+  - **A-017 (test hygiene)**: mock `prisma.customer.update` di describe RC-1 kini di-restore ke kontrak setup (`afterEach`), mencegah bocor ke test masa depan.
+  - **A-015 (desain)**: keputusan pengguna = **status quo** (relink otomatis saat rumah baru; hanya audit log sistem). Tercatat di KNOWN_ISSUES #266.
+  - **A-018**: 14 kegagalan full-suite pre-existing didaftarkan di KNOWN_ISSUES #266.
+- **Gerbang regresi**: build hijau; full suite `npm test` 2× rerun konsisten = 5673 lulus / 14 gagal (semua pre-existing yang telah terdaftar; delta +8 test dari test baru audit). Satu anomali run pertama (15 gagal) tidak reprodusibel 2× rerun → dicatat sebagai observasi flaky, bukan regresi.
+
+#### 2026-10-18 - Fix: Arsitektur Alamat Kedua & Sinkronisasi Jadwal Aktif (RC-1..RC-5, Fase 1-5)
+
+- **Fase 1 — Seam kanonis sinkronisasi jadwal aktif**:
+  - `src/services/reservation-address-sync.service.ts` (BARU): `syncActiveReservationsForCustomer({ tenantId, customerId })` — menyelaraskan seluruh reservasi AKTIF pelanggan ke kartu alamat kanonis (via `resolveCustomerAddressId`) + snapshot `delivery_fee`; idempoten, best-effort, tenant-aware, tulis hanya lewat seam (DILARANG `prisma.customerAddress.*` langsung).
+  - Wiring seam di **tiga rezim penulis lokasi**: `customer.service.ts` (`updateCustomerLocation`, jalur DB & memori), `v3/state/goal-tracker.ts` (mirror durable V3), `staff-reservation.service.ts` (`updateCustomerLocation` lapangan).
+  - RC-1 anti ghost-shadowing: `POST/PATCH /api/admin/reservation/:id` — edit teks alamat tanpa ID kartu eksplisit kini me-resolve kartu kanonis via seam (rumah SAMA → perbarui teks; rumah BEDA → kartu sekunder tanpa relink otomatis, tanpa mencampur koordinat presisi lama) + snapshot `delivery_fee`.
+  - `tests/unit/reservation-address-sync.test.ts`: 8 skenario (status kanon hold/pending/future, completed/cancelled diabaikan, 2 rumah tidak mencampur, idempoten, audit, customer hilang).
+  - `tests/unit/admin-create-reservation.test.ts`: 4 skenario RC-1 (rumah sama/beda, ID eksplisit menang, primary pertama).
+- **Fase 2 — Pemulihan data operasional**:
+  - `src/scripts/heal-firda-active-address.ts` (BARU): dry-run/commit idempoten, menulis lewat seam (`upsertSavedAddress` + `syncActiveReservationsForCustomer`), backup JSON pra-commit.
+- **Fase 3 — Attachment teks alamat (RC-4/A-004)**:
+  - `human-background-enrichment.service.ts`: guard `already_has_location` & `gps_pin_guard` kini menempelkan teks jalan SPESIFIK ke kartu rumah yang benar (rumah sama → teks; rumah beda → kartu sekunder) TANPA menimpa pin presisi (anti data hibrida).
+  - `v3/state/goal-tracker.ts`: cap `location_updated_at` HANYA bila lokasi benar-benar berubah (bukan tiap turn).
+- **Fase 4 — Read-side unification (RC-3/A-005) + Pre-visit brief (RC-5/A-008)**:
+  - `buildEffectiveTaskAddress` (staff-reservation.service.ts): rumah SAMA + koreksi profil lebih baru (`location_updated_at`) → pakai profil; rumah BEDA → kartu reservasi; tanpa timestamp → byte-identik (anti-regresi).
+  - `staff-notification.service.ts`: notifikasi Telegram (assign + itinerary) & pre-visit brief memakai seam yang sama; brief menambah baris **Area Kunjungan** ringkas (kelurahan/kecamatan), tetap tanpa alamat lengkap/no HP.
+  - `sheets/row-formatter.ts`: komentar cermin kanon (lihat KNOWN_ISSUES #266 untuk batasan).
+- **Fase 5 — UI**:
+  - `packages/admin-dashboard/.../CreateReservationModal.tsx`: badge `⚠️ Teks alamat berbeda dengan kartu terpilih` + tombol `[+ Simpan Sebagai Rumah Baru]` (memakai `useUiFeedback`, tanpa `window.confirm/alert`), tanpa page baru.
+- **Gerbang regresi**: `npm run build` (root + dashboard) hijau; full suite `npm test` = 5665 lulus / 14 gagal (semua **pre-existing**, dibuktikan revert-and-rerun ke HEAD). Zero migrasi skema, zero dependency baru.
+
+
 #### 2026-10-18 - Feat: Quick Chat Berbasis Gambar & QRIS Terintegrasi (Fase 1 - 4)
 
 - **Fase 1 — Database, Backend Seam & Smart Caption Splitter**:

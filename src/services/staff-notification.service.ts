@@ -5,7 +5,7 @@ import { webPushService } from './web-push.service';
 import { getLiveChatHub } from './live-chat-hub.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { getStaffNotificationConfig } from '../config/staff-notification-config';
-import { buildMapsUrls } from './staff-reservation.service';
+import { buildMapsUrls, buildEffectiveTaskAddress } from './staff-reservation.service';
 import { getPaymentDisplayStatus } from '../domain/reservation-payment';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
@@ -136,15 +136,18 @@ export class StaffNotificationService {
         .join(', ');
 
       // 2. Format Alamat Lengkap & Patokan Rumah (Fase 3C: prioritaskan CustomerAddress)
+      // Fase 4 (A-005): seam kanonis buildEffectiveTaskAddress — alamat efektif yang
+      // sama dipakai semua pembaca (Telegram/Sheets), termasuk prioritas koreksi rumah SAMA.
       const addrEntity = (reservation as any).customer_address;
+      const effectiveAddr: any = buildEffectiveTaskAddress(addrEntity, cust) || {};
       const addressParts: string[] = [];
-      if (addrEntity?.address) addressParts.push(addrEntity.address);
-      if (addrEntity?.kelurahan || cust?.kelurahan) addressParts.push(`Kel. ${addrEntity?.kelurahan || cust?.kelurahan}`);
-      if (addrEntity?.kecamatan || cust?.kecamatan) addressParts.push(`Kec. ${addrEntity?.kecamatan || cust?.kecamatan}`);
-      if (addrEntity?.kota || cust?.kota) addressParts.push(addrEntity?.kota || cust?.kota);
+      if (effectiveAddr.address) addressParts.push(effectiveAddr.address);
+      if (effectiveAddr.kelurahan) addressParts.push(`Kel. ${effectiveAddr.kelurahan}`);
+      if (effectiveAddr.kecamatan) addressParts.push(`Kec. ${effectiveAddr.kecamatan}`);
+      if (effectiveAddr.kota) addressParts.push(effectiveAddr.kota);
       const addressText = addressParts.join(', ') || 'Alamat belum tercatat lengkap';
 
-      const landmark = addrEntity?.landmark || (cust?.preferences as any)?.landmark || null;
+      const landmark = effectiveAddr.landmark || (cust?.preferences as any)?.landmark || null;
       const housePhotoUrl = (cust?.preferences as any)?.house_photo_url || null;
 
       // 3. Format Waktu & Tanggal (WIB)
@@ -171,12 +174,12 @@ export class StaffNotificationService {
       // buildMapsUrls (source-aware, bukan template inline). Titik NON-presisi
       // + teks alamat → URL TEKS agar Bidan tidak diarahkan ke titik tengah
       // kelurahan/sawah. gps_pin → byte-identik perilaku lama.
-      const lat = addrEntity?.lat ?? cust?.lat;
-      const lng = addrEntity?.lng ?? cust?.lng;
+      const lat = effectiveAddr?.lat ?? cust?.lat;
+      const lng = effectiveAddr?.lng ?? cust?.lng;
       const hasAddressText = !!addressText && addressText !== 'Alamat belum tercatat lengkap';
       const { navigationUrl: seamNavUrl } = buildMapsUrls(
         lat, lng,
-        (addrEntity as any)?.location_source ?? (cust as any)?.location_source ?? null,
+        effectiveAddr?.location_source ?? (cust as any)?.location_source ?? null,
         hasAddressText ? addressText : null
       );
       const navigationUrl =
@@ -344,8 +347,9 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
    *
    * Keputusan G2=B (minimal, privasi): TIDAK menyertakan nomor HP pasien maupun
    * alamat lengkap di Telegram pribadi — hanya jam, nama pasien + usia anak, layanan,
-   * terapis sesi lalu, dan catatan karakter (admin_notes). Alamat/GPS penuh hanya di
-   * portal terapis (butuh login).
+   * AREA ringkas (kelurahan/kecamatan atau nama perumahan), terapis sesi lalu, dan
+   * catatan karakter (admin_notes). Alamat/GPS penuh hanya di portal terapis (login).
+   * (Fase 4 / A-008: baris "Area Kunjungan" ditambahkan; tetap hormati privasi.)
    *
    * Idempoten: `pre_visit_brief_sent_at` mencegah kirim ganda (cron + trigger same-day).
    */
@@ -359,6 +363,7 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
         include: {
           customer: { include: { children: true } },
           children: true,
+          customer_address: true,
           assigned_staff: { select: { id: true, name: true, telegram_chat_id: true } },
         },
       });
@@ -420,11 +425,20 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
       const baseUrl = process.env.ADMIN_DASHBOARD_URL || 'http://localhost:3000';
       const portalUrl = `${baseUrl}/admin/staff/today`;
 
+      // Fase 4 (A-008): baris AREA ringkas (kelurahan/kecamatan) via seam kanonis.
+      // HANYA ringkas area — DILARANG menaruh alamat lengkap/no HP.
+      // A-012 (audit): fallback alamat jalan (`address.split(',')[0]`) DIHAPUS —
+      // alamat tanpa koma bocorkan jalan + no rumah ke Telegram (kontrak G2=B).
+      // Bila area tak diketahui → baris tidak ditampilkan (bukan diisi teks jalan).
+      const effectiveAddrBrief: any = buildEffectiveTaskAddress((reservation as any).customer_address, cust) || {};
+      const areaParts = [effectiveAddrBrief.kelurahan, effectiveAddrBrief.kecamatan].filter(Boolean).map((s: any) => String(s).trim());
+      const areaLine = areaParts.join(', ');
+
       const messageText = `📋 [RINGKASAN PASIEN SEBELUM KUNJUNGAN]
 ⏰ Jam: ${timeStr} WIB
 👤 Pasien: ${this.escapeMarkdown(cust?.name || 'Bunda')}${childLine ? `\n👶 Anak: ${this.escapeMarkdown(childLine)}` : ''}
 🔄 ${this.escapeMarkdown(lastVisitLine)}
-🎯 Layanan: ${this.escapeMarkdown(reservation.treatment_detail || reservation.treatment_category || 'Treatment Homecare')}${adminNotes ? `\n💡 Catatan Khusus:\n${this.escapeMarkdown(adminNotes)}` : ''}
+🎯 Layanan: ${this.escapeMarkdown(reservation.treatment_detail || reservation.treatment_category || 'Treatment Homecare')}${areaLine ? `\n📍 Area Kunjungan: ${this.escapeMarkdown(areaLine)}` : ''}${adminNotes ? `\n💡 Catatan Khusus:\n${this.escapeMarkdown(adminNotes)}` : ''}
 
 📍 Alamat lengkap & rute tersedia di portal (login):
 👉 [Buka Tugas di Portal Terapis](${portalUrl})`;
@@ -849,21 +863,23 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
         );
 
         // 4. Alamat & Google Maps
+        // Fase 4 (A-005): seam kanonis buildEffectiveTaskAddress (sama dgn pembaca lain).
         const addrEntity = (reservation as any).customer_address;
+        const effectiveAddr2: any = buildEffectiveTaskAddress(addrEntity, cust) || {};
         const addressParts: string[] = [];
-        if (addrEntity?.address) addressParts.push(this.escapeMarkdown(addrEntity.address));
-        if (addrEntity?.kelurahan || cust?.kelurahan) addressParts.push(`Kel. ${this.escapeMarkdown(addrEntity?.kelurahan || cust?.kelurahan)}`);
-        if (addrEntity?.kecamatan || cust?.kecamatan) addressParts.push(`Kec. ${this.escapeMarkdown(addrEntity?.kecamatan || cust?.kecamatan)}`);
-        if (addrEntity?.kota || cust?.kota) addressParts.push(this.escapeMarkdown(addrEntity?.kota || cust?.kota));
+        if (effectiveAddr2.address) addressParts.push(this.escapeMarkdown(effectiveAddr2.address));
+        if (effectiveAddr2.kelurahan) addressParts.push(`Kel. ${this.escapeMarkdown(effectiveAddr2.kelurahan)}`);
+        if (effectiveAddr2.kecamatan) addressParts.push(`Kec. ${this.escapeMarkdown(effectiveAddr2.kecamatan)}`);
+        if (effectiveAddr2.kota) addressParts.push(this.escapeMarkdown(effectiveAddr2.kota));
         const addressText = addressParts.join(', ') || 'Alamat tercatat di sistem';
 
         // REVISI-1 Tahap 3.1: seam kanonis buildMapsUrls (source-aware).
-        const lat = addrEntity?.lat ?? cust?.lat;
-        const lng = addrEntity?.lng ?? cust?.lng;
+        const lat = effectiveAddr2.lat ?? cust?.lat;
+        const lng = effectiveAddr2.lng ?? cust?.lng;
         const hasAddressText2 = !!addressText && addressText !== 'Alamat tercatat di sistem';
         const { navigationUrl: seamNavUrl2 } = buildMapsUrls(
           lat, lng,
-          (addrEntity as any)?.location_source ?? (cust as any)?.location_source ?? null,
+          effectiveAddr2.location_source ?? (cust as any)?.location_source ?? null,
           hasAddressText2 ? addressText : null
         );
         const navigationUrl =

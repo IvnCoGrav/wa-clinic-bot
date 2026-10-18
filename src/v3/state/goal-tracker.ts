@@ -322,17 +322,32 @@ export class GoalTracker {
           // (cartItems/booking/selectedTreatment) agar pembaca lama tidak
           // melihat state basi; state episodik hidup di Conversation.
           let prevPrefs: any = {};
+          let prevCust: any = null;
           try {
             const cust = await prisma.customer.findFirst({
               where: { id: conv.customer_id, tenant_id: tenantId },
-              select: { preferences: true },
+              select: { preferences: true, kelurahan: true, kecamatan: true, kota: true, distance_km: true, ongkir: true } as any,
             });
+            prevCust = cust;
             prevPrefs = (cust?.preferences as any) || {};
           } catch { /* DB offline → mulai dari kosong */ }
+          // A-004: cap `location_updated_at` HANYA bila lokasi benar-benar berubah
+          // (bandingkan dengan baris customer sebelumnya), agar tidak memalsukan waktu.
+          const loc = merged.location;
+          const locationChanged = Boolean(
+            prevCust && loc && (
+              loc.kelurahan !== prevCust.kelurahan ||
+              loc.kecamatan !== prevCust.kecamatan ||
+              loc.kota !== prevCust.kota ||
+              (loc.distanceKm ?? null) !== (prevCust.distance_km ?? null) ||
+              (loc.ongkirPromo ?? loc.ongkirNormal ?? null) !== (prevCust.ongkir ?? null)
+            )
+          );
           const durablePrefs: any = {
             ...prevPrefs,
             ...(merged.customerName ? { customerName: merged.customerName } : {}),
             ...(merged.genderGreeting ? { genderGreeting: merged.genderGreeting } : {}),
+            ...(locationChanged ? { location_updated_at: new Date().toISOString() } : {}),
           };
           customerData.preferences = durablePrefs;
 
@@ -340,6 +355,20 @@ export class GoalTracker {
             where: { id: conv.customer_id, tenant_id: tenantId },
             data: customerData
           });
+
+          // Seam kanonis: bila lokasi berubah di sesi V3, selaraskan jadwal aktif
+          // ke alamat terbaru (anti ghost-address). Best-effort, tidak fatal.
+          // A-013 (audit): gated pada `locationChanged` — bila gate hanya
+          // `merged.location`, seam (prisma.reservation.findMany) berlaku setiap
+          // turn percakapan berlokasi walau tak ada perubahan alamat.
+          if (merged.location && locationChanged) {
+            try {
+              const { syncActiveReservationsForCustomer } = await import('../../services/reservation-address-sync.service');
+              await syncActiveReservationsForCustomer({ tenantId, customerId: conv.customer_id });
+            } catch (syncErr: any) {
+              console.warn(JSON.stringify({ event: 'GOAL_TRACKER_ADDR_SYNC_SKIPPED', tenantId, error: syncErr?.message, timestamp: new Date().toISOString() }));
+            }
+          }
         }
       } catch (err: any) {
         console.warn(JSON.stringify({ event: 'GOAL_TRACKER_UPDATE_ERROR', tenantId, conversationId, error: err.message, timestamp: new Date().toISOString() }));

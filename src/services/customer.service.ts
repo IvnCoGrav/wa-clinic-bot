@@ -467,6 +467,9 @@ export class CustomerService {
         console.warn('[CustomerService] syncSavedAddressFromLocation failed (best-effort):', (syncErr as Error)?.message);
       }
 
+      // Seam kanonis: selaraskan jadwal aktif ke alamat terbaru (anti ghost-address).
+      await this.syncActiveReservationsAfterLocationChange(customerId, tenantId);
+
       return updated;
     } catch (error) {
       if (!isTestRuntime()) {
@@ -566,10 +569,26 @@ export class CustomerService {
           } catch (syncErr) {
             console.warn('[CustomerService] sync (mem) failed (best-effort):', (syncErr as Error)?.message);
           }
+          // Seam kanonis (jalur memori): selaraskan jadwal aktif.
+          await this.syncActiveReservationsAfterLocationChange(customerId, tenantId);
           return cust;
         }
       }
       return null;
+    }
+  }
+
+  /**
+   * Best-effort: selaraskan jadwal aktif ke alamat pelanggan terkini setelah
+   * lokasi berubah. Delegasi penuh ke seam kanonis reservation-address-sync
+   * (single source of truth) — tidak menduplikasi logika di sini.
+   */
+  private async syncActiveReservationsAfterLocationChange(customerId: string, tenantId: string): Promise<void> {
+    try {
+      const { syncActiveReservationsForCustomer } = await import('./reservation-address-sync.service');
+      await syncActiveReservationsForCustomer({ tenantId, customerId });
+    } catch (e) {
+      console.warn('[CustomerService] active reservation sync skipped (best-effort):', (e as Error)?.message);
     }
   }
 

@@ -1996,11 +1996,21 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
             {savedAddresses.length > 1 && (
               <div className="p-2.5 bg-[#f0f2f5] dark:bg-[#202c33] rounded-xl border border-[#d1d7db] dark:border-[#2a3942] space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-1">
-                    <Home size={12} className="text-[#008069]" />
-                    <span>Pilih Alamat Rumah ({savedAddresses.length} Alamat Tersimpan):</span>
+                  <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-1">
+                    <Home size={13} className="text-[#008069]" />
+                    <span>Pilih Alamat Rumah ({savedAddresses.length}/10 tersimpan):</span>
                   </span>
+                  {savedAddresses.length >= 10 && (
+                    <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded px-1.5 py-0.5">
+                      Kapasitas Penuh (10/10)
+                    </span>
+                  )}
                 </div>
+                {savedAddresses.length >= 10 && (
+                  <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                    Kapasitas kartu tersimpan penuh (maks 10). Alamat baru akan menggantikan alamat sekunder terlama.
+                  </p>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                   {savedAddresses.map((addrItem: any) => {
                     const isSelected = customerAddressId === addrItem.id;
@@ -2014,25 +2024,25 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                           if (addrItem.landmark) setLandmark(addrItem.landmark);
                           if (addrItem.ongkir != null) setOngkir(addrItem.ongkir);
                         }}
-                        className={`text-left p-2 rounded-lg border text-xs transition-all ${
+                        className={`text-left p-2.5 rounded-lg border text-xs min-h-[44px] transition-all cursor-pointer active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-[#008069] focus-visible:outline-none ${
                           isSelected
                             ? 'bg-[#e8f5f2] border-[#008069] text-[#008069] font-medium shadow-sm'
                             : 'bg-white dark:bg-[#111b21] border-[#e9edef] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:bg-[#f5f6f6]'
                         }`}
                       >
-                        <div className="flex items-center justify-between font-bold text-[11px]">
+                        <div className="flex items-center justify-between font-bold text-xs">
                           <span>{addrItem.label || (addrItem.isPrimary ? 'Rumah Utama' : 'Rumah Kedua')}</span>
                           {addrItem.isPrimary && (
-                            <span className="text-[9px] bg-[#008069]/10 text-[#008069] px-1 py-0.2 rounded font-semibold">
+                            <span className="text-[11px] bg-[#008069]/10 text-[#008069] px-1.5 py-0.5 rounded font-semibold">
                               Primary
                             </span>
                           )}
                         </div>
-                        <p className="text-[10px] truncate text-[#667781] dark:text-[#8696a0] mt-0.5">
+                        <p className="text-[11px] truncate text-[#667781] dark:text-[#8696a0] mt-0.5">
                           {addrItem.address || `${addrItem.kelurahan || ''}, ${addrItem.kecamatan || ''}`}
                         </p>
                         {addrItem.distanceKm != null && (
-                          <p className="text-[9px] text-[#8696a0] mt-0.5">
+                          <p className="text-[11px] text-[#8696a0] mt-0.5">
                             {addrItem.distanceKm} km · Ongkir Rp{(addrItem.ongkir || 0).toLocaleString('id-ID')}
                           </p>
                         )}
@@ -2059,6 +2069,31 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                     spellCheck="false"
                     className="w-full px-3 py-2 bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-medium"
                   />
+                  {(() => {
+                    const selectedCard = savedAddresses.find((a: any) => a.id === customerAddressId);
+                    const norm = (s: string) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+                    const mismatch = Boolean(
+                      selectedCard && address.trim() && norm(selectedCard.address) !== norm(address)
+                    );
+                    if (!mismatch) return null;
+                    return (
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded px-2 py-1">
+                          ⚠️ Teks alamat berbeda dengan kartu terpilih
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomerAddressId(null);
+                            toast('Alamat baru akan disimpan sebagai rumah baru saat reservasi disimpan.', 'info');
+                          }}
+                          className="min-h-[44px] inline-flex items-center px-2.5 py-1 text-xs font-bold text-[#008069] bg-[#008069]/10 hover:bg-[#008069]/20 active:scale-[0.98] rounded-lg transition-transform focus-visible:ring-2 focus-visible:ring-[#008069] focus-visible:outline-none cursor-pointer"
+                        >
+                          + Simpan Sebagai Rumah Baru
+                        </button>
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider block">

@@ -977,6 +977,61 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           const caId = body.customerAddressId !== undefined ? body.customerAddressId : body.customer_address_id;
           updateData.customer_address_id = caId || null;
         }
+
+        // RC-1 (anti ghost-shadowing): admin mengubah TEKS alamat TANPA ID kartu
+        // eksplisit → tempelkan ke kartu kanonis via seam `upsertSavedAddress`
+        // (single source of truth JSON + tabel customer_addresses):
+        //  - rumah SAMA (addressesMatch) → perbarui teks pada kartu itu (koordinat dipertahankan).
+        //  - rumah BEDA → buat kartu sekunder; DILARANG mencampur teks baru dengan
+        //    pin presisi lama (data hibrida). Reservasi INI relink ke kartu baru.
+        // DILARANG menulis prisma.customerAddress.* langsung.
+        // A-011: `null` EKSPLISIT = niat admin melepas kartu (detach) — hormati,
+        // JANGAN jalankan RC-1. Field ABSEN (undefined) saja yang boleh auto-resolve
+        // via RC-1. Tanpa ini, kirim customerAddressId:null + address → tertaut lagi
+        // ke kartu hasil resolusi teks (niat admin hijacked).
+        const hasExplicitAddressId =
+          body.customerAddressId !== undefined
+            ? body.customerAddressId === null || Boolean(body.customerAddressId)
+            : body.customer_address_id !== undefined
+              ? body.customer_address_id === null || Boolean(body.customer_address_id)
+              : false;
+        if (address !== undefined && address !== null && String(address).trim() !== '' && existing.customer_id && !hasExplicitAddressId) {
+          try {
+            const { addressesMatch } = await import('../../domain/customer-address');
+            const { customerService } = await import('../../services/customer.service');
+            const card: any = (existing as any).customer_address || null;
+            const cust: any = (existing as any).customer || {};
+            const sameHouse = card
+              ? addressesMatch(
+                  { address: card.address, kelurahan: card.kelurahan, kecamatan: card.kecamatan, kota: card.kota, lat: card.lat, lng: card.lng },
+                  { address, kelurahan, kecamatan, kota }
+                )
+              : false;
+            const entry = await customerService.upsertSavedAddress(existing.customer_id, {
+              address: String(address).trim(),
+              kelurahan: kelurahan ?? card?.kelurahan ?? cust?.kelurahan ?? null,
+              kecamatan: kecamatan ?? card?.kecamatan ?? cust?.kecamatan ?? null,
+              kota: kota ?? card?.kota ?? cust?.kota ?? null,
+              lat: sameHouse ? (card?.lat ?? cust?.lat ?? null) : null,
+              lng: sameHouse ? (card?.lng ?? cust?.lng ?? null) : null,
+              // A-010: baris Prisma customer_address memakai snake_case
+              // (is_primary/distance_km/location_source); fallback camelCase hanya
+              // untuk objek buatan fixture/lama. Tanpa ini kartu sekunder
+              // terpromosi primary saat koreksi teks (isPrimary selalu true).
+              distanceKm: sameHouse ? (card?.distance_km ?? card?.distanceKm ?? cust?.distance_km ?? null) : null,
+              ongkir: sameHouse ? (card?.ongkir ?? cust?.ongkir ?? null) : null,
+              locationSource: sameHouse ? (card?.location_source ?? card?.locationSource ?? cust?.location_source ?? null) : null,
+              isPrimary: card ? (sameHouse ? (card?.is_primary ?? card?.isPrimary ?? true) : false) : true,
+            }, tenantId);
+            if (entry?.id) {
+              updateData.customer_address_id = entry.id;
+              // Snapshot ongkir (pola KB-6): selaraskan delivery_fee reservasi dgn kartu terpilih.
+              if (typeof entry.ongkir === 'number') updateData.delivery_fee = entry.ongkir;
+            }
+          } catch (rc1Err: any) {
+            console.warn('[Admin API] RC-1 address relink skipped (best-effort):', rc1Err?.message);
+          }
+        }
         
         // Handle notes via raw_text: TIDAK menugaskan updateData.notes karena model Reservation tidak punya kolom notes di Prisma
         if (rawText !== undefined) {

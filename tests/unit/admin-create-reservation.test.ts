@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { buildApp } from '../../src/app';
 import { prisma } from '../../src/db/client';
 import { auditService } from '../../src/services/audit.service';
@@ -455,5 +455,178 @@ describe('Admin Create Reservation (POST /api/admin/reservation)', () => {
     const body = JSON.parse(res.body);
     expect(body.success).toBe(false);
     expect(body.error).toBe('Prisma database constraint error');
+  });
+
+  describe('RC-1 anti ghost-shadowing (PATCH teks alamat → kartu kanonis)', () => {
+    beforeEach(() => {
+      // A-017: mock prisma global dibuat SEKALI di setup dan TIDAK di-reset antar
+      // test. mockResolvedValue disini bocor ke test lain bila tidak di-restore.
+      vi.mocked(prisma.customer.update).mockResolvedValue({} as any);
+    });
+    afterEach(() => {
+      // Restore kontrak default setup: customer.update menolak "Database offline".
+      vi.mocked(prisma.customer.update).mockReset();
+      vi.mocked(prisma.customer.update).mockRejectedValue(new Error('Database offline'));
+    });
+
+    const baseExisting = (over: any) => ({
+      id: 'res-rc1',
+      tenant_id: DEFAULT_TENANT_ID,
+      customer_id: 'cust-rc1',
+      treatment_category: 'BABY',
+      treatment_detail: 'Pijat Bayi',
+      status: 'pending',
+      booking_date: null,
+      raw_text: '[Admin Manual] BABY: Pijat Bayi',
+      customer: { id: 'cust-rc1', name: 'Bunda RC1', phone: '6281200', children: [] },
+      ...over,
+    });
+
+    it('rumah SAMA → pertahankan kartu, koordinat diwarisi, delivery_fee di-snapshot', async () => {
+      const card = {
+        id: 'card-1', address: 'Perumdos ITS Jl. Teknik Sipil Blok W no.18',
+        kelurahan: 'Gebang Putih', kecamatan: 'Sukolilo', kota: 'Kota Surabaya',
+        lat: -7.289199, lng: 112.7970673, distance_km: 13.3, ongkir: 15000, is_primary: true,
+      };
+      vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(baseExisting({ customer_address: card }) as any);
+      const upsertSpy = vi.spyOn(customerService, 'upsertSavedAddress').mockResolvedValue({ id: 'card-1', ongkir: 15000 } as any);
+      let captured: any = null;
+      vi.mocked(prisma.reservation.update).mockImplementationOnce(async ({ data }: any) => {
+        captured = data; return baseExisting({ customer_address: card, ...data }) as any;
+      });
+
+      const app = buildApp();
+      const res = await app.inject({
+        method: 'PATCH', url: '/api/admin/reservation/res-rc1',
+        headers: { 'x-api-key': ADMIN_KEY },
+        payload: { address: 'Perumdos ITS Jl. Teknik Sipil Blok W no.18', kelurahan: 'Gebang Putih', kecamatan: 'Sukolilo', kota: 'Kota Surabaya' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(upsertSpy).toHaveBeenCalledWith('cust-rc1', expect.objectContaining({
+        isPrimary: true, lat: -7.289199, lng: 112.7970673, ongkir: 15000,
+      }), DEFAULT_TENANT_ID);
+      expect(captured.customer_address_id).toBe('card-1');
+      expect(captured.delivery_fee).toBe(15000);
+    });
+
+    it('rumah BEDA → kartu sekunder (bukan primary) + TIDAK mencampur koordinat presisi lama (anti data hibrida)', async () => {
+      const card = {
+        id: 'card-lama', address: 'Jl. Melati No. 12', kelurahan: 'Grogol', kecamatan: 'Tulangan', kota: 'Sidoarjo',
+        lat: -7.4812, lng: 112.6521, distance_km: 12.5, ongkir: 15000, is_primary: true,
+      };
+      vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(baseExisting({ customer_address: card }) as any);
+      const upsertSpy = vi.spyOn(customerService, 'upsertSavedAddress').mockResolvedValue({ id: 'card-baru', ongkir: 22000 } as any);
+      let captured: any = null;
+      vi.mocked(prisma.reservation.update).mockImplementationOnce(async ({ data }: any) => {
+        captured = data; return baseExisting({ customer_address: card, ...data }) as any;
+      });
+
+      const app = buildApp();
+      const res = await app.inject({
+        method: 'PATCH', url: '/api/admin/reservation/res-rc1',
+        headers: { 'x-api-key': ADMIN_KEY },
+        payload: { address: 'Perum Buduran Indah Blok B-5', kelurahan: 'Buduran', kecamatan: 'Buduran', kota: 'Sidoarjo' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const arg = upsertSpy.mock.calls[0][1] as any;
+      expect(arg.isPrimary).toBe(false);
+      expect(arg.lat).toBeNull();
+      expect(arg.lng).toBeNull();
+      expect(captured.customer_address_id).toBe('card-baru');
+      expect(captured.delivery_fee).toBe(22000);
+    });
+
+    it('ID kartu eksplisit dihormati → seam upsert TIDAK dipanggil (otoritas admin menang)', async () => {
+      const card = { id: 'card-current', address: 'Jl. A', is_primary: true, ongkir: 15000 };
+      vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(baseExisting({ customer_address: card }) as any);
+      const upsertSpy = vi.spyOn(customerService, 'upsertSavedAddress').mockResolvedValue({ id: 'nope' } as any);
+      let captured: any = null;
+      vi.mocked(prisma.reservation.update).mockImplementationOnce(async ({ data }: any) => {
+        captured = data; return baseExisting({ customer_address: card, ...data }) as any;
+      });
+
+      const app = buildApp();
+      const res = await app.inject({
+        method: 'PATCH', url: '/api/admin/reservation/res-rc1',
+        headers: { 'x-api-key': ADMIN_KEY },
+        payload: { address: 'Jl. Apa Pun 99', customerAddressId: 'card-explicit' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(upsertSpy).not.toHaveBeenCalled();
+      expect(captured.customer_address_id).toBe('card-explicit');
+    });
+
+    it('belum ada kartu + teks alamat → kartu pertama dijadikan primary', async () => {
+      vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(baseExisting({ customer_address: null }) as any);
+      const upsertSpy = vi.spyOn(customerService, 'upsertSavedAddress').mockResolvedValue({ id: 'card-first', ongkir: 18000 } as any);
+      vi.mocked(prisma.reservation.update).mockImplementationOnce(async ({ data }: any) => baseExisting({ ...data }) as any);
+
+      const app = buildApp();
+      const res = await app.inject({
+        method: 'PATCH', url: '/api/admin/reservation/res-rc1',
+        headers: { 'x-api-key': ADMIN_KEY },
+        payload: { address: 'Jl. Baru Sekali No. 1', kecamatan: 'Sukolilo', kota: 'Kota Surabaya' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(upsertSpy).toHaveBeenCalledWith('cust-rc1', expect.objectContaining({ isPrimary: true }), DEFAULT_TENANT_ID);
+    });
+
+    it('A-010: koreksi teks kartu SEKUNDER (is_primary:false) tetap sekunder + field snake_case Prisma terbaca', async () => {
+      // Fixture mengikuti bentuk BARIS Prisma asli (is_primary/distance_km/location_source).
+      const card = {
+        id: 'card-2', address: 'Perumdos ITS Jl. Teknik Sipil Blok W no.18',
+        kelurahan: 'Gebang Putih', kecamatan: 'Sukolilo', kota: 'Kota Surabaya',
+        lat: -7.289199, lng: 112.7970673, distance_km: 13.3, ongkir: 15000,
+        is_primary: false, location_source: 'gps_pin',
+      };
+      vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(baseExisting({ customer_address: card }) as any);
+      const upsertSpy = vi.spyOn(customerService, 'upsertSavedAddress').mockResolvedValue({ id: 'card-2', ongkir: 15000 } as any);
+      let captured: any = null;
+      vi.mocked(prisma.reservation.update).mockImplementationOnce(async ({ data }: any) => {
+        captured = data; return baseExisting({ customer_address: card, ...data }) as any;
+      });
+
+      const app = buildApp();
+      const res = await app.inject({
+        method: 'PATCH', url: '/api/admin/reservation/res-rc1',
+        headers: { 'x-api-key': ADMIN_KEY },
+        payload: { address: 'Perumdos ITS Jl. Teknik Sipil Blok W no.18', kelurahan: 'Gebang Putih', kecamatan: 'Sukolilo', kota: 'Kota Surabaya' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      // Kartu sekunder TIDAK boleh ikut terpromosi primary (bug A-010 lama: isPrimary selalu true).
+      expect(upsertSpy).toHaveBeenCalledWith('cust-rc1', expect.objectContaining({
+        isPrimary: false,
+        distanceKm: 13.3,
+        locationSource: 'gps_pin',
+        ongkir: 15000,
+      }), DEFAULT_TENANT_ID);
+      expect(captured.customer_address_id).toBe('card-2');
+    });
+
+    it('A-011: customerAddressId:null EKSPLISIT + teks alamat → detach dihormati, RC-1 tidak jalan', async () => {
+      const card = { id: 'card-1', address: 'Jl. A No. 1', kelurahan: 'Gebang Putih', kecamatan: 'Sukolilo', kota: 'Kota Surabaya', is_primary: true, ongkir: 15000 };
+      vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(baseExisting({ customer_address: card }) as any);
+      const upsertSpy = vi.spyOn(customerService, 'upsertSavedAddress').mockResolvedValue({ id: 'kartu-hantu' } as any);
+      let captured: any = null;
+      vi.mocked(prisma.reservation.update).mockImplementationOnce(async ({ data }: any) => {
+        captured = data; return baseExisting({ customer_address: card, ...data }) as any;
+      });
+
+      const app = buildApp();
+      const res = await app.inject({
+        method: 'PATCH', url: '/api/admin/reservation/res-rc1',
+        headers: { 'x-api-key': ADMIN_KEY },
+        payload: { address: 'Jl. Baru Berbeda No. 7', kecamatan: 'Sukolilo', kota: 'Kota Surabaya', customerAddressId: null },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(upsertSpy).not.toHaveBeenCalled();
+      expect(captured.customer_address_id).toBeNull();
+    });
   });
 });

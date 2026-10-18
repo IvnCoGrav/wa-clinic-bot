@@ -98,6 +98,38 @@ describe('StaffNotificationService.sendPreVisitBrief (Fase 5r)', () => {
     expect(text).not.toContain('0812');
   });
 
+  it('A-012: baris Area Kunjungan memakai kelurahan/kecamatan (bukan alamat jalan)', async () => {
+    h.reservationFindUnique.mockResolvedValue(
+      baseReservation({
+        customer_address: {
+          id: 'addr-1', kelurahan: 'Gebang Putih', kecamatan: 'Sukolilo',
+          kota: 'Kota Surabaya', address: 'Perumdos ITS Jl. Teknik Sipil Blok W no.18',
+        },
+      })
+    );
+    await svc.sendPreVisitBrief('res-1', 'tenant-a');
+    const text = h.sendMessage.mock.calls[0][0].text;
+    expect(text).toContain('Area Kunjungan: Gebang Putih, Sukolilo');
+    expect(text).not.toContain('Jl. Teknik Sipil');
+  });
+
+  it('A-012: alamat TANPA kelurahan/kecamatan → baris Area KUNJUNGAN dihilangkan (tanpa fallback jalan)', async () => {
+    // Alamat tanpa koma: fallback lama leaked seluruh teks jalan + no rumah.
+    h.reservationFindUnique.mockResolvedValue(
+      baseReservation({
+        customer_address: {
+          id: 'addr-2', kelurahan: null, kecamatan: null, kota: null,
+          address: 'Perumdos ITS Jl. Teknik Sipil Blok W no.18',
+        },
+      })
+    );
+    await svc.sendPreVisitBrief('res-1', 'tenant-a');
+    const text = h.sendMessage.mock.calls[0][0].text;
+    expect(text).not.toContain('Area Kunjungan');
+    expect(text).not.toContain('Perumdos ITS');
+    expect(text).not.toContain('no.18');
+  });
+
   it('idempoten: sudah pernah dikirim → tidak kirim ulang', async () => {
     h.reservationFindUnique.mockResolvedValue(baseReservation({ pre_visit_brief_sent_at: new Date() }));
     const res = await svc.sendPreVisitBrief('res-1', 'tenant-a');

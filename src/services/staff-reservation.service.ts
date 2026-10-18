@@ -16,6 +16,7 @@ import { sanitizeCustomerNameForGreeting } from '../utils/name-sanitizer';
 import { ensureStaffSignature } from '../utils/staff-signature';
 import { computeCurrentAge } from '../utils/age-calculator';
 import { getBrandIdentityAsync } from '../config/brand';
+import { addressesMatch } from '../domain/customer-address';
 
 export interface StaffTaskChild {
   name: string;
@@ -251,24 +252,45 @@ export function buildAddressText(c: {
  */
 export function buildEffectiveTaskAddress(addr: any, cust: any): any {
   if (!addr) return cust;
+  const prefs = (cust?.preferences as any) || {};
   const fallbackAddress = String(
-    (addr as any)?.address || (cust?.preferences as any)?.address || (cust as any)?.address || ''
+    (addr as any)?.address || prefs.address || (cust as any)?.address || ''
   ).trim();
+
+  // RC-3 (Fase 4): bila `addr` (kartu reservasi) & PROFIL customer merujuk rumah
+  // yang SAMA (`addressesMatch`) DAN koreksi profil lebih baru
+  // (preferences.location_updated_at > addr.last_used_at/created_at) → pakai
+  // teks+koordinat profil (koreksi terbaru). Rumah BEDA → tetap `addr` (alamat
+  // yang disepakati booking). Tanpa timestamp → perilaku lama byte-identik.
+  let useProfile = false;
+  try {
+    const sameHouse = addressesMatch(
+      { address: addr?.address, kelurahan: addr?.kelurahan, kecamatan: addr?.kecamatan, kota: addr?.kota, lat: addr?.lat, lng: addr?.lng },
+      { address: prefs.address, kelurahan: cust?.kelurahan, kecamatan: cust?.kecamatan, kota: cust?.kota, lat: cust?.lat, lng: cust?.lng }
+    );
+    const profTs = prefs.location_updated_at ? Date.parse(prefs.location_updated_at) : NaN;
+    const addrTs = Date.parse((addr as any)?.last_used_at || (addr as any)?.created_at || '');
+    if (sameHouse && Number.isFinite(profTs) && Number.isFinite(addrTs) && profTs > addrTs) {
+      useProfile = true;
+    }
+  } catch { /* pure predicate; abaikan bila bentuk tak terduga */ }
+
+  const chosenAddress = useProfile && prefs.address ? String(prefs.address).trim() : fallbackAddress;
   return {
-    address: fallbackAddress,
-    kelurahan: addr.kelurahan,
-    kecamatan: addr.kecamatan,
-    kota: addr.kota,
-    lat: addr.lat,
-    lng: addr.lng,
-    distance_km: addr.distance_km,
-    ongkir: addr.ongkir,
+    address: chosenAddress,
+    kelurahan: useProfile ? (cust?.kelurahan ?? addr.kelurahan) : addr.kelurahan,
+    kecamatan: useProfile ? (cust?.kecamatan ?? addr.kecamatan) : addr.kecamatan,
+    kota: useProfile ? (cust?.kota ?? addr.kota) : addr.kota,
+    lat: useProfile ? (cust?.lat ?? addr.lat) : addr.lat,
+    lng: useProfile ? (cust?.lng ?? addr.lng) : addr.lng,
+    distance_km: useProfile ? (cust?.distance_km ?? addr.distance_km) : addr.distance_km,
+    ongkir: useProfile ? (cust?.ongkir ?? addr.ongkir) : addr.ongkir,
     landmark: addr.landmark,
-    location_source: addr.location_source,
+    location_source: useProfile ? (cust?.location_source ?? addr.location_source) : addr.location_source,
     preferences: {
-      ...((cust?.preferences as any) || {}),
-      address: fallbackAddress,
-      landmark: addr.landmark || (cust?.preferences as any)?.landmark,
+      ...prefs,
+      address: chosenAddress,
+      landmark: addr.landmark || prefs.landmark,
     },
   };
 }
@@ -2292,6 +2314,16 @@ export class StaffReservationService {
           },
         }).catch(() => {});
       } catch {}
+
+      // Seam kanonis: selaraskan seluruh jadwal aktif ke alamat terbaru
+      // (anti ghost-address lintas rezim penulis lokasi). Best-effort.
+      try {
+        const { syncActiveReservationsForCustomer } = await import('./reservation-address-sync.service');
+        await syncActiveReservationsForCustomer({ tenantId, customerId: customer.id });
+      } catch (syncErr: any) {
+        console.warn('[STAFF RESERVATION] active reservation sync skipped (best-effort):', syncErr?.message);
+      }
+
       return {
         success: true,
         data: {
