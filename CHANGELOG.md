@@ -5,6 +5,88 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+#### 2026-10-18 - Feat: Quick Chat Berbasis Gambar & QRIS Terintegrasi (Fase 1 - 4)
+
+- **Fase 1 — Database, Backend Seam & Smart Caption Splitter**:
+  - `prisma/schema.prisma` & migrasi `20261018010000_add_quickreply_media`: Menambahkan kolom `media_type` (`NONE` | `CUSTOM_IMAGE` | `QRIS`) dan `image_url` ke model `QuickReply`.
+  - `src/routes/admin/quick-replies.subroute.ts`:
+    - Mengganti template `/rek` lama yang di-hardcode dengan `/qris` yang terhubung secara SSOT ke `Tenant.settings.paymentInfo`.
+    - Menambahkan fungsi resolver dinamis `resolveQuickReplyMedia` untuk mengganti `{bank_accounts}` dan `{petunjuk}` secara runtime saat fetch, serta resolusi `image_url` QRIS resmi dan deteksi `mime_type`.
+    - Menambahkan dukungan `media_type`, `image_url`, `imageB64` pada endpoint POST dan PUT quick-replies.
+    - Menyelaraskan auto-seed di GET, `seed-defaults`, dan fallback in-memory (`initMemoryDefaults`).
+  - `src/routes/admin/livechat.subroute.ts`: Menambahkan dukungan `mediaUrl` pada body request endpoint `/reply` dan meneruskannya ke `liveChatService.sendAdminReply`.
+  - `src/services/caption-splitter.ts`: Mengekstrak util bersama `splitImageCaption` (threshold 1000 char) untuk membagi caption media WhatsApp dan sisa pesan lanjutan.
+  - `src/services/staff-reservation.service.ts`: Merefaktor pemanggilan pengiriman QRIS menggunakan util bersama `splitImageCaption`.
+  - `src/services/live-chat.service.ts`: Mengintegrasikan `splitImageCaption` pada pengiriman gambar di `sendAdminReply`, dengan pengiriman teks lanjutan sekuensial.
+
+- **Fase 2 — Quick Replies Manager (Frontend Dashboard)**:
+  - `packages/admin-dashboard/src/pages/tenant/QuickReplies.tsx`:
+    - Menambahkan pemilih tipe media (Teks Saja, QRIS Resmi Klinik, Upload Gambar Kustom).
+    - Menghubungkan preview live barcode QRIS resmi klinik dari Settings Pembayaran.
+    - Menambahkan dropzone gambar kustom (≤ 8 MB) dengan preview thumbnail.
+    - Menampilkan badge indikator media (`[QRIS]`, `[GAMBAR]`) dan thumbnail pada grid kartu template.
+
+- **Fase 3 — Live Chat Composer & Monitor (Frontend Dashboard)**:
+  - `packages/admin-dashboard/src/components/livechat/LiveChatComposer.tsx`: Menambahkan ikon indikator media (`<QrCode />`, `<ImageIcon />`) pada daftar popover quick replies `/shortcut`.
+  - `packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx`:
+    - Memperluas tipe state `selectedImage` agar mendukung `mediaUrl`.
+    - Di `applyQuickReply`: otomatis melampirkan gambar/QRIS ke state `selectedImage` saat template dipilih.
+    - Di `handleSendReply`: memisahkan jalur `body.mediaUrl` (tanpa upload ulang base64) vs `body.imageB64`.
+
+- **Fase 4 — Pengujian & Gerbang Regresi**:
+  - `tests/unit/caption-splitter.test.ts`: 4 skenario pengujian batas panjang caption, pemisahan paragraf, dan penanganan null/empty.
+  - `tests/unit/quick-replies.test.ts`: 10 skenario pengujian CRUD in-memory, resolusi dinamis SSOT dari `paymentInfo`, pengujian adversarial saat data bank kosong, dan sanitasi ekstensi ke MIME type.
+  - `tests/integration/live-chat-reply.test.ts`: Verifikasi pengiriman balasan admin dengan `mediaUrl` ke gateway WhatsApp.
+  - Validasi build: `npm run build` (bot engine) dan `npm run build` (`admin-dashboard`) lulus 100%.
+
+#### 2026-10-18 - Fixed: Triase Klinis Deterministik, Pencegahan Kontaminasi Subjek, Metadata Kelayakan Katalog & Perampingan Call 1 Router (Fase 0 - 7)
+
+- **Fase 0 — Kunci Regresi Track 1**:
+  - Memverifikasi pencabutan `stripNominalAges` dan keabsahan `hasAgeQuestion` di guardrail pipeline.
+  - Memastikan teks rentang usia ("usia 7 - 24 bulan") tidak terpotong oleh pemotong kalimat.
+  - Menambahkan pengujian parafrase konsultatif tanpa tanda tanya ("maaf untuk pulih ceria itu gmna ya" -> cart tetap kosong).
+  - Berkas uji: `tests/unit/v3-catalog-age-text.test.ts`, `tests/unit/v3-consultative-detection.test.ts`.
+
+- **Fase 1 — Pencegahan Kontaminasi Subjek & MomStage UNKNOWN**:
+  - `src/v3/agent/pipeline/tool-pipeline.ts`: Menghentikan fallback penulisan gejala ke anak bila subjek ambigu atau berkonteks ibu. Mengaktifkan `session.pendingSubjectClarification: true`.
+  - `src/v3/agent/pipeline/guardrail-pipeline.ts`: Menambahkan pertanyaan subjek deterministik ("Boleh tahu keluhannya untuk Bunda sendiri atau untuk si kecil ya? 😊") saat `pendingSubjectClarification` aktif dan belum ternilai.
+  - `src/v3/state/patient-extractor.ts`: `MomStage` default ke `'UNKNOWN'` (bukan `'GENERAL'`) jika tanpa bukti teks klinis eksplisit. `syncMomProfile` kini membaca hingga 6 riwayat pesan user terakhir untuk mendeteksi usia kehamilan atau status kehamilan secara persisten.
+  - `src/v3/state/goal-tracker.ts`: Render `formatGoalSessionForPrompt` tidak lagi menyematkan label `'Ibu (Relaksasi Umum)'` saat `MomStage` adalah `'UNKNOWN'`.
+  - Berkas uji: `tests/unit/v3-subject-contamination.test.ts` (6 tests lulus 100%).
+
+- **Fase 2 — Evaluasi Klinis Emas (Track 2A)**:
+  - Menyusun dan memperluas pengujian deterministik di `tests/eval/golden-conversations.eval.test.ts` untuk memverifikasi 39 kasus validasi klinis (active user commitment, multi-opsi ambigu, bumil aterm, bundle cukur + pulih ceria) dan 9 kasus skenario abu-abu (`gray`) yang dicatat untuk tinjauan Bidan Fase B.
+
+- **Fase 3 — Matriks Triase Klinis (Track 2B)**:
+  - Menyusun dokumen resmi `docs/clinical-triage-matrix.md` mencakup 13 skenario triase klinis (TR-01 s/d TR-13) dengan klasifikasi aksi (`ESCALATE`, `SCREEN`, `ASK_STAGE`, `SAFE`), batasan red-flags, dan template teks resmi dari Bidan Yusi (versi 1.0.0).
+
+- **Fase 4 — Metadata Kelayakan Katalog Berbasis Database (Track 2C)**:
+  - `prisma/schema.prisma` & migrasi `20261018000000_add_service_clinical_eligibility`: Menambahkan kolom `eligible_life_stages String[]`, `contraindications String[]`, `requires_screening Boolean` ke model `ClinicService`.
+  - `src/services/treatment-catalog.service.ts`: Helper `inferEligibleLifeStages` untuk inferensi data-driven life-stages. Di `recommendServiceBySymptoms`, jika `momStage === 'UNKNOWN'`, layanan stage-spesifik diblokir dan sistem mengembalikan `askStage: true`.
+  - `src/v3/tools/get-catalog.tool.ts`: Meneruskan `momStage` & `gestationalWeeks`, serta menambahkan `askStage` pada output tool saat layanan tertahan oleh ketidakpastian fase ibu.
+  - Berkas uji: `tests/unit/v3-catalog-stage-filter.test.ts` (9 tests lulus 100%).
+
+- **Fase 5 — Triage Gate Deterministik (Track 2D)**:
+  - `src/v3/agent/pipeline/medical-signal-detector.ts`: Menambahkan detektor trauma fisik kepala/jatuh (`detectPhysicalTraumaSignal`), kegawatdaruratan medis berat (`detectHighSeverityEmergency`), evaluasi skrining pasca-vaksin (`evaluateScreeningAnswer`), ambiguitas tahap ibu (`detectMaternalStageAmbiguity`), dan fungsi evaluator gerbang triase utama (`evaluateTriageGate`).
+  - `src/v3/tools/clinic-faq.tool.ts`: Mendaftarkan topic kebijakan baru: `triage_escalate`, `triage_ask_stage`, `triage_screen` dengan template terstandarisasi.
+  - `src/v3/agent/agent-runner.ts`: Menyisipkan Tahap 3c Triage Gate tepat setelah Stage 1b context grounding. Turn darurat medis atau skrining jeda waktu dibalas langsung deterministik via template kebijakan resmi tanpa membuang token LLM router/generator.
+  - Berkas uji: `tests/unit/v3-triage-gate.test.ts` (18 tests lulus 100%).
+
+- **Fase 6 — Kalibrasi RAG & Perampingan Call 1 Router (Track 2E)**:
+  - `src/v3/agent/pipeline/context-grounder.ts`: Menaikkan ambang rank RAG pre-retrieval dari 0.25 menjadi 0.35. Menghilangkan label kaku `[WAJIB DIPATUHI]` dan menyediakan fallback blok netral jika tidak ditemukan chunk yang relevan.
+  - `src/v3/agent/prompt/prompt-composer.ts`: Mengeluarkan blok `[KONFIGURASI PERSONA TENANT (DASHBOARD...)]` dari `composeRouterPromptAsync` Call 1 (tetap utuh untuk Call 2 di `composeSystemPromptAsync`).
+  - `src/v3/agent/agent-runner.ts`: Menghapus penempelan artikel RAG `preGroundingBlock` ke `messages[0]` prompt Call 1 router. Ukuran prompt router Call 1 menyusut drastis ke ~800-1200 token.
+  - Berkas uji: `tests/unit/v3/dynamic-router-prompt.test.ts` (3 tests lulus 100%).
+
+- **Fase 7 — Pagar Sanitizer & Pengecualian Trimmer Keselamatan (Track 2F)**:
+  - `src/v3/guardrails/sanitizer.ts`:
+    - `isSafetyOrTriageContent`: Mendeteksi pesan rujukan darurat, skrining tanda bahaya, dan jeda protokol medis.
+    - `trimToMaxSentencesPreservingGreetingHeader`: Mengecualikan secara penuh pesan keselamatan, skrining, dan triase medis dari pemotongan batas 3 kalimat.
+    - `sanitizeMedicalAffirmation`: Mencegah pembuka ceroboh sembrono ("Boleh banget/Bisa banget") saat customer menanyakan kelayakan medis, dan mentransformasikannya menjadi pembuka santun & netral secara deterministik.
+  - `src/v3/agent/pipeline/medical-signal-detector.ts`: Menambahkan `isMedicalSafetyQuery` untuk mendeteksi pertanyaan izin/keamanan medis.
+  - `src/v3/agent/pipeline/guardrail-pipeline.ts`: Mengintegrasikan sanitasi afirmasi medis dan pengecualian trimmer.
+  - Berkas uji: `tests/unit/v3-safety-sanitizer.test.ts` (10 tests lulus 100%).
+
 #### 2026-10-17 - Feat: Penyelarasan Katalog Layanan, Tarif Promo & Aset Poster Pricelist Resmi Kala Moms and Baby Spa
 
 - **Penyelarasan Data Bisnis & Katalog (Data-Driven SSOT)**:

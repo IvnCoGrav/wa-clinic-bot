@@ -248,11 +248,132 @@ export class V3AgentRunner {
         conversationId, isFollowUp, seenChunkKeys, retrievedChunks,
       });
       preGroundingBlock = grounding.preGroundingBlock;
-      if (preGroundingBlock) {
-        messages[0].content = `${messages[0].content}\n\n${preGroundingBlock}`;
-        turn.currentSystemPrompt = messages[0].content;
-      }
+      // Fase 6 Track 2E: preGroundingBlock TIDAK disuntikkan ke messages[0] Call 1 Router (hemat token).
+      // Call 1 hanya mengevaluasi pemanggilan tool. preGroundingBlock tetap di-threading utuh
+      // ke GenerationStage.generateReply (Call 2) di Stage 4.
       session = await ContextGrounder.applySessionLatches(session, cleanIncomingText, conversationId, tenantId);
+
+      // Tahap 3c: Triage Gate Deterministik (ESCALATE -> ASK_STAGE -> SCREEN -> SAFE)
+      const { evaluateTriageGate } = await import('./pipeline/medical-signal-detector');
+      const triageVerdict = evaluateTriageGate({
+        incomingText: cleanIncomingText,
+        session,
+        tenantId,
+        conversationHistory,
+      });
+
+      if (triageVerdict.clearedScreening) {
+        session.awaitingScreeningAnswer = false;
+        try {
+          session = await GoalTracker.updateGoalSession(conversationId, { awaitingScreeningAnswer: false }, tenantId);
+        } catch { (session as any).awaitingScreeningAnswer = false; }
+      }
+
+      if (triageVerdict.action !== 'SAFE') {
+        const { executeGetClinicFaq } = await import('../tools/clinic-faq.tool');
+        const policyFaq = triageVerdict.policyTopic
+          ? await executeGetClinicFaq({ topic: triageVerdict.policyTopic }, tenantId)
+          : undefined;
+        const triageReply = policyFaq?.suggestedReply || triageVerdict.fallbackText || 'Mohon maaf Bunda, demi keselamatan medis Bidan kami menyarankan untuk berkonsultasi dengan Dokter terlebih dahulu ya Bun.';
+
+        if (triageVerdict.action === 'ESCALATE') {
+          session.triageStatus = 'ESCALATE';
+          try {
+            session = await GoalTracker.updateGoalSession(conversationId, {
+              triageStatus: 'ESCALATE',
+              cartItems: [],
+              totalPrice: undefined,
+            }, tenantId);
+          } catch {
+            session.triageStatus = 'ESCALATE';
+            session.cartItems = [];
+          }
+          await persistTurnMessages({
+            tenantId, conversationId, skipDbLogging: input.skipDbLogging,
+            originalText: input.originalText, incomingText,
+            finalReply: triageReply, isEscalated: true,
+          });
+          return {
+            replyText: triageReply,
+            executedTools: [],
+            updatedSession: session,
+            shouldSendReply: true,
+            isEscalated: true,
+            escalationReason: triageVerdict.reason,
+            retrievedChunks: [],
+            fewShotExemplars: [],
+            systemPrompt: turn.currentSystemPrompt,
+            reasoning: `[TRIAGE_GATE:ESCALATE] ${triageVerdict.reason}`,
+            tokens: { prompt: 0, completion: 0, total: 0 },
+            costIdr: 0,
+            nextState: ConversationState.HUMAN_HANDLING,
+          };
+        }
+
+        if (triageVerdict.action === 'SCREEN') {
+          session.triageStatus = 'SCREEN';
+          session.awaitingScreeningAnswer = true;
+          try {
+            session = await GoalTracker.updateGoalSession(conversationId, {
+              triageStatus: 'SCREEN',
+              awaitingScreeningAnswer: true,
+            }, tenantId);
+          } catch {
+            session.triageStatus = 'SCREEN';
+            session.awaitingScreeningAnswer = true;
+          }
+          await persistTurnMessages({
+            tenantId, conversationId, skipDbLogging: input.skipDbLogging,
+            originalText: input.originalText, incomingText,
+            finalReply: triageReply, isEscalated: false,
+          });
+          return {
+            replyText: triageReply,
+            executedTools: [],
+            updatedSession: session,
+            shouldSendReply: true,
+            isEscalated: false,
+            retrievedChunks: [],
+            fewShotExemplars: [],
+            systemPrompt: turn.currentSystemPrompt,
+            reasoning: `[TRIAGE_GATE:SCREEN] ${triageVerdict.reason}`,
+            tokens: { prompt: 0, completion: 0, total: 0 },
+            costIdr: 0,
+          };
+        }
+
+        if (triageVerdict.action === 'ASK_STAGE') {
+          session.triageStatus = 'ASK_STAGE';
+          session.pendingSubjectClarification = true;
+          try {
+            session = await GoalTracker.updateGoalSession(conversationId, {
+              triageStatus: 'ASK_STAGE',
+              pendingSubjectClarification: true,
+            }, tenantId);
+          } catch {
+            session.triageStatus = 'ASK_STAGE';
+            session.pendingSubjectClarification = true;
+          }
+          await persistTurnMessages({
+            tenantId, conversationId, skipDbLogging: input.skipDbLogging,
+            originalText: input.originalText, incomingText,
+            finalReply: triageReply, isEscalated: false,
+          });
+          return {
+            replyText: triageReply,
+            executedTools: [],
+            updatedSession: session,
+            shouldSendReply: true,
+            isEscalated: false,
+            retrievedChunks: [],
+            fewShotExemplars: [],
+            systemPrompt: turn.currentSystemPrompt,
+            reasoning: `[TRIAGE_GATE:ASK_STAGE] ${triageVerdict.reason}`,
+            tokens: { prompt: 0, completion: 0, total: 0 },
+            costIdr: 0,
+          };
+        }
+      }
 
       // P1-1: re-evaluate masking PASCA-latch (single source) dan selaraskan prompt + turn
       try {

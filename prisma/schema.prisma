@@ -483,6 +483,9 @@ model ClinicService {
   sort_order       Int      @default(0)
   total_sessions   Int?     // null = single visit, 14 = paket 14 sesi
   session_schedule_type String? // "manual" = admin atur jam per sesi
+  eligible_life_stages String[] @default([]) // Stage yang diperbolehkan (PREGNANT, PREGNANT_ATERM, POSTPARTUM, LACTATING, GENERAL, BABY, KIDS)
+  contraindications String[] @default([]) // Kontraindikasi medis (misal demam, trauma kepala, TM1)
+  requires_screening Boolean  @default(false) // Wajib verifikasi skrining sebelum booking
   created_at       DateTime @default(now())
   updated_at       DateTime @updatedAt
   reservation_items ReservationItem[]
@@ -1070,6 +1073,8 @@ model QuickReply {
   title      String
   content    String   @db.Text
   category   String?
+  media_type String?  @default("NONE") // 'NONE' | 'CUSTOM_IMAGE' | 'QRIS'
+  image_url  String?  @db.Text
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 

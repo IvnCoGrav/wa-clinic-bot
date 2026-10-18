@@ -23,6 +23,8 @@ import {
   Lock,
   LockOpen,
   StickyNote,
+  QrCode,
+  Image as ImageIcon,
 } from 'lucide-react';
 
 /**
@@ -41,6 +43,9 @@ export interface ComposerQuickReply {
   title: string;
   content: string;
   category: string | null;
+  media_type?: string | null;
+  image_url?: string | null;
+  mime_type?: string | null;
 }
 
 export interface ComposerReplyTarget {
@@ -612,7 +617,14 @@ const LiveChatComposerInner = (
               >
                 <span className={`shrink-0 px-1.5 py-0.5 rounded-md text-[11px] font-mono font-bold border ${idx === quickReplyActiveIdx ? 'bg-[#008069] text-white border-[#008069]' : 'bg-[#f0f2f5] text-[#008069] border-[#c2e7e0]'}`}>/{qr.shortcut}</span>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[12px] font-bold text-[#111b21] truncate flex items-center gap-1.5">{qr.title} {qr.category && <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-[#f0f2f5] text-[#54656f] border border-[#e9edef] font-semibold">{qr.category}</span>}</p>
+                  <p className="text-[12px] font-bold text-[#111b21] truncate flex items-center gap-1.5">
+                    {qr.media_type === 'QRIS' ? (
+                      <span title="QRIS Resmi Terlampir" className="inline-flex items-center text-[#008069]"><QrCode size={13} /></span>
+                    ) : qr.image_url || qr.media_type === 'CUSTOM_IMAGE' ? (
+                      <span title="Gambar Terlampir" className="inline-flex items-center text-[#008069]"><ImageIcon size={13} /></span>
+                    ) : null}
+                    {qr.title} {qr.category && <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-[#f0f2f5] text-[#54656f] border border-[#e9edef] font-semibold">{qr.category}</span>}
+                  </p>
                   <p className="text-[11px] text-[#667781] line-clamp-1 truncate">{qr.content.slice(0, 80).replace(/\n/g, ' ')}</p>
                 </div>
               </button>

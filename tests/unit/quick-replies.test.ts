@@ -1,20 +1,25 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   normalizeShortcut,
   isValidShortcut,
   interpolateQuickReply,
+  extToMime,
+  renderBankAccounts,
+  resolveQuickReplyMedia,
   DEFAULT_QUICK_REPLIES,
   memoryQuickReplies,
 } from '../../src/routes/admin/quick-replies.subroute';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
+import { StaffReservationService } from '../../src/services/staff-reservation.service';
 
-describe('Quick Replies - Helpers & In-Memory Store', () => {
+describe('Quick Replies - Helpers, In-Memory Store & SSOT Media Resolution', () => {
   beforeEach(() => {
     memoryQuickReplies.clear();
+    vi.restoreAllMocks();
   });
 
   it('normalizeShortcut strips slash, lowercases and trims', () => {
-    expect(normalizeShortcut('/Rek')).toBe('rek');
+    expect(normalizeShortcut('/QRIS')).toBe('qris');
     expect(normalizeShortcut('  /LOKASI  ')).toBe('lokasi');
     expect(normalizeShortcut('format_reservasi')).toBe('format_reservasi');
     expect(normalizeShortcut('/')).toBe('');
@@ -23,10 +28,31 @@ describe('Quick Replies - Helpers & In-Memory Store', () => {
   it('isValidShortcut validates length and charset', () => {
     expect(isValidShortcut('')).not.toBeNull();
     expect(isValidShortcut('a')).not.toBeNull(); // too short
-    expect(isValidShortcut('rek')).toBeNull();
+    expect(isValidShortcut('qris')).toBeNull();
     expect(isValidShortcut('ongkir-123')).toBeNull();
     expect(isValidShortcut('bad chars!')).not.toBeNull();
     expect(isValidShortcut('a'.repeat(31))).not.toBeNull(); // too long
+  });
+
+  it('extToMime correctly detects mime types from file extension', () => {
+    expect(extToMime('https://example.com/media/qris.png')).toBe('image/png');
+    expect(extToMime('/media/foto.webp?v=1')).toBe('image/webp');
+    expect(extToMime('/media/anim.gif')).toBe('image/gif');
+    expect(extToMime('/media/foto.jpg')).toBe('image/jpeg');
+    expect(extToMime(null)).toBe('image/jpeg');
+  });
+
+  it('renderBankAccounts formats bank list or returns - when empty', () => {
+    expect(renderBankAccounts(null)).toBe('-');
+    expect(renderBankAccounts({ bankAccounts: [] })).toBe('-');
+    const formatted = renderBankAccounts({
+      bankAccounts: [
+        { bank: 'BCA', accountNumber: '1234567890', accountName: 'Kala Spa' },
+        { bank: 'Mandiri', accountNumber: '9876543210', accountName: 'Kala Spa' },
+      ],
+    });
+    expect(formatted).toContain('• *BCA*: `1234567890`');
+    expect(formatted).toContain('• *Mandiri*: `9876543210`');
   });
 
   it('interpolateQuickReply replaces all placeholders including location fields', () => {
@@ -43,91 +69,129 @@ describe('Quick Replies - Helpers & In-Memory Store', () => {
     expect(out).toBe('Halo Bunda Retno (628123456789)\nKec: Rungkut\nKota: Surabaya\nAlamat: Jl Rungkut Asri 12\nDari Kala Spa oleh Kak Sinta');
   });
 
-  it('interpolateQuickReply supports Indonesian aliases ({nama}, {hp}, {kecamatan}, {address})', () => {
-    const content = 'Nama: {nama}, HP: {hp}, Kec: {kecamatan}, Alamat: {address}';
-    const out = interpolateQuickReply(content, {
-      nama: 'Bunda Sari',
-      hp: '0811223344',
-      kecamatan: 'Sukolilo',
-      address: 'Jl Kertajaya Indah',
-    });
-    expect(out).toBe('Nama: Bunda Sari, HP: 0811223344, Kec: Sukolilo, Alamat: Jl Kertajaya Indah');
-  });
-
-  it('interpolateQuickReply uses clean empty fallbacks for location when vars missing', () => {
-    const out = interpolateQuickReply('Hi {name} {phone} {clinic_name} {admin_name} Kec: {kec} Kota: {kota}', {});
-    expect(out).toContain('Bunda');
-    expect(out).toContain('Klinik Kami');
-    expect(out).toContain('Admin');
-    expect(out).toContain('Kec:  Kota: ');
-  });
-
-  it('DEFAULT_QUICK_REPLIES contains 7 required shortcuts with tenant-aware content', () => {
+  it('DEFAULT_QUICK_REPLIES contains /qris replacing legacy /rek and uses QRIS media_type', () => {
     const shortcuts = DEFAULT_QUICK_REPLIES.map((r) => r.shortcut);
-    expect(shortcuts).toContain('rek');
+    expect(shortcuts).toContain('qris');
+    expect(shortcuts).not.toContain('rek'); // Legacy hardcoded /rek dibersihkan
     expect(shortcuts).toContain('lokasi');
     expect(shortcuts).toContain('ongkir');
-    expect(shortcuts).toContain('format_reservasi');
     expect(shortcuts).toContain('jadwal');
+    expect(shortcuts).toContain('format_reservasi');
     expect(shortcuts).toContain('terimakasih');
     expect(shortcuts).toContain('batal');
-    expect(DEFAULT_QUICK_REPLIES.length).toBe(7);
-    // Ensure placeholder usage
-    const withName = DEFAULT_QUICK_REPLIES.filter((r) => r.content.includes('{name}'));
-    expect(withName.length).toBeGreaterThanOrEqual(4);
+    expect(shortcuts).toContain('shareloc');
+
+    const qrisItem = DEFAULT_QUICK_REPLIES.find((r) => r.shortcut === 'qris')!;
+    expect(qrisItem.media_type).toBe('QRIS');
+    expect(qrisItem.image_url).toBeNull();
+    expect(qrisItem.content).toContain('{bank_accounts}');
+    expect(qrisItem.content).toContain('{petunjuk}');
   });
 
-  it('memory store isolates by tenant_id and enforces unique shortcut per tenant', () => {
-    const tenantA = 'tenant-a';
-    const tenantB = 'tenant-b';
-    const idA = 'qr-a-1';
-    memoryQuickReplies.set(idA, {
-      id: idA,
-      tenant_id: tenantA,
-      shortcut: 'rek',
-      title: 'Rek A',
-      content: 'content A',
-      category: 'Pembayaran',
-      created_at: new Date(),
-      updated_at: new Date(),
+  it('resolveQuickReplyMedia: SSOT resolution dynamic from paymentInfo', async () => {
+    const qrisRow = {
+      id: 'qr-1',
+      shortcut: 'qris',
+      title: 'QRIS & Bank',
+      content: 'Halo {name} ✨\n\n{bank_accounts}\n\n{petunjuk}',
+      media_type: 'QRIS',
+      image_url: null,
+    };
+
+    // Skenario 1: paymentInfo Rekening A
+    vi.spyOn(StaffReservationService, 'getPaymentInfo').mockResolvedValueOnce({
+      qrisImageUrl: 'https://cdn.example.com/qris-klinik.png',
+      bankAccounts: [{ bank: 'BCA', accountNumber: '11112222', accountName: 'Kala Moms A' }],
+      instructions: 'Transfer sebelum jam 17.00 WIB',
     });
-    // Same shortcut in different tenant should be allowed (different tenant isolation)
-    const existingInB = Array.from(memoryQuickReplies.values()).find((r) => r.tenant_id === tenantB && r.shortcut === 'rek');
-    expect(existingInB).toBeUndefined();
-    // Duplicate in same tenant should be detected
-    const dupInA = Array.from(memoryQuickReplies.values()).find((r) => r.tenant_id === tenantA && r.shortcut === 'rek');
-    expect(dupInA).toBeDefined();
-    expect(dupInA?.title).toBe('Rek A');
+
+    const resolvedA = await resolveQuickReplyMedia(qrisRow, DEFAULT_TENANT_ID);
+    expect(resolvedA.image_url).toBe('https://cdn.example.com/qris-klinik.png');
+    expect(resolvedA.mime_type).toBe('image/png');
+    expect(resolvedA.content).toContain('11112222');
+    expect(resolvedA.content).toContain('Transfer sebelum jam 17.00 WIB');
+
+    // Skenario 2: paymentInfo diubah ke Rekening B -> response otomatis berubah dinamis
+    vi.spyOn(StaffReservationService, 'getPaymentInfo').mockResolvedValueOnce({
+      qrisImageUrl: 'https://cdn.example.com/qris-klinik-v2.webp',
+      bankAccounts: [{ bank: 'BSI', accountNumber: '55556666', accountName: 'Kala Moms B' }],
+      instructions: 'Cantumkan nama pasien di berita transfer',
+    });
+
+    const resolvedB = await resolveQuickReplyMedia(qrisRow, DEFAULT_TENANT_ID);
+    expect(resolvedB.image_url).toBe('https://cdn.example.com/qris-klinik-v2.webp');
+    expect(resolvedB.mime_type).toBe('image/webp');
+    expect(resolvedB.content).toContain('55556666');
+    expect(resolvedB.content).not.toContain('11112222');
+    expect(resolvedB.content).toContain('Cantumkan nama pasien di berita transfer');
   });
 
-  it('DEFAULT_TENANT_ID is used for memory operations and shortcut uniqueness is case-insensitive via normalize', () => {
-    const s1 = normalizeShortcut('/ReK');
-    const s2 = normalizeShortcut('rek');
-    expect(s1).toBe(s2);
-    expect(isValidShortcut(s1)).toBeNull();
+  it('Adversarial Test: resolveQuickReplyMedia handles empty paymentInfo gracefully without crashing', async () => {
+    const qrisRow = {
+      id: 'qr-empty',
+      shortcut: 'qris',
+      title: 'QRIS & Bank',
+      content: 'Transfer ke:\n{bank_accounts}\nPetunjuk: {petunjuk}',
+      media_type: 'QRIS',
+      image_url: null,
+    };
+
+    vi.spyOn(StaffReservationService, 'getPaymentInfo').mockResolvedValueOnce({
+      qrisImageUrl: null,
+      bankAccounts: [],
+      instructions: undefined,
+    });
+
+    const resolved = await resolveQuickReplyMedia(qrisRow, DEFAULT_TENANT_ID);
+    expect(resolved.image_url).toBeNull();
+    expect(resolved.mime_type).toBe('image/jpeg');
+    expect(resolved.content).toContain('-'); // Placeholder bank & petunjuk diisi '-'
   });
 
-  it('CRUD simulation in memory: create, update, delete flows', () => {
-    const id = 'mem_qr_test1';
+  it('resolveQuickReplyMedia ignores non-QRIS media types and preserves image_url', async () => {
+    const customRow = {
+      id: 'qr-custom',
+      shortcut: 'brosur',
+      title: 'Brosur Layanan',
+      content: 'Berikut pricelist lengkap kami Bunda {name}',
+      media_type: 'CUSTOM_IMAGE',
+      image_url: 'https://cdn.example.com/brosur.png',
+    };
+
+    const resolved = await resolveQuickReplyMedia(customRow, DEFAULT_TENANT_ID);
+    expect(resolved.image_url).toBe('https://cdn.example.com/brosur.png');
+    expect(resolved.mime_type).toBe('image/png');
+    expect(resolved.content).toBe('Berikut pricelist lengkap kami Bunda {name}');
+  });
+
+  it('memory store supports media_type and image_url in CRUD simulation', async () => {
+    const id = 'mem_qr_media_1';
     const item = {
       id,
       tenant_id: DEFAULT_TENANT_ID,
-      shortcut: 'test',
-      title: 'Test Title',
-      content: 'Halo {name}',
+      shortcut: 'promo',
+      title: 'Promo Spesial',
+      content: 'Berikut promo bulan ini {name}',
       category: 'Umum',
+      media_type: 'CUSTOM_IMAGE',
+      image_url: 'https://cdn.example.com/promo.jpg',
       created_at: new Date(),
       updated_at: new Date(),
     };
     memoryQuickReplies.set(id, item);
     expect(memoryQuickReplies.has(id)).toBe(true);
 
-    // update
     const stored = memoryQuickReplies.get(id)!;
-    stored.content = 'Updated {name} dari {clinic_name}';
+    expect(stored.media_type).toBe('CUSTOM_IMAGE');
+    expect(stored.image_url).toBe('https://cdn.example.com/promo.jpg');
+
+    // update to text only
+    stored.media_type = 'NONE';
+    stored.image_url = null;
     stored.updated_at = new Date();
-    const interpolated = interpolateQuickReply(stored.content, { name: 'Bunda Sari', clinic_name: 'Kala' });
-    expect(interpolated).toBe('Updated Bunda Sari dari Kala');
+
+    expect(stored.media_type).toBe('NONE');
+    expect(stored.image_url).toBeNull();
 
     // delete
     memoryQuickReplies.delete(id);

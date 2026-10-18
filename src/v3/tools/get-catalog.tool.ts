@@ -28,7 +28,7 @@ export interface GetCatalogInput {
   /** Usia kehamilan Ibu (minggu) bila pasien adalah Ibu Hamil (kategori MOMS). JANGAN diisi untuk bayi/anak. */
   gestationalWeeks?: number;
   /** Kondisi Ibu: Hamil, Paska Melahirkan/Nifas, Menyusui, atau Relaksasi Umum. */
-  momStage?: 'PREGNANT' | 'POSTPARTUM' | 'BREASTFEEDING' | 'GENERAL';
+  momStage?: 'PREGNANT' | 'POSTPARTUM' | 'BREASTFEEDING' | 'GENERAL' | 'UNKNOWN';
   symptoms?: string[];
   specificTreatmentName?: string;
   /**
@@ -81,7 +81,8 @@ export type CatalogClosingIntent =
   | 'ASK_SCHEDULE'
   | 'PRICE_SUBJECT_CLARIFY'
   | 'CLINICAL_PROBE'
-  | 'MOM_GENERAL_UNSUPPORTED';
+  | 'MOM_GENERAL_UNSUPPORTED'
+  | 'ASK_STAGE';
 
 export interface CatalogPricingBreakdown {
   targetName?: string;
@@ -111,6 +112,8 @@ export interface GetCatalogOutput {
   closingSymptoms?: string[];
   /** SOP klinis: true bila keluhan multi-tier butuh klarifikasi usia netral bulan/tahun. */
   needsAgeClarification?: boolean;
+  /** Butuh klarifikasi tahap hidup Bunda (hamil / nifas / umum) sebelum menentukan layanan */
+  askStage?: boolean;
   /**
    * Template total resmi keranjang multi-item (sesi 214956): dihitung 100%
    * mesin dari snapshot cart + ongkir sesi. Dipakai panduan LLM DAN fallback
@@ -176,7 +179,7 @@ export interface CatalogSessionContext {
    * (session.momProfile), bukan tebakan LLM turn ini. Gerbang klinis
    * deterministik bumil (induksi/perineum butuh ambang minggu).
    */
-  momStage?: 'PREGNANT' | 'POSTPARTUM' | 'BREASTFEEDING' | 'GENERAL';
+  momStage?: 'PREGNANT' | 'POSTPARTUM' | 'BREASTFEEDING' | 'GENERAL' | 'UNKNOWN';
   gestationalWeeks?: number;
 }
 
@@ -203,7 +206,7 @@ export const GET_CATALOG_TOOL_SCHEMA = {
         },
         momStage: {
           type: 'string',
-          enum: ['PREGNANT', 'POSTPARTUM', 'BREASTFEEDING', 'GENERAL'],
+          enum: ['PREGNANT', 'POSTPARTUM', 'BREASTFEEDING', 'GENERAL', 'UNKNOWN'],
           description: 'Kondisi Ibu (Hamil, Paska Melahirkan/Nifas, Menyusui, atau Relaksasi Umum).'
         },
         symptoms: {
@@ -424,11 +427,11 @@ export async function executeGetCatalog(
     // nama bawaan LLM dari turn sebelumnya tak boleh membuang terapi resmi
     // (mis. "Pijat Lahap Juara" membuang "Pijat Kids Pulih Ceria" untuk
     // kembung). Tanpa gejala, filter nama berlaku normal (intent eksplisit).
-    let clinicalRecommendation: ClinicServiceItem | undefined = undefined;
+    let clinicalRecommendation: (ClinicServiceItem & { askStage?: boolean; blockedByStage?: boolean }) | undefined = undefined;
     if (effectiveSymptoms.length > 0) {
       try {
         clinicalRecommendation = treatmentCatalogService.recommendServiceBySymptoms(
-          effectiveSymptoms, childAgeMonths ?? null, category as any, tenantId
+          effectiveSymptoms, childAgeMonths ?? null, category as any, tenantId, momStage, gestationalWeeks
         );
       } catch { clinicalRecommendation = undefined; }
     }
@@ -451,6 +454,7 @@ export async function executeGetCatalog(
         matched = filtered.filter(s => s.name.toLowerCase().includes(query) || s.description.toLowerCase().includes(query));
       }
       const evictsClinical = clinicalRecommendation != null
+        && !clinicalRecommendation.askStage
         && matched.length > 0
         && !matched.some((s) => s.id === (clinicalRecommendation as ClinicServiceItem).id);
       if (matched.length > 0 && !evictsClinical) {
@@ -477,7 +481,7 @@ export async function executeGetCatalog(
       };
     });
 
-    if (clinicalRecommendation) {
+    if (clinicalRecommendation && !clinicalRecommendation.askStage) {
       const recommended = clinicalRecommendation;
       const hit = formattedTreatments.find((t) => t.id === recommended.id);
       if (hit) hit.isRecommendedForSymptoms = true;
@@ -1011,7 +1015,10 @@ export async function executeGetCatalog(
         return hasBabyVariant && hasKidsVariant;
       })();
     let closingIntent: CatalogClosingIntent;
-    if (momGeneralUnsupported) {
+    const askStageNeeded = clinicalRecommendation?.askStage === true;
+    if (askStageNeeded) {
+      closingIntent = 'ASK_STAGE';
+    } else if (momGeneralUnsupported) {
       closingIntent = 'MOM_GENERAL_UNSUPPORTED';
     } else if (hasKnownSymptoms && !hasClinicalMatch && !specificName) {
       closingIntent = 'SAFETY_NO_MATCH';
@@ -1050,6 +1057,7 @@ export async function executeGetCatalog(
       PRICE_SUBJECT_CLARIFY: hasUnmatchedTargetPrice
         ? `Nominal yang ditanyakan customer tidak ada di katalog layanan satuan kami. Wajib kutip Klarifikasi Nominal di atas secara ramah, lalu tanyakan kebutuhan perawatan atau keluhan untuk Bunda atau si kecil.`
         : `Wajib sebutkan paket yang sesuai nominal di atas${showDuration ? ' beserta durasinya' : ''}, lalu tanyakan ramah apakah perawatan untuk Bunda atau si kecil (paket BELUM dipilih — DILARANG mengunci satu paket sepihak).`,
+      ASK_STAGE: `Keluhan Bunda (${effectiveSymptoms.join(', ')}) memerlukan konfirmasi tahap kehamilan/kondisi Bunda saat ini sebelum kami dapat menyarankan perawatan yang paling aman dan tepat. Tanyakan secara hangat apakah Bunda saat ini sedang hamil (usia berapa minggu), pasca melahirkan/nifas, atau untuk relaksasi tubuh umum. DILARANG merekomendasikan paket kehamilan (Prenatal/Induksi) atau laktasi sebelum tahap hidup dipastikan.`,
       // Plan regresi Fase 5.1: hardcoded "si kecil batuk/pilek" dicabut.
       // CLINICAL_PROBE audience-aware: konteks ibu → skrining Bunda
       // (hamil/nifas/menyusui/relaksasi), DILARANG bawa batuk/pilek bayi.
@@ -1078,6 +1086,7 @@ export async function executeGetCatalog(
       closingIntent,
       closingSymptoms: [...effectiveSymptoms],
       needsAgeClarification,
+      askStage: askStageNeeded || undefined,
       recommendationReason,
       suggestedPriceReply,
       cartTotalReply,

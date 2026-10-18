@@ -646,7 +646,13 @@ export class GoalTracker {
     }
     if (hasMom) {
       const mp = session.momProfile || { complaints: [] as string[] };
-      const stageLabel = mp.stage === 'PREGNANT' ? 'Ibu Hamil' : mp.stage === 'POSTPARTUM' ? 'Paska Salin/Nifas' : 'Ibu (Relaksasi Umum)';
+      const stageLabel = mp.stage === 'PREGNANT'
+        ? 'Ibu Hamil'
+        : mp.stage === 'POSTPARTUM'
+          ? 'Paska Salin/Nifas'
+          : mp.stage === 'UNKNOWN'
+            ? 'Ibu (Tahap Belum Terkonfirmasi)'
+            : 'Ibu (Relaksasi Umum)';
       // Usia kehamilan DINAMIS di jalur chat: angka minggu bertambah seiring waktu
       // sejak PERTAMA dicatat (computeGestationalAge). Selaras badge admin
       // (resolveMomGestationalInfo). Fallback ke angka mentah bila jangkar absen.
@@ -660,10 +666,17 @@ export class GoalTracker {
           }).currentWeeks;
         }
       }
-      const gestLabel = effectiveWeeks != null ? `Usia Kehamilan ${effectiveWeeks} minggu` : (mp.stage === 'PREGNANT' ? 'Usia kehamilan belum spesifik' : `Kondisi: ${stageLabel}`);
+      const gestLabel = effectiveWeeks != null
+        ? `Usia Kehamilan ${effectiveWeeks} minggu`
+        : (mp.stage === 'PREGNANT'
+          ? 'Usia kehamilan belum spesifik'
+          : mp.stage === 'UNKNOWN'
+            ? 'Tahap/fase Bunda belum terkonfirmasi'
+            : `Kondisi: ${stageLabel}`);
       const postpartumLabel = mp.postpartumPeriod ? `, Paska salin: ${mp.postpartumPeriod}` : '';
       const complaintLabel = (mp.complaints || []).length > 0 ? `, Keluhan Bunda: ${mp.complaints.join(', ')}` : '';
-      lines.push(`• Data Bunda (Pasien): ${gestLabel}${mp.stage && mp.gestationalWeeks == null && mp.stage !== 'PREGNANT' ? ` (${stageLabel})` : mp.stage === 'PREGNANT' && mp.gestationalWeeks != null ? ` (${stageLabel})` : ''}${postpartumLabel}${complaintLabel} [STATUS: SUDAH DIKETAHUI - DILARANG MENGONVERSI KE USIA ANAK!]`);
+      const shouldAppendStage = mp.stage && mp.stage !== 'UNKNOWN' && ((mp.gestationalWeeks == null && mp.stage !== 'PREGNANT') || (mp.stage === 'PREGNANT' && mp.gestationalWeeks != null));
+      lines.push(`• Data Bunda (Pasien): ${gestLabel}${shouldAppendStage ? ` (${stageLabel})` : ''}${postpartumLabel}${complaintLabel} [STATUS: SUDAH DIKETAHUI - DILARANG MENGONVERSI KE USIA ANAK!]`);
     }
     if (hasKids) {
       if (kids.length > 1) {

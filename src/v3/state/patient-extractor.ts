@@ -203,30 +203,52 @@ export class PatientProfileExtractor {
    */
   public static syncMomProfile(
     session: CustomerGoalSession,
-    text: string
+    text: string,
+    history?: Array<{ role: string; content: string }>
   ): MomProfileState | undefined {
     const lower = (text || '').toLowerCase();
-    if (!lower) return session.momProfile;
-    const audience = PatientProfileExtractor.detectTargetAudience(text);
-    const gestationalWeeks = PatientProfileExtractor.parseGestationalWeeks(text);
-    const mentionsPostpartum = lower.includes('nifas') || lower.includes('paska') || lower.includes('pasca')
-      || lower.includes('baru melahirkan') || lower.includes('postpartum') || lower.includes('menyusui');
-    const mentionsPregnant = lower.includes('hamil') || lower.includes('bumil') || lower.includes('kehamilan')
-      || lower.includes('usia kandungan') || lower.includes('trimester') || gestationalWeeks !== undefined
-      || lower.includes('induksi') || lower.includes('perineum') || lower.includes('prenatal');
-    const mentionsMomRelax = lower.includes('untuk saya') || lower.includes('buat saya') || lower.includes('saya sendiri')
-      || lower.includes('bunda sendiri') || lower.includes('relaksasi ibu') || lower.includes('pijat ibu');
+
+    // T1.4: Baca riwayat hingga 6 pesan user terakhir bila ada
+    let historyUserText = '';
+    if (Array.isArray(history) && history.length > 0) {
+      const userMsgs = history.filter((h) => h.role === 'user').slice(-6);
+      historyUserText = userMsgs.map((h) => h.content || '').join(' ').toLowerCase();
+    }
+    const combinedText = `${historyUserText} ${lower}`.trim();
+    if (!combinedText) return session.momProfile;
+
+    const audience = PatientProfileExtractor.detectTargetAudience(text)
+      || (session.targetAudience === 'MOMS' || session.targetAudience === 'BOTH' ? session.targetAudience : undefined);
+
+    let gestationalWeeks = PatientProfileExtractor.parseGestationalWeeks(text);
+    if (gestationalWeeks === undefined && historyUserText) {
+      gestationalWeeks = PatientProfileExtractor.parseGestationalWeeks(historyUserText);
+    }
+
+    const mentionsPostpartum = combinedText.includes('nifas') || combinedText.includes('paska') || combinedText.includes('pasca')
+      || combinedText.includes('baru melahirkan') || combinedText.includes('postpartum') || combinedText.includes('menyusui');
+    const mentionsPregnant = combinedText.includes('hamil') || combinedText.includes('bumil') || combinedText.includes('kehamilan')
+      || combinedText.includes('usia kandungan') || combinedText.includes('trimester') || gestationalWeeks !== undefined
+      || combinedText.includes('induksi') || combinedText.includes('perineum') || combinedText.includes('prenatal');
+    const mentionsMomRelax = combinedText.includes('untuk saya') || combinedText.includes('buat saya') || combinedText.includes('saya sendiri')
+      || combinedText.includes('bunda sendiri') || combinedText.includes('relaksasi ibu') || combinedText.includes('pijat ibu');
+
     if (!mentionsPregnant && !mentionsPostpartum && !mentionsMomRelax && audience !== 'MOMS' && audience !== 'BOTH') {
       return session.momProfile;
     }
+
     const MOM_COMPLAINT_WORDS = ['pegal', 'capek', 'lelah', 'letih', 'bengkak', 'nyeri', 'ngilu', 'kram', 'pinggang', 'punggung', 'kaki', 'tangan kesemutan', 'susah tidur', 'tidak bisa tidur', 'mual', 'pusing', 'kontraksi', 'kencang', 'asi', 'laktasi', 'menyusui', 'puting', 'bendungan', 'stres', 'cemas', 'sakit pinggang', 'boyok'];
     const foundComplaints = MOM_COMPLAINT_WORDS.filter((s) => lower.includes(s));
     const prev = session.momProfile || { complaints: [] };
-    let stage: MomStage = prev.stage || 'GENERAL';
+
+    // T1.3: Default UNKNOWN bila tanpa penanda klinis eksplisit
+    let stage: MomStage = prev.stage || 'UNKNOWN';
     if (mentionsPregnant) stage = 'PREGNANT';
     else if (mentionsPostpartum) stage = 'POSTPARTUM';
-    else if (prev.stage) stage = prev.stage;
-    else stage = 'GENERAL';
+    else if (mentionsMomRelax) stage = 'GENERAL';
+    else if (prev.stage && prev.stage !== 'UNKNOWN') stage = prev.stage;
+    else stage = 'UNKNOWN';
+
     const mergedComplaints = [...(prev.complaints || [])];
     for (const c of foundComplaints) {
       if (!mergedComplaints.includes(c)) mergedComplaints.push(c);

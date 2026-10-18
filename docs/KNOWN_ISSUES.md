@@ -3,6 +3,26 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 265. [Clinical Triage/LLM Safety] Triase Klinis Deterministik, Pencegahan Kontaminasi Subjek & Metadata Kelayakan Katalog (2026-10-18, IMPLEMENTED)
+
+- **Status:** IMPLEMENTED lokal (Fase 0 s/d 7 selesai, build root `tsc` hijau, vitest 8 suite / 55 tests 100% hijau, zero regresi baru).
+- **Latar Belakang & Akar Masalah:**
+  1. Kontaminasi Subjek: Gejala keluhan maternal ibu (misal "kaki saya bengkak banget") diserap ke profil anak (`childProfile.symptoms`) oleh fallback lama tool `get_catalog_and_price`.
+  2. MomStage GENERAL Default: Saat customer ibu belum spesifik hamil/nifas, default sistem langsung mengasumsikan `GENERAL` (Relaksasi Umum) yang mendistorsi rekomendasi RAG dan katalog.
+  3. LLM Reckless Affirmation: Balasan LLM cenderung membuka dengan "Boleh banget/Bisa banget" saat ditanya keamanan medis (misal pijat pasca vaksin/trauma jatuh), berisiko melanggar etika klinis Bidan.
+  4. Trimmer Mutilation pada Triage: Pesan skrining dan rujukan darurat 4-5 kalimat berpotensi terpotong oleh pemotong batas 3 kalimat Rule 1.
+  5. Call 1 Router Bloat: Injeksi RAG pra-retrieval dan 4 section persona dashboard ke prompt Call 1 router memompa >35k char (ribuan token) yang tidak diperlukan untuk evaluasi pemilihan tool.
+- **Resolusi Fondasional Terpasang:**
+  1. Tool Pipeline & Guardrail: Penghentian fallback kontaminasi anak; aktivasi `pendingSubjectClarification` dan append pertanyaan subjek deterministik bila ambigu (`tool-pipeline.ts`, `guardrail-pipeline.ts`).
+  2. MomStage 'UNKNOWN' & History Reading: Default `MomStage = 'UNKNOWN'`; `syncMomProfile` membaca hingga 6 riwayat pesan user untuk usia kehamilan/status klinis (`patient-extractor.ts`, `goal-tracker.ts`).
+  3. Matriks Triase & Triage Gate: Matriks triase 13 skenario (`docs/clinical-triage-matrix.md`); Triage Gate Tahap 3c di `agent-runner.ts` membalas kasus darurat dan skrining jeda secara deterministik (0 token LLM).
+  4. Metadata Katalog Berbasis Database: Migrasi Prisma kolom kelayakan klinis (`eligible_life_stages`, `contraindications`, `requires_screening`); filter pre-score memblokir layanan stage-spesifik bila `MomStage` UNKNOWN (`treatment-catalog.service.ts`, `get-catalog.tool.ts`).
+  5. Kalibrasi RAG & Slimming Router: Ambang rank dinaikkan ke 0.35 + fallback blok netral; prompt Call 1 dibersihkan dari RAG dan persona dashboard (menyusut ke ~800-1200 token di `prompt-composer.ts` & `agent-runner.ts`).
+  6. Output Sanitizer Safety Guards: `isSafetyOrTriageContent` mengecualikan pesan keselamatan medis dari pemotong 3 kalimat; `sanitizeMedicalAffirmation` me-rephrase pembuka ceroboh menjadi santun & netral bila customer menanyakan keamanan medis (`sanitizer.ts`, `guardrail-pipeline.ts`, `medical-signal-detector.ts`).
+- **Residual / Catatan Operasional:**
+  - Validasi Bidan Fase B terhadap 9 skenario `gray` pada `tests/eval/golden-conversations.eval.test.ts`.
+  - Manual check M1 (`npm run eval:audit`), M2 (`npm run eval:numeric`), M3 (`npm run chat`) diserahkan ke pengguna untuk verifikasi live dengan API key LLM asli.
+
 ## 264. [Media/Storage] Resolusi Deadlock Auto-Pruning Media & Mislabeling Ekstensi (2026-10-17, IMPLEMENTED lokal)
 
 - **Status:** IMPLEMENTED lokal (Fase 1–5 selesai, build root hijau, vitest 10 media suites / 87 tests 100% hijau, zero regresi baru. Full suite `npm test`: 5473 lulus / 8 gagal — 8 gagal terbukti **pre-existing** (fixture bergantung tanggal, file non-media) via revert-and-rerun).

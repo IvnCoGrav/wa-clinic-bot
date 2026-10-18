@@ -10,7 +10,10 @@ export type ClinicPolicyTopic =
   | 'post_vaccine_rules'
   | 'homebase_and_coverage'
   | 'operational_hours_and_booking'
-  | 'general_homecare_info';
+  | 'general_homecare_info'
+  | 'triage_escalate'
+  | 'triage_ask_stage'
+  | 'triage_screen';
 
 export interface GetClinicFaqInput {
   topic: ClinicPolicyTopic;
@@ -129,6 +132,30 @@ function getStaticFallbackPolicy(topic: ClinicPolicyTopic): GetClinicFaqOutput {
         topic,
         factualSummary: 'Layanan homecare buka setiap hari (Senin - Minggu) pukul 08.00 - 17.00 WIB. Pemilihan slot jam kunjungan dikoordinasikan oleh tim Bidan kami berdasarkan ketersediaan rute bidan yang bertugas.',
         suggestedReply: `Layanan homecare kami buka setiap hari (Senin - Minggu) mulai pukul 08.00 hingga 17.00 WIB ya Bunda 😊\n\nUntuk ketersediaan jadwal di hari yang Bunda inginkan, akan kami bantu cekkan terlebih dahulu ketersediaan jadwal tim Bidan kami ya Bunda 🤗`
+      };
+
+    case 'triage_escalate':
+      return {
+        success: true,
+        topic,
+        factualSummary: 'Kondisi kegawatdaruratan medis, trauma fisik/kepala, atau dugaan komplikasi tidak diperbolehkan pemijatan dan wajib segera dirujuk ke faskes/dokter spesialis.',
+        suggestedReply: 'Aduh Bunda, mohon maaf sekali untuk kondisi si kecil/Bunda saat ini, Bidan kami belum menyarankan untuk dilakukan tindakan pemijatan ya Bun. 🙏 Sebaiknya segera diperiksakan ke Dokter atau fasilitas kesehatan terdekat untuk penanganan medis yang aman dan tepat Bun.'
+      };
+
+    case 'triage_ask_stage':
+      return {
+        success: true,
+        topic,
+        factualSummary: 'Keluhan maternal memerlukan konfirmasi tahap kehamilan (usia gestasi minggu) atau pasca bersalin sebelum layanan dapat ditentukan secara aman.',
+        suggestedReply: 'Boleh tahu Bunda, untuk keluhannya saat ini sedang hamil (usia berapa minggu), pasca melahirkan, atau untuk relaksasi tubuh ya Bun? 😊'
+      };
+
+    case 'triage_screen':
+      return {
+        success: true,
+        topic,
+        factualSummary: 'Kondisi pasca imunisasi atau gejala khusus memerlukan skrining jeda minimal 48 jam dan konfirmasi bebas demam sebelum pemesanan disetujui.',
+        suggestedReply: 'Wah si kecil baru selesai imunisasi ya Bun. 👶 Untuk jadwal pemijatan, Bidan kami menyarankan diberikan jeda minimal 2x24 jam (2 hari) setelah imunisasi ya Bun, serta pastikan si kecil sudah tidak ada demam Bun.'
       };
 
     case 'general_homecare_info':

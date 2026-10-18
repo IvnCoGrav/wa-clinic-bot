@@ -77,12 +77,49 @@ export interface ClinicServiceItem {
   isActive: boolean;           // Status keaktifan layanan
   totalSessions?: number;      // null = single visit, 14 = paket 14 sesi
   sessionScheduleType?: string; // "manual" = admin atur jam per sesi
+  eligibleLifeStages?: string[]; // PREGNANT, PREGNANT_ATERM, POSTPARTUM, LACTATING, GENERAL, BABY, KIDS
+  contraindications?: string[];
+  requiresScreening?: boolean;
 }
 
-const SERVICES_FILE = path.join(process.cwd(), 'services_custom.json');
+export const SERVICES_FILE = path.join(process.cwd(), 'services_custom.json');
 
 // Struktur: Map<tenantId, Map<serviceId, ClinicServiceItem>>
 const tenantServiceCatalog: Map<string, Map<string, ClinicServiceItem>> = new Map();
+
+/**
+ * Inferensi kelayakan tahap hidup maternal/anak (Fase 4 data-driven fallback).
+ * Dipakai saat metadata DB/JSON belum terisi penuh agar tidak hardcode di prompt.
+ */
+export function inferEligibleLifeStages(item: {
+  category?: string | null;
+  name?: string;
+  description?: string;
+  ageTier?: { label?: string };
+}): string[] {
+  const cat = (item.category || '').toUpperCase();
+  const text = `${item.name || ''} ${item.description || ''} ${item.ageTier?.label || ''}`.toLowerCase();
+
+  if (cat === 'BABY') return ['BABY'];
+  if (cat === 'KIDS') return ['KIDS'];
+  if (cat === 'BOTH') return ['BABY', 'KIDS', 'MOMS'];
+  if (cat === 'MOMS') {
+    if (text.includes('induksi')) {
+      return ['PREGNANT_ATERM'];
+    }
+    if (text.includes('prenatal') || text.includes('pregnant') || text.includes('perineum') || text.includes('hamil') || text.includes('trimester')) {
+      return ['PREGNANT'];
+    }
+    if (text.includes('laktasi') || text.includes('breast care') || text.includes('oksitosin')) {
+      return ['POSTPARTUM', 'LACTATING'];
+    }
+    if (text.includes('postpartum') || text.includes('nifas') || text.includes('pasca persalinan')) {
+      return ['POSTPARTUM'];
+    }
+    return ['GENERAL', 'PREGNANT', 'POSTPARTUM', 'LACTATING'];
+  }
+  return ['GENERAL'];
+}
 
 /**
  * Sanitasi display fondasional (Fase 1.1): tag `[BUNDLE:...]`/`[ADDON]` adalah
@@ -101,7 +138,18 @@ function sanitizeCatalogItem(item: ClinicServiceItem): ClinicServiceItem {
   let isAd = item.isAddon === true;
   if (/\[ADDON\]/.test(rawDesc)) isAd = true;
   const cleanDesc = rawDesc.replace(/\[BUNDLE:[^\]]+\]\s*/g, '').replace(/\[ADDON\]\s*/g, '').trim();
-  return { ...item, description: cleanDesc, bundleItemIds: bundleIds, isAddon: isAd };
+  const stages = (item.eligibleLifeStages && item.eligibleLifeStages.length > 0)
+    ? item.eligibleLifeStages
+    : inferEligibleLifeStages(item);
+  return {
+    ...item,
+    description: cleanDesc,
+    bundleItemIds: bundleIds,
+    isAddon: isAd,
+    eligibleLifeStages: stages,
+    contraindications: item.contraindications || [],
+    requiresScreening: item.requiresScreening ?? false,
+  };
 }
 
 /** Helper untuk mendapatkan atau membuat catalog map per-tenant */
@@ -922,6 +970,10 @@ export async function loadServicesFromDb(tenantId: string): Promise<void> {
           cat === 'BUNDLE' || (bundleItemIds && bundleItemIds.length >= 2) ? 'BUNDLE' :
           cat === 'ADD_ON' || isAddon ? 'ADD_ON' : 'STANDARD';
 
+        const itemStages = (s as any).eligible_life_stages && (s as any).eligible_life_stages.length > 0
+          ? (s as any).eligible_life_stages
+          : inferEligibleLifeStages({ category: cat, name: s.name, description: desc, ageTier: { label: s.age_label } });
+
         targetCatalog.set(s.service_id, {
           id: s.service_id,
           name: s.name,
@@ -941,6 +993,9 @@ export async function loadServicesFromDb(tenantId: string): Promise<void> {
           isActive: s.is_active,
           totalSessions: s.total_sessions ?? undefined,
           sessionScheduleType: s.session_schedule_type ?? undefined,
+          eligibleLifeStages: itemStages,
+          contraindications: (s as any).contraindications || [],
+          requiresScreening: (s as any).requires_screening ?? false,
         });
       });
       return;
@@ -1008,6 +1063,9 @@ export async function saveServicesToDb(tenantId: string): Promise<boolean> {
           description: metaDesc,
           is_active: s.isActive,
           sort_order: idx,
+          eligible_life_stages: s.eligibleLifeStages || [],
+          contraindications: s.contraindications || [],
+          requires_screening: s.requiresScreening ?? false,
         };
     });
 
@@ -1733,8 +1791,10 @@ export class TreatmentCatalogService {
     symptoms: string[],
     ageMonths?: number | null,
     category?: TreatmentCategoryType,
-    tenantId: string = DEFAULT_TENANT_ID
-  ): ClinicServiceItem | undefined {
+    tenantId: string = DEFAULT_TENANT_ID,
+    momStage?: string | null,
+    gestationalWeeks?: number | null
+  ): (ClinicServiceItem & { askStage?: boolean; blockedByStage?: boolean }) | undefined {
     const rawText = (symptoms || []).join(' ').toLowerCase();
     const tokens = rawText
       .split(/[^a-z0-9]+/)
@@ -1754,6 +1814,63 @@ export class TreatmentCatalogService {
     }
     pool = pool.filter((s) => s.isActive);
     if (pool.length === 0) return undefined;
+
+    // T4.2: Filter kelayakan tahap hidup (Clinical Life Stage Eligibility).
+    // MomStage UNKNOWN -> layanan stage-spesifik (Prenatal/Induksi/Laktasi) diblokir
+    // dari rekomendasi langsung. Jika keluhan paling cocok dengan layanan yang diblokir,
+    // return dengan askStage: true (deterministik).
+    const effectiveMomStage = momStage || (category === 'MOMS' ? 'UNKNOWN' : undefined);
+    const stageSpecificBlocked: ClinicServiceItem[] = [];
+
+    if (effectiveMomStage) {
+      const activeFiltered: ClinicServiceItem[] = [];
+      for (const item of pool) {
+        if (item.category !== 'MOMS' && resolveServiceAudience(item as any) !== 'MOMS') {
+          activeFiltered.push(item);
+          continue;
+        }
+
+        const stages = (item.eligibleLifeStages && item.eligibleLifeStages.length > 0)
+          ? item.eligibleLifeStages
+          : inferEligibleLifeStages(item);
+
+        const isStageSpecific = !stages.includes('GENERAL') && !stages.includes('UNKNOWN');
+
+        if (effectiveMomStage === 'UNKNOWN') {
+          if (isStageSpecific) {
+            stageSpecificBlocked.push(item);
+          } else {
+            activeFiltered.push(item);
+          }
+        } else if (effectiveMomStage === 'PREGNANT') {
+          const isLactationOrPostpartum = stages.some((st) => st === 'POSTPARTUM' || st === 'LACTATING') && !stages.includes('PREGNANT');
+          const isInduksi = stages.includes('PREGNANT_ATERM');
+          const isPreterm = typeof gestationalWeeks === 'number' && gestationalWeeks < 37;
+
+          if (isLactationOrPostpartum || (isInduksi && isPreterm)) {
+            stageSpecificBlocked.push(item);
+          } else {
+            activeFiltered.push(item);
+          }
+        } else if (effectiveMomStage === 'POSTPARTUM' || effectiveMomStage === 'LACTATING') {
+          const isPregnantOnly = stages.some((st) => st === 'PREGNANT' || st === 'PREGNANT_ATERM') && !stages.includes('POSTPARTUM') && !stages.includes('LACTATING');
+          if (isPregnantOnly) {
+            stageSpecificBlocked.push(item);
+          } else {
+            activeFiltered.push(item);
+          }
+        } else if (effectiveMomStage === 'GENERAL') {
+          if (isStageSpecific) {
+            stageSpecificBlocked.push(item);
+          } else {
+            activeFiltered.push(item);
+          }
+        } else {
+          activeFiltered.push(item);
+        }
+      }
+      pool = activeFiltered;
+    }
 
     let best: ClinicServiceItem | undefined;
     let bestScore = 0;
@@ -1796,6 +1913,41 @@ export class TreatmentCatalogService {
         }
       }
     }
+
+    // Bila ada layanan stage-spesifik yang terblokir, evaluasi kecocokannya
+    if (stageSpecificBlocked.length > 0) {
+      let blockedBest: ClinicServiceItem | undefined;
+      let blockedBestScore = 0;
+      for (const item of stageSpecificBlocked) {
+        const nameLower = item.name.toLowerCase();
+        const descLower = (item.description || '').toLowerCase();
+        const haystack = `${nameLower} ${descLower}`;
+        const normHaystack = haystack.replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
+        let score = 0;
+        for (const tok of tokens) {
+          if (nameLower.includes(tok)) score += 4;
+          else if (descLower.includes(tok)) score += 2;
+          else if (haystack.includes(tok)) score += 2;
+        }
+        for (const bg of bigrams) {
+          if (normTextForPhrase.includes(bg) && normHaystack.includes(bg)) score += 8;
+        }
+        if (tokens.length === 1 && normHaystack.includes(tokens[0])) score += 4;
+        if (score > blockedBestScore) {
+          blockedBestScore = score;
+          blockedBest = item;
+        }
+      }
+
+      if (blockedBest && (blockedBestScore > bestScore || !best || bestScore === 0)) {
+        return {
+          ...blockedBest,
+          askStage: effectiveMomStage === 'UNKNOWN',
+          blockedByStage: true,
+        };
+      }
+    }
+
     return bestScore > 0 ? best : undefined;
   }
 

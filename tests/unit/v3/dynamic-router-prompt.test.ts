@@ -31,7 +31,7 @@ describe('Dynamic Router Prompt (Plan 4 Phase 1)', () => {
     expect(asyncOut).not.toContain('KONFIGURASI PERSONA TENANT');
   });
 
-  it('menyerap 4 section TenantPromptConfig dari DB', async () => {
+  it('Call 1 router tetap ramping (tanpa bloat persona), sementara Call 2 menyerap 4 section TenantPromptConfig', async () => {
     const spy = vi
       .spyOn(TenantPromptConfigService, 'getActivePromptConfig')
       .mockResolvedValue({
@@ -41,16 +41,22 @@ describe('Dynamic Router Prompt (Plan 4 Phase 1)', () => {
         medicalOverclaimRules: 'MARKER-OVERCLAIM-UNIK-123',
       });
     try {
-      const out = await PersonaPromptBuilder.buildRouterPromptAsync({ genderGreeting: 'Bunda' } as any, true, {
+      // Call 1: Router Prompt dirampingkan tanpa bloat persona tenant
+      const routerOut = await PersonaPromptBuilder.buildRouterPromptAsync({ genderGreeting: 'Bunda' } as any, true, {
         tenantId: DEFAULT_TENANT_ID,
       });
-      expect(out).toContain('KONFIGURASI PERSONA TENANT');
-      expect(out).toContain('MARKER-TONE-UNIK-123');
-      expect(out).toContain('MARKER-HIERARKI-UNIK-123');
-      expect(out).toContain('MARKER-NEGATIF-UNIK-123');
-      expect(out).toContain('MARKER-OVERCLAIM-UNIK-123');
-      // Base statis tetap dipertahankan (bukan diganti)
-      expect(out).toContain('CALL 1 - TOOL ROUTING');
+      expect(routerOut).not.toContain('KONFIGURASI PERSONA TENANT');
+      expect(routerOut).toContain('CALL 1 - TOOL ROUTING');
+
+      // Call 2: System Prompt menyerap 4 section TenantPromptConfig
+      const systemOut = await PersonaPromptBuilder.buildSystemPromptAsync({ genderGreeting: 'Bunda' } as any, true, {
+        tenantId: DEFAULT_TENANT_ID,
+        incomingText: 'halo bidan',
+      });
+      expect(systemOut.systemPrompt).toContain('MARKER-TONE-UNIK-123');
+      expect(systemOut.systemPrompt).toContain('MARKER-HIERARKI-UNIK-123');
+      expect(systemOut.systemPrompt).toContain('MARKER-NEGATIF-UNIK-123');
+      expect(systemOut.systemPrompt).toContain('MARKER-OVERCLAIM-UNIK-123');
     } finally {
       spy.mockRestore();
       TenantPromptConfigService.__clearCacheForTest(DEFAULT_TENANT_ID);

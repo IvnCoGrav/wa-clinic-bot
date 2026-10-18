@@ -81,6 +81,49 @@ describe('Live Chat Admin Endpoints (monitor & balas)', () => {
     expect(fake.sendTextMessage).toHaveBeenCalledWith(phone, 'Baik Bunda, dokter akan segera merespon');
   });
 
+  it('POST /api/admin/live-chat/conversations/:id/reply menerima mediaUrl dan mengirim pesan gambar ke gateway', async () => {
+    const fake = {
+      providerType: 'WAHA',
+      sendImageMessage: vi.fn().mockResolvedValue({ success: true, messageId: 'waid_img_1', provider: 'WAHA' }),
+      sendTextMessage: vi.fn().mockResolvedValue({ success: true, messageId: 'waid_txt_1', provider: 'WAHA' }),
+    } as any;
+    createTestGateway(fake, DEFAULT_TENANT_ID);
+
+    const { mediaService } = await import('../../src/services/media.service');
+    const saved = await mediaService.saveOutboundMedia({
+      tenantId: DEFAULT_TENANT_ID,
+      imageB64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      mimeType: 'image/png',
+      fileName: 'qris-klinik.png',
+    });
+
+    const phone = `628511${Date.now().toString().slice(-7)}`;
+    const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Media Test', DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/admin/live-chat/conversations/${conversation.id}/reply`,
+      headers: { 'x-api-key': ADMIN_KEY },
+      payload: {
+        text: 'Berikut lampiran QRIS resmi kami',
+        mediaUrl: saved.hdUrl,
+        mimeType: 'image/png',
+        fileName: 'qris-klinik.png',
+        adminName: 'Admin Media',
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.success).toBe(true);
+    expect(fake.sendImageMessage).toHaveBeenCalled();
+    const [callPhone, callUrl, callCaption] = fake.sendImageMessage.mock.calls[0];
+    expect(callPhone).toBe(phone);
+    expect(callUrl).toBeDefined();
+    expect(callCaption).toBe('Berikut lampiran QRIS resmi kami');
+  });
+
   it('GET /api/admin/live-chat/conversations & :id/messages menampilkan thread dengan sender ADMIN', async () => {
     const phone = `628600${Date.now().toString().slice(-7)}`;
     const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Thread', DEFAULT_TENANT_ID);

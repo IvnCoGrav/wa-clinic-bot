@@ -6,6 +6,20 @@
  * dari context-grounder.ts; context-grounder.ts kini mendelegasikan ke sini.
  */
 import { hasBookingCommitSignal } from '../../../utils/date-confirmation';
+import { checkMedicalKeywords, EMERGENCY_SYMPTOM_PATTERNS } from '../../../config/medical-keywords';
+import type { ClinicPolicyTopic } from '../../tools/clinic-faq.tool';
+import type { CustomerGoalSession } from '../../domain/types';
+
+export type TriageAction = 'ESCALATE' | 'ASK_STAGE' | 'SCREEN' | 'SAFE';
+
+export interface TriageEvaluationResult {
+  action: TriageAction;
+  reason: string;
+  redFlags: string[];
+  policyTopic?: ClinicPolicyTopic;
+  fallbackText?: string;
+  clearedScreening?: boolean;
+}
 
 export function hasScheduleSignal(text: string): boolean {
   // Aturan deterministik sendiri (data-driven includes) — SENGAJA tidak
@@ -300,4 +314,227 @@ export function isSubstantiveForPreGrounding(text: string): boolean {
     'treatment', 'terapi', 'moksa', 'inframerah', 'laktasi', 'pijat',
   ];
   return substantiveSignals.some((s) => lower.includes(s));
+}
+
+/**
+ * Deteksi trauma fisik / benturan kepala / jatuh (Red Flag Klinis — ESCALATE).
+ * Mencegah tindakan pemijatan pada kasus cedera kepala dan benturan keras.
+ */
+export function detectPhysicalTraumaSignal(text: string): boolean {
+  const lower = (text || '').toLowerCase();
+  if (!lower) return false;
+
+  const hasFallVerb = /(?:jatuh|jatoh|terbentur|kebentur|kejedot|bentur)/i.test(lower);
+  const hasTraumaSign = /(?:kepala|dahi|kening|jidat|benjol|memar|bengkak|muntah|pingsan|berdarah|darah|nangis\s+terus|membiru)/i.test(lower);
+  const hasFallLocation = /(?:tempat\s+tidur|kasur|stroller|gendongan|tangga|lantai|lemari)/i.test(lower);
+
+  if (hasFallVerb && (hasTraumaSign || hasFallLocation)) return true;
+  if (/kejedot\s+(?:lemari|pintu|tembok|lantai)/i.test(lower)) return true;
+  if (/(?:benjol|memar|luka)\s+di\s+kepala/i.test(lower)) return true;
+  return false;
+}
+
+/**
+ * Deteksi kegawatdaruratan medis berat (Red Flag — ESCALATE).
+ */
+export function detectHighSeverityEmergency(text: string): { isEmergency: boolean; symptoms: string[] } {
+  const lower = (text || '').toLowerCase();
+  if (!lower) return { isEmergency: false, symptoms: [] };
+
+  const check = checkMedicalKeywords(lower);
+  if (check.severity === 'HIGH') {
+    return { isEmergency: true, symptoms: check.detectedSymptoms };
+  }
+
+  for (const re of EMERGENCY_SYMPTOM_PATTERNS) {
+    if (re.test(lower)) {
+      return { isEmergency: true, symptoms: [re.source] };
+    }
+  }
+
+  return { isEmergency: false, symptoms: [] };
+}
+
+/**
+ * Evaluasi jawaban skrining dari turn sebelumnya saat awaitingScreeningAnswer: true.
+ */
+export function evaluateScreeningAnswer(text: string, session?: CustomerGoalSession): {
+  resolved: boolean;
+  isSafe: boolean;
+  note?: string;
+} {
+  const lower = (text || '').toLowerCase();
+  if (!lower) return { resolved: false, isSafe: false };
+
+  // Cek jeda waktu aman pasca vaksin (>= 2 hari / 48 jam)
+  const safeTimeSignals = [
+    '2 hari', '3 hari', '4 hari', '5 hari', '6 hari', '7 hari',
+    'seminggu', '1 minggu', 'minggu lalu', 'kemarin lusa', 'lusa lalu',
+    'sudah lewat 2 hari', 'udah 2 hari', 'udah 3 hari', 'udah seminggu'
+  ];
+  const safeHealthSignals = [
+    'tidak demam', 'ga demam', 'gak demam', 'nggak demam', 'suhu normal',
+    'sudah sembuh', 'udah sembuh', 'udah sehat', 'sudah sehat', 'tidak panas',
+    'ga panas', 'gak panas', 'udah ga panas'
+  ];
+
+  const hasSafeTime = safeTimeSignals.some((s) => lower.includes(s));
+  const hasSafeHealth = safeHealthSignals.some((s) => lower.includes(s));
+
+  if (hasSafeTime || hasSafeHealth) {
+    return { resolved: true, isSafe: true, note: 'Jeda waktu dan kondisi pasca-skrining aman' };
+  }
+
+  // Cek sinyal belum aman
+  const unsafeSignals = [
+    'tadi pagi', 'baru tadi', 'kemarin sore', 'baru kemarin', 'masih demam',
+    'masih panas', 'panasnya belum turun', 'agak anget', 'agak hangat'
+  ];
+  if (unsafeSignals.some((s) => lower.includes(s))) {
+    return { resolved: true, isSafe: false, note: 'Belum memenuhi jeda waktu atau masih bergejala' };
+  }
+
+  return { resolved: false, isSafe: false };
+}
+
+/**
+ * Deteksi ambiguitas tahap hidup maternal (MomStage UNKNOWN).
+ */
+export function detectMaternalStageAmbiguity(text: string, session?: CustomerGoalSession): boolean {
+  const lower = (text || '').toLowerCase();
+  if (!lower) return false;
+
+  const maternalSymptomWords = [
+    'kaki bengkak', 'bengkak banget', 'boyok linu', 'pinggang sakit',
+    'pegel pinggang', 'pinggang pegel', 'induksi', 'laktasi', 'asi seret',
+    'asi tersumbat', 'payudara bengkak', 'oksitosin'
+  ];
+  const hasMaternalSymptom = maternalSymptomWords.some((w) => lower.includes(w));
+  if (!hasMaternalSymptom) return false;
+
+  // Bila subjek jelas anak, bukan maternal ambiguity
+  if (/(?:anak\s+saya|anakku|si\s+kecil|adek|bayi\s+saya|bayiku)\b/i.test(lower)) {
+    return false;
+  }
+
+  // Jika usia kehamilan atau nifas sudah eksplisit di teks:
+  const hasExplicitStage = /(?:\d+\s*(?:minggu|mgg|week|bln|bulan)\s*(?:kehamilan|hamil)?|trimester|pasca\s+(?:salin|lahir)|nifas|menyusui)/i.test(lower);
+  if (hasExplicitStage) return false;
+
+  // Cek state session
+  const stage = session?.momProfile?.stage;
+  if (!stage || stage === 'UNKNOWN') return true;
+
+  return false;
+}
+
+/**
+ * Tahap 3c: Triage Gate Deterministik (ESCALATE -> ASK_STAGE -> SCREEN -> SAFE)
+ * Disisipkan antara Context Grounding dan Tool Masking.
+ */
+export function evaluateTriageGate(params: {
+  incomingText: string;
+  session?: CustomerGoalSession;
+  tenantId?: string;
+  conversationHistory?: Array<{ role: string; content: string }>;
+}): TriageEvaluationResult {
+  const { incomingText, session } = params;
+  const lower = (incomingText || '').toLowerCase().trim();
+
+  // 1. ESCALATE: Trauma fisik anak / kegawatdaruratan medis
+  if (detectPhysicalTraumaSignal(lower)) {
+    return {
+      action: 'ESCALATE',
+      reason: 'Terdeteksi riwayat trauma fisik / benturan kepala / jatuh',
+      redFlags: ['PHYSICAL_TRAUMA_FALL'],
+      policyTopic: 'triage_escalate',
+    };
+  }
+
+  const emergency = detectHighSeverityEmergency(lower);
+  if (emergency.isEmergency) {
+    return {
+      action: 'ESCALATE',
+      reason: 'Terdeteksi gejala kegawatdaruratan medis berat',
+      redFlags: emergency.symptoms,
+      policyTopic: 'triage_escalate',
+    };
+  }
+
+  // 2. Evaluasi jawaban skrining turn sebelumnya (jika awaitingScreeningAnswer aktif)
+  if (session?.awaitingScreeningAnswer) {
+    const screenEval = evaluateScreeningAnswer(lower, session);
+    if (screenEval.resolved) {
+      if (screenEval.isSafe) {
+        return {
+          action: 'SAFE',
+          reason: 'Jawaban skrining memenuhi syarat keselamatan',
+          redFlags: [],
+          clearedScreening: true,
+        };
+      } else {
+        return {
+          action: 'SCREEN',
+          reason: 'Jawaban skrining menunjukkan belum memenuhi jeda waktu aman',
+          redFlags: ['SCREENING_COOLDOWN_ACTIVE'],
+          policyTopic: 'triage_screen',
+        };
+      }
+    }
+  }
+
+  // 3. SCREEN: Pasca vaksin / imunisasi
+  if (hasVaccineSignal(lower)) {
+    const safeCheck = evaluateScreeningAnswer(lower, session);
+    if (!safeCheck.isSafe) {
+      return {
+        action: 'SCREEN',
+        reason: 'Sinyal pasca imunisasi memerlukan verifikasi jeda waktu minimal 48 jam',
+        redFlags: ['POST_VACCINE_SCREENING'],
+        policyTopic: 'triage_screen',
+      };
+    }
+  }
+
+  // 4. ASK_STAGE: Keluhan maternal namun tahap hidup (MomStage) masih UNKNOWN
+  if (detectMaternalStageAmbiguity(lower, session)) {
+    return {
+      action: 'ASK_STAGE',
+      reason: 'Keluhan maternal membutuhkan konfirmasi tahap kehamilan/fase Bunda',
+      redFlags: [],
+      policyTopic: 'triage_ask_stage',
+    };
+  }
+
+  // 5. SAFE: Lolos seluruh uji triase keselamatan
+  return {
+    action: 'SAFE',
+    reason: 'Kondisi aman untuk diproses melalui katalog dan layanan normal',
+    redFlags: [],
+  };
+}
+
+/**
+ * T7.2: Deteksi apakah customer menanyakan kelayakan, izin, atau keamanan medis
+ * (misal: "apakah boleh dipijat kalau lagi demam?", "habis vaksin boleh pijat gak?",
+ * "kalau kejedot kasur aman pijat gak?", "bolehkah pijat pas hamil muda?").
+ */
+export function isMedicalSafetyQuery(text: string): boolean {
+  const lower = (text || '').toLowerCase();
+  if (!lower) return false;
+
+  const hasInquiryVerb = /(?:boleh|bisa|aman|amankah|bolehkah|bisakah)\b/i.test(lower);
+  if (!hasInquiryVerb) return false;
+
+  if (hasVaccineSignal(lower) || hasFallInjurySignal(lower) || detectPhysicalTraumaSignal(lower)) {
+    return true;
+  }
+
+  const medicalConditionWords = [
+    'demam', 'panas', 'suhu', 'batuk', 'pilek', 'bapil', 'flu', 'muntah',
+    'diare', 'mencret', 'kejang', 'flek', 'pendarahan', 'darah', 'kram',
+    'hamil muda', 'trimester 1', 'kandungan lemah', 'kipi', 'bengkak',
+    'habis jatuh', 'baru jatuh', 'sakit'
+  ];
+  return medicalConditionWords.some((w) => lower.includes(w));
 }

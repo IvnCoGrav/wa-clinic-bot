@@ -45,7 +45,7 @@ export interface ChildState {
 export type TargetAudienceType = 'MOMS' | 'BABY' | 'KIDS' | 'BOTH';
 
 /** Kondisi klinis ibu: hamil, paska salin/nifas, menyusui, atau relaksasi umum. */
-export type MomStage = 'PREGNANT' | 'POSTPARTUM' | 'BREASTFEEDING' | 'GENERAL';
+export type MomStage = 'PREGNANT' | 'POSTPARTUM' | 'BREASTFEEDING' | 'GENERAL' | 'UNKNOWN';
 
 /** Data klinis ibu (first-class, terpisah dari data anak — anti kontaminasi silang). */
 export interface MomProfileState {
@@ -127,6 +127,12 @@ export interface CustomerGoalSession {
   };
   /** Subjek layanan: MOMS (ibu), BABY/KIDS (anak), BOTH (Mom & Baby bundle). */
   targetAudience?: TargetAudienceType;
+  /**
+   * Fase 1: true bila customer menyampaikan keluhan fisik namun subjek
+   * belum jelas (Bunda sendiri atau si kecil). Mengaktifkan append pertanyaan
+   * subjek deterministik di guardrail pipeline.
+   */
+  pendingSubjectClarification?: boolean;
   /** Profil klinis ibu (kehamilan/nifas/relaksasi) — first-class, bukan childProfile. */
   momProfile?: MomProfileState;
   /** Profil anak pertama (backward compat). Multi-anak memakai `children`. */
@@ -221,6 +227,12 @@ export interface CustomerGoalSession {
     ongkir?: number | null;
     distanceKm?: number | null;
   };
+  /** Status triase klinis deterministik turn ini atau sesi ini */
+  triageStatus?: 'SAFE' | 'SCREEN' | 'ASK_STAGE' | 'ESCALATE';
+  /** State triase: menunggu jawaban skrining keselamatan (misal jeda 48 jam pasca vaksin / suhu) */
+  awaitingScreeningAnswer?: boolean;
+  /** State triase: jenis topik skrining aktif ('VACCINE' | 'FEVER' | 'TRAUMA') */
+  activeScreeningTopic?: string;
 }
 
 /** Scope penerima layanan: satu anak yang sama vs pasien berbeda. */

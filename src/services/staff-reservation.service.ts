@@ -2790,34 +2790,24 @@ export class StaffReservationService {
 
       // Smart Caption Splitter: WhatsApp membatasi caption gambar maks 1024 karakter.
       if (hasQris && paymentInfo.qrisImageUrl) {
-        if (fullText.length <= 1000) {
-          // Muat dalam 1 pesan bergambar ber-caption
-          sendResult = await liveChatService.sendAdminReply({
-            conversationId: conversation.id,
-            text: fullText,
-            mediaUrl: paymentInfo.qrisImageUrl,
-            mimeType: 'image/png',
-            fileName: 'qris-klinik.png',
-            tenantId,
-            adminName: therapistName,
-            forceEscalate: true,
-          });
-        } else {
-          // Melebihi 1000 karakter: kirim QRIS terlebih dahulu, lalu rincian teks lengkap
+        const { splitImageCaption } = await import('./caption-splitter');
+        const { imageCaption, followUpTexts } = splitImageCaption(fullText, 1000);
+
+        sendResult = await liveChatService.sendAdminReply({
+          conversationId: conversation.id,
+          text: imageCaption,
+          mediaUrl: paymentInfo.qrisImageUrl,
+          mimeType: 'image/png',
+          fileName: 'qris-klinik.png',
+          tenantId,
+          adminName: therapistName,
+          forceEscalate: true,
+        });
+
+        for (const followUp of followUpTexts) {
           await liveChatService.sendAdminReply({
             conversationId: conversation.id,
-            text: 'Barcode QRIS Resmi Klinik:',
-            mediaUrl: paymentInfo.qrisImageUrl,
-            mimeType: 'image/png',
-            fileName: 'qris-klinik.png',
-            tenantId,
-            adminName: therapistName,
-            forceEscalate: true,
-          });
-
-          sendResult = await liveChatService.sendAdminReply({
-            conversationId: conversation.id,
-            text: fullText,
+            text: followUp,
             tenantId,
             adminName: therapistName,
             forceEscalate: true,

@@ -704,6 +704,34 @@ export class OutputSanitizer {
   }
 
   /**
+   * T7.1: Deteksi apakah balasan merupakan pesan keselamatan medis / triase / skrining klinis.
+   * Pesan jenis ini DILARANG dipotong oleh pemotong kalimat agar instruksi klinis tetap utuh.
+   */
+  public static isSafetyOrTriageContent(text: string): boolean {
+    if (!text) return false;
+    if (/(?:dokter\s+spesialis|instalasi\s+gawat\s+darurat|UGD|rumah\s+sakit\s+terdekat)\b/i.test(text)) return true;
+    if (/(?:tanda\s+bahaya|kehilangan\s+kesadaran|muntah\s+menyembur|kejang)\b/i.test(text)) return true;
+    if (/(?:jeda\s+(?:waktu|minimal)|pasca\s+vaksin|efek\s+KIPI)\b/i.test(text)) return true;
+    return false;
+  }
+
+  /**
+   * T7.2: Pagar afirmasi output medis sembrono.
+   * Bila pesan customer menanyakan keamanan medis / kondisi sakit / keluhan fisik,
+   * LLM dilarang membuka dengan kalimat ceroboh "Boleh banget/Bisa banget" sebelum skrining.
+   * Ditransformasikan menjadi pembuka santun & netral secara deterministik.
+   */
+  public static sanitizeMedicalAffirmation(text: string, isMedicalQuery: boolean): string {
+    if (!text || !isMedicalQuery) return text;
+
+    const recklessAffirmationRe = /^(?:Halo\s+Bunda[!,.]*\s*)?(?:Boleh\s+banget|Bisa\s+banget|Tentu\s+bisa\s+banget|Boleh\s+kok|Bisa\s+kok)\s*(?:ya\s+)?(?:Bunda|Bapak)?[!,.]*\s*/i;
+    if (recklessAffirmationRe.test(text.trim())) {
+      return text.trim().replace(recklessAffirmationRe, 'Untuk kondisi tersebut, Bidan kami perlu memastikan kondisinya terlebih dahulu ya Bunda 🙏 ');
+    }
+    return text;
+  }
+
+  /**
    * Trimmer Rule 1 sadar-header: header sapaan Turn-0 yang di-prepend
    * deterministik (varian prefix pendek `Halo X! ✨ Perkenalkan, saya Bidan
    * Yusi dari ...` maupun header kanonis SOP `Halo/Waalaikumsalam Bunda ✨ +
@@ -711,9 +739,18 @@ export class OutputSanitizer {
    * 3 kalimat balasan inti — jika dihitung, jawaban substantif (mis.
    * rekomendasi treatment) atau justru pemantik domisili ikut terpotong.
    * Header dipertahankan utuh; sisa teks dipangkas ke `maxSentences`.
+   *
+   * T7.1: Pesan keselamatan/skrining/triase dikecualikan secara penuh dari pemotongan.
    */
-  public static trimToMaxSentencesPreservingGreetingHeader(text: string, maxSentences = 3): string {
+  public static trimToMaxSentencesPreservingGreetingHeader(
+    text: string,
+    maxSentences = 3,
+    opts?: { isTriageOrSafety?: boolean }
+  ): string {
     if (!text) return text;
+    if (opts?.isTriageOrSafety || OutputSanitizer.isSafetyOrTriageContent(text)) {
+      return text;
+    }
     const headerMatch = text.match(/^Halo\s+[^!?.\n]+!\s*✨\s*Perkenalkan,\s*saya\s+Bidan\s+Yusi[^.]*\.\s*/i)
       ?? text.match(/^(?:Halo|Waalaikumsalam)\s+Bunda\s*✨\s*Terima kasih sudah menghubungi kami\.\s*Perkenalkan,\s*saya\s+Bidan\s+Yusi[^.]*\.\s*/i);
     if (!headerMatch) return OutputSanitizer.trimToMaxSentences(text, maxSentences);

@@ -257,19 +257,16 @@ export async function composeRouterPromptAsync(
     isCalculateDeliveryMasked: opts?.isCalculateDeliveryMasked,
   });
 
-  const [dbPrompt, brand] = await Promise.all([
-    TenantPromptConfigService.getActivePromptConfig(tenantId).catch(() => null),
-    getBrandIdentityAsync(tenantId).catch(() => getBrandIdentity()),
-  ]);
+  const brand = await getBrandIdentityAsync(tenantId).catch(() => getBrandIdentity());
 
   let prompt = base;
   const defaultBiz = DEFAULT_BRAND_IDENTITY.businessName;
   if (brand.businessName !== defaultBiz) {
     prompt = prompt.split(defaultBiz).join(brand.businessName);
   }
-  if (dbPrompt) {
-    prompt += `\n\n[KONFIGURASI PERSONA TENANT (DASHBOARD — BERLAKU MENYELURUH)]\n${dbPrompt.personalityTone}\n\n${dbPrompt.answeringHierarchy}\n\n${dbPrompt.negativeConstraints}\n\n${dbPrompt.medicalOverclaimRules}`;
-  }
+  // Fase 6 Track 2E: Call 1 Router Prompt dirampingkan (~800-1.200 token).
+  // Konfigurasi persona dashboard (personalityTone, answeringHierarchy,
+  // negativeConstraints, medicalOverclaimRules) HANYA untuk Call 2 (Generation Stage).
   return prompt;
 }
 

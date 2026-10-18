@@ -1175,15 +1175,34 @@ export class GuardrailPipeline {
       }
     }
 
+    // T7.2: Pagar afirmasi output medis sembrono (Boleh banget / Bisa banget ditolak & di-rephrase netral)
+    if (shouldSendReply && !isEscalated && finalReply && finalReply.trim()) {
+      const { isMedicalSafetyQuery } = await import('./medical-signal-detector');
+      const isMedQuery = isMedicalSafetyQuery(incomingText);
+      finalReply = OutputSanitizer.sanitizeMedicalAffirmation(finalReply, isMedQuery);
+    }
+
     // Deterministic Output Normalizer (Rule 1) di gate akhir: trimmer
     // 3-kalimat untuk balasan PROSA (termasuk multi-paragraf sapaan), TETAPI
-    // senarai katalog/formulir terstruktur DILARANG dipotong. Nada pra-lokasi
-    // ("bantu cekkan jangkauan") didelegasikan seutuhnya ke layer prompt
-    // (location-rules.phase.ts) — tanpa manipulasi string pembuka di sini
-    // (anti double-emoji & anti mid-sentence mutilation, plan regresi Fase 1).
+    // senarai katalog/formulir terstruktur dan pesan keselamatan/skrining medis
+    // DILARANG dipotong (T7.1).
+    const isTriageActive = Boolean(
+      (session?.triageStatus && session.triageStatus !== 'SAFE')
+      || session?.awaitingScreeningAnswer
+    );
     if (shouldSendReply && !isEscalated && finalReply && finalReply.trim()) {
       if (!OutputSanitizer.hasStructuredContent(finalReply)) {
-        finalReply = OutputSanitizer.trimToMaxSentencesPreservingGreetingHeader(finalReply, 3);
+        finalReply = OutputSanitizer.trimToMaxSentencesPreservingGreetingHeader(finalReply, 3, { isTriageOrSafety: isTriageActive });
+      }
+    }
+
+    // T1.2: Pertanyaan subjek deterministik saat pendingSubjectClarification aktif
+    if (shouldSendReply && !isEscalated && session?.pendingSubjectClarification) {
+      const audienceResolved = Boolean(session.targetAudience);
+      const alreadyAsks = /Boleh\s+tahu\s+keluhannya\s+untuk\s+Bunda\s+sendiri\s+atau\s+untuk\s+si\s+kecil/i.test(finalReply);
+      if (!audienceResolved && !alreadyAsks) {
+        const question = 'Boleh tahu keluhannya untuk Bunda sendiri atau untuk si kecil ya? 😊';
+        finalReply = finalReply ? `${finalReply.trim()}\n\n${question}` : question;
       }
     }
 

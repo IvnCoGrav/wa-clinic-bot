@@ -683,6 +683,16 @@ export class LiveChatService {
       await gateway.markAsRead(customer.phone).catch(() => {});
     }
 
+    // Smart Caption Splitter: WhatsApp membatasi caption gambar maks 1024 karakter
+    let imageCaption = content || undefined;
+    let followUpTexts: string[] = [];
+    if (hasImage && content) {
+      const { splitImageCaption } = await import('./caption-splitter');
+      const splitResult = splitImageCaption(content, 1000);
+      imageCaption = splitResult.imageCaption;
+      followUpTexts = splitResult.followUpTexts;
+    }
+
     // Skema Retry Lokal (Maksimal 2 Percobaan)
     let attempts = 0;
     const maxAttempts = 2;
@@ -693,8 +703,8 @@ export class LiveChatService {
       attempts++;
       if (hasImage) {
         sendResult = sendOptions
-          ? await gateway.sendImageMessage(customer.phone, sendTarget, content || undefined, sendOptions)
-          : await gateway.sendImageMessage(customer.phone, sendTarget, content || undefined);
+          ? await gateway.sendImageMessage(customer.phone, sendTarget, imageCaption, sendOptions)
+          : await gateway.sendImageMessage(customer.phone, sendTarget, imageCaption);
       } else {
         sendResult = sendOptions
           ? await gateway.sendTextMessage(customer.phone, content, sendOptions)
@@ -706,6 +716,17 @@ export class LiveChatService {
       } else if (attempts < maxAttempts) {
         console.warn(`[Live Chat] Percobaan ${attempts} gagal kirim ke ${customer.phone}, retry dalam 2s...`);
         await new Promise(r => setTimeout(r, 2000));
+      }
+    }
+
+    // Jika pesan gambar utama berhasil terkirim dan ada followUpTexts, kirim teks lanjutan secara sekuensial
+    if (hasImage && sendResult?.success && followUpTexts.length > 0) {
+      for (const followUp of followUpTexts) {
+        try {
+          await gateway.sendTextMessage(customer.phone, followUp);
+        } catch (fErr: any) {
+          console.error(`[Live Chat] Gagal mengirim pesan teks lanjutan setelah gambar ke ${customer.phone}:`, fErr?.message || fErr);
+        }
       }
     }
 

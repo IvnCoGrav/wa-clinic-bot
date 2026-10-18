@@ -10,24 +10,40 @@ export interface MemoryQuickReply {
   title: string;
   content: string;
   category: string | null;
+  media_type: string | null;
+  image_url: string | null;
   created_at: Date;
   updated_at: Date;
 }
 
 export const memoryQuickReplies = new Map<string, MemoryQuickReply>();
 
-export const DEFAULT_QUICK_REPLIES: Array<{ shortcut: string; title: string; content: string; category: string }> = [
+export const DEFAULT_QUICK_REPLIES: Array<{
+  shortcut: string;
+  title: string;
+  content: string;
+  category: string;
+  media_type?: string | null;
+  image_url?: string | null;
+}> = [
   {
-    shortcut: 'rek',
-    title: 'Rekening Pembayaran Klinik',
+    shortcut: 'qris',
+    title: 'Pembayaran QRIS & Rekening Resmi',
     category: 'Pembayaran',
+    media_type: 'QRIS',
+    image_url: null,
     content:
-      'Pembayaran dapat ditransfer ke rekening resmi kami:\n🏦 BCA: 1234567890 a.n Klinik\n🏦 Mandiri: 9876543210 a.n Klinik\nMohon kirimkan bukti transfer setelah transaksi ya Bunda {name} ✨',
+      'Berikut barcode QRIS & rekening resmi kami ya Bunda {name} ✨\n\n' +
+      '{bank_accounts}\n\n' +
+      '{petunjuk}\n\n' +
+      'Mohon kirimkan bukti transfer ke sini setelah pembayaran ya. Terima kasih 🙏',
   },
   {
     shortcut: 'lokasi',
     title: 'Alamat & Patokan Klinik',
     category: 'Lokasi',
+    media_type: 'NONE',
+    image_url: null,
     content:
       'Alamat lengkap klinik kami:\n📍 Jl. Raya Rungkut No. 45, Surabaya.\nPatokan: Sebelah Apotek K-24.\nJam operasional: 08.00 - 17.00 WIB.\nDitunggu kedatangannya Bunda {name} 🙏',
   },
@@ -35,6 +51,8 @@ export const DEFAULT_QUICK_REPLIES: Array<{ shortcut: string; title: string; con
     shortcut: 'ongkir',
     title: 'Ketentuan & Tarif Ongkir',
     category: 'Lokasi',
+    media_type: 'NONE',
+    image_url: null,
     content:
       'Tarif transport homecare dihitung berdasarkan jarak dari klinik kami ya Bunda {name}.\nJarak 0-5 km bebas ongkir, selebihnya Rp 3.000/km.\nContoh: jarak 8 km → ongkir Rp 9.000.',
   },
@@ -42,6 +60,8 @@ export const DEFAULT_QUICK_REPLIES: Array<{ shortcut: string; title: string; con
     shortcut: 'jadwal',
     title: 'Jam Operasional & Layanan',
     category: 'Umum',
+    media_type: 'NONE',
+    image_url: null,
     content:
       'Layanan kami tersedia setiap hari Senin - Minggu pukul 08.00 - 17.00 WIB.\nTersedia home-treatment dan kunjungan klinik.\nSilakan pilih hari & jam yang nyaman untuk Bunda {name} ya ✨',
   },
@@ -49,6 +69,8 @@ export const DEFAULT_QUICK_REPLIES: Array<{ shortcut: string; title: string; con
     shortcut: 'format_reservasi',
     title: 'Format Data Reservasi',
     category: 'Reservasi',
+    media_type: 'NONE',
+    image_url: null,
     content:
       'Untuk reservasi homecare/klinik, mohon melengkapi data berikut ya Bunda {name}:\n• Nama Bunda: {name}\n• Nama & Usia Anak:\n• Alamat Lengkap & Shareloc:\n• Layanan yang dipilih:\n• Pilihan Hari & Jam:',
   },
@@ -56,6 +78,8 @@ export const DEFAULT_QUICK_REPLIES: Array<{ shortcut: string; title: string; con
     shortcut: 'terimakasih',
     title: 'Ucapan Terima Kasih',
     category: 'Umum',
+    media_type: 'NONE',
+    image_url: null,
     content:
       'Terima kasih banyak Bunda {name} telah mempercayakan layanan kesehatan keluarga kepada {clinic_name} 🙏\nSemoga lekas pulih dan sehat selalu! ✨',
   },
@@ -63,6 +87,8 @@ export const DEFAULT_QUICK_REPLIES: Array<{ shortcut: string; title: string; con
     shortcut: 'batal',
     title: 'Konfirmasi Pembatalan Reservasi',
     category: 'Reservasi',
+    media_type: 'NONE',
+    image_url: null,
     content:
       'Baik Bunda {name}, reservasi Anda telah kami batalkan sesuai permintaan.\nJika ingin reschedule di lain waktu, silakan hubungi kami kembali ya. Terima kasih 🙏',
   },
@@ -70,6 +96,8 @@ export const DEFAULT_QUICK_REPLIES: Array<{ shortcut: string; title: string; con
     shortcut: 'shareloc',
     title: 'Permintaan Titik Presisi (Shareloc GPS)',
     category: 'Lokasi',
+    media_type: 'NONE',
+    image_url: null,
     content:
       'Boleh bantu kirimkan titik lokasi (shareloc WhatsApp) atau seret pin peta di rumah Bunda {name} agar Bidan kami langsung sampai tepat di depan rumah dan tidak tersasar ya Bunda 🙏',
   },
@@ -88,6 +116,59 @@ export function isValidShortcut(s: string): string | null {
   if (s.length < 2 || s.length > 30) return 'Shortcut harus 2-30 karakter.';
   if (!/^[a-z0-9_-]+$/.test(s)) return 'Shortcut hanya boleh huruf kecil, angka, dash dan underscore.';
   return null;
+}
+
+export function extToMime(url?: string | null): string {
+  if (!url) return 'image/jpeg';
+  const clean = url.toLowerCase().split('?')[0];
+  if (clean.endsWith('.png')) return 'image/png';
+  if (clean.endsWith('.webp')) return 'image/webp';
+  if (clean.endsWith('.gif')) return 'image/gif';
+  return 'image/jpeg';
+}
+
+export function renderBankAccounts(paymentInfo: any): string {
+  if (paymentInfo?.bankAccounts && Array.isArray(paymentInfo.bankAccounts) && paymentInfo.bankAccounts.length > 0) {
+    return paymentInfo.bankAccounts
+      .map((a: any) => `• *${a.bank}*: \`${a.accountNumber}\`\n  a.n. ${a.accountName}`)
+      .join('\n');
+  }
+  return '-';
+}
+
+/**
+ * Resolusi SSOT: gambar + teks rekening HANYA dari Tenant.settings.paymentInfo.
+ * Template di DB tetap bertuliskan placeholder — bisa di-edit admin tanpa menyentuh data bank.
+ */
+export async function resolveQuickReplyMedia(row: any, tenantId: string): Promise<any> {
+  if (!row) return row;
+  if (row.media_type !== 'QRIS') {
+    return {
+      ...row,
+      mime_type: row.image_url ? extToMime(row.image_url) : undefined,
+    };
+  }
+  try {
+    const { StaffReservationService } = await import('../../services/staff-reservation.service');
+    const paymentInfo = await StaffReservationService.getPaymentInfo(tenantId);
+    return {
+      ...row,
+      image_url: paymentInfo.qrisImageUrl ?? null,
+      mime_type: extToMime(paymentInfo.qrisImageUrl),
+      content: (row.content || '')
+        .replace(/\{bank_accounts\}/g, renderBankAccounts(paymentInfo))
+        .replace(/\{petunjuk\}/g, paymentInfo.instructions?.trim() || '-'),
+    };
+  } catch (err) {
+    return {
+      ...row,
+      image_url: null,
+      mime_type: 'image/jpeg',
+      content: (row.content || '')
+        .replace(/\{bank_accounts\}/g, '-')
+        .replace(/\{petunjuk\}/g, '-'),
+    };
+  }
 }
 
 export function interpolateQuickReply(
@@ -145,6 +226,8 @@ function initMemoryDefaults(tenantId: string) {
         title: item.title,
         content: item.content,
         category: item.category,
+        media_type: item.media_type || 'NONE',
+        image_url: item.image_url || null,
         created_at: now,
         updated_at: now,
       });
@@ -175,6 +258,8 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
               title: item.title,
               content: item.content,
               category: item.category,
+              media_type: item.media_type || 'NONE',
+              image_url: item.image_url || null,
             },
           });
         }
@@ -183,13 +268,15 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
           orderBy: [{ category: 'asc' }, { shortcut: 'asc' }],
         });
       }
-      return reply.status(200).send({ success: true, data: rows });
+      const resolved = await Promise.all(rows.map((r: any) => resolveQuickReplyMedia(r, tenantId)));
+      return reply.status(200).send({ success: true, data: resolved });
     } catch (err: any) {
       initMemoryDefaults(tenantId);
       const list = Array.from(memoryQuickReplies.values())
         .filter((r) => r.tenant_id === tenantId)
         .sort((a, b) => (a.category || '').localeCompare(b.category || '') || a.shortcut.localeCompare(b.shortcut));
-      return reply.status(200).send({ success: true, data: list, note: 'Fallback in-memory mode' });
+      const resolvedList = await Promise.all(list.map((r: any) => resolveQuickReplyMedia(r, tenantId)));
+      return reply.status(200).send({ success: true, data: resolvedList, note: 'Fallback in-memory mode' });
     }
   });
 
@@ -200,16 +287,52 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
   fastify.post(
     '/api/admin/quick-replies',
     async (
-      request: FastifyRequest<{ Body: { shortcut?: string; title?: string; content?: string; category?: string } }>,
+      request: FastifyRequest<{
+        Body: {
+          shortcut?: string;
+          title?: string;
+          content?: string;
+          category?: string;
+          media_type?: string;
+          image_url?: string;
+          imageB64?: string;
+          mimeType?: string;
+          fileName?: string;
+        };
+      }>,
       reply: FastifyReply
     ) => {
       const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
-      const { shortcut: rawShortcut, title, content, category } = request.body || {};
+      const { shortcut: rawShortcut, title, content, category, media_type, image_url, imageB64 } = request.body || {};
       const shortcut = normalizeShortcut(rawShortcut || '');
       const err = isValidShortcut(shortcut);
       if (err) return reply.status(400).send({ success: false, error: err });
       if (!title || !title.trim()) return reply.status(400).send({ success: false, error: 'Judul wajib diisi.' });
       if (!content || !content.trim()) return reply.status(400).send({ success: false, error: 'Isi template wajib diisi.' });
+
+      if (media_type && !['NONE', 'CUSTOM_IMAGE', 'QRIS'].includes(media_type)) {
+        return reply.status(400).send({ success: false, error: 'media_type tidak valid. Harus NONE, CUSTOM_IMAGE, atau QRIS.' });
+      }
+
+      let finalMediaType = media_type || 'NONE';
+      let finalImageUrl: string | null = null;
+
+      if (imageB64) {
+        const { mediaService } = await import('../../services/media.service');
+        const rawB64 = imageB64.replace(/^data:image\/[^;]+;base64,/, '');
+        const saved = await mediaService.saveOutboundMedia({
+          tenantId,
+          imageB64: rawB64,
+          mimeType: (request.body as any)?.mimeType || 'image/png',
+          fileName: (request.body as any)?.fileName || 'quick-reply-media.png',
+        });
+        finalImageUrl = saved.hdUrl;
+        finalMediaType = 'CUSTOM_IMAGE';
+      } else if (finalMediaType === 'CUSTOM_IMAGE') {
+        finalImageUrl = image_url?.trim() || null;
+      } else {
+        finalImageUrl = null;
+      }
 
       try {
         const existing = await (prisma as any).quickReply.findFirst({
@@ -225,6 +348,8 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
             title: title.trim(),
             content: content.trim(),
             category: category?.trim() || null,
+            media_type: finalMediaType,
+            image_url: finalImageUrl,
           },
         });
         await auditService.logAdminAction({
@@ -232,11 +357,12 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
           adminIdentity: (request as any).adminIdentity,
           action: 'CREATE_QUICK_REPLY',
           targetId: created.id,
-          payload: { shortcut, title },
+          payload: { shortcut, title, media_type: finalMediaType },
           ipAddress: request.ip,
           tenantId,
         } as any);
-        return reply.status(201).send({ success: true, data: created });
+        const resolved = await resolveQuickReplyMedia(created, tenantId);
+        return reply.status(201).send({ success: true, data: resolved });
       } catch (err: any) {
         // Check duplicate in memory
         const dup = Array.from(memoryQuickReplies.values()).find((r) => r.tenant_id === tenantId && r.shortcut === shortcut);
@@ -250,11 +376,14 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
           title: title!.trim(),
           content: content!.trim(),
           category: category?.trim() || null,
+          media_type: finalMediaType,
+          image_url: finalImageUrl,
           created_at: now,
           updated_at: now,
         };
         memoryQuickReplies.set(id, item);
-        return reply.status(201).send({ success: true, data: item, note: 'Fallback in-memory mode' });
+        const resolved = await resolveQuickReplyMedia(item, tenantId);
+        return reply.status(201).send({ success: true, data: resolved, note: 'Fallback in-memory mode' });
       }
     }
   );
@@ -265,12 +394,25 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
   fastify.put(
     '/api/admin/quick-replies/:id',
     async (
-      request: FastifyRequest<{ Params: { id: string }; Body: { shortcut?: string; title?: string; content?: string; category?: string } }>,
+      request: FastifyRequest<{
+        Params: { id: string };
+        Body: {
+          shortcut?: string;
+          title?: string;
+          content?: string;
+          category?: string;
+          media_type?: string;
+          image_url?: string;
+          imageB64?: string;
+          mimeType?: string;
+          fileName?: string;
+        };
+      }>,
       reply: FastifyReply
     ) => {
       const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
       const { id } = request.params;
-      const { shortcut: rawShortcut, title, content, category } = request.body || {};
+      const { shortcut: rawShortcut, title, content, category, media_type, image_url, imageB64 } = request.body || {};
 
       try {
         const existing = await (prisma as any).quickReply.findFirst({ where: { id, tenant_id: tenantId } });
@@ -297,6 +439,31 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
         }
         if (category !== undefined) updateData.category = category?.trim() || null;
 
+        if (media_type !== undefined) {
+          if (media_type && !['NONE', 'CUSTOM_IMAGE', 'QRIS'].includes(media_type)) {
+            return reply.status(400).send({ success: false, error: 'media_type tidak valid. Harus NONE, CUSTOM_IMAGE, atau QRIS.' });
+          }
+          updateData.media_type = media_type || 'NONE';
+          if (updateData.media_type === 'QRIS' || updateData.media_type === 'NONE') {
+            updateData.image_url = null;
+          }
+        }
+
+        if (imageB64) {
+          const { mediaService } = await import('../../services/media.service');
+          const rawB64 = imageB64.replace(/^data:image\/[^;]+;base64,/, '');
+          const saved = await mediaService.saveOutboundMedia({
+            tenantId,
+            imageB64: rawB64,
+            mimeType: (request.body as any)?.mimeType || 'image/png',
+            fileName: (request.body as any)?.fileName || 'quick-reply-media.png',
+          });
+          updateData.image_url = saved.hdUrl;
+          updateData.media_type = 'CUSTOM_IMAGE';
+        } else if (image_url !== undefined && updateData.media_type !== 'QRIS' && updateData.media_type !== 'NONE') {
+          updateData.image_url = image_url?.trim() || null;
+        }
+
         const updated = await (prisma as any).quickReply.update({ where: { id }, data: updateData });
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
@@ -307,7 +474,8 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
           ipAddress: request.ip,
           tenantId,
         } as any);
-        return reply.status(200).send({ success: true, data: updated });
+        const resolved = await resolveQuickReplyMedia(updated, tenantId);
+        return reply.status(200).send({ success: true, data: resolved });
       } catch (err: any) {
         const mem = memoryQuickReplies.get(id);
         if (!mem || mem.tenant_id !== tenantId) {
@@ -324,8 +492,32 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
         if (title !== undefined) mem.title = title.trim();
         if (content !== undefined) mem.content = content.trim();
         if (category !== undefined) mem.category = category?.trim() || null;
+        if (media_type !== undefined) {
+          if (media_type && !['NONE', 'CUSTOM_IMAGE', 'QRIS'].includes(media_type)) {
+            return reply.status(400).send({ success: false, error: 'media_type tidak valid. Harus NONE, CUSTOM_IMAGE, atau QRIS.' });
+          }
+          mem.media_type = media_type || 'NONE';
+          if (mem.media_type === 'QRIS' || mem.media_type === 'NONE') {
+            mem.image_url = null;
+          }
+        }
+        if (imageB64) {
+          const { mediaService } = await import('../../services/media.service');
+          const rawB64 = imageB64.replace(/^data:image\/[^;]+;base64,/, '');
+          const saved = await mediaService.saveOutboundMedia({
+            tenantId,
+            imageB64: rawB64,
+            mimeType: (request.body as any)?.mimeType || 'image/png',
+            fileName: (request.body as any)?.fileName || 'quick-reply-media.png',
+          });
+          mem.image_url = saved.hdUrl;
+          mem.media_type = 'CUSTOM_IMAGE';
+        } else if (image_url !== undefined && mem.media_type !== 'QRIS' && mem.media_type !== 'NONE') {
+          mem.image_url = image_url?.trim() || null;
+        }
         mem.updated_at = new Date();
-        return reply.status(200).send({ success: true, data: mem, note: 'Fallback in-memory mode' });
+        const resolved = await resolveQuickReplyMedia(mem, tenantId);
+        return reply.status(200).send({ success: true, data: resolved, note: 'Fallback in-memory mode' });
       }
     }
   );
@@ -373,13 +565,21 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
       for (const item of DEFAULT_QUICK_REPLIES) {
         await (prisma as any).quickReply.upsert({
           where: { tenant_id_shortcut: { tenant_id: tenantId, shortcut: item.shortcut } },
-          update: { title: item.title, content: item.content, category: item.category },
+          update: {
+            title: item.title,
+            content: item.content,
+            category: item.category,
+            media_type: item.media_type || 'NONE',
+            image_url: item.image_url || null,
+          },
           create: {
             tenant_id: tenantId,
             shortcut: item.shortcut,
             title: item.title,
             content: item.content,
             category: item.category,
+            media_type: item.media_type || 'NONE',
+            image_url: item.image_url || null,
           },
         });
       }
@@ -387,11 +587,13 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
         where: { tenant_id: tenantId },
         orderBy: [{ category: 'asc' }, { shortcut: 'asc' }],
       });
-      return reply.status(200).send({ success: true, data: rows });
+      const resolved = await Promise.all(rows.map((r: any) => resolveQuickReplyMedia(r, tenantId)));
+      return reply.status(200).send({ success: true, data: resolved });
     } catch (err: any) {
       initMemoryDefaults(tenantId);
       const list = Array.from(memoryQuickReplies.values()).filter((r) => r.tenant_id === tenantId);
-      return reply.status(200).send({ success: true, data: list, note: 'Fallback in-memory mode' });
+      const resolvedList = await Promise.all(list.map((r: any) => resolveQuickReplyMedia(r, tenantId)));
+      return reply.status(200).send({ success: true, data: resolvedList, note: 'Fallback in-memory mode' });
     }
   });
 }

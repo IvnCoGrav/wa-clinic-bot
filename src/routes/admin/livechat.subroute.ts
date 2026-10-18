@@ -396,6 +396,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
         Body: {
           text?: string;
           imageB64?: string;
+          mediaUrl?: string;
           thumbB64?: string;
           mimeType?: string;
           fileName?: string;
@@ -409,12 +410,13 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       reply
     ) => {
       const { id } = request.params;
-      const { text, imageB64, thumbB64, mimeType, fileName, adminName, acknowledgeOutsideWindow, replyToMessageId, isInternalNote, dispatchOrigin } = request.body || {};
+      const { text, imageB64, mediaUrl, thumbB64, mimeType, fileName, adminName, acknowledgeOutsideWindow, replyToMessageId, isInternalNote, dispatchOrigin } = request.body || {};
 
       const result = await liveChatService.sendAdminReply({
         conversationId: id,
         text: text || '',
         imageB64,
+        mediaUrl,
         thumbB64,
         mimeType,
         fileName,

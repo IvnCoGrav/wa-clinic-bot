@@ -602,7 +602,14 @@ export const LiveChatMonitor: React.FC = () => {
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [invoiceModalData, setInvoiceModalData] = useState<ExtractedScheduleData | null>(null);
   const [clinicServices, setClinicServices] = useState<any[]>([]);
-  const [selectedImage, setSelectedImage] = useState<{ file: File; preview: string; dataUrl: string; mimeType: string; fileName: string } | null>(null);
+  const [selectedImage, setSelectedImage] = useState<{
+    file?: File;
+    preview: string;
+    dataUrl?: string;
+    mimeType: string;
+    fileName: string;
+    mediaUrl?: string;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Fase A v3: DOM input composer dimiliki LiveChatComposer (isolasi render ketikan).
   const composerRef = useRef<LiveChatComposerHandle | null>(null);
@@ -1056,12 +1063,25 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
   ]);
 
   // Fase A v3: interpolasi milik monitor (butuh data customer); penyisipan DOM milik composer.
-  const applyQuickReply = useCallback((qr: { content: string }) => {
+  const applyQuickReply = useCallback((qr: {
+    content: string;
+    media_type?: string | null;
+    image_url?: string | null;
+    mime_type?: string | null;
+  }) => {
     const interpolated = interpolateQuickReplyContent(qr.content);
     replyTextRef.current = interpolated;
     setHasReplyText(true);
     if (selectedIdRef.current) {
       saveConversationDraft(selectedIdRef.current, interpolated);
+    }
+    if (qr.image_url) {
+      setSelectedImage({
+        preview: qr.image_url,
+        mediaUrl: qr.image_url,
+        mimeType: qr.mime_type || 'image/jpeg',
+        fileName: qr.media_type === 'QRIS' ? 'qris-klinik' : 'lampiran-quick-chat',
+      });
     }
     return interpolated;
   }, [interpolateQuickReplyContent]);
@@ -4077,11 +4097,15 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         body.replyToMessageId = currentReplyingTo.wa_message_id || currentReplyingTo.id;
       }
       if (image) {
-        // Fase 2.1: JANGAN kirim thumbB64 == imageB64 (dobel payload ~50%).
-        // Backend membuat blur thumbnail server-side via sharp (media.service.ts).
-        body.imageB64 = image.dataUrl;
-        body.mimeType = image.mimeType;
-        body.fileName = image.fileName;
+        if (image.mediaUrl) {
+          body.mediaUrl = image.mediaUrl;
+        } else {
+          // Fase 2.1: JANGAN kirim thumbB64 == imageB64 (dobel payload ~50%).
+          // Backend membuat blur thumbnail server-side via sharp (media.service.ts).
+          body.imageB64 = image.dataUrl;
+          body.mimeType = image.mimeType;
+          body.fileName = image.fileName;
+        }
       }
       if (dispatchOriginRef.current) {
         body.dispatchOrigin = true;

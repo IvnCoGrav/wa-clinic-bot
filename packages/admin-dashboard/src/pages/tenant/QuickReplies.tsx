@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { BRAND } from '../../config/brand';
@@ -15,6 +15,10 @@ import {
   Tag,
   Sparkles,
   Eye,
+  QrCode,
+  Image as ImageIcon,
+  UploadCloud,
+  AlertCircle,
 } from 'lucide-react';
 
 interface QuickReply {
@@ -24,6 +28,9 @@ interface QuickReply {
   title: string;
   content: string;
   category: string | null;
+  media_type?: 'NONE' | 'CUSTOM_IMAGE' | 'QRIS' | null;
+  image_url?: string | null;
+  mime_type?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -37,10 +44,20 @@ const PLACEHOLDERS = [
   { tag: '{alamat}', label: 'Alamat / Kelurahan' },
   { tag: '{clinic_name}', label: 'Nama Klinik' },
   { tag: '{admin_name}', label: 'Nama Admin/Bidan' },
+  { tag: '{bank_accounts}', label: 'Daftar Rekening Bank' },
+  { tag: '{petunjuk}', label: 'Petunjuk Pembayaran' },
 ];
 
-function interpolatePreview(content: string): string {
-  return content
+const fileToDataUrl = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+function interpolatePreview(content: string, pInfo?: any): string {
+  let text = content
     .replace(/\{(?:name|nama|nama_bunda)\}/gi, 'Bunda Retno')
     .replace(/\{(?:phone|hp|no_hp)\}/gi, '628123456789')
     .replace(/\{(?:kec|kecamatan)\}/gi, 'Rungkut')
@@ -48,6 +65,15 @@ function interpolatePreview(content: string): string {
     .replace(/\{(?:alamat|address)\}/gi, 'Jl. Rungkut Asri Timur No. 12')
     .replace(/\{clinic_name\}/gi, BRAND.businessName)
     .replace(/\{admin_name\}/gi, 'Kak Sinta');
+
+  if (pInfo?.bankAccounts && Array.isArray(pInfo.bankAccounts) && pInfo.bankAccounts.length > 0) {
+    const bAcc = pInfo.bankAccounts.map((a: any) => `• *${a.bank}*: \`${a.accountNumber}\`\n  a.n ${a.accountName}`).join('\n');
+    text = text.replace(/\{bank_accounts\}/g, bAcc);
+  } else {
+    text = text.replace(/\{bank_accounts\}/g, '• *BCA*: `1234567890`\n  a.n Kala Moms & Baby Spa');
+  }
+  text = text.replace(/\{petunjuk\}/g, pInfo?.instructions?.trim() || 'Mohon konfirmasi atau kirimkan bukti transfer');
+  return text;
 }
 
 export const QuickReplies: React.FC = () => {
@@ -62,8 +88,18 @@ export const QuickReplies: React.FC = () => {
   const [formTitle, setFormTitle] = useState('');
   const [formContent, setFormContent] = useState('');
   const [formCategory, setFormCategory] = useState('Umum');
+  const [formMediaType, setFormMediaType] = useState<'NONE' | 'CUSTOM_IMAGE' | 'QRIS'>('NONE');
+  const [customImageFile, setCustomImageFile] = useState<File | null>(null);
+  const [customImagePreview, setCustomImagePreview] = useState<string | null>(null);
+  const [paymentInfo, setPaymentInfo] = useState<{
+    qrisImageUrl?: string | null;
+    bankAccounts?: Array<{ bank: string; accountNumber: string; accountName: string }>;
+    instructions?: string;
+  } | null>(null);
+
   const [saving, setSaving] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
     setLoading(true);
@@ -78,8 +114,17 @@ export const QuickReplies: React.FC = () => {
     }
   };
 
+  const loadPaymentInfo = async () => {
+    try {
+      const res: any = await apiRequest('/api/admin/settings/payment-info');
+      const data = res?.data || res;
+      if (data) setPaymentInfo(data);
+    } catch (_) {}
+  };
+
   useEffect(() => {
     load();
+    loadPaymentInfo();
   }, []);
 
   const filtered = useMemo(() => {
@@ -101,6 +146,9 @@ export const QuickReplies: React.FC = () => {
     setFormTitle('');
     setFormContent('');
     setFormCategory('Umum');
+    setFormMediaType('NONE');
+    setCustomImageFile(null);
+    setCustomImagePreview(null);
     setShowModal(true);
   };
 
@@ -110,6 +158,9 @@ export const QuickReplies: React.FC = () => {
     setFormTitle(it.title);
     setFormContent(it.content);
     setFormCategory(it.category || 'Umum');
+    setFormMediaType(it.media_type === 'QRIS' ? 'QRIS' : it.media_type === 'CUSTOM_IMAGE' ? 'CUSTOM_IMAGE' : 'NONE');
+    setCustomImageFile(null);
+    setCustomImagePreview(it.image_url || null);
     setShowModal(true);
   };
 
@@ -121,16 +172,38 @@ export const QuickReplies: React.FC = () => {
     }
     setSaving(true);
     try {
+      let imageB64: string | undefined = undefined;
+      let mimeType: string | undefined = undefined;
+      let fileName: string | undefined = undefined;
+
+      if (formMediaType === 'CUSTOM_IMAGE' && customImageFile) {
+        imageB64 = await fileToDataUrl(customImageFile);
+        mimeType = customImageFile.type || 'image/png';
+        fileName = customImageFile.name;
+      }
+
+      const payload: any = {
+        shortcut: shortcutRaw,
+        title: formTitle.trim(),
+        content: formContent.trim(),
+        category: formCategory,
+        media_type: formMediaType,
+        image_url: formMediaType === 'CUSTOM_IMAGE' ? (customImagePreview || null) : null,
+        imageB64,
+        mimeType,
+        fileName,
+      };
+
       if (editing) {
         await apiRequest(`/api/admin/quick-replies/${editing.id}`, {
           method: 'PUT',
-          body: JSON.stringify({ shortcut: shortcutRaw, title: formTitle.trim(), content: formContent.trim(), category: formCategory }),
+          body: JSON.stringify(payload),
         });
         toast('Balasan cepat diperbarui.', 'success');
       } else {
         await apiRequest('/api/admin/quick-replies', {
           method: 'POST',
-          body: JSON.stringify({ shortcut: shortcutRaw, title: formTitle.trim(), content: formContent.trim(), category: formCategory }),
+          body: JSON.stringify(payload),
         });
         toast('Balasan cepat dibuat.', 'success');
       }
@@ -187,7 +260,7 @@ export const QuickReplies: React.FC = () => {
           </div>
           <div>
             <h2 className="text-xl font-bold tracking-tight text-[#111b21]">Balasan Cepat (Quick Chat)</h2>
-            <p className="text-xs text-[#54656f] mt-0.5">Ketik <code className="bg-[#f0f2f5] px-1 rounded text-[#008069]">/shortcut</code> di Live Chat untuk balasan instan dengan variabel dinamis.</p>
+            <p className="text-xs text-[#54656f] mt-0.5">Ketik <code className="bg-[#f0f2f5] px-1 rounded text-[#008069]">/shortcut</code> di Live Chat untuk balasan instan dengan variabel & media dinamis.</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -257,21 +330,48 @@ export const QuickReplies: React.FC = () => {
           {filtered.map((it) => (
             <div key={it.id} className="bg-white border border-[#e9edef] rounded-2xl p-4 flex flex-col gap-3 hover:border-[#c2e7e0] hover:shadow-sm transition">
               <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex flex-wrap items-center gap-1.5 min-w-0">
                   <span className="px-2 py-1 rounded-lg bg-[#008069] text-white text-xs font-mono font-bold">/{it.shortcut}</span>
                   {it.category && <span className="px-2 py-0.5 rounded-full bg-[#f0f2f5] text-[#54656f] text-[10px] font-bold border border-[#e9edef]">{it.category}</span>}
+                  {it.media_type === 'QRIS' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
+                      <QrCode size={11} /> QRIS
+                    </span>
+                  )}
+                  {(it.media_type === 'CUSTOM_IMAGE' || (!it.media_type && it.image_url)) && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-bold border border-blue-200">
+                      <ImageIcon size={11} /> Gambar
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <button onClick={() => openEdit(it)} className="p-1.5 rounded-lg bg-white border border-[#d1d7db] text-[#54656f] hover:text-[#008069] hover:border-[#008069]"><Edit2 size={13} /></button>
                   <button onClick={() => handleDelete(it)} className="p-1.5 rounded-lg bg-white border border-[#d1d7db] text-[#54656f] hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50"><Trash2 size={13} /></button>
                 </div>
               </div>
+
+              {it.image_url && (
+                <div className="flex items-center gap-2.5 p-2 bg-[#f8fafc] border border-[#e9edef] rounded-xl">
+                  <img
+                    src={it.image_url}
+                    alt={it.title}
+                    className="w-11 h-11 rounded-lg object-contain border border-[#e9edef] bg-white shrink-0 p-0.5"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-semibold text-[#111b21] truncate">
+                      {it.media_type === 'QRIS' ? 'Barcode QRIS Resmi' : 'Lampiran Gambar'}
+                    </p>
+                    <p className="text-[10px] text-[#8696a0] truncate">Otomatis dilampirkan ke chat</p>
+                  </div>
+                </div>
+              )}
+
               <div>
                 <p className="text-sm font-bold text-[#111b21] truncate">{it.title}</p>
                 <p className="text-xs text-[#54656f] line-clamp-3 whitespace-pre-wrap leading-relaxed mt-1 bg-[#f8fafc] border border-[#e9edef] rounded-xl p-2.5">{it.content}</p>
               </div>
               <div className="pt-2 border-t border-[#f0f2f5] flex items-center gap-1.5 text-[11px] text-[#8696a0]">
-                <Eye size={12} /> Preview: <span className="text-[#54656f] line-clamp-1 truncate flex-1">{interpolatePreview(it.content).slice(0, 70)}</span>
+                <Eye size={12} /> Preview: <span className="text-[#54656f] line-clamp-1 truncate flex-1">{interpolatePreview(it.content, paymentInfo).slice(0, 70)}</span>
               </div>
             </div>
           ))}
@@ -292,9 +392,9 @@ export const QuickReplies: React.FC = () => {
                   <label className="text-xs font-semibold text-[#111b21]">Shortcut <span className="text-rose-500">*</span></label>
                   <div className="flex items-center gap-1 mt-1">
                     <span className="px-2 py-2 bg-[#f0f2f5] border border-[#d1d7db] rounded-xl text-xs font-mono text-[#008069]">/</span>
-                    <input value={formShortcut} onChange={(e) => setFormShortcut(e.target.value.replace(/^\//, '').toLowerCase().replace(/\s+/g, ''))} placeholder="rek" className="flex-1 h-9 px-3 bg-white border border-[#d1d7db] rounded-xl text-xs focus:outline-none focus:border-[#008069] font-mono" />
+                    <input value={formShortcut} onChange={(e) => setFormShortcut(e.target.value.replace(/^\//, '').toLowerCase().replace(/\s+/g, ''))} placeholder="qris" className="flex-1 h-9 px-3 bg-white border border-[#d1d7db] rounded-xl text-xs focus:outline-none focus:border-[#008069] font-mono" />
                   </div>
-                  <p className="text-[10px] text-[#8696a0] mt-1">Huruf kecil, tanpa spasi. Contoh: /rek</p>
+                  <p className="text-[10px] text-[#8696a0] mt-1">Huruf kecil, tanpa spasi. Contoh: /qris</p>
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-[#111b21]">Kategori</label>
@@ -303,10 +403,177 @@ export const QuickReplies: React.FC = () => {
                   </select>
                 </div>
               </div>
+
               <div>
                 <label className="text-xs font-semibold text-[#111b21]">Judul <span className="text-rose-500">*</span></label>
-                <input value={formTitle} onChange={(e) => setFormTitle(e.target.value)} placeholder="Contoh: Nomor Rekening BCA & Mandiri" className="w-full mt-1 h-9 px-3 bg-white border border-[#d1d7db] rounded-xl text-xs focus:outline-none focus:border-[#008069]" />
+                <input value={formTitle} onChange={(e) => setFormTitle(e.target.value)} placeholder="Contoh: Pembayaran QRIS & Rekening Resmi" className="w-full mt-1 h-9 px-3 bg-white border border-[#d1d7db] rounded-xl text-xs focus:outline-none focus:border-[#008069]" />
               </div>
+
+              {/* Pilihan Lampiran Media */}
+              <div>
+                <label className="text-xs font-semibold text-[#111b21] block mb-1.5">Tipe Lampiran Media</label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFormMediaType('NONE')}
+                    className={`p-2.5 rounded-xl border text-left transition flex flex-col gap-1 ${
+                      formMediaType === 'NONE'
+                        ? 'bg-[#e8f5f2] border-[#008069] text-[#008069]'
+                        : 'bg-white border-[#d1d7db] text-[#54656f] hover:bg-[#f8fafc]'
+                    }`}
+                  >
+                    <span className="text-xs font-bold flex items-center gap-1.5">
+                      <Zap size={13} /> Teks Saja
+                    </span>
+                    <span className="text-[10px] text-[#8696a0]">Tanpa gambar</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormMediaType('QRIS');
+                      if (!formContent.trim()) {
+                        setFormContent(
+                          'Berikut barcode QRIS & rekening resmi kami ya Bunda {name} ✨\n\n' +
+                          '{bank_accounts}\n\n' +
+                          '{petunjuk}\n\n' +
+                          'Mohon kirimkan bukti transfer ke sini setelah pembayaran ya. Terima kasih 🙏'
+                        );
+                      }
+                    }}
+                    className={`p-2.5 rounded-xl border text-left transition flex flex-col gap-1 ${
+                      formMediaType === 'QRIS'
+                        ? 'bg-[#e8f5f2] border-[#008069] text-[#008069]'
+                        : 'bg-white border-[#d1d7db] text-[#54656f] hover:bg-[#f8fafc]'
+                    }`}
+                  >
+                    <span className="text-xs font-bold flex items-center gap-1.5">
+                      <QrCode size={13} /> QRIS Resmi
+                    </span>
+                    <span className="text-[10px] text-[#8696a0]">SSOT Pembayaran</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFormMediaType('CUSTOM_IMAGE')}
+                    className={`p-2.5 rounded-xl border text-left transition flex flex-col gap-1 ${
+                      formMediaType === 'CUSTOM_IMAGE'
+                        ? 'bg-[#e8f5f2] border-[#008069] text-[#008069]'
+                        : 'bg-white border-[#d1d7db] text-[#54656f] hover:bg-[#f8fafc]'
+                    }`}
+                  >
+                    <span className="text-xs font-bold flex items-center gap-1.5">
+                      <ImageIcon size={13} /> Gambar Kustom
+                    </span>
+                    <span className="text-[10px] text-[#8696a0]">Upload brosur/foto</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Panel Media QRIS */}
+              {formMediaType === 'QRIS' && (
+                <div className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-[#111b21] flex items-center gap-1.5">
+                      <QrCode size={14} className="text-[#008069]" /> Preview Barcode QRIS Resmi
+                    </span>
+                    <span className="text-[10px] bg-emerald-50 text-[#008069] px-2 py-0.5 rounded-full font-bold border border-emerald-200">
+                      Terkait Settings Pembayaran
+                    </span>
+                  </div>
+                  {paymentInfo?.qrisImageUrl ? (
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={paymentInfo.qrisImageUrl}
+                        alt="QRIS Klinik"
+                        className="w-16 h-16 object-contain rounded-lg border border-[#e9edef] bg-white p-1"
+                      />
+                      <div className="text-[11px] text-[#54656f] space-y-1">
+                        <p className="font-semibold text-[#111b21]">Barcode QRIS aktif terdeteksi.</p>
+                        <p className="text-[10px] text-[#8696a0]">Gambar ini otomatis dilampirkan saat shortcut dikirim di Live Chat.</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-[11px] flex items-start gap-2">
+                      <AlertCircle size={15} className="shrink-0 mt-0.5 text-amber-600" />
+                      <div>
+                        <p className="font-bold">QRIS belum diunggah di Settings Pembayaran.</p>
+                        <p className="text-[10px] text-amber-700 mt-0.5">
+                          Shortcut tetap dapat digunakan dan mengirim teks rekening. Unggah QRIS di menu Settings → Pembayaran untuk melampirkan barcode gambar secara otomatis.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Panel Media Gambar Kustom */}
+              {formMediaType === 'CUSTOM_IMAGE' && (
+                <div className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-xl space-y-2">
+                  <label className="text-xs font-bold text-[#111b21] flex items-center gap-1.5">
+                    <ImageIcon size={14} className="text-[#008069]" /> Upload Gambar / Brosur (Maks 8 MB)
+                  </label>
+                  {customImagePreview ? (
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={customImagePreview}
+                        alt="Preview"
+                        className="w-16 h-16 object-contain rounded-lg border border-[#e9edef] bg-white p-1"
+                      />
+                      <div className="space-y-1.5 flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-[#111b21] truncate">
+                          {customImageFile ? customImageFile.name : 'Gambar tersimpan'}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="text-[11px] px-2.5 py-1 rounded-lg bg-white border border-[#d1d7db] text-[#54656f] hover:bg-[#f0f2f5] font-semibold"
+                          >
+                            Ganti Gambar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCustomImageFile(null);
+                              setCustomImagePreview(null);
+                            }}
+                            className="text-[11px] px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 font-semibold"
+                          >
+                            Hapus
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      className="border-2 border-dashed border-[#d1d7db] hover:border-[#008069] rounded-xl p-4 text-center cursor-pointer transition bg-white"
+                    >
+                      <UploadCloud size={24} className="mx-auto text-[#8696a0] mb-1" />
+                      <p className="text-xs font-bold text-[#111b21]">Klik untuk memilih gambar</p>
+                      <p className="text-[10px] text-[#8696a0] mt-0.5">PNG, JPG, WEBP hingga 8 MB</p>
+                    </div>
+                  )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      if (file.size > 8 * 1024 * 1024) {
+                        toast('Ukuran gambar maksimal 8 MB.', 'error');
+                        return;
+                      }
+                      setCustomImageFile(file);
+                      setCustomImagePreview(URL.createObjectURL(file));
+                    }}
+                  />
+                </div>
+              )}
+
               <div>
                 <label className="text-xs font-semibold text-[#111b21]">Isi Template <span className="text-rose-500">*</span></label>
                 <div className="flex flex-wrap gap-1 mt-1.5 mb-1.5">
@@ -314,11 +581,12 @@ export const QuickReplies: React.FC = () => {
                     <button key={p.tag} type="button" onClick={() => insertPlaceholder(p.tag)} className="px-2 py-1 bg-white border border-[#d1d7db] hover:border-[#008069] hover:bg-[#e8f5f2] text-[#008069] rounded-lg text-[11px] font-mono font-bold">+{p.tag}</button>
                   ))}
                 </div>
-                <textarea value={formContent} onChange={(e) => setFormContent(e.target.value)} rows={5} placeholder="Tulis template... gunakan {name} {clinic_name} dll." className="w-full p-3 bg-white border border-[#d1d7db] rounded-xl text-xs leading-relaxed focus:outline-none focus:border-[#008069] resize-none" />
+                <textarea value={formContent} onChange={(e) => setFormContent(e.target.value)} rows={5} placeholder="Tulis template... gunakan {name} {clinic_name} {bank_accounts} dll." className="w-full p-3 bg-white border border-[#d1d7db] rounded-xl text-xs leading-relaxed focus:outline-none focus:border-[#008069] resize-none" />
               </div>
+
               <div className="bg-[#f8fafc] border border-[#e9edef] rounded-xl p-3">
                 <p className="text-[11px] font-bold text-[#008069] flex items-center gap-1"><Eye size={12} /> Live Preview</p>
-                <p className="text-xs text-[#111b21] whitespace-pre-wrap leading-relaxed mt-1">{formContent ? interpolatePreview(formContent) : <span className="text-[#8696a0] italic">Preview akan muncul di sini...</span> as any}</p>
+                <p className="text-xs text-[#111b21] whitespace-pre-wrap leading-relaxed mt-1">{formContent ? interpolatePreview(formContent, paymentInfo) : <span className="text-[#8696a0] italic">Preview akan muncul di sini...</span> as any}</p>
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-[#e9edef] bg-[#f8fafc]">

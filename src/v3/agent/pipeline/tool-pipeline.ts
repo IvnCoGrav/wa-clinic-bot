@@ -938,14 +938,29 @@ export class ToolExecutionPipeline {
           }
         }
       } else if (!isMomArgs && !isChildArgs && fnArgs.symptoms && fnArgs.symptoms.length > 0) {
-        // Fallback lama: tanpa kategori eksplisit, perlakukan sebagai gejala anak
-        // KECUALI pesan murni maternal (sudah ditangani momProfile via syncMomProfile).
-        if (!GoalTracker.isMaternalOnlyMessage(cleanIncomingText)) {
+        // Fase 1 Track 1 (Anti Subject Contamination):
+        // Jika targetAudience MOMS -> tulis ke momProfile.complaints
+        // Jika BABY / KIDS -> tulis ke childProfile
+        // Jika ambigu/kosong -> JANGAN tulis ke anak; aktifkan pendingSubjectClarification
+        if (session.targetAudience === 'MOMS') {
+          const prevMom = session.momProfile || { complaints: [] as string[] };
+          const mergedComplaints = [...(prevMom.complaints || [])];
+          for (const s of fnArgs.symptoms) {
+            if (s && !mergedComplaints.includes(s)) mergedComplaints.push(s);
+          }
+          session = await GoalTracker.updateGoalSession(conversationId, {
+            momProfile: { ...prevMom, complaints: mergedComplaints },
+          }, tenantId);
+        } else if (session.targetAudience === 'BABY' || session.targetAudience === 'KIDS') {
           session = await GoalTracker.updateGoalSession(conversationId, {
             childProfile: {
               ageMonths: fnArgs.childAgeMonths,
               symptoms: fnArgs.symptoms || [],
             },
+          }, tenantId);
+        } else {
+          session = await GoalTracker.updateGoalSession(conversationId, {
+            pendingSubjectClarification: true,
           }, tenantId);
         }
       }

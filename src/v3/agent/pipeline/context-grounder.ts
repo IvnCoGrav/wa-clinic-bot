@@ -501,16 +501,16 @@ export class ContextGrounder {
         // Audit 315036: limit 3 agar pertanyaan multi-topik ("cukur + pijat
         // terapi") tidak memotong artikel definisi terapi.
         let preChunks = await knowledgeBaseService.searchRelevantChunks(cleanIncomingText, 3, tenantId);
-        // Defense-in-depth: filter rank rendah yang lolos dari service (≥0.25)
+        // Defense-in-depth: filter rank rendah yang lolos dari service (≥0.35)
         if (preChunks && preChunks.length > 0) {
           preChunks = (preChunks as any[]).filter((c: any) => {
             const r = typeof c.rank === 'number' ? c.rank : typeof c.similarity === 'number' ? c.similarity : typeof c.score === 'number' ? c.score : 0.9;
-            return r >= 0.25;
+            return r >= 0.35;
           });
         }
         if (preChunks && preChunks.length > 0) {
-          preGroundingBlock = `[PANDUAN & KNOWLEDGE BASE RESMI KLINIK - WAJIB DIPATUHI]\n`
-            + `Berikut panduan resmi klinik yang RELEVAN dengan pertanyaan customer saat ini. Jadikan sebagai acuan utama jawaban (grounded), jangan mengarang di luar panduan ini:\n`
+          preGroundingBlock = `[PANDUAN KNOWLEDGE BASE RESMI KLINIK]\n`
+            + `Berikut panduan resmi klinik yang relevan dengan pertanyaan customer saat ini. Jadikan sebagai acuan utama jawaban (grounded), jangan mengarang di luar panduan ini:\n`
             + preChunks.map((c: any, i: number) => `Artikel ${i + 1} — ${c.title}:\n${c.content}`).join('\n\n');
           for (const c of preChunks as any[]) {
             const key = String((c as any)?.id || (c as any)?.title || '');
@@ -528,6 +528,8 @@ export class ContextGrounder {
               } as any);
             }
           }
+        } else {
+          preGroundingBlock = `[PANDUAN KNOWLEDGE BASE]\nTidak ditemukan artikel spesifik untuk pertanyaan ini. Jawab berdasarkan informasi umum yang terverifikasi dan jangan mengarang informasi klinis di luar kewenangan.`;
         }
       }
     } catch (e) {}
