@@ -17,6 +17,15 @@ import { z } from 'zod';
 
 export const MAX_SAVED_ADDRESSES = 10;
 export const SAME_POINT_MAX_METERS = 150;
+/** Batas panjang label kartu alamat (teknis, bukan data bisnis) — UI + API + domain. */
+export const MAX_ADDRESS_LABEL_LENGTH = 60;
+
+/** Normalisasi label: trim, buang kosong, potong ke batas maksimum. */
+export function normalizeAddressLabel(value?: string | null): string | null {
+  const clean = String(value ?? '').trim();
+  if (!clean) return null;
+  return clean.slice(0, MAX_ADDRESS_LABEL_LENGTH);
+}
 
 export const SavedCustomerAddressSchema = z.object({
   id: z.string().min(1),
@@ -152,11 +161,12 @@ export function buildAutoLabel(
   requested?: string | null
 ): string {
   const clean = (s?: string | null) => String(s ?? '').trim();
-  const base = clean(requested) || `Rumah ${clean(place) || 'Baru'}`;
+  const base =
+    normalizeAddressLabel(requested) || `Rumah ${clean(place) || 'Baru'}`.slice(0, MAX_ADDRESS_LABEL_LENGTH);
   if (!existing.some((a) => norm(a.label) === norm(base))) return base;
   let i = 2;
   while (existing.some((a) => norm(a.label) === norm(`${base} ${i}`))) i++;
-  return `${base} ${i}`;
+  return `${base} ${i}`.slice(0, MAX_ADDRESS_LABEL_LENGTH);
 }
 
 function pickDefined<T extends Record<string, any>>(input: T): Partial<T> {
@@ -250,7 +260,7 @@ export function upsertAddressIntoList(
       ongkir: nextOngkir ?? null,
       landmark: hasText(input.landmark) ? input.landmark! : (prev.landmark ?? null),
       locationSource: nextLocSource ?? null,
-      label: input.label && input.label.trim() ? input.label.trim() : prev.label,
+      label: normalizeAddressLabel(input.label) ?? prev.label,
       // input.isPrimary === true → jadikan entri ini primary (pindah rumah eksplisit).
       isPrimary: input.isPrimary === true ? true : prev.isPrimary,
       id: prev.id,

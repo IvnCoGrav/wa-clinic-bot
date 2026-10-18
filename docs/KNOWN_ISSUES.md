@@ -3,6 +3,17 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 267. [Media Storage] `qrisImageUrl` Belum Terproteksi dari Pruning & Retensi Media di `media.service.ts` (2026-10-18, OPEN)
+
+- **Status:** OPEN (Temuan CG-2 dari audit Quick Replies Media SSOT).
+- **Gejala / Akar Masalah:**
+  - `media.service.ts` (`cleanupExcessiveMediaUsage` L735, `sweepExpiredOutboundMedia` L868) secara eksplisit melindungi file `tenant.pricelist_image_url` dari pembersihan disk dan sweep retensi 30 hari.
+  - Namun gambar barcode QRIS yang diunggah staf/admin di `Settings -> Pembayaran` tersimpan di `tenant.settings.paymentInfo.qrisImageUrl` (bukan kolom tabel langsung) dan belum di-exempt dari sweep retensi outbound berkala jika format path-nya `/media/outbound/...`.
+- **Akibat Potensial:**
+  - Jika kuota disk storage outbound mendekati batas atau file barcode QRIS mencapai usia retensi 30 hari tanpa aktivitas update, file fisik berisiko terhapus otomatis oleh cron sweep sehingga link gambar barcode QRIS menjadi 404 / broken image.
+- **Rencana Tindak Lanjut / Solusi:**
+  - Ekstrak `tenant.settings.paymentInfo.qrisImageUrl` pada fungsi pruning/sweep di `media.service.ts` agar masuk ke dalam whitelist proteksi permanen layaknya `pricelist_image_url`.
+
 ## 266. [Address/Sync] Batasan & Temuan Tertunda — Arsitektur Alamat Kedua & Sinkronisasi Jadwal Aktif (2026-10-18, IMPLEMENTED lokal + audit A-010..A-018 + S-1..S-4 & S-UX)
 
 - **Status:** IMPLEMENTED lokal (Fase 1-5 + ronde audit A-010..A-018 + R1–R4 + S-1..S-4 & S-UX dari `PLAN_SEAM_LOKASI_TUNGGAL_2026-10-18.md`; build root backend + dashboard hijau; 9 test suites / 93 tests terkait alamat 100% hijau). **KOREKSI 2026-10-18:** klaim awal "zero regresi" TIDAK akurat — audit lanjutan menemukan 2 regresi gerbang recalc (sudah diperbaiki) + 3 timeout flaky; lihat butir "Audit pasca-eksekusi" di bawah.

@@ -10,6 +10,7 @@ import { responseCacheService } from '../../services/response-cache.service';
 import { getClinicLocationAsync } from '../../config/clinic-location';
 import { tenantOf } from './route-helpers';
 import { resolveLocationSource } from '../../services/staff-reservation.service';
+import { MAX_ADDRESS_LABEL_LENGTH } from '../../domain/customer-address';
 
 export async function customerAdminRoutes(fastify: FastifyInstance) {
   // Invalidate cache saat ada create/update/delete customer
@@ -540,6 +541,11 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
       if (!label) {
         return reply.status(400).send({ success: false, error: 'Label wajib diisi.' });
       }
+      if (label.length > MAX_ADDRESS_LABEL_LENGTH) {
+        return reply
+          .status(400)
+          .send({ success: false, error: `Label maksimal ${MAX_ADDRESS_LABEL_LENGTH} karakter.` });
+      }
 
       const body = request.body || {};
       const lat = typeof body.lat === 'number' && Number.isFinite(body.lat) ? body.lat : null;
@@ -568,7 +574,11 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
         );
         return reply.status(201).send({ success: true, entry });
       } catch (err: any) {
-        return reply.status(500).send({ success: false, error: err.message });
+        // Jangan bocorkan detail internal ke klien; log untuk diagnosa.
+        console.error('[ADMIN][addresses] gagal menambah alamat:', id, err?.message);
+        return reply
+          .status(500)
+          .send({ success: false, error: 'Gagal menambahkan alamat. Silakan coba lagi.' });
       }
     }
   );
@@ -616,6 +626,11 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
       if (!label) {
         return reply.status(400).send({ success: false, error: 'Label wajib diisi.' });
       }
+      if (label.length > MAX_ADDRESS_LABEL_LENGTH) {
+        return reply
+          .status(400)
+          .send({ success: false, error: `Label maksimal ${MAX_ADDRESS_LABEL_LENGTH} karakter.` });
+      }
       const list = await customerService.getSavedAddresses(id, tenantId).catch(() => []);
       const card = list.find((a) => a.id === addressId);
       if (!card) {
@@ -643,7 +658,10 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
         if (!entry) return reply.status(404).send({ success: false, error: 'Customer tidak ditemukan.' });
         return reply.status(200).send({ success: true, entry });
       } catch (err: any) {
-        return reply.status(500).send({ success: false, error: err.message });
+        console.error('[ADMIN][addresses] gagal mengubah label alamat:', id, addressId, err?.message);
+        return reply
+          .status(500)
+          .send({ success: false, error: 'Gagal mengubah label alamat. Silakan coba lagi.' });
       }
     }
   );

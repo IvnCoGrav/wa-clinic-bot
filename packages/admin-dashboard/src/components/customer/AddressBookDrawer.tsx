@@ -12,6 +12,9 @@ import { useUiFeedback } from '../common/UiFeedback';
  * gunakan useUiFeedback.
  */
 
+// Cermin batas kanonis `MAX_ADDRESS_LABEL_LENGTH` (src/domain/customer-address.ts).
+const MAX_ADDRESS_LABEL_LENGTH = 60;
+
 interface SavedAddress {
   id: string;
   label: string;
@@ -109,6 +112,10 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({ customer, 
       toast('Label alamat wajib diisi (misal: Rumah Mertua, Kantor).', 'error');
       return;
     }
+    if (label.length > MAX_ADDRESS_LABEL_LENGTH) {
+      toast(`Label maksimal ${MAX_ADDRESS_LABEL_LENGTH} karakter.`, 'error');
+      return;
+    }
     if (!customerId) return;
 
     setIsAdding(true);
@@ -166,6 +173,10 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({ customer, 
     const label = draftLabel.trim();
     if (!label) {
       toast('Label tidak boleh kosong.', 'error');
+      return;
+    }
+    if (label.length > MAX_ADDRESS_LABEL_LENGTH) {
+      toast(`Label maksimal ${MAX_ADDRESS_LABEL_LENGTH} karakter.`, 'error');
       return;
     }
     setBusyId(card.id);
@@ -271,6 +282,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({ customer, 
                 autoFocus
                 type="text"
                 value={newLabel}
+                maxLength={MAX_ADDRESS_LABEL_LENGTH}
                 onChange={(e) => setNewLabel(e.target.value)}
                 placeholder="misal: Rumah Mertua / Kantor Suami"
                 className="w-full px-2.5 py-1.5 text-xs border border-[#d1d7db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40"
@@ -373,6 +385,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({ customer, 
                             autoFocus
                             value={draftLabel}
                             onChange={(e) => setDraftLabel(e.target.value)}
+                            maxLength={MAX_ADDRESS_LABEL_LENGTH}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') handleRename(card);
                               if (e.key === 'Escape') setEditingId(null);

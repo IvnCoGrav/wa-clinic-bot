@@ -983,7 +983,16 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
   // ⚡ Quick Chat / Balasan Cepat (/shortcut) — daftar template milik monitor
   // (butuh data customer untuk interpolasi); UI popover & filter dimiliki composer.
-  const [quickReplies, setQuickReplies] = useState<Array<{ id: string; shortcut: string; title: string; content: string; category: string | null }>>([]);
+  const [quickReplies, setQuickReplies] = useState<Array<{
+    id: string;
+    shortcut: string;
+    title: string;
+    content: string;
+    category: string | null;
+    media_type?: string | null;
+    image_url?: string | null;
+    mime_type?: string | null;
+  }>>([]);
 
   useEffect(() => {
     apiRequest('/api/admin/quick-replies')
@@ -1080,7 +1089,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         preview: qr.image_url,
         mediaUrl: qr.image_url,
         mimeType: qr.mime_type || 'image/jpeg',
-        fileName: qr.media_type === 'QRIS' ? 'qris-klinik' : 'lampiran-quick-chat',
+        fileName: qr.media_type === 'QRIS' ? 'qris-klinik' : qr.media_type === 'PRICELIST' ? 'pricelist-klinik' : 'lampiran-quick-chat',
       });
     }
     return interpolated;

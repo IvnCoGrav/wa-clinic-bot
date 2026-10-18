@@ -9,6 +9,9 @@ import { buildApp } from '../../src/app';
  * 2. /api/files/:session/:file (WAHA buffer proxy)
  */
 describe('Media route — HTTP 206 Range Streaming & RFC 7233 Compliance', () => {
+  // Boot seluruh app + stream media: melewati batas default 5 dtk saat suite
+  // penuh. Ini beban runner, bukan masalah performa aplikasi.
+  vi.setConfig({ testTimeout: 20000 });
   const app = buildApp();
   const key = 'test_admin_key_media_range';
   const saved: string[] = [];

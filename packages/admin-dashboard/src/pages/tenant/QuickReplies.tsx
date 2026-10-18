@@ -19,7 +19,9 @@ import {
   Image as ImageIcon,
   UploadCloud,
   AlertCircle,
+  FileText,
 } from 'lucide-react';
+import { compressImageFile, resolveCompressProfile } from '../../utils/imageCompressor';
 
 interface QuickReply {
   id: string;
@@ -28,7 +30,7 @@ interface QuickReply {
   title: string;
   content: string;
   category: string | null;
-  media_type?: 'NONE' | 'CUSTOM_IMAGE' | 'QRIS' | null;
+  media_type?: 'NONE' | 'CUSTOM_IMAGE' | 'QRIS' | 'PRICELIST' | null;
   image_url?: string | null;
   mime_type?: string | null;
   created_at?: string;
@@ -48,13 +50,7 @@ const PLACEHOLDERS = [
   { tag: '{petunjuk}', label: 'Petunjuk Pembayaran' },
 ];
 
-const fileToDataUrl = (file: File): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
+
 
 function interpolatePreview(content: string, pInfo?: any): string {
   let text = content
@@ -88,7 +84,7 @@ export const QuickReplies: React.FC = () => {
   const [formTitle, setFormTitle] = useState('');
   const [formContent, setFormContent] = useState('');
   const [formCategory, setFormCategory] = useState('Umum');
-  const [formMediaType, setFormMediaType] = useState<'NONE' | 'CUSTOM_IMAGE' | 'QRIS'>('NONE');
+  const [formMediaType, setFormMediaType] = useState<'NONE' | 'CUSTOM_IMAGE' | 'QRIS' | 'PRICELIST'>('NONE');
   const [customImageFile, setCustomImageFile] = useState<File | null>(null);
   const [customImagePreview, setCustomImagePreview] = useState<string | null>(null);
   const [paymentInfo, setPaymentInfo] = useState<{
@@ -96,6 +92,7 @@ export const QuickReplies: React.FC = () => {
     bankAccounts?: Array<{ bank: string; accountNumber: string; accountName: string }>;
     instructions?: string;
   } | null>(null);
+  const [pricelistImageUrl, setPricelistImageUrl] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [seeding, setSeeding] = useState(false);
@@ -122,9 +119,18 @@ export const QuickReplies: React.FC = () => {
     } catch (_) {}
   };
 
+  const loadPricelistImage = async () => {
+    try {
+      const res: any = await apiRequest('/api/admin/settings/pricelist-image');
+      const d = res?.data || res;
+      setPricelistImageUrl(d?.pricelistImageUrl || null);
+    } catch (_) {}
+  };
+
   useEffect(() => {
     load();
     loadPaymentInfo();
+    loadPricelistImage();
   }, []);
 
   const filtered = useMemo(() => {
@@ -158,7 +164,7 @@ export const QuickReplies: React.FC = () => {
     setFormTitle(it.title);
     setFormContent(it.content);
     setFormCategory(it.category || 'Umum');
-    setFormMediaType(it.media_type === 'QRIS' ? 'QRIS' : it.media_type === 'CUSTOM_IMAGE' ? 'CUSTOM_IMAGE' : 'NONE');
+    setFormMediaType(it.media_type === 'PRICELIST' ? 'PRICELIST' : it.media_type === 'QRIS' ? 'QRIS' : it.media_type === 'CUSTOM_IMAGE' ? 'CUSTOM_IMAGE' : 'NONE');
     setCustomImageFile(null);
     setCustomImagePreview(it.image_url || null);
     setShowModal(true);
@@ -177,9 +183,11 @@ export const QuickReplies: React.FC = () => {
       let fileName: string | undefined = undefined;
 
       if (formMediaType === 'CUSTOM_IMAGE' && customImageFile) {
-        imageB64 = await fileToDataUrl(customImageFile);
-        mimeType = customImageFile.type || 'image/png';
-        fileName = customImageFile.name;
+        const p = resolveCompressProfile('chat');
+        const c = await compressImageFile(customImageFile, { maxWidth: p.maxWidth, maxHeight: p.maxHeight, quality: p.quality });
+        imageB64 = c.dataUrl;
+        mimeType = 'image/jpeg';
+        fileName = customImageFile.name.replace(/\.\w+$/, '') + '.jpg';
       }
 
       const payload: any = {
@@ -338,6 +346,11 @@ export const QuickReplies: React.FC = () => {
                       <QrCode size={11} /> QRIS
                     </span>
                   )}
+                  {it.media_type === 'PRICELIST' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 text-[10px] font-bold border border-teal-200">
+                      <FileText size={11} /> Pricelist
+                    </span>
+                  )}
                   {(it.media_type === 'CUSTOM_IMAGE' || (!it.media_type && it.image_url)) && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-bold border border-blue-200">
                       <ImageIcon size={11} /> Gambar
@@ -359,7 +372,7 @@ export const QuickReplies: React.FC = () => {
                   />
                   <div className="min-w-0 flex-1">
                     <p className="text-[11px] font-semibold text-[#111b21] truncate">
-                      {it.media_type === 'QRIS' ? 'Barcode QRIS Resmi' : 'Lampiran Gambar'}
+                      {it.media_type === 'QRIS' ? 'Barcode QRIS Resmi' : it.media_type === 'PRICELIST' ? 'Pricelist Resmi' : 'Lampiran Gambar'}
                     </p>
                     <p className="text-[10px] text-[#8696a0] truncate">Otomatis dilampirkan ke chat</p>
                   </div>
@@ -412,7 +425,7 @@ export const QuickReplies: React.FC = () => {
               {/* Pilihan Lampiran Media */}
               <div>
                 <label className="text-xs font-semibold text-[#111b21] block mb-1.5">Tipe Lampiran Media</label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
                   <button
                     type="button"
                     onClick={() => setFormMediaType('NONE')}
@@ -451,6 +464,29 @@ export const QuickReplies: React.FC = () => {
                       <QrCode size={13} /> QRIS Resmi
                     </span>
                     <span className="text-[10px] text-[#8696a0]">SSOT Pembayaran</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormMediaType('PRICELIST');
+                      if (!formContent.trim()) {
+                        setFormContent(
+                          'Berikut pricelist dan daftar treatment lengkap di {clinic_name} ya Bunda {name} ✨\n\n' +
+                          'Silakan dilihat-lihat terlebih dahulu, jika ada keluhan si kecil atau ingin konsultasi treatment yang cocok, boleh kabari kami ya Bunda 🙏'
+                        );
+                      }
+                    }}
+                    className={`p-2.5 rounded-xl border text-left transition flex flex-col gap-1 ${
+                      formMediaType === 'PRICELIST'
+                        ? 'bg-[#e8f5f2] border-[#008069] text-[#008069]'
+                        : 'bg-white border-[#d1d7db] text-[#54656f] hover:bg-[#f8fafc]'
+                    }`}
+                  >
+                    <span className="text-xs font-bold flex items-center gap-1.5">
+                      <FileText size={13} /> Pricelist Resmi
+                    </span>
+                    <span className="text-[10px] text-[#8696a0]">SSOT Pricelist</span>
                   </button>
 
                   <button
@@ -500,6 +536,43 @@ export const QuickReplies: React.FC = () => {
                         <p className="font-bold">QRIS belum diunggah di Settings Pembayaran.</p>
                         <p className="text-[10px] text-amber-700 mt-0.5">
                           Shortcut tetap dapat digunakan dan mengirim teks rekening. Unggah QRIS di menu Settings → Pembayaran untuk melampirkan barcode gambar secara otomatis.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Panel Media PRICELIST */}
+              {formMediaType === 'PRICELIST' && (
+                <div className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-[#111b21] flex items-center gap-1.5">
+                      <FileText size={14} className="text-[#008069]" /> Preview Pricelist Resmi
+                    </span>
+                    <span className="text-[10px] bg-teal-50 text-[#008069] px-2 py-0.5 rounded-full font-bold border border-teal-200">
+                      Terkait Settings Pricelist
+                    </span>
+                  </div>
+                  {pricelistImageUrl ? (
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={pricelistImageUrl}
+                        alt="Pricelist Klinik"
+                        className="w-16 h-16 object-contain rounded-lg border border-[#e9edef] bg-white p-1"
+                      />
+                      <div className="text-[11px] text-[#54656f] space-y-1">
+                        <p className="font-semibold text-[#111b21]">Brosur Pricelist aktif terdeteksi.</p>
+                        <p className="text-[10px] text-[#8696a0]">Gambar ini otomatis dilampirkan saat shortcut dikirim di Live Chat.</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-[11px] flex items-start gap-2">
+                      <AlertCircle size={15} className="shrink-0 mt-0.5 text-amber-600" />
+                      <div>
+                        <p className="font-bold">Pricelist belum diunggah di menu Settings → Pricelist.</p>
+                        <p className="text-[10px] text-amber-700 mt-0.5">
+                          Shortcut tetap dapat digunakan dan mengirim teks katalog. Unggah gambar pricelist di Settings → Pricelist untuk melampirkan brosur secara otomatis.
                         </p>
                       </div>
                     </div>

@@ -5,8 +5,9 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 589
+Total entri terindeks: 590
 
+- 2026-10-18 | Feat: SSOT Media Balasan Cepat (/pricelist & /qris), Hardening bodyLimit 12MB & Kompresi K
 - 2026-10-18 | Fix: Regresi Gerbang Recalc Jarak/Ongkir & Tulis Ganda (Audit Pasca S-1..S-5)
 - 2026-10-18 | Fix: Penutupan Celah Seam Lokasi Tunggal, Relink Profil & Tombstone Anti-Rebirth (S-1..S-4
 - 2026-10-18 | Feat: Buku Alamat & Transparansi Alamat (R1–R4)

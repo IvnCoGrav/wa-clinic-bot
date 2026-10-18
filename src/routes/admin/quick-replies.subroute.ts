@@ -39,6 +39,16 @@ export const DEFAULT_QUICK_REPLIES: Array<{
       'Mohon kirimkan bukti transfer ke sini setelah pembayaran ya. Terima kasih 🙏',
   },
   {
+    shortcut: 'pricelist',
+    title: 'Pricelist & Katalog Layanan',
+    category: 'Umum',
+    media_type: 'PRICELIST',
+    image_url: null,
+    content:
+      'Berikut pricelist dan daftar treatment lengkap di {clinic_name} ya Bunda {name} ✨\n\n' +
+      'Silakan dilihat-lihat terlebih dahulu, jika ada keluhan si kecil atau ingin konsultasi treatment yang cocok, boleh kabari kami ya Bunda 🙏',
+  },
+  {
     shortcut: 'lokasi',
     title: 'Alamat & Patokan Klinik',
     category: 'Lokasi',
@@ -127,6 +137,18 @@ export function extToMime(url?: string | null): string {
   return 'image/jpeg';
 }
 
+/** True bila URL benar-benar bisa diserahkan ke gateway: publik http(s) atau media outbound tenant. */
+export function isDeliverableMediaRef(url?: string | null): boolean {
+  if (!url) return false;
+  if (url.startsWith('/media/outbound/')) return true;
+  try {
+    const u = new URL(url);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export function renderBankAccounts(paymentInfo: any): string {
   if (paymentInfo?.bankAccounts && Array.isArray(paymentInfo.bankAccounts) && paymentInfo.bankAccounts.length > 0) {
     return paymentInfo.bankAccounts
@@ -142,6 +164,24 @@ export function renderBankAccounts(paymentInfo: any): string {
  */
 export async function resolveQuickReplyMedia(row: any, tenantId: string): Promise<any> {
   if (!row) return row;
+
+  if (row.media_type === 'PRICELIST') {
+    try {
+      const { getPricelistImageUrl } = await import('../../services/pricelist-config.service');
+      const raw = await getPricelistImageUrl(tenantId);
+      // Hanya sertakan gambar yang bisa dikirim gateway. Fallback aset lokal default
+      // TIDAK dikirim agar teks tetap terkirim (mirror perilaku QRIS yang null-safe).
+      const deliverable = isDeliverableMediaRef(raw) ? raw : null;
+      return {
+        ...row,
+        image_url: deliverable,
+        mime_type: deliverable ? extToMime(deliverable) : undefined,
+      };
+    } catch {
+      return { ...row, image_url: null, mime_type: undefined };
+    }
+  }
+
   if (row.media_type !== 'QRIS') {
     return {
       ...row,
@@ -268,6 +308,34 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
           orderBy: [{ category: 'asc' }, { shortcut: 'asc' }],
         });
       }
+      const present = new Set(rows.map((r: any) => r.shortcut));
+      let refetch = false;
+      for (const sc of ['qris', 'pricelist']) {
+        if (!present.has(sc)) {
+          const item = DEFAULT_QUICK_REPLIES.find((d) => d.shortcut === sc);
+          if (!item) continue;
+          await (prisma as any).quickReply.upsert({
+            where: { tenant_id_shortcut: { tenant_id: tenantId, shortcut: item.shortcut } },
+            update: {},
+            create: {
+              tenant_id: tenantId,
+              shortcut: item.shortcut,
+              title: item.title,
+              content: item.content,
+              category: item.category,
+              media_type: item.media_type || 'NONE',
+              image_url: item.image_url || null,
+            },
+          });
+          refetch = true;
+        }
+      }
+      if (refetch) {
+        rows = await (prisma as any).quickReply.findMany({
+          where: { tenant_id: tenantId },
+          orderBy: [{ category: 'asc' }, { shortcut: 'asc' }],
+        });
+      }
       const resolved = await Promise.all(rows.map((r: any) => resolveQuickReplyMedia(r, tenantId)));
       return reply.status(200).send({ success: true, data: resolved });
     } catch (err: any) {
@@ -286,6 +354,7 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
    */
   fastify.post(
     '/api/admin/quick-replies',
+    { bodyLimit: 12 * 1024 * 1024 },
     async (
       request: FastifyRequest<{
         Body: {
@@ -310,8 +379,8 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
       if (!title || !title.trim()) return reply.status(400).send({ success: false, error: 'Judul wajib diisi.' });
       if (!content || !content.trim()) return reply.status(400).send({ success: false, error: 'Isi template wajib diisi.' });
 
-      if (media_type && !['NONE', 'CUSTOM_IMAGE', 'QRIS'].includes(media_type)) {
-        return reply.status(400).send({ success: false, error: 'media_type tidak valid. Harus NONE, CUSTOM_IMAGE, atau QRIS.' });
+      if (media_type && !['NONE', 'CUSTOM_IMAGE', 'QRIS', 'PRICELIST'].includes(media_type)) {
+        return reply.status(400).send({ success: false, error: 'media_type tidak valid. Harus NONE, CUSTOM_IMAGE, QRIS, atau PRICELIST.' });
       }
 
       let finalMediaType = media_type || 'NONE';
@@ -393,6 +462,7 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
    */
   fastify.put(
     '/api/admin/quick-replies/:id',
+    { bodyLimit: 12 * 1024 * 1024 },
     async (
       request: FastifyRequest<{
         Params: { id: string };
@@ -440,11 +510,11 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
         if (category !== undefined) updateData.category = category?.trim() || null;
 
         if (media_type !== undefined) {
-          if (media_type && !['NONE', 'CUSTOM_IMAGE', 'QRIS'].includes(media_type)) {
-            return reply.status(400).send({ success: false, error: 'media_type tidak valid. Harus NONE, CUSTOM_IMAGE, atau QRIS.' });
+          if (media_type && !['NONE', 'CUSTOM_IMAGE', 'QRIS', 'PRICELIST'].includes(media_type)) {
+            return reply.status(400).send({ success: false, error: 'media_type tidak valid. Harus NONE, CUSTOM_IMAGE, QRIS, atau PRICELIST.' });
           }
           updateData.media_type = media_type || 'NONE';
-          if (updateData.media_type === 'QRIS' || updateData.media_type === 'NONE') {
+          if (updateData.media_type === 'QRIS' || updateData.media_type === 'PRICELIST' || updateData.media_type === 'NONE') {
             updateData.image_url = null;
           }
         }
@@ -460,7 +530,7 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
           });
           updateData.image_url = saved.hdUrl;
           updateData.media_type = 'CUSTOM_IMAGE';
-        } else if (image_url !== undefined && updateData.media_type !== 'QRIS' && updateData.media_type !== 'NONE') {
+        } else if (image_url !== undefined && updateData.media_type !== 'QRIS' && updateData.media_type !== 'PRICELIST' && updateData.media_type !== 'NONE') {
           updateData.image_url = image_url?.trim() || null;
         }
 
@@ -493,11 +563,11 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
         if (content !== undefined) mem.content = content.trim();
         if (category !== undefined) mem.category = category?.trim() || null;
         if (media_type !== undefined) {
-          if (media_type && !['NONE', 'CUSTOM_IMAGE', 'QRIS'].includes(media_type)) {
-            return reply.status(400).send({ success: false, error: 'media_type tidak valid. Harus NONE, CUSTOM_IMAGE, atau QRIS.' });
+          if (media_type && !['NONE', 'CUSTOM_IMAGE', 'QRIS', 'PRICELIST'].includes(media_type)) {
+            return reply.status(400).send({ success: false, error: 'media_type tidak valid. Harus NONE, CUSTOM_IMAGE, QRIS, atau PRICELIST.' });
           }
           mem.media_type = media_type || 'NONE';
-          if (mem.media_type === 'QRIS' || mem.media_type === 'NONE') {
+          if (mem.media_type === 'QRIS' || mem.media_type === 'PRICELIST' || mem.media_type === 'NONE') {
             mem.image_url = null;
           }
         }
@@ -512,7 +582,7 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
           });
           mem.image_url = saved.hdUrl;
           mem.media_type = 'CUSTOM_IMAGE';
-        } else if (image_url !== undefined && mem.media_type !== 'QRIS' && mem.media_type !== 'NONE') {
+        } else if (image_url !== undefined && mem.media_type !== 'QRIS' && mem.media_type !== 'PRICELIST' && mem.media_type !== 'NONE') {
           mem.image_url = image_url?.trim() || null;
         }
         mem.updated_at = new Date();

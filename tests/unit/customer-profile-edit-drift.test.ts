@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll, vi } from 'vitest';
 import { prisma } from '../../src/db/client';
 import { customerService } from '../../src/services/customer.service';
 import { geocodingService } from '../../src/integrations/google-maps/geocoding';
@@ -132,6 +132,14 @@ describe('Fase S-1: Customer Profile Edit Drift & Precision Guard', () => {
 
 describe('Fase S-2: Gate Koordinat Benar-Benar Berubah (PUT /:id/location)', () => {
   const ADMIN_KEY = 'test_admin_key_s2';
+  // Boot seluruh app = mahal; impor sekali di beforeAll agar uji pertama tidak
+  // dibebani biaya impor + batas timeout default 5 dtk (khusus saat suite penuh).
+  let buildApp: typeof import('../../src/app').buildApp;
+
+  beforeAll(async () => {
+    vi.setConfig({ testTimeout: 20000, hookTimeout: 30000 });
+    ({ buildApp } = await import('../../src/app'));
+  });
 
   beforeEach(() => {
     process.env.ADMIN_API_KEY = ADMIN_KEY;
@@ -149,7 +157,6 @@ describe('Fase S-2: Gate Koordinat Benar-Benar Berubah (PUT /:id/location)', () 
     mem.set(customer.id, customer);
 
     const updateLocSpy = vi.spyOn(customerService, 'updateCustomerLocation');
-    const { buildApp } = await import('../../src/app');
     const app = buildApp();
 
     const res = await app.inject({
@@ -178,7 +185,6 @@ describe('Fase S-2: Gate Koordinat Benar-Benar Berubah (PUT /:id/location)', () 
     mem.set(customer.id, customer);
 
     const updateLocSpy = vi.spyOn(customerService, 'updateCustomerLocation').mockResolvedValue(customer);
-    const { buildApp } = await import('../../src/app');
     const app = buildApp();
 
     const res = await app.inject({

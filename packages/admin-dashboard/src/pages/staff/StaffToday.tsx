@@ -4428,7 +4428,10 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               <MapPin size={14} className="text-[#008069] mt-0.5 flex-shrink-0" />
                               <div className="flex-1 min-w-0">
                                 <p className="text-xs text-[#111b21] leading-snug">{item.address.fullText}</p>
-                                <div className="mt-1"><AccuracyBadge source={item.address.locationSource} /></div>
+                                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                  <AccuracyBadge source={item.address.locationSource} />
+                                  <AddressUpdatedAtChip updatedAt={item.address.addressUpdatedAt} />
+                                </div>
                                 {item.address.distanceKm != null && (
                                   <p className="text-[10px] font-semibold text-[#008069] mt-1 flex items-center gap-1">
                                     <Compass size={11} />
@@ -4677,7 +4680,10 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               <MapPin size={14} className="text-[#008069] mt-0.5 flex-shrink-0" />
                               <div className="flex-1 min-w-0">
                                 <p className="text-xs text-[#111b21] leading-snug">{item.address.fullText}</p>
-                                <div className="mt-1"><AccuracyBadge source={item.address.locationSource} /></div>
+                                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                  <AccuracyBadge source={item.address.locationSource} />
+                                  <AddressUpdatedAtChip updatedAt={item.address.addressUpdatedAt} />
+                                </div>
                                 {item.address.distanceKm != null && (
                                   <p className="text-[10px] font-semibold text-[#008069] mt-1 flex items-center gap-1">
                                     <Compass size={11} />
@@ -5339,7 +5345,10 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 <MapPin size={15} className="text-[#008069] mt-0.5 flex-shrink-0" />
                 <div className="leading-relaxed flex-1 min-w-0">
                   <p className="font-medium">{detailModalTask.address.fullText}</p>
-                  <div className="mt-1"><AccuracyBadge source={detailModalTask.address.locationSource} /></div>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <AccuracyBadge source={detailModalTask.address.locationSource} />
+                    <AddressUpdatedAtChip updatedAt={detailModalTask.address.addressUpdatedAt} />
+                  </div>
                   {detailModalTask.address.distanceKm != null && (
                     <p className="text-[11px] font-semibold text-[#008069] mt-1 flex items-center space-x-1">
                       <Compass size={12} />

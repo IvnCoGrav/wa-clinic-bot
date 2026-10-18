@@ -8,6 +8,8 @@ import {
   resolveActiveAddress,
   buildAutoLabel,
   addressesMatch,
+  normalizeAddressLabel,
+  MAX_ADDRESS_LABEL_LENGTH,
   type SavedCustomerAddress,
 } from '../../src/domain/customer-address';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
@@ -99,6 +101,15 @@ describe('Domain buku alamat — label unik', () => {
 
   it('label request eksplisit dipakai bila belum ada', () => {
     expect(buildAutoLabel([], 'Waru', 'Rumah Nenek')).toBe('Rumah Nenek');
+  });
+
+  it('label dipotong ke batas maksimum (anti label kepanjangan)', () => {
+    const long = 'R'.repeat(120);
+    expect(normalizeAddressLabel(long)?.length).toBe(MAX_ADDRESS_LABEL_LENGTH);
+    const { entry } = upsertAddressIntoList([], { label: long, address: 'Jl. Panjang' }, '2026-10-18T00:00:00Z');
+    expect(entry.label.length).toBe(MAX_ADDRESS_LABEL_LENGTH);
+    // Label auto (tanpa label eksplisit) juga dibatasi.
+    expect(buildAutoLabel([], 'W'.repeat(200), null).length).toBeLessThanOrEqual(MAX_ADDRESS_LABEL_LENGTH);
   });
 });
 

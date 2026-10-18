@@ -9,6 +9,9 @@ import { buildApp } from '../../src/app';
  * Acceptance: /media/inbound/:tenant/:file.ogg → Content-Type audio/ogg + Accept-Ranges.
  */
 describe('Media route — MIME audio & Accept-Ranges', () => {
+  // Boot seluruh app + baca media dari disk: melewati batas default 5 dtk saat
+  // suite penuh (695 berkas paralel). Ini bukan masalah performa aplikasi.
+  vi.setConfig({ testTimeout: 20000 });
   const app = buildApp();
   const key = 'test_admin_key_media_audio';
   const saved: string[] = [];

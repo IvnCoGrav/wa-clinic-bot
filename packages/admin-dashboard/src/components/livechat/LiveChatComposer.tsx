@@ -25,6 +25,7 @@ import {
   StickyNote,
   QrCode,
   Image as ImageIcon,
+  FileText,
 } from 'lucide-react';
 
 /**
@@ -620,6 +621,8 @@ const LiveChatComposerInner = (
                   <p className="text-[12px] font-bold text-[#111b21] truncate flex items-center gap-1.5">
                     {qr.media_type === 'QRIS' ? (
                       <span title="QRIS Resmi Terlampir" className="inline-flex items-center text-[#008069]"><QrCode size={13} /></span>
+                    ) : qr.media_type === 'PRICELIST' ? (
+                      <span title="Pricelist Resmi Terlampir" className="inline-flex items-center text-[#008069]"><FileText size={13} /></span>
                     ) : qr.image_url || qr.media_type === 'CUSTOM_IMAGE' ? (
                       <span title="Gambar Terlampir" className="inline-flex items-center text-[#008069]"><ImageIcon size={13} /></span>
                     ) : null}

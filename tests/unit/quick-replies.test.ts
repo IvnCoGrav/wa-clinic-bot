@@ -4,6 +4,7 @@ import {
   isValidShortcut,
   interpolateQuickReply,
   extToMime,
+  isDeliverableMediaRef,
   renderBankAccounts,
   resolveQuickReplyMedia,
   DEFAULT_QUICK_REPLIES,
@@ -11,6 +12,7 @@ import {
 } from '../../src/routes/admin/quick-replies.subroute';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 import { StaffReservationService } from '../../src/services/staff-reservation.service';
+import * as pricelistConfigService from '../../src/services/pricelist-config.service';
 
 describe('Quick Replies - Helpers, In-Memory Store & SSOT Media Resolution', () => {
   beforeEach(() => {
@@ -197,4 +199,61 @@ describe('Quick Replies - Helpers, In-Memory Store & SSOT Media Resolution', () 
     memoryQuickReplies.delete(id);
     expect(memoryQuickReplies.has(id)).toBe(false);
   });
+
+  it('DEFAULT_QUICK_REPLIES contains /pricelist and uses PRICELIST media_type', () => {
+    const shortcuts = DEFAULT_QUICK_REPLIES.map((r) => r.shortcut);
+    expect(shortcuts).toContain('pricelist');
+
+    const item = DEFAULT_QUICK_REPLIES.find((r) => r.shortcut === 'pricelist')!;
+    expect(item.media_type).toBe('PRICELIST');
+    expect(item.image_url).toBeNull();
+    expect(item.content).toContain('Berikut pricelist');
+  });
+
+  it('isDeliverableMediaRef validates media reference deliverability', () => {
+    expect(isDeliverableMediaRef('/media/outbound/tenant/brosur.jpg')).toBe(true);
+    expect(isDeliverableMediaRef('https://cdn.example.com/pricelist.png')).toBe(true);
+    expect(isDeliverableMediaRef('http://cdn.example.com/pricelist.png')).toBe(true);
+    expect(isDeliverableMediaRef('assets/pricelist_spa.jpg')).toBe(false);
+    expect(isDeliverableMediaRef('relative/local/path.png')).toBe(false);
+    expect(isDeliverableMediaRef(null)).toBe(false);
+    expect(isDeliverableMediaRef(undefined)).toBe(false);
+    expect(isDeliverableMediaRef('')).toBe(false);
+  });
+
+  it('resolveQuickReplyMedia: PRICELIST dynamic SSOT resolution', async () => {
+    const row = {
+      id: 'qr-pl-1',
+      shortcut: 'pricelist',
+      title: 'Pricelist',
+      content: 'Pricelist kami',
+      media_type: 'PRICELIST',
+      image_url: null,
+    };
+
+    // (a) Spy getPricelistImageUrl -> outbound deliverable URL => image_url resolved
+    vi.spyOn(pricelistConfigService, 'getPricelistImageUrl').mockResolvedValueOnce(
+      '/media/outbound/default-tenant/pricelist.jpg'
+    );
+    const resolvedA = await resolveQuickReplyMedia(row, DEFAULT_TENANT_ID);
+    expect(resolvedA.image_url).toBe('/media/outbound/default-tenant/pricelist.jpg');
+    expect(resolvedA.mime_type).toBe('image/jpeg');
+
+    // (b) Spy getPricelistImageUrl -> assets/pricelist_spa.jpg (fallback lokal) => image_url null
+    vi.spyOn(pricelistConfigService, 'getPricelistImageUrl').mockResolvedValueOnce(
+      'assets/pricelist_spa.jpg'
+    );
+    const resolvedB = await resolveQuickReplyMedia(row, DEFAULT_TENANT_ID);
+    expect(resolvedB.image_url).toBeNull();
+    expect(resolvedB.mime_type).toBeUndefined();
+
+    // (c) Spy throw => image_url null tanpa crash
+    vi.spyOn(pricelistConfigService, 'getPricelistImageUrl').mockRejectedValueOnce(
+      new Error('DB failure')
+    );
+    const resolvedC = await resolveQuickReplyMedia(row, DEFAULT_TENANT_ID);
+    expect(resolvedC.image_url).toBeNull();
+    expect(resolvedC.mime_type).toBeUndefined();
+  });
 });
+

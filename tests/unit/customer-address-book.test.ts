@@ -528,6 +528,23 @@ describe('Fase S-UX.2 & S-4: POST /api/admin/customers/:id/addresses and Tenant 
     expect(JSON.parse(res.body).error).toMatch(/Label wajib diisi/i);
   });
 
+  it('POST /api/admin/customers/:id/addresses validasi label terlalu panjang (400)', async () => {
+    const customer = await seedCustomer([]);
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/admin/customers/${customer.id}/addresses`,
+      headers: { 'x-api-key': ADMIN_KEY, 'x-tenant-id': TENANT },
+      payload: {
+        label: 'R'.repeat(61),
+        address: 'Jl. Pemuda No. 45',
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Label maksimal 60 karakter/i);
+  });
+
   it('POST /api/admin/customers/:id/addresses 404 saat customer tidak ditemukan', async () => {
     const app = buildApp();
     const res = await app.inject({

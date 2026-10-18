@@ -5,6 +5,27 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+#### 2026-10-18 - Feat: SSOT Media Balasan Cepat (/pricelist & /qris), Hardening bodyLimit 12MB & Kompresi Klien
+
+- **Akar Masalah & Kebutuhan**:
+  - Balasan cepat `/pricelist` sebelumnya belum mendukung resolusi gambar otomatis (SSOT) dari pengaturan tenant `pricelist_image_url`, sehingga staf harus mengunggah ulang brosur secara manual atau gambar tidak terlampir.
+  - Unggah lampiran gambar kustom resolusi tinggi pada menu Balasan Cepat di dashboard kerap memicu error `Request body is too large` (HTTP 413) karena batas bawaan Fastify bodyLimit (~1MB) dan ketiadaan kompresi di sisi klien.
+- **Backend (`quick-replies.subroute.ts`)**:
+  - Menambahkan tipe media `PRICELIST` pada validator route POST dan PUT.
+  - Helper deliverability `isDeliverableMediaRef`: memastikan hanya URL publik `http(s)` atau media outbound `/media/outbound/...` yang dikirim ke gateway; jika belum diunggah, `image_url` disetel `null` secara aman sehingga teks pesan tetap terkirim tanpa error.
+  - Resolusi SSOT `resolveQuickReplyMedia`: secara dinamis membaca `getPricelistImageUrl(tenantId)` tanpa duplikasi storage (0 MB overhead).
+  - Ensure-seed pada handler `GET /api/admin/quick-replies`: memastikan template default `/qris` dan `/pricelist` otomatis di-seed untuk tenant tanpa menghapus template kustom yang sudah ada.
+  - Hardening rute `bodyLimit: 12 * 1024 * 1024` (12MB) pada POST dan PUT `/api/admin/quick-replies` untuk menampung data URL base64 gambar beresolusi tinggi.
+- **Frontend Dashboard (`packages/admin-dashboard`)**:
+  - `QuickReplies.tsx`: Kartu ke-4 "Pricelist Resmi" (SSOT Pricelist) lengkap dengan preview brosur dinamis dari `/api/admin/settings/pricelist-image` dan badge status di daftar kartu.
+  - Kompresi gambar sisi klien di `QuickReplies.tsx` menggunakan `compressImageFile` profil `'chat'` (`imageCompressor.ts`), mereduksi ukuran file foto/brosur sebelum dikirim ke API.
+  - `LiveChatMonitor.tsx` & `LiveChatComposer.tsx`: Menetapkan `fileName: 'pricelist-klinik'` saat `media_type === 'PRICELIST'` serta ikon `FileText` pada popover autocomplete quick reply.
+- **Pengujian & Keamanan**:
+  - `tests/unit/quick-replies.test.ts` (13 tests): pengujian `DEFAULT_QUICK_REPLIES` mencakup `/pricelist`, validasi ketat `isDeliverableMediaRef`, dan resolusi dinamis `resolveQuickReplyMedia` untuk PRICELIST (outbound terkirim, fallback lokal null, DB error fail-safe).
+  - `tests/integration/quick-replies-media.test.ts` (4 tests): pengujian adversarial payload ~3MB lolos (bukan 413), penolakan tegas batas payload >12MB (413), keabsahan POST/PUT `media_type: PRICELIST`, dan penolakan validator `media_type` sembarang (400).
+  - Gerbang regresi: `npm run build` root + dashboard 100% hijau; 17 tests terkait quick replies 100% hijau.
+
+
 #### 2026-10-18 - Fix: Regresi Gerbang Recalc Jarak/Ongkir & Tulis Ganda (Audit Pasca S-1..S-5)
 
 - **Akar masalah (fondasional, lintas lapisan)**: gerbang auto-recalc di `customer.service.ts`
