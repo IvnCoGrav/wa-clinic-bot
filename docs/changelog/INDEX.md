@@ -5,8 +5,9 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 592
+Total entri terindeks: 593
 
+- 2026-10-18 | Fix: Resolusi Fondasional Split-Brain Alamat (Fuzzy Toponimi, Paritas Cermin FE, Elevasi P
 - 2026-10-18 | Feat: Logo Tenant-Aware & Floating Promo Diskon Interaktif pada Halaman Pricelist Publik
 - 2026-10-18 | Fix: Tindak Lanjut Audit Alamat (Flaky Test Timeout, Hardening API Buku Alamat, Konsistens
 - 2026-10-18 | Feat: SSOT Media Balasan Cepat (/pricelist & /qris), Hardening bodyLimit 12MB & Kompresi K

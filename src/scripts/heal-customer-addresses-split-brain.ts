@@ -34,7 +34,9 @@ const isCommit = process.argv.includes('--commit') || process.argv.includes('--a
 const isDryRun = !isCommit;
 const tenantArg = process.argv.find((a) => a.startsWith('--tenant='));
 const limitArg = process.argv.find((a) => a.startsWith('--limit='));
+const customerArg = process.argv.find((a) => a.startsWith('--customer='));
 const tenantFilter = tenantArg ? tenantArg.split('=')[1]!.trim() : null;
+const customerFilter = customerArg ? customerArg.split('=')[1]!.trim() : null;
 const limit = limitArg ? Math.max(1, parseInt(limitArg.split('=')[1], 10) || 1000) : 1000;
 
 const hasText = (s: unknown): boolean => typeof s === 'string' && s.trim().length > 0;
@@ -53,7 +55,9 @@ function scoreAddressRow(r: any): number {
 function scoreAddressWinner(r: any): number {
   let s = scoreAddressRow(r);
   if (r.is_primary) s += 10;
-  if (r.location_source === 'gps_pin') s += 5;
+  // gps_pin bernilai 15 agar kartu ber-GPS presisi diutamakan di atas kartu estimasi lama
+  if (r.location_source === 'gps_pin') s += 15;
+  else if (r.location_source === 'manual_staff') s += 8;
   return s;
 }
 
@@ -66,15 +70,18 @@ interface Action {
 }
 
 async function main(): Promise<void> {
-  console.log(`[HEAL SPLIT-BRAIN] mode=${isDryRun ? 'DRY-RUN (read-only)' : 'COMMIT'} tenant=${tenantFilter || '(semua)'} limit=${limit}`);
+  console.log(`[HEAL SPLIT-BRAIN] mode=${isDryRun ? 'DRY-RUN (read-only)' : 'COMMIT'} tenant=${tenantFilter || '(semua)'} customer=${customerFilter || '(semua)'} limit=${limit}`);
   if (isCommit) {
     console.log('[HEAL SPLIT-BRAIN] Pastikan backup pg_dump -t customer_addresses -t customers -t reservations SUDAH dibuat sebelum commit.');
   }
 
-  const whereTenant = tenantFilter ? { tenant_id: tenantFilter } : {};
-  // Ambil seluruh customer_addresses yang ada di DB untuk tenant ini
+  const whereClause: any = {};
+  if (tenantFilter) whereClause.tenant_id = tenantFilter;
+  if (customerFilter) whereClause.customer_id = customerFilter;
+
+  // Ambil seluruh customer_addresses yang ada di DB untuk filter ini
   const allAddresses: any[] = await (prisma as any).customerAddress.findMany({
-    where: whereTenant,
+    where: whereClause,
     orderBy: [{ customer_id: 'asc' }, { is_primary: 'desc' }, { last_used_at: 'desc' }],
     take: limit * 10,
   });
@@ -196,7 +203,16 @@ async function main(): Promise<void> {
         const ghostIds = ghosts.map((g: any) => g.id);
 
         let enrichedCoords = false;
-        if (!hasCoords(winner)) {
+        // Utamakan koordinat GPS presisi jika winner bukan gps_pin tapi ghost memiliki gps_pin
+        const ghostGps = ghosts.find((g: any) => g.location_source === 'gps_pin' && hasCoords(g));
+        if (winner.location_source !== 'gps_pin' && ghostGps) {
+          winner.lat = ghostGps.lat;
+          winner.lng = ghostGps.lng;
+          winner.distance_km = ghostGps.distance_km;
+          winner.ongkir = ghostGps.ongkir;
+          winner.location_source = 'gps_pin';
+          enrichedCoords = true;
+        } else if (!hasCoords(winner)) {
           const ghostWithCoords = ghosts.find((g: any) => hasCoords(g));
           if (ghostWithCoords) {
             winner.lat = ghostWithCoords.lat;

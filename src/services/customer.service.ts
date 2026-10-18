@@ -259,6 +259,7 @@ export class CustomerService {
   public async updateCustomerLocation(
     customerId: string,
     data: {
+      address?: string;
       kelurahan?: string;
       kecamatan?: string;
       kota?: string;
@@ -399,6 +400,7 @@ export class CustomerService {
           data: {
             preferences: {
               ...prevPrefs,
+              ...((data as any)?.address ? { address: (data as any).address } : {}),
               location_history: [...hist.slice(-9), entry],
               location_updated_at: new Date().toISOString(),
             } as any,
@@ -430,7 +432,7 @@ export class CustomerService {
       // preserve pin (teks area rumah-2), catat area BARU sebagai estimated_area
       // tanpa menyentuh pin root (anti data hibrida).
       try {
-        const prevAddress = (existing.preferences as any)?.address || '';
+        const prevAddress = (data as any)?.address || (existing.preferences as any)?.address || '';
         const writeLoc = savedEntry
           ? {
               address: prevAddress,
@@ -465,6 +467,7 @@ export class CustomerService {
                 distanceKm: effectiveDistance,
                 ongkir: effectiveOngkir,
                 locationSource: (effectiveSource as any) ?? undefined,
+                isPrimary: true,
               };
         const hasLoc = Boolean(
           data.kelurahan || data.kecamatan || data.kota || data.lat !== undefined || data.lng !== undefined || savedEntry
@@ -517,6 +520,10 @@ export class CustomerService {
                 : (d.lat !== undefined || d.lng !== undefined)
                   ? LocationSource.estimated_area
                   : cust.location_source;
+          const currentPrefs = (cust.preferences as any) || {};
+          if ((d as any)?.address) {
+            currentPrefs.address = (d as any).address;
+          }
           Object.assign(cust, {
             kelurahan: safeKelurahan ?? cust.kelurahan,
             kecamatan: d.kecamatan ?? cust.kecamatan,
@@ -528,12 +535,13 @@ export class CustomerService {
             is_out_of_coverage: d.isOutOfCoverage ?? cust.is_out_of_coverage,
             zipcode: d.zipcode !== undefined ? d.zipcode : cust.zipcode,
             ...(effSource !== undefined ? { location_source: effSource } : {}),
+            preferences: currentPrefs,
             updated_at: new Date(),
           });
           if (d.isNativePin) cust.share_location_sent = true;
           // Sinkronkan ke buku alamat (best-effort — jangan gagalkan update lokasi).
           try {
-            const prevAddress = (cust.preferences as any)?.address || '';
+            const prevAddress = (d as any)?.address || (cust.preferences as any)?.address || '';
             const writeLoc = savedEntry
               ? {
                   address: prevAddress,
@@ -568,6 +576,7 @@ export class CustomerService {
                     distanceKm: effDist,
                     ongkir: effOngkir,
                     locationSource: (effSource as any) ?? undefined,
+                    isPrimary: true,
                   };
             const hasLoc = Boolean(
               d.kelurahan || d.kecamatan || d.kota || d.lat !== undefined || d.lng !== undefined || savedEntry

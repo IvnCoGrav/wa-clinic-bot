@@ -5,6 +5,30 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+#### 2026-10-18 - Fix: Resolusi Fondasional Split-Brain Alamat (Fuzzy Toponimi, Paritas Cermin FE, Elevasi Primary GPS-Safe & Eliminasi Alarm Palsu Shareloc)
+
+- **Akar Masalah**:
+  1. Typo toponimi ("morokrembangab" vs "morokrembangan", variasi penulisan kelurahan/kecamatan intake) menyebabkan `addressesMatch` gagal mengenali rumah yang sama, melahirkan kartu duplikat split-brain (terbukti pada kasus Bunda Novi Hariyanti).
+  2. Alur intake shareloc/lokasi belum menaikkan kartu alamat ber-GPS menjadi primary secara deterministik saat data diperbarui via profil.
+  3. Dashboard livechat dispatch widget memunculkan banner & tombol "Minta Shareloc" secara palsu pada alamat yang berstatus `manual_staff` atau saat reservasi aktif sudah ber-GPS namun fallback chain membaca estimasi profil lama.
+- **Domain (`src/domain/customer-address.ts` & cermin FE `packages/admin-dashboard/src/utils/addressMatch.ts`)**:
+  - Menambahkan similarity checker toponimi fuzzy berbasis Levenshtein (ambang edit distance <= 2 atau relasi substring) yang di-guard ketat oleh `sameStreet === true`, kompatibilitas kota (`sameKota`), dan jarak spasial sentroid <= 3.000 meter.
+  - Mempertahankan invarian anti-over-merge: dua rumah berbeda jalan atau jarak >3.000m tetap dievaluasi sebagai rumah berbeda.
+  - `upsertAddressIntoList`: menjamin pemenang ber-`isPrimary: true` menurunkan kartu lain menjadi non-primary via `ensureSinglePrimary`.
+- **Service (`src/services/customer.service.ts`)**:
+  - `updateCustomerLocation`: menerima parameter `address`, menyimpannya ke `preferences.address`, dan menandai `isPrimary: true` pada `writeLoc` jalur root profil sehingga titik pin presisi GPS otomatis menjadi kartu alamat utama yang sah.
+- **Frontend Dashboard (`packages/admin-dashboard`)**:
+  - `LiveChatDispatchWidget.tsx`: membatasi trigger alarm shareloc hanya untuk `locationSource === 'estimated_area'` (status `manual_staff` dan `gps_pin` dianggap terverifikasi, mengeliminasi alarm palsu).
+  - `LiveChatMonitor.tsx`: memperkaya chain fallback `dispatchLocationSource` dengan menyertakan `selectedChat?.locationSource`.
+- **Skrip Healing (`src/scripts/heal-customer-addresses-split-brain.ts`)**:
+  - Mendukung filter `--customer=<id>`, meningkatkan bobot pemenang untuk `location_source === 'gps_pin'` (+15) di atas estimasi lama, dan mewariskan koordinat GPS dari ghost ke winner.
+- **Pengujian & Regresi**:
+  - `tests/unit/address-match-toponimi.test.ts` (5 tests adversarial): uji typo toponimi 680m, swap kelurahan/kecamatan, anti-over-merge beda jalan/kota/>3km.
+  - `tests/unit/dashboard-address-match-parity.test.ts`: diperluas 5 vektor baru (total 15 tests) memastikan paritas 1:1 antara BE dan FE.
+  - `tests/unit/customer-address-gps-elevation.test.ts` (2 tests): memvalidasi elevasi kartu GPS ke primary tanpa merusak isolasi rumah kedua.
+  - Gerbang regresi lokal: 80 unit test terkait alamat 100% hijau; `npm run build` root dan dashboard exit 0.
+
+
 #### 2026-10-18 - Feat: Logo Tenant-Aware & Floating Promo Diskon Interaktif pada Halaman Pricelist Publik
 
 - **Akar Masalah & Kebutuhan Arsitektur**:

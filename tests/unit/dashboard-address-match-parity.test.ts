@@ -68,6 +68,103 @@ const VECTORS: { name: string; a: any; b: any; expected: boolean }[] = [
     b: {},
     expected: false,
   },
+  // ── Vektor Toponimi & Anti-Over-Merge (Fase 1 Plan Revisi-1) ─────────────
+  {
+    name: 'jalan sama + typo toponimi kecamatan (morokrembangab vs Krembangan) + kelurahan Morokrembangan + jarak 680m → match',
+    a: {
+      address: 'jln tambak asri GG 2 no 6',
+      kelurahan: null,
+      kecamatan: 'morokrembangab',
+      kota: 'sby',
+      lat: -7.2304601,
+      lng: 112.718192,
+    },
+    b: {
+      address: 'jln tambak asri GG 2 no 6',
+      kelurahan: 'Morokrembangan',
+      kecamatan: 'Krembangan',
+      kota: 'Kota Surabaya',
+      lat: -7.23171112,
+      lng: 112.71212724,
+    },
+    expected: true,
+  },
+  {
+    name: 'jalan sama + kelurahan tertukar ke kecamatan pada intake → match',
+    a: {
+      address: 'Jl. Rungkut Asri Timur No. 12',
+      kelurahan: 'Rungkut',
+      kecamatan: 'Rungkut Kidul',
+      kota: 'Surabaya',
+      lat: -7.320100,
+      lng: 112.775000,
+    },
+    b: {
+      address: 'Jl. Rungkut Asri Timur No. 12',
+      kelurahan: 'Rungkut Kidul',
+      kecamatan: 'Rungkut',
+      kota: 'Surabaya',
+      lat: -7.321200,
+      lng: 112.776100,
+    },
+    expected: true,
+  },
+  {
+    name: 'jalan berbeda di kecamatan sama & kota sama → TETAP BEDA (anti-regresi rumah-2)',
+    a: {
+      address: 'Jl. Kedungklinter 1 No. 80',
+      kelurahan: 'Keputih',
+      kecamatan: 'Sukolilo',
+      kota: 'Surabaya',
+      lat: -7.289199,
+      lng: 112.7970673,
+    },
+    b: {
+      address: 'Jl. Klampis Jaya No. 25',
+      kelurahan: 'Klampis Ngasem',
+      kecamatan: 'Sukolilo',
+      kota: 'Surabaya',
+      lat: -7.295000,
+      lng: 112.780000,
+    },
+    expected: false,
+  },
+  {
+    name: 'jalan beda + kota beda → TETAP BEDA',
+    a: {
+      address: 'Jl. Ahmad Yani No. 1',
+      kecamatan: 'Wonokromo',
+      kota: 'Surabaya',
+      lat: -7.305000,
+      lng: 112.735000,
+    },
+    b: {
+      address: 'Jl. Pahlawan No. 10',
+      kecamatan: 'Sidoarjo',
+      kota: 'Sidoarjo',
+      lat: -7.450000,
+      lng: 112.715000,
+    },
+    expected: false,
+  },
+  {
+    name: 'jalan sama persis tetapi jarak > 3.000 m → TETAP BEDA',
+    a: {
+      address: 'Jl. Pahlawan No. 5',
+      kecamatan: 'Bubutan',
+      kota: 'Surabaya',
+      lat: -7.245000,
+      lng: 112.738000,
+    },
+    b: {
+      address: 'Jl. Pahlawan No. 5',
+      kecamatan: 'Waru',
+      kota: 'Sidoarjo',
+      lat: -7.355000,
+      lng: 112.725000,
+    },
+    expected: false,
+  },
 ];
 
 describe('F3 — paritas cermin addressMatch (backend domain vs FE mirror)', () => {

@@ -99,11 +99,54 @@ function bothCoords(
   return typeof a.lat === 'number' && typeof a.lng === 'number' && typeof b.lat === 'number' && typeof b.lng === 'number';
 }
 
+/** Jarak edit Levenshtein (murni tanpa dependency eksternal). */
+function levenshtein(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+
+  const row = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = i;
+    for (let j = 1; j <= b.length; j++) {
+      const val = a[i - 1] === b[j - 1] ? row[j - 1] : Math.min(row[j - 1], row[j], prev) + 1;
+      row[j - 1] = prev;
+      prev = val;
+    }
+    row[b.length] = prev;
+  }
+  return row[b.length];
+}
+
+/** Normalisasi kota: buang prefix administratif & dukung singkatan baku kota (sby/sda). */
+function normCity(value?: string | null): string {
+  const s = norm(value)
+    .replace(/^(kota|kabupaten|kab\.|kotamadya)\s+/i, '')
+    .trim();
+  if (s === 'sby') return 'surabaya';
+  if (s === 'sda') return 'sidoarjo';
+  return s;
+}
+
+/** Evaluasi kemiripan toponimi: identik, child ⊂ parent, atau typo Levenshtein <= 2. */
+function isWilayahSimilar(a?: string | null, b?: string | null): boolean {
+  if (!hasText(a) || !hasText(b)) return false;
+  const na = norm(a);
+  const nb = norm(b);
+  if (na === nb) return true;
+  // Child-name ⊂ parent-name (misal Morokrembangan ⊃ Krembangan)
+  if (na.includes(nb) || nb.includes(na)) return true;
+  // Typo toponimi wajar (Levenshtein <= 2, panjang minimal 4 karakter)
+  if (na.length >= 4 && nb.length >= 4 && levenshtein(na, nb) <= 2) return true;
+  return false;
+}
+
 /**
  * Dedup deterministik. Dua entri dianggap RUMAH SAMA bila:
  *  1. titik <150 m (bukti fisik), ATAU
  *  2. alamat jalan + kelurahan + kecamatan identik (keduanya punya jalan), ATAU
- *  3. hanya wilayah (tanpa jalan) + kelurahan + kecamatan + kota identik.
+ *  3. hanya wilayah (tanpa jalan) + kelurahan + kecamatan + kota identik, ATAU
+ *  4. jalan identik + toponimi / typo wajar kecamatan/kelurahan + toleransi sentroid <= 3 km.
  * Beda jalan dalam kecamatan sama → TIDAK match (biar 2 rumah tetap terpisah).
  */
 export function addressesMatch(
@@ -125,6 +168,29 @@ export function addressesMatch(
   // Aturan: jalan sama + kecamatan sama + desa kompatibel = COCOK.
   // Dua desa SAMA-SAMA isi tapi BEDA -> TETAP TIDAK cocok (Rumah-2 sah).
   if (sameStreet && sameKec && kelKompatibel) return true;
+
+  // Cabang toponimi & typo fuzzy (Mikro 1.2): HANYA aktif bila jalan sama persis DAN kota kompatibel.
+  // Mencegah over-merge: jalan beda / kota beda DILARANG masuk ke sini.
+  const aKota = normCity(a.kota);
+  const bKota = normCity(b.kota);
+  const kotaKompatibel = !hasText(a.kota) || !hasText(b.kota) || aKota === bKota;
+
+  if (sameStreet && kotaKompatibel) {
+    const within3km = !bothCoords(a, b) || haversineMeters(a as any, b as any) <= 3000;
+    if (within3km) {
+      // 1. Cross kelurahan <-> kecamatan (mis. tertukar pada form intake)
+      const crossMatch =
+        (hasText(a.kecamatan) && hasText(b.kelurahan) && norm(a.kecamatan) === norm(b.kelurahan)) ||
+        (hasText(a.kelurahan) && hasText(b.kecamatan) && norm(a.kelurahan) === norm(b.kecamatan));
+      if (crossMatch) return true;
+
+      // 2. Typo toponimi pada kecamatan atau cross kelurahan↔kecamatan (mis. morokrembangab vs Morokrembangan)
+      const toponimiKec = isWilayahSimilar(a.kecamatan, b.kecamatan) && (kelKompatibel || isWilayahSimilar(a.kelurahan, b.kelurahan));
+      const toponimiCross = isWilayahSimilar(a.kecamatan, b.kelurahan) || isWilayahSimilar(a.kelurahan, b.kecamatan);
+      if (toponimiKec || toponimiCross) return true;
+    }
+  }
+
   // Tanpa detail jalan di kedua sisi: samakan bila wilayah desa/kecamatan identik.
   if (!aAddr && !bAddr && sameKel && sameKec) return true;
   // Pengayaan asimetris (ghost primary 2026-10-12): tepat SATU sisi kosong
@@ -303,7 +369,7 @@ export function upsertAddressIntoList(
       next = next.filter((a) => a.id !== victim.id);
     }
   }
-  return { list: ensureSinglePrimary(next), entry };
+  return { list: ensureSinglePrimary(next, input.isPrimary === true ? entry.id : undefined), entry };
 }
 
 // ── Address Tombstones (F-3 / S-3) ──────────────────────────────────────────

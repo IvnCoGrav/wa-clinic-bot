@@ -3931,8 +3931,13 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     toast('Draf posisi Bidan disisipkan. Tekan Kirim untuk mengirim.', 'info');
   };
 
-  // Provenance akurasi lokasi dari data customer-detail via shared geoUtils
-  const dispatchLocationSource = resolveEffectiveLocationSource(customerDetailData);
+  // Provenance akurasi lokasi dari data customer-detail via shared geoUtils (Mikro 3.2, D-1a)
+  const dispatchLocationSource =
+    resolveEffectiveLocationSource(customerDetailData) ||
+    resolveEffectiveLocationSource(activeConfirmedReservation) ||
+    resolveEffectiveLocationSource(activeHoldReservation) ||
+    resolveEffectiveLocationSource(selectedChat?.locationSource) ||
+    null;
 
   // Fase 4: susun draf permintaan shareloc lalu sisipkan ke composer (CS tetap
   // menekan Kirim). Draf dari data pasien; tanpa hardcode tarif/SOP.

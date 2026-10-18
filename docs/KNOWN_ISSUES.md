@@ -3,6 +3,21 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 269. [Address/Split-Brain] Resolusi Toponimi Fuzzy, Elevasi Primary GPS & Alarm Palsu Shareloc (2026-10-18, IMPLEMENTED)
+
+- **Status:** IMPLEMENTED (Fase 1-3 selesai di domain, service, dan FE; paritas 1:1; 80 unit tests terkait alamat 100% hijau; persiapan skrip healing Fase 4 di `src/scripts/heal-customer-addresses-split-brain.ts`).
+- **Gejala / Akar Masalah:**
+  1. Typo toponimi ("morokrembangab" vs "morokrembangan", swap posisi kelurahan/kecamatan) menghasilkan kartu duplikat split-brain (terbukti di database produksi pada Bunda Novi Hariyanti `29705a6a-bdf8-4714-bbbb-c21989cbae29`).
+  2. Saat lokasi diperbarui melalui intake profil root berkoordinat GPS, kartu alamat yang bersangkutan belum otomatis dinaikkan sebagai `isPrimary: true`, sehingga kartu estimasi lama tetap bertengger sebagai primary.
+  3. Dashboard livechat dispatch widget memunculkan banner & tombol "Minta Shareloc" secara keliru pada alamat `manual_staff` atau saat reservasi aktif sudah ber-GPS namun fallback chain membaca profil estimasi lama.
+- **Resolusi Fondasional:**
+  1. **Domain Fuzzy Toponimi**: `addressesMatch` (`customer-address.ts` & cermin FE `addressMatch.ts`) dilengkapi pengecekan toponimi Levenshtein (edit distance <= 2 atau substring) yang di-guard ketat oleh `sameStreet === true`, kompatibilitas kota, dan radius sentroid <= 3.000 meter. Dua rumah beda jalan atau >3.000m tetap aman dari over-merge.
+  2. **Elevasi Primary Aman**: `updateCustomerLocation` kini membawa `address` dan menandai `isPrimary: true` pada `writeLoc` jalur profil root, dengan `ensureSinglePrimary` menurunkan kartu lainnya.
+  3. **Eliminasi Alarm Palsu Shareloc**: Widget dispatch OTW hanya memicu banner shareloc untuk `locationSource === 'estimated_area'`, dan `LiveChatMonitor` menyertakan `selectedChat?.locationSource` dalam fallback chain `dispatchLocationSource`.
+  4. **Skrip Healing Idempoten**: `heal-customer-addresses-split-brain.ts` diperluas dengan opsi `--customer=<id>`, prioritas bobot GPS (+15), dan pewarisan koordinat GPS ke winner.
+- **Rencana Tindak Lanjut**:
+  - Eksekusi dry-run dan commit healing data pada pelanggan terdampak di produksi setelah deployment container `app`.
+
 ## 268. [Brand Identity / Settings] Ketiadaan Route & UI Tulis Terdedikasi untuk `settings.brand` (2026-10-18, OPEN)
 
 - **Status:** OPEN (Keputusan arsitektur sadar dari implementasi logo tenant-aware & promo pricelist).
