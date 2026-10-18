@@ -270,9 +270,19 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    const coordsOrAddressChanged =
+      (formData.address.trim() || null) !== (customer.address || customer.preferences?.address || null) ||
+      (formData.kelurahan.trim() || null) !== (customer.kelurahan || null) ||
+      (formData.lat ? parseFloat(formData.lat) : null) !== customer.lat ||
+      (formData.lng ? parseFloat(formData.lng) : null) !== customer.lng;
+
+    const message = coordsOrAddressChanged
+      ? 'Perubahan profil dan lokasi akan disimpan. Bila customer memiliki jadwal kunjungan aktif, jadwal akan otomatis diselaraskan ke alamat/titik koordinat baru ini.'
+      : 'Yakin ingin menyimpan perubahan profil customer dan data anak ini?';
+
     const confirmed = await confirm({
       title: 'Simpan Perubahan?',
-      message: 'Yakin ingin menyimpan perubahan profil customer dan data anak ini?',
+      message,
       confirmText: 'Ya, Simpan',
       cancelText: 'Batal',
     });

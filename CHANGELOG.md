@@ -5,6 +5,58 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+#### 2026-10-18 - Fix: Regresi Gerbang Recalc Jarak/Ongkir & Tulis Ganda (Audit Pasca S-1..S-5)
+
+- **Akar masalah (fondasional, lintas lapisan)**: gerbang auto-recalc di `customer.service.ts`
+  membandingkan nilai dengan hasil baca **SETELAH** `prisma.customer.update`
+  (read-after-write). Akibatnya `coordsChanged` & `kecamatanDrift` **selalu false**:
+  (a) edit koordinat eksplisit tidak lagi menghitung ulang jarak/ongkir; (b) koreksi
+  drift wilayah (Suko→Waru) tidak lagi di-geocode ulang. Diperparah karena
+  `getCustomerById` dapat mengembalikan **referensi objek cache memori** yang lalu
+  dimutasi `Object.assign` pasca-tulis (retroaktif).
+- **Fixed — snapshot PRA-TULIS**: `updateCustomer()` kini mengambil satu pembacaan
+  `priorCustomer` sebelum tulis dan menyimpan **salinan primitif**
+  (`priorLat/priorLng/priorKelurahan/priorKecamatan/priorKota/priorIsPrecise`).
+  Seluruh gerbang (`coordsChanged`, `explicitCoords`, `preciseLocked`,
+  `kecamatanDrift`, `hasCoords`, `needsGeocode`) dan fallback geocode memakai
+  snapshot tersebut, bukan `finalCustomer`.
+- **Removed — tulis ganda**: dua pemanggilan `repo.update()` di dalam
+  `updateCustomer()` (tulis utama & recalc) dihapus; penulis kanonis tunggal adalah
+  `prisma.customer.update` + sinkron cache memori (repo default
+  `PostgresCustomerRepository` menulis ke tabel yang sama → duplikasi).
+- **Changed — fail-visible**: kegagalan tulis hasil recalc tidak lagi ditelan
+  `.catch(() => {})`; kini `console.error` menyertakan `customerId` + pesan error.
+- **Tests**: `tests/unit/customer-profile-edit-drift.test.ts` — 4 uji regresi yang
+  sebelumnya terhapus dipulihkan + 1 uji baru (koordinat eksplisit berubah dengan
+  kecamatan sama → jarak & ongkir dihitung ulang). Bukti revert-and-rerun: uji
+  tersebut GAGAL pada kode S-1..S-5 dan LULUS pada HEAD → regresi nyata.
+- **Verifikasi**: `npm run build` exit 0; full suite 10 file gagal = 7 baseline
+  pra-eksisting + 2 timeout media + 1 timeout S-2 (5178 ms) — himpunan yang sama
+  terbukti pada kode HEAD (beban runner, bukan regresi logika).
+
+
+#### 2026-10-18 - Fix: Penutupan Celah Seam Lokasi Tunggal, Relink Profil & Tombstone Anti-Rebirth (S-1..S-4, S-UX)
+
+- **S-1 — Seam Relink Profil & Anti-Downgrade Koordinat (`customer.service.ts`)**:
+  - `updateCustomer()`: menutup celah relink; saat profil customer mengalami modifikasi lokasi (`touchedLocation`), kini secara deterministik memanggil `syncSavedAddressFromLocation` dan `syncActiveReservationsAfterLocationChange` (dengan penanganan fail-safe anti-crash webhook chat).
+  - Mengunci `location_source`: form yang mengirim kembali koordinat presisi tanpa perubahan (`coordsChanged === false`) tidak lagi mendowngrade `gps_pin` menjadi `manual_staff`.
+- **S-2 — Gate Koordinat Benar-Benar Berubah (`customers.subroute.ts`)**:
+  - `PUT /api/admin/customers/:id/location`: hanya memanggil `customerService.updateCustomerLocation` jika koordinat benar-benar berubah (`coordsChanged`). Mengedit landmark/catatan patokan tanpa mengubah titik koordinat tidak lagi memicu relink jadwal aktif ke rumah utama secara semena-mena.
+- **S-3 — Tombstone Address Book Saat Hapus Kartu (Anti-Rebirth)**:
+  - `src/domain/customer-address.ts`: menambahkan `AddressTombstone`, `parseAddressTombstones`, `pruneAddressTombstones` (max 20 entri FIFO, kedaluwarsa 90 hari), `matchesTombstone`, `removeMatchingTombstones`.
+  - `customer.service.ts`: `deleteSavedAddress` merekam tombstone ke `Customer.preferences.address_tombstones`. `syncSavedAddressFromLocation` memeriksa tombstone sebelum membuat kartu baru (mencegah kartu terhapus bangkit kembali). `addSavedAddress` / `upsertSavedAddress` membersihkan tombstone yang cocok saat admin/user sengaja mendaftarkan kembali alamat tersebut.
+  - `reservation-core.service.ts`: `resolveCustomerAddressId` memeriksa tombstone; kandidat alamat yang telah di-tombstone tidak akan dibuatkan kartu Rumah 2 baru melainkan fallback ke kartu utama.
+- **S-UX — Aksesibilitas Drawer & Penambahan Alamat UI Admin**:
+  - `AddressBookDrawer.tsx`: menambahkan listener tombol `Escape` untuk menutup drawer / membatalkan mode edit/tambah secara alami.
+  - `AddressBookDrawer.tsx`: tombol dan form inline "+ Tambah Alamat" terpadu (label, jalan, kelurahan, kecamatan, kota, isPrimary) tanpa page-bloat.
+  - `customers.subroute.ts`: route baru `POST /api/admin/customers/:id/addresses` dengan validasi label wajib dan respon 201.
+  - `CustomerEditForm.tsx`: copy dialog konfirmasi diperjelas untuk memberitahu bahwa jika customer memiliki jadwal aktif, jadwal tersebut akan diselaraskan ke lokasi baru.
+- **S-4 — Pengujian & Keamanan**:
+  - `tests/unit/customer-profile-edit-drift.test.ts` (6 test): verifikasi relink jadwal aktif saat edit profil, fail-safe saat sync gagal, proteksi downgrade gps_pin, dan proteksi edit landmark tanpa ubah koordinat.
+  - `tests/unit/customer-address-book.test.ts` (+9 test, total 27 test): verifikasi perekaman tombstone, anti-rebirth sync lokasi, pruning kedaluwarsa >90 hari, pembersihan tombstone saat re-add, fallback resolver, dan proteksi IDOR lintas-tenant (404).
+  - Gerbang regresi: `npm run build` root + dashboard hijau; 9 test suites / 93 tests terkait alamat 100% hijau.
+
+
 #### 2026-10-18 - Feat: Buku Alamat & Transparansi Alamat (R1–R4)
 
 - **R1 — Backend buku alamat + Drawer admin**:

@@ -10,11 +10,16 @@ import { sanitizeCustomerNameForStorage, isValidChildName } from '../utils/name-
 import {
   SavedCustomerAddress,
   UpsertSavedAddressInput,
+  AddressTombstone,
   parseSavedAddresses,
   upsertAddressIntoList,
   ensureSinglePrimary,
   resolveActiveAddress as resolveActiveAddressFromList,
   removeAddressFromList,
+  parseAddressTombstones,
+  pruneAddressTombstones,
+  matchesTombstone,
+  removeMatchingTombstones,
 } from '../domain/customer-address';
 import { ACTIVE_RESERVATION_STATUSES, isActiveReservation } from '../domain/reservation-status';
 import { STAFF_VERIFIED_LOCATION_LABEL, resolveLocationSource } from './staff-reservation.service';
@@ -590,7 +595,13 @@ export class CustomerService {
       const { syncActiveReservationsForCustomer } = await import('./reservation-address-sync.service');
       await syncActiveReservationsForCustomer({ tenantId, customerId });
     } catch (e) {
-      console.warn('[CustomerService] active reservation sync skipped (best-effort):', (e as Error)?.message);
+      // Tanpa throw (R-1, keputusan user): ~10 pemanggil tidak konsisten punya
+      // try/catch; throw = risiko 500 webhook chat. Kegagalan di-log keras dan
+      // ditutup test drift (S-4).
+      console.error('[CustomerService] active reservation sync FAILED:', {
+        customerId,
+        message: (e as Error)?.message,
+      });
     }
   }
 
@@ -999,6 +1010,37 @@ export class CustomerService {
     },
     tenantId: string
   ): Promise<any> {
+    // SEAM PRA-TULIS (fondasional): gerbang presisi lokasi & recalc jarak WAJIB
+    // membandingkan nilai SEBELUM tulis. Membaca ulang state SETELAH
+    // `prisma.customer.update` (read-after-write) membuat `coordsChanged` &
+    // `kecamatanDrift` selalu false sehingga koreksi titik estimasi tidak pernah
+    // dijalankan.
+    const needsPriorState =
+      (data.lat != null && data.lng != null) ||
+      data.kecamatan !== undefined ||
+      data.kelurahan !== undefined ||
+      data.kota !== undefined ||
+      data.address !== undefined ||
+      data.landmark !== undefined;
+    const priorCustomer: any = needsPriorState
+      ? await this.getCustomerById(customerId, tenantId)
+      : null;
+    // SNAPSHOT primitif — WAJIB. `getCustomerById` bisa mengembalikan referensi
+    // objek yang sama dengan cache memori; sinkron cache pasca-tulis
+    // (`Object.assign`) akan memutasi objek itu secara retroaktif sehingga
+    // pembanding drift ikut "berubah" bila kita menyimpan referensinya.
+    const priorLat = CustomerService.toNumberOrNull(priorCustomer?.lat);
+    const priorLng = CustomerService.toNumberOrNull(priorCustomer?.lng);
+    const priorKelurahan = priorCustomer?.kelurahan ?? null;
+    const priorKecamatan = priorCustomer?.kecamatan ?? null;
+    const priorKota = priorCustomer?.kota ?? null;
+    const priorIsPrecise = CustomerService.isPreciseGps(priorCustomer);
+    const coordsProvided = data.lat != null && data.lng != null;
+    const coordsChanged =
+      coordsProvided &&
+      (CustomerService.toNumberOrNull(data.lat) !== priorLat ||
+        CustomerService.toNumberOrNull(data.lng) !== priorLng);
+
     const updateData: any = {};
     if (data.name !== undefined) {
       // Gerbang SEAM TULIS: admin edit pun DILARANG menyelipkan noise toponimi.
@@ -1022,8 +1064,15 @@ export class CustomerService {
     if (data.zipcode !== undefined) updateData.zipcode = data.zipcode;
     if (data.lat !== undefined) updateData.lat = CustomerService.toNumberOrNull(data.lat);
     if (data.lng !== undefined) updateData.lng = CustomerService.toNumberOrNull(data.lng);
-    if (data.lat != null && data.lng != null) {
-      updateData.location_source = LocationSource.manual_staff;
+    // Presisi dihormati (F-1b): sumber lokasi HANYA diturunkan bila koordinat
+    // benar-benar berubah ATAU admin memaksa pindah rumah. Form yang mengirim
+    // ulang koordinat lama TIDAK boleh menurunkan gps_pin → manual_staff.
+    if (coordsProvided) {
+      const preciseLockedLocal =
+        !!priorCustomer && priorIsPrecise && !coordsChanged && !data.forceUpdateGps;
+      if (!preciseLockedLocal) {
+        updateData.location_source = LocationSource.manual_staff;
+      }
     }
 
     if (data.phone !== undefined && data.phone.trim()) {
@@ -1035,8 +1084,7 @@ export class CustomerService {
     // Normalize address & landmark -> preferences
     const effectiveAddress = data.address !== undefined ? data.address : redirectedAddressFromKelurahan;
     if (effectiveAddress !== undefined || data.landmark !== undefined) {
-      const customer = await this.getCustomerById(customerId, tenantId);
-      const currentPrefs = (customer?.preferences as any) || {};
+      const currentPrefs = (priorCustomer?.preferences as any) || {};
       const newPrefs: any = { ...currentPrefs };
       if (effectiveAddress !== undefined) {
         newPrefs.address = effectiveAddress;
@@ -1057,6 +1105,15 @@ export class CustomerService {
         data: updateData,
         include: { children: true },
       });
+
+      // Penulis kanonis tunggal = `prisma.customer.update` di atas (+ sinkron cache
+      // memori). DILARANG menambah tulis repo kedua di sini: repo default
+      // (PostgresCustomerRepository) menulis ke tabel yang sama → tulis ganda.
+      for (const [, cust] of memoryCustomers.entries()) {
+        if (cust && cust.id === customerId && cust.tenant_id === tenantId) {
+          Object.assign(cust, updateData);
+        }
+      }
 
       // Synchronize Children records if provided
       if (Array.isArray(data.children)) {
@@ -1117,52 +1174,32 @@ export class CustomerService {
 
       const finalCustomer = await this.getCustomerById(customerId, tenantId);
 
-      // Sinkronkan profil ke buku alamat (edit admin) — best-effort, deterministik.
-      try {
-        const hasAny = Boolean(
-          data.address !== undefined || data.kelurahan !== undefined ||
-          data.kecamatan !== undefined || data.kota !== undefined
-        );
-        if (hasAny && finalCustomer) {
-          await this.upsertSavedAddress(customerId, {
-            address: (data.address !== undefined ? data.address : (finalCustomer.preferences as any)?.address) || undefined,
-            kelurahan: (data.kelurahan !== undefined ? data.kelurahan : finalCustomer.kelurahan) ?? null,
-            kecamatan: (data.kecamatan !== undefined ? data.kecamatan : finalCustomer.kecamatan) ?? null,
-            kota: (data.kota !== undefined ? data.kota : finalCustomer.kota) ?? null,
-            lat: (data.lat !== undefined ? data.lat : finalCustomer.lat) ?? null,
-            lng: (data.lng !== undefined ? data.lng : finalCustomer.lng) ?? null,
-            locationSource: 'manual_staff',
-          }, tenantId);
-        }
-      } catch (syncErr) {
-        console.warn('[CustomerService] updateCustomer saved-address sync failed (best-effort):', (syncErr as Error)?.message);
-      }
-
       // Auto-recalculate distance_km & ongkir if lat/lng or address components changed.
       // Gerbang presisi: admin yang mengubah komponen TEKS (kelurahan/kecamatan/kota)
       // pada customer ber-pin GPS presisi TIDAK BOLEH memicu geocode-ulang yang menimpa
       // lat/lng + menurunkan sumber ke manual_staff. Teks tetap ter-update; koordinat
       // presisi dipertahankan. (Explicit lat/lng di form = override sah, tetap jalan.)
-      const explicitCoords = data.lat != null && data.lng != null;
+      // Semua pembanding di bawah memakai `priorCustomer` (state PRA-tulis).
+      const explicitCoords = coordsProvided && (coordsChanged || !!data.forceUpdateGps);
       const preciseLocked =
-        !!finalCustomer && CustomerService.isPreciseGps(finalCustomer) && !explicitCoords && !data.forceUpdateGps;
+        !!priorCustomer && priorIsPrecise && !coordsChanged && !data.forceUpdateGps;
 
       // Drift administratif (fondasional, berbasis data wilayah — bukan ambang km
       // hardcode): titik estimasi WAJIB di-geocode ulang bila kecamatan teks berubah.
       // Pindah kelurahan dalam kecamatan yang sama tidak memicu geocode sia-sia.
       const norm = (v?: string | null) => (v || '').trim().toLowerCase();
-      const newKecamatan = data.kecamatan !== undefined ? data.kecamatan : finalCustomer?.kecamatan;
+      const newKecamatan = data.kecamatan !== undefined ? data.kecamatan : priorKecamatan;
       const kecamatanDrift =
-        !!finalCustomer && norm(newKecamatan) !== norm(finalCustomer.kecamatan);
-      const hasCoords = finalCustomer?.lat != null && finalCustomer?.lng != null;
+        !!priorCustomer && norm(newKecamatan) !== norm(priorKecamatan);
+      const hasCoords = coordsProvided ? true : (priorLat != null && priorLng != null);
       const needsGeocode = !explicitCoords && (!hasCoords || kecamatanDrift);
       const shouldRunRecalc =
-        !!finalCustomer && !preciseLocked && (explicitCoords || needsGeocode);
+        !!priorCustomer && !preciseLocked && (explicitCoords || needsGeocode);
 
       if (shouldRunRecalc) {
         try {
-          let recalcLat: number | null = finalCustomer.lat;
-          let recalcLng: number | null = finalCustomer.lng;
+          let recalcLat: number | null = priorLat;
+          let recalcLng: number | null = priorLng;
           let geocoded = false;
 
           if (explicitCoords) {
@@ -1170,9 +1207,9 @@ export class CustomerService {
             recalcLng = data.lng as number;
           } else {
             // Geocode dari komponen alamat (nilai baru bila admin mengubahnya).
-            const kel = data.kelurahan !== undefined ? data.kelurahan : finalCustomer.kelurahan;
-            const kec = data.kecamatan !== undefined ? data.kecamatan : finalCustomer.kecamatan;
-            const kot = data.kota !== undefined ? data.kota : finalCustomer.kota;
+            const kel = data.kelurahan !== undefined ? data.kelurahan : priorKelurahan;
+            const kec = data.kecamatan !== undefined ? data.kecamatan : priorKecamatan;
+            const kot = data.kota !== undefined ? data.kota : priorKota;
             const query = [kel, kec, kot].filter(Boolean).join(', ');
             if (query) {
               const { geocodingService } = await import('../integrations/google-maps/geocoding');
@@ -1195,26 +1232,73 @@ export class CustomerService {
               undefined,
               tenantId
             );
+            const recalcPatch = {
+              lat: recalcLat,
+              lng: recalcLng,
+              distance_km: delivery.distanceKm,
+              ongkir: delivery.ongkir,
+              is_out_of_coverage: delivery.isOutOfCoverage,
+              location_source: LocationSource.manual_staff,
+            };
             await prisma.customer.update({
               where: { id: customerId },
-              data: {
-                lat: recalcLat,
-                lng: recalcLng,
-                distance_km: delivery.distanceKm,
-                ongkir: delivery.ongkir,
-                is_out_of_coverage: delivery.isOutOfCoverage,
-                location_source: LocationSource.manual_staff,
-              },
+              data: recalcPatch,
+            }).catch((e) => {
+              // Fail-visible: jarak/ongkir basi WAJIB terlihat di log, jangan ditelan diam.
+              console.error(
+                '[CUSTOMER UPDATE] Gagal menulis hasil recalc jarak (data bisa basi):',
+                customerId,
+                (e as Error)?.message
+              );
             });
+            for (const [, cust] of memoryCustomers.entries()) {
+              if (cust && cust.id === customerId && cust.tenant_id === tenantId) {
+                Object.assign(cust, recalcPatch);
+              }
+            }
             console.log(`[CUSTOMER UPDATE] Auto-recalculated distance for ${customerId}: ${delivery.distanceKm} km, ongkir: ${delivery.ongkir}`);
           }
         } catch (err: any) {
-          console.warn('[CUSTOMER UPDATE] Auto-recalculate distance failed:', err.message);
+          console.error('[CUSTOMER UPDATE] Auto-recalculate distance failed:', customerId, err?.message);
         }
       }
 
-      return finalCustomer || updated;
+      // SEAM KANONIS (fondasional): Edit Profil Admin TIDAK BOLEH jadi penulis
+      // lokasi "kedua" yang lepas dari sinkronisasi (F-1). Setelah koordinat
+      // tersimpan: 1) selaraskan buku alamat; 2) selaraskan jadwal aktif.
+      const touchedLocation =
+        data.kelurahan !== undefined || data.kecamatan !== undefined ||
+        data.kota !== undefined || data.lat !== undefined || data.lng !== undefined;
+      const currentCustomer = (await this.getCustomerById(customerId, tenantId)) || finalCustomer;
+      if (touchedLocation && currentCustomer) {
+        try {
+          await this.syncSavedAddressFromLocation(currentCustomer, tenantId, {
+            address: (data.address !== undefined ? data.address : (currentCustomer.preferences as any)?.address) || '',
+            kelurahan: data.kelurahan !== undefined ? data.kelurahan : currentCustomer.kelurahan,
+            kecamatan: data.kecamatan !== undefined ? data.kecamatan : currentCustomer.kecamatan,
+            kota: data.kota !== undefined ? data.kota : currentCustomer.kota,
+            lat: data.lat !== undefined ? CustomerService.toNumberOrNull(data.lat) : currentCustomer.lat,
+            lng: data.lng !== undefined ? CustomerService.toNumberOrNull(data.lng) : currentCustomer.lng,
+            distanceKm: currentCustomer.distance_km,
+            ongkir: currentCustomer.ongkir,
+            locationSource: currentCustomer.location_source,
+          } as any);
+        } catch (syncErr) {
+          console.warn('[CustomerService] updateCustomer saved-address sync failed (best-effort):', (syncErr as Error)?.message);
+        }
+        // Tanpa throw (keputusan user 2026-10-18): kegagalan relink di-log keras;
+        // drift tetap tertutup test unit (S-4) dan event pengganti lokal berikutnya.
+        await this.syncActiveReservationsAfterLocationChange(customerId, tenantId);
+      }
+
+      return currentCustomer || updated;
     } catch (error) {
+      // Sinkronkan juga repo InMemory bila ada (test / memory fallback)
+      try {
+        const repo = (await import('../repositories/customer.repository')).getCustomerRepository();
+        await repo.update(customerId, updateData);
+      } catch (_) {}
+
       // Memory fallback update
       for (const [phone, cust] of memoryCustomers.entries()) {
         if (cust.id === customerId && cust.tenant_id === tenantId) {
@@ -1239,6 +1323,27 @@ export class CustomerService {
               created_at: new Date(),
               updated_at: new Date(),
             }));
+          }
+          const touchedLocationMem =
+            data.kelurahan !== undefined || data.kecamatan !== undefined ||
+            data.kota !== undefined || data.lat !== undefined || data.lng !== undefined;
+          if (touchedLocationMem) {
+            try {
+              await this.syncSavedAddressFromLocation(cust, tenantId, {
+                address: (data.address !== undefined ? data.address : (cust.preferences as any)?.address) || '',
+                kelurahan: data.kelurahan !== undefined ? data.kelurahan : cust.kelurahan,
+                kecamatan: data.kecamatan !== undefined ? data.kecamatan : cust.kecamatan,
+                kota: data.kota !== undefined ? data.kota : cust.kota,
+                lat: data.lat !== undefined ? CustomerService.toNumberOrNull(data.lat) : cust.lat,
+                lng: data.lng !== undefined ? CustomerService.toNumberOrNull(data.lng) : cust.lng,
+                distanceKm: cust.distance_km,
+                ongkir: cust.ongkir,
+                locationSource: cust.location_source,
+              } as any);
+            } catch (syncErr) {
+              console.warn('[CustomerService] updateCustomer (mem) saved-address sync failed (best-effort):', (syncErr as Error)?.message);
+            }
+            await this.syncActiveReservationsAfterLocationChange(customerId, tenantId);
           }
           return cust;
         }
@@ -1339,7 +1444,28 @@ export class CustomerService {
     const list = parseSavedAddresses(customer.preferences);
     const nowIso = new Date().toISOString();
     const { list: nextList, entry } = upsertAddressIntoList(list, input, nowIso);
-    await this.persistSavedAddresses(customer, tenantId, nextList, nowIso);
+    const existingTombstones = parseAddressTombstones(customer.preferences);
+    const nextTombstones = removeMatchingTombstones(existingTombstones, input);
+    await this.persistSavedAddresses(customer, tenantId, nextList, nowIso, nextTombstones);
+    return entry;
+  }
+
+  /**
+   * Tambah alamat baru dari admin UI (S-UX.2).
+   * Validasi label tidak boleh kosong, dedup via upsertSavedAddress, dan bersihkan tombstone.
+   */
+  public async addSavedAddress(
+    customerId: string,
+    input: UpsertSavedAddressInput,
+    tenantId: string
+  ): Promise<SavedCustomerAddress> {
+    if (!input.label || !input.label.trim()) {
+      throw new Error('Label alamat wajib diisi');
+    }
+    const entry = await this.upsertSavedAddress(customerId, input, tenantId);
+    if (!entry) {
+      throw new Error('Customer tidak ditemukan');
+    }
     return entry;
   }
 
@@ -1380,7 +1506,8 @@ export class CustomerService {
     const customer = await this.getCustomerById(customerId, tenantId);
     if (!customer) return { deleted: false, activeCount: 0 };
     const list = parseSavedAddresses(customer.preferences);
-    if (!list.some((a) => a.id === addressId)) return { deleted: false, activeCount: 0 };
+    const target = list.find((a) => a.id === addressId);
+    if (!target) return { deleted: false, activeCount: 0 };
 
     let rows: any[] = [];
     try {
@@ -1401,7 +1528,21 @@ export class CustomerService {
 
     const nowIso = new Date().toISOString();
     const { list: nextList } = removeAddressFromList(list, addressId);
-    await this.persistSavedAddresses(customer, tenantId, nextList, nowIso);
+
+    // F-3 / S-3: Rekam tombstone agar kartu tidak auto-rebirth saat sync lokasi berikutnya
+    const existingTombstones = parseAddressTombstones(customer.preferences);
+    const newTombstone: AddressTombstone = {
+      address: target.address ?? null,
+      kelurahan: target.kelurahan ?? null,
+      kecamatan: target.kecamatan ?? null,
+      kota: target.kota ?? null,
+      lat: target.lat ?? null,
+      lng: target.lng ?? null,
+      deletedAt: nowIso,
+    };
+    const nextTombstones = pruneAddressTombstones([...existingTombstones, newTombstone], nowIso);
+
+    await this.persistSavedAddresses(customer, tenantId, nextList, nowIso, nextTombstones);
 
     // Dual-write cleanup baris tabel (best-effort + event terstruktur bila gagal).
     try {
@@ -1428,10 +1569,16 @@ export class CustomerService {
     customer: any,
     tenantId: string,
     list: SavedCustomerAddress[],
-    nowIso: string
+    nowIso: string,
+    tombstones?: AddressTombstone[]
   ): Promise<void> {
     const currentPrefs = (customer?.preferences as any) || {};
-    const newPrefs = { ...currentPrefs, saved_addresses: list, saved_addresses_updated_at: nowIso };
+    const newPrefs = {
+      ...currentPrefs,
+      saved_addresses: list,
+      saved_addresses_updated_at: nowIso,
+      ...(tombstones !== undefined ? { address_tombstones: tombstones } : {}),
+    };
     try {
       const repo = (await import('../repositories/customer.repository')).getCustomerRepository();
       await repo.update(customer.id, { preferences: newPrefs });
@@ -1506,6 +1653,10 @@ export class CustomerService {
     tenantId: string,
     loc: UpsertSavedAddressInput & { isPrimary?: boolean }
   ): Promise<void> {
+    const tombstones = parseAddressTombstones(customer?.preferences);
+    if (tombstones.some((t) => matchesTombstone(t, loc))) {
+      return;
+    }
     const list = parseSavedAddresses(customer?.preferences);
     const nowIso = new Date().toISOString();
     const { list: nextList } = upsertAddressIntoList(list, loc, nowIso);

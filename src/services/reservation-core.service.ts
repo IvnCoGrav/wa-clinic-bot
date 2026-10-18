@@ -456,7 +456,12 @@ export async function resolveCustomerAddressId(params: {
   if (explicitAddressId) return explicitAddressId; // pilihan eksplisit menang mutlak
 
   const { customerService } = await import('./customer.service');
-  const { addressesMatch } = await import('../domain/customer-address');
+  const {
+    addressesMatch,
+    parseAddressTombstones,
+    pruneAddressTombstones,
+    matchesTombstone,
+  } = await import('../domain/customer-address');
 
   try {
     let list: any[] = await customerService.getSavedAddresses(customerId, tenantId);
@@ -535,24 +540,29 @@ export async function resolveCustomerAddressId(params: {
       );
       if (hit) return hit.id; // cocok → pakai entri itu
 
-      // tidak cocok + ada kandidat alamat baru → BUAT Rumah 2 via customerService
-      // 4. Teruskan koordinat, jarak, ongkir, dan locationSource
-      const upserted = await customerService.upsertSavedAddress(
-        customerId,
-        {
-          address: candidate.address || '',
-          kelurahan: candidate.kelurahan ?? null,
-          kecamatan: candidate.kecamatan ?? null,
-          kota: candidate.kota ?? null,
-          lat: candidate.lat ?? null,
-          lng: candidate.lng ?? null,
-          distanceKm: candidate.distanceKm ?? null,
-          ongkir: candidate.ongkir ?? null,
-          locationSource: candidate.locationSource ?? null,
-        },
-        tenantId
-      );
-      if (upserted) return upserted.id;
+      // Cek apakah kandidat cocok dengan tombstone (kartu yang pernah dihapus pelanggan/admin)
+      const tombstones = pruneAddressTombstones(parseAddressTombstones(customer?.preferences));
+      const isTombstoned = tombstones.some((t) => matchesTombstone(t, candidate as any));
+      if (!isTombstoned) {
+        // tidak cocok + bukan tombstone + ada kandidat alamat baru → BUAT Rumah 2 via customerService
+        // 4. Teruskan koordinat, jarak, ongkir, dan locationSource
+        const upserted = await customerService.upsertSavedAddress(
+          customerId,
+          {
+            address: candidate.address || '',
+            kelurahan: candidate.kelurahan ?? null,
+            kecamatan: candidate.kecamatan ?? null,
+            kota: candidate.kota ?? null,
+            lat: candidate.lat ?? null,
+            lng: candidate.lng ?? null,
+            distanceKm: candidate.distanceKm ?? null,
+            ongkir: candidate.ongkir ?? null,
+            locationSource: candidate.locationSource ?? null,
+          },
+          tenantId
+        );
+        if (upserted) return upserted.id;
+      }
     }
 
     const primary = list.find((a: any) => a.isPrimary || a.is_primary) || list[0];

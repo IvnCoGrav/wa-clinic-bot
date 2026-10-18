@@ -5,8 +5,13 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 584
+Total entri terindeks: 589
 
+- 2026-10-18 | Fix: Regresi Gerbang Recalc Jarak/Ongkir & Tulis Ganda (Audit Pasca S-1..S-5)
+- 2026-10-18 | Fix: Penutupan Celah Seam Lokasi Tunggal, Relink Profil & Tombstone Anti-Rebirth (S-1..S-4
+- 2026-10-18 | Feat: Buku Alamat & Transparansi Alamat (R1–R4)
+- 2026-10-18 | Fixed: Hasil Audit Sistem Berlapis atas Implementasi Alamat Kedua (A-010..A-018)
+- 2026-10-18 | Fix: Arsitektur Alamat Kedua & Sinkronisasi Jadwal Aktif (RC-1..RC-5, Fase 1-5)
 - 2026-10-18 | Feat: Quick Chat Berbasis Gambar & QRIS Terintegrasi (Fase 1 - 4)
 - 2026-10-18 | Fixed: Triase Klinis Deterministik, Pencegahan Kontaminasi Subjek, Metadata Kelayakan Kata
 - 2026-10-17 | Feat: Penyelarasan Katalog Layanan, Tarif Promo & Aset Poster Pricelist Resmi Kala Moms an

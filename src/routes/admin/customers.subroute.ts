@@ -512,6 +512,68 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * POST /api/admin/customers/:id/addresses
+   * Tambah alamat baru dari UI AddressBookDrawer (S-UX.2).
+   */
+  fastify.post(
+    '/api/admin/customers/:id/addresses',
+    async (
+      request: FastifyRequest<{
+        Params: { id: string };
+        Body: {
+          label?: string;
+          address?: string;
+          kelurahan?: string;
+          kecamatan?: string;
+          kota?: string;
+          lat?: number | null;
+          lng?: number | null;
+          landmark?: string | null;
+          isPrimary?: boolean;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const { id } = request.params;
+      const tenantId = tenantOf(request);
+      const label = String(request.body?.label ?? '').trim();
+      if (!label) {
+        return reply.status(400).send({ success: false, error: 'Label wajib diisi.' });
+      }
+
+      const body = request.body || {};
+      const lat = typeof body.lat === 'number' && Number.isFinite(body.lat) ? body.lat : null;
+      const lng = typeof body.lng === 'number' && Number.isFinite(body.lng) ? body.lng : null;
+
+      try {
+        const customer = await customerService.getCustomerById(id, tenantId);
+        if (!customer) {
+          return reply.status(404).send({ success: false, error: 'Customer tidak ditemukan.' });
+        }
+
+        const entry = await customerService.addSavedAddress(
+          id,
+          {
+            label,
+            address: body.address ? String(body.address).trim() : '',
+            kelurahan: body.kelurahan ? String(body.kelurahan).trim() : null,
+            kecamatan: body.kecamatan ? String(body.kecamatan).trim() : null,
+            kota: body.kota ? String(body.kota).trim() : null,
+            lat,
+            lng,
+            landmark: body.landmark ? String(body.landmark).trim() : null,
+            isPrimary: Boolean(body.isPrimary),
+          },
+          tenantId
+        );
+        return reply.status(201).send({ success: true, entry });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
    * PATCH /api/admin/customers/:id/addresses/:addressId/default
    * Tetapkan kartu sebagai alamat utama (primary) — satu-satunya gelar primary.
    */
@@ -1359,27 +1421,34 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
         // dari route (itulah akar split-brain). Admin adalah otoritas
         // tertinggi: forceUpdateGps=true + manual_staff (perilaku lama
         // shouldUpdatePrimaryCoords=true dipertahankan).
-        // Route HANYA menangani media/foto di bawah (bukan lokasi).
-        let updatedCustomer: any = null;
-        try {
-          updatedCustomer = await customerService.updateCustomerLocation(
-            customer.id,
-            {
-              kelurahan: customer.kelurahan ?? undefined,
-              kecamatan: customer.kecamatan ?? undefined,
-              kota: customer.kota ?? undefined,
-              lat: lat ?? undefined,
-              lng: lng ?? undefined,
-              locationSource:
-                lat !== undefined && lng !== undefined ? LocationSource.manual_staff : undefined,
-              forceUpdateGps: true,
-            },
-            DEFAULT_TENANT_ID
-          );
-          if (!updatedCustomer) updatedCustomer = customer;
-        } catch (seamErr: any) {
-          console.error('[ADMIN CUSTOMER] Seam lokasi gagal:', seamErr.message);
-          return reply.status(500).send({ success: false, error: seamErr.message });
+        // Gate "lokasi benar-benar berubah" (Opsi A, keputusan user): seam +
+        // relink jadwal aktif hanya bila koordinat pelanggan berubah. Ubah
+        // landmark/foto TIDAK memicu relink (jadwal Rumah 2 tetap aman).
+        const coordsChanged =
+          lat !== undefined && lng !== undefined && lat != null && lng != null &&
+          (lat !== (customer as any).lat || lng !== (customer as any).lng);
+
+        let updatedCustomer: any = customer;
+        if (coordsChanged) {
+          try {
+            updatedCustomer = await customerService.updateCustomerLocation(
+              customer.id,
+              {
+                kelurahan: customer.kelurahan ?? undefined,
+                kecamatan: customer.kecamatan ?? undefined,
+                kota: customer.kota ?? undefined,
+                lat: lat ?? undefined,
+                lng: lng ?? undefined,
+                locationSource: LocationSource.manual_staff,
+                forceUpdateGps: true,
+              },
+              DEFAULT_TENANT_ID
+            );
+            if (!updatedCustomer) updatedCustomer = customer;
+          } catch (seamErr: any) {
+            console.error('[ADMIN CUSTOMER] Seam lokasi gagal:', seamErr.message);
+            return reply.status(500).send({ success: false, error: seamErr.message });
+          }
         }
 
         // Media/foto + landmark: patch preferences SAJA (tanpa kolom lokasi).

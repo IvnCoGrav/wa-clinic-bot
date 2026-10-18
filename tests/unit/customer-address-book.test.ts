@@ -3,6 +3,9 @@ import {
   removeAddressFromList,
   SavedCustomerAddressSchema,
   type SavedCustomerAddress,
+  type AddressTombstone,
+  parseAddressTombstones,
+  pruneAddressTombstones,
 } from '../../src/domain/customer-address';
 import { prisma } from '../../src/db/client';
 import { buildApp } from '../../src/app';
@@ -330,6 +333,233 @@ describe('Fase 0 — routes buku alamat (admin)', () => {
       headers: { 'x-api-key': ADMIN_KEY },
       payload: { label: 'Rumah Kedua' },
     });
+    expect(res.statusCode).toBe(404);
+  });
+});
+
+// ── Fase S-3 & S-UX: Tombstone, Anti-Rebirth, & POST Address Route ──────────
+describe('Fase S-3: Tombstones & Anti-Rebirth', () => {
+  beforeEach(() => {
+    resetCustomerRepository();
+    vi.mocked(prisma.reservation.findMany).mockReset();
+    vi.mocked(prisma.customerAddress.deleteMany).mockReset();
+  });
+  afterEach(() => {
+    resetCustomerRepository();
+    vi.restoreAllMocks();
+  });
+
+  it('hapus kartu → rekam tombstone ke preferences', async () => {
+    const list = [
+      addr('rumah-1', { isPrimary: true, lastUsedAt: '2026-10-16T00:00:00.000Z' }),
+      addr('rumah-2', { lastUsedAt: '2026-10-15T00:00:00.000Z' }),
+    ];
+    const customer = await seedCustomer(list);
+    vi.mocked(prisma.reservation.findMany).mockResolvedValue([]);
+
+    const res = await customerService.deleteSavedAddress(customer.id, 'rumah-2', TENANT);
+    expect(res.deleted).toBe(true);
+
+    const updated = await customerService.getCustomerById(customer.id, TENANT);
+    const tombstones = parseAddressTombstones(updated?.preferences);
+    expect(tombstones.length).toBe(1);
+    expect(tombstones[0].address).toBe('Jl. rumah-2 No. 1');
+    expect(tombstones[0].deletedAt).toBeDefined();
+  });
+
+  it('anti-rebirth: sync lokasi dari pesan/link yang cocok dengan tombstone TIDAK membuat kartu baru', async () => {
+    const list = [
+      addr('rumah-1', { isPrimary: true, lastUsedAt: '2026-10-16T00:00:00.000Z' }),
+      addr('rumah-2', { lastUsedAt: '2026-10-15T00:00:00.000Z' }),
+    ];
+    const customer = await seedCustomer(list);
+    vi.mocked(prisma.reservation.findMany).mockResolvedValue([]);
+
+    // Hapus rumah-2
+    await customerService.deleteSavedAddress(customer.id, 'rumah-2', TENANT);
+
+    // Coba syncSavedAddressFromLocation dengan alamat yang sama persis dengan rumah-2
+    await (customerService as any).syncSavedAddressFromLocation(
+      await customerService.getCustomerById(customer.id, TENANT),
+      TENANT,
+      {
+        address: 'Jl. rumah-2 No. 1',
+        kelurahan: 'Rungkut Menanggal',
+        kecamatan: 'Rungkut',
+        kota: 'Surabaya',
+      }
+    );
+
+    // Verifikasi: rumah-2 TIDAK bangkit kembali (anti-rebirth terjaga)
+    const afterSync = await customerService.getSavedAddresses(customer.id, TENANT);
+    expect(afterSync.length).toBe(1);
+    expect(afterSync[0].id).toBe('rumah-1');
+  });
+
+  it('tombstone >90 hari kedaluwarsa dan dibuang saat pruning', () => {
+    const nowIso = '2026-10-18T00:00:00.000Z';
+    const oldDate = new Date(Date.now() - 95 * 24 * 60 * 60 * 1000).toISOString();
+    const recentDate = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
+
+    const tombstones: AddressTombstone[] = [
+      { address: 'Jl. Basi No. 1', deletedAt: oldDate },
+      { address: 'Jl. Baru No. 2', deletedAt: recentDate },
+    ];
+
+    const pruned = pruneAddressTombstones(tombstones, nowIso);
+    expect(pruned.length).toBe(1);
+    expect(pruned[0].address).toBe('Jl. Baru No. 2');
+  });
+
+  it('admin/user sengaja re-add alamat via addSavedAddress → tombstone yang cocok dibersihkan', async () => {
+    const list = [
+      addr('rumah-1', { isPrimary: true, lastUsedAt: '2026-10-16T00:00:00.000Z' }),
+      addr('rumah-2', { lastUsedAt: '2026-10-15T00:00:00.000Z' }),
+    ];
+    const customer = await seedCustomer(list);
+    vi.mocked(prisma.reservation.findMany).mockResolvedValue([]);
+
+    // Hapus rumah-2
+    await customerService.deleteSavedAddress(customer.id, 'rumah-2', TENANT);
+    let cust = await customerService.getCustomerById(customer.id, TENANT);
+    expect(parseAddressTombstones(cust?.preferences).length).toBe(1);
+
+    // Admin secara sengaja menambahkan kembali alamat tersebut via addSavedAddress
+    await customerService.addSavedAddress(
+      customer.id,
+      {
+        label: 'Rumah 2 Baru',
+        address: 'Jl. rumah-2 No. 1',
+        kelurahan: 'Rungkut Menanggal',
+        kecamatan: 'Rungkut',
+        kota: 'Surabaya',
+      },
+      TENANT
+    );
+
+    // Verifikasi: kartu berhasil ditambah dan tombstone dibersihkan
+    const addresses = await customerService.getSavedAddresses(customer.id, TENANT);
+    expect(addresses.length).toBe(2);
+    cust = await customerService.getCustomerById(customer.id, TENANT);
+    expect(parseAddressTombstones(cust?.preferences).length).toBe(0);
+  });
+
+  it('reservationCoreService.resolveCustomerAddressId mengabaikan kandidat yang di-tombstone dan fallback ke primary', async () => {
+    const list = [
+      addr('rumah-1', { isPrimary: true, lastUsedAt: '2026-10-16T00:00:00.000Z' }),
+      addr('rumah-2', { lastUsedAt: '2026-10-15T00:00:00.000Z' }),
+    ];
+    const customer = await seedCustomer(list);
+    vi.mocked(prisma.reservation.findMany).mockResolvedValue([]);
+
+    // Hapus rumah-2
+    await customerService.deleteSavedAddress(customer.id, 'rumah-2', TENANT);
+
+    const { resolveCustomerAddressId } = await import('../../src/services/reservation-core.service');
+    const resolvedId = await resolveCustomerAddressId({
+      tenantId: TENANT,
+      customerId: customer.id,
+      candidate: {
+        address: 'Jl. rumah-2 No. 1',
+        kelurahan: 'Rungkut Menanggal',
+        kecamatan: 'Rungkut',
+        kota: 'Surabaya',
+      },
+    });
+
+    // Harus fallback ke primary ('rumah-1'), BUKAN membuat kartu baru untuk rumah-2
+    expect(resolvedId).toBe('rumah-1');
+    const afterResolve = await customerService.getSavedAddresses(customer.id, TENANT);
+    expect(afterResolve.length).toBe(1);
+  });
+});
+
+describe('Fase S-UX.2 & S-4: POST /api/admin/customers/:id/addresses and Tenant Isolation', () => {
+  beforeEach(() => {
+    resetCustomerRepository();
+  });
+  afterEach(() => {
+    resetCustomerRepository();
+    vi.restoreAllMocks();
+  });
+
+  it('POST /api/admin/customers/:id/addresses sukses membuat alamat baru (201)', async () => {
+    const customer = await seedCustomer([
+      addr('rumah-1', { isPrimary: true, lastUsedAt: '2026-10-16T00:00:00.000Z' }),
+    ]);
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/admin/customers/${customer.id}/addresses`,
+      headers: { 'x-api-key': ADMIN_KEY, 'x-tenant-id': TENANT },
+      payload: {
+        label: 'Kantor Suami',
+        address: 'Jl. Pemuda No. 45',
+        kelurahan: 'Embong Kaliasin',
+        kecamatan: 'Genteng',
+        kota: 'Surabaya',
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    const body = JSON.parse(res.body);
+    expect(body.success).toBe(true);
+    expect(body.entry.label).toBe('Kantor Suami');
+    expect(body.entry.address).toBe('Jl. Pemuda No. 45');
+
+    const addresses = await customerService.getSavedAddresses(customer.id, TENANT);
+    expect(addresses.length).toBe(2);
+  });
+
+  it('POST /api/admin/customers/:id/addresses validasi label wajib (400 saat kosong)', async () => {
+    const customer = await seedCustomer([]);
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/admin/customers/${customer.id}/addresses`,
+      headers: { 'x-api-key': ADMIN_KEY, 'x-tenant-id': TENANT },
+      payload: {
+        label: '   ',
+        address: 'Jl. Pemuda No. 45',
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Label wajib diisi/i);
+  });
+
+  it('POST /api/admin/customers/:id/addresses 404 saat customer tidak ditemukan', async () => {
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/customers/cust-tidak-ada/addresses',
+      headers: { 'x-api-key': ADMIN_KEY, 'x-tenant-id': TENANT },
+      payload: {
+        label: 'Kantor',
+        address: 'Jl. Pemuda No. 45',
+      },
+    });
+
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('S-4 IDOR Guard: akses cross-tenant pada endpoint alamat customer ditolak (404)', async () => {
+    const customer = await seedCustomer([
+      addr('rumah-1', { isPrimary: true, lastUsedAt: '2026-10-16T00:00:00.000Z' }),
+    ]);
+    const app = buildApp();
+
+    // Mencoba akses customer TENANT dari TENANT_LAIN
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/admin/customers/${customer.id}/addresses`,
+      headers: { 'x-api-key': ADMIN_KEY, 'x-tenant-id': 'tenant-asing' },
+      payload: {
+        label: 'Hacker Address',
+        address: 'Jl. Terlarang No. 99',
+      },
+    });
+
     expect(res.statusCode).toBe(404);
   });
 });
