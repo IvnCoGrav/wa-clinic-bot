@@ -5,7 +5,7 @@ import path from 'path';
 const args = process.argv.slice(2);
 const isWrite = args.includes('--write');
 const sourcesArgIdx = args.findIndex(a => a.startsWith('--sources=') || a === '--sources');
-let sourcePatterns = ['CHANGELOG.md'];
+let sourcePatterns = ['CHANGELOG.md', 'docs/changelog/archive-*.md'];
 
 if (sourcesArgIdx !== -1) {
   const val = args[sourcesArgIdx].startsWith('--sources=')

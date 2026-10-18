@@ -174,7 +174,6 @@ Total entri terindeks: 582
 - 2026-09-21 | Kontrak Konsultasi vs Transaksi + Prioritas Usia Multi-Tier (Sesi 783810)
 - 2026-09-21 | Cost Estimator Provider-Aware + Tarif Live (SUMOPOD Unverified)
 - 2026-09-20 | Mixed-Intent & Anti-DSML Leakage (Sesi 648324) — Fase 1-3
-- 2026-05-14 | Guard foto rumah wajib GPS + respons jujur (belum deploy live)
 - 2026-09-20 | V3 Audit Remediation & Consent Frontier — Deploy Lengkap (2026-09-20)
 - 2026-09-20 | Peta Sebaran — Sumber Lokasi First-Class (GPS / Estimasi / Edit Bidan) (2026-09-20)
 - 2026-09-20 | Peta Sebaran — Warna Reservasi & Koreksi Backfill GPS (2026-09-20)
@@ -328,6 +327,7 @@ Total entri terindeks: 582
 - 2026-09-01 | Audit & Fix — Production Follow-Up Queue Audit & UTC-to-WIB Accurate Scheduling (`follow-u
 - 2026-09-01 | Fitur — Paket Multi-Sesi (ReservationSeries) (`prisma/schema.prisma`, `reservation-series.
 - 2026-09-01 | Fix & Enhancement — Customer Database: Skeleton Ringan + Retry Manual + Timeout 10s Fix (`
+- 2026-09-21 | Perbaikan Sistemik Sesi 89-Turn: State Persistence, Anti-Silent Handoff & Maternal Routing
 - 2026-08-31 | Fix & Enhancement — Custom Treatment: Hapus Auto-Detect Addon & Tambah Input Harga (`Creat
 - 2026-08-31 | Enhancement & Fix — Reservation List View Nearest-Time Sorting (`booking_date ASC`) & Stri
 - 2026-08-31 | Enhancement & Fix — Reservation Card Length, Total Duration & Buffer Time Synchronization
@@ -588,4 +588,4 @@ Total entri terindeks: 582
 - 2026-07-21 | Test Results
 - 2026-07-20 | [1.0.0] — 2026-07-20
 - 2026-07-20 | Added — Initial Project Setup
-- 2026-09-21 | Perbaikan Sistemik Sesi 89-Turn: State Persistence, Anti-Silent Handoff & Maternal Routing
+- 2026-05-14 | Guard foto rumah wajib GPS + respons jujur (belum deploy live)
