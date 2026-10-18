@@ -1,0 +1,591 @@
+# CHANGELOG INDEX
+
+> **Catatan Operasional**:
+> Kunci pencarian = judul entri via `rg "<judul>" CHANGELOG.md` (atau file arsip di `docs/changelog/archive-*.md`).
+> Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
+> Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
+
+Total entri terindeks: 582
+
+- 2026-10-17 | Feat: Penyelarasan Katalog Layanan, Tarif Promo & Aset Poster Pricelist Resmi Kala Moms an
+- 2026-10-17 | Fixed: Resolusi Deadlock Auto-Pruning Media (Video, Audio & Corrupt Files) via Sniffing Ma
+- 2026-10-13 | Fixed: Resolusi Maps Shortlink, Plus Code Geocoding & Stabilisasi State Form Admin (Fase 0
+- 2026-10-13 | Fixed: Resolusi Anomali Atribusi CTWA Fuzzy, Paritas JSON Preview CAPI, dan Komparasi Kana
+- 2026-10-13 | Fixed: Peringatan Titik Presisi (GPS Pin) & Pengingat Shareloc Otomatis (Fase 1-6)
+- 2026-10-13 | Fixed: Penjadwalan Staf vs Pasien (Pesan Tanpa Jam Opsi A) & Pengingat Foto Rumah HP Bidan
+- 2026-10-12 | Fixed: Resolusi Diskrepansi Meta Ads vs Sistem (Anti-Race CTA, TrustProxy, Zero-Preflight
+- 2026-10-12 | Fixed: AI Copilot Grounding Hardening, Deterministic Deep-Link Injection, Persona Hygiene
+- 2026-10-12 | Feature: Skema Baru Hide Message (Role-Based Privacy Display di LiveChatMonitor)
+- 2026-10-12 | Fixed: Optimalisasi UI/UX LiveChat Mobile (Fase 1-4)
+- 2026-10-12 | Fixed: Split-Brain Lokasi, Healing Alamat & Navigasi Sadar-Akurasi (REVISI-1, Tahap 1-4)
+- 2026-10-12 | Fixed: Kebocoran Balasan AI Worker + Latensi GLM 24,8 dtk (Fase 1-6, v1.16.1)
+- 2026-10-12 | Revisi: Header LiveChat Mobile Benar-Benar Ikut Scroll + Banner Sync/Error (Search Tetap S
+- 2026-10-12 | Fixed: Banner AI + Header + Search Ikut Scroll di LiveChat Mobile (Bukan Sticky)
+- 2026-10-09 | Fixed: Fondasi & Kunci Pipeline Meta Conversions API (CAPI) & Ad Attribution (Fase 1 - Fas
+- 2026-10-08 | Fixed: Resolusi Wilayah Anti-Homonim Lintas Kota & Penyelarasan Status Presisi Lapangan St
+- 2026-10-08 | Added: Fitur PIN (Sematkan Bubble) & HIDE (Sembunyikan Internal) di Live Chat
+- 2026-10-08 | Fixed: Penyelarasan Penuh Zona Waktu WIB (Asia/Jakarta) pada Admin Dashboard & Kalender
+- 2026-10-07 | Fixed: Optimalisasi Antarmuka & Sistem LiveChat (Fase 1-5)
+- 2026-10-07 | Refactored: Penyatuan Route Helper Admin & Eliminasi Dummy Timeout (Fase A)
+- 2026-10-07 | Fixed: Deteksi Durasi Batuk Kronis vs Penanda Usia Anak (Anti-Bleed Multi-Turn & Proksimit
+- 2026-10-07 | Fixed: Remediasi Fondasional Follow-Up Engine & WINBACK MQL Mutlak (Plan Revisi-1)
+- 2026-10-07 | Added: Fase 3 Prisma Dual-Write Relasional & Dedicated Worker Split (Fase 3A-3D)
+- 2026-10-07 | Fixed: God Controller split — reservation-dispatch & reservation-series routes (audit arsi
+- 2026-10-07 | Fixed: Webhook echo detection tenant-aware (audit arsitektur Fase 1.3)
+- 2026-10-07 | Fixed: 3x duplikat capture reservasi webhook → 1 helper kanonis (audit arsitektur Fase 1.2
+- 2026-10-07 | Fixed: QueueService sticky Redis downgrade (audit arsitektur Fase 1.1)
+- 2026-10-07 | Fixed: Pemisahan "Selesai" vs "Lunas" — status bayar tri-state & moderasi CAPI outlier tid
+- 2026-10-06 | Fixed: Kolom F Rekapan Sheets "Repeat" palsu — otoritas ordinal riwayat transaksi
+- 2026-10-06 | Changed: Standardisasi Kolom Rekapan Sheets & Klasifikasi CAC (New Ads / New / Repeat)
+- 2026-10-05 | Fixed: Residual Audit #1 (jalur prompt DB) & #2 (ukur cache)
+- 2026-10-05 | Fixed: Hasil Audit Best-Practice Sesi Stabilisasi
+- 2026-10-05 | Changed: Fase 2b — Guidance Tool Mask-Aware di Call 2
+- 2026-10-05 | Fixed: Red-flag Medis Komposit RF-06 (batuk-ruam-demam)
+- 2026-10-05 | Added/Changed: Program Stabilisasi Kecerdasan (Fase 0–2)
+- 2026-10-06 | Fixed: Remediasi Fondasional Engine Follow-Up (Audit 32 Temuan, Tahap 1-5)
+- 2026-10-05 | Fixed: Audio WhatsApp gagal dimuat di Portal Staf (voice note 404 / tak didukung)
+- 2026-10-05 | Fixed: AI Scope Gate — jam acuan idle terkontaminasi pesan bot (Opsi A)
+- 2026-10-05 | Fixed: Pengingat NEXT_TREATMENT prematur (Recent/Upcoming-Visit Guard)
+- 2026-10-05 | Added: Rekapan Google Sheets — Fase 4 (Endpoint Admin & UI Tab)
+- 2026-10-05 | Added: Rekapan Google Sheets — Fase 2–3 (Service, Outbox Worker, Hook & Update Admin)
+- 2026-10-05 | Added: Rekapan Google Sheets — Fase 1 (Resolver Murni & Format 16 Kolom)
+- 2026-10-05 | Added: Rekapan Google Sheets — Fase 0 (Pondasi DB, Scope & Migrasi)
+- 2026-10-05 | Reservasi Aktif: Jendela Hari-H & Filter Bidan Bertugas
+- 2026-10-04 | Added: Balasan Statis Turn-0 Data-Driven (Revisi Plan — Fase 0–3)
+- 2026-10-04 | Fixed: Fondasi Keselamatan Bumil Lintas Kategori, Juri Paket Tunggal, Trimmer List-Safe, C
+- 2026-10-04 | Added: Seed FAQ Aman (--dry-run/--only), Guardrail Radar + Koreksi #220
+- 2026-10-04 | Added: Lapis Kontrak Jawaban, Pemisahan Retrieval Induksi, Tes Parafrase, Reviewer AI Risi
+- 2026-10-04 | Fixed: Keselamatan Klinis Bumil, Presisi Cart, Trimmer Daftar, Anti-Amnesia Delivery & CTA
+- 2026-10-04 | Changed: Unifikasi Jalur OTW + Capture GPS Maksimal + Fallback Titik Berangkat (Fase 3–4)
+- 2026-10-04 | Added: Silent Depart-Capture GPS — Titik Awal & ETA Bidan saat Klik Navigasi (Fase 1–2)
+- 2026-10-04 | Fixed: Foto Chat Terapis — Kompresi Klien Instan, Hapus Batas 8 MB, Timeout 45s
+- 2026-10-04 | Fixed: Sinkronisasi Penugasan Terapis Lintas Lapisan (API → Form → Detail → List)
+- 2026-10-04 | Fixed: Resolusi NEXT_TREATMENT (PENDING→QUEUED), Grace Auto-Cancel, Kuota 40/hari, & Filte
+- 2026-10-04 | Fixed: Radar OTW Live Chat & Tab "Treatment Hari Ini" Hilang saat Reservasi `en_route`
+- 2026-10-04 | CTWA Greeting Catchers: Atribusi Multi-Template + Typing Similarity (Fuzzy Priority 3)
+- 2026-10-03 | Pricelist Landing Page Dinamis (Data-Driven, Tenant-Aware & Server-Side Hydration)
+- 2026-10-03 | Landing Page Pricelist Homecare: Implementasi Opsi C (Contextual Slide-Up Drawer)
+- 2026-10-03 | WINBACK_60D: re-engagement pelanggan dormant MQL/legacy (>60 hari)
+- 2026-10-03 | Fix duplikasi Meta CAPI Queue & status 'Repeat Order' palsu untuk pasien baru
+- 2026-10-03 | Copilot SOP: pencarian kalimat-alami + seed prosedural + rekonsiliasi MANUAL_BOOK
+- 2026-10-03 | Manual Book Operasional Admin & Manajemen Reservasi (`docs/MANUAL_BOOK_ADMIN_RESERVASI.md`
+- 2026-10-03 | AI Clinic Copilot 2.0 (single-tenant owner): gerbang tenant + tool penjelas + SSE (ADR-001
+- 2026-10-03 | Fix Call 1 degenerasi intermiten: partial salvage + retry 1x + gate treatment (insiden "Wa
+- 2026-10-03 | Fix Call 1 netra: provider-aware thinking flag + salvage DSML + recovery state (insiden "W
+- 2026-10-03 | SOP Admin Reservasi v1.1 (revisi audit kesesuaian kode)
+- 2026-10-03 | Fix Alamat/Anak Hilang di LiveChat Edit (F-A..F-D)
+- 2026-10-03 | Fix Alamat Hilang (W1-W5): Seam Tunggal + Anti-Kehilangan Jejak
+- 2026-10-03 | Overhaul Holistik Reservasi (Fase 0-8, fondasional)
+- 2026-10-02 | Fase 4: Stabilisasi Router NLU (glm-5.3-flash → netra) di Produksi
+- 2026-10-02 | Restorasi Navigasi "CTA & Greetings WA" + Scope API Advertiser
+- 2026-10-02 | Meta Ads Performance & Sales Dashboard (CAC/LTV) — Fase 0–4
+- 2026-10-02 | Fase 0-3: Ongkir Transparan saat Kelurahan Typo + Tutup Kebocoran `message`
+- 2026-10-02 | Staf PWA: Akses Bukti Pembayaran & Invoice Pasca Kunjungan Selesai
+- 2026-10-02 | Navigasi Accuracy-Aware (re-apply) + Normalizer Link Copilot
+- 2026-10-02 | Copilot: Indikator Progres + Anggaran Turn 120s (pasca-diagnosis Hermes)
+- 2026-10-02 | Integritas AI Scope & Anti-Duplikasi Jadwal (fondasional)
+- 2026-10-02 | Slot Overlap A5 v2: Triase Fondasional + Dedup Persisten (fondasional)
+- 2026-10-02 | Pricelist: Pemulihan Pengiriman Gambar Otomatis V3 (fondasional)
+- 2026-10-02 | Copilot Admin: Adapter Mode :8642 OpenAI-Compatible (Nonaktif Default)
+- 2026-10-02 | Copilot Admin: Draf Adapter Hermes Tanpa-MCP (Nonaktif Default)
+- 2026-10-02 | Copilot Admin: Pintu Penolakan, Analisa Chat Lebih Luas, Gaya To-The-Point (internal)
+- 2026-10-01 | Navigasi: Gerbang Pra-Keberangkatan Sadar Akurasi (Insiden Bidan Tersasar)
+- 2026-09-30 | Dispatch: Kontrol Keberangkatan (Deprecate Tracking GPS + Status `en_route` + ETA)
+- 2026-09-30 | Katalog: Fase A Unifikasi (A1 file-sync stop, A2 anti-drift seed) (#128-FaseA)
+- 2026-09-30 | Dispatch: Auto-Trigger Telemetry & Standby CS saat Bidan Klik "Navigasi" (#162)
+- 2026-09-30 | Reservasi: Seam Intake Kanonis Form WA (#157a — same-day pending + idempotency)
+- 2026-09-30 | Reservasi: A2 Channel-Aware + Rilis Sesi Paralel (Copilot, LiveChat, Media, Follow-Up)
+- 2026-09-30 | Reservasi: A1–A6 Keputusan Pemilik (booking_date WAJIB, Advisory Lock, Slot-Overlap Alert,
+- 2026-09-29 | Guardrail D7/D3: Eliminasi False Positive Eskalasi Darurat (CASE-084/095)
+- 2026-09-29 | CTWA Hardening: Dekoder Token Meta Ketat + Cleanup Prod + Paritas Preview CAPI
+- 2026-09-29 | LiveChat: Server-Side Filter (Unread/Reservasi) + Perbaikan Modal Label & Badge Unread Glo
+- 2026-09-29 | Remediasi Kebocoran Notifikasi Admin ke Perangkat Terapis (Ghost Push Subscription & RBAC
+- 2026-09-29 | Eliminasi Kebocoran Notifikasi ke Bidan Terapis (Mandat In-System PWA Only)
+- 2026-09-29 | Standardisasi Tanda Tangan Staf & Anti-Sapaan Ganda (OTW & Sudah Sampai)
+- 2026-09-29 | Sinkronisasi & Persistensi Alamat Jalan Fisik + Patokan (preferences.address/landmark)
+- 2026-09-29 | Dispatch Tracking: Auto-Start H-30m, Auto-Off Geofence 50m & Early Warning Keterlambatan C
+- 2026-09-29 | Usia Dinamis Real-Time & Pemisahan Entitas Anak vs Moms
+- 2026-09-29 | Peta Perjalanan Bidan: Pulse Marker + Garis Rute (reuse, tanpa library/ORS)
+- 2026-09-28 | Dispatch Tracking: Hardening Rekomendasi (Deteksi OTW, Peta Presisi, Wake Lock, Rate Limit
+- 2026-09-28 | Internal Realtime Location Tracking & Dispatch Alert Terapis (Fase 3–5)
+- 2026-09-28 | Internal Realtime Location Tracking & Dispatch Alert Terapis (Fase 1 & 2)
+- 2026-09-28 | AI Clinic Copilot: Recall Stalled Inquiry dari Teks Pesan (Akar #163b)
+- 2026-09-28 | AI Clinic Copilot: Anggaran Wall-Clock & Degradasi Jujur (anti "Gagal menghubungi Copilot"
+- 2026-09-28 | Jaminan Akurasi Koordinat & Presisi Navigasi Terapis (Insiden Terapis Tersasar)
+- 2026-09-28 | Optimasi LiveChat Mobile: Placeholder Ringkas, Tombol Kunci Mobile-Hidden, & Filter/Toggle
+- 2026-09-28 | Nebulizer sebagai Add-on Katalog Valid (KNOWN_ISSUES #156, keputusan produk B)
+- 2026-09-28 | Hardening Sesi Staff (503), Access-Log Auth & Observabilitas Pre-Visit Brief (KNOWN_ISSUES
+- 2026-09-28 | Refaktor UI Mobile: Relokasi Online/Sound/Theme ke Sidebar & Copilot Icon di Header
+- 2026-09-28 | Atribusi Iklan CTWA WAHA + Meta Business Messaging CAPI (Issue #119)
+- 2026-09-28 | Ekstensi Copilot: riwayat pasien & katalog/SOP (aditif, grounded)
+- 2026-09-28 | Perbaikan fondasional AI Clinic Copilot (state signal, date filter, sanitizer, deep-link)
+- 2026-09-28 | Penguatan fondasional sistem reservasi & rekonsiliasi spasial (IDOR, collision check, AI a
+- 2026-09-28 | Remediasi fondasional audit (RF-06, lifecycle jadwal, anaphora, injection, scope)
+- 2026-09-28 | Pulse SLA 60 menit, pemadaman multi-device, & refaktor UI/UX LiveChat
+- 2026-09-27 | Cutoff Chat Terapis 1 Jam Pasca-Treatment & Penghilangan Tombol Chat
+- 2026-09-27 | Fix false-positive banner "FORM RESERVASI MASUK" + pelabelan audiens MOMS
+- 2026-09-27 | AI Copilot on/off dipindah ke Sidebar (sesuai permintaan)
+- 2026-09-27 | UX LiveChat: salin per-bubble, toggle Copilot, masking HP khusus terapis
+- 2026-09-27 | Fix holistik audit Live Chat & Reservasi (katalog, waktu, alamat, notifikasi)
+- 2026-09-27 | Fix tombol hide/unhide Copilot (breakpoint mismatch) + tema calm
+- 2026-09-27 | Copilot multi-step loop + tool stalled inquiries + panel mobile collapsible
+- 2026-09-27 | Copilot: tool `query_unscheduled_prospects` (jawaban "belum terjadwal")
+- 2026-09-27 | Fix pasca-live Fase 1r–6r: Copilot date-anchor/anti-N+1/grounding, RBAC Settings read & Pr
+- 2026-09-27 | Fase 6r: AI Clinic Copilot (2 tool, panel kontekstual, grounding kode)
+- 2026-09-27 | Fase 5r: Pre-Visit Brief bidan (H-30 menit, privasi minimal)
+- 2026-09-27 | Fase 2r: Nightly Watchdog (laporan malam 21:00 WIB) + Settings UI
+- 2026-09-27 | Fase 3+4: Catatan Internal `/notes` (anti-bocor) + Pulse Alert kekecewaan (state/SLA-based
+- 2026-09-27 | Fase 1r: Fondasi notifikasi admin (AdminNotificationLog) + field LiveChat (notes & pulse)
+- 2026-09-26 | Anti-logout paksa dashboard: kontrak sinyal 503 vs 401 sesi admin, hot cache, & token rest
+- 2026-09-26 | Klarifikasi persistenstensi chat `run-test-plan.ts` (Live Chat tidak menampilkan chat by d
+- 2026-09-26 | Fix crash `session.children` sparse array (temuan CASE-011, suite v2)
+- 2026-09-26 | Hotfix build & regresi pasca `f5c70ade` (deploy blocker)
+- 2026-09-26 | Watchdog server-DOWN via Telegram (follow-up insiden #135)
+- 2026-09-26 | Mitigasi 502 `/cta` saat recreate container app (insiden #135)
+- 2026-09-25 | Overhaul UX Mobile & LiveChat: Sticky Footer Reservasi, Smart Banner Form 1-Tap, Konsolida
+- 2026-09-25 | Rekonstruksi Test Suite Chatbot (Phase 1–5: Scorer Contract-Based, Episode Slicer, Persona
+- 2026-09-25 | Resolusi Bug Filter Sandbox LiveChat, Schema Drift Migration & Telemetri Model Kenari
+- 2026-09-25 | Resolusi 4 Defect Sistemik Percakapan (Trimmer, Leak RAG, D3 Komparasi, D10 Amnesia)
+- 2026-09-24 | Foundational Call 1 Router Neutralization, Model Harmonization & Output Punctuation Saniti
+- 2026-09-24 | Batch Quick Wins Audit Holistik (E1+E3, I1+I4, R1+R3)
+- 2026-09-24 | Batch Kecerdasan (I3, I5, I4b+I6, M0)
+- 2026-09-24 | Retrieval FTS + Trigram pg_trgm (Fase 4 refaktor; Fase 1 di-drop, Fase 3 ditolak, Fase 2→P
+- 2026-09-24 | Pemulihan Integritas Penamaan Google Contacts & Database (Fase 1-5, hasil audit plan)
+- 2026-09-24 | Optimasi Fondasional Disk & Memori Server Produksi (Fase 1R-3R & 5R)
+- 2026-09-23 | Sinkronisasi Komprehensif Pricelist Katalog Layanan Klinik (Brand Prefix Kala & Deaktivasi
+- 2026-09-23 | Eliminasi Sistemik Blank Page & Fatal Crash Admin Dashboard (Fase 1-4)
+- 2026-09-23 | Revisi Fondasional: State-Machine Gated Masking + Koma-Yatim Emoji (Tanpa Churn PLAN 12)
+- 2026-09-23 | Revisi Fondasional: GLM Timeout via Env + Typo 1-Huruf Terpusat (Tanpa Duplikasi)
+- 2026-09-23 | Optimasi ORS Shortest + Anti-Overestimation (Preference & Circuity Cap Final)
+- 2026-09-23 | Perbaikan Fondasional PageView vs Klik CTA (Instrumentation Coverage Gap, CTR >100%)
+- 2026-09-22 | Sistem Notifikasi In-System Terapis (PWA Web Push, Service Worker & SSE Real-time)
+- 2026-09-22 | Revisi Fondasional Plan Terapis: Filter Batal, Anti Double-Ongkir, Audit Reassign & Safe N
+- 2026-09-22 | Perbaikan Menyeluruh Sistem Notifikasi Terapis & Staf Lapangan (Fase 1-5)
+- 2026-09-22 | Hardening Backend Terapis & Staf Lapangan (IDOR, Kalender WIB, LTV, N+1)
+- 2026-09-22 | Resilient Tool Schema & Location Routing (PLAN 12 — 4 Akar Forensik)
+- 2026-09-22 | Perbaikan Sistemik PLAN 11: Anti-Memburu-Buru Funnel Pacing (State-Gated Information Hidin
+- 2026-09-22 | Perbaikan Sistemik PLAN 10: AI Monitoring & LLM Tracing (7 Bug Observability)
+- 2026-09-22 | Penyelesaian Migrasi SumoPod+GLM: Switch .env, Injeksi reasoning_effort, Koreksi Tarif Pro
+- 2026-09-21 | Katalog Live SumoPod Utama / Kenari Cadangan / DeepSeek Direct + Tarif Diskon Verified
+- 2026-09-21 | Perbaikan Pusat Kendali Model AI: Proteksi Hot-Switch, Mode Kustom, Simulator Per-Provider
+- 2026-09-21 | Fix Fondasional "Save AI Model Tidak Tersave" (Race Persist + Provider Revert)
+- 2026-09-21 | Redesign Total Konfigurasi Model AI Per-Tugas (User-Centric, Zero-Anxiety, 1-Click Operati
+- 2026-09-21 | Resolusi Total Deadlock Antrean Follow-Up & Penjadwalan Ulang 141 Record (`follow-up.servi
+- 2026-09-21 | Kontrak Konsultasi vs Transaksi + Prioritas Usia Multi-Tier (Sesi 783810)
+- 2026-09-21 | Cost Estimator Provider-Aware + Tarif Live (SUMOPOD Unverified)
+- 2026-09-20 | Mixed-Intent & Anti-DSML Leakage (Sesi 648324) — Fase 1-3
+- 2026-05-14 | Guard foto rumah wajib GPS + respons jujur (belum deploy live)
+- 2026-09-20 | V3 Audit Remediation & Consent Frontier — Deploy Lengkap (2026-09-20)
+- 2026-09-20 | Peta Sebaran — Sumber Lokasi First-Class (GPS / Estimasi / Edit Bidan) (2026-09-20)
+- 2026-09-20 | Peta Sebaran — Warna Reservasi & Koreksi Backfill GPS (2026-09-20)
+- 2026-09-20 | Backfill GPS Customer Ber-Reservasi (Live, 2026-09-20)
+- 2026-09-20 | Peta Sebaran — Basemap CARTO API Key & Fallback Esri (2026-09-20)
+- 2026-09-20 | Portal Terapis (StaffToday) — Ergonomi Mobile & Bug Interaksi Notifikasi (2026-09-20)
+- 2026-09-20 | Fixing D1 False-Positive "Sinar Moksa" & POV Violation (Sesi 767713) (2026-09-20)
+- 2026-09-20 | Stage 8 — Actual Model/Provider Labeling pada Fallback (2026-09-20)
+- 2026-09-20 | CG-09 — Redaksi PII JSONL + Retention 60 Hari (2026-09-20)
+- 2026-09-20 | Stage 6-CLM / RC-07 — Entity-Bound Numeric Validation (2026-09-20)
+- 2026-09-20 | Stage 5 Fase 5 — Degraded Replay + Retention (2026-09-20)
+- 2026-09-20 | Stage 5 Fase 4 — Handoff Durable / Escalation Fail-Closed (2026-09-20)
+- 2026-09-20 | Stage 5 Fase 3 — Outbound Ledger Per-Bubble (2026-09-20)
+- 2026-09-20 | Stage 5 Fase 2 — Inbound Durable + Worker Claim (2026-09-20)
+- 2026-09-20 | Stage 5 Fase 1 — Schema `InboundTurn` + `OutboundAttempt` (2026-09-20)
+- 2026-09-20 | Stage 4 Fase C & D — Audit Pembaca Episodik + Status Selesai (2026-09-20)
+- 2026-09-20 | Stage 4 Fase B — Backfill `Conversation.session_data` (2026-09-20)
+- 2026-09-20 | Stage 4 Fase A (RC-02) — Session Episodik ke `Conversation.session_data` (2026-09-20)
+- 2026-09-20 | CG-02 — Pemicu Reset Episode (14,1 Hari + Closing + `/reset`) (2026-09-20)
+- 2026-09-20 | CG-05 (Opsi Flag) — `needs_staff_verification` pada Reservation (2026-09-20)
+- 2026-09-20 | Stage 8 (Parsial) — Flush LLM JSONL saat Shutdown (2026-09-20)
+- 2026-09-20 | Stage 7 (R6) — Reservation Idempotency (`request_id`) + Follow-up Uniqueness (2026-09-20)
+- 2026-09-20 | Stage 4 (R2) — Idle Reset Menyelaraskan Sesi V3 Episodik (2026-09-20)
+- 2026-09-20 | Stage 2 (R1) — Tenant Identity Boundary: Migrasi Lokal + Kode Tenant-Scoped (2026-09-20)
+- 2026-09-20 | Audit P1-14 — Cancel/Delete Reservasi Membatalkan Follow-up (2026-09-20)
+- 2026-09-20 | Audit R7 (ST6-CLM) — Validasi Numerik Aktif pada Direct Reply Tanpa Tool (2026-09-20)
+- 2026-09-20 | Audit R4 — Cegah Balasan Ganda Saat Logging Outbound Gagal (2026-09-20)
+- 2026-09-20 | Pembersihan Suite — Isolasi LLM Dua Test Flaky (#101) (2026-09-20)
+- 2026-09-19 | Stage 6 (Revisi) ST6-3d — Perbaikan Bocor Konsultasi via Tawaran Asisten (2026-09-19)
+- 2026-09-19 | Stage 6 (Revisi) ST6-3c — Test Integrasi Kontrak Komitmen Lintas-Turn (2026-09-19)
+- 2026-09-19 | Stage 6 (Revisi) ST6-3b — Verdict Komitmen Persisten Lintas-Turn (`lastCommitment`) (2026-
+- 2026-09-19 | Stage 6 (Revisi) ST6-4 — Verdict COMMITTED Me-latch Komitmen Booking (2026-09-19)
+- 2026-09-19 | Stage 6 (Revisi) ST6-3 — Verdict Komitmen Call 1 Menjadi Otoritas Cart (2026-09-19)
+- 2026-09-19 | Stage 6 (Revisi) ST6-1 & ST6-2 — Kontrak Verdict Komitmen (Shadow) (2026-09-19)
+- 2026-09-19 | Micro-task Isolasi Tenant pada Tool Eskalasi (Audit V3, RC-01) (2026-09-19)
+- 2026-09-19 | Stage 1 — Correlation Spine + Real-DB Harness (Audit V3) (2026-09-19)
+- 2026-09-19 | Resolusi 14 Kegaalan Test Pre-Existing (Green Full Suite + Build) — 14 Fix (2026-09-19)
+- 2026-09-19 | Resolusi Sabotase Validator Usia & Eksplisitasi Famili Terapi (Sesi 476427) — 2 Fase (2026
+- 2026-09-20 | Mode Peta Jalan OSM Plain Grayscale — Hanya Jalan, Tanpa Warna, Terbatas Sby/Sda (2026-09-
+- 2026-09-19 | Pengerasan Lanjutan Peta Area Vektor — State Reaktif, Pointer-Transparent, Adaptive Bounds
+- 2026-09-19 | Perbaikan Fondasional Peta Area Vektor — Grid-Snap Dissolve & UI Map Pengerasan (2026-09-1
+- 2026-09-19 | Resolusi Komprehensif Sesi 607894/622098/284330/594329 — 8 Fase (Maternal, Atomic, Sanitiz
+- 2026-09-19 | Penyempurnaan UX Peta — Pewarnaan Multi-Level Batas Wilayah, Eliminasi Auto Zoom-Out & Pem
+- 2026-09-19 | Penyempurnaan Fitur Sebaran Pelanggan — Endpoint Toleran, Basecamp Tenant-Aware, KPI Spasi
+- 2026-09-19 | Gerbang Deterministik Balasan Lokasi Murni — Fast SOP Tanpa Call 2 (2026-09-19)
+- 2026-09-19 | Restorasi Greeting SOP & Gerbang Deterministik Narasi Asal Basecamp D8 (2026-09-19)
+- 2026-09-19 | Dashboard Peta Sebaran Pelanggan (Surabaya–Sidoarjo–Gresik) (2026-09-19)
+- 2026-09-19 | Perampingan Rules Fondasional, Ongkir Lokasi Presisi & Remediasi Gramatikal Sanitizer (202
+- 2026-09-19 | Meta CAPI New vs Repeat Order & Peringatan Jadwal Aktif Admin (2026-09-19)
+- 2026-09-19 | Standardisasi Model `deepseek-v4-1-flash` + Fallback LLM 3-Tier (2026-09-19)
+- 2026-09-18 | Arsitektur Data Murni Tool, Netralitas Agama Lapisan Prompt & D7 Kognitif (2026-09-18)
+- 2026-09-18 | Fase 3 & 4 Plan Terbaru: Semantik "Berapa" & Zero-Dangling Sanitizer (2026-09-18)
+- 2026-09-18 | Milestone 2 & 3: Data Terstruktur get-catalog, Guardrail Tanpa Overwrite, & Audit ClinicPo
+- 2026-09-18 | Milestone 1 (Fase 1–2): Netralitas Agama, CTA State-Aware & Carry-Over Berbasis State (202
+- 2026-09-18 | Eksekusi Plan Fondasional 3 Sesi Simulator — D6 Kenjeran + Matrix CM-23 (2026-09-18)
+- 2026-09-18 | Eksekusi Plan Regresi Oksitosin/Cart/Nominal — 6 Fase Fondasional (2026-09-18)
+- 2026-09-18 | Perbaikan Holistik Fondasional Chatbot — 6 Guard Deterministik (2026-09-18)
+- 2026-09-18 | Isolasi Multi-Tenant Meta CAPI/Pixel & Profil ORS Mobil Non-Tol (2026-09-18)
+- 2026-09-17 | Cache-Control `no-store` untuk Seluruh API Admin (Anti Data Basi Browser/Proxy) (2026-09-1
+- 2026-09-17 | Cache SWR Admin Dashboard: TTL-Aware & Primitive Hard-Refresh (2026-09-17)
+- 2026-09-17 | Perbaikan Delivery Fee Tiering: Hardcode Bebas & Paritas Out-of-Coverage (2026-09-17)
+- 2026-09-17 | Penyelarasan Model–Provider Aktif (Anti `no price for model` / `401`) (2026-09-17)
+- 2026-09-17 | Dedicated LLM Execution Tracing & DeepSeek Observability (2026-09-17)
+- 2026-09-17 | Revisi Fondasional P1–P4: Sawan-HIGH, closingIntent, Eskalasi Medis Aman, Salvage Kalimat
+- 2026-09-17 | Investigasi & Remediasi Fallback "Kendala Teknis" Sesi 554018 (2026-09-17)
+- 2026-09-17 | Integrasi LLM Kenari, Primary Model deepseek-v4-1-flash, & Toggle Switcher Provider (2026-
+- 2026-09-17 | Remediasi 391501 — Sanitizer Subjek, Rekomendasi Usia & RAG Persiapan (2026-09-17)
+- 2026-09-17 | Over-Kalkulasi Durasi Layanan & Reservasi Siluman Typo Tanggal (2026-09-17)
+- 2026-09-17 | Terapi Bapil KIDS Berjenjang Usia & Paritas Katalog (2026-09-17)
+- 2026-09-17 | Sesi 337880 — Gerbang Kode Deterministik (2026-09-17)
+- 2026-09-17 | Sesi 180166 — Regresi V3 & Resiliensi Real-Human (2026-09-17)
+- 2026-09-17 | Rencana Fondasional — Direct Enforce, Dekomposisi Grounder, Split Router (2026-09-17)
+- 2026-09-17 | Fase 6 Agenda 3 — Pruning, Refusal Metadata & Enforce Readiness (2026-09-17)
+- 2026-09-17 | Agenda 2 Fase 5 — Conversation Matrix 20 Skenario (2026-09-17)
+- 2026-09-17 | Agenda 1 Fase 4 — Geocoding Hardening & Gazetteer Wilayah Utama (2026-09-17)
+- 2026-09-17 | Housekeeping, Dynamic Phase Injection & Taksonomi Usia Deterministik (2026-09-17)
+- 2026-09-17 | Arsitektur Prompt Modular Berlapis — Dekomposisi Persona Monolitik (2026-09-17)
+- 2026-09-16 | Resolusi Fondasional Siklus Regresi Chatbot Sesi 173235: Anti-Phantom Basket Add-On, Groun
+- 2026-09-16 | Resolusi Fondasional Siklus Regresi Chatbot & Isolasi Total Sandbox CAPI Queue (2026-09-16
+- 2026-09-16 | Follow-Up Berbasis Chat Terakhir & Informasi Alasan Pembatalan (2026-09-16)
+- 2026-09-15 | Resolusi Infinite Holding Stall Pengecekan Jadwal, Latch Time Hint, & Isolasi Konsultasi U
+- 2026-09-14 | Resolusi Fondasional Bug Chat Freeze / Tidak Bisa Scroll Portal Terapis (2026-09-14)
+- 2026-09-14 | Restorasi Akses Chat & Hardening Relasi Percakapan Portal Terapis (2026-09-14)
+- 2026-09-14 | Audit & Perbaikan Fondasional Portal Terapis (Staff Portal) (2026-09-14)
+- 2026-09-14 | Hardening Fondasional FASE 0 — Fail-Closed Defaults & Observability (2026-09-14)
+- 2026-09-15 | Resolusi Fondasional Penulisan Reservasi & Invoice Salah — Kasus 6288000000005 (Bunda Lutf
+- 2026-09-15 | Pembersihan Fondasional: Konsolidasi Page Bloat, Shared Utils & Optimasi Backend (2026-09-
+- 2026-09-14 | Modularisasi Terpadu Modal Riwayat Chat — Eliminasi Duplikasi (Anti-Bloat & Modularity-Fir
+- 2026-09-14 | LiveChat Optimization v3 — Modular Composer, Penegakan Anti-Label Tuntas & Observabilitas
+- 2026-09-12 | Remediasi Fondasional Koneksi WhatsApp: Media Watermark Pruning, Idempotensi Ad Attributio
+- 2026-09-12 | Plan 6 — Geocoding Resilience, Kombo Aritmatika & Schema Hardening (Issues #26, #21, #30;
+- 2026-09-12 | Plan 4 — Persona Multi-Tenant Data-Driven, RAG Safe-Merge Non-Destruktif (Issue #46 RESOLV
+- 2026-09-12 | Plan 5 — Penegakan Mandat Mutlak Larangan Label WAHA & Resolusi Flaky Test (Issue #38 RESO
+- 2026-09-12 | Plan 3 — GoalTracker Decomposition, Symptom Semantic Scorer & Test Harness Isolation (2026
+- 2026-09-12 | Selaraskan Unit Test Katalog Dinamis & Dokumentasi Tech Debt Test Suite (2026-09-12)
+- 2026-09-12 | Sinkronisasi Penuh Knowledge Chunks (FAQ) & Chat Bank (Few-Shot Exemplars) dari Live Serve
+- 2026-09-12 | Resolusi Deadlock Validator Faktual & Pembajakan Sanitizer Eskalasi (2026-09-12)
+- 2026-09-12 | Pembenahan Fondasional UI Edit Reservasi & Integrasi Backend (2026-09-12)
+- 2026-09-11 | Pembaruan Menyeluruh Katalog Treatment & Pricelist (Revisi Final 35 Layanan) (2026-09-11)
+- 2026-09-10 | Multi-Lapisan Fondasional V3: Disambiguasi Multi-Anak, Integritas Matematika & Anti-Brosur
+- 2026-09-09 | Pembenahan Fondasi & Root Cause Alur Konfirmasi Reservasi (HOLD & PENDING) (2026-09-09)
+- 2026-09-09 | Perbaikan Layout Mobile iPhone & Redesain Footer Icon Buttons (2026-09-09)
+- 2026-09-09 | Pembenahan Fondasi Fitur Draf & Redesain UI Mobile Invoice WA (2026-09-09)
+- 2026-09-09 | Redesign Fondasional — Parsing GPS Pin, Klaster Hierarki & Sticky GPS (2026-09-09)
+- 2026-09-09 | Redesain Fondasional — Klasifikasi Lifecycle Pasien & Active Appointment Guard (2026-09-09
+- 2026-09-09 | Audit Sesi 435731 — Anti-Todong Jadwal, Anti-Halusinasi Domisili & Sinkronisasi Keranjang
+- 2026-09-09 | Redesain Fondasional — Siklus Hidup Reservasi & Integritas Transaksi (2026-09-09)
+- 2026-09-08 | Optimization — Audit Mikro & Efisiensi Sistem Menyeluruh (Eliminasi Redundansi, Dead Code
+- 2026-09-08 | Fix — Defensive Admin Knowledge untuk DB skema lama tanpa kolom keywords (P2022) (2026-09-
+- 2026-09-08 | Fix — Dynamic Knowledge Grounding & Zero-Hardcode Persona Restoration (kasus maternal 38 w
+- 2026-09-07 | Fix — Ekstraksi Form Chat, Fuzzy Matching Layanan & Generator Invoice WhatsApp (`chatSched
+- 2026-09-07 | Fix — Eliminasi Phantom Cart Item & Presisi Topik Durasi Pijat Bayi (`goal-tracker.ts`, `p
+- 2026-09-07 | Audit & Enhancement — Investigasi Akar Masalah Follow-Up Cancelled & Optimasi Database Que
+- 2026-09-07 | Fix — Pemisahan Operasional "Tandai Lunas" dari Meta CAPI & Pemulihan Tombol Reservasi (`r
+- 2026-09-07 | Feature — Refresh & Revisi Lokasi, Jarak & Ongkir Customer (Hierarki Validitas Bidan & Cus
+- 2026-09-07 | Feature — Integrasi Otomatis Data Gazetteer untuk Zipcode Meta CAPI (`gazetteer-zipcode-re
+- 2026-09-06 | Feature — RAG Knowledge & Bank Contoh Chat di V3 Agent + Full Observability Inspector (`se
+- 2026-09-06 | Fix — Transisi AI-First & Eliminasi Mid-Sentence Regex Mutilation (`sanitizer.ts`, `respon
+- 2026-09-06 | Feature — Integrasi Koleksi Emas 25 Contoh Chat Bidan Yusi (`gold-few-shot-exemplars.ts`,
+- 2026-09-06 | Fix — Penertiban Kualifikasi STR & Deteksi Harga Slang (`persona.ts`, `get-catalog.tool.ts
+- 2026-09-06 | Fix — Bank Contoh Chat: Restore Non-Destruktif, Auto-Seed Aman & Guard Panjang (`few-shot-
+- 2026-09-06 | Fix — Anti-Repetition Multi-Turn & Penguatan Preservasi Storage (`agent-runner.ts`, `sanit
+- 2026-09-06 | Feature — Riwayat Chat Lengkap: Cursor Pagination & Infinite Scroll Up (`message.service.t
+- 2026-09-06 | Feature — Perbaikan Menyeluruh Bank Contoh Chat Few-Shot (`few-shot-exemplars.ts`, `settin
+- 2026-09-06 | Fix — Preservasi Teks Asli Live Chat & Greeting Statis Deterministik (`webhook.route.ts`,
+- 2026-09-05 | Feature — Integrasi Aturan Emas Klinik ke Arsitektur V3 (`persona.ts`, `sanitizer.ts`, `ag
+- 2026-09-05 | Fix — Preservasi Posisi Scroll Live Chat Saat Pindah Menu/Page & Alt-Tab (`LiveChatMonitor
+- 2026-09-04 | Fix — Sembunyikan Chat Sandbox/QA Test dari Live Server (`livechat.subroute.ts`, `conversa
+- 2026-09-04 | Fix — Perbaikan Permanen Sinkronisasi Reaksi Emoji Customer WhatsApp (`whatsapp-provider.s
+- 2026-09-04 | Fix — Penerimaan & Sinkronisasi Reaksi Emoji Customer WhatsApp ke Dashboard Live Chat (`wh
+- 2026-09-04 | Fix — Auto Mark-As-Read & Sinkronisasi Real-Time Saat Admin Balas via WhatsApp HP (`webhoo
+- 2026-09-04 | Fix — Perbaikan Menyeluruh 12 Bug Live Chat Monitor (`LiveChatMonitor.tsx`, `livechat.subr
+- 2026-09-04 | Changed — Badge footer Live Chat jadi icon-only (`LiveChatMonitor.tsx`) (2026-09-04)
+- 2026-09-04 | Changed — Dark Mode Canvas Pure Black `#000000` (`index.css`, `Layout.tsx`, `Login.tsx`, `
+- 2026-09-04 | Feature — Alih Kelola Form Reservasi ke Admin + Back Gesture & Inquiry Guard (`decision-ma
+- 2026-09-04 | UI — Polish Live Chat Monitor & Dark Mode Menyeluruh Admin Dashboard (2026-09-04)
+- 2026-09-04 | Feature — Durasi HOLD & Reservasi >1 Jam (`QuickHoldModal.tsx`, `reservations.subroute.ts`
+- 2026-09-04 | Fix & Feature — Penanganan Komparasi Lokasi & Ongkir Deterministik Tanpa Tambal Sulam Rege
+- 2026-09-03 | Feature — Dual Theme Light/Dark Mode Admin Dashboard (`ThemeContext`, `ThemeToggle`, `Appe
+- 2026-09-02 | Fix — Sinkronisasi GPS Shareloc & Konsistensi Jarak/Ongkir (`webhook.route.ts`, `human-bac
+- 2026-09-02 | Feature — Quick Chat / Balasan Cepat (/shortcut) Tenant-Aware (`QuickReply`, `quick-replie
+- 2026-09-02 | Fix — Validasi & Re-kalkulasi Jarak/Ongkir ORS untuk 55 Target (`delivery.service.ts`, `va
+- 2026-09-01 | Fix — Toggle Matikan AI Bot Live Chat Persisten & Sinkron SSE (`LiveChatMonitor.tsx`, `liv
+- 2026-09-01 | Fix — Eliminasi Kebocoran AI Reasoning, Anti-Truncation & Persona Bapak (`reply-generator.
+- 2026-09-01 | Fix & Enhancement — Audit & Perbaikan Komprehensif Bug Price Rp 0, Race Condition Modal Ed
+- 2026-09-01 | Feature — Dashboard Transaksi, Reservasi & Histori Pendapatan Bulanan (`FinancialAnalytics
+- 2026-09-01 | Feature & UX Enhancement — Auto-Move Jadwal Lewat Jam ke Tab Selesai & Default View "Akan
+- 2026-09-01 | Enhancement & Fix — iPhone Header Safe-Area Inset & LiveChat Virtual Keyboard Viewport (`L
+- 2026-09-01 | Enhancement — Prioritas Utama Perawatan Lanjutan Bulanan (NEXT_TREATMENT) & Peningkatan Ka
+- 2026-09-01 | Enhancement — Optimalisasi Debounce 7.5s, Eliminasi Bias Alias Generik & Kalkulasi Presisi
+- 2026-09-01 | Audit & Fix — Production Follow-Up Queue Audit & UTC-to-WIB Accurate Scheduling (`follow-u
+- 2026-09-01 | Fitur — Paket Multi-Sesi (ReservationSeries) (`prisma/schema.prisma`, `reservation-series.
+- 2026-09-01 | Fix & Enhancement — Customer Database: Skeleton Ringan + Retry Manual + Timeout 10s Fix (`
+- 2026-08-31 | Fix & Enhancement — Custom Treatment: Hapus Auto-Detect Addon & Tambah Input Harga (`Creat
+- 2026-08-31 | Enhancement & Fix — Reservation List View Nearest-Time Sorting (`booking_date ASC`) & Stri
+- 2026-08-31 | Enhancement & Fix — Reservation Card Length, Total Duration & Buffer Time Synchronization
+- 2026-08-31 | Enhancement & Fix — Full Customer & Children Data Editor, Unified Reservation Edit UI, Enh
+- 2026-08-31 | Bug Fix — LiveChat 24-Hour Draft Memory Lifecycle & Cross-Menu Navigation Persistence (`Li
+- 2026-08-31 | Feature & Fix — Full Reservation Editing Modal & 1:1 Synchronized Top Scrollbar Track for
+- 2026-08-31 | Enhancement & Fix — 8-Point Comprehensive Punch List: Calendar 2D Navigation, Multi-Hour C
+- 2026-08-31 | Feature — Pinch-to-Zoom & Semantic Time Density Scaling untuk Kalender Mingguan & Harian (
+- 2026-08-31 | Fix — Smart Customer Name Sanitization & Complete District/Location Stripping (`name-sanit
+- 2026-08-31 | Fix & Enhancement — Live Chat State Synchronization, Hold-Press System Label Manager & Sma
+- 2026-08-31 | Fix & Optimization — Mobile Network Resilience & Fast Reconnect: SSE Watchdog 18s, Mobile
+- 2026-08-30 | Fix & UI/UX Overhaul — Impeccable Mobile Experience for Reservations & Today Treatments: P
+- 2026-08-30 | Fix — Phantom Draft Auto-Save Prevention & Meaningful Data Guard in Form Draft System (`us
+- 2026-08-30 | Fix & Feature — Form Treatment 0-Lock, Accurate Buffer Stripping & Dynamic Tier Ongkir (An
+- 2026-08-29 | Fix — AI Sandbox & LLM Generator Instant Response: SumoPod Model Auto-Sanitizer & Fast Fal
+- 2026-08-29 | Fix — AI Sandbox Simulator 120s Timeout Resolution via Non-Blocking Terminal Guard & Adjus
+- 2026-08-29 | Fix — Preservation of Enters/Newlines (Multi-Paragraph) & Custom Text Priority in Follow-U
+- 2026-08-29 | Performance — Ultra-Fast Sub-Second Mobile Road Load Time via 4-Stage Optimization Suite (
+- 2026-08-29 | Fix — Direct Navigation to Live Chat Conversation on Notification Click (`sw.js`, `App.tsx
+- 2026-08-29 | Enhanced — In-Page Chat History Modal, Full Follow-Up Text/Variant Editor & Smart Date Ran
+- 2026-08-28 | Impeccable Refinement — Layout 1-Kolom Treatment, Label Waktu Mulai Avatar & Impeccable Au
+- 2026-08-28 | Impeccable Audit & Feature — Tab Treatment Besok & Redesign Impeccable pada Halaman Treatm
+- 2026-08-28 | Enhanced & Fixed — Parsing Tanggal 2-Digit, Ekstraksi Jam & Prioritas Total Price di Form
+- 2026-08-28 | Fixed — Navigasi Mobile Sidebar Terkunci / Tidak Berpindah Halaman (`Layout.tsx`) (2026-08
+- 2026-08-28 | Fixed & Redesigned — In-Place Zero-Jump Save & Impeccable Design di Rolling Template Follo
+- 2026-08-28 | Fixed — RBAC Guard Allow Read-Only Access ke Rute Custom Roles bagi Staf (`admin.route.ts`
+- 2026-08-28 | Optimized — System-Wide Instant Load & Zero-Wait Architecture di Dashboard & Backend API (
+- 2026-08-28 | Fixed — Zero-Lag Typing & Real-Time Top Conversation Order di Live Chat Admin Dashboard (2
+- 2026-08-28 | Fix & Enhancement — Resolusi Nilai Transaksi (GMV) Event Purchase di Meta CAPI Queue & Bat
+- 2026-08-28 | Feature & Architecture — Contextual Intelligence Engine & Admin Dashboard UI: Conversation
+- 2026-08-28 | Fixed — Pembaruan Data & Reservasi Bunda Iren Live Server serta Robustness Parsing Formuli
+- 2026-08-27 | Fixed — Perbaikan Drag-to-Scroll 2D View Mingguan Reservasi & Relaksasi Rate Limiting Admi
+- 2026-08-27 | Fixed — Integrasi Dynamic Closer ke Reply Generator & Fast FAQ serta Pencegahan Pengulanga
+- 2026-08-27 | Fixed — Eliminasi Kalimat Pengantar Jadwal Janggal pada Penanyaan Lokasi tanpa Hari (2026-
+- 2026-08-27 | Fixed — Penanganan Multi-Treatment Kombinasi & Eliminasi Conversational Backtrack pada Pem
+- 2026-08-27 | Improved — Dynamic Closer Adaptif & Anti-Repetisi, Kontinuitas Memori Keluhan Bayi, & Peng
+- 2026-08-27 | Added — Pemisahan Semantik 3-Bubble Khusus Pesan Formulir Reservasi (2026-08-27)
+- 2026-08-27 | Fixed — Penanganan Cerdas Pertanyaan Jadwal & Layanan (Jawab Layanan Dulu, Infokan Cek Jad
+- 2026-08-27 | Fixed — Eliminasi False Trigger Double Ongkir Guard pada Pertanyaan Klinis & Treatment (20
+- 2026-08-27 | Fixed — Kepatuhan Wajib Sapaan Pembuka Turn-0 & Perkenalan Bidan Yusi (2026-08-27)
+- 2026-08-27 | Fixed — Composite Geocoding Resolution & Format Balasan Ongkir Deterministik Resmi (2026-0
+- 2026-08-27 | Fixed — Silent Background Location Enrichment saat Human Handling (Sawotratap 628800000000
+- 2026-08-27 | Feature & Refactor — Dynamic Persona DB Integration & Elimination of Proactive Age Prompti
+- 2026-08-27 | Feature & Refactor — Conversational Consultation Flow, Price Grounding & Form Attachment H
+- 2026-08-27 | Feature & Hardening — Strict Greeting Persona & Lead Onboarding Standardization (2026-08-2
+- 2026-08-27 | Feature & Refactor — Conversational Booking Pipeline, Anti-Looping Forms & Strict Persona
+- 2026-08-27 | Feature & Policy — Manual CS Bypass for Legacy & Repeat Patients with Admin Dashboard Togg
+- 2026-08-27 | Fix & Integration — Slot Engine Reservation Form Pipeline, Schedule Guardrails, History Is
+- 2026-08-26 | Feature & Sync — Live Calendar Peek Synchronization & Total Payment Calculator in Reservat
+- 2026-08-26 | Bugfix & Enhanced — Dual-Category Form Parser, Promo Discount Support & Clean Name Ingesti
+- 2026-08-26 | Feature & UI — Live Chat Quick Reservation & 1-Click WhatsApp Payment Invoice Generator (2
+- 2026-08-26 | Feature & Enhanced — Automated Telegram Morning Briefing & Dedicated Telegram Hub UI (2026
+- 2026-08-26 | Architecture & Enhanced — Centralized PersonaComposer, Unified Sanitizer, & Anti-Patchwork
+- 2026-08-26 | Fixed & Enhanced — Full Live Chat Outbound Sync for Automated Broadcasts & Follow-Ups (202
+- 2026-08-26 | Enhanced — Natural Name & Multi-Baby Sanitizer + Auto-Queued Follow-Up Pipeline (2026-08-2
+- 2026-08-26 | Enhanced — Smart Context Guard Follow-Up Queue (72-Hour Recent Chat Cooldown & Admin Conte
+- 2026-08-26 | [v1.17.0] — Hybrid Fast-Track FAQ Engine (FAQ 1-Call & Dynamic Booking 2-Call) (2026-08-26
+- 2026-08-25 | Enhanced & Hardened — End-to-End LLM Execution Logging, Correlation ID & Flow Cards (2026-
+- 2026-08-25 | Enhanced & Fixed — LLM Execution Logs Pipeline & UX Overhaul (2026-08-25)
+- 2026-08-25 | Added & Enhanced — Live Chat Date Separators & WhatsApp Reply Feature via WAHA (2026-08-25
+- 2026-08-24 | Enhanced & Hardened — Disable Passive Self-Learning & Extend LLM Timeouts to 60s/120s (202
+- 2026-08-24 | Added & Enhanced — AI Output Verifier Audit Logger & Visual Tracing Flow LLM di Menu Debug
+- 2026-08-24 | Enhanced & Optimized — Akses Cepat Live Chat & Eliminasi Browser Connection Starvation (20
+- 2026-08-24 | Added & Enhanced — Fitur Sorting Antrian Follow-Up & Rescheduling Overdue Otomatis (Maks 1
+- 2026-08-24 | Added & Enhanced — Standardisasi Seluruh Kontrol & Tombol ON/OFF Menjadi ToggleSwitch Inte
+- 2026-08-24 | Enhanced & Fixed — Follow-Up & Reminder Queue: Dari 'Kirim Sekarang' ke 'Jadwalkan' (Statu
+- 2026-08-24 | Added & Enhanced — Dynamic Peak-Hour Pricing & Tenant-Aware MiniMax NLU Model Transition (
+- 2026-08-24 | Fixed & Hardened — Regex Word-Boundary Protection for NLU Classifier & Geocoding (2026-08-
+- 2026-08-23 | Enhanced & Aligned — Clinic Services Catalog & Live Database Sync with Pricelist Flyer (20
+- 2026-08-23 | Added & Enhanced — Weekly Google Drive Auto-Backup, Download & Database Restore (2026-08-2
+- 2026-08-23 | Added & Enhanced — Google Maps Distance Matrix Fallback (Tier-2 Motorbike Routing) (2026-0
+- 2026-08-23 | Added & Enhanced — Inbound Google Contacts Sync & Strict Dual-Gate Trigger Strategy (2026-
+- 2026-08-23 | Added & Enhanced — Google Contacts SaaS-Ready Integration (1-Click Google OAuth & Auto-Syn
+- 2026-08-22 | Enhanced & Fixed — Clinic Services Bundle & Add-on Strict Business Logic Alignment (2026-0
+- 2026-08-22 | Fixed — Total Outbound Message Deduplication Guard & Database Cleanup (2026-08-22)
+- 2026-08-22 | Enhanced — On-Demand HD Image Loading & Mobile-Friendly Back Navigation in LiveChat Lightb
+- 2026-08-22 | Fixed — WhatsApp Companion Phone Outbound Image Capture & LiveChat Media Rendering (2026-0
+- 2026-08-22 | Added — Interactive JSON Editor & Custom Payload Approve in Meta CAPI Queue (2026-08-22)
+- 2026-08-22 | Added / Fixed — Export Chat Data Ingestion, Customer & Children DB Enrichment, and CAPI Qu
+- 2026-08-22 | Fixed — Meta CAPI Queue Payload Hardening (Issue #4) & Total Fix Inbound Image / False Sha
+- 2026-08-22 | Fixed — Typo Backslash Escaping (`\Bundlebih`), Anti-Halusinasi Nama Bayi (`Bunny`), & Gen
+- 2026-08-22 | Fixed (Partial — BELUM menyelesaikan masalah live, lihat `docs/KNOWN_ISSUES.md#14`) — Imag
+- 2026-08-22 | Fixed — Auto-Release Exemption (Bypass Hold #1155), Anti-Race In-Flight Abort (#319), & Se
+- 2026-08-22 | Fixed — Reservasi #777 Siska Gagal Capture & Atribusi Aisyah 929 `app.kalababyspa` (2026-0
+- 2026-08-22 | Fixed — Live Chat Sorting Absolut by Waktu (Human Handling Tidak Lagi di Atas) (2026-08-22
+- 2026-08-22 | Fixed — Meta CAPI Queue Approve Stale UI (2026-08-22)
+- 2026-08-21 | Added & Fixed — Meta Full-Funnel Attribution & Initial Landing URL Preservation (2026-08-2
+- 2026-08-21 | Added & Refined — Zero-Hardcoding Admin Configurable Landing Domain & Funnel Architecture
+- 2026-08-21 | Added & Refined — Dynamic Tenant-Aware Meta CAPI Funnel Triggers & Zero-Hardcode Value Par
+- 2026-08-21 | Added & Fixed — LiveChat Share Location Card Widget & Google Maps Direct Link (2026-08-21)
+- 2026-08-21 | Fixed & Refined — Meta Click Catcher Attribution for Returning Contacts, CAPI Queue Modera
+- 2026-08-21 | Added, Fixed & Refined — WAHA Internal Outbound Cut-Off Switch (Emergency Kill-Switch) & S
+- 2026-08-21 | Added, Fixed & Refined — Follow-Up Manual Approval Policy, Queue API Endpoints, Sandbox Fi
+- 2026-08-21 | Added, Fixed & Refined — Time Range Display, Clickable Treatment Cards, Customer LTV/Treat
+- 2026-08-21 | Added, Fixed & Refined — React Portal Viewport Modal Centering, Dynamic Therapist Delegati
+- 2026-08-21 | Added, Fixed & Refined — 2D Calendar Drag Panning, Dynamic Time Navigator, Therapist Filte
+- 2026-08-21 | Fixed & Refined — Button Sound/Haptic Elimination, Seamless Searchbar & In-Place Bot Relea
+- 2026-08-20 | Refactored & Polished — Refined Focus & Clean Metrics for Today Treatments (2026-08-20)
+- 2026-08-20 | Added & Enhanced — Full Feature Parity from StaffToday to TodayTreatments (2026-08-20)
+- 2026-08-20 | Improved & Fixed — Comprehensive UI/UX Polish, iOS Safari Viewport & Mobile-First Controls
+- 2026-08-20 | Added & Refactored — Seamless "Treatment Hari Ini" Module & Single-Shell Admin Flow (2026-
+- 2026-08-20 | Fixed — Elimination of Infinite MutationObserver Loop & "Page Unresponsive" Freeze (2026-0
+- 2026-08-20 | Added & Improved — SPV CS Hybrid Role, Dual Mode Workflow & Team Delegation (2026-08-20)
+- 2026-08-20 | Added & Fixed — Sticky Header Restore, Modal Background Scroll Lock & iOS Viewport Fix (20
+- 2026-08-19 | Added & Fixed — PWA Ultra HD Vector Branding, Role Management Cleanup & Database Schema Sy
+- 2026-08-19 | Added & Fixed — Real-Time Typing Sync, Message Delivery & Read Receipts (Centang Biru), Op
+- 2026-08-19 | Added — Web Push Notification (VAPID + PWA Background Push untuk Mobile & Desktop)
+- 2026-08-19 | Fixed — Pemulihan Tampilan Gambar Masuk (Inbound Customer Media) di Live Chat
+- 2026-08-19 | Added & Improved — Fitur Edit Pesan WhatsApp Terkirim (Batas 15 Menit) & Live Chat Real-Ti
+- 2026-08-19 | Added — Command Telegram `/clean`: Task Pembersihan Server via Cron Host
+- 2026-08-19 | Fixed — Pemulihan Total Seleksi & Salin Teks Global (System Logs, Tables, Message Trace &
+- 2026-08-19 | Fixed — Pemulihan Total Event Stream Real-Time Live Chat SSE (Redis Pub/Sub Local Delivery
+- 2026-08-19 | Added — Sistem Notifikasi Real-time Chat Masuk WhatsApp-Style (Audio Chime, Getaran, In-Ap
+- 2026-08-19 | Added & Improved — Animasi Transisi Halus (Fluid Navigation) Mobile & Eliminasi Total Nati
+- 2026-08-19 | Added & Improved — WhatsApp-Style Mobile Bottom Action Sheet, Gesture Calibration & Histor
+- 2026-08-19 | Fixed — Comprehensive Touch Gestures, Long-Press & History Navigation Overhaul (10 Bug Fix
+- 2026-08-19 | Added & Improved — Mobile Hold-Press Anti-Selection, Right-Aligned Hamburger Menu, Right D
+- 2026-08-19 | Added & Improved — Mobile Back Button Touch Hitbox Fix, Mark All as Read, & Historical Imp
+- 2026-08-19 | Added & Improved — WhatsApp-Style Unread Badge, Manual Dark Green Unread, Orange Awaiting-
+- 2026-08-19 | Added & Improved — Chat Card Label Grouping Refactor & Badge Deduplication
+- 2026-08-19 | Added & Improved — Multi-Tier LLM Gateway Architecture Migration & Fallback Telemetry Refa
+- 2026-08-19 | Added & Improved — ELT Architecture Refactor: Local DB as Single Source of Truth & Zero-WA
+- 2026-08-19 | Added & Improved — Historical Chat Precision Transcript Seeding & Multi-Bubble Financial E
+- 2026-08-19 | Added & Improved — Completed Reservations UI, Customer Sorting & Detail Modal, Chat Migrat
+- 2026-08-19 | Added & Improved — ORS Route Distance 1.1x Buffer Factor
+- 2026-08-19 | Added & Improved — Background Full Sync Engine & Real-time Sync Progress
+- 2026-08-19 | Fixed & Improved — Meta CAPI Historical Sync Guard & Webhook Rate Limit Exemption
+- 2026-08-19 | Fixed & Improved — Mobile Live Chat Layout & +45% Textfield Width Expansion
+- 2026-08-19 | Fixed & Improved — Sidebar Scroll Isolation, Layout Viewport Bounds & Eliminating scrollIn
+- 2026-08-19 | Fixed & Improved — Native Wheel Scrolling Fix, 80% Chat Screen Expansion & AI Draft Resizi
+- 2026-08-19 | Fixed & Improved — Database Schema Sync & 2-Section Dedicated Independent Scrolling
+- 2026-08-19 | Fixed & Improved — Label Synchronization, Foreign Key Safety & 2-Slider Chat Layout
+- 2026-08-19 | Added & Improved — Chat Header Label Dots, Label Description Field & AI Copilot Telemetry
+- 2026-08-19 | Added & Improved — Live Chat UI & Ergonomics Overhaul: Tools Menu Popover, 100% Width Text
+- 2026-08-19 | Fixed & Improved — Sanitizer Em-Dash (—) pada Output AI & Semua Pesan Keluar
+- 2026-08-19 | Added & Improved — AI Copilot Draft for Midwives, Strict Silent Medical Hold & Live Chat U
+- 2026-08-19 | Added & Improved — WhatsApp Customer Profile Picture Retrieval & Smart Avatar Display (`v1
+- 2026-08-19 | Added & Improved — Customer Labels CRUD & Live Chat Tagging System (`v1.13.0`)
+- 2026-08-19 | Fixed & Improved — Intercept Browser History Back at Frame 0 (Touchstart Passive: False) (
+- 2026-08-19 | Fixed & Improved — 199% Bulletproof Admin Swipe: Popstate Sync, Touch-Action Pan-Y & Gener
+- 2026-08-19 | Fixed & Improved — Native DOM Interception for Admin Edge Swipe & 50vw Compact Therapist D
+- 2026-08-19 | Fixed & Improved — Prevent Browser Back on Admin Edge Swipe & Restored Clean 1-Page per Ta
+- 2026-08-19 | Fixed & Improved — Admin Left-Edge Swipe Sidebar & Continuous 60fps Carousel Track for The
+- 2026-08-19 | Fixed & Improved — Overscroll Background Fix, Directional Tab Slide & Right-Edge Swipe Sid
+- 2026-08-19 | Fixed & Improved — Therapist Portal Dedicated Polish & Super Admin Restore (v1.12.5)
+- 2026-08-19 | Fixed & Improved — Multiline Enter, Rock-Solid Auto-Scroll Anchor & GPU Micro-Animations (
+- 2026-08-19 | Fixed & Improved — Swipe Gesture Navigation, Auto-Scroll Instant, Enter Fix & Sidebar Vers
+- 2026-08-19 | Fixed & Improved — Portal Terapis Mobile UX, Anti-Zoom Focus, Quick Reply & Navigasi Cepat
+- 2026-08-19 | Fixed & Improved — Live Chat Monitor Mobile UX & Anti-Zoom Input Focus
+- 2026-08-19 | Changed & Security — Penonaktifan Fitur App State Fisik WAHA (Anti-Session Logout) & Migra
+- 2026-08-19 | Fixed — "Invalid Date" Web Terapis & "Double Bubble" Live Chat Admin
+- 2026-08-19 | Docs — Panduan Setup Meta CAPI & Kunci Enkripsi
+- 2026-08-19 | Changed — Anaphora Clarification Resolution ("Maksud saya yang paket newborn"), NLU Token
+- 2026-08-19 | Added — Comprehensive Server Infrastructure Monitoring (`/server`)
+- 2026-08-19 | Added — Personal Therapist/Midwife Telegram Assignment Dispatch & Privacy Protection
+- 2026-08-19 | Added — Telegram SaaS 1-Click Zero-Setup Pairing & Dynamic Topic Webhook Routing
+- 2026-08-19 | Changed — Telegram Daily Report QA Dummy Test Mode & Safe Simulation
+- 2026-08-19 | Changed — Live Chat Retry, Telegram Alert, Language Naturalization & Symptom Grounding
+- 2026-08-19 | Changed — Natural & Conversational Price Inquiry Formatting ("Mijat balita usia 2 tahun, k
+- 2026-08-19 | Added — Foto Depan Rumah, Tombol Update Titik Lokasi GPS & Patokan, serta Kamera Langsung
+- 2026-08-19 | Added — Right Sidebar Drawer Menu (Garis Tiga) & Tab Treatment Selesai untuk Portal Terapi
+- 2026-08-19 | Fixed — Multi-Child / Multi-Treatment Transport Policy Inquiry ("Untuk 2 anak transportnya
+- 2026-08-19 | Changed — Pricelist HD Dikirim Asli; Dashboard Tanpa Preview (Hanya Tombol Lihat); Mode Up
+- 2026-08-19 | Changed — Card Pricelist Inline dengan MQL & Retensi; Sumber HD Tersimpan, Dashboard Pakai
+- 2026-08-19 | Added & Changed — Kalender Pure, Auto-Scroll Mingguan, Ikon Mata Bukti Bayar, Upload Bukti
+- 2026-08-19 | Added & Changed — Paket Perbaikan Dashboard: Kalender Reservasi, Chat Terapis Kirim Gambar
+- 2026-08-19 | Added — Tab Reservasi: Tombol "Cek Bukti Bayar" (TF/QRIS) + Default Tampilan Daftar (Tabel
+- 2026-08-19 | Changed — Portal Terapis: Gate OTW 2 Jam, Pemisah Visual Treatment, Header Chat Icon-Only,
+- 2026-08-19 | Added & Changed — Notifikasi Login Staf Admin & Penyederhanaan Tabel Staff Management
+- 2026-08-19 | Fixed — Enforce Role THERAPIST untuk Portal Terapis (Akses Tidak Bisa Bocor ke Role Lain)
+- 2026-08-19 | Added & Improved — Perombakan UI & UX Portal Terapis (StaffToday & StaffSchedule)
+- 2026-08-19 | Added & Improved — Boot Progress Bar & Retry Lebih Responsif (Mobile)
+- 2026-08-19 | Added & Improved — Sesi Survive PWA Android (Tidak Logout Saat Tutup Aplikasi)
+- 2026-08-19 | Added & Improved — Mobile UX Overhaul & Touch Ergonomics Dashboard Admin
+- 2026-08-19 | Fixed — Portal Terapis Sering Ter-logout saat Server Restart / Jaringan Gangguan
+- 2026-08-19 | Changed — Tombol Navigasi Peta Terapis dari Mode Mobil ke Sepeda (`travelmode=bicycling`)
+- 2026-08-19 | Fixed — Persistensi Sesi Login Admin & Perpanjangan TTL (Mencegah Sesi Cepat Ter-logout)
+- 2026-08-19 | Added — Manajemen Role & Setup Hak Akses Modul Dashboard (RBAC) Terpadu
+- 2026-08-19 | Added — Sequential Homecare Distance & Travel Duration Calculation for Therapist Itinerary
+- 2026-08-19 | Added — UI Kalender Modern (Week/Day/Month/Table) & Modal Buat Jadwal Baru Terpadu dengan
+- 2026-08-19 | Fixed — Route Mappings & Canonical Path Alignment in Admin Dashboard
+- 2026-08-19 | Added — Full Admin Dashboard UI Overhaul to WhatsApp Web Light & Clean Emerald Aesthetic
+- 2026-08-19 | Added — Tarik & Hapus Pesan WhatsApp untuk Semua Orang (Delete for Everyone / Revoke) & WA
+- 2026-08-19 | Added — WhatsApp Aesthetic Overhaul for Therapist Portal & Staff Management Actions
+- 2026-08-19 | Added — Unified Login & Role-Based Access Control (RBAC) Multirole
+- 2026-08-19 | Added — Enriched Therapist Portal (Alamat Lengkap, Anak, Harga, & Navigasi Turn-by-Turn)
+- 2026-08-19 | Fixed — Fase 8: Anti Hard-Selling FAQ, Batch Follow-Up & Media Webhook (Phase 1-4 hardenin
+- 2026-08-19 | Verifikasi Fase 8
+- 2026-08-19 | Fixed — Fase 1: Critical Bug Fixes (AI Chatbot Hardening)
+- 2026-08-19 | Fixed — Fase 2: Medical Detection Consolidation
+- 2026-08-19 | Added — Fase 3: LLM Gateway Abstraction
+- 2026-08-19 | Fixed — Fase 4: Tenant-Aware Model Registry
+- 2026-08-19 | Fixed — Fase 5: Error Handling Hardening
+- 2026-08-19 | Fixed — Fase 6: Router Signal Cleanup
+- 2026-08-19 | Fixed — Fase 7: Follow-up Engine Fixes
+- 2026-08-19 | Verifikasi
+- 2026-08-13 | [Unreleased] - 2026-08-13
+- 2026-08-13 | Fixed — Sanitasi Teks Meta / Pengantar LLM Phrasing Engine
+- 2026-08-13 | Fixed — Resilience LLM Response Generator (Fallback Plain Text Non-JSON)
+- 2026-08-13 | Added — Daily Chat Export: Rentang Tanggal (startDate & endDate)
+- 2026-08-13 | Fixed — Daily Chat Export: Feedback "0 Data" yang Menyesatkan
+- 2026-08-13 | Fixed — Dual Intent Handling (FAQ + Lokasi dalam 1 Pesan)
+- 2026-08-13 | Fixed — Atribusi Audit LLM (conversation_id & customer_phone) + Analisis Biaya per Bubble
+- 2026-08-13 | Fixed — Treatment Context & Greedy Catalog Match
+- 2026-08-13 | Fixed — Ejaan Desa Sawotratap (Gazetteer)
+- 2026-08-13 | Fixed — Unifikasi Greeting Header (Satu Sumber Kebenaran di `TEMPLATES`)
+- 2026-08-13 | Fixed — LLM Generator: Anti Raw-JSON Leak, Fallback Darurat Aman & Anti Hard-Sell CTA (+ R
+- 2026-08-13 | Added — Harness Uji Variasi Sesi Baru (Pesan Pembuka Sama)
+- 2026-08-13 | Added — Daily Chat Export (Markdown untuk Analisa AI)
+- 2026-08-13 | [1.13.0] - 2026-08-13
+- 2026-08-13 | Fixed & Enhanced
+- 2026-08-12 | [1.12.0] - 2026-08-12
+- 2026-08-12 | Changed & Fixed (Consolidated)
+- 2026-08-02 | [1.11.0] - 2026-08-02
+- 2026-08-02 | Added - AI Router Observability + UNKNOWN Repeated Escalation
+- 2026-08-02 | Notes - Environment / Deploy
+- 2026-08-02 | [1.10.0] — 2026-08-02
+- 2026-08-02 | Added — Structured Children + Dynamic Age Engine
+- 2026-08-02 | Added — Baby Details di Reservation Detail (Manage Modal)
+- 2026-08-02 | Added — AI Router Engine (Shadow-First, LLM Intent Classification)
+- 2026-08-01 | [1.9.0] — 2026-08-01
+- 2026-08-01 | Fixed — Reservation Text Parser (Wrapped & Double-Spaced Labels)
+- 2026-08-01 | Added — Personalized Treatment FAQ Follow-Up
+- 2026-08-01 | Fixed — Persona Language Strictness & Brand Enforcement
+- 2026-08-01 | Fixed — Sandbox UI Multiline Formatting & Input UX
+- 2026-08-01 | Fixed — CLI Simulator
+- 2026-08-01 | Test Suite Status
+- 2026-08-01 | [1.8.0] — 2026-08-01
+- 2026-08-01 | Added — Fase 2 Scheduling & Follow-Up Engine & UI
+- 2026-07-31 | [1.7.0] — 2026-07-31
+- 2026-07-31 | Added — UI Delivery Fee Tiering
+- 2026-07-31 | [1.6.0] — 2026-07-31
+- 2026-07-31 | Added — LLM Geocoding Fallback
+- 2026-07-31 | Added — NLU Model Configuration
+- 2026-07-31 | Added — Documentation
+- 2026-07-31 | Changed — Geocoding Flow
+- 2026-07-31 | Test Results
+- 2026-07-25 | [1.5.0] — 2026-07-25
+- 2026-07-25 | Fixed — Message Rewrite (Body Strip)
+- 2026-07-25 | Fixed — Migration Side Effects (Kritis)
+- 2026-07-25 | Changed — `generateTrackingCode()` Refactor
+- 2026-07-25 | Added — New Test Coverage
+- 2026-07-25 | Test Results
+- 2026-07-24 | [1.4.0] — 2026-07-24
+- 2026-07-24 | Added — WAHA Legacy Chat Migration Module
+- 2026-07-24 | Fixed
+- 2026-07-24 | Test Results
+- 2026-07-23 | [1.3.0] — 2026-07-23
+- 2026-07-23 | Added — Ad Click Attribution & Meta Conversions API (CAPI)
+- 2026-07-23 | Added — Click Catcher Microservice (`wa-click-catcher`)
+- 2026-07-23 | Test Results
+- 2026-07-22 | [1.2.0] — 2026-07-22
+- 2026-07-22 | Added — Security Hardening & Edge Case Coverage
+- 2026-07-22 | Fixed
+- 2026-07-22 | Test Results
+- 2026-07-21 | [1.1.0] — 2026-07-21
+- 2026-07-21 | Added — Conversation Engine Core
+- 2026-07-21 | Test Results
+- 2026-07-20 | [1.0.0] — 2026-07-20
+- 2026-07-20 | Added — Initial Project Setup
+- 2026-09-21 | Perbaikan Sistemik Sesi 89-Turn: State Persistence, Anti-Silent Handoff & Maternal Routing
