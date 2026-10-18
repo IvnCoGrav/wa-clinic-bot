@@ -495,6 +495,12 @@ export async function landingRoutes(fastify: FastifyInstance) {
         reply.type('application/javascript');
       } else if (filename.endsWith('.css')) {
         reply.type('text/css');
+      } else if (filename.endsWith('.svg')) {
+        reply.type('image/svg+xml');
+      } else if (filename.endsWith('.png')) {
+        reply.type('image/png');
+      } else if (filename.endsWith('.webp')) {
+        reply.type('image/webp');
       }
       return reply.send(content);
     } catch {

@@ -35,7 +35,9 @@
 
   /* ---------- Header ---------- */
   header.hero{text-align:center;padding:22px 0 14px}
-  .logo-mark{width:52px;height:52px;display:block;margin:0 auto 2px}
+  .logo-mark{width:52px;height:52px;display:flex;align-items:center;justify-content:center;margin:0 auto 2px;border-radius:14px}
+  .logo-mark img{width:100%;height:100%;object-fit:contain;display:block}
+  .logo-monogram{width:100%;height:100%;border-radius:14px;background:var(--peach-2);color:var(--accent);display:flex;align-items:center;justify-content:center;font-family:'Fredoka',sans-serif;font-size:24px;font-weight:700}
   .wordmark{font-family:'Fredoka',sans-serif;font-weight:700;font-size:46px;line-height:1;color:var(--peach);margin:0;letter-spacing:.5px}
   .tagline{font-family:'Fredoka',sans-serif;font-weight:600;font-size:16px;color:var(--accent);margin:4px 0 0}
   .hero h1.title{font-family:'Fredoka',sans-serif;font-weight:600;font-size:22px;margin:16px 0 4px}
@@ -228,19 +230,271 @@
   }
 
   :focus-visible{outline:3px solid var(--accent);outline-offset:2px}
-  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
+
+  /* ---------- Floating Promo Badge ---------- */
+  .promo-badge {
+    position: fixed;
+    right: 18px;
+    bottom: calc(20px + env(safe-area-inset-bottom));
+    z-index: 45;
+    display: flex;
+    align-items: center;
+    background: #fff;
+    border: 1.5px solid var(--peach-2);
+    border-radius: 999px;
+    padding: 6px 10px 6px 6px;
+    box-shadow: 0 8px 24px rgba(43,26,19,.12), 0 2px 6px rgba(43,26,19,.06);
+    opacity: 0;
+    transform: translateY(30px) scale(.85);
+    pointer-events: none;
+    transition: opacity .35s cubic-bezier(.16,1,.3,1), transform .35s cubic-bezier(.16,1,.3,1), bottom .25s ease;
+  }
+  .promo-badge.show {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+    animation: promoFloat 3s ease-in-out infinite;
+  }
+  @keyframes promoFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+  }
+  body.drawer-open .promo-badge {
+    bottom: calc(104px + env(safe-area-inset-bottom));
+  }
+  .promo-badge-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: transparent;
+    border: none;
+    padding: 0 4px 0 0;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+    min-height: 44px;
+  }
+  .promo-badge-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #FFBE9C, #FBB697);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .promo-badge-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.25;
+  }
+  .promo-badge-text strong {
+    font-family: 'Fredoka', sans-serif;
+    font-size: 13.5px;
+    color: var(--accent);
+  }
+  .promo-badge-text small {
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .promo-badge-close {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    font-size: 14px;
+    cursor: pointer;
+    border-radius: 50%;
+    margin-left: 2px;
+    transition: background .15s ease, color .15s ease;
+  }
+  .promo-badge-close:hover {
+    background: var(--peach-3);
+    color: var(--ink);
+  }
+
+  /* ---------- Promo Dialog Modal ---------- */
+  .promo-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .25s ease;
+  }
+  .promo-modal.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .promo-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(43,26,19,.55);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+  }
+  .promo-dialog {
+    position: relative;
+    background: #fff;
+    width: 100%;
+    max-width: 440px;
+    border-radius: 24px;
+    padding: 22px;
+    box-shadow: 0 20px 40px rgba(43,26,19,.24);
+    border: 1px solid var(--peach-2);
+    transform: translateY(20px) scale(.95);
+    transition: transform .3s cubic-bezier(.16,1,.3,1);
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+  }
+  .promo-modal.open .promo-dialog {
+    transform: none;
+  }
+  .promo-dialog-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .promo-dialog-badge {
+    background: var(--peach-3);
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 999px;
+  }
+  .promo-dialog-close {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    font-size: 16px;
+    color: var(--muted);
+    cursor: pointer;
+    border-radius: 50%;
+  }
+  .promo-dialog-close:hover {
+    background: var(--peach-3);
+    color: var(--ink);
+  }
+  .promo-modal-title {
+    font-family: 'Fredoka', sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--ink);
+    margin: 0 0 6px;
+    line-height: 1.25;
+  }
+  .promo-modal-desc {
+    font-size: 13.5px;
+    color: var(--muted);
+    margin: 0 0 16px;
+    line-height: 1.4;
+  }
+  .promo-rules-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .promo-rule-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    background: #FFF9F4;
+    border: 1px solid var(--peach-3);
+    padding: 10px 12px;
+    border-radius: 14px;
+  }
+  .promo-rule-num {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #FFBE9C;
+    color: #4A1D0B;
+    font-size: 12px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .promo-rule-text {
+    flex: 1;
+    font-size: 13px;
+    line-height: 1.35;
+    color: var(--ink);
+  }
+  .promo-rule-text strong {
+    display: block;
+    color: var(--accent);
+    margin-bottom: 2px;
+  }
+  .promo-dialog-foot {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .promo-claim-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: var(--wa);
+    color: #fff;
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 15px;
+    min-height: 48px;
+    border-radius: 999px;
+    transition: background .15s ease, transform .1s ease;
+  }
+  .promo-claim-btn:active {
+    background: #0e6e3a;
+    transform: scale(.98);
+  }
+  .promo-dismiss-btn {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+    min-height: 44px;
+    cursor: pointer;
+  }
+  .promo-dismiss-btn:hover {
+    color: var(--ink);
+  }
+
+  @media (prefers-reduced-motion:reduce){
+    html{scroll-behavior:auto}
+    *{transition:none!important}
+    .promo-badge{animation:none!important;transition:none!important}
+    .promo-dialog{transition:none!important}
+  }
 </style>
 </head>
 <body>
 
 <div class="wrap">
   <header class="hero">
-    <!-- Logo Kala Moms and Baby Spa -->
-    <svg class="logo-mark" viewBox="0 0 60 60" fill="none" aria-hidden="true">
-      <path d="M44 9A22 22 0 1 0 44 51A20 20 0 0 1 44 9" stroke="#FFBE9C" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-      <circle cx="31" cy="27" r="5.5" fill="#FFBE9C"/>
-      <path d="M22 40c6 4 14 2 19-4" stroke="#FFBE9C" stroke-width="4.5" stroke-linecap="round"/>
-    </svg>
+    <!-- Logo Brand Dinamis / Monogram Fallback -->
+    <div class="logo-mark" id="brandLogo" aria-hidden="true"></div>
     <p class="wordmark">Kala</p>
     <p class="tagline">Moms and Baby Spa</p>
     <h1 class="title">Pricelist Homecare</h1>
@@ -318,6 +572,38 @@
   </div>
 </div>
 
+<!-- Floating Promo Badge (Data-Driven) -->
+<aside id="promoBadge" class="promo-badge" role="complementary" aria-label="Penawaran" hidden>
+  <button type="button" id="promoBadgeBtn" class="promo-badge-btn" aria-haspopup="dialog" aria-controls="promoModal">
+    <span class="promo-badge-icon" aria-hidden="true">🎁</span>
+    <span class="promo-badge-text"><strong id="promoBadgeTitle"></strong><small id="promoBadgeSubtitle"></small></span>
+  </button>
+  <button type="button" class="promo-badge-close" id="promoBadgeClose" aria-label="Tutup penawaran">✕</button>
+</aside>
+
+<!-- Promo Rules Modal (Data-Driven + Aksesibel) -->
+<div id="promoModal" class="promo-modal" role="dialog" aria-modal="true" aria-hidden="true" hidden>
+  <div class="promo-backdrop" id="promoBackdrop"></div>
+  <div class="promo-dialog" role="document">
+    <div class="promo-dialog-head">
+      <div class="promo-dialog-badge">🎁 Penawaran Spesial</div>
+      <button type="button" class="promo-dialog-close" id="promoModalClose" aria-label="Tutup syarat promo">✕</button>
+    </div>
+    <h2 class="promo-modal-title" id="promoModalTitle"></h2>
+    <p class="promo-modal-desc" id="promoModalDesc"></p>
+
+    <div class="promo-rules-list" id="promoRulesList"></div>
+
+    <div class="promo-dialog-foot">
+      <a href="#" id="promoClaimBtn" class="promo-claim-btn" target="_blank" rel="noopener">
+        <span>Klaim ke WhatsApp</span>
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91C2.13 13.66 2.59 15.36 3.45 16.86L2.05 22L7.3 20.62C8.75 21.41 10.38 21.83 12.04 21.83C17.5 21.83 21.95 17.38 21.95 11.92C21.95 9.27 20.92 6.78 19.05 4.91C17.18 3.04 14.69 2 12.04 2M12.05 3.67C14.25 3.67 16.31 4.53 17.87 6.09C19.42 7.65 20.28 9.72 20.28 11.92C20.28 16.46 16.58 20.16 12.04 20.16C10.56 20.16 9.11 19.76 7.85 19L7.55 18.83L4.43 19.65L5.26 16.61L5.06 16.29C4.24 14.99 3.8 13.47 3.8 11.91C3.81 7.37 7.5 3.67 12.05 3.67Z"/></svg>
+      </a>
+      <button type="button" id="promoDismissBtn" class="promo-dismiss-btn">Nanti Saja</button>
+    </div>
+  </div>
+</div>
+
 <script>
   /* ============ DATA DINAMIS (Single Source of Truth: DB) ============
      Payload katalog disuntik server ke #pricelist-data (server-side hydration).
@@ -327,6 +613,20 @@
   let PHONE = '';
   let SECTIONS = [];
   let BOT_NAME = 'Bidan';
+  let PROMO = null;
+
+  function renderBrandLogo(b){
+    const el = document.getElementById('brandLogo');
+    if(!el) return;
+    const logoUrl = b && b.logoUrl ? String(b.logoUrl).trim() : '';
+    if(logoUrl){
+      el.innerHTML = '<img src="' + logoUrl.replace(/"/g, '&quot;') + '" alt="" loading="lazy">';
+    } else {
+      const name = (b && b.businessName ? b.businessName : 'K').trim();
+      const initial = name ? name.charAt(0).toUpperCase() : 'K';
+      el.innerHTML = '<div class="logo-monogram">' + initial + '</div>';
+    }
+  }
 
   function applyBrand(b){
     if(!b) return;
@@ -346,7 +646,10 @@
     if(!data || !Array.isArray(data.sections) || data.sections.length === 0) return false;
     PHONE = String(data.whatsapp_number || '').replace(/\D/g,'');
     SECTIONS = data.sections;
+    PROMO = data.promo || { enabled: false };
     applyBrand(data.brand);
+    renderBrandLogo(data.brand);
+    initPromo();
     return true;
   }
 
@@ -467,6 +770,7 @@
     // Buka Slide-up Drawer
     $ctaDrawer.classList.add('active');
     $ctaDrawer.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('drawer-open');
   }
 
   function clearSelection(){
@@ -477,6 +781,7 @@
     });
     $ctaDrawer.classList.remove('active');
     $ctaDrawer.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('drawer-open');
   }
 
   /* ============ EVENT LISTENERS ============ */
@@ -527,6 +832,161 @@
   }
   document.getElementById('askBtn').addEventListener('click', () => window.open(waLink(generalMsg()), '_blank', 'noopener'));
 
+  /* ============ PROMOSI DISKON & MODAL ATURAN (DATA-DRIVEN) ============ */
+  function escapeHtml(str){
+    if(!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  let promoTimer = null;
+  let promoLastFocused = null;
+
+  function initPromo(){
+    const badge = document.getElementById('promoBadge');
+    if(!PROMO || !PROMO.enabled){
+      if(badge) badge.hidden = true;
+      return;
+    }
+
+    try {
+      if(sessionStorage.getItem('kala.promo.dismissed') === 'true'){
+        if(badge) badge.hidden = true;
+        return;
+      }
+    } catch(e){}
+
+    const bTitle = document.getElementById('promoBadgeTitle');
+    const bSubtitle = document.getElementById('promoBadgeSubtitle');
+
+    if(bTitle) bTitle.textContent = PROMO.badgeTitle || ('Diskon ' + PROMO.discountPercent + '%');
+    if(bSubtitle) bSubtitle.textContent = PROMO.badgeSubtitle || 'Klaim Penawaran';
+
+    const delayMs = Math.max(0, Number(PROMO.delaySeconds) || 0) * 1000;
+    if(promoTimer) clearTimeout(promoTimer);
+    promoTimer = setTimeout(() => {
+      if(badge && !badge.classList.contains('dismissed')){
+        badge.hidden = false;
+        void badge.offsetWidth;
+        badge.classList.add('show');
+      }
+    }, delayMs);
+  }
+
+  function dismissPromoBadge(){
+    const badge = document.getElementById('promoBadge');
+    if(badge){
+      badge.classList.remove('show');
+      badge.classList.add('dismissed');
+      setTimeout(() => { badge.hidden = true; }, 350);
+    }
+    try {
+      sessionStorage.setItem('kala.promo.dismissed', 'true');
+    } catch(e){}
+  }
+
+  function renderModal(){
+    if(!PROMO) return;
+    const titleEl = document.getElementById('promoModalTitle');
+    const descEl = document.getElementById('promoModalDesc');
+    const listEl = document.getElementById('promoRulesList');
+    const claimBtn = document.getElementById('promoClaimBtn');
+
+    if(titleEl) titleEl.textContent = PROMO.modalTitle || ('Penawaran Spesial Diskon ' + PROMO.discountPercent + '%');
+    if(descEl) descEl.textContent = PROMO.modalDescription || 'Ikuti langkah berikut untuk mendapatkan potongan harga treatment:';
+
+    if(listEl){
+      const rules = Array.isArray(PROMO.rules) && PROMO.rules.length > 0 ? PROMO.rules : [];
+      listEl.innerHTML = rules.map((r, i) =>
+        '<div class="promo-rule-item">' +
+          '<div class="promo-rule-num" aria-hidden="true">' + (i + 1) + '</div>' +
+          '<div class="promo-rule-text">' +
+            (r.title ? '<strong>' + escapeHtml(r.title) + '</strong>' : '') +
+            '<span>' + escapeHtml(r.body) + '</span>' +
+          '</div>' +
+        '</div>'
+      ).join('');
+    }
+
+    if(claimBtn){
+      const template = PROMO.claimMessageTemplate || 'Halo ' + BOT_NAME + ', saya ingin klaim promo diskon {discount}% setelah follow IG @{instagram}. Boleh dibantu info slot jadwal yang tersedia? Terima kasih 🙏😊';
+      const text = template
+        .replace(/\{discount\}/g, String(PROMO.discountPercent))
+        .replace(/\{instagram\}/g, String(PROMO.instagramAccount || ''));
+      claimBtn.href = waLink(text);
+    }
+  }
+
+  function openPromoModal(){
+    promoLastFocused = document.activeElement;
+    renderModal();
+    const modal = document.getElementById('promoModal');
+    if(modal){
+      modal.hidden = false;
+      void modal.offsetWidth;
+      modal.classList.add('open');
+      modal.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+      const closeBtn = document.getElementById('promoModalClose');
+      if(closeBtn) closeBtn.focus();
+    }
+  }
+
+  function closePromoModal(){
+    const modal = document.getElementById('promoModal');
+    if(modal){
+      modal.classList.remove('open');
+      modal.setAttribute('aria-hidden', 'true');
+      setTimeout(() => { modal.hidden = true; }, 250);
+    }
+    document.body.style.overflow = '';
+    if(promoLastFocused && typeof promoLastFocused.focus === 'function'){
+      promoLastFocused.focus();
+    }
+  }
+
+  const $promoBadgeBtn = document.getElementById('promoBadgeBtn');
+  const $promoBadgeClose = document.getElementById('promoBadgeClose');
+  const $promoModalClose = document.getElementById('promoModalClose');
+  const $promoDismissBtn = document.getElementById('promoDismissBtn');
+  const $promoBackdrop = document.getElementById('promoBackdrop');
+
+  if($promoBadgeBtn) $promoBadgeBtn.addEventListener('click', openPromoModal);
+  if($promoBadgeClose) $promoBadgeClose.addEventListener('click', (e) => { e.stopPropagation(); dismissPromoBadge(); });
+  if($promoModalClose) $promoModalClose.addEventListener('click', closePromoModal);
+  if($promoDismissBtn) $promoDismissBtn.addEventListener('click', closePromoModal);
+  if($promoBackdrop) $promoBackdrop.addEventListener('click', closePromoModal);
+
+  window.addEventListener('keydown', (e) => {
+    const modal = document.getElementById('promoModal');
+    if(!modal || modal.hidden || !modal.classList.contains('open')) return;
+
+    if(e.key === 'Escape'){
+      e.preventDefault();
+      closePromoModal();
+      return;
+    }
+
+    if(e.key === 'Tab'){
+      const focusables = modal.querySelectorAll('button:not([disabled]), a[href]:not([disabled])');
+      if(!focusables.length) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+
+      if(e.shiftKey && document.activeElement === first){
+        e.preventDefault();
+        last.focus();
+      } else if(!e.shiftKey && document.activeElement === last){
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  });
+
   // Hidrasi data: pakai payload server-side yang disuntik; jika tidak ada
   // (mis. file dibuka statis), fallback graceful ke GET /api/pricelist.
   function bootstrap(){
@@ -549,6 +1009,7 @@
       .catch(() => {});
   }
 
+  renderBrandLogo(null);
   bootstrap();
   refreshGeneralLinks();
   renderTabs();

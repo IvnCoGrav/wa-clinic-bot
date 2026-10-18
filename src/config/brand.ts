@@ -21,6 +21,7 @@ export interface BrandIdentity {
   businessName: string;
   serviceType: string;
   addressTermForCustomer: string;
+  logoUrl?: string;
 }
 
 export const DEFAULT_BRAND_IDENTITY: BrandIdentity = {
@@ -58,11 +59,15 @@ export async function getBrandIdentityAsync(tenantId: string = DEFAULT_TENANT_ID
     if (override && typeof override === 'object') {
       const pick = (v: any, fallback: string) =>
         typeof v === 'string' && v.trim() ? v.trim() : fallback;
+      const logoUrl = typeof override.logoUrl === 'string' && override.logoUrl.trim()
+        ? override.logoUrl.trim()
+        : undefined;
       resolved = {
         botDisplayName: pick(override.botDisplayName, resolved.botDisplayName),
         businessName: pick(override.businessName, resolved.businessName),
         serviceType: pick(override.serviceType, resolved.serviceType),
         addressTermForCustomer: pick(override.addressTermForCustomer, resolved.addressTermForCustomer),
+        ...(logoUrl ? { logoUrl } : {}),
       };
     }
   } catch (err: any) {

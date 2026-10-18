@@ -5,6 +5,38 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+#### 2026-10-18 - Feat: Logo Tenant-Aware & Floating Promo Diskon Interaktif pada Halaman Pricelist Publik
+
+- **Akar Masalah & Kebutuhan Arsitektur**:
+  - Halaman publik `/pricelist` sebelumnya menyajikan markup SVG logo Kala secara statis dan kaku di template HTML, melanggar prinsip multi-tenant (SaaS-readiness).
+  - Belum tersedia mekanisme penawaran promosi diskon interaktif yang fleksibel dan data-driven untuk mengonversi pengunjung landing page pricelist menjadi chat prospek di WhatsApp tanpa hardcode data bisnis.
+- **Model Data & Seam Config (`src/config/pricelist-promo.ts` & `src/config/brand.ts`)**:
+  - Konfigurasi promo disimpan secara tenant-aware pada kolom JSON `Tenant.settings.promo` (**tanpa migrasi schema DB**), dengan default netral & nonaktif (`enabled: false`).
+  - Menyediakan sanitizer & boundary clamp: `discountPercent` (0..100%), `delaySeconds` (0..60 detik), strip `@` pada akun Instagram, pembersihan whitespace, serta validasi rules array.
+  - Memperluas `BrandIdentity` dengan `logoUrl?: string` yang dibaca secara dinamis dari `Tenant.settings.brand.logoUrl` dengan in-memory caching per-tenant.
+  - Menghubungkan promo ke payload server-side di `src/services/pricelist.service.ts` (`getPricelistPayload` -> `promo`).
+  - Menambahkan aset logo resmi `/assets/kala-logo.svg` dengan warna `#FFBE9C` konsisten palet warm `--peach`, disajikan via endpoint statis `/assets/:filename` dengan header MIME `image/svg+xml`.
+- **Backend Admin API (`src/routes/admin/settings.subroute.ts`)**:
+  - Endpoint `GET /api/admin/settings/pricelist-promo`: mengambil konfigurasi promo pricelist, logo brand aktif, dan default value.
+  - Endpoint `PUT /api/admin/settings/pricelist-promo`: memvalidasi URL logo (wajib http/https atau path `/assets/*`), melakukan sanitasi promo, merge atomik ke `Tenant.settings`, membersihkan in-memory cache, dan mencatat audit log `UPDATE_PRICELIST_PROMO_SETTINGS`.
+- **Frontend Dashboard (`packages/admin-dashboard`)**:
+  - Komponen baru `PricelistPromoPanel.tsx`: mengelola logo publik (dengan pratinjau langsung & opsi logo Kala), saklar promo (`ToggleSwitch`), delay detik, persentase diskon, akun Instagram, judul & subjudul badge, judul & deskripsi modal, editor syarat & ketentuan dinamis (tambah/hapus rule), serta template pesan klaim WhatsApp dengan variabel `{discount}` dan `{instagram}`.
+  - Dimuat di halaman `Settings.tsx` pada kategori `META_MARKETING` (konsolidasi modul, tanpa bloat rute baru).
+- **Template Publik (`src/landing/public/pricelist.html`)**:
+  - Menghapus SVG Kala hardcoded; menggantikannya dengan `#brandLogo` dinamis yang merender `<img>` bila `brand.logoUrl` tersedia atau monogram inisial nama bisnis bila logo tidak diatur.
+  - Floating Badge `#promoBadge`: muncul mengambang dengan animasi bob halus setelah `delaySeconds`, adaptif terhadap drawer pemilihan layanan (`body.drawer-open`), dan mendukung penutupan sesi via `sessionStorage`.
+  - Pop-up Modal `#promoModal`: kartu penawaran rounded-3xl elegan dengan backdrop blur, nomor urut kontras tinggi, focus-trap keyboard (Tab terkurung & Escape untuk menutup), tombol klaim otomatis terhubung ke WhatsApp dengan pesan terinterpolasi, dan kepatuhan penuh `prefers-reduced-motion: reduce`.
+- **Pengujian & Regresi**:
+  - `tests/unit/pricelist-promo-config.test.ts` (7 tests): uji boundary clamp sanitizer, penanganan nilai anomali/null, pembersihan string, dan mekanisme in-memory caching.
+  - `tests/integration/pricelist-promo-admin.test.ts` (3 tests): verifikasi GET/PUT endpoint admin, penolakan format URL logo tak valid (400), dan pembaruan pengaturan DB yang persisten.
+  - `tests/integration/pricelist-dynamic.test.ts` (17 tests): verifikasi hidrasi promo aktif, fallback saat nonaktif/DB offline, isolasi multi-tenant antar slug klinik, proteksi adversarial XSS tag `</script>`, serta penyajian aset SVG `/assets/kala-logo.svg`.
+  - Gerbang regresi: `npm run build` backend root exit 0; `npm run build` admin-dashboard exit 0; 27 tests terkait 100% hijau.
+- **Dokumentasi**:
+  - `docs/KNOWN_ISSUES.md`: menambahkan issue #268 mengenai ketiadaan rute/UI terdedikasi untuk `settings.brand` secara penuh (logo ditumpangkan di endpoint promo).
+  - `docs/SAAS_READINESS_AUDIT.md`: memperbarui status kesiapan SaaS untuk modul promo pricelist dan brand logo tenant-aware.
+  - `docs/changelog/INDEX.md`: diregenerasi via `node scripts/make-changelog-index.mjs --write`.
+
+
 #### 2026-10-18 - Fix: Tindak Lanjut Audit Alamat (Flaky Test Timeout, Hardening API Buku Alamat, Konsistensi Chip Alamat Staf & Verifikasi Sheets F-7)
 
 - **Akar masalah**: ronde audit pasca S-1..S-5 menyisakan 3 timeout flaky saat full-suite penuh (bukan regresi logika), route buku alamat menelan error tak terduga sebagai 500 generik sambil membocorkan `err.message`, `label` alamat tak berbatas panjang, chip provenance alamat tidak konsisten antar tab staf, dan klaim F-7 (Sheets basi) belum diverifikasi terhadap kode nyata.

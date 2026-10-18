@@ -16,6 +16,7 @@
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { BrandIdentity, getBrandIdentityAsync } from '../config/brand';
+import { getPricelistPromoConfigAsync, PricelistPromoConfig } from '../config/pricelist-promo';
 import { treatmentCatalogService, ClinicServiceItem, TreatmentCategoryType } from './treatment-catalog.service';
 
 export type PricelistVariantTuple = [age: number | string, promo: number, orig: number];
@@ -49,6 +50,7 @@ export interface PricelistPayload {
   tenantId: string;
   slug: string;
   brand: BrandIdentity;
+  promo: PricelistPromoConfig;
   whatsapp_number: string;
   sections: PricelistSection[];
 }
@@ -349,6 +351,7 @@ export async function getPricelistPayload(
   }
 
   const brand = await getBrandIdentityAsync(tenantId);
+  const promo = await getPricelistPromoConfigAsync(tenantId);
   const whatsapp_number = await resolveWhatsappNumber(tenantId, opts.whatsappFallback);
   const brandPrefix = brandPrefixOf(brand.businessName);
 
@@ -356,6 +359,7 @@ export async function getPricelistPayload(
     tenantId,
     slug: opts.slug || 'default',
     brand,
+    promo,
     whatsapp_number,
     sections: buildSections(services, brandPrefix),
   };

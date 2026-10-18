@@ -3,6 +3,17 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 268. [Brand Identity / Settings] Ketiadaan Route & UI Tulis Terdedikasi untuk `settings.brand` (2026-10-18, OPEN)
+
+- **Status:** OPEN (Keputusan arsitektur sadar dari implementasi logo tenant-aware & promo pricelist).
+- **Gejala / Akar Masalah:**
+  - Belum ada rute admin terdedikasi `PUT /api/admin/settings/brand` atau UI form tersendiri di admin dashboard untuk mengelola seluruh atribut `BrandIdentity` (`businessName`, `botDisplayName`, `serviceType`, `addressTermForCustomer`).
+  - Untuk kebutuhan logo publik landing page pricelist, `brandLogoUrl` disimpan di `Tenant.settings.brand.logoUrl` dan saat ini diperbarui lewat endpoint promo pricelist (`GET|PUT /api/admin/settings/pricelist-promo`).
+- **Akibat:**
+  - Pembaruan logo brand publik menyatu dengan panel pengaturan promo pricelist di dashboard (`PricelistPromoPanel.tsx`). Atribut brand lainnya (seperti `businessName` dan `botDisplayName`) tetap dibaca dari `Tenant.settings.brand` tetapi belum memiliki form editor visual di dashboard.
+- **Rencana Tindak Lanjut / Solusi:**
+  - Saat modul manajemen tenant multi-tenant diperluas, sediakan panel "Identitas Brand & Klinik" terpusat di dashboard dengan rute mandiri `GET|PUT /api/admin/settings/brand` untuk mengelola seluruh field brand identity.
+
 ## 267. [Media Storage] `qrisImageUrl` Belum Terproteksi dari Pruning & Retensi Media di `media.service.ts` (2026-10-18, OPEN)
 
 - **Status:** OPEN (Temuan CG-2 dari audit Quick Replies Media SSOT).

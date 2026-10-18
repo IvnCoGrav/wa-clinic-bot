@@ -13,6 +13,8 @@ import {
   serializePayloadForHtml,
   getPricelistPayload,
 } from '../../src/services/pricelist.service';
+import { __clearPricelistPromoCacheForTest } from '../../src/config/pricelist-promo';
+import { __clearBrandCacheForTest } from '../../src/config/brand';
 
 /**
  * Integrasi dinamis Pricelist Landing Page:
@@ -98,6 +100,7 @@ describe('Pricelist dinamis — transformer (unit, data-driven)', () => {
       tenantId: 't',
       slug: 'default',
       brand: { botDisplayName: 'B', businessName: 'X', serviceType: 's', addressTermForCustomer: 'Bunda' },
+      promo: { enabled: false, delaySeconds: 5, discountPercent: 0, instagramAccount: '', badgeTitle: '', badgeSubtitle: '', modalTitle: '', modalDescription: '', rules: [], claimMessageTemplate: '' },
       whatsapp_number: '628',
       sections: [
         {
@@ -106,7 +109,7 @@ describe('Pricelist dinamis — transformer (unit, data-driven)', () => {
         },
       ],
     };
-    const out = serializePayloadForHtml(payload);
+    const out = serializePayloadForHtml(payload as any);
     expect(out).not.toContain('</script>');
     expect(out).toContain('\\u003c/script');
   });
@@ -117,6 +120,8 @@ describe('Pricelist dinamis — route & API (offline DB)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    __clearPricelistPromoCacheForTest();
+    __clearBrandCacheForTest();
     process.env.ADMIN_API_KEY = 'test_admin_key_999';
     process.env.DEFAULT_WHATSAPP_PHONE = '6281234567890';
     vi.mocked(prisma.landingPage.findFirst).mockResolvedValue(null as any);
@@ -253,5 +258,151 @@ describe('Pricelist dinamis — route & API (offline DB)', () => {
     const payload = await getPricelistPayload(DEFAULT_TENANT_ID, { slug: 'default', whatsappFallback: '628000' });
     expect(payload.sections.length).toBeGreaterThan(0);
     expect(payload.brand.businessName).toBeTruthy();
+    expect(payload.promo).toBeDefined();
+    expect(payload.promo.enabled).toBe(false);
+  });
+
+  it('8. Promo aktif & brand logo: payload memuat promo dan logo, HTML berisi markup', async () => {
+    vi.mocked(prisma.tenant.findUnique).mockResolvedValue({
+      id: DEFAULT_TENANT_ID,
+      whatsapp_number: '628111222333',
+      settings: {
+        promo: {
+          enabled: true,
+          delaySeconds: 5,
+          discountPercent: 10,
+          instagramAccount: 'kalababyspa',
+          badgeTitle: 'Spesial 10%',
+          badgeSubtitle: 'Follow IG Kami',
+          modalTitle: 'Syarat Promo',
+          modalDescription: 'Ikuti langkah berikut',
+          rules: [{ title: 'Follow', body: 'Follow IG @kalababyspa' }],
+          claimMessageTemplate: 'Klaim diskon {discount}% IG @{instagram}',
+        },
+        brand: {
+          businessName: 'Kala Baby Spa',
+          logoUrl: '/assets/kala-logo.svg',
+        },
+      },
+    } as any);
+
+    const res = await app.inject({ method: 'GET', url: '/pricelist' });
+    expect(res.statusCode).toBe(200);
+
+    const body = res.body;
+    expect(body).toContain('id="brandLogo"');
+    expect(body).toContain('id="promoBadge"');
+    expect(body).toContain('id="promoModal"');
+
+    const payload = extractInjectedPayload(body);
+    expect(payload.promo.enabled).toBe(true);
+    expect(payload.promo.discountPercent).toBe(10);
+    expect(payload.promo.instagramAccount).toBe('kalababyspa');
+    expect(payload.brand.logoUrl).toBe('/assets/kala-logo.svg');
+    expect(payload.brand.businessName).toBe('Kala Baby Spa');
+  });
+
+  it('9. Promo nonaktif: promo.enabled false dan tidak melempar error', async () => {
+    vi.mocked(prisma.tenant.findUnique).mockResolvedValue({
+      id: DEFAULT_TENANT_ID,
+      settings: {
+        promo: {
+          enabled: false,
+          discountPercent: 15,
+        },
+      },
+    } as any);
+
+    const res = await app.inject({ method: 'GET', url: '/api/pricelist' });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.data.promo.enabled).toBe(false);
+  });
+
+  it('10. Isolasi multi-tenant: slug partner membaca promo & logo milik tenant partner', async () => {
+    vi.mocked(prisma.landingPage.findFirst).mockResolvedValueOnce({
+      id: 'lp-partner',
+      tenant_id: 'tenant-partner-spa',
+      slug: 'partner-spa',
+      title: 'Partner Spa',
+      landing_type: 'STRUCTURED_JSON',
+      html_content: null,
+      structured_content: null,
+      events: [],
+      meta_pixel_id: null,
+      whatsapp_number: '62888999111',
+      is_active: true,
+    } as any);
+
+    vi.mocked(prisma.tenant.findUnique).mockImplementation(async (args: any) => {
+      if (args.where?.id === 'tenant-partner-spa') {
+        return {
+          id: 'tenant-partner-spa',
+          whatsapp_number: '62888999111',
+          settings: {
+            promo: {
+              enabled: true,
+              discountPercent: 25,
+              instagramAccount: 'partnerspa',
+            },
+            brand: {
+              businessName: 'Partner Baby Spa',
+              logoUrl: 'https://cdn.example.com/partner-logo.png',
+            },
+          },
+        } as any;
+      }
+      return null;
+    });
+
+    const res = await app.inject({ method: 'GET', url: '/api/pricelist?slug=partner-spa' });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.data.tenantId).toBe('tenant-partner-spa');
+    expect(body.data.promo.enabled).toBe(true);
+    expect(body.data.promo.discountPercent).toBe(25);
+    expect(body.data.promo.instagramAccount).toBe('partnerspa');
+    expect(body.data.brand.logoUrl).toBe('https://cdn.example.com/partner-logo.png');
+    expect(body.data.brand.businessName).toBe('Partner Baby Spa');
+  });
+
+  it('11. Adversarial XSS: promo fields dengan tag </script> ter-escape aman', () => {
+    const evilPayload = {
+      tenantId: 'evil-tenant',
+      slug: 'default',
+      brand: {
+        botDisplayName: 'Bidan',
+        businessName: 'Kala Spa',
+        serviceType: 'Homecare',
+        addressTermForCustomer: 'Bunda',
+        logoUrl: '</script><script>alert(1)</script>',
+      },
+      promo: {
+        enabled: true,
+        delaySeconds: 5,
+        discountPercent: 10,
+        instagramAccount: 'kala',
+        badgeTitle: '</script><script>alert("badge")</script>',
+        badgeSubtitle: 'Sub',
+        modalTitle: '</script><script>alert("modal")</script>',
+        modalDescription: 'Desc',
+        rules: [{ title: '</script>', body: '<script>evil()</script>' }],
+        claimMessageTemplate: 'Klaim {discount}%',
+      },
+      whatsapp_number: '6281234567890',
+      sections: [],
+    };
+
+    const out = serializePayloadForHtml(evilPayload as any);
+    expect(out).not.toContain('</script>');
+    expect(out).toContain('\\u003c/script');
+  });
+
+  it('12. /assets/:filename menyajikan aset SVG dengan tipe konten image/svg+xml', async () => {
+    const res = await app.inject({ method: 'GET', url: '/assets/kala-logo.svg' });
+    expect(res.statusCode).toBe(200);
+    expect(String(res.headers['content-type'])).toContain('image/svg+xml');
+    expect(res.body).toContain('xmlns="http://www.w3.org/2000/svg"');
+    expect(res.body).toContain('#FFBE9C');
   });
 });

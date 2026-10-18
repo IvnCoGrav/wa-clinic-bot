@@ -260,6 +260,140 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * GET /api/admin/settings/pricelist-promo
+   * Mengambil konfigurasi promo pricelist & logo brand tenant.
+   */
+  fastify.get('/api/admin/settings/pricelist-promo', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const tenantId = resolveTenantId(request);
+      const {
+        getPricelistPromoConfigAsync,
+        DISABLED_PRICELIST_PROMO,
+      } = await import('../../config/pricelist-promo');
+
+      const tenant = await (prisma as any).tenant.findUnique({
+        where: { id: tenantId },
+        select: { settings: true },
+      });
+      const currentSettings = (tenant?.settings as any) || {};
+      const brandLogoUrl = currentSettings.brand?.logoUrl || null;
+      const promo = await getPricelistPromoConfigAsync(tenantId);
+
+      return reply.status(200).send({
+        success: true,
+        data: {
+          promo,
+          brandLogoUrl,
+          defaults: DISABLED_PRICELIST_PROMO,
+        },
+      });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message });
+    }
+  });
+
+  /**
+   * PUT /api/admin/settings/pricelist-promo
+   * Memperbarui konfigurasi promo pricelist & logo brand tenant.
+   */
+  fastify.put(
+    '/api/admin/settings/pricelist-promo',
+    async (
+      request: FastifyRequest<{
+        Body: {
+          promo?: any;
+          brandLogoUrl?: string | null;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      try {
+        const tenantId = resolveTenantId(request);
+        const { promo, brandLogoUrl } = request.body || {};
+
+        if (brandLogoUrl !== undefined && brandLogoUrl !== null) {
+          const trimmedLogo = typeof brandLogoUrl === 'string' ? brandLogoUrl.trim() : '';
+          if (trimmedLogo) {
+            const isValid = /^https?:\/\//i.test(trimmedLogo) || /^\/assets\/[a-zA-Z0-9._-]+$/i.test(trimmedLogo);
+            if (!isValid) {
+              return reply.status(400).send({
+                success: false,
+                error: 'brandLogoUrl harus berupa URL publik (http/https) atau path /assets/...',
+              });
+            }
+          }
+        }
+
+        const {
+          sanitizePricelistPromoConfig,
+          DISABLED_PRICELIST_PROMO,
+          __clearPricelistPromoCacheForTest,
+        } = await import('../../config/pricelist-promo');
+        const { __clearBrandCacheForTest } = await import('../../config/brand');
+
+        const tenant = await (prisma as any).tenant.findUnique({
+          where: { id: tenantId },
+          select: { settings: true },
+        });
+
+        const currentSettings = (tenant?.settings as Record<string, any>) || {};
+        const existingBrand = currentSettings.brand || {};
+        const updatedBrand = { ...existingBrand };
+
+        if (brandLogoUrl !== undefined) {
+          if (brandLogoUrl === null || (typeof brandLogoUrl === 'string' && !brandLogoUrl.trim())) {
+            delete updatedBrand.logoUrl;
+          } else {
+            updatedBrand.logoUrl = (brandLogoUrl as string).trim();
+          }
+        }
+
+        let updatedPromo = currentSettings.promo;
+        if (promo !== undefined) {
+          updatedPromo = sanitizePricelistPromoConfig(promo);
+        }
+
+        const updatedSettings = {
+          ...currentSettings,
+          ...(promo !== undefined ? { promo: updatedPromo } : {}),
+          brand: updatedBrand,
+        };
+
+        await (prisma as any).tenant.update({
+          where: { id: tenantId },
+          data: { settings: updatedSettings },
+        });
+
+        __clearPricelistPromoCacheForTest(tenantId);
+        __clearBrandCacheForTest(tenantId);
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'UPDATE_PRICELIST_PROMO_SETTINGS',
+          targetId: tenantId,
+          payload: {
+            promo: updatedPromo,
+            brandLogoUrl: updatedBrand.logoUrl || null,
+          },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({
+          success: true,
+          message: 'Pengaturan promo pricelist & logo berhasil diperbarui.',
+          data: {
+            promo: updatedPromo || DISABLED_PRICELIST_PROMO,
+            brandLogoUrl: updatedBrand.logoUrl || null,
+          },
+        });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
    * GET /api/admin/settings/payment-info
    * Mengambil informasi pembayaran klinik (QRIS, rekening bank, instruksi).
    */

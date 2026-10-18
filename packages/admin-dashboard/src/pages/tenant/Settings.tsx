@@ -15,6 +15,7 @@ import { AppearancePanel } from '../../components/settings/AppearancePanel';
 import { DailyReportPanel } from '../../components/settings/DailyReportPanel';
 import { GoogleIntegrationPanel } from '../../components/settings/GoogleIntegrationPanel';
 import { PaymentInfoPanel } from '../../components/settings/PaymentInfoPanel';
+import { PricelistPromoPanel } from '../../components/settings/PricelistPromoPanel';
 import { ToggleSwitch } from '../../components/common/ToggleSwitch';
 
 // Mask penanda token CAPI sudah ter-input (token asli tidak pernah disimpan di UI/state)
@@ -912,6 +913,9 @@ export const Settings: React.FC = () => {
             savingMediaRetention={savingMediaRetention}
             handleSaveMediaRetention={handleSaveMediaRetention}
           />
+
+          {/* Logo Brand Publik & Promo Diskon Melayang */}
+          <PricelistPromoPanel />
 
           {/* Gateway: CTA & Greetings WA (konsolidasi dari rute /admin/customer-service) */}
           <div className="bg-white border border-[#e9edef] rounded-2xl p-5 shadow-xs">

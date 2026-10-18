@@ -8,6 +8,7 @@
 > - **AI Router per-tenant**: config `ai_router_enabled`/`ai_router_shadow_mode` di tabel `Tenant` (default ON), bukan env global — dashboard Settings bisa toggle per tenant.
 > - **WhatsApp Provider per-tenant**: `whatsapp_provider` + kredensial WABA di tabel `Tenant`; `resolveGatewayForTenant()` (per-tenant factory) menggantikan singleton WAHA untuk pemilihan driver.
 > - **Fallback nomor WA hardcode** di `tracking.route.ts`/`click-catcher` sudah dihapus — kini env `DEFAULT_WHATSAPP_PHONE` / kolom tenant (`landing_pages.whatsapp_number`, `tenants.whatsapp_number`), tanpa nilai produksi di source.
+> - **Pricelist Promo & Brand Logo tenant-aware (2026-10-18)**: Konfigurasi promo diskon (`settings.promo`) dan logo publik (`settings.brand.logoUrl`) disimpan per-tenant di kolom JSON `Tenant.settings`. Halaman publik `/pricelist` menyajikan logo dinamis dengan fallback monogram dari inisial bisnis (bukan SVG Kala statis), dan promo default nonaktif (opt-in). Dikelola admin via `PricelistPromoPanel.tsx`.
 > - Status lapisan lain (tenant routing webhook, persona/templates, admin auth) tetap seperti snapshot di bawah.
 
 ---
