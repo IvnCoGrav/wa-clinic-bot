@@ -411,6 +411,8 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
             assigned_staff: {
               select: { id: true, name: true, phone: true },
             },
+            // R4 — kartu buku alamat terkait (label/ongkir) untuk tampilan detail.
+            customer_address: true,
           },
         });
         if (!reservation) {

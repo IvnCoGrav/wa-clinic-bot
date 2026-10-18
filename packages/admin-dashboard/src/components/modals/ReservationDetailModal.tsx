@@ -543,6 +543,22 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                     <span className="font-bold">Haversine 1.6x Terkalibrasi</span>
                   </div>
 
+                  {/* R4 — Kartu buku alamat terkait reservasi (bukan tebakan dari teks) */}
+                  {(() => {
+                    const card = (displayReservation as any).customer_address;
+                    if (!card) return null;
+                    return (
+                      <div className="flex justify-between text-xs">
+                        <span className="text-[#667781]">Kartu Alamat</span>
+                        <span className="text-[#111b21] font-bold">
+                          {card.label}
+                          {` (${card.is_primary ? 'Utama' : 'Kedua'})`}
+                          {card.ongkir != null ? ` · Ongkir Rp ${Number(card.ongkir).toLocaleString('id-ID')}` : ''}
+                        </span>
+                      </div>
+                    );
+                  })()}
+
                   {/* Foto Depan Rumah & Landmark Patokan */}
                   {(() => {
                     const prefs = displayReservation.customer?.preferences as any;

@@ -14,7 +14,9 @@ import {
   upsertAddressIntoList,
   ensureSinglePrimary,
   resolveActiveAddress as resolveActiveAddressFromList,
+  removeAddressFromList,
 } from '../domain/customer-address';
+import { ACTIVE_RESERVATION_STATUSES, isActiveReservation } from '../domain/reservation-status';
 import { STAFF_VERIFIED_LOCATION_LABEL, resolveLocationSource } from './staff-reservation.service';
 
 // In-Memory store fallback — HANYA untuk test offline (VITEST). Produksi: fail-fast + alert.
@@ -1358,6 +1360,64 @@ export class CustomerService {
   public async resolveActiveSavedAddress(customerId: string, tenantId: string): Promise<SavedCustomerAddress | null> {
     const list = await this.getSavedAddresses(customerId, tenantId);
     return resolveActiveAddressFromList(list);
+  }
+
+  /**
+   * Hapus kartu dari buku alamat. GUARD KLINIS: kartu yang dipakai jadwal
+   * AKTIF DILARANG dihapus (deleted:false + activeCount) — FK
+   * Reservation.customer_address_id = SetNull akan menghasilkan ghost-address
+   * bila dihapus semena-mena. Hapus sukses membersihkan DUA sumber:
+   * preferences JSON (via seam removeAddressFromList+persist) DAN baris tabel
+   * customer_addresses (dual-write cleanup — anti split-brain). Verifikasi
+   * guard fail-closed: bila DB gagal menjawab, HAPUS DIBATALKAN (dilempar ke
+   * route 500), bukan dilanjutkan tanpa bukti.
+   */
+  public async deleteSavedAddress(
+    customerId: string,
+    addressId: string,
+    tenantId: string
+  ): Promise<{ deleted: boolean; activeCount: number }> {
+    const customer = await this.getCustomerById(customerId, tenantId);
+    if (!customer) return { deleted: false, activeCount: 0 };
+    const list = parseSavedAddresses(customer.preferences);
+    if (!list.some((a) => a.id === addressId)) return { deleted: false, activeCount: 0 };
+
+    let rows: any[] = [];
+    try {
+      rows = await prisma.reservation.findMany({
+        where: {
+          tenant_id: tenantId,
+          customer_id: customerId,
+          customer_address_id: addressId,
+          status: { in: ACTIVE_RESERVATION_STATUSES },
+        },
+      });
+    } catch (error) {
+      console.error('[CustomerService] deleteSavedAddress guard query failed (fail-closed):', (error as Error)?.message);
+      throw error;
+    }
+    const activeCount = (rows || []).filter((r: any) => isActiveReservation(r)).length;
+    if (activeCount > 0) return { deleted: false, activeCount };
+
+    const nowIso = new Date().toISOString();
+    const { list: nextList } = removeAddressFromList(list, addressId);
+    await this.persistSavedAddresses(customer, tenantId, nextList, nowIso);
+
+    // Dual-write cleanup baris tabel (best-effort + event terstruktur bila gagal).
+    try {
+      if (typeof (prisma as any).customerAddress?.deleteMany === 'function') {
+        await prisma.customerAddress.deleteMany({
+          where: { id: addressId, customer_id: customerId, tenant_id: tenantId },
+        });
+      }
+    } catch (error) {
+      console.warn('[CustomerService] ADDR_BOOK_DELETE_TABLE_FAILED:', {
+        customerId,
+        addressId,
+        message: (error as Error)?.message,
+      });
+    }
+    return { deleted: true, activeCount: 0 };
   }
 
   /**

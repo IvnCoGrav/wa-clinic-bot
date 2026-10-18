@@ -276,6 +276,11 @@ export function buildEffectiveTaskAddress(addr: any, cust: any): any {
   } catch { /* pure predicate; abaikan bila bentuk tak terduga */ }
 
   const chosenAddress = useProfile && prefs.address ? String(prefs.address).trim() : fallbackAddress;
+  // Provenance transparansi (R2): dari mana email alamat tugas berasal — `card`
+  // (kartu buku alamat saat booking) atau `profile` (koreksi profil lebih baru).
+  // Timestamp = waktu terakhir sumber terpilih diperbarui.
+  const addressSource = useProfile ? 'profile' : 'card';
+  const addressUpdatedAt = (useProfile ? prefs.location_updated_at : (addr as any)?.last_used_at || (addr as any)?.created_at) ?? null;
   return {
     address: chosenAddress,
     kelurahan: useProfile ? (cust?.kelurahan ?? addr.kelurahan) : addr.kelurahan,
@@ -287,6 +292,8 @@ export function buildEffectiveTaskAddress(addr: any, cust: any): any {
     ongkir: useProfile ? (cust?.ongkir ?? addr.ongkir) : addr.ongkir,
     landmark: addr.landmark,
     location_source: useProfile ? (cust?.location_source ?? addr.location_source) : addr.location_source,
+    address_source: addressSource,
+    address_updated_at: addressUpdatedAt,
     preferences: {
       ...prefs,
       address: chosenAddress,
@@ -771,6 +778,8 @@ export class StaffReservationService {
             landmark: (effectiveAddr as any)?.landmark || (cust?.preferences as any)?.landmark || null,
             addressDetail: (effectiveAddr as any)?.address || (cust?.preferences as any)?.address || (cust?.preferences as any)?.full_address || null,
             locationSource,
+            addressSource: (effectiveAddr as any)?.address_source ?? null,
+            addressUpdatedAt: (effectiveAddr as any)?.address_updated_at ?? null,
           },
           children: childrenList,
           pricing,
@@ -1075,6 +1084,8 @@ export class StaffReservationService {
             landmark: (effectiveAddr as any)?.landmark || (cust?.preferences as any)?.landmark || null,
             addressDetail: (effectiveAddr as any)?.address || (cust?.preferences as any)?.address || (cust?.preferences as any)?.full_address || null,
             locationSource,
+            addressSource: (effectiveAddr as any)?.address_source ?? null,
+            addressUpdatedAt: (effectiveAddr as any)?.address_updated_at ?? null,
           },
           children: childrenList,
           pricing,
@@ -1257,6 +1268,8 @@ export class StaffReservationService {
             landmark: (effectiveAddr as any)?.landmark || (cust?.preferences as any)?.landmark || null,
             addressDetail: (effectiveAddr as any)?.address || (cust?.preferences as any)?.address || (cust?.preferences as any)?.full_address || null,
             locationSource,
+            addressSource: (effectiveAddr as any)?.address_source ?? null,
+            addressUpdatedAt: (effectiveAddr as any)?.address_updated_at ?? null,
           },
           children: childrenList,
           pricing,

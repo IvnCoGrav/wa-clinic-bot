@@ -46,6 +46,7 @@ import { StaffScheduleTimelineStrip } from './StaffScheduleTimelineStrip';
 import { matchCatalogService } from '../../utils/treatmentStringParser';
 import { getWibDateKey, getTodayWibDateKey, getTodayWibDate, getWibHoursAndMinutes, buildWibIso } from '../../utils/dateWib';
 import { resolveStreetAddress } from '../../utils/reservationAddress';
+import { addressesMatch as addressesMatchMirror } from '../../utils/addressMatch';
 import { resolveStaffName } from '../../utils/resolveStaffName';
 
 // Koordinat klinik fallback — tech-debt tercatat (tenant-aware penuh butuh
@@ -163,6 +164,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   const [address, setAddress] = useState(initialAddress || '');
   const [landmark, setLandmark] = useState(initialLandmark || '');
   const [customerAddressId, setCustomerAddressId] = useState<string | null>(initialReservation?.customer_address_id || null);
+  // R3 — Status "akan disimpan sebagai rumah baru" (chip persisten, bukan toast sekali-lewat).
+  const [savedAsNewHouse, setSavedAsNewHouse] = useState(false);
 
   const savedAddresses: any[] = useMemo(() => {
     if (!selectedCustomerInfo) return [];
@@ -2020,6 +2023,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                         type="button"
                         onClick={() => {
                           setCustomerAddressId(addrItem.id);
+                          setSavedAsNewHouse(false);
                           if (addrItem.address) setAddress(addrItem.address);
                           if (addrItem.landmark) setLandmark(addrItem.landmark);
                           if (addrItem.ongkir != null) setOngkir(addrItem.ongkir);
@@ -2071,26 +2075,48 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                   />
                   {(() => {
                     const selectedCard = savedAddresses.find((a: any) => a.id === customerAddressId);
-                    const norm = (s: string) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+                    // R3 — cocokkan dengan SEMANTIK DEDUP SERVER (cermin domain
+                    // `addressesMatch`): teks jalan + wilayah, bukan string harfiah.
+                    const region = {
+                      kelurahan: selectedCard?.kelurahan,
+                      kecamatan: selectedCard?.kecamatan,
+                      kota: selectedCard?.kota,
+                    };
                     const mismatch = Boolean(
-                      selectedCard && address.trim() && norm(selectedCard.address) !== norm(address)
+                      selectedCard &&
+                        address.trim() &&
+                        !addressesMatchMirror(
+                          { ...region, address: selectedCard.address },
+                          { ...region, address }
+                        )
                     );
-                    if (!mismatch) return null;
+                    if (!mismatch && !savedAsNewHouse) return null;
                     return (
                       <div className="mt-1 flex flex-wrap items-center gap-2">
-                        <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded px-2 py-1">
-                          ⚠️ Teks alamat berbeda dengan kartu terpilih
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCustomerAddressId(null);
-                            toast('Alamat baru akan disimpan sebagai rumah baru saat reservasi disimpan.', 'info');
-                          }}
-                          className="min-h-[44px] inline-flex items-center px-2.5 py-1 text-xs font-bold text-[#008069] bg-[#008069]/10 hover:bg-[#008069]/20 active:scale-[0.98] rounded-lg transition-transform focus-visible:ring-2 focus-visible:ring-[#008069] focus-visible:outline-none cursor-pointer"
-                        >
-                          + Simpan Sebagai Rumah Baru
-                        </button>
+                        {mismatch && (
+                          <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded px-2 py-1">
+                            ⚠️ Teks alamat berbeda dengan kartu terpilih
+                          </span>
+                        )}
+                        {savedAsNewHouse && !mismatch && (
+                          <span className="text-[11px] font-semibold text-[#008069] bg-[#e8f5f2] border border-[#c2e7e0] rounded px-2 py-1 inline-flex items-center gap-1">
+                            <Home size={11} />
+                            Akan disimpan sebagai rumah baru
+                          </span>
+                        )}
+                        {!savedAsNewHouse && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCustomerAddressId(null);
+                              setSavedAsNewHouse(true);
+                              toast('Alamat baru akan disimpan sebagai rumah baru saat reservasi disimpan.', 'info');
+                            }}
+                            className="min-h-[44px] inline-flex items-center px-2.5 py-1 text-xs font-bold text-[#008069] bg-[#008069]/10 hover:bg-[#008069]/20 active:scale-[0.98] rounded-lg transition-transform focus-visible:ring-2 focus-visible:ring-[#008069] focus-visible:outline-none cursor-pointer"
+                          >
+                            + Simpan Sebagai Rumah Baru
+                          </button>
+                        )}
                       </div>
                     );
                   })()}

@@ -189,6 +189,21 @@ export function resolveActiveAddress(list: SavedCustomerAddress[]): SavedCustome
   return [...list].sort((x, y) => (x.lastUsedAt < y.lastUsedAt ? 1 : -1))[0] || null;
 }
 
+/**
+ * Penghapusan kartu dari buku alamat (murni). Invarian tetap dijaga:
+ * bila daftar tersisa tidak kosong, tepat 1 kartu menangkap gelar primary
+ * (kartu `lastUsedAt` terbaru) via ensureSinglePrimary. Idempoten: id yang
+ * tidak ada → daftar utuh + removed null.
+ */
+export function removeAddressFromList(
+  list: SavedCustomerAddress[],
+  addressId: string
+): { list: SavedCustomerAddress[]; removed: SavedCustomerAddress | null } {
+  const removed = list.find((a) => a.id === addressId) || null;
+  const next = list.filter((a) => a.id !== addressId);
+  return { list: next.length > 0 ? ensureSinglePrimary(next) : next, removed };
+}
+
 export interface UpsertResult {
   list: SavedCustomerAddress[];
   entry: SavedCustomerAddress;

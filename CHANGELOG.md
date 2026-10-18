@@ -5,6 +5,28 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+#### 2026-10-18 - Feat: Buku Alamat & Transparansi Alamat (R1–R4)
+
+- **R1 — Backend buku alamat + Drawer admin**:
+  - `src/domain/customer-address.ts`: helper murni `removeAddressFromList` (invarian tetap 1 primary; hapus primary → gelar pindah ke kartu `lastUsedAt` terbaru).
+  - `src/services/customer.service.ts`: `deleteSavedAddress()` — **guard fail-closed**: kartu dipakai jadwal AKTIF DILARANG dihapus (`deleted:false + activeCount`, jendela `isActiveReservation` dihormati); hapus sukses membersihkan DUA sumber (preferences JSON + baris tabel `customer_addresses` via `deleteMany` → anti split-brain, event `ADDR_BOOK_DELETE_TABLE_FAILED` bila tabel gagal).
+  - Routes admin baru (`customers.subroute.ts`): `PATCH .../addresses/:addressId/default` (jadikan utama), `PATCH .../addresses/:addressId/label` (rename via seam `upsertSavedAddress`, id & createdAt kartu tetap), `DELETE .../addresses/:addressId` (409 + `activeCount` saat dipakai jadwal aktif).
+  - `packages/admin-dashboard/.../customer/AddressBookDrawer.tsx` (BARU): Drawer (mobile bottom-sheet) Jadikan Utama / Ubah Label / Hapus kartu, semua via `useUiFeedback` (tanpa `window.confirm/alert`), tombol ≥44px; dipanggil dari panel detail CustomerDatabase (tanpa page baru).
+  - `tests/unit/customer-address-book.test.ts` (18 test adversarial): invarian primary, guard 409, jendela waktu ≥2 jam, dual-write cleanup, delegasi route 200/404/409/400.
+- **R2 — Provenance alamat kartu terapis**:
+  - `buildEffectiveTaskAddress` kini mengembalikan `address_source` (`card`|`profile`) + `address_updated_at` (waktu sumber terpilih terakhir diperbarui).
+  - Tiga serializer kartu terapis (today/upcoming/completed) meneruskan kedua field; `StaffToday.tsx` menampilkan chip `📍 Alamat diperbarui Xj lalu` HANYA bila < 24 jam (server-driven, bukan tebakan klien).
+  - Extensi `tests/unit/staff-task-effective-address.test.ts` (3 test provenance).
+- **R3 — Util cermin FE + anti-drift**:
+  - `packages/admin-dashboard/src/utils/addressMatch.ts` (BARU): cermin 1:1 semantik dedup `src/domain/customer-address.ts` untuk FE.
+  - `tests/unit/dashboard-address-match-parity.test.ts` (10 vektor + simetri): backend domain vs FE mirror WAJIB identik — badge "rumah baru" FE tidak lagi menebak beda dengan dedup server (badge palsu "beda kartu" untuk kartu pin-only turun).
+  - `CreateReservationModal.tsx`: cek mismatch memakai cermin + chip persisten "Akan disimpan sebagai rumah baru" (state, bukan toast sekali-lewat); reset saat kartu dipilih lagi.
+- **R4 — Tracing kartu di detail reservasi**:
+  - `GET /api/admin/reservation/:id` kini `include: { customer_address: true }`.
+  - `ReservationDetailModal.tsx`: baris `Kartu Alamat: <label> (Utama/Kedua) · Ongkir Rp X` saat kartu ada (klinis & jujur, menghilang bila tak ada).
+- **Gerbang regresi**: `npx tsc --noEmit` + build dashboard hijau; suite relevan F0 74/74; tes baru tersedia di 4 file; full-suite gate dijalankan pasca-fitur (baseline 14 pre-existing di KNOWN_ISSUES #266).
+
+
 #### 2026-10-18 - Fixed: Hasil Audit Sistem Berlapis atas Implementasi Alamat Kedua (A-010..A-018)
 
 - **Audit read-only** (`audit-sistem-berlapis` Tahap 0–6) menemukan 4 bug TERBUKTI + 2 risiko di implementasi Fase RC-1..RC-5. Semua fix menyentuh akar lapisan kode/state, bukan tambal prompt:

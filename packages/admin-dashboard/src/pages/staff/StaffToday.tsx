@@ -110,6 +110,8 @@ interface StaffTaskAddress {
   landmark?: string | null;
   addressDetail?: string | null;
   locationSource?: 'gps_pin' | 'estimated_area' | 'manual_staff' | null;
+  addressSource?: 'card' | 'profile' | null;
+  addressUpdatedAt?: string | null;
 }
 
 /**
@@ -134,6 +136,29 @@ function AccuracyBadge({ source }: { source?: string | null }) {
     >
       {badge.source === 'estimated_area' ? <AlertTriangle size={10} /> : null}
       {badge.label}
+    </span>
+  );
+}
+
+/**
+ * R2 — Chip transparansi: seberapa BARU alamat tugas dikoreksi (server-driven
+ * `address_updated_at`, bukan tebakan klien). Hanya tampil < 24 jam agar staf
+ * tahu koreksi profil terbaru sudah terserap; alamat basi tidak berisik.
+ */
+function AddressUpdatedAtChip({ updatedAt }: { updatedAt?: string | null }) {
+  if (!updatedAt) return null;
+  const ts = Date.parse(updatedAt);
+  if (!Number.isFinite(ts)) return null;
+  const hours = (Date.now() - ts) / 36e5;
+  if (hours < 0 || hours >= 24) return null;
+  const label = hours < 1 ? 'kurang dari 1 jam' : `${Math.floor(hours)} jam`;
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-md"
+      title="Alamat pelanggan dikoreksi (via chat/staf) dan sudah terserap ke tugas ini."
+    >
+      <RefreshCw size={10} />
+      {`Alamat diperbarui ${label} lalu`}
     </span>
   );
 }
@@ -3291,7 +3316,10 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               <MapPin size={13} className="text-[#008069] mt-0.5 flex-shrink-0" />
                               <div className="flex-1 min-w-0">
                                 <p className="text-xs text-[#111b21] leading-snug">{task.address.fullText}</p>
-                                <div className="mt-1"><AccuracyBadge source={task.address.locationSource} /></div>
+                                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                  <AccuracyBadge source={task.address.locationSource} />
+                                  <AddressUpdatedAtChip updatedAt={task.address.addressUpdatedAt} />
+                                </div>
                               {task.address.distanceKm != null && (
                                 <p className="text-[10px] font-semibold text-[#008069] mt-0.5 flex items-center gap-1">
                                   <Compass size={10} />

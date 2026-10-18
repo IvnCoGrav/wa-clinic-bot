@@ -512,6 +512,114 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * PATCH /api/admin/customers/:id/addresses/:addressId/default
+   * Tetapkan kartu sebagai alamat utama (primary) — satu-satunya gelar primary.
+   */
+  fastify.patch(
+    '/api/admin/customers/:id/addresses/:addressId/default',
+    async (
+      request: FastifyRequest<{ Params: { id: string; addressId: string } }>,
+      reply: FastifyReply
+    ) => {
+      const { id, addressId } = request.params;
+      const tenantId = tenantOf(request);
+      const list = await customerService.getSavedAddresses(id, tenantId).catch(() => []);
+      if (!list.some((a) => a.id === addressId)) {
+        return reply.status(404).send({ success: false, error: 'Alamat tidak ditemukan pada buku alamat customer.' });
+      }
+      try {
+        await customerService.setDefaultAddress(id, addressId, tenantId);
+        return reply.status(200).send({ success: true });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
+   * PATCH /api/admin/customers/:id/addresses/:addressId/label
+   * Rename label kartu — lewat seam kanonis upsertSavedAddress (tanpa jalur
+   * tulis baru); field kartu lama diteruskan agar dedup mengenali kartu yang
+   * sama (id & createdAt tetap, FK aman).
+   */
+  fastify.patch(
+    '/api/admin/customers/:id/addresses/:addressId/label',
+    async (
+      request: FastifyRequest<{ Params: { id: string; addressId: string }; Body: { label?: string } }>,
+      reply: FastifyReply
+    ) => {
+      const { id, addressId } = request.params;
+      const tenantId = tenantOf(request);
+      const label = String(request.body?.label ?? '').trim();
+      if (!label) {
+        return reply.status(400).send({ success: false, error: 'Label wajib diisi.' });
+      }
+      const list = await customerService.getSavedAddresses(id, tenantId).catch(() => []);
+      const card = list.find((a) => a.id === addressId);
+      if (!card) {
+        return reply.status(404).send({ success: false, error: 'Alamat tidak ditemukan pada buku alamat customer.' });
+      }
+      try {
+        const entry = await customerService.upsertSavedAddress(
+          id,
+          {
+            id: card.id,
+            address: card.address,
+            kelurahan: card.kelurahan,
+            kecamatan: card.kecamatan,
+            kota: card.kota,
+            lat: card.lat,
+            lng: card.lng,
+            distanceKm: card.distanceKm,
+            ongkir: card.ongkir,
+            landmark: card.landmark,
+            locationSource: card.locationSource,
+            label,
+          },
+          tenantId
+        );
+        if (!entry) return reply.status(404).send({ success: false, error: 'Customer tidak ditemukan.' });
+        return reply.status(200).send({ success: true, entry });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
+   * DELETE /api/admin/customers/:id/addresses/:addressId
+   * Hapus kartu. GUARD 409: kartu dipakai jadwal aktif → DILARANG (payload
+   * activeCount untuk pesan admin). Reservasi historis bebas dihapus (FK SetNull).
+   */
+  fastify.delete(
+    '/api/admin/customers/:id/addresses/:addressId',
+    async (
+      request: FastifyRequest<{ Params: { id: string; addressId: string } }>,
+      reply: FastifyReply
+    ) => {
+      const { id, addressId } = request.params;
+      const tenantId = tenantOf(request);
+      const list = await customerService.getSavedAddresses(id, tenantId).catch(() => []);
+      if (!list.some((a) => a.id === addressId)) {
+        return reply.status(404).send({ success: false, error: 'Alamat tidak ditemukan pada buku alamat customer.' });
+      }
+      try {
+        const res = await customerService.deleteSavedAddress(id, addressId, tenantId);
+        if (!res.deleted) {
+          return reply.status(409).send({
+            success: false,
+            error: `Kartu dipakai ${res.activeCount} jadwal aktif. Alihkan jadwal ke kartu lain sebelum menghapus.`,
+            activeCount: res.activeCount,
+          });
+        }
+        return reply.status(200).send({ success: true, deleted: true });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
    * GET /api/admin/customers/:id/messages
    * Riwayat percakapan kronologis (Chat History) untuk modal pada customer tertentu
    */

@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { apiRequest, getCachedApiResponse } from '../../services/api';
 import { CustomerLabels } from './CustomerLabels';
 import { CustomerMapTab } from '../../components/customer/CustomerMapTab';
+import { AddressBookDrawer } from '../../components/customer/AddressBookDrawer';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { Pagination } from '../../components/common/Pagination';
 import { CustomerEditForm } from '../../components/modals/CustomerEditForm';
@@ -129,6 +130,7 @@ export const CustomerDatabase: React.FC = () => {
   const [detailData, setDetailData] = useState<any | null>(null);
   const [customerSeries, setCustomerSeries] = useState<any[]>([]);
   const [detailEditMode, setDetailEditMode] = useState(false);
+  const [addrBookCustomer, setAddrBookCustomer] = useState<{ id: string; name?: string } | null>(null);
   const [refreshingLocationDb, setRefreshingLocationDb] = useState(false);
   // Reservation detail dari riwayat (klik row/card)
   const [selectedReservation, setSelectedReservation] = useState<any>(null);
@@ -1528,6 +1530,17 @@ export const CustomerDatabase: React.FC = () => {
 
               <button
                 type="button"
+                onClick={() =>
+                  setAddrBookCustomer({ id: activeDetailCustomer.id, name: activeDetailCustomer.name ?? undefined })
+                }
+                className="px-4 py-2 bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] text-xs font-semibold rounded-xl transition shadow-xs flex items-center space-x-1.5 min-h-[44px] active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-[#00a884]"
+              >
+                <MapPin size={13} />
+                <span>Buku Alamat</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setDetailEditMode(true)}
                 className="px-4 py-2 bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] text-xs font-semibold rounded-xl transition shadow-xs flex items-center space-x-1.5"
               >
@@ -1544,6 +1557,15 @@ export const CustomerDatabase: React.FC = () => {
           </div>
       </div>
     )}
+
+      {/* Buku Alamat Drawer — multi-rumah pelanggan (Fase R1) */}
+      <AddressBookDrawer
+        customer={addrBookCustomer}
+        onClose={() => setAddrBookCustomer(null)}
+        onChanged={() => {
+          if (activeDetailCustomer) handleOpenDetail(activeDetailCustomer as any);
+        }}
+      />
 
       {/* Edit Profil Modal - terpisah, placement seperti ReservationDetailModal (tidak nested, full overlay) */}
       {detailEditMode && activeDetailCustomer && (

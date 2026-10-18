@@ -43,3 +43,56 @@ describe('buildEffectiveTaskAddress (anti-timpa alamat kosong)', () => {
     expect(eff.preferences.address).toBe('');
   });
 });
+
+/**
+ * R2 — Provenance transparansi alamat (PLAN_BUKU_ALAMAT_TRANSPARANSI_2026-10-18):
+ * kartu terapis wajib membawa `address_source` (`card` | `profile`) dan
+ * `address_updated_at` (waktu sumber terpilih terakhir diperbarui) agar UI staf
+ * tahu kapan alamat terakhir dikoreksi — tanpa tebakan dari teks.
+ */
+describe('buildEffectiveTaskAddress — provenance', () => {
+  it('default: kartu reservasi menang → source "card", timestamp kartu', () => {
+    const addr = {
+      address: 'Jl. Kenanga No. 8',
+      kelurahan: 'Waru',
+      kecamatan: 'Waru',
+      lat: -7.36,
+      lng: 112.73,
+      last_used_at: '2026-10-15T08:00:00.000Z',
+    };
+    const cust = { preferences: { address: 'Jl. Melati No. 5' }, address: 'Jl. Melati No. 5' };
+    const eff = buildEffectiveTaskAddress(addr, cust);
+    expect(eff.address_source).toBe('card');
+    expect(eff.address_updated_at).toBe('2026-10-15T08:00:00.000Z');
+  });
+
+  it('rumah sama + koreksi profil LEBIH BARU → source "profile" + timestamp profil', () => {
+    const addr = {
+      address: 'Jl. Melati No. 5',
+      kelurahan: 'Waru',
+      kecamatan: 'Waru',
+      lat: -7.35,
+      lng: 112.72,
+      last_used_at: '2026-10-15T08:00:00.000Z',
+    };
+    const cust = {
+      address: 'Jl. Melati No. 5',
+      kelurahan: 'Waru',
+      lat: -7.35,
+      lng: 112.72,
+      preferences: { address: 'Jl. Melati No. 5', location_updated_at: '2026-10-17T10:00:00.000Z' },
+    };
+    const eff = buildEffectiveTaskAddress(addr, cust);
+    expect(eff.address).toBe('Jl. Melati No. 5');
+    expect(eff.address_source).toBe('profile');
+    expect(eff.address_updated_at).toBe('2026-10-17T10:00:00.000Z');
+  });
+
+  it('tanpa timestamp sama sekali → provenance tetap ada, timestamp null (bukan undefined)', () => {
+    const addr = { address: 'Jl. Kenanga No. 8' };
+    const cust = { preferences: {} };
+    const eff = buildEffectiveTaskAddress(addr, cust);
+    expect(eff.address_source).toBe('card');
+    expect(eff.address_updated_at ?? null).toBeNull();
+  });
+});
