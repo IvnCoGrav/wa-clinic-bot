@@ -5,6 +5,33 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+#### 2026-10-19 - Fix: Resolusi Fondasional Quick Hold & Kontrak Data purchase_review_status (Opsi A)
+
+- **Akar Masalah & Insiden Nyata**:
+  1. Fitur Quick Hold (`POST /api/admin/reservation/quick-hold`) di server produksi mengalami HTTP 500 `DATABASE_ERROR` saat admin mencoba menahan slot jadwal.
+  2. Audit commit `8c763f2` menemukan bahwa `reservation-core.service.ts` mengirim `purchase_review_status: null` untuk reservasi berstatus non-confirmed (hold/intake tanpa tanggal). Namun, di skema PostgreSQL live kolom `reservations.purchase_review_status` didefinisikan sebagai `character varying NOT NULL DEFAULT 'pending'`.
+  3. Prisma runtime Client menolak input `null` pada kolom NOT NULL dan memicu kegagalan validasi bertingkat (`Argument 'customer' is missing`).
+  4. Selain itu, ditemukan field ilegal `pendingScheduleCheck` yang dikirim ke Prisma `createData` pada reservasi tanpa tanggal (bukan kolom model `Reservation`), yang memicu error `Unknown argument pendingScheduleCheck`.
+
+- **Perubahan yang Dilakukan (Sesuai Plan Resolusi Fondasional Quick Hold Opsi A)**:
+  - **Fase 0 & 1 (Kontrak Data & Core Service)**:
+    - Di `src/services/capi-review-status.ts`: Menambahkan konstanta `PURCHASE_REVIEW_NOT_APPLICABLE = 'not_applicable'`, daftar eksklusi `CAPI_QUEUE_EXCLUDED_RESERVATION_STATUSES = ['cancelled', 'rejected', 'hold']`, memperbarui `resolveNextPurchaseReviewStatus` agar fallback pada `not_applicable`, dan menambahkan `resolvePurchaseReviewOnConfirm`.
+    - Di `src/services/reservation-core.service.ts`: Mengganti penulisan `null` dengan sentinel `PURCHASE_REVIEW_NOT_APPLICABLE` (baris 805 & 1012), menghapus field ilegal `pendingScheduleCheck` (baris 814 & 1024), dan mengetikkan `createData: Prisma.ReservationUncheckedCreateInput` untuk mencegah field liar di masa depan.
+  - **Fase 2 (State Machine: hold/intake -> confirmed)**:
+    - Di `src/routes/admin/reservation-dispatch.route.ts`: Pada 3 endpoint (`PATCH /confirm`, `PATCH /:id`, dan `PATCH /:id/status`), saat status reservasi berubah menjadi `confirmed`, kolom `purchase_review_status` dimutasi secara deterministik via `resolvePurchaseReviewOnConfirm(existing)` menjadi `pending` (atau mempertahankan `approved`/`ignored_outlier`). Paritas fallback in-memory store disamakan.
+  - **Fase 3 (Gerbang Antrean CAPI Kanonis)**:
+    - Di `src/routes/admin/reservation-dispatch.route.ts`: Menyaring status hold/cancelled/rejected (`status: { notIn: [...CAPI_QUEUE_EXCLUDED_RESERVATION_STATUSES] }`) dari query `/api/admin/capi-queue` dan fallback memory store, serta mensyaratkan `booking_date: { not: null }` untuk status `pending`.
+  - **Fase 4 (Audit Produksi Read-Only)**:
+    - Menjalankan audit SQL langsung di PostgreSQL server produksi (`43.173.11.79:1403`): `hold_tercemar = 0`, `intake_tercemar = 0`. Tidak ada data historis yang rusak di database produksi karena seluruh request hold yang gagal terhenti di level 500 tanpa ter-commit.
+  - **Fase 5 (Adversarial Unit Tests)**:
+    - Menyelaraskan dan menambahkan 3 pengujian di `tests/unit/capi-queue-first-workflow.test.ts` (resolver payment, transisi konfirmasi, dan filter isolasi tenant antrean CAPI memory fallback).
+    - Menambahkan 2 pengujian di `tests/unit/admin-quick-hold.test.ts` (verifikasi hold menulis `not_applicable` & bebas `pendingScheduleCheck`, serta transisi `/confirm` mengubah `purchase_review_status` menjadi `pending`).
+
+- **Dampak & Verifikasi**:
+  - `npm run build` sukses 0 error.
+  - Seluruh test terkait (admin-quick-hold, capi-queue-first-workflow, customer-address-book, dashboard-slot-recommendation) 100% lulus (58 test passed). Zero migrasi database (schema tetap utuh).
+
+
 #### 2026-10-19 - Feat & Fix: Penyempurnaan Alamat ke-2 & Pengalaman Admin (Buku Alamat v2, Edit Mode, Komitmen Booking Modal, Rekomendasi Slot Murni & Detail Reservasi)
 
 - **Akar Masalah & Kebutuhan**:
