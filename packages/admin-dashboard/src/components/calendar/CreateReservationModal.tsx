@@ -29,6 +29,7 @@ import {
   Percent,
   BookmarkPlus,
   AlertTriangle,
+  Pencil,
 } from 'lucide-react';
 import { ClinicServiceItem, StaffOption, QuickSlotTarget } from './types';
 import { Reservation } from '../../types';
@@ -48,6 +49,8 @@ import { getWibDateKey, getTodayWibDateKey, getTodayWibDate, getWibHoursAndMinut
 import { resolveStreetAddress } from '../../utils/reservationAddress';
 import { addressesMatch as addressesMatchMirror } from '../../utils/addressMatch';
 import { resolveStaffName } from '../../utils/resolveStaffName';
+import { AddressBookDrawer } from '../customer/AddressBookDrawer';
+import { recommendSlots } from '../../utils/slotRecommendations';
 
 // Koordinat klinik fallback — tech-debt tercatat (tenant-aware penuh butuh
 // endpoint settings baru; lihat KNOWN_ISSUES). Rumus jarak terpusat di geoUtils.
@@ -166,6 +169,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   const [customerAddressId, setCustomerAddressId] = useState<string | null>(initialReservation?.customer_address_id || null);
   // R3 — Status "akan disimpan sebagai rumah baru" (chip persisten, bukan toast sekali-lewat).
   const [savedAsNewHouse, setSavedAsNewHouse] = useState(false);
+  const [correctingCardId, setCorrectingCardId] = useState<string | null>(null);
+  const [showAddressDrawer, setShowAddressDrawer] = useState(false);
 
   const savedAddresses: any[] = useMemo(() => {
     if (!selectedCustomerInfo) return [];
@@ -173,6 +178,27 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     if (Array.isArray(selectedCustomerInfo.preferences?.saved_addresses)) return selectedCustomerInfo.preferences.saved_addresses;
     return [];
   }, [selectedCustomerInfo]);
+
+  // Silang-cek mismatch dan selectedCard dipromosikan ke useMemo (Micro-Task 4.2)
+  const selectedCard = useMemo(
+    () => savedAddresses.find((a: any) => a.id === customerAddressId),
+    [savedAddresses, customerAddressId]
+  );
+
+  const mismatchComputed = useMemo(() => {
+    if (!selectedCard || !address.trim()) return false;
+    const region = {
+      kelurahan: selectedCard.kelurahan,
+      kecamatan: selectedCard.kecamatan,
+      kota: selectedCard.kota,
+    };
+    return !addressesMatchMirror(
+      { ...region, address: selectedCard.address },
+      { ...region, address }
+    );
+  }, [selectedCard, address]);
+
+  const mismatchActive = mismatchComputed && !savedAsNewHouse && !correctingCardId;
 
   // Sinkronisasi alamat/patokan saat modal dibuka / customer berganti (anti-stale props).
   // Prioritas: bila customer terpilih SAMA dengan konteks chat (initialCustomerId),
@@ -1299,165 +1325,22 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       return;
     }
 
-    // Customer Location
-    const custLat = selectedCustomerInfo?.lat || CLINIC_COORDS.lat;
-    const custLng = selectedCustomerInfo?.lng || CLINIC_COORDS.lng;
+    // Customer Location (Micro-Task 4.3: rantai D-4)
+    const custLat = selectedCard?.lat ?? selectedCustomerInfo?.lat ?? CLINIC_COORDS.lat;
+    const custLng = selectedCard?.lng ?? selectedCustomerInfo?.lng ?? CLINIC_COORDS.lng;
 
-    // Standard Candidate Slots: 08:30 to 16:30
-    const CANDIDATE_SLOTS = [
-      '08:30', '09:00', '09:30', '10:00', '10:30',
-      '11:00', '11:30', '13:00', '13:30', '14:00',
-      '14:30', '15:00', '15:30', '16:00', '16:30',
-    ];
-
-    // Cek apakah tanggal reservasi adalah HARI INI — WIB
-    const todayStr = getWibDateKey(new Date());
-    const isToday = bookingDate === todayStr;
-    const { hours: nowH, minutes: nowM } = getWibHoursAndMinutes(new Date());
-    const nowMinutes = nowH * 60 + nowM;
-
-    const results: SlotRecommendation[] = [];
-
-    for (const staff of targetStaffList) {
-      // Find staff's bookings on this date sorted by time — kecualikan diri sendiri saat edit agar tidak self-collision pada rekomendasi
-      const staffBookings = bookedReservationsForDate
-        .filter((r) => {
-          if (mode === 'edit' && (initialReservation as any)?.id && r.id === (initialReservation as any).id) return false;
-          return r.assigned_staff_id === staff.id;
-        })
-        .sort((a, b) => new Date(a.booking_date!).getTime() - new Date(b.booking_date!).getTime());
-
-      for (const slotTime of CANDIDATE_SLOTS) {
-        const [slotH, slotM] = slotTime.split(':').map(Number);
-        const slotStartMinutes = slotH * 60 + slotM;
-        const slotEndMinutes = slotStartMinutes + totalScheduledDurationMinutes;
-
-        // Case 1 Guard: Jika hari ini, jangan rekomendasikan jam yang sudah lewat / kurang dari 15 menit dari sekarang
-        if (isToday && slotStartMinutes <= nowMinutes + 15) {
-          continue;
-        }
-
-        // Check if overlaps with any existing booking
-        let hasConflict = false;
-        let prevBooking: Reservation | null = null;
-        let nextBooking: Reservation | null = null;
-
-        for (const b of staffBookings) {
-          const { hours: bH, minutes: bM } = getWibHoursAndMinutes(b.booking_date!);
-          const bStartMinutes = bH * 60 + bM;
-          // Kontrak tunggal (audit Fase 3.1): `duration_minutes` SUDAH termasuk
-          // 1x buffer 20m. Frontend DILARANG menambah buffer lagi saat cek bentrok.
-          const bDuration = (b as any).duration_minutes || 60;
-          const bEndMinutes = bStartMinutes + bDuration;
-
-          // Direct slot overlap
-          if (slotStartMinutes < bEndMinutes && slotEndMinutes > bStartMinutes) {
-            hasConflict = true;
-            break;
-          }
-
-          if (bEndMinutes <= slotStartMinutes) {
-            prevBooking = b;
-          }
-          if (bStartMinutes >= slotEndMinutes && !nextBooking) {
-            nextBooking = b;
-          }
-        }
-
-        if (hasConflict) continue;
-
-        // Calculate travel distance from origin (Clinic or Prev Patient)
-        let originLat = CLINIC_COORDS.lat;
-        let originLng = CLINIC_COORDS.lng;
-        let originDesc = CLINIC_COORDS.name;
-
-        if (prevBooking) {
-          const prevCust = prevBooking.customer as any;
-          if (prevCust?.lat && prevCust?.lng) {
-            originLat = prevCust.lat;
-            originLng = prevCust.lng;
-            originDesc = `Pasien Ny. ${prevCust.name || 'Sebelumnya'} (${prevCust.kelurahan || 'Sidoarjo'})`;
-          } else {
-            originDesc = `Pasien Ny. ${prevCust?.name || 'Sebelumnya'}`;
-          }
-        }
-
-        const distanceKm = calculateHaversine(originLat, originLng, custLat, custLng);
-        const travelMinutes = Math.max(5, Math.round(distanceKm * 2.05 + 3));
-        const prepMinutes = 10; // Waktu bidan tiba lebih awal untuk cuci tangan & persiapan di rumah pasien
-
-        // Calculate Arrival & Departure Timeline
-        const plannedDepartureMinutes = slotStartMinutes - travelMinutes - prepMinutes;
-        const plannedArrivalMinutes = slotStartMinutes - prepMinutes;
-
-        // If midwife has prior booking, departure cannot be earlier than previous booking end
-        if (prevBooking) {
-          const { hours: pbH, minutes: pbM } = getWibHoursAndMinutes(prevBooking.booking_date!);
-          const prevEndMinutes = pbH * 60 + pbM + ((prevBooking as any).duration_minutes || 60);
-          if (plannedDepartureMinutes < prevEndMinutes) {
-            continue; // Midwife hasn't finished prior patient yet!
-          }
-        } else {
-          // First booking of the day: departure from clinic cannot be earlier than clinic start (08:00 = 480 mins)
-          if (plannedDepartureMinutes < 480) {
-            continue;
-          }
-        }
-
-        // Jika reservasi hari ini, waktu keberangkatan bidan tidak boleh sudah lewat dari jam sekarang
-        if (isToday && plannedDepartureMinutes <= nowMinutes) {
-          continue;
-        }
-
-        // If midwife has next booking, verify she can travel to next booking on time
-        if (nextBooking) {
-          const { hours: nbH, minutes: nbM } = getWibHoursAndMinutes(nextBooking.booking_date!);
-          const nextStartMinutes = nbH * 60 + nbM;
-          const nextCust = nextBooking.customer as any;
-          const nextLat = nextCust?.lat || CLINIC_COORDS.lat;
-          const nextLng = nextCust?.lng || CLINIC_COORDS.lng;
-          const toNextDistanceKm = calculateHaversine(custLat, custLng, nextLat, nextLng);
-          const toNextTravelMinutes = Math.max(5, Math.round(toNextDistanceKm * 2.05 + 3));
-
-          if (slotEndMinutes + toNextTravelMinutes + 10 > nextStartMinutes) {
-            continue; // Cannot arrive at next booking in time!
-          }
-        }
-
-        // Score: closer distance gets higher priority
-        const score = Math.max(1, 100 - distanceKm * 5);
-
-        results.push({
-          startTime: slotTime,
-          departureTime: formatMinutesToTime(plannedDepartureMinutes),
-          arrivalTime: formatMinutesToTime(plannedArrivalMinutes),
-          endTime: formatMinutesToTime(slotEndMinutes),
-          staffId: staff.id,
-          staffName: staff.name,
-          distanceKm,
-          travelMinutes,
-          originDesc,
-          score,
-        });
-      }
-    }
-
-    // Sort by earliest time and best distance score
-    results.sort((a, b) => {
-      if (a.startTime !== b.startTime) return a.startTime.localeCompare(b.startTime);
-      return a.distanceKm - b.distanceKm;
+    // Ekstraksi murni recommendSlots (Micro-Task 4.4)
+    const topRecs = recommendSlots({
+      targetStaffList,
+      staffBookingsForDate: bookedReservationsForDate,
+      custLat,
+      custLng,
+      bookingDate,
+      totalDurationMinutes: totalScheduledDurationMinutes,
+      mode,
+      currentReservationId: (initialReservation as any)?.id,
+      clinicCoords: CLINIC_COORDS,
     });
-
-    // Pick up to 6 distinct recommendations across available therapists
-    const topRecs: SlotRecommendation[] = [];
-    const seenStaffSlots = new Set<string>();
-    for (const r of results) {
-      const key = `${r.startTime}-${r.staffId}`;
-      if (!seenStaffSlots.has(key) && topRecs.length < 6) {
-        seenStaffSlots.add(key);
-        topRecs.push(r);
-      }
-    }
 
     setRecommendations(topRecs);
     setHasCalculatedRecommendations(true);
@@ -1617,6 +1500,12 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     }
     if (!bookingTime || !bookingTime.trim()) {
       toast('Pilih jam mulai reservasi terlebih dahulu', 'error');
+      return;
+    }
+
+    // 🛑 Gerbang submit deterministik bila teks alamat admin belum dikomit (Micro-Task 4.2)
+    if (selectedCard && address.trim() && mismatchActive) {
+      toast('Teks alamat berbeda dgn kartu — pilih: Simpan sebagai Rumah Baru / Perbarui Kartu Terpilih.', 'error');
       return;
     }
 
@@ -1995,14 +1884,27 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 </div>
               </div>
             )}
-            {/* Multi-Address Selector (Jika customer memiliki > 1 alamat tersimpan) */}
-            {savedAddresses.length > 1 && (
+            {/* Multi-Address Selector (Micro-Task 4.1: tampil bila >= 1) */}
+            {savedAddresses.length >= 1 && (
               <div className="p-2.5 bg-[#f0f2f5] dark:bg-[#202c33] rounded-xl border border-[#d1d7db] dark:border-[#2a3942] space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-1">
-                    <Home size={13} className="text-[#008069]" />
-                    <span>Pilih Alamat Rumah ({savedAddresses.length}/10 tersimpan):</span>
-                  </span>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-1">
+                      <Home size={13} className="text-[#008069]" />
+                      <span>Pilih Alamat Rumah ({savedAddresses.length}/10 tersimpan):</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomerAddressId(null);
+                        setSavedAsNewHouse(true);
+                        toast('Mode alamat baru aktif untuk jadwal ini.', 'info');
+                      }}
+                      className="text-[11px] font-semibold text-[#008069] hover:underline cursor-pointer"
+                    >
+                      + Alamat Baru Untuk Jadwal Ini
+                    </button>
+                  </div>
                   {savedAddresses.length >= 10 && (
                     <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded px-1.5 py-0.5">
                       Kapasitas Penuh (10/10)
@@ -2073,38 +1975,27 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                     spellCheck="false"
                     className="w-full px-3 py-2 bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-medium"
                   />
-                  {(() => {
-                    const selectedCard = savedAddresses.find((a: any) => a.id === customerAddressId);
-                    // R3 — cocokkan dengan SEMANTIK DEDUP SERVER (cermin domain
-                    // `addressesMatch`): teks jalan + wilayah, bukan string harfiah.
-                    const region = {
-                      kelurahan: selectedCard?.kelurahan,
-                      kecamatan: selectedCard?.kecamatan,
-                      kota: selectedCard?.kota,
-                    };
-                    const mismatch = Boolean(
-                      selectedCard &&
-                        address.trim() &&
-                        !addressesMatchMirror(
-                          { ...region, address: selectedCard.address },
-                          { ...region, address }
-                        )
-                    );
-                    if (!mismatch && !savedAsNewHouse) return null;
-                    return (
-                      <div className="mt-1 flex flex-wrap items-center gap-2">
-                        {mismatch && (
-                          <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded px-2 py-1">
-                            ⚠️ Teks alamat berbeda dengan kartu terpilih
-                          </span>
-                        )}
-                        {savedAsNewHouse && !mismatch && (
-                          <span className="text-[11px] font-semibold text-[#008069] bg-[#e8f5f2] border border-[#c2e7e0] rounded px-2 py-1 inline-flex items-center gap-1">
-                            <Home size={11} />
-                            Akan disimpan sebagai rumah baru
-                          </span>
-                        )}
-                        {!savedAsNewHouse && (
+                  {(mismatchComputed || savedAsNewHouse || correctingCardId) && (
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      {mismatchActive && (
+                        <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded px-2 py-1">
+                          ⚠️ Teks alamat berbeda dengan kartu terpilih
+                        </span>
+                      )}
+                      {savedAsNewHouse && (
+                        <span className="text-[11px] font-semibold text-[#008069] bg-[#e8f5f2] border border-[#c2e7e0] rounded px-2 py-1 inline-flex items-center gap-1">
+                          <Home size={11} />
+                          Akan disimpan sebagai rumah baru
+                        </span>
+                      )}
+                      {correctingCardId && (
+                        <span className="text-[11px] font-semibold text-sky-700 bg-sky-50 border border-sky-200 rounded px-2 py-1 inline-flex items-center gap-1">
+                          <Pencil size={11} />
+                          Kartu sedang diperbarui
+                        </span>
+                      )}
+                      {!savedAsNewHouse && (
+                        <>
                           <button
                             type="button"
                             onClick={() => {
@@ -2116,10 +2007,23 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                           >
                             + Simpan Sebagai Rumah Baru
                           </button>
-                        )}
-                      </div>
-                    );
-                  })()}
+                          {selectedCard && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCorrectingCardId(selectedCard.id);
+                                setShowAddressDrawer(true);
+                              }}
+                              className="min-h-[44px] inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 active:scale-[0.98] rounded-lg transition-transform focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:outline-none cursor-pointer"
+                            >
+                              <Pencil size={12} />
+                              <span>Perbarui Kartu Ini</span>
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider block">
@@ -3340,6 +3244,40 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
             </div>
           </div>
         )}
+      {/* AddressBookDrawer Overlay untuk Perbarui Kartu Terpilih (Micro-Task 4.2) */}
+      {showAddressDrawer && (customerId || selectedCustomerInfo?.id) && (
+        <AddressBookDrawer
+          customer={selectedCustomerInfo ? { id: selectedCustomerInfo.id, name: selectedCustomerInfo.name } : { id: customerId }}
+          initialEditingCardId={correctingCardId}
+          onClose={() => {
+            setShowAddressDrawer(false);
+            setCorrectingCardId(null);
+          }}
+          onChanged={async () => {
+            const cid = selectedCustomerInfo?.id || customerId;
+            if (cid) {
+              try {
+                const res = await apiRequest<{ success: boolean; data: any }>(
+                  `/api/admin/customers/${cid}`
+                );
+                if (res?.success && res.data) {
+                  setSelectedCustomerInfo(res.data);
+                  if (correctingCardId) {
+                    const updatedCard = (res.data.saved_addresses || []).find((a: any) => a.id === correctingCardId);
+                    if (updatedCard) {
+                      if (updatedCard.address) setAddress(updatedCard.address);
+                      if (updatedCard.landmark) setLandmark(updatedCard.landmark);
+                      if (updatedCard.ongkir != null) setOngkir(updatedCard.ongkir);
+                    }
+                  }
+                }
+              } catch {}
+            }
+            setShowAddressDrawer(false);
+            setCorrectingCardId(null);
+          }}
+        />
+      )}
       </div>
     </div>,
     document.body

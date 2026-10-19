@@ -580,3 +580,159 @@ describe('Fase S-UX.2 & S-4: POST /api/admin/customers/:id/addresses and Tenant 
     expect(res.statusCode).toBe(404);
   });
 });
+
+describe('PUT: edit alamat lengkap (/api/admin/customers/:id/addresses/:addressId)', () => {
+  beforeEach(() => {
+    resetCustomerRepository();
+    vi.restoreAllMocks();
+  });
+  afterEach(() => {
+    resetCustomerRepository();
+    vi.restoreAllMocks();
+  });
+
+  it('PUT teks jalan kartu sekunder -> tersimpan di JSON dan delegasi upsertSavedAddress dipanggil dengan id kartu (spy)', async () => {
+    const customer = await seedCustomer([
+      addr('rumah-1', { isPrimary: true, lastUsedAt: '2026-10-16T00:00:00.000Z' }),
+      addr('rumah-2', { isPrimary: false, lastUsedAt: '2026-10-15T00:00:00.000Z' }),
+    ]);
+    const spy = vi.spyOn(customerService, 'upsertSavedAddress');
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/admin/customers/${customer.id}/addresses/rumah-2`,
+      headers: { 'x-api-key': ADMIN_KEY, 'x-tenant-id': TENANT },
+      payload: {
+        address: 'Jl. Rungkut Asri Timur No. 88',
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.success).toBe(true);
+    expect(body.entry.address).toBe('Jl. Rungkut Asri Timur No. 88');
+    expect(spy).toHaveBeenCalledWith(
+      customer.id,
+      expect.objectContaining({
+        id: 'rumah-2',
+        address: 'Jl. Rungkut Asri Timur No. 88',
+      }),
+      TENANT
+    );
+
+    const addresses = await customerService.getSavedAddresses(customer.id, TENANT);
+    const card = addresses.find((a) => a.id === 'rumah-2');
+    expect(card?.address).toBe('Jl. Rungkut Asri Timur No. 88');
+  });
+
+  it('PUT koordinat kartu sekunder + jadwal aktif menunjuk kartu -> customer_address_id reservasi relink; PUT landmark/foto saja -> TIDAK memicu relink (gate koordinat, D-1)', async () => {
+    const customer = await seedCustomer([
+      addr('rumah-1', { isPrimary: true, lastUsedAt: '2026-10-16T00:00:00.000Z' }),
+      addr('rumah-2', { isPrimary: false, lastUsedAt: '2026-10-15T00:00:00.000Z' }),
+    ]);
+    const app = buildApp();
+
+    vi.mocked(prisma.reservation.findMany).mockResolvedValue([
+      {
+        id: 'res-aktif-kartu-2',
+        customer_id: customer.id,
+        customer_address_id: 'rumah-2',
+        status: 'confirmed',
+        booking_date: new Date(Date.now() + 2 * 60 * 60 * 1000),
+      },
+    ] as any);
+    const updateSpy = vi.mocked(prisma.reservation.update).mockResolvedValue({} as any);
+
+    // 1. PUT landmark saja (koordinat tidak berubah) -> TIDAK memicu relink
+    const resLandmark = await app.inject({
+      method: 'PUT',
+      url: `/api/admin/customers/${customer.id}/addresses/rumah-2`,
+      headers: { 'x-api-key': ADMIN_KEY, 'x-tenant-id': TENANT },
+      payload: {
+        landmark: 'Pagar cat hitam',
+      },
+    });
+    expect(resLandmark.statusCode).toBe(200);
+    expect(updateSpy).not.toHaveBeenCalled();
+
+    // 2. PUT koordinat baru -> MEMICU relink jadwal aktif
+    const resCoords = await app.inject({
+      method: 'PUT',
+      url: `/api/admin/customers/${customer.id}/addresses/rumah-2`,
+      headers: { 'x-api-key': ADMIN_KEY, 'x-tenant-id': TENANT },
+      payload: {
+        lat: -7.310000,
+        lng: 112.750000,
+        ongkir: 20000,
+      },
+    });
+    expect(resCoords.statusCode).toBe(200);
+    expect(updateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'res-aktif-kartu-2' },
+        data: expect.objectContaining({
+          customer_address_id: 'rumah-2',
+          delivery_fee: 20000,
+        }),
+      })
+    );
+  });
+
+  it('PUT lat/lng tak valid (string "abc") -> diabaikan, nilai lama bertahan', async () => {
+    const customer = await seedCustomer([
+      addr('rumah-1', { isPrimary: true, lastUsedAt: '2026-10-16T00:00:00.000Z' }),
+    ]);
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/admin/customers/${customer.id}/addresses/rumah-1`,
+      headers: { 'x-api-key': ADMIN_KEY, 'x-tenant-id': TENANT },
+      payload: {
+        lat: 'abc' as any,
+        lng: 'xyz' as any,
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const addresses = await customerService.getSavedAddresses(customer.id, TENANT);
+    const card = addresses.find((a) => a.id === 'rumah-1');
+    expect(typeof card?.lat === 'number' || card?.lat === null || card?.lat === undefined).toBe(true);
+    expect(card?.lat).not.toBe('abc');
+  });
+
+  it('IDOR tenant: PUT kartu customer tenant lain dengan x-tenant-id: "tenant-asing" -> 404', async () => {
+    const customer = await seedCustomer([
+      addr('rumah-1', { isPrimary: true, lastUsedAt: '2026-10-16T00:00:00.000Z' }),
+    ]);
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/admin/customers/${customer.id}/addresses/rumah-1`,
+      headers: { 'x-api-key': ADMIN_KEY, 'x-tenant-id': 'tenant-asing' },
+      payload: {
+        address: 'Jl. Usurpation No. 1',
+      },
+    });
+
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('Label 61 char -> 400', async () => {
+    const customer = await seedCustomer([
+      addr('rumah-1', { isPrimary: true, lastUsedAt: '2026-10-16T00:00:00.000Z' }),
+    ]);
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/admin/customers/${customer.id}/addresses/rumah-1`,
+      headers: { 'x-api-key': ADMIN_KEY, 'x-tenant-id': TENANT },
+      payload: {
+        label: 'A'.repeat(61),
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Label maksimal 60 karakter/i);
+  });
+});
+

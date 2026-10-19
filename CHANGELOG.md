@@ -5,6 +5,42 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+#### 2026-10-19 - Feat & Fix: Penyempurnaan Alamat ke-2 & Pengalaman Admin (Buku Alamat v2, Edit Mode, Komitmen Booking Modal, Rekomendasi Slot Murni & Detail Reservasi)
+
+- **Akar Masalah & Kebutuhan**:
+  1. Pengeditan kartu alamat tersimpan belum memiliki antarmuka edit lengkap di admin dashboard maupun route PUT di backend (hanya terbatas ubah label/hapus), sehingga perbaikan alamat atau titik GPS pelanggan multi-rumah memerlukan penulisan ulang manual.
+  2. Isolasi tenant pada `src/routes/admin/customers.subroute.ts:474` masih memakai hardcoded `DEFAULT_TENANT_ID` alih-alih `tenantId` dari sesi request.
+  3. Pada modal pembuatan reservasi (`CreateReservationModal.tsx`), pemilih kartu alamat hanya muncul jika alamat >= 2 (sehingga pelanggan ber-1 kartu tidak bisa memilih secara eksplisit), dan perubahan teks alamat secara manual berisiko mengalami ghost-shadowing (teks diganti tapi `customerAddressId` kartu lama tetap terkirim tanpa konfirmasi).
+  4. Logika rekomendasi slot pada modal booking bercampur dengan state UI React dan belum menggunakan koordinat kartu alamat terpilih (D-4 chain).
+  5. Modal detail reservasi (`ReservationDetailModal.tsx`) belum memprioritaskan kartu reservasi terpilih (`card.lat`, `card.lng`, `card.location_source`) untuk rute Google Maps dan badge akurasi GPS.
+
+- **Perubahan yang Dilakukan (Sesuai docs/plans/PLAN_BUKU_ALAMAT_V2_REVISI_2026-10-19.md)**:
+  - **Fase 1 (Backend Seam & TDD)**:
+    - Memperbaiki kebocoran isolasi tenant di `src/routes/admin/customers.subroute.ts:474` menggunakan `tenantId` dari request.
+    - Mengimplementasikan endpoint kanonis `PUT /api/admin/customers/:id/addresses/:addressId` via seam `customerService.upsertSavedAddress`, validasi IDOR deterministik, validasi panjang label (maks 60 karakter), dan gate `coordsChanged` untuk memanggil `syncActiveReservationsForCustomer` non-throwing saat koordinat kartu berubah.
+    - Memperluas `upsertAddressIntoList` di `src/domain/customer-address.ts` agar mendukung pencocokan kartu berbasis `input.id` (kunci kanonis V2).
+    - Menambahkan 5 uji unit TDD di `tests/unit/customer-address-book.test.ts` (`describe('PUT: edit alamat lengkap')`), total 33 uji lulus 100%.
+  - **Fase 2 (AddressBookDrawer Edit Mode & Alat Lokasi Cerdas)**:
+    - Menambahkan form edit lengkap di `AddressBookDrawer.tsx` (`editingAddress`, `initialEditingCardId`) untuk label, alamat lengkap, landmark, kelurahan, kecamatan, kota, koordinat, dan ongkir kartu.
+    - Mengintegrasikan alat lokasi: resolver shortlink Google Maps (`useMapsShortlinkResolver`), geocoding Nominatim, kalkulasi Haversine dari koordinat klinik (`CLINIC_COORDS`), dan tiering ongkir dinamis dari `/api/admin/delivery-tiers`.
+    - Menambahkan touch-target aksesibel `min-h-[44px]` dan konfirmasi perubahan koordinat terhadap jadwal aktif.
+  - **Fase 3 (Integrasi WhatsApp LiveChat)**:
+    - Memasang `AddressBookDrawer` di `LiveChatMonitor.tsx` berdampingan dengan form edit pelanggan dengan layer overlay yang tepat.
+    - Menambahkan badge interaktif `📍 {n} alamat tersimpan` di bawah detail alamat lengkap pasien dan tombol footer `Buku Alamat`.
+    - Cache hitungan kartu per-customer tanpa polling ganda.
+  - **Fase 4 (Alur Booking Modal & Rekomendasi Slot Murni)**:
+    - Mengaktifkan pemilih alamat pada `CreateReservationModal.tsx` untuk `savedAddresses.length >= 1` dan tombol "+ Alamat Baru Untuk Jadwal Ini".
+    - Mencegah mismatch teks alamat vs kartu terpilih: menambahkan submit blocker dengan toast peringatan injak dan chip status persisten, serta tombol "Perbarui Kartu Ini" untuk membuka drawer edit kartu langsung (`correctingCardId`).
+    - Mengekstrak fungsi rekomendasi slot murni tanpa state `recommendSlots` ke `packages/admin-dashboard/src/utils/slotRecommendations.ts` dengan rantai koordinat D-4 (`selectedCard?.lat ?? selectedCustomerInfo?.lat ?? CLINIC_COORDS.lat`), penjaga travel time 15 menit, sorting dan deduplikasi multi-staf.
+    - Menambahkan 4 uji unit baru di `tests/unit/dashboard-slot-recommendation.test.ts` (100% lulus).
+  - **Fase 5 (Integritas Detail Reservasi)**:
+    - Menyelaraskan `ReservationDetailModal.tsx` agar memprioritaskan data koordinat & alamat kartu reservasi (`card.lat`, `card.lng`, `card.address`, `card.location_source`) untuk navigasi Google Maps dan badge akurasi GPS, serta kartu ongkir (`card?.ongkir ?? customer?.ongkir`).
+
+- **Dampak & Verifikasi**:
+  - Root build dan packages/admin-dashboard build exit code 0.
+  - Unit tests terkait alamat (`customer-address-book.test.ts`, `dashboard-slot-recommendation.test.ts`, `admin-create-reservation.test.ts`) 100% lulus tanpa regresi.
+
+
 #### 2026-10-18 - Fix: Resolusi Fondasional Split-Brain Alamat (Fuzzy Toponimi, Paritas Cermin FE, Elevasi Primary GPS-Safe & Eliminasi Alarm Palsu Shareloc)
 
 - **Akar Masalah**:

@@ -667,6 +667,119 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * PUT /api/admin/customers/:id/addresses/:addressId
+   * Edit alamat lengkap via seam kanonis upsertSavedAddress (D-1).
+   * Menjaga otoritas teks admin, guard IDOR tenant, validasi label, dan relink jadwal aktif bila koordinat berubah.
+   */
+  fastify.put(
+    '/api/admin/customers/:id/addresses/:addressId',
+    async (
+      request: FastifyRequest<{
+        Params: { id: string; addressId: string };
+        Body: {
+          label?: string;
+          address?: string;
+          kelurahan?: string;
+          kecamatan?: string;
+          kota?: string;
+          lat?: number | null;
+          lng?: number | null;
+          landmark?: string | null;
+          distanceKm?: number | null;
+          ongkir?: number | null;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const { id, addressId } = request.params;
+      const tenantId = tenantOf(request);
+
+      const customer = await customerService.getCustomerById(id, tenantId);
+      if (!customer) {
+        return reply.status(404).send({ success: false, error: 'Customer tidak ditemukan.' });
+      }
+
+      const body = request.body || {};
+      const label = body.label !== undefined ? String(body.label).trim() : undefined;
+      if (label !== undefined && label.length > MAX_ADDRESS_LABEL_LENGTH) {
+        return reply
+          .status(400)
+          .send({ success: false, error: `Label maksimal ${MAX_ADDRESS_LABEL_LENGTH} karakter.` });
+      }
+
+      const list = await customerService.getSavedAddresses(id, tenantId).catch(() => []);
+      const card = list.find((a) => a.id === addressId);
+      if (!card) {
+        return reply.status(404).send({ success: false, error: 'Alamat tidak ditemukan pada buku alamat customer.' });
+      }
+
+      try {
+        const entry = await customerService.upsertSavedAddress(
+          id,
+          {
+            id: card.id,
+            address: body.address !== undefined && body.address.trim() ? body.address.trim() : card.address,
+            kelurahan: body.kelurahan !== undefined ? (body.kelurahan?.trim() || null) : card.kelurahan,
+            kecamatan: body.kecamatan !== undefined ? (body.kecamatan?.trim() || null) : card.kecamatan,
+            kota: body.kota !== undefined ? (body.kota?.trim() || null) : card.kota,
+            lat: typeof body.lat === 'number' && Number.isFinite(body.lat) ? body.lat : card.lat,
+            lng: typeof body.lng === 'number' && Number.isFinite(body.lng) ? body.lng : card.lng,
+            distanceKm: body.distanceKm !== undefined ? body.distanceKm : card.distanceKm,
+            ongkir: body.ongkir !== undefined ? body.ongkir : card.ongkir,
+            landmark: body.landmark !== undefined ? (body.landmark?.trim() || null) : card.landmark,
+            locationSource: (card as any).locationSource ?? (card as any).location_source ?? null,
+            label: label !== undefined && label.length > 0 ? label : card.label,
+          },
+          tenantId
+        );
+
+        if (!entry) {
+          return reply.status(404).send({ success: false, error: 'Customer tidak ditemukan.' });
+        }
+
+        const coordsChanged =
+          (typeof body.lat === 'number' && Number.isFinite(body.lat) && body.lat !== card.lat) ||
+          (typeof body.lng === 'number' && Number.isFinite(body.lng) && body.lng !== card.lng);
+
+        if (coordsChanged) {
+          try {
+            const { isActiveReservation, ACTIVE_RESERVATION_STATUSES } = await import('../../domain/reservation-status');
+            const activeRows = await prisma.reservation.findMany({
+              where: {
+                tenant_id: tenantId,
+                customer_id: id,
+                customer_address_id: card.id,
+                status: { in: ACTIVE_RESERVATION_STATUSES },
+              },
+            }).catch(() => []);
+
+            const active = (activeRows || []).filter((r) => isActiveReservation(r));
+            for (const r of active) {
+              const newFee = typeof entry.ongkir === 'number' ? entry.ongkir : undefined;
+              await prisma.reservation.update({
+                where: { id: r.id },
+                data: {
+                  customer_address_id: card.id,
+                  ...(newFee !== undefined ? { delivery_fee: newFee } : {}),
+                },
+              }).catch(() => {});
+            }
+          } catch (syncErr: any) {
+            console.warn('[ADMIN][addresses] relink active reservation skipped:', syncErr?.message);
+          }
+        }
+
+        return reply.status(200).send({ success: true, entry });
+      } catch (err: any) {
+        console.error('[ADMIN][addresses] gagal memperbarui alamat:', id, addressId, err?.message);
+        return reply
+          .status(500)
+          .send({ success: false, error: 'Gagal memperbarui alamat. Silakan coba lagi.' });
+      }
+    }
+  );
+
+  /**
    * DELETE /api/admin/customers/:id/addresses/:addressId
    * Hapus kartu. GUARD 409: kartu dipakai jadwal aktif → DILARANG (payload
    * activeCount untuk pesan admin). Reservasi historis bebas dihapus (FK SetNull).

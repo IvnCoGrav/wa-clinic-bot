@@ -535,7 +535,11 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                   <div className="flex justify-between text-xs">
                     <span className="text-[#667781]">Ongkir</span>
                     <span className="text-[#111b21] font-bold">
-                      {displayReservation.customer?.ongkir ? `Rp ${displayReservation.customer.ongkir.toLocaleString()}` : 'Gratis / Belum dihitung'}
+                      {(() => {
+                        const card = (displayReservation as any).customer_address;
+                        const effectiveOngkir = card?.ongkir ?? displayReservation.customer?.ongkir;
+                        return effectiveOngkir != null ? `Rp ${Number(effectiveOngkir).toLocaleString('id-ID')}` : 'Gratis / Belum dihitung';
+                      })()}
                     </span>
                   </div>
                   <div className="flex justify-between text-xs text-[#008069]">
@@ -559,21 +563,25 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                     );
                   })()}
 
-                  {/* Foto Depan Rumah & Landmark Patokan */}
+                  {/* Foto Depan Rumah & Landmark Patokan (Micro-Task 5.1: prioritas kartu, V6 & V10) */}
                   {(() => {
+                    const card = (displayReservation as any).customer_address;
                     const prefs = displayReservation.customer?.preferences as any;
                     const housePhoto = prefs?.house_photo_url;
-                    const landmark = prefs?.landmark;
-                    const lat = displayReservation.customer?.lat;
-                    const lng = displayReservation.customer?.lng;
-                    // REVISI-1 Tahap 3.2: URL sadar akurasi (titik non-presisi +
-                    // teks → tujuan teks) + badge status di judul seksi.
-                    const locSource = (displayReservation.customer as any)?.location_source || null;
-                    const addrText = [prefs?.address || (displayReservation.customer as any)?.address, prefs?.kelurahan || displayReservation.customer?.kelurahan, prefs?.kecamatan || displayReservation.customer?.kecamatan, displayReservation.customer?.kota].filter(Boolean).join(', ');
-                    const mapsUrl = lat && lng ? getGoogleMapsDirectionUrl(lat, lng, addrText || null, locSource) : null;
+                    const effectiveLandmark = card?.landmark || prefs?.landmark;
+                    const effectiveLat = (card?.lat ?? displayReservation.customer?.lat) || null;
+                    const effectiveLng = (card?.lng ?? displayReservation.customer?.lng) || null;
+                    const effectiveAddress = [
+                      card?.address || prefs?.address || (displayReservation.customer as any)?.address,
+                      card?.kelurahan || prefs?.kelurahan || displayReservation.customer?.kelurahan,
+                      card?.kecamatan || prefs?.kecamatan || displayReservation.customer?.kecamatan,
+                      card?.kota || displayReservation.customer?.kota,
+                    ].filter(Boolean).join(', ');
+                    const locSource = card?.location_source ?? card?.locationSource ?? (displayReservation.customer as any)?.location_source ?? null;
+                    const mapsUrl = effectiveLat && effectiveLng ? getGoogleMapsDirectionUrl(effectiveLat, effectiveLng, effectiveAddress || null, locSource) : null;
                     const locBadge = getLocationBadgeConfig({ location_source: locSource, preferences: prefs });
 
-                    if (!housePhoto && !landmark && !mapsUrl) {
+                    if (!housePhoto && !effectiveLandmark && !mapsUrl) {
                       return (
                         <div className="mt-2 pt-2 border-t border-[#e9edef]">
                           <button
@@ -640,9 +648,9 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                               <span className="text-[10px] font-bold text-[#008069] uppercase tracking-wider block">
                                 🏠 Foto Tampak Depan Rumah
                               </span>
-                              {landmark ? (
+                              {effectiveLandmark ? (
                                 <p className="text-xs text-[#111b21] font-semibold mt-0.5 leading-snug">
-                                  Patokan: {landmark}
+                                  Patokan: {effectiveLandmark}
                                 </p>
                               ) : (
                                 <p className="text-[11px] text-[#667781]">Foto panduan tersimpan</p>
@@ -656,12 +664,12 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                           </div>
                         )}
 
-                        {!housePhoto && landmark && (
+                        {!housePhoto && effectiveLandmark && (
                           <div className="p-2 rounded-xl bg-white border border-[#e9edef] text-xs">
                             <span className="text-[10px] font-bold text-[#008069] uppercase tracking-wider block">
                               📍 Patokan Rumah
                             </span>
-                            <p className="text-xs text-[#111b21] font-semibold mt-0.5">{landmark}</p>
+                            <p className="text-xs text-[#111b21] font-semibold mt-0.5">{effectiveLandmark}</p>
                           </div>
                         )}
                       </div>

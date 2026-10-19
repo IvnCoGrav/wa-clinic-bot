@@ -97,6 +97,7 @@ import {
 } from '../../utils/mediaExtractor';
 import { CustomerAvatar } from '../../components/common/CustomerAvatar';
 import { CustomerEditForm } from '../../components/modals/CustomerEditForm';
+import { AddressBookDrawer } from '../../components/customer/AddressBookDrawer';
 import { ReservationDetailModal } from '../../components/modals/ReservationDetailModal';
 import { CustomerFollowUpSection } from '../../components/customer/CustomerFollowUpSection';
 import { LiveChatDispatchWidget, DispatchTripData } from '../../components/livechat/LiveChatDispatchWidget';
@@ -553,6 +554,24 @@ export const LiveChatMonitor: React.FC = () => {
   const [customerDetailEditMode, setCustomerDetailEditMode] = useState(false);
   const [customerDetailLoading, setCustomerDetailLoading] = useState(false);
   const [customerDetailData, setCustomerDetailData] = useState<any>(null);
+  const [addrBookCustomer, setAddrBookCustomer] = useState<{ id: string; name?: string } | null>(null);
+  const [savedAddressCount, setSavedAddressCount] = useState<number>(0);
+
+  // Cache address count bila customer aktif berganti (Fase 3, Micro-Task 3.1)
+  useEffect(() => {
+    const cid = customerDetailData?.id || selectedChat?.customerId;
+    if (!cid) {
+      setSavedAddressCount(0);
+      return;
+    }
+    apiRequest<{ success: boolean; addresses: any[] }>(`/api/admin/customers/${cid}/addresses`)
+      .then((res) => {
+        if (res?.success && Array.isArray(res.addresses)) {
+          setSavedAddressCount(res.addresses.length);
+        }
+      })
+      .catch(() => setSavedAddressCount(0));
+  }, [customerDetailData?.id, selectedChat?.customerId]);
   const [refreshingLocation, setRefreshingLocation] = useState(false);
   // Reservation detail dari riwayat (klik card reservasi)
   const [selectedReservation, setSelectedReservation] = useState<any>(null);
@@ -1876,6 +1895,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         composerRef.current.closePopovers();
       }
       if (customerDetailModalOpen) { setCustomerDetailModalOpen(false); e.preventDefault(); return; }
+      if (addrBookCustomer) { setAddrBookCustomer(null); e.preventDefault(); return; }
       if (customerDetailEditMode) { setCustomerDetailEditMode(false); e.preventDefault(); return; }
       if (showQuickBookingModal) { setShowQuickBookingModal(false); e.preventDefault(); return; }
       if (showInvoiceModal) { setShowInvoiceModal(false); e.preventDefault(); return; }
@@ -6874,6 +6894,22 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       <div>
                         <p className="text-[10px] text-[#667781] font-semibold uppercase">Alamat Lengkap</p>
                         <p className="font-medium text-[#111b21]">{customerDetailData?.preferences?.address || customerDetailData?.address || customerDetailData?.kelurahan || selectedChat?.kelurahan || '-'}</p>
+                        {savedAddressCount > 1 && (
+                          <div className="pt-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const cid = customerDetailData?.id || selectedChat?.customerId;
+                                if (cid) setAddrBookCustomer({ id: cid, name: customerDetailData?.name || selectedChat?.customerName });
+                              }}
+                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] hover:bg-[#c2e7e0] transition active:scale-[0.98] focus-visible:ring-2 cursor-pointer"
+                              title="Lihat semua alamat tersimpan"
+                            >
+                              <MapPin size={11} />
+                              <span>📍 {savedAddressCount} alamat tersimpan</span>
+                            </button>
+                          </div>
+                        )}
                         {(customerDetailData?.preferences?.landmark || customerDetailData?.preferences?.address_notes) && (
                           <p className="text-[11px] text-[#008069] mt-0.5 font-medium">📍 Patokan: {customerDetailData?.preferences?.landmark || customerDetailData?.preferences?.address_notes}</p>
                         )}
@@ -7033,8 +7069,20 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
             <div className="p-4 border-t border-[#e9edef] bg-[#f8fafc] flex justify-end space-x-2">
               <button
                 type="button"
+                onClick={() => {
+                  const cid = customerDetailData?.id || selectedChat?.customerId;
+                  if (cid) setAddrBookCustomer({ id: cid, name: customerDetailData?.name || selectedChat?.customerName });
+                }}
+                className="min-h-[44px] px-3.5 py-2 bg-white hover:bg-[#f0f2f5] text-[#111b21] border border-[#d1d7db] text-xs font-bold rounded-xl transition shadow-xs inline-flex items-center space-x-1.5 active:scale-[0.98] focus-visible:ring-2 cursor-pointer"
+                title="Buka Buku Alamat"
+              >
+                <MapPin size={14} className="text-[#008069]" />
+                <span>Buku Alamat{savedAddressCount > 0 ? ` (${savedAddressCount})` : ''}</span>
+              </button>
+              <button
+                type="button"
                 onClick={() => setCustomerDetailEditMode(true)}
-                className="px-4 py-2 bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] text-xs font-bold rounded-xl transition shadow-xs flex items-center space-x-1.5"
+                className="min-h-[44px] px-4 py-2 bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] text-xs font-bold rounded-xl transition shadow-xs flex items-center space-x-1.5 active:scale-[0.98] focus-visible:ring-2 cursor-pointer"
               >
                 <PenLine size={14} />
                 <span>Edit Profil</span>
@@ -7076,6 +7124,27 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           loading={customerDetailLoading}
         />
       )}
+
+      {/* Buku Alamat Drawer - multi-rumah pelanggan di WhatsApp Live Chat (Fase 3) */}
+      <AddressBookDrawer
+        customer={addrBookCustomer}
+        onClose={() => setAddrBookCustomer(null)}
+        onChanged={async () => {
+          const cid = customerDetailData?.id || selectedChat?.customerId;
+          if (cid) {
+            try {
+              const res: any = await apiRequest(`/api/admin/customers/${cid}`);
+              if (res?.success && res.data) {
+                setCustomerDetailData((prev: any) => ({ ...prev, ...res.data, follow_ups: res.data.follow_ups || prev?.follow_ups }));
+              }
+              const addrRes: any = await apiRequest(`/api/admin/customers/${cid}/addresses`);
+              if (addrRes?.success && Array.isArray(addrRes.addresses)) {
+                setSavedAddressCount(addrRes.addresses.length);
+              }
+            } catch {}
+          }
+        }}
+      />
 
       {/* Reservation Detail Modal dari riwayat (klik card) */}
       {selectedReservation && (

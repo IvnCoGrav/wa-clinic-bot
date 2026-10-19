@@ -295,7 +295,9 @@ export function upsertAddressIntoList(
   input: UpsertSavedAddressInput,
   nowIso: string
 ): UpsertResult {
-  const idx = list.findIndex((a) => addressesMatch(a, input));
+  const targetId = input.id ? input.id.trim() : null;
+  const byIdIdx = targetId ? list.findIndex((a) => a.id === targetId) : -1;
+  const idx = byIdIdx >= 0 ? byIdIdx : list.findIndex((a) => addressesMatch(a, input));
   const place = input.kecamatan || input.kota || null;
 
   if (idx >= 0) {

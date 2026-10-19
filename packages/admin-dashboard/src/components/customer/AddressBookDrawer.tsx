@@ -1,21 +1,41 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, MapPin, Star, Trash2, Pencil, Check, Loader2, AlertTriangle, Plus } from 'lucide-react';
+import {
+  X,
+  MapPin,
+  Star,
+  Trash2,
+  Pencil,
+  Check,
+  Loader2,
+  AlertTriangle,
+  Plus,
+  Navigation,
+  Search,
+} from 'lucide-react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
+import { useMapsShortlinkResolver } from '../../hooks/useMapsShortlinkResolver';
+import { geocodeAddressWithNominatim, calculateHaversineKm } from '../../utils/geoUtils';
+import { calculateOngkirFromTiers, type DeliveryTierItem } from '../../utils/deliveryTierCalculator';
 
 /**
- * AddressBookDrawer — Buku Alamat pelanggan (multi-rumah) dalam Drawer. Fitur
- * pendukung dimodalkan di dalam modul induk CustomerDatabase (anti page-bloat):
- * Jadikan Utama / Ubah Label / Hapus kartu, semuanya lewat endpoint buku alamat
- * kanonis (`/api/admin/customers/:id/addresses*`). Hindari window.confirm/alert:
- * gunakan useUiFeedback.
+ * AddressBookDrawer — Buku Alamat pelanggan (multi-rumah) dalam Drawer.
+ * Fitur:
+ * - Tambah Alamat Baru & Edit Alamat Lengkap (D-1/Fase 2)
+ * - Alat Lokasi Cerdas: Resolver link Google Maps / shareloc & Nominatim Geocoding
+ * - Hitung jarak & estimasi ongkir otomatis via delivery-tiers
+ * - Jadikan Utama / Hapus kartu via seam kanonis
  */
 
-// Cermin batas kanonis `MAX_ADDRESS_LABEL_LENGTH` (src/domain/customer-address.ts).
 const MAX_ADDRESS_LABEL_LENGTH = 60;
 
-interface SavedAddress {
+const CLINIC_COORDS = {
+  lat: -7.34886,
+  lng: 112.751677,
+};
+
+export interface SavedAddress {
   id: string;
   label: string;
   address?: string | null;
@@ -26,6 +46,8 @@ interface SavedAddress {
   lng?: number | null;
   distanceKm?: number | null;
   ongkir?: number | null;
+  landmark?: string | null;
+  locationSource?: string | null;
   isPrimary?: boolean;
 }
 
@@ -33,19 +55,28 @@ export interface AddressBookDrawerProps {
   customer: { id: string; name?: string } | null;
   onClose: () => void;
   onChanged?: () => void;
+  initialEditingCardId?: string | null;
 }
 
 function addrLine(a: SavedAddress): string {
   return [a.address, a.kelurahan, a.kecamatan, a.kota].filter(Boolean).join(', ') || 'Koordinat pin saja';
 }
 
-export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({ customer, onClose, onChanged }) => {
+export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
+  customer,
+  onClose,
+  onChanged,
+  initialEditingCardId,
+}) => {
   const { toast, confirm } = useUiFeedback();
+  const { resolve: resolveMapsUrl, isResolving: isResolvingMaps } = useMapsShortlinkResolver();
+
   const [addresses, setAddresses] = useState<SavedAddress[]>([]);
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [draftLabel, setDraftLabel] = useState('');
+
+  // Delivery Tiers dari DB (SaaS-Ready)
+  const [deliveryTiers, setDeliveryTiers] = useState<DeliveryTierItem[]>([]);
 
   // S-UX.3: Form Tambah Alamat Baru
   const [showAddForm, setShowAddForm] = useState(false);
@@ -55,9 +86,44 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({ customer, 
   const [newKelurahan, setNewKelurahan] = useState('');
   const [newKecamatan, setNewKecamatan] = useState('');
   const [newKota, setNewKota] = useState('');
+  const [newLandmark, setNewLandmark] = useState('');
+  const [newLat, setNewLat] = useState<number | null>(null);
+  const [newLng, setNewLng] = useState<number | null>(null);
+  const [newDistanceKm, setNewDistanceKm] = useState<number | null>(null);
+  const [newOngkir, setNewOngkir] = useState<number | null>(null);
+  const [newMapsUrl, setNewMapsUrl] = useState('');
   const [newIsPrimary, setNewIsPrimary] = useState(false);
+  const [isGeocodingAdd, setIsGeocodingAdd] = useState(false);
+
+  // Fase 2: Form Edit Alamat Lengkap
+  const [editingAddress, setEditingAddress] = useState<SavedAddress | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [editLabel, setEditLabel] = useState('');
+  const [editAddress, setEditAddress] = useState('');
+  const [editKelurahan, setEditKelurahan] = useState('');
+  const [editKecamatan, setEditKecamatan] = useState('');
+  const [editKota, setEditKota] = useState('');
+  const [editLandmark, setEditLandmark] = useState('');
+  const [editLat, setEditLat] = useState<number | null>(null);
+  const [editLng, setEditLng] = useState<number | null>(null);
+  const [editDistanceKm, setEditDistanceKm] = useState<number | null>(null);
+  const [editOngkir, setEditOngkir] = useState<number | null>(null);
+  const [editMapsUrl, setEditMapsUrl] = useState('');
+  const [isGeocodingEdit, setIsGeocodingEdit] = useState(false);
 
   const customerId = customer?.id;
+
+  // Load delivery tiers
+  useEffect(() => {
+    apiRequest('/api/admin/delivery-tiers')
+      .then((res: any) => {
+        const list = Array.isArray(res) ? res : res?.data || [];
+        if (Array.isArray(list) && list.length > 0) {
+          setDeliveryTiers(list);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const load = useCallback(async () => {
     if (!customerId) return;
@@ -80,18 +146,28 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({ customer, 
     if (customerId) load();
   }, [customerId, load]);
 
+  // Buka edit form otomatis jika initialEditingCardId diberikan
+  useEffect(() => {
+    if (initialEditingCardId && addresses.length > 0) {
+      const target = addresses.find((a) => a.id === initialEditingCardId);
+      if (target) {
+        startEditing(target);
+      }
+    }
+  }, [initialEditingCardId, addresses]);
+
   const close = useCallback(() => {
-    setEditingId(null);
+    setEditingAddress(null);
     setShowAddForm(false);
     onClose();
   }, [onClose]);
 
-  // S-UX.1: Keyboard accessibility (Escape key closes drawer or cancels active edits)
+  // Keyboard accessibility (Escape key closes drawer or cancels active forms)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (editingId) {
-          setEditingId(null);
+        if (editingAddress) {
+          setEditingAddress(null);
         } else if (showAddForm) {
           setShowAddForm(false);
         } else {
@@ -101,10 +177,130 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({ customer, 
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [editingId, showAddForm, close]);
+  }, [editingAddress, showAddForm, close]);
 
   if (!customer) return null;
 
+  // Helper hitung jarak & ongkir dari koordinat
+  const updateDistanceAndOngkir = (
+    lat: number,
+    lng: number,
+    setter: (dist: number, ongkir: number) => void
+  ) => {
+    const km = calculateHaversineKm(CLINIC_COORDS.lat, CLINIC_COORDS.lng, lat, lng);
+    const roundedKm = Math.round(km * 10) / 10;
+    const calc = calculateOngkirFromTiers(roundedKm, deliveryTiers);
+    setter(roundedKm, calc.netOngkir);
+  };
+
+  // Mulai mode edit
+  const startEditing = (card: SavedAddress) => {
+    setShowAddForm(false);
+    setEditingAddress(card);
+    setEditLabel(card.label || '');
+    setEditAddress(card.address || '');
+    setEditKelurahan(card.kelurahan || '');
+    setEditKecamatan(card.kecamatan || '');
+    setEditKota(card.kota || '');
+    setEditLandmark(card.landmark || '');
+    setEditLat(typeof card.lat === 'number' ? card.lat : null);
+    setEditLng(typeof card.lng === 'number' ? card.lng : null);
+    setEditDistanceKm(typeof card.distanceKm === 'number' ? card.distanceKm : null);
+    setEditOngkir(typeof card.ongkir === 'number' ? card.ongkir : null);
+    setEditMapsUrl('');
+  };
+
+  // Urai Link Google Maps untuk Form Tambah
+  const handleResolveMapsAdd = async (urlStr: string) => {
+    const res = await resolveMapsUrl(urlStr);
+    if (res && typeof res.lat === 'number' && typeof res.lng === 'number') {
+      setNewLat(res.lat);
+      setNewLng(res.lng);
+      if (res.formattedAddress && !newAddress) setNewAddress(res.formattedAddress);
+      if (res.kelurahan && !newKelurahan) setNewKelurahan(res.kelurahan);
+      if (res.kecamatan && !newKecamatan) setNewKecamatan(res.kecamatan);
+      if (res.kota && !newKota) setNewKota(res.kota);
+      updateDistanceAndOngkir(res.lat, res.lng, (dist, ongkir) => {
+        setNewDistanceKm(dist);
+        setNewOngkir(ongkir);
+      });
+    }
+  };
+
+  // Urai Link Google Maps untuk Form Edit
+  const handleResolveMapsEdit = async (urlStr: string) => {
+    const res = await resolveMapsUrl(urlStr);
+    if (res && typeof res.lat === 'number' && typeof res.lng === 'number') {
+      setEditLat(res.lat);
+      setEditLng(res.lng);
+      if (res.formattedAddress && !editAddress) setEditAddress(res.formattedAddress);
+      if (res.kelurahan && !editKelurahan) setEditKelurahan(res.kelurahan);
+      if (res.kecamatan && !editKecamatan) setEditKecamatan(res.kecamatan);
+      if (res.kota && !editKota) setEditKota(res.kota);
+      updateDistanceAndOngkir(res.lat, res.lng, (dist, ongkir) => {
+        setEditDistanceKm(dist);
+        setEditOngkir(ongkir);
+      });
+    }
+  };
+
+  // Geocoding Nominatim Tambah
+  const handleGeocodeAdd = async () => {
+    const query = [newAddress, newKelurahan, newKecamatan, newKota].filter(Boolean).join(', ');
+    if (!query || query.length < 3) {
+      toast('Isi alamat/kelurahan/kecamatan terlebih dahulu.', 'error');
+      return;
+    }
+    setIsGeocodingAdd(true);
+    try {
+      const geo = await geocodeAddressWithNominatim(query);
+      if (geo && geo.lat && geo.lng) {
+        setNewLat(geo.lat);
+        setNewLng(geo.lng);
+        updateDistanceAndOngkir(geo.lat, geo.lng, (dist, ongkir) => {
+          setNewDistanceKm(dist);
+          setNewOngkir(ongkir);
+        });
+        toast(`Titik ditemukan: ${geo.displayName.slice(0, 35)}...`, 'success');
+      } else {
+        toast('Koordinat tidak ditemukan via geocoding.', 'error');
+      }
+    } catch (err: any) {
+      toast(err?.message || 'Gagal mencari koordinat.', 'error');
+    } finally {
+      setIsGeocodingAdd(false);
+    }
+  };
+
+  // Geocoding Nominatim Edit
+  const handleGeocodeEdit = async () => {
+    const query = [editAddress, editKelurahan, editKecamatan, editKota].filter(Boolean).join(', ');
+    if (!query || query.length < 3) {
+      toast('Isi alamat/kelurahan/kecamatan terlebih dahulu.', 'error');
+      return;
+    }
+    setIsGeocodingEdit(true);
+    try {
+      const geo = await geocodeAddressWithNominatim(query);
+      if (geo && geo.lat && geo.lng) {
+        setEditLat(geo.lat);
+        setEditLng(geo.lng);
+        updateDistanceAndOngkir(geo.lat, geo.lng, (dist, ongkir) => {
+          setEditDistanceKm(dist);
+          setEditOngkir(ongkir);
+        });
+        toast(`Titik ditemukan: ${geo.displayName.slice(0, 35)}...`, 'success');
+      } else {
+        toast('Koordinat tidak ditemukan via geocoding.', 'error');
+      }
+    } catch (err: any) {
+      toast(err?.message || 'Gagal mencari koordinat.', 'error');
+    } finally {
+      setIsGeocodingEdit(false);
+    }
+  };
+
+  // Submit Tambah Alamat
   const handleAddAddress = async (e: React.FormEvent) => {
     e.preventDefault();
     const label = newLabel.trim();
@@ -129,6 +325,11 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({ customer, 
           kelurahan: newKelurahan.trim() || undefined,
           kecamatan: newKecamatan.trim() || undefined,
           kota: newKota.trim() || undefined,
+          landmark: newLandmark.trim() || undefined,
+          lat: newLat,
+          lng: newLng,
+          distanceKm: newDistanceKm,
+          ongkir: newOngkir,
           isPrimary: newIsPrimary,
         }),
       });
@@ -138,6 +339,12 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({ customer, 
       setNewKelurahan('');
       setNewKecamatan('');
       setNewKota('');
+      setNewLandmark('');
+      setNewLat(null);
+      setNewLng(null);
+      setNewDistanceKm(null);
+      setNewOngkir(null);
+      setNewMapsUrl('');
       setNewIsPrimary(false);
       setShowAddForm(false);
       await load();
@@ -146,6 +353,64 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({ customer, 
       toast(err?.message || 'Gagal menambahkan alamat.', 'error');
     } finally {
       setIsAdding(false);
+    }
+  };
+
+  // Submit Edit Alamat (PUT)
+  const handleUpdateAddress = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAddress || !customerId) return;
+
+    const label = editLabel.trim();
+    if (!label) {
+      toast('Label alamat wajib diisi.', 'error');
+      return;
+    }
+    if (label.length > MAX_ADDRESS_LABEL_LENGTH) {
+      toast(`Label maksimal ${MAX_ADDRESS_LABEL_LENGTH} karakter.`, 'error');
+      return;
+    }
+
+    // Konfirmasi bila koordinat berubah
+    const coordsChanged =
+      (typeof editLat === 'number' && editLat !== editingAddress.lat) ||
+      (typeof editLng === 'number' && editLng !== editingAddress.lng);
+
+    if (coordsChanged) {
+      const ok = await confirm({
+        title: 'Perbarui Koordinat Kartu?',
+        message: 'Perubahan koordinat kartu akan ikut memperbarui jadwal aktif yang menggunakan rumah ini.',
+        confirmText: 'Ya, Perbarui',
+      });
+      if (!ok) return;
+    }
+
+    setIsUpdating(true);
+    try {
+      await apiRequest(`/api/admin/customers/${customerId}/addresses/${editingAddress.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          label,
+          address: editAddress.trim() || undefined,
+          kelurahan: editKelurahan.trim() || null,
+          kecamatan: editKecamatan.trim() || null,
+          kota: editKota.trim() || null,
+          landmark: editLandmark.trim() || null,
+          lat: editLat,
+          lng: editLng,
+          distanceKm: editDistanceKm,
+          ongkir: editOngkir,
+        }),
+      });
+      toast(`Alamat "${label}" berhasil diperbarui.`, 'success');
+      setEditingAddress(null);
+      await load();
+      onChanged?.();
+    } catch (err: any) {
+      toast(err?.message || 'Gagal memperbarui alamat.', 'error');
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -164,34 +429,6 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({ customer, 
       onChanged?.();
     } catch (err: any) {
       toast(err?.message || 'Gagal mengubah alamat utama.', 'error');
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const handleRename = async (card: SavedAddress) => {
-    const label = draftLabel.trim();
-    if (!label) {
-      toast('Label tidak boleh kosong.', 'error');
-      return;
-    }
-    if (label.length > MAX_ADDRESS_LABEL_LENGTH) {
-      toast(`Label maksimal ${MAX_ADDRESS_LABEL_LENGTH} karakter.`, 'error');
-      return;
-    }
-    setBusyId(card.id);
-    try {
-      await apiRequest(`/api/admin/customers/${customerId}/addresses/${card.id}/label`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label }),
-      });
-      toast('Label alamat diperbarui.', 'success');
-      setEditingId(null);
-      await load();
-      onChanged?.();
-    } catch (err: any) {
-      toast(err?.message || 'Gagal mengubah label.', 'error');
     } finally {
       setBusyId(null);
     }
@@ -229,9 +466,12 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({ customer, 
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4" onClick={close}>
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4"
+      onClick={close}
+    >
       <div
-        className="w-full sm:max-w-lg max-h-[85dvh] flex flex-col bg-white rounded-t-2xl sm:rounded-2xl shadow-xl"
+        className="w-full sm:max-w-lg max-h-[90dvh] flex flex-col bg-white rounded-t-2xl sm:rounded-2xl shadow-xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-label="Buku Alamat Pelanggan"
@@ -245,8 +485,11 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({ customer, 
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
             <button
-              onClick={() => setShowAddForm((prev) => !prev)}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#e8f5f2] text-[#008069] hover:bg-[#c2e7e0] text-xs font-semibold focus-visible:ring-2 focus-visible:ring-[#00a884] active:scale-[0.98] transition"
+              onClick={() => {
+                setEditingAddress(null);
+                setShowAddForm((prev) => !prev);
+              }}
+              className="min-h-[44px] inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#e8f5f2] text-[#008069] hover:bg-[#c2e7e0] text-xs font-semibold focus-visible:ring-2 focus-visible:ring-[#00a884] active:scale-[0.98] transition"
               aria-label="Tambah alamat baru"
             >
               <Plus size={15} />
@@ -262,14 +505,174 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({ customer, 
           </div>
         </div>
 
-        {showAddForm && (
-          <form onSubmit={handleAddAddress} className="p-4 bg-[#f8fafc] border-b border-[#e9edef] space-y-2.5 shrink-0">
+        {/* Form Edit Alamat Lengkap (Fase 2) */}
+        {editingAddress && (
+          <form
+            onSubmit={handleUpdateAddress}
+            className="p-4 bg-[#f0f9f6] border-b border-[#c2e7e0] space-y-2.5 shrink-0 max-h-[60dvh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-[#008069] flex items-center gap-1.5">
+                <Pencil size={13} />
+                Edit Alamat: {editingAddress.label}
+              </span>
+              <button
+                type="button"
+                onClick={() => setEditingAddress(null)}
+                className="text-[11px] text-[#8696a0] hover:text-[#111b21] py-1 px-2"
+              >
+                Batal
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-medium text-[#111b21] mb-1">
+                Label <span className="text-red-500">*</span>
+              </label>
+              <input
+                autoFocus
+                type="text"
+                value={editLabel}
+                maxLength={MAX_ADDRESS_LABEL_LENGTH}
+                onChange={(e) => setEditLabel(e.target.value)}
+                placeholder="misal: Rumah Mertua / Kantor Suami"
+                className="w-full px-2.5 py-1.5 text-xs border border-[#d1d7db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40 bg-white"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-medium text-[#111b21] mb-1">Alamat Jalan</label>
+              <input
+                type="text"
+                value={editAddress}
+                onChange={(e) => setEditAddress(e.target.value)}
+                placeholder="Jl. Raya No. 123"
+                className="w-full px-2.5 py-1.5 text-xs border border-[#d1d7db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40 bg-white"
+              />
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="block text-[10px] text-[#8696a0] mb-0.5">Kelurahan</label>
+                <input
+                  type="text"
+                  value={editKelurahan}
+                  onChange={(e) => setEditKelurahan(e.target.value)}
+                  placeholder="Kelurahan"
+                  className="w-full px-2 py-1 text-xs border border-[#d1d7db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40 bg-white"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] text-[#8696a0] mb-0.5">Kecamatan</label>
+                <input
+                  type="text"
+                  value={editKecamatan}
+                  onChange={(e) => setEditKecamatan(e.target.value)}
+                  placeholder="Kecamatan"
+                  className="w-full px-2 py-1 text-xs border border-[#d1d7db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40 bg-white"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] text-[#8696a0] mb-0.5">Kota</label>
+                <input
+                  type="text"
+                  value={editKota}
+                  onChange={(e) => setEditKota(e.target.value)}
+                  placeholder="Surabaya"
+                  className="w-full px-2 py-1 text-xs border border-[#d1d7db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40 bg-white"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[10px] text-[#8696a0] mb-0.5">Landmark / Patokan Rumah</label>
+              <input
+                type="text"
+                value={editLandmark}
+                onChange={(e) => setEditLandmark(e.target.value)}
+                placeholder="Pagar hitam depan pos satpam"
+                className="w-full px-2.5 py-1 text-xs border border-[#d1d7db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40 bg-white"
+              />
+            </div>
+
+            {/* Alat Lokasi Cerdas (Micro-Task 2.2) */}
+            <div className="p-2.5 bg-white border border-[#d1d7db] rounded-xl space-y-2">
+              <span className="text-[11px] font-semibold text-[#111b21] flex items-center gap-1">
+                <Navigation size={12} className="text-[#008069]" />
+                Titik GPS & Alat Lokasi
+              </span>
+
+              <div className="flex gap-1.5">
+                <input
+                  type="text"
+                  value={editMapsUrl}
+                  onChange={(e) => setEditMapsUrl(e.target.value)}
+                  placeholder="Tempel link Google Maps / shareloc..."
+                  className="flex-1 px-2 py-1 text-xs border border-[#d1d7db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40"
+                />
+                <button
+                  type="button"
+                  disabled={isResolvingMaps || !editMapsUrl.trim()}
+                  onClick={() => handleResolveMapsEdit(editMapsUrl)}
+                  className="min-h-[44px] px-2.5 py-1 bg-[#e8f5f2] text-[#008069] hover:bg-[#c2e7e0] text-xs font-medium rounded-lg transition disabled:opacity-50 inline-flex items-center gap-1"
+                >
+                  {isResolvingMaps ? <Loader2 size={13} className="animate-spin" /> : <Navigation size={13} />}
+                  <span>Urai</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={isGeocodingEdit}
+                  onClick={handleGeocodeEdit}
+                  className="min-h-[44px] px-2.5 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 text-xs font-medium rounded-lg transition disabled:opacity-50 inline-flex items-center gap-1"
+                  title="Cari koordinat dari kelurahan/kecamatan via Nominatim"
+                >
+                  {isGeocodingEdit ? <Loader2 size={13} className="animate-spin" /> : <Search size={13} />}
+                  <span>Cari</span>
+                </button>
+              </div>
+
+              {editLat != null && editLng != null ? (
+                <div className="flex items-center justify-between text-[11px] text-[#54656f] bg-[#f8fafc] px-2 py-1 rounded-lg">
+                  <span>GPS: {editLat.toFixed(5)}, {editLng.toFixed(5)}</span>
+                  <span>{editDistanceKm != null ? `${editDistanceKm} km` : ''} {editOngkir != null ? `• Rp ${editOngkir.toLocaleString('id-ID')}` : ''}</span>
+                </div>
+              ) : (
+                <p className="text-[10px] text-[#8696a0]">Koordinat belum disetel (ongkir belum dihitung).</p>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setEditingAddress(null)}
+                className="min-h-[44px] px-3 py-1.5 text-xs text-[#54656f] hover:bg-[#e9edef] rounded-lg transition"
+              >
+                Batal
+              </button>
+              <button
+                type="submit"
+                disabled={isUpdating}
+                className="min-h-[44px] inline-flex items-center gap-1.5 px-4 py-1.5 bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold rounded-lg shadow-sm transition disabled:opacity-50"
+              >
+                {isUpdating ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                <span>Perbarui Alamat</span>
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* Form Tambah Alamat Baru */}
+        {showAddForm && !editingAddress && (
+          <form
+            onSubmit={handleAddAddress}
+            className="p-4 bg-[#f8fafc] border-b border-[#e9edef] space-y-2.5 shrink-0 max-h-[60dvh] overflow-y-auto"
+          >
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-[#111b21]">Tambah Alamat Baru</span>
               <button
                 type="button"
                 onClick={() => setShowAddForm(false)}
-                className="text-[11px] text-[#8696a0] hover:text-[#111b21]"
+                className="text-[11px] text-[#8696a0] hover:text-[#111b21] py-1 px-2"
               >
                 Batal
               </button>
@@ -330,6 +733,64 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({ customer, 
                 />
               </div>
             </div>
+
+            <div>
+              <label className="block text-[10px] text-[#8696a0] mb-0.5">Landmark / Patokan Rumah</label>
+              <input
+                type="text"
+                value={newLandmark}
+                onChange={(e) => setNewLandmark(e.target.value)}
+                placeholder="Pagar hitam depan pos satpam"
+                className="w-full px-2.5 py-1 text-xs border border-[#d1d7db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40"
+              />
+            </div>
+
+            {/* Alat Lokasi Cerdas (Micro-Task 2.2) */}
+            <div className="p-2.5 bg-white border border-[#d1d7db] rounded-xl space-y-2">
+              <span className="text-[11px] font-semibold text-[#111b21] flex items-center gap-1">
+                <Navigation size={12} className="text-[#008069]" />
+                Titik GPS & Alat Lokasi
+              </span>
+
+              <div className="flex gap-1.5">
+                <input
+                  type="text"
+                  value={newMapsUrl}
+                  onChange={(e) => setNewMapsUrl(e.target.value)}
+                  placeholder="Tempel link Google Maps / shareloc..."
+                  className="flex-1 px-2 py-1 text-xs border border-[#d1d7db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40"
+                />
+                <button
+                  type="button"
+                  disabled={isResolvingMaps || !newMapsUrl.trim()}
+                  onClick={() => handleResolveMapsAdd(newMapsUrl)}
+                  className="min-h-[44px] px-2.5 py-1 bg-[#e8f5f2] text-[#008069] hover:bg-[#c2e7e0] text-xs font-medium rounded-lg transition disabled:opacity-50 inline-flex items-center gap-1"
+                >
+                  {isResolvingMaps ? <Loader2 size={13} className="animate-spin" /> : <Navigation size={13} />}
+                  <span>Urai</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={isGeocodingAdd}
+                  onClick={handleGeocodeAdd}
+                  className="min-h-[44px] px-2.5 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 text-xs font-medium rounded-lg transition disabled:opacity-50 inline-flex items-center gap-1"
+                  title="Cari koordinat dari kelurahan/kecamatan via Nominatim"
+                >
+                  {isGeocodingAdd ? <Loader2 size={13} className="animate-spin" /> : <Search size={13} />}
+                  <span>Cari</span>
+                </button>
+              </div>
+
+              {newLat != null && newLng != null ? (
+                <div className="flex items-center justify-between text-[11px] text-[#54656f] bg-[#f8fafc] px-2 py-1 rounded-lg">
+                  <span>GPS: {newLat.toFixed(5)}, {newLng.toFixed(5)}</span>
+                  <span>{newDistanceKm != null ? `${newDistanceKm} km` : ''} {newOngkir != null ? `• Rp ${newOngkir.toLocaleString('id-ID')}` : ''}</span>
+                </div>
+              ) : (
+                <p className="text-[10px] text-[#8696a0]">Koordinat belum disetel (ongkir belum dihitung).</p>
+              )}
+            </div>
+
             <div className="flex items-center gap-2 pt-1">
               <input
                 type="checkbox"
@@ -346,14 +807,14 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({ customer, 
               <button
                 type="button"
                 onClick={() => setShowAddForm(false)}
-                className="px-3 py-1.5 text-xs text-[#54656f] hover:bg-[#e9edef] rounded-lg transition"
+                className="min-h-[44px] px-3 py-1.5 text-xs text-[#54656f] hover:bg-[#e9edef] rounded-lg transition"
               >
                 Batal
               </button>
               <button
                 type="submit"
                 disabled={isAdding}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold rounded-lg shadow-sm transition disabled:opacity-50"
+                className="min-h-[44px] inline-flex items-center gap-1.5 px-4 py-1.5 bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold rounded-lg shadow-sm transition disabled:opacity-50"
               >
                 {isAdding ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
                 <span>Simpan Alamat</span>
@@ -362,6 +823,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({ customer, 
           </form>
         )}
 
+        {/* Daftar Kartu Alamat */}
         <div className="overflow-y-auto flex-1">
           {loading ? (
             <div className="p-8 flex items-center justify-center text-[#8696a0]">
@@ -378,46 +840,27 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({ customer, 
               {addresses.map((card, i) => (
                 <li key={card.id} className={`px-4 py-3 ${i > 0 ? 'border-t border-[#e9edef]' : ''}`}>
                   <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      {editingId === card.id ? (
-                        <div className="flex items-center gap-1.5">
-                          <input
-                            autoFocus
-                            value={draftLabel}
-                            onChange={(e) => setDraftLabel(e.target.value)}
-                            maxLength={MAX_ADDRESS_LABEL_LENGTH}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') handleRename(card);
-                              if (e.key === 'Escape') setEditingId(null);
-                            }}
-                            className="w-full px-2 py-1.5 text-xs border border-[#00a884] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40"
-                            aria-label="Label alamat baru"
-                          />
-                          <button
-                            onClick={() => handleRename(card)}
-                            disabled={busyId === card.id}
-                            className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl bg-[#e8f5f2] text-[#008069] hover:bg-[#c2e7e0] focus-visible:ring-2 focus-visible:ring-[#00a884] active:scale-[0.98] transition disabled:opacity-50"
-                            aria-label="Simpan label"
-                          >
-                            {busyId === card.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                          </button>
-                        </div>
-                      ) : (
-                        <p className="text-xs font-semibold text-[#111b21] flex items-center gap-1.5">
-                          <span className="truncate">
-                            {card.label}
-                            {card.isPrimary && (
-                              <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-[#e8f5f2] text-[#008069] text-[10px] font-bold align-middle">
-                                Utama
-                              </span>
-                            )}
-                          </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-[#111b21] flex items-center gap-1.5">
+                        <span className="truncate">
+                          {card.label}
+                          {card.isPrimary && (
+                            <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-[#e8f5f2] text-[#008069] text-[10px] font-bold align-middle">
+                              Utama
+                            </span>
+                          )}
+                        </span>
+                      </p>
+                      <p className="text-[11px] text-[#8696a0] mt-0.5 line-clamp-2">{addrLine(card)}</p>
+                      {card.landmark && (
+                        <p className="text-[10px] text-amber-800 bg-amber-50 rounded px-1.5 py-0.5 mt-1 inline-block">
+                          Patokan: {card.landmark}
                         </p>
                       )}
-                      <p className="text-[11px] text-[#8696a0] mt-0.5 line-clamp-2">{addrLine(card)}</p>
                       <p className="text-[11px] text-[#8696a0] mt-0.5">
                         {card.ongkir != null ? `Ongkir Rp ${card.ongkir.toLocaleString('id-ID')}` : 'Ongkir belum dihitung'}
-                        {card.kelurahan ? '' : ' · area belum lengkap'}
+                        {card.distanceKm != null ? ` (${card.distanceKm} km)` : ''}
+                        {card.kelurahan ? '' : ' • area belum lengkap'}
                       </p>
                     </div>
                     <div className="flex items-center shrink-0 -mr-1">
@@ -432,15 +875,13 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({ customer, 
                           {busyId === card.id ? <Loader2 size={15} className="animate-spin" /> : <Star size={15} />}
                         </button>
                       )}
+                      {/* Tombol Pensil: Buka Form Edit Alamat Lengkap (Micro-Task 2.1) */}
                       <button
-                        onClick={() => {
-                          setEditingId(card.id);
-                          setDraftLabel(card.label);
-                        }}
+                        onClick={() => startEditing(card)}
                         disabled={busyId === card.id}
                         className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl text-[#8696a0] hover:bg-sky-50 hover:text-sky-600 focus-visible:ring-2 focus-visible:ring-[#00a884] active:scale-[0.98] transition disabled:opacity-50"
-                        title="Ubah label"
-                        aria-label={`Ubah label ${card.label}`}
+                        title="Edit alamat lengkap"
+                        aria-label={`Edit alamat ${card.label}`}
                       >
                         <Pencil size={15} />
                       </button>
@@ -462,10 +903,9 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({ customer, 
         </div>
 
         <div className="p-3 border-t border-[#e9edef] bg-[#f8fafc] flex items-start gap-2 text-[11px] text-[#8696a0] shrink-0">
-          <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+          <AlertTriangle size={13} className="mt-0.5 shrink-0 text-amber-500" />
           <p>
-            Perubahan di sini ikut dipakai chatbot & jadwal kunjungan. Hapus alamat utama akan memindahkan gelar
-            "Utama" ke rumah yang paling baru dipakai.
+            Perubahan koordinat kartu akan otomatis memperbarui ongkir dan jadwal kunjungan aktif yang terhubung.
           </p>
         </div>
       </div>
