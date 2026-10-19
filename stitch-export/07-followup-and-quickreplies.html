@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>07 — Follow-Up Queue & Quick Replies</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body { font-family: 'Plus Jakarta Sans', sans-serif; }</style>
+</head>
+<body class="bg-[#f0f2f5] p-6 text-[#111b21]">
+  <div class="mx-auto max-w-6xl overflow-hidden rounded-3xl border border-[#e9edef] bg-white p-6 shadow-xl">
+    <!-- Header -->
+    <div class="flex flex-wrap items-center justify-between gap-4 border-b border-[#e9edef] pb-5 mb-6">
+      <div>
+        <h1 class="text-lg font-bold text-[#111b21]">CRM Otomasi: Follow-Up & Balasan Cepat</h1>
+        <p class="text-xs text-[#54656f]">Antrean Pesan Pengingat WhatsApp Terjadwal & Template Shortcut CS</p>
+      </div>
+      <button class="rounded-xl bg-[#008069] px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#00a884]">
+        + Tambah Template Follow-Up
+      </button>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- Left: Follow-Up Queue -->
+      <div class="rounded-2xl border border-[#e9edef] p-5 space-y-3">
+        <h2 class="text-xs font-bold text-[#111b21] border-b border-[#e9edef] pb-2">Antrean Follow-Up Otomatis (Hari Ini)</h2>
+        
+        <div class="rounded-xl border border-amber-200 bg-amber-50/50 p-3.5">
+          <div class="flex justify-between items-center text-xs font-bold text-amber-900">
+            <span>Pengingat H-1 Jadwal Booking</span>
+            <span class="text-[10px] bg-amber-100 px-2 py-0.5 rounded">Pukul 18:00 WIB</span>
+          </div>
+          <p class="text-xs text-[#54656f] mt-1">"Halo Bunda, mengingatkan besok ada jadwal Pijat Bayi pukul 09.00 WIB bersama Bidan..."</p>
+          <div class="mt-2 text-[11px] font-semibold text-amber-800">Target: 6 Pasien Terjadwal Besok</div>
+        </div>
+
+        <div class="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3.5">
+          <div class="flex justify-between items-center text-xs font-bold text-emerald-900">
+            <span>Survey Kepuasan & Rating (H+1)</span>
+            <span class="text-[10px] bg-emerald-100 px-2 py-0.5 rounded">TERKIRIM</span>
+          </div>
+          <p class="text-xs text-[#54656f] mt-1">"Bagaimana kondisi adik setelah tindakan kemarin Bunda? Apakah tidurnya sudah lebih lelap?"</p>
+          <div class="mt-2 text-[11px] font-semibold text-emerald-800">Terkirim ke 8 Pasien (Rating: 4.9/5)</div>
+        </div>
+      </div>
+
+      <!-- Right: Quick Replies -->
+      <div class="rounded-2xl border border-[#e9edef] p-5 space-y-3">
+        <h2 class="text-xs font-bold text-[#111b21] border-b border-[#e9edef] pb-2">Daftar Balasan Cepat (Quick Replies / CS Shortcuts)</h2>
+        
+        <div class="space-y-2 text-xs">
+          <div class="rounded-xl border border-[#e9edef] p-3 hover:bg-slate-50">
+            <div class="flex items-center justify-between">
+              <span class="font-mono font-bold text-[#008069] bg-[#e8f5f2] px-2 py-0.5 rounded">/jadwal</span>
+              <span class="text-[10px] text-[#54656f]">Info Slot</span>
+            </div>
+            <p class="text-[11px] text-[#54656f] mt-1.5">"Untuk hari ini slot home care yang masih tersedia ada di jam {slot_tersedia}. Mau kami amankan Bunda?"</p>
+          </div>
+
+          <div class="rounded-xl border border-[#e9edef] p-3 hover:bg-slate-50">
+            <div class="flex items-center justify-between">
+              <span class="font-mono font-bold text-[#008069] bg-[#e8f5f2] px-2 py-0.5 rounded">/bapil</span>
+              <span class="text-[10px] text-[#54656f]">SOP Batuk Pilek</span>
+            </div>
+            <p class="text-[11px] text-[#54656f] mt-1.5">"Untuk keluhan batuk pilek, bidan kami melayani terapi nebulizer dan vibrasi dada untuk melegakan nafas si kecil ya Bunda."</p>
+          </div>
+
+          <div class="rounded-xl border border-[#e9edef] p-3 hover:bg-slate-50">
+            <div class="flex items-center justify-between">
+              <span class="font-mono font-bold text-[#008069] bg-[#e8f5f2] px-2 py-0.5 rounded">/ongkir</span>
+              <span class="text-[10px] text-[#54656f]">Tarif Jarak</span>
+            </div>
+            <p class="text-[11px] text-[#54656f] mt-1.5">"Jarak 0-3 km dari klinik bebas ongkir (free), untuk jarak berikutnya Rp 2.500/km ya Bunda."</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

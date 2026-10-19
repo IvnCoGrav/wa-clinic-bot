@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kala Spa — Live Chat Monitor (Full Layout)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body { font-family: 'Plus Jakarta Sans', sans-serif; }</style>
+</head>
+<body class="bg-[#f0f2f5] text-[#111b21] h-screen flex overflow-hidden">
+
+  <!-- 1. LEFT SIDEBAR NAVIGATION (KALA SPA) -->
+  <aside class="w-64 bg-white border-r border-[#e9edef] flex flex-col justify-between shrink-0 h-full">
+    <div class="overflow-y-auto">
+      <!-- Logo Header -->
+      <div class="p-4 border-b border-[#e9edef] flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600 font-bold text-sm">
+          KS
+        </div>
+        <div>
+          <h1 class="text-sm font-bold text-[#111b21] leading-none">KALA SPA</h1>
+          <p class="text-[10px] text-[#54656f] mt-1">Management Bot</p>
+        </div>
+      </div>
+
+      <!-- Navigation Groups -->
+      <div class="p-3 space-y-4 text-xs font-semibold text-[#54656f]">
+        <!-- Group 1 -->
+        <div>
+          <span class="text-[10px] font-bold uppercase tracking-wider text-[#8696a0] px-3 block mb-1">Operasional & Jadwal</span>
+          <nav class="space-y-0.5">
+            <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-[#f0f2f5] text-[#54656f]">Overview</a>
+            <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-[#f0f2f5] text-[#54656f]">Customer Database</a>
+            <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-[#f0f2f5] text-[#54656f]">Chat Migration & Seeding</a>
+            <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-[#f0f2f5] text-[#54656f]">Reservations & Calendar</a>
+            <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-[#f0f2f5] text-[#54656f]">Treatment Hari Ini</a>
+            <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-[#f0f2f5] text-[#54656f]">Follow-Up Queue</a>
+            <a href="#" class="flex items-center justify-between px-3 py-2 rounded-xl bg-emerald-50 text-[#008069] font-bold border border-emerald-200/60">
+              <span>Live Chat Monitor</span>
+              <span class="bg-[#008069] text-white text-[10px] px-2 py-0.2 rounded-full font-bold">11</span>
+            </a>
+            <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-[#f0f2f5] text-[#54656f]">Balasan Cepat</a>
+            <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-[#f0f2f5] text-[#54656f]">Transaksi & Pendapatan</a>
+          </nav>
+        </div>
+
+        <!-- Group 2 -->
+        <div>
+          <span class="text-[10px] font-bold uppercase tracking-wider text-[#8696a0] px-3 block mb-1">Marketing & Ads</span>
+          <nav class="space-y-0.5">
+            <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-[#f0f2f5] text-[#54656f]">CTA & Greetings WA</a>
+            <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-[#f0f2f5] text-[#54656f]">Landing Page</a>
+            <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-[#f0f2f5] text-[#54656f]">Meta Click Catcher</a>
+            <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-[#f0f2f5] text-[#54656f]">Meta CAPI Queue</a>
+          </nav>
+        </div>
+
+        <!-- Group 3 -->
+        <div>
+          <span class="text-[10px] font-bold uppercase tracking-wider text-[#8696a0] px-3 block mb-1">Staff & Layanan</span>
+          <nav class="space-y-0.5">
+            <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-[#f0f2f5] text-[#54656f]">Staff & Terapis</a>
+            <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-[#f0f2f5] text-[#54656f]">Clinic Services</a>
+          </nav>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sidebar Bottom User -->
+    <div class="p-3 border-t border-[#e9edef] bg-[#f8fafc]">
+      <div class="rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-1.5 flex items-center justify-between text-[11px] font-bold text-emerald-800 mb-2">
+        <span>● WhatsApp Online</span>
+        <span>›</span>
+      </div>
+      <div class="text-[11px]">
+        <div class="font-bold text-[#111b21] truncate">admin@kalamomsspa.com</div>
+        <span class="text-[10px] text-[#008069] font-bold">Super Admin</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- 2. MAIN CONTENT AREA -->
+  <main class="flex-1 flex flex-col min-w-0 bg-[#f0f2f5] overflow-hidden">
+    
+    <!-- Top Bar -->
+    <header class="bg-white border-b border-[#e9edef] px-6 py-2.5 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <span class="text-sm font-bold text-[#111b21]">KALA SPA</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <span class="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-200">
+          ● Online
+        </span>
+        <button class="rounded-xl border border-[#d1d7db] px-3 py-1 text-xs text-[#54656f] flex items-center gap-1.5 hover:bg-slate-50">
+          ☀️ Beralih ke Mode Gelap (Dark)
+        </button>
+      </div>
+    </header>
+
+    <!-- Amber Notification Banner -->
+    <div class="bg-amber-50 border-b border-amber-200 px-6 py-2.5 flex items-center justify-between text-xs text-amber-900">
+      <div class="flex items-center gap-2">
+        <span class="font-bold">⚠️ CHATBOT AI NONAKTIF:</span>
+        <span>AI diam, dialihkan ke CS manual. Follow-up & balasan Live Chat manual tetap aktif.</span>
+      </div>
+      <button class="rounded-lg bg-[#008069] px-3 py-1 text-xs font-bold text-white shadow-2xs">
+        Aktifkan AI
+      </button>
+    </div>
+
+    <!-- Live Chat Split Interface -->
+    <div class="flex-1 flex min-h-0">
+      
+      <!-- Sub-panel Left: Chat Conversation List -->
+      <div class="w-80 bg-white border-r border-[#e9edef] flex flex-col">
+        <!-- Sub-header -->
+        <div class="p-3 border-b border-[#e9edef]">
+          <div class="flex items-center justify-between mb-2">
+            <h2 class="text-xs font-bold text-[#111b21]">Live Chat Monitor <span class="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.2 rounded font-bold">50 Total • Live</span></h2>
+          </div>
+          <div class="flex gap-2">
+            <input type="text" placeholder="Cari nama, no. HP, atau keyword chat..." class="w-full rounded-xl bg-[#f0f2f5] px-3 py-1.5 text-xs text-[#111b21] outline-none">
+          </div>
+        </div>
+
+        <!-- Chat List Items -->
+        <div class="flex-1 overflow-y-auto divide-y divide-[#f0f2f5]">
+          <!-- Item 1 -->
+          <div class="p-3 hover:bg-slate-50 cursor-pointer">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-bold text-[#111b21]">babyspantiq</span>
+              <span class="text-[10px] text-[#8696a0]">3 menit lalu</span>
+            </div>
+            <p class="text-xs text-[#8696a0] truncate mt-1">"Masih, mau liat-liat dulu ta?"</p>
+          </div>
+
+          <!-- Item 2 (Active Selected) -->
+          <div class="p-3 bg-emerald-50/70 border-l-4 border-[#008069] cursor-pointer">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-bold text-[#111b21]">Yanuarita Firnanda Putri</span>
+              <span class="text-[10px] text-[#008069] font-bold">12 menit lalu</span>
+            </div>
+            <p class="text-xs text-[#111b21] font-semibold truncate mt-1">"Waru mana ya ka?"</p>
+          </div>
+
+          <!-- Item 3 -->
+          <div class="p-3 hover:bg-slate-50 cursor-pointer">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-bold text-[#111b21]">Bunda Novi Hariyanti</span>
+              <span class="text-[10px] text-[#8696a0]">17 menit lalu</span>
+            </div>
+            <p class="text-xs text-[#8696a0] truncate mt-1">"Sudah sampai mana bidan?"</p>
+            <span class="mt-1.5 inline-block rounded bg-emerald-100 px-1.5 py-0.2 text-[9px] font-bold text-emerald-800">Terjadwal</span>
+          </div>
+
+          <!-- Item 4 -->
+          <div class="p-3 hover:bg-slate-50 cursor-pointer">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-bold text-[#111b21]">ibuknya wulan</span>
+              <span class="text-[10px] text-[#8696a0]">36 menit lalu</span>
+            </div>
+            <p class="text-xs text-[#8696a0] truncate mt-1">"Halo Bunda! Semoga Bunda dan keluarga sehat selalu..."</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sub-panel Right: Active Conversation Area -->
+      <div class="flex-1 flex flex-col bg-[#efeae2]/30">
+        <!-- Active Header -->
+        <div class="bg-white border-b border-[#e9edef] px-6 py-3 flex items-center justify-between">
+          <div>
+            <h3 class="text-xs font-bold text-[#111b21]">Yanuarita Firnanda Putri</h3>
+            <span class="text-[10px] text-[#54656f] font-mono">6285155454533</span>
+          </div>
+          <button class="rounded-xl border border-[#d1d7db] bg-white px-3 py-1.5 text-xs font-bold text-sky-800 hover:bg-sky-50 shadow-2xs">
+            Kembalikan ke Bot
+          </button>
+        </div>
+
+        <!-- Chat Flow -->
+        <div class="flex-1 overflow-y-auto p-6 space-y-4">
+          <div class="text-center"><span class="bg-white/80 rounded-full px-3 py-1 text-[10px] font-bold text-[#54656f] border border-[#e9edef]">Hari Ini</span></div>
+
+          <!-- Bubble 1 Customer -->
+          <div class="flex justify-start">
+            <div class="bg-white p-3.5 rounded-2xl rounded-tl-none border border-[#e9edef] shadow-xs max-w-md text-xs leading-relaxed">
+              <span class="text-[10px] font-bold text-[#54656f] block mb-1">Customer</span>
+              Assalamualaikum ini untuk daerah mana ya ka?
+              <span class="block text-right text-[10px] text-[#8696a0] mt-1">11:00</span>
+            </div>
+          </div>
+
+          <!-- Bubble 2 Admin -->
+          <div class="flex justify-end">
+            <div class="bg-[#d9fdd3] p-3.5 rounded-2xl rounded-tr-none border border-[#c4f3bd] shadow-xs max-w-lg text-xs leading-relaxed">
+              <span class="text-[10px] font-bold text-[#008069] block mb-1">Admin</span>
+              Waalaikumsalam Bunda ! ✨<br><br>
+              Terima kasih sudah menghubungi kami.<br>
+              Perkenalkan, saya Bidan Yusi. Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).<br><br>
+              Kami dari daerah waru bund, Kalau boleh tau rumahnya dimana ya Bunda?
+              <span class="block text-right text-[10px] text-[#54656f] mt-1">11:06 ✓✓</span>
+            </div>
+          </div>
+
+          <!-- Bubble 3 Customer -->
+          <div class="flex justify-start">
+            <div class="bg-white p-3.5 rounded-2xl rounded-tl-none border border-[#e9edef] shadow-xs max-w-md text-xs leading-relaxed">
+              <span class="text-[10px] font-bold text-[#54656f] block mb-1">Customer</span>
+              Waru mana ya ka?
+              <span class="block text-right text-[10px] text-[#8696a0] mt-1">11:09</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chat Input Bar -->
+        <div class="bg-white border-t border-[#e9edef] p-4 flex items-center gap-3">
+          <button class="w-8 h-8 rounded-full border border-[#d1d7db] text-[#54656f] flex items-center justify-center font-bold text-sm hover:bg-slate-50">+</button>
+          <input type="text" placeholder="Tulis balasan..." class="flex-1 rounded-xl border border-[#d1d7db] px-4 py-2 text-xs text-[#111b21] outline-none">
+          <button class="rounded-xl border border-[#d1d7db] px-3 py-2 text-xs font-bold text-[#54656f]">Internal</button>
+          <button class="rounded-xl bg-[#008069] px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#00a884]">Kirim</button>
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+</body>
+</html>

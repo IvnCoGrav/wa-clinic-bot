@@ -44,6 +44,7 @@ const StaffSchedule = lazy(() => import('./pages/staff/StaffSchedule').then(m =>
 const StaffManagement = lazy(() => import('./pages/tenant/StaffManagement').then(m => ({ default: m.StaffManagement })));
 const TelegramIntegration = lazy(() => import('./pages/tenant/TelegramIntegration').then(m => ({ default: m.TelegramIntegration })));
 const QuickReplies = lazy(() => import('./pages/tenant/QuickReplies').then(m => ({ default: m.QuickReplies })));
+const StitchShowcase = lazy(() => import('./pages/StitchShowcase').then(m => ({ default: m.StitchShowcase })));
 
 /** Redirect awal berbasis role: terapis → portal staff, lainnya → overview admin. Mendukung resolusi URL legacy berbasis hash. */
 const IndexRedirect: React.FC = () => {
@@ -110,6 +111,10 @@ export const App: React.FC = () => {
           <Routes>
             {/* Public routes */}
             <Route path="/admin/login" element={<Login />} />
+            <Route path="/stitch-preview" element={<StitchShowcase />} />
+            <Route path="/admin/stitch-preview" element={<StitchShowcase />} />
+            <Route path="/stitch" element={<Navigate to="/admin/stitch-preview" replace />} />
+            <Route path="/admin/stitch" element={<Navigate to="/admin/stitch-preview" replace />} />
             
             {/* Protected tenant admin dashboard routes */}
             <Route path="/admin/overview" element={

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>03 — Customer Database & Pasien</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body { font-family: 'Plus Jakarta Sans', sans-serif; }</style>
+</head>
+<body class="bg-[#f0f2f5] p-6 text-[#111b21]">
+  <div class="mx-auto max-w-6xl overflow-hidden rounded-3xl border border-[#e9edef] bg-white p-6 shadow-xl">
+    <!-- Header -->
+    <div class="flex flex-wrap items-center justify-between gap-4 border-b border-[#e9edef] pb-5 mb-6">
+      <div>
+        <h1 class="text-lg font-bold text-[#111b21]">Basis Data Pasien (Customer Database)</h1>
+        <p class="text-xs text-[#54656f]">Rekam Medis Ringkas, Profil Anak, & Histori Order Treatment</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <input type="text" placeholder="Cari nama ibu, anak, atau No. WA..." readonly value="" class="rounded-xl border border-[#d1d7db] px-3.5 py-2 text-xs text-[#111b21] w-64 outline-none">
+        <button class="rounded-xl bg-[#008069] px-4 py-2 text-xs font-bold text-white shadow-xs">+ Tambah Pasien</button>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="overflow-x-auto rounded-2xl border border-[#e9edef]">
+      <table class="w-full text-left text-xs">
+        <thead class="bg-[#f8fafc] text-[#54656f] border-b border-[#e9edef]">
+          <tr>
+            <th class="p-3.5 font-bold">Nama Pasien & Anak</th>
+            <th class="p-3.5 font-bold">Nomor WhatsApp</th>
+            <th class="p-3.5 font-bold">Alamat Utama</th>
+            <th class="p-3.5 font-bold">Kategori / Label</th>
+            <th class="p-3.5 font-bold">Total Kunjungan</th>
+            <th class="p-3.5 font-bold text-right">Aksi</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-[#f0f2f5]">
+          <tr class="hover:bg-slate-50">
+            <td class="p-3.5">
+              <div class="font-bold text-[#111b21]">Ibu Anisa Rahman</div>
+              <div class="text-[11px] text-[#54656f]">Baby Ken (8 Bulan) • Lahir Normal</div>
+            </td>
+            <td class="p-3.5 font-mono text-[#54656f]">0812-9876-4321</td>
+            <td class="p-3.5 text-[#54656f] max-w-[200px] truncate">Jl. Gandaria Selatan No. 12, Jaksel</td>
+            <td class="p-3.5">
+              <span class="rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-200">
+                VIP Langganan
+              </span>
+            </td>
+            <td class="p-3.5 font-bold text-[#111b21]">4x Selesai</td>
+            <td class="p-3.5 text-right">
+              <button class="rounded-lg border border-[#d1d7db] px-2.5 py-1 text-[11px] font-bold text-[#008069] hover:bg-emerald-50">
+                Detail Chat
+              </button>
+            </td>
+          </tr>
+
+          <tr class="hover:bg-slate-50">
+            <td class="p-3.5">
+              <div class="font-bold text-[#111b21]">Ibu Citra Lestari</div>
+              <div class="text-[11px] text-[#54656f]">Pasca Salin: 2 Minggu • ASI Eksklusif</div>
+            </td>
+            <td class="p-3.5 font-mono text-[#54656f]">0856-1122-8899</td>
+            <td class="p-3.5 text-[#54656f] max-w-[200px] truncate">Jl. Dharmawangsa X No. 5, Jaksel</td>
+            <td class="p-3.5">
+              <span class="rounded-md bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-800 border border-sky-200">
+                Ibu Menyusui
+              </span>
+            </td>
+            <td class="p-3.5 font-bold text-[#111b21]">2x Selesai</td>
+            <td class="p-3.5 text-right">
+              <button class="rounded-lg border border-[#d1d7db] px-2.5 py-1 text-[11px] font-bold text-[#008069] hover:bg-emerald-50">
+                Detail Chat
+              </button>
+            </td>
+          </tr>
+
+          <tr class="hover:bg-slate-50">
+            <td class="p-3.5">
+              <div class="font-bold text-[#111b21]">Ibu Maya Amanda</div>
+              <div class="text-[11px] text-[#54656f]">Baby Arka (4 Bulan)</div>
+            </td>
+            <td class="p-3.5 font-mono text-[#54656f]">0813-7766-2211</td>
+            <td class="p-3.5 text-[#54656f] max-w-[200px] truncate">Jl. Tebet Barat Dalam No. 88</td>
+            <td class="p-3.5">
+              <span class="rounded-md bg-purple-50 px-2 py-0.5 text-[10px] font-bold text-purple-800 border border-purple-200">
+                Baby Spa
+              </span>
+            </td>
+            <td class="p-3.5 font-bold text-[#111b21]">3x Selesai</td>
+            <td class="p-3.5 text-right">
+              <button class="rounded-lg border border-[#d1d7db] px-2.5 py-1 text-[11px] font-bold text-[#008069] hover:bg-emerald-50">
+                Detail Chat
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>

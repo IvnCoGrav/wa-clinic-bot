@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>08 — Staff Bidan & Tarif Jarak</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body { font-family: 'Plus Jakarta Sans', sans-serif; }</style>
+</head>
+<body class="bg-[#f0f2f5] p-6 text-[#111b21]">
+  <div class="mx-auto max-w-6xl overflow-hidden rounded-3xl border border-[#e9edef] bg-white p-6 shadow-xl">
+    <!-- Header -->
+    <div class="flex flex-wrap items-center justify-between gap-4 border-b border-[#e9edef] pb-5 mb-6">
+      <div>
+        <h1 class="text-lg font-bold text-[#111b21]">Manajemen Tim Bidan & Zonasi Jarak Ongkir</h1>
+        <p class="text-xs text-[#54656f]">Pengaturan Tenaga Kesehatan Lapangan & Skema Tarif Pengantaran</p>
+      </div>
+      <button class="rounded-xl bg-[#008069] px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#00a884]">
+        + Tambah Bidan / Terapis
+      </button>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- Staff Management -->
+      <div class="rounded-2xl border border-[#e9edef] p-5 space-y-4">
+        <h2 class="text-xs font-bold text-[#111b21] border-b border-[#e9edef] pb-2">Daftar Bidan & Staf Medis Aktif</h2>
+        
+        <div class="space-y-3">
+          <div class="rounded-2xl border border-[#e9edef] p-3.5 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="h-10 w-10 rounded-full bg-[#008069] text-white flex items-center justify-center font-bold text-xs">RN</div>
+              <div>
+                <h3 class="text-xs font-bold text-[#111b21]">Bidan Rina Amd.Keb</h3>
+                <p class="text-[11px] text-[#54656f]">STR: 1988-2027 • Spesialis Laktasi & Bapil</p>
+              </div>
+            </div>
+            <span class="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-200">
+              ● Di Lapangan (OTW)
+            </span>
+          </div>
+
+          <div class="rounded-2xl border border-[#e9edef] p-3.5 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="h-10 w-10 rounded-full bg-slate-300 text-[#111b21] flex items-center justify-center font-bold text-xs">SN</div>
+              <div>
+                <h3 class="text-xs font-bold text-[#111b21]">Bidan Siti Nurhaliza</h3>
+                <p class="text-[11px] text-[#54656f]">STR: 1994-2028 • Spesialis Pijat Bayi & Hydro</p>
+              </div>
+            </div>
+            <span class="rounded-full bg-sky-50 px-2.5 py-0.5 text-[10px] font-bold text-sky-800 border border-sky-200">
+              ● Standby di Klinik
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Delivery Tiers -->
+      <div class="rounded-2xl border border-[#e9edef] p-5 space-y-4">
+        <h2 class="text-xs font-bold text-[#111b21] border-b border-[#e9edef] pb-2">Tier Jarak & Ongkos Kirim (Home Care)</h2>
+        
+        <div class="space-y-2.5 text-xs">
+          <div class="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3 flex justify-between items-center">
+            <div>
+              <span class="font-bold text-emerald-950">Radius Ring 1 (0.0 - 3.0 km)</span>
+              <p class="text-[11px] text-emerald-700">Area sekitar klinik pusat</p>
+            </div>
+            <span class="font-bold text-emerald-800">GRATIS (Free Ongkir)</span>
+          </div>
+
+          <div class="rounded-xl border border-[#e9edef] p-3 flex justify-between items-center">
+            <div>
+              <span class="font-bold text-[#111b21]">Radius Ring 2 (3.1 - 7.0 km)</span>
+              <p class="text-[11px] text-[#54656f]">Area kecamatan tetangga</p>
+            </div>
+            <span class="font-bold text-[#111b21]">Rp 15.000</span>
+          </div>
+
+          <div class="rounded-xl border border-[#e9edef] p-3 flex justify-between items-center">
+            <div>
+              <span class="font-bold text-[#111b21]">Radius Ring 3 (7.1 - 12.0 km)</span>
+              <p class="text-[11px] text-[#54656f]">Jarak menengah kota</p>
+            </div>
+            <span class="font-bold text-[#111b21]">Rp 25.000</span>
+          </div>
+
+          <div class="rounded-xl border border-[#e9edef] p-3 flex justify-between items-center">
+            <div>
+              <span class="font-bold text-[#111b21]">Luar Radius (&gt; 12.0 km)</span>
+              <p class="text-[11px] text-[#54656f]">Biaya per kilometer tambahan</p>
+            </div>
+            <span class="font-bold text-[#008069]">+Rp 3.500 / km</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

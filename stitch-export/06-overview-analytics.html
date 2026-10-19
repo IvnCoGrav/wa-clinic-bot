@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>06 — Dashboard Overview & Omset</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body { font-family: 'Plus Jakarta Sans', sans-serif; }</style>
+</head>
+<body class="bg-[#f0f2f5] p-6 text-[#111b21]">
+  <div class="mx-auto max-w-6xl overflow-hidden rounded-3xl border border-[#e9edef] bg-white p-6 shadow-xl">
+    <!-- Header -->
+    <div class="flex flex-wrap items-center justify-between gap-4 border-b border-[#e9edef] pb-5 mb-6">
+      <div>
+        <h1 class="text-lg font-bold text-[#111b21]">Dashboard Overview & Analitik Klinik</h1>
+        <p class="text-xs text-[#54656f]">Statistik Real-time Omset, Volume Chat Masuk, & Performa Bot AI</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-xs text-[#54656f]">Periode:</span>
+        <button class="rounded-xl border border-[#d1d7db] bg-[#f8fafc] px-3.5 py-1.5 text-xs font-bold text-[#111b21]">7 Hari Terakhir</button>
+      </div>
+    </div>
+
+    <!-- 4 Big Metric Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div class="rounded-2xl border border-[#e9edef] bg-[#f8fafc] p-4">
+        <span class="text-xs text-[#54656f]">Chat Masuk Hari Ini</span>
+        <div class="text-2xl font-bold text-[#111b21] mt-1">142 Pesan</div>
+        <span class="text-[11px] text-emerald-700 font-semibold">↑ +18% vs minggu lalu</span>
+      </div>
+
+      <div class="rounded-2xl border border-[#e9edef] bg-[#f8fafc] p-4">
+        <span class="text-xs text-[#54656f]">Total Reservasi Sukses</span>
+        <div class="text-2xl font-bold text-[#111b21] mt-1">16 Booking</div>
+        <span class="text-[11px] text-[#008069] font-semibold">94% Tingkat Konfirmasi</span>
+      </div>
+
+      <div class="rounded-2xl border border-[#e9edef] bg-[#f8fafc] p-4">
+        <span class="text-xs text-[#54656f]">Total Omset Hari Ini</span>
+        <div class="text-2xl font-bold text-[#111b21] mt-1">Rp 2.450.000</div>
+        <span class="text-[11px] text-emerald-700 font-semibold">↑ Rata-rata Rp 153k/order</span>
+      </div>
+
+      <div class="rounded-2xl border border-[#e9edef] bg-[#f8fafc] p-4">
+        <span class="text-xs text-[#54656f]">Tingkat Konversi AI Bot</span>
+        <div class="text-2xl font-bold text-[#111b21] mt-1">11.27%</div>
+        <span class="text-[11px] text-purple-700 font-semibold">0 Pelanggaran SOP Klinis</span>
+      </div>
+    </div>
+
+    <!-- Chart Representation & Quick System Health -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Chart Left -->
+      <div class="lg:col-span-2 rounded-2xl border border-[#e9edef] p-5">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-xs font-bold text-[#111b21]">Tren Kunjungan & Omset Mingguan</h2>
+          <span class="text-[11px] text-[#54656f]">13 - 19 Okt 2026</span>
+        </div>
+        <!-- Bar representation -->
+        <div class="flex items-end justify-between h-44 px-4 pt-6 border-b border-[#e9edef]">
+          <div class="flex flex-col items-center gap-1.5"><div class="w-10 bg-emerald-200 rounded-t h-20"></div><span class="text-[10px] text-[#54656f]">Sen</span></div>
+          <div class="flex flex-col items-center gap-1.5"><div class="w-10 bg-emerald-200 rounded-t h-24"></div><span class="text-[10px] text-[#54656f]">Sel</span></div>
+          <div class="flex flex-col items-center gap-1.5"><div class="w-10 bg-emerald-200 rounded-t h-16"></div><span class="text-[10px] text-[#54656f]">Rab</span></div>
+          <div class="flex flex-col items-center gap-1.5"><div class="w-10 bg-emerald-300 rounded-t h-28"></div><span class="text-[10px] text-[#54656f]">Kam</span></div>
+          <div class="flex flex-col items-center gap-1.5"><div class="w-10 bg-emerald-300 rounded-t h-32"></div><span class="text-[10px] text-[#54656f]">Jum</span></div>
+          <div class="flex flex-col items-center gap-1.5"><div class="w-10 bg-emerald-400 rounded-t h-36"></div><span class="text-[10px] text-[#54656f]">Sab</span></div>
+          <div class="flex flex-col items-center gap-1.5"><div class="w-10 bg-[#008069] rounded-t h-40"></div><span class="text-[10px] font-bold text-[#008069]">Min</span></div>
+        </div>
+      </div>
+
+      <!-- Health Right -->
+      <div class="rounded-2xl border border-[#e9edef] p-5 space-y-3">
+        <h2 class="text-xs font-bold text-[#111b21] border-b border-[#e9edef] pb-2">Status Sistem & Gateway</h2>
+        <div class="flex justify-between items-center text-xs">
+          <span class="text-[#54656f]">WhatsApp Gateway (WAHA)</span>
+          <span class="text-emerald-700 font-bold">Terhubung (Green)</span>
+        </div>
+        <div class="flex justify-between items-center text-xs">
+          <span class="text-[#54656f]">Basis Data PostgreSQL</span>
+          <span class="text-emerald-700 font-bold">Normal (4ms)</span>
+        </div>
+        <div class="flex justify-between items-center text-xs">
+          <span class="text-[#54656f]">AI Decision Engine</span>
+          <span class="text-emerald-700 font-bold">Siap (Gemini Flash)</span>
+        </div>
+        <div class="flex justify-between items-center text-xs">
+          <span class="text-[#54656f]">Bidan Bertugas</span>
+          <span class="text-[#111b21] font-bold">4 Orang Aktif</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
