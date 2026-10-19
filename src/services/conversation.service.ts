@@ -670,7 +670,18 @@ export class ConversationService {
     }
 
     // 2. Kirim notifikasi alert eskalasi ke Telegram Admin (hanya untuk customer riil, nonaktif untuk sandbox)
-    if (!isSandbox) {
+    // Jangan kirim notifikasi Telegram jika alasan eskalasi adalah admin membalas manual via aplikasi WhatsApp HP
+    const isManualAdminHpReply = Boolean(
+      reason && (
+        reason.toLowerCase().includes('admin membalas manual via aplikasi whatsapp hp') ||
+        (reason.toLowerCase().includes('admin membalas manual') && reason.toLowerCase().includes('whatsapp')) ||
+        (escalationReason === 'manual_reply' && /whatsapp|hp/i.test(reason))
+      )
+    );
+
+    if (isManualAdminHpReply) {
+      console.log(`[ESCALATION ALERT] Skip Telegram alert for manual WhatsApp HP reply (${cleanPhone}).`);
+    } else if (!isSandbox) {
       try {
         const { alertService, AlertType, AlertSeverity } = await import('./alert.service');
         const timeStr = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });

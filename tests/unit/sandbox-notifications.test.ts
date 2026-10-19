@@ -72,6 +72,28 @@ describe('Sandbox Notification Suppression Suite', () => {
 
     expect(result.sent).toBe(false);
   });
+
+  it('4. escalateToHumanHandling does NOT send Telegram alert when admin replies manually via WhatsApp HP', async () => {
+    const realCustomerPhone = `62812345${Date.now().toString().slice(-4)}`;
+    const customer = await customerService.getOrCreateCustomer(realCustomerPhone, 'Bunda Real', DEFAULT_TENANT_ID);
+    customer.is_sandbox_test = false;
+    const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+    conversation.customer = customer;
+
+    const { alertService } = await import('../../src/services/alert.service');
+    const alertSpy = vi.spyOn(alertService, 'notifyAlert');
+
+    const updated = await conversationService.escalateToHumanHandling(
+      conversation,
+      realCustomerPhone,
+      'Admin membalas manual via aplikasi WhatsApp HP',
+      DEFAULT_TENANT_ID,
+      'manual_reply'
+    );
+
+    expect(updated.is_human_handling).toBe(true);
+    expect(alertSpy).not.toHaveBeenCalled();
+  });
 });
 
 describe('Internal Staff Notification Suppression Suite (Fase 4)', () => {
