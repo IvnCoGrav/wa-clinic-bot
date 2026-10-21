@@ -15,6 +15,9 @@ interface Props {
   autoSendPurchaseCapi: boolean;
   savingPurchaseModeration: boolean;
   handleTogglePurchaseModeration: (val: boolean) => void;
+  metaPurchasePolicy?: string;
+  savingPurchasePolicy?: boolean;
+  handleSavePurchasePolicy?: (val: string) => void;
 }
 
 export const MetaCapiPanel: React.FC<Props> = ({
@@ -29,6 +32,9 @@ export const MetaCapiPanel: React.FC<Props> = ({
   autoSendPurchaseCapi,
   savingPurchaseModeration,
   handleTogglePurchaseModeration,
+  metaPurchasePolicy,
+  savingPurchasePolicy,
+  handleSavePurchasePolicy,
 }) => {
   return (
     <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-4 shadow-xs">
@@ -140,6 +146,70 @@ export const MetaCapiPanel: React.FC<Props> = ({
             size="md"
             title="Kebijakan Queue-First: seluruh event melalui moderasi antrean CAPI"
           />
+        </div>
+      </div>
+
+      {/* Kebijakan Atribusi Repeat Purchase Meta CAPI */}
+      <div className="border-t border-[#e9edef] pt-4 mt-2 space-y-2">
+        <h4 className="text-xs font-bold text-[#111b21] flex items-center space-x-1.5">
+          <ShieldCheck className="text-[#008069]" size={14} />
+          <span>Kebijakan Repeat Purchase (Anti-Distorsi CAC)</span>
+        </h4>
+        <p className="text-xs text-[#667781] leading-relaxed">
+          Pilih bagaimana sistem memproses repeat purchase (pelanggan lama) ke Meta CAPI. Standar Meta Blueprint
+          merekomendasikan mode Akuisisi Murni agar metrik CAC di Ads Manager tidak terdistorsi repeat order.
+        </p>
+
+        <div className="grid grid-cols-1 gap-2 pt-1">
+          {[
+            {
+              id: 'SUPPRESS_REPEAT',
+              title: 'Akuisisi Murni (Disarankan Meta Blueprint)',
+              badge: 'CAC Protection',
+              desc: 'Hanya order pertama yang dikirim ke Meta Ads Manager. Repeat order difilter di server agar metrik CAC murni.',
+            },
+            {
+              id: 'DUAL_EVENT',
+              title: 'Dual Event (ReturningCustomerPurchase)',
+              badge: 'Retention Tracking',
+              desc: 'Order pertama dikirim sebagai Purchase. Repeat order dikirim sebagai Custom Event ReturningCustomerPurchase.',
+            },
+            {
+              id: 'ALL_WITH_TAG',
+              title: 'Kirim Semua + opt_out=true',
+              badge: 'Meta Blueprint opt_out',
+              desc: 'Semua order dikirim sebagai Purchase, namun repeat order ditandai opt_out=true (atribusi saja, tidak melatih optimizer).',
+            },
+          ].map((opt) => (
+            <label
+              key={opt.id}
+              onClick={() => handleSavePurchasePolicy && handleSavePurchasePolicy(opt.id)}
+              className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${
+                (metaPurchasePolicy || 'SUPPRESS_REPEAT') === opt.id
+                  ? 'border-[#008069] bg-[#f0fdf4]'
+                  : 'border-[#e9edef] bg-white hover:bg-[#f8fafc]'
+              }`}
+            >
+              <input
+                type="radio"
+                name="metaPurchasePolicy"
+                value={opt.id}
+                checked={(metaPurchasePolicy || 'SUPPRESS_REPEAT') === opt.id}
+                onChange={() => {}}
+                disabled={savingPurchasePolicy}
+                className="mt-0.5 text-[#008069] focus:ring-[#008069]"
+              />
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-[#111b21]">{opt.title}</span>
+                  <span className="text-[10px] bg-slate-100 text-slate-700 font-semibold px-2 py-0.2 rounded">
+                    {opt.badge}
+                  </span>
+                </div>
+                <p className="text-[11px] text-[#667781] mt-0.5 leading-relaxed">{opt.desc}</p>
+              </div>
+            </label>
+          ))}
         </div>
       </div>
     </div>

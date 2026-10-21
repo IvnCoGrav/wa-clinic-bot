@@ -95,6 +95,18 @@ async function recoverBlockedEvents() {
       });
 
       if (result.success) {
+        if (result.skipped) {
+          console.log(`  [RECOVERY] Suppressed: repeat purchase suppressed per tenant policy (${result.policy || 'SUPPRESS_REPEAT'}).`);
+          await prisma.reservation.update({
+            where: { id: txn.id },
+            data: {
+              purchase_review_status: 'approved',
+            },
+          });
+          console.log(`  [DB] Status diupdate ke 'approved' (purchase_event_sent_at tidak diset karena suppressed).`);
+          continue;
+        }
+
         console.log(`  [CAPI SUCCESS] Event berhasil dikirim!`);
         console.log(`    events_received: ${result.events_received}`);
         console.log(`    fbtrace_id: ${result.fbtrace_id}`);

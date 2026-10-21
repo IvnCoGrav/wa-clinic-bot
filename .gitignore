@@ -107,15 +107,8 @@ scripts/db_customers.json
 scripts/db_reservations.json
 scripts/*.json
 scripts/__pycache__/
-scripts/analyze_october.py
-scripts/audit_*.py
-scripts/calc_scenarios.py
-scripts/check_*.py
-scripts/deep_first_timers.py
-scripts/find_all_greetings.py
-scripts/inspect_*.py
-scripts/print_summary_table.py
-scripts/verify_*.py
+# Semua skrip analisis lokal di scripts/ (one-off, memuat query DB/PII) - jangan commit
+scripts/*.py
 docs/spreadsheet_booking_data.tsv
 scripts/cleanup-bunda-*.sql
 scripts/add-customers*.sh

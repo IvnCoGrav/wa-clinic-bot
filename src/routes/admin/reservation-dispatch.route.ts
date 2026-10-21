@@ -2036,6 +2036,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const tenantId = tenantOf(request);
       const { id } = request.params;
+      let capiSkipped = false;
       try {
         if (id.startsWith('lead_')) {
           const customerId = id.replace('lead_', '');
@@ -2138,7 +2139,6 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
         const customPayload = body.customPayload;
 
         const formats = await getTenantCapiFormats(tenantId);
-        
         let autoResolvedVal = existing.purchase_value && existing.purchase_value > 0 ? existing.purchase_value : undefined;
         if (!autoResolvedVal) {
           const raw = existing.raw_text || '';
@@ -2221,6 +2221,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           customEventId: customPayload?.event_id,
           reservationId: existing.id,
         });
+        capiSkipped = capiResult.skipped === true;
 
         if (!capiResult.success) {
           console.error(`[CAPI ERROR] Approved Purchase send failed for ${id}: ${capiResult.message}`);
@@ -2239,7 +2240,8 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
             ...(existing.purchase_occurred_at ? { purchase_occurred_at: occurredDate } : {}),
             purchase_value: resolvedVal ?? undefined,
             purchase_review_status: 'approved',
-            purchase_event_sent_at: new Date(),
+            // Jangan memalsukan status pengiriman jika event CAPI di-suppress (kebijakan repeat order)
+            ...(capiResult.skipped !== true ? { purchase_event_sent_at: new Date() } : {}),
           },
         });
 
@@ -2278,11 +2280,22 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
             force: forceResend || undefined,
             forceReason: forceResend ? forceReason : undefined,
             allowAged: allowAged || undefined,
+            capi_suppressed: capiResult.skipped === true,
+            capi_policy: capiResult.policy || undefined,
           },
           ipAddress: request.ip,
         });
 
-        return reply.status(200).send({ success: true, data: reservation, warning });
+        const isSkipped = capiResult.skipped === true;
+        return reply.status(200).send({
+          success: true,
+          data: reservation,
+          warning,
+          skipped: isSkipped,
+          note: isSkipped
+            ? 'Pembelian disetujui internal; event CAPI repeat purchase tidak dikirim ke Meta untuk menjaga akurasi CAC iklan.'
+            : undefined,
+        });
       } catch (error) {
         console.error('[CAPI APPROVE ERROR]', (error as Error).message);
         // Fallback in-memory hanya untuk dev/test ΓÇö di production harus fail agar UI tidak tampil success palsu
@@ -2290,7 +2303,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           const mock = memoryReservations.get(id);
           if (mock && mock.tenant_id === tenantId) {
             mock.purchase_review_status = 'approved';
-            mock.purchase_event_sent_at = new Date();
+            mock.purchase_event_sent_at = capiSkipped ? null : new Date();
             mock.updated_at = new Date();
             memoryReservations.set(id, mock);
             return reply.status(200).send({ success: true, data: mock, note: 'Fallback in-memory mode' });
@@ -2505,6 +2518,8 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
       );
 
       const formats = await getTenantCapiFormats(tenantId);
+      const { getTenantMetaPurchasePolicy } = await import('../../services/capi.service');
+      const tenantMetaPolicy = await getTenantMetaPurchasePolicy(tenantId);
       const now = Date.now();
 
       let tenantLandingDomain = '';
@@ -2640,6 +2655,14 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
             is_repeat_order: isRepeatOrder,
             order_number: orderNumber,
             customer_type: isRepeatOrder ? 'repeat' : 'new',
+            capi_policy: tenantMetaPolicy,
+            // "CAPI Filtered" hanya sah bila: belum di-approve (akan difilter nanti),
+            // ATAU sudah approved tapi TIDAK PERNAH terkirim (sent_at null = hasil suppress).
+            // Event historis yang sudah terkirim (sent_at terisi) TIDAK berlabel "Filtered".
+            will_suppress_capi:
+              isRepeatOrder &&
+              tenantMetaPolicy === 'SUPPRESS_REPEAT' &&
+              (r.purchase_review_status === 'pending' || !r.purchase_event_sent_at),
             distanceKm,
             customer: {
               id: r.customer?.id,

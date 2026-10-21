@@ -3,6 +3,29 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 270. [Meta Ads / CAPI] Atribusi Historis Event Purchase di Meta Ads Manager Bersifat Imutabel & Kebocoran Retargeting Advantage (2026-10-21, IMPLEMENTED + TECH DEBT)
+
+- **Status:** IMPLEMENTED (Gerbang deterministik `metaPurchasePolicy` di backend & frontend aktif per 2026-10-21; 27 unit test CAPI hijau di 4 suite). Keterbatasan historis Meta bersifat by-design.
+- **Gejala / Akar Masalah:**
+  1. Pasien repeat order (seperti Bunda Retno & Bunda Nurul Hidayati) yang reservasi pada 18–21 Oktober teratribusi ke kampanye prospecting dingin (`#LPWA Kala Purchase Campaign v15`), mencemari metrik Website Purchases (tercatat 4 pembelian senilai Rp 385.000, padahal akuisisi baru hanya 2 pasien senilai Rp 325.000).
+  2. Mengapa Custom Audience Exclusion bocor:
+     a) Pasien mendaftar WhatsApp dengan nomor HP berbeda dari nomor/email Facebook/Instagram pribadi.
+     b) Meta Attribution Window menyertakan 1-day view-through attribution (iklan pernah tayang di feed pasien tanpa diklik).
+     c) Fitur Advantage Audience / Targeting Expansion Meta secara otomatis menembus list eksklusi jika algoritma memprediksi konversi.
+  3. Keterbatasan API Meta: Event Purchase historis yang sudah diterima dan diproses oleh Meta Graph API bersifat permanen (immutable) dan TIDAK BISA diedit, dihapus, atau di-reassign ke kampanye lain melalui CAPI maupun Events Manager.
+- **Resolusi Fondasional:**
+  1. Kontrak kebijakan tenant `metaPurchasePolicy` (`SUPPRESS_REPEAT` [default murni CAC], `DUAL_EVENT` [ReturningCustomerPurchase], `ALL_WITH_TAG` [opt_out: true]) di `capi.service.ts` dan `Tenant.settings`.
+  2. Penambahan parameter resmi Meta Blueprint: `order_id` dan `customer_segmentation: 'new_customer_to_business' | 'existing_customer_to_business'`.
+  3. Pencegahan transmisi jaringan deterministik sebelum circuit breaker pada kebijakan `SUPPRESS_REPEAT`, serta penandaan `purchase_review_status: 'approved'` tanpa mengisi `purchase_event_sent_at`.
+  4. Panel konfigurasi di UI Admin Dashboard (`MetaCapiPanel.tsx`) dan badge queue `🔁 Repeat Order • CAPI Filtered`.
+- **Rencana Tindak Lanjut & Mitigasi Operasional:**
+  - Data historis 18–21 Oktober (4 purchase) tetap berada di dashboard Meta Ads Manager sebagai baseline pembanding.
+  - Untuk kampanye selanjutnya, kebijakan default `SUPPRESS_REPEAT` menyaring seluruh event Purchase repeat order pada jalur CAPI standar, sehingga metrik CPR dan ROAS lebih mencerminkan efektivitas akuisisi riil. Dua pengecualian yang disengaja dan BUKAN bug: (a) override admin `force_send_repeat_purchase` (escape hatch dengan audit log), dan (b) fail-safe saat DB offline yang sengaja memperlakukan customer sebagai `new` agar tidak salah-suppress (event tetap terkirim). Karena itu klaim "100% pasien baru" tidak boleh dipakai sebagai jaminan mutlak.
+- **Catatan Verifikasi (2026-10-21, post-audit ops):**
+  - Poin *1-day view-through* dan **Advantage Audience Expansion = HIPOTESIS**, wajib dibuktikan via Events Manager (breakdown atribusi) sebelum dipakai untuk keputusan bisnis strategis.
+  - Rekonsiliasi matematika belum mutlak (Rp 325.000 + Rp 70.000 = Rp 395.000 vs angka Ads Manager Rp 385.000, ada selisih Rp 10.000 akibat diskon/DP parsial yang memerlukan breakdown per ad-set di Ads Manager).
+  - High-priority post-audit bug & hardening tuntas: perbaikan pola `will_suppress_capi` pada riwayat terkirim, sanitasi parameter internal (`force_send_repeat_purchase`, `allowZero`) dari payload Graph API Meta, dan segmen kustomer (`customer_segmentation`) dikunci ke otoritas DB.
+
 ## 269. [Address/Split-Brain] Resolusi Toponimi Fuzzy, Elevasi Primary GPS & Alarm Palsu Shareloc (2026-10-18, IMPLEMENTED)
 
 - **Status:** IMPLEMENTED (Fase 1-3 selesai di domain, service, dan FE; paritas 1:1; 80 unit tests terkait alamat 100% hijau; persiapan skrip healing Fase 4 di `src/scripts/heal-customer-addresses-split-brain.ts`).
@@ -1242,10 +1265,13 @@ dicatat di CHANGELOG 2026-10-05. Sisa batasan:
 - **Catatan serupa:** ambang FAQ (`src/cli/faq-corpus.ts:163-165` "37-38 minggu") dan template
   persona (`src/config/persona.ts:353`) juga masih hardcode — ikut roadmap tenant-aware di atas.
 
-## 217. [OTW/Dispatch] Batasan sadar Silent Depart-Capture GPS (2026-10-04, OPEN — by design)
+## 217. [OTW/Dispatch] Batasan sadar Silent Depart-Capture GPS (2026-10-04, diperbarui 2026-10-20 — OPEN by design)
 
 - **Konteks:** unifikasi jalur OTW + rekam titik awal GPS saat klik "Navigasi"/"MULAI JALAN"
-  + fallback titik berangkat bila GPS null (plan 2026-10-04, Fase 1–4).
+  + fallback titik berangkat bila GPS null (plan 2026-10-04, Fase 1–4; diperbarui plan 2026-10-20).
+- **Penyelarasan 2026-10-20 (Gate-0 terkonfirmasi):**
+  - `OtwConfirmModal` **dipertahankan**: berfungsi krusial sebagai pratinjau pesan DB-driven, visualisasi status GPS (segar/perlu izin), dan gerbang anti kirim ganda (`sendingOtwId`).
+  - Pre-warm GPS dipisahkan menjadi konstanta mandiri `GPS_WARMUP_MINUTES = 60` (`geoUtils.ts`), tidak lagi berbagi angka dengan gerbang waktu kirim pesan OTW (H-120 s/d H+15).
 - **Batasan yang tersisa (bukan bug):**
   1. **Izin lokasi browser ditolak permanen / GPS HP mati → titik awal tidak dapat direkam dari
      Bidan.** Sistem fail-open: pesan OTW tetap terkirim, titik awal jatuh ke fallback
@@ -1260,8 +1286,8 @@ dicatat di CHANGELOG 2026-10-05. Sisa batasan:
      (saat ini masih hardcode tech-debt). Trip pertama hari itu tanpa GPS tetap `unknown`.
   5. **Sesi trip in-memory hilang saat restart / multi-instans** — calon Redis `SETEX`
      (tidak berubah dari sebelumnya).
-- **Verifikasi:** `tests/unit/depart-gps-cache.test.ts`, `tests/unit/staff-trip-tracking.test.ts`
-  (originSource), `tests/integration/otw-depart-endpoint.test.ts`, `tests/integration/staff-trip-dispatch.test.ts`.
+- **Verifikasi:** `tests/unit/depart-gps-cache.test.ts`, `tests/unit/depart-window.test.ts`, `tests/unit/task-action.test.ts`,
+  `tests/integration/otw-depart-endpoint.test.ts`, `tests/integration/staff-trip-dispatch.test.ts`.
 - **Dampak fasilitas:** koordinat klinik hardcode masih tercatat di
   `docs/SAAS_READINESS_AUDIT.md` (Confirmation Gate terpisah).
 
@@ -2754,12 +2780,15 @@ Keputusan user: (1) tahan booking lokasi tak presisi + notifikasi admin saja; (2
   sanitasi durasi/tipografi, dan gerbang pelunasan sudah dieksekusi (lihat
   `src/services/staff-reservation.service.ts`, `durationCalculator.ts`,
   `StaffToday.tsx`). Entri ini mencatat sisa yang BELUM/tidak dieksekusi.
-- **165a — OTW H-2 tidak dilonggarkan (OPEN, sengaja):** Tombol OTW tetap terkunci
-  maks. 2 jam sebelum jadwal di frontend (`isOtwAllowed`) DAN backend
-  (`src/routes/staff/today.subroute.ts:354-364`, fail-closed). Usulan "izinkan
-  OTW awal via dialog konfirmasi" DITOLAK karena gerbang backend harus ikut diubah
-  dan ambang H-2 adalah kebijakan anti-spam tenant. Bila bisnis butuh, ubah
-  kebijakan per-tenant di DB + longgarkan kedua lapis (Confirmation Gate).
+- **165a — Penyelarasan Jendela OTW H-2 & Penghapusan Bypass Peta Senyap (RESOLVED 2026-10-20):**
+  Kontrak gerbang OTW disatukan 1:1 antara frontend dan backend: jendela pengiriman adalah H-120 s/d toleransi H+15
+  (`OTW_OPEN_MINUTES_BEFORE = 120`, `OTW_GRACE_MINUTES_AFTER = 15`, `getOtwGate()`). Bypass peta senyap tanpa kirim
+  OTW pada H-10 dihapus: pada H-10, "Sampai" tetap aksi utama dan tombol kedua adalah "OTW" yang membuka peta sekaligus
+  mengirim pesan ke WhatsApp pasien melalui satu gerbang konfirmasi terpadu (`OtwConfirmModal`). Endpoint OTW
+  (`POST /api/staff/reservations/:id/otw`) dilengkapi idempotensi deterministik (pengiriman kedua mengembalikan `alreadySent: true`
+  tanpa mengirim ulang pesan atau memutasi DB; supervisor tetap memiliki `forceResend`).
+  *Utang SaaS tertinggal:* ambang jendela H-120 dan toleransi H+15 masih berupa konstanta global (`geoUtils.ts` dan `today.subroute.ts`),
+  belum ditarik per-tenant dari tabel konfigurasi database.
 - **165b — Validasi jalur tulis `kelurahan` (RESOLVED 2026-09-29):** akar
   cemaran ditemukan di 2 lapis: (1) caller form reservasi
   (`state-machine/machine.ts:352`, `routes/webhook.route.ts:619/1216/1287/1395`)

@@ -30,6 +30,13 @@ vi.mock('../../src/services/follow-up.service', () => ({
  * Bersifat adversarial: menguji edge case update (tidak menghitung reservasi itu sendiri),
  * dan customer tanpa riwayat.
  */
+const SAVED_POLICY_ENV = process.env.DEFAULT_META_PURCHASE_POLICY;
+beforeEach(() => { process.env.DEFAULT_META_PURCHASE_POLICY = 'ALL_WITH_TAG'; });
+afterEach(() => {
+  if (SAVED_POLICY_ENV === undefined) delete process.env.DEFAULT_META_PURCHASE_POLICY;
+  else process.env.DEFAULT_META_PURCHASE_POLICY = SAVED_POLICY_ENV;
+});
+
 describe('Reservation is_repeat_order otomasi (root cause: sebelumnya di-set oleh follow-up pending)', () => {
   beforeEach(() => {
     vi.clearAllMocks();

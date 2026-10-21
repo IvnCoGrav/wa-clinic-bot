@@ -5,6 +5,74 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+#### 2026-10-21 - Feat: Isolasi Atribusi Repeat Purchase Meta CAPI & Proteksi Metrik CAC Iklan
+
+- **Akar Masalah & Kebutuhan (Audit Transkrip & Evaluasi Kampanye Iklan)**:
+  1. Pelanggan repeat order (Bunda Retno & Bunda Nurul Hidayati) yang melakukan pemesanan pada 18–21 Oktober teratribusi ke kampanye prospecting dingin (#LPWA Kala Purchase Campaign v15), menghasilkan pencatatan 4 website purchase senilai Rp 385.000 di Meta Ads Manager (padahal pasien baru riil hanya 2 orang senilai Rp 325.000).
+  2. Daftar eksklusi Custom Audience di Meta Ads Manager bocor karena ketidaksesuaian identitas (nomor WA klinik vs email/nomor FB/IG), jendela atribusi 1-day view-through, dan ekspansi otomatis Advantage Audience.
+  3. Belum adanya pemisahan deterministik di Conversions API (CAPI) antara transaksi pasien baru (CAC prospecting) vs pasien lama (LTV retensi), sehingga optimizer Meta terdistorsi oleh konversi repeat order.
+
+- **Perubahan yang Dilakukan (Sesuai Final Plan: Isolasi Atribusi Repeat Purchase Meta CAPI)**:
+  - **Fase 0 (Verifikasi Sumber Event)**:
+    - Memverifikasi bahwa browser pixel landing page tidak menembak event `Purchase` (100% server-side via CAPI), sehingga gerbang CAPI backend menjadi satu-satunya otoritas pengiriman konversi.
+  - **Fase 1 (Kontrak Kebijakan Tenant & Endpoint Settings)**:
+    - Di `src/services/capi.service.ts`: Mengekspor tipe `MetaPurchasePolicy` (`SUPPRESS_REPEAT` | `DUAL_EVENT` | `ALL_WITH_TAG`), `MetaRepeatDecision`, dan fungsi `getTenantMetaPurchasePolicy()`. Membaca `Tenant.settings.metaPurchasePolicy` dengan fallback fail-safe ke `SUPPRESS_REPEAT` saat DB offline / nilai tidak valid (zero migrasi DB).
+    - Di `src/routes/admin/settings.subroute.ts`: Menambahkan endpoint `GET /api/admin/settings/meta-purchase-policy` dan `PUT /api/admin/settings/meta-purchase-policy` dengan validasi enum serta pencatatan audit log admin.
+  - **Fase 2 (Hardening Payload & Gerbang Deterministik)**:
+    - Di `src/services/capi.service.ts`: Memperbarui payload `Purchase` CAPI sesuai standar Meta Blueprint: menambahkan `custom_data.customer_segmentation` (`new_customer_to_business` vs `existing_customer_to_business`) dan `custom_data.order_id`.
+    - Mengintegrasikan evaluasi kebijakan sebelum circuit breaker: jika repeat order dan kebijakan `SUPPRESS_REPEAT`, fungsi langsung mengembalikan `{ success: true, skipped: true, policy }` tanpa koneksi jaringan ke Graph API. Opsi `DUAL_EVENT` mengubah nama event menjadi `ReturningCustomerPurchase`, sedangkan `ALL_WITH_TAG` menyematkan parameter resmi Meta `opt_out: true`.
+    - Menyediakan escape hatch `customData.force_send_repeat_purchase` untuk kebutuhan pengiriman paksa oleh staf/admin dengan audit log terisolasi.
+  - **Fase 3 (Penanganan Skipped di Jalur Kirim Admin & Recovery)**:
+    - Di `src/routes/admin/reservation-dispatch.route.ts` (`POST /reservations/:id/approve-purchase`): Jika skipped, memperbarui reservasi `purchase_review_status: 'approved'`, mempertahankan `purchase_event_sent_at` tetap null, mengembalikan status HTTP 200 dengan note transparan, serta mencatat `capi_suppressed: true` di audit log.
+    - Menambahkan field `capi_policy` dan `will_suppress_capi` pada endpoint review queue agar staf mengetahui status CAPI sebelum melakukan approval.
+    - Memperbarui `customers.subroute.ts`, `meta-attribution.subroute.ts`, dan `scripts/recover-blocked-capi-events.ts` untuk menangani respons skipped secara elegan.
+  - **Fase 4 (Visibilitas UI Admin Dashboard)**:
+    - Di `packages/admin-dashboard/src/components/settings/MetaCapiPanel.tsx` & `Settings.tsx`: Menambahkan radio group konfigurasi 3 opsi kebijakan Repeat Purchase Policy dengan penjelasan awam konsekuensi optimizer.
+    - Di `packages/admin-dashboard/src/pages/tenant/MetaCapiQueue.tsx`: Menambahkan badge visual `🔁 Repeat Order • CAPI Filtered` pada daftar antrean serta notifikasi toast informatif saat transaksi repeat di-approve tanpa transmisi CAPI.
+  - **Fase 5 (Pengujian Unit & Integrasi Adversarial)**:
+    - Membuat suite pengujian komprehensif `tests/unit/capi-repeat-purchase-policy.test.ts` (12 pengujian) mencakup: pasien baru, repeat order suppress, dual event, all with tag, bypass force_send, fallback DB offline, riwayat reservasi batal/hold yang tidak dihitung repeat, sanitasi SHA-256 PII, endpoint GET/PUT, alur approve skipped, dan akurasi badge `will_suppress_capi` pada baris riwayat terkirim (post-audit).
+    - Menjaga integritas suite `tests/unit/capi-repeat-order.test.ts` (8/8 lulus) dan total seluruh 27 pengujian CAPI (4 suite: `capi-repeat-order`, `capi-repeat-purchase-policy`, `capi-queue-attribution`, `capi-queue-integrity`) lulus 100% tanpa regresi.
+
+- **Dampak & Verifikasi**:
+  - `npm run build` root backend berhasil 0 error.
+  - `npm run build` di `packages/admin-dashboard` berhasil 0 error.
+  - Seluruh 27 test CAPI (4 suite) lulus 100%.
+  - Full suite (`npm test`) berstatus MERAH, tetapi SELURUH kegagalannya bersifat **pre-existing** (bukan dari fitur ini; bukti revert-and-rerun 7 file CAPI ke HEAD pada 2026-10-21 menghasilkan kegagalan yang sama). Pengukuran terakhir pasca-hardening post-audit: **16 test gagal di 9 file** (5804 lulus). File terkait: `copilot-tenant-gate`, `v3-conversation-matrix` (2), `agent-runner`, `adversarial-reservation-resilience`, `catalog-seed-drift` (3), `chat-schedule-extractor` (2), `reservation-idempotency-request-id`, `reservation-security-and-integrity` (4), `staff-otw-chat-poison`. Daftar ini berfluktuasi antar-run (mis. `production_edge_cases` gagal pada baseline awal, kini hijau); tidak ada file kegagalan baru akibat perubahan ini.
+
+
+#### 2026-10-20 - Fix: Penyelarasan Gerbang OTW H-2, Penghapusan Bypass Peta Senyap, & Idempotensi Endpoint OTW
+
+- **Akar Masalah & Kebutuhan (Gate-0 Terkunci)**:
+  1. Ketidakselarasan batas jendela OTW frontend vs backend: frontend sebelumnya memakai `DEPART_WINDOW_MINUTES = 60` sementara backend menerapkan gerbang H-2 jam (H-120 s/d toleransi H+15), menimbulkan drift batas waktu dan penolakan 400.
+  2. Adanya tautan bypass peta senyap (`<a href={navUrl}>Peta</a>`) pada mode jam tiba langsung (H-10) yang membuka navigasi Google Maps tanpa mengirimkan notifikasi OTW ke pasien.
+  3. Endpoint `POST /api/staff/reservations/:id/otw` belum memiliki proteksi idempotensi sisi server: dua klik cepat, dua tab bersamaan, atau panggilan dari entry point berbeda berisiko mengirim pesan WhatsApp ganda ke customer.
+  4. Keputusan aksi UI tombol di kartu tugas staf (`StaffToday.tsx`) sebelumnya dilakukan via rentetan ekspresi boolean inline tanpa pemisahan logika murni yang dapat diuji tanpa dependensi render DOM.
+
+- **Perubahan yang Dilakukan (Sesuai Final Plan: Penyelarasan Gerbang OTW H-2 & Penghapusan Bypass Peta Senyap)**:
+  - **Fase 1 (Satu Kontrak Gerbang Waktu)**:
+    - Di `packages/admin-dashboard/src/utils/geoUtils.ts`: Mengganti konstanta lama dengan `OTW_OPEN_MINUTES_BEFORE = 120`, `OTW_GRACE_MINUTES_AFTER = 15`, memisahkan pre-warm GPS ke konstanta mandiri `GPS_WARMUP_MINUTES = 60`, serta mengekspor `getOtwGate()` (membandingkan milidetik mentah identik dengan backend) dan `isWithinGpsWarmupWindow()`.
+    - Di `packages/admin-dashboard/src/pages/staff/StaffToday.tsx`: Memperbarui `isOtwAllowed` menggunakan `getOtwGate(task.bookingDate).allowed`, `hasDepartWindowTask` menggunakan `isWithinGpsWarmupWindow`, menambahkan guard `if (sendingOtwId) return;`, dan menyatukan penanganan toast informatif/peta pada `handleUnifiedDepart`.
+  - **Fase 2 (Penghapusan Bypass Peta Senyap)**:
+    - Di `StaffToday.tsx`: Menghapus tautan senyap `<a href={navUrl}>Peta</a>` pada H-10 dan menggantinya dengan tombol `<button onClick={(e) => requestNavigation(task, e)}>OTW</button>`, sehingga pada H-10 tombol "Sampai" tetap aksi utama (primary) dan tombol kedua adalah "OTW" yang memicu alur kirim OTW + buka peta.
+  - **Fase 3 (Idempotensi Endpoint OTW)**:
+    - Di `src/routes/staff/today.subroute.ts`: Menyisipkan guard idempotensi setelah validasi status terminal. Jika reservasi sudah memiliki `otw_sent_at` dan bukan `forceResend` oleh supervisor, endpoint mengembalikan HTTP 200 `{ success: true, data: { alreadySent: true, otwSentAt, status } }` tanpa mengirim pesan WhatsApp ulang atau memutasi database. Menambahkan dukungan `forceResend: true` untuk peran supervisor.
+    - Di `StaffToday.tsx` & `TodayTreatments.tsx`: Menangani respons `alreadySent: true` dengan sinkronisasi state lokal dan menampilkan toast info bahwa pesan sudah pernah dikirim.
+  - **Fase 4 (Ekstraksi Resolver Aksi UI)**:
+    - Membuat modul logika murni baru `packages/admin-dashboard/src/pages/staff/taskAction.ts` (`resolveTaskAction`) yang mengembalikan `{ primary: 'complete'|'arrive'|'otw'|'map', secondary: 'otw'|null, showExtraNav }` tanpa efek samping DOM.
+    - Mengintegrasikan `resolveTaskAction` ke dalam IIFE tombol aksi kartu tugas di `StaffToday.tsx`.
+  - **Fase 5 (Pengujian Unit & Integrasi Adversarial)**:
+    - Memperbarui `tests/unit/depart-window.test.ts` (19 test) mencakup batas jendela H-121, H-120, H-90, H-5, H+15, H+16, milidetik mentah 15m30s, dan pre-warm GPS 60 menit.
+    - Membuat `tests/unit/task-action.test.ts` (9 test) mencakup seluruh 7 skenario transisi state aksi UI.
+    - Menambahkan pengujian idempotensi, supervisor forceResend, dan batas jendela H-121/H+16 di `tests/integration/otw-depart-endpoint.test.ts` (total 17 test lulus).
+  - **Fase 6 (Dokumentasi & Known Issues)**:
+    - Memperbarui `docs/KNOWN_ISSUES.md`: Menyelesaikan entri #165a, memperbarui #217 terkait retensi `OtwConfirmModal` dan pemisahan `GPS_WARMUP_MINUTES`, serta mencatat utang SaaS konstanta global OTW.
+
+- **Dampak & Verifikasi**:
+  - `npm run build` root backend berhasil 0 error.
+  - `npm run build` di `packages/admin-dashboard` berhasil 0 error.
+  - Seluruh 45 test pada 3 suite terkait lulus 100% tanpa regresi.
+
+
 #### 2026-10-19 - Fix: Resolusi Fondasional Quick Hold & Kontrak Data purchase_review_status (Opsi A)
 
 - **Akar Masalah & Insiden Nyata**:

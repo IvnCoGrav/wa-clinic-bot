@@ -258,6 +258,38 @@ export const Settings: React.FC = () => {
     }
   };
 
+  const [metaPurchasePolicy, setMetaPurchasePolicy] = useState<string>('SUPPRESS_REPEAT');
+  const [savingPurchasePolicy, setSavingPurchasePolicy] = useState(false);
+
+  const loadMetaPurchasePolicy = async () => {
+    try {
+      const res = await apiRequest('/api/admin/settings/meta-purchase-policy');
+      if (res && res.data && res.data.policy) {
+        setMetaPurchasePolicy(res.data.policy);
+      }
+    } catch (e) {
+      console.warn('Failed to load Meta Purchase Policy:', e);
+    }
+  };
+
+  const handleSavePurchasePolicy = async (val: string) => {
+    setSavingPurchasePolicy(true);
+    try {
+      const res = await apiRequest('/api/admin/settings/meta-purchase-policy', {
+        method: 'PUT',
+        body: JSON.stringify({ policy: val }),
+      });
+      if (res && res.success) {
+        setMetaPurchasePolicy(val);
+        toast('Kebijakan Meta Purchase CAPI berhasil disimpan.', 'success');
+      }
+    } catch (err: any) {
+      toast(`Gagal menyimpan kebijakan CAPI: ${err.message}`, 'error');
+    } finally {
+      setSavingPurchasePolicy(false);
+    }
+  };
+
   useEffect(() => {
     async function loadSettings() {
       try {
@@ -282,6 +314,7 @@ export const Settings: React.FC = () => {
           loadMediaRetention(),
           loadPricelistImage(),
           loadPurchaseModeration(),
+          loadMetaPurchasePolicy(),
         ]);
 
         if (data) {
@@ -895,6 +928,9 @@ export const Settings: React.FC = () => {
             autoSendPurchaseCapi={autoSendPurchaseCapi}
             savingPurchaseModeration={savingPurchaseModeration}
             handleTogglePurchaseModeration={handleSavePurchaseModeration}
+            metaPurchasePolicy={metaPurchasePolicy}
+            savingPurchasePolicy={savingPurchasePolicy}
+            handleSavePurchasePolicy={handleSavePurchasePolicy}
           />
 
           {/* Pricelist, MQL Automation & Media Retention Settings */}
