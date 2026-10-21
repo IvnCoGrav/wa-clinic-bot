@@ -77,7 +77,8 @@ import { useTripTelemetry } from '../../hooks/useTripTelemetry';
 import {
   calculateHaversineKm,
   estimateTravelMinutesKm,
-  isWithinDepartWindow,
+  getOtwGate,
+  isWithinGpsWarmupWindow,
   formatWibClock,
   needsNavigationPreflight,
   getLocationBadgeConfig,
@@ -88,6 +89,7 @@ import {
 import { NavigationPreflightModal } from '../../components/staff/NavigationPreflightModal';
 import { OtwConfirmModal } from '../../components/staff/OtwConfirmModal';
 import { needsHousePhoto, resolveLocModalMode } from './housePhotoGuard';
+import { resolveTaskAction } from './taskAction';
 
 interface StaffTaskChild {
   name: string;
@@ -669,13 +671,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   };
 
   // Tombol OTW hanya bisa ditekan maksimal 2 jam sebelum jadwal treatment s/d toleransi 15 menit setelah jadwal
-  const isOtwAllowed = (task: StaffTask) => {
-    if (!task.bookingDate) return false;
-    const start = new Date(task.bookingDate).getTime();
-    if (isNaN(start)) return false;
-    const now = Date.now();
-    return now >= start - 2 * 60 * 60 * 1000 && now <= start + 15 * 60 * 1000;
-  };
+  const isOtwAllowed = (task: StaffTask) => getOtwGate(task.bookingDate).allowed;
 
   // Benar-benar jamnya tiba: H-10 menit s/d kapan pun setelah janji, belum OTW, belum Tiba.
   const isTimeForArrival = (t: StaffTask): boolean => {
@@ -1008,7 +1004,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   // prompt izin tertinggal di tab background. Silent total; dilepas saat tak ada
   // tugas dalam window / unmount (privasi).
   const hasDepartWindowTask = useMemo(
-    () => [...tasks, ...upcomingTasks].some((t) => isWithinDepartWindow(t.bookingDate)),
+    () => [...tasks, ...upcomingTasks].some((t) => isWithinGpsWarmupWindow(t.bookingDate)),
     [tasks, upcomingTasks]
   );
   useEffect(() => {
@@ -1915,6 +1911,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
    * - Belum OTW tapi di luar jendela / offline / tanpa chat → mode intip / info.
    */
   const handleUnifiedDepart = async (task: StaffTask, navUrl: string | null) => {
+    if (sendingOtwId) return;
     const TERMINAL = ['completed', 'cancelled', 'rejected'];
     if (TERMINAL.includes(String(task.status || '').toLowerCase())) {
       openMapsIfAny(navUrl);
@@ -1925,21 +1922,28 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       return;
     }
 
-    const withinWindow = isWithinDepartWindow(task.bookingDate);
-    // Ada navUrl → jendela H-60..H+120 (perilaku lama); tanpa navUrl → izin
-    // H-2 jam (perilaku lama handleSendOtw). Keduanya kini bermuara ke SATU kirim.
-    const canSend = (navUrl ? withinWindow : isOtwAllowed(task)) && !!task.conversationId && isOnline;
-
-    if (!canSend) {
-      if (navUrl) {
-        openMapsIfAny(navUrl); // mode intip: hanya melihat peta
-      } else if (!isOtwAllowed(task)) {
+    const gate = getOtwGate(task.bookingDate);
+    if (!gate.allowed) {
+      openMapsIfAny(navUrl);
+      if (gate.reason === 'too_early') {
         toast(`Tombol OTW baru aktif maks. 2 jam sebelum jadwal (${formatTime(task.bookingDate)})`, 'info');
-      } else if (!isOnline) {
-        toast('Koneksi internet terputus. Tidak dapat mengirim info OTW saat ini.', 'error');
+      } else if (gate.reason === 'expired') {
+        toast('Jadwal treatment sudah lewat batas OTW. Silakan gunakan tombol "Sampai".', 'info');
       } else {
-        toast('Belum ada riwayat percakapan WhatsApp untuk pasien ini.', 'error');
+        toast('Jadwal belum memiliki waktu booking yang valid.', 'error');
       }
+      return;
+    }
+
+    if (!isOnline) {
+      openMapsIfAny(navUrl);
+      toast('Koneksi internet terputus. Tidak dapat mengirim info OTW saat ini.', 'error');
+      return;
+    }
+
+    if (!task.conversationId) {
+      openMapsIfAny(navUrl);
+      toast('Belum ada riwayat percakapan WhatsApp untuk pasien ini.', 'error');
       return;
     }
 
@@ -2025,6 +2029,17 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           }),
         });
         if (res?.success) {
+          if (res?.data?.alreadySent) {
+            const serverOtwAt = res?.data?.otwSentAt || task.otwSentAt || new Date().toISOString();
+            const nextStatus = res?.data?.status || task.status;
+            const updateOtw = (t: StaffTask): StaffTask =>
+              t.reservationId === task.reservationId ? { ...t, otwSentAt: serverOtwAt, status: nextStatus } : t;
+            setTasks((prev) => prev.map(updateOtw));
+            setUpcomingTasks((prev) => prev.map(updateOtw));
+            setSelectedTask((prev) => (prev ? updateOtw(prev) : prev));
+            toast('Info OTW sudah pernah dikirim sebelumnya — tidak dikirim ulang.', 'info');
+            return;
+          }
           const nowIso = new Date().toISOString();
           const nextStatus = res?.data?.status || 'en_route';
           const updateOtw = (t: StaffTask): StaffTask =>
@@ -3544,11 +3559,20 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                         {(() => {
                           const isChatHidden = (task.status === 'completed' && !isChatWindowOpen(task)) || task.chatWindow?.reason === 'CLOSED_AFTER_COMPLETE';
                           const navUrl = task.navigationUrl || task.mapsUrl;
+                          const action = resolveTaskAction({
+                            status: task.status,
+                            arrivedAt: task.arrivedAt,
+                            otwSentAt: task.otwSentAt,
+                            bookingDate: task.bookingDate,
+                            navUrl,
+                            isScheduleOverdue: isScheduleOverdue(task),
+                            timeForArrival: isTimeForArrival(task),
+                          });
                           const isTerminal = task.status === 'completed';
-                          const isArrived = !isTerminal && (task.arrivedAt || isScheduleOverdue(task));
+                          const isArrived = !isTerminal && (Boolean(task.arrivedAt) || isScheduleOverdue(task));
                           const isOtw = !isTerminal && !isArrived && !!task.otwSentAt;
                           const isDirectArrival = !isTerminal && !isArrived && !isOtw && isTimeForArrival(task);
-                          const showExtraNav = (isOtw || isDirectArrival) && !!navUrl;
+                          const showExtraNav = action.showExtraNav ?? ((isOtw || isDirectArrival) && !!navUrl);
                           const colsClass = isChatHidden
                             ? (showExtraNav ? 'grid-cols-2' : 'grid-cols-1')
                             : (showExtraNav ? 'grid-cols-3' : 'grid-cols-2');
@@ -3602,19 +3626,18 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                 )
                               )}
 
-                              {/* Mode jam tiba langsung (tanpa OTW): tombol Peta murni tanpa kirim pesan OTW */}
-                              {isDirectArrival && navUrl && (
-                                <a
-                                  href={navUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={(e) => e.stopPropagation()}
+                              {/* Mode jam tiba langsung (H-10): tombol OTW kedua di samping aksi utama Sampai */}
+                              {action.secondary === 'otw' && (
+                                <button
+                                  type="button"
+                                  disabled={isSendingOtw}
+                                  onClick={(e) => requestNavigation(task, e)}
                                   className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold rounded-xl transition-all active:scale-95 shadow-xs text-[#008069] bg-[#d9fdd3] hover:bg-[#cbf7c3] border border-[#00a884]/30"
-                                  title="Buka peta navigasi (tanpa kirim pesan OTW)"
+                                  title="Kirim info OTW ke pasien & buka peta navigasi"
                                 >
                                   <Navigation size={15} />
-                                  <span>Peta</span>
-                                </a>
+                                  <span>OTW</span>
+                                </button>
                               )}
 
                               {/* Aksi operasional 3-state */}

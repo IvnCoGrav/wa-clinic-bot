@@ -402,6 +402,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
           etaMinutes?: number;
           arrivalWib?: string;
           markEnRoute?: boolean;
+          forceResend?: boolean;
         };
       }>,
       reply: FastifyReply
@@ -472,6 +473,21 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({
           success: false,
           error: `Pesan OTW tidak dapat dikirim untuk jadwal berstatus "${(reservation as any).status}".`,
+        });
+      }
+
+      // Idempotensi OTW: jika pesan OTW sudah pernah dikirim dan bukan forceResend oleh supervisor,
+      // jangan kirim ulang. Kembalikan 200 dengan alreadySent: true agar frontend tersinkronkan.
+      const alreadySentAt = (reservation as any).otw_sent_at ? new Date((reservation as any).otw_sent_at) : null;
+      const forceResend = body.forceResend === true && isSupervisor;
+      if (alreadySentAt && !forceResend) {
+        return reply.status(200).send({
+          success: true,
+          data: {
+            alreadySent: true,
+            otwSentAt: alreadySentAt.toISOString(),
+            status: (reservation as any).status,
+          },
         });
       }
 

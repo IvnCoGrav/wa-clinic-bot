@@ -432,7 +432,11 @@ export const TodayTreatments: React.FC = () => {
     try {
       const res = await apiRequest(`/api/staff/reservations/${task.reservationId}/otw`, { method: 'POST' });
       if (res.success) {
-        toast('Notifikasi OTW berhasil dikirim ke WhatsApp pasien!', 'success');
+        if (res?.data?.alreadySent) {
+          toast('Info OTW sudah pernah dikirim sebelumnya — tidak dikirim ulang.', 'info');
+        } else {
+          toast('Notifikasi OTW berhasil dikirim ke WhatsApp pasien!', 'success');
+        }
         fetchTasks(true);
       }
     } catch (err: any) {
