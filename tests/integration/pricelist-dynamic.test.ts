@@ -428,5 +428,10 @@ describe('Pricelist dinamis — route & API (offline DB)', () => {
     expect(consultIdx).toBeGreaterThan(0);
     expect(ongkirIdx).toBeGreaterThan(consultIdx);
     expect(footerIdx).toBeGreaterThan(ongkirIdx);
+
+    // Keterangan & tombol cek alamat ditiadakan sesuai preferensi
+    expect(body).not.toContain('<th>Keterangan</th>');
+    expect(body).not.toContain('Cek Ongkir Alamat Saya');
+    expect(body).not.toContain('Jarak dihitung otomatis');
   });
 });
