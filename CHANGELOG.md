@@ -5,7 +5,31 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+#### 2026-10-22 - Fix: Default Meta Purchase Policy ke Dual Event, Penguncian Dedup event_id & Export Audience Meta
+
+- **Akar Masalah & Koreksi Audit (Tindak Lanjut Entri 2026-10-21)**:
+  1. `SUPPRESS_REPEAT` sebagai default membuang sinyal repeat order dari Meta. Meta tidak membedakan pembeli baru vs lama secara otomatis; menahan event justru menghilangkan sinyal LTV yang berguna. Praktik yang dianjurkan: kirim event terpisah dan jadikan event pasien baru sebagai target optimasi akuisisi.
+  2. `ALL_WITH_TAG` (`opt_out: true`) tidak menyelesaikan keluhan angka purchase di laporan. Dokumentasi resmi Meta (Server Event Parameters, 12 Feb 2026): "If set to `true`, we only use the event for attribution" — event tetap dihitung di atribusi, hanya dikeluarkan dari optimasi delivery. Copy UI/CHANGELOG sebelumnya menyesatkan dan sudah dikoreksi.
+  3. Deduplikasi Meta memakai pasangan `event_name` + `event_id`. Implementasi Purchase sudah deterministik (`{trackingCode}_pur_{reservationId}_{originalEventTime}`), tetapi belum ada test yang mengunci stabilitas retry dan keunikan antar-reservasi.
+  4. Klaim "16 test gagal pre-existing" diverifikasi ulang: pada HEAD `6db62612` dan baseline `55420e0f` hasilnya identik **15 test gagal di 8 file** (bukan 16, angka berfluktuasi seperti dicatat).
+  5. Akar masalah atribusi tetap di exclusion/attribution Ads Manager (identitas WA vs FB/IG, view-through, Advantage Audience) — belum terbukti, masih hipotesis operasional.
+
+- **Perubahan yang Dilakukan**:
+  - **Default kebijakan `DUAL_EVENT`**: `src/services/capi.service.ts` (fallback service), `.env.example`, `Settings.tsx`, `MetaCapiPanel.tsx`, dan endpoint GET settings. Repeat order kini dikirim sebagai `ReturningCustomerPurchase` (sinyal LTV tetap ada) sementara `Purchase` tetap murni untuk optimasi akuisisi.
+  - **Koreksi copy & label**: opsi `SUPPRESS_REPEAT` tidak lagi berlabel "Disarankan"; `ALL_WITH_TAG` menjelaskan bahwa event tetap dihitung di laporan atribusi.
+  - **Penguncian dedup `event_id`**: test baru menegaskan retry reservasi yang sama menghasilkan `event_id` identik, reservasi berbeda menghasilkan ID berbeda, dan event repeat berprefix `returning_` (Meta dedup memakai `event_name` + `event_id`).
+  - **Export Audience Meta (akar masalah exclusion)**: endpoint `GET /api/admin/customers/audience-export` menghasilkan CSV kolom `phone` berformat internasional `62…` (tanpa `0`/`+`), dinormalisasi via `normalizePhoneID`, di-dedupe, mengecualikan soft-deleted/sandbox/staf internal, dan fail-closed saat DB offline. Tombol **Export Audience** ditambahkan di header modul Database Customer (bukan halaman baru).
+
+- **Dampak & Verifikasi**:
+  - Test CAPI: `capi-repeat-purchase-policy` 14 test + `capi-repeat-order` 8 test hijau; total suite CAPI 31+ hijau.
+  - Test baru `tests/integration/customer-audience-export.test.ts` (3 test) hijau: normalisasi+dedupe, fail-closed DB offline, tolak request tanpa API key.
+  - Verifikasi pre-existing: 9 file terkait tetap **15 gagal / 80 lulus** identik dengan baseline sebelum commit CAPI.
+
+- **Utang Teknis Tercatat**: `order_id` sebaiknya ditempatkan di `original_event_data.order_id` (slot kanonis Meta untuk event tertunda), dan tipe `MetaRepeatDecision` belum terpakai.
+
 #### 2026-10-21 - Feat: Isolasi Atribusi Repeat Purchase Meta CAPI & Proteksi Metrik CAC Iklan
+
+> **Koreksi 2026-10-22**: default kebijakan diubah menjadi `DUAL_EVENT`; klaim bahwa `ALL_WITH_TAG` melindungi metrik CAC perlu dibaca sebagai "melindungi optimasi delivery" saja — event tetap dihitung di laporan atribusi Meta.
 
 - **Akar Masalah & Kebutuhan (Audit Transkrip & Evaluasi Kampanye Iklan)**:
   1. Pelanggan repeat order (Bunda Retno & Bunda Nurul Hidayati) yang melakukan pemesanan pada 18–21 Oktober teratribusi ke kampanye prospecting dingin (#LPWA Kala Purchase Campaign v15), menghasilkan pencatatan 4 website purchase senilai Rp 385.000 di Meta Ads Manager (padahal pasien baru riil hanya 2 orang senilai Rp 325.000).

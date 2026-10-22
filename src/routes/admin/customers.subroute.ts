@@ -11,6 +11,7 @@ import { getClinicLocationAsync } from '../../config/clinic-location';
 import { tenantOf } from './route-helpers';
 import { resolveLocationSource } from '../../services/staff-reservation.service';
 import { MAX_ADDRESS_LABEL_LENGTH } from '../../domain/customer-address';
+import { normalizePhoneID } from '../../utils/phone-normalizer';
 
 export async function customerAdminRoutes(fastify: FastifyInstance) {
   // Invalidate cache saat ada create/update/delete customer
@@ -38,6 +39,51 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
         .send({ success: true, stats });
     } catch (err: any) {
       return reply.status(500).send({ success: false, error: err.message });
+    }
+  });
+
+  /**
+   * GET /api/admin/customers/audience-export
+   * Unduh daftar nomor pasien (format internasional 62..., tanpa 0/+) untuk
+   * Custom Audience Meta. Nomor WA klinik sering tidak cocok dengan akun FB/IG
+   * pasien, sehingga upload daftar ini adalah lapis exclusion kedua di Ads Manager.
+   */
+  fastify.get('/api/admin/customers/audience-export', async (request, reply) => {
+    try {
+      const tenantId = tenantOf(request);
+      const rows = await prisma.customer.findMany({
+        where: {
+          tenant_id: tenantId,
+          deleted_at: null,
+          is_sandbox_test: false,
+          is_internal_staff: false,
+        },
+        select: { phone: true },
+        orderBy: { created_at: 'desc' },
+      });
+
+      const phones = Array.from(
+        new Set(
+          rows
+            .map((row) => normalizePhoneID(row.phone))
+            .filter((phone) => /^62\d{8,15}$/.test(phone))
+        )
+      );
+
+      const csv = ['phone', ...phones].join('\n');
+      const stamp = new Date().toISOString().slice(0, 10);
+
+      return reply
+        .header('Content-Type', 'text/csv; charset=utf-8')
+        .header('Content-Disposition', `attachment; filename="meta-audience-${tenantId}-${stamp}.csv"`)
+        .header('Cache-Control', 'no-store')
+        .status(200)
+        .send(csv);
+    } catch (err: any) {
+      return reply.status(500).send({
+        success: false,
+        error: err.message || 'Gagal mengekspor audience Meta.',
+      });
     }
   });
 

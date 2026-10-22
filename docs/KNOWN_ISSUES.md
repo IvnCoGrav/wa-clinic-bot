@@ -30,9 +30,9 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Dampak:** Bukti pembayaran berupa gambar yang dikirim pelanggan via nomor WhatsApp Cloud API (WABA) tersimpan di media storage tetapi tidak otomatis di-attach ke data reservasi via Vision AI.
 - **Rencana Masa Depan:** Panggil `attachFromInbound` secara fire-and-forget di background setelah `saveInboundMedia` di `src/routes/waba-webhook.route.ts`, lalu lengkapi dengan spy test di `tests/integration/waba-webhook-route.test.ts`.
 
-## 270. [Meta Ads / CAPI] Atribusi Historis Event Purchase di Meta Ads Manager Bersifat Imutabel & Kebocoran Retargeting Advantage (2026-10-21, IMPLEMENTED + TECH DEBT)
+## 270. [Meta Ads / CAPI] Atribusi Historis Event Purchase di Meta Ads Manager Bersifat Imutabel & Kebocoran Retargeting Advantage (2026-10-21, diperbarui 2026-10-22 — IMPLEMENTED + TECH DEBT)
 
-- **Status:** IMPLEMENTED (Gerbang deterministik `metaPurchasePolicy` di backend & frontend aktif per 2026-10-21; 27 unit test CAPI hijau di 4 suite). Keterbatasan historis Meta bersifat by-design.
+- **Status:** IMPLEMENTED (Gerbang deterministik `metaPurchasePolicy` di backend & frontend aktif; default diubah ke `DUAL_EVENT` pada 2026-10-22; 34 unit test CAPI hijau). Keterbatasan historis Meta bersifat by-design.
 - **Gejala / Akar Masalah:**
   1. Pasien repeat order (seperti Bunda Retno & Bunda Nurul Hidayati) yang reservasi pada 18–21 Oktober teratribusi ke kampanye prospecting dingin (`#LPWA Kala Purchase Campaign v15`), mencemari metrik Website Purchases (tercatat 4 pembelian senilai Rp 385.000, padahal akuisisi baru hanya 2 pasien senilai Rp 325.000).
   2. Mengapa Custom Audience Exclusion bocor:
@@ -41,16 +41,24 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
      c) Fitur Advantage Audience / Targeting Expansion Meta secara otomatis menembus list eksklusi jika algoritma memprediksi konversi.
   3. Keterbatasan API Meta: Event Purchase historis yang sudah diterima dan diproses oleh Meta Graph API bersifat permanen (immutable) dan TIDAK BISA diedit, dihapus, atau di-reassign ke kampanye lain melalui CAPI maupun Events Manager.
 - **Resolusi Fondasional:**
-  1. Kontrak kebijakan tenant `metaPurchasePolicy` (`SUPPRESS_REPEAT` [default murni CAC], `DUAL_EVENT` [ReturningCustomerPurchase], `ALL_WITH_TAG` [opt_out: true]) di `capi.service.ts` dan `Tenant.settings`.
-  2. Penambahan parameter resmi Meta Blueprint: `order_id` dan `customer_segmentation: 'new_customer_to_business' | 'existing_customer_to_business'`.
-  3. Pencegahan transmisi jaringan deterministik sebelum circuit breaker pada kebijakan `SUPPRESS_REPEAT`, serta penandaan `purchase_review_status: 'approved'` tanpa mengisi `purchase_event_sent_at`.
-  4. Panel konfigurasi di UI Admin Dashboard (`MetaCapiPanel.tsx`) dan badge queue `🔁 Repeat Order • CAPI Filtered`.
+  1. Kontrak kebijakan tenant `metaPurchasePolicy` (`DUAL_EVENT` [default sejak 2026-10-22], `SUPPRESS_REPEAT`, `ALL_WITH_TAG`) di `capi.service.ts` dan `Tenant.settings`.
+  2. Penambahan parameter resmi Meta: `order_id` dan `customer_segmentation: 'new_customer_to_business' | 'existing_customer_to_business'`.
+  3. Pada `DUAL_EVENT`, repeat order dikirim sebagai `ReturningCustomerPurchase` + `customer_segmentation: 'existing_customer_to_business'`, sehingga sinyal LTV tetap terkirim tanpa mengotori `Purchase` yang dioptimasi kampanye akuisisi.
+  4. Pencegahan transmisi jaringan deterministik sebelum circuit breaker pada kebijakan `SUPPRESS_REPEAT`, serta penandaan `purchase_review_status: 'approved'` tanpa mengisi `purchase_event_sent_at`.
+  5. Deduplikasi: `event_id` Purchase deterministik (`..._pur_{reservationId}_{originalEventTime}`), retry stabil dan unik antar-reservasi (dikunci `tests/unit/capi-repeat-purchase-policy.test.ts` test 11).
+  6. **Lapis exclusion kedua di Ads Manager**: `GET /api/admin/customers/audience-export` mengunduh CSV `phone` format `62…` (normalisasi `normalizePhoneID`, dedupe, mengecualikan sandbox/staf internal/soft-delete), plus tombol **Export Audience** di modul Database Customer.
+  7. Panel konfigurasi di UI Admin Dashboard (`MetaCapiPanel.tsx`) dan badge queue `🔁 Repeat Order • CAPI Filtered`.
 - **Rencana Tindak Lanjut & Mitigasi Operasional:**
   - Data historis 18–21 Oktober (4 purchase) tetap berada di dashboard Meta Ads Manager sebagai baseline pembanding.
-  - Untuk kampanye selanjutnya, kebijakan default `SUPPRESS_REPEAT` menyaring seluruh event Purchase repeat order pada jalur CAPI standar, sehingga metrik CPR dan ROAS lebih mencerminkan efektivitas akuisisi riil. Dua pengecualian yang disengaja dan BUKAN bug: (a) override admin `force_send_repeat_purchase` (escape hatch dengan audit log), dan (b) fail-safe saat DB offline yang sengaja memperlakukan customer sebagai `new` agar tidak salah-suppress (event tetap terkirim). Karena itu klaim "100% pasien baru" tidak boleh dipakai sebagai jaminan mutlak.
-- **Catatan Verifikasi (2026-10-21, post-audit ops):**
+  - Untuk kampanye selanjutnya, default `DUAL_EVENT` mengirim repeat order sebagai event terpisah; target optimasi kampanye prospecting WAJIB diset ke event `Purchase` (bukan `ReturningCustomerPurchase`). Dua pengecualian yang disengaja dan BUKAN bug: (a) override admin `force_send_repeat_purchase` (escape hatch dengan audit log), dan (b) fail-safe saat DB offline yang sengaja memperlakukan customer sebagai `new` agar tidak salah-suppress (event tetap terkirim). Karena itu klaim "100% pasien baru" tidak boleh dipakai sebagai jaminan mutlak.
+  - **Koreksi semantik `opt_out`**: dokumentasi resmi Meta menyatakan `opt_out: true` mengeluarkan event dari *optimasi delivery* tetapi event **tetap dipakai untuk atribusi**. Mode `ALL_WITH_TAG` TIDAK menghapus angka purchase dari laporan Ads Manager.
+  - **Eksklusi tetap wajib dua lapis**: (a) Custom Audience dari pixel/CAPI dan (b) upload CSV pasien dari endpoint export di atas. Nomor WA klinik sering tidak match dengan akun FB/IG pasien, sehingga lapis upload daftar nomor diperlukan.
+  - Langkah operasional belum diuji di akun: verifikasi "Customer lifecycle strategy / New customer acquisition" di ad set, coba incremental attribution, dan breakdown per ad-set untuk selisih Rp 10.000.
+- **Catatan Verifikasi (2026-10-21, post-audit ops; diperbarui 2026-10-22):**
   - Poin *1-day view-through* dan **Advantage Audience Expansion = HIPOTESIS**, wajib dibuktikan via Events Manager (breakdown atribusi) sebelum dipakai untuk keputusan bisnis strategis.
   - Rekonsiliasi matematika belum mutlak (Rp 325.000 + Rp 70.000 = Rp 395.000 vs angka Ads Manager Rp 385.000, ada selisih Rp 10.000 akibat diskon/DP parsial yang memerlukan breakdown per ad-set di Ads Manager).
+  - Klaim "16 test gagal pre-existing" diverifikasi ulang 2026-10-22: baseline `55420e0f` vs HEAD `6db62612` sama-sama **15 test gagal di 8 file** (80 lulus). Bukan regresi commit CAPI; angka 16 di CHANGELOG lama adalah pengukuran yang berfluktuasi.
+  - Utang teknis: `order_id` idealnya di `original_event_data.order_id` (slot kanonis Meta untuk event tertunda); tipe `MetaRepeatDecision` belum dipakai.
   - High-priority post-audit bug & hardening tuntas: perbaikan pola `will_suppress_capi` pada riwayat terkirim, sanitasi parameter internal (`force_send_repeat_purchase`, `allowZero`) dari payload Graph API Meta, dan segmen kustomer (`customer_segmentation`) dikunci ke otoritas DB.
 
 ## 269. [Address/Split-Brain] Resolusi Toponimi Fuzzy, Elevasi Primary GPS & Alarm Palsu Shareloc (2026-10-18, IMPLEMENTED)

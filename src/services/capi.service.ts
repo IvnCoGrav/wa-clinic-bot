@@ -707,15 +707,17 @@ export type MetaRepeatDecision =
 /**
  * Membaca kebijakan perutean event Purchase CAPI Meta untuk pelanggan repeat.
  * Disimpan di `Tenant.settings.metaPurchasePolicy` (tanpa alter table/migrasi).
- * Default aman: 'SUPPRESS_REPEAT' (isolasi akuisisi murni untuk perlindungan CAC).
- * Fail-safe: jika tenant undefined atau DB offline, fallback ke 'SUPPRESS_REPEAT'.
+ * Default: 'DUAL_EVENT' — repeat order tetap dikirim sebagai
+ * `ReturningCustomerPurchase` sehingga sinyal LTV tidak hilang, namun event
+ * `Purchase` yang dioptimasi kampanye akuisisi tetap murni pasien baru.
+ * Fail-safe: jika tenant undefined atau DB offline, fallback ke 'DUAL_EVENT'.
  */
 export async function getTenantMetaPurchasePolicy(tenantId?: string): Promise<MetaPurchasePolicy> {
   const envPolicy = process.env.DEFAULT_META_PURCHASE_POLICY as MetaPurchasePolicy | undefined;
   const defaultPolicy: MetaPurchasePolicy =
     envPolicy === 'DUAL_EVENT' || envPolicy === 'ALL_WITH_TAG' || envPolicy === 'SUPPRESS_REPEAT'
       ? envPolicy
-      : 'SUPPRESS_REPEAT';
+      : 'DUAL_EVENT';
 
   if (!tenantId) return defaultPolicy;
   try {

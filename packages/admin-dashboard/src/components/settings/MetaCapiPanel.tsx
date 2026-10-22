@@ -156,36 +156,36 @@ export const MetaCapiPanel: React.FC<Props> = ({
           <span>Kebijakan Repeat Purchase (Anti-Distorsi CAC)</span>
         </h4>
         <p className="text-xs text-[#667781] leading-relaxed">
-          Pilih bagaimana sistem memproses repeat purchase (pelanggan lama) ke Meta CAPI. Standar Meta Blueprint
-          merekomendasikan mode Akuisisi Murni agar metrik CAC di Ads Manager tidak terdistorsi repeat order.
+          Pilih bagaimana sistem memproses repeat purchase (pelanggan lama) ke Meta CAPI. Mode Dual Event
+          direkomendasikan: sinyal pelanggan lama tetap terkirim tanpa mengotori metrik akuisisi (CAC).
         </p>
 
         <div className="grid grid-cols-1 gap-2 pt-1">
           {[
             {
-              id: 'SUPPRESS_REPEAT',
-              title: 'Akuisisi Murni (Disarankan Meta Blueprint)',
-              badge: 'CAC Protection',
-              desc: 'Hanya order pertama yang dikirim ke Meta Ads Manager. Repeat order difilter di server agar metrik CAC murni.',
+              id: 'DUAL_EVENT',
+              title: 'Dual Event (Disarankan)',
+              badge: 'Retention Tracking',
+              desc: 'Order pertama dikirim sebagai Purchase (target optimasi akuisisi). Repeat order dikirim sebagai Custom Event ReturningCustomerPurchase, sehingga sinyal LTV tetap terkirim tanpa mengotori CAC.',
             },
             {
-              id: 'DUAL_EVENT',
-              title: 'Dual Event (ReturningCustomerPurchase)',
-              badge: 'Retention Tracking',
-              desc: 'Order pertama dikirim sebagai Purchase. Repeat order dikirim sebagai Custom Event ReturningCustomerPurchase.',
+              id: 'SUPPRESS_REPEAT',
+              title: 'Akuisisi Murni (Tanpa Sinyal Repeat)',
+              badge: 'CAC Protection',
+              desc: 'Repeat order tidak dikirim sama sekali ke Meta. Metrik CAC bersih, tetapi sinyal pembeli lama dan potensi LTV hilang dari optimizer.',
             },
             {
               id: 'ALL_WITH_TAG',
               title: 'Kirim Semua + opt_out=true',
-              badge: 'Meta Blueprint opt_out',
-              desc: 'Semua order dikirim sebagai Purchase, namun repeat order ditandai opt_out=true (atribusi saja, tidak melatih optimizer).',
+              badge: 'Atribusi saja',
+              desc: 'Semua order dikirim sebagai Purchase, repeat order ditandai opt_out=true. Catatan: opt_out hanya mengeluarkan event dari optimasi delivery — event tetap dihitung di laporan atribusi.',
             },
           ].map((opt) => (
             <label
               key={opt.id}
               onClick={() => handleSavePurchasePolicy && handleSavePurchasePolicy(opt.id)}
               className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${
-                (metaPurchasePolicy || 'SUPPRESS_REPEAT') === opt.id
+                (metaPurchasePolicy || 'DUAL_EVENT') === opt.id
                   ? 'border-[#008069] bg-[#f0fdf4]'
                   : 'border-[#e9edef] bg-white hover:bg-[#f8fafc]'
               }`}
@@ -194,7 +194,7 @@ export const MetaCapiPanel: React.FC<Props> = ({
                 type="radio"
                 name="metaPurchasePolicy"
                 value={opt.id}
-                checked={(metaPurchasePolicy || 'SUPPRESS_REPEAT') === opt.id}
+                checked={(metaPurchasePolicy || 'DUAL_EVENT') === opt.id}
                 onChange={() => {}}
                 disabled={savingPurchasePolicy}
                 className="mt-0.5 text-[#008069] focus:ring-[#008069]"

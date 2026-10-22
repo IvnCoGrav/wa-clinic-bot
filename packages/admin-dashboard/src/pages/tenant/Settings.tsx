@@ -258,7 +258,7 @@ export const Settings: React.FC = () => {
     }
   };
 
-  const [metaPurchasePolicy, setMetaPurchasePolicy] = useState<string>('SUPPRESS_REPEAT');
+  const [metaPurchasePolicy, setMetaPurchasePolicy] = useState<string>('DUAL_EVENT');
   const [savingPurchasePolicy, setSavingPurchasePolicy] = useState(false);
 
   const loadMetaPurchasePolicy = async () => {

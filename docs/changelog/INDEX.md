@@ -5,8 +5,9 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 597
+Total entri terindeks: 598
 
+- 2026-10-22 | Fix: Default Meta Purchase Policy ke Dual Event, Penguncian Dedup event_id & Export Audien
 - 2026-10-21 | Feat: Isolasi Atribusi Repeat Purchase Meta CAPI & Proteksi Metrik CAC Iklan
 - 2026-10-20 | Fix: Penyelarasan Gerbang OTW H-2, Penghapusan Bypass Peta Senyap, & Idempotensi Endpoint
 - 2026-10-19 | Fix: Resolusi Fondasional Quick Hold & Kontrak Data purchase_review_status (Opsi A)

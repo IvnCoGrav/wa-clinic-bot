@@ -115,6 +115,10 @@ describe('Meta CAPI Repeat Purchase Policy & Blueprint Compliance', () => {
 
     const event = postBody().data[0];
     expect(event.event_name).toBe('ReturningCustomerPurchase');
+    // Dedup Meta memakai pasangan event_name + event_id. Prefix wajib membedakan
+    // ID repeat dari event Purchase biasa agar policy switch tidak menciptakan tabrakan.
+    expect(event.event_id).toMatch(/^returning_/);
+    expect(event.event_id).toContain('res-nurul-repeat');
     expect(event.custom_data.customer_segmentation).toBe('existing_customer_to_business');
     expect(event.custom_data.customer_type).toBe('repeat');
     expect(event.custom_data.is_repeat_order).toBe(true);
@@ -253,19 +257,19 @@ describe('Meta CAPI Repeat Purchase Policy & Blueprint Compliance', () => {
   });
 
   it('9. getTenantMetaPurchasePolicy default & fallback aman', async () => {
-    // Undefined tenant
-    expect(await getTenantMetaPurchasePolicy(undefined)).toBe('SUPPRESS_REPEAT');
+    // Undefined tenant → default DUAL_EVENT (sinyal LTV tetap terkirim, CAC tetap terisolasi)
+    expect(await getTenantMetaPurchasePolicy(undefined)).toBe('DUAL_EVENT');
 
     // Tenant dengan settings null/kosong
     vi.mocked(prisma.tenant.findUnique).mockResolvedValueOnce({ id: 't1', settings: null } as any);
-    expect(await getTenantMetaPurchasePolicy('t1')).toBe('SUPPRESS_REPEAT');
+    expect(await getTenantMetaPurchasePolicy('t1')).toBe('DUAL_EVENT');
 
     // Tenant dengan nilai ngawur
     vi.mocked(prisma.tenant.findUnique).mockResolvedValueOnce({
       id: 't2',
       settings: { metaPurchasePolicy: 'NGAWUR_VALUE' },
     } as any);
-    expect(await getTenantMetaPurchasePolicy('t2')).toBe('SUPPRESS_REPEAT');
+    expect(await getTenantMetaPurchasePolicy('t2')).toBe('DUAL_EVENT');
 
     // Tenant dengan nilai valid
     vi.mocked(prisma.tenant.findUnique).mockResolvedValueOnce({
@@ -276,7 +280,15 @@ describe('Meta CAPI Repeat Purchase Policy & Blueprint Compliance', () => {
 
     // DB Offline
     vi.mocked(prisma.tenant.findUnique).mockRejectedValueOnce(new Error('DB Offline'));
-    expect(await getTenantMetaPurchasePolicy('t4')).toBe('SUPPRESS_REPEAT');
+    expect(await getTenantMetaPurchasePolicy('t4')).toBe('DUAL_EVENT');
+  });
+
+  it('9b. DEFAULT_META_PURCHASE_POLICY tetap menimpa fallback bawaan (escape hatch global)', async () => {
+    process.env.DEFAULT_META_PURCHASE_POLICY = 'SUPPRESS_REPEAT';
+    expect(await getTenantMetaPurchasePolicy(undefined)).toBe('SUPPRESS_REPEAT');
+
+    process.env.DEFAULT_META_PURCHASE_POLICY = 'NGAWUR';
+    expect(await getTenantMetaPurchasePolicy(undefined)).toBe('DUAL_EVENT');
   });
 
   it('10. Endpoint GET & PUT /api/admin/settings/meta-purchase-policy', async () => {
@@ -512,5 +524,38 @@ describe('Meta CAPI Repeat Purchase Policy & Blueprint Compliance', () => {
     // c) approved, sent_at null -> will_suppress_capi === true (hasil suppress)
     expect(items[2].id).toBe('res-queue-3');
     expect(items[2].will_suppress_capi).toBe(true);
+  });
+
+  it('11. event_id Purchase deterministik: retry stabil, reservasi berbeda unik', async () => {
+    vi.mocked(prisma.tenant.findUnique).mockResolvedValue({
+      id: DEFAULT_TENANT_ID,
+      settings: { metaPurchasePolicy: 'DUAL_EVENT' },
+    } as any);
+    vi.mocked(prisma.customer.findFirst).mockRejectedValue(new Error('Database offline'));
+    vi.mocked(prisma.adClick.findFirst).mockRejectedValue(new Error('Database offline'));
+    vi.mocked(prisma.reservation.count).mockResolvedValue(0);
+
+    const eventTime = 1790000000;
+    const base = {
+      eventName: 'Purchase',
+      customer: { id: 'cust-dedup', phone: '081299999999', name: 'Bunda Dedup' },
+      tenantId: DEFAULT_TENANT_ID,
+      value: 150000,
+      eventTime,
+    };
+
+    // Retry event yang sama (reservasi sama, event_time sama)
+    await capiService.sendCapiEvent({ ...base, reservationId: 'res-dedup-A' });
+    await capiService.sendCapiEvent({ ...base, reservationId: 'res-dedup-A' });
+    // Reservasi berbeda pada detik yang sama (skenario dua order beruntun)
+    await capiService.sendCapiEvent({ ...base, reservationId: 'res-dedup-B' });
+
+    const ids = mockedAxios.post.mock.calls.map((c: any) => c[1].data[0].event_id);
+    expect(ids).toHaveLength(3);
+    expect(ids[0]).toBeTruthy();
+    expect(ids[0]).toBe(ids[1]);
+    expect(ids[2]).not.toBe(ids[0]);
+    expect(ids[0]).toContain('res-dedup-A');
+    expect(ids[2]).toContain('res-dedup-B');
   });
 });

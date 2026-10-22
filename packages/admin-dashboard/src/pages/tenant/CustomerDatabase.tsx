@@ -51,6 +51,7 @@ import {
   Package,
   CheckCircle2,
   Pause,
+  Download,
 } from 'lucide-react';
 
 interface CustomerItem {
@@ -115,6 +116,7 @@ export const CustomerDatabase: React.FC = () => {
     totalRevenue: 0,
   });
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [exportingAudience, setExportingAudience] = useState(false);
 
   // Retry & Error State (Phase 2)
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -431,6 +433,37 @@ export const CustomerDatabase: React.FC = () => {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val);
   };
 
+  const handleExportAudience = async () => {
+    setExportingAudience(true);
+    try {
+      const adminKey = localStorage.getItem('adminApiKey') || '';
+      const response = await fetch('/api/admin/customers/audience-export', {
+        credentials: 'include',
+        headers: adminKey ? { 'x-api-key': adminKey } : {},
+      });
+
+      if (!response.ok) {
+        throw new Error('Gagal mengunduh audience Meta');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `meta-audience-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      toast('Daftar audience Meta diunduh (format 62...). Upload ke Custom Audience di Ads Manager.', 'success');
+    } catch (err: any) {
+      toast(err.message || 'Gagal mengekspor audience Meta.', 'error');
+    } finally {
+      setExportingAudience(false);
+    }
+  };
+
   const renderSortIcon = (field: string) => {
     if (sortBy !== field) {
       return <ArrowUpDown size={11} className="text-[#8696a0] opacity-40 group-hover:opacity-100" />;
@@ -486,6 +519,15 @@ export const CustomerDatabase: React.FC = () => {
         </div>
 
         <div className="flex items-center space-x-2">
+          <button
+            onClick={handleExportAudience}
+            disabled={exportingAudience}
+            className="px-3 py-1.5 rounded-xl bg-white border border-[#d1d7db] text-[#54656f] hover:bg-[#f0f2f5] hover:text-[#111b21] transition shadow-xs disabled:opacity-50 flex items-center space-x-1.5 text-xs font-semibold cursor-pointer"
+            title="Unduh CSV nomor pasien (format 62...) untuk Custom Audience Meta"
+          >
+            <Download size={13} className={exportingAudience ? 'animate-pulse text-[#008069]' : ''} />
+            <span>Export Audience</span>
+          </button>
           <button
             onClick={loadCustomers}
             disabled={loading}

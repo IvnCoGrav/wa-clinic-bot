@@ -412,19 +412,22 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
           policy,
           options: [
             {
-              value: 'SUPPRESS_REPEAT',
-              label: 'Akuisisi Murni (Disarankan)',
-              description: 'Hanya order pertama yang dikirim ke Meta Ads Manager. Repeat order tidak dikirim agar metrik CAC murni.',
+              value: 'DUAL_EVENT',
+              label: 'Dual Event (Disarankan)',
+              description:
+                'Order pertama dikirim sebagai Purchase (target optimasi akuisisi), repeat order dikirim sebagai ReturningCustomerPurchase sehingga sinyal LTV pelanggan lama tetap terkirim tanpa mengotori metrik CAC.',
             },
             {
-              value: 'DUAL_EVENT',
-              label: 'Dual Event',
-              description: 'Order pertama dikirim sebagai Purchase, repeat order dikirim sebagai ReturningCustomerPurchase (Custom Event).',
+              value: 'SUPPRESS_REPEAT',
+              label: 'Akuisisi Murni (Tanpa Sinyal Repeat)',
+              description:
+                'Repeat order tidak dikirim sama sekali ke Meta. Metrik CAC bersih, tetapi sinyal pembeli lama dan potensi LTV hilang dari optimizer.',
             },
             {
               value: 'ALL_WITH_TAG',
               label: 'Kirim Semua + opt_out',
-              description: 'Semua order dikirim sebagai Purchase dengan opt_out=true untuk repeat order (atribusi saja, tidak melatih optimizer).',
+              description:
+                'Semua order tetap dikirim sebagai Purchase dengan opt_out=true pada repeat order. Perhatian: opt_out hanya mengeluarkan event dari optimasi delivery; event tetap dihitung di laporan atribusi (angka Purchase tidak berkurang).',
             },
           ],
         },
@@ -489,7 +492,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
           action: 'UPDATE_META_PURCHASE_POLICY',
           targetId: tenantId,
           payload: {
-            previousPolicy: currentSettings.metaPurchasePolicy || 'SUPPRESS_REPEAT',
+            previousPolicy: currentSettings.metaPurchasePolicy || 'DUAL_EVENT',
             newPolicy: policy,
           },
           ipAddress: request.ip,
