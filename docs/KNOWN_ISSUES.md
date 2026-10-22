@@ -3,6 +3,13 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 274. [Deploy/Ops] `scripts/backfill-meta-purchase-policy.ts` Tidak Dapat Dijalankan di Container Produksi (2026-10-22, OPEN - LOW)
+
+- **Status:** OPEN (low impact: tidak ada tenant dengan nilai eksplisit `SUPPRESS_REPEAT` per verifikasi DB live 2026-10-22; backfill belum diperlukan).
+- **Gejala / Akar Masalah:** Image runner hanya menyalin `dist/`, `services_custom.json`, `delivery_tiers_custom.json`, dan `packages/admin-dashboard/dist`; direktori `scripts/` tidak ikut. `docker compose exec app npx tsx scripts/...` gagal `ERR_MODULE_NOT_FOUND`. `tsx` juga devDependency (tidak terpasang di runner).
+- **Dampak:** Skrip migrasi/backfill satu-kali tidak bisa dieksekusi lewat container; harus dijalankan dari host dengan Node+`tsx`+dependensi, atau via SQL manual.
+- **Rencana Masa Depan:** Pindahkan util backfill ke `src/scripts/` (ikut ter-compile ke `dist/`) atau buat service one-off di compose dengan mount `./scripts`; verifikasi di staging sebelum dipakai.
+
 ## 273. [Baseline Eval] Baseline Evaluasi LLM: CM-07/CM-08 Pre-Existing & Eval Berbayar Manual-Only (2026-10-21, OPEN)
 
 - **Status:** OPEN (Keputusan arsitektur sadar untuk efisiensi biaya API LLM eksternal).
