@@ -27,8 +27,9 @@ const QA_NAME = 'QA Repeat CAPI';
 const TENANT = 'default-tenant';
 
 async function cleanup() {
-  const cust = await prisma.customer.findFirst({ where: { phone: QA_PHONE } });
+  const cust = await prisma.customer.findFirst({ where: { phone: QA_PHONE, name: QA_NAME } });
   if (cust) {
+    if (!cust.name || cust.name !== QA_NAME) throw new Error('Refuse to delete non-QA customer');
     await prisma.reservation.deleteMany({ where: { customer_id: cust.id } });
     await prisma.customer.delete({ where: { id: cust.id } });
     console.log(`[QA] Data QA dihapus (customer ${cust.id} + reservasi).`);
