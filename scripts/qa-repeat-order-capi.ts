@@ -1,14 +1,28 @@
 /**
- * QA live: verifikasi repeat order CAPI (DUAL_EVENT → ReturningCustomerPurchase +
- * customer_segmentation existing_customer_to_business) di akun Meta riil.
+ * QA: verifikasi repeat order CAPI (DUAL_EVENT → ReturningCustomerPurchase +
+ * customer_segmentation existing_customer_to_business).
+ *
+ * KEAMANAN (default aman — pelajaran insiden 2026-10-22):
+ *   TANPA FLAG       → DRY-RUN: tidak menulis DB, tidak mengirim apa-apa; hanya
+ *                      mencetak rencana + payload yang akan dikirim.
+ *   --send           → benar-benar membuat fixture QA + mengirim event.
+ *   --send TANPA --live → DITOLAK (exit 2): jalur ini tidak mendukung
+ *                      test_event_code; event akan masuk dataset RIIL Meta.
+ *   --live           → konfirmasi sengaja bahwa event boleh masuk dataset riil.
+ *                      (Prasyarat: --send --live bersamaan.)
+ *   --cleanup        → hapus data QA saja (scope by QA_PHONE + QA_NAME, menolak
+ *                      menghapus customer dengan nama lain).
+ * Lapis keamanan tambahan: event Webhook test terpisah yang didukung
+ * test_event_code menggunakan `scripts/test-ctwa-capi.js`.
  *
  * Pemakaian:
- *   npx tsx scripts/qa-repeat-order-capi.ts            # buat data QA + kirim event (dev/offline)
- *   npx tsx scripts/qa-repeat-order-capi.ts --cleanup  # hapus data QA saja
+ *   npx tsx scripts/qa-repeat-order-capi.ts              # DRY-RUN (aman)
+ *   npx tsx scripts/qa-repeat-order-capi.ts --cleanup    # hapus data QA
+ *   npx tsx scripts/qa-repeat-order-capi.ts --send --live # ISI + KIRIM event RIIL (mengotori dataset!)
  *
  * Di server produksi, harus dijalankan DI DALAM container app (dist CJS):
  *   docker compose cp /tmp/qa-host.cjs app:/tmp/qa.cjs
- *   docker compose exec -T app node /tmp/qa.cjs
+ *   docker compose exec -T app node /tmp/qa.cjs [--cleanup|--live]
  * (kompilasi: npx tsc scripts/qa-repeat-order-capi.ts atau tulis versi CJS manual).
  *
  * Safeguard: customer QA dibuat dengan nama/nomor di luar pola dummy-filter
@@ -26,10 +40,11 @@ const QA_PHONE = '628810000001';
 const QA_NAME = 'QA Repeat CAPI';
 const TENANT = 'default-tenant';
 
+const has = (name: string) => process.argv.some((a) => a === name || a.startsWith(`${name}=`));
+
 async function cleanup() {
   const cust = await prisma.customer.findFirst({ where: { phone: QA_PHONE, name: QA_NAME } });
   if (cust) {
-    if (!cust.name || cust.name !== QA_NAME) throw new Error('Refuse to delete non-QA customer');
     await prisma.reservation.deleteMany({ where: { customer_id: cust.id } });
     await prisma.customer.delete({ where: { id: cust.id } });
     console.log(`[QA] Data QA dihapus (customer ${cust.id} + reservasi).`);
@@ -39,8 +54,36 @@ async function cleanup() {
 }
 
 async function main() {
-  if (process.argv.includes('--cleanup')) {
+  if (has('--cleanup')) {
     await cleanup();
+    return;
+  }
+
+  const sendMode = has('--send');
+  const liveMode = has('--live');
+
+  if (sendMode && !liveMode) {
+    console.error('[QA] DITOLAK: `--send` wajib disertai `--live` (jalur ini tidak mendukung test_event_code; event akan masuk dataset RIIL Meta).');
+    console.error('[QA] Kalau memakai uji Test Events, gunakan `scripts/test-ctwa-capi.js --test-event-code=KODE` sebagai gantinya.');
+    process.exitCode = 2;
+    return;
+  }
+
+  if (has('--test-event-code')) {
+    console.error('[QA] DITOLAK: jalur produksi ini tidak mendukung test_event_code. Gunakan `scripts/test-ctwa-capi.js --test-event-code=KODE` untuk Test Events.');
+    process.exitCode = 2;
+    return;
+  }
+
+  if (!sendMode) {
+    console.log('[QA DRY-RUN] Tidak ada flag --send — tidak menulis DB & tidak mengirim ke Meta.');
+    console.log(`[QA DRY-RUN] Yang AKAN dilakukan dengan --send --live:`);
+    console.log(`  1. Hapus data QA lama (customer ${QA_PHONE} + reservasi).`);
+    console.log(`  2. Buat fixture: customer '${QA_NAME}', reservasi #1 completed 40 hari lalu (supaya jadi repeat), reservasi #2 confirmed.`);
+    console.log(`  3. Kirim eventName='Purchase' (value 150000 IDR, tenant ${TENANT}, reservationId=#2) via sendCapiEvent.`);
+    console.log(`  4. Ekspektasi: DUAL_EVENT → event_name 'ReturningCustomerPurchase', event_id 'returning_pur_${TENANT}_{#2}', customer_segmentation 'existing_customer_to_business'.`);
+    console.log(`  5. Event masuk DATASET RIIL Meta (ReturningCustomerPurchase Rp 150.000, tidak menyentuh kolom Purchase).`);
+    console.log(`[QA DRY-RUN] Cleanup: npx tsx scripts/qa-repeat-order-capi.ts --cleanup`);
     return;
   }
   await cleanup(); // idempotent: mulai dari kondisi bersih

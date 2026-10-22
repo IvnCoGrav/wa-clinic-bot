@@ -56,7 +56,10 @@ const normalizePhone = (raw) => {
 // Nilai contoh sesuai payload produksi; tidak mengandung data pasien riil.
 const tenantId = args.tenant || 'default-tenant';
 const reservationId = args.reservation || `test_reservation_${Date.now()}`;
-const testPhone = args.phone || '6281234567890';
+// Nomor default SENGAJA tidak valid (prefiks `62` diikuti `0` — tidak ada nomor
+// nasional Indonesia yang demikian) supaya TIDAK mungkin menabrak data
+// pencocokan pengguna riil. Jangan pakai nomor placeholder umum (mis. 6281234567890).
+const testPhone = args.phone || '6200000000000';
 const ctwaClid = args.ctwa || `ctwa_test_${Date.now()}`;
 
 const eventId = args.eventid || `pur_${tenantId}_${reservationId}`;
@@ -103,8 +106,17 @@ const url = `${GRAPH_BASE}/${GRAPH_VER}/${pixelId}/events?access_token=${accessT
     const body = await res.json();
     console.log(`HTTP ${res.status}`);
     console.log(JSON.stringify(body, null, 2));
+    const mismatch = (body.messages || []).some((m) => /does not match an active Test Events session/i.test(m || ''));
+    if (mismatch) {
+      // Event sudah masuk dataset RIIL (tidak bisa ditarik). Suburkarkan kegagalan:
+      // exit non-zero supaya retry otomatis/berulang TIDAK melanjutkan pengiriman.
+      console.error('\n⚠️ test_event_code TIDAK aktif — event ini DIPROSES NORMAL (masuk dataset riil, tidak bisa ditarik).');
+      console.error('   JANGAN jalankan ulang dengan kode yang sama. Buka tab Test Events yang MASIH TERBUKA di Events Manager,');
+      console.error('   salin kode segar (kode berlaku hanya selama seluruh tab terbuka), lalu jalankan ulang dengan kode baru.');
+      process.exit(3);
+    }
     if (res.status === 200 && body.events_received === 1) {
-      console.log('\n✔ Meta menerima event. Cek Events Manager > Test Events untuk validasi ctwa_clid, action_source "chat", order_id, dan event_id deterministik.');
+      console.log('\n✔ Meta menerima event sebagai TEST EVENT. Cek tab Test Events (harus terlihat di sana, bukan di data live) untuk validasi ctwa_clid, action_source "chat", order_id, dan event_id deterministik.');
     } else {
       console.log('\n✘ Meta menolak atau menerima sebagian. Periksa error di atas dan bandingkan dengan payload produksi di src/services/capi.service.ts.');
     }
