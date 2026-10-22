@@ -29,7 +29,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ## 272. [Meta Ads / CAPI] Tahap B Post-Audit CAPI: Hardening Export, event_id Deterministik, action_source & Matching Geo (2026-10-22 — IMPLEMENTED, VERIF AKUN METAL OPEN)
 
-- **Status:** IMPLEMENTED (kode + test hijau; verifikasi efektif di Events Manager Meta belum dilakukan — butuh akses akun).
+- **Status:** IMPLEMENTED + PARSIAL TERVERIFIKASI LIVE (2026-10-22). Repeat order live test LULUS; CTWA/payload dasar diterima Meta (HTTP 200, events_received=1, tanpa warning); verifikasi visual Test Events & dedup PageView masih tertunda.
 - **Konteks:** Tahap A audit CAPI (A-001…A-012) menghasilkan persetujuan Tahap B dari user pada 2026-10-22 dengan kontrak test-first.
 - **Yang diselesaikan (Tahap B):**
   - **B1 Export Audience hardening**: rate limit 5 req/menit per IP (Fastify `config.rateLimit` di `src/routes/admin/customers.subroute.ts`), RBAC super_admin/tenant_admin saja (staff → 403 `FORBIDDEN_STAFF_ROLE`, prefix didaftarkan di `superAdminOnlyPrefixes` `src/routes/admin.route.ts`), audit log `CUSTOMER_AUDIENCE_EXPORT` {rowCount, tenantId}, header `X-Total-Rows`, persist `metaAudienceLastExportAt`/`metaAudienceLastExportCount` di `Tenant.settings` (fail-open, try/catch), endpoint meta `GET /api/admin/customers/audience-export/meta`, UI gate + info "Terakhir export" di `CustomerDatabase.tsx`.
@@ -41,10 +41,10 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - **B7 Email (A-009)**: belum dikerjakan — butuh kolom DB baru, sumber data email yang tidak dimiliki klinik hari ini, dan persetujuan pasien (privasi). Feature-flagged omisi field `em` tetap berlaku.
   - **B5**: `order_id` TETAP di `custom_data` (bukan dipindah) karena struktur `original_event_data` belum terverifikasi (docs Meta HTTP 400) — klaim "Meta Blueprint" di CHANGELOG #2026-10-22/21 dikoreksi.
 - **Verifikasi efektif yang belum dilakukan (butuh akses akun Meta):**
-  1. Events Manager: cek event PageView baru punya `action_source=website` dan tidak duplicate vs pixel (shared event_id).
-  2. Uji `ctwa_clid` + `action_source=chat` via `test_event_code` (skrip `scripts/test-ctwa-capi.js`).
-  3. Payload Helper / "View JSON" untuk memastikan `order_id` di `custom_data` diterima tanpa warning, atau pindah ke Original Event Data bila Meta menolak.
-  4. Rate-limit & 403 export diuji manual dari dashboard staf.
+  1. **[LIVE 2026-10-22] Repeat order uji — LULUS.** Data QA `628810000001` (customer `5a8b4beb-c9df-458f-ae5e-1a25ffca25f0`, 2 reservasi, r1 completed 40 hari lalu) → `sendCapiEvent Purchase` (r2) menghasilkan: `event_name: ReturningCustomerPurchase`, `event_id: returning_pur_default-tenant_{r2}`, `action_source: chat`, `customer_segmentation: existing_customer_to_business`, `is_repeat_order: true`, `order_number: 2`, `prior_orders_count: 1`, `order_id = {r2}` (di custom_data) — Meta menerima `events_received: 1` tanpa warning (`messages: []`, fbtrace `AMjgaHsT2u9iffYpwxybzVm`). Event `Purchase` asli TIDAK ikut terkirim (tidak tercampur). Rerun dengan `event_id` sama diterima Meta → dedup `event_id` deterministik bekerja. Data QA dibiarkan di DB untuk korelasi Events Manager — CS dapat menghapus via `scripts/qa-repeat-order-capi.ts --cleanup`.
+  2. **[LIVE 2026-10-22] Uji CTWA via `test_event_code` — payload DITERIMA, penilaian visual TERTUNDA.** `scripts/test-ctwa-capi.js --test-event-code=TEST26999` → HTTP 200, `events_received: 1`, TETAPI kode TIDAK match sesi Test Events aktif — event **"received and processed normally"** (masuk dataset riil sebagai Purchase Rp 1.000 `ctwa_test_*`, tidak bisa ditarik). Kode test harus diambil segar dari tab Test Events yang terbuka; sampai itu, verifikasi visual `ctwa_clid`/`order_id` di Events Manager belum selesai.
+  3. **[BERDASARKAN #2] order_id di custom_data — diterima tanpa error** (metaMessages kosong pada event repeat riil). Meta TIDAK menolak formatnya; catatan: pindah ke Original Event Data hanya perlu bila Payload Helper/Test Events menampakkan warning eksplisit — belum tampak bukti penolakan.
+  4. **Dedup PageView (pixel ↔ CAPI event_id sama) — BELUM terverifikasi.** Butuh kunjungan landing asli dengan pixel aktif lalu rekonsiliasi Events Manager.
 
 ## 271. [WABA/Payment Proof] Gambar Inbound WABA Belum Diteruskan ke attachFromInbound (2026-10-21, OPEN — EXCLUDED TEMPORARILY)
 
