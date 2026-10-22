@@ -433,5 +433,6 @@ describe('Pricelist dinamis — route & API (offline DB)', () => {
     expect(body).not.toContain('<th>Keterangan</th>');
     expect(body).not.toContain('Cek Ongkir Alamat Saya');
     expect(body).not.toContain('Jarak dihitung otomatis');
+    expect(body).not.toContain('Dihitung dari titik klinik');
   });
 });
