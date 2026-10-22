@@ -405,4 +405,28 @@ describe('Pricelist dinamis — route & API (offline DB)', () => {
     expect(res.body).toContain('xmlns="http://www.w3.org/2000/svg"');
     expect(res.body).toContain('#FFBE9C');
   });
+
+  it('13. /pricelist menyajikan tabel tarif ongkir di bagian paling bawah terklasifikasi per tarif', async () => {
+    const res = await app.inject({ method: 'GET', url: '/pricelist' });
+    expect(res.statusCode).toBe(200);
+    const body = res.body;
+
+    expect(body).toContain('id="sec-ongkir"');
+    expect(body).toContain('Tarif Transportasi Homecare (Ongkir)');
+    expect(body).toContain('groupTiersByFee');
+    expect(body).toContain('renderOngkirSection');
+
+    const payload = extractInjectedPayload(body);
+    expect(Array.isArray(payload.deliveryTiers)).toBe(true);
+    expect(payload.deliveryTiers.length).toBeGreaterThan(0);
+    expect(payload.deliveryTiers[0].fee).toBe(0);
+    expect(payload.deliveryTiers[0].maxDist).toBe(5);
+
+    const consultIdx = body.indexOf('consult-card');
+    const ongkirIdx = body.indexOf('id="sec-ongkir"');
+    const footerIdx = body.indexOf('footer class="trust"');
+    expect(consultIdx).toBeGreaterThan(0);
+    expect(ongkirIdx).toBeGreaterThan(consultIdx);
+    expect(footerIdx).toBeGreaterThan(ongkirIdx);
+  });
 });

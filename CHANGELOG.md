@@ -5,6 +5,23 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+#### 2026-10-22 - Feat: Tabel Tarif Ongkir Homecare Terklasifikasi Dinamis pada Halaman Pricelist Publik (/pricelist)
+
+- **Latar Belakang & Kebutuhan**:
+  - Halaman publik `/pricelist` sebelumnya hanya menyajikan daftar paket layanan dan harga treatment, tanpa informasi biaya transportasi / ongkir homecare.
+  - Sesuai arahan pengguna, tabel ongkir menampilkan tarif standar normal secara bersih tanpa embel-embel promo/coret/diskon, dan tier jarak diklasifikasikan/dikelompokkan sesuai kesamaan tarif ongkir di posisi paling bawah halaman.
+- **Arsitektur & Perubahan (100% Data-Driven & SaaS-Ready)**:
+  - `src/services/pricelist.service.ts`:
+    - Mengintegrasikan `getDeliveryTiersFromDb(tenantId)` ke dalam `getPricelistPayload()`.
+    - Menambahkan `deliveryTiers: DeliveryTier[]` ke antarmuka `PricelistPayload` secara dinamis dari tabel `delivery_tiers` (fallback file saat DB offline).
+  - `src/landing/public/pricelist.html`:
+    - Menambahkan fungsi pengelompokan kontigu `groupTiersByFee(tiers)`: menggabungkan tier jarak berurutan yang memiliki nominal tarif sama (misal 5–7 km & 7–10 km menjadi `> 5 – 10 km: Rp 15.000`; 10–15 km & 15–20 km menjadi `> 10 – 20 km: Rp 25.000`; 20–25 km & 25–30 km menjadi `> 20 – 30 km: Rp 35.000`; dan `0 – 5 km: GRATIS`).
+    - Merender kartu responsif tabel ongkir di posisi paling bawah halaman (`#sec-ongkir`) sebelum footer trust badges, lengkap dengan catatan rute Google Maps dan tombol CTA WhatsApp *"Cek Ongkir Alamat Saya"*.
+    - Menambahkan tab navigasi `🛵 Ongkir` pada bilah atas yang otomatis melakukan smooth scroll ke tabel ongkir.
+    - Menghubungkan kata kunci pencarian (*"ongkir"*, *"jarak"*, *"biaya kirim"*, *"delivery"*) agar menampilkan tabel ongkir.
+  - `tests/integration/pricelist-dynamic.test.ts`:
+    - Menambahkan uji integrasi test #13 untuk memvalidasi penyajian tabel ongkir terklasifikasi, hidrasi data `deliveryTiers`, dan urutan penempatan elemen di paling bawah halaman.
+
 #### 2026-10-22 - Fix: Tahap B Post-Audit CAPI — Hardening Export, event_id Purchase Deterministik, action_source per Event & Matching Geo Tenant-Aware
 
 - **Akar Masalah (Tahap A audit A-001…A-012, disetujui user untuk eksekusi Tahap B test-first)**:

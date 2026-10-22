@@ -18,6 +18,7 @@ import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { BrandIdentity, getBrandIdentityAsync } from '../config/brand';
 import { getPricelistPromoConfigAsync, PricelistPromoConfig } from '../config/pricelist-promo';
 import { treatmentCatalogService, ClinicServiceItem, TreatmentCategoryType } from './treatment-catalog.service';
+import { getDeliveryTiersFromDb, DeliveryTier } from './delivery.service';
 
 export type PricelistVariantTuple = [age: number | string, promo: number, orig: number];
 
@@ -53,6 +54,7 @@ export interface PricelistPayload {
   promo: PricelistPromoConfig;
   whatsapp_number: string;
   sections: PricelistSection[];
+  deliveryTiers: DeliveryTier[];
 }
 
 /**
@@ -355,6 +357,13 @@ export async function getPricelistPayload(
   const whatsapp_number = await resolveWhatsappNumber(tenantId, opts.whatsappFallback);
   const brandPrefix = brandPrefixOf(brand.businessName);
 
+  let deliveryTiers: DeliveryTier[] = [];
+  try {
+    deliveryTiers = await getDeliveryTiersFromDb(tenantId);
+  } catch {
+    deliveryTiers = [];
+  }
+
   return {
     tenantId,
     slug: opts.slug || 'default',
@@ -362,6 +371,7 @@ export async function getPricelistPayload(
     promo,
     whatsapp_number,
     sections: buildSections(services, brandPrefix),
+    deliveryTiers,
   };
 }
 

@@ -125,6 +125,47 @@
   .empty p{margin:0 0 12px;color:var(--muted)}
   .empty button{height:44px;padding:0 20px;border:0;border-radius:999px;background:var(--peach);font-family:'Fredoka',sans-serif;font-weight:600;font-size:15px;color:var(--ink);cursor:pointer}
 
+  /* ---------- Seksi Ongkir Paling Bawah ---------- */
+  .ongkir-section{margin-top:28px}
+  .ongkir-card{
+    background:#fff;border:1.5px solid var(--peach-2);border-radius:var(--radius);
+    padding:18px 16px;box-shadow:0 2px 10px rgba(194,85,43,.05);
+  }
+  .ongkir-head{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+  .ongkir-icon{
+    width:42px;height:42px;border-radius:50%;background:var(--peach-3);
+    border:1px solid var(--peach-2);display:grid;place-items:center;font-size:22px;flex:0 0 auto;
+  }
+  .ongkir-head h2{font-family:'Fredoka',sans-serif;font-weight:600;font-size:20px;margin:0;line-height:1.2}
+  .ongkir-head .meta{font-size:12.5px;color:var(--muted);font-weight:600;margin-top:2px}
+  .ongkir-table-wrap{overflow-x:auto;border-radius:14px;border:1px solid var(--line);background:#fff}
+  .ongkir-table{width:100%;border-collapse:collapse;text-align:left;font-size:13.5px}
+  .ongkir-table th{
+    background:var(--peach-3);color:var(--ink);font-family:'Fredoka',sans-serif;
+    font-weight:600;padding:10px 14px;font-size:13px;border-bottom:1px solid var(--line);
+    white-space:nowrap;
+  }
+  .ongkir-table td{padding:11px 14px;border-bottom:1px solid var(--cream);vertical-align:middle}
+  .ongkir-table tr:last-child td{border-bottom:0}
+  .ongkir-table tr:hover td{background:rgba(255,239,229,.4)}
+  .ongkir-dist{font-weight:700;color:var(--ink);white-space:nowrap}
+  .ongkir-fee-val{font-family:'Fredoka',sans-serif;font-weight:600;font-size:15px;color:var(--accent)}
+  .ongkir-fee-free{font-family:'Fredoka',sans-serif;font-weight:700;font-size:14px;color:var(--wa)}
+  .ongkir-pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11.5px;font-weight:700}
+  .ongkir-pill-free{background:#E8F5E9;color:var(--wa);border:1px solid #C8E6C9}
+  .ongkir-pill-std{background:var(--peach-3);color:var(--muted);border:1px solid var(--line)}
+  .ongkir-pill-confirm{background:#FFF3E0;color:#E65100;border:1px solid #FFE0B2}
+  .ongkir-foot{margin-top:14px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px}
+  .ongkir-info-note{flex:1;min-width:240px;font-size:12px;color:var(--muted);line-height:1.4}
+  .ongkir-cta-btn{
+    display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:999px;
+    background:var(--wa);color:#fff;text-decoration:none;font-family:'Fredoka',sans-serif;
+    font-weight:600;font-size:13px;transition:background .15s, transform .1s;
+    box-shadow:0 2px 8px rgba(18,140,74,.2);white-space:nowrap;
+  }
+  .ongkir-cta-btn:active{transform:scale(.97);background:#0e6e3a}
+  .ongkir-cta-btn svg{width:16px;height:16px;fill:currentColor}
+
   /* ---------- Card Konsultasi Bawah ---------- */
   .consult-card{
     margin-top:28px;background:#fff;border:1.5px solid var(--peach);border-radius:var(--radius);
@@ -538,6 +579,9 @@
     </a>
   </div>
 
+  <!-- TARIF ONGKIR (Paling Bawah) -->
+  <section class="ongkir-section" id="sec-ongkir" aria-label="Tarif Transportasi Homecare"></section>
+
   <footer class="trust">
     <div class="badge"><div class="ic">🏠</div><b>Homecare</b><span>Datang ke rumah</span></div>
     <div class="badge"><div class="ic">🛡️</div><b>Bidan Profesional</b><span>Bersertifikasi STR</span></div>
@@ -614,6 +658,7 @@
   let SECTIONS = [];
   let BOT_NAME = 'Bidan';
   let PROMO = null;
+  let DELIVERY_TIERS = [];
 
   function renderBrandLogo(b){
     const el = document.getElementById('brandLogo');
@@ -647,6 +692,7 @@
     PHONE = String(data.whatsapp_number || '').replace(/\D/g,'');
     SECTIONS = data.sections;
     PROMO = data.promo || { enabled: false };
+    DELIVERY_TIERS = Array.isArray(data.deliveryTiers) ? data.deliveryTiers : [];
     applyBrand(data.brand);
     renderBrandLogo(data.brand);
     initPromo();
@@ -677,9 +723,122 @@
   const $ctaSend = document.getElementById('ctaSend');
   const $ctaClose = document.getElementById('ctaClose');
 
+  /* ============ DATA-DRIVEN ONGKIR TIERS ============ */
+  function groupTiersByFee(tiers){
+    if (!Array.isArray(tiers) || tiers.length === 0) return [];
+    const sorted = tiers.slice().sort((a, b) => (Number(a.maxDist) || 0) - (Number(b.maxDist) || 0));
+    const groups = [];
+    let currentMin = 0;
+
+    for (let i = 0; i < sorted.length; i++) {
+      const t = sorted[i];
+      const maxD = Number(t.maxDist) || 0;
+      const feeVal = Number(t.fee) || 0;
+      const prev = groups[groups.length - 1];
+
+      if (prev && prev.fee === feeVal) {
+        prev.maxDist = maxD;
+      } else {
+        groups.push({
+          minDist: currentMin,
+          maxDist: maxD,
+          fee: feeVal
+        });
+      }
+      currentMin = maxD;
+    }
+    return groups;
+  }
+
+  function renderOngkirSection(){
+    const $sec = document.getElementById('sec-ongkir');
+    if (!$sec) return;
+    if (!Array.isArray(DELIVERY_TIERS) || DELIVERY_TIERS.length === 0) {
+      $sec.innerHTML = '';
+      $sec.style.display = 'none';
+      return;
+    }
+
+    const isOngkirTab = state.cat === 'ongkir';
+    const isAllTab = state.cat === 'all';
+    const words = state.q.toLowerCase().split(/\s+/).filter(Boolean);
+    const matchesOngkirSearch = words.length > 0 && words.some(w => 'ongkir ongkos kirim jarak delivery transport tarif'.includes(w));
+
+    if (!isOngkirTab && !isAllTab && !matchesOngkirSearch) {
+      $sec.style.display = 'none';
+      return;
+    }
+    $sec.style.display = 'block';
+
+    const groups = groupTiersByFee(DELIVERY_TIERS);
+    const rows = groups.map(g => {
+      const rangeLabel = g.minDist === 0 ? '0 – ' + g.maxDist + ' km' : '> ' + g.minDist + ' – ' + g.maxDist + ' km';
+      const isFree = g.fee === 0;
+      const feeHtml = isFree
+        ? '<span class="ongkir-fee-free">GRATIS (Rp 0)</span>'
+        : '<span class="ongkir-fee-val">' + rp(g.fee) + '</span>';
+      const pillHtml = isFree
+        ? '<span class="ongkir-pill ongkir-pill-free">🌿 Bebas Ongkir</span>'
+        : '<span class="ongkir-pill ongkir-pill-std">Tarif Normal</span>';
+
+      return '<tr>' +
+        '<td><span class="ongkir-dist">' + rangeLabel + '</span></td>' +
+        '<td>' + feeHtml + '</td>' +
+        '<td>' + pillHtml + '</td>' +
+        '</tr>';
+    }).join('');
+
+    const maxDistOverall = groups.length > 0 ? groups[groups.length - 1].maxDist : 30;
+    const extraRow = '<tr>' +
+      '<td><span class="ongkir-dist">> ' + maxDistOverall + ' km</span></td>' +
+      '<td><span class="ongkir-fee-val" style="font-size:13.5px">Konfirmasi Bidan</span></td>' +
+      '<td><span class="ongkir-pill ongkir-pill-confirm">Luar Radius Standar</span></td>' +
+      '</tr>';
+
+    const checkOngkirMsg = 'Halo ' + BOT_NAME + ', saya ingin reservasi homecare. Boleh dibantu cek estimasi jarak dan ongkir ke alamat rumah saya? Terima kasih 🙏😊';
+    const ctaHref = waLink(checkOngkirMsg);
+
+    $sec.innerHTML = '<div class="ongkir-card">' +
+      '<div class="ongkir-head">' +
+        '<div class="ongkir-icon" aria-hidden="true">🛵</div>' +
+        '<div>' +
+          '<h2>Tarif Transportasi Homecare (Ongkir)</h2>' +
+          '<div class="meta">Dihitung dari titik klinik (Waru, Sidoarjo) ke alamat rumah Bunda</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="ongkir-table-wrap">' +
+        '<table class="ongkir-table">' +
+          '<thead>' +
+            '<tr>' +
+              '<th>Radius Jarak</th>' +
+              '<th>Tarif Ongkir</th>' +
+              '<th>Keterangan</th>' +
+            '</tr>' +
+          '</thead>' +
+          '<tbody>' +
+            rows +
+            extraRow +
+          '</tbody>' +
+        '</table>' +
+      '</div>' +
+      '<div class="ongkir-foot">' +
+        '<div class="ongkir-info-note">' +
+          '📍 Jarak dihitung otomatis berdasarkan rute berkendara nyata Google Maps dari klinik ke rumah Bunda. Bebas ongkir hingga ' + (groups[0]?.maxDist || 5) + ' km!' +
+        '</div>' +
+        '<a href="' + ctaHref + '" class="ongkir-cta-btn" target="_blank" rel="noopener">' +
+          '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>' +
+        '<span>Cek Ongkir Alamat Saya</span>' +
+      '</a>' +
+    '</div>' +
+  '</div>';
+  }
+
   /* ============ RENDER ============ */
   function renderTabs(){
     const all = [{id:'all', tab:'Semua'}].concat(SECTIONS);
+    if (Array.isArray(DELIVERY_TIERS) && DELIVERY_TIERS.length > 0) {
+      all.push({ id: 'ongkir', tab: '🛵 Ongkir' });
+    }
     $tabs.innerHTML = all.map(s =>
       '<button type="button" class="tab" data-cat="' + s.id + '" aria-pressed="' + (state.cat === s.id) + '">' + s.tab + '</button>'
     ).join('');
@@ -709,7 +868,9 @@
 
   function render(){
     const words = state.q.toLowerCase().split(/\s+/).filter(Boolean);
+    const matchesOngkirSearch = words.length > 0 && words.some(w => 'ongkir ongkos kirim jarak delivery transport tarif'.includes(w));
     let total = 0, html = '';
+    if (state.cat !== 'ongkir') {
     SECTIONS.forEach((sec, si) => {
       if (state.cat !== 'all' && state.cat !== sec.id) return;
       const found = [];
@@ -723,10 +884,15 @@
         (words.length ? '' : '<p class="note">' + sec.note + '</p>') +
         '</section>';
     });
+    }
     $list.innerHTML = html;
-    $empty.classList.toggle('show', total === 0);
-    $count.textContent = total ? total + ' layanan' + (words.length ? ' ditemukan' : '') : '';
+    const isShowingOngkir = state.cat === 'ongkir' || (total === 0 && matchesOngkirSearch);
+    $empty.classList.toggle('show', total === 0 && !isShowingOngkir);
+    $count.textContent = state.cat === 'ongkir'
+      ? 'Tarif Ongkos Kirim Homecare'
+      : (total ? total + ' layanan' + (words.length ? ' ditemukan' : '') : (matchesOngkirSearch ? 'Informasi Ongkos Kirim' : ''));
     $clear.classList.toggle('show', state.q.length > 0);
+    renderOngkirSection();
   }
 
   /* ============ OPSI C: DRAWER & SELECTION LOGIC ============ */
@@ -812,7 +978,12 @@
     clearSelection();
     renderTabs();
     render();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (state.cat === 'ongkir') {
+      const ongkirEl = document.getElementById('sec-ongkir');
+      if (ongkirEl) ongkirEl.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   });
 
   $q.addEventListener('input', () => {
