@@ -37,6 +37,8 @@ interface QueueItem {
   is_repeat_order?: boolean;
   order_number?: number;
   customer_type?: 'new' | 'repeat';
+  capi_policy?: string;
+  will_suppress_capi?: boolean;
   customer: {
     id?: string;
     name: string;
@@ -144,17 +146,26 @@ const customerTypeBadge = (item: QueueItem) => {
   if (item.eventType && item.eventType !== 'Purchase') return null;
   const isRepeat = item.is_repeat_order === true || item.customer_type === 'repeat';
   const orderNo = item.order_number && item.order_number > 0 ? item.order_number : isRepeat ? undefined : 1;
+  const isSuppressed = item.will_suppress_capi === true;
   const label = isRepeat
-    ? `🔁 Repeat Order${orderNo ? ` (Order #${orderNo})` : ''}`
+    ? `🔁 Repeat Order${orderNo ? ` (Order #${orderNo})` : ''}${isSuppressed ? ' • CAPI Filtered' : ''}`
     : `✨ Pasien Baru${orderNo ? ` (Order #${orderNo})` : ''}`;
   return (
     <span
       className={
         isRepeat
-          ? 'px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-500/15 border border-indigo-200 dark:border-indigo-500/40 text-indigo-800 dark:text-indigo-300 text-[10px] font-bold whitespace-nowrap'
+          ? isSuppressed
+            ? 'px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-500/15 border border-amber-300 dark:border-amber-500/40 text-amber-900 dark:text-amber-200 text-[10px] font-bold whitespace-nowrap'
+            : 'px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-500/15 border border-indigo-200 dark:border-indigo-500/40 text-indigo-800 dark:text-indigo-300 text-[10px] font-bold whitespace-nowrap'
           : 'px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-500/15 border border-emerald-200 dark:border-emerald-500/40 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold whitespace-nowrap'
       }
-      title={isRepeat ? 'Transaksi berulang (repeat customer)' : 'Transaksi pertama customer (new customer)'}
+      title={
+        isRepeat
+          ? isSuppressed
+            ? 'Repeat Order: event CAPI Purchase difilter di server untuk melindungi akurasi CAC iklan.'
+            : 'Transaksi berulang (repeat customer)'
+          : 'Transaksi pertama customer (new customer)'
+      }
     >
       {label}
     </span>
@@ -595,6 +606,8 @@ export const MetaCapiQueue: React.FC = () => {
         toast(res.error || `Gagal approve ${eventName} event.`, 'error');
         setLoading(false);
         return;
+      } else if (res?.skipped) {
+        toast(res.note || `Event ${eventName} disetujui (CAPI repeat order difilter untuk melindungi CAC).`, 'info');
       } else if (res?.warning) {
         toast(`⚠️ ${res.warning}`, 'info');
       } else {

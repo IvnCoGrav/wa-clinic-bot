@@ -96,11 +96,37 @@ export function estimateTravelMinutesKm(distanceKm: number): number {
 }
 
 /**
- * Jendela keberangkatan (menit) untuk menawarkan OTW + status "dalam perjalanan".
- * Di luar jendela ini, tombol "Navigasi" hanya membuka peta (mode intip).
- * Plan 2026-09-30 (kontrol keberangkatan).
+ * Batas jendela pengiriman info OTW:
+ * H-120 menit (2 jam sebelum jadwal) s/d toleransi H+15 menit setelah jadwal.
+ * Diselaraskan identik dengan validasi backend (today.subroute.ts).
  */
-export const DEPART_WINDOW_MINUTES = 60;
+export const OTW_OPEN_MINUTES_BEFORE = 120;
+export const OTW_GRACE_MINUTES_AFTER = 15;
+
+/**
+ * Jendela pre-warm GPS (60 menit sebelum jadwal s/d 120 menit setelah jadwal).
+ * Memanaskan cache lokasi perangkat bidan secara senyap sebelum keberangkatan.
+ */
+export const GPS_WARMUP_MINUTES = 60;
+
+export type OtwGateReason = 'ok' | 'too_early' | 'expired' | 'invalid';
+
+/**
+ * Evaluasi gerbang waktu pengiriman pesan OTW secara deterministik.
+ * Membandingkan milidetik mentah (bukan Math.round) agar boundary identik dengan backend.
+ */
+export function getOtwGate(
+  bookingDateIso: string | Date | null | undefined,
+  nowMs: number = Date.now()
+): { allowed: boolean; reason: OtwGateReason; minutesUntil: number | null } {
+  const t = bookingDateIso ? new Date(bookingDateIso).getTime() : NaN;
+  if (!Number.isFinite(t)) return { allowed: false, reason: 'invalid', minutesUntil: null };
+  const diffMs = t - nowMs;
+  const minutesUntil = Math.round(diffMs / 60000);
+  if (diffMs > OTW_OPEN_MINUTES_BEFORE * 60000) return { allowed: false, reason: 'too_early', minutesUntil };
+  if (diffMs < -OTW_GRACE_MINUTES_AFTER * 60000) return { allowed: false, reason: 'expired', minutesUntil };
+  return { allowed: true, reason: 'ok', minutesUntil };
+}
 
 /**
  * Menit menuju jadwal booking (bisa negatif bila sudah lewat). Murni.
@@ -114,18 +140,16 @@ export function minutesUntilBooking(bookingDateIso: string | Date | null | undef
 }
 
 /**
- * True bila booking berada dalam jendela keberangkatan (<= DEPART_WINDOW_MINUTES
- * ke depan, atau baru lewat sedikit). Booking jauh di masa depan / lampau → false.
- * Murni (tanpa I/O) agar mudah diuji.
+ * True bila booking berada dalam jendela pre-warm GPS (<= GPS_WARMUP_MINUTES
+ * ke depan, s/d 120 menit lewat). Murni (tanpa I/O) agar mudah diuji.
  */
-export function isWithinDepartWindow(
+export function isWithinGpsWarmupWindow(
   bookingDateIso: string | Date | null | undefined,
   nowMs: number = Date.now(),
-  windowMinutes: number = DEPART_WINDOW_MINUTES
+  windowMinutes: number = GPS_WARMUP_MINUTES
 ): boolean {
   const mins = minutesUntilBooking(bookingDateIso, nowMs);
   if (mins == null) return false;
-  // Dalam jendela: dari -2 jam (baru lewat, masih relevan) sampai windowMinutes ke depan.
   return mins <= windowMinutes && mins >= -120;
 }
 

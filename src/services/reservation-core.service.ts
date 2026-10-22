@@ -1,6 +1,8 @@
 import { prisma } from '../db/client';
 import { TreatmentCategory } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import type { BabyDetail } from '../utils/reservation-text-parser';
+import { PURCHASE_REVIEW_NOT_APPLICABLE } from './capi-review-status';
 
 /**
  * Canonical Reservation Domain Service — Single Source of Truth untuk SEMUA
@@ -802,7 +804,9 @@ export class ReservationCoreService {
               data: {
                 status: bookingStatus,
                 // Queue-First reaktivasi: booking baru = antrean baru. Reset jejak kiriman lama agar tidak dikira sudah terkirim.
-                purchase_review_status: bookingStatus === 'confirmed' ? 'pending' : null,
+                purchase_review_status: bookingStatus === 'confirmed'
+                  ? 'pending'
+                  : PURCHASE_REVIEW_NOT_APPLICABLE,
                 purchase_event_sent_at: null,
                 purchase_occurred_at: null,
                 // Intake tanpa tanggal: pertahankan tanggal lama (jangan null-kan).
@@ -810,8 +814,6 @@ export class ReservationCoreService {
                 assigned_staff_id:
                   assignedStaffId !== undefined ? assignedStaffId || null : existingByRequest.assigned_staff_id,
                 duration_minutes: duration ?? (existingByRequest as any).duration_minutes ?? null,
-                // Intake tanpa tanggal TIDAK boleh masuk jalur schedule-check.
-                ...(hasValidDate ? {} : { pendingScheduleCheck: false }),
                 // KB-6: snapshot ongkir ikut direaktivasi bila diberikan eksplisit.
                 ...(deliveryFee !== undefined && deliveryFee !== null ? { delivery_fee: deliveryFee } : {}),
                 ...(resolvedAddressId ? { customer_address_id: resolvedAddressId } : {}),
@@ -997,7 +999,7 @@ export class ReservationCoreService {
     }
 
     const isRepeatOrder = await computeIsRepeatOrder({ tenantId, customerId, db });
-    const createData: any = {
+    const createData: Prisma.ReservationUncheckedCreateInput = {
       tenant_id: tenantId,
       customer_id: customerId,
       treatment_category: validCategory,
@@ -1008,8 +1010,11 @@ export class ReservationCoreService {
       raw_text: effectiveRawText,
       status: bookingStatus,
       purchase_value: purchaseValue ?? null,
-      // Queue-First: confirmed langsung antre CAPI; non-confirmed (intake tanpa tanggal) = null agar tidak banjiri antrean.
-      purchase_review_status: bookingStatus === 'confirmed' ? 'pending' : null,
+      // Queue-First: confirmed masuk antrean CAPI. Non-purchase (hold/intake) memakai
+      // sentinel eksplisit agar kolom NOT NULL tidak pernah menerima null.
+      purchase_review_status: bookingStatus === 'confirmed'
+        ? 'pending'
+        : PURCHASE_REVIEW_NOT_APPLICABLE,
       // Integritas kasir: WAJIB null sampai uang riil diterima via recordPayment / payment-proof.
       purchase_occurred_at: null,
       // KB-6: snapshot ongkir saat booking (riwayat abadi).
@@ -1020,8 +1025,6 @@ export class ReservationCoreService {
       // CG-05 (opsi flag): bot/agent non-same-day berstatus confirmed = slot
       // belum diverifikasi staf → tandai agar admin memverifikasi.
       needs_staff_verification: source !== 'ADMIN_PANEL' && bookingStatus === 'confirmed',
-      // Intake tanpa tanggal TIDAK boleh masuk jalur schedule-check.
-      ...(hasValidDate ? {} : { pendingScheduleCheck: false }),
     };
     // Create di dalam transaksi/lock (A3). Bila gagal → pemanggil memutuskan
     // fallback in-memory (admin routes punya fallback).

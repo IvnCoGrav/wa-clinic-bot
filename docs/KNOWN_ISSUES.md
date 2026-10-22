@@ -3,7 +3,7 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
-## 272. [Baseline Eval] Baseline Evaluasi LLM: CM-07/CM-08 Pre-Existing & Eval Berbayar Manual-Only (2026-10-21, OPEN)
+## 273. [Baseline Eval] Baseline Evaluasi LLM: CM-07/CM-08 Pre-Existing & Eval Berbayar Manual-Only (2026-10-21, OPEN)
 
 - **Status:** OPEN (Keputusan arsitektur sadar untuk efisiensi biaya API LLM eksternal).
 - **Gejala / Akar Masalah:**
@@ -11,6 +11,14 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - Skenario baseline CM-07/CM-08 telah dibuktikan pre-existing sebelum perbaikan P1/P2 ini.
 - **Dampak:** Evaluasi eksternal berbayar di-skip dalam test suite reguler (`npm test` offline-only).
 - **Rencana Masa Depan:** Evaluasi berbayar hanya dijalankan secara on-demand / manual saat rilis versi mayor atau verifikasi kualitas jawaban komprehensif.
+
+## 272. [Persona/Config] Persona Split-Brain Residual & Editor 4-Section Dashboard (2026-10-21, RESOLVED)
+
+- **Status:** RESOLVED (Bridge runtime `TenantPromptConfigService` + rute backend `GET|PUT /api/admin/persona/prompt-config` + UI tab "Advanced 4-Section Prompt" di dashboard selesai & teruji 100% hijau).
+- **Gejala / Solusi:**
+  - Sebelumnya UI admin dashboard hanya menyediakan editor 1-field untuk string persona legacy (`TenantPersona`), sehingga bagian `answeringHierarchy`, `negativeConstraints`, dan `medicalOverclaimRules` tidak dapat dikonfigurasi via UI secara dinamis.
+  - Sekarang admin dashboard telah dilengkapi Tab "Advanced 4-Section Prompt" di `AiPersona.tsx` yang memungkinkan admin mengedit ke-4 seksi prompt secara visual, menyimpan versi baru secara berkesinambungan (live versioning) dengan audit trail, serta menampilkan peringatan prioritas prompt yang transparan.
+  - Backend `settings.subroute.ts` menyediakan endpoint `GET|PUT /api/admin/persona/prompt-config` dengan validasi ketat, dan unit test `tests/unit/admin-persona-prompt-config.test.ts` mengunci perilakunya.
 
 ## 271. [WABA/Payment Proof] Gambar Inbound WABA Belum Diteruskan ke attachFromInbound (2026-10-21, OPEN — EXCLUDED TEMPORARILY)
 
@@ -22,13 +30,28 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Dampak:** Bukti pembayaran berupa gambar yang dikirim pelanggan via nomor WhatsApp Cloud API (WABA) tersimpan di media storage tetapi tidak otomatis di-attach ke data reservasi via Vision AI.
 - **Rencana Masa Depan:** Panggil `attachFromInbound` secara fire-and-forget di background setelah `saveInboundMedia` di `src/routes/waba-webhook.route.ts`, lalu lengkapi dengan spy test di `tests/integration/waba-webhook-route.test.ts`.
 
-## 270. [Persona/Config] Persona Split-Brain Residual & Editor 4-Section Dashboard (2026-10-21, RESOLVED)
+## 270. [Meta Ads / CAPI] Atribusi Historis Event Purchase di Meta Ads Manager Bersifat Imutabel & Kebocoran Retargeting Advantage (2026-10-21, IMPLEMENTED + TECH DEBT)
 
-- **Status:** RESOLVED (Bridge runtime `TenantPromptConfigService` + rute backend `GET|PUT /api/admin/persona/prompt-config` + UI tab "Advanced 4-Section Prompt" di dashboard selesai & teruji 100% hijau).
-- **Gejala / Solusi:**
-  - Sebelumnya UI admin dashboard hanya menyediakan editor 1-field untuk string persona legacy (`TenantPersona`), sehingga bagian `answeringHierarchy`, `negativeConstraints`, dan `medicalOverclaimRules` tidak dapat dikonfigurasi via UI secara dinamis.
-  - Sekarang admin dashboard telah dilengkapi Tab "Advanced 4-Section Prompt" di `AiPersona.tsx` yang memungkinkan admin mengedit ke-4 seksi prompt secara visual, menyimpan versi baru secara berkesinambungan (live versioning) dengan audit trail, serta menampilkan peringatan prioritas prompt yang transparan.
-  - Backend `settings.subroute.ts` menyediakan endpoint `GET|PUT /api/admin/persona/prompt-config` dengan validasi ketat, dan unit test `tests/unit/admin-persona-prompt-config.test.ts` mengunci perilakunya.
+- **Status:** IMPLEMENTED (Gerbang deterministik `metaPurchasePolicy` di backend & frontend aktif per 2026-10-21; 27 unit test CAPI hijau di 4 suite). Keterbatasan historis Meta bersifat by-design.
+- **Gejala / Akar Masalah:**
+  1. Pasien repeat order (seperti Bunda Retno & Bunda Nurul Hidayati) yang reservasi pada 18–21 Oktober teratribusi ke kampanye prospecting dingin (`#LPWA Kala Purchase Campaign v15`), mencemari metrik Website Purchases (tercatat 4 pembelian senilai Rp 385.000, padahal akuisisi baru hanya 2 pasien senilai Rp 325.000).
+  2. Mengapa Custom Audience Exclusion bocor:
+     a) Pasien mendaftar WhatsApp dengan nomor HP berbeda dari nomor/email Facebook/Instagram pribadi.
+     b) Meta Attribution Window menyertakan 1-day view-through attribution (iklan pernah tayang di feed pasien tanpa diklik).
+     c) Fitur Advantage Audience / Targeting Expansion Meta secara otomatis menembus list eksklusi jika algoritma memprediksi konversi.
+  3. Keterbatasan API Meta: Event Purchase historis yang sudah diterima dan diproses oleh Meta Graph API bersifat permanen (immutable) dan TIDAK BISA diedit, dihapus, atau di-reassign ke kampanye lain melalui CAPI maupun Events Manager.
+- **Resolusi Fondasional:**
+  1. Kontrak kebijakan tenant `metaPurchasePolicy` (`SUPPRESS_REPEAT` [default murni CAC], `DUAL_EVENT` [ReturningCustomerPurchase], `ALL_WITH_TAG` [opt_out: true]) di `capi.service.ts` dan `Tenant.settings`.
+  2. Penambahan parameter resmi Meta Blueprint: `order_id` dan `customer_segmentation: 'new_customer_to_business' | 'existing_customer_to_business'`.
+  3. Pencegahan transmisi jaringan deterministik sebelum circuit breaker pada kebijakan `SUPPRESS_REPEAT`, serta penandaan `purchase_review_status: 'approved'` tanpa mengisi `purchase_event_sent_at`.
+  4. Panel konfigurasi di UI Admin Dashboard (`MetaCapiPanel.tsx`) dan badge queue `🔁 Repeat Order • CAPI Filtered`.
+- **Rencana Tindak Lanjut & Mitigasi Operasional:**
+  - Data historis 18–21 Oktober (4 purchase) tetap berada di dashboard Meta Ads Manager sebagai baseline pembanding.
+  - Untuk kampanye selanjutnya, kebijakan default `SUPPRESS_REPEAT` menyaring seluruh event Purchase repeat order pada jalur CAPI standar, sehingga metrik CPR dan ROAS lebih mencerminkan efektivitas akuisisi riil. Dua pengecualian yang disengaja dan BUKAN bug: (a) override admin `force_send_repeat_purchase` (escape hatch dengan audit log), dan (b) fail-safe saat DB offline yang sengaja memperlakukan customer sebagai `new` agar tidak salah-suppress (event tetap terkirim). Karena itu klaim "100% pasien baru" tidak boleh dipakai sebagai jaminan mutlak.
+- **Catatan Verifikasi (2026-10-21, post-audit ops):**
+  - Poin *1-day view-through* dan **Advantage Audience Expansion = HIPOTESIS**, wajib dibuktikan via Events Manager (breakdown atribusi) sebelum dipakai untuk keputusan bisnis strategis.
+  - Rekonsiliasi matematika belum mutlak (Rp 325.000 + Rp 70.000 = Rp 395.000 vs angka Ads Manager Rp 385.000, ada selisih Rp 10.000 akibat diskon/DP parsial yang memerlukan breakdown per ad-set di Ads Manager).
+  - High-priority post-audit bug & hardening tuntas: perbaikan pola `will_suppress_capi` pada riwayat terkirim, sanitasi parameter internal (`force_send_repeat_purchase`, `allowZero`) dari payload Graph API Meta, dan segmen kustomer (`customer_segmentation`) dikunci ke otoritas DB.
 
 ## 269. [Address/Split-Brain] Resolusi Toponimi Fuzzy, Elevasi Primary GPS & Alarm Palsu Shareloc (2026-10-18, IMPLEMENTED)
 

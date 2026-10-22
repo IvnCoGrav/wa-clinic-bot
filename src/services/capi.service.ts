@@ -697,6 +697,41 @@ async function resolveNewVsRepeatContext(params: {
  * Default false = moderasi manual aktif (event ditahan ke queue admin review).
  * Tenant-aware: dibaca dari kolom tenant DB; fallback false bila DB offline.
  */
+export type MetaPurchasePolicy = 'SUPPRESS_REPEAT' | 'DUAL_EVENT' | 'ALL_WITH_TAG';
+
+export type MetaRepeatDecision =
+  | { action: 'SEND'; eventName: string; optOut: boolean; segmentation: 'new_customer_to_business' }
+  | { action: 'SUPPRESS' }
+  | { action: 'SEND_REPEAT'; eventName: string; optOut: boolean; segmentation: 'existing_customer_to_business' };
+
+/**
+ * Membaca kebijakan perutean event Purchase CAPI Meta untuk pelanggan repeat.
+ * Disimpan di `Tenant.settings.metaPurchasePolicy` (tanpa alter table/migrasi).
+ * Default aman: 'SUPPRESS_REPEAT' (isolasi akuisisi murni untuk perlindungan CAC).
+ * Fail-safe: jika tenant undefined atau DB offline, fallback ke 'SUPPRESS_REPEAT'.
+ */
+export async function getTenantMetaPurchasePolicy(tenantId?: string): Promise<MetaPurchasePolicy> {
+  const envPolicy = process.env.DEFAULT_META_PURCHASE_POLICY as MetaPurchasePolicy | undefined;
+  const defaultPolicy: MetaPurchasePolicy =
+    envPolicy === 'DUAL_EVENT' || envPolicy === 'ALL_WITH_TAG' || envPolicy === 'SUPPRESS_REPEAT'
+      ? envPolicy
+      : 'SUPPRESS_REPEAT';
+
+  if (!tenantId) return defaultPolicy;
+  try {
+    const { prisma } = await import('../db/client');
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+    const settings = (tenant?.settings as any) || {};
+    const policy = settings.metaPurchasePolicy;
+    if (policy === 'DUAL_EVENT' || policy === 'ALL_WITH_TAG' || policy === 'SUPPRESS_REPEAT') {
+      return policy;
+    }
+    return defaultPolicy;
+  } catch {
+    return defaultPolicy;
+  }
+}
+
 export async function getTenantAutoSendPurchaseCapi(tenantId?: string): Promise<boolean> {
   if (!tenantId) return false;
   try {
@@ -764,6 +799,8 @@ export class CapiService {
     metaResponse?: any;
     sentPayload?: any;
     pixelId?: string;
+    skipped?: boolean;
+    policy?: MetaPurchasePolicy;
   }> {
     const { eventName, customer, adClick, value, currency, tenantId, customData, eventTime, eventId, customUserData, customEventId, reservationId } = params;
 
@@ -1217,7 +1254,54 @@ export class CapiService {
         eventData.custom_data.order_number =
           typeof explicitOrderNumber === 'number' ? explicitOrderNumber : newVsRepeat.orderNumber;
         eventData.custom_data.prior_orders_count = newVsRepeat.priorCount;
+
+        // Meta Blueprint Standards: order_id & customer_segmentation
+        if (reservationId) {
+          eventData.custom_data.order_id = String(reservationId);
+        }
+
+        // Kebijakan repeat customer di level tenant (SUPPRESS_REPEAT / DUAL_EVENT / ALL_WITH_TAG)
+        const dbIsRepeat = newVsRepeat.isRepeat; // Otoritas kebenaran DB
+        if (typeof explicitRepeat === 'boolean' && explicitRepeat !== dbIsRepeat) {
+          console.warn(`[CAPI] Admin override is_repeat_order=${explicitRepeat} (DB=${dbIsRepeat}) — customer_segmentation mengikuti DB.`);
+        }
+        eventData.custom_data.customer_segmentation = dbIsRepeat
+          ? 'existing_customer_to_business'
+          : 'new_customer_to_business';
+
+        const forceSend = customData?.force_send_repeat_purchase === true; // Escape hatch admin
+        const policy = dbIsRepeat ? await getTenantMetaPurchasePolicy(tenantId) : 'SUPPRESS_REPEAT';
+
+        if (dbIsRepeat && !forceSend) {
+          if (policy === 'SUPPRESS_REPEAT') {
+            console.log(`[CAPI POLICY GUARD] Purchase event for repeat customer ${maskPhone(customer?.phone)} SUPPRESSED per tenant acquisition policy (${policy}).`);
+            return {
+              success: true,
+              skipped: true,
+              policy,
+              message: 'Repeat purchase suppressed (CAC protection).',
+            };
+          }
+          if (policy === 'DUAL_EVENT') {
+            console.log(`[CAPI POLICY] Transforming Purchase to ReturningCustomerPurchase for repeat customer ${maskPhone(customer?.phone)}.`);
+            eventData.event_name = 'ReturningCustomerPurchase';
+            if (eventData.event_id && !customEventId) {
+              eventData.event_id = `returning_${eventData.event_id}`;
+            }
+          } else {
+            // ALL_WITH_TAG: Resmi Meta opt_out=true (atribusi saja, tidak melatih optimizer)
+            console.log(`[CAPI POLICY] Tagging Purchase with opt_out=true for repeat customer ${maskPhone(customer?.phone)}.`);
+            eventData.opt_out = true;
+          }
+        }
+        if (forceSend && dbIsRepeat) {
+          console.warn(`[CAPI POLICY] force_send_repeat_purchase override by admin for ${maskPhone(customer?.phone)}`);
+        }
       }
+
+      // Mandat payload bersih: flag internal TIDAK boleh bocor ke Graph API Meta
+      delete eventData.custom_data?.force_send_repeat_purchase;
+      delete eventData.custom_data?.allowZero;
 
       const payload = {
         data: [eventData],

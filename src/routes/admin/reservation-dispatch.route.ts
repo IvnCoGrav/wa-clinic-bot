@@ -12,6 +12,10 @@ import {
   getTenantCapiFormats,
   resolveCanonicalLandingUrl,
 } from '../../services/capi.service';
+import {
+  resolvePurchaseReviewOnConfirm,
+  CAPI_QUEUE_EXCLUDED_RESERVATION_STATUSES,
+} from '../../services/capi-review-status';
 import { extractRupiahAmount } from '../../services/purchase-detection.service';
 import {
   parseReservationText,
@@ -534,6 +538,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           where: { id },
           data: {
             status: 'confirmed',
+            purchase_review_status: resolvePurchaseReviewOnConfirm(existing as any),
             google_calendar_event_id: calendarEventId,
             needs_staff_verification: false,
           },
@@ -912,6 +917,9 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
             const caId = body.customerAddressId !== undefined ? body.customerAddressId : body.customer_address_id;
             mock.customer_address_id = caId || null;
           }
+          if (status === 'confirmed' && mock.status !== 'confirmed') {
+            mock.purchase_review_status = resolvePurchaseReviewOnConfirm(mock as any);
+          }
           if (status !== undefined) mock.status = status;
           if (notes !== undefined) {
             mock.notes = notes;
@@ -975,6 +983,9 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
         if (treatmentDetail !== undefined) updateData.treatment_detail = treatmentDetail;
         if (purchaseValue !== undefined) updateData.purchase_value = purchaseValue;
         if (status !== undefined) updateData.status = status;
+        if (isBecomingConfirmed) {
+          updateData.purchase_review_status = resolvePurchaseReviewOnConfirm(existing as any);
+        }
         if (body.customerAddressId !== undefined || body.customer_address_id !== undefined) {
           const caId = body.customerAddressId !== undefined ? body.customerAddressId : body.customer_address_id;
           updateData.customer_address_id = caId || null;
@@ -1466,6 +1477,9 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
         // `completeReservationById` (seam tunggal). Lunas HANYA via recordPayment
         // (staff), approve-purchase, atau deteksi pesan Payment.
         const updateStatusData: any = { status };
+        if (status === 'confirmed' && existing.status !== 'confirmed') {
+          updateStatusData.purchase_review_status = resolvePurchaseReviewOnConfirm(existing as any);
+        }
 
         const reservation = await prisma.reservation.update({
           where: { id },
@@ -1545,6 +1559,9 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
               code: 'PREMATURE_COMPLETION_BLOCKED',
               error: 'Reservasi masa depan tidak dapat ditandai sebagai completed sebelum tanggal kunjungan tiba. Gunakan forceComplete: true bila ada persetujuan darurat.',
             });
+          }
+          if (status === 'confirmed' && mock.status !== 'confirmed') {
+            mock.purchase_review_status = resolvePurchaseReviewOnConfirm(mock as any);
           }
           mock.status = status;
           mock.updated_at = new Date();
@@ -2019,6 +2036,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const tenantId = tenantOf(request);
       const { id } = request.params;
+      let capiSkipped = false;
       try {
         if (id.startsWith('lead_')) {
           const customerId = id.replace('lead_', '');
@@ -2121,7 +2139,6 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
         const customPayload = body.customPayload;
 
         const formats = await getTenantCapiFormats(tenantId);
-        
         let autoResolvedVal = existing.purchase_value && existing.purchase_value > 0 ? existing.purchase_value : undefined;
         if (!autoResolvedVal) {
           const raw = existing.raw_text || '';
@@ -2204,6 +2221,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           customEventId: customPayload?.event_id,
           reservationId: existing.id,
         });
+        capiSkipped = capiResult.skipped === true;
 
         if (!capiResult.success) {
           console.error(`[CAPI ERROR] Approved Purchase send failed for ${id}: ${capiResult.message}`);
@@ -2222,7 +2240,8 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
             ...(existing.purchase_occurred_at ? { purchase_occurred_at: occurredDate } : {}),
             purchase_value: resolvedVal ?? undefined,
             purchase_review_status: 'approved',
-            purchase_event_sent_at: new Date(),
+            // Jangan memalsukan status pengiriman jika event CAPI di-suppress (kebijakan repeat order)
+            ...(capiResult.skipped !== true ? { purchase_event_sent_at: new Date() } : {}),
           },
         });
 
@@ -2261,11 +2280,22 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
             force: forceResend || undefined,
             forceReason: forceResend ? forceReason : undefined,
             allowAged: allowAged || undefined,
+            capi_suppressed: capiResult.skipped === true,
+            capi_policy: capiResult.policy || undefined,
           },
           ipAddress: request.ip,
         });
 
-        return reply.status(200).send({ success: true, data: reservation, warning });
+        const isSkipped = capiResult.skipped === true;
+        return reply.status(200).send({
+          success: true,
+          data: reservation,
+          warning,
+          skipped: isSkipped,
+          note: isSkipped
+            ? 'Pembelian disetujui internal; event CAPI repeat purchase tidak dikirim ke Meta untuk menjaga akurasi CAC iklan.'
+            : undefined,
+        });
       } catch (error) {
         console.error('[CAPI APPROVE ERROR]', (error as Error).message);
         // Fallback in-memory hanya untuk dev/test ΓÇö di production harus fail agar UI tidak tampil success palsu
@@ -2273,7 +2303,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           const mock = memoryReservations.get(id);
           if (mock && mock.tenant_id === tenantId) {
             mock.purchase_review_status = 'approved';
-            mock.purchase_event_sent_at = new Date();
+            mock.purchase_event_sent_at = capiSkipped ? null : new Date();
             mock.updated_at = new Date();
             memoryReservations.set(id, mock);
             return reply.status(200).send({ success: true, data: mock, note: 'Fallback in-memory mode' });
@@ -2449,11 +2479,14 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
 
       const whereClause: any = {
         tenant_id: tenantId,
-        status: { not: 'cancelled' },
+        status: { notIn: [...CAPI_QUEUE_EXCLUDED_RESERVATION_STATUSES] },
         customer: { is_sandbox_test: false },
         OR: [
-          // Queue-First: semua yang antre (pending) + jejak approved 7 hari. outlier yang ditolak SENGAJA tidak ikut default.
-          { purchase_review_status: { in: ['pending', 'approved'] } },
+          // Riwayat approved tetap terlihat walau tanpa tanggal.
+          { purchase_review_status: 'approved' },
+          // Pending hanya sah bila sudah punya jadwal.
+          { purchase_review_status: 'pending', booking_date: { not: null } },
+          // Pembayaran terdeteksi pada intake tanpa tanggal tetap boleh tampil.
           { purchase_occurred_at: { not: null } },
           { status: 'completed' },
         ],
@@ -2485,6 +2518,8 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
       );
 
       const formats = await getTenantCapiFormats(tenantId);
+      const { getTenantMetaPurchasePolicy } = await import('../../services/capi.service');
+      const tenantMetaPolicy = await getTenantMetaPurchasePolicy(tenantId);
       const now = Date.now();
 
       let tenantLandingDomain = '';
@@ -2620,6 +2655,14 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
             is_repeat_order: isRepeatOrder,
             order_number: orderNumber,
             customer_type: isRepeatOrder ? 'repeat' : 'new',
+            capi_policy: tenantMetaPolicy,
+            // "CAPI Filtered" hanya sah bila: belum di-approve (akan difilter nanti),
+            // ATAU sudah approved tapi TIDAK PERNAH terkirim (sent_at null = hasil suppress).
+            // Event historis yang sudah terkirim (sent_at terisi) TIDAK berlabel "Filtered".
+            will_suppress_capi:
+              isRepeatOrder &&
+              tenantMetaPolicy === 'SUPPRESS_REPEAT' &&
+              (r.purchase_review_status === 'pending' || !r.purchase_event_sent_at),
             distanceKm,
             customer: {
               id: r.customer?.id,
@@ -2812,10 +2855,23 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
 
       return reply.status(200).send({ success: true, data, total: data.length, pending, wabaConfigured });
     } catch (err: any) {
-      const rows = Array.from(memoryReservations.values()).filter(
-        (r) => r.status !== 'cancelled'
-          && !shouldExcludeFromCapiQueue((r as any).customer?.phone ?? (r as any).phone, (r as any).customer?.name ?? (r as any).name, (r as any).customer?.is_sandbox_test ?? (r as any).is_sandbox_test)
-      );
+      const rows = filterMemoryByTenant(memoryReservations.values(), tenantId).filter((r: any) => {
+        if ((CAPI_QUEUE_EXCLUDED_RESERVATION_STATUSES as readonly string[]).includes(String(r.status))) {
+          return false;
+        }
+        const review = r.purchase_review_status || 'pending';
+        const queueEligible =
+          review === 'approved'
+          || (review === 'pending' && Boolean(r.booking_date))
+          || Boolean(r.purchase_occurred_at)
+          || r.status === 'completed';
+        if (!queueEligible) return false;
+        return !shouldExcludeFromCapiQueue(
+          r.customer?.phone ?? r.phone,
+          r.customer?.name ?? r.name,
+          r.customer?.is_sandbox_test ?? r.is_sandbox_test
+        );
+      });
       return reply.status(200).send({
         success: true,
         data: rows,

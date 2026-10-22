@@ -299,4 +299,64 @@ describe('Admin Quick Booking / Slot Hold (POST /api/admin/reservation/quick-hol
       })
     );
   });
+
+  it('9. Quick hold menulis not_applicable dan tidak mengirim pendingScheduleCheck', async () => {
+    const createSpy = vi.mocked(prisma.reservation.create).mockResolvedValueOnce({
+      id: 'res-hold-9',
+      status: 'hold',
+    } as any);
+    vi.spyOn(auditService, 'logAdminAction').mockResolvedValue(undefined);
+
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/reservation/quick-hold',
+      headers: { 'x-api-key': ADMIN_KEY },
+      payload: {
+        customerId: 'cust-hold-1',
+        bookingDate: new Date('2026-09-03T10:00:00.000Z').toISOString(),
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    const data = createSpy.mock.calls[0][0].data as any;
+    expect(data.purchase_review_status).toBe('not_applicable');
+    expect(data.purchase_review_status).not.toBeNull();
+    expect('pendingScheduleCheck' in data).toBe(false);
+  });
+
+  it('10. Hold dikonfirmasi via PATCH /confirm masuk antrean dengan purchase_review_status: pending', async () => {
+    const futureDate = new Date(Date.now() + 24 * 3600 * 1000);
+    const mockHold = {
+      id: 'res-hold-10',
+      tenant_id: DEFAULT_TENANT_ID,
+      customer_id: 'cust-hold-10',
+      status: 'hold',
+      booking_date: futureDate,
+      created_at: new Date(),
+      purchase_review_status: 'not_applicable',
+      customer: { name: 'Bunda Test Real', phone: '628123456002', children: [] },
+      assigned_staff: null,
+      children: [],
+    };
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(mockHold as any);
+    const updateSpy = vi.mocked(prisma.reservation.update).mockResolvedValueOnce({
+      ...mockHold,
+      status: 'confirmed',
+      purchase_review_status: 'pending',
+    } as any);
+
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/admin/reservation/res-hold-10/confirm',
+      headers: { 'x-api-key': ADMIN_KEY },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const updateCall = updateSpy.mock.calls[0][0] as any;
+    expect(updateCall.data.status).toBe('confirmed');
+    expect(updateCall.data.purchase_review_status).toBe('pending');
+  });
 });
+

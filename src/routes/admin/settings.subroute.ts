@@ -397,6 +397,117 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
    * GET /api/admin/settings/payment-info
    * Mengambil informasi pembayaran klinik (QRIS, rekening bank, instruksi).
    */
+  /**
+   * GET /api/admin/settings/meta-purchase-policy
+   * Mengambil kebijakan pengiriman CAPI Purchase untuk repeat customer.
+   */
+  fastify.get('/api/admin/settings/meta-purchase-policy', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const tenantId = resolveTenantId(request);
+      const { getTenantMetaPurchasePolicy } = await import('../../services/capi.service');
+      const policy = await getTenantMetaPurchasePolicy(tenantId);
+      return reply.status(200).send({
+        success: true,
+        data: {
+          policy,
+          options: [
+            {
+              value: 'SUPPRESS_REPEAT',
+              label: 'Akuisisi Murni (Disarankan)',
+              description: 'Hanya order pertama yang dikirim ke Meta Ads Manager. Repeat order tidak dikirim agar metrik CAC murni.',
+            },
+            {
+              value: 'DUAL_EVENT',
+              label: 'Dual Event',
+              description: 'Order pertama dikirim sebagai Purchase, repeat order dikirim sebagai ReturningCustomerPurchase (Custom Event).',
+            },
+            {
+              value: 'ALL_WITH_TAG',
+              label: 'Kirim Semua + opt_out',
+              description: 'Semua order dikirim sebagai Purchase dengan opt_out=true untuk repeat order (atribusi saja, tidak melatih optimizer).',
+            },
+          ],
+        },
+      });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message });
+    }
+  });
+
+  /**
+   * PUT /api/admin/settings/meta-purchase-policy
+   * Memperbarui kebijakan pengiriman CAPI Purchase.
+   */
+  fastify.put(
+    '/api/admin/settings/meta-purchase-policy',
+    async (
+      request: FastifyRequest<{
+        Body: {
+          policy: string;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      try {
+        const tenantId = resolveTenantId(request);
+        const { policy } = request.body || {};
+
+        const validPolicies = ['SUPPRESS_REPEAT', 'DUAL_EVENT', 'ALL_WITH_TAG'];
+        if (!policy || !validPolicies.includes(policy)) {
+          return reply.status(400).send({
+            success: false,
+            error: `Kebijakan tidak valid. Pilihan yang tersedia: ${validPolicies.join(', ')}`,
+          });
+        }
+
+        const tenant = await (prisma as any).tenant.findUnique({
+          where: { id: tenantId },
+          select: { settings: true },
+        });
+
+        if (!tenant) {
+          return reply.status(404).send({
+            success: false,
+            error: `Tenant dengan ID ${tenantId} tidak ditemukan.`,
+          });
+        }
+
+        const currentSettings = (tenant.settings as Record<string, any>) || {};
+        const updatedSettings = {
+          ...currentSettings,
+          metaPurchasePolicy: policy,
+        };
+
+        await (prisma as any).tenant.update({
+          where: { id: tenantId },
+          data: { settings: updatedSettings },
+        });
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'UPDATE_META_PURCHASE_POLICY',
+          targetId: tenantId,
+          payload: {
+            previousPolicy: currentSettings.metaPurchasePolicy || 'SUPPRESS_REPEAT',
+            newPolicy: policy,
+          },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({
+          success: true,
+          message: 'Kebijakan Meta Purchase CAPI berhasil diperbarui.',
+          data: {
+            policy,
+          },
+        });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
   fastify.get('/api/admin/settings/payment-info', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;

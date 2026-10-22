@@ -5,8 +5,12 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 593
+Total entri terindeks: 597
 
+- 2026-10-21 | Feat: Isolasi Atribusi Repeat Purchase Meta CAPI & Proteksi Metrik CAC Iklan
+- 2026-10-20 | Fix: Penyelarasan Gerbang OTW H-2, Penghapusan Bypass Peta Senyap, & Idempotensi Endpoint
+- 2026-10-19 | Fix: Resolusi Fondasional Quick Hold & Kontrak Data purchase_review_status (Opsi A)
+- 2026-10-19 | Feat & Fix: Penyempurnaan Alamat ke-2 & Pengalaman Admin (Buku Alamat v2, Edit Mode, Komit
 - 2026-10-18 | Fix: Resolusi Fondasional Split-Brain Alamat (Fuzzy Toponimi, Paritas Cermin FE, Elevasi P
 - 2026-10-18 | Feat: Logo Tenant-Aware & Floating Promo Diskon Interaktif pada Halaman Pricelist Publik
 - 2026-10-18 | Fix: Tindak Lanjut Audit Alamat (Flaky Test Timeout, Hardening API Buku Alamat, Konsistens

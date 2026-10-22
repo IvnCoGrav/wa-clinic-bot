@@ -971,7 +971,10 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
 
         return reply.status(200).send({
           success: true,
-          message: `Event '${eventName}' berhasil dikirim ke Meta CAPI untuk customer ${customer.phone}.`,
+          message: capiResult.skipped
+            ? `Event '${eventName}' tidak dikirim ke Meta CAPI: ${capiResult.message || 'Dikecualikan oleh kebijakan CAC repeat customer'}.`
+            : `Event '${eventName}' berhasil dikirim ke Meta CAPI untuk customer ${customer.phone}.`,
+          skipped: capiResult.skipped === true,
           data: capiResult,
         });
       } catch (err: any) {

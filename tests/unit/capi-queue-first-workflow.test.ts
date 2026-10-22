@@ -9,6 +9,8 @@ import { isReservationPaid, getPaymentDisplayStatus } from '../../src/domain/res
 import { buildApp } from '../../src/app';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 import { FastifyInstance } from 'fastify';
+import { resolveNextPurchaseReviewStatus, resolvePurchaseReviewOnConfirm } from '../../src/services/capi-review-status';
+import { memoryReservations } from '../../src/routes/admin/stores';
 
 /**
  * Suite Uji Regresi Mandatori: Meta CAPI Queue-First & Anti-Duplikat
@@ -111,7 +113,7 @@ describe('Meta CAPI Queue-First & Anti-Duplikat Workflow (Fase 5 Suite)', () => 
   });
 
   // 2. intake_tanpa_tanggal_tidak_masuk_antrean
-  it('2. intake_tanpa_tanggal_tidak_masuk_antrean — intake tanpa tanggal tidak boleh membanjiri antrean CAPI (review_status = null)', async () => {
+  it('2. intake_tanpa_tanggal_tidak_masuk_antrean — review_status = not_applicable', async () => {
     let capturedCreateData: any = null;
     vi.mocked(prisma.reservation.create).mockImplementation(async ({ data }: any) => {
       capturedCreateData = data;
@@ -135,8 +137,8 @@ describe('Meta CAPI Queue-First & Anti-Duplikat Workflow (Fase 5 Suite)', () => 
 
     expect(result.isNew).toBe(true);
     expect(capturedCreateData).toBeDefined();
-    // Intake tanpa tanggal dilarang masuk antrean
-    expect(capturedCreateData.purchase_review_status).toBeNull();
+    // Intake tanpa tanggal dilarang masuk antrean (sentinel not_applicable)
+    expect(capturedCreateData.purchase_review_status).toBe('not_applicable');
     expect(capturedCreateData.purchase_occurred_at).toBeNull();
   });
 
@@ -346,14 +348,16 @@ describe('Meta CAPI Queue-First & Anti-Duplikat Workflow (Fase 5 Suite)', () => 
       headers: HEADERS,
     });
     expect(resDefault.statusCode).toBe(200);
-    // Verifikasi OR clause hanya mencakup pending dan approved
+    // Verifikasi OR clause mencakup approved dan pending dengan booking_date
     expect(capturedWhere.OR).toEqual(
       expect.arrayContaining([
-        { purchase_review_status: { in: ['pending', 'approved'] } },
+        { purchase_review_status: 'approved' },
+        { purchase_review_status: 'pending', booking_date: { not: null } },
         { purchase_occurred_at: { not: null } },
         { status: 'completed' },
       ])
     );
+    expect(capturedWhere.status?.notIn).toEqual(expect.arrayContaining(['hold', 'rejected', 'cancelled']));
     // Di default, statusFilter tidak menyaring ignored_outlier
     expect(capturedWhere.purchase_review_status).toBeUndefined();
 
@@ -388,4 +392,78 @@ describe('Meta CAPI Queue-First & Anti-Duplikat Workflow (Fase 5 Suite)', () => 
     expect(isReservationPaid(paidCompleted)).toBe(true);
     expect(getPaymentDisplayStatus(paidCompleted)).toBe('LUNAS');
   });
+
+  // 9. resolver payment
+  it('9. resolver payment — not_applicable menjadi pending, approved dan ignored_outlier tetap dipertahankan', () => {
+    expect(resolveNextPurchaseReviewStatus({ purchase_review_status: 'not_applicable' })).toBe('pending');
+    expect(resolveNextPurchaseReviewStatus({ purchase_review_status: 'approved' })).toBe('approved');
+    expect(resolveNextPurchaseReviewStatus({ purchase_review_status: 'ignored_outlier' })).toBe('ignored_outlier');
+  });
+
+  // 10. transisi konfirmasi
+  it('10. transisi konfirmasi — hold/intake -> confirmed menyetel pending, approved tetap approved, ignored_outlier tetap outlier', () => {
+    expect(resolvePurchaseReviewOnConfirm({ purchase_review_status: 'not_applicable' })).toBe('pending');
+    expect(resolvePurchaseReviewOnConfirm({ purchase_review_status: 'approved' })).toBe('approved');
+    expect(resolvePurchaseReviewOnConfirm({ purchase_review_status: 'ignored_outlier' })).toBe('ignored_outlier');
+  });
+
+  // 11. fallback memory CAPI queue
+  it('11. fallback memory CAPI queue — isolasi tenant dan menyaring hold/intake tanpa tanggal', async () => {
+    app = buildApp();
+    await app.ready();
+
+    // Setup memoryReservations
+    memoryReservations.clear();
+    memoryReservations.set('res-def-1', {
+      id: 'res-def-1',
+      tenant_id: DEFAULT_TENANT_ID,
+      status: 'confirmed',
+      booking_date: new Date('2026-10-25T10:00:00.000Z'),
+      purchase_review_status: 'pending',
+      phone: '6282111222333',
+      customer: { phone: '6282111222333', name: 'Bunda Sarah' },
+    });
+    memoryReservations.set('res-other-tenant', {
+      id: 'res-other-tenant',
+      tenant_id: 'other-tenant',
+      status: 'confirmed',
+      booking_date: new Date('2026-10-25T10:00:00.000Z'),
+      purchase_review_status: 'pending',
+      phone: '6282111222444',
+      customer: { phone: '6282111222444', name: 'Bunda Dina' },
+    });
+    memoryReservations.set('res-hold-mem', {
+      id: 'res-hold-mem',
+      tenant_id: DEFAULT_TENANT_ID,
+      status: 'hold',
+      booking_date: new Date('2026-10-25T10:00:00.000Z'),
+      purchase_review_status: 'not_applicable',
+      phone: '6282111222555',
+      customer: { phone: '6282111222555', name: 'Bunda Lilis' },
+    });
+    memoryReservations.set('res-nodate-mem', {
+      id: 'res-nodate-mem',
+      tenant_id: DEFAULT_TENANT_ID,
+      status: 'pending',
+      booking_date: null,
+      purchase_review_status: 'not_applicable',
+      phone: '6282111222666',
+      customer: { phone: '6282111222666', name: 'Bunda Tina' },
+    });
+
+    vi.mocked(prisma.reservation.findMany).mockRejectedValueOnce(new Error('DB offline'));
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/admin/capi-queue',
+      headers: HEADERS,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.success).toBe(true);
+    expect(body.data.length).toBe(1);
+    expect(body.data[0].id).toBe('res-def-1');
+  });
 });
+

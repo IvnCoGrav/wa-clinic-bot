@@ -666,7 +666,12 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
 
         return reply.status(200).send({
           success: result.success,
-          message: result.success ? `Event ${eventName} berhasil dikirim ke Meta CAPI.` : (result.message || 'Gagal mengirim event'),
+          message: (result as any).skipped
+            ? `Event ${eventName} tidak dikirim ke Meta CAPI: ${result.message || 'Dikecualikan oleh kebijakan CAC repeat customer'}.`
+            : result.success
+            ? `Event ${eventName} berhasil dikirim ke Meta CAPI.`
+            : (result.message || 'Gagal mengirim event'),
+          skipped: (result as any).skipped === true,
           data: fullAuditPayload,
         });
       } catch (err: any) {

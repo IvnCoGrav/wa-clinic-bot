@@ -177,6 +177,125 @@ describe('POST /otw — kontrol keberangkatan (en_route + ETA)', () => {
     expect(res.statusCode).toBe(200);
     expect(staffTripTrackingService.getTrip(TENANT, RES_ID)).toBeNull();
   });
+
+  describe('Idempotensi & Validasi Jendela OTW (Plan 2026-10-20)', () => {
+    it('POST kedua (alreadySent: true) → tidak kirim ulang WA & tidak update database', async () => {
+      const alreadySentDate = new Date(Date.now() - 5 * 60 * 1000);
+      vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+        ...reservationRow,
+        otw_sent_at: alreadySentDate,
+        status: 'en_route',
+      } as any);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/staff/reservations/${RES_ID}/otw`,
+        headers: staffHeaders,
+        payload: { customText: '', markEnRoute: true },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.success).toBe(true);
+      expect(body.data.alreadySent).toBe(true);
+      expect(body.data.otwSentAt).toBe(alreadySentDate.toISOString());
+      expect(body.data.status).toBe('en_route');
+      expect(liveChatService.sendAdminReply).not.toHaveBeenCalled();
+      expect(prisma.reservation.update).not.toHaveBeenCalled();
+    });
+
+    it('POST kedua dengan forceResend: true oleh SUPERVISOR → tetap kirim ulang', async () => {
+      const alreadySentDate = new Date(Date.now() - 5 * 60 * 1000);
+      const supervisorSession = {
+        ...staffSession,
+        staff: {
+          ...staffSession.staff,
+          role: 'SUPER_ADMIN' as any,
+        },
+      };
+      vi.spyOn(StaffAuthService, 'validateSession').mockResolvedValue(supervisorSession as any);
+      vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+        ...reservationRow,
+        otw_sent_at: alreadySentDate,
+        status: 'en_route',
+      } as any);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/staff/reservations/${RES_ID}/otw`,
+        headers: staffHeaders,
+        payload: { customText: 'Pesan ulang oleh supervisor', forceResend: true, markEnRoute: true },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.success).toBe(true);
+      expect(body.data.alreadySent).toBeUndefined();
+      expect(liveChatService.sendAdminReply).toHaveBeenCalled();
+      expect(prisma.reservation.update).toHaveBeenCalled();
+    });
+
+    it('forceResend: true oleh THERAPIST biasa → diabaikan, tetap return alreadySent: true', async () => {
+      const alreadySentDate = new Date(Date.now() - 5 * 60 * 1000);
+      vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+        ...reservationRow,
+        otw_sent_at: alreadySentDate,
+        status: 'en_route',
+      } as any);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/staff/reservations/${RES_ID}/otw`,
+        headers: staffHeaders,
+        payload: { customText: 'Pesan ulang therapist', forceResend: true },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.success).toBe(true);
+      expect(body.data.alreadySent).toBe(true);
+      expect(liveChatService.sendAdminReply).not.toHaveBeenCalled();
+      expect(prisma.reservation.update).not.toHaveBeenCalled();
+    });
+
+    it('H-121 menit (lebih dari 2 jam sebelum jadwal) → 400', async () => {
+      vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+        ...reservationRow,
+        booking_date: new Date(Date.now() + 121 * 60 * 1000), // 121 menit ke depan
+      } as any);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/staff/reservations/${RES_ID}/otw`,
+        headers: staffHeaders,
+        payload: { customText: '' },
+      });
+
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.success).toBe(false);
+      expect(body.error).toContain('maksimal 2 jam sebelum jam reservasi');
+    });
+
+    it('H+16 menit (lewat toleransi 15 menit setelah jadwal) → 400', async () => {
+      vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+        ...reservationRow,
+        booking_date: new Date(Date.now() - 16 * 60 * 1000), // 16 menit lewat
+      } as any);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/staff/reservations/${RES_ID}/otw`,
+        headers: staffHeaders,
+        payload: { customText: '' },
+      });
+
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.success).toBe(false);
+      expect(body.error).toContain('Silakan gunakan tombol Catat Kedatangan / Sudah Sampai');
+    });
+  });
 });
 
 describe('getOtwMessageText — pesan OTW bersih (tanpa estimasi ke customer) & anti Default Clinic', () => {
