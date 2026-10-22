@@ -526,13 +526,11 @@ export function resolveCanonicalLandingUrl(
       } catch {}
     }
     return `${domain}${cleanPath}`;
-  } else if (url.startsWith('/cta')) {
-    const qIdx = url.indexOf('?');
-    const query = qIdx !== -1 ? url.slice(qIdx) : '';
-    return `https://kalababyspa.online/reservasionline${query}`;
   }
-
-  return url;
+  // Anti-hardcode domain bisnis: tanpa domain tenant ATAU fallback di
+  // `Tenant.settings.capiFallbackLandingDomain`, JANGAN mengarang-nomor domain.
+  // Caller memutuskan sendiri (event_source_url dihilangkan bila tidak ada sumber).
+  return undefined;
 }
 
 /**
@@ -734,6 +732,62 @@ export async function getTenantMetaPurchasePolicy(tenantId?: string): Promise<Me
   }
 }
 
+export interface CapiMatchingGeo {
+  state: string;
+  country: string;
+}
+
+const DEFAULT_CAPI_MATCHING_GEO: CapiMatchingGeo = { state: 'jawa timur', country: 'id' };
+
+export function normalizeCapiMatchingGeo(raw: any): CapiMatchingGeo {
+  const state = typeof raw?.state === 'string' ? raw.state.trim().toLowerCase() : '';
+  const country = typeof raw?.country === 'string' ? raw.country.trim().toLowerCase() : '';
+  return {
+    state: state || DEFAULT_CAPI_MATCHING_GEO.state,
+    country: country || DEFAULT_CAPI_MATCHING_GEO.country,
+  };
+}
+
+/**
+ * Params ADVANCED MATCHING geografis per tenant (state/provinsi & negara).
+ * Sumber kebenaran: `Tenant.settings.capiMatchingGeo` (data-driven, admin-editable,
+ * tanpa migrasi). Default fail-safe hanya untuk tenant yang belum mengonfigurasi.
+ */
+export async function getTenantCapiMatchingGeo(tenantId?: string): Promise<CapiMatchingGeo> {
+  if (!tenantId) return DEFAULT_CAPI_MATCHING_GEO;
+  try {
+    const { prisma } = await import('../db/client');
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+    return normalizeCapiMatchingGeo((tenant?.settings as any)?.capiMatchingGeo);
+  } catch {
+    return DEFAULT_CAPI_MATCHING_GEO;
+  }
+}
+
+/**
+ * event_id Purchase deterministik dari kunci bisnis imutabel.
+ * Retry / force-resend / perubahan purchase_occurred_at TIDAK mengubah id,
+ * sehingga dedupe Meta benar-benar idempoten.
+ */
+export function buildDeterministicPurchaseEventId(tenantId: string | undefined, reservationId: string): string {
+  return `pur_${tenantId || 'org'}_${reservationId}`;
+}
+
+/**
+ * Format event_id LAMA (belum dimigrasi): {trackingCode}_pur_{res|cus}_{eventTime}.
+ * Dipakai dispatch untuk reservasi yang sudah pernah terkirim SEBELUM pembaruan ini,
+ * agar force-resend memakai ulang event_id pengiriman pertama (bukan membuat id baru).
+ */
+export function buildLegacyPurchaseEventId(params: {
+  trackingCode?: string | null;
+  reservationId?: string | null;
+  customerId: string;
+  eventTimeSec: number;
+}): string {
+  const subject = params.reservationId || params.customerId;
+  return `${params.trackingCode || 'org'}_pur_${subject}_${params.eventTimeSec}`;
+}
+
 export async function getTenantAutoSendPurchaseCapi(tenantId?: string): Promise<boolean> {
   if (!tenantId) return false;
   try {
@@ -808,13 +862,18 @@ export class CapiService {
 
     // 1. Meta CAPI Sandbox / Dummy Test Guard & Non-Customer Bypass Guard (Skip / Admin CS)
     //    Staf internal (CS/Bidan via nomor resmi klinik) juga dikecualikan: bukan pelanggan.
+    //    Pengecualian: PageView adalah sinyal WEB anonim (BEACON, tanpa nomor WA),
+    //    tidak boleh dipalatkan filter dummy-contact nomor HP.
+    const isPageViewEvent = eventName === 'PageView';
     if (
+      !isPageViewEvent && (
       customer?.is_sandbox_test ||
       customer?.is_internal_staff ||
       isDummyOrTestContact(customer?.phone, customer?.name, customer?.is_sandbox_test) ||
       customer?.is_admin_labeled === true ||
       hasBypassLabel(customer) ||
       (await checkCustomerBypass({ customerId: customer?.id, phone: customer?.phone, tenantId }))
+      )
     ) {
       console.log(`[CAPI GUARD] Skipped sending ${eventName} to Meta CAPI for sandbox/dummy/bypass/internal-staff contact (skip/admin cs): ${maskPhone(customer?.phone)}`);
       return { success: false, message: 'Skipped: Sandbox, dummy test, or non-customer bypass contact (skip/admin cs)' };
@@ -899,6 +958,17 @@ export class CapiService {
       return { success: false, message: `Skipped: Credentials missing for tenant ${tenantId || 'unknown'}` };
     }
 
+    // Satu kali baca tenant untuk: domain landing, fallback domain, WABA id, dan
+    // geo matching (state/country). Semua data-driven dari Tenant.settings/kolom DB.
+    let tenantRecord: any = null;
+    if (tenantId) {
+      try {
+        tenantRecord = await prisma.tenant.findUnique({ where: { id: tenantId } });
+      } catch {}
+    }
+    const tenantSettings = (tenantRecord?.settings as any) || {};
+    const matchingGeo = normalizeCapiMatchingGeo(tenantSettings.capiMatchingGeo);
+
     try {
       // 2. NORMALIZE & HASH PII (Nomor HP, Nama, External ID, Kota, Zipcode, Country) menggunakan Meta ParamBuilder
       const builder = new ParamBuilder();
@@ -976,7 +1046,7 @@ export class CapiService {
       if (rawCity) {
         hashedCity = builder.getNormalizedAndHashedPII(rawCity, PII_DATA_TYPE.CITY) || undefined;
       }
-      hashedState = builder.getNormalizedAndHashedPII('jawa timur', PII_DATA_TYPE.STATE) || undefined;
+      hashedState = builder.getNormalizedAndHashedPII(matchingGeo.state, PII_DATA_TYPE.STATE) || undefined;
       let rawZip = (fullCustomer?.zipcode || fullCustomer?.pending_zipcode || '').trim();
       let gazetteerZip: string | null = null;
       if (!rawZip) {
@@ -1028,7 +1098,7 @@ export class CapiService {
       if (rawZip) {
         hashedZip = builder.getNormalizedAndHashedPII(rawZip, PII_DATA_TYPE.ZIP_CODE) || undefined;
       }
-      hashedCountry = builder.getNormalizedAndHashedPII('id', PII_DATA_TYPE.COUNTRY) || undefined;
+      hashedCountry = builder.getNormalizedAndHashedPII(matchingGeo.country, PII_DATA_TYPE.COUNTRY) || undefined;
 
       // Gender: kirim 'f' (female) jika treatment berkaitan dengan Moms / Ibu Hamil / Postpartum
       const treatmentText = (
@@ -1131,22 +1201,30 @@ export class CapiService {
 
       // 4. CONSTRUCT EVENT DATA payload
       //    event_id = trackingCode ad click (auto-derive) atau synthetic ID untuk organic
-      let tenantDomain = '';
       let wabaBusinessAccountId = '';
-      if (tenantId) {
+      let tenantDomain = ((tenantRecord as any)?.landing_domain as string | undefined || '').trim();
+      // Fallback domain juga konfigurasi tenant (`settings.capiFallbackLandingDomain`),
+      // BUKAN hardcode domain bisnis tertentu di dalam kode.
+      if (!tenantDomain) {
+        const fallbackDomain = typeof tenantSettings.capiFallbackLandingDomain === 'string'
+          ? tenantSettings.capiFallbackLandingDomain.trim()
+          : '';
+        if (fallbackDomain) tenantDomain = fallbackDomain;
+      }
+      wabaBusinessAccountId = String(((tenantRecord as any)?.waba_business_account_id || '')).trim();
+
+      const eventSourceUrlFromAdClick = resolveCanonicalLandingUrl(effectiveAdClick?.landingUrl, tenantDomain);
+      // PageView adalah event WEB (Meta docs: website events WAJIB event_source_url +
+      // client_user_agent) — action_source 'website'. Konversi via percakapan
+      // WhatsApp tetap 'chat', CTWA ber-WABA memakai 'business_messaging'.
+      const isWebsiteEvent = eventName === 'PageView';
+      let eventSourceUrl = eventSourceUrlFromAdClick;
+      if (!eventSourceUrl && isWebsiteEvent && tenantDomain) {
         try {
-          const { prisma } = await import('../db/client');
-          const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
-          if ((tenant as any)?.landing_domain) {
-            tenantDomain = (tenant as any).landing_domain.trim();
-          }
-          if ((tenant as any)?.waba_business_account_id) {
-            wabaBusinessAccountId = String((tenant as any).waba_business_account_id).trim();
-          }
+          const parsedDomain = new URL(tenantDomain.startsWith('http') ? tenantDomain : `https://${tenantDomain}`);
+          eventSourceUrl = `${parsedDomain.origin}${parsedDomain.pathname && parsedDomain.pathname !== '/' ? parsedDomain.pathname : '/'}`;
         } catch {}
       }
-
-      const eventSourceUrl = resolveCanonicalLandingUrl(effectiveAdClick?.landingUrl, tenantDomain);
 
       // 3b. Business Messaging envelope (Meta CTWA spec):
       //     Konversi dari iklan Click-to-WhatsApp WAJIB memakai
@@ -1193,7 +1271,7 @@ export class CapiService {
         event_name: eventName,
         event_time: effectiveEventTime,
         event_source_url: eventSourceUrl,
-        action_source: useBusinessMessaging ? 'business_messaging' : 'chat',
+        action_source: useBusinessMessaging ? 'business_messaging' : (isWebsiteEvent ? 'website' : 'chat'),
         user_data: userData,
         custom_data: {
           ...(customData || {}),
@@ -1218,8 +1296,27 @@ export class CapiService {
       } else if (eventId) {
         eventData.event_id = eventId;
       } else if (eventName === 'Purchase') {
-        // OriginalEventTime membuat event_id Purchase stabil (idempotent) saat retry / re-approve
-        eventData.event_id = `${effectiveAdClick?.trackingCode || 'org'}_pur_${reservationId || customer.id}_${originalEventTime}`;
+        // Kontrak baru: satu kunci bisnis imutabel satu event_id.
+        if (reservationId) {
+          eventData.event_id = buildDeterministicPurchaseEventId(tenantId, reservationId);
+        } else {
+          // Tanpa reservasi (trigger manual dsb.): id mengikat pada anchor WAKTU
+          // KONVERSI (eventTime / adClick.createdAt / customer.created_at), BUKAN
+          // tanggal pengiriman (Date.now) agar retry & resend tidak membuat id baru.
+          let anchorSec: number | undefined;
+          if (typeof eventTime === 'number') {
+            anchorSec = eventTime;
+          } else {
+            const anchorRaw = effectiveAdClick?.createdAt || fullCustomer?.created_at || customer?.created_at;
+            if (anchorRaw) {
+              try {
+                const ts = new Date(anchorRaw as any).getTime();
+                if (!Number.isNaN(ts)) anchorSec = Math.floor(ts / 1000);
+              } catch {}
+            }
+          }
+          eventData.event_id = `${effectiveAdClick?.trackingCode || 'org'}_pur_${customer.id}_${anchorSec ?? originalEventTime}`;
+        }
       } else if (effectiveAdClick?.trackingCode) {
         eventData.event_id = effectiveAdClick.trackingCode;
       } else if (effectiveAdClick?.ctwa_clid) {

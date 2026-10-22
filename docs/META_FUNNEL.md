@@ -57,10 +57,13 @@ Dibaca lewat `getTenantCapiFormats(tenantId)` di [capi.service.ts] (fallback def
 
 ## 3. Dedup & Event ID
 
-- `sendCapiEvent` mengisi `eventData.event_id = adClick.trackingCode` untuk **semua** event (Lead, InitiateCheckout, Purchase, dst).
+- **Sejak Tahap B post-audit (2026-10-22), kontrak `event_id` TIDAK lagi satu-format-untuk-semua**:
+  - Event non-Purchase (`Contact`, `Lead`, `InitiateCheckout`, PageView server) tetap memakai `adClick.trackingCode` (atau `ctwa_{clid}_{customerId}` untuk CTWA tanpa trackingCode).
+  - `Purchase` memakai **event_id deterministik per reservasi**: `pur_{tenantId}_{reservationId}` (kontrak baru). Reservasi yang dikirim ulang paksa (force-resend) WAJIB memakai ulang `event_id` pengiriman pertama — `src/routes/admin/reservation-dispatch.route.ts` membaca `purchase_event_sent_at` dan memakai format legacy agar tidak membuat event duplikat di Meta.
+  - `PageView` server & pixel browser **berbagi `event_id`** — Meta men-dedup keduanya menjadi satu event.
 - **Manfaat:**
   - Purchase yang ke-trigger ganda (mis. admin `Tandai Lunas` DAN deteksi pesan "Payment") tidak dobel-convert.
-  - Pixel klien (di landing) vs server-side CAPI — pakai konsep `eventID` yang sama saat deliver sehingga Meta men-dedup.
+  - Retry/force-resend tidak lagi memicu konversi ganda karena `event_id` deterministik, bukan `Date.now()`.
 - **Anti dobel-Purchase:** setelah Purchase terpicu, `reservations.purchase_event_sent_at` diisi `now()`. Dashboard tombol `Tandai Lunas` **nonaktif 7 hari** (`PURCHASE_DEDUP_WINDOW_MS = 7*24h`) agar operator tidak menandai lunas berkali-kali untuk order yang sama, tanpa menghalangi repeat order (7 hari kemudian).
 
 > Catatan: nilai `PURCHASE_DEDUP_WINDOW_MS` di `capi.service.ts` dan logika tanggal di `Reservations.tsx` (7*24*60*60*1000) harus selalu selaras.
@@ -117,7 +120,8 @@ Aturan (2) menjaga pertanyaan seperti "cara Payment?" / "Payment gimana?" **tida
 ## 5. Jalan ke Depan / Backlog (opsional)
 
 - Retry queue CAPI (saat ini silent-fail + circuit breaker; belum ada retry).
-- `test_event_code`/`external_id` (shadow mode Meta) per tenant bila diinginkan.
+- `test_event_code` **sudah tersedia** via `scripts/test-ctwa-capi.js` (uji `ctwa_clid` + `action_source` + `order_id` di Events Manager > Test Events) — verifikasi hasilnya masih dibuka di `docs/KNOWN_ISSUES.md` #272.
+- Matching geo & domain fallback tenant-aware via `Tenant.settings` (`capiMatchingGeo`, `capiFallbackLandingDomain`); email (param `em`) masih utang — lihat #272 (B7).
 - Pemindahan nilai `Purchase`: apakah selalu dari nominal pesan atau murni `resolveTreatmentValue` — diesuaikan kebutuhan akurasi laporan.
 
 ---

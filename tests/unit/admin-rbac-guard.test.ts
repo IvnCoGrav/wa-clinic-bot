@@ -92,6 +92,20 @@ describe('Admin RBAC Guard & Security Isolation (SEC-01 Fix)', () => {
       expect(res.json().code).toBe('FORBIDDEN_STAFF_ROLE');
     });
 
+    it('strictly blocks staff from bulk PII export (/api/admin/customers/audience-export)', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/admin/customers/audience-export',
+        headers: {
+          cookie: 'staff_session=valid_staff_token',
+          'x-requested-with': 'XMLHttpRequest',
+        },
+      });
+
+      expect(res.statusCode).toBe(403);
+      expect(res.json().code).toBe('FORBIDDEN_STAFF_ROLE');
+    });
+
     it('strictly blocks staff from modifying AI models (/api/admin/ai-models/*)', async () => {
       const res = await app.inject({
         method: 'PATCH',

@@ -6,6 +6,7 @@ import { CustomerLabels } from './CustomerLabels';
 import { CustomerMapTab } from '../../components/customer/CustomerMapTab';
 import { AddressBookDrawer } from '../../components/customer/AddressBookDrawer';
 import { useUiFeedback } from '../../components/common/UiFeedback';
+import { useAuth } from '../../contexts/AuthContext';
 import { Pagination } from '../../components/common/Pagination';
 import { CustomerEditForm } from '../../components/modals/CustomerEditForm';
 import { ChatHistoryModal } from '../../components/modals/ChatHistoryModal';
@@ -88,6 +89,9 @@ interface ChatMessage {
 
 export const CustomerDatabase: React.FC = () => {
   const { toast, confirm } = useUiFeedback();
+  const { user } = useAuth();
+  // Export Audience = unduh PII massal → hanya super/tenant admin (backend fail-closed, ini lapis UI).
+  const canExportAudience = !user || ['super_admin', 'tenant_admin'].includes(String(user.role || '').toLowerCase());
   const [searchParams, setSearchParams] = useSearchParams();
   const rawTab = searchParams.get('tab') || 'customers';
   const activeMainTab = (
@@ -117,6 +121,28 @@ export const CustomerDatabase: React.FC = () => {
   });
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [exportingAudience, setExportingAudience] = useState(false);
+  const [audienceMeta, setAudienceMeta] = useState<{ lastExportAt: string | null; lastExportCount: number | null }>({
+    lastExportAt: null,
+    lastExportCount: null,
+  });
+
+  const loadAudienceMeta = async () => {
+    try {
+      const res: any = await apiRequest('/api/admin/customers/audience-export/meta', { timeoutMs: 15000 });
+      if (res?.success && res?.data) {
+        setAudienceMeta({
+          lastExportAt: res.data.lastExportAt ?? null,
+          lastExportCount: res.data.lastExportCount ?? null,
+        });
+      }
+    } catch {
+      // Non-kritis: UI tetap jalan walau meta gagal dimuat.
+    }
+  };
+
+  useEffect(() => {
+    loadAudienceMeta();
+  }, []);
 
   // Retry & Error State (Phase 2)
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -443,9 +469,16 @@ export const CustomerDatabase: React.FC = () => {
       });
 
       if (!response.ok) {
+        if (response.status === 403) {
+          throw new Error('Export Audience hanya tersedia untuk Super Admin.');
+        }
+        if (response.status === 429) {
+          throw new Error('Terlalu sering. Maksimal 5 unduhan per menit, coba lagi sebentar.');
+        }
         throw new Error('Gagal mengunduh audience Meta');
       }
 
+      const totalRows = response.headers.get('X-Total-Rows') ? parseInt(response.headers.get('X-Total-Rows')!, 10) : null;
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -455,6 +488,10 @@ export const CustomerDatabase: React.FC = () => {
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
+
+      // Optimistic + sinkron ulang dari server (single source: Tenant.settings)
+      setAudienceMeta({ lastExportAt: new Date().toISOString(), lastExportCount: totalRows });
+      loadAudienceMeta();
 
       toast('Daftar audience Meta diunduh (format 62...). Upload ke Custom Audience di Ads Manager.', 'success');
     } catch (err: any) {
@@ -519,6 +556,8 @@ export const CustomerDatabase: React.FC = () => {
         </div>
 
         <div className="flex items-center space-x-2">
+          {canExportAudience && (
+            <>
           <button
             onClick={handleExportAudience}
             disabled={exportingAudience}
@@ -528,6 +567,18 @@ export const CustomerDatabase: React.FC = () => {
             <Download size={13} className={exportingAudience ? 'animate-pulse text-[#008069]' : ''} />
             <span>Export Audience</span>
           </button>
+          {audienceMeta.lastExportAt && (
+            <span
+              className="text-[10px] text-[#667781] whitespace-nowrap"
+              title="Export Custom Audience Meta terakhir (dari Tenant.settings)"
+            >
+              Terakhir export:{' '}
+              {new Date(audienceMeta.lastExportAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+              {typeof audienceMeta.lastExportCount === 'number' ? ` • ${audienceMeta.lastExportCount} kontak` : ''}
+            </span>
+          )}
+            </>
+          )}
           <button
             onClick={loadCustomers}
             disabled={loading}

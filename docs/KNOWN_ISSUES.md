@@ -27,6 +27,25 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - Sekarang admin dashboard telah dilengkapi Tab "Advanced 4-Section Prompt" di `AiPersona.tsx` yang memungkinkan admin mengedit ke-4 seksi prompt secara visual, menyimpan versi baru secara berkesinambungan (live versioning) dengan audit trail, serta menampilkan peringatan prioritas prompt yang transparan.
   - Backend `settings.subroute.ts` menyediakan endpoint `GET|PUT /api/admin/persona/prompt-config` dengan validasi ketat, dan unit test `tests/unit/admin-persona-prompt-config.test.ts` mengunci perilakunya.
 
+## 272. [Meta Ads / CAPI] Tahap B Post-Audit CAPI: Hardening Export, event_id Deterministik, action_source & Matching Geo (2026-10-22 — IMPLEMENTED, VERIF AKUN METAL OPEN)
+
+- **Status:** IMPLEMENTED (kode + test hijau; verifikasi efektif di Events Manager Meta belum dilakukan — butuh akses akun).
+- **Konteks:** Tahap A audit CAPI (A-001…A-012) menghasilkan persetujuan Tahap B dari user pada 2026-10-22 dengan kontrak test-first.
+- **Yang diselesaikan (Tahap B):**
+  - **B1 Export Audience hardening**: rate limit 5 req/menit per IP (Fastify `config.rateLimit` di `src/routes/admin/customers.subroute.ts`), RBAC super_admin/tenant_admin saja (staff → 403 `FORBIDDEN_STAFF_ROLE`, prefix didaftarkan di `superAdminOnlyPrefixes` `src/routes/admin.route.ts`), audit log `CUSTOMER_AUDIENCE_EXPORT` {rowCount, tenantId}, header `X-Total-Rows`, persist `metaAudienceLastExportAt`/`metaAudienceLastExportCount` di `Tenant.settings` (fail-open, try/catch), endpoint meta `GET /api/admin/customers/audience-export/meta`, UI gate + info "Terakhir export" di `CustomerDatabase.tsx`.
+  - **B2 event_id Purchase deterministik**: `buildDeterministicPurchaseEventId(tenantId, reservationId)` = `pur_{tenantId}_{reservationId}` untuk reservasi baru; timestamp seed dari eventTime/adClick/created_at — `Date.now()` DIHAPUS dari trigger manual. Force-resend (`reservation-dispatch.route.ts`) kini memakai ulang event_id pengiriman pertama via `purchase_event_sent_at` + `legacyEventIdForResend` (format lama) agar reservasi terkirim sebelum kontrak baru tidak membuat event duplikat.
+  - **B3 action_source per event**: `PageView` → `website` (+client_user_agent +event_source_url fallback root domain), `Purchase`/`Contact` → `chat` (Line of Business messaging). Pixel browser & CAPI berbagi event_id untuk PageView (dedup Meta).
+  - **B4 matching geo & domain tenant-aware**: hardcode `'jawa timur'`/`'id'` diganti `DEFAULT_CAPI_MATCHING_GEO` yang bisa dioverride via `Tenant.settings.capiMatchingGeo` (`getTenantCapiMatchingGeo()`); domain fallback hardcode `kalababyspa.online` DIHAPUS dari `src/services/capi.service.ts` — tanpa konfigurasi tenant, domain tidak dikirim (undefined), bukan nilai busuk.
+  - **B6 CTWA**: pengiriman `ctwa_clid` TIDAK dihentikan (keputusan: salah menghapus lebih buruk daripada param tak dikenal yang diloloskan Meta); verifikasi efektif dilakukan via skrip uji `test_event_code`.
+- **Utang / yang SENGAJA ditunda:**
+  - **B7 Email (A-009)**: belum dikerjakan — butuh kolom DB baru, sumber data email yang tidak dimiliki klinik hari ini, dan persetujuan pasien (privasi). Feature-flagged omisi field `em` tetap berlaku.
+  - **B5**: `order_id` TETAP di `custom_data` (bukan dipindah) karena struktur `original_event_data` belum terverifikasi (docs Meta HTTP 400) — klaim "Meta Blueprint" di CHANGELOG #2026-10-22/21 dikoreksi.
+- **Verifikasi efektif yang belum dilakukan (butuh akses akun Meta):**
+  1. Events Manager: cek event PageView baru punya `action_source=website` dan tidak duplicate vs pixel (shared event_id).
+  2. Uji `ctwa_clid` + `action_source=chat` via `test_event_code` (skrip `scripts/test-ctwa-capi.js`).
+  3. Payload Helper / "View JSON" untuk memastikan `order_id` di `custom_data` diterima tanpa warning, atau pindah ke Original Event Data bila Meta menolak.
+  4. Rate-limit & 403 export diuji manual dari dashboard staf.
+
 ## 271. [WABA/Payment Proof] Gambar Inbound WABA Belum Diteruskan ke attachFromInbound (2026-10-21, OPEN — EXCLUDED TEMPORARILY)
 
 - **Status:** OPEN (Eksplisit diexclude / ditunda untuk sementara waktu sesuai keputusan pengguna pada 2026-10-21; kode dan test WABA TIDAK DISENTUH).
@@ -49,7 +68,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   3. Keterbatasan API Meta: Event Purchase historis yang sudah diterima dan diproses oleh Meta Graph API bersifat permanen (immutable) dan TIDAK BISA diedit, dihapus, atau di-reassign ke kampanye lain melalui CAPI maupun Events Manager.
 - **Resolusi Fondasional:**
   1. Kontrak kebijakan tenant `metaPurchasePolicy` (`DUAL_EVENT` [default sejak 2026-10-22], `SUPPRESS_REPEAT`, `ALL_WITH_TAG`) di `capi.service.ts` dan `Tenant.settings`.
-  2. Penambahan parameter resmi Meta: `order_id` dan `customer_segmentation: 'new_customer_to_business' | 'existing_customer_to_business'`.
+  2. Penambahan parameter resmi Meta: `customer_segmentation: 'new_customer_to_business' | 'existing_customer_to_business'` (di `custom_data`, sesuai contoh resmi) dan `order_id` (dikirim di `custom_data` — **koreksi 2026-10-22**: penempatan ini TIDAK didukung dokumentasi resmi Meta yang menaruh `order_id` di keluarga Original Event Data; struktur JSON `original_event_data` belum terverifikasi, lihat poin utang di bawah).
   3. Pada `DUAL_EVENT`, repeat order dikirim sebagai `ReturningCustomerPurchase` + `customer_segmentation: 'existing_customer_to_business'`, sehingga sinyal LTV tetap terkirim tanpa mengotori `Purchase` yang dioptimasi kampanye akuisisi.
   4. Pencegahan transmisi jaringan deterministik sebelum circuit breaker pada kebijakan `SUPPRESS_REPEAT`, serta penandaan `purchase_review_status: 'approved'` tanpa mengisi `purchase_event_sent_at`.
   5. Deduplikasi: `event_id` Purchase deterministik (`..._pur_{reservationId}_{originalEventTime}`), retry stabil dan unik antar-reservasi (dikunci `tests/unit/capi-repeat-purchase-policy.test.ts` test 11).
@@ -65,7 +84,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - Poin *1-day view-through* dan **Advantage Audience Expansion = HIPOTESIS**, wajib dibuktikan via Events Manager (breakdown atribusi) sebelum dipakai untuk keputusan bisnis strategis.
   - Rekonsiliasi matematika belum mutlak (Rp 325.000 + Rp 70.000 = Rp 395.000 vs angka Ads Manager Rp 385.000, ada selisih Rp 10.000 akibat diskon/DP parsial yang memerlukan breakdown per ad-set di Ads Manager).
   - Klaim "16 test gagal pre-existing" diverifikasi ulang 2026-10-22: baseline `55420e0f` vs HEAD `6db62612` sama-sama **15 test gagal di 8 file** (80 lulus). Bukan regresi commit CAPI; angka 16 di CHANGELOG lama adalah pengukuran yang berfluktuasi.
-  - Utang teknis: `order_id` idealnya di `original_event_data.order_id` (slot kanonis Meta untuk event tertunda); tipe `MetaRepeatDecision` belum dipakai.
+  - Utang teknis: tipe `MetaRepeatDecision` belum dipakai. Verifikasi `order_id` (dan skema parameternya) belum bisa dilakukan via docs — halaman dokumentasi `original_event_data` mengembalikan HTTP 400; verifikasi WAJIB lewat Events Manager / skrip uji `test_event_code` (lihat #271).
   - High-priority post-audit bug & hardening tuntas: perbaikan pola `will_suppress_capi` pada riwayat terkirim, sanitasi parameter internal (`force_send_repeat_purchase`, `allowZero`) dari payload Graph API Meta, dan segmen kustomer (`customer_segmentation`) dikunci ke otoritas DB.
 
 ## 269. [Address/Split-Brain] Resolusi Toponimi Fuzzy, Elevasi Primary GPS & Alarm Palsu Shareloc (2026-10-18, IMPLEMENTED)

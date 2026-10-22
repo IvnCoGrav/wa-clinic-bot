@@ -121,7 +121,11 @@ Token disimpan terenkripsi AES-256-GCM ke kolom `tenants.meta_capi_access_token`
      di Events Manager dalam hitungan detik).
 2. **Meta CAPI Queue**: `/admin/meta-capi-queue` — melihat antrean event
    `Purchase` yang menunggu moderasi (bila auto-send nonaktif).
-3. **Log bot**: `docker compose logs --tail 50 app` — cari baris
+3. **Uji payload CTWA / `order_id` / `action_source`**: dari repo lokal,
+   `node scripts/test-ctwa-capi.js --test-event-code=CODE` (kode dari
+   Events Manager > tab Test Events). Hasil desision event tampil di
+   Events Manager, bukan di log bot.
+4. **Log bot**: `docker compose logs --tail 50 app` — cari baris
    `[CAPI]` tanpa error 4xx/5xx dari Meta.
 
 ## Catatan Keamanan

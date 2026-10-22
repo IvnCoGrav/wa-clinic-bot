@@ -214,6 +214,11 @@ describe('Meta Full-Funnel Attribution & Landing URL Preservation', () => {
     const resolvedD = resolveCanonicalLandingUrl(relativeUrl, 'https://kalababyspa.online/reservasionline');
     expect(resolvedD).toBe('https://kalababyspa.online/reservasionline?fbclid=PAc123&utm_campaign=promo');
 
+    // Case F: relative /cta tanpa domain tenant DAN tanpa fallback terkonfigurasi
+    // -> JANGAN mengarang-nomor domain hardcode; laporkan undefined (event_source_url dihilangkan).
+    const resolvedF = resolveCanonicalLandingUrl('/cta?fbclid=PAc123', '');
+    expect(resolvedF).toBeUndefined();
+
     // Case E: already clean landing URL remains unchanged
     const cleanUrl = 'https://kalababyspa.online/reservasionline?fbclid=PAc123';
     const resolvedE = resolveCanonicalLandingUrl(cleanUrl, 'https://kalababyspa.online/reservasionline');

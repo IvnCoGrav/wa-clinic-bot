@@ -2207,6 +2207,20 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           } catch {}
         }
 
+        // Tahap-B (A-004): reservasi yang sudah pernah terkirim SEBELUM kontrak
+        // event_id deterministik WAJIB memakai ulang event_id pengiriman pertamanya
+        // (format lama berbasis occurredAt) saat force-resend — jangan membuat id baru
+        // yang membuat Meta menghitung ulang konversi yang sama (double count).
+        const { buildLegacyPurchaseEventId } = await import('../../services/capi.service');
+        const legacyEventIdForResend = existing.purchase_event_sent_at != null && !customPayload?.event_id
+          ? buildLegacyPurchaseEventId({
+              trackingCode: (existing.customer as any)?.adClick?.trackingCode,
+              reservationId: existing.id,
+              customerId: existing.customer_id,
+              eventTimeSec: Math.floor(occurredAt.getTime() / 1000),
+            })
+          : undefined;
+
         // 5. AWAIT CAPI ΓÇö hanya set approved jika Meta benar-benar menerima event.
         const capiResult = await capiService.sendCapiEvent({
           eventName,
@@ -2218,7 +2232,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           eventTime,
           customData,
           customUserData: customPayload?.user_data,
-          customEventId: customPayload?.event_id,
+          customEventId: customPayload?.event_id ?? legacyEventIdForResend,
           reservationId: existing.id,
         });
         capiSkipped = capiResult.skipped === true;

@@ -552,10 +552,8 @@ describe('Meta CAPI Repeat Purchase Policy & Blueprint Compliance', () => {
 
     const ids = mockedAxios.post.mock.calls.map((c: any) => c[1].data[0].event_id);
     expect(ids).toHaveLength(3);
-    expect(ids[0]).toBeTruthy();
+    expect(ids[0]).toBe(`pur_${DEFAULT_TENANT_ID}_res-dedup-A`);
     expect(ids[0]).toBe(ids[1]);
-    expect(ids[2]).not.toBe(ids[0]);
-    expect(ids[0]).toContain('res-dedup-A');
-    expect(ids[2]).toContain('res-dedup-B');
+    expect(ids[2]).toBe(`pur_${DEFAULT_TENANT_ID}_res-dedup-B`);
   });
 });

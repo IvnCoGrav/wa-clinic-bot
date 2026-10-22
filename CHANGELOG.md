@@ -5,6 +5,22 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+#### 2026-10-22 - Fix: Tahap B Post-Audit CAPI — Hardening Export, event_id Purchase Deterministik, action_source per Event & Matching Geo Tenant-Aware
+
+- **Akar Masalah (Tahap A audit A-001…A-012, disetujui user untuk eksekusi Tahap B test-first)**:
+  1. Export Audience CSV PII tanpa audit log, tanpa rate limit, dan dapat diakses role staff (risiko exfil massal nomor pasien).
+  2. `event_id` Purchase memakai `Date.now()` pada trigger manual → force-resend membuat event duplikat di Meta (dedup gagal).
+  3. `action_source` semua event `'chat'` — salah semantik utk PageView (Line of Business messaging), mengganggu optimasi & burdensome di Events Manager.
+  4. `hashedState`/`hashedCountry`/domain fallback hardcode ke satu klinik → melanggar mandat SaaS multi-tenant.
+- **Perubahan**:
+  - `src/services/capi.service.ts`: `DEFAULT_CAPI_MATCHING_GEO` + `getTenantCapiMatchingGeo()` (override via `Tenant.settings.capiMatchingGeo`), `buildDeterministicPurchaseEventId()` (`pur_{tenantId}_{reservationId}`) dengan seed timestamp dari eventTime/adClick/created_at (bukan `Date.now`), `action_source` dinamis (`website` untuk PageView, `chat` untuk messaging, `business_messaging` via `useBusinessMessaging`), guard dummy/sandbox di-skip untuk PageView, domain fallback hardcode dihapus (tanpa konfigurasi → undefined).
+  - `src/routes/admin/customers.subroute.ts`: rate limit 5/menit, RBAC super_admin/tenant_admin (staff 403), audit log `CUSTOMER_AUDIENCE_EXPORT`, header `X-Total-Rows`, persist `metaAudienceLastExportAt/Count` (fail-open), endpoint meta `GET .../audience-export/meta`.
+  - `src/routes/admin.route.ts`: prefix `audience-export` masuk `superAdminOnlyPrefixes`.
+  - `src/routes/admin/reservation-dispatch.route.ts`: force-resend kini memakai ulang `event_id` pengiriman pertama (`legacyEventIdForResend`) bila `purchase_event_sent_at` sudah terisi.
+  - `packages/admin-dashboard/src/pages/tenant/CustomerDatabase.tsx`: gate tombol export per role, toast 403/429, info "Terakhir export" dari endpoint meta.
+- **Test**: unit `purchase-event-id-stability` (4), `capi-action-source` (3), `capi-matching-geo` (3); integrasi `customer-audience-export` (6, termasuk rate limit & audit); RBAC guard diperluas. Suite CAPI terkait 42 test hijau.
+- **Dokumentasi**: klaim `order_id` "Meta Blueprint" dikoreksi (docs Meta menaruh `order_id` di keluarga Original Event Data; `custom_data` dipertahankan sementara sebagai keputusan sadar). Utang email (A-009) dicatat di KNOWN_ISSUES #272. Verifikasi efektif di Events Manager Meta masih OPEN.
+
 #### 2026-10-22 - Fix: Default Meta Purchase Policy ke Dual Event, Penguncian Dedup event_id & Export Audience Meta
 
 - **Akar Masalah & Koreksi Audit (Tindak Lanjut Entri 2026-10-21)**:
@@ -25,7 +41,7 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
   - Test baru `tests/integration/customer-audience-export.test.ts` (3 test) hijau: normalisasi+dedupe, fail-closed DB offline, tolak request tanpa API key.
   - Verifikasi pre-existing: 9 file terkait tetap **15 gagal / 80 lulus** identik dengan baseline sebelum commit CAPI.
 
-- **Utang Teknis Tercatat**: `order_id` sebaiknya ditempatkan di `original_event_data.order_id` (slot kanonis Meta untuk event tertunda), dan tipe `MetaRepeatDecision` belum terpakai.
+- **Utang Teknis Tercatat**: tipe `MetaRepeatDecision` belum terpakai. **Koreksi 2026-10-22**: klaim `order_id` "sesuai Meta Blueprint" TIDAK dapat dipertanggungjawabkan — dokumentasi resmi Meta menaruh `order_id` di keluarga parameter **Original Event Data** (bukan `custom_data`); struktur JSON lengkap `original_event_data` belum terverifikasi (halaman docs mengembalikan HTTP 400). `order_id` TETAP dikirim di `custom_data` hingga diverifikasi via Payload Helper/test_event_code (lihat #270).
 
 #### 2026-10-21 - Feat: Isolasi Atribusi Repeat Purchase Meta CAPI & Proteksi Metrik CAC Iklan
 
@@ -43,7 +59,7 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
     - Di `src/services/capi.service.ts`: Mengekspor tipe `MetaPurchasePolicy` (`SUPPRESS_REPEAT` | `DUAL_EVENT` | `ALL_WITH_TAG`), `MetaRepeatDecision`, dan fungsi `getTenantMetaPurchasePolicy()`. Membaca `Tenant.settings.metaPurchasePolicy` dengan fallback fail-safe ke `SUPPRESS_REPEAT` saat DB offline / nilai tidak valid (zero migrasi DB).
     - Di `src/routes/admin/settings.subroute.ts`: Menambahkan endpoint `GET /api/admin/settings/meta-purchase-policy` dan `PUT /api/admin/settings/meta-purchase-policy` dengan validasi enum serta pencatatan audit log admin.
   - **Fase 2 (Hardening Payload & Gerbang Deterministik)**:
-    - Di `src/services/capi.service.ts`: Memperbarui payload `Purchase` CAPI sesuai standar Meta Blueprint: menambahkan `custom_data.customer_segmentation` (`new_customer_to_business` vs `existing_customer_to_business`) dan `custom_data.order_id`.
+    - Di `src/services/capi.service.ts`: Memperbarui payload `Purchase` CAPI: menambahkan `custom_data.customer_segmentation` (`new_customer_to_business` vs `existing_customer_to_business`) dan `custom_data.order_id`. **Koreksi 2026-10-22**: `customer_segmentation` di `custom_data` sesuai contoh resmi dokumentasi Meta; penempatan `order_id` di `custom_data` TIDAK didukung dokumentasi resmi (dokumen menaruhnya di keluarga Original Event Data) — dibiarkan sementara dan dicatat sebagai utang verifikasi di #270.
     - Mengintegrasikan evaluasi kebijakan sebelum circuit breaker: jika repeat order dan kebijakan `SUPPRESS_REPEAT`, fungsi langsung mengembalikan `{ success: true, skipped: true, policy }` tanpa koneksi jaringan ke Graph API. Opsi `DUAL_EVENT` mengubah nama event menjadi `ReturningCustomerPurchase`, sedangkan `ALL_WITH_TAG` menyematkan parameter resmi Meta `opt_out: true`.
     - Menyediakan escape hatch `customData.force_send_repeat_purchase` untuk kebutuhan pengiriman paksa oleh staf/admin dengan audit log terisolasi.
   - **Fase 3 (Penanganan Skipped di Jalur Kirim Admin & Recovery)**:

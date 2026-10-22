@@ -58,7 +58,7 @@ describe('Fase 1.2 & 2: Purchase Event Idempotency & Moderation Guards', () => {
       expect(sentPayloads).toHaveLength(2);
       const eventId1 = sentPayloads[0].data[0].event_id;
       const eventId2 = sentPayloads[1].data[0].event_id;
-      expect(eventId1).toBe(`org_pur_${resId}_${eventTime}`);
+      expect(eventId1).toBe(`pur_${DEFAULT_TENANT_ID}_${resId}`);
       expect(eventId1).toBe(eventId2);
     });
 

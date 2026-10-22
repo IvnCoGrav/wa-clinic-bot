@@ -47,8 +47,37 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
    * Unduh daftar nomor pasien (format internasional 62..., tanpa 0/+) untuk
    * Custom Audience Meta. Nomor WA klinik sering tidak cocok dengan akun FB/IG
    * pasien, sehingga upload daftar ini adalah lapis exclusion kedua di Ads Manager.
+   *
+   * Hardening PII (Tahap B):
+   * - Super-admin only (RBAC guard di admin.route.ts + double-check di sini).
+   * - Rate limit ketat 5/menit — anti unduh massal / brute force.
+   * - Setiap unduhan dicatat di audit log (siapa, kapan, baris keberapa).
+   * - metaAudienceLastExportAt/Count dipersist ke Tenant.settings agar UI
+   *   memaparkan kapan terakhir export dilakukan.
    */
-  fastify.get('/api/admin/customers/audience-export', async (request, reply) => {
+  fastify.get(
+    '/api/admin/customers/audience-export',
+    {
+      config: {
+        rateLimit: {
+          max: 5,
+          timeWindow: '1 minute',
+          keyGenerator: (req) => `${req.ip}|${(req as any).tenantId || 'no-tenant'}`,
+        },
+      },
+    },
+    async (request, reply) => {
+    // Double-check super-admin: API key == super admin; staff session HARUS SUPER_ADMIN
+    // (RBAC prefix guard sudah memblokir di admin.route.ts; ini lapis kedua fail-closed).
+    const staffRole = (request as any).staffRole;
+    if (staffRole && staffRole !== 'SUPER_ADMIN') {
+      return reply.status(403).send({
+        success: false,
+        error: 'Export audience hanya tersedia untuk Super Admin.',
+        code: 'FORBIDDEN_STAFF_ROLE',
+      });
+    }
+
     try {
       const tenantId = tenantOf(request);
       const rows = await prisma.customer.findMany({
@@ -72,11 +101,41 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
 
       const csv = ['phone', ...phones].join('\n');
       const stamp = new Date().toISOString().slice(0, 10);
+      const exportedAt = new Date().toISOString();
+
+      try {
+        const tenantRow = await prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: { settings: true },
+        });
+        const mergedSettings: any = {
+          ...(((tenantRow as any)?.settings as any) || {}),
+          metaAudienceLastExportAt: exportedAt,
+          metaAudienceLastExportCount: phones.length,
+        };
+        await prisma.tenant.update({
+          where: { id: tenantId },
+          data: { settings: mergedSettings },
+        });
+      } catch (persistErr: any) {
+        console.warn(`[AUDIENCE EXPORT] Gagal persist metaAudienceLastExportAt: ${persistErr?.message}`);
+      }
+
+      await auditService.logAdminAction({
+        apiKey: (request as any).adminKeyUsed,
+        adminIdentity: (request as any).adminIdentity,
+        action: 'CUSTOMER_AUDIENCE_EXPORT',
+        targetId: tenantId,
+        payload: { rowCount: phones.length, tenantId },
+        ipAddress: request.ip,
+        tenantId,
+      });
 
       return reply
         .header('Content-Type', 'text/csv; charset=utf-8')
         .header('Content-Disposition', `attachment; filename="meta-audience-${tenantId}-${stamp}.csv"`)
         .header('Cache-Control', 'no-store')
+        .header('X-Total-Rows', String(phones.length))
         .status(200)
         .send(csv);
     } catch (err: any) {
@@ -84,6 +143,33 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
         success: false,
         error: err.message || 'Gagal mengekspor audience Meta.',
       });
+    }
+    }
+  );
+
+  /**
+   * GET /api/admin/customers/audience-export/meta
+   * Bukan PII: metadata kapan terakhir audience Meta diexport (untuk UI).
+   */
+  fastify.get('/api/admin/customers/audience-export/meta', async (request, reply) => {
+    try {
+      const tenantId = tenantOf(request);
+      const tenantRow = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { settings: true },
+      });
+      const settings: any = (tenantRow as any)?.settings || {};
+      return reply.status(200).send({
+        success: true,
+        data: {
+          lastExportAt: settings.metaAudienceLastExportAt ?? null,
+          lastExportCount: typeof settings.metaAudienceLastExportCount === 'number'
+            ? settings.metaAudienceLastExportCount
+            : null,
+        },
+      });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message });
     }
   });
 
@@ -968,12 +1054,12 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
     async (
       request: FastifyRequest<{
         Params: { id: string };
-        Body: { eventName: string; value?: number; currency?: string };
+        Body: { eventName: string; value?: number; currency?: string; eventTime?: number };
       }>,
       reply: FastifyReply
     ) => {
       const { id } = request.params;
-      const { eventName, value, currency = 'IDR' } = request.body || {};
+      const { eventName, value, currency = 'IDR', eventTime } = request.body || {};
 
       if (!eventName) {
         return reply.status(400).send({ success: false, error: 'eventName wajib diisi (mis. Lead, Purchase, ViewContent)' });
@@ -999,6 +1085,9 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           },
           value,
           currency,
+          // Anti-Stempel-Janji: anchor waktu konversi EKSPLISIT — id event tidak lagi
+          // mengikat ke Date.now() pengiriman (idempoten saat retry manual).
+          ...(typeof eventTime === 'number' ? { eventTime } : {}),
           tenantId: DEFAULT_TENANT_ID,
           customData: {
             manual_trigger: true,

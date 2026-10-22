@@ -216,6 +216,8 @@ export async function adminRoutes(fastify: FastifyInstance) {
         // rute riil '/api/admin/integrations/google/*' (mismatch = semua staf bisa akses).
         '/api/admin/integrations/google',
         '/api/admin/waba',
+        // Tahap-B hardening: unduh PII massal (Custom Audience Meta) hanya Super Admin.
+        '/api/admin/customers/audience-export',
       ];
 
       if (superAdminOnlyPrefixes.some((prefix) => urlPath.startsWith(prefix))) {
