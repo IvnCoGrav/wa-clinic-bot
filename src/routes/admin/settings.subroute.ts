@@ -576,6 +576,113 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * GET /api/admin/persona/prompt-config
+   * Mengambil konfigurasi 4-section prompt aktif atau default
+   */
+  fastify.get('/api/admin/persona/prompt-config', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const { TenantPromptConfigService } = await import('../../services/tenant-prompt-config.service');
+      const resolved = await TenantPromptConfigService.getPromptConfigMeta(tenantId);
+      const defaultConfig = TenantPromptConfigService.getDefaultConfig();
+      const config = resolved.config || defaultConfig;
+      const isCustom = resolved.source === 'active';
+
+      return reply.status(200).send({
+        success: true,
+        tenantId,
+        isCustom,
+        source: resolved.source,
+        config,
+      });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message });
+    }
+  });
+
+  /**
+   * PUT /api/admin/persona/prompt-config
+   * Menyimpan versi baru konfigurasi 4-section prompt
+   */
+  fastify.put(
+    '/api/admin/persona/prompt-config',
+    async (
+      request: FastifyRequest<{
+        Body: {
+          personalityTone?: string;
+          answeringHierarchy?: string;
+          negativeConstraints?: string;
+          medicalOverclaimRules?: string;
+          changeSummary?: string;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      try {
+        const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+        const {
+          personalityTone,
+          answeringHierarchy,
+          negativeConstraints,
+          medicalOverclaimRules,
+          changeSummary,
+        } = request.body || {};
+
+        if (!personalityTone?.trim()) {
+          return reply.status(400).send({ success: false, error: 'personalityTone is required' });
+        }
+        if (!answeringHierarchy?.trim()) {
+          return reply.status(400).send({ success: false, error: 'answeringHierarchy is required' });
+        }
+        if (!negativeConstraints?.trim()) {
+          return reply.status(400).send({ success: false, error: 'negativeConstraints is required' });
+        }
+        if (!medicalOverclaimRules?.trim()) {
+          return reply.status(400).send({ success: false, error: 'medicalOverclaimRules is required' });
+        }
+
+        const data = {
+          personalityTone: personalityTone.trim(),
+          answeringHierarchy: answeringHierarchy.trim(),
+          negativeConstraints: negativeConstraints.trim(),
+          medicalOverclaimRules: medicalOverclaimRules.trim(),
+        };
+
+        const author = (request as any).adminIdentity || (request as any).adminKeyUsed || 'admin';
+        const summary = changeSummary?.trim() || 'Updated via Admin Dashboard';
+
+        const { TenantPromptConfigService } = await import('../../services/tenant-prompt-config.service');
+        await TenantPromptConfigService.saveNewVersion(tenantId, data, author, summary);
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'BOT_PROMPT_CONFIG_CHANGE',
+          targetId: tenantId,
+          payload: {
+            summary,
+            sections: {
+              personalityToneLength: data.personalityTone.length,
+              answeringHierarchyLength: data.answeringHierarchy.length,
+              negativeConstraintsLength: data.negativeConstraints.length,
+              medicalOverclaimRulesLength: data.medicalOverclaimRules.length,
+            },
+          },
+        });
+
+        return reply.status(200).send({
+          success: true,
+          message: 'Konfigurasi 4-seksi prompt berhasil disimpan!',
+          tenantId,
+          config: data,
+        });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
    * GET /api/admin/few-shots
    */
   fastify.get('/api/admin/few-shots', async (request: FastifyRequest, reply: FastifyReply) => {

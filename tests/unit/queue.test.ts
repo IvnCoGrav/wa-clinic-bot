@@ -4,6 +4,7 @@ import { stateMachine } from '../../src/state-machine/machine';
 import { customerService } from '../../src/services/customer.service';
 import { conversationService } from '../../src/services/conversation.service';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
+import { turnRepository } from '../../src/repositories/turn.repository';
 
 describe('Message Queue Service Unit Tests', () => {
   beforeEach(() => {
@@ -186,6 +187,51 @@ describe('Message Queue Service Unit Tests', () => {
     const b = resolveQueueJobId('628111', mk());
     expect(a).not.toContain('undefined');
     expect(a).not.toBe(b);
+  });
+
+  it('R3b. turnId sama yang di-enqueue dua kali hanya diproses sekali', async () => {
+    const claimSpy = vi
+      .spyOn(turnRepository, 'claimForProcessing')
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+
+    const processSpy = vi
+      .spyOn(stateMachine, 'processMessage')
+      .mockResolvedValue({ nextState: 'INITIAL' as any, shouldSendReply: false });
+
+    const svc = queueService as any;
+    const prevEnabled = svc.redisEnabled;
+    const prevClient = svc.redisClient;
+    svc.redisEnabled = false;
+    svc.redisClient = null;
+
+    try {
+      const phone = '628777111222';
+      const customer = await customerService.getOrCreateCustomer(phone);
+      const payload: QueuePayload = {
+        tenantId: DEFAULT_TENANT_ID,
+        customerId: customer.id,
+        phone,
+        provider: 'WAHA',
+        inboundMessageId: 'msg-dup-1',
+        turnId: 'default-tenant:WAHA:msg-dup-1',
+        incomingMessage: { id: 'msg-dup-1', from: phone, timestamp: '1700000000', type: 'text', text: { body: 'halo' } },
+      };
+
+      await Promise.all([
+        queueService.enqueueMessage(payload),
+        queueService.enqueueMessage(payload),
+      ]);
+
+      await vi.waitFor(() => {
+        expect(claimSpy).toHaveBeenCalledTimes(2);
+      }, { timeout: 2000 });
+
+      expect(processSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      svc.redisEnabled = prevEnabled;
+      svc.redisClient = prevClient;
+    }
   });
 
   // Insiden balasan ganda 12/10/2026 — kunci in-flight terdistribusi.

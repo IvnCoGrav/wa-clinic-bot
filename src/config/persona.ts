@@ -218,6 +218,8 @@ export async function savePersonaToDb(
     if (maxCharsPerReply !== undefined) {
       maxCharsByTenant.set(tenantId, maxCharsPerReply ?? null);
     }
+    const { TenantPromptConfigService } = await import('../services/tenant-prompt-config.service');
+    TenantPromptConfigService.invalidateCache(tenantId);
     return true;
   } catch (err) {
     console.warn('[PERSONA] DB unavailable, using file fallback:', (err as Error).message);
@@ -225,6 +227,10 @@ export async function savePersonaToDb(
     if (maxCharsPerReply !== undefined) {
       maxCharsByTenant.set(tenantId, maxCharsPerReply ?? null);
     }
+    try {
+      const { TenantPromptConfigService } = await import('../services/tenant-prompt-config.service');
+      TenantPromptConfigService.invalidateCache(tenantId);
+    } catch {}
     return true;
   }
 }

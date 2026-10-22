@@ -736,7 +736,7 @@ export class GenerationStage {
       }
     }
 
-    const assistantMessage = parsed.assistantMessage;
+    let assistantMessage = parsed.assistantMessage;
     let toolCalls = parsed.toolCalls;
     const cleanContent = parsed.cleanContent;
     const callReasoning = parsed.reasoning;
@@ -748,6 +748,38 @@ export class GenerationStage {
 
     // Tracing Call 1 (Tool Routing): latensi bersih model + token/biaya per-call
     let parsedCalls = parsed.parsedCalls;
+    // Kontrak tool terpaksa: bila router mengembalikan nol tool padahal pipeline
+    // sudah memaksa calculate_delivery (sinyal lokasi), jalankan tool itu dengan
+    // entitas pesan saat ini. Jangan biarkan turn jatuh ke fallback kalengan.
+    if (
+      parsedCalls.length === 0 &&
+      typeof dynamicToolChoice === 'object' &&
+      dynamicToolChoice?.function?.name === 'calculate_delivery'
+    ) {
+      const callId = `forced_delivery_${Date.now()}`;
+      const args = { locationText: cleanIncomingText };
+      const synthetic = {
+        id: callId,
+        type: 'function',
+        function: { name: 'calculate_delivery', arguments: JSON.stringify(args) },
+      };
+      assistantMessage = {
+        ...(assistantMessage && typeof assistantMessage === 'object'
+          ? assistantMessage
+          : { role: 'assistant', content: null }),
+        content: null,
+        tool_calls: [synthetic],
+      };
+      toolCalls = [synthetic];
+      parsedCalls = [{ name: 'calculate_delivery', args, _raw: synthetic }];
+      console.warn(JSON.stringify({
+        event: 'CALL1_EMPTY_FORCED_TOOL_FALLBACK_APPLIED',
+        tenantId: turn.tenantId,
+        conversationId: turn.conversationId,
+        tool: 'calculate_delivery',
+        timestamp: new Date().toISOString(),
+      }));
+    }
     // Atomic Routing: 1 turn = 1 tool utama (mitigasi parallel spraying).
     // Prioritas berpegang pada gate sistem (bukan hafalan pola): coverage la
     // pembatas jangkauan (luar area → tolak) setara kunci keamanan bisnis,

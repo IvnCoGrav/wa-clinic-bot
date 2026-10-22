@@ -3,6 +3,33 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 272. [Baseline Eval] Baseline Evaluasi LLM: CM-07/CM-08 Pre-Existing & Eval Berbayar Manual-Only (2026-10-21, OPEN)
+
+- **Status:** OPEN (Keputusan arsitektur sadar untuk efisiensi biaya API LLM eksternal).
+- **Gejala / Akar Masalah:**
+  - Evaluasi smoke/persona/numeric LLM yang menggunakan API berbayar (`tests/evals/` atau skrip evaluasi eksternal) tidak boleh dijalankan otomatis di pipeline CI/CD rutin atau unit test lokal tanpa instruksi eksplisit pengguna.
+  - Skenario baseline CM-07/CM-08 telah dibuktikan pre-existing sebelum perbaikan P1/P2 ini.
+- **Dampak:** Evaluasi eksternal berbayar di-skip dalam test suite reguler (`npm test` offline-only).
+- **Rencana Masa Depan:** Evaluasi berbayar hanya dijalankan secara on-demand / manual saat rilis versi mayor atau verifikasi kualitas jawaban komprehensif.
+
+## 271. [WABA/Payment Proof] Gambar Inbound WABA Belum Diteruskan ke attachFromInbound (2026-10-21, OPEN — EXCLUDED TEMPORARILY)
+
+- **Status:** OPEN (Eksplisit diexclude / ditunda untuk sementara waktu sesuai keputusan pengguna pada 2026-10-21; kode dan test WABA TIDAK DISENTUH).
+- **Bukti:**
+  - `src/routes/waba-webhook.route.ts:191` menyimpan media via `mediaService.saveInboundMedia`, tetapi tidak memanggil `attachFromInbound`.
+  - Paritas WAHA ada di `src/routes/webhook.route.ts:826` yang memanggil `customer-payment-proof.service.ts -> attachFromInbound`.
+  - Signature service: `src/services/customer-payment-proof.service.ts:280` (`attachFromInbound(params)`).
+- **Dampak:** Bukti pembayaran berupa gambar yang dikirim pelanggan via nomor WhatsApp Cloud API (WABA) tersimpan di media storage tetapi tidak otomatis di-attach ke data reservasi via Vision AI.
+- **Rencana Masa Depan:** Panggil `attachFromInbound` secara fire-and-forget di background setelah `saveInboundMedia` di `src/routes/waba-webhook.route.ts`, lalu lengkapi dengan spy test di `tests/integration/waba-webhook-route.test.ts`.
+
+## 270. [Persona/Config] Persona Split-Brain Residual & Editor 4-Section Dashboard (2026-10-21, RESOLVED)
+
+- **Status:** RESOLVED (Bridge runtime `TenantPromptConfigService` + rute backend `GET|PUT /api/admin/persona/prompt-config` + UI tab "Advanced 4-Section Prompt" di dashboard selesai & teruji 100% hijau).
+- **Gejala / Solusi:**
+  - Sebelumnya UI admin dashboard hanya menyediakan editor 1-field untuk string persona legacy (`TenantPersona`), sehingga bagian `answeringHierarchy`, `negativeConstraints`, dan `medicalOverclaimRules` tidak dapat dikonfigurasi via UI secara dinamis.
+  - Sekarang admin dashboard telah dilengkapi Tab "Advanced 4-Section Prompt" di `AiPersona.tsx` yang memungkinkan admin mengedit ke-4 seksi prompt secara visual, menyimpan versi baru secara berkesinambungan (live versioning) dengan audit trail, serta menampilkan peringatan prioritas prompt yang transparan.
+  - Backend `settings.subroute.ts` menyediakan endpoint `GET|PUT /api/admin/persona/prompt-config` dengan validasi ketat, dan unit test `tests/unit/admin-persona-prompt-config.test.ts` mengunci perilakunya.
+
 ## 269. [Address/Split-Brain] Resolusi Toponimi Fuzzy, Elevasi Primary GPS & Alarm Palsu Shareloc (2026-10-18, IMPLEMENTED)
 
 - **Status:** IMPLEMENTED (Fase 1-3 selesai di domain, service, dan FE; paritas 1:1; 80 unit tests terkait alamat 100% hijau; persiapan skrip healing Fase 4 di `src/scripts/heal-customer-addresses-split-brain.ts`).

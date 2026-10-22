@@ -14,10 +14,41 @@ export interface PromptConfigSections {
   medicalOverclaimRules: string;
 }
 
-const promptCache = new Map<string, PromptConfigSections>();
+export type PromptConfigSource = 'active' | 'legacy' | 'default';
+
+export interface ResolvedPromptConfig {
+  config: PromptConfigSections | null;
+  source: PromptConfigSource;
+}
+
+const promptCache = new Map<string, ResolvedPromptConfig>();
 
 export class TenantPromptConfigService {
-  public static async getActivePromptConfig(tenantId: string = DEFAULT_TENANT_ID): Promise<PromptConfigSections | null> {
+  public static invalidateCache(tenantId: string = DEFAULT_TENANT_ID): void {
+    promptCache.delete(tenantId);
+  }
+
+  private static async getLegacyPersonaConfig(
+    tenantId: string
+  ): Promise<PromptConfigSections | null> {
+    try {
+      const row = await (prisma as any).tenantPersona.findUnique({
+        where: { tenant_id: tenantId },
+      });
+      const persona = typeof row?.persona === 'string' ? row.persona.trim() : '';
+      if (!persona) return null;
+
+      return {
+        ...this.getDefaultConfig(),
+        personalityTone: persona,
+      };
+    } catch {
+      return null;
+    }
+  }
+  public static async getPromptConfigMeta(
+    tenantId: string = DEFAULT_TENANT_ID
+  ): Promise<ResolvedPromptConfig> {
     const cached = promptCache.get(tenantId);
     if (cached) return cached;
 
@@ -34,8 +65,9 @@ export class TenantPromptConfigService {
           negativeConstraints: row.negative_constraints,
           medicalOverclaimRules: row.medical_overclaim_rules,
         };
-        promptCache.set(tenantId, config);
-        return config;
+        const result: ResolvedPromptConfig = { config, source: 'active' };
+        promptCache.set(tenantId, result);
+        return result;
       }
     } catch (e: any) {
       // Tabel/kolom belum termigrasi (Issue #30) → null senyap (fallback statis).
@@ -44,7 +76,21 @@ export class TenantPromptConfigService {
       }
     }
 
-    return null;
+    const legacy = await this.getLegacyPersonaConfig(tenantId);
+    if (legacy) {
+      const result: ResolvedPromptConfig = { config: legacy, source: 'legacy' };
+      promptCache.set(tenantId, result);
+      return result;
+    }
+
+    return { config: null, source: 'default' };
+  }
+
+  public static async getActivePromptConfig(
+    tenantId: string = DEFAULT_TENANT_ID
+  ): Promise<PromptConfigSections | null> {
+    const resolved = await this.getPromptConfigMeta(tenantId);
+    return resolved.config;
   }
 
   public static async saveNewVersion(
@@ -82,7 +128,10 @@ export class TenantPromptConfigService {
       }),
     ]);
 
-    promptCache.set(tenantId, data);
+    promptCache.set(tenantId, {
+      config: data,
+      source: 'active',
+    });
   }
 
   public static getDefaultConfig(): PromptConfigSections {
@@ -131,6 +180,6 @@ export class TenantPromptConfigService {
 
   /** Clear cache untuk testing */
   public static __clearCacheForTest(tenantId: string = DEFAULT_TENANT_ID): void {
-    promptCache.delete(tenantId);
+    this.invalidateCache(tenantId);
   }
 }

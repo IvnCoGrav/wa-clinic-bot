@@ -7,6 +7,7 @@ import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 import { ConversationStateMachine } from '../../src/state-machine/machine';
 import { TypingService } from '../../src/services/typing.service';
 import { CapturingWAHAClient, setupOfflineEnv } from '../integration/helpers/chat-harness';
+import { captureWarningEvents } from '../integration/helpers/warning-capture';
 import { GoalTracker } from '../../src/v3/state/goal-tracker';
 import { GenerationStage } from '../../src/v3/agent/pipeline/generation-stage';
 import { ConversationState } from '@prisma/client';
@@ -85,12 +86,12 @@ function routeStub(payload: any): any {
   if (toolChoice && typeof toolChoice === 'object' && toolChoice?.function?.name) {
     const name = toolChoice.function.name;
     const args: Record<string, unknown> = {};
-    if (name === 'calculate_delivery') args.text = lastUser;
+    if (name === 'calculate_delivery') args.locationText = String(lastUser);
     return llmResponse('', makeToolCall(name, args));
   }
 
   if (/kelurahan|kecamatan|alamat|rumah di|share|sedati|rungkut|waru|tuban|sidoarjo|surabaya/.test(text)) {
-    return llmResponse('', makeToolCall('calculate_delivery', { text: lastUser }));
+    return llmResponse('', makeToolCall('calculate_delivery', { locationText: String(lastUser) }));
   }
   if (/harga|biaya|berapa|pricelist|price|rp|promo/.test(text)) {
     return llmResponse('', makeToolCall('get_catalog_and_price', { query: lastUser }));
@@ -101,15 +102,21 @@ function routeStub(payload: any): any {
   return llmResponse('Baik Bunda, kami bantu ya.');
 }
 
-/** Stub generator (Call 2). Menggemakan hasil tool apa adanya + 1 kalimat penutup. */
+/** Stub generator (Call 2). Memakai balasan resmi tool, bukan JSON mentah. */
 function generateStub(payload: any): any {
   const messages: any[] = payload?.messages ?? [];
   const toolMsg = [...messages].reverse().find((m) => m.role === 'tool');
-  const raw = toolMsg ? String(toolMsg.content) : '';
-  // Ambil potongan yang terlihat seperti data resmi (nama layanan/harga) tanpa mengarang.
-  const excerpt = raw.replace(/\s+/g, ' ').slice(0, 600);
+  let official = '';
+  try {
+    const parsed = JSON.parse(String(toolMsg?.content ?? ''));
+    if (typeof parsed?.suggestedTemplateReply === 'string') {
+      official = parsed.suggestedTemplateReply.trim();
+    }
+  } catch {}
   return llmResponse(
-    `Baik Bunda, berikut informasi yang bisa kami sampaikan. ${excerpt}\n\nApakah ada yang ingin ditanyakan lagi ya Bunda?`
+    official
+      ? `Baik Bunda, berikut informasi yang bisa kami sampaikan. ${official}\n\nApakah ada yang ingin ditanyakan lagi ya Bunda?`
+      : 'Baik Bunda, informasinya sudah kami cek. Ada lagi yang bisa kami bantu? 😊'
   );
 }
 
@@ -235,13 +242,16 @@ function hashId(id: string): number {
 
 describe('FASE 0 — Golden Regression Gate (real V3 pipeline, offline)', () => {
   let spy: ReturnType<typeof stubLlm>;
+  let warnings: ReturnType<typeof captureWarningEvents>;
 
   beforeAll(() => {
+    warnings = captureWarningEvents();
     spy = stubLlm();
   });
 
   afterAll(() => {
     spy.mockRestore();
+    warnings.restore();
   });
 
   it('dataset golden corpus valid', () => {
@@ -259,6 +269,7 @@ describe('FASE 0 — Golden Regression Gate (real V3 pipeline, offline)', () => 
       const allSkipped: string[] = [];
 
       for (const turn of scenario.turns) {
+        warnings.events.length = 0;
         await runTurn(ctx, turn.input);
         const reply = ctx.client.sentTexts.slice(-1)[0] ?? '';
         const session = await GoalTracker.getGoalSession(ctx.conversation.id, DEFAULT_TENANT_ID);
@@ -268,6 +279,16 @@ describe('FASE 0 — Golden Regression Gate (real V3 pipeline, offline)', () => 
         const slateEval = evaluateSlate(turn.slateAssertions, slate);
         allFailures.push(...slateEval.failures.map((f) => `turn ${turn.turn}: ${f}`));
         allSkipped.push(...slateEval.skipped.map((s) => `turn ${turn.turn}: ${s}`));
+
+        const schemaRejections = warnings.events.filter(
+          (e) => e.event === 'V3_TOOL_SCHEMA_REJECTED' && e.tool === 'calculate_delivery'
+        );
+        expect(schemaRejections, JSON.stringify(schemaRejections)).toEqual([]);
+
+        const hallucinations = warnings.events.filter(
+          (e) => e.event === 'FACTUAL_HALLUCINATION_DETECTED'
+        );
+        expect(hallucinations, JSON.stringify(hallucinations)).toEqual([]);
       }
 
       if (allSkipped.length > 0) {

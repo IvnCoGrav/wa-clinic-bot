@@ -42,7 +42,17 @@ export const AiPersona: React.FC = () => {
   const { toast, confirm } = useUiFeedback();
 
   // Tab State: 'prompt' | 'fewshots'
-  const [activeTab, setActiveTab] = useState<'prompt' | 'fewshots'>('prompt');
+  const [activeTab, setActiveTab] = useState<'prompt' | 'sections' | 'fewshots'>('prompt');
+
+  // 4-Section Prompt Config States
+  const [personalityTone, setPersonalityTone] = useState('');
+  const [answeringHierarchy, setAnsweringHierarchy] = useState('');
+  const [negativeConstraints, setNegativeConstraints] = useState('');
+  const [medicalOverclaimRules, setMedicalOverclaimRules] = useState('');
+  const [changeSummary, setChangeSummary] = useState('');
+  const [promptConfigSource, setPromptConfigSource] = useState<'active' | 'legacy' | 'default'>('default');
+  const [promptConfigLoading, setPromptConfigLoading] = useState(false);
+  const [isSavingPromptConfig, setIsSavingPromptConfig] = useState(false);
 
   // Persona Prompt States
   const [persona, setPersona] = useState('');
@@ -120,9 +130,77 @@ export const AiPersona: React.FC = () => {
     }
   };
 
+  // Load 4-Section Prompt Config
+  const loadPromptConfig = async () => {
+    setPromptConfigLoading(true);
+    try {
+      const res = await apiRequest('/api/admin/persona/prompt-config');
+      if (res && res.config) {
+        setPersonalityTone(res.config.personalityTone || '');
+        setAnsweringHierarchy(res.config.answeringHierarchy || '');
+        setNegativeConstraints(res.config.negativeConstraints || '');
+        setMedicalOverclaimRules(res.config.medicalOverclaimRules || '');
+      }
+      setPromptConfigSource(res?.source || 'default');
+    } catch (err: any) {
+      console.error('Failed to load 4-section prompt config:', err);
+      toast('Gagal memuat 4-section prompt config: ' + err.message, 'error');
+    } finally {
+      setPromptConfigLoading(false);
+    }
+  };
+
+  const handleSavePromptConfig = async () => {
+    if (
+      !personalityTone.trim() ||
+      !answeringHierarchy.trim() ||
+      !negativeConstraints.trim() ||
+      !medicalOverclaimRules.trim()
+    ) {
+      toast('Semua 4 section wajib diisi dan tidak boleh kosong.', 'info');
+      return;
+    }
+
+    const confirmed = await confirm({
+      title: 'Simpan Konfigurasi 4-Section Prompt?',
+      message:
+        'Konfigurasi 4-section ini akan menjadi versi aktif di database dan diprioritaskan di atas persona string legacy.',
+      confirmText: 'Ya, Simpan & Aktifkan',
+      cancelText: 'Batal',
+    });
+    if (!confirmed) return;
+
+    setIsSavingPromptConfig(true);
+    try {
+      const res = await apiRequest('/api/admin/persona/prompt-config', {
+        method: 'PUT',
+        body: JSON.stringify({
+          personalityTone,
+          answeringHierarchy,
+          negativeConstraints,
+          medicalOverclaimRules,
+          changeSummary: changeSummary.trim() || undefined,
+        }),
+      });
+      if (res && res.success) {
+        setPromptConfigSource('active');
+        toast(res.message || 'Konfigurasi 4-section berhasil disimpan!', 'success');
+        setChangeSummary('');
+      } else {
+        toast(res?.error || 'Gagal menyimpan konfigurasi', 'error');
+      }
+    } catch (err: any) {
+      console.error('Failed to save prompt config:', err);
+      toast(err.message || 'Gagal menyimpan konfigurasi', 'error');
+    } finally {
+      setIsSavingPromptConfig(false);
+    }
+  };
+
   useEffect(() => {
     loadPersona();
     loadExemplars();
+    loadPromptConfig();
   }, []);
 
   // Save Persona Prompt
@@ -367,6 +445,28 @@ export const AiPersona: React.FC = () => {
           </button>
         )}
 
+        {activeTab === 'sections' && (
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={loadPromptConfig}
+              disabled={promptConfigLoading || isSavingPromptConfig}
+              className="px-3 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] text-[#54656f] dark:text-[#aebac1] rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
+              title="Muat ulang dari server"
+            >
+              <RotateCcw size={13} />
+              <span>Muat Ulang</span>
+            </button>
+            <button
+              onClick={handleSavePromptConfig}
+              disabled={promptConfigLoading || isSavingPromptConfig}
+              className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
+            >
+              <Save size={14} />
+              <span>{isSavingPromptConfig ? 'Menyimpan...' : 'Simpan 4-Section'}</span>
+            </button>
+          </div>
+        )}
+
         {activeTab === 'fewshots' && (
           <div className="flex items-center space-x-2">
             <button
@@ -397,8 +497,31 @@ export const AiPersona: React.FC = () => {
           }`}
         >
           <FileText size={15} />
-          <span>System Persona & Rules</span>
+          <span>System Persona (Legacy)</span>
           {activeTab === 'prompt' && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#008069] rounded-t-full" />
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('sections')}
+          className={`pb-3 text-xs font-bold transition flex items-center space-x-2 relative ${
+            activeTab === 'sections' ? 'text-[#008069]' : 'text-[#667781] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-white'
+          }`}
+        >
+          <Sparkles size={15} />
+          <span>Advanced 4-Section Prompt</span>
+          {promptConfigSource === 'active' && (
+            <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 font-semibold">
+              Aktif
+            </span>
+          )}
+          {promptConfigSource === 'legacy' && (
+            <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 font-semibold">
+              Legacy Bridge
+            </span>
+          )}
+          {activeTab === 'sections' && (
             <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#008069] rounded-t-full" />
           )}
         </button>
@@ -516,6 +639,144 @@ export const AiPersona: React.FC = () => {
             </div>
           )}
         </>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 2: ADVANCED 4-SECTION PROMPT CONFIG                                   */}
+      {/* ========================================================================= */}
+      {activeTab === 'sections' && (
+        <div className="space-y-6">
+          {/* Warning Banner */}
+          <div className="p-4 rounded-2xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 flex items-start space-x-3 text-xs text-amber-900 dark:text-amber-200">
+            <Info className="flex-shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" size={18} />
+            <div className="space-y-1">
+              <p className="font-bold text-amber-950 dark:text-amber-100">
+                Prioritas Otoritas Prompt (Anti Split-Brain):
+              </p>
+              <p className="text-amber-800 dark:text-amber-300 leading-relaxed">
+                Menyimpan konfigurasi 4-Section ini akan membuat versi baru di database. Konfigurasi 4-section aktif <strong>secara otomatis menjadi prioritas utama</strong> pada AI Engine V3, mengesampingkan prompt single-string legacy di tab sebelah.{' '}
+                {promptConfigSource === 'active' && 'Saat ini konfigurasi 4-Section KUSTOM aktif.'}
+                {promptConfigSource === 'legacy' && 'Belum ada 4-Section aktif. Engine memakai bridge persona legacy sebagai Personality & Tone; section lain memakai default klinik.'}
+                {promptConfigSource === 'default' && 'Belum ada konfigurasi 4-Section aktif; seluruh section memakai default klinik.'}
+              </p>
+            </div>
+          </div>
+
+          {promptConfigLoading ? (
+            <div className="flex justify-center items-center py-20">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#008069] border-t-transparent"></div>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {/* Section 1 */}
+              <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#222e35] rounded-2xl p-5 space-y-3 shadow-xs">
+                <div className="flex justify-between items-center pb-2 border-b border-[#e9edef] dark:border-[#222e35]">
+                  <span className="text-xs font-bold text-[#111b21] dark:text-white uppercase tracking-wider flex items-center space-x-1.5">
+                    <FileText size={14} className="text-[#008069]" />
+                    <span>1. Personality & Tone (Gaya Bahasa, Sapaan & Karakter Bidan)</span>
+                  </span>
+                  <span className="text-[10px] text-[#8696a0]">Karakter: {personalityTone.length}</span>
+                </div>
+                <textarea
+                  rows={7}
+                  value={personalityTone}
+                  onChange={(e) => setPersonalityTone(e.target.value)}
+                  className="w-full p-4 bg-[#f8fafc] dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] leading-relaxed font-mono resize-y shadow-xs"
+                  placeholder="Gaya bicara hangat, santai, partikel WhatsApp, emoji lembut..."
+                />
+              </div>
+
+              {/* Section 2 */}
+              <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#222e35] rounded-2xl p-5 space-y-3 shadow-xs">
+                <div className="flex justify-between items-center pb-2 border-b border-[#e9edef] dark:border-[#222e35]">
+                  <span className="text-xs font-bold text-[#111b21] dark:text-white uppercase tracking-wider flex items-center space-x-1.5">
+                    <FileText size={14} className="text-[#008069]" />
+                    <span>2. Answering Hierarchy (Alur & Prioritas Menjawab)</span>
+                  </span>
+                  <span className="text-[10px] text-[#8696a0]">Karakter: {answeringHierarchy.length}</span>
+                </div>
+                <textarea
+                  rows={7}
+                  value={answeringHierarchy}
+                  onChange={(e) => setAnsweringHierarchy(e.target.value)}
+                  className="w-full p-4 bg-[#f8fafc] dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] leading-relaxed font-mono resize-y shadow-xs"
+                  placeholder="Prioritas jawab pertanyaan dulu, cek FAQ asal klinik, penanganan keluhan fisik..."
+                />
+              </div>
+
+              {/* Section 3 */}
+              <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#222e35] rounded-2xl p-5 space-y-3 shadow-xs">
+                <div className="flex justify-between items-center pb-2 border-b border-[#e9edef] dark:border-[#222e35]">
+                  <span className="text-xs font-bold text-[#111b21] dark:text-white uppercase tracking-wider flex items-center space-x-1.5">
+                    <FileText size={14} className="text-[#008069]" />
+                    <span>3. Negative Constraints (Batasan Mutlak & Aturan Emas)</span>
+                  </span>
+                  <span className="text-[10px] text-[#8696a0]">Karakter: {negativeConstraints.length}</span>
+                </div>
+                <textarea
+                  rows={9}
+                  value={negativeConstraints}
+                  onChange={(e) => setNegativeConstraints(e.target.value)}
+                  className="w-full p-4 bg-[#f8fafc] dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] leading-relaxed font-mono resize-y shadow-xs"
+                  placeholder="Maksimal 2-3 kalimat, dilarang sebut harga/durasi tanpa ditanya, anti-todong jadwal..."
+                />
+              </div>
+
+              {/* Section 4 */}
+              <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#222e35] rounded-2xl p-5 space-y-3 shadow-xs">
+                <div className="flex justify-between items-center pb-2 border-b border-[#e9edef] dark:border-[#222e35]">
+                  <span className="text-xs font-bold text-[#111b21] dark:text-white uppercase tracking-wider flex items-center space-x-1.5">
+                    <FileText size={14} className="text-[#008069]" />
+                    <span>4. Medical Overclaim Rules (Batasan Klaim Medis)</span>
+                  </span>
+                  <span className="text-[10px] text-[#8696a0]">Karakter: {medicalOverclaimRules.length}</span>
+                </div>
+                <textarea
+                  rows={5}
+                  value={medicalOverclaimRules}
+                  onChange={(e) => setMedicalOverclaimRules(e.target.value)}
+                  className="w-full p-4 bg-[#f8fafc] dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] leading-relaxed font-mono resize-y shadow-xs"
+                  placeholder="Perawatan bersifat komplementer/suportif, larangan garansi pasti sembuh..."
+                />
+              </div>
+
+              {/* Change summary & bottom save */}
+              <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#222e35] rounded-2xl p-5 space-y-4 shadow-xs">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-[#111b21] dark:text-white">
+                    Catatan Perubahan Versi (Opsional untuk Riwayat Audit)
+                  </label>
+                  <input
+                    type="text"
+                    value={changeSummary}
+                    onChange={(e) => setChangeSummary(e.target.value)}
+                    placeholder="mis. Penyesuaian aturan durasi pijat bayi & nada sapaan ramah"
+                    className="w-full p-2.5 bg-[#f8fafc] dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
+                  />
+                </div>
+
+                <div className="flex justify-end items-center space-x-3 pt-2 border-t border-[#e9edef] dark:border-[#222e35]">
+                  <button
+                    onClick={loadPromptConfig}
+                    disabled={promptConfigLoading || isSavingPromptConfig}
+                    className="px-4 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] text-[#54656f] dark:text-[#aebac1] rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
+                  >
+                    <RotateCcw size={14} />
+                    <span>Muat Ulang</span>
+                  </button>
+                  <button
+                    onClick={handleSavePromptConfig}
+                    disabled={promptConfigLoading || isSavingPromptConfig}
+                    className="px-5 py-2.5 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
+                  >
+                    <Save size={14} />
+                    <span>{isSavingPromptConfig ? 'Menyimpan Versi Baru...' : 'Simpan 4-Section (Live Version)'}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {/* ========================================================================= */}
