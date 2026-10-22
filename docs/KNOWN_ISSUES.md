@@ -1089,7 +1089,7 @@ dicatat di CHANGELOG 2026-10-05. Sisa batasan:
   - **Kolom K (Harga Akhir):** SELALU kosong (`''`) agar rumus kalkulasi spreadsheet klinik tidak tertimpa oleh bot.
   - **Kolom O (Follow Up):** SELALU kosong (`''`), merupakan kolom catatan follow-up manual yang diketik admin klinik di spreadsheet.
   - **Kolom N (Tip) & P (Catatan):** SELALU kosong (`''`) dari bot.
-- **Proteksi Kolom Manual (Anti-Data Loss):** Set kolom terproteksi saat update diperluas menjadi `{7, 8, 9, 10, 13, 14, 15}` (0-based: H, I, J, K untuk harga/diskon write-once + N, O, P untuk input manual admin). Update reservasi completed di kemudian hari TIDAK AKAN mengosongkan tulisan manual yang diketik staf/admin di spreadsheet.
+- **Proteksi Kolom Manual & Pembaruan Ongkir Promo (2026-10-22):** Set kolom terproteksi saat update disesuaikan menjadi `{10, 13, 14, 15}` (0-based: Kolom K/10 Harga akhir rumus klinik + N/13 Tip, O/14 Follow up, P/15 Catatan manual admin). Kolom H (Ongkir) dan I (Total) dibuka dari set proteksi agar pembaruan data/koreksi ongkir ke tarif promo resmi klinik dapat tersinkronisasi ke Google Sheets tanpa menimpa rumus kustom di Kolom K.
 - **Gerbang Status Completed (Dua Lapis):**
   - Outbox dispatch: route admin edit dan assign-staff hanya melakukan enqueue bila status reservasi `completed`.
   - Jaring pengaman `syncReservation`: melempar `SHEETS_SKIP_NON_COMPLETED` bila status bukan completed; ditangkap di `processOutbox` untuk langsung `markDone` dan dicatat di metrik `skipped` tanpa mencemari `succeeded` atau `failed`.

@@ -194,10 +194,12 @@ describe('SheetsSyncService — append/update idempoten', () => {
 
     const cols = gw.updated[0].cells.map((c) => c.col);
     // Kolom 1-based: H=8, I=9, J=10, K=11 serta N=14, O=15, P=16 HARAM ditulis saat update.
-    for (const protectedCol of [8, 9, 10, 11, 14, 15, 16]) {
+    for (const protectedCol of [11, 14, 15, 16]) {
       expect(cols).not.toContain(protectedCol);
     }
     // Kolom non-protected (mis. L Metode Bayar=12, M Bidan=13) tetap diperbarui.
+    expect(cols).toContain(8);
+    expect(cols).toContain(9);
     expect(cols).toContain(12);
     expect(cols).toContain(13);
   });

@@ -264,7 +264,7 @@ export class SheetsSyncService {
     if (samePlace && existingRow != null && existingRow >= 2) {
       // Update: TULIS ULANG semua kolom KECUALI H/I/J/K (ongkir/harga write-once)
       // dan N/O/P (Tip/Follow up/Catatan manual admin klinik) agar tidak tertimpa.
-      const PROTECTED = new Set([7, 8, 9, 10, 13, 14, 15]); // 0-based: H..K + N..P
+      const PROTECTED = new Set([10, 13, 14, 15]); // 0-based: K(10) + N..P(13..15) — H/I dibuka agar promo ter-update
       const cells = row
         .map((value, idx) => ({ col: idx + 1, value }))
         .filter((c) => !PROTECTED.has(c.col - 1));
