@@ -29,6 +29,7 @@ import {
   MessageSquare,
   Plus,
 } from 'lucide-react';
+import { evaluatePaymentProof } from '../../utils/paymentProof';
 import { extractBabiesFromRawText } from '../../utils/reservationBabies';
 import { resolveStreetAddress } from '../../utils/reservationAddress';
 import { resolveChildAgeRows, momGestationalBadge } from '../../utils/clinicalAge';
@@ -680,6 +681,25 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                 {/* Bukti Bayar (upload + lihat) */}
                 <div className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-2">
                   <span className="text-[11px] text-[#667781] font-bold block uppercase">Bukti Bayar</span>
+                  {(() => {
+                    const proofEval = evaluatePaymentProof(displayReservation);
+                    if (!proofEval.isMismatch) return null;
+                    return (
+                      <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs space-y-1">
+                        <div className="flex items-center gap-1.5 font-bold text-rose-700">
+                          <AlertTriangle size={13} className="shrink-0 animate-pulse" />
+                          <span>Peringatan: Nominal Bukti Transfer Tidak Sesuai</span>
+                        </div>
+                        <div className="text-[11px] grid grid-cols-2 gap-1 pt-1 border-t border-rose-200">
+                          <div>Tagihan Resmi: <strong className="text-xs">Rp {proofEval.totalExpected.toLocaleString('id-ID')}</strong></div>
+                          <div>Nominal di Struk: <strong className="text-xs text-rose-700 font-extrabold">Rp {proofEval.receiptAmount?.toLocaleString('id-ID')}</strong></div>
+                        </div>
+                        <div className="text-[11px] font-semibold text-rose-800">
+                          Selisih: {proofEval.isUnderpaid ? `Kurang Rp ${Math.abs(proofEval.difference).toLocaleString('id-ID')}` : `Lebih Rp ${proofEval.difference.toLocaleString('id-ID')}`}
+                        </div>
+                      </div>
+                    );
+                  })()}
                   {displayReservation.proof_url ? (
                     <div className="flex items-center space-x-2.5">
                       <img

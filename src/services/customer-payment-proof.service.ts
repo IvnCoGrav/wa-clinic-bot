@@ -100,7 +100,7 @@ export async function attachCustomerPaymentProof(params: {
   mediaUrl: string;
   signal: ReceiptSignal;
   waMessageId: string;
-}): Promise<{ attached: boolean; reason: string; reservationId?: string }> {
+}): Promise<{ attached: boolean; reason: string; reservationId?: string; isMismatch?: boolean; receiptAmount?: number | null }> {
   const { tenantId, customerId, conversationId, mediaUrl, signal, waMessageId } = params;
 
   try {
@@ -183,20 +183,26 @@ export async function attachCustomerPaymentProof(params: {
 
     let finalPurchaseValue = existingPurchaseValue;
     let isUnderpaid = false;
+    let isMismatch = false;
 
     if (signal.amount != null && signal.amount > 0) {
-      if (existingPurchaseValue > 0 && signal.amount < totalExpected) {
-        isUnderpaid = true;
-        console.warn(
-          `[PAYMENT PROOF DOWNSIDE GUARD] Transfer Rp ${signal.amount} < total tagihan Rp ${totalExpected} (layanan: ${existingPurchaseValue} + ongkir: ${deliveryFee}) pada reservasi ${reservation.id}. Mempertahankan purchase_value resmi.`
-        );
+      if (existingPurchaseValue > 0) {
+        if (signal.amount !== totalExpected) {
+          isMismatch = true;
+        }
+        if (signal.amount < totalExpected) {
+          isUnderpaid = true;
+          console.warn(
+            `[PAYMENT PROOF DOWNSIDE GUARD] Transfer Rp ${signal.amount} < total tagihan Rp ${totalExpected} (layanan: ${existingPurchaseValue} + ongkir: ${deliveryFee}) pada reservasi ${reservation.id}. Mempertahankan purchase_value resmi.`
+          );
+        }
       } else if (existingPurchaseValue === 0) {
         finalPurchaseValue = Math.max(0, signal.amount - deliveryFee);
       }
     }
 
-    // Flag staff review jika rekening asing atau nominal di bawah tagihan
-    const shouldVerify = !methodInfo.isOfficialDestination || isUnderpaid || reservation.needs_staff_verification;
+    // Flag staff review jika rekening asing, nominal di bawah tagihan, atau nominal tidak sesuai
+    const shouldVerify = !methodInfo.isOfficialDestination || isUnderpaid || isMismatch || reservation.needs_staff_verification;
 
     // 6. Pertahankan 'approved' bila CAPI sudah pernah terkirim (kontrak kanonik).
     const updateData: any = {
@@ -208,13 +214,36 @@ export async function attachCustomerPaymentProof(params: {
       purchase_value: finalPurchaseValue,
     };
 
+    if (signal.amount != null && signal.amount > 0) {
+      updateData.receipt_amount = signal.amount;
+    }
+
+    const currentRaw = reservation.raw_text || '';
+    const rawTags: string[] = [];
+
+    if (signal.amount != null && signal.amount > 0) {
+      const amountTag = `[RECEIPT_AMOUNT:${signal.amount}]`;
+      if (!currentRaw.includes(amountTag)) {
+        rawTags.push(amountTag);
+      }
+      if (isMismatch) {
+        const mismatchTag = `[TRANSFER_MISMATCH:TRANSFER=${signal.amount};EXPECTED=${totalExpected};DIFF=${signal.amount - totalExpected}]`;
+        if (!currentRaw.includes('[TRANSFER_MISMATCH:')) {
+          rawTags.push(mismatchTag);
+        }
+      }
+    }
+
     if (signal.referenceNumber) {
       updateData.receipt_reference = signal.referenceNumber.trim();
       const refTag = `[RECEIPT_REF:${signal.referenceNumber.trim()}]`;
-      const currentRaw = reservation.raw_text || '';
       if (!currentRaw.includes(refTag)) {
-        updateData.raw_text = currentRaw ? `${currentRaw}\n${refTag}` : refTag;
+        rawTags.push(refTag);
       }
+    }
+
+    if (rawTags.length > 0) {
+      updateData.raw_text = currentRaw ? `${currentRaw}\n${rawTags.join('\n')}` : rawTags.join('\n');
     }
 
     await prisma.reservation.update({
@@ -238,6 +267,9 @@ export async function attachCustomerPaymentProof(params: {
         payload: {
           paymentMethod: methodInfo.label,
           amount: signal.amount,
+          receiptAmount: signal.amount,
+          totalExpected,
+          isMismatch,
           reference: signal.referenceNumber,
           mediaUrl,
           isOfficialDestination: methodInfo.isOfficialDestination,
@@ -261,12 +293,15 @@ export async function attachCustomerPaymentProof(params: {
             reservationId: reservation.id,
             mediaUrl,
             paymentMethod: methodInfo.label,
+            receiptAmount: signal.amount ?? null,
+            totalExpected,
+            isMismatch,
           },
         })
         .catch(() => {});
     } catch {}
 
-    return { attached: true, reason: 'PROOF_ATTACHED', reservationId: reservation.id };
+    return { attached: true, reason: 'PROOF_ATTACHED', reservationId: reservation.id, isMismatch, receiptAmount: signal.amount ?? null };
   } catch (err: any) {
     console.error(`[PAYMENT PROOF ERROR] Gagal menempelkan bukti bayar: ${err?.message || err}`);
     return { attached: false, reason: 'INTERNAL_ERROR' };

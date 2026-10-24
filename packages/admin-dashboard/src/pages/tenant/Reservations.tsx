@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { apiRequest, getCachedApiResponse } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { Reservation } from '../../types';
+import { evaluatePaymentProof } from '../../utils/paymentProof';
 import { extractBabiesFromRawText } from '../../utils/reservationBabies';
 import { getWibDateKey, getTodayWibDate } from '../../utils/dateWib';
 import { resolveChildAgeRows, momGestationalBadge } from '../../utils/clinicalAge';
@@ -1486,21 +1487,34 @@ export const Reservations: React.FC = () => {
                         );
                       })()}
                       
-                      {res.status === 'completed' && res.proof_url && (
-                        <div className="pt-1 flex justify-end">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setProofModal(res);
-                            }}
-                            className="px-2.5 py-1 bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] rounded-xl transition text-[11px] font-semibold flex items-center space-x-1 cursor-pointer"
-                            title={`Lihat Bukti Bayar (${getPaymentMethodLabel(res.payment_method)})`}
-                          >
-                            <Eye size={13} />
-                            <span>Bukti Bayar</span>
-                          </button>
-                        </div>
-                      )}
+                      {Boolean(res.proof_url) && (() => {
+                        const proofEval = evaluatePaymentProof(res);
+                        return (
+                          <div className="pt-1 flex items-center justify-end gap-1.5">
+                            {proofEval.isMismatch && (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-rose-600 text-white flex items-center gap-1 uppercase tracking-wider">
+                                <AlertTriangle size={10} className="shrink-0" />
+                                <span>{proofEval.badgeLabel}</span>
+                              </span>
+                            )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setProofModal(res);
+                              }}
+                              className={`px-2.5 py-1 rounded-xl transition text-[11px] font-semibold flex items-center space-x-1 cursor-pointer border ${
+                                proofEval.isMismatch
+                                  ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
+                                  : 'bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border-[#c2e7e0]'
+                              }`}
+                              title={`Lihat Bukti Bayar (${getPaymentMethodLabel(res.payment_method)})`}
+                            >
+                              <Eye size={13} />
+                              <span>Bukti Bayar</span>
+                            </button>
+                          </div>
+                        );
+                      })()}
                     </div>
                   ))
                 )}
@@ -1668,18 +1682,40 @@ export const Reservations: React.FC = () => {
                             </td>
                             <td className="py-3.5 px-5">{getStatusBadge(res.status, res.raw_text)}</td>
                             <td className="py-3.5 px-5 whitespace-nowrap">
-                              {res.status === 'completed' && res.proof_url ? (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setProofModal(res);
-                                  }}
-                                  className="p-2 bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] rounded-xl transition-all flex items-center justify-center cursor-pointer"
-                                  title={`Lihat Bukti Bayar — ${getPaymentMethodLabel(res.payment_method)}`}
-                                >
-                                  <Eye size={15} />
-                                </button>
-                              ) : res.payment_method ? (
+                              {res.proof_url ? (() => {
+                                const proofEval = evaluatePaymentProof(res);
+                                return (
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setProofModal(res);
+                                      }}
+                                      className={`p-2 rounded-xl transition-all flex items-center justify-center cursor-pointer border ${
+                                        proofEval.isMismatch
+                                          ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200 shadow-2xs'
+                                          : 'bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border-[#c2e7e0]'
+                                      }`}
+                                      title={`Lihat Bukti Bayar — ${getPaymentMethodLabel(res.payment_method)}`}
+                                    >
+                                      <Eye size={15} />
+                                    </button>
+                                    {proofEval.isMismatch ? (
+                                      <span
+                                        className="px-2 py-0.5 rounded-md bg-rose-100 text-rose-700 border border-rose-200 text-[10px] font-bold flex items-center gap-1 cursor-help"
+                                        title={proofEval.description}
+                                      >
+                                        <AlertTriangle size={11} className="shrink-0" />
+                                        <span>Beda: Rp {proofEval.receiptAmount?.toLocaleString('id-ID')}</span>
+                                      </span>
+                                    ) : res.payment_method ? (
+                                      <span className="px-2 py-0.5 rounded bg-[#f0f2f5] text-[11px] text-[#54656f] font-semibold">
+                                        {getPaymentMethodLabel(res.payment_method)}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                );
+                              })() : res.payment_method ? (
                                 <span className="px-2 py-0.5 rounded bg-[#f0f2f5] text-[11px] text-[#54656f] font-semibold">
                                   {getPaymentMethodLabel(res.payment_method)}
                                 </span>
@@ -1772,6 +1808,32 @@ export const Reservations: React.FC = () => {
                 </button>
               </div>
 
+              {(() => {
+                const modalEval = evaluatePaymentProof(proofModal);
+                if (!modalEval.isMismatch) return null;
+                return (
+                  <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 space-y-1.5">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-rose-700">
+                      <AlertTriangle size={15} className="shrink-0 animate-pulse" />
+                      <span>Peringatan: Nominal Transfer Tidak Sesuai Tagihan</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-rose-200">
+                      <div>
+                        <span className="text-[10px] text-rose-600 block uppercase font-bold">Total Tagihan:</span>
+                        <strong>Rp {modalEval.totalExpected.toLocaleString('id-ID')}</strong>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-rose-600 block uppercase font-bold">Nominal di Struk:</span>
+                        <strong className="text-rose-700 font-extrabold">Rp {modalEval.receiptAmount?.toLocaleString('id-ID')}</strong>
+                      </div>
+                    </div>
+                    <div className="text-[11px] font-semibold text-rose-800">
+                      Selisih: {modalEval.isUnderpaid ? `Kurang Rp ${Math.abs(modalEval.difference).toLocaleString('id-ID')}` : `Lebih Rp ${modalEval.difference.toLocaleString('id-ID')}`}
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div className="text-xs space-y-1.5 bg-[#f8fafc] border border-[#e9edef] rounded-2xl p-3.5">
                 <div className="flex justify-between">
                   <span className="text-[#667781]">Pasien:</span>
@@ -1784,11 +1846,19 @@ export const Reservations: React.FC = () => {
                   <span className="font-bold text-[#111b21]">{getPaymentMethodLabel(proofModal.payment_method)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[#667781]">Nilai:</span>
+                  <span className="text-[#667781]">Tagihan Resmi:</span>
                   <span className="font-bold text-[#111b21]">
                     {proofModal.purchase_value ? `Rp ${proofModal.purchase_value.toLocaleString('id-ID')}` : '-'}
                   </span>
                 </div>
+                {proofModal.receipt_amount != null && (
+                  <div className="flex justify-between">
+                    <span className="text-[#667781]">Nominal di Struk:</span>
+                    <span className="font-bold text-rose-600">
+                      Rp {proofModal.receipt_amount.toLocaleString('id-ID')}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between items-center pt-1 border-t border-[#e9edef]">
                   <span className="text-[#667781]">Status:</span>
                   {getStatusBadge(proofModal.status, proofModal.raw_text)}

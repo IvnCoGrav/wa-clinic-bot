@@ -61,6 +61,7 @@ export interface Reservation {
   purchase_value?: number | null;
   payment_method?: 'CASH' | 'TRANSFER' | 'QRIS' | string | null;
   proof_url?: string | null;
+  receipt_amount?: number | null;
   baby_details?: BabyDetail[];
   mom_gestational_info?: MomGestationalInfo;
   assigned_staff_id?: string | null;

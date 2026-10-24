@@ -564,6 +564,7 @@ export class StaffReservationService {
           arrived_at: true,
           payment_method: true,
           proof_url: true,
+          receipt_amount: true,
           assigned_staff: {
             select: {
               id: true,
@@ -888,6 +889,7 @@ export class StaffReservationService {
           purchase_occurred_at: true,
           payment_method: true,
           proof_url: true,
+          receipt_amount: true,
           customer: {
             select: {
               name: true,
@@ -1147,6 +1149,7 @@ export class StaffReservationService {
           arrived_at: true,
           payment_method: true,
           proof_url: true,
+          receipt_amount: true,
           customer: {
             select: {
               name: true,

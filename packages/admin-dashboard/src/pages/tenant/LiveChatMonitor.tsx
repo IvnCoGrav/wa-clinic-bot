@@ -7,6 +7,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useCopilot } from '../../contexts/CopilotContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { connectLiveChatSse } from '../../services/liveChatSse';
+import { evaluatePaymentProof } from '../../utils/paymentProof';
 import { getCleanTreatmentName } from '../../utils/treatmentFormatter';
 import { resolveStaffName } from '../../utils/resolveStaffName';
 import { formatClinicalAge } from '../../utils/clinicalAge';
@@ -5614,61 +5615,95 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 )}
 
                 {/* Active Payment Proof Banner (Bukti Bayar Masuk) */}
-                {Boolean(currentActiveReservation?.proof_url) && (
-                  <div className={`mx-1.5 mb-1.5 px-3 py-2 rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center justify-between gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition-all bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700/60 text-emerald-950 dark:text-emerald-100`}>
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Receipt size={16} className="text-emerald-700 dark:text-emerald-400 shrink-0" />
-                      <div className="flex flex-col justify-center leading-tight min-w-0">
-                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
-                          BUKTI TRANSFER ({currentActiveReservation.payment_method || 'Transfer'})
-                        </span>
-                        <span className="text-[11px] truncate font-medium text-emerald-900 dark:text-emerald-200">
-                          {currentActiveReservation.purchase_value ? `Rp ${currentActiveReservation.purchase_value.toLocaleString('id-ID')}` : 'Nominal terlampir'} • Status: <span className="font-bold">{currentActiveReservation.purchase_review_status === 'approved' ? 'Lunas' : 'Menunggu Verifikasi CS'}</span>
-                        </span>
+                {Boolean(currentActiveReservation?.proof_url) && (() => {
+                  const proofEval = evaluatePaymentProof(currentActiveReservation);
+                  const isMismatch = proofEval.isMismatch;
+                  const bannerBg = isMismatch
+                    ? 'bg-rose-50/95 dark:bg-rose-950/60 border-rose-300 dark:border-rose-700/60 text-rose-950 dark:text-rose-100'
+                    : 'bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700/60 text-emerald-950 dark:text-emerald-100';
+                  const iconColor = isMismatch
+                    ? 'text-rose-600 dark:text-rose-400'
+                    : 'text-emerald-700 dark:text-emerald-400';
+                  const headerColor = isMismatch
+                    ? 'text-rose-800 dark:text-rose-300'
+                    : 'text-emerald-800 dark:text-emerald-300';
+                  const subtextColor = isMismatch
+                    ? 'text-rose-900 dark:text-rose-200'
+                    : 'text-emerald-900 dark:text-emerald-200';
+
+                  return (
+                    <div className={`mx-1.5 mb-1.5 px-3 py-2 rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center justify-between gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition-all ${bannerBg}`}>
+                      <div className="flex items-center gap-2 min-w-0">
+                        {isMismatch ? (
+                          <AlertTriangle size={16} className={`${iconColor} shrink-0 animate-pulse`} />
+                        ) : (
+                          <Receipt size={16} className={`${iconColor} shrink-0`} />
+                        )}
+                        <div className="flex flex-col justify-center leading-tight min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className={`font-extrabold text-[9px] uppercase tracking-wider ${headerColor}`}>
+                              BUKTI TRANSFER ({currentActiveReservation.payment_method || 'Transfer'})
+                            </span>
+                            {isMismatch && (
+                              <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-rose-600 text-white uppercase tracking-wider shadow-2xs">
+                                NOMINAL TIDAK SESUAI
+                              </span>
+                            )}
+                          </div>
+                          <span className={`text-[11px] truncate font-medium ${subtextColor}`}>
+                            {proofEval.description} • Status: <span className="font-bold">{currentActiveReservation.purchase_review_status === 'approved' ? 'Lunas' : 'Menunggu Verifikasi CS'}</span>
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => setProofModalReservation(currentActiveReservation)}
-                        className="px-2.5 py-1 rounded-lg bg-white dark:bg-emerald-900 border border-emerald-300 dark:border-emerald-600 text-emerald-800 dark:text-emerald-200 text-xs font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-800 transition flex items-center gap-1 cursor-pointer shadow-2xs"
-                        title="Lihat Bukti Transfer"
-                      >
-                        <Eye size={13} />
-                        <span>Lihat Bukti</span>
-                      </button>
-                      {currentActiveReservation.purchase_review_status !== 'approved' && (
+                      <div className="flex items-center gap-1.5 shrink-0">
                         <button
                           type="button"
-                          onClick={async () => {
-                            const ok = await confirm({
-                              title: 'Tandai Lunas & Setujui?',
-                              message: `Setujui pembayaran ${currentActiveReservation.payment_method || 'Transfer'} sebesar ${currentActiveReservation.purchase_value ? `Rp ${currentActiveReservation.purchase_value.toLocaleString('id-ID')}` : ''}?`,
-                              confirmText: 'Ya, Tandai Lunas',
-                              cancelText: 'Batal',
-                            });
-                            if (!ok) return;
-                            try {
-                              await apiRequest(`/api/admin/reservation/${currentActiveReservation.id}/approve-purchase`, {
-                                method: 'POST',
-                                body: JSON.stringify({ force: true, reason: 'CS Verified Payment Proof' }),
-                              });
-                              toast('Pembayaran berhasil disetujui & ditandai lunas.', 'success');
-                              await handleReservationUpdate();
-                            } catch (err: any) {
-                              toast(`Gagal memproses persetujuan: ${err?.message || 'Terjadi kesalahan'}`, 'error');
-                            }
-                          }}
-                          className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-2xs"
-                          title="Tandai pembayaran telah diverifikasi CS"
+                          onClick={() => setProofModalReservation(currentActiveReservation)}
+                          className={`px-2.5 py-1 rounded-lg border text-xs font-semibold transition flex items-center gap-1 cursor-pointer shadow-2xs ${
+                            isMismatch
+                              ? 'bg-white dark:bg-rose-900 border-rose-300 dark:border-rose-600 text-rose-800 dark:text-rose-200 hover:bg-rose-100 dark:hover:bg-rose-800'
+                              : 'bg-white dark:bg-emerald-900 border-emerald-300 dark:border-emerald-600 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-800'
+                          }`}
+                          title="Lihat Bukti Transfer"
                         >
-                          <CheckCircle size={13} />
-                          <span>Tandai Lunas</span>
+                          <Eye size={13} />
+                          <span>Lihat Bukti</span>
                         </button>
-                      )}
+                        {currentActiveReservation.purchase_review_status !== 'approved' && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const ok = await confirm({
+                                title: isMismatch ? 'Peringatan: Nominal Tidak Sesuai. Tetap Setujui?' : 'Tandai Lunas & Setujui?',
+                                message: isMismatch
+                                  ? `Nominal struk (Rp ${proofEval.receiptAmount?.toLocaleString('id-ID')}) TIDAK SESUAI dengan tagihan resmi (Rp ${proofEval.totalExpected.toLocaleString('id-ID')}). Tetap setujui pembayaran?`
+                                  : `Setujui pembayaran ${currentActiveReservation.payment_method || 'Transfer'} sebesar ${currentActiveReservation.purchase_value ? `Rp ${currentActiveReservation.purchase_value.toLocaleString('id-ID')}` : ''}?`,
+                                confirmText: isMismatch ? 'Ya, Tetap Setujui' : 'Ya, Tandai Lunas',
+                                cancelText: 'Batal',
+                              });
+                              if (!ok) return;
+                              try {
+                                await apiRequest(`/api/admin/reservation/${currentActiveReservation.id}/approve-purchase`, {
+                                  method: 'POST',
+                                  body: JSON.stringify({ force: true, reason: isMismatch ? 'CS Override Mismatched Payment Proof' : 'CS Verified Payment Proof' }),
+                                });
+                                toast('Pembayaran berhasil disetujui & ditandai lunas.', 'success');
+                                await handleReservationUpdate();
+                              } catch (err: any) {
+                                toast(`Gagal memproses persetujuan: ${err?.message || 'Terjadi kesalahan'}`, 'error');
+                              }
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-2xs"
+                            title="Tandai pembayaran telah diverifikasi CS"
+                          >
+                            <CheckCircle size={13} />
+                            <span>Tandai Lunas</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* Active Confirmed / Terjadwal Alert Banner */}
                  {!activeHoldReservation && activeConfirmedReservation && (
@@ -7203,6 +7238,32 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 </button>
               </div>
 
+              {(() => {
+                const modalEval = evaluatePaymentProof(proofModalReservation);
+                if (!modalEval.isMismatch) return null;
+                return (
+                  <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 space-y-1.5">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-rose-700">
+                      <AlertTriangle size={15} className="shrink-0 animate-pulse" />
+                      <span>Peringatan: Nominal Transfer Tidak Sesuai Tagihan</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-rose-200">
+                      <div>
+                        <span className="text-[10px] text-rose-600 block uppercase font-bold">Total Tagihan:</span>
+                        <strong>Rp {modalEval.totalExpected.toLocaleString('id-ID')}</strong>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-rose-600 block uppercase font-bold">Nominal di Struk:</span>
+                        <strong className="text-rose-700 font-extrabold">Rp {modalEval.receiptAmount?.toLocaleString('id-ID')}</strong>
+                      </div>
+                    </div>
+                    <div className="text-[11px] font-semibold text-rose-800">
+                      Selisih: {modalEval.isUnderpaid ? `Kurang Rp ${Math.abs(modalEval.difference).toLocaleString('id-ID')}` : `Lebih Rp ${modalEval.difference.toLocaleString('id-ID')}`}
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div className="text-xs space-y-1.5 bg-[#f8fafc] border border-[#e9edef] rounded-2xl p-3.5">
                 <div className="flex justify-between">
                   <span className="text-[#667781]">Pasien:</span>
@@ -7215,11 +7276,19 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   <span className="font-bold text-[#111b21]">{proofModalReservation.payment_method || 'Transfer'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[#667781]">Nilai:</span>
+                  <span className="text-[#667781]">Tagihan Resmi:</span>
                   <span className="font-bold text-[#111b21]">
                     {proofModalReservation.purchase_value ? `Rp ${proofModalReservation.purchase_value.toLocaleString('id-ID')}` : '-'}
                   </span>
                 </div>
+                {proofModalReservation.receipt_amount != null && (
+                  <div className="flex justify-between">
+                    <span className="text-[#667781]">Nominal di Struk:</span>
+                    <span className="font-bold text-rose-600">
+                      Rp {proofModalReservation.receipt_amount.toLocaleString('id-ID')}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between items-center pt-1 border-t border-[#e9edef]">
                   <span className="text-[#667781]">Status Review:</span>
                   <span className={`font-semibold uppercase ${

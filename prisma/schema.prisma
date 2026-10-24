@@ -305,6 +305,7 @@ model Reservation {
   payment_method           String?
   proof_url                String?
   receipt_reference        String?
+  receipt_amount           Int?
   is_repeat_order          Boolean           @default(false)
   otw_sent_at              DateTime?
   arrived_at               DateTime?
@@ -348,6 +349,7 @@ model Reservation {
   @@index([series_id])
   @@index([customer_address_id])
   @@index([tenant_id, receipt_reference])
+  @@index([tenant_id, receipt_amount])
   @@unique([tenant_id, request_id])
   @@map("reservations")
 }

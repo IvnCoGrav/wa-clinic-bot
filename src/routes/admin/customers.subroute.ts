@@ -1026,6 +1026,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
             purchase_value: true,
             payment_method: true,
             proof_url: true,
+            receipt_amount: true,
             delivery_fee: true,
             needs_staff_verification: true,
             raw_text: true,

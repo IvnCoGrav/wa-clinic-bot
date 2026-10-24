@@ -10,6 +10,15 @@ import { CONFIRMED_FAMILY_STATUSES, isHoldActive, isTreatmentWithinActiveWindow 
 
 // WABA free-form text hanya diperbolehkan dalam 24 jam sejak pesan inbound terakhir customer
 const WABA_WINDOW_MS = 24 * 60 * 60 * 1000;
+export function parseReceiptAmountFromRawText(rawText: string | null | undefined): number | null {
+  if (!rawText) return null;
+  const match = rawText.match(/\[RECEIPT_AMOUNT:(\d+)\]/);
+  if (match && match[1]) {
+    const val = parseInt(match[1], 10);
+    return isNaN(val) ? null : val;
+  }
+  return null;
+}
 
 export interface LiveChatConversationItem {
   conversationId: string;
@@ -79,6 +88,7 @@ export interface LiveChatReservationItem {
   purchase_value?: number | null;
   payment_method?: string | null;
   proof_url?: string | null;
+  receipt_amount?: number | null;
   delivery_fee?: number | null;
   purchase_occurred_at?: string | null;
   needs_staff_verification?: boolean;
@@ -1291,6 +1301,7 @@ export class LiveChatService {
         purchase_value: Number(res.purchase_value) || 0,
         payment_method: (res as any).payment_method || null,
         proof_url: (res as any).proof_url || null,
+        receipt_amount: (res as any).receipt_amount !== undefined && (res as any).receipt_amount !== null ? Number((res as any).receipt_amount) : parseReceiptAmountFromRawText(res.raw_text),
         delivery_fee: (res as any).delivery_fee ?? null,
         purchase_occurred_at: res.purchase_occurred_at
           ? (typeof res.purchase_occurred_at === 'string' ? res.purchase_occurred_at : (res.purchase_occurred_at as Date).toISOString())
