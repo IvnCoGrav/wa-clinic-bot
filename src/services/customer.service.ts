@@ -2757,10 +2757,28 @@ export class CustomerService {
     try {
       const cust = await prisma.customer.findFirst({
         where: { id: customerId, ...(tenantId ? { tenant_id: tenantId } : {}) },
-        select: { ongkir: true },
+        select: { ongkir: true, preferences: true },
       });
-      const legacy = (cust as any)?.ongkir;
-      if (typeof legacy === 'number' && legacy >= 0) return legacy;
+      if (cust) {
+        const prefs = (cust.preferences as any) || {};
+
+        // 2. Prioritas Kedua: Hasil estimasi kesepakatan chat WhatsApp (promo)
+        const estOngkir = prefs.distance_estimate?.ongkir;
+        if (typeof estOngkir === 'number' && !isNaN(estOngkir) && estOngkir >= 0) {
+          return estOngkir;
+        }
+
+        // 3. Prioritas Ketiga: Kartu buku alamat tersimpan utama
+        const addrs = Array.isArray(prefs.saved_addresses) ? prefs.saved_addresses : [];
+        const primaryAddr = addrs.find((a: any) => a.isPrimary) || addrs[0];
+        if (typeof primaryAddr?.ongkir === 'number' && !isNaN(primaryAddr.ongkir) && primaryAddr.ongkir >= 0) {
+          return primaryAddr.ongkir;
+        }
+
+        // 4. Fallback legacy: Customer.ongkir resmi
+        const legacy = (cust as any)?.ongkir;
+        if (typeof legacy === 'number' && legacy >= 0) return legacy;
+      }
     } catch {}
     return null;
   }

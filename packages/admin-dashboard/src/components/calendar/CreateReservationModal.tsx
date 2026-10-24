@@ -79,6 +79,48 @@ export interface SlotRecommendation {
   score: number;
 }
 
+/**
+ * Resolusi Ongkir Default Pelanggan (SSOT Ongkir Promo).
+ * Mengutamakan harga promo (hasil kesepakatan chat atau kartu alamat tersimpan atau tier netOngkir)
+ * daripada kolom legacy customer.ongkir yang mungkin masih memegang tarif normal kotor.
+ */
+function resolveCustomerDefaultOngkir(
+  cust: any,
+  deliveryTiers: DeliveryTierItem[] = []
+): number | '' {
+  if (!cust) return 0;
+
+  // 1. Prioritas Tertinggi: Ongkir Promo dari Kesepakatan Chat WhatsApp
+  const estOngkir = cust.preferences?.distance_estimate?.ongkir;
+  if (typeof estOngkir === 'number' && !isNaN(estOngkir) && estOngkir >= 0) {
+    return estOngkir;
+  }
+
+  // 2. Prioritas Kedua: Kartu Alamat Tersimpan (Buku Alamat)
+  const addrs = Array.isArray(cust.preferences?.saved_addresses) ? cust.preferences.saved_addresses : [];
+  const primaryAddr = addrs.find((a: any) => a.isPrimary) || addrs[0];
+  if (typeof primaryAddr?.ongkir === 'number' && !isNaN(primaryAddr.ongkir) && primaryAddr.ongkir >= 0) {
+    return primaryAddr.ongkir;
+  }
+
+  // 3. Prioritas Ketiga: Hitung Otomatis dari Jarak km menggunakan Tier (Net Ongkir = Promo)
+  // Tidak mensyaratkan deliveryTiers.length > 0 agar memanfaatkan fallback internal (anti race-condition)
+  const dist = Number(cust.distance_km || cust.distanceKm);
+  if (dist > 0) {
+    const calc = calculateOngkirFromTiers(dist, deliveryTiers);
+    if (!calc.isOutOfCoverage) {
+      return calc.netOngkir;
+    }
+  }
+
+  // 4. Prioritas Keempat: Kolom Profil customer.ongkir
+  if (cust.ongkir !== undefined && cust.ongkir !== null && !isNaN(Number(cust.ongkir)) && Number(cust.ongkir) >= 0) {
+    return Number(cust.ongkir);
+  }
+
+  return 0;
+}
+
 interface CreateReservationModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -735,8 +777,11 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         setCustomerId(cust.id || res.customer_id || '');
         setSelectedCustomerInfo(cust);
         setCustomerSearch(`${cust.name || 'Bunda'} (${cust.phone || ''})`);
-        if (cust.ongkir !== undefined && cust.ongkir !== null && !isNaN(Number(cust.ongkir))) {
-          setOngkir(Number(cust.ongkir));
+        const existingFee = res.delivery_fee ?? (res as any).ongkir;
+        if (existingFee !== undefined && existingFee !== null && !isNaN(Number(existingFee))) {
+          setOngkir(Number(existingFee));
+        } else {
+          setOngkir(resolveCustomerDefaultOngkir(cust, deliveryTiers));
         }
       } else if (res.customer_id) {
         setCustomerId(res.customer_id);
@@ -758,7 +803,12 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
               setCustomerId(c.id);
               setSelectedCustomerInfo(c);
               setCustomerSearch(`${c.name || 'Bunda'} (${c.phone || ''})`);
-              if (c.ongkir != null && !isNaN(Number(c.ongkir))) setOngkir(Number(c.ongkir));
+              const existingFee = (data as any)?.delivery_fee ?? (data as any)?.ongkir ?? res.delivery_fee ?? (res as any).ongkir;
+              if (existingFee !== undefined && existingFee !== null && !isNaN(Number(existingFee))) {
+                setOngkir(Number(existingFee));
+              } else {
+                setOngkir(resolveCustomerDefaultOngkir(c, deliveryTiers));
+              }
             }
             const fullBabies = (c?.children && c.children.length > 0)
               ? c.children
@@ -883,14 +933,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       setBabies(initialBabies.map((b) => ({ name: b.name || '', ageText: b.ageText || '' })));
     }
 
-    // Auto calculate & fill ongkir from customer profile / distance via DB delivery tiers
-    if (c.ongkir !== undefined && c.ongkir !== null && !isNaN(Number(c.ongkir))) {
-      setOngkir(Number(c.ongkir));
-    } else if (c.distance_km || c.distanceKm) {
-      const dist = Number(c.distance_km || c.distanceKm);
-      const calc = calculateOngkirFromTiers(dist, deliveryTiers);
-      setOngkir(calc.netOngkir);
-    }
+    // Auto calculate & fill ongkir from customer profile / distance via DB delivery tiers (SSOT Promo)
+    setOngkir(resolveCustomerDefaultOngkir(c, deliveryTiers));
   };
 
   // Filter services by search term
@@ -1928,7 +1972,12 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                           setSavedAsNewHouse(false);
                           if (addrItem.address) setAddress(addrItem.address);
                           if (addrItem.landmark) setLandmark(addrItem.landmark);
-                          if (addrItem.ongkir != null) setOngkir(addrItem.ongkir);
+                          if (addrItem.ongkir != null) {
+                            setOngkir(addrItem.ongkir);
+                          } else if (addrItem.distanceKm) {
+                            const calc = calculateOngkirFromTiers(Number(addrItem.distanceKm), deliveryTiers);
+                            if (!calc.isOutOfCoverage) setOngkir(calc.netOngkir);
+                          }
                         }}
                         className={`text-left p-2.5 rounded-lg border text-xs min-h-[44px] transition-all cursor-pointer active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-[#008069] focus-visible:outline-none ${
                           isSelected
@@ -2876,7 +2925,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
               <div>
                 <label className="block text-[11px] font-semibold text-rose-600 dark:text-rose-300 mb-1 flex items-center gap-1">
                   <Percent size={11} />
-                  <span>Diskon / Promo (Rp)</span>
+                  <span>Diskon Layanan (Rp)</span>
+                  <span className="text-[10px] text-gray-500 dark:text-gray-400 font-normal ml-1">(*Khusus potongan harga layanan, bukan ongkir)</span>
                 </label>
                 <input
                   type="number"
