@@ -1,5 +1,6 @@
 import { prisma } from '../db/client';
 import { BabyDetail, classifyPatientEntity } from '../utils/reservation-text-parser';
+import { isGenericCustomerName } from '../utils/name-sanitizer';
 import { TreatmentCategory, ConversationState } from '@prisma/client';
 
 /**
@@ -47,12 +48,13 @@ export class ReservationLifecycleService {
     try {
       const { customerService } = await import('./customer.service');
       const targetName = (customerName || '').trim();
-      if (targetName && targetName.length > 1) {
-        const cleanName = targetName.replace(/^(?:bunda|ibu|mama|mom|mbak|mas|kak|kakak|ny|ny\.)\s+/i, '').trim();
+      if (targetName && targetName.length > 1 && !isGenericCustomerName(targetName)) {
+        const isMale = /^(?:ayah|pak|bapak|mas)\s+/i.test(targetName);
+        const cleanName = targetName.replace(/^(?:ayah|pak|bapak|bunda|ibu|mama|mom|mbak|mas|kak|kakak|ny|ny\.)\s+/i, '').trim();
         if (cleanName && !['bunda', 'ibu', 'mama', 'mom', 'mbak', 'mas', 'kak', 'kakak', 'pasien', 'customer', '-'].includes(cleanName.toLowerCase())) {
           // Integritas penamaan: kecamatan hidup di kolom kecamatan (dipakai
           // formatter Google Contacts dari DB), DILARANG ditempel ke Customer.name.
-          const contactFormattedName = `Bunda ${cleanName}`.trim();
+          const contactFormattedName = isMale ? `Ayah ${cleanName}`.trim() : `Bunda ${cleanName}`.trim();
           await customerService.updateCustomerName(customerId, contactFormattedName, tenantId).catch(() => {});
         }
       }

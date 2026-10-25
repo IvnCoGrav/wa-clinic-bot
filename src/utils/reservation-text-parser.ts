@@ -421,13 +421,9 @@ export function parseReservationText(rawText: string): ParseResult {
 
   const babies = buildBabyDetails(babyNameLines, babyAgeLines);
 
-  // Jika Nama Bunda kosong tapi Nama Bayi ada, gunakan nama bayi
-  if ((!name || isPlaceholderText(name)) && (babyName || babyNameLines.length > 0)) {
-    const validBaby = babyName || babyNameLines.find(b => !isPlaceholderText(b)) || '';
-    if (validBaby && !isPlaceholderText(validBaby)) {
-      name = validBaby;
-    }
-  }
+  // Integritas Penamaan (Fase 2): Nama bayi DILARANG dijadikan nama pemesan.
+  // Bila Nama Bunda kosong/placeholder, biarkan kosong agar nama master customer di DB
+  // tidak tercemar menjadi "Bunda {NamaAnak}". Data anak hidup di array `babies`.
 
   // Validasi Field Krusial: Minimal Alamat & (Nama Bunda atau Nama Bayi)
   const missingFields: string[] = [];
@@ -986,9 +982,7 @@ export function parseConversationalReservation(rawText: string): ParsedReservati
     }
   }
 
-  if (!name && babyName) {
-    name = babyName;
-  }
+  // Integritas Penamaan: Nama bayi tidak boleh disalin ke nama pemesan.
 
   // 2. Ekstrak Usia Bayi / Anak
   const ageMatch = rawText.match(/(\d+\s*(?:bulan|bln|tahun|thn|th|hari|hr|minggu|mg|mgg))/i);

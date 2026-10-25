@@ -6,7 +6,7 @@ import { hasBypassLabel } from '../utils/customer-bypass';
 import { responseCacheService } from './response-cache.service';
 import { pickGpsTier, GpsCandidate } from './location-ingest.service';
 import { sanitizeKelurahanInput } from '../utils/kelurahan-guard';
-import { sanitizeCustomerNameForStorage, isValidChildName } from '../utils/name-sanitizer';
+import { sanitizeCustomerNameForStorage, isValidChildName, isGenericCustomerName } from '../utils/name-sanitizer';
 import {
   SavedCustomerAddress,
   UpsertSavedAddressInput,
@@ -953,8 +953,18 @@ export class CustomerService {
 
   /**
    * Update nama kontak customer (misal: "Bunda Sari" / "Bunda Sari Waru")
+   * 
+   * PROTEKSI INTEGRITAS (Fase 1):
+   * Bila `options?.force !== true` (panggilan otomatis bot/form/sync):
+   * Jika nama customer di DB sudah sah (bukan generic), DILARANG ditimpa
+   * demi mencegah mutasi nama saat mendaftarkan anak kedua atau sinkronisasi WAHA.
    */
-  public async updateCustomerName(customerId: string, name: string, tenantId: string): Promise<any> {
+  public async updateCustomerName(
+    customerId: string,
+    name: string,
+    tenantId: string,
+    options?: { force?: boolean }
+  ): Promise<any> {
     // Gerbang SEAM TULIS (fondasional): noise toponimi ("Kecamatan X", "Kec. Y")
     // DILARANG masuk kolom `name`. Bila hasil bersih kosong/placeholder, JANGAN
     // menimpa nama lama (anti data-loss) — cukup lewati penulisan nama.
@@ -962,6 +972,15 @@ export class CustomerService {
     if (!safeName) {
       const current = await this.getCustomerById(customerId, tenantId);
       return current;
+    }
+
+    // Gerbang Proteksi Identitas Master
+    if (!options?.force) {
+      const current = await this.getCustomerById(customerId, tenantId);
+      if (current?.name && !isGenericCustomerName(current.name)) {
+        // Nama di database sudah definitif dan sah. Pertahankan tanpa perubahan.
+        return current;
+      }
     }
     try {
       const updated = await prisma.customer.update({

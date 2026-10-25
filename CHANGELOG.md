@@ -4,6 +4,35 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-25 - Fix: Proteksi Fondasional Integritas Penamaan Master Customer (Anti-Mutasi Liar & Anti-Pembajakan Nama Bayi)
+
+- **Latar Belakang & Akar Masalah**:
+  - Ditemukan anomali di mana nama master customer di database (dan Google Contacts) sering berganti secara liar:
+    1. Pembajakan nama anak di parser form: Saat form reservasi dikirim dengan Nama Bunda kosong/placeholder dan Nama Bayi terisi, parser menduplikasi nama bayi menjadi nama Bunda, sehingga master contact tersimpan sebagai "Bunda {NamaAnak}".
+    2. Kerentanan penimpaan multi-anak: Customer yang mendaftarkan anak kedua dengan nama anak berbeda akan menimpa nama profil master Bunda karena alur reservasi tidak memiliki gerbang proteksi status nama definitif.
+    3. Bug logika sinkronisasi riwayat WAHA: Kondisi pengecekan customerName !== customer.name menyebabkan PushName WhatsApp lama (seperti nama olshop/toko) menimpa nama resmi customer.
+    4. Amputasi gelar pemesan pria: Alur pasca-reservasi selalu memaksakan prefix "Bunda" meskipun pemesan mencantumkan "Ayah {Nama}".
+- **Arsitektur & Perubahan (Solusi Fondasional & Seam Kanonis Tunggal)**:
+  - `src/utils/name-sanitizer.ts`:
+    - Memperkaya `GENERIC_NAME_PLACEHOLDERS` dengan sebutan sapaan pria/keluarga: 'ayah', 'pak', 'bapak', 'bu'.
+    - Mengimplementasikan helper kanonis `isGenericCustomerName(name)` untuk membedakan nama placeholder/sapaan tunggal vs nama definitif sah.
+  - `src/services/customer.service.ts`:
+    - Menambahkan gerbang proteksi identitas master pada `updateCustomerName`: jika nama customer di DB sudah sah (bukan generic) dan panggilan tidak menyertakan `{ force: true }`, penulisan ditolak secara aman untuk mencegah data-loss identitas.
+  - `src/v3/tools/save-reservation.tool.ts`:
+    - Mengimpor dan mere-export `isGenericCustomerName` kanonis dari `name-sanitizer.ts` (menghapus duplikasi leksikon lokal).
+  - `src/routes/admin/reservation-crud.route.ts`:
+    - Meneruskan opsi `{ force }` pada endpoint admin `/api/admin/reservation/quick-hold` agar penimpaan hanya terjadi atas kehendak eksplisit admin.
+  - `src/utils/reservation-text-parser.ts`:
+    - Menghapus blok fallback pembajakan nama bayi ke nama Bunda (L424-430 & L989-990). Jika Nama Bunda kosong/placeholder, nama dibiarkan kosong dan data anak tetap hidup terisolasi pada entitas `babies`.
+  - `src/services/waha-history-sync.service.ts`:
+    - Memperbaiki kondisi backfill menjadi *true empty backfill* (`isCurrentGeneric && !isGenericCustomerName(customerName)`).
+  - `src/services/reservation-lifecycle.service.ts` & `src/state-machine/machine.ts` & `src/routes/admin/reservation-dispatch.route.ts`:
+    - Menambahkan guard `!isGenericCustomerName(customerName)` sebelum mencoba memperbarui nama, dan mendeteksi gender/sapaan pria (`Ayah Rudi` alih-alih `Bunda Rudi`).
+- **Pengujian & Validasi**:
+  - `tests/unit/customer-name-protection.test.ts`: 11 uji unit adversarial mencakup 7 skenario (anti-pembajakan nama bayi, proteksi nama lintas reservasi, backfill nama generic, anti-penimpaan WAHA, admin force override, gelar ayah, helper kanonis).
+  - `tests/unit/capi-payload-sanitizer.test.ts`: Menyelaraskan ekspektasi uji dengan aturan proteksi identitas (nama bunda tetap falsy, nama bayi ada di `babies[0].name`).
+  - Verifikasi: `npm run build` (zero error) dan 96 uji unit terkait 100% hijau.
+
 
 #### 2026-10-22 - Feat: Tabel Tarif Ongkir Homecare Terklasifikasi Dinamis pada Halaman Pricelist Publik (/pricelist)
 

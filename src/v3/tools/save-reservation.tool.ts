@@ -141,19 +141,9 @@ export function hasStreetDetail(address: string | undefined): boolean {
   return hasDigit && lower.trim().length >= 8;
 }
 
-/** Nama generik/placeholder yang TIDAK sah sebagai nama Bunda (data-driven). */
-const GENERIC_CUSTOMER_NAMES = [
-  'bunda', 'ibu', 'bapak', 'kak', 'sandbox customer', 'customer', 'pasien', '-', 'bu', 'null',
-];
-
-/** True bila nama belum lengkap/sah untuk booking homecare. */
-export function isGenericCustomerName(name: string | undefined): boolean {
-  const trimmed = (name || '').trim();
-  if (trimmed.length < 2) return true;
-  const lower = trimmed.toLowerCase();
-  if (lower.includes('*')) return true;
-  return GENERIC_CUSTOMER_NAMES.some((g) => lower === g);
-}
+/** Re-export helper isGenericCustomerName kanonis dari name-sanitizer */
+import { isGenericCustomerName } from '../../utils/name-sanitizer';
+export { isGenericCustomerName };
 
 /**
  * Batas usia anak untuk label klinis NIFAS (audit Turn 8: ibu dari anak

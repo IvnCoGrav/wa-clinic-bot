@@ -11,6 +11,7 @@ import { getBrandIdentity } from '../config/brand';
 import { LLM_HISTORY_LIMIT } from '../config/llm-context';
 import { contextStorage } from '../utils/context';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
+import { isGenericCustomerName } from '../utils/name-sanitizer';
 
 export class ConversationStateMachine {
   private typingSvc: TypingService;
@@ -413,8 +414,10 @@ export class ConversationStateMachine {
         // Customer.name. Sebelumnya `Bunda ${name} ${kecamatan}` memproduksi
         // duplikasi wilayah ("Bunda Ella Kecamatan Waru Kecamatan Waru").
         const customerName = parsed.name?.trim();
-        if (customerName && customerName.length > 0 && customerName.toLowerCase() !== 'bunda') {
-          const contactName = `Bunda ${customerName}`.trim();
+        if (customerName && customerName.length > 0 && !isGenericCustomerName(customerName)) {
+          const isMale = /^(?:ayah|pak|bapak|mas)\s+/i.test(customerName);
+          const cleanName = customerName.replace(/^(?:ayah|pak|bapak|bunda|ibu|mama|mom|mbak|mas|kak|kakak|ny|ny\.)\s+/i, '').trim();
+          const contactName = isMale ? `Ayah ${cleanName}`.trim() : `Bunda ${cleanName || customerName}`.trim();
           try {
             const { customerService } = await import('../services/customer.service');
             await customerService.updateCustomerName(customer.id, contactName, tenantId);

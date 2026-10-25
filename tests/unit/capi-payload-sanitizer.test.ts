@@ -45,8 +45,9 @@ Treatment : (Mohon bisa diisi Bunda 😊)
     expect(result.success).toBe(true);
     expect(result.reservation).toBeDefined();
 
-    // Nama Bunda kosong tapi nama bayi ada -> nama customer jadi Hasbi
-    expect(result.reservation?.name).toBe('Hasbi');
+    // Sesuai proteksi identitas: nama pemesan TIDAK dibajak nama bayi jika nama bunda kosong
+    expect(result.reservation?.name).toBeFalsy();
+    expect(result.reservation?.babies[0]?.name).toBe('Hasbi');
     expect(result.reservation?.treatmentCategory).toBe('BABY');
     expect(result.reservation?.treatmentDetail).toContain('Pijat Bayi Ceria');
     // Moms treatment should NOT exist

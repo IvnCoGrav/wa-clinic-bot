@@ -48,10 +48,38 @@ export const COMMON_DISTRICTS = [
 ].sort((a, b) => b.length - a.length);
 
 const GENERIC_NAME_PLACEHOLDERS = new Set([
-  'bunda', 'ibu', 'mama', 'moms', 'momm', 'mbak', 'mas', 'kak', 'kakak', 'ny', 'ny.',
+  'bunda', 'ibu', 'bu', 'mama', 'moms', 'momm', 'mbak', 'mas', 'kak', 'kakak', 'ny', 'ny.',
+  'ayah', 'pak', 'bapak',
   'pasien', 'customer', 'pelanggan', 'lead', 'sandbox customer', 'test', 'tester', 'dummy',
   '-', '--', '...', 'null', 'undefined'
 ]);
+
+/**
+ * Memeriksa apakah sebuah nama customer berstatus generik/placeholder/belum definitif.
+ * Nama generik diizinkan diperbarui saat customer memberikan nama asli di reservasi pertama.
+ * Nama yang SUDAH DEFINITIF (bukan generic) DILARANG ditimpa otomatis oleh transaksi berikutnya.
+ */
+export function isGenericCustomerName(name: string | null | undefined): boolean {
+  if (!name) return true;
+  const trimmed = name.trim();
+  if (trimmed.length < 2) return true;
+  const lower = trimmed.toLowerCase();
+
+  // Pola masking nomor, placeholder, atau simbol teknis
+  if (lower.includes('*') || lower === 'null' || lower === 'undefined' || lower === '-') return true;
+
+  // Leksikon generic
+  if (GENERIC_NAME_PLACEHOLDERS.has(lower)) return true;
+
+  // Pola awalan label generik sistem (mis. "Pelanggan 6319", "Customer 0812")
+  if (/^(?:pelanggan|customer|lead|pasien|sandbox customer)\b/i.test(lower)) return true;
+
+  // Nama yang HANYA terdiri dari kata sapaan saja tanpa nama orang (mis. "Bunda", "Ibu", "Ayah", "Pak", "Bu")
+  const stripped = lower.replace(/^(?:bunda|ibu|bu|mama|moms|mbak|mas|kak|kakak|ny|ny\.|ayah|pak|bapak)\s*/i, '').trim();
+  if (!stripped || stripped.length < 2) return true;
+
+  return false;
+}
 
 // Leksikon toponimi tambahan yang DIINJEKSI saat boot (data-driven dari dataset
 // gazetteer). DILARANG mengimpor gazetteer di sini (modul ini harus pure/ringan

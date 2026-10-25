@@ -7,6 +7,7 @@ import { messageService } from './message.service';
 import { getLiveChatHub } from './live-chat-hub.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
+import { isGenericCustomerName } from '../utils/name-sanitizer';
 
 export interface WahaHistorySyncResult {
   success: boolean;
@@ -241,7 +242,8 @@ export class WahaHistorySyncService {
               skipFollowUpScheduling: true,
             });
 
-            if (customerName && customerName !== customer.name) {
+            const isCurrentGeneric = !customer.name || isGenericCustomerName(customer.name);
+            if (customerName && isCurrentGeneric && !isGenericCustomerName(customerName)) {
               try {
                 await customerService.updateCustomerName(customer.id, customerName, tenantId);
                 customer.name = customerName;
@@ -473,8 +475,9 @@ export class WahaHistorySyncService {
           skipFollowUpScheduling: true, // history lama tidak boleh memicu follow-up baru
         });
 
-        // Backfill nama customer lama yang masih kosong (data hasil sync sebelumnya)
-        if (customerName && customerName !== customer.name) {
+        // Backfill nama customer lama HANYA bila nama di DB saat ini masih kosong/generic
+        const isCurrentGeneric = !customer.name || isGenericCustomerName(customer.name);
+        if (customerName && isCurrentGeneric && !isGenericCustomerName(customerName)) {
           try {
             await customerService.updateCustomerName(customer.id, customerName, tenantId);
             customer.name = customerName;

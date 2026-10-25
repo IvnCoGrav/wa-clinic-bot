@@ -2191,14 +2191,17 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
             };
 
         // Jika nama customer masih generic (misal "Mbak" / "Bunda"), update nama customer di DB dari raw_text
-        if (existing.raw_text && existing.customer) {
+        const { isGenericCustomerName } = await import('../../utils/name-sanitizer');
+        const isCurrentGeneric = !existing.customer?.name || isGenericCustomerName(existing.customer.name);
+        if (isCurrentGeneric && existing.raw_text && existing.customer) {
           try {
             const { parseReservationText } = await import('../../utils/reservation-text-parser');
             const pr = parseReservationText(existing.raw_text);
-            if (pr.success && pr.reservation?.name) {
-              const cleanName = pr.reservation.name.replace(/^(?:bunda|ibu|mama|mom|mbak|mas|kak|kakak|ny|ny\.)\s+/i, '').trim();
+            if (pr.success && pr.reservation?.name && !isGenericCustomerName(pr.reservation.name)) {
+              const isMale = /^(?:ayah|pak|bapak|mas)\s+/i.test(pr.reservation.name);
+              const cleanName = pr.reservation.name.replace(/^(?:ayah|pak|bapak|bunda|ibu|mama|mom|mbak|mas|kak|kakak|ny|ny\.)\s+/i, '').trim();
               if (cleanName && !['bunda', 'ibu', 'mama', 'mom', 'mbak', 'mas', 'kak', 'kakak', 'pasien', 'customer', '-'].includes(cleanName.toLowerCase())) {
-                const formattedName = `Bunda ${cleanName}`.trim();
+                const formattedName = isMale ? `Ayah ${cleanName}`.trim() : `Bunda ${cleanName}`.trim();
                 const { customerService } = await import('../../services/customer.service');
                 await customerService.updateCustomerName(existing.customer.id, formattedName, tenantId).catch(() => {});
                 existing.customer.name = formattedName;
