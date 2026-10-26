@@ -138,10 +138,16 @@ export function addressesMatch(
       const toponimiKec = isWilayahSimilar(a.kecamatan, b.kecamatan) && (kelKompatibel || isWilayahSimilar(a.kelurahan, b.kelurahan));
       const toponimiCross = isWilayahSimilar(a.kecamatan, b.kelurahan) || isWilayahSimilar(a.kelurahan, b.kecamatan);
       if (toponimiKec || toponimiCross) return true;
+
+      // 3. Alamat jalan identik & spesifik (panjang >= 15 karakter atau ada nomor/blok/cluster/rt/rw):
+      // Jika jalan sama persis di kota sama dalam radius sentroid <= 3km, ini adalah rumah yang sama
+      // meskipun kecamatan administratif berbeda karena pergeseran batas reverse-geocoding peta.
+      const isSpecificStreet = norm(a.address).length >= 15 || /\b(?:no|nomor|blok|gang|gg|cluster|perum|perumahan|rt|rw)\b/i.test(a.address || '');
+      if (isSpecificStreet) return true;
     }
   }
 
-  if (!aAddr && !bAddr && sameKel && sameKec) return true;
+  if (!aAddr && !bAddr && sameKec && kelKompatibel && kotaKompatibel) return true;
   if (aAddr !== bAddr && sameKec) {
     const kelOk = sameKel || !hasText(a.kelurahan) || !hasText(b.kelurahan);
     if (kelOk) return true;

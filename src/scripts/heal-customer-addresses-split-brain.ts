@@ -127,10 +127,10 @@ async function main(): Promise<void> {
             ]);
           },
         });
+      } else if (siblings.length === 1) {
+        actions.push({ kind: 'REPORT_ONLY', customerId, tenantId, detail: 'ghost primary tanpa baris isi (hanya 1 kartu) — lapor saja', apply: async () => {} });
         continue;
       }
-      actions.push({ kind: 'REPORT_ONLY', customerId, tenantId, detail: 'ghost primary tanpa baris isi — lapor saja', apply: async () => {} });
-      continue;
     }
 
     // --- Pass 2: desync sumber (primer sah vs customers) ---

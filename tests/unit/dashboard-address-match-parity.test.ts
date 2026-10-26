@@ -165,6 +165,32 @@ const VECTORS: { name: string; a: any; b: any; expected: boolean }[] = [
     },
     expected: false,
   },
+  {
+    name: 'tanpa teks jalan di kedua sisi + kelurahan null di kedua sisi + kecamatan sama → match (anti duplikat Rumah Sedati 2)',
+    a: { address: '', kelurahan: null, kecamatan: 'Sedati', kota: 'Sidoarjo' },
+    b: { address: '', kelurahan: null, kecamatan: 'Sedati', kota: 'Sidoarjo' },
+    expected: true,
+  },
+  {
+    name: 'alamat jalan spesifik sama persis (<3km) di kota sama beda kecamatan karena pergeseran batas peta → match',
+    a: {
+      address: 'Grand Pakuwon Cluster Adelaide JF9/11',
+      kelurahan: 'Banjar Sugihan',
+      kecamatan: 'Tandes',
+      kota: 'Surabaya',
+      lat: -7.252370,
+      lng: 112.660090,
+    },
+    b: {
+      address: 'Grand Pakuwon Cluster Adelaide JF9/11',
+      kelurahan: 'Tambak Sarioso',
+      kecamatan: 'Asemrowo',
+      kota: 'Surabaya',
+      lat: -7.238602,
+      lng: 112.674148,
+    },
+    expected: true,
+  },
 ];
 
 describe('F3 — paritas cermin addressMatch (backend domain vs FE mirror)', () => {

@@ -60,7 +60,23 @@ export class ReservationLifecycleService {
       }
 
       if (kecamatan || kota || kelurahan || address) {
-        const currentCust = await customerService.getCustomerById(customerId, tenantId);
+        // Jika reservasi sudah memiliki customer_address_id yang valid (diselesaikan oleh reservationCoreService),
+        // hindari sequential double-write yang memanggil ulang upsert dengan parameter parsial (anti split-brain).
+        let alreadyHasAddressCard = false;
+        if (reservationId) {
+          try {
+            const existingRes = await prisma.reservation.findUnique({
+              where: { id: reservationId },
+              select: { customer_address_id: true },
+            });
+            if (existingRes?.customer_address_id) {
+              alreadyHasAddressCard = true;
+            }
+          } catch (_) {}
+        }
+
+        if (!alreadyHasAddressCard) {
+          const currentCust = await customerService.getCustomerById(customerId, tenantId);
         const hasExistingPrimary = Boolean(
           currentCust &&
           (currentCust.kelurahan || currentCust.kecamatan || (currentCust.preferences as any)?.address || (currentCust.preferences as any)?.saved_addresses?.length)
@@ -109,6 +125,7 @@ export class ReservationLifecycleService {
                 console.warn('[RESERVATION LIFECYCLE] updateCustomer(address) failed — alamat jalan tidak tersimpan:', e?.message);
               });
           }
+        }
         }
 
         // Background Auto-Distance Calculation jika customer belum memiliki distance_km

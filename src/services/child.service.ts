@@ -41,29 +41,52 @@ export class ChildService {
         const birthDate = parseAgeTextToBirthDate(baby.age, now);
         const ageMonthsAtReg = birthDate ? monthsBetween(birthDate, now) : null;
 
-        await prisma.child.upsert({
-          where: {
-            customer_id_name: {
+        // Cari dulu secara case-insensitive untuk mencegah duplikasi (Zayn vs zayn)
+        let existingChild: any = null;
+        if (typeof prisma.child.findFirst === 'function') {
+          existingChild = await prisma.child.findFirst({
+            where: {
               customer_id: customerId,
-              name: baby.name,
+              name: { equals: baby.name, mode: 'insensitive' },
             },
-          },
-          create: {
-            tenant_id: tenantId,
-            customer_id: customerId,
-            reservation_id: reservationId ?? null,
-            name: baby.name,
-            birth_date: birthDate,
-            age_months_at_registration: ageMonthsAtReg,
-            raw_age_text: baby.age || null,
-          },
-          update: {
-            reservation_id: reservationId ?? null,
-            birth_date: birthDate ?? undefined,
-            age_months_at_registration: ageMonthsAtReg ?? undefined,
-            raw_age_text: baby.age || null,
-          },
-        });
+          });
+        }
+
+        if (existingChild) {
+          await prisma.child.update({
+            where: { id: existingChild.id },
+            data: {
+              reservation_id: reservationId ?? existingChild.reservation_id,
+              birth_date: birthDate ?? existingChild.birth_date,
+              age_months_at_registration: ageMonthsAtReg ?? existingChild.age_months_at_registration,
+              raw_age_text: baby.age || existingChild.raw_age_text,
+            },
+          });
+        } else {
+          await prisma.child.upsert({
+            where: {
+              customer_id_name: {
+                customer_id: customerId,
+                name: baby.name,
+              },
+            },
+            create: {
+              tenant_id: tenantId,
+              customer_id: customerId,
+              reservation_id: reservationId ?? null,
+              name: baby.name,
+              birth_date: birthDate,
+              age_months_at_registration: ageMonthsAtReg,
+              raw_age_text: baby.age || null,
+            },
+            update: {
+              reservation_id: reservationId ?? null,
+              birth_date: birthDate ?? undefined,
+              age_months_at_registration: ageMonthsAtReg ?? undefined,
+              raw_age_text: baby.age || null,
+            },
+          });
+        }
       }
     } catch (err: any) {
       console.warn('[CHILD SERVICE] Failed to persist children (DB offline?):', err.message);

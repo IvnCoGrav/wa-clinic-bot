@@ -421,6 +421,16 @@ export function isValidChildName(raw: string | null | undefined): boolean {
     return false;
   }
 
+  // Dilarang placeholder numerik/generik form formulir (misal "Bayi 1", "Bayi 2", "Bayi 3", "Anak 1", "Bayi", "Anak")
+  if (/^(?:bayi|anak)\s*\d*$/i.test(lower)) {
+    return false;
+  }
+
+  // Dilarang kata medis / kondisi klinis ibu / instruksi (misal "hamil", "nifas", "nebul", "pasca vaksin")
+  if (/\b(hamil|nifas|nebul|pasca\s+vaksin)\b/i.test(lower)) {
+    return false;
+  }
+
   return true;
 }
 

@@ -397,7 +397,7 @@ describe('Fase S-3: Tombstones & Anti-Rebirth', () => {
   });
 
   it('tombstone >90 hari kedaluwarsa dan dibuang saat pruning', () => {
-    const nowIso = '2026-10-18T00:00:00.000Z';
+    const nowIso = new Date().toISOString();
     const oldDate = new Date(Date.now() - 95 * 24 * 60 * 60 * 1000).toISOString();
     const recentDate = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
 

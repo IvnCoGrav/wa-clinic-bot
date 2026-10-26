@@ -188,11 +188,17 @@ export function addressesMatch(
       const toponimiKec = isWilayahSimilar(a.kecamatan, b.kecamatan) && (kelKompatibel || isWilayahSimilar(a.kelurahan, b.kelurahan));
       const toponimiCross = isWilayahSimilar(a.kecamatan, b.kelurahan) || isWilayahSimilar(a.kelurahan, b.kecamatan);
       if (toponimiKec || toponimiCross) return true;
+
+      // 3. Alamat jalan identik & spesifik (panjang >= 15 karakter atau ada nomor/blok/cluster/rt/rw):
+      // Jika jalan sama persis di kota sama dalam radius sentroid <= 3km, ini adalah rumah yang sama
+      // meskipun kecamatan administratif berbeda karena pergeseran batas reverse-geocoding peta.
+      const isSpecificStreet = norm(a.address).length >= 15 || /\b(?:no|nomor|blok|gang|gg|cluster|perum|perumahan|rt|rw)\b/i.test(a.address || '');
+      if (isSpecificStreet) return true;
     }
   }
 
   // Tanpa detail jalan di kedua sisi: samakan bila wilayah desa/kecamatan identik.
-  if (!aAddr && !bAddr && sameKel && sameKec) return true;
+  if (!aAddr && !bAddr && sameKec && kelKompatibel && kotaKompatibel) return true;
   // Pengayaan asimetris (ghost primary 2026-10-12): tepat SATU sisi kosong
   // (tanpa teks jalan) dan wilayahnya cocok → rumah yang SAMA sedang
   // dilengkapi, bukan rumah baru. Syarat kecamatan sama; kelurahan sama bila
