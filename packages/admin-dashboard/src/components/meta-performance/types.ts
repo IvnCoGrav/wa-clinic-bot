@@ -1,3 +1,47 @@
+export type CohortChannel = 'ALL' | 'LPWA' | 'CTWA' | 'ORGANIC';
+
+export interface CohortMonthlyPeriodMetric {
+  count: number;
+  pct: number;
+  orders: number;
+  revenue: number;
+  upcomingCount: number;
+  upcomingRevenue: number;
+  status: 'COMPLETED' | 'ONGOING' | 'FUTURE';
+}
+
+export interface UnifiedMonthlyCohortRow {
+  cohortMonth: string;
+  channel: CohortChannel;
+  channelLabel: string;
+  cohortSize: number;
+  initialRevenue: number;
+  initialDeliveryFee: number;
+  initialUpcomingOrders: number;
+  initialUpcomingRevenue: number;
+  repeatM1: CohortMonthlyPeriodMetric | null;
+  repeatM2: CohortMonthlyPeriodMetric | null;
+  repeatM3: CohortMonthlyPeriodMetric | null;
+  totalRealizedRevenue: number;
+  revenuePerPatient: number;
+  adSpend: number | null;
+  cac: number | null;
+  roas: number | null;
+  paybackStatus: 'BALIK_MODAL' | 'BELUM_BALIK_MODAL' | 'BELUM_DIISI' | 'TIDAK_BERLAKU';
+  isOngoing: boolean;
+  isSmallSample: boolean;
+}
+
+export interface CohortPlanningMetrics {
+  matureLtv60Days: number | null;
+  matureSamplePatients: number;
+  hasEnoughData: boolean;
+  grossMarginPct: number;
+  maxAllowableCac: number | null;
+  minSampleThreshold: number;
+  dataCutoffDate: string;
+}
+
 export interface RevenueBasis {
   treatmentSource: string;
   deliverySource: string;
@@ -89,6 +133,9 @@ export interface MetaPerformanceReport {
     returned60: number | null;
     returned90: number | null;
   }>;
+  monthlyCohorts: UnifiedMonthlyCohortRow[];
+  rolling3MonthCohorts?: UnifiedMonthlyCohortRow[];
+  cohortPlanning: CohortPlanningMetrics;
   therapistCapacity: {
     activeTherapists: number;
     bookingCount: number;

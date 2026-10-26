@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { prisma } from '../../src/db/client';
-import { getMetaPerformanceReport } from '../../src/services/meta-performance-analytics.service';
+import { getMetaPerformanceReport, META_BOT_EXCLUDE_CLAUSE, buildMonthlyCohorts } from '../../src/services/meta-performance-analytics.service';
 import { responseCacheService } from '../../src/services/response-cache.service';
 import { treatmentCatalogService } from '../../src/services/treatment-catalog.service';
 
@@ -35,6 +35,7 @@ function install(fx: {
   followUps?: any[];
   pageViews?: number;
   staffCount?: number;
+  tenantSettings?: any;
 }) {
   const byTenant = (arr: any[], where: any) =>
     (arr || []).filter((r) => !where?.tenant_id || r.tenant_id === where.tenant_id);
@@ -55,6 +56,13 @@ function install(fx: {
   (prisma as any).conversation = { findMany: vi.fn(() => Promise.resolve(fx.conversations || [])) };
   (prisma as any).followUp = { findMany: vi.fn(() => Promise.resolve(fx.followUps || [])) };
   (prisma as any).landingPageView = { count: vi.fn(() => Promise.resolve(fx.pageViews ?? 0)) };
+  (prisma as any).tenant = {
+    findUnique: vi.fn((args: any) =>
+      fx.tenantSettings !== undefined
+        ? Promise.resolve({ id: args?.where?.id || T, settings: fx.tenantSettings })
+        : Promise.reject(new Error('Database offline')),
+    ),
+  };
 }
 
 beforeEach(() => {
@@ -184,6 +192,53 @@ describe('meta-performance-analytics: CAC/LTV kanonis', () => {
     expect(campA.initialRevenue).toBe(200000);
     expect(r.leakageDiagnostics.followUpRecovery.sent).toBe(1);
     expect(r.leakageDiagnostics.followUpRecovery.byStatus.FAILED).toBe(1);
+  });
+
+  it('memastikan klik CTWA dengan userAgent null lolos META_BOT_EXCLUDE_CLAUSE dan masuk channelComparison CTWA_NATIVE', async () => {
+    expect(META_BOT_EXCLUDE_CLAUSE.OR).toBeDefined();
+    expect(META_BOT_EXCLUDE_CLAUSE.OR).toContainEqual({ userAgent: null });
+
+    const cCtwa = cust('ctwa-1', T);
+    const ctwaClick = {
+      tenant_id: T,
+      customerId: 'ctwa-1',
+      matchedAt: '2026-08-02T02:00:00.000Z',
+      ctwa_clid: 'ctwa_direct_123',
+      utmCampaign: 'ctwa_campaign',
+      utmSource: 'meta',
+      utmMedium: 'ctwa',
+      userAgent: null,
+      createdAt: '2026-08-02T02:00:00.000Z',
+      customer: cCtwa,
+    };
+    const ctwaRes = {
+      id: 'r_ctwa',
+      tenant_id: T,
+      customer_id: 'ctwa-1',
+      created_at: '2026-08-03T02:00:00.000Z',
+      booking_date: '2026-08-04T02:00:00.000Z',
+      status: 'confirmed',
+      purchase_value: 125000,
+      treatment_detail: 'Pijat Bayi',
+      treatment_category: 'BABY',
+      delivery_fee: 0,
+      customer: cCtwa,
+    };
+
+    install({
+      rangeClicks: [ctwaClick],
+      matchedAds: [ctwaClick],
+      rangeReservations: [ctwaRes],
+      historyReservations: [ctwaRes],
+      customers: [cCtwa],
+    });
+
+    const r = await getMetaPerformanceReport({ tenantId: T, ...RANGE });
+    const native = r.channelComparison.find((c) => c.channel === 'CTWA_NATIVE');
+    expect(native).toBeDefined();
+    expect(native?.leads).toBe(1);
+    expect(native?.firstTimeBuyers).toBe(1);
+    expect(native?.initialRevenue).toBe(125000);
   });
 });
 
@@ -424,5 +479,331 @@ describe('meta-performance-analytics: ketahanan & isolasi', () => {
     expect(r.kpiSummary.newCustomersAcquired).toBe(0);
     expect(r.funnel.totalClicks).toBe(0);
     expect(r.meta.revenueBasis.errors.length).toBeGreaterThan(0);
+  });
+});
+
+
+describe('meta-performance-analytics: Mesin Kohort Bulanan & Omzet Treatment Murni', () => {
+  it('memisahkan omzet treatment murni dari ongkir (ongkir tidak boleh masuk omzet iklan/LTV)', async () => {
+    const c1 = cust('c1', T, { phone: '08123456789' });
+    const resAug = {
+      id: 'r_aug',
+      tenant_id: T,
+      customer_id: 'c1',
+      created_at: '2026-08-05T03:00:00.000Z',
+      booking_date: '2026-08-05T04:00:00.000Z',
+      status: 'completed',
+      purchase_value: 150000,
+      treatment_detail: 'Pijat Bayi',
+      treatment_category: 'BABY',
+      delivery_fee: 25000, // Ongkos kirim Rp 25.000
+      customer: c1,
+    };
+
+    const ad1 = {
+      tenant_id: T,
+      customerId: 'c1',
+      matchedAt: '2026-08-02T02:00:00.000Z',
+      ctwa_clid: null,
+      utmCampaign: 'promo_agustus',
+      utmSource: 'meta',
+      utmMedium: 'cpc',
+      createdAt: '2026-08-02T02:00:00.000Z',
+      customer: c1,
+    };
+
+    const result = await buildMonthlyCohorts({
+      tenantId: T,
+      historyReservations: [resAug],
+      rangeReservations: [resAug],
+      matchedAds: [ad1],
+      monthlySpends: { '2026-08': { lpwa: 100000 } },
+      grossMarginPct: 40,
+      treatmentFeeOf: async (r) => r.purchase_value,
+    });
+
+    const augLpwa = result.monthlyCohorts.find((r) => r.cohortMonth === '2026-08' && r.channel === 'LPWA')!;
+    expect(augLpwa).toBeDefined();
+    expect(augLpwa.cohortSize).toBe(1);
+    // Omzet murni adalah Rp 150.000 (tanpa ongkir 25.000)
+    expect(augLpwa.initialRevenue).toBe(150000);
+    expect(augLpwa.initialDeliveryFee).toBe(25000);
+    expect(augLpwa.totalRealizedRevenue).toBe(150000);
+    expect(augLpwa.revenuePerPatient).toBe(150000);
+    // ROAS dihitung terhadap omzet murni: 150.000 / 100.000 = 1.5x (bukan 175.000 / 100.000)
+    expect(augLpwa.roas).toBe(1.5);
+    expect(augLpwa.paybackStatus).toBe('BALIK_MODAL');
+  });
+
+  it('mengelompokkan kohort berdasarkan tanggal kunjungan (booking_date), bukan created_at', async () => {
+    // Dipesan akhir Agustus (created_at 31 Aug), tetapi kunjungan awal September (booking_date 2 Sep)
+    const c1 = cust('c_sept', T, { phone: '0812999888' });
+    const res = {
+      id: 'r_sep',
+      tenant_id: T,
+      customer_id: 'c_sept',
+      created_at: '2026-08-31T20:00:00.000Z',
+      booking_date: '2026-09-02T09:00:00.000Z',
+      status: 'completed',
+      purchase_value: 120000,
+      treatment_detail: 'Pijat Laktasi',
+      treatment_category: 'MOM',
+      delivery_fee: 0,
+      customer: c1,
+    };
+
+    const result = await buildMonthlyCohorts({
+      tenantId: T,
+      historyReservations: [res],
+      rangeReservations: [res],
+      matchedAds: [],
+      treatmentFeeOf: async (r) => r.purchase_value,
+    });
+
+    // Pasien wajib masuk kohort 2026-09 (bulan kunjungan riil), BUKAN 2026-08
+    const sepRow = result.monthlyCohorts.find((r) => r.cohortMonth === '2026-09' && r.channel === 'ORGANIC')!;
+    expect(sepRow).toBeDefined();
+    expect(sepRow.cohortSize).toBe(1);
+    expect(sepRow.initialRevenue).toBe(120000);
+
+    const augRow = result.monthlyCohorts.find((r) => r.cohortMonth === '2026-08' && r.channel === 'ORGANIC');
+    expect(augRow).toBeUndefined();
+  });
+
+  it('membedakan status completed (terealisasi) vs confirmed (terjadwal mendatang)', async () => {
+    const c1 = cust('c_conf', T, { phone: '08155544433' });
+    const resConfirmed = {
+      id: 'r_conf',
+      tenant_id: T,
+      customer_id: 'c_conf',
+      created_at: '2026-10-20T03:00:00.000Z',
+      booking_date: '2026-10-28T04:00:00.000Z',
+      status: 'confirmed', // Belum terlaksana
+      purchase_value: 140000,
+      treatment_detail: 'Pijat Anak',
+      treatment_category: 'KIDS',
+      delivery_fee: 10000,
+      customer: c1,
+    };
+
+    const result = await buildMonthlyCohorts({
+      tenantId: T,
+      historyReservations: [resConfirmed],
+      rangeReservations: [resConfirmed],
+      matchedAds: [],
+      now: new Date('2026-10-26T09:00:00.000Z'),
+      treatmentFeeOf: async (r) => r.purchase_value,
+    });
+
+    const octRow = result.monthlyCohorts.find((r) => r.cohortMonth === '2026-10' && r.channel === 'ORGANIC')!;
+    expect(octRow.cohortSize).toBe(1);
+    // Omzet terealisasi wajib 0 karena belum completed!
+    expect(octRow.initialRevenue).toBe(0);
+    expect(octRow.totalRealizedRevenue).toBe(0);
+    // Masuk ke upcoming
+    expect(octRow.initialUpcomingOrders).toBe(1);
+    expect(octRow.initialUpcomingRevenue).toBe(140000);
+  });
+
+  it('menghitung repeat M+1 dan M+2, serta status balikan per periode', async () => {
+    const c1 = cust('c_repeat', T, { phone: '081888777' });
+    const res1 = {
+      id: 'r1',
+      tenant_id: T,
+      customer_id: 'c_repeat',
+      created_at: '2026-08-01T03:00:00.000Z',
+      booking_date: '2026-08-02T04:00:00.000Z',
+      status: 'completed',
+      purchase_value: 130000,
+      treatment_detail: 'Pijat Bayi',
+      delivery_fee: 0,
+      customer: c1,
+    };
+    const res2 = {
+      id: 'r2',
+      tenant_id: T,
+      customer_id: 'c_repeat',
+      created_at: '2026-09-10T03:00:00.000Z',
+      booking_date: '2026-09-11T04:00:00.000Z',
+      status: 'completed',
+      purchase_value: 130000,
+      treatment_detail: 'Pijat Bayi',
+      delivery_fee: 0,
+      customer: c1,
+    };
+
+    const result = await buildMonthlyCohorts({
+      tenantId: T,
+      historyReservations: [res1, res2],
+      rangeReservations: [],
+      matchedAds: [],
+      now: new Date('2026-10-26T09:00:00.000Z'),
+      treatmentFeeOf: async (r) => r.purchase_value,
+    });
+
+    const augAll = result.monthlyCohorts.find((r) => r.cohortMonth === '2026-08' && r.channel === 'ALL')!;
+    expect(augAll.cohortSize).toBe(1);
+    expect(augAll.initialRevenue).toBe(130000);
+    expect(augAll.repeatM1).not.toBeNull();
+    expect(augAll.repeatM1?.count).toBe(1);
+    expect(augAll.repeatM1?.pct).toBe(100);
+    expect(augAll.repeatM1?.revenue).toBe(130000);
+    expect(augAll.repeatM1?.status).toBe('COMPLETED');
+    expect(augAll.totalRealizedRevenue).toBe(260000);
+    expect(augAll.revenuePerPatient).toBe(260000);
+
+    // M+2 adalah Oktober (bulan berjalan)
+    expect(augAll.repeatM2?.status).toBe('ONGOING');
+    // M+3 adalah November (masa depan)
+    expect(augAll.repeatM3).toBeNull();
+  });
+
+  it('menghitung LTV 60 hari matang HANYA dari pasien iklan kohort matang (tanpa pasien organik)', async () => {
+    // Pasien Iklan A: First visit 1 Agustus 2026 (umur > 60 hari) -> omzet 150rb + repeat 120rb = 270rb
+    const cAd = cust('c_ad', T, { phone: '08123450001' });
+    const adClick = {
+      tenant_id: T,
+      customerId: 'c_ad',
+      matchedAt: '2026-08-01T00:00:00Z',
+      ctwa_clid: 'ctwa_mature',
+      utmCampaign: 'camp',
+      utmSource: 'meta',
+      utmMedium: 'ctwa',
+      createdAt: '2026-08-01T00:00:00Z',
+      customer: cAd,
+    };
+    const rAd1 = {
+      id: 'ra1',
+      tenant_id: T,
+      customer_id: 'c_ad',
+      created_at: '2026-08-01T02:00:00Z',
+      booking_date: '2026-08-02T02:00:00Z',
+      status: 'completed',
+      purchase_value: 150000,
+      treatment_detail: 'Pijat',
+      delivery_fee: 0,
+      customer: cAd,
+    };
+    const rAd2 = {
+      id: 'ra2',
+      tenant_id: T,
+      customer_id: 'c_ad',
+      created_at: '2026-09-01T02:00:00Z',
+      booking_date: '2026-09-02T02:00:00Z',
+      status: 'completed',
+      purchase_value: 120000,
+      treatment_detail: 'Pijat',
+      delivery_fee: 0,
+      customer: cAd,
+    };
+
+    // Pasien Organik B: First visit 1 Agustus 2026 -> omzet besar Rp 1.000.000 (DILARANG masuk LTV iklan!)
+    const cOrg = cust('c_org', T, { phone: '08123450002' });
+    const rOrg = {
+      id: 'ro1',
+      tenant_id: T,
+      customer_id: 'c_org',
+      created_at: '2026-08-01T02:00:00Z',
+      booking_date: '2026-08-02T02:00:00Z',
+      status: 'completed',
+      purchase_value: 1000000,
+      treatment_detail: 'Pijat',
+      delivery_fee: 0,
+      customer: cOrg,
+    };
+
+    // Pasien Iklan C: First visit 15 Oktober 2026 (umur baru 11 hari -> BELUM MATANG, dilarang masuk!)
+    const cNew = cust('c_new', T, { phone: '08123450003' });
+    const adNew = {
+      tenant_id: T,
+      customerId: 'c_new',
+      matchedAt: '2026-10-15T00:00:00Z',
+      ctwa_clid: 'ctwa_new',
+      utmCampaign: 'camp',
+      utmSource: 'meta',
+      utmMedium: 'ctwa',
+      createdAt: '2026-10-15T00:00:00Z',
+      customer: cNew,
+    };
+    const rNew = {
+      id: 'rn1',
+      tenant_id: T,
+      customer_id: 'c_new',
+      created_at: '2026-10-15T02:00:00Z',
+      booking_date: '2026-10-16T02:00:00Z',
+      status: 'completed',
+      purchase_value: 100000,
+      treatment_detail: 'Pijat',
+      delivery_fee: 0,
+      customer: cNew,
+    };
+
+    const result = await buildMonthlyCohorts({
+      tenantId: T,
+      historyReservations: [rAd1, rAd2, rOrg, rNew],
+      rangeReservations: [],
+      matchedAds: [adClick, adNew],
+      now: new Date('2026-10-26T09:00:00.000Z'),
+      grossMarginPct: 40,
+      treatmentFeeOf: async (r) => r.purchase_value,
+    });
+
+    const planning = result.planning;
+    // Hanya pasien c_ad yang masuk: umur > 60 hari dan dari iklan
+    expect(planning.matureSamplePatients).toBe(1);
+    expect(planning.matureLtv60Days).toBe(270000); // 150rb + 120rb
+    // Max allowable CAC dengan margin 40%: 270.000 * 0.40 = 108.000
+    expect(planning.maxAllowableCac).toBe(108000);
+    // Sampel 1 < 20 sehingga hasEnoughData = false
+    expect(planning.hasEnoughData).toBe(false);
+  });
+
+  it('menormalkan duplikasi nomor telepon (+62 vs 08) menjadi satu pasien', async () => {
+    // Pasien yang sama pesan di bulan 8 dengan format '0812345678' dan di bulan 9 dengan '+62812345678'
+    const cA = cust('ca', T, { phone: '0812345678' });
+    const cB = cust('cb', T, { phone: '+62812345678' });
+
+    const r1 = {
+      id: 'r_tel1',
+      tenant_id: T,
+      customer_id: 'ca',
+      created_at: '2026-08-05T00:00:00Z',
+      booking_date: '2026-08-05T00:00:00Z',
+      status: 'completed',
+      purchase_value: 150000,
+      treatment_detail: 'Pijat',
+      delivery_fee: 0,
+      customer: cA,
+    };
+    const r2 = {
+      id: 'r_tel2',
+      tenant_id: T,
+      customer_id: 'cb',
+      created_at: '2026-09-05T00:00:00Z',
+      booking_date: '2026-09-05T00:00:00Z',
+      status: 'completed',
+      purchase_value: 150000,
+      treatment_detail: 'Pijat',
+      delivery_fee: 0,
+      customer: cB,
+    };
+
+    const result = await buildMonthlyCohorts({
+      tenantId: T,
+      historyReservations: [r1, r2],
+      rangeReservations: [],
+      matchedAds: [],
+      now: new Date('2026-10-26T09:00:00.000Z'),
+      treatmentFeeOf: async (r) => r.purchase_value,
+    });
+
+    // Harus dihitung 1 pasien baru di Agustus yang repeat di September
+    const augRow = result.monthlyCohorts.find((r) => r.cohortMonth === '2026-08' && r.channel === 'ORGANIC')!;
+    expect(augRow.cohortSize).toBe(1);
+    expect(augRow.repeatM1?.count).toBe(1);
+
+    // September TIDAK boleh mencatat cB sebagai pasien baru
+    const sepRow = result.monthlyCohorts.find((r) => r.cohortMonth === '2026-09' && r.channel === 'ORGANIC');
+    expect(sepRow).toBeUndefined();
   });
 });

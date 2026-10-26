@@ -4,6 +4,7 @@ import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { auditService } from '../../services/audit.service';
 import { capiService, capiBreaker } from '../../services/capi.service';
 import { memoryAdClicks } from '../tracking.route';
+import { responseCacheService } from '../../services/response-cache.service';
 import {
   getMetaPerformanceReport,
   buildZeroMetaPerformanceReport,
@@ -58,13 +59,18 @@ function buildDateRange(startDate?: string, endDate?: string): { createdAt?: { g
 import { isBotOrCrawler, memoryPageViews } from '../tracking.route';
 
 const BOT_EXCLUDE_CLAUSE = {
-  NOT: [
-    { userAgent: { contains: 'facebookexternalhit', mode: 'insensitive' } },
-    { userAgent: { contains: 'facebot', mode: 'insensitive' } },
-    { userAgent: { contains: 'meta-externalagent', mode: 'insensitive' } },
-    { userAgent: { contains: 'googlebot', mode: 'insensitive' } },
-    { userAgent: { contains: 'bingbot', mode: 'insensitive' } },
-    { userAgent: { contains: 'twitterbot', mode: 'insensitive' } },
+  OR: [
+    { userAgent: null },
+    {
+      NOT: [
+        { userAgent: { contains: 'facebookexternalhit', mode: 'insensitive' } },
+        { userAgent: { contains: 'facebot', mode: 'insensitive' } },
+        { userAgent: { contains: 'meta-externalagent', mode: 'insensitive' } },
+        { userAgent: { contains: 'googlebot', mode: 'insensitive' } },
+        { userAgent: { contains: 'bingbot', mode: 'insensitive' } },
+        { userAgent: { contains: 'twitterbot', mode: 'insensitive' } },
+      ],
+    },
   ],
 };
 
@@ -488,6 +494,98 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
             adSpend: parsed.data.adSpend,
             dbNote: `DB offline: ${String(err?.message || err).slice(0, 160)}`,
           }),
+        });
+      }
+    }
+  );
+
+  /**
+   * GET /api/admin/meta-performance/settings
+   * Mengambil konfigurasi pengeluaran iklan bulanan (per kanal) dan margin kotor untuk analisis LTV/CAC.
+   */
+  fastify.get(
+    '/api/admin/meta-performance/settings',
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const tenantId = (request as any).staffTenantId || DEFAULT_TENANT_ID;
+      try {
+        const tenant = await (prisma.tenant as any).findUnique({
+          where: { id: tenantId },
+          select: { settings: true },
+        });
+        const perfSettings = ((tenant?.settings as any)?.metaPerformanceSettings) || {
+          monthlySpends: {},
+          grossMarginPct: 40,
+          minSampleThreshold: 20,
+        };
+        return reply.status(200).send({ success: true, data: perfSettings });
+      } catch (err: any) {
+        return reply.status(200).send({
+          success: true,
+          data: { monthlySpends: {}, grossMarginPct: 40, minSampleThreshold: 20 },
+          dbNote: `DB offline: ${err?.message?.slice(0, 160)}`,
+        });
+      }
+    }
+  );
+
+  /**
+   * PUT /api/admin/meta-performance/settings
+   * Memperbarui konfigurasi pengeluaran iklan bulanan (per kanal) dan margin kotor di DB.
+   */
+  fastify.put(
+    '/api/admin/meta-performance/settings',
+    async (
+      request: FastifyRequest<{
+        Body: {
+          monthlySpends?: Record<string, { lpwa?: number; ctwa?: number }>;
+          grossMarginPct?: number;
+          minSampleThreshold?: number;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const tenantId = (request as any).staffTenantId || DEFAULT_TENANT_ID;
+      const body = request.body || {};
+      try {
+        const tenant = await (prisma.tenant as any).findUnique({
+          where: { id: tenantId },
+          select: { settings: true },
+        });
+        const currentSettings = ((tenant?.settings as Record<string, any>) || {});
+        const currentPerf = (currentSettings.metaPerformanceSettings as Record<string, any>) || {};
+
+        const updatedPerf = {
+          monthlySpends: {
+            ...(currentPerf.monthlySpends || {}),
+            ...(body.monthlySpends || {}),
+          },
+          grossMarginPct:
+            typeof body.grossMarginPct === 'number' && body.grossMarginPct >= 0 && body.grossMarginPct <= 100
+              ? body.grossMarginPct
+              : (currentPerf.grossMarginPct ?? 40),
+          minSampleThreshold:
+            typeof body.minSampleThreshold === 'number' && body.minSampleThreshold > 0
+              ? body.minSampleThreshold
+              : (currentPerf.minSampleThreshold ?? 20),
+        };
+
+        await (prisma.tenant as any).update({
+          where: { id: tenantId },
+          data: {
+            settings: {
+              ...currentSettings,
+              metaPerformanceSettings: updatedPerf,
+            },
+          },
+        });
+
+        responseCacheService.clear();
+
+        return reply.status(200).send({ success: true, data: updatedPerf });
+      } catch (err: any) {
+        return reply.status(500).send({
+          success: false,
+          error: `Gagal memperbarui pengaturan performa Meta: ${err?.message}`,
         });
       }
     }

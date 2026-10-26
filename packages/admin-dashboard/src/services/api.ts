@@ -97,6 +97,22 @@ export function fetchMetaPerformance<T = any>(params: { startDate?: string; endD
   return apiRequest(`/api/admin/meta-performance${qs ? `?${qs}` : ''}`);
 }
 
+export function fetchMetaPerformanceSettings<T = any>(): Promise<T> {
+  return apiRequest('/api/admin/meta-performance/settings');
+}
+
+export function updateMetaPerformanceSettings<T = any>(data: {
+  monthlySpends?: Record<string, { lpwa?: number; ctwa?: number }>;
+  grossMarginPct?: number;
+  minSampleThreshold?: number;
+}): Promise<T> {
+  return apiRequest('/api/admin/meta-performance/settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+}
+
 export interface CtwaCatcher {
   id: string;
   tenant_id: string;

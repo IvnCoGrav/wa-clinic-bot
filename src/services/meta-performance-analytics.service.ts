@@ -51,13 +51,18 @@ export const EXCLUDED_REVENUE_STATUSES = ['cancelled', 'rejected'] as const;
  * route dapat mengimpor dari sini (satu sumber), bukan menyalin ulang.
  */
 export const META_BOT_EXCLUDE_CLAUSE: any = {
-  NOT: [
-    { userAgent: { contains: 'facebookexternalhit', mode: 'insensitive' } },
-    { userAgent: { contains: 'facebot', mode: 'insensitive' } },
-    { userAgent: { contains: 'meta-externalagent', mode: 'insensitive' } },
-    { userAgent: { contains: 'googlebot', mode: 'insensitive' } },
-    { userAgent: { contains: 'bingbot', mode: 'insensitive' } },
-    { userAgent: { contains: 'twitterbot', mode: 'insensitive' } },
+  OR: [
+    { userAgent: null },
+    {
+      NOT: [
+        { userAgent: { contains: 'facebookexternalhit', mode: 'insensitive' } },
+        { userAgent: { contains: 'facebot', mode: 'insensitive' } },
+        { userAgent: { contains: 'meta-externalagent', mode: 'insensitive' } },
+        { userAgent: { contains: 'googlebot', mode: 'insensitive' } },
+        { userAgent: { contains: 'bingbot', mode: 'insensitive' } },
+        { userAgent: { contains: 'twitterbot', mode: 'insensitive' } },
+      ],
+    },
   ],
 };
 
@@ -82,6 +87,50 @@ export interface RevenueBasis {
   pendingHoldIncluded: false;
   truncated: boolean;
   errors: string[];
+}
+
+export type CohortChannel = 'ALL' | 'LPWA' | 'CTWA' | 'ORGANIC';
+
+export interface CohortMonthlyPeriodMetric {
+  count: number;
+  pct: number;
+  orders: number;
+  revenue: number;
+  upcomingCount: number;
+  upcomingRevenue: number;
+  status: 'COMPLETED' | 'ONGOING' | 'FUTURE';
+}
+
+export interface UnifiedMonthlyCohortRow {
+  cohortMonth: string;
+  channel: CohortChannel;
+  channelLabel: string;
+  cohortSize: number;
+  initialRevenue: number;
+  initialDeliveryFee: number;
+  initialUpcomingOrders: number;
+  initialUpcomingRevenue: number;
+  repeatM1: CohortMonthlyPeriodMetric | null;
+  repeatM2: CohortMonthlyPeriodMetric | null;
+  repeatM3: CohortMonthlyPeriodMetric | null;
+  totalRealizedRevenue: number;
+  revenuePerPatient: number;
+  adSpend: number | null;
+  cac: number | null;
+  roas: number | null;
+  paybackStatus: 'BALIK_MODAL' | 'BELUM_BALIK_MODAL' | 'BELUM_DIISI' | 'TIDAK_BERLAKU';
+  isOngoing: boolean;
+  isSmallSample: boolean;
+}
+
+export interface CohortPlanningMetrics {
+  matureLtv60Days: number | null;
+  matureSamplePatients: number;
+  hasEnoughData: boolean;
+  grossMarginPct: number;
+  maxAllowableCac: number | null;
+  minSampleThreshold: number;
+  dataCutoffDate: string;
 }
 
 export interface MetaPerformanceReport {
@@ -174,6 +223,12 @@ export interface MetaPerformanceReport {
     returned60: number | null;
     returned90: number | null;
   }>;
+  /** Kohort retensi repeat order bulanan terpadu (Semua, LPWA, CTWA, Organik). */
+  monthlyCohorts: UnifiedMonthlyCohortRow[];
+  /** Agregasi 3 bulan terakhir (rolling 90 hari) untuk meredam fluktuasi sampel kecil. */
+  rolling3MonthCohorts?: UnifiedMonthlyCohortRow[];
+  /** Metrik perencanaan forward-looking (LTV 60 hari matang & Max Allowable CAC). */
+  cohortPlanning: CohortPlanningMetrics;
   /** Kapasitas & utilisasi terapis (DB-driven: jumlah Staff aktif per hari). */
   therapistCapacity: {
     activeTherapists: number;
@@ -341,6 +396,17 @@ export function buildZeroMetaPerformanceReport(
       mqlDropOff: { mqlTotal: 0, converted: 0, dropped: 0, outOfCoverage: 0, cancelled: 0, noReservation: 0 },
     },
     retentionCohorts: [],
+    monthlyCohorts: [],
+    rolling3MonthCohorts: [],
+    cohortPlanning: {
+      matureLtv60Days: null,
+      matureSamplePatients: 0,
+      hasEnoughData: false,
+      grossMarginPct: 40,
+      maxAllowableCac: null,
+      minSampleThreshold: 20,
+      dataCutoffDate: wibTodayStr(),
+    },
     therapistCapacity: null,
   };
 }
@@ -349,6 +415,400 @@ export function buildZeroMetaPerformanceReport(
  * Laporan performa Meta Ads to Sales (tenant-scoped, read-only).
  * Offline-safe: setiap query gagal → fallback aman, tidak melempar unhandled rejection.
  */
+
+function wibMonthKey(d: Date): string {
+  return new Date(d.getTime() + WIB_OFFSET_MS).toISOString().slice(0, 7);
+}
+
+function monthDiff(fromMonth: string, toMonth: string): number {
+  const [y1, m1] = fromMonth.split('-').map(Number);
+  const [y2, m2] = toMonth.split('-').map(Number);
+  return (y2 - y1) * 12 + (m2 - m1);
+}
+
+function addMonths(monthStr: string, n: number): string {
+  const [y, m] = monthStr.split('-').map(Number);
+  const totalMonths = y * 12 + (m - 1) + n;
+  const newY = Math.floor(totalMonths / 12);
+  const newM = (totalMonths % 12) + 1;
+  return `${newY}-${String(newM).padStart(2, '0')}`;
+}
+
+function normalizePhone(p?: string | null): string {
+  if (!p) return '';
+  const digits = p.replace(/\D/g, '');
+  if (digits.startsWith('0')) return '62' + digits.slice(1);
+  if (digits.startsWith('62')) return digits;
+  return digits;
+}
+
+export interface BuildMonthlyCohortsParams {
+  tenantId: string;
+  historyReservations: any[];
+  rangeReservations: any[];
+  matchedAds: any[];
+  monthlySpends?: Record<string, { lpwa?: number; ctwa?: number }>;
+  defaultSpend?: number;
+  grossMarginPct?: number;
+  minSampleThreshold?: number;
+  now?: Date;
+  treatmentFeeOf: (r: any) => Promise<number>;
+}
+
+export async function buildMonthlyCohorts(params: BuildMonthlyCohortsParams): Promise<{
+  monthlyCohorts: UnifiedMonthlyCohortRow[];
+  rolling3MonthCohorts: UnifiedMonthlyCohortRow[];
+  planning: CohortPlanningMetrics;
+}> {
+  const {
+    historyReservations,
+    rangeReservations,
+    matchedAds,
+    monthlySpends = {},
+    defaultSpend,
+    grossMarginPct = 40,
+    minSampleThreshold = 20,
+    now = new Date(),
+    treatmentFeeOf,
+  } = params;
+
+  const nowMs = now.getTime();
+  const currentWibMonth = wibMonthKey(now);
+  const todayWibStr = wibDateKey(now);
+
+  // 1. Map customerId to ad channel
+  const customerChannelMap = new Map<string, 'CTWA' | 'LPWA'>();
+  for (const a of matchedAds) {
+    if (!a.customerId) continue;
+    const isCtwa = Boolean(a.ctwa_clid) || a.utmMedium === 'ctwa' || a.utmMedium === 'ctwa_fuzzy' || a.utmSource === 'whatsapp_direct';
+    const channel: 'CTWA' | 'LPWA' = isCtwa ? 'CTWA' : 'LPWA';
+    const prev = customerChannelMap.get(a.customerId);
+    if (prev !== 'CTWA') {
+      customerChannelMap.set(a.customerId, channel);
+    }
+  }
+
+  // Deduplicate reservations
+  const allResMap = new Map<string, any>();
+  for (const r of historyReservations) if (r?.id) allResMap.set(r.id, r);
+  for (const r of rangeReservations) if (r?.id) allResMap.set(r.id, r);
+  const allReservations = Array.from(allResMap.values());
+
+  const patientKeyOf = (r: any): string => {
+    const phone = normalizePhone(r.customer?.phone);
+    if (phone) return `phone:${phone}`;
+    return `id:${r.customer_id || r.customer?.id || r.id}`;
+  };
+
+  const isQual = (r: any) => isQualifyingStatus(r?.status) && !isSandboxed(r?.customer);
+
+  const patientReservations = new Map<string, any[]>();
+  const patientChannel = new Map<string, 'CTWA' | 'LPWA' | 'ORGANIC'>();
+
+  for (const r of allReservations) {
+    if (!isQual(r)) continue;
+    const pKey = patientKeyOf(r);
+    const list = patientReservations.get(pKey) || [];
+    list.push(r);
+    patientReservations.set(pKey, list);
+
+    if (!patientChannel.has(pKey) || patientChannel.get(pKey) === 'ORGANIC') {
+      const cid = r.customer_id || r.customer?.id;
+      const ch = cid ? customerChannelMap.get(cid) : undefined;
+      if (ch) {
+        patientChannel.set(pKey, ch);
+      } else if (!patientChannel.has(pKey)) {
+        patientChannel.set(pKey, 'ORGANIC');
+      }
+    }
+  }
+
+  interface PatientInfo {
+    key: string;
+    channel: 'CTWA' | 'LPWA' | 'ORGANIC';
+    cohortMonth: string;
+    firstRes: any;
+    firstVisitDate: Date;
+    reservations: any[];
+  }
+
+  const patientInfos: PatientInfo[] = [];
+
+  for (const [pKey, resList] of patientReservations.entries()) {
+    const getVisitDate = (r: any) => (r.booking_date ? new Date(r.booking_date) : new Date(r.created_at));
+    resList.sort((a, b) => getVisitDate(a).getTime() - getVisitDate(b).getTime());
+
+    const firstRes = resList[0];
+    const firstVisitDate = getVisitDate(firstRes);
+    const cohortMonth = wibMonthKey(firstVisitDate);
+    const channel = patientChannel.get(pKey) || 'ORGANIC';
+
+    patientInfos.push({
+      key: pKey,
+      channel,
+      cohortMonth,
+      firstRes,
+      firstVisitDate,
+      reservations: resList,
+    });
+  }
+
+  const allMonths = Array.from(new Set(patientInfos.map((p) => p.cohortMonth))).sort((a, b) => (a < b ? 1 : -1));
+  if (!allMonths.includes(currentWibMonth)) {
+    allMonths.unshift(currentWibMonth);
+  }
+
+  const channels: CohortChannel[] = ['ALL', 'LPWA', 'CTWA', 'ORGANIC'];
+  const monthlyCohorts: UnifiedMonthlyCohortRow[] = [];
+
+  for (const month of allMonths) {
+    for (const ch of channels) {
+      const isChMatch = (pCh: 'CTWA' | 'LPWA' | 'ORGANIC') => (ch === 'ALL' ? true : pCh === ch);
+      const cohortPatients = patientInfos.filter((p) => p.cohortMonth === month && isChMatch(p.channel));
+
+      const cohortSize = cohortPatients.length;
+      let initialRevenue = 0;
+      let initialDeliveryFee = 0;
+      let initialUpcomingOrders = 0;
+      let initialUpcomingRevenue = 0;
+
+      for (const p of cohortPatients) {
+        const r = p.firstRes;
+        const fee = await treatmentFeeOf(r);
+        const delFee = resolveDeliveryFeeSnapshot(r);
+        if (r.status === 'completed') {
+          initialRevenue += fee;
+          initialDeliveryFee += delFee;
+        } else if (r.status === 'confirmed') {
+          initialUpcomingOrders += 1;
+          initialUpcomingRevenue += fee;
+        }
+      }
+
+      const computePeriod = async (nMonths: number): Promise<CohortMonthlyPeriodMetric | null> => {
+        const targetMonth = addMonths(month, nMonths);
+        const diffFromCurrent = monthDiff(currentWibMonth, targetMonth);
+        const status: 'COMPLETED' | 'ONGOING' | 'FUTURE' =
+          diffFromCurrent > 0 ? 'FUTURE' : diffFromCurrent === 0 ? 'ONGOING' : 'COMPLETED';
+
+        if (status === 'FUTURE') return null;
+
+        let orders = 0;
+        let revenue = 0;
+        let upcomingCount = 0;
+        let upcomingRevenue = 0;
+        const returningPatients = new Set<string>();
+
+        for (const p of cohortPatients) {
+          for (let i = 1; i < p.reservations.length; i++) {
+            const r = p.reservations[i];
+            const rDate = r.booking_date ? new Date(r.booking_date) : new Date(r.created_at);
+            const rMonth = wibMonthKey(rDate);
+            if (rMonth === targetMonth) {
+              const fee = await treatmentFeeOf(r);
+              if (r.status === 'completed') {
+                orders += 1;
+                revenue += fee;
+                returningPatients.add(p.key);
+              } else if (r.status === 'confirmed') {
+                upcomingCount += 1;
+                upcomingRevenue += fee;
+              }
+            }
+          }
+        }
+
+        const count = returningPatients.size;
+        const pct = cohortSize > 0 ? round2((count / cohortSize) * 100) : 0;
+
+        return { count, pct, orders, revenue, upcomingCount, upcomingRevenue, status };
+      };
+
+      const repeatM1 = await computePeriod(1);
+      const repeatM2 = await computePeriod(2);
+      const repeatM3 = await computePeriod(3);
+
+      const totalRealizedRevenue =
+        initialRevenue + (repeatM1?.revenue || 0) + (repeatM2?.revenue || 0) + (repeatM3?.revenue || 0);
+      const revenuePerPatient = cohortSize > 0 ? Math.round(totalRealizedRevenue / cohortSize) : 0;
+
+      let adSpend: number | null = null;
+      const monthSpendConfig = monthlySpends[month];
+      if (ch === 'LPWA') {
+        adSpend = monthSpendConfig?.lpwa !== undefined ? monthSpendConfig.lpwa : null;
+      } else if (ch === 'CTWA') {
+        adSpend = monthSpendConfig?.ctwa !== undefined ? monthSpendConfig.ctwa : null;
+      } else if (ch === 'ALL') {
+        if (monthSpendConfig?.lpwa !== undefined || monthSpendConfig?.ctwa !== undefined) {
+          adSpend = (monthSpendConfig?.lpwa || 0) + (monthSpendConfig?.ctwa || 0);
+        }
+      }
+
+      if (adSpend === null && defaultSpend !== undefined && defaultSpend > 0 && month === currentWibMonth) {
+        if (ch === 'ALL') adSpend = defaultSpend;
+      }
+
+      const cac =
+        (ch === 'LPWA' || ch === 'CTWA') && adSpend !== null && cohortSize > 0
+          ? Math.round(adSpend / cohortSize)
+          : null;
+
+      const roas =
+        (ch === 'LPWA' || ch === 'CTWA') && adSpend !== null && adSpend > 0
+          ? round2(totalRealizedRevenue / adSpend)
+          : null;
+
+      let paybackStatus: UnifiedMonthlyCohortRow['paybackStatus'] = 'TIDAK_BERLAKU';
+      if (ch === 'LPWA' || ch === 'CTWA') {
+        if (adSpend === null || adSpend === 0) {
+          paybackStatus = 'BELUM_DIISI';
+        } else if (roas !== null && roas >= 1.0) {
+          paybackStatus = 'BALIK_MODAL';
+        } else {
+          paybackStatus = 'BELUM_BALIK_MODAL';
+        }
+      }
+
+      const channelLabel =
+        ch === 'ALL'
+          ? 'Semua Pasien'
+          : ch === 'LPWA'
+          ? 'LPWA (Landing Page)'
+          : ch === 'CTWA'
+          ? 'CTWA (Click to WA)'
+          : 'Organik';
+
+      monthlyCohorts.push({
+        cohortMonth: month,
+        channel: ch,
+        channelLabel,
+        cohortSize,
+        initialRevenue,
+        initialDeliveryFee,
+        initialUpcomingOrders,
+        initialUpcomingRevenue,
+        repeatM1,
+        repeatM2,
+        repeatM3,
+        totalRealizedRevenue,
+        revenuePerPatient,
+        adSpend,
+        cac,
+        roas,
+        paybackStatus,
+        isOngoing: month === currentWibMonth,
+        isSmallSample: cohortSize < minSampleThreshold,
+      });
+    }
+  }
+
+  // Planning calculation: Mature LTV 60-Day (AD patients only, firstVisit >= 60 days ago)
+  const matureAdPatients = patientInfos.filter((p) => {
+    if (p.channel !== 'LPWA' && p.channel !== 'CTWA') return false;
+    const ageDays = (nowMs - p.firstVisitDate.getTime()) / MS_PER_DAY;
+    return ageDays >= 60;
+  });
+
+  let totalMatureRevenue60d = 0;
+  for (const p of matureAdPatients) {
+    for (const r of p.reservations) {
+      if (r.status !== 'completed') continue;
+      const rDate = r.booking_date ? new Date(r.booking_date) : new Date(r.created_at);
+      const deltaDays = (rDate.getTime() - p.firstVisitDate.getTime()) / MS_PER_DAY;
+      if (deltaDays >= 0 && deltaDays <= 60) {
+        totalMatureRevenue60d += await treatmentFeeOf(r);
+      }
+    }
+  }
+
+  const matureSamplePatients = matureAdPatients.length;
+  const hasEnoughData = matureSamplePatients >= minSampleThreshold;
+  const matureLtv60Days =
+    matureSamplePatients > 0 ? Math.round(totalMatureRevenue60d / matureSamplePatients) : null;
+  const maxAllowableCac =
+    matureLtv60Days !== null ? Math.round(matureLtv60Days * (grossMarginPct / 100)) : null;
+
+  const planning: CohortPlanningMetrics = {
+    matureLtv60Days,
+    matureSamplePatients,
+    hasEnoughData,
+    grossMarginPct,
+    maxAllowableCac,
+    minSampleThreshold,
+    dataCutoffDate: todayWibStr,
+  };
+
+  // Rolling 3-Month Aggregate
+  const recent3Months = allMonths.slice(0, 3);
+  const rolling3MonthCohorts: UnifiedMonthlyCohortRow[] = [];
+
+  for (const ch of channels) {
+    const rows = monthlyCohorts.filter((r) => recent3Months.includes(r.cohortMonth) && r.channel === ch);
+    const cohortSize = rows.reduce((s, r) => s + r.cohortSize, 0);
+    const initialRevenue = rows.reduce((s, r) => s + r.initialRevenue, 0);
+    const initialDeliveryFee = rows.reduce((s, r) => s + r.initialDeliveryFee, 0);
+    const initialUpcomingOrders = rows.reduce((s, r) => s + r.initialUpcomingOrders, 0);
+    const initialUpcomingRevenue = rows.reduce((s, r) => s + r.initialUpcomingRevenue, 0);
+    const totalRealizedRevenue = rows.reduce((s, r) => s + r.totalRealizedRevenue, 0);
+    const revenuePerPatient = cohortSize > 0 ? Math.round(totalRealizedRevenue / cohortSize) : 0;
+
+    let adSpend: number | null = null;
+    const spends = rows.map((r) => r.adSpend).filter((s): s is number => s !== null);
+    if (spends.length > 0) {
+      adSpend = spends.reduce((a, b) => a + b, 0);
+    }
+
+    const cac =
+      (ch === 'LPWA' || ch === 'CTWA') && adSpend !== null && cohortSize > 0
+        ? Math.round(adSpend / cohortSize)
+        : null;
+    const roas =
+      (ch === 'LPWA' || ch === 'CTWA') && adSpend !== null && adSpend > 0
+        ? round2(totalRealizedRevenue / adSpend)
+        : null;
+
+    let paybackStatus: UnifiedMonthlyCohortRow['paybackStatus'] = 'TIDAK_BERLAKU';
+    if (ch === 'LPWA' || ch === 'CTWA') {
+      if (adSpend === null || adSpend === 0) paybackStatus = 'BELUM_DIISI';
+      else if (roas !== null && roas >= 1.0) paybackStatus = 'BALIK_MODAL';
+      else paybackStatus = 'BELUM_BALIK_MODAL';
+    }
+
+    const channelLabel =
+      ch === 'ALL'
+        ? 'Semua Pasien (3 Bln)'
+        : ch === 'LPWA'
+        ? 'LPWA (3 Bln)'
+        : ch === 'CTWA'
+        ? 'CTWA (3 Bln)'
+        : 'Organik (3 Bln)';
+
+    rolling3MonthCohorts.push({
+      cohortMonth: recent3Months.length > 1 ? `${recent3Months[recent3Months.length - 1]} s.d. ${recent3Months[0]}` : recent3Months[0] || currentWibMonth,
+      channel: ch,
+      channelLabel,
+      cohortSize,
+      initialRevenue,
+      initialDeliveryFee,
+      initialUpcomingOrders,
+      initialUpcomingRevenue,
+      repeatM1: null,
+      repeatM2: null,
+      repeatM3: null,
+      totalRealizedRevenue,
+      revenuePerPatient,
+      adSpend,
+      cac,
+      roas,
+      paybackStatus,
+      isOngoing: true,
+      isSmallSample: cohortSize < minSampleThreshold,
+    });
+  }
+
+  return { monthlyCohorts, rolling3MonthCohorts, planning };
+}
+
 export async function getMetaPerformanceReport(
   options: MetaPerformanceQueryOptions,
 ): Promise<MetaPerformanceReport> {
@@ -410,7 +870,7 @@ export async function getMetaPerformanceReport(
           select: {
             id: true, customer_id: true, created_at: true, booking_date: true, status: true, purchase_value: true,
             treatment_detail: true, treatment_category: true, delivery_fee: true, assigned_staff_id: true,
-            customer: { select: { id: true, created_at: true, ongkir: true, is_mql: true, mql_triggered_at: true, is_sandbox_test: true, is_internal_staff: true, kecamatan: true, kota: true, is_out_of_coverage: true } },
+            customer: { select: { id: true, phone: true, created_at: true, ongkir: true, is_mql: true, mql_triggered_at: true, is_sandbox_test: true, is_internal_staff: true, kecamatan: true, kota: true, is_out_of_coverage: true } },
           },
           orderBy: { created_at: 'asc' },
           take: MAX_ROWS + 1,
@@ -421,9 +881,9 @@ export async function getMetaPerformanceReport(
         prisma.reservation.findMany({
           where: { tenant_id: tenantId },
           select: {
-            id: true, customer_id: true, created_at: true, status: true, purchase_value: true, treatment_detail: true,
+            id: true, customer_id: true, created_at: true, booking_date: true, status: true, purchase_value: true, treatment_detail: true,
             treatment_category: true, delivery_fee: true,
-            customer: { select: { id: true, created_at: true, ongkir: true, is_sandbox_test: true, is_internal_staff: true } },
+            customer: { select: { id: true, phone: true, created_at: true, ongkir: true, is_sandbox_test: true, is_internal_staff: true } },
           },
           orderBy: { created_at: 'asc' },
           take: MAX_ROWS + 1,
@@ -467,6 +927,17 @@ export async function getMetaPerformanceReport(
   if (matchedAds.length > MAX_ROWS) matchedAds.length = MAX_ROWS;
 
   const dbNote = errors.length ? `Sebagian query gagal: ${errors.slice(0, 3).join(' | ')}` : undefined;
+
+  let tenantSettings: any = {};
+  try {
+    const t = await (prisma.tenant as any).findUnique({
+      where: { id: tenantId },
+      select: { settings: true },
+    });
+    tenantSettings = (t?.settings as any)?.metaPerformanceSettings || {};
+  } catch {
+    tenantSettings = {};
+  }
 
   // ── Kanal & kohort iklan ──────────────────────────────────────────────────
   const channelOf = (a: any): 'CTWA_NATIVE' | 'CTWA_FUZZY' | 'PROMO_CTA' =>
@@ -796,6 +1267,23 @@ export async function getMetaPerformanceReport(
       returned90: m90.mature(cohort) ? v.r90 : null,
     }));
 
+  const monthlySpends = tenantSettings?.monthlySpends || {};
+  const grossMarginPct = typeof tenantSettings?.grossMarginPct === 'number' ? tenantSettings.grossMarginPct : 40;
+  const minSampleThreshold = typeof tenantSettings?.minSampleThreshold === 'number' ? tenantSettings.minSampleThreshold : 20;
+
+  const { monthlyCohorts, rolling3MonthCohorts, planning: cohortPlanning } = await buildMonthlyCohorts({
+    tenantId,
+    historyReservations,
+    rangeReservations,
+    matchedAds,
+    monthlySpends,
+    defaultSpend: adSpend,
+    grossMarginPct,
+    minSampleThreshold,
+    now: new Date(),
+    treatmentFeeOf,
+  });
+
   // ── Kapasitas & utilisasi terapis (DB-driven: jumlah Staff aktif/hari) ─────
   let therapistCapacity: MetaPerformanceReport['therapistCapacity'] = null;
   let activeTherapists: number | null = null;
@@ -913,6 +1401,9 @@ export async function getMetaPerformanceReport(
       mqlDropOff,
     },
     retentionCohorts,
+    monthlyCohorts,
+    rolling3MonthCohorts,
+    cohortPlanning,
     therapistCapacity,
   };
 
@@ -923,4 +1414,4 @@ export async function getMetaPerformanceReport(
 }
 
 /** Ekspor helper murni untuk pengujian unit (tanpa DB). */
-export const _internal = { wibDayStart, wibDayEnd, median, mean, safeDiv, safeDivOrUndef, sanitizeUtmCampaign, sanitizeUtmSource, JOURNEY_BRACKETS, LEADTIME_BRACKETS };
+export const _internal = { wibDayStart, wibDayEnd, median, mean, safeDiv, safeDivOrUndef, sanitizeUtmCampaign, sanitizeUtmSource, JOURNEY_BRACKETS, LEADTIME_BRACKETS, wibMonthKey, monthDiff, addMonths, normalizePhone };
