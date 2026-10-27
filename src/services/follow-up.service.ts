@@ -1943,6 +1943,27 @@ export class FollowUpService {
         return false;
       }
 
+      // FASE C: Gerbang deterministik reservasi paused (paket berseri dijeda)
+      if (fu.reservation_id) {
+        let res = fu.reservation;
+        if (!res) {
+          try {
+            res = await prisma.reservation.findUnique({
+              where: { id: fu.reservation_id },
+              select: { status: true, series_id: true },
+            });
+          } catch {}
+        }
+        if (res && res.status === 'paused') {
+          console.log(`[FollowUp Worker] FollowUp #${fu.id} ditunda karena reservasi #${fu.reservation_id} sedang dijeda (status: paused).`);
+          await prisma.followUp.update({
+            where: { id: fu.id },
+            data: { processing_claimed_at: null },
+          }).catch(() => {});
+          return false;
+        }
+      }
+
       // F3 (V-fondasional): gerbang proaktif TUNGGAL — DILARANG kirim pengingat
       // saat chat sedang dipegang manusia (< ambang jam) atau kontak bypass/admin.
       {

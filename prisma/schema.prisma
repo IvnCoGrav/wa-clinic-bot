@@ -370,6 +370,16 @@ model ReservationSeries {
   updated_at        DateTime       @updatedAt
   reservations      Reservation[]
 
+  delivery_fee        Int?
+  discount_amount     Int?
+  payment_method      String?
+  duration_minutes    Int?
+  customer_address_id String?
+  customer_address    CustomerAddress? @relation(fields: [customer_address_id], references: [id], onDelete: SetNull)
+  request_id          String?
+
+  @@unique([tenant_id, request_id])
+  @@index([customer_address_id])
   @@index([tenant_id, customer_id])
   @@index([tenant_id, status])
   @@map("reservation_series")
@@ -412,6 +422,8 @@ model CustomerAddress {
   created_at      DateTime       @default(now())
   last_used_at    DateTime       @default(now())
   reservations    Reservation[]
+
+  reservation_series ReservationSeries[]
 
   @@index([tenant_id, customer_id])
   @@map("customer_addresses")

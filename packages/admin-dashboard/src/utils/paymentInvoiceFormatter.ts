@@ -284,7 +284,10 @@ export function generateReservationInvoiceText(params: GenerateInvoiceParams): s
     }
   }
 
-  lines.push(`Treatment : ${treatment}`);
+  const seriesBadge = (reservation as any).series_id
+    ? ` [Paket Berseri Sesi ${(reservation as any).session_number || 1}/${(reservation as any).total_sessions || '?'}]`
+    : '';
+  lines.push(`Treatment : ${treatment}${seriesBadge}`);
   lines.push('');
   lines.push('Payment : ');
   lines.push(`Treatment = ${formatThousand(treatmentPrice)}`);
@@ -296,6 +299,93 @@ export function generateReservationInvoiceText(params: GenerateInvoiceParams): s
   lines.push('');
   lines.push('H-1 sebelum treatment akan kami reminder kembali bunda 🥰');
   lines.push('Terimakasih.  ☺️');
+
+  return lines.join('\n');
+}
+
+export interface GenerateSeriesInvoiceParams {
+  series: {
+    id?: string;
+    treatment_name: string;
+    total_sessions: number;
+    purchase_value?: number | null;
+    delivery_fee?: number | null;
+    discount_amount?: number | null;
+    payment_method?: string | null;
+    reservations?: Array<{
+      session_number: number;
+      booking_date: string | Date;
+    }>;
+  };
+  customer?: InvoiceCustomerData | null;
+  discount?: number;
+}
+
+/**
+ * Mengenerate teks rincian booking & invoice WhatsApp untuk satu PAKET BERSERI utuh (unit komersial tunggal)
+ */
+export function generateSeriesInvoiceText(params: GenerateSeriesInvoiceParams): string {
+  const { series, customer, discount = 0 } = params;
+  const kec = customer?.kecamatan || '';
+  const kota = customer?.kota || '';
+  const phone = customer?.phone || '';
+  const bundaName = cleanBundaName(customer?.name || '', kec, kota);
+  const address = customer?.address || customer?.preferences?.address || '';
+  const totalSessions = series.total_sessions || series.reservations?.length || 1;
+  const packagePrice = series.purchase_value || 0;
+  const perVisitOngkir = series.delivery_fee || 0;
+  const totalOngkir = perVisitOngkir * totalSessions;
+  const effectiveDiscount = Number(discount) || Number(series.discount_amount) || 0;
+  const total = Math.max(0, packagePrice + totalOngkir - effectiveDiscount);
+
+  const lines: string[] = [
+    'Berikut reservasi Paket Berseri 🐣',
+    '',
+    `Paket : ${series.treatment_name} (${totalSessions} Sesi)`,
+    `Nama Bunda : ${bundaName ? bundaName : '-'}`,
+    `Alamat & Shareloc : ${address || '-'}`,
+    `Kec : ${kec || '-'}`,
+    `Kota : ${kota || '-'}`,
+    `No. Hp : ${phone || '-'}`,
+    '',
+  ];
+
+  const babyDetails = (customer?.children || [])
+    .map((c) => ({ name: (c.name || '').trim(), age: (c.current_age || c.raw_age_text || '').trim() }))
+    .filter((b) => b.name && b.name !== '-');
+
+  if (babyDetails.length > 0) {
+    babyDetails.forEach((b, idx) => {
+      const suffix = babyDetails.length > 1 ? ` ${idx + 1}` : '';
+      lines.push(`Nama Bayi${suffix} : ${b.name}`);
+      lines.push(`Usia Bayi/Anak${suffix} : ${b.age || '-'}`);
+    });
+    lines.push('');
+  }
+
+  if (series.reservations && series.reservations.length > 0) {
+    lines.push('Rincian Jadwal Sesi :');
+    series.reservations.forEach((r) => {
+      const dateFormatted = formatIndonesianDateTime(String(r.booking_date));
+      lines.push(`• Sesi ${r.session_number}: ${dateFormatted}`);
+    });
+    lines.push('');
+  }
+
+  lines.push('Payment :');
+  lines.push(`Paket (${totalSessions} Sesi) = ${formatThousand(packagePrice)}`);
+  if (perVisitOngkir > 0) {
+    lines.push(`Ongkir (${totalSessions} kunjungan @ ${formatThousand(perVisitOngkir)}) = ${formatThousand(totalOngkir)}`);
+  } else {
+    lines.push('Ongkir = free');
+  }
+  if (effectiveDiscount > 0) {
+    lines.push(`Diskon = - ${formatThousand(effectiveDiscount)}`);
+  }
+  lines.push(`Total = ${formatThousand(total)}`);
+  lines.push('');
+  lines.push('H-1 sebelum setiap sesi treatment akan kami reminder kembali bunda 🥰');
+  lines.push('Terimakasih. ☺️');
 
   return lines.join('\n');
 }

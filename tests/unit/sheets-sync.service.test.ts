@@ -306,6 +306,39 @@ describe('PrismaSheetsSyncStore.getReservation — ordinal riwayat kanonis (kont
     expect(r?.is_repeat_order).toBe(false);
   });
 
+  it('Paket Berseri: Sesi 2..7 dari paket yang sama tetap prior=0 dan is_repeat_order=false (unit komersial tunggal)', async () => {
+    const seriesId = 'series-newborn-7d';
+    const now = new Date();
+    (prisma as any).reservation.findFirst = vi.fn().mockResolvedValue({
+      id: 'res-session-4',
+      tenant_id: TENANT,
+      customer_id: 'cust-newborn',
+      created_at: now,
+      series_id: seriesId,
+      session_number: 4,
+      total_sessions: 7,
+      is_repeat_order: false,
+      customer: null,
+      children: [],
+      assigned_staff: null,
+    });
+    (prisma as any).reservation.findMany = vi.fn().mockResolvedValue([
+      { id: 'res-session-1', customer_id: 'cust-newborn', created_at: now, series_id: seriesId, session_number: 1 },
+      { id: 'res-session-2', customer_id: 'cust-newborn', created_at: now, series_id: seriesId, session_number: 2 },
+      { id: 'res-session-3', customer_id: 'cust-newborn', created_at: now, series_id: seriesId, session_number: 3 },
+      { id: 'res-session-4', customer_id: 'cust-newborn', created_at: now, series_id: seriesId, session_number: 4 },
+      { id: 'res-session-5', customer_id: 'cust-newborn', created_at: now, series_id: seriesId, session_number: 5 },
+      { id: 'res-session-6', customer_id: 'cust-newborn', created_at: now, series_id: seriesId, session_number: 6 },
+      { id: 'res-session-7', customer_id: 'cust-newborn', created_at: now, series_id: seriesId, session_number: 7 },
+    ]);
+
+    const store = new PrismaSheetsSyncStore();
+    const r = await store.getReservation('res-session-4', TENANT);
+
+    expect(r?.prior_reservations_count).toBe(0);
+    expect(r?.is_repeat_order).toBe(false);
+  });
+
   it('reservasi tidak ditemukan → null', async () => {
     (prisma as any).reservation.findFirst = vi.fn().mockResolvedValue(null);
     const store = new PrismaSheetsSyncStore();

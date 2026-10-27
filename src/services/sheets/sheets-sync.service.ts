@@ -418,23 +418,48 @@ export class PrismaSheetsSyncStore implements SheetsSyncStore {
     });
     if (!r) return null;
 
-    // Ordinal riwayat KANONIS: hitung reservasi qualifying milik customer yang
-    // dibuat LEBIH AWAL (created_at asc) — sama dengan ordinal yang dipakai
-    // Admin Dashboard (`reservations.subroute.ts`) dan status riwayat kanonis
-    // `computeIsRepeatOrder` (`reservation-core.service.ts`: confirmed/en_route/
-    // completed). Flag mentah `is_repeat_order` DB TIDAK dipakai sebagai otoritas
-    // karena bisa terkontaminasi bug follow-up lama (order #1 palsu Repeat).
+    // Ordinal riwayat KANONIS berbasis Unit Komersial:
+    // - Bila bagian dari Paket Berseri (series_id != null): Setiap Paket Berseri dihitung 1 unit komersial.
+    //   Sesi 2..N dari paket yang sama DILARANG menaikkan ordinal menjadi repeat order palsu.
+    // - Bila reservasi tunggal (series_id null): hitung reservasi qualifying dibuat LEBIH AWAL.
     // Fail-safe DB offline → priorCount = 0 (New), selaras reservasi-core.
     let priorCount = 0;
     try {
-      priorCount = await prisma.reservation.count({
-        where: {
+      if ((r as any).series_id) {
+        const { unitKeyOf, assignUnitOrdinals } = await import('../reservation-unit');
+        const allCustomerRows = await prisma.reservation.findMany({
+          where: {
+            customer_id: r.customer_id,
+            tenant_id: tenantId,
+            status: { in: ['confirmed', 'en_route', 'completed'] },
+          },
+          select: { id: true, customer_id: true, created_at: true, series_id: true, session_number: true },
+        });
+        const currentEntry = {
+          id: r.id,
           customer_id: r.customer_id,
-          tenant_id: tenantId,
-          status: { in: ['confirmed', 'en_route', 'completed'] },
-          created_at: { lt: r.created_at },
-        },
-      });
+          created_at: r.created_at,
+          series_id: (r as any).series_id,
+          session_number: (r as any).session_number,
+        };
+        const merged = [
+          ...allCustomerRows.filter((p) => p.id !== r.id),
+          currentEntry,
+        ];
+        const ordinals = assignUnitOrdinals(merged as any);
+        const myKey = unitKeyOf(currentEntry);
+        const myOrdinal = ordinals.get(myKey) ?? 1;
+        priorCount = Math.max(0, myOrdinal - 1);
+      } else {
+        priorCount = await prisma.reservation.count({
+          where: {
+            customer_id: r.customer_id,
+            tenant_id: tenantId,
+            status: { in: ['confirmed', 'en_route', 'completed'] },
+            created_at: { lt: r.created_at },
+          },
+        });
+      }
     } catch (err: any) {
       console.warn('[SHEETS] hitung prior_reservations_count gagal (anggap 0):', err?.message);
       priorCount = 0;

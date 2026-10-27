@@ -319,9 +319,28 @@ export class ReservationLifecycleService {
     }
 
     // 2. NEXT_TREATMENT (per-stage guard + WIB + SENT-aware ada di follow-up.service)
+    // Anti-False Retention: jangan kirim repeat reminder jika reservasi ini bagian dari paket berseri yang masih berjalan
     try {
-      const { followUpService } = await import('./follow-up.service');
-      await followUpService.createNextTreatmentFollowUps(customerId, bookingDate, tenantId, reservationId);
+      let isPartOfActiveSeries = false;
+      const resData = await prisma.reservation.findUnique({
+        where: { id: reservationId },
+        select: { series_id: true },
+      }).catch(() => null);
+
+      if (resData?.series_id) {
+        const remaining = await prisma.reservation.count({
+          where: {
+            series_id: resData.series_id,
+            status: { in: ['pending', 'confirmed', 'en_route', 'paused'] },
+          },
+        }).catch(() => 0);
+        if (remaining > 0) isPartOfActiveSeries = true;
+      }
+
+      if (!isPartOfActiveSeries) {
+        const { followUpService } = await import('./follow-up.service');
+        await followUpService.createNextTreatmentFollowUps(customerId, bookingDate, tenantId, reservationId);
+      }
     } catch (err: any) {
       console.warn('[RESERVATION LIFECYCLE] onReservationCompleted createNextTreatmentFollowUps failed:', err?.message || err);
     }
@@ -392,6 +411,20 @@ export class ReservationLifecycleService {
       await sheetsSyncService.enqueue(reservationId, tenantId);
     } catch (err: any) {
       console.warn('[RESERVATION LIFECYCLE] onReservationCompleted sheetsSync enqueue failed:', err?.message || err);
+    }
+
+    // 5. Cek kelengkapan paket berseri (jika bagian dari reservation series)
+    try {
+      const res = await prisma.reservation.findUnique({
+        where: { id: reservationId },
+        select: { series_id: true },
+      }).catch(() => null);
+      if (res?.series_id) {
+        const { reservationSeriesService } = await import('./reservation-series.service');
+        await reservationSeriesService.checkAndCompleteSeries(res.series_id, tenantId);
+      }
+    } catch (seriesErr: any) {
+      console.warn('[RESERVATION LIFECYCLE] onReservationCompleted checkAndCompleteSeries failed:', seriesErr?.message || seriesErr);
     }
   }
 

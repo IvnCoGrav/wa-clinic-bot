@@ -304,14 +304,111 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   const [discount, setDiscount] = useState<number | ''>(0);
 
   // Multi-Session Package State
+  type SeriesIntervalPreset = 'DAILY' | 'EVERY_2_DAYS' | 'EVERY_3_DAYS' | 'WEEKLY' | 'TWICE_DAILY';
   const [isMultiSession, setIsMultiSession] = useState(false);
   const [multiSessionTotal, setMultiSessionTotal] = useState(0);
+  const [seriesInterval, setSeriesInterval] = useState<SeriesIntervalPreset>('DAILY');
+  const [conflictSessionNumber, setConflictSessionNumber] = useState<number | null>(null);
   const [multiSessionSchedule, setMultiSessionSchedule] = useState<Array<{
     sessionNumber: number;
     date: string;
     time: string;
     staffId: string;
   }>>([]);
+
+  const buildSeriesSchedule = (
+    total: number,
+    interval: SeriesIntervalPreset,
+    startDateStr: string,
+    startTimeStr: string,
+    defaultStaffId: string
+  ) => {
+    const schedule = [];
+    const baseDate = startDateStr ? new Date(`${startDateStr}T00:00:00`) : getTodayWibDate();
+    const baseTime = startTimeStr || '09:00';
+
+    for (let i = 0; i < total; i++) {
+      let dayOffset = 0;
+      let time = baseTime;
+
+      if (interval === 'DAILY') {
+        dayOffset = i;
+      } else if (interval === 'EVERY_2_DAYS') {
+        dayOffset = i * 2;
+      } else if (interval === 'EVERY_3_DAYS') {
+        dayOffset = i * 3;
+      } else if (interval === 'WEEKLY') {
+        dayOffset = i * 7;
+      } else if (interval === 'TWICE_DAILY') {
+        dayOffset = Math.floor(i / 2);
+        time = i % 2 === 0 ? baseTime : '15:00';
+      }
+
+      const d = new Date(baseDate);
+      d.setDate(d.getDate() + dayOffset);
+      const dateStr = getWibDateKey(d);
+      schedule.push({
+        sessionNumber: i + 1,
+        date: dateStr,
+        time,
+        staffId: defaultStaffId || '',
+      });
+    }
+    return schedule;
+  };
+
+  const handleIntervalPresetChange = (newInterval: SeriesIntervalPreset) => {
+    setSeriesInterval(newInterval);
+    const startD = multiSessionSchedule[0]?.date || bookingDate || getWibDateKey(getTodayWibDate());
+    const startT = multiSessionSchedule[0]?.time || bookingTime || '09:00';
+    const total = multiSessionSchedule.length > 0 ? multiSessionSchedule.length : (multiSessionTotal || 3);
+    const updated = buildSeriesSchedule(total, newInterval, startD, startT, assignedStaffId || '');
+    setMultiSessionSchedule(updated);
+  };
+
+  const handleAddSessionRow = () => {
+    const current = [...multiSessionSchedule];
+    const nextNum = current.length + 1;
+    let nextDate = bookingDate || getWibDateKey(getTodayWibDate());
+    let nextTime = bookingTime || '09:00';
+    if (current.length > 0) {
+      const last = current[current.length - 1];
+      const d = new Date(`${last.date}T00:00:00`);
+      const offset = seriesInterval === 'EVERY_2_DAYS' ? 2 : seriesInterval === 'EVERY_3_DAYS' ? 3 : seriesInterval === 'WEEKLY' ? 7 : 1;
+      d.setDate(d.getDate() + offset);
+      nextDate = getWibDateKey(d);
+      nextTime = last.time;
+    }
+    current.push({
+      sessionNumber: nextNum,
+      date: nextDate,
+      time: nextTime,
+      staffId: assignedStaffId || '',
+    });
+    setMultiSessionSchedule(current);
+    setMultiSessionTotal(current.length);
+  };
+
+  const handleRemoveSessionRow = (sessionNumber: number) => {
+    if (multiSessionSchedule.length <= 2) {
+      toast('Minimal paket berseri adalah 2 sesi.', 'info');
+      return;
+    }
+    const filtered = multiSessionSchedule
+      .filter((s) => s.sessionNumber !== sessionNumber)
+      .map((s, idx) => ({ ...s, sessionNumber: idx + 1 }));
+    setMultiSessionSchedule(filtered);
+    setMultiSessionTotal(filtered.length);
+  };
+
+  const handleEnableCustomMultiSession = (initialCount = 3) => {
+    setIsMultiSession(true);
+    setMultiSessionTotal(initialCount);
+    const startD = bookingDate || getWibDateKey(getTodayWibDate());
+    const startT = bookingTime || '09:00';
+    const schedule = buildSeriesSchedule(initialCount, seriesInterval, startD, startT, assignedStaffId || '');
+    setMultiSessionSchedule(schedule);
+  };
 
   // Delivery Tiers State (SaaS-Ready from DB)
   const [deliveryTiers, setDeliveryTiers] = useState<DeliveryTierItem[]>([]);
@@ -985,18 +1082,13 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     if (srv.totalSessions && srv.totalSessions > 1) {
       setIsMultiSession(true);
       setMultiSessionTotal(srv.totalSessions);
-      // Generate default schedule: starting from tomorrow, daily 09:00 + 15:00
-      const schedule = [];
+      const isNewborn2Days = (srv.name || '').toLowerCase().includes('2 hari') || (srv.name || '').toLowerCase().includes('newborn');
+      const defaultInterval: SeriesIntervalPreset = isNewborn2Days ? 'EVERY_2_DAYS' : 'DAILY';
+      setSeriesInterval(defaultInterval);
       const tomorrow = getTodayWibDate();
       tomorrow.setDate(tomorrow.getDate() + 1);
-      for (let i = 0; i < srv.totalSessions; i++) {
-        const dayOffset = Math.floor(i / 2);
-        const date = new Date(tomorrow);
-        date.setDate(date.getDate() + dayOffset);
-        const dateStr = getWibDateKey(date);
-        const time = i % 2 === 0 ? '09:00' : '15:00';
-        schedule.push({ sessionNumber: i + 1, date: dateStr, time, staffId: assignedStaffId || '' });
-      }
+      const tomorrowStr = getWibDateKey(tomorrow);
+      const schedule = buildSeriesSchedule(srv.totalSessions, defaultInterval, tomorrowStr, '09:00', assignedStaffId || '');
       setMultiSessionSchedule(schedule);
     }
   };
@@ -1618,37 +1710,52 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           throw editErr;
         }
       } else if (isMultiSession && multiSessionSchedule.length > 0) {
-        // Multi-Session Series Creation (R3: tambahkan babies ke payload)
+        // Multi-Session Series Creation dengan payload komersial lengkap
         const primaryTreatment = selectedTreatments.find((t) => !isAddonService(t));
         const formBabies = babies.filter((b) => b.name.trim().length > 0).map((b) => ({ name: b.name.trim(), ageText: b.ageText.trim() }));
-        const res = await apiRequest('/api/admin/reservation-series', {
-          method: 'POST',
-          body: JSON.stringify({
-            customerId,
-            treatmentName: primaryTreatment?.name || treatmentSummary,
-            treatmentCategory: computedCategory,
-            totalSessions: multiSessionTotal,
-            purchaseValue: Math.max(0, subtotalTreatments - (Number(discount) || 0)),
-            assignedStaffId: assignedStaffId || undefined,
-            notes: notes.trim() || undefined,
-            babies: formBabies,
-            sessions: multiSessionSchedule.map((s) => ({
-              sessionNumber: s.sessionNumber,
-              bookingDate: buildWibIso(s.date, s.time),
-              assignedStaffId: s.staffId || assignedStaffId || undefined,
-            })),
-          }),
-        });
+        const reqId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `req_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
-        toast(`Paket ${multiSessionTotal} sesi berhasil dibuat!`, 'success');
-        discardDraft(true);
-        const savedRes = res?.data || res;
-        const enrichedRes = enrichResWithFormState(savedRes);
-        onSuccess(enrichedRes);
-        if (withInvoice && onSuccessAndInvoice) {
-          onSuccessAndInvoice(enrichedRes);
+        try {
+          const res = await apiRequest('/api/admin/reservation-series', {
+            method: 'POST',
+            body: JSON.stringify({
+              customerId,
+              treatmentName: primaryTreatment?.name || treatmentSummary,
+              treatmentCategory: computedCategory,
+              totalSessions: multiSessionSchedule.length,
+              purchaseValue: Math.max(0, subtotalTreatments - (Number(discount) || 0)),
+              deliveryFee: Number(ongkir) || 0,
+              customerAddressId: (selectedCustomerInfo?.addresses?.[0]?.id || (selectedCustomerInfo as any)?.customer_address_id) || undefined,
+              discountAmount: Number(discount) || 0,
+              durationMinutes: Number(pureDurationMinutes) || 60,
+              requestId: reqId,
+              assignedStaffId: assignedStaffId || undefined,
+              notes: notes.trim() || undefined,
+              babies: formBabies,
+              sessions: multiSessionSchedule.map((s) => ({
+                sessionNumber: s.sessionNumber,
+                bookingDate: buildWibIso(s.date, s.time),
+                assignedStaffId: s.staffId || assignedStaffId || undefined,
+              })),
+            }),
+          });
+
+          toast(`Paket ${multiSessionSchedule.length} sesi berhasil dibuat!`, 'success');
+          discardDraft(true);
+          const savedRes = res?.data || res;
+          const enrichedRes = enrichResWithFormState(savedRes);
+          onSuccess(enrichedRes);
+          if (withInvoice && onSuccessAndInvoice) {
+            onSuccessAndInvoice(enrichedRes);
+          }
+          onClose();
+        } catch (seriesErr: any) {
+          if (seriesErr?.sessionNumber) {
+            setConflictSessionNumber(seriesErr.sessionNumber);
+          }
+          toast(seriesErr?.message || 'Gagal membuat paket berseri.', 'error');
+          return;
         }
-        onClose();
       } else {
         const { payload } = buildCreatePayload(forceSubmit);
         try {
@@ -2818,66 +2925,146 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
               </div>
             )}
 
+            {/* Tombol Buat Sebagai Paket Berseri jika belum aktif */}
+            {!isMultiSession && mode !== 'edit' && (
+              <div className="flex items-center justify-end">
+                <button
+                  type="button"
+                  onClick={() => handleEnableCustomMultiSession(3)}
+                  className="px-2.5 py-1 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/60 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-[11px] font-semibold hover:bg-blue-100 dark:hover:bg-blue-900/40 transition flex items-center space-x-1 cursor-pointer"
+                >
+                  <Plus size={12} />
+                  <span>Buat Sebagai Paket Berseri (Multi-Sesi)</span>
+                </button>
+              </div>
+            )}
+
             {/* Multi-Session Schedule Builder */}
             {isMultiSession && multiSessionSchedule.length > 0 && (
-              <div className="p-3 bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/30 rounded-xl space-y-2.5">
+              <div className="p-3 bg-blue-50/80 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/30 rounded-xl space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-blue-700 flex items-center space-x-1.5">
+                  <span className="text-xs font-bold text-blue-800 dark:text-blue-300 flex items-center space-x-1.5">
                     <CalendarDays size={14} />
-                    <span>Jadwal Paket {multiSessionTotal} Sesi</span>
+                    <span>Jadwal Paket Berseri ({multiSessionSchedule.length} Sesi)</span>
                   </span>
                   <button
                     type="button"
-                    onClick={() => { setIsMultiSession(false); setMultiSessionSchedule([]); }}
+                    onClick={() => { setIsMultiSession(false); setMultiSessionSchedule([]); setConflictSessionNumber(null); }}
                     className="text-[10px] text-blue-600 hover:text-red-600 font-bold cursor-pointer"
                   >
-                    Batal Paket
+                    Batalkan Mode Paket
                   </button>
                 </div>
-                <div className="max-h-48 overflow-y-auto space-y-1.5">
-                  {multiSessionSchedule.map((s, idx) => (
-                    <div key={idx} className="flex items-center gap-2 bg-white rounded-lg px-2.5 py-1.5 border border-blue-100">
-                      <span className="text-[10px] font-bold text-blue-600 w-12 shrink-0">Sesi {s.sessionNumber}</span>
-                      <input
-                        type="date"
-                        value={s.date}
-                        onChange={(e) => {
-                          const newSchedule = [...multiSessionSchedule];
-                          newSchedule[idx].date = e.target.value;
-                          setMultiSessionSchedule(newSchedule);
-                        }}
-                        className="flex-1 min-w-0 px-2 py-1 border border-[#d1d7db] dark:border-[#374248] rounded-lg text-[11px] text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069]"
-                      />
-                      <input
-                        type="time"
-                        value={s.time}
-                        onChange={(e) => {
-                          const newSchedule = [...multiSessionSchedule];
-                          newSchedule[idx].time = e.target.value;
-                          setMultiSessionSchedule(newSchedule);
-                        }}
-                        className="w-24 px-2 py-1 border border-[#d1d7db] dark:border-[#374248] rounded-lg text-[11px] text-[#111b21] dark:text-[#e9edef] font-bold focus:outline-none focus:border-[#008069]"
-                      />
-                      <select
-                        value={s.staffId}
-                        onChange={(e) => {
-                          const newSchedule = [...multiSessionSchedule];
-                          newSchedule[idx].staffId = e.target.value;
-                          setMultiSessionSchedule(newSchedule);
-                        }}
-                        className="w-28 px-2 py-1 border border-[#d1d7db] dark:border-[#374248] rounded-lg text-[11px] text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] truncate"
+
+                {/* Preset Interval Selector */}
+                <div className="space-y-1">
+                  <span className="text-[10px] font-semibold text-blue-900 dark:text-blue-200">Pola Interval Kunjungan:</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { id: 'DAILY' as const, label: 'Setiap Hari (1 hari)' },
+                      { id: 'EVERY_2_DAYS' as const, label: '2 Hari Sekali (2 hari)' },
+                      { id: 'EVERY_3_DAYS' as const, label: '3 Hari Sekali (3 hari)' },
+                      { id: 'WEEKLY' as const, label: 'Mingguan (7 hari)' },
+                      { id: 'TWICE_DAILY' as const, label: 'Pagi & Sore' },
+                    ].map((preset) => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => handleIntervalPresetChange(preset.id)}
+                        className={`px-2 py-1 rounded-md text-[10px] font-bold transition cursor-pointer ${
+                          seriesInterval === preset.id
+                            ? 'bg-blue-600 text-white shadow-xs'
+                            : 'bg-white dark:bg-[#1f2c34] text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700/50 hover:bg-blue-100'
+                        }`}
                       >
-                        <option value="">Default</option>
-                        {staffList.map((st) => (
-                          <option key={st.id} value={st.id}>{st.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                  ))}
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <p className="text-[10px] text-blue-600 italic">
-                  * Atur tanggal & jam per sesi. Klik "Buat Paket" untuk membuat {multiSessionTotal} reservasi sekaligus.
-                </p>
+
+                {/* Session Rows List */}
+                <div className="max-h-56 overflow-y-auto space-y-1.5 pr-0.5">
+                  {multiSessionSchedule.map((s, idx) => {
+                    const isConflict = conflictSessionNumber === s.sessionNumber;
+                    return (
+                      <div
+                        key={idx}
+                        className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 border transition ${
+                          isConflict
+                            ? 'bg-red-50 dark:bg-red-950/40 border-red-400 dark:border-red-600'
+                            : 'bg-white dark:bg-[#1f2c34] border-blue-100 dark:border-blue-900/50'
+                        }`}
+                      >
+                        <span className={`text-[10px] font-bold w-12 shrink-0 ${isConflict ? 'text-red-700 dark:text-red-400' : 'text-blue-600 dark:text-blue-400'}`}>
+                          Sesi {s.sessionNumber}
+                        </span>
+                        <input
+                          type="date"
+                          value={s.date}
+                          onChange={(e) => {
+                            const newSchedule = [...multiSessionSchedule];
+                            newSchedule[idx].date = e.target.value;
+                            setMultiSessionSchedule(newSchedule);
+                            if (conflictSessionNumber === s.sessionNumber) setConflictSessionNumber(null);
+                          }}
+                          className="flex-1 min-w-0 px-2 py-1 border border-[#d1d7db] dark:border-[#374248] rounded-md text-[11px] text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069]"
+                        />
+                        <input
+                          type="time"
+                          value={s.time}
+                          onChange={(e) => {
+                            const newSchedule = [...multiSessionSchedule];
+                            newSchedule[idx].time = e.target.value;
+                            setMultiSessionSchedule(newSchedule);
+                            if (conflictSessionNumber === s.sessionNumber) setConflictSessionNumber(null);
+                          }}
+                          className="w-20 px-1.5 py-1 border border-[#d1d7db] dark:border-[#374248] rounded-md text-[11px] text-[#111b21] dark:text-[#e9edef] font-bold focus:outline-none focus:border-[#008069]"
+                        />
+                        <select
+                          value={s.staffId}
+                          onChange={(e) => {
+                            const newSchedule = [...multiSessionSchedule];
+                            newSchedule[idx].staffId = e.target.value;
+                            setMultiSessionSchedule(newSchedule);
+                            if (conflictSessionNumber === s.sessionNumber) setConflictSessionNumber(null);
+                          }}
+                          className="w-24 px-1 py-1 border border-[#d1d7db] dark:border-[#374248] rounded-md text-[11px] text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] truncate"
+                        >
+                          <option value="">Default</option>
+                          {staffList.map((st) => (
+                            <option key={st.id} value={st.id}>{st.name}</option>
+                          ))}
+                        </select>
+                        {multiSessionSchedule.length > 2 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSessionRow(s.sessionNumber)}
+                            className="p-1 text-gray-400 hover:text-red-500 rounded transition cursor-pointer"
+                            title="Hapus sesi ini"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Footer Controls: Add Session & Summary Note */}
+                <div className="flex items-center justify-between pt-1 border-t border-blue-200/60 dark:border-blue-700/40">
+                  <button
+                    type="button"
+                    onClick={handleAddSessionRow}
+                    className="px-2.5 py-1 rounded-md bg-white dark:bg-[#1f2c34] text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700 text-[11px] font-bold hover:bg-blue-50 transition flex items-center space-x-1 cursor-pointer"
+                  >
+                    <Plus size={12} />
+                    <span>Tambah Sesi</span>
+                  </button>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-300 italic">
+                    * Total {multiSessionSchedule.length} kunjungan terapis. Ongkir dihitung per kunjungan.
+                  </p>
+                </div>
               </div>
             )}
           </div>

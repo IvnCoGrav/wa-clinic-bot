@@ -1541,6 +1541,87 @@ export const CustomerDatabase: React.FC = () => {
                                 <span>{Math.round(progress)}% selesai</span>
                                 {resolveStaffName(series, reservationStaffList) && <span>Terapis: {resolveStaffName(series, reservationStaffList)}</span>}
                               </div>
+                              {(series.status === 'active' || series.status === 'paused') && (
+                                <div className="pt-1.5 border-t border-[#e9edef] flex items-center justify-end space-x-1.5">
+                                  {series.status === 'active' && (
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        const ok = await confirm({
+                                          title: 'Jeda Paket Berseri?',
+                                          message: `Sisa sesi untuk paket "${series.treatment_name}" akan dijeda (status: paused) dan pengingat follow-up ditunda sementara.`,
+                                          confirmText: 'Ya, Jeda Paket',
+                                        });
+                                        if (!ok) return;
+                                        try {
+                                          const pRes: any = await apiRequest(`/api/admin/reservation-series/${series.id}/pause`, { method: 'PATCH' });
+                                          if (pRes?.success) {
+                                            toast('Paket berhasil dijeda.', 'success');
+                                            const sRes: any = await apiRequest(`/api/admin/reservation-series/customer/${activeDetailCustomer.id}`);
+                                            if (sRes?.success && Array.isArray(sRes.data)) setCustomerSeries(sRes.data);
+                                          }
+                                        } catch (e: any) {
+                                          toast(`Gagal menjeda paket: ${e.message}`, 'error');
+                                        }
+                                      }}
+                                      className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 transition cursor-pointer"
+                                    >
+                                      Jeda
+                                    </button>
+                                  )}
+                                  {series.status === 'paused' && (
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        const ok = await confirm({
+                                          title: 'Lanjutkan Paket Berseri?',
+                                          message: `Sesi paket "${series.treatment_name}" yang dijeda akan diaktifkan kembali.`,
+                                          confirmText: 'Lanjutkan Paket',
+                                        });
+                                        if (!ok) return;
+                                        try {
+                                          const rRes: any = await apiRequest(`/api/admin/reservation-series/${series.id}/resume`, { method: 'PATCH' });
+                                          if (rRes?.success) {
+                                            toast('Paket berhasil dilanjutkan.', 'success');
+                                            const sRes: any = await apiRequest(`/api/admin/reservation-series/customer/${activeDetailCustomer.id}`);
+                                            if (sRes?.success && Array.isArray(sRes.data)) setCustomerSeries(sRes.data);
+                                          }
+                                        } catch (e: any) {
+                                          toast(`Gagal melanjutkan paket: ${e.message}`, 'error');
+                                        }
+                                      }}
+                                      className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition cursor-pointer"
+                                    >
+                                      Lanjutkan
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      const ok = await confirm({
+                                        title: 'Batalkan Sisa Sesi Paket?',
+                                        message: `Seluruh sisa sesi yang belum terlaksana untuk paket "${series.treatment_name}" akan dibatalkan.`,
+                                        confirmText: 'Ya, Batalkan Sisa Sesi',
+                                        danger: true,
+                                      });
+                                      if (!ok) return;
+                                      try {
+                                        const cRes: any = await apiRequest(`/api/admin/reservation-series/${series.id}/cancel`, { method: 'PATCH' });
+                                        if (cRes?.success) {
+                                          toast('Sisa sesi paket berhasil dibatalkan.', 'success');
+                                          const sRes: any = await apiRequest(`/api/admin/reservation-series/customer/${activeDetailCustomer.id}`);
+                                          if (sRes?.success && Array.isArray(sRes.data)) setCustomerSeries(sRes.data);
+                                        }
+                                      } catch (e: any) {
+                                        toast(`Gagal membatalkan paket: ${e.message}`, 'error');
+                                      }
+                                    }}
+                                    className="px-2 py-0.5 rounded text-[10px] font-semibold bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 transition cursor-pointer"
+                                  >
+                                    Batalkan
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           );
                         })}

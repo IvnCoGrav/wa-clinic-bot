@@ -10,6 +10,12 @@ export interface CreateSeriesParams {
   treatmentCategory?: string;
   totalSessions: number;
   purchaseValue?: number;
+  deliveryFee?: number;
+  customerAddressId?: string;
+  paymentMethod?: string;
+  discountAmount?: number;
+  durationMinutes?: number;
+  requestId?: string;
   assignedStaffId?: string;
   notes?: string;
   sessions: Array<{
@@ -18,6 +24,7 @@ export interface CreateSeriesParams {
     assignedStaffId?: string;
   }>;
   babies?: Array<{ name: string; ageText?: string }>;
+  force?: boolean;
 }
 
 export interface SeriesWithReservations {
@@ -28,6 +35,12 @@ export interface SeriesWithReservations {
   completedSessions: number;
   pendingSessions: number;
   purchaseValue: number | null;
+  deliveryFee?: number | null;
+  discountAmount?: number | null;
+  paymentMethod?: string | null;
+  durationMinutes?: number | null;
+  customerAddressId?: string | null;
+  requestId?: string | null;
   status: string;
   assignedStaffId: string | null;
   notes: string | null;
@@ -76,6 +89,42 @@ class ReservationSeriesService {
   }
 
   /**
+   * Helper: Map series and reservations to SeriesWithReservations
+   */
+  private mapSeriesToResult(series: any, reservations?: any[]): SeriesWithReservations {
+    const resList = reservations || series.reservations || [];
+    const completedSessions = resList.filter((r: any) => r.status === 'completed').length;
+    const pendingSessions = resList.filter((r: any) => r.status === 'pending' || r.status === 'confirmed').length;
+
+    return {
+      id: series.id,
+      customerId: series.customer_id,
+      treatmentName: series.treatment_name,
+      totalSessions: series.total_sessions,
+      completedSessions,
+      pendingSessions,
+      purchaseValue: series.purchase_value,
+      deliveryFee: series.delivery_fee,
+      discountAmount: series.discount_amount,
+      paymentMethod: series.payment_method,
+      durationMinutes: series.duration_minutes,
+      customerAddressId: series.customer_address_id,
+      requestId: series.request_id,
+      status: series.status,
+      assignedStaffId: series.assigned_staff_id,
+      notes: series.notes,
+      createdAt: series.created_at,
+      reservations: resList.map((r: any) => ({
+        id: r.id,
+        sessionNumber: r.session_number!,
+        bookingDate: r.booking_date!,
+        status: r.status,
+        assignedStaffId: r.assigned_staff_id,
+      })),
+    };
+  }
+
+  /**
    * Create a reservation series with N auto-generated reservations.
    */
   async createSeries(params: CreateSeriesParams, tenantId: string = DEFAULT_TENANT_ID): Promise<SeriesWithReservations> {
@@ -88,97 +137,157 @@ class ReservationSeriesService {
       assignedStaffId,
       notes,
       sessions,
+      requestId,
+      deliveryFee,
+      customerAddressId,
+      paymentMethod,
+      discountAmount,
+      durationMinutes,
+      force,
     } = params;
 
     if (sessions.length !== totalSessions) {
       throw new Error(`sessions array length (${sessions.length}) tidak sama dengan totalSessions (${totalSessions})`);
     }
 
-    const resolvedCategory = await this.resolveCategory(treatmentName, treatmentCategory);
-    const sanitizedStaffId = assignedStaffId?.trim() ? assignedStaffId.trim() : null;
-
-    // Fase 3.3: collision check per sesi SEBELUM transaksi — gagal atomik
-    // (seluruh series ditolak bila ada 1 sesi bentrok), mencegah double-booking
-    // terapis lewat pembuatan paket sesi berulang.
-    const { findOverlappingStaffReservations } = await import('./reservation-core.service');
-    for (const s of sessions) {
-      const sessionStaffId = s.assignedStaffId?.trim() ? s.assignedStaffId.trim() : sanitizedStaffId;
-      if (!sessionStaffId) continue;
-      const bookingDate = typeof s.bookingDate === 'string' ? new Date(s.bookingDate) : s.bookingDate;
-      if (!bookingDate || isNaN(bookingDate.getTime())) continue;
-      const conflicts = await findOverlappingStaffReservations({
-        tenantId,
-        staffId: sessionStaffId,
-        bookingDate,
-        durationMinutes: 60,
+    // B3. Idempotensi (anti klik-ganda)
+    if (requestId && requestId.trim()) {
+      const existing = await prisma.reservationSeries.findFirst({
+        where: { tenant_id: tenantId, request_id: requestId.trim() },
+        include: { reservations: { orderBy: { session_number: 'asc' } } },
       });
-      if (conflicts.length > 0) {
-        const err: any = new Error('STAFF_COLLISION');
-        err.code = 'STAFF_COLLISION';
-        err.conflict = conflicts[0];
-        err.sessionNumber = s.sessionNumber;
-        throw err;
+      if (existing) {
+        return this.mapSeriesToResult(existing);
       }
     }
 
-    // Create series + all reservations in a transaction
-    const result = await prisma.$transaction(async (tx) => {
-      const series = await tx.reservationSeries.create({
-        data: {
-          tenant_id: tenantId,
-          customer_id: customerId,
-          treatment_name: treatmentName,
-          total_sessions: totalSessions,
-          purchase_value: purchaseValue ?? null,
-          assigned_staff_id: sanitizedStaffId,
-          notes: notes ?? null,
-          status: 'active',
-        },
+    const resolvedCategory = await this.resolveCategory(treatmentName, treatmentCategory);
+    const sanitizedStaffId = assignedStaffId?.trim() ? assignedStaffId.trim() : null;
+    const dur = durationMinutes && durationMinutes > 0 ? durationMinutes : 60;
+
+    // B4. Pre-flight lengkap per sesi SEBELUM transaksi
+    const {
+      findOverlappingStaffReservations,
+      findOverlappingCustomerReservations,
+      hasCapacityForUnassignedBooking,
+      computeAdvisoryLockKey,
+      runWithAdvisoryLock,
+    } = await import('./reservation-core.service');
+
+    const throwCollision = (code: string, sessionNumber: number, conflict: any) => {
+      const err: any = new Error(code);
+      err.code = code;
+      err.sessionNumber = sessionNumber;
+      err.conflict = conflict;
+      throw err;
+    };
+
+    // Validasi format tanggal & masa lalu
+    for (const s of sessions) {
+      const bookingDate = typeof s.bookingDate === 'string' ? new Date(s.bookingDate) : s.bookingDate;
+      if (!bookingDate || isNaN(bookingDate.getTime())) {
+        throwCollision('INVALID_SESSION_DATE', s.sessionNumber, null);
+      }
+      if (!force && bookingDate.getTime() < Date.now() - 5 * 60 * 1000) {
+        throwCollision('PAST_SESSION_DATE', s.sessionNumber, null);
+      }
+      const sessionStaffId = s.assignedStaffId?.trim() ? s.assignedStaffId.trim() : sanitizedStaffId;
+
+      if (sessionStaffId) {
+        const staffConflicts = await findOverlappingStaffReservations({
+          tenantId,
+          staffId: sessionStaffId,
+          bookingDate,
+          durationMinutes: dur,
+        });
+        if (staffConflicts.length > 0) {
+          throwCollision('STAFF_COLLISION', s.sessionNumber, staffConflicts[0]);
+        }
+      } else {
+        const hasCapacity = await hasCapacityForUnassignedBooking(tenantId, bookingDate);
+        if (!hasCapacity) {
+          throwCollision('CAPACITY_EXCEEDED', s.sessionNumber, null);
+        }
+      }
+
+      const { exactConflicts } = await findOverlappingCustomerReservations({
+        tenantId,
+        customerId,
+        bookingDate,
+        durationMinutes: dur,
       });
+      if (exactConflicts.length > 0) {
+        throwCollision('CUSTOMER_COLLISION', s.sessionNumber, exactConflicts[0]);
+      }
+    }
 
-      const reservations = await Promise.all(
-        sessions.map(async (s) => {
-          const bookingDate = typeof s.bookingDate === 'string' ? new Date(s.bookingDate) : s.bookingDate;
-          const sessionStaffId = s.assignedStaffId?.trim() ? s.assignedStaffId.trim() : sanitizedStaffId;
-          return tx.reservation.create({
-            data: {
-              tenant_id: tenantId,
-              customer_id: customerId,
-              treatment_category: resolvedCategory,
-              treatment_detail: `${treatmentName} [Sesi ${s.sessionNumber}/${totalSessions}]`,
-              booking_date: bookingDate,
-              status: 'confirmed',
-              assigned_staff_id: sessionStaffId,
-              purchase_value: purchaseValue ? Math.round(purchaseValue / totalSessions) : null,
-              series_id: series.id,
-              session_number: s.sessionNumber,
-              total_sessions: totalSessions,
-              raw_text: `[Admin Series] ${treatmentName} - Sesi ${s.sessionNumber}/${totalSessions}`,
-            },
-          });
-        })
-      );
+    // Cek duplikasi jadwal di antara sesi-sesi dalam paket yang sama
+    for (let i = 0; i < sessions.length; i++) {
+      for (let j = i + 1; j < sessions.length; j++) {
+        const d1 = new Date(sessions[i].bookingDate).getTime();
+        const d2 = new Date(sessions[j].bookingDate).getTime();
+        if (Math.abs(d1 - d2) < dur * 60000) {
+          throwCollision('CUSTOMER_COLLISION', sessions[j].sessionNumber, { reason: 'Sesi dalam paket saling tumpang tindih' });
+        }
+      }
+    }
 
-      return {
-        id: series.id,
-        customerId: series.customer_id,
-        treatmentName: series.treatment_name,
-        totalSessions: series.total_sessions,
-        completedSessions: 0,
-        pendingSessions: reservations.length,
-        purchaseValue: series.purchase_value,
-        status: series.status,
-        assignedStaffId: series.assigned_staff_id,
-        notes: series.notes,
-        createdAt: series.created_at,
-        reservations: reservations.map((r) => ({
-          id: r.id,
-          sessionNumber: r.session_number!,
-          bookingDate: r.booking_date!,
-          status: r.status,
-          assignedStaffId: r.assigned_staff_id,
-        })),
-      };
+    // B5. Kunci advisory per (staf+hari sesi pertama)
+    const firstDate = typeof sessions[0].bookingDate === 'string' ? new Date(sessions[0].bookingDate) : sessions[0].bookingDate;
+    const lockKey = computeAdvisoryLockKey(tenantId, sanitizedStaffId, firstDate);
+
+    const result = await runWithAdvisoryLock(lockKey, async (db) => {
+      const runner = typeof db.$transaction === 'function' ? (fn: any) => db.$transaction(fn) : (fn: any) => fn(db);
+      return runner(async (tx: any) => {
+        const series = await tx.reservationSeries.create({
+          data: {
+            tenant_id: tenantId,
+            customer_id: customerId,
+            treatment_name: treatmentName,
+            total_sessions: totalSessions,
+            purchase_value: purchaseValue ?? null,
+            delivery_fee: deliveryFee ?? null,
+            discount_amount: discountAmount ?? null,
+            payment_method: paymentMethod ?? null,
+            duration_minutes: dur,
+            customer_address_id: customerAddressId ?? null,
+            request_id: requestId?.trim() ?? null,
+            assigned_staff_id: sanitizedStaffId,
+            notes: notes ?? null,
+            status: 'active',
+          },
+        });
+
+        const reservations = await Promise.all(
+          sessions.map(async (s) => {
+            const bookingDate = typeof s.bookingDate === 'string' ? new Date(s.bookingDate) : s.bookingDate;
+            const sessionStaffId = s.assignedStaffId?.trim() ? s.assignedStaffId.trim() : sanitizedStaffId;
+            return tx.reservation.create({
+              data: {
+                tenant_id: tenantId,
+                customer_id: customerId,
+                treatment_category: resolvedCategory,
+                treatment_detail: `${treatmentName} [Sesi ${s.sessionNumber}/${totalSessions}]`,
+                booking_date: bookingDate,
+                status: 'confirmed',
+                assigned_staff_id: sessionStaffId,
+                purchase_value: purchaseValue ? Math.round(purchaseValue / totalSessions) : null,
+                delivery_fee: deliveryFee ?? null,
+                discount_amount: discountAmount ? Math.round(discountAmount / totalSessions) : null,
+                payment_method: paymentMethod ?? null,
+                duration_minutes: dur,
+                customer_address_id: customerAddressId ?? null,
+                series_id: series.id,
+                session_number: s.sessionNumber,
+                total_sessions: totalSessions,
+                raw_text: `[Admin Series] ${treatmentName} - Sesi ${s.sessionNumber}/${totalSessions}`,
+              },
+            });
+          })
+        );
+
+        return this.mapSeriesToResult(series, reservations);
+      });
     });
 
     // Sync babies if provided (same upsert logic as single reservation edit)
@@ -393,6 +502,18 @@ class ReservationSeriesService {
       }
     }
 
+    // FASE C: sinkronkan reminder via followUpService.onReservationRescheduled saat bookingDate berubah
+    if (data.bookingDate !== undefined && updated.booking_date) {
+      try {
+        const { followUpService } = await import('./follow-up.service');
+        const { googleCalendarService } = await import('./google-calendar.service');
+        await followUpService.onReservationRescheduled?.(updated.id, updated.booking_date, tenantId).catch(() => {});
+        (googleCalendarService as any).updateEvent?.(updated).catch(() => {});
+      } catch (e: any) {
+        console.warn('[RESERVATION SERIES] error rescheduling follow-up/gcal on updateSession:', e?.message);
+      }
+    }
+
     return updated;
   }
 
@@ -486,6 +607,18 @@ class ReservationSeriesService {
       await customerService.recalculateCustomerLtv(series.customer_id, tenantId);
     } catch (err: any) {
       console.warn('[RESERVATION SERIES] recalculateCustomerLtv on cancel failed:', err.message);
+    }
+
+    // FASE C: sinkronkan pembatalan ke follow-up dan Google Calendar untuk setiap sesi yang dibatalkan
+    try {
+      const { followUpService } = await import('./follow-up.service');
+      const { googleCalendarService } = await import('./google-calendar.service');
+      for (const r of cancellable) {
+        await followUpService.onReservationCancelled?.(r.id, tenantId).catch(() => {});
+        (googleCalendarService as any).deleteEvent?.(r.id, tenantId).catch(() => {});
+      }
+    } catch (e: any) {
+      console.warn('[RESERVATION SERIES] error cancelling follow-ups/gcal on cancelSeries:', e?.message);
     }
 
     return { cancelledCount: cancellable.length };

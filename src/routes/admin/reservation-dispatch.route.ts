@@ -515,6 +515,15 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
         if (!existing) {
           throw new Error('Reservation not found');
         }
+
+        // FASE F: Sesi 2..N dari paket berseri DILARANG membawa event CAPI (unit komersial tunggal pada sesi 1)
+        if (existing.series_id && (existing.session_number ?? 1) > 1) {
+          return reply.status(409).send({
+            success: false,
+            code: 'NOT_COMMERCIAL_ANCHOR',
+            error: `Reservasi ini adalah sesi ${existing.session_number} dari paket berseri. Event Purchase Meta CAPI hanya dikirim untuk sesi 1 (anchor paket).`,
+          });
+        }
         const { canTransition, isHoldActive, isHoldActiveByCreated } = await import('../../domain/reservation-status');
         if (!canTransition(existing.status, 'confirmed')) {
           return reply.status(409).send({ success: false, code: 'ILLEGAL_TRANSITION', error: `Transisi ${existing.status} ΓåÆ confirmed ditolak.` });
@@ -2140,6 +2149,19 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
 
         const formats = await getTenantCapiFormats(tenantId);
         let autoResolvedVal = existing.purchase_value && existing.purchase_value > 0 ? existing.purchase_value : undefined;
+
+        // FASE F: Jika sesi 1 dari paket berseri, gunakan total purchase_value dari series (bukan nilai per sesi)
+        if (existing.series_id && (existing.session_number ?? 1) === 1) {
+          try {
+            const seriesRow = await prisma.reservationSeries.findUnique({
+              where: { id: existing.series_id },
+              select: { purchase_value: true },
+            });
+            if (seriesRow?.purchase_value && seriesRow.purchase_value > 0) {
+              autoResolvedVal = seriesRow.purchase_value;
+            }
+          } catch {}
+        }
         if (!autoResolvedVal) {
           const raw = existing.raw_text || '';
           if (raw && /payment|pembayaran|total\s*[:=]|treatment\s*[:=]/i.test(raw)) {
@@ -2528,11 +2550,13 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
         },
       });
 
-      // Isolasi sandbox lapis presentasi (defense-in-depth): saring baris
-      // sandbox/dummy yang lolos filter query (flag belum ter-set tapi nomor dummy).
-      const visibleRows = rows.filter(
-        (r: (typeof rows)[number]) => !shouldExcludeFromCapiQueue(r.customer?.phone, r.customer?.name, (r.customer as any)?.is_sandbox_test)
-      );
+      // Isolasi sandbox lapis presentasi & saring sesi 2..N dari paket berseri
+      // (hanya sesi 1 / anchor yang masuk CAPI Purchase Queue)
+      const visibleRows = rows.filter((r: (typeof rows)[number]) => {
+        if (shouldExcludeFromCapiQueue(r.customer?.phone, r.customer?.name, (r.customer as any)?.is_sandbox_test)) return false;
+        if (r.series_id && (r.session_number ?? 1) > 1) return false;
+        return true;
+      });
 
       const formats = await getTenantCapiFormats(tenantId);
       const { getTenantMetaPurchasePolicy } = await import('../../services/capi.service');

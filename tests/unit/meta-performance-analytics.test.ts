@@ -240,6 +240,54 @@ describe('meta-performance-analytics: CAC/LTV kanonis', () => {
     expect(native?.firstTimeBuyers).toBe(1);
     expect(native?.initialRevenue).toBe(125000);
   });
+
+  it('Paket Berseri: seluruh 7 sesi paket newborn dihitung sebagai 1 transaksi (initialRevenue penuh, repeatRevenue=0)', async () => {
+    const cPkg = cust('pkg-1', T);
+    const click = {
+      tenant_id: T,
+      customerId: 'pkg-1',
+      matchedAt: '2026-08-01T02:00:00.000Z',
+      ctwa_clid: 'pkg_click_1',
+      utmCampaign: 'newborn_series_promo',
+      utmSource: 'meta',
+      utmMedium: 'cpc',
+      userAgent: null,
+      createdAt: '2026-08-01T02:00:00.000Z',
+      customer: cPkg,
+    };
+    const seriesId = 'series_newborn_7';
+    // 7 sesi @ 100.000 treatment + 10.000 ongkir = 110.000 per sesi -> total paket 770.000
+    const seriesReservations = Array.from({ length: 7 }, (_, i) => ({
+      id: `r_pkg_${i + 1}`,
+      tenant_id: T,
+      customer_id: 'pkg-1',
+      created_at: '2026-08-02T02:00:00.000Z',
+      booking_date: `2026-08-0${i + 3}T02:00:00.000Z`,
+      status: 'confirmed',
+      purchase_value: 100000,
+      treatment_detail: `Newborn 7 Hari [Sesi ${i + 1}/7]`,
+      treatment_category: 'BABY',
+      delivery_fee: 10000,
+      series_id: seriesId,
+      session_number: i + 1,
+      total_sessions: 7,
+      customer: cPkg,
+    }));
+
+    install({
+      rangeClicks: [click],
+      matchedAds: [click],
+      rangeReservations: seriesReservations,
+      historyReservations: seriesReservations,
+      customers: [cPkg],
+    });
+
+    const report = await getMetaPerformanceReport({ tenantId: T, ...RANGE });
+    expect(report.kpiSummary.newCustomersAcquired).toBe(1);
+    expect(report.kpiSummary.initialRevenue).toBe(770000);
+    expect(report.kpiSummary.repeatCustomersCount).toBe(0);
+    expect(report.kpiSummary.repeatRevenue).toBe(0);
+  });
 });
 
 describe('meta-performance-analytics: sanitasi UTM teknis', () => {
