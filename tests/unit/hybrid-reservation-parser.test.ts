@@ -38,24 +38,33 @@ Treatment : Pijat Bayi Ceria`;
       expect(isReservationFormMessage(freeFormMsg1)).toBe(true);
     });
 
-    it('should extract entities from free-form conversational text (Name, Age, Address, Date)', () => {
+    it('should extract free-form booking when only the child is named (mother name stays empty)', () => {
       const result = parseReservationText(freeFormMsg1);
       expect(result.success).toBe(true);
-      expect(result.reservation?.name).toBe('Raffa');
-      expect(result.reservation?.address).toContain('Wisma Lidah Kulon');
+      // Kontrak R-2: nama anak TIDAK boleh menjadi nama pemesan.
+      expect(result.reservation?.name).toBe('');
       expect(result.reservation?.babies[0]?.name).toBe('Raffa');
+      expect(result.reservation?.address).toContain('Wisma Lidah Kulon');
       expect(result.reservation?.babies[0]?.age).toContain('1 tahun');
       expect(result.reservation?.treatmentDetail).toMatch(/Baby:|Pijat/);
     });
 
     const freeFormMsg2 = 'Pesan paket newborn untuk anak saya Arkana 2 bulan, alamat di Sedati Agung gang 3, hari Sabtu';
 
-    it('should extract entities from newborn free-form booking', () => {
+    it('should extract newborn free-form booking without polluting customer name', () => {
       const result = parseReservationText(freeFormMsg2);
       expect(result.success).toBe(true);
-      expect(result.reservation?.name).toBe('Arkana');
+      expect(result.reservation?.name).toBe('');
+      expect(result.reservation?.babies[0]?.name).toBe('Arkana');
       expect(result.reservation?.address).toContain('Sedati Agung');
       expect(result.reservation?.babies[0]?.age).toContain('2 bulan');
+    });
+
+    it('R-2: nama anak tidak bocor ke nama customer pada free-form tanpa nama Bunda', () => {
+      const r = parseReservationText('Mau booking pijat bayi, anak saya Kenzo 5 bulan, alamat Jl. Kenjeran No. 5');
+      expect(r.success).toBe(true);
+      expect(r.reservation?.name).toBe('');
+      expect(r.reservation?.babies[0]?.name).toBe('Kenzo');
     });
   });
 

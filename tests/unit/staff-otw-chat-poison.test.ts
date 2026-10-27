@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { isDifferentDayWib, formatChatDateSeparatorWib, formatWibTime } from '../../packages/admin-dashboard/src/utils/dateWib';
+import { isDifferentDayWib, formatChatDateSeparatorWib, formatWibTime, wibDayStartEnd } from '../../packages/admin-dashboard/src/utils/dateWib';
+
+// Fixture deterministik: "hari ini 02:00 WIB" dihitung saat runtime (bukan tanggal mati).
+// Mencegah time bomb: label pemisah selalu 'Hari ini' kapan pun suite dijalankan.
+const TODAY_WIB_02_ISO = new Date(wibDayStartEnd(new Date()).start.getTime() + 2 * 3600 * 1000).toISOString();
+const TODAY_WIB_0205_ISO = new Date(wibDayStartEnd(new Date()).start.getTime() + (2 * 3600 + 5 * 60) * 1000).toISOString();
 
 describe('Staff OTW Chat Poisoning & Message Filtering Tests', () => {
   it('filters out non-message API responses like OTW status payload from message array', () => {
@@ -8,7 +13,7 @@ describe('Staff OTW Chat Poisoning & Message Filtering Tests', () => {
         id: 'msg_001',
         direction: 'INBOUND',
         content: 'Halo mau booking',
-        created_at: '2026-10-10T02:00:00Z',
+        created_at: TODAY_WIB_02_ISO,
       },
       // Rogue payload returned by OTW API
       {
@@ -25,7 +30,7 @@ describe('Staff OTW Chat Poisoning & Message Filtering Tests', () => {
         id: 'msg_003',
         direction: 'OUTBOUND',
         content: 'Baik Bunda',
-        created_at: '2026-10-10T02:05:00Z',
+        created_at: TODAY_WIB_0205_ISO,
       },
     ];
 
@@ -51,7 +56,7 @@ describe('Staff OTW Chat Poisoning & Message Filtering Tests', () => {
         id: 'msg_001',
         direction: 'INBOUND',
         content: 'Halo Bidan',
-        created_at: '2026-10-10T02:00:00Z',
+        created_at: TODAY_WIB_02_ISO,
       },
       // Poisoned item from OTW response
       {
