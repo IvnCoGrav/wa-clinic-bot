@@ -10,7 +10,6 @@ import {
   RefreshCw,
   Unlink,
   Save,
-  Sparkles,
   ExternalLink,
   Info,
   Download,
@@ -617,7 +616,7 @@ export const GoogleIntegrationPanel: React.FC = () => {
               disabled={fetchingAuthUrl}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold shadow-xs transition-all disabled:opacity-50"
             >
-              {fetchingAuthUrl ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+              {fetchingAuthUrl ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Calendar className="w-3.5 h-3.5" />}
               <span>Hubungkan Akun Google</span>
             </button>
           ) : (
@@ -729,7 +728,7 @@ export const GoogleIntegrationPanel: React.FC = () => {
                     {fetchingAuthUrl ? (
                       <RefreshCw className="w-4 h-4 animate-spin" />
                     ) : (
-                      <Sparkles className="w-4 h-4" />
+                      <Calendar className="w-4 h-4" />
                     )}
                     <span>Hubungkan dengan Akun Google (1-Klik)</span>
                   </button>
@@ -1040,7 +1039,7 @@ export const GoogleIntegrationPanel: React.FC = () => {
                     disabled={fetchingAuthUrl}
                     className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-semibold rounded-xl shadow-2xs transition-colors disabled:opacity-50"
                   >
-                    {fetchingAuthUrl ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-[#008069]" />}
+                    {fetchingAuthUrl ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <HardDrive className="w-3.5 h-3.5 text-[#008069]" />}
                     <span>Hubungkan Drive</span>
                   </button>
                 )}

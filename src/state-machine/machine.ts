@@ -49,7 +49,7 @@ export class ConversationStateMachine {
       };
     }
 
-    // --- GATE 🛡️: HUMAN HANDLING ACTIVE (CS TAKEOVER GUARD) ---
+    // Gate: Human Handling Active (CS Takeover)
     if (conversation.is_human_handling) {
       console.log(`[STATE MACHINE ABORT] Conversation ${conversation.id} for customer ${customer.phone} is in HUMAN_HANDLING mode. Skipping bot auto-reply.`);
       try {
@@ -563,7 +563,7 @@ export class ConversationStateMachine {
       }
     } catch {}
 
-    // --- 🚀 4. EKSEKUSI UTAMA: V3 AGENTIC (DEFAULT) / V2 SLOT-FILLING ENGINE ---
+    // 4. Eksekusi Utama: V3 Agentic (Default) / V2 Slot-Filling Engine
     // recentDbMsgs/historyFormatted dimuat di gate medis (RF-06) & dipakai ulang di sini.
     const handlerCtx = { ...ctx, tenantId, conversation: activeConversation, history: historyFormatted, bubbleCorrelationId };
 
@@ -609,7 +609,7 @@ export class ConversationStateMachine {
       };
     }
     
-    // --- GATE ✨: CUSTOMER SLASH COMMANDS (/reset, /state, /mulai) ---
+    // Gate: Customer Slash Commands (/reset, /state, /mulai)
     // Sengaja SETELAH gate medis/domain (Fase C3): perintah tak boleh memulihkan
     // state darurat atau eskalasi. Saat is_human_handling, guard di atas sudah
     // return sunyi lebih dulu sehingga /reset tak menyela CS.

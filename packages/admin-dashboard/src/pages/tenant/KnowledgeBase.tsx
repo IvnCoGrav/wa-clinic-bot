@@ -20,7 +20,7 @@ import {
   Save,
   X,
   Trash2,
-  Sparkles
+  Cpu
 } from 'lucide-react';
 
 export const KnowledgeBase: React.FC = () => {
@@ -919,7 +919,7 @@ export const KnowledgeBase: React.FC = () => {
                   className="px-2.5 py-1.5 bg-[#e8f5f2] hover:bg-[#c2e7e0] border border-[#c2e7e0] text-[#008069] rounded-xl text-xs font-semibold transition flex items-center space-x-1 disabled:opacity-50 shadow-xs"
                   title="Olah dan rapikan seluruh draf staging dengan AI"
                 >
-                  <Sparkles size={12} className={analyzingStaging ? 'animate-spin text-[#008069]' : ''} />
+                  {analyzingStaging ? <Loader size={12} className="animate-spin text-[#008069]" /> : <Cpu size={12} />}
                   <span>{analyzingStaging ? 'Menganalisis...' : 'Analisis AI'}</span>
                 </button>
                 <button

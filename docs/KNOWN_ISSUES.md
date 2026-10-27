@@ -3,25 +3,21 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
-## 275. [Data Integrity] Remediasi Duplikasi Alamat (Split-Brain) & Data Anak Corrupt/Duplikat di Database Produksi (2026-10-26, RESOLVED)
+## 277. [Landing/Copy] Ulasan & Testimoni Layanan Publik (`layanan.html`) (2026-10-27, OPEN - LOW)
 
-- **Status:** RESOLVED (Pencegahan kode di backend & admin dashboard dideploy; database live dibersihkan dengan aman setelah full backup pre-deletion; referential integrity ERD terjaga 100%).
-- **Akar Masalah:**
-  1. **Buku Alamat (`customer_addresses`)**:
-     - *Double-write sequence*: `reservation-lifecycle.service.ts` memanggil `upsertSavedAddress` kedua kalinya 24–200 ms setelah `reservationCoreService` membuat kartu alamat primer, sehingga memicu split-brain kartu sekunder (`Rumah X 2`).
-     - *Pencocokan Kelurahan Null*: `addressesMatch` mengevaluasi `!aAddr && !bAddr && sameKel && sameKec`. Saat kedua kartu memiliki kelurahan `null`, `sameKel` bernilai `false`, memicu duplikasi kartu.
-  2. **Data Anak (`children`)**:
-     - *Case-sensitivity duplicate*: `child.service.ts` melakukan `findFirst` peka huruf besar-kecil (`Zayn` vs `zayn`), menyebabkan anak yang sama tersimpan berulang dengan casing berbeda.
-     - *Penyerapan Form & Chat Fragment*: Pesan template CRM ("Gimana perkembangan si kecil belakangan ini?") dan potongan obrolan terserap menjadi nama anak ("belakangan ini", "zayyan boleh nebul k", "sabtu jam set").
-     - *Reservasi Maternal Tersimpan Sebagai Anak*: Booking ibu hamil ("Bella hamil 37 mgg") tersimpan ke tabel `children`.
-     - *Baris Majemuk & Potongan Usia*: Reservasi multi-anak terserap sebagai baris gabungan tunggal ("Chiara & Cio", "alesha & alea") di samping baris individu dan potongan usia ("5 tahun)").
-- **Solusi Fondasional & Hasil Remediasi:**
-  1. **Backup Pra-Hapus**: Snapshot dump lengkap `wa_clinic_db` (`backup_pre_dedup_20261026_0951.dump` & `.sql`) disimpan di `/opt/wa-clinic-bot/backups/`.
-  2. **Audit ERD & Relink Transaksional**: `reservations.customer_address_id` wajib dipindahkan (*repointed*) ke ID pemenang sebelum kartu duplikat dihapus, mencegah `NULL` customer_address_id pada reservasi aktif.
-  3. **Hasil Bersih Database Live**:
-     - Alamat: Dari 146 kartu (36 duplikat) menjadi **110 kartu untuk 110 pelanggan** (rasio 1:1 sempurna, 0 duplikat).
-     - Anak: Dari 292 baris menjadi **264 anak bersih untuk 220 pelanggan** (0 duplikat case-insensitive, 0 parsing garbage, 0 dangling foreign keys).
-  4. **Pencegahan Kode**: Guard double-write di `reservation-lifecycle.service.ts`, case-insensitive upsert di `child.service.ts`, validator nama di `name-sanitizer.ts`, perbaikan paritas di `addressMatch.ts` (backend & dashboard), dan deployment ulang kontainer `app` serta `worker`.
+- **Status:** OPEN (Menunggu keputusan bisnis pemilik klinik: format review WhatsApp asli vs studi kasus).
+- **Gejala / Akar Masalah:** File generator `scripts/build_landing.js` menghasilkan 3 kartu ulasan statis di `src/landing/public/layanan.html` (Bunda Amanda, Bunda Sarah, Bunda Dian) dengan bintang 5.0 seragam. Meskipun kode membuktikan teks ini bersifat statis/hardcoded, belum diputuskan apakah akan digantikan tangkapan layar review WhatsApp pasien asli atau format studi kasus klinis.
+- **Dampak:** Bersifat representasional pada halaman landing publik; tidak mempengaruhi logika bisnis transaksi atau bot WhatsApp.
+- **Rencana Tindak Lanjut:** Saat ada sesi peninjauan materi pemasaran klinik, ganti ulasan dengan review terverifikasi atau tangkapan layar chat WhatsApp asli berizin.
+
+## 276. [Analytics/KPI] Formula & Window Conversion Rate Overview Dashboard (2026-10-27, OPEN - LOW)
+
+- **Status:** OPEN (Rasio reservasi hari ini / total chat sepanjang waktu tidak valid secara matematis; kartu diganti AOV bulanan).
+- **Gejala / Akar Masalah:** Sebelumnya kartu Conversion Rate di Overview menghitung rasio reservasi harian terhadap total seluruh percakapan sepanjang masa di database. Karena penyebut dan pembilang memiliki rentang waktu (time window) yang berbeda, angka persentase menjadi tidak bermakna.
+- **Dampak:** Kartu sementara digantikan dengan "Rata-rata Nilai Reservasi (AOV)" bulanan yang bersumber langsung dari `kpi.aov` di `FinancialAnalyticsService`.
+- **Rencana Tindak Lanjut:** Jika manajemen klinik membutuhkan metrik Conversion Rate, definisikan formula berbasis cohort atau window waktu seragam (misal: reservasi bulan ini / percakapan unik bulan ini * 100%) dan sediakan endpoint kalkulasi kanonis di backend.
+
+## 275. [Data Integrity] Remediasi Duplikasi Alamat (Split-Brain) & Data Anak Corrupt/Duplikat di Database Produksi (2026-10-26, RESOLVED)
 
 ## 274. [Deploy/Ops] `scripts/backfill-meta-purchase-policy.ts` Tidak Dapat Dijalankan di Container Produksi (2026-10-22, OPEN - LOW)
 

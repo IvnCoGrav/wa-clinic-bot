@@ -83,7 +83,7 @@ export const AiRouterPanel: React.FC<Props> = ({
           {/* Auto-save status indicator */}
           <div className="flex items-center gap-1.5 shrink-0">
             {savingAiScope ? (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-[#008069] text-xs font-semibold animate-pulse border border-emerald-200">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-[#008069] text-xs font-semibold border border-emerald-200">
                 <Loader2 size={13} className="animate-spin" />
                 <span>Menyimpan ke server...</span>
               </span>

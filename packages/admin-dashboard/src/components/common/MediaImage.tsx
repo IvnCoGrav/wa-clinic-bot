@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { ImageOff, Loader, X, ArrowLeft, Sparkles, Check, ZoomIn, ZoomOut, Download } from 'lucide-react';
+import { ImageOff, Loader, X, ArrowLeft, Check, ZoomIn, ZoomOut, Download } from 'lucide-react';
 
 export interface ChatMediaData {
   url?: string;
@@ -264,9 +264,9 @@ export const MediaImage: React.FC<{
                       type="button"
                       onClick={handleLoadHd}
                       title="Klik untuk memuat resolusi penuh (HD)"
-                      className="flex items-center space-x-1 px-2.5 py-1.5 rounded-full bg-amber-500/90 hover:bg-amber-500 active:bg-amber-600 text-white text-[11px] font-bold shadow-sm transition cursor-pointer touch-manipulation ring-1 ring-amber-300/50 animate-pulse"
+                      className="flex items-center space-x-1 px-2.5 py-1.5 rounded-full bg-amber-500/90 hover:bg-amber-500 active:bg-amber-600 text-white text-[11px] font-bold shadow-sm transition cursor-pointer touch-manipulation ring-1 ring-amber-300/50"
                     >
-                      <Sparkles size={13} />
+                      <ZoomIn size={13} />
                       <span>Muat HD</span>
                     </button>
                   )}

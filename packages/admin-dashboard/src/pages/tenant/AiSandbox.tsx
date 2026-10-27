@@ -10,12 +10,13 @@ import {
   Activity, 
   Cpu, 
   AlertOctagon,
-  Sparkles,
   Edit3,
   Save,
   X,
   RefreshCw,
   Zap,
+  RotateCcw,
+  MessageSquare,
 } from 'lucide-react';
 
 interface ChatMessage {
@@ -492,7 +493,7 @@ export const AiSandbox: React.FC = () => {
             className="px-3.5 py-2 bg-white hover:bg-[#f0f2f5] text-[#008069] border border-[#c2e7e0] rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
             title="Mulai sesi simulator customer baru yang bersih"
           >
-            <Sparkles size={13} />
+            <RotateCcw size={13} />
             <span>Sesi Bersih Baru</span>
           </button>
 
@@ -516,7 +517,7 @@ export const AiSandbox: React.FC = () => {
           <div className="flex items-center justify-between pb-3 border-b border-[#e9edef] mb-3">
             <div className="flex items-center space-x-2">
               <span className="text-xs font-bold text-[#111b21] uppercase flex items-center space-x-1.5">
-                <Sparkles size={14} className="text-[#008069]" />
+                <MessageSquare size={14} className="text-[#008069]" />
                 <span>Simulated WhatsApp Chat</span>
               </span>
               {inspectorData.modelUsed && (

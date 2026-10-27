@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
-import { Download, FileText, RefreshCw, CalendarDays, Sparkles } from 'lucide-react';
+import { Download, FileText, RefreshCw, CalendarDays, HelpCircle } from 'lucide-react';
 import { getWibDateKey } from '../../utils/dateWib';
 
 interface ExportFile {
@@ -199,7 +199,7 @@ export const ChatExport: React.FC = () => {
       {/* Tip analisa AI */}
       <div className="rounded-2xl bg-purple-50 border border-purple-200 p-4 shadow-xs">
         <p className="text-xs text-purple-900 leading-relaxed flex items-start gap-2">
-          <Sparkles size={14} className="mt-0.5 shrink-0 text-purple-700" />
+          <HelpCircle size={14} className="mt-0.5 shrink-0 text-purple-700" />
           <span>
             File dapat langsung di-upload ke AI (ChatGPT/Gemini/Claude) dengan prompt, contoh:{' '}
             <code className="text-purple-900 bg-purple-100 px-1.5 py-0.5 rounded font-mono text-[11px]">

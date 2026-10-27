@@ -17,7 +17,6 @@ import {
   ShieldCheck,
   Cpu,
   Terminal,
-  Sparkles,
   ChevronDown,
   ChevronRight,
   Copy,
@@ -39,7 +38,7 @@ type TabId = 'system' | 'llm' | 'logs' | 'messages' | 'conversations';
 
 const TABS: Array<{ id: TabId; label: string; icon: LucideIcon }> = [
   { id: 'system', label: 'System Overview', icon: Server },
-  { id: 'llm', label: '🧠 LLM Execution Logs', icon: Sparkles },
+  { id: 'llm', label: 'LLM Execution Logs', icon: Cpu },
   { id: 'logs', label: 'Logs', icon: Terminal },
   { id: 'messages', label: 'Message Trace', icon: MessageSquare },
   { id: 'conversations', label: 'Conversations', icon: Phone },

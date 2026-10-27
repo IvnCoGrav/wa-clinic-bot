@@ -54,7 +54,7 @@ const IndexRedirect: React.FC = () => {
   }, [loading, user]);
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#f0f2f5]">
+      <div className="flex h-[100dvh] min-h-[100dvh] items-center justify-center bg-[#f0f2f5]">
         <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#008069] border-t-transparent"></div>
       </div>
     );
@@ -104,7 +104,7 @@ export const App: React.FC = () => {
         <BootProgress />
         <AppErrorBoundary scopeLabel="global">
         <Suspense fallback={
-          <div className="flex h-screen items-center justify-center bg-[#f0f2f5]">
+          <div className="flex h-[100dvh] min-h-[100dvh] items-center justify-center bg-[#f0f2f5]">
             <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#008069] border-t-transparent"></div>
           </div>
         }>
@@ -299,7 +299,7 @@ export const App: React.FC = () => {
 
             {/* Unauthorized view */}
             <Route path="/admin/unauthorized" element={
-              <div className="flex h-screen flex-col items-center justify-center bg-[#f0f2f5] text-[#111b21] text-center p-6 space-y-4">
+              <div className="flex h-[100dvh] min-h-[100dvh] flex-col items-center justify-center bg-[#f0f2f5] text-[#111b21] text-center p-6 space-y-4">
                 <div className="bg-white border border-[#e9edef] rounded-2xl p-8 shadow-xs max-w-sm flex flex-col items-center space-y-3">
                   <h3 className="text-lg font-bold text-rose-600">Access Unauthorized</h3>
                   <p className="text-xs text-[#667781]">

@@ -1,5 +1,5 @@
 import React from 'react';
-import { MapPin, AlertTriangle, MessageSquareWarning, HeartHandshake, Sparkles } from 'lucide-react';
+import { MapPin, AlertTriangle, MessageSquareWarning, HeartHandshake } from 'lucide-react';
 import { MetaPerformanceReport, fmtNum, fmtRupiah } from './types';
 
 /** Diagnosa kebocoran prospek + preferensi layanan pasien iklan. */
@@ -10,7 +10,7 @@ export const LeakageGrid: React.FC<{ report: MetaPerformanceReport }> = ({ repor
     <section className="grid grid-cols-1 lg:grid-cols-2 gap-3">
       <div className="bg-white border border-[#e9edef] rounded-2xl p-5 shadow-xs space-y-3">
         <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
-          <Sparkles size={16} className="text-[#008069]" /> Preferensi Layanan Pasien Iklan
+          <HeartHandshake size={16} className="text-[#008069]" /> Preferensi Layanan Pasien Iklan
         </h3>
         {prefs.length === 0 ? (
           <p className="text-xs text-[#8696a0] italic">Belum ada pembelian dari kanal iklan pada rentang ini.</p>
@@ -53,7 +53,7 @@ export const LeakageGrid: React.FC<{ report: MetaPerformanceReport }> = ({ repor
             <MapPin size={16} className="text-[#008069]" /> Sebaran Wilayah Peminat
           </h3>
           {d.topRegions.length === 0 ? (
-            <p className="text-xs text-[#8696a0] italic">Belum ada data wilayah.</p>
+            <p className="text-xs text-[#8696a0]">Belum ada deteksi wilayah. Sistem mencatat wilayah saat pasien menyebutkan lokasi kecamatan/kelurahan di chat WhatsApp.</p>
           ) : (
             <div className="flex flex-wrap gap-1.5">
               {d.topRegions.map((r) => (

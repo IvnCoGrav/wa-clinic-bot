@@ -20,7 +20,7 @@ import {
   Crosshair,
   UserCheck,
   User,
-  Sparkles,
+  Heart,
   Smile,
   X,
   MessageSquare,
@@ -248,7 +248,7 @@ export const TodayTreatments: React.FC = () => {
     }
     if (cat === 'MOMS') {
       return {
-        icon: <Sparkles size={15} className="text-purple-600" />,
+        icon: <Heart size={15} className="text-purple-600" />,
         badge: 'bg-purple-50 border-purple-200 text-purple-700',
         borderAccent: 'border-l-4 border-l-purple-500',
         label: 'Moms Spa',
@@ -810,7 +810,7 @@ export const TodayTreatments: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#e9edef] dark:border-[#2a3942]">
         <div className="flex items-center space-x-3.5">
           <div className="h-12 w-12 rounded-2xl bg-[#008069] text-white flex items-center justify-center shadow-sm shrink-0">
-            {dateTab === 'tomorrow' ? <Sparkles size={24} className="animate-pulse text-amber-200" /> : <CalendarDays size={24} />}
+            <CalendarDays size={24} />
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
@@ -1139,7 +1139,7 @@ export const TodayTreatments: React.FC = () => {
                           <span>Selesai</span>
                         </span>
                       ) : isOtw ? (
-                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-sky-100 dark:bg-sky-950/40 text-sky-800 dark:text-sky-300 border border-sky-300 dark:border-sky-500/40 flex items-center gap-1 animate-pulse">
+                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-sky-100 dark:bg-sky-950/40 text-sky-800 dark:text-sky-300 border border-sky-300 dark:border-sky-500/40 flex items-center gap-1">
                           <Navigation2 size={12} />
                           <span>Sedang OTW</span>
                         </span>
@@ -2064,7 +2064,7 @@ export const TodayTreatments: React.FC = () => {
                   <div className="space-y-3 bg-[#f8fafc] -mx-5 p-5 rounded-2xl border border-[#e9edef]">
                     <div className="flex items-center justify-between">
                       <label className="block text-xs font-bold text-[#111b21] flex items-center space-x-1.5">
-                        <Sparkles size={13} className="text-[#008069]" />
+                        <Crosshair size={13} className="text-[#008069]" />
                         <span>Kunci Titik GPS Pasien:</span>
                       </label>
                       {locCoords && (

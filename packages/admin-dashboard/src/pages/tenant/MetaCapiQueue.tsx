@@ -13,7 +13,7 @@ import {
   Clock,
   Code2,
   Copy,
-  Sparkles,
+  Activity,
   MapPin,
   Pencil,
   RotateCcw,
@@ -906,7 +906,7 @@ export const MetaCapiQueue: React.FC = () => {
                               : 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/40 text-emerald-800 dark:text-emerald-300'
                           }`}
                         >
-                          <Sparkles size={11} className={isPurchase ? 'text-blue-600' : 'text-emerald-600'} />
+                          <Activity size={11} className={isPurchase ? 'text-blue-600' : 'text-emerald-600'} />
                           <span>{item.eventType || 'Purchase'}</span>
                         </div>
                         {item.value && item.value > 0 ? (
@@ -1102,7 +1102,7 @@ export const MetaCapiQueue: React.FC = () => {
                             : 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/40 text-emerald-800 dark:text-emerald-300'
                         }`}
                       >
-                        <Sparkles size={11} />
+                        <Activity size={11} />
                         <span>{item.eventType || 'Purchase'}</span>
                       </span>
                       {item.value && item.value > 0 ? (
@@ -1237,7 +1237,7 @@ export const MetaCapiQueue: React.FC = () => {
                         className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-white dark:bg-transparent hover:bg-slate-100 dark:hover:bg-[#2a3942] border border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] text-xs font-semibold transition cursor-pointer"
                         title="Format & rapikan JSON"
                       >
-                        <Sparkles size={12} className="text-blue-500" />
+                        <Code2 size={12} className="text-blue-500" />
                         <span>Format</span>
                       </button>
                       <button

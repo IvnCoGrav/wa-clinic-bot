@@ -687,7 +687,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                     return (
                       <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs space-y-1">
                         <div className="flex items-center gap-1.5 font-bold text-rose-700">
-                          <AlertTriangle size={13} className="shrink-0 animate-pulse" />
+                          <AlertTriangle size={13} className="shrink-0" />
                           <span>Peringatan: Nominal Bukti Transfer Tidak Sesuai</span>
                         </div>
                         <div className="text-[11px] grid grid-cols-2 gap-1 pt-1 border-t border-rose-200">

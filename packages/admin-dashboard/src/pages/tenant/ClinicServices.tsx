@@ -11,8 +11,7 @@ import {
   Trash2, 
   Check, 
   X, 
-  Clock, 
-  Sparkles,
+  Clock,
   ToggleLeft,
   ToggleRight,
   Package,
@@ -629,7 +628,7 @@ export const ClinicServices: React.FC = () => {
                         </div>
                       )}
                       <div className="flex items-center space-x-1 text-sm font-bold text-[#008069]">
-                        <Sparkles size={13} />
+                        <Tag size={13} />
                         <span>Rp {promPrice.toLocaleString('id-ID')}</span>
                       </div>
                       {savings > 0 && (
@@ -787,7 +786,7 @@ export const ClinicServices: React.FC = () => {
 
                       <td className="px-4 py-3.5 text-xs text-right">
                         <div className="flex items-center justify-end space-x-0.5 font-bold text-[#008069]">
-                          <Sparkles size={11} />
+                          <Tag size={11} />
                           <span>Rp {promPrice.toLocaleString('id-ID')}</span>
                         </div>
                         {savings > 0 && (

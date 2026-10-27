@@ -43,7 +43,6 @@ import {
   ArrowDown,
   Clock,
   Crosshair,
-  Sparkles,
   Link2,
   ExternalLink,
   ChevronUp,
@@ -715,7 +714,7 @@ export const Reservations: React.FC = () => {
       case 'pending':
         // KB-2: same-day request butuh perhatian admin (badge hilang saat status diubah).
         if (rawText && /\[SAME_DAY_REQUEST\]/i.test(rawText)) {
-          return <span className="px-2.5 py-0.5 rounded-full bg-rose-500 text-white text-xs font-bold shadow-2xs animate-pulse">⏰ Hari Ini — Perlu Cek</span>;
+          return <span className="px-2.5 py-0.5 rounded-full bg-rose-500 text-white text-xs font-bold shadow-2xs">⏰ Hari Ini — Perlu Cek</span>;
         }
         return <span className="px-2.5 py-0.5 rounded-full bg-amber-100 border border-amber-200 text-amber-800 text-xs font-semibold">⏳ Menunggu</span>;
       default:
@@ -1814,7 +1813,7 @@ export const Reservations: React.FC = () => {
                 return (
                   <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 space-y-1.5">
                     <div className="flex items-center gap-1.5 text-xs font-bold text-rose-700">
-                      <AlertTriangle size={15} className="shrink-0 animate-pulse" />
+                      <AlertTriangle size={15} className="shrink-0" />
                       <span>Peringatan: Nominal Transfer Tidak Sesuai Tagihan</span>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-rose-200">
@@ -2070,7 +2069,7 @@ export const Reservations: React.FC = () => {
               <div className="space-y-3 bg-[#f8fafc] -mx-4 p-4 rounded-2xl border border-[#e9edef]">
                 <div className="flex items-center justify-between">
                   <label className="block text-xs font-bold text-[#111b21] flex items-center space-x-1.5">
-                    <Sparkles size={13} className="text-[#008069]" />
+                    <Crosshair size={13} className="text-[#008069]" />
                     <span>3. Titik Lokasi GPS Rumah Pasien:</span>
                   </label>
                   {editLat && editLng && (

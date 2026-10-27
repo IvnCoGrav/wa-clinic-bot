@@ -171,7 +171,7 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
           }`}
         >
           <div className="flex items-start gap-1.5 font-semibold">
-            <AlertTriangle size={13} className="mt-0.5 flex-shrink-0 animate-pulse" />
+            <AlertTriangle size={13} className="mt-0.5 flex-shrink-0" />
             <span>
               Bidan{staffName ? ` ${staffName}` : ''} diprediksi terlambat {delay?.delayMinutes} menit
               {delay?.formattedArrivalWib ? ` (estimasi tiba ±${delay.formattedArrivalWib} WIB)` : ''}.

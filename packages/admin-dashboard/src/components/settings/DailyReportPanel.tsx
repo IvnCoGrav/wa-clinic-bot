@@ -11,7 +11,7 @@ import {
   Users,
   ExternalLink,
   RefreshCw,
-  Sparkles,
+  Zap,
   Layers,
   HelpCircle,
   Moon,
@@ -322,7 +322,7 @@ export const DailyReportPanel: React.FC = () => {
           <div className="bg-emerald-50/40 border border-emerald-200 rounded-2xl p-4 space-y-3 shadow-xs">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <Sparkles size={15} className="text-[#008069]" />
+                <Zap size={15} className="text-[#008069]" />
                 <span className="text-xs font-bold text-[#111b21]">Koneksi 1-Klik Instan (Zero-Setup)</span>
               </div>
               <button

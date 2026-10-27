@@ -15,7 +15,6 @@ import {
   Edit2,
   Trash2,
   RotateCcw,
-  Sparkles,
   Search,
   Tag,
   User,
@@ -509,7 +508,7 @@ export const AiPersona: React.FC = () => {
             activeTab === 'sections' ? 'text-[#008069]' : 'text-[#667781] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-white'
           }`}
         >
-          <Sparkles size={15} />
+          <FileText size={15} />
           <span>Advanced 4-Section Prompt</span>
           {promptConfigSource === 'active' && (
             <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 font-semibold">
@@ -786,7 +785,7 @@ export const AiPersona: React.FC = () => {
         <div className="space-y-5">
           {/* Info Banner */}
           <div className="p-4 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/60 flex items-start space-x-3 text-xs text-[#2e7d32] dark:text-emerald-300">
-            <Sparkles className="flex-shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" size={18} />
+            <Info className="flex-shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" size={18} />
             <div className="space-y-1">
               <p className="font-bold text-emerald-950 dark:text-emerald-200">Cara Kerja Bank Contoh Chat (Few-Shot):</p>
               <p className="text-emerald-800 dark:text-emerald-300 leading-relaxed">
@@ -976,7 +975,7 @@ export const AiPersona: React.FC = () => {
                     {/* Midwife Response */}
                     <div className="space-y-1 pt-1">
                       <span className="text-[10px] font-bold text-[#008069] flex items-center space-x-1">
-                        <Sparkles size={11} />
+                        <MessageSquare size={11} />
                         <span>Balasan Ideal Bidan Yusi (Ditiru AI):</span>
                       </span>
                       <div className="bg-emerald-50/80 dark:bg-emerald-950/50 p-2.5 rounded-lg border border-emerald-200/80 dark:border-emerald-900/50 text-[#0f5132] dark:text-emerald-200 text-[11px] leading-relaxed font-medium">

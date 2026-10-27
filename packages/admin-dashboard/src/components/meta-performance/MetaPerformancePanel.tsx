@@ -1,5 +1,5 @@
 import React, { Suspense, useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, Loader, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Loader, RefreshCw, Activity } from 'lucide-react';
 import {
   fetchMetaPerformance,
   fetchMetaPerformanceSettings,
@@ -187,8 +187,26 @@ export const MetaPerformancePanel: React.FC<Props> = ({ startDate, endDate }) =>
           <LeakageGrid report={report} />
         </>
       ) : (
-        <div className="bg-white border border-[#e9edef] rounded-2xl p-12 text-center text-sm text-[#8696a0]">
-          Tidak ada data untuk ditampilkan.
+        <div className="bg-white border border-[#e9edef] rounded-2xl p-12 text-center shadow-xs space-y-3">
+          <div className="w-12 h-12 rounded-2xl bg-[#e8f5f2] text-[#008069] flex items-center justify-center mx-auto">
+            <Activity size={24} />
+          </div>
+          <div className="space-y-1 max-w-md mx-auto">
+            <h4 className="text-sm font-bold text-[#111b21]">Belum Ada Data Event Meta Pixel</h4>
+            <p className="text-xs text-[#667781] leading-relaxed">
+              Sistem belum menerima kiriman event pelacakan iklan pada rentang tanggal ini. Pastikan kampanye iklan Meta aktif dan Meta Pixel ID telah dipasang pada halaman landing page klinik.
+            </p>
+          </div>
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={() => load(spendInput)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold shadow-xs transition"
+            >
+              <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+              <span>Cek Ulang Data</span>
+            </button>
+          </div>
         </div>
       )}
     </div>

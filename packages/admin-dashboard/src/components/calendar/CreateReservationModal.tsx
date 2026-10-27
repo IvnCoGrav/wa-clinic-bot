@@ -8,7 +8,7 @@ import {
   Calendar as CalendarIcon, 
   Search, 
   Baby, 
-  Sparkles, 
+  Tag, 
   Clock, 
   ChevronDown, 
   Check, 
@@ -2232,7 +2232,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider block flex items-center space-x-1.5">
-                <Sparkles size={14} className="text-[#008069]" />
+                <Tag size={14} className="text-[#008069]" />
                 <span>Pilih Layanan / Treatment ({selectedTreatments.length} Dipilih) *</span>
               </label>
               {!showCustomServiceInput && (
@@ -2740,7 +2740,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
               <div className="p-3 bg-[#e8f5f2] border border-[#c2e7e0] rounded-xl space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-[#008069] flex items-center space-x-1.5">
-                    <Sparkles size={14} />
+                    <Clock size={14} />
                     <span>Rekomendasi Jam & Estimasi Kedatangan Bidan</span>
                   </span>
                   <span className="text-[10px] text-[#54656f] dark:text-[#aebac1]">Klik slot untuk memilih</span>

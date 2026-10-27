@@ -125,8 +125,8 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
           }
         }
 
-        const { items, hasMore } = await liveChatService.getConversationList(tenantId, limit, offset, effectiveMode, search, label as any, filter, staffId);
-        const payload = { success: true, count: items.length, hasMore, mode: effectiveMode, filter, data: items };
+        const { items, hasMore, total } = await liveChatService.getConversationList(tenantId, limit, offset, effectiveMode, search, label as any, filter, staffId);
+        const payload = { success: true, count: items.length, total, hasMore, mode: effectiveMode, filter, data: items };
         if (cacheKey) {
           responseCacheService.set(cacheKey, payload, 5); // 5s TTL
         }

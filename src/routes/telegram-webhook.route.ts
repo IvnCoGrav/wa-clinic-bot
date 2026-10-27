@@ -47,10 +47,7 @@ export async function telegramWebhookRoutes(fastify: FastifyInstance) {
     const isGroup = message.chat?.type === 'group' || message.chat?.type === 'supergroup';
     const messageThreadId = message.message_thread_id ? String(message.message_thread_id) : undefined;
     const senderName = [message.from?.first_name, message.from?.last_name].filter(Boolean).join(' ') || 'Admin';
-
-    // -----------------------------------------------------------------------------------------
     // 1. Command: /start [PAIRING_TOKEN] (Deep Link Binding)
-    // -----------------------------------------------------------------------------------------
     const startMatch = text.match(/^\/start(?:@\w+)?(?:\s+(\S+))?$/i);
     if (startMatch) {
       const pairingToken = startMatch[1]?.trim();
@@ -160,10 +157,7 @@ _Pengaturan juga dapat Anda pantau langsung dari Admin Dashboard._`,
 
       return reply.status(200).send({ ok: true, tenantId: tenant.id, boundChat: combinedChatId });
     }
-
-    // -----------------------------------------------------------------------------------------
     // Helper: Find Tenant associated with this Chat ID
-    // -----------------------------------------------------------------------------------------
     const findTenantForChat = async () => {
       // Check exact match or base chatId before ':'
       const tenants = await prisma.tenant.findMany({
@@ -178,10 +172,7 @@ _Pengaturan juga dapat Anda pantau langsung dari Admin Dashboard._`,
         return baseId === chatId || t.telegram_chat_id === chatId;
       });
     };
-
-    // -----------------------------------------------------------------------------------------
     // 2. Command: /set_daily_report (or /report_here / /reportDailyHere)
-    // -----------------------------------------------------------------------------------------
     if (
       /^\/(?:set_daily_report|set_report|report_here|reportdailyhere)(?:@\w+)?$/i.test(text)
     ) {
@@ -216,10 +207,7 @@ Silakan hubungkan grup ini terlebih dahulu melalui tombol *Hubungkan ke Telegram
       });
       return reply.status(200).send({ ok: true });
     }
-
-    // -----------------------------------------------------------------------------------------
     // 3. Command: /set_error_alerts (or /error_here / /set_errors)
-    // -----------------------------------------------------------------------------------------
     if (
       /^\/(?:set_error_alerts|set_errors|error_here|errordailyhere)(?:@\w+)?$/i.test(text)
     ) {
@@ -252,10 +240,7 @@ Notifikasi kegagalan server, gangguan WAHA, dan error sistem untuk *${tenant.nam
       });
       return reply.status(200).send({ ok: true });
     }
-
-    // -----------------------------------------------------------------------------------------
     // 4. Command: /set_medical_alerts (or /medical_here / /set_medical)
-    // -----------------------------------------------------------------------------------------
     if (
       /^\/(?:set_medical_alerts|set_medical|medical_here)(?:@\w+)?$/i.test(text)
     ) {
@@ -288,10 +273,7 @@ Deteksi gawat darurat & eskalasi medis ke bidan untuk *${tenant.name || 'Klinik'
       });
       return reply.status(200).send({ ok: true });
     }
-
-    // -----------------------------------------------------------------------------------------
     // 5. Command: /status_telegram (or /status)
-    // -----------------------------------------------------------------------------------------
     if (/^\/(?:status_telegram|status)(?:@\w+)?$/i.test(text)) {
       const tenant = await findTenantForChat();
       if (!tenant) {
@@ -320,11 +302,7 @@ _Ketik \`/help\` untuk melihat perintah konfigurasi topik._`,
       });
       return reply.status(200).send({ ok: true });
     }
-
-    // -----------------------------------------------------------------------------------------
-    // -----------------------------------------------------------------------------------------
     // 6. Command: /server (or /status_server / /server_status / /health / /ping)
-    // -----------------------------------------------------------------------------------------
     if (/^\/(?:server|status_server|server_status|health|ping)(?:@\w+)?$/i.test(text)) {
       const startTime = Date.now();
       const os = await import('os');
@@ -459,13 +437,10 @@ _Semua infrastruktur server beroperasi optimal._`,
       });
       return reply.status(200).send({ ok: true });
     }
-
-    // -----------------------------------------------------------------------------------------
     // 6b. Command: /clean (atau /clean_server / /server_clean)
     // Task pembersihan server: bot menulis request file di storage/, cron host
     // (clean-trigger.sh) menjalankan server-clean.sh, lalu bot polling hasilnya.
     // HANYA dari chat yang sudah ter-pair dengan tenant (aman — bukan sembarang chat).
-    // -----------------------------------------------------------------------------------------
     if (/^\/(?:clean|clean_server|server_clean)(?:@\w+)?$/i.test(text)) {
       const cleanEnabled = (process.env.TELEGRAM_CLEAN_ENABLED || 'true').toLowerCase();
       if (cleanEnabled === 'false') {
@@ -569,10 +544,7 @@ ${resultText}
 
       return reply.status(200).send({ ok: true, cleanScheduled: true });
     }
-
-    // -----------------------------------------------------------------------------------------
     // 7. Command: /help
-    // -----------------------------------------------------------------------------------------
     if (/^\/(?:help)(?:@\w+)?$/i.test(text)) {
       await telegramService.sendMessage({
         chatId,

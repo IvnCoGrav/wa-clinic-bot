@@ -9,7 +9,7 @@ import {
   Check,
   FileText,
   Search,
-  Sparkles,
+  Baby,
   Tag,
   X,
   Layers,
@@ -122,7 +122,7 @@ const CATEGORIES = [
   { id: 'REVIEW', label: 'Review H+1', icon: HeartHandshake },
   { id: 'NO_PURCHASE', label: 'Belum Reservasi', icon: CalendarHeart },
   { id: 'NEXT_TREATMENT', label: 'Treatment Rutin', icon: UserCheck },
-  { id: 'MILESTONE', label: 'Milestone Usia Bayi', icon: Sparkles },
+  { id: 'MILESTONE', label: 'Milestone Usia Bayi', icon: Baby },
   { id: 'WINBACK', label: 'Re-engagement', icon: Users },
 ];
 
@@ -331,7 +331,7 @@ export const FollowUpTemplates: React.FC = () => {
         <div className="flex flex-col sm:flex-row items-start justify-between gap-3">
           <div className="flex items-start space-x-3">
             <div className="p-2 rounded-xl bg-white/80 dark:bg-[#202c33] border border-[#c2e7e0] dark:border-[#00a884]/30 text-[#008069] dark:text-[#00a884] mt-0.5 shadow-xs">
-              <Sparkles size={16} />
+              <Tag size={16} />
             </div>
             <div>
               <h4 className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] uppercase tracking-wide flex items-center gap-1.5">

@@ -7,7 +7,6 @@ import {
   Copy,
   ExternalLink,
   RefreshCw,
-  Sparkles,
   Calendar,
   AlertCircle,
   Search,
@@ -193,7 +192,7 @@ export const TelegramIntegration: React.FC = () => {
               </>
             ) : (
               <>
-                <Sparkles size={14} />
+                <Send size={14} />
                 <span>Kirim Morning Briefing Hari Ini</span>
               </>
             )}

@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   X,
   Receipt,
+  Eye,
   Copy,
   Send,
   Calendar,
@@ -9,10 +10,8 @@ import {
   User,
   Phone,
   Baby,
-  Sparkles,
   Check,
   Truck,
-  Sparkle,
   Percent,
   Plus,
   Minus,
@@ -1032,7 +1031,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
             <div className="flex-1 overflow-y-auto space-y-3 pr-1 max-h-[50vh] lg:max-h-[52vh]">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-1.5 text-xs font-bold text-[#111b21]">
-                  <Sparkles size={14} className="text-[#008069]" />
+                  <Eye size={14} className="text-[#008069]" />
                   <span>Live Preview WhatsApp</span>
                 </div>
                 <button

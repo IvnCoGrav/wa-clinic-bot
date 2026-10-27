@@ -181,7 +181,7 @@ export class ConversationService {
     label?: string,
     filter: 'all' | 'unread' | 'reservation' = 'all',
     staffId?: string
-  ): Promise<{ items: any[]; hasMore: boolean }> {
+  ): Promise<{ items: any[]; hasMore: boolean; total: number }> {
     try {
       const where: any = {
         tenant_id: tenantId,
@@ -260,6 +260,7 @@ export class ConversationService {
         else if (label === 'unresolved_faq') where.escalation_reason = 'unresolved_faq';
         else if (label === 'human_request') where.is_human_handling = true;
       }
+      const total = await prisma.conversation.count({ where });
       const convs = await prisma.conversation.findMany({
         where,
         include: (search && search.trim()) ? {
@@ -301,7 +302,7 @@ export class ConversationService {
       const hasMore = filteredConvs.length > take;
       const items = filteredConvs.slice(0, take);
       items.forEach((c) => memoryConversations.set(c.id, c));
-      return { items, hasMore };
+      return { items, hasMore, total };
     } catch (error) {
       const { customerService } = await import('./customer.service');
       const all = Array.from(memoryConversations.values())
@@ -408,9 +409,10 @@ export class ConversationService {
         }
         working = next;
       }
+      const total = working.length;
       const hasMore = working.length > offset + take;
       const items = working.slice(offset, offset + take);
-      return { items, hasMore };
+      return { items, hasMore, total };
     }
   }
 

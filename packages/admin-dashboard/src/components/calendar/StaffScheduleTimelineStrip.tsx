@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Clock, UserCheck, CheckCircle2, AlertCircle, Sparkles } from 'lucide-react';
+import { Clock, UserCheck, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Reservation } from '../../types';
 import { StaffOption } from './types';
 import { getWibDateKey, getWibHoursAndMinutes, getTodayWibDateKey } from '../../utils/dateWib';
@@ -258,7 +258,7 @@ export const StaffScheduleTimelineStrip: React.FC<StaffScheduleTimelineStripProp
             <div
               className={`absolute top-0.5 bottom-0.5 rounded-md border-2 shadow-md transition-all duration-200 pointer-events-none flex items-center justify-center text-[10px] font-extrabold ${
                 collisionState?.hasCollision
-                  ? 'bg-rose-500/25 border-rose-600 text-rose-800 dark:text-rose-200 animate-pulse'
+                  ? 'bg-rose-500/25 border-rose-600 text-rose-800 dark:text-rose-200'
                   : 'bg-emerald-500/30 border-emerald-600 text-emerald-950 dark:text-emerald-100'
               }`}
               style={{
@@ -288,7 +288,7 @@ export const StaffScheduleTimelineStrip: React.FC<StaffScheduleTimelineStripProp
       {availableQuickSlots.length > 0 ? (
         <div className="space-y-1.5 pt-1">
           <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 flex items-center space-x-1">
-            <Sparkles size={11} className="text-emerald-600" />
+            <Clock size={11} className="text-emerald-600" />
             <span>Slot Jam Kosong yang Muat ({treatmentDurationMinutes} mnt):</span>
           </span>
           <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">

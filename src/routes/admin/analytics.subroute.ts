@@ -1,6 +1,6 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { FinancialAnalyticsService } from '../../services/financial-analytics.service';
-import { DEFAULT_TENANT_ID } from '../../config/tenant';
+import { tenantOf } from './route-helpers';
 
 export async function analyticsAdminRoutes(fastify: FastifyInstance) {
   /**
@@ -22,8 +22,9 @@ export async function analyticsAdminRoutes(fastify: FastifyInstance) {
       const month = request.query.month ? parseInt(request.query.month, 10) : undefined;
 
       try {
+        const tenantId = tenantOf(request);
         const data = await FinancialAnalyticsService.getMonthlyAnalytics(
-          DEFAULT_TENANT_ID,
+          tenantId,
           year,
           month
         );
@@ -33,7 +34,8 @@ export async function analyticsAdminRoutes(fastify: FastifyInstance) {
           .status(200)
           .send({ success: true, data });
       } catch (err: any) {
-        return reply.status(500).send({
+        const statusCode = err.statusCode || 500;
+        return reply.status(statusCode).send({
           success: false,
           error: err.message || 'Gagal memuat data analitik transaksi.',
         });
@@ -61,8 +63,9 @@ export async function analyticsAdminRoutes(fastify: FastifyInstance) {
       const month = request.query.month ? parseInt(request.query.month, 10) : now.getMonth() + 1;
 
       try {
+        const tenantId = tenantOf(request);
         const csvContent = await FinancialAnalyticsService.generateMonthlyTransactionsCsv(
-          DEFAULT_TENANT_ID,
+          tenantId,
           year,
           month
         );
@@ -75,7 +78,8 @@ export async function analyticsAdminRoutes(fastify: FastifyInstance) {
           .status(200)
           .send(csvContent);
       } catch (err: any) {
-        return reply.status(500).send({
+        const statusCode = err.statusCode || 500;
+        return reply.status(statusCode).send({
           success: false,
           error: err.message || 'Gagal mengekspor file CSV transaksi.',
         });

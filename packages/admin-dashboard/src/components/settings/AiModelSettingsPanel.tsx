@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Bot, Save, RefreshCw, Sparkles, Check, ChevronDown, ChevronUp, Beaker, RotateCcw, Zap, Compass, MessageSquare } from 'lucide-react';
+import { Bot, Save, RefreshCw, Activity, Check, ChevronDown, ChevronUp, Beaker, RotateCcw, Zap, Compass, MessageSquare } from 'lucide-react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
 
@@ -372,7 +372,7 @@ export const AiModelSettingsPanel: React.FC = () => {
       {/* Status Server */}
       <div className="px-4 sm:px-6 py-4 bg-[#f8fafc] dark:bg-[#0a1014] border-b border-[#e9edef] dark:border-[#222e35]">
         <div className="flex items-center gap-2 mb-3">
-          <Sparkles size={14} className="text-[#00a884]" />
+          <Activity size={14} className="text-[#00a884]" />
           <span className="text-xs font-bold text-[#111b21] dark:text-white tracking-wide">🩺 STATUS SERVER</span>
           {switchingProvider && (
             <span className="ml-auto inline-flex items-center gap-1 text-xs text-[#00a884] font-medium">

@@ -17,7 +17,7 @@ import {
   AlertCircle,
   CheckCircle,
   User,
-  Sparkles,
+  Eye,
   Edit2,
   ShieldCheck,
   Trash2,
@@ -477,7 +477,7 @@ export const FollowUpQueue: React.FC = () => {
         );
       case 'QUEUED':
         return (
-          <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200 animate-pulse">
+          <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
             <CalendarCheck size={11} />
             <span>QUEUED</span>
           </span>
@@ -1014,7 +1014,7 @@ export const FollowUpQueue: React.FC = () => {
                       <td className="px-4 py-3.5 text-xs text-[#54656f]">
                         <div className="flex flex-col space-y-0.5">
                           <div className="flex items-center space-x-1.5">
-                            <Sparkles size={12} className="text-amber-500 flex-shrink-0" />
+                            <MessageSquare size={12} className="text-emerald-600 flex-shrink-0" />
                             <span className="font-semibold text-[#111b21]">
                               {fu.type === 'NO_PURCHASE' ? `Hari ke-${[3,7,14][fu.stage-1]||fu.stage}` : fu.type === 'NEXT_TREATMENT' ? `Bulan ke-${fu.stage}` : `Tahap ${fu.stage}`} {fu.custom_text ? '' : `(Varian ${effectiveVariant(fu)})`}
                             </span>
@@ -1223,7 +1223,7 @@ export const FollowUpQueue: React.FC = () => {
                 <div className="space-y-1.5">
                   <div className="flex justify-between items-center">
                     <label className="text-xs font-bold text-[#111b21] flex items-center space-x-1.5">
-                      <Sparkles size={14} className="text-amber-500" />
+                      <MessageSquare size={14} className="text-[#008069]" />
                       <span>Varian Pesan</span>
                       <span className="text-[10px] font-normal text-[#8696a0]">(gaya bahasa)</span>
                     </label>
@@ -1305,7 +1305,7 @@ export const FollowUpQueue: React.FC = () => {
                   </p>
                   {/* Live Preview */}
                   <div className="bg-[#f0fdf4] border border-emerald-200 rounded-xl p-3 space-y-1">
-                    <p className="text-[10px] font-bold text-emerald-800 flex items-center gap-1"><Sparkles size={10} /> Preview WhatsApp (Bunda {(editModal.item?.customer as any)?.name?.split(' ')[0] || 'Rina'}, {(editModal.item?.customer as any)?.children?.[0]?.name || 'Kenzo'}):</p>
+                    <p className="text-[10px] font-bold text-emerald-800 flex items-center gap-1"><Eye size={10} /> Preview WhatsApp (Bunda {(editModal.item?.customer as any)?.name?.split(' ')[0] || 'Rina'}, {(editModal.item?.customer as any)?.children?.[0]?.name || 'Kenzo'}):</p>
                     <p className="text-xs text-[#111b21] leading-relaxed whitespace-pre-wrap bg-white p-2 rounded-lg border border-emerald-100">
                       {editModal.customText
                         .replace(/Bunda\s*\{name\}/gi, `Bunda ${(editModal.item?.customer as any)?.name?.split(' ')[0] || 'Rina'}`)

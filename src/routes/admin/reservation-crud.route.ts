@@ -23,33 +23,53 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
   /**
    * GET /api/admin/reservations/count
    */
-  fastify.get('/api/admin/reservations/count', async (request: FastifyRequest, reply: FastifyReply) => {
-    const tenantId = tenantOf(request);
-    const cacheKey = `reservations:count:${tenantId}`;
-    const cached = responseCacheService.get<number>(cacheKey);
-    if (cached !== null && cached !== undefined) {
-      return reply
-        .header('Cache-Control', 'private, max-age=5, stale-while-revalidate=30')
-        .status(200)
-        .send({ success: true, count: cached });
-    }
+  fastify.get(
+    '/api/admin/reservations/count',
+    async (
+      request: FastifyRequest<{ Querystring: { date?: string; refresh?: string } }>,
+      reply: FastifyReply
+    ) => {
+      const tenantId = tenantOf(request);
+      const dateStr = (request.query.date || '').trim();
+      const isHardRefresh = request.query.refresh === '1';
+      const range = dateStr ? wibDayRangeToUtc(dateStr) : null;
+      if (dateStr && !range) {
+        return reply.status(400).send({ success: false, error: 'Format tanggal harus YYYY-MM-DD' });
+      }
+      const cacheKey = `reservations:count:${tenantId}:${dateStr || 'all'}`;
+      const cacheHeader = 'private, max-age=5, stale-while-revalidate=30';
 
-    try {
-      const count = await prisma.reservation.count({
-        where: { tenant_id: tenantId },
-      });
-      responseCacheService.set(cacheKey, count, 15);
-      return reply
-        .header('Cache-Control', 'private, max-age=5, stale-while-revalidate=30')
-        .status(200)
-        .send({ success: true, count });
-    } catch (err: any) {
-      return reply
-        .header('Cache-Control', 'private, max-age=5, stale-while-revalidate=30')
-        .status(200)
-        .send({ success: true, count: filterMemoryByTenant(memoryReservations.values(), tenantId).length });
+      if (!isHardRefresh) {
+        const cached = responseCacheService.get<number>(cacheKey);
+        if (cached !== null && cached !== undefined) {
+          return reply.header('Cache-Control', cacheHeader).status(200)
+            .send({ success: true, count: cached, scope: dateStr || 'all' });
+        }
+      }
+
+      try {
+        const count = await prisma.reservation.count({
+          where: {
+            tenant_id: tenantId,
+            ...(range ? { created_at: { gte: range.start, lte: range.end } } : {}),
+          },
+        });
+        responseCacheService.set(cacheKey, count, 15);
+        return reply.header('Cache-Control', cacheHeader).status(200)
+          .send({ success: true, count, scope: dateStr || 'all' });
+      } catch {
+        const fallback = filterMemoryByTenant(memoryReservations.values(), tenantId)
+          .filter((r: any) => {
+            if (!range) return true;
+            if (!r.created_at) return false;
+            const t = new Date(r.created_at).getTime();
+            return t >= range.start.getTime() && t <= range.end.getTime();
+          });
+        return reply.header('Cache-Control', cacheHeader).status(200)
+          .send({ success: true, count: fallback.length, scope: dateStr || 'all' });
+      }
     }
-  });
+  );
 
   /**
    * GET /api/admin/reservations/daily-slots

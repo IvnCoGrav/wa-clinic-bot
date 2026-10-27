@@ -13,7 +13,7 @@ import {
   Check,
   X,
   Loader,
-  Sparkles,
+  CheckCheck,
   Search,
   ArrowUpDown,
   ArrowUp,
@@ -372,7 +372,7 @@ export const ChatMigration: React.FC = () => {
           {/* Left info */}
           <div className="space-y-1">
             <div className="flex items-center space-x-2">
-              <Sparkles size={16} className="text-[#008069]" />
+              <FileText size={16} className="text-[#008069]" />
               <h3 className="font-bold text-sm text-[#111b21]">Ekstraksi & Parsing Form Reservasi (Lokal)</h3>
             </div>
             <p className="text-xs text-[#667781] max-w-xl leading-relaxed">
@@ -454,7 +454,7 @@ export const ChatMigration: React.FC = () => {
             className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
             title="Setujui seluruh kontak yang memiliki form reservasi & nilai transaksi sekaligus"
           >
-            {bulkApproving ? <Loader size={13} className="animate-spin" /> : <Sparkles size={13} />}
+            {bulkApproving ? <Loader size={13} className="animate-spin" /> : <CheckCheck size={13} />}
             <span>Approve Semua yang Ada Reservasi ({statusCounts.PENDING_WITH_RESERVATION})</span>
           </button>
         )}

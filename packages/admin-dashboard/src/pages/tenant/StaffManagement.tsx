@@ -7,7 +7,6 @@ import {
   UserPlus,
   Phone,
   Lock,
-  Sparkles,
   Pencil,
   Trash2,
   Shield,
@@ -455,7 +454,7 @@ export const StaffManagement: React.FC = () => {
     if (formatted === 'therapist') {
       return (
         <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0]">
-          <Sparkles size={11} />
+          <UserCheck size={11} />
           <span>{label}</span>
         </span>
       );

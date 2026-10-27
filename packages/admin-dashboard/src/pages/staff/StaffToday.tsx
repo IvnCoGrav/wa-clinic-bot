@@ -15,7 +15,7 @@ import {
   LogOut,
   ChevronLeft,
   RefreshCw,
-  Sparkles,
+  Heart,
   CheckCircle2,
   Navigation,
   CreditCard,
@@ -617,7 +617,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     }
     if (cat === 'MOMS') {
       return {
-        icon: <Sparkles size={18} className="text-purple-600" />,
+        icon: <Heart size={18} className="text-purple-600" />,
         bg: 'bg-purple-100 border-purple-200 text-purple-700',
         badge: 'bg-purple-50 text-purple-700 border-purple-200',
         borderAccent: 'border-l-purple-500 bg-purple-50/20',

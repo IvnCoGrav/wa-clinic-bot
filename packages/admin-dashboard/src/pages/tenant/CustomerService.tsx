@@ -7,7 +7,6 @@ import {
   Copy, 
   Check, 
   Link as LinkIcon, 
-  Sparkles,
   Info
 } from 'lucide-react';
 
@@ -134,7 +133,7 @@ export const CustomerService: React.FC = () => {
         {/* Panel 1: Settings Form */}
         <div className="bg-white p-5 space-y-4 rounded-2xl border border-[#e9edef] shadow-xs">
           <div className="flex items-center space-x-2 border-b border-[#e9edef] pb-3">
-            <Sparkles size={16} className="text-[#008069]" />
+            <Headphones size={16} className="text-[#008069]" />
             <h3 className="text-sm font-bold text-[#111b21]">Pengaturan Customer Service</h3>
           </div>
 

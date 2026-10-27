@@ -43,7 +43,6 @@ import {
   Check,
   CheckCheck,
   AlertCircle,
-  Sparkles,
   ExternalLink,
   Calendar,
   FileText,
@@ -4373,7 +4372,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
               }`}
               title={`Bidan${delayAlert.staffName ? ' ' + delayAlert.staffName : ''} diprediksi terlambat ${delayAlert.delayMinutes} menit${delayAlert.formattedArrivalWib ? ' (tiba ±' + delayAlert.formattedArrivalWib + ' WIB)' : ''}`}
             >
-              <AlertTriangle size={12} className="animate-pulse" />
+              <AlertTriangle size={12} />
               <span>Telat {delayAlert.delayMinutes}m</span>
             </button>
           )}
@@ -4521,7 +4520,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       }`}
                       title={`Bidan diprediksi terlambat ${delayAlert.delayMinutes} menit`}
                     >
-                      <AlertTriangle size={11} className="animate-pulse" />
+                      <AlertTriangle size={11} />
                       <span>{delayAlert.delayMinutes}m</span>
                     </div>
                   )}
@@ -4542,7 +4541,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           : 'bg-[#f0f2f5] dark:bg-[#2a3942] border-[#e9edef] dark:border-[#374248] text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef]'
                       }`}
                     >
-                      <Sparkles size={15} />
+                      <Bot size={15} />
                     </button>
                   )}
                   {/* Tombol sinkronisasi chat */}
@@ -5635,7 +5634,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     <div className={`mx-1.5 mb-1.5 px-3 py-2 rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center justify-between gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition-all ${bannerBg}`}>
                       <div className="flex items-center gap-2 min-w-0">
                         {isMismatch ? (
-                          <AlertTriangle size={16} className={`${iconColor} shrink-0 animate-pulse`} />
+                          <AlertTriangle size={16} className={`${iconColor} shrink-0`} />
                         ) : (
                           <Receipt size={16} className={`${iconColor} shrink-0`} />
                         )}
@@ -6997,7 +6996,10 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       Data Anak / Bayi ({customerDetailData?.children?.length || 0})
                     </h4>
                     {(customerDetailData?.children || []).length === 0 ? (
-                      <p className="text-[#8696a0] italic">Belum ada data anak tercatat.</p>
+                      <div className="p-3 rounded-xl border border-dashed border-[#d1d7db] bg-[#f8fafc] text-center space-y-1">
+                        <p className="text-xs text-[#8696a0]">Belum ada data anak tercatat.</p>
+                        <p className="text-[10px] text-[#667781]">Data anak otomatis terdata saat customer mengisi form pemesanan atau menyebutkan usia anak di chat WhatsApp.</p>
+                      </div>
                     ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {customerDetailData.children.map((ch: any) => (
@@ -7244,7 +7246,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 return (
                   <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 space-y-1.5">
                     <div className="flex items-center gap-1.5 text-xs font-bold text-rose-700">
-                      <AlertTriangle size={15} className="shrink-0 animate-pulse" />
+                      <AlertTriangle size={15} className="shrink-0" />
                       <span>Peringatan: Nominal Transfer Tidak Sesuai Tagihan</span>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-rose-200">

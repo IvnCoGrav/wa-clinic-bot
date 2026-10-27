@@ -19,7 +19,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#f0f2f5]">
+      <div className="flex h-[100dvh] min-h-[100dvh] items-center justify-center bg-[#f0f2f5]">
         <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#008069] border-t-transparent"></div>
       </div>
     );

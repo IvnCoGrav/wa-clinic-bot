@@ -11,9 +11,7 @@ import { getBrandIdentity } from './brand';
 
 const CUSTOM_PERSONA_PATH = path.join(__dirname, 'persona_custom.txt');
 
-// =========================================================================
 // 2. SYSTEM PROMPT — dipakai LLM untuk FAQ & respons yang butuh generation
-// =========================================================================
 
 const DEFAULT_PERSONA_PROMPT = `
 Kamu adalah asisten chat resmi ${getBrandIdentity().businessName}, layanan homecare
@@ -72,7 +70,7 @@ GAYA BAHASA & ATURAN SAPAAN (SANGAT PENTING):
 - NATURALISASI SAPAAN "Bunda" (ANTI-OVERUSE): Maksimal 1-2 kali saja kata "Bunda" dalam satu respon (di luar greeting header). DILARANG menyebut kata "Bunda/Bund" berulang kali di setiap kalimat/koma agar kalimat mengalir alami seperti manusia (CS/Bidan asli). DILARANG menulis "maupun Bund", "untuk Bund", "ke Bund", "dari Bund" (gunakan "maupun Bunda" atau langsung tanpa sapaan jika subjek sudah jelas).
 - EJAAN BRAND RESMI: Nama bisnis kami adalah ${getBrandIdentity().businessName} — EJAAN HARUS PERSIS. DILARANG KERAS menerjemahkan kata "Baby" menjadi "bayi" (DILARANG: "Kala Moms and bayi Spa").
 - Emoji digunakan sangat sedikit dan hanya di akhir kalimat untuk memberi kesan hangat.
-  Palet terbatas: 🙏🏻 ☺️ ✨ 🤍. Hindari emoji playful/berlebihan (😂🤣🥰 terlalu sering).
+  Palet terbatas: 🙏🏻 ☺️ 🤍. Hindari emoji playful/berlebihan (😂🤣🥰 terlalu sering).
 - Tanggapi pertanyaan dengan informasi yang akurat dan menenangkan, tidak mengada.
 - Customer terkadang memanggilmu "bubid" (kependekan "bu bidan") atau
   "${getBrandIdentity().botDisplayName}". Kenali sebagai sapaan hangat.
@@ -235,9 +233,7 @@ export async function savePersonaToDb(
   }
 }
 
-// =========================================================================
 // 3. TEMPLATE PESAN TETAP (bukan LLM — variabel di-inject langsung)
-// =========================================================================
 
 export const TEMPLATES = {
   // Template netral tanya domisili (Fase D6): TANPA nama kecamatan/kota —
@@ -410,10 +406,7 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
     `Baik Bunda, terkait layanan tersebut kami koordinasikan terlebih dahulu dengan Bidan/tim admin kami yaa. Mohon ditunggu sebentar, tim kami akan segera membantu Bunda 😊🙏`,
 
   locationEscalation: () => `Baik Bunda, saya bantu cek ongkirnya ya bund, mohon ditunggu sebentar 😊`,
-
-  // =======================================================================
   // JAWABAN HARGA & PRICELIST (fitur "tanya harga -> beri tahu")
-  // =======================================================================
   // CTA penawaran jadwal treatment
   priceCta: (_name?: string) => `Rencana mau treatment di hari apa Bunda ? 😊`,
   // Format harga yang NATURAL/ngobrol (bukan brosur): deterministik, tanpa LLM,
@@ -648,11 +641,8 @@ Sudah cukup lama nih sejak treatment terakhir. Kalau Bunda mau lanjut lagi, kami
 Mohon izin follow up ya bunda. Untuk pembayaran treatment yang kemarin apakah sudah sempat dilakukan?
 
 Apabila sudah transfer, mohon berkenan mengirimkan bukti pembayarannya ya bunda 🙏\n\nTerima kasih banyak bunda 🤗`,
-
-  // =======================================================================
   // Follow-up BELUM PURCHASE — hari ke-3, 7, 14 sejak kontak terakhir
   // Array varian: dipilih random tiap broadcast supaya tidak identik semua.
-  // =======================================================================
 
   followUpNoPurchaseDay3: [
     (params: { name: string }) => `Halo Bunda ${params.name} 😊

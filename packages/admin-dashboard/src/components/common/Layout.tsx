@@ -35,7 +35,8 @@ import {
   QrCode,
   Loader,
   RefreshCw,
-  Sparkles,
+  CalendarDays,
+  Bot,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
@@ -184,7 +185,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         { name: 'Live Chat Monitor', path: '/admin/live-chat', icon: MessageSquare, badge: unreadLiveChatCount > 0 ? unreadLiveChatCount : undefined },
         { name: 'Transaksi & Pendapatan', path: '/admin/financial-analytics', icon: TrendingUp },
         { name: 'Reservations & Calendar', path: '/admin/reservations', icon: CalendarRange },
-        { name: 'Treatment Hari Ini', path: '/admin/today-treatments', icon: Sparkles },
+        { name: 'Treatment Hari Ini', path: '/admin/today-treatments', icon: CalendarDays },
         { name: 'Customer Database', path: '/admin/customers', icon: Users },
         { name: 'Chat Migration & Seeding', path: '/admin/chat-migration', icon: Database },
         { name: 'Follow-Up Queue', path: '/admin/follow-ups', icon: Clock },
@@ -965,7 +966,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                     : 'bg-[#f0f2f5] dark:bg-[#2a3942] border-[#e9edef] dark:border-[#374248] text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef]'
                 }`}
               >
-                <Sparkles size={16} />
+                <Bot size={16} />
               </button>
             )}
 

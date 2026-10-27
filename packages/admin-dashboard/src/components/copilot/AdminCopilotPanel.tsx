@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, X, Send, Loader, ShieldCheck, MessageCircle, Search, Brain, PenLine, ListChecks, Hourglass, type LucideIcon } from 'lucide-react';
+import { Bot, X, Send, Loader, ShieldCheck, MessageCircle, Search, Brain, PenLine, ListChecks, Hourglass, type LucideIcon } from 'lucide-react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
 import { useCopilot } from '../../contexts/CopilotContext';
@@ -268,10 +268,10 @@ export const AdminCopilotPanel: React.FC<{ conversationId?: string | null; custo
   return (
     <>
       {open && (
-        <div id="copilot-panel" className="fixed bottom-24 right-4 z-40 w-[min(92vw,380px)] h-[min(70vh,520px)] bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        <div id="copilot-panel" className="fixed bottom-24 right-4 z-40 w-[min(92vw,380px)] h-[min(70vh,520px)] bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl shadow-lg border border-[#d1d7db] flex flex-col overflow-hidden">
           <div className="px-3.5 py-2.5 bg-[#008069] text-white flex items-center justify-between shrink-0">
             <span className="text-xs font-bold flex items-center gap-1.5">
-              <Sparkles size={14} /> AI Clinic Copilot
+              <Bot size={14} /> AI Clinic Copilot
             </span>
             <button
               type="button"

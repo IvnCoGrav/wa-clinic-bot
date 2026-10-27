@@ -311,13 +311,11 @@ export const CALCULATE_DELIVERY_TOOL_SCHEMA = {
   }
 };
 
-// ---------------------------------------------------------------------------
 // Validasi batas & wilayah luas — data-driven tanpa regex hafalan (Pilar 5):
 // - Daftar kota luar sebagai DATA (bukan regex); keputusan final tetap berbasis
 //   jarak koordinat riil (distanceKm > 30) + kota hasil geocoding hierarkis.
 // - Wilayah luas dicek via pencocokan token includes terhadap gazetteer/kota,
 //   bukan regex kaku.
-// ---------------------------------------------------------------------------
 const OUTSIDE_CITY_NAMES = getOutsideCities();
 
 /** Sinyal awal kota luar via word-boundary data-driven (bukan regex, bukan substring mentah). */
@@ -392,12 +390,10 @@ function isBroadRegionQuery(text: string): boolean {
   return false;
 }
 
-// ---------------------------------------------------------------------------
 // Data-driven kecamatan matcher (toleran typo ringan, tanpa regex patchwork):
 // mengenali nama kecamatan resmi dari database gazetteer di dalam query,
 // termasuk varian salah ketik 1 huruf (misal "memganti" → "Menganti").
 // Delegates to central gazetteer service (Single Source of Truth) — no direct fs I/O.
-// ---------------------------------------------------------------------------
 import { getGazetteerKecamatanEntries } from '../../utils/gazetteer';
 import { isTypoAtMostOne } from '../../utils/typo-match';
 import { GEO_TOKEN_SKIPLIST as KECAMATAN_TOKEN_SKIPLIST } from '../../utils/typo-match';

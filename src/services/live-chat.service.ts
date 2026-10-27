@@ -190,10 +190,10 @@ export class LiveChatService {
     label?: string,
     filter: 'all' | 'unread' | 'reservation' = 'all',
     staffId?: string
-  ): Promise<{ items: LiveChatConversationItem[]; hasMore: boolean }> {
-    const { items: conversations, hasMore } = await conversationService.listConversations(tenantId, take, offset, mode, search, label as any, filter, staffId);
+  ): Promise<{ items: LiveChatConversationItem[]; hasMore: boolean; total: number }> {
+    const { items: conversations, hasMore, total } = await conversationService.listConversations(tenantId, take, offset, mode, search, label as any, filter, staffId);
     if (conversations.length === 0) {
-      return { items: [], hasMore: false };
+      return { items: [], hasMore: false, total };
     }
 
     const conversationIds = conversations.map((c) => c.id);
@@ -332,7 +332,7 @@ export class LiveChatService {
       )
     );
     // Urutan sudah dijamin DB (pinned desc, lalu last_message_at desc absolut waktu) — stabil antar halaman.
-    return { items, hasMore };
+    return { items, hasMore, total };
   }
 
   /**

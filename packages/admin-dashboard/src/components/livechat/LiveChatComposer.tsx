@@ -18,7 +18,7 @@ import {
   CalendarPlus,
   Receipt,
   ImagePlus,
-  Sparkles,
+  Wand2,
   Reply,
   Lock,
   LockOpen,
@@ -689,7 +689,7 @@ const LiveChatComposerInner = (
                 className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#111b21] hover:bg-amber-50/80 hover:text-amber-700 transition text-left group disabled:opacity-50"
               >
                 <div className="w-7 h-7 rounded-lg bg-amber-100/80 text-amber-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                  <Sparkles size={15} />
+                  <Wand2 size={15} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-[12px] truncate flex items-center gap-1">

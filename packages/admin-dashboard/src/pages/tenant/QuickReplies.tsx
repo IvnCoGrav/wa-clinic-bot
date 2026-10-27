@@ -13,7 +13,7 @@ import {
   Save,
   Layers,
   Tag,
-  Sparkles,
+  Database,
   Eye,
   QrCode,
   Image as ImageIcon,
@@ -276,7 +276,7 @@ export const QuickReplies: React.FC = () => {
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
           </button>
           <button onClick={handleSeed} disabled={seeding} className="h-9 px-3 rounded-xl bg-white border border-amber-200 text-xs font-semibold text-amber-700 hover:bg-amber-50 flex items-center gap-1.5 disabled:opacity-50">
-            <Sparkles size={14} /> {seeding ? 'Seeding...' : 'Seed Default'}
+            <Database size={14} /> {seeding ? 'Seeding...' : 'Seed Default'}
           </button>
           <button onClick={openCreate} className="h-9 px-4 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold flex items-center gap-1.5 shadow-xs">
             <Plus size={14} /> Tambah Template

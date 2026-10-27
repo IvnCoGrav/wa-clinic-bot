@@ -14,7 +14,6 @@ import {
   CheckCircle2,
   Clock,
   ChevronDown,
-  Sparkles,
   UserCheck,
   CreditCard,
   Building2,
