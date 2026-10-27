@@ -983,6 +983,7 @@ export function parseConversationalReservation(rawText: string): ParsedReservati
   }
 
   // Integritas Penamaan: Nama bayi tidak boleh disalin ke nama pemesan.
+  // Nama Bunda tetap '' bila tidak disebut; entitas anak hidup di `babies`.
 
   // 2. Ekstrak Usia Bayi / Anak
   const ageMatch = rawText.match(/(\d+\s*(?:bulan|bln|tahun|thn|th|hari|hr|minggu|mg|mgg))/i);
@@ -1041,8 +1042,11 @@ export function parseConversationalReservation(rawText: string): ParsedReservati
     }
   }
 
-  // Validasi: harus ada Nama DAN Alamat
-  if (!name || !address) {
+  // Kontrak data (R-2, 2026-10-27): cukup ADA ENTITAS PASIEN (nama Bunda ATAU nama bayi)
+  // + alamat. `name` boleh '' bila customer hanya menyebut nama anak — nama bayi DILARANG
+  // disalin ke `name` (integritas master customer). Downstream fail-safe: machine.ts:416
+  // dan reservation-lifecycle.service.ts:50 tidak menulis nama kosong.
+  if ((!name && !babyName) || !address) {
     return null;
   }
 

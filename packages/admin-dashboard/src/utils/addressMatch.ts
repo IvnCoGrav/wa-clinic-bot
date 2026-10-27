@@ -140,10 +140,12 @@ export function addressesMatch(
       if (toponimiKec || toponimiCross) return true;
 
       // 3. Alamat jalan identik & spesifik (panjang >= 15 karakter atau ada nomor/blok/cluster/rt/rw):
-      // Jika jalan sama persis di kota sama dalam radius sentroid <= 3km, ini adalah rumah yang sama
-      // meskipun kecamatan administratif berbeda karena pergeseran batas reverse-geocoding peta.
+      // Jalan sama persis di kota sama dalam radius <= 3 km bisa rumah yang sama saat batas
+      // reverse-geocoding bergeser. GERBANG DATA (R-1, 2026-10-27): HANYA sah bila kelurahan
+      // KOMPATIBEL. Dua kelurahan terisi BERBEDA = bukti dua rumah sah; nama jalan sama
+      // (mis. "Jl. Mawar No. 10") lazim ada di dua desa. Tanpa gate ini dedup melebur 2 rumah.
       const isSpecificStreet = norm(a.address).length >= 15 || /\b(?:no|nomor|blok|gang|gg|cluster|perum|perumahan|rt|rw)\b/i.test(a.address || '');
-      if (isSpecificStreet) return true;
+      if (isSpecificStreet && kelKompatibel) return true;
     }
   }
 

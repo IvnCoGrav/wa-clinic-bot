@@ -3,6 +3,25 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 276. [Regression & Test Suite] Dua Regresi Terbukti + Time Bomb Test + Suite Non-Deterministik (2026-10-27)
+
+- **Status:** R-1 & R-2 RESOLVED (Fase 0); time bomb RESOLVED; sisa flake OPEN.
+- **R-1 [RESOLVED]** `addressesMatch` cabang jalan-spesifik melebur dua rumah beda kelurahan
+  (`src/domain/customer-address.ts:195`, cermin `packages/admin-dashboard/src/utils/addressMatch.ts:145`).
+  Bukti: `tests/unit/address-match-null-kelurahan.test.ts` kasus (d) gagal di HEAD, lulus di baseline `2942487e`.
+  Perbaikan: gerbang `kelKompatibel`. **Utang:** data historis yang sudah terlanjur ter-merge belum diaudit.
+- **R-2 [RESOLVED]** Parser free-form mensyaratkan nama Bunda (`reservation-text-parser.ts:1045`) sehingga
+  booking yang hanya menyebut nama anak gagal; perbaikan memisahkan kontrak kelengkapan data dari identitas
+  customer (`name` boleh '', nama anak hidup di `babies`). Bukti: 2 test `hybrid-reservation-parser` gagal di HEAD.
+- **Time bomb [RESOLVED]** `tests/unit/staff-otw-chat-poison.test.ts` memakai tanggal mati 2026-10-10 dengan
+  assertion 'Hari ini'. Kini diturunkan dari `wibDayStartEnd(new Date())`.
+- **Suite non-deterministik [OPEN]:** CM-07/CM-08 gagal deterministik (pre-existing sejak 4668496f, lihat #273);
+  `staff-auth-and-reservation` (GPS) & `production_edge_cases` timeout di bawah beban paralel → anggaran eksplisit.
+- **Utang skema [OPEN]:** `children.@@unique([customer_id, name])` masih case-sensitive; `customer_addresses`
+  belum punya unique constraint `(customer_id, alamat ternormalisasi)`; guard split-brain
+  `reservation-lifecycle.service.ts:62-109` masih fail-open (`catch (_) {}`).
+- **Rencana:** audit data historis alamat ter-merge (skrip read-only + laporan), lalu constraint DB di migrasi terpisah.
+
 ## 275. [Data Integrity] Remediasi Duplikasi Alamat (Split-Brain) & Data Anak Corrupt/Duplikat di Database Produksi (2026-10-26, RESOLVED)
 
 - **Status:** RESOLVED (Pencegahan kode di backend & admin dashboard dideploy; database live dibersihkan dengan aman setelah full backup pre-deletion; referential integrity ERD terjaga 100%).

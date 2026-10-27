@@ -55,6 +55,13 @@ describe('Adversarial & Regression Test: addressesMatch with NULL / Asymmetric K
     expect(addressesMatch(a, b)).toBe(false);
   });
 
+  // d2. jalan spesifik panjang + nomor + kelurahan BEDA + jarak < 3km -> WAJIB false
+  it('(d2) jalan spesifik dengan kelurahan berbeda tidak boleh dianggap rumah sama walau < 3 km', () => {
+    const a = mkAddr({ address: 'Jl. Mawar No. 10', kelurahan: 'Banjarkemantren', kecamatan: 'Buduran', lat: -7.4300, lng: 112.7200 });
+    const b = { address: 'Jl. Mawar No. 10', kelurahan: 'Pagerwojo', kecamatan: 'Buduran', lat: -7.4380, lng: 112.7280 };
+    expect(addressesMatch(a, b)).toBe(false);
+  });
+
   // e. upsert lama berkoordinat + input tanpa koordinat -> koordinat utuh, label tetap
   it('(e) upsertAddressIntoList: alamat lama berkoordinat diupdate input tanpa koordinat -> koordinat utuh, label TIDAK jadi "X 2"', () => {
     const existing = mkAddr({

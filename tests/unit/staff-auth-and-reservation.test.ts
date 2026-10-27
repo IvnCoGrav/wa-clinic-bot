@@ -668,7 +668,7 @@ describe('Staff Auth & Reservation Services', () => {
           }),
         })
       );
-    });
+    }, 15000);
 
     it('should preserve primary coordinates and append revised coords to landmark when shift > 1km', async () => {
       (prisma.reservation.findUnique as any).mockResolvedValue({

@@ -39,6 +39,12 @@ const VECTORS: { name: string; a: any; b: any; expected: boolean }[] = [
     expected: false,
   },
   {
+    name: 'R-1: jalan spesifik + kelurahan terisi BEDA → NO match (dua rumah sah)',
+    a: { address: 'Jl. Mawar No. 10', kelurahan: 'Banjarkemantren', kecamatan: 'Buduran', kota: 'Sidoarjo' },
+    b: { address: 'Jl. Mawar No. 10', kelurahan: 'Pagerwojo', kecamatan: 'Buduran', kota: 'Sidoarjo' },
+    expected: false,
+  },
+  {
     name: 'tanpa teks jalan di kedua sisi + kelurahan+kecamatan identik → match',
     a: { address: '', kelurahan: 'Rungkut Menanggal', kecamatan: 'Rungkut', kota: 'Surabaya' },
     b: { address: null, kelurahan: 'Rungkut Menanggal', kecamatan: 'Rungkut', kota: 'Surabaya' },
@@ -172,7 +178,7 @@ const VECTORS: { name: string; a: any; b: any; expected: boolean }[] = [
     expected: true,
   },
   {
-    name: 'alamat jalan spesifik sama persis (<3km) di kota sama beda kecamatan karena pergeseran batas peta → match',
+    name: 'R-1: alamat jalan spesifik sama persis (<3km) beda kecamatan tapi kelurahan terisi beda → NO match',
     a: {
       address: 'Grand Pakuwon Cluster Adelaide JF9/11',
       kelurahan: 'Banjar Sugihan',
@@ -184,6 +190,26 @@ const VECTORS: { name: string; a: any; b: any; expected: boolean }[] = [
     b: {
       address: 'Grand Pakuwon Cluster Adelaide JF9/11',
       kelurahan: 'Tambak Sarioso',
+      kecamatan: 'Asemrowo',
+      kota: 'Surabaya',
+      lat: -7.238602,
+      lng: 112.674148,
+    },
+    expected: false,
+  },
+  {
+    name: 'alamat jalan spesifik sama persis (<3km) di kota sama beda kecamatan dengan kelurahan kompatibel (null) → match',
+    a: {
+      address: 'Grand Pakuwon Cluster Adelaide JF9/11',
+      kelurahan: 'Banjar Sugihan',
+      kecamatan: 'Tandes',
+      kota: 'Surabaya',
+      lat: -7.252370,
+      lng: 112.660090,
+    },
+    b: {
+      address: 'Grand Pakuwon Cluster Adelaide JF9/11',
+      kelurahan: null,
       kecamatan: 'Asemrowo',
       kota: 'Surabaya',
       lat: -7.238602,
