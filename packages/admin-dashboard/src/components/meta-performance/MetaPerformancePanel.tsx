@@ -200,7 +200,7 @@ export const MetaPerformancePanel: React.FC<Props> = ({ startDate, endDate }) =>
           <div className="pt-2">
             <button
               type="button"
-              onClick={() => load(spendInput)}
+              onClick={() => load(totalSpendNum > 0 ? totalSpendNum : undefined)}
               className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold shadow-xs transition"
             >
               <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
