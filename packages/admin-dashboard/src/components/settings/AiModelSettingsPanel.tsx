@@ -405,7 +405,7 @@ export const AiModelSettingsPanel: React.FC = () => {
               )}
             </div>
             <div className="flex items-center justify-between text-[11px] pt-1">
-              <span className={providersStatus?.sumopod?.configured ? 'text-emerald-700 dark:text-emerald-400 font-semibold' : 'text-slate-500 dark:text-[#8696a0]'}>
+              <span className={providersStatus?.sumopod?.configured ? 'text-emerald-700 dark:text-[#00a884] font-semibold' : 'text-slate-500 dark:text-[#8696a0]'}>
                 {providersStatus?.sumopod?.configured ? '🟢 Kunci API Terhubung' : '○ Key di .env'}
               </span>
               <span className="text-[11px] text-[#667781] dark:text-[#8696a0]">Latensi P50: 1.1s • 5 model resmi</span>
@@ -435,7 +435,7 @@ export const AiModelSettingsPanel: React.FC = () => {
               )}
             </div>
             <div className="flex items-center justify-between text-[11px] pt-1">
-              <span className={providersStatus?.kenari?.configured ? 'text-emerald-700 dark:text-emerald-400 font-semibold' : 'text-slate-500 dark:text-[#8696a0]'}>
+              <span className={providersStatus?.kenari?.configured ? 'text-emerald-700 dark:text-[#00a884] font-semibold' : 'text-slate-500 dark:text-[#8696a0]'}>
                 {providersStatus?.kenari?.configured ? '🟢 Kunci API Terhubung' : '○ Key di .env'}
               </span>
               <span className="text-[11px] text-[#667781] dark:text-[#8696a0]">Auto-failover siaga bila SumoPod gangguan</span>
@@ -584,7 +584,7 @@ export const AiModelSettingsPanel: React.FC = () => {
                         <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#111b21] dark:text-white">
                           <Compass size={14} className="text-sky-500" /> Call 1: Tool Routing & Slot Extractor
                         </span>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 dark:bg-[#0f2a33] text-sky-800 dark:text-sky-300">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 dark:bg-[#0f2a33] text-sky-800 dark:text-[#38bdf8]">
                           🎰 Extractor
                         </span>
                       </div>
@@ -592,13 +592,13 @@ export const AiModelSettingsPanel: React.FC = () => {
                         Mengevaluasi pemanggilan tool (ongkir, katalog, SOP) secara atomik. Parameter thinking hanya dikirim ke model yang mendukungnya (GLM); model DeepSeek/Qwen tidak menerimanya.
                       </p>
                       <div className="flex flex-wrap gap-1.5 mb-3">
-                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-[#143d2f] text-emerald-700 dark:text-emerald-300 font-medium">
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-[#143d2f] text-emerald-700 dark:text-[#00a884] font-medium">
                           {behavior.latency}
                         </span>
                         <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-[#202c33] text-slate-700 dark:text-slate-300 font-medium">
                           {behavior.thinking}
                         </span>
-                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-50 dark:bg-[#2a2414] text-amber-700 dark:text-amber-300 font-medium">
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-50 dark:bg-[#2a2414] text-amber-700 dark:text-[#f59e0b] font-medium">
                           💰 Hemat Token
                         </span>
                       </div>
@@ -639,7 +639,7 @@ export const AiModelSettingsPanel: React.FC = () => {
                         <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#111b21] dark:text-white">
                           <MessageSquare size={14} className="text-[#00a884]" /> Call 2: Balasan Persona Bidan Yusi
                         </span>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-[#143d2f] text-emerald-800 dark:text-emerald-300">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-[#143d2f] text-emerald-800 dark:text-[#00a884]">
                           💬 Generator
                         </span>
                       </div>
@@ -647,13 +647,13 @@ export const AiModelSettingsPanel: React.FC = () => {
                         Menyusun balasan akhir yang hangat, ramah, dan empatis untuk Bunda berdasarkan fakta tool yang telah diambil.
                       </p>
                       <div className="flex flex-wrap gap-1.5 mb-3">
-                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-[#143d2f] text-emerald-700 dark:text-emerald-300 font-medium">
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-[#143d2f] text-emerald-700 dark:text-[#00a884] font-medium">
                           🩺 Persona Bidan Yusi
                         </span>
-                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-blue-50 dark:bg-[#0f2a33] text-blue-700 dark:text-blue-300 font-medium">
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-blue-50 dark:bg-[#0f2a33] text-blue-700 dark:text-[#aebac1] font-medium">
                           🛡️ Guardrails Aktif
                         </span>
-                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-purple-50 dark:bg-[#241a2f] text-purple-700 dark:text-purple-300 font-medium">
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-purple-50 dark:bg-[#241a2f] text-purple-700 dark:text-[#aebac1] font-medium">
                           ✨ Bahasa Alami
                         </span>
                       </div>
@@ -702,7 +702,7 @@ export const AiModelSettingsPanel: React.FC = () => {
                     onClick={() => handleTestScenario(sc)}
                     className={`px-4 py-2.5 rounded-xl text-xs font-semibold border transition-[border-color,background-color,box-shadow] duration-150 ease-out touch-manipulation active:scale-[0.98] min-h-[48px] min-w-[48px] ${
                       isTesting
-                        ? 'bg-amber-50 dark:bg-[#2a2414] border-amber-200 dark:border-amber-700/50 text-amber-700 dark:text-amber-300'
+                        ? 'bg-amber-50 dark:bg-[#2a2414] border-amber-200 dark:border-amber-700/50 text-amber-700 dark:text-[#f59e0b]'
                         : 'bg-white dark:bg-[#1f2c34] border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-white [@media(hover:hover)]:hover:border-[#00a884] [@media(hover:hover)]:hover:bg-emerald-50 [@media(hover:hover)]:dark:hover:bg-[#1a2a24]'
                     }`}
                   >
@@ -770,10 +770,10 @@ export const AiModelSettingsPanel: React.FC = () => {
                     <div key={cfg.task} className={`p-3 rounded-xl border ${isChatHero ? 'border-[#00a884]/30 bg-emerald-50/30 dark:bg-[#1a2a24]/50' : 'border-[#e9edef] dark:border-[#222e35] bg-[#f8fafc] dark:bg-[#1f2c34]'} transition-all`}>
                       <div className="flex items-center gap-2 mb-2 flex-wrap">
                         <span className="text-xs font-bold text-[#111b21] dark:text-white">{meta.label}</span>
-                        <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-[#143d2f] text-emerald-800 dark:text-emerald-300">{meta.badge}</span>
+                        <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-[#143d2f] text-emerald-800 dark:text-[#00a884]">{meta.badge}</span>
                         {isChatHero && <span className="text-[10px] text-[#00a884] font-semibold">— Hero (disinkron preset)</span>}
-                        {isNlu && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 dark:bg-[#0f2a33] text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-700/40">Rekomendasi: SumoPod netra — P50 1.8s</span>}
-                        {isNlu && nluOffRec && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-[#2a2414] text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-700/50">⚠️ Di luar SumoPod berisiko latensi &gt;1.8s</span>}
+                        {isNlu && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 dark:bg-[#0f2a33] text-sky-700 dark:text-[#38bdf8] border border-sky-200 dark:border-sky-700/40">Rekomendasi: SumoPod netra — P50 1.8s</span>}
+                        {isNlu && nluOffRec && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-[#2a2414] text-amber-800 dark:text-[#f59e0b] border border-amber-200 dark:border-amber-700/50">⚠️ Di luar SumoPod berisiko latensi &gt;1.8s</span>}
                       </div>
                       <p className="text-[11px] text-[#667781] dark:text-[#8696a0] mb-2">{cfg.description}</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
@@ -897,7 +897,7 @@ export const AiModelSettingsPanel: React.FC = () => {
                 {savingAll ? (<><RefreshCw size={14} className="animate-spin" /> Menyimpan...</>) : (<><Save size={14} /> 💾 Simpan Semua Perubahan</>)}
               </button>
               <span className="text-[11px] text-[#667781] dark:text-[#8696a0] text-center sm:text-right">
-                ✨ Perubahan langsung aktif pada pesan WhatsApp berikutnya tanpa perlu restart {dirty && <span className="text-amber-600 dark:text-amber-400 font-semibold">• Ada perubahan belum disimpan</span>}
+                ✨ Perubahan langsung aktif pada pesan WhatsApp berikutnya tanpa perlu restart {dirty && <span className="text-amber-600 dark:text-[#f59e0b] font-semibold">• Ada perubahan belum disimpan</span>}
               </span>
             </div>
           </div>

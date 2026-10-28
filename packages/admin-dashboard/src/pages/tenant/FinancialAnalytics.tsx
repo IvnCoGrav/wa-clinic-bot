@@ -165,9 +165,9 @@ function getLedgerPaymentClass(status: TransactionLedgerItem['paymentStatus']): 
     return 'bg-[#d9fdd3] dark:bg-[#005c4b]/50 text-[#008069] dark:text-[#4ae3b5] border border-[#00a884]/30';
   }
   if (status === 'SELESAI_BELUM_VERIFIKASI') {
-    return 'bg-sky-100 dark:bg-sky-500/20 text-sky-800 dark:text-sky-300 border border-sky-300 dark:border-sky-500/40';
+    return 'bg-sky-100 dark:bg-[#202c33]/20 text-sky-800 dark:text-[#38bdf8] border border-sky-300 dark:border-sky-800/40';
   }
-  return 'bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-300';
+  return 'bg-amber-100 dark:bg-amber-950/30 text-amber-800 dark:text-[#f59e0b] border border-amber-300';
 }
 
 export const FinancialAnalytics: React.FC = () => {

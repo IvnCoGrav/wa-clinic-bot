@@ -853,7 +853,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
                       </p>
                       <p className="text-[11px] text-[#8696a0] mt-0.5 line-clamp-2">{addrLine(card)}</p>
                       {card.landmark && (
-                        <p className="text-[10px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 rounded px-1.5 py-0.5 mt-1 inline-block">
+                        <p className="text-[10px] text-amber-800 dark:text-[#f59e0b] bg-amber-50 dark:bg-amber-950/40 rounded px-1.5 py-0.5 mt-1 inline-block">
                           Patokan: {card.landmark}
                         </p>
                       )}

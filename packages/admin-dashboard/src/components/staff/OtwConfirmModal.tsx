@@ -73,7 +73,7 @@ export const OtwConfirmModal: React.FC<OtwConfirmModalProps> = ({
         <div
           className={`rounded-xl border p-3 text-xs leading-relaxed flex items-start gap-2 ${
             hasGps
-              ? 'border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300'
+              ? 'border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-[#00a884]'
               : 'border-amber-300 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200'
           }`}
         >

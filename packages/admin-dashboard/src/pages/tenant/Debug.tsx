@@ -529,24 +529,24 @@ interface GroupedCustomerLlmLogs {
 const getFlowBadge = (flowType: string, isDirectReply = false) => {
   switch (flowType) {
     case 'NLU_EXTRACTOR':
-      return { label: '1. NLU Extractor', short: 'NLU EXT', icon: '🎰', cls: 'bg-violet-50 dark:bg-violet-500/15 text-violet-800 dark:text-violet-300 border-violet-200 dark:border-violet-500/40' };
+      return { label: '1. NLU Extractor', short: 'NLU EXT', icon: '🎰', cls: 'bg-violet-50 dark:bg-[#202c33] text-violet-800 dark:text-[#aebac1] border-violet-200 dark:border-[#2a3942]' };
     case 'SLOT_EXTRACTOR':
-      return { label: '1. NLU Extractor (legacy)', short: 'SLOT EXT', icon: '🎰', cls: 'bg-violet-50 dark:bg-violet-500/15 text-violet-800 dark:text-violet-300 border-violet-200 dark:border-violet-500/40' };
+      return { label: '1. NLU Extractor (legacy)', short: 'SLOT EXT', icon: '🎰', cls: 'bg-violet-50 dark:bg-[#202c33] text-violet-800 dark:text-[#aebac1] border-violet-200 dark:border-[#2a3942]' };
     case 'V3_ROUTING':
       if (isDirectReply) {
-        return { label: '⚡ Direct Reply (1 Call)', short: 'DIRECT', icon: '⚡', cls: 'bg-emerald-50 dark:bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/40' };
+        return { label: '⚡ Direct Reply (1 Call)', short: 'DIRECT', icon: '⚡', cls: 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-[#00a884] border-emerald-200 dark:border-emerald-800/40' };
       }
-      return { label: '2. Tool Routing (Call 1)', short: 'ROUTING', icon: '🧭', cls: 'bg-sky-50 dark:bg-sky-500/15 text-sky-900 dark:text-sky-300 border-sky-300 dark:border-sky-500/40' };
+      return { label: '2. Tool Routing (Call 1)', short: 'ROUTING', icon: '🧭', cls: 'bg-sky-50 dark:bg-[#202c33] text-sky-900 dark:text-[#38bdf8] border-sky-300 dark:border-sky-800/40' };
     case 'V3_GENERATION':
-      return { label: '3. Reply Generation (Call 2)', short: 'GENERATION', icon: '🎯', cls: 'bg-fuchsia-50 dark:bg-fuchsia-500/15 text-fuchsia-800 dark:text-fuchsia-300 border-fuchsia-200 dark:border-fuchsia-500/40' };
+      return { label: '3. Reply Generation (Call 2)', short: 'GENERATION', icon: '🎯', cls: 'bg-fuchsia-50 dark:bg-[#202c33] text-fuchsia-800 dark:text-[#aebac1] border-fuchsia-200 dark:border-[#2a3942]' };
     case 'V3_REPROMPT':
-      return { label: '4. Reprompt / Self-Correction', short: 'REPROMPT', icon: '🔧', cls: 'bg-amber-50 dark:bg-amber-500/15 text-amber-900 dark:text-amber-300 border-amber-300 dark:border-amber-500/40' };
+      return { label: '4. Reprompt / Self-Correction', short: 'REPROMPT', icon: '🔧', cls: 'bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-[#f59e0b] border-amber-300 dark:border-amber-800/40' };
     case 'SLOT_GENERATOR':
-      return { label: 'Slot Generator (legacy)', short: 'SLOT GEN', icon: '🎯', cls: 'bg-fuchsia-50 dark:bg-fuchsia-500/15 text-fuchsia-800 dark:text-fuchsia-300 border-fuchsia-200 dark:border-fuchsia-500/40' };
+      return { label: 'Slot Generator (legacy)', short: 'SLOT GEN', icon: '🎯', cls: 'bg-fuchsia-50 dark:bg-[#202c33] text-fuchsia-800 dark:text-[#aebac1] border-fuchsia-200 dark:border-[#2a3942]' };
     case 'SLOT_FAST_FAQ':
-      return { label: 'Fast FAQ (legacy)', short: 'FAST FAQ', icon: '⚡', cls: 'bg-amber-50 dark:bg-amber-500/15 text-amber-900 dark:text-amber-300 border-amber-300 dark:border-amber-500/40' };
+      return { label: 'Fast FAQ (legacy)', short: 'FAST FAQ', icon: '⚡', cls: 'bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-[#f59e0b] border-amber-300 dark:border-amber-800/40' };
     case 'V3_AGENT':
-      return { label: 'V3 Agent (legacy monolitik)', short: 'V3 AGENT', icon: '🤖', cls: 'bg-emerald-50 dark:bg-emerald-500/15 text-emerald-900 dark:text-emerald-300 border-emerald-300 dark:border-emerald-500/40' };
+      return { label: 'V3 Agent (legacy monolitik)', short: 'V3 AGENT', icon: '🤖', cls: 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-900 dark:text-[#00a884] border-emerald-300 dark:border-emerald-800/40' };
     default:
       return { label: flowType, short: flowType, icon: '⚡', cls: 'bg-slate-50 dark:bg-[#2a3942] text-slate-800 dark:text-slate-200 border-slate-200 dark:border-[#374248]' };
   }
@@ -769,7 +769,7 @@ function LlmLogsSection() {
               <span>🧠 Dedicated LLM Execution Tracing</span>
             </h3>
             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-              autoSync ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/40' : 'bg-slate-100 dark:bg-[#2a3942] text-slate-600 dark:text-[#aebac1]'
+              autoSync ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-[#00a884] border border-emerald-200 dark:border-emerald-800/40' : 'bg-slate-100 dark:bg-[#2a3942] text-slate-600 dark:text-[#aebac1]'
             }`}>
               <span className={`w-1.5 h-1.5 rounded-full ${autoSync ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
               {autoSync ? 'Auto-Sync 6s' : 'Jeda'}
@@ -790,7 +790,7 @@ function LlmLogsSection() {
             }`}
             title={autoSync ? 'Jeda Sinkronisasi Otomatis' : 'Aktifkan Sinkronisasi Otomatis'}
           >
-            {autoSync ? <Pause size={13} className="text-emerald-700 dark:text-emerald-300" /> : <Play size={13} className="text-slate-600 dark:text-[#aebac1]" />}
+            {autoSync ? <Pause size={13} className="text-emerald-700 dark:text-[#00a884]" /> : <Play size={13} className="text-slate-600 dark:text-[#aebac1]" />}
             <span>{autoSync ? 'Pause' : 'Play'}</span>
           </button>
 
@@ -817,7 +817,7 @@ function LlmLogsSection() {
           <button
             onClick={handleClearBuffer}
             disabled={groupedData.length === 0}
-            className="px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-950/50 border border-rose-200 dark:border-rose-800/40 text-xs font-bold text-rose-700 dark:text-rose-300 transition shadow-xs flex items-center gap-1.5 disabled:opacity-40"
+            className="px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-950/50 border border-rose-200 dark:border-rose-800/40 text-xs font-bold text-rose-700 dark:text-[#f87171] transition shadow-xs flex items-center gap-1.5 disabled:opacity-40"
             title="Hapus / Reset Buffer LLM Logs"
           >
             <Trash2 size={13} />
@@ -829,7 +829,7 @@ function LlmLogsSection() {
       {/* Aggregate Stats Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
         <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl p-3 flex items-center gap-3 shadow-2xs">
-          <div className="w-8 h-8 rounded-lg bg-teal-50 dark:bg-teal-500/15 border border-teal-200 dark:border-teal-500/40 flex items-center justify-center text-teal-700 dark:text-teal-300">
+          <div className="w-8 h-8 rounded-lg bg-teal-50 dark:bg-[#202c33] border border-teal-200 dark:border-teal-800/40 flex items-center justify-center text-teal-700 dark:text-[#2dd4bf]">
             <Phone size={15} />
           </div>
           <div>
@@ -839,7 +839,7 @@ function LlmLogsSection() {
         </div>
 
         <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl p-3 flex items-center gap-3 shadow-2xs">
-          <div className="w-8 h-8 rounded-lg bg-sky-50 dark:bg-sky-500/15 border border-sky-200 dark:border-sky-500/40 flex items-center justify-center text-sky-700 dark:text-sky-300">
+          <div className="w-8 h-8 rounded-lg bg-sky-50 dark:bg-[#202c33] border border-sky-200 dark:border-sky-800/40 flex items-center justify-center text-sky-700 dark:text-[#38bdf8]">
             <MessageSquare size={15} />
           </div>
           <div>
@@ -849,22 +849,22 @@ function LlmLogsSection() {
         </div>
 
         <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl p-3 flex items-center gap-3 shadow-2xs">
-          <div className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-500/15 border border-purple-200 dark:border-purple-500/40 flex items-center justify-center text-purple-700 dark:text-purple-300">
+          <div className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-[#202c33] border border-purple-200 dark:border-[#2a3942] flex items-center justify-center text-purple-700 dark:text-[#aebac1]">
             <BrainCircuit size={15} />
           </div>
           <div>
             <p className="text-[10px] uppercase font-bold text-slate-500 dark:text-[#8696a0] tracking-wider">Total AI Steps</p>
-            <p className="text-base font-extrabold text-purple-900 dark:text-purple-300">{totalAiSteps}</p>
+            <p className="text-base font-extrabold text-purple-900 dark:text-[#aebac1]">{totalAiSteps}</p>
           </div>
         </div>
 
         <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl p-3 flex items-center gap-3 shadow-2xs">
-          <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-200 dark:border-emerald-500/40 flex items-center justify-center text-emerald-700 dark:text-emerald-300">
+          <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 flex items-center justify-center text-emerald-700 dark:text-[#00a884]">
             <Zap size={15} />
           </div>
           <div>
             <p className="text-[10px] uppercase font-bold text-slate-500 dark:text-[#8696a0] tracking-wider">V3 Pipeline</p>
-            <p className="text-base font-extrabold text-emerald-900 dark:text-emerald-300">Routing → Generation</p>
+            <p className="text-base font-extrabold text-emerald-900 dark:text-[#00a884]">Routing → Generation</p>
           </div>
         </div>
       </div>
@@ -1101,12 +1101,12 @@ function LlmLogsSection() {
                                           </span>
 
                                           {call.modelUsed && (
-                                            <span className="text-[10px] font-mono text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-500/15 px-2 py-0.5 rounded-md border border-purple-200 dark:border-purple-500/40 font-semibold">
+                                            <span className="text-[10px] font-mono text-purple-700 dark:text-[#aebac1] bg-purple-50 dark:bg-[#202c33] px-2 py-0.5 rounded-md border border-purple-200 dark:border-[#2a3942] font-semibold">
                                               {call.modelUsed}
                                             </span>
                                           )}
                                           {(call.actualProvider || call.actualModel) && (
-                                            <span className="text-[10px] font-mono text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-500/15 px-2 py-0.5 rounded-md border border-sky-200 dark:border-sky-500/40 font-semibold" title={call.actualModel ? `Model aktual: ${call.actualModel}` : undefined}>
+                                            <span className="text-[10px] font-mono text-sky-700 dark:text-[#38bdf8] bg-sky-50 dark:bg-[#202c33] px-2 py-0.5 rounded-md border border-sky-200 dark:border-sky-800/40 font-semibold" title={call.actualModel ? `Model aktual: ${call.actualModel}` : undefined}>
                                               {(call.actualProvider || 'Provider')} {call.actualModel && call.actualModel !== call.modelUsed ? `· ${call.actualModel}` : ''}
                                               {call.status === 'FALLBACK' && ' ⚠️ fallback'}
                                             </span>
@@ -1119,7 +1119,7 @@ function LlmLogsSection() {
                                           )}
 
                                           {call.confidenceScore !== undefined && (
-                                            <span className="text-[10px] font-mono text-cyan-800 dark:text-cyan-300 bg-cyan-50 dark:bg-cyan-500/15 px-2 py-0.5 rounded-md border border-cyan-200 dark:border-cyan-500/40 font-bold">
+                                            <span className="text-[10px] font-mono text-cyan-800 dark:text-[#38bdf8] bg-cyan-50 dark:bg-[#202c33] px-2 py-0.5 rounded-md border border-cyan-200 dark:border-cyan-800/40 font-bold">
                                               Confidence: {Math.round(call.confidenceScore * 100)}%
                                             </span>
                                           )}
@@ -1129,10 +1129,10 @@ function LlmLogsSection() {
                                           <span
                                             className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
                                               call.status === 'SUCCESS'
-                                              ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/40'
+                                              ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-[#00a884] border border-emerald-200 dark:border-emerald-800/40'
                                               : call.status === 'FALLBACK'
-                                              ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/40'
-                                              : 'bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/40'
+                                              ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-[#f59e0b] border border-amber-200 dark:border-amber-800/40'
+                                              : 'bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-[#f87171] border border-rose-200 dark:border-rose-800/40'
                                             }`}
                                           >
                                             {call.status}
@@ -1153,7 +1153,7 @@ function LlmLogsSection() {
                                       {/* ERROR BANNER — pesan error teknis konkret */}
                                       {call.status === 'ERROR' && (
                                         <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800/60 rounded-xl p-3 space-y-1">
-                                          <span className="text-[10px] font-bold text-rose-800 dark:text-rose-300 uppercase tracking-wider block">
+                                          <span className="text-[10px] font-bold text-rose-800 dark:text-[#f87171] uppercase tracking-wider block">
                                             ⛔ Error Eksekusi LLM
                                           </span>
                                           <p className="text-rose-950 dark:text-rose-200 font-mono text-[11px] font-semibold whitespace-pre-wrap break-words">
@@ -1166,14 +1166,14 @@ function LlmLogsSection() {
                                       {(call.flowType === 'NLU_EXTRACTOR' || call.flowType === 'SLOT_EXTRACTOR' || call.flowType === 'SLOT_GENERATOR' || call.flowType === 'SLOT_FAST_FAQ' || call.flowType === 'V3_ROUTING' || call.flowType === 'V3_GENERATION' || call.flowType === 'V3_REPROMPT' || call.flowType === 'V3_AGENT') && (
                                         <div className="space-y-2.5 text-xs">
                                           <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                                            <div className="bg-violet-50/70 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/40 rounded-xl p-3 space-y-1">
-                                              <span className="text-[10px] font-bold text-violet-800 dark:text-violet-300 uppercase tracking-wider block">
+                                            <div className="bg-violet-50/70 dark:bg-[#202c33] border border-violet-200 dark:border-[#2a3942] rounded-xl p-3 space-y-1">
+                                              <span className="text-[10px] font-bold text-violet-800 dark:text-[#aebac1] uppercase tracking-wider block">
                                                 🎰 Input Pasien / Slot State
                                               </span>
                                               <p className="text-violet-950 dark:text-violet-200 font-medium whitespace-pre-wrap">{call.customerInput || '-'}</p>
                                             </div>
                                             <div className="bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 rounded-xl p-3 space-y-1">
-                                              <span className="text-[10px] font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider block">
+                                              <span className="text-[10px] font-bold text-emerald-800 dark:text-[#00a884] uppercase tracking-wider block">
                                                 🎯 Output Keputusan Slot / Balasan
                                               </span>
                                               <p className="text-emerald-950 dark:text-emerald-200 font-medium whitespace-pre-wrap">{call.finalReply || '-'}</p>
@@ -1182,8 +1182,8 @@ function LlmLogsSection() {
 
                                           {/* Reasoning Ringkas */}
                                           {(call.reasoning || call.rawReasoning) && (
-                                            <div className="bg-purple-50/80 dark:bg-purple-500/10 border border-purple-200 dark:border-purple-500/40 rounded-xl p-3 space-y-1">
-                                              <span className="text-[10px] font-bold text-purple-900 dark:text-purple-300 uppercase tracking-wider block">
+                                            <div className="bg-purple-50/80 dark:bg-[#202c33] border border-purple-200 dark:border-[#2a3942] rounded-xl p-3 space-y-1">
+                                              <span className="text-[10px] font-bold text-purple-900 dark:text-[#aebac1] uppercase tracking-wider block">
                                                 🧠 AI Reasoning & Context Analysis
                                               </span>
                                               <p className="text-purple-950 dark:text-purple-200 font-medium text-xs whitespace-pre-wrap">{call.reasoning || call.rawReasoning}</p>
@@ -1192,15 +1192,15 @@ function LlmLogsSection() {
 
                                           {/* Token & biaya per-call */}
                                           {((call as any).promptTokens !== undefined || (call as any).completionTokens !== undefined || (call as any).costIdr !== undefined || (call as any).cachedPromptTokens !== undefined || (call as any).reasoningTokens !== undefined) && (
-                                            <div className="bg-sky-50/70 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/40 rounded-xl p-3 space-y-1">
-                                              <span className="text-[10px] font-bold text-sky-900 dark:text-sky-300 uppercase tracking-wider block">
+                                            <div className="bg-sky-50/70 dark:bg-[#202c33] border border-sky-200 dark:border-sky-800/40 rounded-xl p-3 space-y-1">
+                                              <span className="text-[10px] font-bold text-sky-900 dark:text-[#38bdf8] uppercase tracking-wider block">
                                                 📊 Token & Biaya
                                               </span>
                                               <p className="text-sky-950 dark:text-sky-200 font-mono text-[11px] font-semibold">
                                                 📥 {(call as any).promptTokens ?? '-'} tokens | 📤 {(call as any).completionTokens ?? '-'} tokens{(call as any).totalTokens !== undefined ? ` | Σ ${(call as any).totalTokens}` : ''}{(call as any).costIdr !== undefined ? ` | Rp ${Number((call as any).costIdr).toLocaleString('id-ID')}` : ''}
                                               </p>
                                               {((call as any).cachedPromptTokens !== undefined || (call as any).reasoningTokens !== undefined) && (
-                                                <p className="text-sky-800 dark:text-sky-300 font-mono text-[10px]">
+                                                <p className="text-sky-800 dark:text-[#38bdf8] font-mono text-[10px]">
                                                   {((call as any).cachedPromptTokens !== undefined) && <>💾 Cache Hit: {(call as any).cachedPromptTokens} tokens</>}
                                                   {((call as any).cachedPromptTokens !== undefined && (call as any).reasoningTokens !== undefined) && ' | '}
                                                   {((call as any).reasoningTokens !== undefined) && <>🧠 Thinking: {(call as any).reasoningTokens} tokens</>}
@@ -1211,8 +1211,8 @@ function LlmLogsSection() {
 
                                           {/* Tools yang diputuskan LLM */}
                                           {Array.isArray((call as any).toolsCalled) && (call as any).toolsCalled.length > 0 && (
-                                            <div className="bg-teal-50/70 dark:bg-teal-500/10 border border-teal-200 dark:border-teal-500/40 rounded-xl p-3 space-y-1.5">
-                                              <span className="text-[10px] font-bold text-teal-900 dark:text-teal-300 uppercase tracking-wider block">
+                                            <div className="bg-teal-50/70 dark:bg-[#202c33] border border-teal-200 dark:border-teal-800/40 rounded-xl p-3 space-y-1.5">
+                                              <span className="text-[10px] font-bold text-teal-900 dark:text-[#2dd4bf] uppercase tracking-wider block">
                                                 🛠️ Tools Called ({(call as any).toolsCalled.length})
                                               </span>
                                               {(call as any).toolsCalled.map((t: any, ti: number) => (
@@ -1306,7 +1306,7 @@ function LlmLogsSection() {
                                               </div>
                                             </div>
                                             {call.reasoning && (
-                                              <div className="bg-purple-50 dark:bg-purple-500/10 border border-purple-200 dark:border-purple-500/40 rounded-xl p-3 text-purple-950 dark:text-purple-200 font-mono text-[11px] whitespace-pre-wrap">
+                                              <div className="bg-purple-50 dark:bg-[#202c33] border border-purple-200 dark:border-[#2a3942] rounded-xl p-3 text-purple-950 dark:text-purple-200 font-mono text-[11px] whitespace-pre-wrap">
                                                 {call.reasoning}
                                               </div>
                                             )}
@@ -1353,7 +1353,7 @@ function LlmLogsSection() {
                         {log.customerName || formatPhoneDisplay(log.customerPhone)}
                       </span>
                       {log.modelUsed && (
-                        <span className="text-[10px] font-mono text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-500/15 px-2 py-0.5 rounded-md border border-purple-200 dark:border-purple-500/40 font-semibold">
+                        <span className="text-[10px] font-mono text-purple-700 dark:text-[#aebac1] bg-purple-50 dark:bg-[#202c33] px-2 py-0.5 rounded-md border border-purple-200 dark:border-[#2a3942] font-semibold">
                           {log.modelUsed}
                         </span>
                       )}
@@ -1369,10 +1369,10 @@ function LlmLogsSection() {
                       <span
                         className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                           log.status === 'SUCCESS'
-                          ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/40'
+                          ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-[#00a884] border border-emerald-200 dark:border-emerald-800/40'
                           : log.status === 'FALLBACK'
-                          ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/40'
-                          : 'bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/40'
+                          ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-[#f59e0b] border border-amber-200 dark:border-amber-800/40'
+                          : 'bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-[#f87171] border border-rose-200 dark:border-rose-800/40'
                         }`}
                       >
                         {log.status}
@@ -1382,18 +1382,18 @@ function LlmLogsSection() {
 
                   {log.customerInput && (
                     <div className="bg-sky-50/70 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800/40 rounded-xl p-3">
-                      <span className="text-[10px] font-bold text-sky-800 dark:text-sky-300 uppercase block mb-1">Input / Prompt</span>
+                      <span className="text-[10px] font-bold text-sky-800 dark:text-[#38bdf8] uppercase block mb-1">Input / Prompt</span>
                       <p className="text-sky-950 dark:text-sky-200 text-xs font-medium whitespace-pre-wrap">{log.customerInput}</p>
                     </div>
                   )}
 
-                  <div className="bg-purple-50/60 dark:bg-purple-500/10 border border-purple-200 dark:border-purple-500/40 rounded-xl p-3">
+                  <div className="bg-purple-50/60 dark:bg-[#202c33] border border-purple-200 dark:border-[#2a3942] rounded-xl p-3">
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-[10px] font-bold text-purple-800 dark:text-purple-300 uppercase block">Reasoning &amp; CoT</span>
+                      <span className="text-[10px] font-bold text-purple-800 dark:text-[#aebac1] uppercase block">Reasoning &amp; CoT</span>
                       <button
                         type="button"
                         onClick={() => copyText(log.id, displayReasoning)}
-                        className="text-[10px] font-semibold text-purple-700 dark:text-purple-300 flex items-center gap-1 bg-white dark:bg-transparent px-1.5 py-0.5 rounded border border-purple-200 dark:border-purple-500/40"
+                        className="text-[10px] font-semibold text-purple-700 dark:text-[#aebac1] flex items-center gap-1 bg-white dark:bg-transparent px-1.5 py-0.5 rounded border border-purple-200 dark:border-[#2a3942]"
                       >
                         {copiedId === log.id ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} />}
                         <span>Salin</span>
@@ -1403,7 +1403,7 @@ function LlmLogsSection() {
                   </div>
 
                   <div className="bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 rounded-xl p-3">
-                    <span className="text-[10px] font-bold text-emerald-800 dark:text-emerald-300 uppercase block mb-1">Output Akhir</span>
+                    <span className="text-[10px] font-bold text-emerald-800 dark:text-[#00a884] uppercase block mb-1">Output Akhir</span>
                     <p className="text-emerald-950 dark:text-emerald-200 font-medium text-xs whitespace-pre-wrap">{log.finalReply || '-'}</p>
                   </div>
                 </div>

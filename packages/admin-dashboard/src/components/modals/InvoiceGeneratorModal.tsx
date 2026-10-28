@@ -1108,7 +1108,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                 type="button"
                 onClick={() => { showButtonTip('Draf Disimpan'); saveDraftManually(); }}
                 onTouchStart={() => showButtonTip('Simpan Draf')}
-                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-[#2a3942] active:scale-90 transition flex items-center justify-center shadow-2xs cursor-pointer"
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] text-amber-700 dark:text-[#f59e0b] hover:bg-amber-50 dark:hover:bg-[#2a3942] active:scale-90 transition flex items-center justify-center shadow-2xs cursor-pointer"
                 title="Simpan Draf"
               >
                 <BookmarkPlus size={18} />

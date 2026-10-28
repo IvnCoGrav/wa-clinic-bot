@@ -57,13 +57,13 @@ export const MessagePinBanner: React.FC<MessagePinBannerProps> = ({
           title="Klik untuk melompat ke pesan yang disematkan ini"
         >
           {/* Badge Icon Pin */}
-          <span className="w-6 h-6 rounded-full bg-emerald-600/10 dark:bg-emerald-400/15 text-[#008069] dark:text-emerald-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+          <span className="w-6 h-6 rounded-full bg-emerald-600/10 dark:bg-[#00a884]/15 text-[#008069] dark:text-[#00a884] flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
             <Pin size={13} className="fill-current -rotate-45" />
           </span>
 
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 text-[10px] leading-tight">
-              <span className="font-bold text-[#008069] dark:text-emerald-400 truncate">
+              <span className="font-bold text-[#008069] dark:text-[#00a884] truncate">
                 Pesan Disematkan • {senderTitle}
               </span>
               {pinnedMessage.pinned_by && (

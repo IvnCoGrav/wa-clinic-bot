@@ -5,8 +5,9 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 604
+Total entri terindeks: 605
 
+- 2026-10-28 | Refactor: Eliminasi 420 Warna Neon di Dark Mode & Harmonisasi Anti-Neon WhatsApp Design Sy
 - 2026-10-28 | Refactor & Feature: Remediasi Menyeluruh UI/UX, Eliminasi Flashbang & Standardisasi Dark M
 - 2026-10-28 | Fix: Penyempurnaan Integritas Penamaan Master Customer (Anti-Locking Pushname Non-Manusia
 - 2026-10-27 | Refactor & Audit: Pembersihan Menyeluruh AI Slop UI/UX, Backend Contracts & Comment Hygien

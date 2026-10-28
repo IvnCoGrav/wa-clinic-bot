@@ -66,24 +66,24 @@ function parseContextSummary(summary?: string | null): { done: string[]; banned:
 }
 
 const ONGKIR_STATUS_META: Record<string, { label: string; cls: string }> = {
-  QUOTED: { label: 'QUOTED · Sudah Disampaikan - Dilarang Hitung Ulang', cls: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/40' },
-  CONFIRMED: { label: 'CONFIRMED · Disetujui Customer', cls: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/40' },
+  QUOTED: { label: 'QUOTED · Sudah Disampaikan - Dilarang Hitung Ulang', cls: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/30 dark:text-[#f59e0b] dark:border-amber-800/40' },
+  CONFIRMED: { label: 'CONFIRMED · Disetujui Customer', cls: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/30 dark:text-[#00a884] dark:border-emerald-800/40' },
   UNQUOTED: { label: 'UNQUOTED · Belum dihitung', cls: 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-[#2a3942] dark:text-[#aebac1] dark:border-[#374248]' },
 };
 
 const CONV_STATE_CLS: Record<string, string> = {
   INITIAL: 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-[#2a3942] dark:text-[#aebac1] dark:border-[#374248]',
-  LOCATION_CONFIRMED: 'bg-sky-100 text-sky-800 border-sky-300 dark:bg-sky-500/15 dark:text-sky-300 dark:border-sky-500/40',
-  AWAITING_INTEREST: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/40',
-  RESERVATION_SENT: 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-500/15 dark:text-purple-300 dark:border-purple-500/40',
-  HUMAN_HANDLING: 'bg-rose-100 text-rose-700 border-rose-300 dark:bg-rose-500/15 dark:text-rose-300 dark:border-rose-500/40',
-  COMPLETED: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/40',
+  LOCATION_CONFIRMED: 'bg-sky-100 text-sky-800 border-sky-300 dark:bg-sky-950/30 dark:text-[#38bdf8] dark:border-sky-800/40',
+  AWAITING_INTEREST: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/30 dark:text-[#f59e0b] dark:border-amber-800/40',
+  RESERVATION_SENT: 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-[#202c33] dark:text-[#aebac1] dark:border-[#2a3942]',
+  HUMAN_HANDLING: 'bg-rose-100 text-rose-700 border-rose-300 dark:bg-rose-950/30 dark:text-[#f87171] dark:border-rose-800/40',
+  COMPLETED: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/30 dark:text-[#00a884] dark:border-emerald-800/40',
 };
 
 const CART_TYPE_META: Record<string, { label: string; cls: string }> = {
-  PRIMARY: { label: 'Utama', cls: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/40' },
-  ADDON: { label: 'Add-on', cls: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/40' },
-  SERVICE: { label: 'Layanan', cls: 'bg-sky-100 text-sky-800 border-sky-300 dark:bg-sky-500/15 dark:text-sky-300 dark:border-sky-500/40' },
+  PRIMARY: { label: 'Utama', cls: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/30 dark:text-[#00a884] dark:border-emerald-800/40' },
+  ADDON: { label: 'Add-on', cls: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/30 dark:text-[#f59e0b] dark:border-amber-800/40' },
+  SERVICE: { label: 'Layanan', cls: 'bg-sky-100 text-sky-800 border-sky-300 dark:bg-sky-950/30 dark:text-[#38bdf8] dark:border-sky-800/40' },
 };
 
 export const AiSandbox: React.FC = () => {
@@ -521,7 +521,7 @@ export const AiSandbox: React.FC = () => {
                 <span>Simulated WhatsApp Chat</span>
               </span>
               {inspectorData.modelUsed && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 shadow-2xs" title="Model AI yang membalas giliran chat ini">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-[#aebac1] border border-purple-200 dark:border-purple-800 shadow-2xs" title="Model AI yang membalas giliran chat ini">
                   <Cpu size={10} className="mr-1" />
                   {inspectorData.provider ? `${inspectorData.provider}: ` : ''}{inspectorData.modelUsed}
                 </span>
@@ -775,7 +775,7 @@ export const AiSandbox: React.FC = () => {
                                 return (
                                   <div key={i} className="flex items-center justify-between gap-2 text-xs">
                                     <span className="text-[#111b21] dark:text-[#e9edef] font-semibold truncate">
-                                      {recipient && <span className="mr-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200 dark:bg-indigo-500/15 dark:text-indigo-300 dark:border-indigo-500/40">[{recipient}]</span>}
+                                      {recipient && <span className="mr-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200 dark:bg-[#202c33] dark:text-[#aebac1] dark:border-[#2a3942]">[{recipient}]</span>}
                                       {it.name}
                                     </span>
                                     <span className="flex items-center gap-1.5 shrink-0">
@@ -790,9 +790,9 @@ export const AiSandbox: React.FC = () => {
                               <div className="flex justify-between"><span>Subtotal Layanan</span><span className="font-mono font-bold">{fmtRpId(subtotal)}</span></div>
                               <div className="flex justify-between"><span>Ongkir Promo</span><span className="font-mono font-bold">{fmtRpId(ongkir)}</span></div>
                             </div>
-                            <div className="rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 px-3 py-2 flex items-center justify-between">
-                              <span className="text-[11px] font-bold text-emerald-800 dark:text-emerald-300">Total Akumulasi</span>
-                              <span className="text-base font-black font-mono text-emerald-800 dark:text-emerald-300">{fmtRpId(subtotal + ongkir)}</span>
+                            <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40/30 px-3 py-2 flex items-center justify-between">
+                              <span className="text-[11px] font-bold text-emerald-800 dark:text-[#00a884]">Total Akumulasi</span>
+                              <span className="text-base font-black font-mono text-emerald-800 dark:text-[#00a884]">{fmtRpId(subtotal + ongkir)}</span>
                             </div>
                           </>
                         )}
@@ -874,7 +874,7 @@ export const AiSandbox: React.FC = () => {
                           <>
                             {summary.done.length > 0 && (
                               <div>
-                                <div className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 uppercase mb-1">✅ Sudah Dibahas & Tuntas</div>
+                                <div className="text-[10px] font-bold text-emerald-700 dark:text-[#00a884] uppercase mb-1">✅ Sudah Dibahas & Tuntas</div>
                                 <ul className="space-y-0.5 text-[11px] text-[#111b21] dark:text-[#e9edef]">
                                   {summary.done.map((s, i) => <li key={i}>• {s}</li>)}
                                 </ul>
@@ -882,7 +882,7 @@ export const AiSandbox: React.FC = () => {
                             )}
                             {summary.banned.length > 0 && (
                               <div>
-                                <div className="text-[10px] font-bold text-rose-600 dark:text-rose-300 uppercase mb-1">🚫 Dilarang Diulang</div>
+                                <div className="text-[10px] font-bold text-rose-600 dark:text-[#f87171] uppercase mb-1">🚫 Dilarang Diulang</div>
                                 <ul className="space-y-0.5 text-[11px] text-[#111b21] dark:text-[#e9edef]">
                                   {summary.banned.map((s, i) => <li key={i}>• {s}</li>)}
                                 </ul>
@@ -890,7 +890,7 @@ export const AiSandbox: React.FC = () => {
                             )}
                             {summary.focus.length > 0 && (
                               <div>
-                                <div className="text-[10px] font-bold text-sky-700 dark:text-sky-300 uppercase mb-1">🎯 Topik Fokus Saat Ini</div>
+                                <div className="text-[10px] font-bold text-sky-700 dark:text-[#38bdf8] uppercase mb-1">🎯 Topik Fokus Saat Ini</div>
                                 <ul className="space-y-0.5 text-[11px] text-[#111b21] dark:text-[#e9edef]">
                                   {summary.focus.map((s, i) => <li key={i}>• {s}</li>)}
                                 </ul>
@@ -1132,7 +1132,7 @@ export const AiSandbox: React.FC = () => {
                 {(inspectorData.tokens || inspectorData.costIdr || inspectorData.modelUsed) && (
                   <div className="flex flex-wrap gap-1.5 text-[10px] font-mono">
                     {inspectorData.modelUsed && (
-                      <span className="px-2 py-1 rounded-lg bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 font-semibold flex items-center gap-1">
+                      <span className="px-2 py-1 rounded-lg bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-[#aebac1] font-semibold flex items-center gap-1">
                         <Cpu size={11} />
                         <span>{inspectorData.provider ? `${inspectorData.provider} · ` : ''}{inspectorData.modelUsed}</span>
                       </span>

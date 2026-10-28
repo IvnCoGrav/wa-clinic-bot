@@ -715,7 +715,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                         <span
                           title={`${item.badge} percakapan butuh respons / unread`}
                           className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            isActive ? 'bg-[#008069] dark:bg-[#00a884] text-white' : 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/30'
+                            isActive ? 'bg-[#008069] dark:bg-[#00a884] text-white' : 'bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-[#f59e0b] border border-amber-200 dark:border-amber-800/40'
                           }`}
                         >
                           {item.badge}
@@ -737,10 +737,10 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             onClick={() => setShowStatusPopover(true)}
             className={`w-full flex items-center justify-between px-3 py-2 rounded-xl border text-xs font-semibold transition active:scale-98 cursor-pointer shadow-2xs ${
               wahaStatus === 'WORKING'
-                ? 'bg-emerald-50 dark:bg-emerald-500/15 border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100'
+                ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/40 text-emerald-700 dark:text-[#00a884] hover:bg-emerald-100'
                 : wahaStatus === 'SCAN_QR_CODE'
-                ? 'bg-amber-50 dark:bg-amber-500/15 border-amber-200 dark:border-amber-500/30 text-amber-700 dark:text-amber-300 hover:bg-amber-100'
-                : 'bg-rose-50 dark:bg-rose-500/15 border-rose-200 dark:border-rose-500/30 text-rose-700 dark:text-rose-300 hover:bg-rose-100'
+                ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800/40 text-amber-700 dark:text-[#f59e0b] hover:bg-amber-100'
+                : 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800/40 text-rose-700 dark:text-[#f87171] hover:bg-rose-100'
             }`}
             title="Klik untuk melihat status sistem WhatsApp & Server"
           >
@@ -781,7 +781,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 }}
                 className={`flex-1 min-h-[38px] flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-xl border text-xs font-semibold transition active:scale-95 cursor-pointer shadow-2xs ${
                   soundActive
-                    ? 'bg-emerald-50 dark:bg-emerald-500/15 border-emerald-200 dark:border-emerald-500/30 text-[#008069] dark:text-[#00a884]'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/40 text-[#008069] dark:text-[#00a884]'
                     : 'bg-white dark:bg-[#2a3942] border-[#e9edef] dark:border-[#374248] text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef]'
                 }`}
                 title={soundActive ? 'Suara & Push: Aktif (Klik untuk Mute)' : 'Suara & Push: Mati (Klik untuk Aktifkan)'}
@@ -896,7 +896,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               <button
                 onClick={() => setShowStatusPopover(!showStatusPopover)}
                 title="Status Server WhatsApp: Terputus. Klik untuk membuka panel status"
-                className="hidden md:flex rounded-full bg-rose-50 dark:bg-rose-500/20 border border-rose-200 dark:border-rose-500/40 text-rose-600 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-500/30 transition items-center gap-1.5 px-3 py-1.5 text-xs font-semibold h-8 min-h-[34px] cursor-pointer touch-manipulation active:scale-95"
+                className="hidden md:flex rounded-full bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/40 text-rose-600 dark:text-[#f87171] hover:bg-rose-100 dark:hover:bg-rose-900/50 transition items-center gap-1.5 px-3 py-1.5 text-xs font-semibold h-8 min-h-[34px] cursor-pointer touch-manipulation active:scale-95"
               >
                 <WifiOff size={14} />
                 <span className="text-[11px] font-bold">Terputus</span>

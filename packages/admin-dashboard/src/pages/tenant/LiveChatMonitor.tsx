@@ -149,7 +149,7 @@ function renderHighlightedText(text: string, query: string) {
     const testRegex = new RegExp(`^${escaped}$`, 'i');
     return parts.map((part, i) =>
       testRegex.test(part) ? (
-        <mark key={i} className="bg-amber-200 dark:bg-amber-500/20 text-amber-900 dark:text-amber-200 font-bold px-0.5 rounded">
+        <mark key={i} className="bg-amber-200 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 font-bold px-0.5 rounded">
           {part}
         </mark>
       ) : (
@@ -4419,11 +4419,11 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
       {/* Internal Chatbot OFF Warning Banner (desktop: global di atas; mobile: duplikat ringkas di dalam scroll daftar) */}
       {!chatBotActive && (
-        <div className="hidden lg:flex p-2 sm:p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-500/40 text-amber-900 dark:text-amber-200 text-xs font-semibold items-center justify-between shadow-2xs shrink-0 animate-fadeIn">
+        <div className="hidden lg:flex p-2 sm:p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800/40 text-amber-900 dark:text-amber-200 text-xs font-semibold items-center justify-between shadow-2xs shrink-0 animate-fadeIn">
           <div className="flex items-center space-x-2 min-w-0">
-            <ShieldAlert size={16} className="text-amber-600 dark:text-amber-400 shrink-0" />
+            <ShieldAlert size={16} className="text-amber-600 dark:text-[#f59e0b] shrink-0" />
             <div className="truncate">
-              <span className="font-bold text-amber-700 dark:text-amber-300">CHATBOT AI NONAKTIF:</span>{' '}
+              <span className="font-bold text-amber-700 dark:text-[#f59e0b]">CHATBOT AI NONAKTIF:</span>{' '}
               <span className="text-amber-800 dark:text-amber-200">AI diam, dialihkan ke CS manual. Follow-Up & balasan Live Chat manual tetap aktif.</span>
             </div>
           </div>
@@ -4614,7 +4614,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       const Icon = opt.icon;
                       const isActive = sourceFilter === opt.value;
                       const activeClass = opt.value === 'sandbox'
-                        ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-500/40 shadow-2xs'
+                        ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-[#aebac1] border border-purple-200 dark:border-[#2a3942] shadow-2xs'
                         : 'bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] shadow-2xs';
                       const hasUnreadBadge = opt.value === 'unread' && (totalUnreadCount > 0 || chats.some(c => !c.isSandboxTest && ((c.unreadCount || 0) > 0 || c.isManualUnread)));
                       return (
@@ -5003,13 +5003,13 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                 <span
                                   title="Butuh Respon Segera (Menunggu balasan > 60 menit)"
                                   aria-label="Butuh respon segera, menunggu balasan lebih dari 60 menit"
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300 ring-1 ring-rose-300 dark:ring-rose-500/50 shadow-2xs shrink-0 cursor-help"
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-[#f87171] ring-1 ring-rose-300 dark:ring-rose-800/40 shadow-2xs shrink-0 cursor-help"
                                 >
                                   <span className="relative flex h-2 w-2">
                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
                                     <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-600"></span>
                                   </span>
-                                  <AlertTriangle size={11} className="text-rose-600 dark:text-rose-400 shrink-0" />
+                                  <AlertTriangle size={11} className="text-rose-600 dark:text-[#f87171] shrink-0" />
                                 </span>
                               )}
                               {(chat.customerLabels || []).map((lbl) => (
@@ -5054,14 +5054,14 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                   const staff = ar?.assigned_staff;
                                   if (staff?.name) {
                                     return (
-                                      <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-violet-100 dark:bg-violet-950/60 text-violet-800 dark:text-violet-300 ring-1 ring-violet-300 dark:ring-violet-500/40 shadow-2xs">
+                                      <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-violet-100 dark:bg-violet-950/60 text-violet-800 dark:text-[#aebac1] ring-1 ring-violet-300 dark:ring-[#2a3942] shadow-2xs">
                                         👩‍⚕️ Bidan {staff.name}
                                       </span>
                                     );
                                   }
                                   if (ar && !ar.assigned_staff_id) {
                                     return (
-                                      <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 ring-1 ring-amber-300 dark:ring-amber-500/40 shadow-2xs">
+                                      <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-[#f59e0b] ring-1 ring-amber-300 dark:ring-amber-800/40 shadow-2xs">
                                         ⚠️ Belum Ada Bidan
                                       </span>
                                     );
@@ -5085,7 +5085,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                               className={`p-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center shadow-2xs disabled:opacity-50 ${
                                 isMedical
                                   ? 'bg-rose-100 hover:bg-rose-200 text-rose-700 border border-rose-300'
-                                  : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-500/40'
+                                  : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/60 dark:text-[#aebac1] dark:border-[#2a3942]'
                               }`}
                             >
                               {releasingId === chat.conversationId ? (
@@ -5144,7 +5144,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                         if (searchQuery.trim() && matchedSnippet) {
                           return (
                             <div className="mt-1 p-1.5 rounded bg-amber-50/60 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/20 text-[11px] text-[#111b21] dark:text-slate-200 line-clamp-2 leading-tight flex gap-1.5 items-start">
-                              <Search size={10} className="shrink-0 mt-0.5 text-amber-600 dark:text-amber-500/60" />
+                              <Search size={10} className="shrink-0 mt-0.5 text-amber-600 dark:text-[#f59e0b]/60" />
                               <span className="flex-1 min-w-0">&quot;{renderHighlightedText(extractSmartSearchSnippet(matchedSnippet, searchQuery), searchQuery)}&quot;</span>
                             </div>
                           );
@@ -5167,11 +5167,11 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       {/* GRUP 2: Metrik, Order, Traffic, Medis, & Jam (Di Footer Bar) — background ikut status */}
                       <div className={`flex justify-between items-center text-[10px] border-t -mx-2 px-2.5 py-1.5 rounded-b-[11px] mt-1.5 ${
                         (chat as any).hasActiveHold
-                          ? 'bg-amber-100/90 dark:bg-amber-950/50 border-amber-300/70 dark:border-amber-500/40 text-amber-950 dark:text-amber-200'
+                          ? 'bg-amber-100/90 dark:bg-amber-950/50 border-amber-300/70 dark:border-amber-800/40 text-amber-950 dark:text-amber-200'
                           : (chat as any).hasUpcomingBooking
-                            ? 'bg-emerald-50/90 dark:bg-emerald-950/50 border-emerald-200/70 dark:border-emerald-500/40 text-emerald-900 dark:text-emerald-200'
+                            ? 'bg-emerald-50/90 dark:bg-emerald-950/50 border-emerald-200/70 dark:border-emerald-800/40 text-emerald-900 dark:text-emerald-200'
                             : (chat as any).hasPendingBooking
-                              ? 'bg-sky-100/90 dark:bg-sky-950/50 border-sky-300/70 dark:border-sky-500/40 text-sky-950 dark:text-sky-200'
+                              ? 'bg-sky-100/90 dark:bg-sky-950/50 border-sky-300/70 dark:border-sky-800/40 text-sky-950 dark:text-sky-200'
                               : 'bg-[#f8fafc]/60 dark:bg-black/35 border-[#e9edef] dark:border-[#2a3942] text-[#667781] dark:text-[#aebac1]'
                       }`}>
                         <span className="flex items-center flex-wrap gap-1.5">
@@ -5179,7 +5179,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           {/* Medis Badge (icon-only) */}
                           {isMedical && (
                             <span
-                              className="inline-flex items-center p-1 rounded text-[9px] font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-500/40"
+                              className="inline-flex items-center p-1 rounded text-[9px] font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-[#f87171] border border-rose-200 dark:border-rose-800/40"
                               title="Medical Concern / Emergency — Butuh respon medis"
                             >
                               <AlertTriangle size={8} />
@@ -5190,7 +5190,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           {chat.isMql && !(chat.purchaseCount && chat.purchaseCount > 0) && (
                             <span
                               title={`MQL (${chat.mqlBubbleCount ?? 0} Bubble)`}
-                              className="inline-flex items-center p-1 rounded text-[9px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/40"
+                              className="inline-flex items-center p-1 rounded text-[9px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-[#00a884] border border-emerald-200 dark:border-emerald-800/40"
                             >
                               <Zap size={8} />
                             </span>
@@ -5206,8 +5206,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                               }
                               className={`inline-flex items-center space-x-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold border ${
                                 chat.purchaseCount === 1
-                                  ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/40'
-                                  : 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-500/40'
+                                  ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-[#00a884] border-emerald-200 dark:border-emerald-800/40'
+                                  : 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-[#f59e0b] border-amber-200 dark:border-amber-800/40'
                               }`}
                             >
                               <ShoppingBag size={8} className="mr-0.5" />
@@ -5219,7 +5219,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           {chat.trafficSource === 'meta' && (
                             <span
                               title="Traffic Iklan Meta"
-                              className="inline-flex items-center p-1 rounded text-[9px] font-bold bg-sky-100 dark:bg-sky-950/60 text-sky-800 dark:text-sky-300 border border-sky-200 dark:border-sky-500/40"
+                              className="inline-flex items-center p-1 rounded text-[9px] font-bold bg-sky-100 dark:bg-sky-950/60 text-sky-800 dark:text-[#38bdf8] border border-sky-200 dark:border-sky-800/40"
                             >
                               <Facebook size={8} />
                             </span>
@@ -5229,7 +5229,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           {chat.trafficSource === 'legacy' && !(chat.purchaseCount && chat.purchaseCount > 0) && (
                             <span
                               title="Pasien Legacy (Data hasil migrasi arsip riwayat WhatsApp lama)"
-                              className="inline-flex items-center p-1 rounded text-[9px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-500/40"
+                              className="inline-flex items-center p-1 rounded text-[9px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-[#aebac1] border border-purple-200 dark:border-[#2a3942]"
                             >
                               <Archive size={8} />
                             </span>
@@ -5238,7 +5238,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           {/* Sandbox Badge */}
                           {chat.isSandboxTest && (
                             <span
-                              className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-500/40"
+                              className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-[#aebac1] border border-purple-200 dark:border-[#2a3942]"
                               title="Chat simulasi / sandbox"
                             >
                               Sandbox
@@ -5255,14 +5255,14 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           )}
                           {chat.currentState === 'HUMAN_HANDLING' ? (
                             <span
-                              className="inline-flex items-center p-1 rounded-full text-[9px] font-bold bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-500/40"
+                              className="inline-flex items-center p-1 rounded-full text-[9px] font-bold bg-amber-100 dark:bg-amber-950/30 text-amber-800 dark:text-[#f59e0b] border border-amber-200 dark:border-amber-800/40"
                               title="Ditangani CS (manual)"
                             >
                               <User size={10} />
                             </span>
                           ) : (
                             <span
-                              className="inline-flex items-center p-1 rounded-full text-[9px] font-bold bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/40"
+                              className="inline-flex items-center p-1 rounded-full text-[9px] font-bold bg-emerald-100 dark:bg-emerald-950/30 text-emerald-800 dark:text-[#00a884] border border-emerald-200 dark:border-emerald-800/40"
                               title={`Alur: ${chat.currentState}`}
                             >
                               <Bot size={10} />
@@ -5540,13 +5540,13 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
                 {/* Active Hold Slot Alert Banner */}
                 {activeHoldReservation && (
-                  <div className={`mx-1.5 mb-1.5 px-3 py-1.5 min-h-[40px] rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition-all bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent dark:from-amber-500/20 dark:via-amber-500/10 dark:to-transparent border-amber-300/80 dark:border-amber-600/50 text-amber-950 dark:text-amber-100`}>
+                  <div className={`mx-1.5 mb-1.5 px-3 py-1.5 min-h-[40px] rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition-all bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent dark:from-amber-500/10 dark:via-transparent dark:to-transparent border-amber-300/80 dark:border-amber-600/50 text-amber-950 dark:text-amber-100`}>
                     <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
                       <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
                       <div className="flex flex-col justify-center leading-tight min-w-0">
-                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-amber-800 dark:text-amber-300">HOLD</span>
+                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-amber-800 dark:text-[#f59e0b]">HOLD</span>
                         <span className="flex items-center gap-1 min-w-0 text-amber-950 dark:text-amber-100">
-                          <Clock size={11} className="text-amber-700 dark:text-amber-300 shrink-0" />
+                          <Clock size={11} className="text-amber-700 dark:text-[#f59e0b] shrink-0" />
                           <span className="font-semibold truncate text-[11px]">
                             {activeHoldReservation.booking_date
                               ? new Date(activeHoldReservation.booking_date).toLocaleDateString('id-ID', {
@@ -5604,7 +5604,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       <button
                         type="button"
                         onClick={() => setIsBannerCollapsed(true)}
-                        className="md:hidden inline-flex items-center justify-center h-[30px] w-[30px] text-amber-700 dark:text-amber-300 hover:bg-amber-500/15 active:scale-95 rounded-full transition-all shrink-0"
+                        className="md:hidden inline-flex items-center justify-center h-[30px] w-[30px] text-amber-700 dark:text-[#f59e0b] hover:bg-amber-500/15 active:scale-95 rounded-full transition-all shrink-0"
                         title="Ciutkan banner"
                       >
                         <ChevronUp size={14} className="stroke-[2.5]" />
@@ -5621,11 +5621,11 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     ? 'bg-rose-50/95 dark:bg-rose-950/60 border-rose-300 dark:border-rose-700/60 text-rose-950 dark:text-rose-100'
                     : 'bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700/60 text-emerald-950 dark:text-emerald-100';
                   const iconColor = isMismatch
-                    ? 'text-rose-600 dark:text-rose-400'
-                    : 'text-emerald-700 dark:text-emerald-400';
+                    ? 'text-rose-600 dark:text-[#f87171]'
+                    : 'text-emerald-700 dark:text-[#00a884]';
                   const headerColor = isMismatch
-                    ? 'text-rose-800 dark:text-rose-300'
-                    : 'text-emerald-800 dark:text-emerald-300';
+                    ? 'text-rose-800 dark:text-[#f87171]'
+                    : 'text-emerald-800 dark:text-[#00a884]';
                   const subtextColor = isMismatch
                     ? 'text-rose-900 dark:text-rose-200'
                     : 'text-emerald-900 dark:text-emerald-200';
@@ -5706,7 +5706,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
                 {/* Active Confirmed / Terjadwal Alert Banner */}
                  {!activeHoldReservation && activeConfirmedReservation && (
-                   <div className={`mx-1.5 mb-1.5 px-3 py-1.5 min-h-[40px] rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition-all bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent dark:from-emerald-500/20 dark:via-emerald-500/10 dark:to-transparent border-emerald-300/80 dark:border-emerald-600/50 text-emerald-950 dark:text-emerald-100`}>
+                   <div className={`mx-1.5 mb-1.5 px-3 py-1.5 min-h-[40px] rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition-all bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent dark:from-emerald-500/10 dark:via-transparent dark:to-transparent border-emerald-300/80 dark:border-emerald-600/50 text-emerald-950 dark:text-emerald-100`}>
                      <button
                        type="button"
                        onClick={() => setSelectedReservation(activeConfirmedReservation)}
@@ -5715,9 +5715,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                      >
                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
                        <div className="flex flex-col justify-center leading-tight min-w-0">
-                         <span className="font-extrabold text-[9px] uppercase tracking-wider text-emerald-800 dark:text-emerald-300">JADWAL</span>
+                         <span className="font-extrabold text-[9px] uppercase tracking-wider text-emerald-800 dark:text-[#00a884]">JADWAL</span>
                          <span className="flex items-center gap-1 min-w-0 text-emerald-950 dark:text-emerald-100">
-                           <Clock size={11} className="text-emerald-700 dark:text-emerald-300 shrink-0" />
+                           <Clock size={11} className="text-emerald-700 dark:text-[#00a884] shrink-0" />
                            <span className="font-semibold truncate text-[11px]">
                              {activeConfirmedReservation.booking_date
                                ? new Date(activeConfirmedReservation.booking_date).toLocaleDateString('id-ID', {
@@ -5745,7 +5745,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                            setActiveEditingConfirmedReservation(activeConfirmedReservation);
                            setShowQuickBookingModal(true);
                          }}
-                         className={`inline-flex items-center justify-center bg-transparent border-transparent active:scale-95 text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:hover:text-emerald-100 transition-all cursor-pointer shrink-0 ${chatBotActive ? 'w-7 h-4' : 'h-[30px] w-[30px]'}`}
+                         className={`inline-flex items-center justify-center bg-transparent border-transparent active:scale-95 text-emerald-700 dark:text-[#00a884] hover:text-emerald-900 dark:hover:text-emerald-100 transition-all cursor-pointer shrink-0 ${chatBotActive ? 'w-7 h-4' : 'h-[30px] w-[30px]'}`}
                          title="Ubah Jadwal, Jam, atau Bidan Bertugas"
                        >
                          <PenLine size={chatBotActive ? 12 : 14} className="shrink-0" />
@@ -5768,7 +5768,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                             toast('Gagal menandai selesai.', 'error');
                           }
                         }}
-                        className={`inline-flex items-center justify-center bg-transparent border-transparent active:scale-95 text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:hover:text-emerald-100 transition-all cursor-pointer shrink-0 ${chatBotActive ? 'w-7 h-4' : 'h-[30px] w-[30px]'}`}
+                        className={`inline-flex items-center justify-center bg-transparent border-transparent active:scale-95 text-emerald-700 dark:text-[#00a884] hover:text-emerald-900 dark:hover:text-emerald-100 transition-all cursor-pointer shrink-0 ${chatBotActive ? 'w-7 h-4' : 'h-[30px] w-[30px]'}`}
                         title="Tandai reservasi telah selesai treatment"
                       >
                         <CheckCircle size={chatBotActive ? 12 : 14} className="shrink-0" />
@@ -5776,7 +5776,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       <button
                         type="button"
                         onClick={() => setIsBannerCollapsed(true)}
-                        className="md:hidden inline-flex items-center justify-center h-[30px] w-[30px] text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/15 active:scale-95 rounded-full transition-all shrink-0"
+                        className="md:hidden inline-flex items-center justify-center h-[30px] w-[30px] text-emerald-700 dark:text-[#00a884] hover:bg-emerald-500/15 active:scale-95 rounded-full transition-all shrink-0"
                         title="Ciutkan banner"
                       >
                         <ChevronUp size={14} className="stroke-[2.5]" />
@@ -5791,9 +5791,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
                       <span className="w-2 h-2 rounded-full bg-sky-500 animate-pulse shrink-0" />
                       <div className="flex flex-col justify-center leading-tight min-w-0">
-                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-sky-800 dark:text-sky-300">PENDING</span>
+                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-sky-800 dark:text-[#38bdf8]">PENDING</span>
                         <span className="flex items-center gap-1 min-w-0 text-sky-950 dark:text-sky-100">
-                          <Clock size={11} className="text-sky-700 dark:text-sky-300 shrink-0" />
+                          <Clock size={11} className="text-sky-700 dark:text-[#38bdf8] shrink-0" />
                           <span className="font-semibold truncate text-[11px]">
                             {activePendingReservation.booking_date
                               ? new Date(activePendingReservation.booking_date).toLocaleDateString('id-ID', {
@@ -5826,7 +5826,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       <button
                         type="button"
                         onClick={() => setIsBannerCollapsed(true)}
-                        className="md:hidden inline-flex items-center justify-center h-[30px] w-[30px] text-sky-700 dark:text-sky-300 hover:bg-sky-500/15 active:scale-95 rounded-full transition-all shrink-0"
+                        className="md:hidden inline-flex items-center justify-center h-[30px] w-[30px] text-sky-700 dark:text-[#38bdf8] hover:bg-sky-500/15 active:scale-95 rounded-full transition-all shrink-0"
                         title="Ciutkan banner"
                       >
                         <ChevronUp size={14} className="stroke-[2.5]" />
@@ -5843,7 +5843,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                       <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
                       <div className="flex flex-col justify-center leading-tight min-w-0">
-                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-emerald-800 dark:text-[#00a884]">
                           {formBannerExtracted.hasExplicitReservationForm
                             ? 'FORM RESERVASI MASUK'
                             : 'KESEPAKATAN JADWAL TERDETEKSI (CHAT)'}
@@ -5868,7 +5868,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       <button
                         type="button"
                         onClick={() => setDismissedFormBanner(formBannerKey)}
-                        className="inline-flex items-center justify-center w-[30px] h-[30px] text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/15 active:scale-95 rounded-full transition shrink-0"
+                        className="inline-flex items-center justify-center w-[30px] h-[30px] text-emerald-700 dark:text-[#00a884] hover:bg-emerald-500/15 active:scale-95 rounded-full transition shrink-0"
                         title="Abaikan banner form ini"
                       >
                         <X size={14} strokeWidth={2.5} />
@@ -5920,7 +5920,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                       <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
                       <div className="flex flex-col justify-center leading-tight min-w-0">
-                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-amber-800 dark:text-[#f59e0b]">
                           PERINGATAN KUNJUNGAN LAPANGAN
                         </span>
                         <span className="font-semibold truncate text-[11px]">
@@ -6261,13 +6261,13 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                               }`}
                             >
                               {isMessagePinned && !isRevoked && (
-                                <div className="flex items-center gap-1 text-[10px] font-semibold text-amber-700 dark:text-amber-300 mb-1 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800 w-fit select-none">
+                                <div className="flex items-center gap-1 text-[10px] font-semibold text-amber-700 dark:text-[#f59e0b] mb-1 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800 w-fit select-none">
                                   <Pin size={10} className="text-amber-600 fill-amber-500" />
                                   <span>Disematkan{msg.pinned_by ? ` • ${msg.pinned_by}` : ''}</span>
                                 </div>
                               )}
                               {isInternalNote && !isRevoked && (
-                                <span className="flex items-center gap-1 text-[10px] font-bold mb-0.5 text-amber-700 dark:text-amber-300">
+                                <span className="flex items-center gap-1 text-[10px] font-bold mb-0.5 text-amber-700 dark:text-[#f59e0b]">
                                   <Lock size={10} />
                                   <span>Catatan Internal — {msg.sender_name || 'Staf'}</span>
                                 </span>
@@ -6493,7 +6493,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                   {msg.created_at ? formatWibTime(msg.created_at) : ''}
                                 </span>
                                 {isInternalNote && !isRevoked && (
-                                  <span className="text-[9px] text-amber-700 dark:text-amber-300 italic ml-0.5">
+                                  <span className="text-[9px] text-amber-700 dark:text-[#f59e0b] italic ml-0.5">
                                     Hanya tim klinik • tidak dikirim ke WhatsApp
                                   </span>
                                 )}
@@ -7587,9 +7587,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 <button
                   type="button"
                   onClick={() => handleDismissFrustration(contextMenu.chat)}
-                  className="w-full px-3.5 py-3 text-left rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 active:bg-rose-200/70 flex items-center space-x-3 transition font-medium text-xs text-rose-600 dark:text-rose-400 cursor-pointer"
+                  className="w-full px-3.5 py-3 text-left rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 active:bg-rose-200/70 flex items-center space-x-3 transition font-medium text-xs text-rose-600 dark:text-[#f87171] cursor-pointer"
                 >
-                  <BellOff size={16} className="text-rose-600 dark:text-rose-400" />
+                  <BellOff size={16} className="text-rose-600 dark:text-[#f87171]" />
                   <span>Padamkan Peringatan SLA</span>
                 </button>
               </div>
@@ -7728,9 +7728,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 <button
                   type="button"
                   onClick={() => handleDismissFrustration(contextMenu.chat)}
-                  className="w-full px-3.5 py-2.5 text-left hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center space-x-2.5 transition font-medium cursor-pointer text-rose-600 dark:text-rose-400"
+                  className="w-full px-3.5 py-2.5 text-left hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center space-x-2.5 transition font-medium cursor-pointer text-rose-600 dark:text-[#f87171]"
                 >
-                  <BellOff size={14} className="text-rose-600 dark:text-rose-400" />
+                  <BellOff size={14} className="text-rose-600 dark:text-[#f87171]" />
                   <span>Padamkan Peringatan SLA</span>
                 </button>
               </div>

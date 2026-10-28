@@ -4,6 +4,21 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-28 - Refactor: Eliminasi 420 Warna Neon di Dark Mode & Harmonisasi Anti-Neon WhatsApp Design System
+
+- **Latar Belakang & Akar Masalah**:
+  - Setelah perombakan dark mode awal, ditemukan 420 titik warna neon/stabilo berkroma tinggi yang tersebar di 37 file dashboard.
+  - Akar masalah teridentifikasi dari 5 pola desain: (1) pemakaian stop kecerahan `-300` yang berpendar di latar hitam, (2) border tingkat 500 yang menyala seperti kawat neon, (3) angka statistik raksasa (2xl font-black) diberi warna neon, (4) sindrom pelangi badge langkah AI (violet, fuchsia, cyan, teal), dan (5) pemetaan CSS global hex neon (`#4ae3b5`, `#fcd34d`, `#fda4af`) di `index.css`.
+- **Arsitektur & Perubahan (Solusi Anti-Neon WhatsApp)**:
+  - `packages/admin-dashboard/src/index.css`: Menghapus seluruh hex neon dan menggantinya dengan palet teduh WhatsApp (`#00a884`, `#f59e0b`, `#f87171`), serta meredam border kalender jadwal menjadi 35% opacity.
+  - `TodayTreatments.tsx`: Mengubah angka metrik raksasa (`completedCount`, `otwCount`, `lunasCount`) menjadi putih bersih `#e9edef`, serta meredam badge status.
+  - `LiveChatMonitor.tsx`: Meredam banner HOLD dan JADWAL, membersihkan border-500, dan menenangkan teks status.
+  - `Debug.tsx`: Menstandarisasi badge alur AI (NLU, Routing, Generation, FAQ) dari pelangi neon menjadi *slate pill badges* netral WhatsApp (`bg-[#202c33] text-[#8696a0]`).
+  - `AiSandbox.tsx`, `MetaCapiQueue.tsx`, `ClinicServices.tsx`, `Layout.tsx`, dan 30 file lainnya: Mengeliminasi 100% kelas neon `dark:text-*-300`, `dark:border-*-500`, dan `dark:bg-*-500`.
+- **Verifikasi**:
+  - Pemindaian regex/AST membuktikan penurunan kelas neon dari 420 menjadi **0** titik.
+  - `npm run build` di dashboard dan root sukses (0 error). Uji unit `tests/unit/typing.test.ts` 100% hijau.
+
 #### 2026-10-28 - Refactor & Feature: Remediasi Menyeluruh UI/UX, Eliminasi Flashbang & Standardisasi Dark Mode (WhatsApp Design System)
 
 - **Latar Belakang & Akar Masalah**:

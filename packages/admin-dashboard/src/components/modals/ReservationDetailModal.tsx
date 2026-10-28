@@ -723,7 +723,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                       <button
                         onClick={handleProofRemoveClick}
                         disabled={proofUploading}
-                        className="p-2 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-950/50 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/40 transition flex items-center justify-center disabled:opacity-50"
+                        className="p-2 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-950/50 text-rose-600 dark:text-[#f87171] border border-rose-200 dark:border-rose-900/40 transition flex items-center justify-center disabled:opacity-50"
                         title="Hapus Bukti Bayar"
                       >
                         <Trash2 size={14} />
@@ -886,7 +886,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                 {displayReservation.status !== 'cancelled' && (
                   <button
                     onClick={handleCancelClick}
-                    className="flex-1 sm:flex-initial justify-center px-3.5 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-950/50 transition text-xs font-semibold flex items-center space-x-1.5 shadow-xs cursor-pointer"
+                    className="flex-1 sm:flex-initial justify-center px-3.5 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 text-amber-800 dark:text-[#f59e0b] hover:bg-amber-100 dark:hover:bg-amber-950/50 transition text-xs font-semibold flex items-center space-x-1.5 shadow-xs cursor-pointer"
                     title="Batalkan reservasi (Status berubah menjadi Cancelled)"
                   >
                     <X size={14} />
@@ -896,7 +896,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
 
                 <button
                   onClick={handleDeletePermanentClick}
-                  className="flex-1 sm:flex-initial justify-center px-3.5 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 text-rose-700 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-950/50 transition text-xs font-semibold flex items-center space-x-1.5 shadow-xs cursor-pointer"
+                  className="flex-1 sm:flex-initial justify-center px-3.5 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 text-rose-700 dark:text-[#f87171] hover:bg-rose-100 dark:hover:bg-rose-950/50 transition text-xs font-semibold flex items-center space-x-1.5 shadow-xs cursor-pointer"
                   title="Hapus data reservasi secara permanen dari database"
                 >
                   <Trash2 size={14} />
@@ -924,7 +924,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                         displayReservation.customer?.phone || undefined
                       )
                     }
-                    className="flex-1 sm:flex-initial justify-center px-3.5 py-2 rounded-xl bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-900/40 text-sky-700 dark:text-sky-400 hover:bg-sky-100 dark:hover:bg-sky-950/50 transition text-xs font-semibold flex items-center space-x-1.5 shadow-xs cursor-pointer"
+                    className="flex-1 sm:flex-initial justify-center px-3.5 py-2 rounded-xl bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-900/40 text-sky-700 dark:text-[#38bdf8] hover:bg-sky-100 dark:hover:bg-sky-950/50 transition text-xs font-semibold flex items-center space-x-1.5 shadow-xs cursor-pointer"
                     title="Lihat riwayat chat WhatsApp customer ini"
                   >
                     <MessageSquare size={14} className="text-sky-600" />

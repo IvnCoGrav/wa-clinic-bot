@@ -169,7 +169,7 @@ export const StaffScheduleTimelineStrip: React.FC<StaffScheduleTimelineStripProp
 
         {/* Status Indicator */}
         {collisionState?.hasCollision ? (
-          <div className="flex items-center space-x-1 px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 text-[10px] font-bold border border-rose-300">
+          <div className="flex items-center space-x-1 px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-[#f87171] text-[10px] font-bold border border-rose-300">
             <AlertCircle size={11} />
             <span>Bentrok ({collisionState.collidedWith?.timeFormatted} Ny. {collisionState.collidedWith?.customerName})</span>
           </div>
@@ -313,7 +313,7 @@ export const StaffScheduleTimelineStrip: React.FC<StaffScheduleTimelineStripProp
           </div>
         </div>
       ) : (
-        <p className="text-[11px] text-amber-700 dark:text-amber-400 italic pt-1">
+        <p className="text-[11px] text-amber-700 dark:text-[#f59e0b] italic pt-1">
           Tidak ada slot kosong yang muat durasi {treatmentDurationMinutes} menit di tanggal ini. Silakan ganti tanggal atau force override.
         </p>
       )}

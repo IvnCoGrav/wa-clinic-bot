@@ -511,12 +511,12 @@ export const AiPersona: React.FC = () => {
           <FileText size={15} />
           <span>Advanced 4-Section Prompt</span>
           {promptConfigSource === 'active' && (
-            <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 font-semibold">
+            <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-[#00a884] font-semibold">
               Aktif
             </span>
           )}
           {promptConfigSource === 'legacy' && (
-            <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 font-semibold">
+            <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-[#f59e0b] font-semibold">
               Legacy Bridge
             </span>
           )}
@@ -533,7 +533,7 @@ export const AiPersona: React.FC = () => {
         >
           <MessageSquare size={15} />
           <span>Bank Contoh Chat (Few-Shot)</span>
-          <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 font-semibold">
+          <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-[#00a884] font-semibold">
             {activeCount} Aktif
           </span>
           {activeTab === 'fewshots' && (
@@ -626,7 +626,7 @@ export const AiPersona: React.FC = () => {
                       </p>
                     </div>
 
-                    <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-amber-800 dark:text-amber-300 flex items-start space-x-2 text-xs">
+                    <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-amber-800 dark:text-[#f59e0b] flex items-start space-x-2 text-xs">
                       <HelpCircle className="flex-shrink-0 mt-0.5 text-amber-600" size={14} />
                       <span>
                         <strong>Penting:</strong> Perubahan prompt yang disimpan akan langsung aktif pada pesan masuk baru berikutnya secara real-time.
@@ -647,12 +647,12 @@ export const AiPersona: React.FC = () => {
         <div className="space-y-6">
           {/* Warning Banner */}
           <div className="p-4 rounded-2xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 flex items-start space-x-3 text-xs text-amber-900 dark:text-amber-200">
-            <Info className="flex-shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" size={18} />
+            <Info className="flex-shrink-0 text-amber-600 dark:text-[#f59e0b] mt-0.5" size={18} />
             <div className="space-y-1">
               <p className="font-bold text-amber-950 dark:text-amber-100">
                 Prioritas Otoritas Prompt (Anti Split-Brain):
               </p>
-              <p className="text-amber-800 dark:text-amber-300 leading-relaxed">
+              <p className="text-amber-800 dark:text-[#f59e0b] leading-relaxed">
                 Menyimpan konfigurasi 4-Section ini akan membuat versi baru di database. Konfigurasi 4-section aktif <strong>secara otomatis menjadi prioritas utama</strong> pada AI Engine V3, mengesampingkan prompt single-string legacy di tab sebelah.{' '}
                 {promptConfigSource === 'active' && 'Saat ini konfigurasi 4-Section KUSTOM aktif.'}
                 {promptConfigSource === 'legacy' && 'Belum ada 4-Section aktif. Engine memakai bridge persona legacy sebagai Personality & Tone; section lain memakai default klinik.'}
@@ -784,11 +784,11 @@ export const AiPersona: React.FC = () => {
       {activeTab === 'fewshots' && (
         <div className="space-y-5">
           {/* Info Banner */}
-          <div className="p-4 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/60 flex items-start space-x-3 text-xs text-[#2e7d32] dark:text-emerald-300">
-            <Info className="flex-shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" size={18} />
+          <div className="p-4 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/60 flex items-start space-x-3 text-xs text-[#2e7d32] dark:text-[#00a884]">
+            <Info className="flex-shrink-0 text-emerald-600 dark:text-[#00a884] mt-0.5" size={18} />
             <div className="space-y-1">
               <p className="font-bold text-emerald-950 dark:text-emerald-200">Cara Kerja Bank Contoh Chat (Few-Shot):</p>
-              <p className="text-emerald-800 dark:text-emerald-300 leading-relaxed">
+              <p className="text-emerald-800 dark:text-[#00a884] leading-relaxed">
                 Saat customer bertanya hal tertentu (misal: jadwal, batuk pilek, harga, atau diskon), sistem akan secara otomatis memilih 1–2 contoh dialog ideal di bawah ini yang paling cocok dan menyuplainya ke AI. AI akan <strong>meniru gaya bahasa, keramahan, dan alur solusinya</strong> secara presisi.
               </p>
             </div>
@@ -919,7 +919,7 @@ export const AiPersona: React.FC = () => {
                           onClick={() => handleToggleActive(item)}
                           className={`p-1.5 rounded-lg text-xs font-medium transition ${
                             item.isActive !== false
-                              ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/60'
+                              ? 'text-emerald-700 dark:text-[#00a884] bg-emerald-50 dark:bg-emerald-900/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/60'
                               : 'text-gray-500 dark:text-[#8696a0] bg-gray-100 dark:bg-[#202c33] hover:bg-gray-200 dark:hover:bg-[#2a3942]'
                           }`}
                           title={item.isActive !== false ? 'Nonaktifkan contoh' : 'Aktifkan contoh'}
@@ -1066,12 +1066,12 @@ export const AiPersona: React.FC = () => {
                 />
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-[11px] text-[#8696a0]">
-                    Gunakan format WhatsApp: cetak tebal satu bintang <code className="text-emerald-700 dark:text-emerald-400">*teks*</code>, sapa "Bunda", gunakan kata "kami", dan akhiri dengan emoji hangat.
+                    Gunakan format WhatsApp: cetak tebal satu bintang <code className="text-emerald-700 dark:text-[#00a884]">*teks*</code>, sapa "Bunda", gunakan kata "kami", dan akhiri dengan emoji hangat.
                   </p>
                   <span
                     className={`text-[10px] font-semibold whitespace-nowrap ${
                       formIdealResponse.length > 500
-                        ? 'text-amber-600 dark:text-amber-400'
+                        ? 'text-amber-600 dark:text-[#f59e0b]'
                         : 'text-[#8696a0]'
                     }`}
                     title={formIdealResponse.length > 500 ? 'Respon terlalu panjang — contoh ini ikut masuk prompt AI setiap kali relevan, usahakan ringkas.' : ''}

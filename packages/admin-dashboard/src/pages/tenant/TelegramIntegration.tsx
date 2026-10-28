@@ -247,7 +247,7 @@ export const TelegramIntegration: React.FC = () => {
                 <CheckCircle2 size={16} className="text-emerald-600" />
               </div>
               <div className="text-2xl font-bold text-emerald-900 dark:text-emerald-200 mt-1">{stats.connected}</div>
-              <div className="text-[11px] text-emerald-700 dark:text-emerald-300 mt-1">Siap menerima notifikasi penugasan & briefing pagi</div>
+              <div className="text-[11px] text-emerald-700 dark:text-[#00a884] mt-1">Siap menerima notifikasi penugasan & briefing pagi</div>
             </div>
 
             <div className="bg-amber-50/60 dark:bg-amber-950/30 p-4 rounded-2xl border border-amber-200/80 dark:border-amber-800/40 shadow-xs">
@@ -256,7 +256,7 @@ export const TelegramIntegration: React.FC = () => {
                 <AlertCircle size={16} className="text-amber-600" />
               </div>
               <div className="text-2xl font-bold text-amber-900 dark:text-amber-200 mt-1">{stats.unconnected}</div>
-              <div className="text-[11px] text-amber-700 dark:text-amber-300 mt-1">Salin link pairing & kirim via WhatsApp ke Bidan</div>
+              <div className="text-[11px] text-amber-700 dark:text-[#f59e0b] mt-1">Salin link pairing & kirim via WhatsApp ke Bidan</div>
             </div>
           </div>
 
@@ -397,7 +397,7 @@ export const TelegramIntegration: React.FC = () => {
                                 <button
                                   onClick={() => handleTestBriefing(staff)}
                                   disabled={isBriefingThis}
-                                  className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-sky-50 dark:bg-sky-500/10 hover:bg-sky-100 dark:hover:bg-sky-500/20 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-500/30 text-[11px] font-semibold transition-all"
+                                  className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-sky-50 dark:bg-[#202c33]/10 hover:bg-sky-100 dark:hover:bg-sky-500/20 text-sky-700 dark:text-[#38bdf8] border border-sky-200 dark:border-sky-800/40/30 text-[11px] font-semibold transition-all"
                                   title="Test kirim briefing jadwal hari ini ke Telegram Bidan"
                                 >
                                   {isBriefingThis ? (

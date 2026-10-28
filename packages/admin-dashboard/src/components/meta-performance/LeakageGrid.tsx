@@ -64,7 +64,7 @@ export const LeakageGrid: React.FC<{ report: MetaPerformanceReport }> = ({ repor
             </div>
           )}
           {d.outOfCoverageCount > 0 && (
-            <p className="inline-flex items-center gap-1.5 text-[11px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 rounded-lg px-2 py-1">
+            <p className="inline-flex items-center gap-1.5 text-[11px] text-amber-800 dark:text-[#f59e0b] bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 rounded-lg px-2 py-1">
               <AlertTriangle size={12} className="text-amber-600" /> {fmtNum(d.outOfCoverageCount)} prospek iklan di luar jangkauan (out-of-coverage).
             </p>
           )}

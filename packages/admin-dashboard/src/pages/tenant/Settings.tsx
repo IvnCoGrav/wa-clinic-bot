@@ -1166,7 +1166,7 @@ export const Settings: React.FC = () => {
                     <div className="flex space-x-2 items-end pb-1">
                       <button
                         onClick={() => { setOngkirTiers(ongkirTiers.filter(t => t.id !== tier.id)); }}
-                        className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/40 transition flex justify-center items-center shadow-xs"
+                        className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 text-rose-600 dark:text-[#f87171] hover:bg-rose-100 dark:hover:bg-rose-900/40 transition flex justify-center items-center shadow-xs"
                         title="Hapus Tier"
                       >
                         <Trash size={12} />

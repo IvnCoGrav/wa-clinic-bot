@@ -167,7 +167,7 @@ export const MonthScheduleGrid: React.FC<MonthScheduleGridProps> = ({
                     .replace('.', ':');
                   const isHold = res.status === 'hold';
                   const catColor = isHold
-                    ? 'bg-amber-100 dark:bg-[#2e2009] text-amber-900 dark:text-amber-200 border-dashed border-amber-400 dark:border-amber-500/60 font-bold'
+                    ? 'bg-amber-100 dark:bg-[#2e2009] text-amber-900 dark:text-amber-200 border-dashed border-amber-400 dark:border-amber-800/40/60 font-bold'
                     : getCategoryColor(res.treatment_category);
                   const nameDisplay = isHold ? `[HOLD] ${res.customer?.name || 'Pasien'}` : (res.customer?.name || 'Bunda');
 

@@ -3,9 +3,9 @@ import { Activity, Info } from 'lucide-react';
 import { MetaPerformanceReport, fmtNum, fmtPct } from './types';
 
 const BAND: Record<string, { label: string; cls: string }> = {
-  AMAN: { label: 'Aman untuk scale iklan', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800' },
-  OPTIMAL: { label: 'Optimal — pertahankan budget', cls: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800' },
-  PENUH: { label: 'Penuh — tambah terapis sebelum scale', cls: 'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800' },
+  AMAN: { label: 'Aman untuk scale iklan', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-[#00a884] dark:border-emerald-800' },
+  OPTIMAL: { label: 'Optimal — pertahankan budget', cls: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-[#f59e0b] dark:border-amber-800' },
+  PENUH: { label: 'Penuh — tambah terapis sebelum scale', cls: 'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-[#f87171] dark:border-rose-800' },
   UNKNOWN: { label: 'Data kapasitas belum tersedia', cls: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700' },
 };
 

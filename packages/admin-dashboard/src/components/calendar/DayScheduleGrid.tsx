@@ -354,7 +354,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
 
               const isHold = res.status === 'hold';
               const effectiveCardStyle = isHold
-                ? 'bg-amber-50/95 dark:bg-[#33230a] border-2 border-dashed border-amber-500 dark:border-amber-400 text-amber-950 dark:text-amber-100 hover:bg-amber-100/90 dark:hover:bg-[#422e0c]'
+                ? 'bg-amber-50/95 dark:bg-[#33230a] border-2 border-dashed border-amber-500 dark:border-amber-800/40 text-amber-950 dark:text-amber-100 hover:bg-amber-100/90 dark:hover:bg-[#422e0c]'
                 : theme.card;
 
               return (
@@ -420,7 +420,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                             </span>
                           )}
                           {res.session_number != null && res.total_sessions != null && (
-                            <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-blue-600/10 dark:bg-blue-500/20 text-blue-800 dark:text-blue-300">
+                            <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-blue-600/10 dark:bg-[#202c33]/20 text-blue-800 dark:text-[#aebac1]">
                               Sesi {res.session_number}/{res.total_sessions}
                             </span>
                           )}
@@ -437,13 +437,13 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                               HOLD
                             </span>
                           ) : res.status === 'confirmed' ? (
-                            <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-600/10 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 ring-1 ring-emerald-500/30">
-                              <CheckCircle2 size={10} className="mr-0.5 text-emerald-600 dark:text-emerald-400" />
+                            <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-600/10 dark:bg-emerald-950/30 text-emerald-800 dark:text-[#00a884] ring-1 ring-emerald-500/30">
+                              <CheckCircle2 size={10} className="mr-0.5 text-emerald-600 dark:text-[#00a884]" />
                               {(res as any).purchase_occurred_at ? 'Terjadwal • Lunas' : 'Terjadwal'}
                             </span>
                           ) : (
-                            <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-600/10 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 ring-1 ring-amber-500/30">
-                              <AlertCircle size={10} className="mr-0.5 text-amber-600 dark:text-amber-400" />
+                            <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-600/10 dark:bg-amber-950/30 text-amber-800 dark:text-[#f59e0b] ring-1 ring-amber-500/30">
+                              <AlertCircle size={10} className="mr-0.5 text-amber-600 dark:text-[#f59e0b]" />
                               Pending
                             </span>
                           )}

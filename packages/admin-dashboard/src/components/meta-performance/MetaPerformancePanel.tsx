@@ -139,13 +139,13 @@ export const MetaPerformancePanel: React.FC<Props> = ({ startDate, endDate }) =>
       </div>
 
       {report?.meta?.dbNote && (
-        <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 rounded-xl px-3 py-2">
+        <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-[#f59e0b] bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 rounded-xl px-3 py-2">
           <AlertTriangle size={14} className="text-amber-600 mt-0.5 shrink-0" />
           <span>{report.meta.dbNote}</span>
         </div>
       )}
       {report?.meta?.revenueBasis?.truncated && (
-        <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 rounded-xl px-3 py-2">
+        <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-[#f59e0b] bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 rounded-xl px-3 py-2">
           <AlertTriangle size={14} className="text-amber-600 mt-0.5 shrink-0" />
           <span>Data melebihi batas 5.000 baris per kategori — angka ditampilkan sebagian (truncated).</span>
         </div>

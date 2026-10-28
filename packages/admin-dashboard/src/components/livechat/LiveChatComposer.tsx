@@ -641,9 +641,9 @@ const LiveChatComposerInner = (
       )}
 
       {isInternalMode && (
-        <div className="flex sm:hidden items-center justify-between bg-amber-100 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-500/40 px-2.5 py-1 rounded-lg mb-1 animate-fadeIn text-[11px] font-bold text-amber-900 dark:text-amber-200">
+        <div className="flex sm:hidden items-center justify-between bg-amber-100 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800/40 px-2.5 py-1 rounded-lg mb-1 animate-fadeIn text-[11px] font-bold text-amber-900 dark:text-amber-200">
           <span className="flex items-center space-x-1.5 min-w-0">
-            <Lock size={12} className="text-amber-700 dark:text-amber-300 shrink-0" />
+            <Lock size={12} className="text-amber-700 dark:text-[#f59e0b] shrink-0" />
             <span className="truncate">Mode Catatan Internal (Hanya Staf)</span>
           </span>
           <button
