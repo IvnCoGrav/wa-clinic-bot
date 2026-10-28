@@ -22,6 +22,8 @@ export interface UnifiedMonthlyCohortRow {
   repeatM1: CohortMonthlyPeriodMetric | null;
   repeatM2: CohortMonthlyPeriodMetric | null;
   repeatM3: CohortMonthlyPeriodMetric | null;
+  repeatM4: CohortMonthlyPeriodMetric | null;
+  repeatM5: CohortMonthlyPeriodMetric | null;
   totalRealizedRevenue: number;
   revenuePerPatient: number;
   adSpend: number | null;

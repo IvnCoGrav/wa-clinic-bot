@@ -113,6 +113,8 @@ export interface UnifiedMonthlyCohortRow {
   repeatM1: CohortMonthlyPeriodMetric | null;
   repeatM2: CohortMonthlyPeriodMetric | null;
   repeatM3: CohortMonthlyPeriodMetric | null;
+  repeatM4: CohortMonthlyPeriodMetric | null;
+  repeatM5: CohortMonthlyPeriodMetric | null;
   totalRealizedRevenue: number;
   revenuePerPatient: number;
   adSpend: number | null;
@@ -627,9 +629,11 @@ export async function buildMonthlyCohorts(params: BuildMonthlyCohortsParams): Pr
       const repeatM1 = await computePeriod(1);
       const repeatM2 = await computePeriod(2);
       const repeatM3 = await computePeriod(3);
+      const repeatM4 = await computePeriod(4);
+      const repeatM5 = await computePeriod(5);
 
       const totalRealizedRevenue =
-        initialRevenue + (repeatM1?.revenue || 0) + (repeatM2?.revenue || 0) + (repeatM3?.revenue || 0);
+        initialRevenue + (repeatM1?.revenue || 0) + (repeatM2?.revenue || 0) + (repeatM3?.revenue || 0) + (repeatM4?.revenue || 0) + (repeatM5?.revenue || 0);
       const revenuePerPatient = cohortSize > 0 ? Math.round(totalRealizedRevenue / cohortSize) : 0;
 
       let adSpend: number | null = null;
@@ -690,6 +694,8 @@ export async function buildMonthlyCohorts(params: BuildMonthlyCohortsParams): Pr
         repeatM1,
         repeatM2,
         repeatM3,
+        repeatM4,
+        repeatM5,
         totalRealizedRevenue,
         revenuePerPatient,
         adSpend,
@@ -795,6 +801,8 @@ export async function buildMonthlyCohorts(params: BuildMonthlyCohortsParams): Pr
       repeatM1: null,
       repeatM2: null,
       repeatM3: null,
+      repeatM4: null,
+      repeatM5: null,
       totalRealizedRevenue,
       revenuePerPatient,
       adSpend,
