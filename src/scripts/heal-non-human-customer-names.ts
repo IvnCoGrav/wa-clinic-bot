@@ -1,6 +1,6 @@
-import { prisma } from '../../src/db/client';
-import { isGenericCustomerName, sanitizeCustomerNameForStorage } from '../../src/utils/name-sanitizer';
-import { parseReservationText } from '../../src/utils/reservation-text-parser';
+import { prisma } from '../db/client';
+import { isGenericCustomerName, sanitizeCustomerNameForStorage } from '../utils/name-sanitizer';
+import { parseReservationText } from '../utils/reservation-text-parser';
 
 interface HealAction {
   customerId: string;
@@ -87,31 +87,29 @@ async function main() {
             admin_identity: 'System (Heal Customer Names)',
             action: 'HEAL_NON_HUMAN_CUSTOMER_NAME',
             target_id: act.customerId,
-            payload: {
+            payload: JSON.stringify({
               phone: act.phone,
               oldName: act.oldName,
               newName: act.newName,
               reason: act.reason,
-            },
+            }),
           },
         });
       } catch (_) {}
 
       updatedCount++;
     }
-    console.log(`\n🎉 Selesai! Berhasil memperbarui ${updatedCount} profil customer.`);
+    console.log(`\n✅ Berhasil memperbarui ${updatedCount} profil customer di database.`);
   } else if (!isCommit && actions.length > 0) {
-    console.log('\n💡 Jalankan dengan opsi --commit untuk menerapkan perubahan ini ke database.');
+    console.log('\n💡 Jalankan dengan argumen --commit untuk menerapkan perubahan di atas ke database.');
   } else {
-    console.log('\n✅ Tidak ada nama customer yang perlu dipulihkan.');
+    console.log('\n✅ Semua nama customer di database sudah bersih dan definitif. Tidak ada aksi yang diperlukan.');
   }
+
+  await prisma.$disconnect();
 }
 
-main()
-  .catch((err) => {
-    console.error('Error:', err);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+main().catch((err) => {
+  console.error('❌ Error executing heal script:', err);
+  process.exit(1);
+});
