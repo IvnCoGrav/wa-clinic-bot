@@ -656,6 +656,8 @@ describe('meta-performance-analytics: Mesin Kohort Bulanan & Omzet Treatment Mur
     expect(augAll.repeatM2?.status).toBe('ONGOING');
     // M+3 adalah November (masa depan)
     expect(augAll.repeatM3).toBeNull();
+    expect(augAll.repeatM4).toBeNull();
+    expect(augAll.repeatM5).toBeNull();
   });
 
   it('menghitung LTV 60 hari matang HANYA dari pasien iklan kohort matang (tanpa pasien organik)', async () => {
@@ -805,5 +807,71 @@ describe('meta-performance-analytics: Mesin Kohort Bulanan & Omzet Treatment Mur
     // September TIDAK boleh mencatat cB sebagai pasien baru
     const sepRow = result.monthlyCohorts.find((r) => r.cohortMonth === '2026-09' && r.channel === 'ORGANIC');
     expect(sepRow).toBeUndefined();
+  });
+
+  it('menghitung retensi repeat order bulanan hingga M+4 dan M+5 secara akurat', async () => {
+    const c1 = cust('c_m5', T, { phone: '08123450099' });
+    const rMay = {
+      id: 'r_may',
+      tenant_id: T,
+      customer_id: 'c_m5',
+      created_at: '2026-05-10T03:00:00.000Z',
+      booking_date: '2026-05-11T04:00:00.000Z',
+      status: 'completed',
+      purchase_value: 100000,
+      treatment_detail: 'Pijat Bayi',
+      delivery_fee: 0,
+      customer: c1,
+    };
+    const rSep = {
+      id: 'r_sep',
+      tenant_id: T,
+      customer_id: 'c_m5',
+      created_at: '2026-09-15T03:00:00.000Z',
+      booking_date: '2026-09-15T04:00:00.000Z',
+      status: 'completed',
+      purchase_value: 120000,
+      treatment_detail: 'Pijat Bayi',
+      delivery_fee: 0,
+      customer: c1,
+    };
+    const rOct = {
+      id: 'r_oct',
+      tenant_id: T,
+      customer_id: 'c_m5',
+      created_at: '2026-10-20T03:00:00.000Z',
+      booking_date: '2026-10-20T04:00:00.000Z',
+      status: 'completed',
+      purchase_value: 130000,
+      treatment_detail: 'Pijat Bayi',
+      delivery_fee: 0,
+      customer: c1,
+    };
+
+    const result = await buildMonthlyCohorts({
+      tenantId: T,
+      historyReservations: [rMay, rSep, rOct],
+      rangeReservations: [],
+      matchedAds: [],
+      now: new Date('2026-10-26T09:00:00.000Z'),
+      treatmentFeeOf: async (r) => r.purchase_value,
+    });
+
+    const mayRow = result.monthlyCohorts.find((r) => r.cohortMonth === '2026-05' && r.channel === 'ALL')!;
+    expect(mayRow).toBeDefined();
+    expect(mayRow.cohortSize).toBe(1);
+    expect(mayRow.initialRevenue).toBe(100000);
+    expect(mayRow.repeatM1?.count).toBe(0);
+    expect(mayRow.repeatM2?.count).toBe(0);
+    expect(mayRow.repeatM3?.count).toBe(0);
+    expect(mayRow.repeatM4).not.toBeNull();
+    expect(mayRow.repeatM4?.count).toBe(1);
+    expect(mayRow.repeatM4?.revenue).toBe(120000);
+    expect(mayRow.repeatM4?.status).toBe('COMPLETED');
+    expect(mayRow.repeatM5).not.toBeNull();
+    expect(mayRow.repeatM5?.count).toBe(1);
+    expect(mayRow.repeatM5?.revenue).toBe(130000);
+    expect(mayRow.repeatM5?.status).toBe('ONGOING');
+    expect(mayRow.totalRealizedRevenue).toBe(350000);
   });
 });

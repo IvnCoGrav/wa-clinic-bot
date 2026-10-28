@@ -13,6 +13,7 @@ import {
 import {
   MetaPerformanceReport,
   UnifiedMonthlyCohortRow,
+  CohortMonthlyPeriodMetric,
   CohortChannel,
   fmtRupiah,
   fmtNum,
@@ -45,10 +46,7 @@ export const CohortRetentionTable: React.FC<CohortRetentionTableProps> = ({ repo
       : report.monthlyCohorts || [];
 
   // Filter baris sesuai channel pill
-  const filteredRows =
-    selectedChannel === 'ALL'
-      ? sourceRows
-      : sourceRows.filter((r) => r.channel === selectedChannel);
+  const filteredRows = sourceRows.filter((r) => r.channel === selectedChannel);
 
   const channelBadge = (ch: CohortChannel) => {
     switch (ch) {
@@ -102,6 +100,28 @@ export const CohortRetentionTable: React.FC<CohortRetentionTableProps> = ({ repo
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300">
         <Clock size={11} className="text-amber-700" /> Belum Balik
       </span>
+    );
+  };
+
+  const renderRepeatCell = (metric: CohortMonthlyPeriodMetric | null | undefined) => {
+    if (!metric) return <span className="text-[#cbd5e1]">-</span>;
+    return (
+      <div>
+        <p className="font-semibold text-[#111b21]">
+          {fmtNum(metric.count)}{' '}
+          <span className="text-[#64748b] font-normal">
+            ({metric.pct.toFixed(0)}%)
+          </span>
+        </p>
+        <p className="text-[10px] text-[#64748b]">
+          {fmtRupiah(metric.revenue)}
+        </p>
+        {metric.status === 'ONGOING' && (
+          <span className="text-[9px] text-amber-600 font-sans font-medium">
+            (berjalan)
+          </span>
+        )}
+      </div>
     );
   };
 
@@ -246,7 +266,7 @@ export const CohortRetentionTable: React.FC<CohortRetentionTableProps> = ({ repo
 
       {/* ── Tabel Kohort ────────────────────────────────────────── */}
       <div className="overflow-x-auto">
-        <table className="w-full text-xs min-w-[850px]">
+        <table className="w-full text-xs min-w-[980px]">
           <thead>
             <tr className="text-left uppercase font-bold text-[#667781] border-b border-[#e9edef] bg-[#f8fafc]">
               <th className="py-2.5 px-3">Kohort</th>
@@ -258,6 +278,8 @@ export const CohortRetentionTable: React.FC<CohortRetentionTableProps> = ({ repo
               <th className="py-2.5 px-3 text-right">Repeat M+1</th>
               <th className="py-2.5 px-3 text-right">Repeat M+2</th>
               <th className="py-2.5 px-3 text-right">Repeat M+3</th>
+              <th className="py-2.5 px-3 text-right">Repeat M+4</th>
+              <th className="py-2.5 px-3 text-right">Repeat M+5</th>
               <th className="py-2.5 px-3 text-right">Total Omzet</th>
               <th className="py-2.5 px-3 text-right">Nilai/Pasien</th>
               <th className="py-2.5 px-3 text-right">ROAS</th>
@@ -267,7 +289,7 @@ export const CohortRetentionTable: React.FC<CohortRetentionTableProps> = ({ repo
           <tbody>
             {filteredRows.length === 0 ? (
               <tr>
-                <td colSpan={13} className="text-center py-6 text-slate-400 italic">
+                <td colSpan={15} className="text-center py-6 text-slate-400 italic">
                   Tidak ada data kohort untuk kanal ini pada periode yang dipilih.
                 </td>
               </tr>
@@ -347,74 +369,27 @@ export const CohortRetentionTable: React.FC<CohortRetentionTableProps> = ({ repo
 
                     {/* Repeat M+1 */}
                     <td className="py-2.5 px-3 text-right font-mono whitespace-nowrap">
-                      {r.repeatM1 ? (
-                        <div>
-                          <p className="font-semibold text-[#111b21]">
-                            {fmtNum(r.repeatM1.count)}{' '}
-                            <span className="text-[#64748b] font-normal">
-                              ({r.repeatM1.pct.toFixed(0)}%)
-                            </span>
-                          </p>
-                          <p className="text-[10px] text-[#64748b]">
-                            {fmtRupiah(r.repeatM1.revenue)}
-                          </p>
-                          {r.repeatM1.status === 'ONGOING' && (
-                            <span className="text-[9px] text-amber-600 font-sans font-medium">
-                              (berjalan)
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-[#cbd5e1]">-</span>
-                      )}
+                      {renderRepeatCell(r.repeatM1)}
                     </td>
 
                     {/* Repeat M+2 */}
                     <td className="py-2.5 px-3 text-right font-mono whitespace-nowrap">
-                      {r.repeatM2 ? (
-                        <div>
-                          <p className="font-semibold text-[#111b21]">
-                            {fmtNum(r.repeatM2.count)}{' '}
-                            <span className="text-[#64748b] font-normal">
-                              ({r.repeatM2.pct.toFixed(0)}%)
-                            </span>
-                          </p>
-                          <p className="text-[10px] text-[#64748b]">
-                            {fmtRupiah(r.repeatM2.revenue)}
-                          </p>
-                          {r.repeatM2.status === 'ONGOING' && (
-                            <span className="text-[9px] text-amber-600 font-sans font-medium">
-                              (berjalan)
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-[#cbd5e1]">-</span>
-                      )}
+                      {renderRepeatCell(r.repeatM2)}
                     </td>
 
                     {/* Repeat M+3 */}
                     <td className="py-2.5 px-3 text-right font-mono whitespace-nowrap">
-                      {r.repeatM3 ? (
-                        <div>
-                          <p className="font-semibold text-[#111b21]">
-                            {fmtNum(r.repeatM3.count)}{' '}
-                            <span className="text-[#64748b] font-normal">
-                              ({r.repeatM3.pct.toFixed(0)}%)
-                            </span>
-                          </p>
-                          <p className="text-[10px] text-[#64748b]">
-                            {fmtRupiah(r.repeatM3.revenue)}
-                          </p>
-                          {r.repeatM3.status === 'ONGOING' && (
-                            <span className="text-[9px] text-amber-600 font-sans font-medium">
-                              (berjalan)
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-[#cbd5e1]">-</span>
-                      )}
+                      {renderRepeatCell(r.repeatM3)}
+                    </td>
+
+                    {/* Repeat M+4 */}
+                    <td className="py-2.5 px-3 text-right font-mono whitespace-nowrap">
+                      {renderRepeatCell(r.repeatM4)}
+                    </td>
+
+                    {/* Repeat M+5 */}
+                    <td className="py-2.5 px-3 text-right font-mono whitespace-nowrap">
+                      {renderRepeatCell(r.repeatM5)}
                     </td>
 
                     {/* Total Realized Revenue */}
