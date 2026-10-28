@@ -128,11 +128,11 @@ export const CohortRetentionTable: React.FC<CohortRetentionTableProps> = ({ repo
   };
 
   return (
-    <section className="bg-white border border-[#e9edef] rounded-2xl p-5 shadow-xs space-y-5">
+    <section className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#202c33] rounded-2xl p-5 shadow-xs space-y-5">
       {/* ── Header Judul ────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
+          <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
             <Users size={16} className="text-[#008069]" /> Retensi Repeat Order &amp; Performa Unit Economics (Kohort)
           </h3>
           <p className="text-[11px] text-[#8696a0] mt-0.5">
@@ -141,7 +141,7 @@ export const CohortRetentionTable: React.FC<CohortRetentionTableProps> = ({ repo
         </div>
 
         {/* Toggle Tampilan Waktu */}
-        <div className="flex items-center bg-[#f0f2f5] p-1 rounded-xl text-xs font-semibold self-start sm:self-auto">
+        <div className="flex items-center bg-[#f0f2f5] dark:bg-[#202c33] p-1 rounded-xl text-xs font-semibold self-start sm:self-auto">
           <button
             onClick={() => setViewMode('MONTHLY')}
             className={`px-3 py-1.5 rounded-lg transition ${
@@ -166,9 +166,9 @@ export const CohortRetentionTable: React.FC<CohortRetentionTableProps> = ({ repo
       </div>
 
       {/* ── Kartu Perencanaan Forward-Looking (Planning Cards) ─────── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 bg-gradient-to-br from-[#f8fafc] to-[#f1f5f9] border border-[#e2e8f0] rounded-2xl">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 bg-gradient-to-br from-[#f8fafc] to-[#f1f5f9] dark:from-[#182229] dark:to-[#111b21] border border-[#e2e8f0] dark:border-[#202c33] rounded-2xl">
         {/* Card 1: LTV 60 Hari Matang (Pasien Iklan) */}
-        <div className="bg-white border border-[#e2e8f0] rounded-xl p-3.5 space-y-1.5 shadow-2xs">
+        <div className="bg-white dark:bg-[#202c33] border border-[#e2e8f0] dark:border-[#2a3942] rounded-xl p-3.5 space-y-1.5 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-[11px] uppercase font-bold text-[#64748b] tracking-wider flex items-center gap-1.5">
               <Sparkles size={13} className="text-[#008069]" /> LTV 60-Hari (Iklan)
@@ -183,7 +183,7 @@ export const CohortRetentionTable: React.FC<CohortRetentionTableProps> = ({ repo
               </span>
             )}
           </div>
-          <p className="text-xl font-extrabold text-[#0f172a]">
+          <p className="text-xl font-extrabold text-[#0f172a] dark:text-[#e9edef]">
             {fmtRupiah(matureLtv)}
           </p>
           <p className="text-[10px] text-[#64748b]">
@@ -192,12 +192,12 @@ export const CohortRetentionTable: React.FC<CohortRetentionTableProps> = ({ repo
         </div>
 
         {/* Card 2: Pengaturan Margin Kotor */}
-        <div className="bg-white border border-[#e2e8f0] rounded-xl p-3.5 space-y-1.5 shadow-2xs">
+        <div className="bg-white dark:bg-[#202c33] border border-[#e2e8f0] dark:border-[#2a3942] rounded-xl p-3.5 space-y-1.5 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-[11px] uppercase font-bold text-[#64748b] tracking-wider flex items-center gap-1.5">
               <DollarSign size={13} className="text-[#0284c7]" /> Margin Kotor Klinik
             </span>
-            <span className="text-xs font-mono font-bold text-[#0f172a]">
+            <span className="text-xs font-mono font-bold text-[#0f172a] dark:text-[#e9edef]">
               {marginInput}%
             </span>
           </div>
@@ -218,7 +218,7 @@ export const CohortRetentionTable: React.FC<CohortRetentionTableProps> = ({ repo
         </div>
 
         {/* Card 3: Batas Maksimal CAC Aman */}
-        <div className="bg-white border border-[#e2e8f0] rounded-xl p-3.5 space-y-1.5 shadow-2xs">
+        <div className="bg-white dark:bg-[#202c33] border border-[#e2e8f0] dark:border-[#2a3942] rounded-xl p-3.5 space-y-1.5 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-[11px] uppercase font-bold text-[#64748b] tracking-wider flex items-center gap-1.5">
               <Target size={13} className="text-[#10b981]" /> Max Allowable CAC
@@ -240,7 +240,7 @@ export const CohortRetentionTable: React.FC<CohortRetentionTableProps> = ({ repo
       </div>
 
       {/* ── Filter Pills Kanal ──────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-1.5 border-b border-[#e9edef] pb-3">
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-[#e9edef] dark:border-[#202c33] pb-3">
         <span className="text-xs font-semibold text-[#667781] mr-1">Filter Kanal:</span>
         {(['ALL', 'LPWA', 'CTWA', 'ORGANIC'] as CohortChannel[]).map((ch) => {
           const labels: Record<CohortChannel, string> = {
@@ -257,7 +257,7 @@ export const CohortRetentionTable: React.FC<CohortRetentionTableProps> = ({ repo
               className={`px-3 py-1 rounded-full text-xs font-semibold transition ${
                 isActive
                   ? 'bg-[#008069] text-white shadow-xs'
-                  : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e2e8f0]'
+                  : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0] hover:bg-[#e2e8f0] dark:hover:bg-[#2a3942]'
               }`}
             >
               {labels[ch]}

@@ -515,22 +515,22 @@ export const CustomerDatabase: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Top-level Tabs: Customers vs Labels */}
-      <div className="flex items-center gap-2 border-b border-[#e9edef] pb-0">
+      <div className="flex items-center gap-2 border-b border-[#e9edef] dark:border-[#2a3942] pb-0">
         <button
           onClick={() => setSearchParams({}, { replace: true })}
-          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition -mb-px ${activeMainTab === 'CUSTOMERS' ? 'border-[#008069] text-[#008069]' : 'border-transparent text-[#667781] hover:text-[#111b21]'}`}
+          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition -mb-px ${activeMainTab === 'CUSTOMERS' ? 'border-[#008069] text-[#008069]' : 'border-transparent text-[#667781] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef]'}`}
         >
           Daftar Pelanggan
         </button>
         <button
           onClick={() => setSearchParams({ tab: 'labels' }, { replace: true })}
-          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition -mb-px ${activeMainTab === 'LABELS' ? 'border-[#008069] text-[#008069]' : 'border-transparent text-[#667781] hover:text-[#111b21]'}`}
+          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition -mb-px ${activeMainTab === 'LABELS' ? 'border-[#008069] text-[#008069]' : 'border-transparent text-[#667781] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef]'}`}
         >
           Kelola Label
         </button>
         <button
           onClick={() => setSearchParams({ tab: 'map' }, { replace: true })}
-          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition -mb-px ${activeMainTab === 'MAP' ? 'border-[#008069] text-[#008069]' : 'border-transparent text-[#667781] hover:text-[#111b21]'}`}
+          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition -mb-px ${activeMainTab === 'MAP' ? 'border-[#008069] text-[#008069]' : 'border-transparent text-[#667781] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef]'}`}
         >
           Sebaran Peta
         </button>
@@ -546,11 +546,11 @@ export const CustomerDatabase: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h1 className="text-xl font-bold text-[#111b21] tracking-tight flex items-center space-x-2">
+          <h1 className="text-xl font-bold text-[#111b21] dark:text-[#e9edef] tracking-tight flex items-center space-x-2">
             <Users className="text-[#008069]" size={22} />
             <span>Database Customer</span>
           </h1>
-          <p className="text-xs text-[#667781] mt-0.5">
+          <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
             Kelola data customer, wilayah (kecamatan & kota), nilai LTV, riwayat reservasi/anak, riwayat chat, dan kirim event Meta CAPI.
           </p>
         </div>
@@ -561,7 +561,7 @@ export const CustomerDatabase: React.FC = () => {
           <button
             onClick={handleExportAudience}
             disabled={exportingAudience}
-            className="px-3 py-1.5 rounded-xl bg-white border border-[#d1d7db] text-[#54656f] hover:bg-[#f0f2f5] hover:text-[#111b21] transition shadow-xs disabled:opacity-50 flex items-center space-x-1.5 text-xs font-semibold cursor-pointer"
+            className="px-3 py-1.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] hover:text-[#111b21] dark:hover:text-[#e9edef] transition shadow-xs disabled:opacity-50 flex items-center space-x-1.5 text-xs font-semibold cursor-pointer"
             title="Unduh CSV nomor pasien (format 62...) untuk Custom Audience Meta"
           >
             <Download size={13} className={exportingAudience ? 'animate-pulse text-[#008069]' : ''} />
@@ -582,7 +582,7 @@ export const CustomerDatabase: React.FC = () => {
           <button
             onClick={loadCustomers}
             disabled={loading}
-            className="px-3 py-1.5 rounded-xl bg-white border border-[#d1d7db] text-[#54656f] hover:bg-[#f0f2f5] hover:text-[#111b21] transition shadow-xs disabled:opacity-50 flex items-center space-x-1.5 text-xs font-semibold cursor-pointer"
+            className="px-3 py-1.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] hover:text-[#111b21] dark:hover:text-[#e9edef] transition shadow-xs disabled:opacity-50 flex items-center space-x-1.5 text-xs font-semibold cursor-pointer"
             title="Refresh database"
           >
             <RefreshCw size={13} className={loading ? 'animate-spin text-[#008069]' : ''} />
@@ -593,36 +593,36 @@ export const CustomerDatabase: React.FC = () => {
 
       {/* Ringkasan Finansial & Statistik Pelanggan */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="bg-white p-3.5 rounded-xl border border-[#e9edef] shadow-xs">
+        <div className="bg-white dark:bg-[#111b21] p-3.5 rounded-xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-[#667781] uppercase tracking-wider">Total Pelanggan</span>
+            <span className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider">Total Pelanggan</span>
             <Users size={15} className="text-[#008069]" />
           </div>
-          <p className="text-lg font-bold text-[#111b21] mt-1">{stats.totalCustomers || totalCount}</p>
-          <span className="text-[10px] text-[#667781]">Kontak WhatsApp Aktif</span>
+          <p className="text-lg font-bold text-[#111b21] dark:text-[#e9edef] mt-1">{stats.totalCustomers || totalCount}</p>
+          <span className="text-[10px] text-[#667781] dark:text-[#8696a0]">Kontak WhatsApp Aktif</span>
         </div>
 
-        <div className="bg-white p-3.5 rounded-xl border border-[#e9edef] shadow-xs">
+        <div className="bg-white dark:bg-[#111b21] p-3.5 rounded-xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-[#667781] uppercase tracking-wider">Pelanggan Pembeli</span>
+            <span className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider">Pelanggan Pembeli</span>
             <ShoppingBag size={15} className="text-emerald-600" />
           </div>
           <p className="text-lg font-bold text-emerald-700 mt-1">{stats.totalPurchasers} Kontak</p>
           <span className="text-[10px] text-emerald-600 font-medium">Memiliki Form Reservasi / Paid</span>
         </div>
 
-        <div className="bg-white p-3.5 rounded-xl border border-[#e9edef] shadow-xs">
+        <div className="bg-white dark:bg-[#111b21] p-3.5 rounded-xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-[#667781] uppercase tracking-wider">Total Omset (LTV)</span>
+            <span className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider">Total Omset (LTV)</span>
             <DollarSign size={15} className="text-[#008069]" />
           </div>
           <p className="text-lg font-bold text-[#008069] mt-1">{formatCurrency(stats.totalRevenue)}</p>
-          <span className="text-[10px] text-[#667781]">Akumulasi Transaksi Riil</span>
+          <span className="text-[10px] text-[#667781] dark:text-[#8696a0]">Akumulasi Transaksi Riil</span>
         </div>
 
-        <div className="bg-white p-3.5 rounded-xl border border-[#e9edef] shadow-xs">
+        <div className="bg-white dark:bg-[#111b21] p-3.5 rounded-xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-[#667781] uppercase tracking-wider">Prospek Tanya-Tanya</span>
+            <span className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider">Prospek Tanya-Tanya</span>
             <MessageSquare size={15} className="text-sky-600" />
           </div>
           <p className="text-lg font-bold text-sky-700 mt-1">{stats.totalProspects} Kontak</p>
@@ -633,7 +633,7 @@ export const CustomerDatabase: React.FC = () => {
       {/* Sub-Filter Segmentasi & Search Bar */}
       <div className="space-y-2.5">
         {/* Desktop Segment Filter Tabs (>= md) */}
-        <div className="hidden md:flex flex-wrap items-center gap-1.5 p-1 bg-[#f0f2f5] border border-[#e9edef] rounded-xl w-fit">
+        <div className="hidden md:flex flex-wrap items-center gap-1.5 p-1 bg-[#f0f2f5] dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl w-fit">
           <button
             onClick={() => {
               setSegment('all');
@@ -641,8 +641,8 @@ export const CustomerDatabase: React.FC = () => {
             }}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center space-x-1.5 cursor-pointer ${
               segment === 'all'
-                ? 'bg-white text-[#111b21] shadow-2xs font-bold'
-                : 'text-[#667781] hover:text-[#111b21]'
+                ? 'bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] shadow-2xs font-bold'
+                : 'text-[#667781] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef]'
             }`}
           >
             <Users size={12} />
@@ -702,7 +702,7 @@ export const CustomerDatabase: React.FC = () => {
                 setSegment(e.target.value as any);
                 setPage(1);
               }}
-              className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs font-semibold text-[#111b21] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs cursor-pointer appearance-none pr-7 truncate"
+              className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] rounded-xl px-3 py-2 text-xs font-semibold text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] dark:focus:border-[#00a884] focus:ring-1 focus:ring-[#008069] dark:focus:ring-[#00a884] shadow-xs cursor-pointer appearance-none pr-7 truncate"
             >
               <option value="all">👥 Semua ({stats.totalCustomers || totalCount})</option>
               <option value="purchased">🎯 Pembeli ({stats.totalPurchasers})</option>
@@ -724,7 +724,7 @@ export const CustomerDatabase: React.FC = () => {
                 setSortOrder(o as 'asc' | 'desc');
                 setPage(1);
               }}
-              className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs font-semibold text-[#111b21] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs cursor-pointer appearance-none pr-7 truncate"
+              className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] rounded-xl px-3 py-2 text-xs font-semibold text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] dark:focus:border-[#00a884] focus:ring-1 focus:ring-[#008069] dark:focus:ring-[#00a884] shadow-xs cursor-pointer appearance-none pr-7 truncate"
             >
               <option value="created_at:desc">Terdaftar: Terbaru</option>
               <option value="created_at:asc">Terdaftar: Terlama</option>
@@ -771,7 +771,7 @@ export const CustomerDatabase: React.FC = () => {
       )}
 
       {/* Customer Table & Mobile Cards */}
-      <div className="bg-white border border-[#e9edef] rounded-2xl overflow-hidden shadow-xs relative">
+      <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl overflow-hidden shadow-xs relative">
         {/* Loading Overlay (refresh — data exists) */}
         {loading && customers.length > 0 && (
           <div className="absolute inset-0 z-10 bg-white/60 animate-pulse" />
@@ -821,18 +821,18 @@ export const CustomerDatabase: React.FC = () => {
         ) : (
           <>
             {/* Mobile Card List (< md) */}
-            <div className="md:hidden divide-y divide-[#e9edef]">
+            <div className="md:hidden divide-y divide-[#e9edef] dark:divide-[#2a3942]">
               {customers.map((customer) => (
                 <div
                   key={customer.id}
                   onClick={() => handleOpenDetail(customer)}
-                  className="p-4 space-y-2.5 bg-white hover:bg-[#f8fafc] active:bg-[#f0f2f5] transition cursor-pointer"
+                  className="p-4 space-y-2.5 bg-white dark:bg-[#111b21] hover:bg-[#f8fafc] dark:hover:bg-[#1c272e] active:bg-[#f0f2f5] dark:active:bg-[#202c33] transition cursor-pointer"
                 >
                   {/* Top row: Name/Phone/Location & LTV */}
                   <div className="flex justify-between items-start gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center space-x-1.5">
-                        <span className="font-bold text-sm text-[#111b21] truncate">
+                        <span className="font-bold text-sm text-[#111b21] dark:text-[#e9edef] truncate">
                           {customer.name || 'Bunda Customer'}
                         </span>
                         {customer.isMql && (
@@ -845,7 +845,7 @@ export const CustomerDatabase: React.FC = () => {
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center space-x-1.5 text-xs text-[#54656f] mt-0.5">
+                      <div className="flex items-center space-x-1.5 text-xs text-[#54656f] dark:text-[#8696a0] mt-0.5">
                         <Phone size={12} className="text-[#8696a0] shrink-0" />
                         <span className="font-mono">{customer.phone}</span>
                       </div>
@@ -900,7 +900,7 @@ export const CustomerDatabase: React.FC = () => {
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-[#e9edef] bg-[#f8fafc] text-[#667781] font-bold uppercase text-[10px] tracking-wider select-none">
+                  <tr className="border-b border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#1c272e] text-[#667781] dark:text-[#8696a0] font-bold uppercase text-[10px] tracking-wider select-none">
                     <th
                       className="py-3 px-4 cursor-pointer hover:text-[#111b21] group transition"
                       onClick={() => handleSort('name')}
@@ -940,9 +940,9 @@ export const CustomerDatabase: React.FC = () => {
                     <th className="py-3 px-4 text-right">Aksi</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#e9edef]">
+                <tbody className="divide-y divide-[#e9edef] dark:divide-[#2a3942]">
                   {customers.map((customer) => (
-                    <tr key={customer.id} className="hover:bg-[#f8fafc] transition">
+                    <tr key={customer.id} className="hover:bg-[#f8fafc] dark:hover:bg-[#1c272e] transition text-[#111b21] dark:text-[#e9edef]">
                       {/* Customer Phone & Name with MQL icon */}
                       <td className="py-3.5 px-4">
                         <div className="flex items-center space-x-2.5">
@@ -1097,7 +1097,7 @@ export const CustomerDatabase: React.FC = () => {
           >
             <form onSubmit={handleSendMetaEvent}>
               {/* Modal Header */}
-              <div className="p-4 border-b border-[#e9edef] flex justify-between items-center bg-[#f8fafc]">
+              <div className="p-4 border-b border-[#e9edef] dark:border-[#2a3942] flex justify-between items-center bg-[#f8fafc] dark:bg-[#1c272e]">
                 <div>
                   <h3 className="font-bold text-[#111b21] text-sm flex items-center space-x-2">
                     <Send size={15} className="text-[#008069]" />
@@ -1164,11 +1164,11 @@ export const CustomerDatabase: React.FC = () => {
               </div>
 
               {/* Modal Footer */}
-              <div className="p-4 border-t border-[#e9edef] bg-[#f8fafc] flex justify-end space-x-2">
+              <div className="p-4 border-t border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#1c272e] flex justify-end space-x-2">
                 <button
                   type="button"
                   onClick={() => setActiveEventCustomer(null)}
-                  className="px-4 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] rounded-xl text-xs font-semibold transition shadow-xs"
+                  className="px-4 py-2 bg-white dark:bg-[#202c33] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] border border-[#d1d7db] dark:border-[#374248] text-[#111b21] dark:text-[#e9edef] rounded-xl text-xs font-semibold transition shadow-xs"
                 >
                   Batal
                 </button>
@@ -1197,14 +1197,14 @@ export const CustomerDatabase: React.FC = () => {
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="p-4 sm:p-5 border-b border-[#e9edef] bg-[#f8fafc] flex justify-between items-start">
+            <div className="p-4 sm:p-5 border-b border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#1c272e] flex justify-between items-start">
               <div className="flex items-center space-x-3">
                 <div className="h-12 w-12 rounded-2xl bg-[#e8f5f2] border border-[#c2e7e0] text-[#008069] flex items-center justify-center font-bold text-lg shadow-xs flex-shrink-0">
                   {(detailData?.name || activeDetailCustomer.name || 'B')[0].toUpperCase()}
                 </div>
                 <div>
                   <div className="flex items-center space-x-2">
-                    <h3 className="font-bold text-base text-[#111b21]">
+                    <h3 className="font-bold text-base text-[#111b21] dark:text-[#e9edef]">
                       {detailData?.name || activeDetailCustomer.name || 'Bunda Customer'}
                     </h3>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
@@ -1244,7 +1244,7 @@ export const CustomerDatabase: React.FC = () => {
             </div>
 
             {/* Modal Body */}
-            <div className="p-4 sm:p-6 overflow-y-auto space-y-5 text-xs text-[#111b21]">
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-5 text-xs text-[#111b21] dark:text-[#e9edef]">
               {loadingDetail ? (
                 <div className="flex flex-col justify-center items-center py-16 space-y-3">
                   <Loader className="animate-spin text-[#008069]" size={36} />

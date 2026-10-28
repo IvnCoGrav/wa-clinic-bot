@@ -739,7 +739,7 @@ export const Settings: React.FC = () => {
   if (subTab === 'cs') {
     return (
       <div className="space-y-4">
-        <button onClick={() => setSearchParams({}, { replace: true })} className="text-xs text-[#008069] hover:underline flex items-center gap-1">
+        <button onClick={() => setSearchParams({}, { replace: true })} className="text-xs text-[#008069] dark:text-[#00a884] hover:underline flex items-center gap-1">
           ← Kembali ke Settings
         </button>
         <CustomerService />
@@ -749,7 +749,7 @@ export const Settings: React.FC = () => {
   if (subTab === 'telegram') {
     return (
       <div className="space-y-4">
-        <button onClick={() => setSearchParams({}, { replace: true })} className="text-xs text-[#008069] hover:underline flex items-center gap-1">
+        <button onClick={() => setSearchParams({}, { replace: true })} className="text-xs text-[#008069] dark:text-[#00a884] hover:underline flex items-center gap-1">
           ← Kembali ke Settings
         </button>
         <TelegramIntegration />
@@ -760,23 +760,23 @@ export const Settings: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header & Category Navigation Tabs */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#e9edef] pb-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#e9edef] dark:border-[#2a3942] pb-4">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-[#111b21] flex items-center space-x-2">
-            <SettingsIcon className="text-[#008069]" size={22} />
+          <h2 className="text-xl font-bold tracking-tight text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
+            <SettingsIcon className="text-[#008069] dark:text-[#00a884]" size={22} />
             <span>Operational Settings</span>
           </h2>
-          <p className="text-xs text-[#667781] mt-0.5">Konfigurasi WhatsApp provider, AI router, Meta Pixel/CAPI, dan operasional bot</p>
+          <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">Konfigurasi WhatsApp provider, AI router, Meta Pixel/CAPI, dan operasional bot</p>
         </div>
 
         {/* Category Filter Tabs */}
-        <div className="flex flex-wrap gap-1.5 p-1 bg-[#f0f2f5] border border-[#e9edef] rounded-2xl w-full md:w-auto">
+        <div className="flex flex-wrap gap-1.5 p-1 bg-[#f0f2f5] dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl w-full md:w-auto">
           <button
             onClick={() => setActiveCategory('ALL')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 ${
               activeCategory === 'ALL'
                 ? 'bg-[#008069] text-white shadow-xs'
-                : 'text-[#54656f] hover:text-[#111b21] hover:bg-white/60'
+                : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-white/60 dark:hover:bg-[#202c33]/60'
             }`}
           >
             <Layers size={13} />
@@ -787,7 +787,7 @@ export const Settings: React.FC = () => {
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 ${
               activeCategory === 'CHANNEL_AI'
                 ? 'bg-[#008069] text-white shadow-xs'
-                : 'text-[#54656f] hover:text-[#111b21] hover:bg-white/60'
+                : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-white/60 dark:hover:bg-[#202c33]/60'
             }`}
           >
             <MessageCircle size={13} />
@@ -798,7 +798,7 @@ export const Settings: React.FC = () => {
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 ${
               activeCategory === 'META_MARKETING'
                 ? 'bg-[#008069] text-white shadow-xs'
-                : 'text-[#54656f] hover:text-[#111b21] hover:bg-white/60'
+                : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-white/60 dark:hover:bg-[#202c33]/60'
             }`}
           >
             <BarChart3 size={13} />
@@ -809,7 +809,7 @@ export const Settings: React.FC = () => {
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 ${
               activeCategory === 'INTEGRATION_REPORTS'
                 ? 'bg-[#008069] text-white shadow-xs'
-                : 'text-[#54656f] hover:text-[#111b21] hover:bg-white/60'
+                : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-white/60 dark:hover:bg-[#202c33]/60'
             }`}
           >
             <Cloud size={13} />
@@ -820,7 +820,7 @@ export const Settings: React.FC = () => {
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 ${
               activeCategory === 'APP_OPS'
                 ? 'bg-[#008069] text-white shadow-xs'
-                : 'text-[#54656f] hover:text-[#111b21] hover:bg-white/60'
+                : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-white/60 dark:hover:bg-[#202c33]/60'
             }`}
           >
             <Smartphone size={13} />
@@ -1109,7 +1109,7 @@ export const Settings: React.FC = () => {
                 {ongkirTiers.map((tier, idx) => (
                   <div key={tier.id} className="grid grid-cols-2 sm:grid-cols-5 gap-2 items-end">
                     <div className="space-y-1">
-                      <label className="text-[10px] text-[#667781] block uppercase font-bold">Max Dist (km)</label>
+                      <label className="text-[10px] text-[#667781] dark:text-[#8696a0] block uppercase font-bold">Max Dist (km)</label>
                       <input
                         type="number"
                         value={tier.maxDist}
@@ -1118,11 +1118,11 @@ export const Settings: React.FC = () => {
                           newTiers[idx].maxDist = parseFloat(e.target.value);
                           setOngkirTiers(newTiers);
                         }}
-                        className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+                        className="w-full p-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] text-[#667781] block uppercase font-bold">Tarif (Rp)</label>
+                      <label className="text-[10px] text-[#667781] dark:text-[#8696a0] block uppercase font-bold">Tarif (Rp)</label>
                       <input
                         type="number"
                         value={tier.fee}
@@ -1131,11 +1131,11 @@ export const Settings: React.FC = () => {
                           newTiers[idx].fee = parseInt(e.target.value);
                           setOngkirTiers(newTiers);
                         }}
-                        className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+                        className="w-full p-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] text-[#667781] block uppercase font-bold">Promo (Rp)</label>
+                      <label className="text-[10px] text-[#667781] dark:text-[#8696a0] block uppercase font-bold">Promo (Rp)</label>
                       <input
                         type="number"
                         value={tier.promoDiscount !== undefined ? tier.promoDiscount : 0}
@@ -1144,11 +1144,11 @@ export const Settings: React.FC = () => {
                           newTiers[idx].promoDiscount = parseInt(e.target.value) || 0;
                           setOngkirTiers(newTiers);
                         }}
-                        className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+                        className="w-full p-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] text-[#667781] block uppercase font-bold">Ongkir Jadi</label>
+                      <label className="text-[10px] text-[#667781] dark:text-[#8696a0] block uppercase font-bold">Ongkir Jadi</label>
                       <div
                         className={`w-full p-2 rounded-xl text-xs font-bold text-center shadow-xs ${
                           (tier.fee || 0) - (tier.promoDiscount || 0) <= 0
@@ -1166,7 +1166,7 @@ export const Settings: React.FC = () => {
                     <div className="flex space-x-2 items-end pb-1">
                       <button
                         onClick={() => { setOngkirTiers(ongkirTiers.filter(t => t.id !== tier.id)); }}
-                        className="p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 transition flex justify-center items-center shadow-xs"
+                        className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/40 transition flex justify-center items-center shadow-xs"
                         title="Hapus Tier"
                       >
                         <Trash size={12} />
@@ -1178,7 +1178,7 @@ export const Settings: React.FC = () => {
                 <div className="pt-2 flex justify-between items-center">
                   <button
                     onClick={() => { setOngkirTiers([...ongkirTiers, { id: Date.now(), maxDist: 20, fee: 30000, promoDiscount: 5000 }]); }}
-                    className="px-3 py-1.5 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] rounded-xl text-xs font-semibold text-[#111b21] flex items-center space-x-1 shadow-xs"
+                    className="px-3 py-1.5 bg-white dark:bg-[#202c33] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs font-semibold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-1 shadow-xs"
                   >
                     <Plus size={11} />
                     <span>Tambah Tier</span>
@@ -1232,7 +1232,7 @@ export const Settings: React.FC = () => {
                       type="number"
                       value={randomDelay}
                       onChange={(e) => setRandomDelay(parseInt(e.target.value) || 0)}
-                      className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+                      className="w-full p-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
                     />
                   </div>
 

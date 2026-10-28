@@ -132,7 +132,7 @@ export const PricelistPromoPanel: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="bg-white border border-[#e9edef] rounded-2xl p-6 shadow-xs flex items-center justify-center space-x-3 text-[#667781]">
+      <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-6 shadow-xs flex items-center justify-center space-x-3 text-[#667781] dark:text-[#8696a0]">
         <Loader2 className="w-5 h-5 animate-spin text-[#008069]" />
         <span className="text-sm">Memuat pengaturan promo &amp; logo pricelist...</span>
       </div>
@@ -140,16 +140,16 @@ export const PricelistPromoPanel: React.FC = () => {
   }
 
   return (
-    <div className="bg-white border border-[#e9edef] rounded-2xl p-5 md:p-6 shadow-xs space-y-6">
+    <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 md:p-6 shadow-xs space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#e9edef] pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#e9edef] dark:border-[#2a3942] pb-4">
         <div className="flex items-center space-x-3">
           <div className="p-2.5 rounded-xl bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0]">
             <Gift size={20} />
           </div>
           <div>
-            <h3 className="text-base font-bold text-[#111b21]">Logo &amp; Penawaran Promo Pricelist</h3>
-            <p className="text-xs text-[#667781]">
+            <h3 className="text-base font-bold text-[#111b21] dark:text-[#e9edef]">Logo &amp; Penawaran Promo Pricelist</h3>
+            <p className="text-xs text-[#667781] dark:text-[#8696a0]">
               Atur logo brand dan promo diskon interaktif pada landing page publik (/pricelist).
             </p>
           </div>
@@ -168,7 +168,7 @@ export const PricelistPromoPanel: React.FC = () => {
 
       {/* Bagian 1: Logo Brand Publik */}
       <div className="space-y-3">
-        <label className="block text-xs font-bold uppercase tracking-wider text-[#41525d]">
+        <label className="block text-xs font-bold uppercase tracking-wider text-[#41525d] dark:text-[#8696a0]">
           Logo Brand Publik (/pricelist)
         </label>
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
@@ -178,16 +178,16 @@ export const PricelistPromoPanel: React.FC = () => {
               value={brandLogoUrl}
               onChange={(e) => setBrandLogoUrl(e.target.value)}
               placeholder="Contoh: /assets/kala-logo.svg atau https://..."
-              className="w-full min-h-[44px] px-3.5 py-2 text-sm bg-[#f0f2f5] border border-[#e9edef] rounded-xl text-[#111b21] focus:outline-hidden focus:ring-2 focus:ring-[#008069] transition"
+              className="w-full min-h-[44px] px-3.5 py-2 text-sm bg-[#f0f2f5] dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] rounded-xl text-[#111b21] dark:text-[#e9edef] focus:outline-hidden focus:ring-2 focus:ring-[#008069] transition"
             />
-            <p className="text-xs text-[#667781] mt-1.5 leading-relaxed">
-              Path aset lokal (misal: <code className="bg-[#f0f2f5] px-1 py-0.5 rounded text-[#111b21]">/assets/kala-logo.svg</code>) atau URL gambar publik. Kosongkan untuk menggunakan inisial monogram otomatis dari nama bisnis.
+            <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-1.5 leading-relaxed">
+              Path aset lokal (misal: <code className="bg-[#f0f2f5] px-1 py-0.5 rounded text-[#111b21] dark:text-[#e9edef]">/assets/kala-logo.svg</code>) atau URL gambar publik. Kosongkan untuk menggunakan inisial monogram otomatis dari nama bisnis.
             </p>
           </div>
 
           {/* Logo Preview */}
           <div className="flex items-center gap-2">
-            <div className="w-12 h-12 rounded-xl border border-[#e9edef] bg-[#fafafa] flex items-center justify-center overflow-hidden shrink-0">
+            <div className="w-12 h-12 rounded-xl border border-[#e9edef] dark:border-[#2a3942] bg-[#fafafa] dark:bg-[#202c33] flex items-center justify-center overflow-hidden shrink-0">
               {brandLogoUrl ? (
                 <img
                   src={brandLogoUrl}
@@ -213,11 +213,11 @@ export const PricelistPromoPanel: React.FC = () => {
       </div>
 
       {/* Bagian 2: Promosi Diskon Melayang */}
-      <div className="pt-4 border-t border-[#e9edef] space-y-4">
+      <div className="pt-4 border-t border-[#e9edef] dark:border-[#2a3942] space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h4 className="text-sm font-bold text-[#111b21]">Badge &amp; Pop-up Promo Diskon</h4>
-            <p className="text-xs text-[#667781]">
+            <h4 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef]">Badge &amp; Pop-up Promo Diskon</h4>
+            <p className="text-xs text-[#667781] dark:text-[#8696a0]">
               Aktifkan penawaran diskon melayang (floating badge) yang mengarahkan customer ke WhatsApp.
             </p>
           </div>
@@ -233,7 +233,7 @@ export const PricelistPromoPanel: React.FC = () => {
             {/* Row 1: Parameter Teknis */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-[#41525d] mb-1">
+                <label className="block text-xs font-semibold text-[#41525d] dark:text-[#8696a0] mb-1">
                   Delay Tampil (Detik)
                 </label>
                 <input
@@ -242,12 +242,12 @@ export const PricelistPromoPanel: React.FC = () => {
                   max={60}
                   value={delaySeconds}
                   onChange={(e) => setDelaySeconds(Number(e.target.value))}
-                  className="w-full min-h-[44px] px-3 py-2 text-sm bg-[#f0f2f5] border border-[#e9edef] rounded-xl text-[#111b21] focus:outline-hidden focus:ring-2 focus:ring-[#008069]"
+                  className="w-full min-h-[44px] px-3 py-2 text-sm bg-[#f0f2f5] dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] rounded-xl text-[#111b21] dark:text-[#e9edef] focus:outline-hidden focus:ring-2 focus:ring-[#008069]"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#41525d] mb-1">
+                <label className="block text-xs font-semibold text-[#41525d] dark:text-[#8696a0] mb-1">
                   Diskon (%)
                 </label>
                 <input
@@ -256,12 +256,12 @@ export const PricelistPromoPanel: React.FC = () => {
                   max={100}
                   value={discountPercent}
                   onChange={(e) => setDiscountPercent(Number(e.target.value))}
-                  className="w-full min-h-[44px] px-3 py-2 text-sm bg-[#f0f2f5] border border-[#e9edef] rounded-xl text-[#111b21] focus:outline-hidden focus:ring-2 focus:ring-[#008069]"
+                  className="w-full min-h-[44px] px-3 py-2 text-sm bg-[#f0f2f5] dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] rounded-xl text-[#111b21] dark:text-[#e9edef] focus:outline-hidden focus:ring-2 focus:ring-[#008069]"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#41525d] mb-1">
+                <label className="block text-xs font-semibold text-[#41525d] dark:text-[#8696a0] mb-1">
                   Akun Instagram (Tanpa @)
                 </label>
                 <input
@@ -269,7 +269,7 @@ export const PricelistPromoPanel: React.FC = () => {
                   value={instagramAccount}
                   onChange={(e) => setInstagramAccount(e.target.value)}
                   placeholder="kalababyspa"
-                  className="w-full min-h-[44px] px-3 py-2 text-sm bg-[#f0f2f5] border border-[#e9edef] rounded-xl text-[#111b21] focus:outline-hidden focus:ring-2 focus:ring-[#008069]"
+                  className="w-full min-h-[44px] px-3 py-2 text-sm bg-[#f0f2f5] dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] rounded-xl text-[#111b21] dark:text-[#e9edef] focus:outline-hidden focus:ring-2 focus:ring-[#008069]"
                 />
               </div>
             </div>
@@ -277,7 +277,7 @@ export const PricelistPromoPanel: React.FC = () => {
             {/* Row 2: Badge Teks */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-[#41525d] mb-1">
+                <label className="block text-xs font-semibold text-[#41525d] dark:text-[#8696a0] mb-1">
                   Judul Badge Melayang
                 </label>
                 <input
@@ -285,12 +285,12 @@ export const PricelistPromoPanel: React.FC = () => {
                   value={badgeTitle}
                   onChange={(e) => setBadgeTitle(e.target.value)}
                   placeholder="Spesial Diskon 10%"
-                  className="w-full min-h-[44px] px-3 py-2 text-sm bg-[#f0f2f5] border border-[#e9edef] rounded-xl text-[#111b21] focus:outline-hidden focus:ring-2 focus:ring-[#008069]"
+                  className="w-full min-h-[44px] px-3 py-2 text-sm bg-[#f0f2f5] dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] rounded-xl text-[#111b21] dark:text-[#e9edef] focus:outline-hidden focus:ring-2 focus:ring-[#008069]"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#41525d] mb-1">
+                <label className="block text-xs font-semibold text-[#41525d] dark:text-[#8696a0] mb-1">
                   Subjudul Badge
                 </label>
                 <input
@@ -298,7 +298,7 @@ export const PricelistPromoPanel: React.FC = () => {
                   value={badgeSubtitle}
                   onChange={(e) => setBadgeSubtitle(e.target.value)}
                   placeholder="Follow IG &amp; Klaim Promo"
-                  className="w-full min-h-[44px] px-3 py-2 text-sm bg-[#f0f2f5] border border-[#e9edef] rounded-xl text-[#111b21] focus:outline-hidden focus:ring-2 focus:ring-[#008069]"
+                  className="w-full min-h-[44px] px-3 py-2 text-sm bg-[#f0f2f5] dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] rounded-xl text-[#111b21] dark:text-[#e9edef] focus:outline-hidden focus:ring-2 focus:ring-[#008069]"
                 />
               </div>
             </div>
@@ -306,7 +306,7 @@ export const PricelistPromoPanel: React.FC = () => {
             {/* Row 3: Modal Teks */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-[#41525d] mb-1">
+                <label className="block text-xs font-semibold text-[#41525d] dark:text-[#8696a0] mb-1">
                   Judul Pop-up Modal
                 </label>
                 <input
@@ -314,12 +314,12 @@ export const PricelistPromoPanel: React.FC = () => {
                   value={modalTitle}
                   onChange={(e) => setModalTitle(e.target.value)}
                   placeholder="Syarat &amp; Ketentuan Promo"
-                  className="w-full min-h-[44px] px-3 py-2 text-sm bg-[#f0f2f5] border border-[#e9edef] rounded-xl text-[#111b21] focus:outline-hidden focus:ring-2 focus:ring-[#008069]"
+                  className="w-full min-h-[44px] px-3 py-2 text-sm bg-[#f0f2f5] dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] rounded-xl text-[#111b21] dark:text-[#e9edef] focus:outline-hidden focus:ring-2 focus:ring-[#008069]"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#41525d] mb-1">
+                <label className="block text-xs font-semibold text-[#41525d] dark:text-[#8696a0] mb-1">
                   Deskripsi Singkat Modal
                 </label>
                 <input
@@ -327,7 +327,7 @@ export const PricelistPromoPanel: React.FC = () => {
                   value={modalDescription}
                   onChange={(e) => setModalDescription(e.target.value)}
                   placeholder="Ikuti langkah berikut untuk mendapatkan potongan harga treatment"
-                  className="w-full min-h-[44px] px-3 py-2 text-sm bg-[#f0f2f5] border border-[#e9edef] rounded-xl text-[#111b21] focus:outline-hidden focus:ring-2 focus:ring-[#008069]"
+                  className="w-full min-h-[44px] px-3 py-2 text-sm bg-[#f0f2f5] dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] rounded-xl text-[#111b21] dark:text-[#e9edef] focus:outline-hidden focus:ring-2 focus:ring-[#008069]"
                 />
               </div>
             </div>
@@ -335,7 +335,7 @@ export const PricelistPromoPanel: React.FC = () => {
             {/* Row 4: Aturan Promo (Rules Editor) */}
             <div className="space-y-3 pt-2">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-bold uppercase tracking-wider text-[#41525d]">
+                <label className="text-xs font-bold uppercase tracking-wider text-[#41525d] dark:text-[#8696a0]">
                   Daftar Syarat &amp; Ketentuan ({rules.length})
                 </label>
                 <button
@@ -349,7 +349,7 @@ export const PricelistPromoPanel: React.FC = () => {
               </div>
 
               {rules.length === 0 ? (
-                <div className="p-4 border border-dashed border-[#e9edef] rounded-xl text-center text-xs text-[#667781]">
+                <div className="p-4 border border-dashed border-[#e9edef] rounded-xl text-center text-xs text-[#667781] dark:text-[#8696a0]">
                   Belum ada syarat promo. Klik "Tambah Syarat" di atas.
                 </div>
               ) : (
@@ -357,7 +357,7 @@ export const PricelistPromoPanel: React.FC = () => {
                   {rules.map((rule, idx) => (
                     <div
                       key={idx}
-                      className="flex items-start gap-2 bg-[#f8faf9] p-3 rounded-xl border border-[#e9edef]"
+                      className="flex items-start gap-2 bg-[#f8faf9] dark:bg-[#202c33] p-3 rounded-xl border border-[#e9edef] dark:border-[#2a3942]"
                     >
                       <span className="w-6 h-6 rounded-full bg-[#e8f5f2] text-[#008069] text-xs font-bold flex items-center justify-center shrink-0 mt-2">
                         {idx + 1}
@@ -368,20 +368,20 @@ export const PricelistPromoPanel: React.FC = () => {
                           value={rule.title}
                           onChange={(e) => handleUpdateRule(idx, 'title', e.target.value)}
                           placeholder="Judul syarat (misal: Follow Instagram)"
-                          className="w-full min-h-[44px] px-3 py-2 text-xs bg-white border border-[#e9edef] rounded-lg text-[#111b21] focus:outline-hidden focus:ring-2 focus:ring-[#008069]"
+                          className="w-full min-h-[44px] px-3 py-2 text-xs bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-lg text-[#111b21] dark:text-[#e9edef] focus:outline-hidden focus:ring-2 focus:ring-[#008069]"
                         />
                         <input
                           type="text"
                           value={rule.body}
                           onChange={(e) => handleUpdateRule(idx, 'body', e.target.value)}
                           placeholder="Rincian (misal: Follow akun resmi kami)"
-                          className="w-full min-h-[44px] px-3 py-2 text-xs bg-white border border-[#e9edef] rounded-lg text-[#111b21] focus:outline-hidden focus:ring-2 focus:ring-[#008069]"
+                          className="w-full min-h-[44px] px-3 py-2 text-xs bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-lg text-[#111b21] dark:text-[#e9edef] focus:outline-hidden focus:ring-2 focus:ring-[#008069]"
                         />
                       </div>
                       <button
                         type="button"
                         onClick={() => handleRemoveRule(idx)}
-                        className="p-2 text-[#667781] hover:text-[#ea0038] hover:bg-red-50 rounded-lg min-h-[44px] min-w-[44px] flex items-center justify-center transition"
+                        className="p-2 text-[#667781] dark:text-[#8696a0] hover:text-[#ea0038] hover:bg-red-50 rounded-lg min-h-[44px] min-w-[44px] flex items-center justify-center transition"
                         title="Hapus aturan ini"
                       >
                         <Trash2 size={16} />
@@ -394,7 +394,7 @@ export const PricelistPromoPanel: React.FC = () => {
 
             {/* Row 5: Template Pesan Klaim WA */}
             <div className="space-y-1.5 pt-2">
-              <label className="block text-xs font-semibold text-[#41525d]">
+              <label className="block text-xs font-semibold text-[#41525d] dark:text-[#8696a0]">
                 Template Pesan WhatsApp Saat Klaim Promo
               </label>
               <textarea
@@ -402,10 +402,10 @@ export const PricelistPromoPanel: React.FC = () => {
                 value={claimMessageTemplate}
                 onChange={(e) => setClaimMessageTemplate(e.target.value)}
                 placeholder="Halo, saya ingin klaim promo diskon {discount}% setelah follow IG @{instagram}. Mohon info jadwal treatment yang tersedia."
-                className="w-full px-3 py-2 text-sm bg-[#f0f2f5] border border-[#e9edef] rounded-xl text-[#111b21] focus:outline-hidden focus:ring-2 focus:ring-[#008069] leading-relaxed"
+                className="w-full px-3 py-2 text-sm bg-[#f0f2f5] dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] rounded-xl text-[#111b21] dark:text-[#e9edef] focus:outline-hidden focus:ring-2 focus:ring-[#008069] leading-relaxed"
               />
-              <p className="text-xs text-[#667781]">
-                Gunakan tag variabel <code className="bg-[#f0f2f5] px-1 py-0.5 rounded text-[#111b21]">{'{discount}'}</code> untuk persentase diskon dan <code className="bg-[#f0f2f5] px-1 py-0.5 rounded text-[#111b21]">{'{instagram}'}</code> untuk nama akun Instagram.
+              <p className="text-xs text-[#667781] dark:text-[#8696a0]">
+                Gunakan tag variabel <code className="bg-[#f0f2f5] px-1 py-0.5 rounded text-[#111b21] dark:text-[#e9edef]">{'{discount}'}</code> untuk persentase diskon dan <code className="bg-[#f0f2f5] px-1 py-0.5 rounded text-[#111b21] dark:text-[#e9edef]">{'{instagram}'}</code> untuk nama akun Instagram.
               </p>
             </div>
           </div>

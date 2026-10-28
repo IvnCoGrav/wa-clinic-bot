@@ -128,19 +128,19 @@ export const ChatExport: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#e9edef]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#e9edef] dark:border-[#2a3942]">
         <div>
-          <h2 className="text-xl font-bold text-[#111b21] flex items-center gap-2">
+          <h2 className="text-xl font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
             <FileText className="text-[#008069]" size={22} />
             <span>Daily Chat Export (Analisa AI)</span>
           </h2>
-          <p className="text-xs text-[#667781] mt-0.5">
+          <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
             Ekspor percakapan harian ke file Markdown terstruktur — mudah dibaca AI untuk menilai kualitas balasan bot vs balasan staf manusia.
           </p>
         </div>
         <button
           onClick={loadFiles}
-          className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] rounded-xl text-xs font-semibold text-[#111b21] transition shadow-xs self-start sm:self-auto"
+          className="flex items-center gap-1.5 px-3.5 py-2 bg-white dark:bg-[#202c33] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs font-semibold text-[#111b21] dark:text-[#e9edef] transition shadow-xs self-start sm:self-auto"
         >
           <RefreshCw size={13} className="text-[#008069]" />
           <span>Refresh Daftar</span>
@@ -148,10 +148,10 @@ export const ChatExport: React.FC = () => {
       </div>
 
       {/* Generate card */}
-      <div className="rounded-2xl bg-white border border-[#e9edef] p-5 shadow-xs">
+      <div className="rounded-2xl bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] p-5 shadow-xs">
         <div className="flex flex-col md:flex-row md:items-end gap-4">
           <div className="flex-1 space-y-2">
-            <label className="text-[11px] uppercase font-bold text-[#111b21] flex items-center gap-1.5">
+            <label className="text-[11px] uppercase font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-1.5">
               <CalendarDays size={13} className="text-[#008069]" /> <span>Rentang Tanggal Ekspor</span>
             </label>
             <div className="flex flex-wrap items-center gap-2">
@@ -162,7 +162,7 @@ export const ChatExport: React.FC = () => {
                   value={startDate}
                   max={endDate || localToday()}
                   onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full md:w-44 px-3.5 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+                  className="w-full md:w-44 px-3.5 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
                 />
               </div>
               <span className="text-[#8696a0] text-xs mt-4">s/d</span>
@@ -173,11 +173,11 @@ export const ChatExport: React.FC = () => {
                   value={endDate}
                   max={localToday()}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full md:w-44 px-3.5 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+                  className="w-full md:w-44 px-3.5 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
                 />
               </div>
             </div>
-            <p className="text-xs text-[#667781] mt-1">
+            <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-1">
               Semua pesan (pelanggan, BOT, dan staf) pada rentang tersebut akan diekspor dalam satu file
               Markdown, maksimal 31 hari.{' '}
               <span className="text-amber-700 font-medium">
@@ -212,7 +212,7 @@ export const ChatExport: React.FC = () => {
 
       {/* Recent files */}
       <div className="rounded-2xl bg-white border border-[#e9edef] overflow-hidden shadow-xs">
-        <div className="px-5 py-3.5 border-b border-[#e9edef] bg-[#f8fafc] text-xs font-bold text-[#111b21] flex items-center justify-between">
+        <div className="px-5 py-3.5 border-b border-[#e9edef] bg-[#f8fafc] text-xs font-bold text-[#111b21] dark:text-[#e9edef] flex items-center justify-between">
           <span className="flex items-center gap-2">
             <FileText size={15} className="text-[#008069]" /> File Ekspor Tersimpan ({files?.length || 0})
           </span>
@@ -221,13 +221,13 @@ export const ChatExport: React.FC = () => {
         {!files || files.length === 0 ? (
           <div className="p-8 text-center text-xs text-[#8696a0]">
             Belum ada file ekspor tersimpan. Gunakan tombol di atas untuk generate manual, atau aktifkan
-            <code className="text-[#111b21] ml-1 font-mono">ENABLE_CHAT_EXPORT_CRON=true</code> di server.
+            <code className="text-[#111b21] dark:text-[#e9edef] ml-1 font-mono">ENABLE_CHAT_EXPORT_CRON=true</code> di server.
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="text-left text-[11px] uppercase font-bold text-[#667781] border-b border-[#e9edef] bg-[#f8fafc]">
+                <tr className="text-left text-[11px] uppercase font-bold text-[#667781] dark:text-[#8696a0] border-b border-[#e9edef] bg-[#f8fafc]">
                   <th className="px-5 py-3">Tanggal</th>
                   <th className="px-5 py-3">File</th>
                   <th className="px-5 py-3 text-right">Ukuran</th>
@@ -238,11 +238,11 @@ export const ChatExport: React.FC = () => {
               <tbody>
                 {(files || []).map((f) => (
                   <tr key={f.fileName} className="border-b border-[#e9edef] last:border-0 hover:bg-[#f8fafc] transition-colors">
-                    <td className="px-5 py-3 font-mono text-xs text-[#111b21] whitespace-nowrap font-medium">
+                    <td className="px-5 py-3 font-mono text-xs text-[#111b21] dark:text-[#e9edef] whitespace-nowrap font-medium">
                       {f.rangeEnd ? `${f.date} s/d ${f.rangeEnd}` : f.date}
                     </td>
-                    <td className="px-5 py-3 text-xs text-[#667781] font-mono">{f.fileName}</td>
-                    <td className="px-5 py-3 text-right text-xs text-[#667781]">{formatBytes(f.sizeBytes)}</td>
+                    <td className="px-5 py-3 text-xs text-[#667781] dark:text-[#8696a0] font-mono">{f.fileName}</td>
+                    <td className="px-5 py-3 text-right text-xs text-[#667781] dark:text-[#8696a0]">{formatBytes(f.sizeBytes)}</td>
                     <td className="px-5 py-3 text-right text-xs text-[#8696a0] whitespace-nowrap">
                       {new Date(f.updatedAt).toLocaleString('id-ID')}
                     </td>

@@ -168,10 +168,10 @@ function parseDeviceSummary(ua?: string | null): string {
 
 function StatCard({ label, value, tone = 'default', sub }: { label: string; value: React.ReactNode; tone?: 'ok' | 'warn' | 'err' | 'default'; sub?: React.ReactNode }) {
   const toneCls =
-    tone === 'ok' ? 'text-[#008069]' : tone === 'warn' ? 'text-amber-700' : tone === 'err' ? 'text-rose-600' : 'text-[#111b21]';
+    tone === 'ok' ? 'text-[#008069]' : tone === 'warn' ? 'text-amber-700' : tone === 'err' ? 'text-rose-600' : 'text-[#111b21] dark:text-[#e9edef]';
   return (
-    <div className="bg-white border border-[#e9edef] rounded-2xl p-4 flex flex-col gap-1 shadow-xs">
-      <p className="text-[11px] uppercase font-bold text-[#667781] tracking-wider">{label}</p>
+    <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-4 flex flex-col gap-1 shadow-xs">
+      <p className="text-[11px] uppercase font-bold text-[#667781] dark:text-[#8696a0] tracking-wider">{label}</p>
       <p className={`text-2xl font-extrabold ${toneCls}`}>{value}</p>
       {sub && <p className="text-xs text-[#8696a0] truncate">{sub}</p>}
     </div>
@@ -196,7 +196,7 @@ function StatusBadge({ entry }: { entry: ClickEntry }) {
 function MetaTiny({ label, value }: { label: string; value?: string | null }) {
   if (!value) return null;
   return (
-    <p className="text-[10px]"><span className="text-[#8696a0] uppercase font-bold">{label}:</span> <span className="text-[#111b21] font-mono">{value}</span></p>
+    <p className="text-[10px]"><span className="text-[#8696a0] uppercase font-bold">{label}:</span> <span className="text-[#111b21] dark:text-[#e9edef] font-mono">{value}</span></p>
   );
 }
 
@@ -451,10 +451,10 @@ export const MetaClickCatcher: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#e9edef]">
         <div>
-          <h2 className="text-xl font-bold text-[#111b21] flex items-center gap-2">
+          <h2 className="text-xl font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
             <MousePointerClick size={22} className="text-[#008069]" /> Meta Click Catcher &amp; CAPI Debug
           </h2>
-          <p className="text-xs text-[#667781] mt-0.5">Pantau performa iklan Meta Ads, atribusi chat WhatsApp, dan kesehatan Conversion API.</p>
+          <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">Pantau performa iklan Meta Ads, atribusi chat WhatsApp, dan kesehatan Conversion API.</p>
         </div>
         <button
           onClick={handleRefresh}
@@ -473,7 +473,7 @@ export const MetaClickCatcher: React.FC = () => {
           className={`px-3.5 py-2 rounded-t-xl text-xs font-bold transition flex items-center gap-1.5 ${
             activeTab === 'performance'
               ? 'bg-white text-[#008069] border border-b-0 border-[#e9edef] -mb-px'
-              : 'text-[#667781] hover:text-[#111b21] hover:bg-[#f0f2f5]'
+              : 'text-[#667781] dark:text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5]'
           }`}
         >
           📊 Performa Iklan &amp; Penjualan (CAC &amp; ROI)
@@ -484,7 +484,7 @@ export const MetaClickCatcher: React.FC = () => {
           className={`px-3.5 py-2 rounded-t-xl text-xs font-bold transition flex items-center gap-1.5 ${
             activeTab === 'observability'
               ? 'bg-white text-[#008069] border border-b-0 border-[#e9edef] -mb-px'
-              : 'text-[#667781] hover:text-[#111b21] hover:bg-[#f0f2f5]'
+              : 'text-[#667781] dark:text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5]'
           }`}
         >
           🛠️ Log Klik &amp; Observability CAPI
@@ -495,7 +495,7 @@ export const MetaClickCatcher: React.FC = () => {
           className={`px-3.5 py-2 rounded-t-xl text-xs font-bold transition flex items-center gap-1.5 ${
             activeTab === 'catchers'
               ? 'bg-white text-[#008069] border border-b-0 border-[#e9edef] -mb-px'
-              : 'text-[#667781] hover:text-[#111b21] hover:bg-[#f0f2f5]'
+              : 'text-[#667781] dark:text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5]'
           }`}
         >
           🎯 Greeting Catchers CTWA
@@ -576,14 +576,14 @@ export const MetaClickCatcher: React.FC = () => {
 
       {/* ---------------- 1b. Dual-kolom Web-side vs Server-side (Fase 5b) ---------------- */}
       {summary?.pageViewsBySource && (
-        <section className="bg-white border border-[#e9edef] rounded-2xl p-4 shadow-xs space-y-3">
-          <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
+        <section className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-4 shadow-xs space-y-3">
+          <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
             <Eye size={16} className="text-[#008069]" />
             <span>Rincian Sumber PageView Server</span>
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 space-y-1">
-              <p className="font-bold text-[#111b21]">Kolom Web-side (browser → Meta)</p>
+              <p className="font-bold text-[#111b21] dark:text-[#e9edef]">Kolom Web-side (browser → Meta)</p>
               <p className="text-[#5b6b73]">
                 Angka di Meta Ads Manager / Events Manager: <span className="font-semibold">superset</span> —
                 setiap kunjungan menembak Pixel langsung, termasuk yang tracker server lewatkan.
@@ -591,14 +591,14 @@ export const MetaClickCatcher: React.FC = () => {
               </p>
             </div>
             <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 px-3 py-2.5 space-y-1.5">
-              <p className="font-bold text-[#111b21]">
+              <p className="font-bold text-[#111b21] dark:text-[#e9edef]">
                 Kolom Server-side (subset, total {summary?.totalPageViews ?? 0})
               </p>
               <ul className="space-y-1">
                 {Object.entries(summary.pageViewsBySource).map(([source, count]) => (
                   <li key={source} className="flex items-center justify-between gap-2">
                     <span className="text-[#5b6b73]">{pageViewSourceLabel(source)}</span>
-                    <span className="font-mono font-bold text-[#111b21]">{count}</span>
+                    <span className="font-mono font-bold text-[#111b21] dark:text-[#e9edef]">{count}</span>
                   </li>
                 ))}
               </ul>
@@ -611,42 +611,42 @@ export const MetaClickCatcher: React.FC = () => {
 
       {/* ---------------- 2. Filter Bar (tanggal dipakai bersama kedua tab) ---------------- */}
       {activeTab !== 'catchers' && (
-        <section className="bg-white border border-[#e9edef] rounded-2xl p-4 shadow-xs space-y-3">
+        <section className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-4 shadow-xs space-y-3">
           {/* Preset Shortcuts */}
           <div className="flex items-center gap-1.5 flex-wrap pb-2 border-b border-[#f0f2f5]">
-            <span className="text-[11px] font-bold text-[#667781] uppercase mr-1">Shortcut Tanggal:</span>
+            <span className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase mr-1">Shortcut Tanggal:</span>
             <button
               type="button"
               onClick={() => setDatePreset('today')}
-              className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] transition shadow-2xs"
+              className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] dark:text-[#e9edef] transition shadow-2xs"
             >
               Hari Ini
             </button>
             <button
               type="button"
               onClick={() => setDatePreset('7days')}
-              className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] transition shadow-2xs"
+              className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] dark:text-[#e9edef] transition shadow-2xs"
             >
               7 Hari Terakhir
             </button>
             <button
               type="button"
               onClick={() => setDatePreset('30days')}
-              className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] transition shadow-2xs"
+              className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] dark:text-[#e9edef] transition shadow-2xs"
             >
               30 Hari Terakhir
             </button>
             <button
               type="button"
               onClick={() => setDatePreset('thisMonth')}
-              className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] transition shadow-2xs"
+              className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] dark:text-[#e9edef] transition shadow-2xs"
             >
               Bulan Ini
             </button>
             <button
               type="button"
               onClick={() => setDatePreset('allTime')}
-              className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] transition shadow-2xs"
+              className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] dark:text-[#e9edef] transition shadow-2xs"
             >
               Semua Waktu
             </button>
@@ -654,32 +654,32 @@ export const MetaClickCatcher: React.FC = () => {
 
           <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
-              <label className="text-[11px] uppercase font-bold text-[#667781] flex items-center gap-1"><CalendarDays size={12} className="text-[#008069]" /> Dari</label>
-              <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setPage(1); }} className="bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs" />
+              <label className="text-[11px] uppercase font-bold text-[#667781] dark:text-[#8696a0] flex items-center gap-1"><CalendarDays size={12} className="text-[#008069]" /> Dari</label>
+              <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setPage(1); }} className="bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs" />
             </div>
             <div className="space-y-1">
-              <label className="text-[11px] uppercase font-bold text-[#667781] flex items-center gap-1"><CalendarDays size={12} className="text-[#008069]" /> Sampai</label>
-              <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setPage(1); }} className="bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs" />
+              <label className="text-[11px] uppercase font-bold text-[#667781] dark:text-[#8696a0] flex items-center gap-1"><CalendarDays size={12} className="text-[#008069]" /> Sampai</label>
+              <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setPage(1); }} className="bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs" />
             </div>
             {activeTab === 'observability' && (
               <>
             <div className="space-y-1">
-              <label className="text-[11px] uppercase font-bold text-[#667781] flex items-center gap-1"><Activity size={12} className="text-[#008069]" /> Status</label>
-              <select value={status} onChange={(e) => { setStatus(e.target.value as any); setPage(1); }} className="bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs">
+              <label className="text-[11px] uppercase font-bold text-[#667781] dark:text-[#8696a0] flex items-center gap-1"><Activity size={12} className="text-[#008069]" /> Status</label>
+              <select value={status} onChange={(e) => { setStatus(e.target.value as any); setPage(1); }} className="bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs">
                 <option value="all">Semua Status</option>
                 <option value="matched">MATCHED (Chat Masuk)</option>
                 <option value="unmatched">PENDING (Batal / Belum Chat)</option>
               </select>
             </div>
             <div className="flex-1 min-w-[180px] space-y-1">
-              <label className="text-[11px] uppercase font-bold text-[#667781] flex items-center gap-1"><Tag size={12} className="text-[#008069]" /> Tracking Code / Campaign</label>
+              <label className="text-[11px] uppercase font-bold text-[#667781] dark:text-[#8696a0] flex items-center gap-1"><Tag size={12} className="text-[#008069]" /> Tracking Code / Campaign</label>
               <input
                 type="text"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleApplyFilters()}
                 placeholder="Cari kode tracking (mis. mh) atau campaign..."
-                className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+                className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
               />
             </div>
               </>
@@ -691,7 +691,7 @@ export const MetaClickCatcher: React.FC = () => {
               <button onClick={handleApplyFilters} className="px-3.5 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs">
                 <Search size={13} /> <span>Terapkan</span>
               </button>
-              <button onClick={handleResetFilters} className="px-3.5 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] rounded-xl text-xs font-semibold transition shadow-xs">
+              <button onClick={handleResetFilters} className="px-3.5 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] dark:text-[#e9edef] rounded-xl text-xs font-semibold transition shadow-xs">
                 Reset
               </button>
             </div>
@@ -702,9 +702,9 @@ export const MetaClickCatcher: React.FC = () => {
       {activeTab === 'observability' && (
         <>
       {/* ---------------- 3. Ad Click Log Table ---------------- */}
-      <section className="bg-white border border-[#e9edef] rounded-2xl p-5 shadow-xs">
+      <section className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 shadow-xs">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
+          <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
             <MousePointerClick size={16} className="text-[#008069]" /> <span>Log Klik Iklan &amp; Atribusi Pasien</span>
           </h3>
           <span className="text-xs text-[#8696a0]">{total} klik tercatat · halaman {page}/{totalPages}</span>
@@ -713,7 +713,7 @@ export const MetaClickCatcher: React.FC = () => {
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="text-left uppercase font-bold text-[#667781] border-b border-[#e9edef] bg-[#f8fafc]">
+              <tr className="text-left uppercase font-bold text-[#667781] dark:text-[#8696a0] border-b border-[#e9edef] bg-[#f8fafc] dark:bg-[#202c33]">
                 <th className="py-2.5 px-3">Tracking Code</th>
                 <th className="py-2.5 px-3">Waktu Klik</th>
                 <th className="py-2.5 px-3">Status Atribusi</th>
@@ -735,22 +735,22 @@ export const MetaClickCatcher: React.FC = () => {
                 </tr>
               )}
               {entries.map((e) => (
-                <tr key={e.id} className="border-b border-[#e9edef] last:border-0 align-top hover:bg-[#f8fafc] transition-colors">
+                <tr key={e.id} className="border-b border-[#e9edef] last:border-0 align-top hover:bg-[#f8fafc] dark:bg-[#202c33] transition-colors">
                   <td className="py-2.5 px-3">
                     <span className="font-mono font-bold text-[#008069] bg-[#e8f5f2] border border-[#c2e7e0] rounded-lg px-2 py-0.5">{e.trackingCode ?? '-'}</span>
                   </td>
-                  <td className="py-2.5 px-3 whitespace-nowrap text-[#667781]">{fmtTime(e.createdAt)}</td>
+                  <td className="py-2.5 px-3 whitespace-nowrap text-[#667781] dark:text-[#8696a0]">{fmtTime(e.createdAt)}</td>
                   <td className="py-2.5 px-3">
                     <StatusBadge entry={e} />
                   </td>
                   <td className="py-2.5 px-3">
                     {e.customer ? (
                       <div className="space-y-0.5">
-                        <p className="text-[#111b21] font-bold text-xs">
+                        <p className="text-[#111b21] dark:text-[#e9edef] font-bold text-xs">
                           {e.customer.name || 'Pelanggan WhatsApp'}
                         </p>
                         {e.customer.phone && (
-                          <p className="text-[#667781] font-mono text-[11px]">
+                          <p className="text-[#667781] dark:text-[#8696a0] font-mono text-[11px]">
                             {e.customer.phone}
                           </p>
                         )}
@@ -764,8 +764,8 @@ export const MetaClickCatcher: React.FC = () => {
                       </div>
                     ) : e.phone ? (
                       <div className="space-y-0.5">
-                        <p className="text-[#667781] font-semibold text-[11px]">Nomor Terdeteksi</p>
-                        <p className="text-[#111b21] font-mono text-[11px]">{e.phone}</p>
+                        <p className="text-[#667781] dark:text-[#8696a0] font-semibold text-[11px]">Nomor Terdeteksi</p>
+                        <p className="text-[#111b21] dark:text-[#e9edef] font-mono text-[11px]">{e.phone}</p>
                       </div>
                     ) : (
                       <span className="text-[#8696a0] text-[11px] italic flex items-center gap-1">
@@ -777,12 +777,12 @@ export const MetaClickCatcher: React.FC = () => {
                     {e.utmCampaign ? (
                       <div className="text-[11px] space-y-0.5">
                         <p className="text-[#008069] font-bold">@{e.utmCampaign}</p>
-                        {e.utmSource && <p className="text-[#667781]"><span className="font-semibold text-[#111b21]">Source:</span> {e.utmSource}{e.utmMedium ? ` / ${e.utmMedium}` : ''}</p>}
+                        {e.utmSource && <p className="text-[#667781] dark:text-[#8696a0]"><span className="font-semibold text-[#111b21] dark:text-[#e9edef]">Source:</span> {e.utmSource}{e.utmMedium ? ` / ${e.utmMedium}` : ''}</p>}
                         {e.landingUrl && <p className="text-[#8696a0] truncate max-w-[180px]" title={e.landingUrl}><Globe size={10} className="inline mr-0.5 text-[#008069]" />{e.landingUrl}</p>}
                       </div>
                     ) : e.utmSource || e.landingUrl ? (
                       <div className="text-[11px] space-y-0.5">
-                        {e.utmSource && <p className="text-[#667781]"><span className="font-semibold text-[#111b21]">Source:</span> {e.utmSource}</p>}
+                        {e.utmSource && <p className="text-[#667781] dark:text-[#8696a0]"><span className="font-semibold text-[#111b21] dark:text-[#e9edef]">Source:</span> {e.utmSource}</p>}
                         {e.landingUrl && <p className="text-[#8696a0] truncate max-w-[180px]" title={e.landingUrl}><Globe size={10} className="inline mr-0.5 text-[#008069]" />{e.landingUrl}</p>}
                       </div>
                     ) : (
@@ -790,17 +790,17 @@ export const MetaClickCatcher: React.FC = () => {
                     )}
                   </td>
                   <td className="py-2.5 px-3">
-                    <p className="text-[#111b21] font-medium text-[11px]">{parseDeviceSummary(e.userAgent)}</p>
+                    <p className="text-[#111b21] dark:text-[#e9edef] font-medium text-[11px]">{parseDeviceSummary(e.userAgent)}</p>
                     {e.ipAddress && (
                       <p className="text-[10px] text-[#8696a0] font-mono mt-0.5">
-                        <span className="font-semibold text-[#667781]">IP:</span> {e.ipAddress}
+                        <span className="font-semibold text-[#667781] dark:text-[#8696a0]">IP:</span> {e.ipAddress}
                       </p>
                     )}
                   </td>
                   <td className="py-2.5 px-3 text-right">
                     <button
                       onClick={() => setSelectedItem(e)}
-                      className="px-2.5 py-1 rounded-lg bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] hover:text-[#008069] text-[11px] font-semibold transition inline-flex items-center gap-1"
+                      className="px-2.5 py-1 rounded-lg bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] dark:text-[#e9edef] hover:text-[#008069] text-[11px] font-semibold transition inline-flex items-center gap-1"
                       title="Lihat Detail Koneksi Meta"
                     >
                       <Eye size={13} />
@@ -819,10 +819,10 @@ export const MetaClickCatcher: React.FC = () => {
       {/* ---------------- 4. Manual CAPI Event Sender & History (2 Cards Side-by-Side) ---------------- */}
       <section className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Card 1: Kirim Manual Event (5 cols) */}
-        <div className="lg:col-span-5 bg-white border border-[#e9edef] rounded-2xl p-5 space-y-4 shadow-xs flex flex-col justify-between">
+        <div className="lg:col-span-5 bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-4 shadow-xs flex flex-col justify-between">
           <div className="space-y-3">
             <div className="flex items-center justify-between border-b border-[#f0f2f5] pb-2.5">
-              <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
+              <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
                 <Send size={16} className="text-[#008069]" />
                 <span>Kirim Manual Event CAPI</span>
               </h3>
@@ -830,13 +830,13 @@ export const MetaClickCatcher: React.FC = () => {
                 Direct Hash PII
               </span>
             </div>
-            <p className="text-xs text-[#667781]">
+            <p className="text-xs text-[#667781] dark:text-[#8696a0]">
               Kirimkan event konversi (Purchase, Contact, Lead, dll.) secara langsung ke Meta Conversion API untuk nomor WhatsApp tertentu.
             </p>
 
             <div className="space-y-3 pt-1">
               <div>
-                <label className="text-[11px] uppercase font-bold text-[#111b21] block mb-1">
+                <label className="text-[11px] uppercase font-bold text-[#111b21] dark:text-[#e9edef] block mb-1">
                   Nomor WhatsApp Pelanggan <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
@@ -848,14 +848,14 @@ export const MetaClickCatcher: React.FC = () => {
                     value={manualPhone}
                     onChange={(e) => setManualPhone(e.target.value)}
                     placeholder="mis. 088000000019 atau 628..."
-                    className="w-full bg-white border border-[#d1d7db] rounded-xl pl-8 pr-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl pl-8 pr-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="text-[11px] uppercase font-bold text-[#111b21] block mb-1">
+                  <label className="text-[11px] uppercase font-bold text-[#111b21] dark:text-[#e9edef] block mb-1">
                     Nama Pasien (Opsional)
                   </label>
                   <div className="relative">
@@ -867,18 +867,18 @@ export const MetaClickCatcher: React.FC = () => {
                       value={manualName}
                       onChange={(e) => setManualName(e.target.value)}
                       placeholder="mis. Bunda Siti"
-                      className="w-full bg-white border border-[#d1d7db] rounded-xl pl-7 pr-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+                      className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl pl-7 pr-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="text-[11px] uppercase font-bold text-[#111b21] block mb-1">
+                  <label className="text-[11px] uppercase font-bold text-[#111b21] dark:text-[#e9edef] block mb-1">
                     Nama Event <span className="text-rose-500">*</span>
                   </label>
                   <select
                     value={manualEvent}
                     onChange={(e) => setManualEvent(e.target.value)}
-                    className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
                   >
                     <option value="Purchase">Purchase (Pembayaran)</option>
                     <option value="Contact">Contact (Chat Masuk)</option>
@@ -891,7 +891,7 @@ export const MetaClickCatcher: React.FC = () => {
               </div>
 
               <div>
-                <label className="text-[11px] uppercase font-bold text-[#111b21] block mb-1">
+                <label className="text-[11px] uppercase font-bold text-[#111b21] dark:text-[#e9edef] block mb-1">
                   Treatment / Layanan (Opsional)
                 </label>
                 <div className="relative">
@@ -903,14 +903,14 @@ export const MetaClickCatcher: React.FC = () => {
                     value={manualTreatment}
                     onChange={(e) => setManualTreatment(e.target.value)}
                     placeholder="mis. Baby Spa Hydrotherapy / Pijat Bayi"
-                    className="w-full bg-white border border-[#d1d7db] rounded-xl pl-7 pr-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl pl-7 pr-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="text-[11px] uppercase font-bold text-[#111b21] block mb-1">
+                  <label className="text-[11px] uppercase font-bold text-[#111b21] dark:text-[#e9edef] block mb-1">
                     Nilai / Value (Rp)
                   </label>
                   <div className="relative">
@@ -922,12 +922,12 @@ export const MetaClickCatcher: React.FC = () => {
                       value={manualValue}
                       onChange={(e) => setManualValue(e.target.value)}
                       placeholder="mis. 250000"
-                      className="w-full bg-white border border-[#d1d7db] rounded-xl pl-7 pr-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+                      className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl pl-7 pr-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="text-[11px] uppercase font-bold text-[#111b21] block mb-1">
+                  <label className="text-[11px] uppercase font-bold text-[#111b21] dark:text-[#e9edef] block mb-1">
                     Test Event Code
                   </label>
                   <input
@@ -935,7 +935,7 @@ export const MetaClickCatcher: React.FC = () => {
                     value={manualTestCode}
                     onChange={(e) => setManualTestCode(e.target.value)}
                     placeholder="TESTxxxx (opsional)"
-                    className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                 </div>
               </div>
@@ -955,10 +955,10 @@ export const MetaClickCatcher: React.FC = () => {
         </div>
 
         {/* Card 2: Tabel Riwayat Manual Event (7 cols) */}
-        <div className="lg:col-span-7 bg-white border border-[#e9edef] rounded-2xl p-5 space-y-3 shadow-xs flex flex-col justify-between">
+        <div className="lg:col-span-7 bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-3 shadow-xs flex flex-col justify-between">
           <div className="space-y-3">
             <div className="flex items-center justify-between border-b border-[#f0f2f5] pb-2.5">
-              <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
+              <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
                 <Activity size={16} className="text-[#008069]" />
                 <span>Riwayat Manual Event Terkirim</span>
               </h3>
@@ -974,7 +974,7 @@ export const MetaClickCatcher: React.FC = () => {
 
             <div className="overflow-x-auto min-h-[220px] max-h-[290px] overflow-y-auto">
               {loadingHistory ? (
-                <div className="py-12 text-center text-xs text-[#667781] flex flex-col items-center gap-2">
+                <div className="py-12 text-center text-xs text-[#667781] dark:text-[#8696a0] flex flex-col items-center gap-2">
                   <Loader size={18} className="animate-spin text-[#008069]" />
                   <span>Memuat riwayat pengiriman...</span>
                 </div>
@@ -985,7 +985,7 @@ export const MetaClickCatcher: React.FC = () => {
               ) : (
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
-                    <tr className="border-b border-[#f0f2f5] text-[#667781] text-[10px] uppercase font-bold sticky top-0 bg-white">
+                    <tr className="border-b border-[#f0f2f5] text-[#667781] dark:text-[#8696a0] text-[10px] uppercase font-bold sticky top-0 bg-white">
                       <th className="py-1.5 px-2">Waktu</th>
                       <th className="py-1.5 px-2">Event</th>
                       <th className="py-1.5 px-2">WhatsApp / Customer</th>
@@ -997,7 +997,7 @@ export const MetaClickCatcher: React.FC = () => {
                   <tbody className="divide-y divide-[#f0f2f5]">
                     {manualHistory.map((h) => (
                       <tr key={h.id} className="hover:bg-[#f8f9fa] transition">
-                        <td className="py-2 px-2 text-[11px] text-[#667781] whitespace-nowrap">
+                        <td className="py-2 px-2 text-[11px] text-[#667781] dark:text-[#8696a0] whitespace-nowrap">
                           {fmtTime(h.createdAt)}
                         </td>
                         <td className="py-2 px-2">
@@ -1010,10 +1010,10 @@ export const MetaClickCatcher: React.FC = () => {
                           </span>
                         </td>
                         <td className="py-2 px-2 text-[11px]">
-                          <p className="font-mono text-[#111b21] font-semibold">{h.phone}</p>
+                          <p className="font-mono text-[#111b21] dark:text-[#e9edef] font-semibold">{h.phone}</p>
                           {h.name && h.name !== '-' && <p className="text-[10px] text-[#8696a0]">{h.name}</p>}
                         </td>
-                        <td className="py-2 px-2 text-[11px] font-medium text-[#111b21]">
+                        <td className="py-2 px-2 text-[11px] font-medium text-[#111b21] dark:text-[#e9edef]">
                           {h.value ? `Rp ${Number(h.value).toLocaleString('id-ID')}` : '-'}
                         </td>
                         <td className="py-2 px-2">
@@ -1027,7 +1027,7 @@ export const MetaClickCatcher: React.FC = () => {
                         <td className="py-2 px-2 text-right">
                           <button
                             onClick={() => setSelectedItem(h.rawPayload || h)}
-                            className="px-2 py-1 rounded bg-[#f0f2f5] hover:bg-[#e9edef] text-[11px] font-semibold text-[#111b21] hover:text-[#008069] transition inline-flex items-center gap-1"
+                            className="px-2 py-1 rounded bg-[#f0f2f5] hover:bg-[#e9edef] text-[11px] font-semibold text-[#111b21] dark:text-[#e9edef] hover:text-[#008069] transition inline-flex items-center gap-1"
                             title="Lihat Detail Koneksi Meta"
                           >
                             <Eye size={12} />
@@ -1048,9 +1048,9 @@ export const MetaClickCatcher: React.FC = () => {
       </section>
 
       {/* ---------------- 5. CAPI Health & Live Tester ---------------- */}
-      <section className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-4 shadow-xs">
+      <section className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-4 shadow-xs">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
+          <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
             <Zap size={16} className="text-[#008069]" /> <span>Meta CAPI Health &amp; Live Tester</span>
           </h3>
           {capi && (
@@ -1087,15 +1087,15 @@ export const MetaClickCatcher: React.FC = () => {
         )}
 
         <div className="border-t border-[#e9edef] pt-4">
-          <h4 className="text-xs font-bold text-[#111b21] mb-2">Live Test Event CAPI</h4>
-          <p className="text-xs text-[#667781] mb-3">
-            Kirim event test ke Meta untuk memastikan Pixel ID &amp; Access Token valid tanpa menunggu transaksi riil. Konfigurasi kredensial di <span className="text-[#111b21] font-semibold">Operational Settings → Meta Pixel &amp; CAPI</span>.
+          <h4 className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] mb-2">Live Test Event CAPI</h4>
+          <p className="text-xs text-[#667781] dark:text-[#8696a0] mb-3">
+            Kirim event test ke Meta untuk memastikan Pixel ID &amp; Access Token valid tanpa menunggu transaksi riil. Konfigurasi kredensial di <span className="text-[#111b21] dark:text-[#e9edef] font-semibold">Operational Settings → Meta Pixel &amp; CAPI</span>.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
             <div className="space-y-1">
-              <label className="text-[11px] uppercase font-bold text-[#111b21] block">Event</label>
-              <select value={testEvent} onChange={(e) => setTestEvent(e.target.value as any)} className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs">
+              <label className="text-[11px] uppercase font-bold text-[#111b21] dark:text-[#e9edef] block">Event</label>
+              <select value={testEvent} onChange={(e) => setTestEvent(e.target.value as any)} className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs">
                 <option>Contact</option>
                 <option>Purchase</option>
                 <option>Lead</option>
@@ -1105,19 +1105,19 @@ export const MetaClickCatcher: React.FC = () => {
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-[11px] uppercase font-bold text-[#111b21] block">Nilai (opsional)</label>
-              <input type="number" value={testValue} onChange={(e) => setTestValue(e.target.value)} placeholder="mis. 150000" className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs" />
+              <label className="text-[11px] uppercase font-bold text-[#111b21] dark:text-[#e9edef] block">Nilai (opsional)</label>
+              <input type="number" value={testValue} onChange={(e) => setTestValue(e.target.value)} placeholder="mis. 150000" className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs" />
             </div>
             <div className="space-y-1">
-              <label className="text-[11px] uppercase font-bold text-[#111b21] block">Currency</label>
-              <select value={testCurrency} onChange={(e) => setTestCurrency(e.target.value)} className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs">
+              <label className="text-[11px] uppercase font-bold text-[#111b21] dark:text-[#e9edef] block">Currency</label>
+              <select value={testCurrency} onChange={(e) => setTestCurrency(e.target.value)} className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs">
                 <option>IDR</option>
                 <option>USD</option>
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-[11px] uppercase font-bold text-[#111b21] block">Test Event Code (opsional)</label>
-              <input type="text" value={testEventCode} onChange={(e) => setTestEventCode(e.target.value)} placeholder="TESTxxxx (Events Manager)" className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs" />
+              <label className="text-[11px] uppercase font-bold text-[#111b21] dark:text-[#e9edef] block">Test Event Code (opsional)</label>
+              <input type="text" value={testEventCode} onChange={(e) => setTestEventCode(e.target.value)} placeholder="TESTxxxx (Events Manager)" className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs" />
             </div>
           </div>
 
@@ -1153,7 +1153,7 @@ export const MetaClickCatcher: React.FC = () => {
       {activeTab === 'performance' && (
         <Suspense
           fallback={
-            <div className="bg-white border border-[#e9edef] rounded-2xl p-12 flex items-center justify-center text-[#8696a0]">
+            <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-12 flex items-center justify-center text-[#8696a0]">
               <Loader size={16} className="animate-spin text-[#008069] mr-2" /> Memuat panel performa...
             </div>
           }
@@ -1165,7 +1165,7 @@ export const MetaClickCatcher: React.FC = () => {
       {activeTab === 'catchers' && (
         <Suspense
           fallback={
-            <div className="bg-white border border-[#e9edef] rounded-2xl p-12 flex items-center justify-center text-[#8696a0]">
+            <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-12 flex items-center justify-center text-[#8696a0]">
               <Loader size={16} className="animate-spin text-[#008069] mr-2" /> Memuat Greeting Catchers...
             </div>
           }
@@ -1186,10 +1186,10 @@ export const MetaClickCatcher: React.FC = () => {
                     <ShieldCheck size={20} />
                   </div>
                   <div>
-                    <h4 className="text-base font-bold text-[#111b21]">
+                    <h4 className="text-base font-bold text-[#111b21] dark:text-[#e9edef]">
                       Detail Koneksi Meta CAPI &amp; Atribusi
                     </h4>
-                    <p className="text-xs text-[#667781]">
+                    <p className="text-xs text-[#667781] dark:text-[#8696a0]">
                       Verifikasi data terhubung antara WhatsApp, Layanan / Treatment, dan Pixel Meta
                     </p>
                   </div>
@@ -1197,7 +1197,7 @@ export const MetaClickCatcher: React.FC = () => {
               </div>
               <button
                 onClick={() => { setSelectedItem(null); setShowRawJson(false); }}
-                className="w-8 h-8 rounded-xl bg-[#f0f2f5] hover:bg-[#e9edef] text-[#667781] hover:text-[#111b21] flex items-center justify-center text-sm font-bold transition"
+                className="w-8 h-8 rounded-xl bg-[#f0f2f5] hover:bg-[#e9edef] text-[#667781] dark:text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef] flex items-center justify-center text-sm font-bold transition"
               >
                 ✕
               </button>
@@ -1208,7 +1208,7 @@ export const MetaClickCatcher: React.FC = () => {
               {/* Status Header Banner */}
               <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-[#f8f9fa] rounded-xl border border-[#e9edef]">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-[#667781]">Status Pengiriman:</span>
+                  <span className="text-xs font-bold text-[#667781] dark:text-[#8696a0]">Status Pengiriman:</span>
                   <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold ${
                     (selectedItem.status === 'SUCCESS' || selectedItem.status === 'MATCHED')
                       ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
@@ -1218,8 +1218,8 @@ export const MetaClickCatcher: React.FC = () => {
                     <span>{selectedItem.status === 'SUCCESS' ? 'Terkirim ke Meta CAPI (HTTP 200)' : selectedItem.status === 'MATCHED' ? 'Terhubung dengan Chat WA' : 'Menunggu Chat Pasien'}</span>
                   </span>
                 </div>
-                <div className="text-xs text-[#667781]">
-                  <span className="font-semibold text-[#111b21]">Target Pixel:</span>{' '}
+                <div className="text-xs text-[#667781] dark:text-[#8696a0]">
+                  <span className="font-semibold text-[#111b21] dark:text-[#e9edef]">Target Pixel:</span>{' '}
                   <span className="font-mono font-bold text-[#008069]">{selectedItem.metaPixelId || '1465457801784141'}</span>
                 </div>
               </div>
@@ -1227,20 +1227,20 @@ export const MetaClickCatcher: React.FC = () => {
               {/* Grid: 2 Columns */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                 {/* 1. Data Pelanggan */}
-                <div className="bg-white border border-[#e9edef] rounded-xl p-4 space-y-2.5 shadow-2xs">
+                <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl p-4 space-y-2.5 shadow-2xs">
                   <h5 className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 text-[#008069]">
                     <User size={14} /> <span>1. Data Pelanggan (Customer)</span>
                   </h5>
                   <div className="space-y-2 text-xs">
                     <div>
                       <span className="text-[#8696a0] block text-[11px]">Nomor WhatsApp:</span>
-                      <span className="font-mono font-bold text-[#111b21] text-sm">
+                      <span className="font-mono font-bold text-[#111b21] dark:text-[#e9edef] text-sm">
                         {selectedItem.customer?.phone || selectedItem.phone || '-'}
                       </span>
                     </div>
                     <div>
                       <span className="text-[#8696a0] block text-[11px]">Nama Pasien:</span>
-                      <span className="font-semibold text-[#111b21]">
+                      <span className="font-semibold text-[#111b21] dark:text-[#e9edef]">
                         {selectedItem.customer?.name || selectedItem.name || 'Pelanggan WhatsApp'}
                       </span>
                     </div>
@@ -1253,7 +1253,7 @@ export const MetaClickCatcher: React.FC = () => {
                 </div>
 
                 {/* 2. Detail Layanan & Konversi */}
-                <div className="bg-white border border-[#e9edef] rounded-xl p-4 space-y-2.5 shadow-2xs">
+                <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl p-4 space-y-2.5 shadow-2xs">
                   <h5 className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 text-[#008069]">
                     <DollarSign size={14} /> <span>2. Konversi &amp; Layanan</span>
                   </h5>
@@ -1268,7 +1268,7 @@ export const MetaClickCatcher: React.FC = () => {
                     </div>
                     <div>
                       <span className="text-[#8696a0] block text-[11px]">Treatment / Layanan:</span>
-                      <span className="font-semibold text-[#111b21]">
+                      <span className="font-semibold text-[#111b21] dark:text-[#e9edef]">
                         {selectedItem.conversionData?.treatment || selectedItem.treatment || 'Treatment Klinik (Reservasi)'}
                       </span>
                     </div>
@@ -1284,7 +1284,7 @@ export const MetaClickCatcher: React.FC = () => {
                 </div>
 
                 {/* 3. Koneksi Atribusi Iklan */}
-                <div className="bg-white border border-[#e9edef] rounded-xl p-4 space-y-2.5 shadow-2xs">
+                <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl p-4 space-y-2.5 shadow-2xs">
                   <h5 className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 text-[#008069]">
                     <Target size={14} /> <span>3. Koneksi Atribusi Iklan</span>
                   </h5>
@@ -1297,7 +1297,7 @@ export const MetaClickCatcher: React.FC = () => {
                     </div>
                     <div>
                       <span className="text-[#8696a0] block text-[11px]">Sumber Trafik:</span>
-                      <span className="font-semibold text-[#111b21]">
+                      <span className="font-semibold text-[#111b21] dark:text-[#e9edef]">
                         {selectedItem.attribution?.utmSource || selectedItem.utmSource || 'Instagram / Facebook Ads'}
                         {(selectedItem.attribution?.utmMedium || selectedItem.utmMedium) ? ` / ${selectedItem.attribution?.utmMedium || selectedItem.utmMedium}` : ''}
                       </span>
@@ -1305,14 +1305,14 @@ export const MetaClickCatcher: React.FC = () => {
                     {(selectedItem.attribution?.utmCampaign || selectedItem.utmCampaign) && (
                       <div>
                         <span className="text-[#8696a0] block text-[11px]">Campaign ID:</span>
-                        <span className="font-mono font-semibold text-[#111b21]">
+                        <span className="font-mono font-semibold text-[#111b21] dark:text-[#e9edef]">
                           {selectedItem.attribution?.utmCampaign || selectedItem.utmCampaign}
                         </span>
                       </div>
                     )}
                     <div>
                       <span className="text-[#8696a0] block text-[11px]">Perangkat Pasien:</span>
-                      <span className="text-[#111b21]">
+                      <span className="text-[#111b21] dark:text-[#e9edef]">
                         {parseDeviceSummary(selectedItem.userAgent || selectedItem.attribution?.userAgent)}
                       </span>
                     </div>
@@ -1320,33 +1320,33 @@ export const MetaClickCatcher: React.FC = () => {
                 </div>
 
                 {/* 4. Respon Meta & Audit */}
-                <div className="bg-white border border-[#e9edef] rounded-xl p-4 space-y-2.5 shadow-2xs">
+                <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl p-4 space-y-2.5 shadow-2xs">
                   <h5 className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 text-[#008069]">
                     <Clock size={14} /> <span>4. Waktu &amp; Pengiriman</span>
                   </h5>
                   <div className="space-y-2 text-xs">
                     <div>
                       <span className="text-[#8696a0] block text-[11px]">Waktu Pengiriman:</span>
-                      <span className="font-medium text-[#111b21]">
+                      <span className="font-medium text-[#111b21] dark:text-[#e9edef]">
                         {fmtTime(selectedItem.timestamp || selectedItem.createdAt || selectedItem.matchedAt)}
                       </span>
                     </div>
                     <div>
                       <span className="text-[#8696a0] block text-[11px]">Channel Event:</span>
-                      <span className="font-medium text-[#111b21]">
+                      <span className="font-medium text-[#111b21] dark:text-[#e9edef]">
                         WhatsApp In-App / Chat Commerce
                       </span>
                     </div>
                     <div>
                       <span className="text-[#8696a0] block text-[11px]">Operator Pengirim:</span>
-                      <span className="font-medium text-[#111b21]">
+                      <span className="font-medium text-[#111b21] dark:text-[#e9edef]">
                         {selectedItem.adminIdentity || 'Sistem Otomatis / Admin CS'}
                       </span>
                     </div>
                     {selectedItem.metaGraphApiResponse?.fbtrace_id && (
                       <div>
                         <span className="text-[#8696a0] block text-[11px]">Meta Trace ID:</span>
-                        <span className="font-mono text-[10px] text-[#667781] truncate block">
+                        <span className="font-mono text-[10px] text-[#667781] dark:text-[#8696a0] truncate block">
                           {selectedItem.metaGraphApiResponse.fbtrace_id}
                         </span>
                       </div>
@@ -1359,7 +1359,7 @@ export const MetaClickCatcher: React.FC = () => {
               <div className="pt-2">
                 <button
                   onClick={() => setShowRawJson(!showRawJson)}
-                  className="text-[11px] font-semibold text-[#667781] hover:text-[#008069] flex items-center gap-1 transition"
+                  className="text-[11px] font-semibold text-[#667781] dark:text-[#8696a0] hover:text-[#008069] flex items-center gap-1 transition"
                 >
                   <span>{showRawJson ? '▼ Sembunyikan Data Teknis Mentah' : '▶ Tampilkan Data Teknis Mentah (Opsional)'}</span>
                 </button>

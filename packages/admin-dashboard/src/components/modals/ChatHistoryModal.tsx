@@ -192,26 +192,26 @@ export const ChatHistoryModal: React.FC<ChatHistoryModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="bg-white border border-[#e9edef] rounded-t-3xl sm:rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90dvh] sm:max-h-[85vh] overflow-hidden animate-slideUp sm:animate-modalScaleUp"
+        className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-t-3xl sm:rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90dvh] sm:max-h-[85vh] overflow-hidden animate-slideUp sm:animate-modalScaleUp"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Mobile Drag Handle */}
-        <div className="pt-2 pb-1 bg-[#f8fafc] sm:hidden flex justify-center shrink-0">
-          <div className="w-10 h-1 bg-[#d1d7db] rounded-full" />
+        <div className="pt-2 pb-1 bg-[#f8fafc] dark:bg-[#111b21] sm:hidden flex justify-center shrink-0">
+          <div className="w-10 h-1 bg-[#d1d7db] dark:bg-[#374248] rounded-full" />
         </div>
 
         {/* Header */}
-        <div className="p-4 border-b border-[#e9edef] flex justify-between items-center bg-[#f8fafc] shrink-0">
+        <div className="p-4 border-b border-[#e9edef] dark:border-[#2a3942] flex justify-between items-center bg-[#f8fafc] dark:bg-[#111b21] shrink-0">
           <div className="flex items-center space-x-3 min-w-0">
             <div className="w-10 h-10 rounded-full bg-[#008069] text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
               {(customer.name ? customer.name.slice(0, 2).toUpperCase() : 'CU')}
             </div>
             <div className="min-w-0">
-              <h3 className="font-bold text-[#111b21] text-sm flex items-center space-x-1.5 truncate">
+              <h3 className="font-bold text-[#111b21] dark:text-[#e9edef] text-sm flex items-center space-x-1.5 truncate">
                 <MessageSquare size={14} className="text-[#008069] shrink-0" />
                 <span className="truncate">{customer.name || 'Customer'}</span>
               </h3>
-              <p className="text-[11px] text-[#667781] truncate">
+              <p className="text-[11px] text-[#667781] dark:text-[#8696a0] truncate">
                 <span className="font-mono">{customer.phone || '-'}</span>
                 {customer.trackingCode ? <span> • Tracking: {customer.trackingCode}</span> : null}
               </p>
@@ -222,7 +222,7 @@ export const ChatHistoryModal: React.FC<ChatHistoryModalProps> = ({
               href={liveChatUrl}
               target="_blank"
               rel="noreferrer"
-              className="px-2.5 py-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] active:scale-95 border border-[#d1d7db] text-[#54656f] text-xs font-semibold transition flex items-center space-x-1"
+              className="px-2.5 py-1.5 rounded-xl bg-white dark:bg-[#202c33] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] active:scale-95 border border-[#d1d7db] dark:border-[#2a3942] text-[#54656f] dark:text-[#e9edef] text-xs font-semibold transition flex items-center space-x-1"
               title="Buka di Live Chat Penuh"
             >
               <ExternalLink size={12} />
@@ -230,7 +230,7 @@ export const ChatHistoryModal: React.FC<ChatHistoryModalProps> = ({
             </a>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#e9edef] transition"
+              className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef] hover:bg-[#e9edef] transition"
               title="Tutup (Esc)"
             >
               <X size={18} />
@@ -241,7 +241,7 @@ export const ChatHistoryModal: React.FC<ChatHistoryModalProps> = ({
         {/* Body */}
         <div
           ref={containerRef}
-          className="p-4 overflow-y-auto overscroll-contain flex-1 space-y-3 bg-[#efeae2] min-h-[300px]"
+          className="p-4 overflow-y-auto overscroll-contain flex-1 space-y-3 bg-[#efeae2] dark:bg-[#0b141a] min-h-[300px]"
           style={{
             backgroundImage: `radial-gradient(#d1d7db 0.75px, transparent 0.75px)`,
             backgroundSize: '16px 16px',
@@ -253,9 +253,9 @@ export const ChatHistoryModal: React.FC<ChatHistoryModalProps> = ({
               <Loader2 className="animate-spin text-[#008069]" size={32} />
             </div>
           ) : messages.length === 0 ? (
-            <div className="text-center py-20 text-[#667781] text-xs">
+            <div className="text-center py-20 text-[#667781] dark:text-[#8696a0] text-xs">
               <MessageSquare size={32} className="mx-auto text-[#8696a0] mb-2 opacity-40" />
-              <p className="font-semibold text-[#111b21]">Belum ada riwayat pesan tercatat.</p>
+              <p className="font-semibold text-[#111b21] dark:text-[#e9edef]">Belum ada riwayat pesan tercatat.</p>
               {canReply && <p className="text-[#8696a0] mt-0.5">Ketik pesan di bawah untuk memulai percakapan.</p>}
             </div>
           ) : (
@@ -271,14 +271,14 @@ export const ChatHistoryModal: React.FC<ChatHistoryModalProps> = ({
                   <React.Fragment key={msg.id || `msg-${idx}`}>
                     {showSeparator && (
                       <div className="flex justify-center py-1">
-                        <span className="px-3 py-1 rounded-full bg-white/90 border border-[#e9edef] text-[10px] font-semibold text-[#54656f] shadow-xs">
+                        <span className="px-3 py-1 rounded-full bg-white/90 dark:bg-[#111b21]/90 border border-[#e9edef] dark:border-[#2a3942] text-[10px] font-semibold text-[#54656f] dark:text-[#8696a0] shadow-xs">
                           {formatChatDateSeparatorWib(msg.created_at)}
                         </span>
                       </div>
                     )}
                     <div className={`flex flex-col ${isInbound ? 'items-start' : 'items-end'}`}>
-                      <div className="flex items-center space-x-1 text-[10px] text-[#667781] mb-0.5 px-1">
-                        <span className="font-bold text-[#111b21]">{resolveSender(msg)}</span>
+                      <div className="flex items-center space-x-1 text-[10px] text-[#667781] dark:text-[#8696a0] mb-0.5 px-1">
+                        <span className="font-bold text-[#111b21] dark:text-[#e9edef]">{resolveSender(msg)}</span>
                         <span>•</span>
                         <Clock size={9} />
                         <span>{msgHasDate ? formatWibTime(msg.created_at) : '-'}</span>
@@ -286,8 +286,8 @@ export const ChatHistoryModal: React.FC<ChatHistoryModalProps> = ({
                       <div
                         className={`max-w-[85%] sm:max-w-[75%] p-3 rounded-2xl text-xs leading-relaxed shadow-xs ${
                           isInbound
-                            ? 'bg-white text-[#111b21] rounded-tl-none border border-black/5'
-                            : 'bg-[#d9fdd3] text-[#111b21] rounded-tr-none border border-[#00a884]/20'
+                            ? 'bg-white text-[#111b21] dark:text-[#e9edef] rounded-tl-none border border-black/5'
+                            : 'bg-[#d9fdd3] text-[#111b21] dark:text-[#e9edef] rounded-tr-none border border-[#00a884]/20'
                         }`}
                       >
                         {media && (
@@ -319,14 +319,14 @@ export const ChatHistoryModal: React.FC<ChatHistoryModalProps> = ({
         {canReply && (
           <form
             onSubmit={handleSendReply}
-            className="p-3 border-t border-[#e9edef] bg-[#f8fafc] flex items-center space-x-2 shrink-0"
+            className="p-3 border-t border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#111b21] flex items-center space-x-2 shrink-0"
           >
             <input
               type="text"
               value={replyText}
               onChange={(e) => setReplyText(e.target.value)}
               placeholder="Ketik balasan WhatsApp langsung ke nomor ini..."
-              className="flex-1 px-3.5 py-2.5 bg-white border border-[#d1d7db] hover:border-[#008069] focus:border-[#008069] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none shadow-xs transition"
+              className="flex-1 px-3.5 py-2.5 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] hover:border-[#008069] focus:border-[#008069] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none shadow-xs transition"
             />
             <button
               type="submit"

@@ -308,7 +308,7 @@ export const QuickReplies: React.FC = () => {
               <button
                 key={cat}
                 onClick={() => setCategoryFilter(cat)}
-                className={`h-8 px-3 rounded-xl text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 ${isActive ? 'bg-[#008069] text-white shadow-sm' : 'bg-white border border-[#d1d7db] text-[#54656f] hover:bg-[#f0f2f5]'}`}
+                className={`h-8 px-3 rounded-xl text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 ${isActive ? 'bg-[#008069] text-white shadow-sm' : 'bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#202c33] text-[#54656f] dark:text-[#8696a0] hover:bg-[#f0f2f5] dark:hover:bg-[#202c33]'}`}
               >
                 {cat === 'Semua' ? <Layers size={13} /> : <Tag size={13} />}
                 {cat}
@@ -319,24 +319,24 @@ export const QuickReplies: React.FC = () => {
         </div>
         <div className="relative min-w-[220px] sm:max-w-xs">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8696a0]" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari shortcut / judul / isi..." className="w-full h-9 pl-9 pr-8 bg-white border border-[#d1d7db] rounded-xl text-xs focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069]" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari shortcut / judul / isi..." className="w-full h-9 pl-9 pr-8 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] rounded-xl text-xs focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069]" />
           {search && <button onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8696a0]"><X size={14} /></button>}
         </div>
       </div>
 
       {/* Grid */}
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-16 bg-white border border-[#e9edef] rounded-2xl">
+        <div className="flex flex-col items-center justify-center py-16 bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#202c33] rounded-2xl">
           <RefreshCw className="animate-spin text-[#008069] mb-2" size={28} /><p className="text-xs text-[#54656f]">Memuat balasan cepat...</p>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-14 bg-white border border-[#e9edef] rounded-2xl">
-          <Zap size={32} className="mx-auto text-[#8696a0] opacity-50 mb-2" /><p className="text-sm font-bold text-[#111b21]">Belum ada template</p><p className="text-xs text-[#667781] mt-1">Buat template pertama atau klik Seed Default untuk template bawaan klinik.</p>
+        <div className="text-center py-14 bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#202c33] rounded-2xl">
+          <Zap size={32} className="mx-auto text-[#8696a0] opacity-50 mb-2" /><p className="text-sm font-bold text-[#111b21] dark:text-[#e9edef]">Belum ada template</p><p className="text-xs text-[#667781] mt-1">Buat template pertama atau klik Seed Default untuk template bawaan klinik.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map((it) => (
-            <div key={it.id} className="bg-white border border-[#e9edef] rounded-2xl p-4 flex flex-col gap-3 hover:border-[#c2e7e0] hover:shadow-sm transition">
+            <div key={it.id} className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#202c33] rounded-2xl p-4 flex flex-col gap-3 hover:border-[#c2e7e0] dark:hover:border-[#00a884]/40 hover:shadow-sm transition">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-1.5 min-w-0">
                   <span className="px-2 py-1 rounded-lg bg-[#008069] text-white text-xs font-mono font-bold">/{it.shortcut}</span>
@@ -358,13 +358,13 @@ export const QuickReplies: React.FC = () => {
                   )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button onClick={() => openEdit(it)} className="p-1.5 rounded-lg bg-white border border-[#d1d7db] text-[#54656f] hover:text-[#008069] hover:border-[#008069]"><Edit2 size={13} /></button>
-                  <button onClick={() => handleDelete(it)} className="p-1.5 rounded-lg bg-white border border-[#d1d7db] text-[#54656f] hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50"><Trash2 size={13} /></button>
+                  <button onClick={() => openEdit(it)} className="p-1.5 rounded-lg bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#54656f] dark:text-[#8696a0] hover:text-[#008069] hover:border-[#008069]"><Edit2 size={13} /></button>
+                  <button onClick={() => handleDelete(it)} className="p-1.5 rounded-lg bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#54656f] dark:text-[#8696a0] hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50"><Trash2 size={13} /></button>
                 </div>
               </div>
 
               {it.image_url && (
-                <div className="flex items-center gap-2.5 p-2 bg-[#f8fafc] border border-[#e9edef] rounded-xl">
+                <div className="flex items-center gap-2.5 p-2 bg-[#f8fafc] dark:bg-[#182229] border border-[#e9edef] dark:border-[#202c33] rounded-xl">
                   <img
                     src={it.image_url}
                     alt={it.title}
@@ -380,10 +380,10 @@ export const QuickReplies: React.FC = () => {
               )}
 
               <div>
-                <p className="text-sm font-bold text-[#111b21] truncate">{it.title}</p>
-                <p className="text-xs text-[#54656f] line-clamp-3 whitespace-pre-wrap leading-relaxed mt-1 bg-[#f8fafc] border border-[#e9edef] rounded-xl p-2.5">{it.content}</p>
+                <p className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] truncate">{it.title}</p>
+                <p className="text-xs text-[#54656f] dark:text-[#8696a0] line-clamp-3 whitespace-pre-wrap leading-relaxed mt-1 bg-[#f8fafc] dark:bg-[#182229] border border-[#e9edef] dark:border-[#202c33] rounded-xl p-2.5">{it.content}</p>
               </div>
-              <div className="pt-2 border-t border-[#f0f2f5] flex items-center gap-1.5 text-[11px] text-[#8696a0]">
+              <div className="pt-2 border-t border-[#f0f2f5] dark:border-[#202c33] flex items-center gap-1.5 text-[11px] text-[#8696a0]">
                 <Eye size={12} /> Preview: <span className="text-[#54656f] line-clamp-1 truncate flex-1">{interpolatePreview(it.content, paymentInfo).slice(0, 70)}</span>
               </div>
             </div>
@@ -394,37 +394,37 @@ export const QuickReplies: React.FC = () => {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl border border-[#e9edef] max-h-[90vh] flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-[#e9edef] bg-[#f8fafc]">
-              <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2"><Zap size={16} className="text-[#008069]" /> {editing ? 'Edit Balasan Cepat' : 'Tambah Balasan Cepat'}</h3>
+          <div className="bg-white dark:bg-[#111b21] rounded-2xl w-full max-w-lg shadow-2xl border border-[#e9edef] dark:border-[#202c33] max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#e9edef] dark:border-[#202c33] bg-[#f8fafc] dark:bg-[#182229]">
+              <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2"><Zap size={16} className="text-[#008069]" /> {editing ? 'Edit Balasan Cepat' : 'Tambah Balasan Cepat'}</h3>
               <button onClick={() => setShowModal(false)} className="p-1.5 rounded-xl hover:bg-[#f0f2f5] text-[#8696a0]"><X size={16} /></button>
             </div>
             <div className="p-5 space-y-4 overflow-y-auto flex-1">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-semibold text-[#111b21]">Shortcut <span className="text-rose-500">*</span></label>
+                  <label className="text-xs font-semibold text-[#111b21] dark:text-[#e9edef]">Shortcut <span className="text-rose-500">*</span></label>
                   <div className="flex items-center gap-1 mt-1">
                     <span className="px-2 py-2 bg-[#f0f2f5] border border-[#d1d7db] rounded-xl text-xs font-mono text-[#008069]">/</span>
-                    <input value={formShortcut} onChange={(e) => setFormShortcut(e.target.value.replace(/^\//, '').toLowerCase().replace(/\s+/g, ''))} placeholder="qris" className="flex-1 h-9 px-3 bg-white border border-[#d1d7db] rounded-xl text-xs focus:outline-none focus:border-[#008069] font-mono" />
+                    <input value={formShortcut} onChange={(e) => setFormShortcut(e.target.value.replace(/^\//, '').toLowerCase().replace(/\s+/g, ''))} placeholder="qris" className="flex-1 h-9 px-3 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] rounded-xl text-xs focus:outline-none focus:border-[#008069] font-mono" />
                   </div>
                   <p className="text-[10px] text-[#8696a0] mt-1">Huruf kecil, tanpa spasi. Contoh: /qris</p>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-[#111b21]">Kategori</label>
-                  <select value={formCategory} onChange={(e) => setFormCategory(e.target.value)} className="w-full mt-1 h-9 px-2 bg-white border border-[#d1d7db] rounded-xl text-xs focus:outline-none focus:border-[#008069]">
+                  <label className="text-xs font-semibold text-[#111b21] dark:text-[#e9edef]">Kategori</label>
+                  <select value={formCategory} onChange={(e) => setFormCategory(e.target.value)} className="w-full mt-1 h-9 px-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] rounded-xl text-xs focus:outline-none focus:border-[#008069]">
                     <option>Pembayaran</option><option>Lokasi</option><option>Reservasi</option><option>Umum</option>
                   </select>
                 </div>
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-[#111b21]">Judul <span className="text-rose-500">*</span></label>
-                <input value={formTitle} onChange={(e) => setFormTitle(e.target.value)} placeholder="Contoh: Pembayaran QRIS & Rekening Resmi" className="w-full mt-1 h-9 px-3 bg-white border border-[#d1d7db] rounded-xl text-xs focus:outline-none focus:border-[#008069]" />
+                <label className="text-xs font-semibold text-[#111b21] dark:text-[#e9edef]">Judul <span className="text-rose-500">*</span></label>
+                <input value={formTitle} onChange={(e) => setFormTitle(e.target.value)} placeholder="Contoh: Pembayaran QRIS & Rekening Resmi" className="w-full mt-1 h-9 px-3 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] rounded-xl text-xs focus:outline-none focus:border-[#008069]" />
               </div>
 
               {/* Pilihan Lampiran Media */}
               <div>
-                <label className="text-xs font-semibold text-[#111b21] block mb-1.5">Tipe Lampiran Media</label>
+                <label className="text-xs font-semibold text-[#111b21] dark:text-[#e9edef] block mb-1.5">Tipe Lampiran Media</label>
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
                   <button
                     type="button"
@@ -432,7 +432,7 @@ export const QuickReplies: React.FC = () => {
                     className={`p-2.5 rounded-xl border text-left transition flex flex-col gap-1 ${
                       formMediaType === 'NONE'
                         ? 'bg-[#e8f5f2] border-[#008069] text-[#008069]'
-                        : 'bg-white border-[#d1d7db] text-[#54656f] hover:bg-[#f8fafc]'
+                        : 'bg-white dark:bg-[#202c33] border-[#d1d7db] dark:border-[#2a3942] text-[#54656f] dark:text-[#8696a0] hover:bg-[#f8fafc] dark:hover:bg-[#2a3942]'
                     }`}
                   >
                     <span className="text-xs font-bold flex items-center gap-1.5">
@@ -457,7 +457,7 @@ export const QuickReplies: React.FC = () => {
                     className={`p-2.5 rounded-xl border text-left transition flex flex-col gap-1 ${
                       formMediaType === 'QRIS'
                         ? 'bg-[#e8f5f2] border-[#008069] text-[#008069]'
-                        : 'bg-white border-[#d1d7db] text-[#54656f] hover:bg-[#f8fafc]'
+                        : 'bg-white dark:bg-[#202c33] border-[#d1d7db] dark:border-[#2a3942] text-[#54656f] dark:text-[#8696a0] hover:bg-[#f8fafc] dark:hover:bg-[#2a3942]'
                     }`}
                   >
                     <span className="text-xs font-bold flex items-center gap-1.5">
@@ -480,7 +480,7 @@ export const QuickReplies: React.FC = () => {
                     className={`p-2.5 rounded-xl border text-left transition flex flex-col gap-1 ${
                       formMediaType === 'PRICELIST'
                         ? 'bg-[#e8f5f2] border-[#008069] text-[#008069]'
-                        : 'bg-white border-[#d1d7db] text-[#54656f] hover:bg-[#f8fafc]'
+                        : 'bg-white dark:bg-[#202c33] border-[#d1d7db] dark:border-[#2a3942] text-[#54656f] dark:text-[#8696a0] hover:bg-[#f8fafc] dark:hover:bg-[#2a3942]'
                     }`}
                   >
                     <span className="text-xs font-bold flex items-center gap-1.5">
@@ -495,7 +495,7 @@ export const QuickReplies: React.FC = () => {
                     className={`p-2.5 rounded-xl border text-left transition flex flex-col gap-1 ${
                       formMediaType === 'CUSTOM_IMAGE'
                         ? 'bg-[#e8f5f2] border-[#008069] text-[#008069]'
-                        : 'bg-white border-[#d1d7db] text-[#54656f] hover:bg-[#f8fafc]'
+                        : 'bg-white dark:bg-[#202c33] border-[#d1d7db] dark:border-[#2a3942] text-[#54656f] dark:text-[#8696a0] hover:bg-[#f8fafc] dark:hover:bg-[#2a3942]'
                     }`}
                   >
                     <span className="text-xs font-bold flex items-center gap-1.5">
@@ -648,7 +648,7 @@ export const QuickReplies: React.FC = () => {
               )}
 
               <div>
-                <label className="text-xs font-semibold text-[#111b21]">Isi Template <span className="text-rose-500">*</span></label>
+                <label className="text-xs font-semibold text-[#111b21] dark:text-[#e9edef]">Isi Template <span className="text-rose-500">*</span></label>
                 <div className="flex flex-wrap gap-1 mt-1.5 mb-1.5">
                   {PLACEHOLDERS.map((p) => (
                     <button key={p.tag} type="button" onClick={() => insertPlaceholder(p.tag)} className="px-2 py-1 bg-white border border-[#d1d7db] hover:border-[#008069] hover:bg-[#e8f5f2] text-[#008069] rounded-lg text-[11px] font-mono font-bold">+{p.tag}</button>

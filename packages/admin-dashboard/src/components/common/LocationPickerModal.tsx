@@ -164,20 +164,20 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
 
   return createPortal(
     <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn" style={{ zIndex }} onClick={onClose}>
-      <div className="bg-white rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto shadow-2xl border border-[#e9edef] p-4 space-y-4" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between border-b border-[#e9edef] pb-3">
-          <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2"><MapPin size={16} className="text-[#008069]" /> Pilih Lokasi & Foto Rumah</h3>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5]"><X size={16} /></button>
+      <div className="bg-white dark:bg-[#111b21] rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto shadow-2xl border border-[#e9edef] dark:border-[#2a3942] p-4 space-y-4" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-[#e9edef] dark:border-[#2a3942] pb-3">
+          <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2"><MapPin size={16} className="text-[#008069]" /> Pilih Lokasi & Foto Rumah</h3>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#202c33]"><X size={16} /></button>
         </div>
 
         <div className="space-y-3">
-          <label className="text-xs font-bold text-[#111b21]">Link Google Maps (tempel shareloc)</label>
+          <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Link Google Maps (tempel shareloc)</label>
           <div className="flex gap-2">
-            <input value={mapsUrl} onChange={(e) => handlePasteMapsUrl(e.target.value)} placeholder="https://maps.google.com/..." className="flex-1 px-3 py-2 border border-[#d1d7db] rounded-xl text-xs" />
-            <button type="button" onClick={() => handlePasteMapsUrl(mapsUrl)} disabled={resolvingShortlink || !mapsUrl.trim()} className="px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs font-semibold hover:bg-[#f0f2f5] flex items-center gap-1 disabled:opacity-50">
+            <input value={mapsUrl} onChange={(e) => handlePasteMapsUrl(e.target.value)} placeholder="https://maps.google.com/..." className="flex-1 px-3 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] rounded-xl text-xs" />
+            <button type="button" onClick={() => handlePasteMapsUrl(mapsUrl)} disabled={resolvingShortlink || !mapsUrl.trim()} className="px-3 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] rounded-xl text-xs font-semibold hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] flex items-center gap-1 disabled:opacity-50">
               {resolvingShortlink ? <Loader size={12} className="animate-spin" /> : <Search size={12} />} Cek Link
             </button>
-            <button onClick={handleGeocode} disabled={geocoding} className="px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs font-semibold hover:bg-[#f0f2f5] flex items-center gap-1">
+            <button onClick={handleGeocode} disabled={geocoding} className="px-3 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] rounded-xl text-xs font-semibold hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] flex items-center gap-1">
               {geocoding ? <Loader size={12} className="animate-spin" /> : <Search size={12} />} Cari Alamat
             </button>
           </div>
@@ -190,21 +190,21 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
 
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="text-[11px] text-[#667781] font-bold">Latitude</label>
-              <input value={value.lat ?? ''} onChange={(e) => onChange({ ...value, lat: e.target.value ? parseFloat(e.target.value) : null })} placeholder="-7.34" className="w-full px-3 py-2 border border-[#d1d7db] rounded-xl text-xs" />
+              <label className="text-[11px] text-[#667781] dark:text-[#8696a0] font-bold">Latitude</label>
+              <input value={value.lat ?? ''} onChange={(e) => onChange({ ...value, lat: e.target.value ? parseFloat(e.target.value) : null })} placeholder="-7.34" className="w-full px-3 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] rounded-xl text-xs" />
             </div>
             <div>
-              <label className="text-[11px] text-[#667781] font-bold">Longitude</label>
-              <input value={value.lng ?? ''} onChange={(e) => onChange({ ...value, lng: e.target.value ? parseFloat(e.target.value) : null })} placeholder="112.75" className="w-full px-3 py-2 border border-[#d1d7db] rounded-xl text-xs" />
+              <label className="text-[11px] text-[#667781] dark:text-[#8696a0] font-bold">Longitude</label>
+              <input value={value.lng ?? ''} onChange={(e) => onChange({ ...value, lng: e.target.value ? parseFloat(e.target.value) : null })} placeholder="112.75" className="w-full px-3 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] rounded-xl text-xs" />
             </div>
           </div>
 
-          <button onClick={handleLockGps} disabled={lockingGps} className="w-full py-2.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5">
+          <button onClick={handleLockGps} disabled={lockingGps} className="w-full py-2.5 bg-emerald-50 dark:bg-[#00a884]/15 hover:bg-emerald-100 dark:hover:bg-[#00a884]/25 border border-emerald-200 dark:border-[#00a884]/30 text-emerald-700 dark:text-[#00a884] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5">
             <Navigation size={13} /> {lockingGps ? 'Mengunci GPS...' : value.accuracy ? `GPS ±${value.accuracy}m (kunci ulang)` : 'Gunakan Lokasi Saat Ini (GPS)'}
           </button>
 
           <div className="space-y-2">
-            <label className="text-xs font-bold text-[#111b21]">Foto Rumah {processingPhoto && <span className="text-[11px] text-[#008069] animate-pulse">Memproses...</span>}</label>
+            <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Foto Rumah {processingPhoto && <span className="text-[11px] text-[#008069] animate-pulse">Memproses...</span>}</label>
             <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhoto(f); }} />
             <input ref={galleryRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhoto(f); }} />
             {value.housePhotoUrl ? (
@@ -214,15 +214,15 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-2">
-                <button onClick={() => cameraRef.current?.click()} disabled={processingPhoto} className="py-3 rounded-xl bg-emerald-50 border-2 border-dashed border-emerald-300 text-emerald-700 text-xs font-bold flex flex-col items-center gap-1"><Camera size={18} /> Ambil Kamera</button>
-                <button onClick={() => galleryRef.current?.click()} disabled={processingPhoto} className="py-3 rounded-xl bg-slate-50 border-2 border-dashed border-slate-300 text-slate-700 text-xs font-bold flex flex-col items-center gap-1"><ImageIcon size={18} /> Pilih Galeri</button>
+                <button onClick={() => cameraRef.current?.click()} disabled={processingPhoto} className="py-3 rounded-xl bg-emerald-50 dark:bg-[#00a884]/15 border-2 border-dashed border-emerald-300 dark:border-[#00a884]/40 text-emerald-700 dark:text-[#00a884] text-xs font-bold flex flex-col items-center gap-1"><Camera size={18} /> Ambil Kamera</button>
+                <button onClick={() => galleryRef.current?.click()} disabled={processingPhoto} className="py-3 rounded-xl bg-slate-50 dark:bg-[#202c33] border-2 border-dashed border-slate-300 dark:border-[#2a3942] text-slate-700 dark:text-[#e9edef] text-xs font-bold flex flex-col items-center gap-1"><ImageIcon size={18} /> Pilih Galeri</button>
               </div>
             )}
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 pt-3 border-t border-[#e9edef]">
-          <button onClick={onClose} className="px-4 py-2 border border-[#d1d7db] rounded-xl text-xs font-semibold">Batal</button>
+        <div className="flex justify-end gap-2 pt-3 border-t border-[#e9edef] dark:border-[#2a3942]">
+          <button onClick={onClose} className="px-4 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] rounded-xl text-xs font-semibold">Batal</button>
           <button onClick={handleSave} className="px-5 py-2 bg-[#008069] text-white rounded-xl text-xs font-bold hover:bg-[#00a884]">Simpan Lokasi</button>
         </div>
       </div>

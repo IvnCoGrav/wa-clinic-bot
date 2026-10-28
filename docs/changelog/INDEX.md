@@ -5,9 +5,11 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 602
+Total entri terindeks: 604
 
+- 2026-10-28 | Refactor & Feature: Remediasi Menyeluruh UI/UX, Eliminasi Flashbang & Standardisasi Dark M
 - 2026-10-28 | Fix: Penyempurnaan Integritas Penamaan Master Customer (Anti-Locking Pushname Non-Manusia
+- 2026-10-27 | Refactor & Audit: Pembersihan Menyeluruh AI Slop UI/UX, Backend Contracts & Comment Hygien
 - 2026-10-25 | Fix: Proteksi Fondasional Integritas Penamaan Master Customer (Anti-Mutasi Liar & Anti-Pem
 - 2026-10-22 | Feat: Tabel Tarif Ongkir Homecare Terklasifikasi Dinamis pada Halaman Pricelist Publik (/p
 - 2026-10-22 | Fix: Tahap B Post-Audit CAPI — Hardening Export, event_id Purchase Deterministik, action_s

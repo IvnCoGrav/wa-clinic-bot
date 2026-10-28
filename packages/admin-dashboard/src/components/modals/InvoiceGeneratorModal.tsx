@@ -518,7 +518,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150 overscroll-contain overflow-hidden" style={{ overscrollBehavior: 'contain', touchAction: 'pan-y', overscrollBehaviorX: 'none' as any }}>
       <div
-        className="bg-white w-full max-w-4xl rounded-none sm:rounded-2xl shadow-2xl border-0 sm:border border-[#e9edef] flex flex-col h-[100dvh] sm:h-auto sm:max-h-[90vh] overflow-hidden overscroll-contain"
+        className="bg-white dark:bg-[#111b21] text-[#111b21] dark:text-[#e9edef] w-full max-w-4xl rounded-none sm:rounded-2xl shadow-2xl border-0 sm:border border-[#e9edef] dark:border-[#2a3942] flex flex-col h-[100dvh] sm:h-auto sm:max-h-[90vh] overflow-hidden overscroll-contain"
         style={{ overscrollBehavior: 'contain', touchAction: 'pan-y', overscrollBehaviorX: 'none' as any, maxWidth: 'min(100vw - 24px, 56rem)' }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -538,9 +538,9 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
         </div>
 
         {/* Modal Body: 2 Columns — di mobile jadi tab Setting / Preview agar keduanya reachable */}
-        <div className="flex flex-1 flex-col min-h-0 bg-[#f8fafc] lg:grid lg:grid-cols-12 lg:divide-x divide-[#e9edef] overflow-hidden">
+        <div className="flex flex-1 flex-col min-h-0 bg-[#f8fafc] dark:bg-[#1c272e] lg:grid lg:grid-cols-12 lg:divide-x divide-[#e9edef] dark:divide-[#2a3942] overflow-hidden">
           {/* Mobile Tabs — ramping */}
-          <div className="flex lg:hidden shrink-0 border-b border-[#e9edef] bg-white p-1 gap-1">
+          <div className="flex lg:hidden shrink-0 border-b border-[#e9edef] dark:border-[#2a3942] bg-white dark:bg-[#111b21] p-1 gap-1">
             <button
               type="button"
               onClick={() => setMobileTab('setting')}
@@ -931,7 +931,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                     value={distanceKmInput}
                     onChange={(e) => setDistanceKmInput(e.target.value)}
                     placeholder="0"
-                    className="w-full px-3 py-1.5 bg-[#f8fafc] border border-[#d1d7db] rounded-lg text-xs font-semibold text-[#111b21] focus:outline-none focus:border-[#008069]"
+                    className="w-full px-3 py-1.5 bg-[#f8fafc] dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] rounded-lg text-xs font-semibold text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] dark:focus:border-[#00a884]"
                   />
                 </div>
                 <div>
@@ -943,7 +943,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                     step={5000}
                     min={0}
                     placeholder="0"
-                    className="w-full px-3 py-1.5 bg-[#f8fafc] border border-[#d1d7db] rounded-lg text-xs font-semibold text-[#111b21] focus:outline-none focus:border-[#008069]"
+                    className="w-full px-3 py-1.5 bg-[#f8fafc] dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] rounded-lg text-xs font-semibold text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] dark:focus:border-[#00a884]"
                   />
                 </div>
                 <div>
@@ -1025,12 +1025,12 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
             id="inv-tab-preview"
             className={`${
               mobileTab === 'setting' ? 'hidden' : ''
-            } lg:!flex lg:col-span-5 p-4 sm:p-5 flex flex-col justify-between bg-[#efeae2]/40 relative min-h-0 overflow-hidden`}
+            } lg:!flex lg:col-span-5 p-4 sm:p-5 flex flex-col justify-between bg-[#efeae2]/40 dark:bg-[#0b141a] relative min-h-0 overflow-hidden`}
           >
             {/* Scrollable Preview Area */}
             <div className="flex-1 overflow-y-auto space-y-3 pr-1 max-h-[50vh] lg:max-h-[52vh]">
               <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-1.5 text-xs font-bold text-[#111b21]">
+                <div className="flex items-center space-x-1.5 text-xs font-bold text-[#111b21] dark:text-[#e9edef]">
                   <Eye size={14} className="text-[#008069]" />
                   <span>Live Preview WhatsApp</span>
                 </div>
@@ -1054,7 +1054,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
               </div>
 
               {/* WhatsApp Bubble Simulation */}
-              <div className="p-4 bg-white rounded-2xl rounded-tr-none shadow-md border border-[#e2ddd5] font-mono text-xs text-[#111b21] leading-relaxed whitespace-pre-wrap select-text relative">
+              <div className="p-4 bg-white dark:bg-[#202c33] rounded-2xl rounded-tr-none shadow-md border border-[#e2ddd5] dark:border-[#2a3942] font-mono text-xs text-[#111b21] dark:text-[#e9edef] leading-relaxed whitespace-pre-wrap select-text relative">
                 {generatedInvoiceText}
                 <div className="text-[10px] text-[#8696a0] text-right mt-2 flex items-center justify-end space-x-1">
                   <span>
@@ -1068,14 +1068,14 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
             </div>
 
             {/* Pinned Total Summary Card */}
-            <div className="mt-3 p-3 bg-white rounded-xl border border-[#d1d7db] shadow-xs space-y-1.5 shrink-0">
+            <div className="mt-3 p-3 bg-white dark:bg-[#202c33] rounded-xl border border-[#d1d7db] dark:border-[#374248] shadow-xs space-y-1.5 shrink-0">
               <div className="flex justify-between text-xs text-[#667781]">
                 <span>Harga Treatment:</span>
-                <span className="font-semibold text-[#111b21]">Rp {formatRp(treatmentPrice)}</span>
+                <span className="font-semibold text-[#111b21] dark:text-[#e9edef]">Rp {formatRp(treatmentPrice)}</span>
               </div>
               <div className="flex justify-between text-xs text-[#667781]">
                 <span>Ongkos Kirim:</span>
-                <span className="font-semibold text-[#111b21]">
+                <span className="font-semibold text-[#111b21] dark:text-[#e9edef]">
                   {Number(ongkir) === 0 ? 'Free' : `Rp ${formatRp(ongkir)}`}
                 </span>
               </div>
@@ -1094,9 +1094,9 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
         </div>
 
         {/* Modal Footer — Ramping, Ikonik, Aman Notch/Home Bar */}
-        <div className="px-4 py-2 sm:px-5 sm:py-2.5 bg-[#f0f2f5] border-t border-[#e9edef] flex items-center justify-between gap-3 shrink-0 z-10 sticky bottom-0 pb-[calc(0.6rem+env(safe-area-inset-bottom,0px))]">
+        <div className="px-4 py-2 sm:px-5 sm:py-2.5 bg-[#f0f2f5] dark:bg-[#111b21] border-t border-[#e9edef] dark:border-[#2a3942] flex items-center justify-between gap-3 shrink-0 z-10 sticky bottom-0 pb-[calc(0.6rem+env(safe-area-inset-bottom,0px))]">
           {/* Total Tagihan */}
-          <div className="text-xs text-[#54656f]">
+          <div className="text-xs text-[#54656f] dark:text-[#aebac1]">
             Total: <strong className="text-[#008069] font-bold text-sm sm:text-base">Rp {formatRp(totalPrice)}</strong>
           </div>
 
@@ -1108,7 +1108,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                 type="button"
                 onClick={() => { showButtonTip('Draf Disimpan'); saveDraftManually(); }}
                 onTouchStart={() => showButtonTip('Simpan Draf')}
-                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white border border-[#d1d7db] text-amber-700 hover:bg-amber-50 active:scale-90 transition flex items-center justify-center shadow-2xs cursor-pointer"
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-[#2a3942] active:scale-90 transition flex items-center justify-center shadow-2xs cursor-pointer"
                 title="Simpan Draf"
               >
                 <BookmarkPlus size={18} />

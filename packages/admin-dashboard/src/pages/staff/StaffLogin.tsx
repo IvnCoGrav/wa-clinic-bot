@@ -28,21 +28,21 @@ export const StaffLogin: React.FC = () => {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-[#f0f2f5] flex flex-col justify-center items-center p-4 relative">
+    <div className="min-h-[100dvh] bg-[#f0f2f5] dark:bg-[#0b141a] flex flex-col justify-center items-center p-4 relative">
       {/* Main card */}
-      <div className="w-full max-w-md bg-white rounded-2xl p-6 sm:p-8 border border-[#e9edef] relative z-10 shadow-sm">
+      <div className="w-full max-w-md bg-white dark:bg-[#111b21] rounded-2xl p-6 sm:p-8 border border-[#e9edef] dark:border-[#2a3942] relative z-10 shadow-sm">
         {/* Brand Header */}
         <div className="text-center mb-6">
           <div className="inline-flex h-14 w-14 rounded-2xl bg-[#008069] items-center justify-center text-white shadow-xs mb-3">
             <HeartHandshake size={28} />
           </div>
-          <h2 className="text-xl font-bold tracking-tight text-[#111b21] mb-1">
+          <h2 className="text-xl font-bold tracking-tight text-[#111b21] dark:text-[#e9edef] mb-1">
             {BRAND.businessName}
           </h2>
           <p className="text-xs text-[#008069] font-bold uppercase tracking-wider">
             Portal Terapis & Staff Lapangan
           </p>
-          <p className="text-xs text-[#667781] mt-1">
+          <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-1">
             Masuk untuk melihat jadwal tugas & percakapan hari ini
           </p>
         </div>
@@ -59,7 +59,7 @@ export const StaffLogin: React.FC = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Phone input */}
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-[#111b21]">Nomor WhatsApp / HP</label>
+            <label className="text-xs font-semibold text-[#111b21] dark:text-[#e9edef]">Nomor WhatsApp / HP</label>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-[#8696a0]">
                 <Phone size={16} />
@@ -70,14 +70,14 @@ export const StaffLogin: React.FC = () => {
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="08123456789"
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-[#d1d7db] text-[#111b21] placeholder-[#8696a0] text-sm focus:outline-none focus:border-[#008069] focus:ring-2 focus:ring-[#008069]/15 transition-all"
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] text-sm focus:outline-none focus:border-[#008069] focus:ring-2 focus:ring-[#008069]/15 transition-all"
               />
             </div>
           </div>
 
           {/* Password input */}
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-[#111b21]">Password</label>
+            <label className="text-xs font-semibold text-[#111b21] dark:text-[#e9edef]">Password</label>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-[#8696a0]">
                 <Lock size={16} />
@@ -88,7 +88,7 @@ export const StaffLogin: React.FC = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-[#d1d7db] text-[#111b21] placeholder-[#8696a0] text-sm focus:outline-none focus:border-[#008069] focus:ring-2 focus:ring-[#008069]/15 transition-all"
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] text-sm focus:outline-none focus:border-[#008069] focus:ring-2 focus:ring-[#008069]/15 transition-all"
               />
             </div>
           </div>

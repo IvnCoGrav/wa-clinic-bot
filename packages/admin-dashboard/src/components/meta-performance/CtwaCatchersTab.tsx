@@ -65,7 +65,7 @@ const TagInput: React.FC<{
               }
             }}
             placeholder={placeholder}
-            className="flex-1 text-xs border border-[#e9edef] rounded-lg px-3 py-2 resize-none focus:outline-none focus:border-[#008069]"
+            className="flex-1 text-xs border border-[#e9edef] dark:border-[#2a3942] bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] rounded-lg px-3 py-2 resize-none focus:outline-none focus:border-[#008069]"
           />
         ) : (
           <input
@@ -78,7 +78,7 @@ const TagInput: React.FC<{
               }
             }}
             placeholder={placeholder}
-            className="flex-1 text-xs border border-[#e9edef] rounded-lg px-3 py-2 focus:outline-none focus:border-[#008069]"
+            className="flex-1 text-xs border border-[#e9edef] dark:border-[#2a3942] bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] rounded-lg px-3 py-2 focus:outline-none focus:border-[#008069]"
           />
         )}
         <button
@@ -281,11 +281,11 @@ export const CtwaCatchersTab: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           {rows.map((row) => (
-            <div key={row.id} className="bg-white border border-[#e9edef] rounded-2xl p-4 space-y-3">
+            <div key={row.id} className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#202c33] rounded-2xl p-4 space-y-3">
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-sm text-[#111b21]">{row.campaign_name}</span>
+                    <span className="font-bold text-sm text-[#111b21] dark:text-[#e9edef]">{row.campaign_name}</span>
                     <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-sky-50 text-sky-800 border border-sky-200">
                       {row.source}
                     </span>
@@ -325,7 +325,7 @@ export const CtwaCatchersTab: React.FC = () => {
                 <div className="text-[10px] font-bold uppercase tracking-wider text-[#8696a0] mb-1">Template Sapaan</div>
                 <div className="flex flex-wrap gap-1.5">
                   {row.greetings.map((g, i) => (
-                    <span key={i} className="text-[11px] px-2 py-0.5 rounded-full bg-[#f0f2f5] text-[#111b21] border border-[#e9edef] max-w-full truncate">
+                    <span key={i} className="text-[11px] px-2 py-0.5 rounded-full bg-[#f0f2f5] dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] border border-[#e9edef] dark:border-[#2a3942] max-w-full truncate">
                       {g}
                     </span>
                   ))}
@@ -352,7 +352,7 @@ export const CtwaCatchersTab: React.FC = () => {
       )}
 
       {/* Simulator */}
-      <div className="bg-white border border-[#e9edef] rounded-2xl p-4 space-y-3">
+      <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#202c33] rounded-2xl p-4 space-y-3">
         <h4 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
           <FlaskConical size={15} className="text-[#008069]" /> Simulator Interaktif
         </h4>
@@ -367,7 +367,7 @@ export const CtwaCatchersTab: React.FC = () => {
               if (e.key === 'Enter') handleSimulate();
             }}
             placeholder="cth: halo min mau tny prmo baby spa sby"
-            className="flex-1 text-xs border border-[#e9edef] rounded-lg px-3 py-2 focus:outline-none focus:border-[#008069]"
+            className="flex-1 text-xs border border-[#e9edef] dark:border-[#2a3942] bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] rounded-lg px-3 py-2 focus:outline-none focus:border-[#008069]"
           />
           <button
             onClick={handleSimulate}
@@ -379,7 +379,7 @@ export const CtwaCatchersTab: React.FC = () => {
         </div>
 
         {simResult && (
-          <div className="space-y-2 border-t border-[#e9edef] pt-3">
+          <div className="space-y-2 border-t border-[#e9edef] dark:border-[#202c33] pt-3">
             <div className="flex flex-wrap items-center gap-2">
               <span
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
@@ -426,9 +426,9 @@ export const CtwaCatchersTab: React.FC = () => {
       {/* Modal */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto border border-[#e9edef]">
-            <div className="flex items-start justify-between border-b border-[#e9edef] pb-3">
-              <h4 className="text-base font-bold text-[#111b21]">
+          <div className="bg-white dark:bg-[#111b21] rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto border border-[#e9edef] dark:border-[#202c33]">
+            <div className="flex items-start justify-between border-b border-[#e9edef] dark:border-[#202c33] pb-3">
+              <h4 className="text-base font-bold text-[#111b21] dark:text-[#e9edef]">
                 {editingId ? 'Edit Kampanye Catcher' : 'Tambah Kampanye Catcher'}
               </h4>
               <button
@@ -440,21 +440,21 @@ export const CtwaCatchersTab: React.FC = () => {
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-bold text-[#111b21]">Nama Kampanye</label>
+              <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Nama Kampanye</label>
               <input
                 value={fCampaign}
                 onChange={(e) => setFCampaign(e.target.value)}
                 placeholder="cth: IG-BABYSPA"
-                className="w-full text-xs border border-[#e9edef] rounded-lg px-3 py-2 focus:outline-none focus:border-[#008069]"
+                className="w-full text-xs border border-[#e9edef] dark:border-[#2a3942] bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] rounded-lg px-3 py-2 focus:outline-none focus:border-[#008069]"
               />
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-bold text-[#111b21]">Platform</label>
+              <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Platform</label>
               <select
                 value={fSource}
                 onChange={(e) => setFSource(e.target.value)}
-                className="w-full text-xs border border-[#e9edef] rounded-lg px-3 py-2 focus:outline-none focus:border-[#008069]"
+                className="w-full text-xs border border-[#e9edef] dark:border-[#2a3942] bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] rounded-lg px-3 py-2 focus:outline-none focus:border-[#008069]"
               >
                 {SOURCE_OPTIONS.map((s) => (
                   <option key={s} value={s}>
@@ -465,7 +465,7 @@ export const CtwaCatchersTab: React.FC = () => {
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-bold text-[#111b21]">Template Sapaan (multi)</label>
+              <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Template Sapaan (multi)</label>
               <TagInput
                 values={fGreetings}
                 onChange={setFGreetings}
@@ -475,7 +475,7 @@ export const CtwaCatchersTab: React.FC = () => {
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-bold text-[#111b21]">Kata Kunci Jangkar (opsional)</label>
+              <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Kata Kunci Jangkar (opsional)</label>
               <TagInput
                 values={fAnchors}
                 onChange={setFAnchors}
@@ -487,7 +487,7 @@ export const CtwaCatchersTab: React.FC = () => {
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-bold text-[#111b21]">
+              <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">
                 Sensitivitas Kemiripan: <span className="text-[#008069]">{fThreshold}%</span>
               </label>
               <input

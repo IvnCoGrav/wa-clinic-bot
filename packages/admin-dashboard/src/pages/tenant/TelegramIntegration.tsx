@@ -284,7 +284,7 @@ export const TelegramIntegration: React.FC = () => {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Cari nama staff atau nomor HP..."
-                  className="w-full pl-9 pr-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-hidden focus:border-[#008069]"
+                  className="w-full pl-9 pr-3 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-hidden focus:border-[#008069]"
                 />
               </div>
 

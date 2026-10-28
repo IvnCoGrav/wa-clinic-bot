@@ -75,6 +75,53 @@
   }
 }
 
+@layer components {
+  /* ========================================================================= */
+  /* FORM CONTROLS KANONIS DUAL-MODE (WhatsApp Clinic Design System)           */
+  /* ========================================================================= */
+  .wa-input {
+    @apply bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] text-[#111b21] dark:text-[#e9edef] placeholder:text-[#8696a0] rounded-xl text-xs focus:outline-none focus:border-[#008069] dark:focus:border-[#00a884] focus:ring-1 focus:ring-[#008069] dark:focus:ring-[#00a884] shadow-xs transition duration-150;
+  }
+  .wa-select {
+    @apply bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] text-[#111b21] dark:text-[#e9edef] rounded-xl text-xs focus:outline-none focus:border-[#008069] dark:focus:border-[#00a884] focus:ring-1 focus:ring-[#008069] dark:focus:ring-[#00a884] shadow-xs transition duration-150;
+  }
+  .wa-textarea {
+    @apply bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] text-[#111b21] dark:text-[#e9edef] placeholder:text-[#8696a0] rounded-xl text-xs focus:outline-none focus:border-[#008069] dark:focus:border-[#00a884] focus:ring-1 focus:ring-[#008069] dark:focus:ring-[#00a884] shadow-xs transition duration-150 resize-none;
+  }
+
+  /* ========================================================================= */
+  /* PERMUKAAN ELEVASI MODAL & DRAWER KANONIS                                  */
+  /* ========================================================================= */
+  .wa-modal-surface {
+    @apply bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] shadow-2xl;
+  }
+  .wa-modal-header {
+    @apply px-5 py-4 border-b border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#1c272e] flex justify-between items-center;
+  }
+  .wa-modal-footer {
+    @apply px-5 py-4 border-t border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#1c272e] flex justify-end gap-2;
+  }
+
+  /* ========================================================================= */
+  /* BADGE STATUS DUAL-MODE KONTRAS TINGGI                                     */
+  /* ========================================================================= */
+  .wa-badge-emerald {
+    @apply bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50;
+  }
+  .wa-badge-amber {
+    @apply bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/50;
+  }
+  .wa-badge-rose {
+    @apply bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800/50;
+  }
+  .wa-badge-purple {
+    @apply bg-purple-50 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800/50;
+  }
+  .wa-badge-blue {
+    @apply bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800/50;
+  }
+}
+
 html {
   background-color: #ffffff;
   color: #111b21;
@@ -567,6 +614,10 @@ html.dark {
 
 /* --- Kanvas & permukaan netral --- */
 .dark .bg-\[\#f0f2f5\] { background-color: #000000; }
+.dark .bg-\[\#edf2f7\], .dark .bg-\[\#f8f9fa\], .dark .bg-\[\#fcfdfd\], .dark .bg-\[\#fdfefe\], .dark .bg-\[\#f0f0f0\], .dark .bg-\[\#e0e0e0\], .dark .bg-\[\#e2e8f0\] { background-color: #111b21; }
+.dark .bg-\[\#f0f9f6\], .dark .bg-\[\#d5ebe6\], .dark .bg-\[\#d9f0ea\], .dark .bg-\[\#e7f8e8\], .dark .bg-\[\#f0fdf4\], .dark .bg-\[\#f0f7f5\], .dark .bg-\[\#f8faf9\] { background-color: rgba(0, 168, 132, 0.14); }
+.dark .bg-\[\#eff6ff\] { background-color: rgba(59, 130, 246, 0.12); }
+.dark .bg-\[\#fffbeb\] { background-color: rgba(245, 158, 11, 0.12); }
 .dark .bg-\[\#f8fafc\] { background-color: #111b21; }
 .dark .bg-white { background-color: #202c33; }
 .dark .bg-slate-50 { background-color: #111b21; }

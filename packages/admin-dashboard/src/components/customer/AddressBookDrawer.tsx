@@ -471,14 +471,14 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
       onClick={close}
     >
       <div
-        className="w-full sm:max-w-lg max-h-[90dvh] flex flex-col bg-white rounded-t-2xl sm:rounded-2xl shadow-xl overflow-hidden"
+        className="w-full sm:max-w-lg max-h-[90dvh] flex flex-col bg-white dark:bg-[#111b21] dark:border dark:border-[#202c33] rounded-t-2xl sm:rounded-2xl shadow-xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-label="Buku Alamat Pelanggan"
       >
-        <div className="p-4 border-b border-[#e9edef] flex items-center justify-between shrink-0">
+        <div className="p-4 border-b border-[#e9edef] dark:border-[#202c33] flex items-center justify-between shrink-0">
           <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-[#111b21]">Buku Alamat</h3>
+            <h3 className="text-sm font-semibold text-[#111b21] dark:text-[#e9edef]">Buku Alamat</h3>
             <p className="text-[11px] text-[#8696a0] truncate">
               {customer.name || 'Pelanggan'} — alamat multi-rumah tersimpan
             </p>
@@ -489,7 +489,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
                 setEditingAddress(null);
                 setShowAddForm((prev) => !prev);
               }}
-              className="min-h-[44px] inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#e8f5f2] text-[#008069] hover:bg-[#c2e7e0] text-xs font-semibold focus-visible:ring-2 focus-visible:ring-[#00a884] active:scale-[0.98] transition"
+              className="min-h-[44px] inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#e8f5f2] text-[#008069] hover:bg-[#c2e7e0] dark:bg-[#00a884]/20 dark:text-[#00a884] text-xs font-semibold focus-visible:ring-2 focus-visible:ring-[#00a884] active:scale-[0.98] transition"
               aria-label="Tambah alamat baru"
             >
               <Plus size={15} />
@@ -497,7 +497,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
             </button>
             <button
               onClick={close}
-              className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl hover:bg-[#e9edef] focus-visible:ring-2 focus-visible:ring-[#00a884] active:scale-[0.98] transition"
+              className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl hover:bg-[#e9edef] dark:hover:bg-[#202c33] text-[#54656f] dark:text-[#8696a0] focus-visible:ring-2 focus-visible:ring-[#00a884] active:scale-[0.98] transition"
               aria-label="Tutup buku alamat"
             >
               <X size={18} />
@@ -509,24 +509,24 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
         {editingAddress && (
           <form
             onSubmit={handleUpdateAddress}
-            className="p-4 bg-[#f0f9f6] border-b border-[#c2e7e0] space-y-2.5 shrink-0 max-h-[60dvh] overflow-y-auto"
+            className="p-4 bg-[#f0f9f6] dark:bg-[#182229] border-b border-[#c2e7e0] dark:border-[#202c33] space-y-2.5 shrink-0 max-h-[60dvh] overflow-y-auto"
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-[#008069] flex items-center gap-1.5">
+              <span className="text-xs font-bold text-[#008069] dark:text-[#00a884] flex items-center gap-1.5">
                 <Pencil size={13} />
                 Edit Alamat: {editingAddress.label}
               </span>
               <button
                 type="button"
                 onClick={() => setEditingAddress(null)}
-                className="text-[11px] text-[#8696a0] hover:text-[#111b21] py-1 px-2"
+                className="text-[11px] text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] py-1 px-2"
               >
                 Batal
               </button>
             </div>
 
             <div>
-              <label className="block text-[11px] font-medium text-[#111b21] mb-1">
+              <label className="block text-[11px] font-medium text-[#111b21] dark:text-[#e9edef] mb-1">
                 Label <span className="text-red-500">*</span>
               </label>
               <input
@@ -536,18 +536,18 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
                 maxLength={MAX_ADDRESS_LABEL_LENGTH}
                 onChange={(e) => setEditLabel(e.target.value)}
                 placeholder="misal: Rumah Mertua / Kantor Suami"
-                className="w-full px-2.5 py-1.5 text-xs border border-[#d1d7db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40 bg-white"
+                className="w-full px-2.5 py-1.5 text-xs border border-[#d1d7db] dark:border-[#2a3942] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40 bg-white dark:bg-[#202c33] dark:text-[#e9edef]"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] font-medium text-[#111b21] mb-1">Alamat Jalan</label>
+              <label className="block text-[11px] font-medium text-[#111b21] dark:text-[#e9edef] mb-1">Alamat Jalan</label>
               <input
                 type="text"
                 value={editAddress}
                 onChange={(e) => setEditAddress(e.target.value)}
                 placeholder="Jl. Raya No. 123"
-                className="w-full px-2.5 py-1.5 text-xs border border-[#d1d7db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40 bg-white"
+                className="w-full px-2.5 py-1.5 text-xs border border-[#d1d7db] dark:border-[#2a3942] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40 bg-white dark:bg-[#202c33] dark:text-[#e9edef]"
               />
             </div>
 
@@ -559,7 +559,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
                   value={editKelurahan}
                   onChange={(e) => setEditKelurahan(e.target.value)}
                   placeholder="Kelurahan"
-                  className="w-full px-2 py-1 text-xs border border-[#d1d7db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40 bg-white"
+                  className="w-full px-2 py-1 text-xs border border-[#d1d7db] dark:border-[#2a3942] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40 bg-white dark:bg-[#202c33] dark:text-[#e9edef]"
                 />
               </div>
               <div>
@@ -569,7 +569,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
                   value={editKecamatan}
                   onChange={(e) => setEditKecamatan(e.target.value)}
                   placeholder="Kecamatan"
-                  className="w-full px-2 py-1 text-xs border border-[#d1d7db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40 bg-white"
+                  className="w-full px-2 py-1 text-xs border border-[#d1d7db] dark:border-[#2a3942] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40 bg-white dark:bg-[#202c33] dark:text-[#e9edef]"
                 />
               </div>
               <div>
@@ -579,7 +579,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
                   value={editKota}
                   onChange={(e) => setEditKota(e.target.value)}
                   placeholder="Surabaya"
-                  className="w-full px-2 py-1 text-xs border border-[#d1d7db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40 bg-white"
+                  className="w-full px-2 py-1 text-xs border border-[#d1d7db] dark:border-[#2a3942] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40 bg-white dark:bg-[#202c33] dark:text-[#e9edef]"
                 />
               </div>
             </div>
@@ -591,13 +591,13 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
                 value={editLandmark}
                 onChange={(e) => setEditLandmark(e.target.value)}
                 placeholder="Pagar hitam depan pos satpam"
-                className="w-full px-2.5 py-1 text-xs border border-[#d1d7db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40 bg-white"
+                className="w-full px-2.5 py-1 text-xs border border-[#d1d7db] dark:border-[#2a3942] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40 bg-white dark:bg-[#202c33] dark:text-[#e9edef]"
               />
             </div>
 
             {/* Alat Lokasi Cerdas (Micro-Task 2.2) */}
-            <div className="p-2.5 bg-white border border-[#d1d7db] rounded-xl space-y-2">
-              <span className="text-[11px] font-semibold text-[#111b21] flex items-center gap-1">
+            <div className="p-2.5 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl space-y-2">
+              <span className="text-[11px] font-semibold text-[#111b21] dark:text-[#e9edef] flex items-center gap-1">
                 <Navigation size={12} className="text-[#008069]" />
                 Titik GPS & Alat Lokasi
               </span>
@@ -608,7 +608,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
                   value={editMapsUrl}
                   onChange={(e) => setEditMapsUrl(e.target.value)}
                   placeholder="Tempel link Google Maps / shareloc..."
-                  className="flex-1 px-2 py-1 text-xs border border-[#d1d7db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40"
+                  className="flex-1 px-2 py-1 text-xs border border-[#d1d7db] dark:border-[#2a3942] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40 bg-white dark:bg-[#111b21] dark:text-[#e9edef]"
                 />
                 <button
                   type="button"
@@ -623,7 +623,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
                   type="button"
                   disabled={isGeocodingEdit}
                   onClick={handleGeocodeEdit}
-                  className="min-h-[44px] px-2.5 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 text-xs font-medium rounded-lg transition disabled:opacity-50 inline-flex items-center gap-1"
+                  className="min-h-[44px] px-2.5 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-[#111b21] dark:text-[#e9edef] dark:hover:bg-[#2a3942] text-xs font-medium rounded-lg transition disabled:opacity-50 inline-flex items-center gap-1"
                   title="Cari koordinat dari kelurahan/kecamatan via Nominatim"
                 >
                   {isGeocodingEdit ? <Loader2 size={13} className="animate-spin" /> : <Search size={13} />}
@@ -632,7 +632,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
               </div>
 
               {editLat != null && editLng != null ? (
-                <div className="flex items-center justify-between text-[11px] text-[#54656f] bg-[#f8fafc] px-2 py-1 rounded-lg">
+                <div className="flex items-center justify-between text-[11px] text-[#54656f] dark:text-[#8696a0] bg-[#f8fafc] dark:bg-[#111b21] px-2 py-1 rounded-lg">
                   <span>GPS: {editLat.toFixed(5)}, {editLng.toFixed(5)}</span>
                   <span>{editDistanceKm != null ? `${editDistanceKm} km` : ''} {editOngkir != null ? `• Rp ${editOngkir.toLocaleString('id-ID')}` : ''}</span>
                 </div>
@@ -645,7 +645,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
               <button
                 type="button"
                 onClick={() => setEditingAddress(null)}
-                className="min-h-[44px] px-3 py-1.5 text-xs text-[#54656f] hover:bg-[#e9edef] rounded-lg transition"
+                className="min-h-[44px] px-3 py-1.5 text-xs text-[#54656f] dark:text-[#8696a0] hover:bg-[#e9edef] dark:hover:bg-[#202c33] rounded-lg transition"
               >
                 Batal
               </button>
@@ -665,7 +665,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
         {showAddForm && !editingAddress && (
           <form
             onSubmit={handleAddAddress}
-            className="p-4 bg-[#f8fafc] border-b border-[#e9edef] space-y-2.5 shrink-0 max-h-[60dvh] overflow-y-auto"
+            className="p-4 bg-[#f8fafc] dark:bg-[#182229] border-b border-[#e9edef] dark:border-[#202c33] space-y-2.5 shrink-0 max-h-[60dvh] overflow-y-auto"
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-[#111b21]">Tambah Alamat Baru</span>
@@ -678,7 +678,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
               </button>
             </div>
             <div>
-              <label className="block text-[11px] font-medium text-[#111b21] mb-1">
+              <label className="block text-[11px] font-medium text-[#111b21] dark:text-[#e9edef] mb-1">
                 Label <span className="text-red-500">*</span>
               </label>
               <input
@@ -688,17 +688,17 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
                 maxLength={MAX_ADDRESS_LABEL_LENGTH}
                 onChange={(e) => setNewLabel(e.target.value)}
                 placeholder="misal: Rumah Mertua / Kantor Suami"
-                className="w-full px-2.5 py-1.5 text-xs border border-[#d1d7db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40"
+                className="w-full px-2.5 py-1.5 text-xs border border-[#d1d7db] dark:border-[#2a3942] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40 bg-white dark:bg-[#202c33] dark:text-[#e9edef]"
               />
             </div>
             <div>
-              <label className="block text-[11px] font-medium text-[#111b21] mb-1">Alamat Jalan</label>
+              <label className="block text-[11px] font-medium text-[#111b21] dark:text-[#e9edef] mb-1">Alamat Jalan</label>
               <input
                 type="text"
                 value={newAddress}
                 onChange={(e) => setNewAddress(e.target.value)}
                 placeholder="Jl. Raya No. 123"
-                className="w-full px-2.5 py-1.5 text-xs border border-[#d1d7db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40"
+                className="w-full px-2.5 py-1.5 text-xs border border-[#d1d7db] dark:border-[#2a3942] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40 bg-white dark:bg-[#202c33] dark:text-[#e9edef]"
               />
             </div>
             <div className="grid grid-cols-3 gap-2">
@@ -709,7 +709,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
                   value={newKelurahan}
                   onChange={(e) => setNewKelurahan(e.target.value)}
                   placeholder="Kelurahan"
-                  className="w-full px-2 py-1 text-xs border border-[#d1d7db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40"
+                  className="w-full px-2 py-1 text-xs border border-[#d1d7db] dark:border-[#2a3942] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40 bg-white dark:bg-[#202c33] dark:text-[#e9edef]"
                 />
               </div>
               <div>
@@ -719,7 +719,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
                   value={newKecamatan}
                   onChange={(e) => setNewKecamatan(e.target.value)}
                   placeholder="Kecamatan"
-                  className="w-full px-2 py-1 text-xs border border-[#d1d7db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40"
+                  className="w-full px-2 py-1 text-xs border border-[#d1d7db] dark:border-[#2a3942] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40 bg-white dark:bg-[#202c33] dark:text-[#e9edef]"
                 />
               </div>
               <div>
@@ -729,7 +729,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
                   value={newKota}
                   onChange={(e) => setNewKota(e.target.value)}
                   placeholder="Surabaya"
-                  className="w-full px-2 py-1 text-xs border border-[#d1d7db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40"
+                  className="w-full px-2 py-1 text-xs border border-[#d1d7db] dark:border-[#2a3942] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40 bg-white dark:bg-[#202c33] dark:text-[#e9edef]"
                 />
               </div>
             </div>
@@ -741,13 +741,13 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
                 value={newLandmark}
                 onChange={(e) => setNewLandmark(e.target.value)}
                 placeholder="Pagar hitam depan pos satpam"
-                className="w-full px-2.5 py-1 text-xs border border-[#d1d7db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40"
+                className="w-full px-2.5 py-1 text-xs border border-[#d1d7db] dark:border-[#2a3942] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40 bg-white dark:bg-[#202c33] dark:text-[#e9edef]"
               />
             </div>
 
             {/* Alat Lokasi Cerdas (Micro-Task 2.2) */}
-            <div className="p-2.5 bg-white border border-[#d1d7db] rounded-xl space-y-2">
-              <span className="text-[11px] font-semibold text-[#111b21] flex items-center gap-1">
+            <div className="p-2.5 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl space-y-2">
+              <span className="text-[11px] font-semibold text-[#111b21] dark:text-[#e9edef] flex items-center gap-1">
                 <Navigation size={12} className="text-[#008069]" />
                 Titik GPS & Alat Lokasi
               </span>
@@ -758,7 +758,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
                   value={newMapsUrl}
                   onChange={(e) => setNewMapsUrl(e.target.value)}
                   placeholder="Tempel link Google Maps / shareloc..."
-                  className="flex-1 px-2 py-1 text-xs border border-[#d1d7db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40"
+                  className="flex-1 px-2 py-1 text-xs border border-[#d1d7db] dark:border-[#2a3942] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]/40 bg-white dark:bg-[#111b21] dark:text-[#e9edef]"
                 />
                 <button
                   type="button"
@@ -773,7 +773,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
                   type="button"
                   disabled={isGeocodingAdd}
                   onClick={handleGeocodeAdd}
-                  className="min-h-[44px] px-2.5 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 text-xs font-medium rounded-lg transition disabled:opacity-50 inline-flex items-center gap-1"
+                  className="min-h-[44px] px-2.5 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-[#111b21] dark:text-[#e9edef] dark:hover:bg-[#2a3942] text-xs font-medium rounded-lg transition disabled:opacity-50 inline-flex items-center gap-1"
                   title="Cari koordinat dari kelurahan/kecamatan via Nominatim"
                 >
                   {isGeocodingAdd ? <Loader2 size={13} className="animate-spin" /> : <Search size={13} />}
@@ -782,7 +782,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
               </div>
 
               {newLat != null && newLng != null ? (
-                <div className="flex items-center justify-between text-[11px] text-[#54656f] bg-[#f8fafc] px-2 py-1 rounded-lg">
+                <div className="flex items-center justify-between text-[11px] text-[#54656f] dark:text-[#8696a0] bg-[#f8fafc] dark:bg-[#111b21] px-2 py-1 rounded-lg">
                   <span>GPS: {newLat.toFixed(5)}, {newLng.toFixed(5)}</span>
                   <span>{newDistanceKm != null ? `${newDistanceKm} km` : ''} {newOngkir != null ? `• Rp ${newOngkir.toLocaleString('id-ID')}` : ''}</span>
                 </div>
@@ -799,7 +799,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
                 onChange={(e) => setNewIsPrimary(e.target.checked)}
                 className="h-3.5 w-3.5 text-[#008069] rounded border-[#d1d7db] focus:ring-[#00a884]"
               />
-              <label htmlFor="isPrimaryCheckbox" className="text-xs text-[#111b21] cursor-pointer">
+              <label htmlFor="isPrimaryCheckbox" className="text-xs text-[#111b21] dark:text-[#e9edef] cursor-pointer">
                 Jadikan Alamat Utama
               </label>
             </div>
@@ -807,7 +807,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
               <button
                 type="button"
                 onClick={() => setShowAddForm(false)}
-                className="min-h-[44px] px-3 py-1.5 text-xs text-[#54656f] hover:bg-[#e9edef] rounded-lg transition"
+                className="min-h-[44px] px-3 py-1.5 text-xs text-[#54656f] dark:text-[#8696a0] hover:bg-[#e9edef] dark:hover:bg-[#202c33] rounded-lg transition"
               >
                 Batal
               </button>
@@ -838,14 +838,14 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
           ) : (
             <ul>
               {addresses.map((card, i) => (
-                <li key={card.id} className={`px-4 py-3 ${i > 0 ? 'border-t border-[#e9edef]' : ''}`}>
+                <li key={card.id} className={`px-4 py-3 ${i > 0 ? 'border-t border-[#e9edef] dark:border-[#202c33]' : ''}`}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-semibold text-[#111b21] flex items-center gap-1.5">
+                      <p className="text-xs font-semibold text-[#111b21] dark:text-[#e9edef] flex items-center gap-1.5">
                         <span className="truncate">
                           {card.label}
                           {card.isPrimary && (
-                            <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-[#e8f5f2] text-[#008069] text-[10px] font-bold align-middle">
+                            <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-[#e8f5f2] text-[#008069] dark:bg-[#00a884]/20 dark:text-[#00a884] text-[10px] font-bold align-middle">
                               Utama
                             </span>
                           )}
@@ -853,7 +853,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
                       </p>
                       <p className="text-[11px] text-[#8696a0] mt-0.5 line-clamp-2">{addrLine(card)}</p>
                       {card.landmark && (
-                        <p className="text-[10px] text-amber-800 bg-amber-50 rounded px-1.5 py-0.5 mt-1 inline-block">
+                        <p className="text-[10px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 rounded px-1.5 py-0.5 mt-1 inline-block">
                           Patokan: {card.landmark}
                         </p>
                       )}
@@ -868,7 +868,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
                         <button
                           onClick={() => handleSetDefault(card)}
                           disabled={busyId === card.id}
-                          className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl text-[#8696a0] hover:bg-amber-50 hover:text-amber-600 focus-visible:ring-2 focus-visible:ring-[#00a884] active:scale-[0.98] transition disabled:opacity-50"
+                          className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl text-[#8696a0] hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-950/30 focus-visible:ring-2 focus-visible:ring-[#00a884] active:scale-[0.98] transition disabled:opacity-50"
                           title="Jadikan utama"
                           aria-label={`Jadikan ${card.label} alamat utama`}
                         >
@@ -879,7 +879,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
                       <button
                         onClick={() => startEditing(card)}
                         disabled={busyId === card.id}
-                        className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl text-[#8696a0] hover:bg-sky-50 hover:text-sky-600 focus-visible:ring-2 focus-visible:ring-[#00a884] active:scale-[0.98] transition disabled:opacity-50"
+                        className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl text-[#8696a0] hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-sky-950/30 focus-visible:ring-2 focus-visible:ring-[#00a884] active:scale-[0.98] transition disabled:opacity-50"
                         title="Edit alamat lengkap"
                         aria-label={`Edit alamat ${card.label}`}
                       >
@@ -888,7 +888,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
                       <button
                         onClick={() => handleDelete(card)}
                         disabled={busyId === card.id}
-                        className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl text-[#8696a0] hover:bg-red-50 hover:text-red-600 focus-visible:ring-2 focus-visible:ring-[#00a884] active:scale-[0.98] transition disabled:opacity-50"
+                        className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl text-[#8696a0] hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 focus-visible:ring-2 focus-visible:ring-[#00a884] active:scale-[0.98] transition disabled:opacity-50"
                         title="Hapus kartu"
                         aria-label={`Hapus ${card.label}`}
                       >
@@ -902,7 +902,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
           )}
         </div>
 
-        <div className="p-3 border-t border-[#e9edef] bg-[#f8fafc] flex items-start gap-2 text-[11px] text-[#8696a0] shrink-0">
+        <div className="p-3 border-t border-[#e9edef] dark:border-[#202c33] bg-[#f8fafc] dark:bg-[#182229] flex items-start gap-2 text-[11px] text-[#8696a0] shrink-0">
           <AlertTriangle size={13} className="mt-0.5 shrink-0 text-amber-500" />
           <p>
             Perubahan koordinat kartu akan otomatis memperbarui ongkir dan jadwal kunjungan aktif yang terhubung.

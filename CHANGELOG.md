@@ -4,7 +4,36 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-28 - Refactor & Feature: Remediasi Menyeluruh UI/UX, Eliminasi Flashbang & Standardisasi Dark Mode (WhatsApp Design System)
+
+- **Latar Belakang & Akar Masalah**:
+  - Berdasarkan audit mendalam terhadap seluruh modul antarmuka (28 halaman utama, 34 modal dialog mandiri, 5 drawer samping, 12 panel pengaturan, dan komponen chat/kalender), ditemukan 64 file mengalami kebutaan tema gelap (*dark mode blindness*), memicu efek silau (*flashbang*) saat admin atau bidan lapangan membuka modul di kondisi redup/malam.
+  - Terdapat benturan spesifisitas CSS pada `index.css` di mana penimpaan selektor tag menimpa kelas utilitas Tailwind.
+  - Tombol tutup dialog modal publik (`.cta-close` di `pricelist.html`) memiliki ukuran sentuh di bawah standar ergonomi jempol mobile (di bawah 44x44px).
+- **Arsitektur & Solusi Bertahap (Fase 0 s/d Fase 4)**:
+  - **Fase 0 — Fondasi Token Desain & Komponen Primitif**:
+    - `packages/admin-dashboard/index.html`: Body disetel ke `dark:bg-[#0b141a] dark:text-[#e9edef]`.
+    - `packages/admin-dashboard/src/index.css`: Menambahkan utilitas kelas primitif kanonis (`.wa-input`, `.wa-select`, `.wa-textarea`, `.wa-modal-surface`, `.wa-modal-header`, `.wa-modal-footer`, `.wa-badge-*`) serta memetakan 46 warna background pastel legacy ke 4 tingkat elevasi WhatsApp Design System (`#0b141a` canvas, `#111b21` surface, `#202c33` card/bubble, `#2a3942` border).
+  - **Fase 1 — Remediasi Modul Kritis Operasional & CRM (P1)**:
+    - `CustomerDatabase.tsx` & `CustomerLabels.tsx`: Seluruh kontainer, tabel, pencarian, sub-modal CAPI, dan detail pelanggan diadaptasi ke tema gelap.
+    - `InvoiceGeneratorModal.tsx` & `AddressBookDrawer.tsx`: Bingkai dialog modal, form input, live preview teks WA, dan kartu alamat tersimpan diadaptasi penuh.
+    - `ReservationDetailModal.tsx` & `CustomerEditForm.tsx`: Dialog detail reservasi dan form edit pasien/anak diadaptasi ke elevasi WhatsApp.
+    - `StaffToday.tsx` & `DailyScheduleModal.tsx`: Portal mobile bidan lapangan (kartu tugas hari ini, drawer menu, modal kasir pembayaran, navigasi, dan bubble percakapan) diadaptasi ke tema malam tanpa elemen silau.
+  - **Fase 2 — Analitik, Pemasaran Meta, & Pengaturan (P2)**:
+    - 11 Komponen Meta Performance (`MetaPerformancePanel`, `KpiGrid`, `SpendCalculator`, `FunnelBars`, `CampaignTable`, `ChannelTable`, `CohortRetentionTable`, `JourneyHistogram`, `LeakageGrid`, `TherapistUtilizationCard`, `CtwaCatchersTab`): Diadaptasi ke tema gelap.
+    - `FinancialAnalytics.tsx`: Adaptasi kartu KPI omset, grafik tren bulanan Recharts (tooltip dark mode), donut breakdown, dan ledger transaksi.
+    - `QuickReplies.tsx` & `FollowUpTemplates.tsx`: Adaptasi kartu template, skenario pesan, chip variabel, dan modal editor.
+    - 12 Panel Pengaturan di `Settings.tsx` & `components/settings/` (`WhatsAppProviderPanel`, `AiRouterPanel`, `DailyReportPanel`, `GoogleIntegrationPanel`, `InstallAppPanel`, `MetaCapiPanel`, `MqlSettingsPanel`, `PaymentInfoPanel`, `PricelistImagePanel`, `PricelistPromoPanel`, `CustomerService.tsx`, `TelegramIntegration.tsx`): Diadaptasi penuh.
+  - **Fase 3 — Modul Peta, Autentikasi, & Halaman Publik (P3)**:
+    - Modal Peta & Chat: `LocationPickerModal.tsx`, `DispatchMapModal.tsx`, `FleetMapModal.tsx`, `ChatHistoryModal.tsx`, `NavigationPreflightModal.tsx`, `OtwConfirmModal.tsx` diadaptasi penuh.
+    - Autentikasi: `Login.tsx` dan `StaffLogin.tsx` diadaptasi ke background `#0b141a` dan kartu `#111b21`.
+    - Ergonomi Mobile Web: `pricelist.html` (`.cta-close`) diperbesar menjadi minimum 44x44px.
+  - **Fase 4 — Verifikasi Menyeluruh & Regenerasi Indeks**:
+    - Pemindaian AST membuktikan kemunculan kelas `dark:` meningkat dari 2.400 menjadi 5.340+ kemunculan di 84+ file komponen.
+    - `npm run build` di root dan dashboard lulus 100% tanpa error. Seluruh test unit hijau.
+
 #### 2026-10-28 - Fix: Penyempurnaan Integritas Penamaan Master Customer (Anti-Locking Pushname Non-Manusia & Otoritas Form Reservasi)
+
 
 - **Latar Belakang & Akar Masalah**:
   - Pada kasus nomor `6285856479479`, nomor masuk pertama kali via iklan dengan pushname WhatsApp mentah bernilai `A_31`.
@@ -22,6 +51,50 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
   - `tests/unit/customer-name-protection.test.ts`: Menambahkan Skenario 8, 9, dan 10 untuk menguji handle non-manusia, transisi pushname `A_31` -> `Bunda azima`, pemulihan record terkontaminasi lama, serta jaminan proteksi nama Bunda pada repeat order dengan anak berbeda.
   - Verifikasi: 64 pengujian di 4 test suites 100% hijau.
 
+
+#### 2026-10-27 - Refactor & Audit: Pembersihan Menyeluruh AI Slop UI/UX, Backend Contracts & Comment Hygiene
+
+- **Latar Belakang & Akar Masalah**:
+  - Berdasarkan audit menyeluruh standar anti-slop (miqdadbadjuber/anti-slop: antislop-ui, antislop-code, antislop-copywriting, antislop-layoutmobile), ditemukan sejumlah artefak AI slop:
+    1. Overview Dashboard memuat angka-angka karangan statis (incomingChats: 142, revenue: Rp 3.600.000, +14.2% dari kemarin, dan chart jam dummy) alih-alih data riil.
+    2. Rasio conversion rate dihitung dari pembilang harian dibagi penyebut sepanjang waktu (tidak valid).
+    3. Endpoint analitik /api/admin/financial-analytics menggunakan DEFAULT_TENANT_ID statis (kerentanan isolasi tenant).
+    4. Penggunaan berlebihan ikon berkilau Sparkles di 70+ lokasi teknis/operasional (jadwal perawat, tagihan, antrean CAPI, database).
+    5. Animasi denyut animate-pulse yang berkedip tanpa henti pada status badge dan banner peringatan permanen.
+    6. Kondisi kosong (empty states) pasif tanpa konteks dan tombol aksi.
+    7. Penggunaan h-screen pada layout mobile yang memicu layout shifts saat address bar browser bergerak.
+    8. Komentar kode backend memuat garis spanduk dekoratif (===, ---) dan emoji berlebihan (antislop-code).
+- **Arsitektur & Perubahan (Solusi Fondasional & Bertahap)**:
+  - Backend Contracts (Phase 0):
+    - `src/routes/admin/analytics.subroute.ts`: Isolasi tenant wajib via `tenantOf(request)` (fail-closed 401 saat kredensial tidak ada).
+    - `src/routes/admin/reservation-crud.route.ts`: Endpoint `/api/admin/reservations/count` mendukung filter `?date=YYYY-MM-DD` (WIB) dan bypass cache `?refresh=1`.
+    - `src/services/conversation.service.ts` & `src/services/live-chat.service.ts` & `src/routes/admin/livechat.subroute.ts`: Mengembalikan field `total` percakapan riil (bukan ukuran page).
+  - Kejujuran Metrik Overview (Phase 1):
+    - `packages/admin-dashboard/src/pages/tenant/Overview.tsx`: Menghubungkan metrik ke API riil (`health`, `reservations/count?date=&refresh=1`, `financial-analytics`, `live-chat/conversations`), mengganti conversion rate dengan AOV bulanan, dan merender grafik harian bulanan riil `dailyTrend`.
+    - `packages/admin-dashboard/src/lib/dashboard-metrics.ts`: Helper kanonis parsing dan pemformatan metrik.
+  - Standardisasi Ikon Medis & Klinis (Phase 2):
+    - Membersihkan lebih dari 70 pemanggilan `Sparkles` di 28 file dashboard (menggantinya dengan ikon fungsional: `CalendarDays`, `Tag`, `Activity`, `Heart`, `Bot`, `Clock`, `Crosshair`, `Eye`, `ZoomIn`, `Wand2`, `Database`, `Code2`, `Baby`, `FileText`, `RotateCcw`, `HelpCircle`, `CheckCheck`, `Headphones`, `Send`). Ikon `Sparkles` hanya diizinkan di canvas desain `StitchShowcase.tsx`.
+    - `src/config/persona.ts`: Menghapus emoji `✨` dari palet prompt karakter Bidan (template pesan tetap dijaga utuh).
+  - UX Informatif & Mobile Resilience (Phase 3):
+    - Menghilangkan `animate-pulse` tak berujung pada banner peringatan dan badge status statis di `ReservationDetailModal`, `Reservations`, `LiveChatMonitor`, `StaffToday`, dsb.
+    - Menambahkan actionable empty states pada `MetaPerformancePanel`, `LeakageGrid`, dan `LiveChatMonitor`.
+    - Mengganti `h-screen` dengan `h-[100dvh] min-h-[100dvh]` pada `App.tsx`, `ProtectedRoute.tsx`, dan `StaffProtectedRoute.tsx`.
+  - Penertiban Landing Page Multi-Tenant (Phase 4):
+    - `src/landing/public/go.html`: Meredam bulatan cahaya radial gelap menjadi background halus `#008069`, mengganti badge statis dengan placeholder dinamis `__CLINIC_NAME__`, dan merapikan catatan kaki keamanan.
+  - Pembersihan Komentar Program (Phase 5 - antislop-code):
+    - Membersihkan banner spanduk dekoratif `===` dan `---` di `persona.ts`, `telegram-webhook.route.ts`, dan `calculate-delivery.tool.ts`.
+    - Membersihkan emoji bising pada komentar mesin state di `machine.ts`.
+- **Pengujian & Validasi**:
+  - Uji unit baru:
+    - `tests/unit/admin-analytics-tenant.test.ts` (4 uji tenant isolation & 401 gate)
+    - `tests/unit/reservation-count-date.test.ts` (3 uji WIB date filtering & refresh bypass)
+    - `tests/unit/livechat-total.test.ts` (2 uji total conversation count)
+    - `tests/unit/dashboard-metrics.test.ts` (6 uji format & kalkulasi metrik)
+  - Regression gate:
+    - `tests/unit/typing.test.ts` (12 uji) LULUS
+    - `tests/integration/live-chat-reply.test.ts` (11 uji) LULUS
+    - Backend build (`npm run build`) exited 0
+    - Admin dashboard build (`cd packages/admin-dashboard; npm run build`) exited 0 (2506 modules transformed, 0 type errors)
 
 #### 2026-10-25 - Fix: Proteksi Fondasional Integritas Penamaan Master Customer (Anti-Mutasi Liar & Anti-Pembajakan Nama Bayi)
 

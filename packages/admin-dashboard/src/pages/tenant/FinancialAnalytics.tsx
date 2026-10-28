@@ -378,7 +378,7 @@ export const FinancialAnalytics: React.FC = () => {
           <button
             onClick={fetchAnalytics}
             disabled={loading}
-            className="p-2 rounded-xl bg-white border border-[#d1d7db] text-[#54656f] hover:text-[#111b21] hover:bg-[#f0f2f5] transition shadow-xs disabled:opacity-50 cursor-pointer"
+            className="p-2 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] transition shadow-xs disabled:opacity-50 cursor-pointer"
             title="Muat Ulang Data"
           >
             <RefreshCw size={15} className={loading ? 'animate-spin text-[#008069]' : ''} />
@@ -389,13 +389,13 @@ export const FinancialAnalytics: React.FC = () => {
       {/* 4 Top KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Card 1: Total Revenue */}
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#e9edef] shadow-xs relative overflow-hidden group hover:border-[#008069] transition">
+        <div className="bg-white dark:bg-[#111b21] p-4 sm:p-5 rounded-2xl border border-[#e9edef] dark:border-[#202c33] shadow-xs relative overflow-hidden group hover:border-[#008069] transition">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-xs font-bold text-[#54656f] uppercase tracking-wider">
+              <p className="text-xs font-bold text-[#54656f] dark:text-[#8696a0] uppercase tracking-wider">
                 Total Omset ({data?.monthName || 'Bulan Ini'})
               </p>
-              <h3 className="text-2xl font-black text-[#111b21] mt-1.5 tracking-tight">
+              <h3 className="text-2xl font-black text-[#111b21] dark:text-[#e9edef] mt-1.5 tracking-tight">
                 {formatRupiah(kpi.totalRevenue)}
               </h3>
             </div>
@@ -403,7 +403,7 @@ export const FinancialAnalytics: React.FC = () => {
               <DollarSign size={20} />
             </div>
           </div>
-          <div className="mt-3 pt-3 border-t border-[#f0f2f5] flex items-center justify-between text-xs">
+          <div className="mt-3 pt-3 border-t border-[#f0f2f5] dark:border-[#202c33] flex items-center justify-between text-xs">
             <span className="text-[#008069] font-bold">
               ✓ Lunas: {formatRupiah(kpi.lunasRevenue)}
             </span>
@@ -414,13 +414,13 @@ export const FinancialAnalytics: React.FC = () => {
         </div>
 
         {/* Card 2: Total Bookings */}
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#e9edef] shadow-xs relative overflow-hidden group hover:border-sky-500 transition">
+        <div className="bg-white dark:bg-[#111b21] p-4 sm:p-5 rounded-2xl border border-[#e9edef] dark:border-[#202c33] shadow-xs relative overflow-hidden group hover:border-sky-500 transition">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-xs font-bold text-[#54656f] uppercase tracking-wider">
+              <p className="text-xs font-bold text-[#54656f] dark:text-[#8696a0] uppercase tracking-wider">
                 Total Reservasi
               </p>
-              <h3 className="text-2xl font-black text-[#111b21] mt-1.5 tracking-tight">
+              <h3 className="text-2xl font-black text-[#111b21] dark:text-[#e9edef] mt-1.5 tracking-tight">
                 {kpi.totalBookings} <span className="text-sm font-semibold text-[#54656f]">Kunjungan</span>
               </h3>
             </div>
@@ -428,7 +428,7 @@ export const FinancialAnalytics: React.FC = () => {
               <CalendarDays size={20} />
             </div>
           </div>
-          <div className="mt-3 pt-3 border-t border-[#f0f2f5] flex items-center justify-between text-xs text-[#54656f]">
+          <div className="mt-3 pt-3 border-t border-[#f0f2f5] dark:border-[#202c33] flex items-center justify-between text-xs text-[#54656f]">
             <span className="text-[#008069] font-semibold">
               {kpi.completedBookings} Selesai
             </span>
@@ -444,13 +444,13 @@ export const FinancialAnalytics: React.FC = () => {
         </div>
 
         {/* Card 3: Average Order Value (AOV) */}
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#e9edef] shadow-xs relative overflow-hidden group hover:border-purple-500 transition">
+        <div className="bg-white dark:bg-[#111b21] p-4 sm:p-5 rounded-2xl border border-[#e9edef] dark:border-[#202c33] shadow-xs relative overflow-hidden group hover:border-purple-500 transition">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-xs font-bold text-[#54656f] uppercase tracking-wider">
+              <p className="text-xs font-bold text-[#54656f] dark:text-[#8696a0] uppercase tracking-wider">
                 Rata-rata Order (AOV)
               </p>
-              <h3 className="text-2xl font-black text-[#111b21] mt-1.5 tracking-tight">
+              <h3 className="text-2xl font-black text-[#111b21] dark:text-[#e9edef] mt-1.5 tracking-tight">
                 {formatRupiah(kpi.aov)}
               </h3>
             </div>
@@ -458,19 +458,19 @@ export const FinancialAnalytics: React.FC = () => {
               <ShoppingBag size={20} />
             </div>
           </div>
-          <div className="mt-3 pt-3 border-t border-[#f0f2f5] flex items-center justify-between text-xs text-[#54656f]">
+          <div className="mt-3 pt-3 border-t border-[#f0f2f5] dark:border-[#202c33] flex items-center justify-between text-xs text-[#54656f]">
             <span>Nominal belanja rata-rata per transaksi</span>
           </div>
         </div>
 
         {/* Card 4: Repeat Customer Rate */}
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#e9edef] shadow-xs relative overflow-hidden group hover:border-amber-500 transition">
+        <div className="bg-white dark:bg-[#111b21] p-4 sm:p-5 rounded-2xl border border-[#e9edef] dark:border-[#202c33] shadow-xs relative overflow-hidden group hover:border-amber-500 transition">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-xs font-bold text-[#54656f] uppercase tracking-wider">
+              <p className="text-xs font-bold text-[#54656f] dark:text-[#8696a0] uppercase tracking-wider">
                 Rasio Pasien Langganan
               </p>
-              <h3 className="text-2xl font-black text-[#111b21] mt-1.5 tracking-tight">
+              <h3 className="text-2xl font-black text-[#111b21] dark:text-[#e9edef] mt-1.5 tracking-tight">
                 {kpi.repeatRatePercentage}% <span className="text-sm font-semibold text-[#54656f]">Repeat</span>
               </h3>
             </div>
@@ -478,7 +478,7 @@ export const FinancialAnalytics: React.FC = () => {
               <Users size={20} />
             </div>
           </div>
-          <div className="mt-3 pt-3 border-t border-[#f0f2f5] flex items-center justify-between text-xs text-[#54656f]">
+          <div className="mt-3 pt-3 border-t border-[#f0f2f5] dark:border-[#202c33] flex items-center justify-between text-xs text-[#54656f]">
             <span className="text-[#008069] font-semibold">{kpi.repeatCustomersCount} Pasien Lama</span>
             <span className="text-sky-700 font-semibold">{kpi.newCustomersCount} Pasien Baru</span>
           </div>
@@ -486,10 +486,10 @@ export const FinancialAnalytics: React.FC = () => {
       </div>
 
       {/* Daily Revenue History Chart */}
-      <div className="bg-white p-4 sm:p-6 rounded-2xl border border-[#e9edef] shadow-xs space-y-4">
+      <div className="bg-white dark:bg-[#111b21] p-4 sm:p-6 rounded-2xl border border-[#e9edef] dark:border-[#202c33] shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
-            <h2 className="text-base font-bold text-[#111b21] flex items-center gap-2">
+            <h2 className="text-base font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
               <BarChart2 size={18} className="text-[#008069]" />
               <span>Histori Pendapatan Harian ({data?.monthName} {selectedYear})</span>
             </h2>
@@ -531,8 +531,8 @@ export const FinancialAnalytics: React.FC = () => {
                   if (active && payload && payload.length) {
                     const item = payload[0].payload as DailyRevenuePoint;
                     return (
-                      <div className="bg-white p-3 rounded-xl shadow-lg border border-[#e9edef] text-xs space-y-1.5">
-                        <p className="font-bold text-[#111b21] border-b border-[#f0f2f5] pb-1">
+                      <div className="bg-white dark:bg-[#202c33] p-3 rounded-xl shadow-lg border border-[#e9edef] dark:border-[#2a3942] text-xs space-y-1.5">
+                        <p className="font-bold text-[#111b21] dark:text-[#e9edef] border-b border-[#f0f2f5] dark:border-[#2a3942] pb-1">
                           {item.dayName}, {item.dateStr}
                         </p>
                         <p className="text-[#008069] font-bold">
@@ -543,7 +543,7 @@ export const FinancialAnalytics: React.FC = () => {
                             ⏳ Tagih: {formatRupiah(item.pendingRevenue)}
                           </p>
                         )}
-                        <p className="text-[#111b21] font-bold pt-1 border-t border-[#f0f2f5]">
+                        <p className="text-[#111b21] font-bold pt-1 border-t border-[#f0f2f5] dark:border-[#202c33]">
                           Total Omset: {formatRupiah(item.revenue)} ({item.bookingsCount} Pasien)
                         </p>
                       </div>
@@ -562,8 +562,8 @@ export const FinancialAnalytics: React.FC = () => {
       {/* Grid 2 Columns: Breakdowns & Leaderboards */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Category Breakdown (Donut Chart) */}
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#e9edef] shadow-xs space-y-4">
-          <h2 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
+        <div className="bg-white dark:bg-[#111b21] p-4 sm:p-5 rounded-2xl border border-[#e9edef] dark:border-[#202c33] shadow-xs space-y-4">
+          <h2 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
             <PieIcon size={16} className="text-[#008069]" />
             <span>Kategori Layanan</span>
           </h2>
@@ -596,7 +596,7 @@ export const FinancialAnalytics: React.FC = () => {
               </div>
             )}
           </div>
-          <div className="space-y-1.5 pt-2 border-t border-[#f0f2f5] text-xs">
+          <div className="space-y-1.5 pt-2 border-t border-[#f0f2f5] dark:border-[#202c33] text-xs">
             {(data?.categoryBreakdown || []).map((cat, idx) => (
               <div key={idx} className="flex items-center justify-between text-xs">
                 <div className="flex items-center space-x-2">
@@ -604,12 +604,12 @@ export const FinancialAnalytics: React.FC = () => {
                     className="w-2.5 h-2.5 rounded-full shrink-0"
                     style={{ backgroundColor: CATEGORY_COLORS[idx % CATEGORY_COLORS.length] }}
                   />
-                  <span className="font-semibold text-[#111b21] truncate max-w-[120px]">
+                  <span className="font-semibold text-[#111b21] dark:text-[#e9edef] truncate max-w-[120px]">
                     {cat.label}
                   </span>
                 </div>
                 <div className="text-right font-mono">
-                  <span className="font-bold text-[#111b21]">{formatCompactRupiah(cat.revenue)}</span>
+                  <span className="font-bold text-[#111b21] dark:text-[#e9edef]">{formatCompactRupiah(cat.revenue)}</span>
                   <span className="text-[#8696a0] ml-1.5 text-[11px]">({cat.percentage}%)</span>
                 </div>
               </div>
@@ -618,8 +618,8 @@ export const FinancialAnalytics: React.FC = () => {
         </div>
 
         {/* Middle: Payment Methods & Top Services */}
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#e9edef] shadow-xs space-y-4">
-          <h2 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
+        <div className="bg-white dark:bg-[#111b21] p-4 sm:p-5 rounded-2xl border border-[#e9edef] dark:border-[#202c33] shadow-xs space-y-4">
+          <h2 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
             <CreditCard size={16} className="text-[#008069]" />
             <span>Metode Pembayaran</span>
           </h2>
@@ -627,10 +627,10 @@ export const FinancialAnalytics: React.FC = () => {
             {(data?.paymentBreakdown || []).map((pay, idx) => (
               <div key={idx} className="space-y-1">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-[#111b21]">{pay.label}</span>
+                  <span className="font-semibold text-[#111b21] dark:text-[#e9edef]">{pay.label}</span>
                   <span className="font-mono font-bold text-[#008069]">{formatRupiah(pay.revenue)} ({pay.percentage}%)</span>
                 </div>
-                <div className="h-2 w-full bg-[#f0f2f5] rounded-full overflow-hidden">
+                <div className="h-2 w-full bg-[#f0f2f5] dark:bg-[#202c33] rounded-full overflow-hidden">
                   <div
                     className="h-full rounded-full transition-all duration-300"
                     style={{
@@ -643,18 +643,18 @@ export const FinancialAnalytics: React.FC = () => {
             ))}
           </div>
 
-          <div className="pt-4 border-t border-[#f0f2f5] space-y-3">
-            <h3 className="text-xs font-bold text-[#54656f] uppercase tracking-wider">
+          <div className="pt-4 border-t border-[#f0f2f5] dark:border-[#202c33] space-y-3">
+            <h3 className="text-xs font-bold text-[#54656f] dark:text-[#8696a0] uppercase tracking-wider">
               Top Layanan Paling Laris
             </h3>
             <div className="space-y-2">
               {(data?.topServices || []).slice(0, 4).map((s, idx) => (
-                <div key={idx} className="flex items-center justify-between text-xs bg-[#f8fafc] p-2 rounded-xl border border-[#e9edef]">
+                <div key={idx} className="flex items-center justify-between text-xs bg-[#f8fafc] dark:bg-[#182229] p-2 rounded-xl border border-[#e9edef] dark:border-[#202c33]">
                   <div className="flex items-center space-x-2 min-w-0 pr-2">
                     <span className="h-5 w-5 rounded-full bg-[#e8f5f2] text-[#008069] flex items-center justify-center font-bold text-[10px] shrink-0">
                       {idx + 1}
                     </span>
-                    <span className="font-semibold text-[#111b21] truncate">{cleanTreatmentName(stripBufferMetadata(s.serviceName))}</span>
+                    <span className="font-semibold text-[#111b21] dark:text-[#e9edef] truncate">{cleanTreatmentName(stripBufferMetadata(s.serviceName))}</span>
                   </div>
                   <span className="font-bold text-[#008069] shrink-0 font-mono text-[11px]">
                     {s.count}x ({formatCompactRupiah(s.estimatedRevenue)})
@@ -666,8 +666,8 @@ export const FinancialAnalytics: React.FC = () => {
         </div>
 
         {/* Right: Staff Leaderboard */}
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#e9edef] shadow-xs space-y-4">
-          <h2 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
+        <div className="bg-white dark:bg-[#111b21] p-4 sm:p-5 rounded-2xl border border-[#e9edef] dark:border-[#202c33] shadow-xs space-y-4">
+          <h2 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
             <Award size={16} className="text-[#008069]" />
             <span>Leaderboard Terapis</span>
           </h2>
@@ -676,7 +676,7 @@ export const FinancialAnalytics: React.FC = () => {
               data.staffPerformance.map((staff, idx) => (
                 <div
                   key={staff.staffId}
-                  className="flex items-center justify-between p-2.5 bg-[#f8fafc] hover:bg-[#e8f5f2]/40 rounded-xl border border-[#e9edef] transition"
+                  className="flex items-center justify-between p-2.5 bg-[#f8fafc] dark:bg-[#182229] hover:bg-[#e8f5f2]/40 dark:hover:bg-[#202c33] rounded-xl border border-[#e9edef] dark:border-[#202c33] transition"
                 >
                   <div className="flex items-center space-x-2.5 min-w-0 pr-2">
                     <div className={`h-8 w-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
@@ -689,7 +689,7 @@ export const FinancialAnalytics: React.FC = () => {
                       {idx + 1}
                     </div>
                     <div className="min-w-0">
-                      <h4 className="font-bold text-xs text-[#111b21] truncate">
+                      <h4 className="font-bold text-xs text-[#111b21] dark:text-[#e9edef] truncate">
                         {staff.staffName}
                       </h4>
                       <p className="text-[10px] text-[#54656f]">
@@ -714,9 +714,9 @@ export const FinancialAnalytics: React.FC = () => {
       </div>
 
       {/* Transaction Ledger Table */}
-      <div className="bg-white rounded-2xl border border-[#e9edef] shadow-xs overflow-hidden space-y-4">
+      <div className="bg-white dark:bg-[#111b21] rounded-2xl border border-[#e9edef] dark:border-[#202c33] shadow-xs overflow-hidden space-y-4">
         {/* Table Controls */}
-        <div className="p-4 sm:p-5 border-b border-[#e9edef] flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="p-4 sm:p-5 border-b border-[#e9edef] dark:border-[#202c33] flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="relative w-full sm:w-80">
             <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-[#8696a0]">
               <Search size={14} />
@@ -726,7 +726,7 @@ export const FinancialAnalytics: React.FC = () => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Cari pasien, ID, menu, atau terapis..."
-              className="w-full pl-9 pr-3.5 py-2 rounded-xl bg-[#f0f2f5] border-0 text-[#111b21] text-xs focus:outline-none focus:ring-2 focus:ring-[#008069] min-h-[38px]"
+              className="w-full pl-9 pr-3.5 py-2 rounded-xl bg-[#f0f2f5] dark:bg-[#202c33] border-0 text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] text-xs focus:outline-none focus:ring-2 focus:ring-[#008069] min-h-[38px]"
             />
           </div>
 
@@ -736,7 +736,7 @@ export const FinancialAnalytics: React.FC = () => {
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
                 statusFilter === 'ALL'
                   ? 'bg-[#008069] text-white shadow-xs'
-                  : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
+                  : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0] hover:bg-[#e9edef] dark:hover:bg-[#2a3942]'
               }`}
             >
               Semua ({(data?.transactions || []).length})
@@ -746,7 +746,7 @@ export const FinancialAnalytics: React.FC = () => {
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
                 statusFilter === 'LUNAS'
                   ? 'bg-[#008069] text-white shadow-xs'
-                  : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
+                  : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0] hover:bg-[#e9edef] dark:hover:bg-[#2a3942]'
               }`}
             >
               ✓ Lunas
@@ -756,7 +756,7 @@ export const FinancialAnalytics: React.FC = () => {
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
                 statusFilter === 'TAGIH_DI_TEMPAT'
                   ? 'bg-[#008069] text-white shadow-xs'
-                  : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
+                  : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0] hover:bg-[#e9edef] dark:hover:bg-[#2a3942]'
               }`}
             >
               ⏳ Tagih di Tempat
@@ -766,7 +766,7 @@ export const FinancialAnalytics: React.FC = () => {
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
                 statusFilter === 'SELESAI_BELUM_VERIFIKASI'
                   ? 'bg-[#008069] text-white shadow-xs'
-                  : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
+                  : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0] hover:bg-[#e9edef] dark:hover:bg-[#2a3942]'
               }`}
             >
               Selesai — Belum Verifikasi
@@ -838,7 +838,7 @@ export const FinancialAnalytics: React.FC = () => {
                   })()}
                 </div>
 
-                <div className="flex items-center justify-between text-[11px] text-[#8696a0] pt-1 border-t border-[#f0f2f5] dark:border-[#2a3942]">
+                <div className="flex items-center justify-between text-[11px] text-[#8696a0] pt-1 border-t border-[#f0f2f5] dark:border-[#202c33] dark:border-[#2a3942]">
                   <span className="truncate">
                     Terapis: <strong className="text-[#111b21] dark:text-[#e9edef]">{resolveStaffName(tx) || 'Belum ditugaskan'}</strong>
                   </span>
@@ -852,7 +852,7 @@ export const FinancialAnalytics: React.FC = () => {
         {/* Desktop Table (>= md) */}
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs text-[#111b21]">
-            <thead className="bg-[#f8fafc] text-[#54656f] uppercase text-[10px] font-bold border-b border-[#e9edef]">
+            <thead className="bg-[#f8fafc] dark:bg-[#182229] text-[#54656f] dark:text-[#8696a0] uppercase text-[10px] font-bold border-b border-[#e9edef] dark:border-[#202c33]">
               <tr>
                 <th className="py-3 px-4">Tanggal & Jam</th>
                 <th className="py-3 px-4">Pasien</th>
@@ -863,7 +863,7 @@ export const FinancialAnalytics: React.FC = () => {
                 <th className="py-3 px-4">Status Bayar</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#f0f2f5]">
+            <tbody className="divide-y divide-[#f0f2f5] dark:divide-[#202c33]">
               {loading ? (
                 <tr>
                   <td colSpan={7} className="py-8 text-center text-[#8696a0]">
@@ -882,7 +882,7 @@ export const FinancialAnalytics: React.FC = () => {
                   <tr
                     key={tx.id}
                     onClick={() => setSelectedTx(tx)}
-                    className="hover:bg-[#f8fafc] transition-colors cursor-pointer group"
+                    className="hover:bg-[#f8fafc] dark:hover:bg-[#1c272e] transition-colors cursor-pointer group"
                   >
                     <td className="py-3 px-4 whitespace-nowrap font-mono text-[11px]">
                       {tx.bookingDate
@@ -895,7 +895,7 @@ export const FinancialAnalytics: React.FC = () => {
                         : '-'}
                     </td>
                     <td className="py-3 px-4 whitespace-nowrap">
-                      <div className="font-bold text-[#111b21] group-hover:text-[#008069] transition">
+                      <div className="font-bold text-[#111b21] dark:text-[#e9edef] group-hover:text-[#008069] transition">
                         {tx.customerName}
                       </div>
                       <div className="text-[10px] text-[#8696a0] font-mono">
@@ -924,7 +924,7 @@ export const FinancialAnalytics: React.FC = () => {
                     <td className="py-3 px-4 max-w-xs truncate text-[#54656f]">
                       {tx.location}
                     </td>
-                    <td className="py-3 px-4 whitespace-nowrap text-right font-mono font-bold text-[#111b21]">
+                    <td className="py-3 px-4 whitespace-nowrap text-right font-mono font-bold text-[#111b21] dark:text-[#e9edef]">
                       {formatRupiah(tx.totalFee)}
                       {tx.deliveryFee > 0 && (
                         <div className="text-[10px] text-[#8696a0] font-normal">
@@ -954,11 +954,11 @@ export const FinancialAnalytics: React.FC = () => {
       {/* Transaction Detail Modal */}
       {selectedTx && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-[#e9edef] overflow-hidden animate-scaleIn">
-            <div className="p-4 sm:p-5 border-b border-[#e9edef] flex items-center justify-between bg-[#f8fafc]">
+          <div className="bg-white dark:bg-[#111b21] w-full max-w-lg rounded-2xl shadow-2xl border border-[#e9edef] dark:border-[#202c33] overflow-hidden animate-scaleIn">
+            <div className="p-4 sm:p-5 border-b border-[#e9edef] dark:border-[#202c33] flex items-center justify-between bg-[#f8fafc] dark:bg-[#182229]">
               <div className="flex items-center space-x-2">
                 <FileSpreadsheet size={18} className="text-[#008069]" />
-                <h3 className="font-bold text-sm text-[#111b21]">
+                <h3 className="font-bold text-sm text-[#111b21] dark:text-[#e9edef]">
                   Rincian Transaksi
                 </h3>
               </div>
@@ -971,7 +971,7 @@ export const FinancialAnalytics: React.FC = () => {
             </div>
 
             <div className="p-5 space-y-4 text-xs">
-              <div className="flex justify-between items-center bg-[#f0f2f5] p-3 rounded-xl">
+              <div className="flex justify-between items-center bg-[#f0f2f5] dark:bg-[#182229] p-3 rounded-xl">
                 <div>
                   <span className="text-[10px] text-[#54656f] uppercase font-bold">No. Reservasi</span>
                   <p className="font-mono font-bold text-[#111b21]">{selectedTx.id}</p>
@@ -990,33 +990,33 @@ export const FinancialAnalytics: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 bg-[#f8fafc] rounded-xl border border-[#e9edef]">
+                <div className="p-3 bg-[#f8fafc] dark:bg-[#182229] rounded-xl border border-[#e9edef] dark:border-[#202c33]">
                   <span className="text-[10px] text-[#54656f] uppercase font-bold">Pasien</span>
                   <p className="font-bold text-sm text-[#111b21] mt-0.5">{selectedTx.customerName}</p>
                   <p className="text-[#8696a0] font-mono text-[11px]">{selectedTx.customerPhoneMasked}</p>
                 </div>
-                <div className="p-3 bg-[#f8fafc] rounded-xl border border-[#e9edef]">
+                <div className="p-3 bg-[#f8fafc] dark:bg-[#182229] rounded-xl border border-[#e9edef] dark:border-[#202c33]">
                   <span className="text-[10px] text-[#54656f] uppercase font-bold">Terapis</span>
                   <p className="font-bold text-sm text-[#008069] mt-0.5">{selectedTx.assignedStaffName}</p>
                   <p className="text-[#8696a0] text-[11px]">Penanggung Jawab</p>
                 </div>
               </div>
 
-              <div className="p-3 bg-[#f8fafc] rounded-xl border border-[#e9edef] space-y-1">
+              <div className="p-3 bg-[#f8fafc] dark:bg-[#182229] rounded-xl border border-[#e9edef] dark:border-[#202c33] space-y-1">
                 <span className="text-[10px] text-[#54656f] uppercase font-bold">Menu Treatment</span>
-                <p className="font-semibold text-[#111b21]">{(() => {
+                <p className="font-semibold text-[#111b21] dark:text-[#e9edef]">{(() => {
                   const clean = stripBufferMetadata(selectedTx.treatmentDetail);
                   return clean.split(/\s*\+\s*/).map((s) => cleanTreatmentName(s)).join(' + ') || clean;
                 })()}</p>
                 <p className="text-[11px] text-[#8696a0]">Kategori: {selectedTx.category}</p>
               </div>
 
-              <div className="p-3 bg-[#f8fafc] rounded-xl border border-[#e9edef] space-y-1">
+              <div className="p-3 bg-[#f8fafc] dark:bg-[#182229] rounded-xl border border-[#e9edef] dark:border-[#202c33] space-y-1">
                 <span className="text-[10px] text-[#54656f] uppercase font-bold">Alamat / Lokasi</span>
                 <p className="text-[#111b21]">{selectedTx.location}</p>
               </div>
 
-              <div className="p-3.5 bg-emerald-50/60 rounded-xl border border-emerald-200 space-y-2">
+              <div className="p-3.5 bg-emerald-50/60 dark:bg-emerald-950/20 rounded-xl border border-emerald-200 dark:border-emerald-800/40 space-y-2">
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-[#54656f]">Biaya Layanan Treatment:</span>
                   <span className="font-mono font-bold text-[#111b21]">{formatRupiah(selectedTx.treatmentFee)}</span>
@@ -1025,14 +1025,14 @@ export const FinancialAnalytics: React.FC = () => {
                   <span className="text-[#54656f]">Ongkos Kirim (Transport):</span>
                   <span className="font-mono font-bold text-[#111b21]">{formatRupiah(selectedTx.deliveryFee)}</span>
                 </div>
-                <div className="flex justify-between items-center text-sm font-black text-[#008069] pt-2 border-t border-emerald-200">
+                <div className="flex justify-between items-center text-sm font-black text-[#008069] dark:text-[#00a884] pt-2 border-t border-emerald-200 dark:border-emerald-800/40">
                   <span>TOTAL PEMBAYARAN:</span>
                   <span className="font-mono">{formatRupiah(selectedTx.totalFee)}</span>
                 </div>
               </div>
             </div>
 
-            <div className="p-4 bg-[#f8fafc] border-t border-[#e9edef] flex justify-end">
+            <div className="p-4 bg-[#f8fafc] dark:bg-[#182229] border-t border-[#e9edef] dark:border-[#202c33] flex justify-end">
               <button
                 onClick={() => setSelectedTx(null)}
                 className="px-4 py-2 rounded-xl bg-[#008069] text-white text-xs font-bold hover:bg-[#00a884] transition"

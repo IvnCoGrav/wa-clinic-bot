@@ -124,9 +124,9 @@ export const MetaPerformancePanel: React.FC<Props> = ({ startDate, endDate }) =>
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-[#667781]">
-          Rentang: <span className="font-semibold text-[#111b21]">{startDate}</span> s/d{' '}
-          <span className="font-semibold text-[#111b21]">{endDate}</span>
+        <p className="text-xs text-[#667781] dark:text-[#8696a0]">
+          Rentang: <span className="font-semibold text-[#111b21] dark:text-[#e9edef]">{startDate}</span> s/d{' '}
+          <span className="font-semibold text-[#111b21] dark:text-[#e9edef]">{endDate}</span>
         </p>
         <button
           onClick={() => load(totalSpendNum > 0 ? totalSpendNum : undefined)}
@@ -139,13 +139,13 @@ export const MetaPerformancePanel: React.FC<Props> = ({ startDate, endDate }) =>
       </div>
 
       {report?.meta?.dbNote && (
-        <div className="flex items-start gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+        <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 rounded-xl px-3 py-2">
           <AlertTriangle size={14} className="text-amber-600 mt-0.5 shrink-0" />
           <span>{report.meta.dbNote}</span>
         </div>
       )}
       {report?.meta?.revenueBasis?.truncated && (
-        <div className="flex items-start gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+        <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 rounded-xl px-3 py-2">
           <AlertTriangle size={14} className="text-amber-600 mt-0.5 shrink-0" />
           <span>Data melebihi batas 5.000 baris per kategori — angka ditampilkan sebagian (truncated).</span>
         </div>
@@ -163,7 +163,7 @@ export const MetaPerformancePanel: React.FC<Props> = ({ startDate, endDate }) =>
       />
 
       {loading && !report ? (
-        <div className="bg-white border border-[#e9edef] rounded-2xl p-12 flex flex-col items-center gap-2 text-[#667781]">
+        <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#202c33] rounded-2xl p-12 flex flex-col items-center gap-2 text-[#667781] dark:text-[#8696a0]">
           <Loader size={20} className="animate-spin text-[#008069]" />
           <span className="text-xs">Menghitung performa iklan &amp; kohort...</span>
         </div>
@@ -187,12 +187,12 @@ export const MetaPerformancePanel: React.FC<Props> = ({ startDate, endDate }) =>
           <LeakageGrid report={report} />
         </>
       ) : (
-        <div className="bg-white border border-[#e9edef] rounded-2xl p-12 text-center shadow-xs space-y-3">
-          <div className="w-12 h-12 rounded-2xl bg-[#e8f5f2] text-[#008069] flex items-center justify-center mx-auto">
+        <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#202c33] rounded-2xl p-12 text-center shadow-xs space-y-3">
+          <div className="w-12 h-12 rounded-2xl bg-[#e8f5f2] dark:bg-[#00a884]/20 text-[#008069] dark:text-[#00a884] flex items-center justify-center mx-auto">
             <Activity size={24} />
           </div>
           <div className="space-y-1 max-w-md mx-auto">
-            <h4 className="text-sm font-bold text-[#111b21]">Belum Ada Data Event Meta Pixel</h4>
+            <h4 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef]">Belum Ada Data Event Meta Pixel</h4>
             <p className="text-xs text-[#667781] leading-relaxed">
               Sistem belum menerima kiriman event pelacakan iklan pada rentang tanggal ini. Pastikan kampanye iklan Meta aktif dan Meta Pixel ID telah dipasang pada halaman landing page klinik.
             </p>

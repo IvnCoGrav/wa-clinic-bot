@@ -290,10 +290,10 @@ export const DailyReportPanel: React.FC = () => {
   };
 
   return (
-    <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-5 shadow-xs">
+    <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-5 shadow-xs">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-        <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
+        <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
           <BarChart3 className="text-[#008069]" size={16} />
           <span>Laporan Operasional Harian &amp; Notifikasi Telegram</span>
         </h3>
@@ -310,7 +310,7 @@ export const DailyReportPanel: React.FC = () => {
         )}
       </div>
 
-      <p className="text-xs text-[#667781] leading-relaxed">
+      <p className="text-xs text-[#667781] dark:text-[#8696a0] leading-relaxed">
         Kirim ringkasan performa operasional (Sales, Omzet, Customer Baru, Atribusi Iklan, &amp; Kesehatan Bot) secara otomatis ke Telegram setiap pagi tanpa perlu konfigurasi teknis yang rumit.
       </p>
 
@@ -319,11 +319,11 @@ export const DailyReportPanel: React.FC = () => {
       ) : (
         <div className="space-y-4 pt-1">
           {/* 1-Click Zero-Setup Pairing Section */}
-          <div className="bg-emerald-50/40 border border-emerald-200 rounded-2xl p-4 space-y-3 shadow-xs">
+          <div className="bg-emerald-50/40 dark:bg-[#00a884]/10 border border-emerald-200 dark:border-[#00a884]/30 rounded-2xl p-4 space-y-3 shadow-xs">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <Zap size={15} className="text-[#008069]" />
-                <span className="text-xs font-bold text-[#111b21]">Koneksi 1-Klik Instan (Zero-Setup)</span>
+                <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Koneksi 1-Klik Instan (Zero-Setup)</span>
               </div>
               <button
                 type="button"
@@ -336,7 +336,7 @@ export const DailyReportPanel: React.FC = () => {
               </button>
             </div>
 
-            <p className="text-[11px] text-[#54656f] leading-relaxed">
+            <p className="text-[11px] text-[#54656f] dark:text-[#8696a0] leading-relaxed">
               Pilih tujuan penerimaan laporan. Anda cukup mengklik tombol di bawah dan menekan tombol <b>START / Tambahkan</b> di Telegram:
             </p>
 
@@ -352,7 +352,7 @@ export const DailyReportPanel: React.FC = () => {
                     <MessageSquare size={16} />
                   </div>
                   <div>
-                    <span className="text-xs font-bold text-[#111b21] block group-hover:text-[#008069]">
+                    <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] block group-hover:text-[#008069]">
                       Chat Pribadi (DM)
                     </span>
                     <span className="text-[10px] text-[#8696a0]">Laporan langsung ke akun Anda</span>
@@ -372,7 +372,7 @@ export const DailyReportPanel: React.FC = () => {
                     <Users size={16} />
                   </div>
                   <div>
-                    <span className="text-xs font-bold text-[#111b21] block group-hover:text-[#008069]">
+                    <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] block group-hover:text-[#008069]">
                       Grup Telegram / Tim
                     </span>
                     <span className="text-[10px] text-[#8696a0]">Laporan ke grup bersama staff</span>
@@ -383,12 +383,12 @@ export const DailyReportPanel: React.FC = () => {
             </div>
 
             {/* Forum / Topics Quick Guide */}
-            <div className="p-3 bg-white rounded-xl border border-emerald-200/80 text-[11px] text-[#54656f] space-y-1.5 shadow-2xs">
-              <div className="font-bold text-[#111b21] flex items-center space-x-1">
+            <div className="p-3 bg-white rounded-xl border border-emerald-200/80 text-[11px] text-[#54656f] dark:text-[#8696a0] space-y-1.5 shadow-2xs">
+              <div className="font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-1">
                 <Layers size={13} className="text-[#008069]" />
                 <span>Panduan Sub-Topik (Forum Topics):</span>
               </div>
-              <p className="text-[10.5px] leading-relaxed text-[#54656f]">
+              <p className="text-[10.5px] leading-relaxed text-[#54656f] dark:text-[#8696a0]">
                 Jika bot dimasukkan ke grup dengan banyak topik, cukup buka topik yang diinginkan lalu ketik perintah berikut:
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 pt-1 text-[10px] font-mono">
@@ -409,10 +409,10 @@ export const DailyReportPanel: React.FC = () => {
           </div>
 
           {/* Schedule Settings */}
-          <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef]">
+          <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#f8fafc] dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942]">
             <div>
-              <span className="text-xs font-bold text-[#111b21] block">Aktifkan Jadwal Cron Otomatis</span>
-              <span className="text-xs text-[#667781]">Kirim notifikasi ringkasan otomatis setiap hari di jam terpilih</span>
+              <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] block">Aktifkan Jadwal Cron Otomatis</span>
+              <span className="text-xs text-[#667781] dark:text-[#8696a0]">Kirim notifikasi ringkasan otomatis setiap hari di jam terpilih</span>
             </div>
             <ToggleSwitch
               checked={enabled}
@@ -424,7 +424,7 @@ export const DailyReportPanel: React.FC = () => {
           </div>
 
           <div className="space-y-1">
-            <label className="text-[11px] font-bold text-[#111b21] block flex items-center space-x-1">
+            <label className="text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] block flex items-center space-x-1">
               <Clock size={12} className="text-[#008069]" />
               <span>Jam Pengiriman (WIB, 00-23)</span>
             </label>
@@ -434,7 +434,7 @@ export const DailyReportPanel: React.FC = () => {
               max={23}
               value={reportHour}
               onChange={(e) => setReportHour(parseInt(e.target.value, 10) || 0)}
-              className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+              className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
             />
             <span className="text-[10px] text-[#8696a0] block">
               Default: Jam 07:00 WIB (merangkum data jam 00:00 - 23:59 WIB hari sebelumnya).
@@ -454,9 +454,9 @@ export const DailyReportPanel: React.FC = () => {
           </div>
 
           {showAdvanced && (
-            <div className="p-4 bg-[#f8fafc] border border-[#e9edef] rounded-2xl space-y-3">
+            <div className="p-4 bg-[#f8fafc] dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-[#111b21]">Konfigurasi Token &amp; Chat ID Manual</span>
+                <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Konfigurasi Token &amp; Chat ID Manual</span>
                 <button
                   type="button"
                   onClick={handleRegenerateToken}
@@ -469,7 +469,7 @@ export const DailyReportPanel: React.FC = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-[#111b21] block flex items-center space-x-1">
+                  <label className="text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] block flex items-center space-x-1">
                     <KeyRound size={12} className="text-[#008069]" />
                     <span>Telegram Bot Token (BYOB / Custom)</span>
                   </label>
@@ -478,7 +478,7 @@ export const DailyReportPanel: React.FC = () => {
                     value={telegramBotToken}
                     onChange={(e) => setTelegramBotToken(e.target.value)}
                     placeholder={telegramBotTokenConfigured ? '•••••• tersimpan — biarkan kosong untuk mempertahankan' : '123456789:ABCdefGHIjklMNOpqrsTUVwxyZ...'}
-                    className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+                    className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
                   />
                   <span className="text-[10px] text-[#8696a0] block">
                     Kosongkan untuk menggunakan bot resmi default (@{telegramBotUsername}).
@@ -486,7 +486,7 @@ export const DailyReportPanel: React.FC = () => {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-[#111b21] block flex items-center space-x-1">
+                  <label className="text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] block flex items-center space-x-1">
                     <MessageSquare size={12} className="text-[#008069]" />
                     <span>Telegram Chat ID Terdaftar</span>
                   </label>
@@ -495,7 +495,7 @@ export const DailyReportPanel: React.FC = () => {
                     value={telegramChatId}
                     onChange={(e) => setTelegramChatId(e.target.value)}
                     placeholder="-1001234567890 atau ID Chat Pribadi"
-                    className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+                    className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
                   />
                   <span className="text-[10px] text-[#8696a0] block">
                     Diisi otomatis oleh tombol 1-Klik, atau isi manual jika diperlukan.
@@ -505,33 +505,33 @@ export const DailyReportPanel: React.FC = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-[#54656f]">Topic ID Laporan</label>
+                  <label className="text-[10px] font-bold text-[#54656f] dark:text-[#8696a0]">Topic ID Laporan</label>
                   <input
                     type="text"
                     value={telegramTopicDailyReport}
                     onChange={(e) => setTelegramTopicDailyReport(e.target.value)}
                     placeholder="contoh: 42"
-                    className="w-full bg-white border border-[#d1d7db] rounded-xl px-2.5 py-1.5 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069]"
+                    className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-2.5 py-1.5 text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069]"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-[#54656f]">Topic ID Error Server</label>
+                  <label className="text-[10px] font-bold text-[#54656f] dark:text-[#8696a0]">Topic ID Error Server</label>
                   <input
                     type="text"
                     value={telegramTopicSystemErrors}
                     onChange={(e) => setTelegramTopicSystemErrors(e.target.value)}
                     placeholder="contoh: 50"
-                    className="w-full bg-white border border-[#d1d7db] rounded-xl px-2.5 py-1.5 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069]"
+                    className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-2.5 py-1.5 text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069]"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-[#54656f]">Topic ID Eskalasi Medis</label>
+                  <label className="text-[10px] font-bold text-[#54656f] dark:text-[#8696a0]">Topic ID Eskalasi Medis</label>
                   <input
                     type="text"
                     value={telegramTopicMedicalAlerts}
                     onChange={(e) => setTelegramTopicMedicalAlerts(e.target.value)}
                     placeholder="contoh: 65"
-                    className="w-full bg-white border border-[#d1d7db] rounded-xl px-2.5 py-1.5 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069]"
+                    className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-2.5 py-1.5 text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069]"
                   />
                 </div>
               </div>
@@ -544,7 +544,7 @@ export const DailyReportPanel: React.FC = () => {
               onClick={handleTestSend}
               disabled={testing}
               title="Kirim notifikasi simulasi berisi data dummy untuk menguji integrasi Telegram tanpa mempengaruhi riwayat laporan harian"
-              className="px-3.5 py-2 bg-white hover:bg-[#f0f2f5] text-[#111b21] rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 disabled:opacity-50 border border-[#d1d7db] shadow-xs"
+              className="px-3.5 py-2 bg-white hover:bg-[#f0f2f5] text-[#111b21] dark:text-[#e9edef] rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 disabled:opacity-50 border border-[#d1d7db] shadow-xs"
             >
               <Send size={12} className="text-[#008069]" />
               <span>{testing ? 'Mengirim Simulasi...' : 'Tes Kirim (Data Dummy)'}</span>
@@ -565,7 +565,7 @@ export const DailyReportPanel: React.FC = () => {
       {/* ================= Fase 2r — Nightly Watchdog ================= */}
       <div className="border-t border-[#e9edef] pt-5 space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
+          <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
             <Moon className="text-indigo-600" size={16} />
             <span>Laporan Malam (Nightly Watchdog) — 21:00 WIB</span>
           </h3>
@@ -579,15 +579,15 @@ export const DailyReportPanel: React.FC = () => {
           </button>
         </div>
 
-        <p className="text-xs text-[#667781] leading-relaxed">
+        <p className="text-xs text-[#667781] dark:text-[#8696a0] leading-relaxed">
           Rekap pengawasan malam: chat belum dibalas, tanya jadwal belum booking, dan jadwal terkonfirmasi besok.
           Dikirim otomatis ke Telegram (dan WhatsApp bila diaktifkan &amp; provider = WAHA).
         </p>
 
-        <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef]">
+        <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#f8fafc] dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942]">
           <div>
-            <span className="text-xs font-bold text-[#111b21] block">Aktifkan Laporan Malam</span>
-            <span className="text-xs text-[#667781]">Kirim otomatis setiap malam pada jam terpilih</span>
+            <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] block">Aktifkan Laporan Malam</span>
+            <span className="text-xs text-[#667781] dark:text-[#8696a0]">Kirim otomatis setiap malam pada jam terpilih</span>
           </div>
           <ToggleSwitch
             checked={nightlyEnabled}
@@ -599,7 +599,7 @@ export const DailyReportPanel: React.FC = () => {
         </div>
 
         <div className="space-y-1">
-          <label className="text-[11px] font-bold text-[#111b21] block flex items-center space-x-1">
+          <label className="text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] block flex items-center space-x-1">
             <Clock size={12} className="text-indigo-600" />
             <span>Jam Pengiriman (WIB, 0-23)</span>
           </label>
@@ -609,13 +609,13 @@ export const DailyReportPanel: React.FC = () => {
             max={23}
             value={nightlyHour}
             onChange={(e) => setNightlyHour(parseInt(e.target.value, 10) || 0)}
-            className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069]"
+            className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069]"
           />
         </div>
 
         {/* Kanal */}
         <div className="space-y-1.5">
-          <span className="text-[11px] font-bold text-[#111b21] block">Kanal Notifikasi</span>
+          <span className="text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] block">Kanal Notifikasi</span>
           <div className="flex flex-wrap gap-2">
             {['TELEGRAM', 'WHATSAPP'].map((ch) => (
               <button
@@ -625,7 +625,7 @@ export const DailyReportPanel: React.FC = () => {
                 className={`px-3 py-1.5 rounded-lg text-[11px] font-bold border transition ${
                   channels.includes(ch)
                     ? 'bg-[#008069] text-white border-[#008069]'
-                    : 'bg-white text-[#54656f] border-[#d1d7db] hover:border-[#008069]'
+                    : 'bg-white text-[#54656f] dark:text-[#8696a0] border-[#d1d7db] hover:border-[#008069]'
                 }`}
               >
                 {ch}
@@ -638,7 +638,7 @@ export const DailyReportPanel: React.FC = () => {
         {channels.includes('WHATSAPP') && (
           <div className="space-y-2 p-3.5 rounded-xl bg-amber-50/50 border border-amber-200">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-[#111b21] flex items-center space-x-1">
+              <span className="text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-1">
                 <Phone size={12} className="text-amber-600" />
                 <span>Nomor WhatsApp Admin</span>
               </span>
@@ -650,7 +650,7 @@ export const DailyReportPanel: React.FC = () => {
             </div>
             <div className="flex flex-wrap gap-1.5">
               {adminNumbers.map((num) => (
-                <span key={num} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white border border-amber-200 text-[11px] font-mono text-[#111b21]">
+                <span key={num} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white border border-amber-200 text-[11px] font-mono text-[#111b21] dark:text-[#e9edef]">
                   {num}
                   <button type="button" onClick={() => removeNumber(num)} className="text-rose-500 hover:text-rose-700">
                     <X size={11} />
@@ -666,7 +666,7 @@ export const DailyReportPanel: React.FC = () => {
                 onChange={(e) => setNumberInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addNumber(); } }}
                 placeholder="08xx / 628xx / +62 8xx"
-                className="flex-1 bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069]"
+                className="flex-1 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069]"
               />
               <button
                 type="button"
@@ -684,7 +684,7 @@ export const DailyReportPanel: React.FC = () => {
             type="button"
             onClick={handleTestNightly}
             disabled={testingNightly}
-            className="px-3.5 py-2 bg-white hover:bg-[#f0f2f5] text-[#111b21] rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 disabled:opacity-50 border border-[#d1d7db]"
+            className="px-3.5 py-2 bg-white hover:bg-[#f0f2f5] text-[#111b21] dark:text-[#e9edef] rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 disabled:opacity-50 border border-[#d1d7db]"
           >
             <Send size={12} className="text-indigo-600" />
             <span>{testingNightly ? 'Mengirim...' : '🧪 Kirim Uji Coba'}</span>
@@ -702,7 +702,7 @@ export const DailyReportPanel: React.FC = () => {
 
         {showLogs && (
           <div className="border border-[#e9edef] rounded-xl overflow-hidden">
-            <div className="px-3 py-2 bg-[#f8fafc] border-b border-[#e9edef] text-[11px] font-bold text-[#111b21] flex items-center justify-between">
+            <div className="px-3 py-2 bg-[#f8fafc] border-b border-[#e9edef] text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] flex items-center justify-between">
               <span>Riwayat Pengiriman (100 terakhir)</span>
               <button type="button" onClick={fetchLogs} className="text-[#008069] hover:text-[#00a884] flex items-center gap-1">
                 <RefreshCw size={11} /> Refresh
@@ -715,7 +715,7 @@ export const DailyReportPanel: React.FC = () => {
             ) : (
               <div className="overflow-x-auto max-h-72 overflow-y-auto">
                 <table className="w-full text-[11px]">
-                  <thead className="bg-[#f8fafc] text-[#667781] sticky top-0">
+                  <thead className="bg-[#f8fafc] text-[#667781] dark:text-[#8696a0] sticky top-0">
                     <tr>
                       <th className="text-left px-2.5 py-1.5 font-bold">Waktu</th>
                       <th className="text-left px-2.5 py-1.5 font-bold">Kanal</th>
@@ -727,12 +727,12 @@ export const DailyReportPanel: React.FC = () => {
                   <tbody className="divide-y divide-[#f0f2f5]">
                     {logs.map((l) => (
                       <tr key={l.id}>
-                        <td className="px-2.5 py-1.5 whitespace-nowrap text-[#54656f]">
+                        <td className="px-2.5 py-1.5 whitespace-nowrap text-[#54656f] dark:text-[#8696a0]">
                           {new Date(l.sent_at).toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })}
                         </td>
-                        <td className="px-2.5 py-1.5 font-semibold text-[#111b21]">{l.channel}</td>
-                        <td className="px-2.5 py-1.5 font-mono text-[#54656f]">{l.recipient}</td>
-                        <td className="px-2.5 py-1.5 text-[#54656f]">{l.notification_type}</td>
+                        <td className="px-2.5 py-1.5 font-semibold text-[#111b21] dark:text-[#e9edef]">{l.channel}</td>
+                        <td className="px-2.5 py-1.5 font-mono text-[#54656f] dark:text-[#8696a0]">{l.recipient}</td>
+                        <td className="px-2.5 py-1.5 text-[#54656f] dark:text-[#8696a0]">{l.notification_type}</td>
                         <td className="px-2.5 py-1.5">
                           <span className={`px-1.5 py-0.5 rounded font-bold ${
                             l.status === 'SENT' ? 'bg-emerald-100 text-emerald-700'

@@ -10,11 +10,11 @@ interface BadgeProps {
 }
 
 const Badge: React.FC<BadgeProps> = ({ label, value, icon, tone = 'default' }) => (
-  <div className="flex items-center gap-2 rounded-xl border border-[#e9edef] bg-[#f8fafc] px-3 py-2">
+  <div className="flex items-center gap-2 rounded-xl border border-[#e9edef] dark:border-[#202c33] bg-[#f8fafc] dark:bg-[#182229] px-3 py-2">
     <span className={`shrink-0 ${tone === 'ok' ? 'text-[#008069]' : 'text-[#667781]'}`}>{icon}</span>
     <div className="min-w-0">
       <p className="text-[10px] uppercase font-bold text-[#8696a0] tracking-wider">{label}</p>
-      <p className={`text-sm font-extrabold truncate ${tone === 'ok' ? 'text-[#008069]' : 'text-[#111b21]'}`}>{value}</p>
+      <p className={`text-sm font-extrabold truncate ${tone === 'ok' ? 'text-[#008069]' : 'text-[#111b21] dark:text-[#e9edef]'}`}>{value}</p>
     </div>
   </div>
 );
@@ -50,12 +50,12 @@ export const SpendCalculator: React.FC<SpendCalculatorProps> = ({
   const totalSpend = lpNum + ctNum;
 
   return (
-    <section className="bg-white border border-[#e9edef] rounded-2xl p-4 shadow-xs space-y-3">
+    <section className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#202c33] rounded-2xl p-4 shadow-xs space-y-3">
       <div className="flex flex-col lg:flex-row lg:items-end gap-3 justify-between">
         <div className="flex flex-col sm:flex-row items-start sm:items-end gap-2.5">
           {/* Input Spend LPWA */}
           <div className="space-y-1">
-            <label className="text-[10.5px] uppercase font-bold text-[#667781] flex items-center gap-1">
+            <label className="text-[10.5px] uppercase font-bold text-[#667781] dark:text-[#8696a0] flex items-center gap-1">
               <DollarSign size={12} className="text-[#0284c7]" /> Spend LPWA (Rp)
             </label>
             <input
@@ -64,13 +64,13 @@ export const SpendCalculator: React.FC<SpendCalculatorProps> = ({
               value={lpwaSpend}
               onChange={(e) => onLpwaSpendChange(e.target.value)}
               placeholder="mis. 1430000"
-              className="w-full sm:w-36 bg-white border border-[#d1d7db] rounded-xl px-2.5 py-1.5 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs font-mono"
+              className="w-full sm:w-36 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-2.5 py-1.5 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs font-mono"
             />
           </div>
 
           {/* Input Spend CTWA */}
           <div className="space-y-1">
-            <label className="text-[10.5px] uppercase font-bold text-[#667781] flex items-center gap-1">
+            <label className="text-[10.5px] uppercase font-bold text-[#667781] dark:text-[#8696a0] flex items-center gap-1">
               <DollarSign size={12} className="text-[#9333ea]" /> Spend CTWA (Rp)
             </label>
             <input
@@ -79,14 +79,14 @@ export const SpendCalculator: React.FC<SpendCalculatorProps> = ({
               value={ctwaSpend}
               onChange={(e) => onCtwaSpendChange(e.target.value)}
               placeholder="mis. 1144000"
-              className="w-full sm:w-36 bg-white border border-[#d1d7db] rounded-xl px-2.5 py-1.5 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs font-mono"
+              className="w-full sm:w-36 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-2.5 py-1.5 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs font-mono"
             />
           </div>
 
           {/* Total Spend Display */}
           <div className="space-y-1">
-            <p className="text-[10.5px] uppercase font-bold text-[#667781]">Total Biaya</p>
-            <div className="bg-[#f8fafc] border border-[#e2e8f0] rounded-xl px-3 py-1.5 text-xs font-mono font-bold text-[#0f172a] min-w-[110px]">
+            <p className="text-[10.5px] uppercase font-bold text-[#667781] dark:text-[#8696a0]">Total Biaya</p>
+            <div className="bg-[#f8fafc] dark:bg-[#202c33] border border-[#e2e8f0] dark:border-[#2a3942] rounded-xl px-3 py-1.5 text-xs font-mono font-bold text-[#0f172a] dark:text-[#e9edef] min-w-[110px]">
               {totalSpend > 0 ? fmtRupiah(totalSpend) : '-'}
             </div>
           </div>

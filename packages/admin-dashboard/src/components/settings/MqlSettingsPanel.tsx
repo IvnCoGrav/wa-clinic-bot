@@ -43,18 +43,18 @@ export const MqlSettingsPanel: React.FC<Props> = ({
       />
 
       {/* MQL Automation Settings */}
-      <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-3 shadow-xs">
-        <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
+      <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-3 shadow-xs">
+        <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
           <Volume2 className="text-[#008069]" size={16} />
           <span>MQL Automation (Otomatisasi Lead)</span>
         </h3>
-        <p className="text-xs text-[#667781] leading-relaxed">
+        <p className="text-xs text-[#667781] dark:text-[#8696a0] leading-relaxed">
           Atur ambang batas bubble chat untuk mengonversi lead potensial menjadi Marketing Qualified Lead (MQL) secara otomatis.
         </p>
 
         <div className="space-y-3 pt-1">
           <div className="space-y-1">
-            <label className="text-[11px] font-bold text-[#111b21] block">
+            <label className="text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] block">
               Ambang Batas Bubble Chat (Default: 5)
             </label>
             <input
@@ -63,14 +63,14 @@ export const MqlSettingsPanel: React.FC<Props> = ({
               max={50}
               value={mqlThresholdBubbles}
               onChange={(e) => setMqlThresholdBubbles(parseInt(e.target.value, 10) || 5)}
-              className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+              className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
             />
           </div>
 
-          <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef]">
+          <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#f8fafc] dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942]">
             <div>
-              <span className="text-xs font-bold text-[#111b21] block">Otomatisasi Auto-Lead</span>
-              <span className="text-[11px] text-[#667781]">Tandai customer sebagai MQL otomatis saat batas tercapai</span>
+              <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] block">Otomatisasi Auto-Lead</span>
+              <span className="text-[11px] text-[#667781] dark:text-[#8696a0]">Tandai customer sebagai MQL otomatis saat batas tercapai</span>
             </div>
             <ToggleSwitch
               checked={mqlAutoLeadEnabled}
@@ -95,18 +95,18 @@ export const MqlSettingsPanel: React.FC<Props> = ({
       </div>
 
       {/* Live Chat Media Retention Settings */}
-      <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-3 shadow-xs">
-        <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
+      <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-3 shadow-xs">
+        <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
           <ImageIcon className="text-[#008069]" size={16} />
           <span>Retensi Media Live Chat</span>
         </h3>
-        <p className="text-xs text-[#667781] leading-relaxed">
+        <p className="text-xs text-[#667781] dark:text-[#8696a0] leading-relaxed">
           Atur durasi penyimpanan file media (gambar &amp; dokumen) Live Chat sebelum dibersihkan otomatis oleh sistem maintenance.
         </p>
 
         <div className="space-y-3 pt-1">
           <div className="space-y-1">
-            <label className="text-[11px] font-bold text-[#111b21] block">
+            <label className="text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] block">
               Masa Retensi Media (Hari, 1-3650)
             </label>
             <input
@@ -115,7 +115,7 @@ export const MqlSettingsPanel: React.FC<Props> = ({
               max={3650}
               value={mediaRetentionDays}
               onChange={(e) => setMediaRetentionDays(e.target.value)}
-              className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+              className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
             />
             <span className="text-[10px] text-[#8696a0] mt-0.5 block">
               Fallback default environment: {mediaEnvFallbackDays} hari.

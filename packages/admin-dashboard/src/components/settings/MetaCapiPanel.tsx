@@ -37,9 +37,9 @@ export const MetaCapiPanel: React.FC<Props> = ({
   handleSavePurchasePolicy,
 }) => {
   return (
-    <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-4 shadow-xs">
+    <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-4 shadow-xs">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-        <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
+        <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
           <BarChart3 className="text-[#008069]" size={16} />
           <span>Meta Pixel &amp; CAPI (Konversi Iklan Meta)</span>
         </h3>
@@ -52,12 +52,12 @@ export const MetaCapiPanel: React.FC<Props> = ({
         </span>
       </div>
 
-      <p className="text-xs text-[#667781] leading-relaxed">
+      <p className="text-xs text-[#667781] dark:text-[#8696a0] leading-relaxed">
         Integrasi Conversion API (CAPI) Meta untuk mengirim event konversi (Lead &amp; Purchase) secara server-side ke Meta Ads Manager.
       </p>
 
-      <div className="rounded-xl bg-[#f0f7f5] border border-emerald-200 px-3 py-2.5 text-[11px] text-[#3d5a52] leading-relaxed">
-        <span className="font-bold text-[#111b21]">Atribusi iklan Click-to-WhatsApp (CTWA):</span> agar
+      <div className="rounded-xl bg-[#f0f7f5] dark:bg-[#00a884]/10 border border-emerald-200 dark:border-[#00a884]/30 px-3 py-2.5 text-[11px] text-[#3d5a52] dark:text-[#86efac] leading-relaxed">
+        <span className="font-bold text-[#111b21] dark:text-[#e9edef]">Atribusi iklan Click-to-WhatsApp (CTWA):</span> agar
         konversi dari iklan WhatsApp teratribusi benar, isi juga{' '}
         <span className="font-semibold">Business Account ID</span> di{' '}
         <span className="font-semibold">WhatsApp Provider → tab WABA</span>. Field itu dipakai lintas
@@ -67,7 +67,7 @@ export const MetaCapiPanel: React.FC<Props> = ({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
         <div className="space-y-1">
-          <label className="text-[11px] font-bold text-[#111b21] flex items-center space-x-1">
+          <label className="text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-1">
             <BarChart3 size={11} className="text-[#008069]" />
             <span>Meta Pixel ID</span>
           </label>
@@ -76,12 +76,12 @@ export const MetaCapiPanel: React.FC<Props> = ({
             value={metaPixelId}
             onChange={(e) => setMetaPixelId(e.target.value)}
             placeholder="mis. 123456789012345"
-            className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+            className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
           />
         </div>
 
         <div className="space-y-1">
-          <label className="text-[11px] font-bold text-[#111b21] flex items-center space-x-1">
+          <label className="text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-1">
             <ShieldCheck size={11} className="text-[#008069]" />
             <span>CAPI Access Token (Meta Conversion API)</span>
           </label>
@@ -90,7 +90,7 @@ export const MetaCapiPanel: React.FC<Props> = ({
             value={capiAccessToken}
             onChange={(e) => setCapiAccessToken(e.target.value)}
             placeholder={capiConfigured ? '•••••••• (kosongkan bila tidak diubah)' : 'EAA... Meta CAPI Access Token'}
-            className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+            className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
           />
         </div>
       </div>
@@ -106,33 +106,33 @@ export const MetaCapiPanel: React.FC<Props> = ({
       </div>
 
       {/* Moderasi Event Purchase Meta CAPI (Outlier Filter Queue) */}
-      <div className="border-t border-[#e9edef] pt-4 mt-2">
+      <div className="border-t border-[#e9edef] dark:border-[#2a3942] pt-4 mt-2">
         <div className="flex items-center justify-between mb-2">
-          <h4 className="text-xs font-bold text-[#111b21] flex items-center space-x-1.5">
+          <h4 className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-1.5">
             <FileClock className="text-[#008069]" size={14} />
             <span>Moderasi Purchase Meta (CAPI)</span>
           </h4>
           <Link
             to="/admin/meta-capi-queue"
-            className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] text-xs font-semibold transition shadow-xs"
+            className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-white dark:bg-[#202c33] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] text-xs font-semibold transition shadow-xs"
           >
             <span>Buka Meta CAPI Queue</span>
             <ArrowRight size={11} />
           </Link>
         </div>
-        <p className="text-xs text-[#667781] leading-relaxed mb-3">
+        <p className="text-xs text-[#667781] dark:text-[#8696a0] leading-relaxed mb-3">
           Jika OFF, transaksi pembayaran ditahan di queue moderasi (Pending Review) sampai disetujui admin —
           mencegah data outlier terkirim ke Meta.
         </p>
-        <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] opacity-90">
+        <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#f8fafc] dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] opacity-90">
           <div className="pr-3">
             <div className="flex items-center gap-1.5">
-              <span className="text-xs font-bold text-[#111b21]">Auto-send Purchase CAPI</span>
+              <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Auto-send Purchase CAPI</span>
               <span className="text-[10px] bg-emerald-100 text-emerald-800 font-semibold px-2 py-0.5 rounded-full">
                 Queue-First
               </span>
             </div>
-            <p className="text-xs text-[#667781] mt-0.5">
+            <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
               Seluruh transaksi pembayaran kini diproses via antrean moderasi CAPI demi akurasi data &amp; anti-duplikasi.
             </p>
           </div>
@@ -150,12 +150,12 @@ export const MetaCapiPanel: React.FC<Props> = ({
       </div>
 
       {/* Kebijakan Atribusi Repeat Purchase Meta CAPI */}
-      <div className="border-t border-[#e9edef] pt-4 mt-2 space-y-2">
-        <h4 className="text-xs font-bold text-[#111b21] flex items-center space-x-1.5">
+      <div className="border-t border-[#e9edef] dark:border-[#2a3942] pt-4 mt-2 space-y-2">
+        <h4 className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-1.5">
           <ShieldCheck className="text-[#008069]" size={14} />
           <span>Kebijakan Repeat Purchase (Anti-Distorsi CAC)</span>
         </h4>
-        <p className="text-xs text-[#667781] leading-relaxed">
+        <p className="text-xs text-[#667781] dark:text-[#8696a0] leading-relaxed">
           Pilih bagaimana sistem memproses repeat purchase (pelanggan lama) ke Meta CAPI. Mode Dual Event
           direkomendasikan: sinyal pelanggan lama tetap terkirim tanpa mengotori metrik akuisisi (CAC).
         </p>
@@ -201,12 +201,12 @@ export const MetaCapiPanel: React.FC<Props> = ({
               />
               <div className="flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-[#111b21]">{opt.title}</span>
+                  <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">{opt.title}</span>
                   <span className="text-[10px] bg-slate-100 text-slate-700 font-semibold px-2 py-0.2 rounded">
                     {opt.badge}
                   </span>
                 </div>
-                <p className="text-[11px] text-[#667781] mt-0.5 leading-relaxed">{opt.desc}</p>
+                <p className="text-[11px] text-[#667781] dark:text-[#8696a0] mt-0.5 leading-relaxed">{opt.desc}</p>
               </div>
             </label>
           ))}

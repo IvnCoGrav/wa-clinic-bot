@@ -11,8 +11,8 @@ export const JourneyHistogram: React.FC<{ report: MetaPerformanceReport }> = ({ 
   const lead = report.bookingLeadTime;
   return (
     <section className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-      <div className="bg-white border border-[#e9edef] rounded-2xl p-5 shadow-xs space-y-3">
-        <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
+      <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#202c33] rounded-2xl p-5 shadow-xs space-y-3">
+        <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
           <Timer size={16} className="text-[#008069]" /> Distribusi Siklus Konversi
         </h3>
         <p className="text-[11px] text-[#8696a0]">Jarak hari dari touch iklan (klik teratribusi) hingga reservasi pertama pasien.</p>
@@ -24,7 +24,7 @@ export const JourneyHistogram: React.FC<{ report: MetaPerformanceReport }> = ({ 
               <YAxis tick={{ fontSize: 10, fill: '#667781' }} allowDecimals={false} />
               <Tooltip
                 formatter={(v: any) => [`${v} pasien`, 'Jumlah']}
-                contentStyle={{ fontSize: 12, borderRadius: 12, border: '1px solid #e9edef' }}
+                contentStyle={{ fontSize: 12, borderRadius: 12, border: '1px solid var(--wa-border, #e9edef)', backgroundColor: 'var(--wa-surface, #ffffff)', color: 'var(--wa-text-primary, #111b21)' }}
               />
               <Bar dataKey="count" radius={[6, 6, 0, 0]}>
                 {journey.map((_, i) => (
@@ -36,8 +36,8 @@ export const JourneyHistogram: React.FC<{ report: MetaPerformanceReport }> = ({ 
         </div>
       </div>
 
-      <div className="bg-white border border-[#e9edef] rounded-2xl p-5 shadow-xs space-y-3">
-        <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
+      <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#202c33] rounded-2xl p-5 shadow-xs space-y-3">
+        <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
           <Timer size={16} className="text-[#008069]" /> Lead Time Pemesanan
           <span title="Berbasis order: menghitung total janji temu fisik yang dipesan pada rentang ini." className="text-[#8696a0] cursor-help">
             <Info size={13} />
@@ -47,12 +47,12 @@ export const JourneyHistogram: React.FC<{ report: MetaPerformanceReport }> = ({ 
           {lead.map((b) => (
             <div key={b.key} className="space-y-1">
               <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-[#111b21]">{b.label}</span>
+                <span className="font-semibold text-[#111b21] dark:text-[#e9edef]">{b.label}</span>
                 <span className="font-mono text-[#667781]">
                   {fmtNum(b.count)} {b.pct > 0 ? <span className="text-[#8696a0]">({b.pct}%)</span> : null}
                 </span>
               </div>
-              <div className="h-2 bg-[#f0f2f5] rounded-full overflow-hidden">
+              <div className="h-2 bg-[#f0f2f5] dark:bg-[#202c33] rounded-full overflow-hidden">
                 <div className="h-full bg-[#008069] rounded-full" style={{ width: `${Math.min(100, b.pct)}%` }} />
               </div>
             </div>

@@ -2914,9 +2914,9 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   }, {});
 
   return (
-    <div className="h-[100dvh] max-h-[100dvh] w-full max-w-full overflow-hidden bg-[#f0f2f5] text-[#111b21] flex flex-col font-sans select-none antialiased">
+    <div className="h-[100dvh] max-h-[100dvh] w-full max-w-full overflow-hidden bg-[#f0f2f5] dark:bg-[#0b141a] text-[#111b21] dark:text-[#e9edef] flex flex-col font-sans select-none antialiased">
       {/* WhatsApp Web Minimalist Clean Top Bar — hidden on mobile when chat active (fondasional gating) */}
-      <header className={`${mobileView === 'chat' && activeTab === 'today' ? 'hidden md:block' : 'block'} bg-white border-b border-[#e9edef] px-3 sm:px-4 py-2.5 sticky top-0 z-30 shadow-xs pt-[calc(0.625rem+env(safe-area-inset-top,0px))] md:pt-2.5 pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))] shrink-0`}>
+      <header className={`${mobileView === 'chat' && activeTab === 'today' ? 'hidden md:block' : 'block'} bg-white dark:bg-[#111b21] border-b border-[#e9edef] dark:border-[#202c33] px-3 sm:px-4 py-2.5 sticky top-0 z-30 shadow-xs pt-[calc(0.625rem+env(safe-area-inset-top,0px))] md:pt-2.5 pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))] shrink-0`}>
         <div className="flex items-center justify-between gap-2 sm:gap-4 max-w-7xl mx-auto w-full">
           <div className="flex items-center space-x-2.5 min-w-0">
             {mobileView === 'chat' && activeTab === 'today' && (
@@ -2941,7 +2941,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             </button>
 
             <div className="min-w-0">
-              <h1 className="font-bold text-sm sm:text-base text-[#111b21] tracking-tight truncate">
+              <h1 className="font-bold text-sm sm:text-base text-[#111b21] dark:text-[#e9edef] tracking-tight truncate">
                 {currentStaff?.name || 'Terapis'}
               </h1>
               <p className="text-[11px] text-[#667781] truncate flex items-center gap-1">
@@ -2953,7 +2953,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
           {/* Navigation Tab Switcher (Hari Ini vs Jadwal Mendatang vs Selesai) */}
           {!(mobileView === 'chat' && activeTab === 'today') && (
-            <div className="hidden sm:flex items-center bg-[#f0f2f5] p-1 rounded-xl border border-[#e9edef]">
+            <div className="hidden sm:flex items-center bg-[#f0f2f5] dark:bg-[#111b21] p-1 rounded-xl border border-[#e9edef] dark:border-[#202c33]">
               <button
                 type="button"
                 onClick={() => handleTabChange('today')}
@@ -2967,7 +2967,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 <span>Hari Ini</span>
                 <span
                   className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                    activeTab === 'today' ? 'bg-[#d9fdd3] text-[#008069]' : 'bg-[#e9edef] text-[#667781]'
+                    activeTab === 'today' ? 'bg-[#d9fdd3] dark:bg-[#00a884]/20 text-[#008069] dark:text-[#00a884]' : 'bg-[#e9edef] dark:bg-[#202c33] text-[#667781] dark:text-[#8696a0]'
                   }`}
                 >
                   {activeTodayTasks.length}
@@ -2987,7 +2987,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 <span>Jadwal Mendatang</span>
                 <span
                   className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                    activeTab === 'upcoming' ? 'bg-[#d9fdd3] text-[#008069]' : 'bg-[#e9edef] text-[#667781]'
+                    activeTab === 'upcoming' ? 'bg-[#d9fdd3] dark:bg-[#00a884]/20 text-[#008069] dark:text-[#00a884]' : 'bg-[#e9edef] dark:bg-[#202c33] text-[#667781] dark:text-[#8696a0]'
                   }`}
                 >
                   {upcomingTasks.length}
@@ -3007,7 +3007,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 <span>Selesai</span>
                 <span
                   className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                    activeTab === 'completed' ? 'bg-[#d9fdd3] text-[#008069]' : 'bg-[#e9edef] text-[#667781]'
+                    activeTab === 'completed' ? 'bg-[#d9fdd3] dark:bg-[#00a884]/20 text-[#008069] dark:text-[#00a884]' : 'bg-[#e9edef] dark:bg-[#202c33] text-[#667781] dark:text-[#8696a0]'
                   }`}
                 >
                   {combinedCompletedTasks.length}
@@ -3035,7 +3035,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             <button
               onClick={() => fetchTasks(false)}
               disabled={loading}
-              className="p-2 rounded-full bg-white hover:bg-[#e9edef] text-[#54656f] hover:text-[#111b21] transition-all disabled:opacity-50 active:scale-95 border border-[#e9edef] shadow-xs"
+              className="p-2 rounded-full bg-white dark:bg-[#202c33] hover:bg-[#e9edef] dark:hover:bg-[#2a3942] text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] transition-all disabled:opacity-50 active:scale-95 border border-[#e9edef] dark:border-[#2a3942] shadow-xs"
               title="Muat Ulang Data"
             >
               <RefreshCw size={14} className={loading ? 'animate-spin text-[#008069]' : ''} />
@@ -3045,7 +3045,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             <button
               type="button"
               onClick={() => setShowMenuDrawer(true)}
-              className="p-2 rounded-full bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] hover:text-[#008069] transition-all active:scale-95 border border-[#e9edef] shadow-xs flex items-center justify-center"
+              className="p-2 rounded-full bg-[#f0f2f5] dark:bg-[#202c33] hover:bg-[#e9edef] dark:hover:bg-[#2a3942] text-[#111b21] dark:text-[#e9edef] hover:text-[#008069] dark:hover:text-[#00a884] transition-all active:scale-95 border border-[#e9edef] dark:border-[#2a3942] shadow-xs flex items-center justify-center"
               title="Buka Menu Navigasi"
               aria-label="Menu"
             >
@@ -3096,14 +3096,14 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             <div
               className={`${
                 mobileView === 'chat' ? 'hidden md:flex' : 'flex'
-              } w-full md:w-[420px] flex-col border-r border-[#e9edef] bg-[#f0f2f5] overflow-hidden flex-shrink-0 min-h-0 h-full animate-fadeIn`}
+              } w-full md:w-[420px] flex-col border-r border-[#e9edef] dark:border-[#202c33] bg-[#f0f2f5] dark:bg-[#111b21] overflow-hidden flex-shrink-0 min-h-0 h-full animate-fadeIn`}
             >
               {/* Panel Search & Header */}
-              <div className="p-3 bg-white border-b border-[#e9edef] space-y-2.5">
+              <div className="p-3 bg-white dark:bg-[#111b21] border-b border-[#e9edef] dark:border-[#202c33] space-y-2.5">
                 <div className="flex items-center justify-between px-1">
                   <div className="flex items-center space-x-2">
                     <Calendar size={16} className="text-[#008069]" />
-                    <h2 className="font-bold text-sm text-[#111b21]">Jadwal Kunjungan Hari Ini</h2>
+                    <h2 className="font-bold text-sm text-[#111b21] dark:text-[#e9edef]">Jadwal Kunjungan Hari Ini</h2>
                   </div>
                   <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#d9fdd3] text-[#008069] border border-[#00a884]/30">
                     {tasks.length} Pasien
@@ -3119,7 +3119,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Cari pasien, alamat, atau layanan..."
-                    className="w-full pl-9 pr-4 py-2 rounded-lg bg-[#f0f2f5] text-[16px] sm:text-xs text-[#111b21] placeholder-[#667781] focus:outline-none focus:ring-1 focus:ring-[#008069] transition-all"
+                    className="w-full pl-9 pr-4 py-2 rounded-lg bg-[#f0f2f5] dark:bg-[#202c33] text-[16px] sm:text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#667781] dark:placeholder-[#8696a0] focus:outline-none focus:ring-1 focus:ring-[#008069] transition-all"
                   />
                   {searchQuery && (
                     <button
@@ -3133,7 +3133,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
                 {/* Supervisor Scope Filter: Tugas Saya vs Semua Terapis Tim */}
                 {isSupervisor && (
-                  <div className="flex items-center p-1 bg-[#f0f2f5] rounded-xl border border-[#e9edef] gap-1">
+                  <div className="flex items-center p-1 bg-[#f0f2f5] dark:bg-[#202c33] rounded-xl border border-[#e9edef] dark:border-[#2a3942] gap-1">
                     <button
                       type="button"
                       onClick={() => {
@@ -3261,7 +3261,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                             e.stopPropagation();
                             setDetailModalTask(task);
                           }}
-                          className="flex items-start justify-between gap-2 mb-1 p-1 -m-1 rounded-xl hover:bg-[#f0f2f5] transition cursor-pointer group"
+                          className="flex items-start justify-between gap-2 mb-1 p-1 -m-1 rounded-xl hover:bg-[#f0f2f5] dark:hover:bg-[#202c33] transition cursor-pointer group"
                           title="Klik untuk melihat detail lengkap pasien"
                         >
                           <div className="flex items-center space-x-2.5 min-w-0">
@@ -3277,7 +3277,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               </span>
                             </div>
                             <div className="min-w-0">
-                              <h3 className="font-semibold text-sm text-[#111b21] truncate group-hover:text-[#008069] transition">
+                              <h3 className="font-semibold text-sm text-[#111b21] dark:text-[#e9edef] truncate group-hover:text-[#008069] transition">
                                 {task.customerName || 'Customer'}
                               </h3>
                               <p className="text-[11px] text-[#008069] font-medium line-clamp-2">
@@ -3442,7 +3442,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                         {/* Kotak Patokan Rumah (plan 2026-10-02): kontras tinggi agar
                             Bidan langsung hafal ciri pagar/rumah sebelum mengetuk pintu. */}
                         {(task.address.landmark || task.address.addressDetail) && (
-                          <div className="mb-2 flex items-start gap-2 px-3 py-2 rounded-xl bg-amber-50 border-2 border-amber-300 text-amber-900">
+                          <div className="mb-2 flex items-start gap-2 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/30 border-2 border-amber-300 dark:border-amber-900/50 text-amber-900 dark:text-amber-200">
                             <Home size={14} className="text-amber-600 flex-shrink-0 mt-0.5" />
                             <div className="min-w-0 flex-1">
                               <p className="text-[10px] font-extrabold uppercase tracking-wide text-amber-700">
@@ -3469,7 +3469,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               return (
                                 <span
                                   key={i}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#e7f8e8] text-[#008069] text-[11px] font-medium border border-[#00a884]/20"
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#e7f8e8] dark:bg-[#00a884]/20 text-[#008069] dark:text-[#00a884] text-[11px] font-medium border border-[#00a884]/20 dark:border-[#00a884]/40"
                                 >
                                   <Baby size={11} />
                                   <span>{formatPatientName(child.name)}</span>
@@ -3484,7 +3484,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
                         {/* Cuplikan Catatan Klinis / Keluhan (dari CS/LiveChat) */}
                         {task.adminNotes && (
-                          <div className="mb-2 flex items-start gap-1.5 px-2 py-1 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-[11px] font-medium">
+                          <div className="mb-2 flex items-start gap-1.5 px-2 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 text-amber-900 dark:text-amber-200 text-[11px] font-medium">
                             <AlertCircle size={12} className="text-amber-600 flex-shrink-0 mt-0.5" />
                             <span className="line-clamp-2" title={task.adminNotes}>
                               <strong>Keluhan/Catatan:</strong> {task.adminNotes}
@@ -3748,12 +3748,12 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             <div
               className={`${
                 mobileView === 'list' ? 'hidden md:flex' : 'flex'
-              } flex-1 flex-col bg-[#efeae2] overflow-hidden relative min-h-0 h-full`}
+              } flex-1 flex-col bg-[#efeae2] dark:bg-[#0b141a] overflow-hidden relative min-h-0 h-full`}
             >
               {selectedTask ? (
                 <>
                   {/* WhatsApp Web Chat Header — safe-area for notch/Dynamic Island */}
-                  <div className="bg-[#f0f2f5] border-b border-[#e9edef] px-4 pt-[calc(0.625rem+env(safe-area-inset-top,0px))] md:pt-2.5 pb-2.5 flex items-center justify-between gap-3 shadow-xs z-10 shrink-0">
+                  <div className="bg-[#f0f2f5] dark:bg-[#111b21] border-b border-[#e9edef] dark:border-[#202c33] px-4 pt-[calc(0.625rem+env(safe-area-inset-top,0px))] md:pt-2.5 pb-2.5 flex items-center justify-between gap-3 shadow-xs z-10 shrink-0">
                     <div className="flex items-center space-x-2.5 min-w-0">
                       {/* Mobile Back to List Button */}
                       <button
@@ -3780,7 +3780,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
                         <div className="min-w-0">
                           <div className="flex items-center space-x-2">
-                            <h2 className="font-semibold text-[#111b21] text-sm truncate group-hover:text-[#008069] transition">
+                            <h2 className="font-semibold text-[#111b21] dark:text-[#e9edef] text-sm truncate group-hover:text-[#008069] transition">
                               {selectedTask.customerName || 'Customer'}
                             </h2>
                             <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#d9fdd3] text-[#008069] font-bold border border-[#00a884]/30 whitespace-nowrap">
@@ -3954,7 +3954,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                           <React.Fragment key={msg.id || `msg-${idx}`}>
                             {isDifferentDay && separatorLabel && (
                               <div className="flex justify-center my-1.5">
-                                <div className="bg-white text-[#54656f] text-[11px] font-medium px-3 py-1 rounded-lg text-center shadow-xs border border-[#e9edef]">
+                                <div className="bg-white dark:bg-[#182229] text-[#54656f] dark:text-[#8696a0] text-[11px] font-medium px-3 py-1 rounded-lg text-center shadow-xs border border-[#e9edef] dark:border-[#202c33]">
                                   {separatorLabel}
                                 </div>
                               </div>
@@ -4192,7 +4192,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                   {/* WhatsApp Quick Reply Input Bar */}
                   <form
                     onSubmit={handleSendReply}
-                    className="bg-[#f0f2f5] border-t border-[#e9edef] p-2.5 sm:p-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] md:pb-3 z-10 space-y-2 shrink-0"
+                    className="bg-[#f0f2f5] dark:bg-[#111b21] border-t border-[#e9edef] dark:border-[#202c33] p-2.5 sm:p-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] md:pb-3 z-10 space-y-2 shrink-0"
                   >
                     {/* Quick Reply Template Chips for Fast Field Messaging */}
                     <div
@@ -4243,7 +4243,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               }, 0);
                             }
                           }}
-                          className="text-xs font-semibold bg-white hover:bg-[#e8f5f2] text-[#008069] border border-[#00a884]/30 min-h-[44px] px-3.5 py-2.5 rounded-full whitespace-nowrap transition-transform duration-150 hover:scale-105 active:scale-95 shadow-2xs flex-shrink-0 inline-flex items-center select-none"
+                          className="text-xs font-semibold bg-white dark:bg-[#202c33] hover:bg-[#e8f5f2] dark:hover:bg-[#2a3942] text-[#008069] dark:text-[#00a884] border border-[#00a884]/30 min-h-[44px] px-3.5 py-2.5 rounded-full whitespace-nowrap transition-transform duration-150 hover:scale-105 active:scale-95 shadow-2xs flex-shrink-0 inline-flex items-center select-none"
                         >
                           {chip.label}
                         </button>
@@ -4283,7 +4283,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                         type="button"
                         onClick={() => chatFileInputRef.current?.click()}
                         disabled={sending}
-                        className="h-10 w-10 rounded-xl bg-white border border-[#e9edef] text-[#008069] hover:bg-[#e8f5f2] transition shadow-xs flex items-center justify-center flex-shrink-0 disabled:opacity-40 active:scale-95"
+                        className="h-10 w-10 rounded-xl bg-white dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] text-[#008069] dark:text-[#00a884] hover:bg-[#e8f5f2] dark:hover:bg-[#2a3942] transition shadow-xs flex items-center justify-center flex-shrink-0 disabled:opacity-40 active:scale-95"
                         title="Buka Kamera & Ambil Foto Langsung"
                         aria-label="Kamera"
                       >
@@ -4300,7 +4300,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                         type="button"
                         onClick={() => chatGalleryInputRef.current?.click()}
                         disabled={sending}
-                        className="h-10 w-10 rounded-xl bg-white border border-[#e9edef] text-[#008069] hover:bg-[#e8f5f2] transition shadow-xs flex items-center justify-center flex-shrink-0 disabled:opacity-40 active:scale-95"
+                        className="h-10 w-10 rounded-xl bg-white dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] text-[#008069] dark:text-[#00a884] hover:bg-[#e8f5f2] dark:hover:bg-[#2a3942] transition shadow-xs flex items-center justify-center flex-shrink-0 disabled:opacity-40 active:scale-95"
                         title="Pilih Foto / Screenshot dari Galeri"
                         aria-label="Galeri"
                       >
@@ -4315,7 +4315,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                           placeholder={`Ketik balasan sebagai ~ ${staff?.name || 'Terapis'}...`}
                           disabled={sending}
                           style={{ fontSize: '16px' }}
-                          className="w-full resize-none bg-white border border-[#e9edef] focus:border-[#008069] focus:ring-1 focus:ring-[#008069] text-[#111b21] rounded-xl px-3.5 py-2 text-[16px] sm:text-sm focus:outline-none placeholder-[#667781] transition-colors disabled:opacity-50 shadow-xs min-h-[40px] max-h-[130px] leading-relaxed block"
+                          className="w-full resize-none bg-white dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] focus:border-[#008069] focus:ring-1 focus:ring-[#008069] text-[#111b21] dark:text-[#e9edef] rounded-xl px-3.5 py-2 text-[16px] sm:text-sm focus:outline-none placeholder-[#667781] dark:placeholder-[#8696a0] transition-colors disabled:opacity-50 shadow-xs min-h-[40px] max-h-[130px] leading-relaxed block"
                         />
                       </div>
 
@@ -4414,12 +4414,12 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                       return (
                         <div
                           key={item.reservationId}
-                          className={`bg-white rounded-2xl p-4 border border-[#e9edef] shadow-xs hover:border-[#008069]/40 transition-all space-y-3 text-left ${catInfo.borderAccent} border-l-4`}
+                          className={`bg-white dark:bg-[#111b21] rounded-2xl p-4 border border-[#e9edef] dark:border-[#202c33] shadow-xs hover:border-[#008069]/40 transition-all space-y-3 text-left ${catInfo.borderAccent} border-l-4`}
                         >
                           {/* Header: Name & Time (KLIK BARIS INI = DETAIL PASIEN) */}
                           <div
                             onClick={() => setDetailModalTask(item)}
-                            className="flex items-start justify-between gap-2 p-1 -m-1 rounded-xl hover:bg-[#f0f2f5] transition cursor-pointer group"
+                            className="flex items-start justify-between gap-2 p-1 -m-1 rounded-xl hover:bg-[#f0f2f5] dark:hover:bg-[#202c33] transition cursor-pointer group"
                             title="Klik untuk melihat detail lengkap pasien"
                           >
                             <div className="flex items-center space-x-2.5 min-w-0">
@@ -4446,7 +4446,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                           </div>
 
                           {/* Alamat & Jarak dari Klinik */}
-                          <div className="text-xs text-[#54656f] bg-[#f0f2f5] p-2.5 rounded-xl border border-[#e9edef] space-y-2">
+                          <div className="text-xs text-[#54656f] dark:text-[#8696a0] bg-[#f0f2f5] dark:bg-[#182229] p-2.5 rounded-xl border border-[#e9edef] dark:border-[#202c33] space-y-2">
                             <div className="flex items-start gap-1.5">
                               <MapPin size={14} className="text-[#008069] mt-0.5 flex-shrink-0" />
                               <div className="flex-1 min-w-0">
@@ -4666,12 +4666,12 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                       return (
                         <div
                           key={item.reservationId}
-                          className={`bg-white rounded-2xl p-4 border border-[#e9edef] shadow-xs hover:border-emerald-500/40 transition-all space-y-3 text-left ${catInfo.borderAccent} border-l-4`}
+                          className={`bg-white dark:bg-[#111b21] rounded-2xl p-4 border border-[#e9edef] dark:border-[#202c33] shadow-xs hover:border-emerald-500/40 transition-all space-y-3 text-left ${catInfo.borderAccent} border-l-4`}
                         >
                           {/* Header: Name & Completed Badge (KLIK BARIS INI = DETAIL PASIEN) */}
                           <div
                             onClick={() => setDetailModalTask(item)}
-                            className="flex items-start justify-between gap-2 p-1 -m-1 rounded-xl hover:bg-[#f0f2f5] transition cursor-pointer group"
+                            className="flex items-start justify-between gap-2 p-1 -m-1 rounded-xl hover:bg-[#f0f2f5] dark:hover:bg-[#202c33] transition cursor-pointer group"
                             title="Klik untuk melihat detail lengkap pasien"
                           >
                             <div className="flex items-center space-x-2.5 min-w-0">
@@ -4698,7 +4698,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                           </div>
 
                           {/* Alamat & Jarak dari Klinik */}
-                          <div className="text-xs text-[#54656f] bg-[#f0f2f5] p-2.5 rounded-xl border border-[#e9edef] space-y-2">
+                          <div className="text-xs text-[#54656f] dark:text-[#8696a0] bg-[#f0f2f5] dark:bg-[#182229] p-2.5 rounded-xl border border-[#e9edef] dark:border-[#202c33] space-y-2">
                             <div className="flex items-start gap-1.5">
                               <MapPin size={14} className="text-[#008069] mt-0.5 flex-shrink-0" />
                               <div className="flex-1 min-w-0">
@@ -4972,13 +4972,13 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 className={`w-full flex items-center justify-between p-2 rounded-xl transition-all text-left ${
                   activeTab === 'today'
                     ? 'bg-[#d9fdd3] text-[#008069] font-bold shadow-xs border border-[#00a884]/30'
-                    : 'bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21]'
+                    : 'bg-[#f0f2f5] dark:bg-[#202c33] hover:bg-[#e9edef] dark:hover:bg-[#2a3942] text-[#111b21] dark:text-[#e9edef]'
                 }`}
               >
                 <div className="flex items-center space-x-2 min-w-0">
                   <div
                     className={`h-7 w-7 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                      activeTab === 'today' ? 'bg-[#008069] text-white' : 'bg-white text-[#008069] shadow-xs'
+                      activeTab === 'today' ? 'bg-[#008069] text-white' : 'bg-white dark:bg-[#111b21] text-[#008069] dark:text-[#00a884] shadow-xs'
                     }`}
                   >
                     <Calendar size={14} />
@@ -4992,7 +4992,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 </div>
                 <span
                   className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-1 ${
-                    activeTab === 'today' ? 'bg-[#008069] text-white' : 'bg-white text-[#008069] border border-[#e9edef]'
+                    activeTab === 'today' ? 'bg-[#008069] text-white' : 'bg-white dark:bg-[#202c33] text-[#008069] dark:text-[#00a884] border border-[#e9edef] dark:border-[#2a3942]'
                   }`}
                 >
                   {tasks.length}
@@ -5009,13 +5009,13 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 className={`w-full flex items-center justify-between p-2 rounded-xl transition-all text-left ${
                   activeTab === 'upcoming'
                     ? 'bg-[#d9fdd3] text-[#008069] font-bold shadow-xs border border-[#00a884]/30'
-                    : 'bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21]'
+                    : 'bg-[#f0f2f5] dark:bg-[#202c33] hover:bg-[#e9edef] dark:hover:bg-[#2a3942] text-[#111b21] dark:text-[#e9edef]'
                 }`}
               >
                 <div className="flex items-center space-x-2 min-w-0">
                   <div
                     className={`h-7 w-7 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                      activeTab === 'upcoming' ? 'bg-[#008069] text-white' : 'bg-white text-[#008069] shadow-xs'
+                      activeTab === 'upcoming' ? 'bg-[#008069] text-white' : 'bg-white dark:bg-[#111b21] text-[#008069] dark:text-[#00a884] shadow-xs'
                     }`}
                   >
                     <Clock size={14} />
@@ -5029,7 +5029,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 </div>
                 <span
                   className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-1 ${
-                    activeTab === 'upcoming' ? 'bg-[#008069] text-white' : 'bg-white text-[#008069] border border-[#e9edef]'
+                    activeTab === 'upcoming' ? 'bg-[#008069] text-white' : 'bg-white dark:bg-[#202c33] text-[#008069] dark:text-[#00a884] border border-[#e9edef] dark:border-[#2a3942]'
                   }`}
                 >
                   {upcomingTasks.length}
@@ -5046,13 +5046,13 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 className={`w-full flex items-center justify-between p-2 rounded-xl transition-all text-left ${
                   activeTab === 'completed'
                     ? 'bg-[#d9fdd3] text-[#008069] font-bold shadow-xs border border-[#00a884]/30'
-                    : 'bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21]'
+                    : 'bg-[#f0f2f5] dark:bg-[#202c33] hover:bg-[#e9edef] dark:hover:bg-[#2a3942] text-[#111b21] dark:text-[#e9edef]'
                 }`}
               >
                 <div className="flex items-center space-x-2 min-w-0">
                   <div
                     className={`h-7 w-7 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                      activeTab === 'completed' ? 'bg-[#008069] text-white' : 'bg-white text-[#008069] shadow-xs'
+                      activeTab === 'completed' ? 'bg-[#008069] text-white' : 'bg-white dark:bg-[#111b21] text-[#008069] dark:text-[#00a884] shadow-xs'
                     }`}
                   >
                     <CheckCircle2 size={14} />
@@ -5066,7 +5066,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 </div>
                 <span
                   className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-1 ${
-                    activeTab === 'completed' ? 'bg-[#008069] text-white' : 'bg-white text-[#008069] border border-[#e9edef]'
+                    activeTab === 'completed' ? 'bg-[#008069] text-white' : 'bg-white dark:bg-[#202c33] text-[#008069] dark:text-[#00a884] border border-[#e9edef] dark:border-[#2a3942]'
                   }`}
                 >
                   {completedTasks.length}
@@ -5075,7 +5075,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             </div>
 
             {/* Drawer Footer Actions — safe-area bawah untuk home indicator iPhone */}
-            <div className="p-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] border-t border-[#e9edef] bg-[#f0f2f5] space-y-1.5">
+            <div className="p-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] border-t border-[#e9edef] dark:border-[#202c33] bg-[#f0f2f5] dark:bg-[#182229] space-y-1.5">
               {isSupervisor && (
                 <button
                   type="button"
@@ -5096,7 +5096,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                   setShowMenuDrawer(false);
                   setShowStaffProfileModal(true);
                 }}
-                className="w-full flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-xl bg-white hover:bg-[#e9edef] text-[11px] font-semibold text-[#111b21] border border-[#e9edef] shadow-xs transition-all active:scale-95"
+                className="w-full flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-xl bg-white dark:bg-[#202c33] hover:bg-[#e9edef] dark:hover:bg-[#2a3942] text-[11px] font-semibold text-[#111b21] dark:text-[#e9edef] border border-[#e9edef] dark:border-[#2a3942] shadow-xs transition-all active:scale-95"
               >
                 <Info size={13} className="text-[#008069] flex-shrink-0" />
                 <span className="truncate">Profil Akun</span>
@@ -5140,7 +5140,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                   </span>
                 </button>
 
-                <div className="mt-1.5 flex items-center justify-between p-2 rounded-xl bg-[#f0f2f5] border border-[#e9edef]">
+                <div className="mt-1.5 flex items-center justify-between p-2 rounded-xl bg-[#f0f2f5] dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942]">
                   <span className="flex items-center space-x-2 min-w-0 text-[#111b21]">
                     <span className="text-[11px] font-semibold truncate">Mode Terang / Gelap</span>
                   </span>
@@ -5185,7 +5185,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           onClick={() => setShowStaffProfileModal(false)}
         >
           <div
-            className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl border border-[#e9edef] space-y-5 text-center relative animate-modalScaleUp"
+            className="bg-white dark:bg-[#111b21] rounded-3xl p-6 w-full max-w-sm shadow-2xl border border-[#e9edef] dark:border-[#202c33] space-y-5 text-center relative animate-modalScaleUp"
             onClick={(e) => e.stopPropagation()}
           >
             <button
@@ -5299,7 +5299,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           onClick={() => setDetailModalTask(null)}
         >
           <div
-            className="bg-white rounded-t-3xl sm:rounded-3xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] space-y-4 text-left relative max-h-[88dvh] sm:max-h-[90vh] overflow-y-auto animate-modalScaleUp"
+            className="bg-white dark:bg-[#111b21] rounded-t-3xl sm:rounded-3xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] dark:border-[#202c33] space-y-4 text-left relative max-h-[88dvh] sm:max-h-[90vh] overflow-y-auto animate-modalScaleUp"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Mobile drag handle */}
@@ -5603,7 +5603,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           onClick={() => setPaymentModalTask(null)}
         >
           <div
-            className="bg-white rounded-t-3xl sm:rounded-3xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] space-y-4 text-left animate-modalScaleUp max-h-[88dvh] sm:max-h-[90vh] overflow-y-auto"
+            className="bg-white dark:bg-[#111b21] rounded-t-3xl sm:rounded-3xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] dark:border-[#202c33] space-y-4 text-left animate-modalScaleUp max-h-[88dvh] sm:max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Mobile drag handle */}
@@ -5911,7 +5911,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           onClick={() => setUpdateLocationModalTask(null)}
         >
           <div
-            className="bg-white rounded-3xl p-5 sm:p-6 w-full max-w-md shadow-2xl border border-[#e9edef] space-y-4 text-left relative max-h-[92vh] overflow-y-auto animate-modalScaleUp"
+            className="bg-white dark:bg-[#111b21] rounded-3xl p-5 sm:p-6 w-full max-w-md shadow-2xl border border-[#e9edef] dark:border-[#202c33] space-y-4 text-left relative max-h-[92vh] overflow-y-auto animate-modalScaleUp"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -6320,7 +6320,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       {/* ========================================================================= */}
       {editingMsg && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white border border-[#e9edef] rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+          <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#202c33] rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
             <div className="flex justify-between items-center px-5 py-3.5 border-b border-[#e9edef] bg-[#f8fafc]">
               <div className="flex items-center space-x-2">
                 <div className="p-1.5 rounded-lg bg-[#e8f5f2] text-[#008069]">
@@ -6402,7 +6402,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           onClick={() => setReassignModalTask(null)}
         >
           <div
-            className="bg-white border border-[#e9edef] rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden animate-scaleUp"
+            className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#202c33] rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden animate-scaleUp"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-between items-center px-4 py-3.5 border-b border-[#e9edef] bg-[#f8fafc]">
@@ -6511,21 +6511,21 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       {!(mobileView === 'chat' && activeTab === 'today') && (
         <nav
           aria-label="Navigasi Utama Bawah"
-          className="sm:hidden sticky bottom-0 z-30 bg-white border-t border-[#e9edef] shadow-[0_-2px_8px_rgba(0,0,0,0.06)] flex items-stretch justify-around gap-1 px-1 pt-1 pb-[max(0.25rem,env(safe-area-inset-bottom,0px))] shrink-0"
+          className="sm:hidden sticky bottom-0 z-30 bg-white dark:bg-[#111b21] border-t border-[#e9edef] dark:border-[#202c33] shadow-[0_-2px_8px_rgba(0,0,0,0.06)] flex items-stretch justify-around gap-1 px-1 pt-1 pb-[max(0.25rem,env(safe-area-inset-bottom,0px))] shrink-0"
         >
           <button
             type="button"
             onClick={() => handleTabChange('today')}
             aria-current={activeTab === 'today' ? 'page' : undefined}
             className={`relative flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[58px] rounded-xl transition-all active:scale-95 ${
-              activeTab === 'today' ? 'text-[#008069] bg-[#d9fdd3]' : 'text-[#54656f] hover:text-[#111b21] hover:bg-[#f0f2f5]'
+              activeTab === 'today' ? 'text-[#008069] dark:text-[#00a884] bg-[#d9fdd3] dark:bg-[#00a884]/20' : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#202c33]'
             }`}
           >
             <Calendar size={20} />
             <span className="text-[11px] font-bold leading-none">Hari Ini</span>
             {activeTodayTasks.length > 0 && (
               <span className={`absolute top-1 right-[22%] min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${
-                activeTab === 'today' ? 'bg-[#008069] text-white' : 'bg-[#e9edef] text-[#54656f]'
+                activeTab === 'today' ? 'bg-[#008069] text-white' : 'bg-[#e9edef] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0]'
               }`}>
                 {activeTodayTasks.length}
               </span>
@@ -6537,14 +6537,14 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             onClick={() => handleTabChange('upcoming')}
             aria-current={activeTab === 'upcoming' ? 'page' : undefined}
             className={`relative flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[58px] rounded-xl transition-all active:scale-95 ${
-              activeTab === 'upcoming' ? 'text-[#008069] bg-[#d9fdd3]' : 'text-[#54656f] hover:text-[#111b21] hover:bg-[#f0f2f5]'
+              activeTab === 'upcoming' ? 'text-[#008069] dark:text-[#00a884] bg-[#d9fdd3] dark:bg-[#00a884]/20' : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#202c33]'
             }`}
           >
             <Clock size={20} />
             <span className="text-[11px] font-bold leading-none">Mendatang</span>
             {upcomingTasks.length > 0 && (
               <span className={`absolute top-1 right-[22%] min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${
-                activeTab === 'upcoming' ? 'bg-[#008069] text-white' : 'bg-[#e9edef] text-[#54656f]'
+                activeTab === 'upcoming' ? 'bg-[#008069] text-white' : 'bg-[#e9edef] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0]'
               }`}>
                 {upcomingTasks.length}
               </span>
@@ -6556,14 +6556,14 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             onClick={() => handleTabChange('completed')}
             aria-current={activeTab === 'completed' ? 'page' : undefined}
             className={`relative flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[58px] rounded-xl transition-all active:scale-95 ${
-              activeTab === 'completed' ? 'text-[#008069] bg-[#d9fdd3]' : 'text-[#54656f] hover:text-[#111b21] hover:bg-[#f0f2f5]'
+              activeTab === 'completed' ? 'text-[#008069] dark:text-[#00a884] bg-[#d9fdd3] dark:bg-[#00a884]/20' : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#202c33]'
             }`}
           >
             <CheckCircle2 size={20} />
             <span className="text-[11px] font-bold leading-none">Selesai</span>
             {combinedCompletedTasks.length > 0 && (
               <span className={`absolute top-1 right-[22%] min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${
-                activeTab === 'completed' ? 'bg-[#008069] text-white' : 'bg-[#e9edef] text-[#54656f]'
+                activeTab === 'completed' ? 'bg-[#008069] text-white' : 'bg-[#e9edef] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0]'
               }`}>
                 {combinedCompletedTasks.length}
               </span>

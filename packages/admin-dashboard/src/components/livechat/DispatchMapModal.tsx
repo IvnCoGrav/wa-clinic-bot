@@ -79,13 +79,13 @@ export const DispatchMapModal: React.FC<DispatchMapModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"
+        className="bg-white dark:bg-[#111b21] rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden border border-[#e9edef] dark:border-[#2a3942]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-[#2a3942]">
           <div className="min-w-0">
-            <h3 className="text-sm font-bold text-[#111b21]">Peta Perjalanan Bidan</h3>
-            <p className="text-[11px] text-[#667781] truncate">
+            <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef]">Peta Perjalanan Bidan</h3>
+            <p className="text-[11px] text-[#667781] dark:text-[#8696a0] truncate">
               {staffName ? `${staffName} · ` : ''}
               {areaName || 'Lokasi terkini'}
             </p>
@@ -93,14 +93,14 @@ export const DispatchMapModal: React.FC<DispatchMapModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-gray-100 text-[#54656f]"
+            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-[#202c33] text-[#54656f] dark:text-[#8696a0]"
             aria-label="Tutup"
           >
             <X size={18} />
           </button>
         </div>
 
-        <div className="flex items-center gap-3 px-4 py-2 text-[11px] text-[#54656f]">
+        <div className="flex items-center gap-3 px-4 py-2 text-[11px] text-[#54656f] dark:text-[#8696a0] border-b border-gray-100 dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#111b21]">
           <span className="flex items-center gap-1">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" /> Motor Bidan{therapistLive ? ' (live)' : ''}
           </span>
@@ -115,7 +115,7 @@ export const DispatchMapModal: React.FC<DispatchMapModalProps> = ({
           </span>
         </div>
 
-        <div ref={containerRef} className="relative flex-1 min-h-[360px] bg-[#f0f2f5] overflow-hidden">
+        <div ref={containerRef} className="relative flex-1 min-h-[360px] bg-[#f0f2f5] dark:bg-[#0b141a] overflow-hidden">
           {hasAny ? (
             <>
               {view.tiles.map((t) => (
@@ -178,7 +178,7 @@ export const DispatchMapModal: React.FC<DispatchMapModalProps> = ({
           )}
         </div>
 
-        <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-end">
+        <div className="px-4 py-3 border-t border-gray-100 dark:border-[#2a3942] bg-white dark:bg-[#111b21] flex items-center justify-end">
           <a
             href={routeUrl}
             target="_blank"

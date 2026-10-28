@@ -105,30 +105,30 @@ export const DailyScheduleModal: React.FC<Props> = ({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-t-3xl sm:rounded-3xl rounded-b-none sm:rounded-b-3xl shadow-2xl border border-[#e9edef] w-full max-w-4xl max-h-[92vh] sm:max-h-[88vh] flex flex-col overflow-hidden self-end sm:self-center"
+        className="bg-white dark:bg-[#111b21] rounded-t-3xl sm:rounded-3xl rounded-b-none sm:rounded-b-3xl shadow-2xl border border-[#e9edef] dark:border-[#202c33] w-full max-w-4xl max-h-[92vh] sm:max-h-[88vh] flex flex-col overflow-hidden self-end sm:self-center"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-4 py-3 border-b border-[#c2e7e0] bg-gradient-to-r from-[#e8f5f2] to-white flex items-center justify-between shrink-0">
-          <h3 className="font-extrabold text-[#005c4b] text-sm flex items-center gap-2">
+        <div className="px-4 py-3 border-b border-[#c2e7e0] dark:border-[#202c33] bg-gradient-to-r from-[#e8f5f2] to-white dark:from-[#111b21] dark:to-[#182229] flex items-center justify-between shrink-0">
+          <h3 className="font-extrabold text-[#005c4b] dark:text-[#00a884] text-sm flex items-center gap-2">
             <Calendar size={16} className="text-[#008069]" /> JADWAL KALENDER HARIAN
           </h3>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full hover:bg-white border border-[#c2e7e0] flex items-center justify-center text-[#005c4b]"
+            className="w-8 h-8 rounded-full hover:bg-white dark:hover:bg-[#202c33] border border-[#c2e7e0] dark:border-[#2a3942] flex items-center justify-center text-[#005c4b] dark:text-[#00a884]"
           >
             <X size={18} />
           </button>
         </div>
 
-        <div className="px-4 py-2 border-b border-[#e9edef] bg-[#f8fafc] shrink-0 space-y-2">
+        <div className="px-4 py-2 border-b border-[#e9edef] dark:border-[#202c33] bg-[#f8fafc] dark:bg-[#182229] shrink-0 space-y-2">
           <div className="flex items-center justify-between">
             <button
               onClick={() => shiftDate(-1)}
-              className="w-8 h-8 rounded-full bg-white border border-[#d1d7db] flex items-center justify-center hover:bg-[#f0f2f5]"
+              className="w-8 h-8 rounded-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] flex items-center justify-center hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942]"
             >
               <ChevronLeft size={16} />
             </button>
-            <div className="relative font-bold text-sm text-[#111b21] hover:text-[#008069] flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-[#c2e7e0] transition shadow-2xs cursor-pointer">
+            <div className="relative font-bold text-sm text-[#111b21] dark:text-[#e9edef] hover:text-[#008069] dark:hover:text-[#00a884] flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-[#202c33] border border-[#c2e7e0] dark:border-[#2a3942] transition shadow-2xs cursor-pointer">
               <Calendar size={14} className="text-[#008069] shrink-0 pointer-events-none" />
               <span className="truncate pointer-events-none">{formatDateLabel(selectedDateStr)}</span>
               <input
@@ -143,7 +143,7 @@ export const DailyScheduleModal: React.FC<Props> = ({
             </div>
             <button
               onClick={() => shiftDate(1)}
-              className="w-8 h-8 rounded-full bg-white border border-[#d1d7db] flex items-center justify-center hover:bg-[#f0f2f5]"
+              className="w-8 h-8 rounded-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] flex items-center justify-center hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942]"
             >
               <ChevronRight size={16} />
             </button>
@@ -152,7 +152,7 @@ export const DailyScheduleModal: React.FC<Props> = ({
             <div className="flex items-center gap-1.5 flex-wrap">
               <button
                 onClick={() => setSelectedStaffId('all')}
-                className={`px-3 py-1 rounded-full text-xs font-bold border ${selectedStaffId === 'all' ? 'bg-[#008069] text-white border-[#008069]' : 'bg-white border-[#d1d7db] text-[#54656f]'}`}
+                className={`px-3 py-1 rounded-full text-xs font-bold border ${selectedStaffId === 'all' ? 'bg-[#008069] text-white border-[#008069]' : 'bg-white dark:bg-[#202c33] border-[#d1d7db] dark:border-[#2a3942] text-[#54656f] dark:text-[#8696a0]'}`}
               >
                 Semua Bidan
               </button>
@@ -160,7 +160,7 @@ export const DailyScheduleModal: React.FC<Props> = ({
                 <button
                   key={s.id}
                   onClick={() => setSelectedStaffId(s.id)}
-                  className={`px-3 py-1 rounded-full text-xs font-bold border ${selectedStaffId === s.id ? 'bg-[#008069] text-white border-[#008069]' : 'bg-white border-[#d1d7db] text-[#54656f]'}`}
+                  className={`px-3 py-1 rounded-full text-xs font-bold border ${selectedStaffId === s.id ? 'bg-[#008069] text-white border-[#008069]' : 'bg-white dark:bg-[#202c33] border-[#d1d7db] dark:border-[#2a3942] text-[#54656f] dark:text-[#8696a0]'}`}
                 >
                   {s.name}
                 </button>
@@ -172,7 +172,7 @@ export const DailyScheduleModal: React.FC<Props> = ({
           </div>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-hidden bg-[#f8fafc] flex flex-col">
+        <div className="flex-1 min-h-0 overflow-hidden bg-[#f8fafc] dark:bg-[#111b21] flex flex-col">
           {loading ? (
             <p className="text-center text-xs text-[#8696a0] py-8">Memuat jadwal...</p>
           ) : (
@@ -194,10 +194,10 @@ export const DailyScheduleModal: React.FC<Props> = ({
           )}
         </div>
 
-        <div className="p-3 border-t border-[#e9edef] bg-white shrink-0">
+        <div className="p-3 border-t border-[#e9edef] dark:border-[#202c33] bg-white dark:bg-[#182229] shrink-0">
           <button
             onClick={onClose}
-            className="w-full py-2.5 rounded-xl bg-[#f0f2f5] hover:bg-[#e9edef] text-[#54656f] text-xs font-bold cursor-pointer"
+            className="w-full py-2.5 rounded-xl bg-[#f0f2f5] dark:bg-[#202c33] hover:bg-[#e9edef] dark:hover:bg-[#2a3942] text-[#54656f] dark:text-[#8696a0] text-xs font-bold cursor-pointer"
           >
             Tutup
           </button>

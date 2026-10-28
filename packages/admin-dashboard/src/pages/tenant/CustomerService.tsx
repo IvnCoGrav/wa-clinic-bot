@@ -117,13 +117,13 @@ export const CustomerService: React.FC = () => {
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       {/* Header */}
-      <div className="flex items-center space-x-3 pb-2 border-b border-[#e9edef]">
-        <div className="p-2.5 rounded-xl bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0]">
+      <div className="flex items-center space-x-3 pb-2 border-b border-[#e9edef] dark:border-[#2a3942]">
+        <div className="p-2.5 rounded-xl bg-[#e8f5f2] dark:bg-[#00a884]/15 text-[#008069] dark:text-[#00a884] border border-[#c2e7e0] dark:border-[#00a884]/30">
           <Headphones size={22} />
         </div>
         <div>
-          <h2 className="text-xl font-bold text-[#111b21]">Customer Service &amp; CTA Link Generator</h2>
-          <p className="text-xs text-[#667781] mt-0.5">
+          <h2 className="text-xl font-bold text-[#111b21] dark:text-[#e9edef]">Customer Service &amp; CTA Link Generator</h2>
+          <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
             Pusat konfigurasi Customer Service dan pembuat CTA Link otomatis terhubung ke WhatsApp.
           </p>
         </div>
@@ -131,55 +131,55 @@ export const CustomerService: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Panel 1: Settings Form */}
-        <div className="bg-white p-5 space-y-4 rounded-2xl border border-[#e9edef] shadow-xs">
-          <div className="flex items-center space-x-2 border-b border-[#e9edef] pb-3">
+        <div className="bg-white dark:bg-[#111b21] p-5 space-y-4 rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs">
+          <div className="flex items-center space-x-2 border-b border-[#e9edef] dark:border-[#2a3942] pb-3">
             <Headphones size={16} className="text-[#008069]" />
-            <h3 className="text-sm font-bold text-[#111b21]">Pengaturan Customer Service</h3>
+            <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef]">Pengaturan Customer Service</h3>
           </div>
 
           <div className="space-y-3.5">
             <div className="space-y-1">
-              <label className="block text-[11px] font-bold text-[#111b21]">Nama Customer Service</label>
+              <label className="block text-[11px] font-bold text-[#111b21] dark:text-[#e9edef]">Nama Customer Service</label>
               <input
                 type="text"
                 value={csName}
                 onChange={(e) => setCsName(e.target.value)}
                 placeholder="Cs Yusi"
-                className="w-full bg-white border border-[#d1d7db] rounded-xl px-3.5 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs transition"
+                className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3.5 py-2 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs transition"
               />
             </div>
 
             <div className="space-y-1">
-              <label className="block text-[11px] font-bold text-[#111b21]">No WA (WhatsApp)</label>
+              <label className="block text-[11px] font-bold text-[#111b21] dark:text-[#e9edef]">No WA (WhatsApp)</label>
               <input
                 type="text"
                 value={whatsappNumber}
                 onChange={(e) => setWhatsappNumber(e.target.value)}
                 placeholder="6285794210526"
-                className="w-full bg-white border border-[#d1d7db] rounded-xl px-3.5 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs transition"
+                className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3.5 py-2 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs transition"
               />
             </div>
 
             <div className="space-y-1">
-              <label className="block text-[11px] font-bold text-[#111b21]">Format Visit (Pesan Awal Visit / Lead)</label>
+              <label className="block text-[11px] font-bold text-[#111b21] dark:text-[#e9edef]">Format Visit (Pesan Awal Visit / Lead)</label>
               <textarea
                 rows={2}
                 value={formatVisit}
                 onChange={(e) => setFormatVisit(e.target.value)}
                 placeholder="Promo [%ID%]"
-                className="w-full bg-white border border-[#d1d7db] rounded-xl p-2.5 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs transition"
+                className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl p-2.5 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs transition"
               />
               <p className="text-[10px] text-[#8696a0]">Gunakan <code className="text-[#008069] font-mono font-semibold">[%ID%]</code> untuk penempatan posisi kode unik tracking.</p>
             </div>
 
             <div className="space-y-1">
-              <label className="block text-[11px] font-bold text-[#111b21]">Greetings Text (Pesan Pembuka WA)</label>
+              <label className="block text-[11px] font-bold text-[#111b21] dark:text-[#e9edef]">Greetings Text (Pesan Pembuka WA)</label>
               <textarea
                 rows={2}
                 value={greetingsText}
                 onChange={(e) => setGreetingsText(e.target.value)}
                 placeholder="PROMO [%ID%]"
-                className="w-full bg-white border border-[#d1d7db] rounded-xl p-2.5 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs transition"
+                className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl p-2.5 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs transition"
               />
               <p className="text-[10px] text-[#8696a0] flex items-center space-x-1">
                 <Info size={11} className="text-[#008069]" />
@@ -188,35 +188,35 @@ export const CustomerService: React.FC = () => {
             </div>
 
             <div className="space-y-1">
-              <label className="block text-[11px] font-bold text-[#111b21]">Format Checkout (Reservasi Form)</label>
+              <label className="block text-[11px] font-bold text-[#111b21] dark:text-[#e9edef]">Format Checkout (Reservasi Form)</label>
               <textarea
                 rows={2}
                 value={formatCheckout}
                 onChange={(e) => setFormatCheckout(e.target.value)}
                 placeholder="list untuk reservasi :"
-                className="w-full bg-white border border-[#d1d7db] rounded-xl p-2.5 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs transition"
+                className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl p-2.5 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs transition"
               />
             </div>
 
             <div className="space-y-1">
-              <label className="block text-[11px] font-bold text-[#111b21]">Format Purchase (Label Pembayaran)</label>
+              <label className="block text-[11px] font-bold text-[#111b21] dark:text-[#e9edef]">Format Purchase (Label Pembayaran)</label>
               <textarea
                 rows={2}
                 value={formatPurchase}
                 onChange={(e) => setFormatPurchase(e.target.value)}
                 placeholder="Payment"
-                className="w-full bg-white border border-[#d1d7db] rounded-xl p-2.5 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs transition"
+                className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl p-2.5 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs transition"
               />
             </div>
 
             <div className="space-y-1">
-              <label className="block text-[11px] font-bold text-[#111b21]">Format Value (Label Treatment/Nilai)</label>
+              <label className="block text-[11px] font-bold text-[#111b21] dark:text-[#e9edef]">Format Value (Label Treatment/Nilai)</label>
               <textarea
                 rows={2}
                 value={formatValue}
                 onChange={(e) => setFormatValue(e.target.value)}
                 placeholder="Treatment = %VALUE%"
-                className="w-full bg-white border border-[#d1d7db] rounded-xl p-2.5 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs transition"
+                className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl p-2.5 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs transition"
               />
             </div>
           </div>
@@ -232,32 +232,32 @@ export const CustomerService: React.FC = () => {
         </div>
 
         {/* Panel 2: CTA Link Generator */}
-        <div className="bg-white p-5 space-y-4 rounded-2xl border border-[#e9edef] shadow-xs self-start">
+        <div className="bg-white dark:bg-[#111b21] p-5 space-y-4 rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs self-start">
           <div className="space-y-3.5">
-            <div className="flex items-center space-x-2 border-b border-[#e9edef] pb-3">
+            <div className="flex items-center space-x-2 border-b border-[#e9edef] dark:border-[#2a3942] pb-3">
               <LinkIcon size={16} className="text-[#008069]" />
-              <h3 className="text-sm font-bold text-[#111b21]">Generate CTA Link</h3>
+              <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef]">Generate CTA Link</h3>
             </div>
 
             <div className="space-y-1">
-              <label className="block text-[11px] font-bold text-[#111b21]">Divisi / Nama Kampanye</label>
+              <label className="block text-[11px] font-bold text-[#111b21] dark:text-[#e9edef]">Divisi / Nama Kampanye</label>
               <input
                 type="text"
                 value={divisi}
                 onChange={(e) => setDivisi(e.target.value)}
                 placeholder="Iklan Treatment Bunda"
-                className="w-full bg-white border border-[#d1d7db] rounded-xl px-3.5 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs transition"
+                className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3.5 py-2 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs transition"
               />
             </div>
 
             <div className="space-y-1">
-              <label className="block text-[11px] font-bold text-[#111b21]">Domain Landing Page / Base URL</label>
+              <label className="block text-[11px] font-bold text-[#111b21] dark:text-[#e9edef]">Domain Landing Page / Base URL</label>
               <input
                 type="text"
                 value={landingDomain}
                 onChange={(e) => setLandingDomain(e.target.value)}
                 placeholder="https://example.com"
-                className="w-full bg-white border border-[#d1d7db] rounded-xl px-3.5 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs transition"
+                className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3.5 py-2 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs transition"
               />
               <p className="text-[10px] text-[#8696a0]">
                 Domain ini akan tersimpan ke database dan digunakan untuk membuat link CTA serta atribusi Meta CAPI.
@@ -283,12 +283,12 @@ export const CustomerService: React.FC = () => {
 
             {/* Full Manual Link */}
             <div className="space-y-1">
-              <label className="block text-[11px] font-bold text-[#111b21]">Link Manual (Hardcoded Phone/Msg)</label>
+              <label className="block text-[11px] font-bold text-[#111b21] dark:text-[#e9edef]">Link Manual (Hardcoded Phone/Msg)</label>
               <textarea
                 readOnly
                 rows={3}
                 value={generatedCtaLink}
-                className="w-full bg-[#f8fafc] border border-[#d1d7db] rounded-xl p-2.5 text-xs font-mono text-[#008069] focus:outline-none resize-none select-all"
+                className="w-full bg-[#f8fafc] dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl p-2.5 text-xs font-mono text-[#008069] dark:text-[#00a884] focus:outline-none resize-none select-all"
               />
             </div>
 

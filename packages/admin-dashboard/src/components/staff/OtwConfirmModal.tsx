@@ -48,13 +48,13 @@ export const OtwConfirmModal: React.FC<OtwConfirmModalProps> = ({
       aria-label="Konfirmasi berangkat OTW"
     >
       <div
-        className="bg-white rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 w-full max-w-md shadow-2xl border border-[#e9edef] space-y-4 text-left animate-modalScaleUp max-h-[90dvh] overflow-y-auto"
+        className="bg-white dark:bg-[#111b21] rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 w-full max-w-md shadow-2xl border border-[#e9edef] dark:border-[#2a3942] space-y-4 text-left animate-modalScaleUp max-h-[90dvh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-12 h-1.5 bg-[#d1d7db] rounded-full mx-auto -mt-2 mb-1 sm:hidden" />
+        <div className="w-12 h-1.5 bg-[#d1d7db] dark:bg-[#374248] rounded-full mx-auto -mt-2 mb-1 sm:hidden" />
 
         <div className="flex items-start justify-between">
-          <h3 className="text-base font-bold text-[#111b21] flex items-center space-x-2">
+          <h3 className="text-base font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
             <Navigation className="text-[#008069] flex-shrink-0" size={20} />
             <span>Mulai Jalan (OTW)</span>
           </h3>
@@ -62,7 +62,7 @@ export const OtwConfirmModal: React.FC<OtwConfirmModalProps> = ({
             type="button"
             onClick={onClose}
             disabled={sending}
-            className="text-[#667781] hover:text-[#111b21] p-1 rounded-full hover:bg-[#f0f2f5] disabled:opacity-40"
+            className="text-[#667781] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] p-1 rounded-full hover:bg-[#f0f2f5] dark:hover:bg-[#202c33] disabled:opacity-40"
             aria-label="Tutup"
           >
             <X size={18} />
@@ -73,8 +73,8 @@ export const OtwConfirmModal: React.FC<OtwConfirmModalProps> = ({
         <div
           className={`rounded-xl border p-3 text-xs leading-relaxed flex items-start gap-2 ${
             hasGps
-              ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
-              : 'border-amber-300 bg-amber-50 text-amber-800'
+              ? 'border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300'
+              : 'border-amber-300 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200'
           }`}
         >
           {hasGps ? (
@@ -98,7 +98,7 @@ export const OtwConfirmModal: React.FC<OtwConfirmModalProps> = ({
               type="button"
               onClick={onRetryGps}
               disabled={gpsChecking || sending}
-              className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-md px-2 py-1 disabled:opacity-50"
+              className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-900 dark:text-amber-100 bg-amber-100 dark:bg-amber-900/40 hover:bg-amber-200 dark:hover:bg-amber-900/60 border border-amber-300 dark:border-amber-800 rounded-md px-2 py-1 disabled:opacity-50"
             >
               <RefreshCw size={11} className={gpsChecking ? 'animate-spin' : ''} />
               Coba lagi
@@ -108,10 +108,10 @@ export const OtwConfirmModal: React.FC<OtwConfirmModalProps> = ({
 
         {/* Pratinjau pesan ke pasien */}
         <div className="space-y-1.5">
-          <p className="text-[11px] font-semibold text-[#667781]">
+          <p className="text-[11px] font-semibold text-[#667781] dark:text-[#8696a0]">
             Pesan WhatsApp ke {patientName}:
           </p>
-          <p className="text-xs text-[#111b21] leading-relaxed whitespace-pre-wrap bg-[#f0f2f5] p-3.5 rounded-xl border border-[#e9edef]">
+          <p className="text-xs text-[#111b21] dark:text-[#e9edef] leading-relaxed whitespace-pre-wrap bg-[#f0f2f5] dark:bg-[#202c33] p-3.5 rounded-xl border border-[#e9edef] dark:border-[#2a3942]">
             {draft}
           </p>
         </div>
@@ -134,7 +134,7 @@ export const OtwConfirmModal: React.FC<OtwConfirmModalProps> = ({
             type="button"
             onClick={onClose}
             disabled={sending}
-            className="w-full min-h-[44px] py-2.5 px-4 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] rounded-2xl text-xs font-bold transition active:scale-[0.98] disabled:opacity-40"
+            className="w-full min-h-[44px] py-2.5 px-4 bg-white dark:bg-[#202c33] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] border border-[#d1d7db] dark:border-[#2a3942] text-[#54656f] dark:text-[#e9edef] rounded-2xl text-xs font-bold transition active:scale-[0.98] disabled:opacity-40"
           >
             Batal
           </button>

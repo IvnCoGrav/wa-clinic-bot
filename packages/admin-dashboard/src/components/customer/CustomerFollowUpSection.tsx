@@ -222,9 +222,9 @@ export const CustomerFollowUpSection: React.FC<Props> = ({ customerId, followUps
   };
 
   return (
-    <div className="p-4 bg-white border border-[#e9edef] rounded-2xl space-y-3 shadow-2xs">
+    <div className="p-4 bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl space-y-3 shadow-2xs">
       <div className="flex items-center justify-between">
-        <h4 className="font-bold text-xs text-[#111b21] flex items-center gap-1.5">
+        <h4 className="font-bold text-xs text-[#111b21] dark:text-[#e9edef] flex items-center gap-1.5">
           <Clock size={14} className="text-[#008069]" />
           <span>Antrean Follow-Up ({active.length} aktif)</span>
         </h4>
@@ -241,8 +241,8 @@ export const CustomerFollowUpSection: React.FC<Props> = ({ customerId, followUps
       </div>
 
       {active.length === 0 ? (
-        <div className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-xl text-center">
-          <p className="text-xs text-[#667781]">Tidak ada jadwal follow-up aktif untuk customer ini.</p>
+        <div className="p-3 bg-[#f8fafc] dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] rounded-xl text-center">
+          <p className="text-xs text-[#667781] dark:text-[#8696a0]">Tidak ada jadwal follow-up aktif untuk customer ini.</p>
           <p className="text-[11px] text-[#8696a0] mt-1">Follow-up otomatis akan dibuat setelah reservasi atau jika customer belum purchase.</p>
         </div>
       ) : (
@@ -251,11 +251,11 @@ export const CustomerFollowUpSection: React.FC<Props> = ({ customerId, followUps
             const isExpanded = expandedId === fu.id;
             const overdue = new Date(fu.scheduled_at).getTime() < Date.now();
             return (
-              <div key={fu.id} className={`rounded-xl border p-3 space-y-2 ${overdue ? 'border-amber-200 bg-amber-50/40' : 'border-[#e9edef] bg-[#f8fafc]'}`}>
+              <div key={fu.id} className={`rounded-xl border p-3 space-y-2 ${overdue ? 'border-amber-200 bg-amber-50/40' : 'border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#202c33]'}`}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-xs font-bold text-[#111b21]">{humanizeType(fu.type, fu.stage)}</span>
+                      <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">{humanizeType(fu.type, fu.stage)}</span>
                       <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold border ${STATUS_STYLES[fu.status] || 'bg-gray-100 text-gray-700 border-gray-200'}`}>
                         {fu.status}
                       </span>
@@ -266,7 +266,7 @@ export const CustomerFollowUpSection: React.FC<Props> = ({ customerId, followUps
                       <span className="font-medium">{formatWibRelative(fu.scheduled_at, fu.status)}</span>
                     </div>
                     {fu.reservation && (
-                      <p className="text-[11px] text-[#667781] mt-1 truncate">
+                      <p className="text-[11px] text-[#667781] dark:text-[#8696a0] mt-1 truncate">
                         Terkait reservasi: {fu.reservation.treatment_detail || fu.reservation.treatment_category || fu.reservation.id.slice(0, 8)} •{' '}
                         {fu.reservation.booking_date ? new Date(fu.reservation.booking_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : ''}
                       </p>
@@ -275,7 +275,7 @@ export const CustomerFollowUpSection: React.FC<Props> = ({ customerId, followUps
                   <button
                     type="button"
                     onClick={() => setExpandedId(isExpanded ? null : fu.id)}
-                    className="p-1.5 rounded-lg hover:bg-white border border-transparent hover:border-[#e9edef] text-[#667781] transition shrink-0"
+                    className="p-1.5 rounded-lg hover:bg-white border border-transparent hover:border-[#e9edef] text-[#667781] dark:text-[#8696a0] transition shrink-0"
                     title={isExpanded ? 'Sembunyikan' : 'Lihat pesan'}
                   >
                     {isExpanded ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -285,9 +285,9 @@ export const CustomerFollowUpSection: React.FC<Props> = ({ customerId, followUps
                 {isExpanded && (
                   <div className="p-2.5 bg-white border border-[#e9edef] rounded-xl text-xs leading-relaxed whitespace-pre-wrap">
                     {fu.custom_text ? (
-                      <p className="text-[#111b21]">{fu.custom_text}</p>
+                      <p className="text-[#111b21] dark:text-[#e9edef]">{fu.custom_text}</p>
                     ) : (
-                      <p className="text-[#667781] italic">Pratinjau template default: {humanizeType(fu.type, fu.stage)} — teks akan dirender saat pengiriman (varian rolling 1..3).</p>
+                      <p className="text-[#667781] dark:text-[#8696a0] italic">Pratinjau template default: {humanizeType(fu.type, fu.stage)} — teks akan dirender saat pengiriman (varian rolling 1..3).</p>
                     )}
                   </div>
                 )}
@@ -316,7 +316,7 @@ export const CustomerFollowUpSection: React.FC<Props> = ({ customerId, followUps
                   <button
                     type="button"
                     onClick={() => openEdit(fu)}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-[#e9edef] hover:bg-[#f0f2f5] text-[#111b21] text-xs font-semibold transition"
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-[#e9edef] hover:bg-[#f0f2f5] text-[#111b21] dark:text-[#e9edef] text-xs font-semibold transition"
                   >
                     <Pencil size={12} />
                     Edit / Reschedule
@@ -338,7 +338,7 @@ export const CustomerFollowUpSection: React.FC<Props> = ({ customerId, followUps
 
       {historyOpen && history.length > 0 && (
         <div className="pt-2 border-t border-[#e9edef] space-y-2">
-          <h5 className="text-[11px] font-bold text-[#667781] uppercase tracking-wider flex items-center gap-1">
+          <h5 className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider flex items-center gap-1">
             <CheckCircle2 size={12} />
             Riwayat ({history.length})
           </h5>
@@ -347,10 +347,10 @@ export const CustomerFollowUpSection: React.FC<Props> = ({ customerId, followUps
               <div key={fu.id} className="p-2.5 rounded-xl border border-[#e9edef] bg-white flex justify-between items-start gap-2">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-xs font-semibold text-[#111b21]">{humanizeType(fu.type, fu.stage)}</span>
+                    <span className="text-xs font-semibold text-[#111b21] dark:text-[#e9edef]">{humanizeType(fu.type, fu.stage)}</span>
                     <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold border ${STATUS_STYLES[fu.status] || ''}`}>{fu.status}</span>
                   </div>
-                  <p className="text-[11px] text-[#667781] mt-0.5">
+                  <p className="text-[11px] text-[#667781] dark:text-[#8696a0] mt-0.5">
                     {fu.status === 'SENT' && fu.sent_at ? `Terkirim ${new Date(fu.sent_at).toLocaleString('id-ID')}` : `Jadwal ${formatWibRelative(fu.scheduled_at, fu.status)}`}
                   </p>
                   {fu.cancel_reason && <p className="text-[11px] text-rose-600 mt-0.5">Alasan: {fu.cancel_reason}</p>}
@@ -367,10 +367,10 @@ export const CustomerFollowUpSection: React.FC<Props> = ({ customerId, followUps
         <div className="fixed inset-0 z-[70] bg-black/40 backdrop-blur-xs flex items-center justify-center p-4" onClick={() => setCancellingId(null)}>
           <div className="bg-white rounded-2xl w-full max-w-md p-4 space-y-3 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <h5 className="font-bold text-sm text-[#111b21] flex items-center gap-1.5"><AlertCircle size={16} className="text-rose-600" /> Batalkan Follow-Up</h5>
+              <h5 className="font-bold text-sm text-[#111b21] dark:text-[#e9edef] flex items-center gap-1.5"><AlertCircle size={16} className="text-rose-600" /> Batalkan Follow-Up</h5>
               <button onClick={() => setCancellingId(null)} className="p-1 rounded-lg hover:bg-[#f0f2f5]"><X size={16} /></button>
             </div>
-            <p className="text-xs text-[#667781]">Alasan pembatalan (opsional) akan disimpan di <code>cancel_reason</code>:</p>
+            <p className="text-xs text-[#667781] dark:text-[#8696a0]">Alasan pembatalan (opsional) akan disimpan di <code>cancel_reason</code>:</p>
             <textarea
               value={cancelReason}
               onChange={(e) => setCancelReason(e.target.value)}
@@ -393,16 +393,16 @@ export const CustomerFollowUpSection: React.FC<Props> = ({ customerId, followUps
         <div className="fixed inset-0 z-[70] bg-black/40 backdrop-blur-xs flex items-center justify-center p-4" onClick={() => setEditing(null)}>
           <div className="bg-white rounded-2xl w-full max-w-md p-4 space-y-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <h5 className="font-bold text-sm text-[#111b21] flex items-center gap-1.5"><Pencil size={16} className="text-[#008069]" /> Edit Follow-Up</h5>
+              <h5 className="font-bold text-sm text-[#111b21] dark:text-[#e9edef] flex items-center gap-1.5"><Pencil size={16} className="text-[#008069]" /> Edit Follow-Up</h5>
               <button onClick={() => setEditing(null)} className="p-1 rounded-lg hover:bg-[#f0f2f5]"><X size={16} /></button>
             </div>
             <div className="space-y-3 text-xs">
               <div>
-                <label className="font-semibold text-[#111b21] block mb-1">Tipe</label>
-                <p className="p-2.5 bg-[#f8fafc] border border-[#e9edef] rounded-xl text-[#54656f]">{humanizeType(editing.type, editing.stage)}</p>
+                <label className="font-semibold text-[#111b21] dark:text-[#e9edef] block mb-1">Tipe</label>
+                <p className="p-2.5 bg-[#f8fafc] dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] rounded-xl text-[#54656f]">{humanizeType(editing.type, editing.stage)}</p>
               </div>
               <div>
-                <label className="font-semibold text-[#111b21] block mb-1">Tahap (Stage 1..3)</label>
+                <label className="font-semibold text-[#111b21] dark:text-[#e9edef] block mb-1">Tahap (Stage 1..3)</label>
                 <select value={editStage} onChange={(e) => setEditStage(Number(e.target.value))} className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs focus:outline-none focus:border-[#008069]">
                   <option value={1}>Tahap 1</option>
                   <option value={2}>Tahap 2</option>
@@ -410,7 +410,7 @@ export const CustomerFollowUpSection: React.FC<Props> = ({ customerId, followUps
                 </select>
               </div>
               <div>
-                <label className="font-semibold text-[#111b21] block mb-1">Jadwal Kirim (WIB)</label>
+                <label className="font-semibold text-[#111b21] dark:text-[#e9edef] block mb-1">Jadwal Kirim (WIB)</label>
                 <input
                   type="datetime-local"
                   value={editScheduledAt}
@@ -420,7 +420,7 @@ export const CustomerFollowUpSection: React.FC<Props> = ({ customerId, followUps
                 <p className="text-[11px] text-[#8696a0] mt-1">Disimpan sebagai UTC, ditampilkan WIB.</p>
               </div>
               <div>
-                <label className="font-semibold text-[#111b21] block mb-1">Custom Text (opsional)</label>
+                <label className="font-semibold text-[#111b21] dark:text-[#e9edef] block mb-1">Custom Text (opsional)</label>
                 <textarea
                   value={editCustomText}
                   onChange={(e) => setEditCustomText(e.target.value)}
