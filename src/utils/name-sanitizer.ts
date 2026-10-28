@@ -57,7 +57,7 @@ const GENERIC_NAME_PLACEHOLDERS = new Set([
 /**
  * Memeriksa apakah sebuah nama customer berstatus generik/placeholder/belum definitif.
  * Nama generik diizinkan diperbarui saat customer memberikan nama asli di reservasi pertama.
- * Nama yang SUDAH DEFINITIF (bukan generic) DILARANG ditimpa otomatis oleh transaksi berikutnya.
+ * Nama yang SUDAH DEFINITIF (nama orang asli yang sah) DILARANG ditimpa otomatis oleh transaksi berikutnya.
  */
 export function isGenericCustomerName(name: string | null | undefined): boolean {
   if (!name) return true;
@@ -65,18 +65,29 @@ export function isGenericCustomerName(name: string | null | undefined): boolean 
   if (trimmed.length < 2) return true;
   const lower = trimmed.toLowerCase();
 
-  // Pola masking nomor, placeholder, atau simbol teknis
+  // 1. Pola masking nomor, placeholder, atau simbol teknis
   if (lower.includes('*') || lower === 'null' || lower === 'undefined' || lower === '-') return true;
 
-  // Leksikon generic
+  // 2. Leksikon generic terdaftar
   if (GENERIC_NAME_PLACEHOLDERS.has(lower)) return true;
 
-  // Pola awalan label generik sistem (mis. "Pelanggan 6319", "Customer 0812")
+  // 3. Pola awalan label generik sistem (mis. "Pelanggan 6319", "Customer 0812")
   if (/^(?:pelanggan|customer|lead|pasien|sandbox customer)\b/i.test(lower)) return true;
 
-  // Nama yang HANYA terdiri dari kata sapaan saja tanpa nama orang (mis. "Bunda", "Ibu", "Ayah", "Pak", "Bu")
+  // 4. Pola non-manusia / handle teknis (username WhatsApp / kode / tag):
+  //    - Mengandung underscore (_) atau simbol handle teknis
+  if (/[_@#|\\\/=~+<>]/.test(trimmed)) return true;
+
+  //    - Mengandung digit/angka (contoh: a_31, ay719, user123, Bunda (0812...))
+  if (/\d/.test(trimmed)) return true;
+
+  // 5. Nama yang HANYA terdiri dari kata sapaan saja tanpa nama orang (mis. "Bunda", "Ibu", "Ayah", "Pak", "Bu")
   const stripped = lower.replace(/^(?:bunda|ibu|bu|mama|moms|mbak|mas|kak|kakak|ny|ny\.|ayah|pak|bapak)\s*/i, '').trim();
   if (!stripped || stripped.length < 2) return true;
+
+  // 6. Harus tersisa minimal 2 huruf alfabet asli (anti pure emoji/simbol: "😊", "⭐️", "~", ".")
+  const lettersOnly = stripped.replace(/[^\p{L}]/gu, '');
+  if (lettersOnly.length < 2) return true;
 
   return false;
 }
@@ -339,17 +350,34 @@ export function sanitizeCustomerNameForStorage(rawName?: string | null): string 
   if (!rawName) return '';
   let name = rawName.trim();
 
-  // Buang catatan alamat/status ("Bunda Balqis, Sidotopo Wetan", "- Leave ur Chat").
+  // 1. Buang emoji
+  name = name.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E0}-\u{1F1FF}]/gu, '').trim();
+
+  // 2. Ekstrak nama dalam kurung jika ada (misal: "0812345 (Bunda Rina)" -> "Bunda Rina")
+  if (name.includes('(') && name.includes(')')) {
+    const pMatch = name.match(/\(([^)]+)\)/);
+    if (pMatch && pMatch[1]) {
+      const inside = pMatch[1].trim();
+      if (inside && !inside.toLowerCase().includes('bulan') && !inside.toLowerCase().includes('tahun') && !/^\d+/.test(inside)) {
+        name = inside;
+      } else {
+        name = name.replace(/\([^)]*\)/g, '').trim();
+      }
+    }
+  }
+
+  // 3. Buang catatan alamat/status ("Bunda Balqis, Sidotopo Wetan", "- Leave ur Chat").
   name = name.split(/[,|]/)[0].trim();
   name = name.split(/\s+[-+/:]\s+|\s*\+\s*alamat/i)[0].trim();
 
-  // Gerbang wilayah deterministik (ekspansi "Kec." + leksikon dataset).
+  // 4. Gerbang wilayah deterministik (ekspansi "Kec." + leksikon dataset).
   name = stripLocationNoise(name);
 
-  // Rapikan simbol sisa.
+  // 5. Rapikan simbol sisa.
   name = name.replace(/^[\s~_.*\-#@!&|+=<>]+|[\s~_.*\-#@!&|+=<>]+$/g, '').trim();
 
-  if (!name || GENERIC_NAME_PLACEHOLDERS.has(name.toLowerCase())) return '';
+  // 6. Jika nama yang tersisa adalah generic / handle / non-manusia (misal "A_31", "ay719", "Pelanggan 6319", "Bunda") -> kosongkan
+  if (!name || isGenericCustomerName(name)) return '';
   return name.replace(/\s+/g, ' ').trim();
 }
 

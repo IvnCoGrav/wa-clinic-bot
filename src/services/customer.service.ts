@@ -978,7 +978,7 @@ export class CustomerService {
     if (!options?.force) {
       const current = await this.getCustomerById(customerId, tenantId);
       if (current?.name && !isGenericCustomerName(current.name)) {
-        // Nama di database sudah definitif dan sah. Pertahankan tanpa perubahan.
+        console.log(`[CUSTOMER NAME SHIELD] Pertahankan nama definitif '${current.name}' untuk customer ${customerId} (abaikan kandidat non-force '${safeName}')`);
         return current;
       }
     }

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { isGenericCustomerName } from '../../src/utils/name-sanitizer';
+import { isGenericCustomerName, sanitizeCustomerNameForStorage } from '../../src/utils/name-sanitizer';
 import { parseReservationText } from '../../src/utils/reservation-text-parser';
 import { customerService } from '../../src/services/customer.service';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
@@ -187,6 +187,95 @@ Treatment : Pijat Bayi
       expect(isGenericCustomerName('Pak Hendra')).toBe(false);
       expect(isGenericCustomerName('Bapak Ahmad')).toBe(false);
       expect(isGenericCustomerName('dr. Annisa')).toBe(false);
+      expect(isGenericCustomerName("Syafi'i")).toBe(false);
+      expect(isGenericCustomerName('Anne-Marie')).toBe(false);
+      expect(isGenericCustomerName('Azima')).toBe(false);
+      expect(isGenericCustomerName('Bunda Azima')).toBe(false);
+    });
+  });
+
+  describe('Skenario 8: Deteksi Non-Manusia / Handle WhatsApp (A_31, ay719, emoji, simbol, nomor HP)', () => {
+    it('mengklasifikasikan username, handle, dan kode teknis sebagai generic (true)', () => {
+      expect(isGenericCustomerName('A_31')).toBe(true);
+      expect(isGenericCustomerName('a_31')).toBe(true);
+      expect(isGenericCustomerName('ay719')).toBe(true);
+      expect(isGenericCustomerName('user_123')).toBe(true);
+      expect(isGenericCustomerName('rika_olshop')).toBe(true);
+      expect(isGenericCustomerName('Bunda (08980707299)')).toBe(true);
+      expect(isGenericCustomerName('😊')).toBe(true);
+      expect(isGenericCustomerName('⭐️')).toBe(true);
+      expect(isGenericCustomerName('.')).toBe(true);
+      expect(isGenericCustomerName('~')).toBe(true);
+      expect(isGenericCustomerName('V')).toBe(true);
+    });
+
+    it('sanitasi penyimpanan membuang handle non-manusia dan mengekstrak nama sah dari kurung', () => {
+      expect(sanitizeCustomerNameForStorage('A_31')).toBe('');
+      expect(sanitizeCustomerNameForStorage('ay719')).toBe('');
+      expect(sanitizeCustomerNameForStorage('user_123')).toBe('');
+      expect(sanitizeCustomerNameForStorage('Bunda (08980707299)')).toBe('');
+      expect(sanitizeCustomerNameForStorage('😊')).toBe('');
+      expect(sanitizeCustomerNameForStorage('⭐️')).toBe('');
+      expect(sanitizeCustomerNameForStorage('0812345 (Bunda Rina)')).toBe('Bunda Rina');
+      expect(sanitizeCustomerNameForStorage('azima')).toBe('azima');
+      expect(sanitizeCustomerNameForStorage('Bunda azima')).toBe('Bunda azima');
+      expect(sanitizeCustomerNameForStorage('dr. Annisa')).toBe('dr. Annisa');
+      expect(sanitizeCustomerNameForStorage('Ayah Rudi')).toBe('Ayah Rudi');
+    });
+  });
+
+  describe('Skenario 9: Alur Pelanggan Baru dengan Pushname A_31 Menjadi Bunda Azima via Form Reservasi', () => {
+    it('menyimpan null saat pushname A_31 masuk, lalu mengupdate nama menjadi Bunda azima saat form dikirim', async () => {
+      const phone = '6285856479479';
+
+      // 1. Pesan awal masuk dengan pushname A_31 dari WAHA
+      const initialCust = await customerService.getOrCreateCustomer(phone, 'A_31', DEFAULT_TENANT_ID);
+      // Profil master di DB tidak boleh terkontaminasi handle A_31
+      expect(initialCust.name).toBeNull();
+
+      // 2. Pelanggan mengisi formulir reservasi resmi dengan Nama Bunda: azima
+      const updateResult = await customerService.updateCustomerName(initialCust.id, 'Bunda azima', DEFAULT_TENANT_ID);
+      expect(updateResult.name).toBe('Bunda azima');
+
+      // 3. Verifikasi tersimpan di profil master
+      const verified = await customerService.getCustomerById(initialCust.id, DEFAULT_TENANT_ID);
+      expect(verified.name).toBe('Bunda azima');
+    });
+
+    it('mampu memulihkan customer yang sudah terlanjur tersimpan dengan nama handle lama A_31', async () => {
+      const phone = '6285856479478';
+      // Simulasi state database lama sebelum fix (A_31 sempat tersimpan di memory/DB)
+      const initialCust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
+      initialCust.name = 'A_31'; // simulasi record lama di DB
+      customerService.getMemoryCustomers().set(phone, initialCust);
+      customerService.getMemoryCustomers().set(initialCust.id, initialCust);
+
+      // Verifikasi A_31 terdeteksi sebagai generic (bukan nama sah)
+      expect(isGenericCustomerName(initialCust.name)).toBe(true);
+
+      // Form reservasi baru masuk dengan nama sah
+      const updateResult = await customerService.updateCustomerName(initialCust.id, 'Bunda azima', DEFAULT_TENANT_ID);
+      expect(updateResult.name).toBe('Bunda azima');
+
+      const verified = await customerService.getCustomerById(initialCust.id, DEFAULT_TENANT_ID);
+      expect(verified.name).toBe('Bunda azima');
+    });
+  });
+
+  describe('Skenario 10: Repeat Customer dengan Anak Berbeda Tidak Menimpa Nama Bunda', () => {
+    it('mempertahankan nama Bunda saat repeat order anak kedua dikirim tanpa opsi force', async () => {
+      const phone = '628777888999';
+      // Pelanggan sudah memiliki nama sah "Bunda Azima" dari reservasi pertama
+      const cust = await customerService.getOrCreateCustomer(phone, 'Bunda Azima', DEFAULT_TENANT_ID);
+      expect(cust.name).toBe('Bunda Azima');
+
+      // Repeat order: mencoba menimpa dengan nama anak kedua "Bunda Kenzo"
+      const blockedUpdate = await customerService.updateCustomerName(cust.id, 'Bunda Kenzo', DEFAULT_TENANT_ID);
+      expect(blockedUpdate.name).toBe('Bunda Azima');
+
+      // Nama profil master tetap utuh
+      const checked = await customerService.getCustomerById(cust.id, DEFAULT_TENANT_ID);
+      expect(checked.name).toBe('Bunda Azima');
     });
   });
 });

@@ -4,49 +4,24 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-#### 2026-10-27 - Refactor & Audit: Pembersihan Menyeluruh AI Slop UI/UX, Backend Contracts & Comment Hygiene
+#### 2026-10-28 - Fix: Penyempurnaan Integritas Penamaan Master Customer (Anti-Locking Pushname Non-Manusia & Otoritas Form Reservasi)
 
 - **Latar Belakang & Akar Masalah**:
-  - Berdasarkan audit menyeluruh standar anti-slop (miqdadbadjuber/anti-slop: antislop-ui, antislop-code, antislop-copywriting, antislop-layoutmobile), ditemukan sejumlah artefak AI slop:
-    1. Overview Dashboard memuat angka-angka karangan statis (incomingChats: 142, revenue: Rp 3.600.000, +14.2% dari kemarin, dan chart jam dummy) alih-alih data riil.
-    2. Rasio conversion rate dihitung dari pembilang harian dibagi penyebut sepanjang waktu (tidak valid).
-    3. Endpoint analitik /api/admin/financial-analytics menggunakan DEFAULT_TENANT_ID statis (kerentanan isolasi tenant).
-    4. Penggunaan berlebihan ikon berkilau Sparkles di 70+ lokasi teknis/operasional (jadwal perawat, tagihan, antrean CAPI, database).
-    5. Animasi denyut animate-pulse yang berkedip tanpa henti pada status badge dan banner peringatan permanen.
-    6. Kondisi kosong (empty states) pasif tanpa konteks dan tombol aksi.
-    7. Penggunaan h-screen pada layout mobile yang memicu layout shifts saat address bar browser bergerak.
-    8. Komentar kode backend memuat garis spanduk dekoratif (===, ---) dan emoji berlebihan (antislop-code).
-- **Arsitektur & Perubahan (Solusi Fondasional & Bertahap)**:
-  - Backend Contracts (Phase 0):
-    - `src/routes/admin/analytics.subroute.ts`: Isolasi tenant wajib via `tenantOf(request)` (fail-closed 401 saat kredensial tidak ada).
-    - `src/routes/admin/reservation-crud.route.ts`: Endpoint `/api/admin/reservations/count` mendukung filter `?date=YYYY-MM-DD` (WIB) dan bypass cache `?refresh=1`.
-    - `src/services/conversation.service.ts` & `src/services/live-chat.service.ts` & `src/routes/admin/livechat.subroute.ts`: Mengembalikan field `total` percakapan riil (bukan ukuran page).
-  - Kejujuran Metrik Overview (Phase 1):
-    - `packages/admin-dashboard/src/pages/tenant/Overview.tsx`: Menghubungkan metrik ke API riil (`health`, `reservations/count?date=&refresh=1`, `financial-analytics`, `live-chat/conversations`), mengganti conversion rate dengan AOV bulanan, dan merender grafik harian bulanan riil `dailyTrend`.
-    - `packages/admin-dashboard/src/lib/dashboard-metrics.ts`: Helper kanonis parsing dan pemformatan metrik.
-  - Standardisasi Ikon Medis & Klinis (Phase 2):
-    - Membersihkan lebih dari 70 pemanggilan `Sparkles` di 28 file dashboard (menggantinya dengan ikon fungsional: `CalendarDays`, `Tag`, `Activity`, `Heart`, `Bot`, `Clock`, `Crosshair`, `Eye`, `ZoomIn`, `Wand2`, `Database`, `Code2`, `Baby`, `FileText`, `RotateCcw`, `HelpCircle`, `CheckCheck`, `Headphones`, `Send`). Ikon `Sparkles` hanya diizinkan di canvas desain `StitchShowcase.tsx`.
-    - `src/config/persona.ts`: Menghapus emoji `✨` dari palet prompt karakter Bidan (template pesan tetap dijaga utuh).
-  - UX Informatif & Mobile Resilience (Phase 3):
-    - Menghilangkan `animate-pulse` tak berujung pada banner peringatan dan badge status statis di `ReservationDetailModal`, `Reservations`, `LiveChatMonitor`, `StaffToday`, dsb.
-    - Menambahkan actionable empty states pada `MetaPerformancePanel`, `LeakageGrid`, dan `LiveChatMonitor`.
-    - Mengganti `h-screen` dengan `h-[100dvh] min-h-[100dvh]` pada `App.tsx`, `ProtectedRoute.tsx`, dan `StaffProtectedRoute.tsx`.
-  - Penertiban Landing Page Multi-Tenant (Phase 4):
-    - `src/landing/public/go.html`: Meredam bulatan cahaya radial gelap menjadi background halus `#008069`, mengganti badge statis dengan placeholder dinamis `__CLINIC_NAME__`, dan merapikan catatan kaki keamanan.
-  - Pembersihan Komentar Program (Phase 5 - antislop-code):
-    - Membersihkan banner spanduk dekoratif `===` dan `---` di `persona.ts`, `telegram-webhook.route.ts`, dan `calculate-delivery.tool.ts`.
-    - Membersihkan emoji bising pada komentar mesin state di `machine.ts`.
+  - Pada kasus nomor `6285856479479`, nomor masuk pertama kali via iklan dengan pushname WhatsApp mentah bernilai `A_31`.
+  - Sistem validator lama `isGenericCustomerName` hanya memeriksa leksikon generik (`bunda`, `ibu`, `pelanggan`) dan tidak memeriksa karakter teknis seperti underscore (`_`), percampuran angka (`\d`), atau emoji.
+  - Akibatnya, `A_31` (dan varian handle seperti `ay719`, `Si_5174`, `salsabilazahra2608`, `😊`, `⭐️`) dikira sebagai nama manusia sah definitif. Ketika pelanggan mengirim formulir reservasi resmi dengan `Nama Bunda: azima`, sistem menolak menimpa nama secara diam-diam (*silent rejection*).
+- **Arsitektur & Perubahan (Solusi Fondasional & Seam Kanonis)**:
+  - `src/utils/name-sanitizer.ts`:
+    - Memperkaya `isGenericCustomerName`: mendeteksi nama non-manusia / handle teknis yang mengandung underscore (`_`), simbol username (`@#|\/=~+<>`), angka/digit (`\d`), atau tidak menyisakan minimal 2 huruf alfabet asli setelah sapaan dibuang sebagai generic/non-definitif (`true`).
+    - Memperkaya `sanitizeCustomerNameForStorage`: mengekstrak nama di dalam kurung, membuang nomor telepon dalam kurung (mis. `(0812...)`), membuang emoji, dan jika nama tersisa tergolong generic/non-manusia, otomatis dikosongkan (`''`) agar profil kontak baru di DB tidak terkontaminasi handle teknis.
+  - `src/services/customer.service.ts`:
+    - Menambahkan logging diagnostik transparan `[CUSTOMER NAME SHIELD]` pada gerbang proteksi master agar keputusan penolakan penimpaan nama terpantau jelas di log.
+  - `scripts/audit/heal-non-human-customer-names.ts`:
+    - Menyediakan skrip audit self-healing untuk memindai database dan memulihkan nama-nama pelanggan lama yang terkontaminasi handle/simbol non-manusia.
 - **Pengujian & Validasi**:
-  - Uji unit baru:
-    - `tests/unit/admin-analytics-tenant.test.ts` (4 uji tenant isolation & 401 gate)
-    - `tests/unit/reservation-count-date.test.ts` (3 uji WIB date filtering & refresh bypass)
-    - `tests/unit/livechat-total.test.ts` (2 uji total conversation count)
-    - `tests/unit/dashboard-metrics.test.ts` (6 uji format & kalkulasi metrik)
-  - Regression gate:
-    - `tests/unit/typing.test.ts` (12 uji) LULUS
-    - `tests/integration/live-chat-reply.test.ts` (11 uji) LULUS
-    - Backend build (`npm run build`) exited 0
-    - Admin dashboard build (`cd packages/admin-dashboard; npm run build`) exited 0 (2506 modules transformed, 0 type errors)
+  - `tests/unit/customer-name-protection.test.ts`: Menambahkan Skenario 8, 9, dan 10 untuk menguji handle non-manusia, transisi pushname `A_31` -> `Bunda azima`, pemulihan record terkontaminasi lama, serta jaminan proteksi nama Bunda pada repeat order dengan anak berbeda.
+  - Verifikasi: 64 pengujian di 4 test suites 100% hijau.
+
 
 #### 2026-10-25 - Fix: Proteksi Fondasional Integritas Penamaan Master Customer (Anti-Mutasi Liar & Anti-Pembajakan Nama Bayi)
 
