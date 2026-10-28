@@ -401,10 +401,30 @@ describe('Meta CAPI Queue-First & Anti-Duplikat Workflow (Fase 5 Suite)', () => 
   });
 
   // 10. transisi konfirmasi
-  it('10. transisi konfirmasi — hold/intake -> confirmed menyetel pending, approved tetap approved, ignored_outlier tetap outlier', () => {
+  it('10. transisi konfirmasi — hold/intake -> confirmed menyetel pending, approved tetap approved, ignored_outlier tetap outlier, dan sesi 2..N series tetap not_applicable', () => {
+    // Regular single reservation: not_applicable -> pending saat konfirmasi
     expect(resolvePurchaseReviewOnConfirm({ purchase_review_status: 'not_applicable' })).toBe('pending');
     expect(resolvePurchaseReviewOnConfirm({ purchase_review_status: 'approved' })).toBe('approved');
     expect(resolvePurchaseReviewOnConfirm({ purchase_review_status: 'ignored_outlier' })).toBe('ignored_outlier');
+
+    // [P1.2b] Paket berseri: Sesi anchor (sesi 1) menjadi pending
+    expect(resolvePurchaseReviewOnConfirm({
+      series_id: 'series-123',
+      session_number: 1,
+      purchase_review_status: 'not_applicable',
+    })).toBe('pending');
+
+    // [P1.2b] Paket berseri: Sesi non-anchor (sesi 2+) WAJIB tetap not_applicable (anti-leak CAPI)
+    expect(resolvePurchaseReviewOnConfirm({
+      series_id: 'series-123',
+      session_number: 2,
+      purchase_review_status: 'not_applicable',
+    })).toBe('not_applicable');
+    expect(resolvePurchaseReviewOnConfirm({
+      series_id: 'series-123',
+      session_number: 3,
+      purchase_review_status: 'pending',
+    })).toBe('not_applicable');
   });
 
   // 11. fallback memory CAPI queue
@@ -464,6 +484,82 @@ describe('Meta CAPI Queue-First & Anti-Duplikat Workflow (Fase 5 Suite)', () => 
     expect(body.success).toBe(true);
     expect(body.data.length).toBe(1);
     expect(body.data[0].id).toBe('res-def-1');
+  });
+
+  // 12. [P1.2c] Guard approve-purchase pada sesi non-anchor paket berseri menolak dengan 409
+  it('12. [P1.2c] approve-purchase menolak dengan 409 NOT_COMMERCIAL_ANCHOR bila reservasi adalah sesi non-anchor', async () => {
+    app = buildApp();
+    await app.ready();
+
+    const nonAnchorSession = {
+      id: 'res-series-session-2',
+      tenant_id: DEFAULT_TENANT_ID,
+      customer_id: 'cust-series',
+      series_id: 'series-abc',
+      session_number: 2,
+      total_sessions: 3,
+      status: 'confirmed',
+      purchase_review_status: 'not_applicable',
+      purchase_value: 100000,
+      customer: {
+        id: 'cust-series',
+        name: 'Bunda Paket',
+        phone: '628123456789',
+      },
+    };
+
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue(nonAnchorSession as any);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/reservation/res-series-session-2/approve-purchase',
+      headers: HEADERS,
+    });
+
+    expect(res.statusCode).toBe(409);
+    const body = JSON.parse(res.body);
+    expect(body.success).toBe(false);
+    expect(body.code).toBe('NOT_COMMERCIAL_ANCHOR');
+    expect(body.error).toContain('Event Purchase Meta CAPI hanya dikirim untuk sesi 1 (anchor paket)');
+  });
+
+  // 13. [P1.2d] maybeFirePurchaseEvent mengembalikan false dan menolak auto-queue untuk sesi non-anchor
+  it('13. [P1.2d] maybeFirePurchaseEvent mengembalikan false saat reservasi terdeteksi sebagai sesi 2..N paket berseri', async () => {
+    const { maybeFirePurchaseEvent } = await import('../../src/services/purchase-detection.service');
+
+    const nonAnchorReservation = {
+      id: 'res-msg-series-session-3',
+      tenant_id: DEFAULT_TENANT_ID,
+      customer_id: 'cust-series-msg',
+      series_id: 'series-xyz',
+      session_number: 3,
+      total_sessions: 3,
+      status: 'confirmed',
+      purchase_review_status: 'not_applicable',
+      purchase_value: 150000,
+      treatment_detail: 'Paket Newborn [Sesi 3/3]',
+      customer: {
+        id: 'cust-series-msg',
+        name: 'Bunda Seri',
+        phone: '628998877665',
+      },
+    };
+
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue(nonAnchorReservation as any);
+    const updateSpy = vi.mocked(prisma.reservation.update);
+    updateSpy.mockClear();
+
+    const handled = await maybeFirePurchaseEvent({
+      tenantId: DEFAULT_TENANT_ID,
+      customerId: 'cust-series-msg',
+      customerPhone: '628998877665',
+      messageText: 'Sudah saya transfer ya mba 150rb',
+      messageTimestamp: new Date(),
+    });
+
+    // Harus mengembalikan false dan DILARANG mengupdate DB menjadi pending
+    expect(handled).toBe(false);
+    expect(updateSpy).not.toHaveBeenCalled();
   });
 });
 

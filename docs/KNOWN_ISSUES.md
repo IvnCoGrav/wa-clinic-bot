@@ -3,6 +3,28 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 277. [Paket Berseri / Billing & CAPI] Toleransi Single-Anchor CAPI dan Concurrency Locking Unassigned Series (2026-10-27, RESOLVED)
+
+- **Status:** RESOLVED (Fase P1–P3 implementasi selesai, build root + dashboard hijau, verifikasi offline via Vitest).
+- **Akar & Temuan:**
+  1. **Toleransi Unit Komersial Tunggal Meta CAPI**:
+     - Paket berseri adalah transaksi komersial tunggal bernilai penuh di muka (pembelian 1 paket = 1 purchase event).
+     - Sesi ke-2 dan seterusnya (sesi non-anchor, `session_number > 1`) tidak boleh memicu event purchase ke Meta Conversions API (CAPI) ataupun masuk ke antrean `pending` review CAPI, demi mencegah over-reporting ROAS iklan hingga N kali lipat.
+     - Sebelumnya, `tx.reservation.create` mewarisi default `'pending'` untuk semua sesi, dan `resolvePurchaseReviewOnConfirm` menimpa kembali status `not_applicable` menjadi `pending` saat admin mengonfirmasi jadwal sesi non-anchor.
+     - Tombol approve CAPI di endpoint admin juga belum memiliki proteksi 409 bila sesi non-anchor secara manual disetujui.
+  2. **Concurrency Locking untuk Paket Berseri Unassigned**:
+     - Paket berseri yang dibuat tanpa memilih staf spesifik (`assignedStaffId == null`) sebelumnya kehilangan proteksi advisory lock karena filter array membuang nilai null.
+     - Hal ini membuka celah race condition saat admin membuat beberapa paket serentak pada tanggal yang sama.
+- **Resolusi (Fondasional):**
+  1. **Sesi Non-Anchor Berstatus `not_applicable` Sejak Lahir**:
+     - `reservation-series.service.ts`: Sesi 1 dibuat dengan `purchase_review_status: 'pending'`, sedangkan sesi 2..N dibuat langsung dengan `purchase_review_status: 'not_applicable'`.
+     - `capi-review-status.ts`: Fungsi kanonis `resolvePurchaseReviewOnConfirm` mengenali `series_id` dan `session_number > 1` serta mempertahankan status `not_applicable` saat konfirmasi atau edit reservasi.
+     - `reservation-dispatch.route.ts`: Guard `NOT_COMMERCIAL_ANCHOR` (HTTP 409) dipindahkan ke `POST /api/admin/reservation/:id/approve-purchase` sehingga staf bebas mengonfirmasi jadwal sesi 2..N tanpa error, tetapi approve CAPI sesi non-anchor ditolak secara deterministik.
+     - `purchase-detection.service.ts`: `maybeFirePurchaseEvent` mengembalikan `false` jika mendeteksi reservasi paket berseri dengan `session_number > 1`.
+     - Migrasi SQL `20261027010000_backfill_series_session_capi_status` mengoreksi data historis sesi non-anchor di DB live.
+  2. **Advisory Lock Unassigned Kanonis**:
+     - `reservation-series.service.ts`: Penguncian multi-kunci `computeAdvisoryLockKey(tenantId, st || null, d)` tidak memfilter null, sehingga hash kanonis `'__unassigned__'` digunakan untuk mengunci slot tanggal paket tanpa staf secara aman berurutan.
+
 ## 276. [Regression & Test Suite] Dua Regresi Terbukti + Time Bomb Test + Suite Non-Deterministik (2026-10-27)
 
 - **Status:** R-1 & R-2 RESOLVED (Fase 0); time bomb RESOLVED; sisa flake OPEN.

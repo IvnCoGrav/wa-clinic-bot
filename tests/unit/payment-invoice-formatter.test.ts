@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   generateReservationInvoiceText,
   generateSeriesInvoiceText,
+  seriesInvoiceParamsFromApi,
 } from '../../packages/admin-dashboard/src/utils/paymentInvoiceFormatter';
 
 describe('Payment Invoice Formatter Unit Tests', () => {
@@ -188,5 +189,72 @@ Alamat: Jl. Tropodo`,
     expect(text).toContain('Diskon = - 20.000');
     // 700.000 + 105.000 - 20.000 = 785.000
     expect(text).toContain('Total = 785.000');
+  });
+
+  it('should support dual-case camelCase payload from Dashboard API in generateSeriesInvoiceText', () => {
+    const text = generateSeriesInvoiceText({
+      series: {
+        treatmentName: 'Paket Terapi Tumbuh Kembang (4 Sesi)',
+        totalSessions: 4,
+        purchaseValue: 400000,
+        deliveryFee: 10000,
+        discountAmount: 10000,
+        reservations: [
+          { sessionNumber: 1, bookingDate: '2026-10-01T02:00:00.000Z' },
+          { sessionNumber: 2, bookingDate: '2026-10-08T02:00:00.000Z' },
+          { sessionNumber: 3, bookingDate: '2026-10-15T02:00:00.000Z' },
+          { sessionNumber: 4, bookingDate: '2026-10-22T02:00:00.000Z' },
+        ],
+      },
+      customer: {
+        name: 'Bunda Rina',
+        phone: '081234567890',
+        address: 'Jl. Melati No. 5',
+        kecamatan: 'Taman',
+        kota: 'Sidoarjo',
+      },
+    });
+
+    expect(text).toContain('Berikut reservasi Paket Berseri 🐣');
+    expect(text).toContain('Paket : Paket Terapi Tumbuh Kembang (4 Sesi) (4 Sesi)');
+    expect(text).toContain('• Sesi 1:');
+    expect(text).toContain('• Sesi 4:');
+    expect(text).toContain('Paket (4 Sesi) = 400.000');
+    expect(text).toContain('Ongkir (4 kunjungan @ 10.000) = 40.000');
+    expect(text).toContain('Diskon = - 10.000');
+    // 400.000 + 40.000 - 10.000 = 430.000
+    expect(text).toContain('Total = 430.000');
+  });
+
+  it('should adapt raw API response safely via seriesInvoiceParamsFromApi', () => {
+    const rawApiData = {
+      id: 'series_abc',
+      treatment_name: 'Paket Baby Spa Ceria',
+      total_sessions: 3,
+      purchase_value: 300000,
+      delivery_fee: 15000,
+      discount_amount: 0,
+      sessions: [
+        { sessionNumber: 1, bookingDate: '2026-11-01T03:00:00.000Z' },
+        { sessionNumber: 2, bookingDate: '2026-11-08T03:00:00.000Z' },
+      ],
+    };
+
+    const params = seriesInvoiceParamsFromApi(rawApiData, {
+      name: 'Bunda Gita',
+      phone: '081122334455',
+    });
+
+    expect(params.series.treatment_name).toBe('Paket Baby Spa Ceria');
+    expect(params.series.treatmentName).toBe('Paket Baby Spa Ceria');
+    expect(params.series.totalSessions).toBe(3);
+    expect(params.series.purchaseValue).toBe(300000);
+    expect(params.series.reservations?.length).toBe(2);
+    expect(params.series.reservations?.[0].sessionNumber).toBe(1);
+
+    // Edge case: null apiSeries
+    const emptyParams = seriesInvoiceParamsFromApi(null);
+    expect(emptyParams.series.treatmentName).toBe('');
+    expect(emptyParams.series.totalSessions).toBe(1);
   });
 });

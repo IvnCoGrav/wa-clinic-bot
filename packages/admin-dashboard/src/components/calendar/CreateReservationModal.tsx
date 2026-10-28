@@ -1,3522 +1,3523 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { createPortal } from 'react-dom';
-import { apiRequest } from '../../services/api';
-import { useUiFeedback } from '../common/UiFeedback';
-import { ToggleSwitch } from '../common/ToggleSwitch';
-import { 
-  X, 
-  Calendar as CalendarIcon, 
-  Search, 
-  Baby, 
-  Sparkles, 
-  Clock, 
-  ChevronDown, 
-  Check, 
-  Plus, 
-  Minus,
-  MapPin,
-  FileText,
-  Eye,
-  Trash2,
-  CalendarDays,
-  UserCheck,
-  Zap,
-  Bike,
-  Home,
-  Copy,
-  CheckCircle2,
-  Receipt,
-  Percent,
-  BookmarkPlus,
-  AlertTriangle,
-  Pencil,
-} from 'lucide-react';
-import { ClinicServiceItem, StaffOption, QuickSlotTarget } from './types';
-import { Reservation } from '../../types';
-import { useAuth } from '../../contexts/AuthContext';
-import { calculateOngkirFromTiers, DeliveryTierItem } from '../../utils/deliveryTierCalculator';
-import { useFormDraft } from '../../hooks/useFormDraft';
-import { calculateHaversineKm as calculateHaversine, checkTravelTimeSufficiency, estimateTravelMinutesKm } from '../../utils/geoUtils';
-import { 
-  parseTreatmentsFromDetail, 
-  DEFAULT_CLINIC_SERVICES_FALLBACK, 
-  isAddonService, 
-  SelectedTreatmentItem 
-} from '../../utils/treatmentParser';
-import { StaffScheduleTimelineStrip } from './StaffScheduleTimelineStrip';
-import { matchCatalogService } from '../../utils/treatmentStringParser';
-import { getWibDateKey, getTodayWibDateKey, getTodayWibDate, getWibHoursAndMinutes, buildWibIso } from '../../utils/dateWib';
-import { resolveStreetAddress } from '../../utils/reservationAddress';
-import { addressesMatch as addressesMatchMirror } from '../../utils/addressMatch';
-import { resolveStaffName } from '../../utils/resolveStaffName';
-import { AddressBookDrawer } from '../customer/AddressBookDrawer';
-import { recommendSlots } from '../../utils/slotRecommendations';
-
-// Koordinat klinik fallback — tech-debt tercatat (tenant-aware penuh butuh
-// endpoint settings baru; lihat KNOWN_ISSUES). Rumus jarak terpusat di geoUtils.
-const CLINIC_COORDS = {
-  lat: -7.34886,
-  lng: 112.751677,
-  name: 'Kala Moms and Baby Spa (Klinik)',
-};
-
-function formatMinutesToTime(totalMinutes: number): string {
-const h = Math.floor(totalMinutes / 60) % 24;
-  const m = totalMinutes % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-}
-
-export interface SlotRecommendation {
-  startTime: string;
-  departureTime: string;
-  arrivalTime: string;
-  endTime: string;
-  staffId: string;
-  staffName: string;
-  distanceKm: number;
-  travelMinutes: number;
-  originDesc: string;
-  score: number;
-}
-
-/**
- * Resolusi Ongkir Default Pelanggan (SSOT Ongkir Promo).
- * Mengutamakan harga promo (hasil kesepakatan chat atau kartu alamat tersimpan atau tier netOngkir)
- * daripada kolom legacy customer.ongkir yang mungkin masih memegang tarif normal kotor.
- */
-function resolveCustomerDefaultOngkir(
-  cust: any,
-  deliveryTiers: DeliveryTierItem[] = []
-): number | '' {
-  if (!cust) return 0;
-
-  // 1. Prioritas Tertinggi: Ongkir Promo dari Kesepakatan Chat WhatsApp
-  const estOngkir = cust.preferences?.distance_estimate?.ongkir;
-  if (typeof estOngkir === 'number' && !isNaN(estOngkir) && estOngkir >= 0) {
-    return estOngkir;
-  }
-
-  // 2. Prioritas Kedua: Kartu Alamat Tersimpan (Buku Alamat)
-  const addrs = Array.isArray(cust.preferences?.saved_addresses) ? cust.preferences.saved_addresses : [];
-  const primaryAddr = addrs.find((a: any) => a.isPrimary) || addrs[0];
-  if (typeof primaryAddr?.ongkir === 'number' && !isNaN(primaryAddr.ongkir) && primaryAddr.ongkir >= 0) {
-    return primaryAddr.ongkir;
-  }
-
-  // 3. Prioritas Ketiga: Hitung Otomatis dari Jarak km menggunakan Tier (Net Ongkir = Promo)
-  // Tidak mensyaratkan deliveryTiers.length > 0 agar memanfaatkan fallback internal (anti race-condition)
-  const dist = Number(cust.distance_km || cust.distanceKm);
-  if (dist > 0) {
-    const calc = calculateOngkirFromTiers(dist, deliveryTiers);
-    if (!calc.isOutOfCoverage) {
-      return calc.netOngkir;
-    }
-  }
-
-  // 4. Prioritas Keempat: Kolom Profil customer.ongkir
-  if (cust.ongkir !== undefined && cust.ongkir !== null && !isNaN(Number(cust.ongkir)) && Number(cust.ongkir) >= 0) {
-    return Number(cust.ongkir);
-  }
-
-  return 0;
-}
-
-interface CreateReservationModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSuccess: (newReservation?: any) => void;
-  staffList: StaffOption[];
-  initialSlotTarget?: QuickSlotTarget | null;
-  initialCustomer?: any | null;
-  initialCustomerId?: string;
-  existingReservations?: Reservation[];
-  mode?: 'create' | 'edit';
-  initialReservation?: Reservation | any;
-  /** Opsional: buka detail/edit reservasi eksisting dari warning jadwal aktif. */
-  onEditReservation?: (reservation: any) => void;
-
-  // Smart Pre-Fill Pipeline
-  initialTreatmentName?: string | null;
-  initialTreatmentCategory?: 'BABY' | 'MOMS' | 'BOTH' | 'KIDS' | 'BUNDLE' | null;
-  initialBabies?: Array<{ name: string; ageText: string }> | null;
-  initialNotes?: string | null;
-  /** Alamat jalan fisik (prefill dari chat/profil customer) — dipersist ke preferences.address. */
-  initialAddress?: string | null;
-  /** Patokan/landmark rumah (prefill) — dipersist ke preferences.landmark. */
-  initialLandmark?: string | null;
-  onSuccessAndInvoice?: (newReservation: any) => void;
-}
-
-export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
-  isOpen,
-  onClose,
-  onSuccess,
-  staffList,
-  initialSlotTarget,
-  initialCustomer,
-  initialCustomerId,
-  existingReservations = [],
-  mode = 'create',
-  initialReservation,
-  onEditReservation,
-  initialTreatmentName,
-  initialTreatmentCategory,
-  initialBabies,
-  initialNotes,
-  initialAddress,
-  initialLandmark,
-  onSuccessAndInvoice,
-}) => {
-  const { user } = useAuth();
-  const { toast, confirm } = useUiFeedback();
-  const [submitting, setSubmitting] = useState(false);
-
-  // Form State
-  const [customerId, setCustomerId] = useState('');
-  const [customerSearch, setCustomerSearch] = useState('');
-  const [selectedCustomerInfo, setSelectedCustomerInfo] = useState<any | null>(null);
-  const [customerResults, setCustomerResults] = useState<any[]>([]);
-  const [searchingCustomer, setSearchingCustomer] = useState(false);
-
-  // Service Catalog
-  const [services, setServices] = useState<ClinicServiceItem[]>(DEFAULT_CLINIC_SERVICES_FALLBACK);
-  const [loadingServices, setLoadingServices] = useState(false);
-  const [serviceSearch, setServiceSearch] = useState('');
-  const [isServiceDropdownOpen, setIsServiceDropdownOpen] = useState(false);
-
-  // Multi-Treatment Selection (Supports multiple instances of the same treatment for 2 children)
-  const [selectedTreatments, setSelectedTreatments] = useState<SelectedTreatmentItem[]>([]);
-  const [customServiceName, setCustomServiceName] = useState('');
-  const [customServiceDuration, setCustomServiceDuration] = useState<number | ''>(60);
-  const [customServicePrice, setCustomServicePrice] = useState<number | ''>(0);
-  const [customCategory, setCustomCategory] = useState<'BABY' | 'MOMS' | 'BOTH' | 'KIDS' | 'BUNDLE'>('BABY');
-  const [customIsAddon, setCustomIsAddon] = useState(false);
-  const [showCustomServiceInput, setShowCustomServiceInput] = useState(false);
-
-  // Category Pills (Filter / Overall)
-  const [treatmentCategory, setTreatmentCategory] = useState<'BABY' | 'MOMS' | 'BOTH' | 'KIDS' | 'BUNDLE'>('BABY');
-
-  // Date & Time — Fase 2R: cabut silent default 09:00 (anti-jam-senyap), required gate di handleSubmit
-  const [bookingDate, setBookingDate] = useState('');
-  const [bookingTime, setBookingTime] = useState('');
-
-  // Staff & Status — fondasional: dukung semua state pembayaran
-  const [assignedStaffId, setAssignedStaffId] = useState('');
-  const [status, setStatus] = useState<'pending' | 'confirmed' | 'completed' | 'cancelled' | 'hold'>('confirmed');
-  const [notes, setNotes] = useState('');
-
-  // Alamat jalan fisik & patokan rumah (persist ke preferences.address/landmark)
-  const [address, setAddress] = useState(initialAddress || '');
-  const [landmark, setLandmark] = useState(initialLandmark || '');
-  const [customerAddressId, setCustomerAddressId] = useState<string | null>(initialReservation?.customer_address_id || null);
-  // R3 — Status "akan disimpan sebagai rumah baru" (chip persisten, bukan toast sekali-lewat).
-  const [savedAsNewHouse, setSavedAsNewHouse] = useState(false);
-  const [correctingCardId, setCorrectingCardId] = useState<string | null>(null);
-  const [showAddressDrawer, setShowAddressDrawer] = useState(false);
-
-  const savedAddresses: any[] = useMemo(() => {
-    if (!selectedCustomerInfo) return [];
-    if (Array.isArray(selectedCustomerInfo.saved_addresses)) return selectedCustomerInfo.saved_addresses;
-    if (Array.isArray(selectedCustomerInfo.preferences?.saved_addresses)) return selectedCustomerInfo.preferences.saved_addresses;
-    return [];
-  }, [selectedCustomerInfo]);
-
-  // Silang-cek mismatch dan selectedCard dipromosikan ke useMemo (Micro-Task 4.2)
-  const selectedCard = useMemo(
-    () => savedAddresses.find((a: any) => a.id === customerAddressId),
-    [savedAddresses, customerAddressId]
-  );
-
-  const mismatchComputed = useMemo(() => {
-    if (!selectedCard || !address.trim()) return false;
-    const region = {
-      kelurahan: selectedCard.kelurahan,
-      kecamatan: selectedCard.kecamatan,
-      kota: selectedCard.kota,
-    };
-    return !addressesMatchMirror(
-      { ...region, address: selectedCard.address },
-      { ...region, address }
-    );
-  }, [selectedCard, address]);
-
-  const mismatchActive = mismatchComputed && !savedAsNewHouse && !correctingCardId;
-
-  // Sinkronisasi alamat/patokan saat modal dibuka / customer berganti (anti-stale props).
-  // Prioritas: bila customer terpilih SAMA dengan konteks chat (initialCustomerId),
-  // hasil ekstraksi chat (initialAddress) diutamakan; bila admin memilih customer LAIN,
-  // alamat profil customer tersebut yang diutamakan.
-  useEffect(() => {
-    if (!isOpen) return;
-    const prefAddress = selectedCustomerInfo?.preferences?.address || selectedCustomerInfo?.address || '';
-    const prefLandmark = selectedCustomerInfo?.preferences?.landmark || selectedCustomerInfo?.preferences?.address_notes || selectedCustomerInfo?.address_notes || '';
-    // W3: fallback alamat jalan dari raw_text reservasi (edit reservasi lama yang
-    // alamatnya hanya hidup di formulir chat) — paritas dengan modal detail.
-    const rawAddress = resolveStreetAddress(initialReservation, selectedCustomerInfo) || '';
-    const isInitialCustomer =
-      !initialCustomerId || !selectedCustomerInfo?.id || selectedCustomerInfo.id === initialCustomerId;
-    // F-B3: di mode edit, data DB/profil adalah OTORITAS — hasil ekstraksi chat
-    // (initialAddress) hanya fallback terakhir, agar banner ramping tidak menimpa
-    // alamat profil yang lengkap (bug Syarifa). Di create, chat tetap prioritas.
-    const addr = mode === 'edit'
-      ? (prefAddress || rawAddress || initialAddress || '')
-      : (isInitialCustomer ? (initialAddress || prefAddress || rawAddress || '') : (prefAddress || ''));
-    setAddress(addr);
-    const lm = mode === 'edit'
-      ? (prefLandmark || initialLandmark || '')
-      : (isInitialCustomer ? (initialLandmark || prefLandmark || '') : (prefLandmark || ''));
-    setLandmark(lm);
-  }, [isOpen, mode, initialAddress, initialLandmark, initialCustomerId, selectedCustomerInfo, initialReservation]);
-
-  // Sinkronisasi pilihan alamat saat customer atau reservasi berganti
-  useEffect(() => {
-    if (!isOpen) return;
-    if (initialReservation?.customer_address_id) {
-      setCustomerAddressId(initialReservation.customer_address_id);
-    } else if (savedAddresses.length > 0 && !customerAddressId) {
-      const primary = savedAddresses.find((a: any) => a.isPrimary) || savedAddresses[0];
-      if (primary) {
-        setCustomerAddressId(primary.id);
-      }
-    }
-  }, [isOpen, initialReservation, savedAddresses]);
-
-  // Self-healing staff list jika props kosong (misal dibuka dari Live Chat sebelum parent selesai fetch)
-  const [internalStaffList, setInternalStaffList] = useState<StaffOption[]>(staffList || []);
-  useEffect(() => {
-    if (staffList && staffList.length > 0) {
-      setInternalStaffList(staffList);
-    } else if (isOpen) {
-      apiRequest('/api/admin/staff')
-        .then((res: any) => {
-          const list = res?.data || (Array.isArray(res) ? res : []);
-          if (Array.isArray(list) && list.length > 0) setInternalStaffList(list);
-        })
-        .catch(() => {});
-    }
-  }, [staffList, isOpen]);
-  const effectiveStaffList = useMemo(() => {
-    return internalStaffList && internalStaffList.length > 0 ? internalStaffList : (staffList || []);
-  }, [internalStaffList, staffList]);
-
-  // Payment Breakdown & Discounts
-  const [ongkir, setOngkir] = useState<number | ''>(0);
-  const [discount, setDiscount] = useState<number | ''>(0);
-
-  // Multi-Session Package State
-  type SeriesIntervalPreset = 'DAILY' | 'EVERY_2_DAYS' | 'EVERY_3_DAYS' | 'WEEKLY' | 'TWICE_DAILY';
-  const [isMultiSession, setIsMultiSession] = useState(false);
-  const [multiSessionTotal, setMultiSessionTotal] = useState(0);
-  const [seriesInterval, setSeriesInterval] = useState<SeriesIntervalPreset>('DAILY');
-  const [conflictSessionNumber, setConflictSessionNumber] = useState<number | null>(null);
-  const [multiSessionSchedule, setMultiSessionSchedule] = useState<Array<{
-    sessionNumber: number;
-    date: string;
-    time: string;
-    staffId: string;
-  }>>([]);
-
-  const buildSeriesSchedule = (
-    total: number,
-    interval: SeriesIntervalPreset,
-    startDateStr: string,
-    startTimeStr: string,
-    defaultStaffId: string
-  ) => {
-    const schedule = [];
-    const baseDate = startDateStr ? new Date(`${startDateStr}T00:00:00`) : getTodayWibDate();
-    const baseTime = startTimeStr || '09:00';
-
-    for (let i = 0; i < total; i++) {
-      let dayOffset = 0;
-      let time = baseTime;
-
-      if (interval === 'DAILY') {
-        dayOffset = i;
-      } else if (interval === 'EVERY_2_DAYS') {
-        dayOffset = i * 2;
-      } else if (interval === 'EVERY_3_DAYS') {
-        dayOffset = i * 3;
-      } else if (interval === 'WEEKLY') {
-        dayOffset = i * 7;
-      } else if (interval === 'TWICE_DAILY') {
-        dayOffset = Math.floor(i / 2);
-        time = i % 2 === 0 ? baseTime : '15:00';
-      }
-
-      const d = new Date(baseDate);
-      d.setDate(d.getDate() + dayOffset);
-      const dateStr = getWibDateKey(d);
-      schedule.push({
-        sessionNumber: i + 1,
-        date: dateStr,
-        time,
-        staffId: defaultStaffId || '',
-      });
-    }
-    return schedule;
-  };
-
-  const handleIntervalPresetChange = (newInterval: SeriesIntervalPreset) => {
-    setSeriesInterval(newInterval);
-    const startD = multiSessionSchedule[0]?.date || bookingDate || getWibDateKey(getTodayWibDate());
-    const startT = multiSessionSchedule[0]?.time || bookingTime || '09:00';
-    const total = multiSessionSchedule.length > 0 ? multiSessionSchedule.length : (multiSessionTotal || 3);
-    const updated = buildSeriesSchedule(total, newInterval, startD, startT, assignedStaffId || '');
-    setMultiSessionSchedule(updated);
-  };
-
-  const handleAddSessionRow = () => {
-    const current = [...multiSessionSchedule];
-    const nextNum = current.length + 1;
-    let nextDate = bookingDate || getWibDateKey(getTodayWibDate());
-    let nextTime = bookingTime || '09:00';
-    if (current.length > 0) {
-      const last = current[current.length - 1];
-      const d = new Date(`${last.date}T00:00:00`);
-      const offset = seriesInterval === 'EVERY_2_DAYS' ? 2 : seriesInterval === 'EVERY_3_DAYS' ? 3 : seriesInterval === 'WEEKLY' ? 7 : 1;
-      d.setDate(d.getDate() + offset);
-      nextDate = getWibDateKey(d);
-      nextTime = last.time;
-    }
-    current.push({
-      sessionNumber: nextNum,
-      date: nextDate,
-      time: nextTime,
-      staffId: assignedStaffId || '',
-    });
-    setMultiSessionSchedule(current);
-    setMultiSessionTotal(current.length);
-  };
-
-  const handleRemoveSessionRow = (sessionNumber: number) => {
-    if (multiSessionSchedule.length <= 2) {
-      toast('Minimal paket berseri adalah 2 sesi.', 'info');
-      return;
-    }
-    const filtered = multiSessionSchedule
-      .filter((s) => s.sessionNumber !== sessionNumber)
-      .map((s, idx) => ({ ...s, sessionNumber: idx + 1 }));
-    setMultiSessionSchedule(filtered);
-    setMultiSessionTotal(filtered.length);
-  };
-
-  const handleEnableCustomMultiSession = (initialCount = 3) => {
-    setIsMultiSession(true);
-    setMultiSessionTotal(initialCount);
-    const startD = bookingDate || getWibDateKey(getTodayWibDate());
-    const startT = bookingTime || '09:00';
-    const schedule = buildSeriesSchedule(initialCount, seriesInterval, startD, startT, assignedStaffId || '');
-    setMultiSessionSchedule(schedule);
-  };
-
-  // Delivery Tiers State (SaaS-Ready from DB)
-  const [deliveryTiers, setDeliveryTiers] = useState<DeliveryTierItem[]>([]);
-
-  useEffect(() => {
-    apiRequest('/api/admin/delivery-tiers')
-      .then((res) => {
-        const list = Array.isArray(res) ? res : res?.data || [];
-        if (Array.isArray(list) && list.length > 0) {
-          setDeliveryTiers(list);
-        }
-      })
-      .catch(() => {});
-  }, []);
-
-  // Live Reservations Synchronizer
-  const [loadedReservations, setLoadedReservations] = useState<Reservation[]>([]);
-  const [loadingReservations, setLoadingReservations] = useState(false);
-
-  // Children / Babies (Multi-Anak Support)
-  const [babies, setBabies] = useState<Array<{ name: string; ageText: string }>>([]);
-
-  // (Fase 3: toggle Ringkas/Lengkap dihapus — anti-bloat, tombol kustom selalu terlihat)
-
-  // Modals & Recommendations UI
-  const [showBookedSlotsModal, setShowBookedSlotsModal] = useState(false);
-  const [recommendations, setRecommendations] = useState<SlotRecommendation[]>([]);
-  const [hasCalculatedRecommendations, setHasCalculatedRecommendations] = useState(false);
-  const initializedEditIdRef = useRef<string | null>(null);
-  const hydratedWithLiveCatalogRef = useRef<boolean>(false);
-  // Double-booking conflict UX (409 DUPLICATE_BOOKING / STAFF_COLLISION)
-  const [conflictInfo, setConflictInfo] = useState<{ code: string; message: string; existingReservation: any } | null>(null);
-  const [showConflictModal, setShowConflictModal] = useState(false);
-
-  // Form Draft Persistence Hook (1-hour TTL) — payload lengkap termasuk multi-sesi & kustom
-  const currentFormPayload = useMemo(() => ({
-    customerId,
-    customerSearch,
-    selectedCustomerInfo,
-    treatmentCategory,
-    bookingDate,
-    bookingTime,
-    assignedStaffId,
-    status,
-    notes,
-    address,
-    landmark,
-    customerAddressId,
-    ongkir,
-    discount,
-    babies,
-    selectedTreatments,
-    isMultiSession,
-    multiSessionTotal,
-    multiSessionSchedule,
-    customServiceName,
-    customServiceDuration,
-    customServicePrice,
-    customCategory,
-    customIsAddon,
-    showCustomServiceInput,
-  }), [
-    customerId,
-    customerSearch,
-    selectedCustomerInfo,
-    treatmentCategory,
-    bookingDate,
-    bookingTime,
-    assignedStaffId,
-    status,
-    notes,
-    address,
-    landmark,
-    customerAddressId,
-    ongkir,
-    discount,
-    babies,
-    selectedTreatments,
-    isMultiSession,
-    multiSessionTotal,
-    multiSessionSchedule,
-    customServiceName,
-    customServiceDuration,
-    customServicePrice,
-    customCategory,
-    customIsAddon,
-    showCustomServiceInput,
-  ]);
-
-  const handleRestoreDraft = (restored: any) => {
-    if (!restored) return;
-    // 4.4 Sanitasi tanggal & re-validasi harga saat restore
-    let sanitizedDate = restored.bookingDate;
-    if (sanitizedDate) {
-      try {
-        const todayKey = getWibDateKey(new Date());
-        if (sanitizedDate < todayKey) {
-          sanitizedDate = todayKey;
-          toast(`Tanggal draf sudah lewat — disesuaikan ke hari ini (${todayKey}).`, 'info');
-        }
-      } catch {}
-    }
-    // Re-sinkronisasi harga dengan katalog aktif (hindari tarif usang) — hanya bila katalog tersedia
-    let sanitizedTreatments = restored.selectedTreatments;
-    if (Array.isArray(sanitizedTreatments) && sanitizedTreatments.length > 0 && services.length > 0) {
-      sanitizedTreatments = sanitizedTreatments.map((t: any) => {
-        const norm = (t.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-        const match = services.find((s: any) => s.name.toLowerCase().replace(/[^a-z0-9]/g, '') === norm);
-        if (match && (match as any).promoPrice != null) {
-          return { ...t, price: (match as any).promoPrice ?? (match as any).price ?? t.price };
-        }
-        return t;
-      });
-    }
-    if (restored.customerId !== undefined) setCustomerId(restored.customerId);
-    if (restored.customerSearch !== undefined) setCustomerSearch(restored.customerSearch);
-    if (restored.selectedCustomerInfo !== undefined) setSelectedCustomerInfo(restored.selectedCustomerInfo);
-    if (restored.treatmentCategory !== undefined) setTreatmentCategory(restored.treatmentCategory);
-    if (sanitizedDate !== undefined) setBookingDate(sanitizedDate);
-    if (restored.bookingTime !== undefined) setBookingTime(restored.bookingTime);
-    if (restored.assignedStaffId !== undefined) setAssignedStaffId(restored.assignedStaffId);
-    if (restored.status !== undefined) setStatus(restored.status);
-    if (restored.notes !== undefined) setNotes(restored.notes);
-    if (restored.address !== undefined) setAddress(restored.address);
-    if (restored.landmark !== undefined) setLandmark(restored.landmark);
-    if (restored.customerAddressId !== undefined) setCustomerAddressId(restored.customerAddressId);
-    if (restored.ongkir !== undefined) setOngkir(restored.ongkir);
-    if (restored.discount !== undefined) setDiscount(restored.discount);
-    if (restored.babies !== undefined) setBabies(restored.babies);
-    if (sanitizedTreatments !== undefined) setSelectedTreatments(sanitizedTreatments);
-    if (restored.isMultiSession !== undefined) setIsMultiSession(restored.isMultiSession);
-    if (restored.multiSessionTotal !== undefined) setMultiSessionTotal(restored.multiSessionTotal);
-    if (restored.multiSessionSchedule !== undefined) setMultiSessionSchedule(restored.multiSessionSchedule);
-    if (restored.customServiceName !== undefined) setCustomServiceName(restored.customServiceName);
-    if (restored.customServiceDuration !== undefined) setCustomServiceDuration(restored.customServiceDuration);
-    if (restored.customServicePrice !== undefined) setCustomServicePrice(restored.customServicePrice);
-    if (restored.customCategory !== undefined) setCustomCategory(restored.customCategory);
-    if (restored.customIsAddon !== undefined) setCustomIsAddon(restored.customIsAddon);
-    if (restored.showCustomServiceInput !== undefined) setShowCustomServiceInput(restored.showCustomServiceInput);
-    setIsFormDirty(false);
-  };
-
-  const resetModalState = useCallback(() => {
-    setCustomerId('');
-    setCustomerSearch('');
-    setSelectedCustomerInfo(null);
-    setCustomerResults([]);
-    setSelectedTreatments([]);
-    setCustomServiceName('');
-    setCustomServiceDuration(60);
-    setCustomServicePrice(0);
-    setCustomCategory('BABY');
-    setCustomIsAddon(false);
-    setShowCustomServiceInput(false);
-    setBookingDate('');
-    setBookingTime('');
-    setAssignedStaffId('');
-    setStatus('confirmed');
-    setNotes('');
-    setAddress('');
-    setLandmark('');
-    setOngkir(0);
-    setDiscount(0);
-    setIsMultiSession(false);
-    setMultiSessionTotal(0);
-    setMultiSessionSchedule([]);
-    setBabies([]);
-    setRecommendations([]);
-    setHasCalculatedRecommendations(false);
-    setIsFormDirty(false);
-    setConflictInfo(null);
-    setShowConflictModal(false);
-    setServiceSearch('');
-    setIsServiceDropdownOpen(false);
-  }, []);
-
-  useEffect(() => {
-    if (!isOpen) {
-      resetModalState();
-      initializedEditIdRef.current = null;
-    }
-  }, [isOpen]);
-
-  const isReservationDraftMeaningful = useCallback((data: typeof currentFormPayload) => {
-    if (!data) return false;
-    const hasTreatments = Array.isArray(data.selectedTreatments) && data.selectedTreatments.length > 0;
-    const hasBabies = Array.isArray(data.babies) && data.babies.some((b: any) => b?.name?.trim() || b?.ageText?.trim());
-    const hasNotes = Boolean(data.notes && data.notes.trim().length > 0);
-    const hasDiscount = typeof data.discount === 'number' && data.discount > 0;
-    const hasAssignedStaff = Boolean(data.assignedStaffId && data.assignedStaffId.trim().length > 0);
-    const hasMultiSession = Boolean((data as any).isMultiSession || (Array.isArray((data as any).multiSessionSchedule) && (data as any).multiSessionSchedule.length > 0));
-    const hasCustom = Boolean((data as any).customServiceName && String((data as any).customServiceName).trim().length > 0);
-
-    return hasTreatments || hasBabies || hasNotes || hasDiscount || hasAssignedStaff || hasMultiSession || hasCustom;
-  }, []);
-
-  const effectiveCustomerId = customerId || (initialCustomer as any)?.id || initialCustomerId || '';
-
-  // Peringatan Jadwal Aktif — cegah split-brain duplicate booking (customer sudah
-  // punya reservasi confirmed/hold hari ini atau ke depan). Hanya mode create.
-  const [activeReservations, setActiveReservations] = useState<any[]>([]);
-  useEffect(() => {
-    if (!isOpen || mode === 'edit' || !effectiveCustomerId) {
-      setActiveReservations([]);
-      return;
-    }
-    let cancelled = false;
-    apiRequest(`/api/admin/customers/${effectiveCustomerId}/active-reservations`)
-      .then((res: any) => {
-        if (cancelled) return;
-        const list = Array.isArray(res?.data) ? res.data : [];
-        setActiveReservations(list);
-      })
-      .catch(() => {
-        if (!cancelled) setActiveReservations([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen, mode, effectiveCustomerId]);
-  // Isolasi ketat: HANYA aktifkan draf jika customer sudah teridentifikasi (anti-leakage)
-  const draftKey = effectiveCustomerId ? `reservation_cust_${effectiveCustomerId}` : '';
-  const [isFormDirty, setIsFormDirty] = useState(false);
-  const { hasDraft, draftTimeAgo, saveDraftManually, restoreDraft, discardDraft } = useFormDraft(
-    draftKey,
-    currentFormPayload,
-    handleRestoreDraft,
-    {
-      enabled: Boolean(isOpen && mode !== 'edit' && draftKey),
-      isMeaningful: isReservationDraftMeaningful,
-      isDirty: isFormDirty,
-    }
-  );
-  const formDirtyContainerRef = useRef<HTMLFormElement>(null);
-
-  // Safe close dengan konfirmasi draf (anti window.confirm — useUiFeedback)
-  const handleSafeClose = useCallback(async () => {
-    if (isFormDirty && hasDraft) {
-      const wantToDiscard = await confirm({
-        title: 'Tinggalkan Formulir?',
-        message: 'Terdapat perubahan yang belum disimpan. Apakah ingin membuang draf ini?',
-        confirmText: 'Ya, Buang Draf',
-        cancelText: 'Simpan Draf',
-        danger: true,
-      });
-      if (wantToDiscard) {
-        discardDraft(true);
-        setIsFormDirty(false);
-      }
-    } else if (isFormDirty && isReservationDraftMeaningful(currentFormPayload)) {
-      // Ada ketikan bermakna yang belum sempat jadi draf (debounce belum fire) — tawarkan simpan
-      const wantToDiscard = await confirm({
-        title: 'Tinggalkan Formulir?',
-        message: 'Terdapat perubahan yang belum disimpan. Apakah ingin membuang perubahan ini?',
-        confirmText: 'Ya, Buang',
-        cancelText: 'Tetap di Form',
-        danger: true,
-      });
-      if (!wantToDiscard) return;
-      discardDraft(true);
-      setIsFormDirty(false);
-    }
-    onClose();
-  }, [isFormDirty, hasDraft, confirm, discardDraft, isReservationDraftMeaningful, currentFormPayload, onClose]);
-
-  // Dirty tracking via DOM events (input/change/click button) — anti phantom auto-save
-  useEffect(() => {
-    if (!isOpen || mode === 'edit') return;
-    const el = formDirtyContainerRef.current;
-    if (!el) return;
-    const mark = () => setIsFormDirty(true);
-    el.addEventListener('input', mark);
-    el.addEventListener('change', mark);
-    const clickMark = (e: Event) => {
-      const t = e.target as HTMLElement;
-      if (t.closest('button')) mark();
-    };
-    el.addEventListener('click', clickMark);
-    return () => {
-      el.removeEventListener('input', mark);
-      el.removeEventListener('change', mark);
-      el.removeEventListener('click', clickMark);
-    };
-  }, [isOpen, mode]);
-
-  // Fase 2 — Soft-keyboard handling (mobile): saat input menerima fokus, gulir ke
-  // tengah area form agar tidak tertutup keyboard virtual. Gerbang deterministik:
-  // HANYA viewport < 640px (desktop keyboard-fisik tidak perlu auto-scroll janky).
-  useEffect(() => {
-    if (!isOpen) return;
-    const container = formDirtyContainerRef.current;
-    if (!container) return;
-    if (typeof window.matchMedia === 'function' && !window.matchMedia('(max-width: 639px)').matches) return;
-    let scrollTimer: number | undefined;
-    const handleFocusIn = (e: FocusEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (!target) return;
-      const tag = target.tagName?.toLowerCase();
-      if (tag !== 'input' && tag !== 'textarea' && tag !== 'select') return;
-      window.clearTimeout(scrollTimer);
-      scrollTimer = window.setTimeout(() => {
-        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }, 120);
-    };
-    container.addEventListener('focusin', handleFocusIn);
-    return () => {
-      window.clearTimeout(scrollTimer);
-      container.removeEventListener('focusin', handleFocusIn);
-    };
-  }, [isOpen]);
-
-  // Load clinic services catalog with auto-repair
-  useEffect(() => {
-    async function loadCatalog() {
-      try {
-        setLoadingServices(true);
-        const res = await apiRequest('/api/admin/services');
-        const list = Array.isArray(res) ? res : res?.data || [];
-        const activeList = list.filter((s: ClinicServiceItem) => s.isActive !== false);
-        const finalList = activeList.length > 0 ? activeList : DEFAULT_CLINIC_SERVICES_FALLBACK;
-        setServices(finalList);
-
-        // Auto-repair any selected treatments that currently have price === 0
-        setSelectedTreatments((prev) => {
-          if (!prev || prev.length === 0) return prev;
-          let changed = false;
-          const next = prev.map((t) => {
-            if (!t.price || t.price === 0) {
-              const matched = matchCatalogService(t.name, finalList as any);
-              if (matched) {
-                changed = true;
-                return {
-                  ...t,
-                  price: matched.promoPrice || matched.originalPrice || 0,
-                  serviceId: t.serviceId.startsWith('custom-') ? matched.id : t.serviceId,
-                };
-              }
-            }
-            return t;
-          });
-          return changed ? next : prev;
-        });
-      } catch {
-        setServices(DEFAULT_CLINIC_SERVICES_FALLBACK);
-      } finally {
-        setLoadingServices(false);
-      }
-    }
-    if (isOpen) {
-      loadCatalog();
-    }
-  }, [isOpen]);
-
-  // FASE 3.1: reaktif per-tanggal — selaras WIB backend, fallback prop existingReservations (R5)
-  useEffect(() => {
-    if (!isOpen) return;
-    if (bookingDate) {
-      setLoadingReservations(true);
-      apiRequest(`/api/admin/reservations?startDate=${bookingDate}&endDate=${bookingDate}&status=all&pageSize=100`)
-        .then((res) => {
-          const list = Array.isArray(res) ? res : res?.reservations || res?.data || [];
-          setLoadedReservations(list);
-        })
-        .catch((err) => {
-          console.error('Gagal memuat jadwal reservasi untuk modal:', err);
-        })
-        .finally(() => setLoadingReservations(false));
-      return;
-    }
-    // Fallback saat bookingDate kosong (mis. edit tanpa tanggal): pakai prop atau fetch 300
-    if (Array.isArray(existingReservations) && existingReservations.length > 0) {
-      setLoadedReservations(existingReservations);
-    } else {
-      setLoadingReservations(true);
-      apiRequest('/api/admin/reservations?pageSize=300')
-        .then((res) => {
-          const list = Array.isArray(res) ? res : res?.reservations || res?.data || [];
-          setLoadedReservations(list);
-        })
-        .catch((err) => {
-          console.error('Gagal memuat jadwal reservasi untuk modal:', err);
-        })
-        .finally(() => setLoadingReservations(false));
-    }
-  }, [isOpen, bookingDate, existingReservations]);
-
-  // Sync initial target slot if opened via calendar slot click
-  useEffect(() => {
-    if (isOpen && initialSlotTarget) {
-      // Dukung dua bentuk date: Date object (kalender) & string YYYY-MM-DD (LiveChat)
-      const rawDate: any = (initialSlotTarget as any).date;
-      if (typeof rawDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
-        setBookingDate(rawDate);
-      } else if (rawDate) {
-        setBookingDate(getWibDateKey(rawDate));
-      }
-      // Prioritas timeStr (HH:MM dari chat), fallback hour
-      const ts = (initialSlotTarget as any).timeStr as string | undefined;
-      if (ts && /^\d{1,2}:\d{2}$/.test(ts)) {
-        setBookingTime(ts);
-      } else {
-        const hh = String((initialSlotTarget as any).hour ?? 9).padStart(2, '0');
-        setBookingTime(`${hh}:00`);
-      }
-      if ((initialSlotTarget as any).staffId) {
-        setAssignedStaffId((initialSlotTarget as any).staffId);
-      }
-    } else if (isOpen && !bookingDate && mode !== 'edit') {
-      // Fallback hari ini HANYA untuk mode pembuatan baru, JANGAN untuk mode edit.
-      // Fase 2R: jam dibiarkan kosong (required) — anti silent 09:00.
-      setBookingDate(getTodayWibDateKey());
-      setBookingTime('');
-    }
-  }, [isOpen, initialSlotTarget, mode]);
-
-  // Auto-populate customer if initialCustomer is provided
-  // F-B2: mode edit TIDAK memakai auto-populate dari prop (bisa ramping/sintetik);
-  // sumber kebenaran edit = efek hidrasi edit + fetch detail. auto-populate hanya create.
-  useEffect(() => {
-    if (mode === 'edit') return;
-    if (isOpen && initialCustomer) {
-      handleSelectCustomer(initialCustomer);
-    } else if (isOpen && initialCustomerId && !customerId) {
-      apiRequest(`/api/admin/customers/${initialCustomerId}`)
-        .then((res) => {
-          const c = res?.customer || res?.data || res;
-          if (c?.id) handleSelectCustomer(c);
-        })
-        .catch(() => {});
-    }
-  }, [isOpen, initialCustomer, initialCustomerId, mode]);
-
-  // Pre-fill state when opened in edit mode — Fase 3R anti-race hidrasi katalog
-  useEffect(() => {
-    if (isOpen && mode === 'edit' && initialReservation) {
-      const isLiveCatalogReady = services !== DEFAULT_CLINIC_SERVICES_FALLBACK && services.length > 0;
-      const alreadyHydratedForm = initializedEditIdRef.current === initialReservation.id;
-
-      if (alreadyHydratedForm) {
-        // Anti-race: form utama SUDAH terhidrasi. Saat katalog live tiba di latar
-        // belakang, HANYA remap harga/durasi treatment — DILARANG menimpa pilihan
-        // admin (assignedStaffId, tanggal, customer, catatan) yang mungkin sudah diedit.
-        if (hydratedWithLiveCatalogRef.current) return;
-        if (!isLiveCatalogReady) return;
-        hydratedWithLiveCatalogRef.current = true;
-        if (initialReservation.treatment_detail) {
-          try {
-            const rawBabies = initialReservation.customer?.children || (initialReservation as any).children || (initialReservation as any).baby_details || [];
-            const parsed = parseTreatmentsFromDetail(initialReservation.treatment_detail, services, initialReservation.purchase_value, rawBabies as any);
-            if (parsed.length > 0) setSelectedTreatments(parsed);
-          } catch {}
-        }
-        return;
-      }
-
-      // Hidrasi form utama — hanya SEKALI per reservasi.
-      initializedEditIdRef.current = initialReservation.id;
-      if (isLiveCatalogReady) hydratedWithLiveCatalogRef.current = true;
-
-      const res = initialReservation;
-      const cust = res.customer;
-      if (cust) {
-        setCustomerId(cust.id || res.customer_id || '');
-        setSelectedCustomerInfo(cust);
-        setCustomerSearch(`${cust.name || 'Bunda'} (${cust.phone || ''})`);
-        const existingFee = res.delivery_fee ?? (res as any).ongkir;
-        if (existingFee !== undefined && existingFee !== null && !isNaN(Number(existingFee))) {
-          setOngkir(Number(existingFee));
-        } else {
-          setOngkir(resolveCustomerDefaultOngkir(cust, deliveryTiers));
-        }
-      } else if (res.customer_id) {
-        setCustomerId(res.customer_id);
-      }
-      // F-B1: deep hydration berbasis KELENGKAPAN (bukan truthiness). Bootstrap
-      // LiveChat membawa objek ramping (tanpa preferences/children/raw_text) tapi
-      // tetap truthy → dulu fetch dilewati. Bila customer/reservasi tidak lengkap,
-      // ambil 1x detail kanonik `GET /reservation/:id` (customer+children+baby_details).
-      const custHasLocation = Boolean(cust?.preferences?.address || cust?.preferences?.full_address || cust?.address);
-      const custHasChildren = Array.isArray(cust?.children) && cust.children.length > 0;
-      const resHasRaw = Boolean((res as any).raw_text);
-      const needsFullFetch = Boolean(res.id) && (!cust || (!custHasLocation && !custHasChildren) || !resHasRaw);
-      if (needsFullFetch) {
-        apiRequest(`/api/admin/reservation/${res.id}`)
-          .then((r: any) => {
-            const data = r?.data || r;
-            const c = data?.customer;
-            if (c?.id) {
-              setCustomerId(c.id);
-              setSelectedCustomerInfo(c);
-              setCustomerSearch(`${c.name || 'Bunda'} (${c.phone || ''})`);
-              const existingFee = (data as any)?.delivery_fee ?? (data as any)?.ongkir ?? res.delivery_fee ?? (res as any).ongkir;
-              if (existingFee !== undefined && existingFee !== null && !isNaN(Number(existingFee))) {
-                setOngkir(Number(existingFee));
-              } else {
-                setOngkir(resolveCustomerDefaultOngkir(c, deliveryTiers));
-              }
-            }
-            const fullBabies = (c?.children && c.children.length > 0)
-              ? c.children
-              : ((data?.children && data.children.length > 0) ? data.children : (data?.baby_details || []));
-            if (Array.isArray(fullBabies) && fullBabies.length > 0) {
-              setBabies(fullBabies.map((b: any) => ({ name: b.name || '', ageText: b.current_age || b.raw_age_text || b.age || b.ageText || '' })));
-            }
-            const fullAddress = resolveStreetAddress(data, c) || c?.preferences?.address || c?.address || '';
-            if (fullAddress) setAddress(fullAddress);
-            const fullLandmark = c?.preferences?.landmark || c?.preferences?.address_notes || (data?.customer as any)?.preferences?.landmark || '';
-            if (fullLandmark) setLandmark(fullLandmark);
-          })
-          .catch(() => {});
-      }
-
-      if (res.treatment_category) {
-        const cat = res.treatment_category as any;
-        setTreatmentCategory(cat === 'BUNDLE' ? 'BOTH' : cat);
-      }
-
-      if (res.booking_date) {
-        try {
-          const d = new Date(res.booking_date);
-          if (!isNaN(d.getTime())) {
-            setBookingDate(getWibDateKey(d));
-            const { timeFormatted } = getWibHoursAndMinutes(d);
-            setBookingTime(timeFormatted);
-          }
-        } catch {}
-      }
-
-      // Selalu tetapkan nilai pasti, jangan biarkan stale state dari modal sebelumnya
-      setAssignedStaffId(res.assigned_staff_id || (res as any).assigned_staff?.id || '');
-
-       // Hold tetap 'hold' saat dibuka; flip ke confirmed hanya saat Simpan ditekan.
-       const validStatus = (['pending', 'confirmed', 'completed', 'cancelled', 'hold'].includes(res.status) ? res.status : 'confirmed');
-      setStatus(validStatus as any);
-      const extractedNotes = res.notes || (() => {
-        if (!res.raw_text) return '';
-        const match = res.raw_text.match(/(?:^|\n)Catatan:\s*([\s\S]*)$/i);
-        return match ? match[1].trim() : '';
-      })();
-      setNotes(extractedNotes);
-
-      // W3: hidrasi alamat/patokan eksplisit saat edit (anti field kosong) — prioritas
-      // initialAddress (chat) → preferences → kolom legacy → raw_text form.
-      const editAddress =
-        initialAddress
-        || cust?.preferences?.address
-        || cust?.address
-        || (res as any).address
-        || resolveStreetAddress(res, cust)
-        || '';
-      if (editAddress) setAddress(editAddress);
-      const editLandmark =
-        initialLandmark
-        || cust?.preferences?.landmark
-        || cust?.preferences?.address_notes
-        || (res.customer as any)?.preferences?.landmark
-        || '';
-      if (editLandmark) setLandmark(editLandmark);
-
-      // Children / babies pre-fill — fallback ke baby_details untuk reservasi lama
-      const rawBabies = cust?.children || res.children || (res as any).baby_details || [];
-      if (Array.isArray(rawBabies) && rawBabies.length > 0) {
-        setBabies(
-          rawBabies.map((b: any) => ({
-            name: b.name || '',
-            ageText: b.ageText || b.age || b.raw_age_text || b.current_age || '',
-          }))
-        );
-      }
-
-      // Treatments pre-fill — sertakan babies untuk mapping assignedChildIndex yang benar
-      if (res.treatment_detail) {
-        try {
-          const parsed = parseTreatmentsFromDetail(res.treatment_detail, services, res.purchase_value, rawBabies as any);
-          if (parsed.length > 0) {
-            setSelectedTreatments(parsed);
-          }
-        } catch {}
-      }
-    } else if (!isOpen) {
-      initializedEditIdRef.current = null;
-      hydratedWithLiveCatalogRef.current = false;
-    }
-  }, [isOpen, mode, initialReservation, services, initialAddress, initialLandmark]);
-
-  // Customer search
-  const handleCustomerSearch = async (query: string) => {
-    setCustomerSearch(query);
-    if (!query || query.length < 2) {
-      setCustomerResults([]);
-      return;
-    }
-    setSearchingCustomer(true);
-    try {
-      const params = new URLSearchParams({ search: query, pageSize: '8' });
-      const res = await apiRequest(`/api/admin/customers?${params.toString()}`);
-      setCustomerResults(res?.customers || res?.data || []);
-    } catch {
-      setCustomerResults([]);
-    } finally {
-      setSearchingCustomer(false);
-    }
-  };
-
-  const handleSelectCustomer = (c: any) => {
-    setCustomerId(c.id);
-    setSelectedCustomerInfo(c);
-    setCustomerSearch(`${c.name || 'Bunda'} (${c.phone})`);
-    setCustomerResults([]);
-
-    if (c.children && c.children.length > 0) {
-      setBabies(
-        c.children.map((child: any) => ({
-          name: child.name,
-          ageText: child.current_age || child.raw_age_text || '',
-        }))
-      );
-    } else if (initialBabies && initialBabies.length > 0) {
-      setBabies(initialBabies.map((b) => ({ name: b.name || '', ageText: b.ageText || '' })));
-    }
-
-    // Auto calculate & fill ongkir from customer profile / distance via DB delivery tiers (SSOT Promo)
-    setOngkir(resolveCustomerDefaultOngkir(c, deliveryTiers));
-  };
-
-  // Filter services by search term
-  const filteredServices = useMemo(() => {
-    if (!serviceSearch.trim()) return services;
-    const q = serviceSearch.toLowerCase();
-    return services.filter(
-      (s) =>
-        s.name.toLowerCase().includes(q) ||
-        s.category.toLowerCase().includes(q) ||
-        (s.description && s.description.toLowerCase().includes(q))
-    );
-  }, [services, serviceSearch]);
-
-  // Multi-treatment handler: Supports adding multiple instances (for 2 children)
-  const handleAddServiceInstance = (srv: ClinicServiceItem, targetChildIndex?: number) => {
-    const isAddon = isAddonService(srv);
-
-    // Business Rule Check: Add-on cannot stand alone.
-    // If trying to add an Add-on and there are no main (non-addon) treatments selected yet:
-    const hasMainService = selectedTreatments.some((t) => !isAddonService(t));
-    if (isAddon && !hasMainService) {
-      toast(`Layanan "${srv.name}" adalah Add-on dan tidak bisa berdiri sendiri. Silakan pilih minimal 1 layanan utama terlebih dahulu.`, 'error');
-      return;
-    }
-
-    const existingForService = selectedTreatments.filter((t) => t.serviceId === srv.id);
-    const nextChildIndex = targetChildIndex !== undefined 
-      ? targetChildIndex 
-      : Math.min(existingForService.length, Math.max(0, babies.length - 1));
-
-    const newItem: SelectedTreatmentItem = {
-      instanceId: `inst-${srv.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      serviceId: srv.id,
-      name: srv.name,
-      category: srv.category,
-      durationMinutes: srv.durationMinutes || (isAddon ? 15 : 60),
-      price: srv.promoPrice || srv.originalPrice || 0,
-      isAddon,
-      assignedChildIndex: nextChildIndex,
-    };
-    setSelectedTreatments((prev) => [...prev, newItem]);
-    if (!isAddon && srv.category !== 'ADD_ON') {
-      setTreatmentCategory(srv.category as any);
-    }
-
-    // Detect multi-session treatment and generate schedule
-    if (srv.totalSessions && srv.totalSessions > 1) {
-      setIsMultiSession(true);
-      setMultiSessionTotal(srv.totalSessions);
-      const isNewborn2Days = (srv.name || '').toLowerCase().includes('2 hari') || (srv.name || '').toLowerCase().includes('newborn');
-      const defaultInterval: SeriesIntervalPreset = isNewborn2Days ? 'EVERY_2_DAYS' : 'DAILY';
-      setSeriesInterval(defaultInterval);
-      const tomorrow = getTodayWibDate();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const tomorrowStr = getWibDateKey(tomorrow);
-      const schedule = buildSeriesSchedule(srv.totalSessions, defaultInterval, tomorrowStr, '09:00', assignedStaffId || '');
-      setMultiSessionSchedule(schedule);
-    }
-  };
-
-  const handleRemoveLastServiceInstance = (serviceId: string) => {
-    setSelectedTreatments((prev) => {
-      const idx = prev.map((t) => t.serviceId).lastIndexOf(serviceId);
-      if (idx === -1) return prev;
-      const next = prev.filter((_, i) => i !== idx);
-      const remainingMain = next.filter((t) => !isAddonService(t));
-      const remainingAddons = next.filter((t) => isAddonService(t));
-      if (remainingMain.length === 0 && remainingAddons.length > 0) {
-        toast('Perhatian: Reservasi yang tersisa hanya berisi layanan add-on. Harap tambahkan layanan utama.', 'info');
-      }
-      return next;
-    });
-  };
-
-  const handleDuplicateTreatment = (item: SelectedTreatmentItem) => {
-    const nextChildIndex = (item.assignedChildIndex !== undefined && item.assignedChildIndex < babies.length - 1)
-      ? item.assignedChildIndex + 1
-      : item.assignedChildIndex ?? 0;
-
-    const newItem: SelectedTreatmentItem = {
-      ...item,
-      instanceId: `inst-${item.serviceId}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      assignedChildIndex: nextChildIndex,
-    };
-    setSelectedTreatments((prev) => [...prev, newItem]);
-    toast(`Treatment "${item.name}" berhasil ditambahkan untuk anak berikutnya!`, 'success');
-  };
-
-  const handleUpdateTreatmentChild = (instanceId: string, childIdx: number) => {
-    setSelectedTreatments((prev) =>
-      prev.map((t) => (t.instanceId === instanceId ? { ...t, assignedChildIndex: childIdx } : t))
-    );
-  };
-
-  // Smart Pre-Fill Pipeline (Live Chat / Quick Booking handoff)
-  const prefillTreatmentMatchedRef = useRef(false);
-  useEffect(() => {
-    if (!isOpen) {
-      prefillTreatmentMatchedRef.current = false;
-      return;
-    }
-
-    // 1. Data anak dari chat (jika state masih kosong) — berlaku juga untuk mode edit hold.
-    if (initialBabies && initialBabies.length > 0 && babies.length === 0) {
-      setBabies(initialBabies.map((b) => ({ name: b.name || '', ageText: (b as any).ageText || (b as any).age || '' })));
-    }
-    if (mode === 'edit') return;
-
-    // 2. Catatan awal dari chat
-    if (initialNotes && !notes.trim()) {
-      setNotes(initialNotes);
-    }
-
-    // 3. Treatment category awal
-    if (initialTreatmentCategory) {
-      setTreatmentCategory(initialTreatmentCategory);
-    }
-
-    // 4. Auto-match treatment ke katalog dinamis database.
-    // F-B4: tunggu katalog LIVE (jangan kunci ke fallback statis) agar harga/nama
-    // resmi DB yang dipakai, bukan fallback JSON.
-    const isLiveCatalogReady = services !== DEFAULT_CLINIC_SERVICES_FALLBACK && services.length > 0;
-    if (initialTreatmentName && selectedTreatments.length === 0 && !prefillTreatmentMatchedRef.current && isLiveCatalogReady) {
-      const matched = matchCatalogService(initialTreatmentName, services as any);
-      if (matched) {
-        prefillTreatmentMatchedRef.current = true;
-        handleAddServiceInstance(matched);
-      }
-    }
-  }, [
-    isOpen,
-    initialBabies,
-    initialNotes,
-    initialTreatmentCategory,
-    initialTreatmentName,
-    services,
-    selectedTreatments.length,
-    babies.length,
-    notes,
-  ]);
-
-  const handleAddCustomTreatment = () => {
-    if (!customServiceName.trim()) {
-      toast('Nama treatment kustom wajib diisi', 'error');
-      return;
-    }
-    const isAddon = customIsAddon;
-    const hasMainService = selectedTreatments.some((t) => !isAddonService(t));
-    if (isAddon && !hasMainService) {
-      toast(`Layanan kustom "${customServiceName}" adalah Add-on dan tidak bisa berdiri sendiri. Silakan pilih minimal 1 layanan utama terlebih dahulu.`, 'error');
-      return;
-    }
-
-    const newItem: SelectedTreatmentItem = {
-      instanceId: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      serviceId: `custom-${Date.now()}`,
-      name: customServiceName.trim(),
-      category: customCategory,
-      durationMinutes: Math.max(10, Number(customServiceDuration) || 60),
-      price: Number(customServicePrice) || 0,
-      isAddon,
-      assignedChildIndex: 0,
-    };
-    setSelectedTreatments((prev) => [...prev, newItem]);
-    setCustomServiceName('');
-    setCustomServicePrice(0);
-    setCustomIsAddon(false);
-    setShowCustomServiceInput(false);
-  };
-
-  const handleRemoveTreatment = (instanceId: string) => {
-    setSelectedTreatments((prev) => {
-      const next = prev.filter((t) => t.instanceId !== instanceId);
-      const remainingMain = next.filter((t) => !isAddonService(t));
-      const remainingAddons = next.filter((t) => isAddonService(t));
-      if (remainingMain.length === 0 && remainingAddons.length > 0) {
-        toast('Perhatian: Reservasi yang tersisa hanya berisi layanan add-on. Harap tambahkan layanan utama.', 'info');
-      }
-      return next;
-    });
-  };
-
-  const handleUpdateTreatmentPrice = (instanceId: string, newPrice: number) => {
-    setSelectedTreatments((prev) =>
-      prev.map((t) => (t.instanceId === instanceId ? { ...t, price: Math.max(0, isNaN(newPrice) ? 0 : newPrice) } : t))
-    );
-  };
-
-  // Duration & Buffer Calculation: +20 min per MAIN treatment (Addon like moksa = 0 buffer)
-  const pureDurationMinutes = useMemo(() => {
-    if (selectedTreatments.length === 0) return 60;
-    return selectedTreatments.reduce((sum, t) => sum + (t.durationMinutes || 0), 0);
-  }, [selectedTreatments]);
-
-  const subtotalTreatments = useMemo(() => {
-    return selectedTreatments.reduce((sum, t) => sum + (Number(t.price) || 0), 0);
-  }, [selectedTreatments]);
-
-  const totalPaymentAmount = useMemo(() => {
-    const sub = Number(subtotalTreatments) || 0;
-    const ong = Number(ongkir) || 0;
-    const disc = Number(discount) || 0;
-    return Math.max(0, sub + ong - disc);
-  }, [subtotalTreatments, ongkir, discount]);
-
-  const mainTreatmentsCount = useMemo(() => {
-    return selectedTreatments.filter((t) => !isAddonService(t)).length;
-  }, [selectedTreatments]);
-
-  const addonTreatmentsCount = useMemo(() => {
-    return selectedTreatments.filter((t) => isAddonService(t)).length;
-  }, [selectedTreatments]);
-
-  // Fase 4R: buffer kanonis tunggal 20 menit per kunjungan (selaras backend resolveDurationBreakdown) — anti-snowball
-  const totalBufferMinutes = useMemo(() => {
-    if (selectedTreatments.length === 0) return 20;
-    if (mainTreatmentsCount === 0) return 10;
-    return 20; // satu buffer per kunjungan bila ada layanan utama (bundle = durasi penuh)
-  }, [selectedTreatments, mainTreatmentsCount]);
-
-  const totalScheduledDurationMinutes = useMemo(() => {
-    return pureDurationMinutes + totalBufferMinutes;
-  }, [pureDurationMinutes, totalBufferMinutes]);
-
-  // End time calculation
-  const calculateEndTime = () => {
-    if (!bookingTime) return '';
-    const [h, m] = bookingTime.split(':').map(Number);
-    const totalMinutes = h * 60 + m + totalScheduledDurationMinutes;
-    return formatMinutesToTime(totalMinutes);
-  };
-
-  // Babies Handlers
-  const handleAddBaby = () => {
-    setBabies((prev) => [...prev, { name: '', ageText: '' }]);
-  };
-
-  const handleUpdateBaby = (idx: number, field: 'name' | 'ageText', val: string) => {
-    setBabies((prev) => {
-      const next = [...prev];
-      next[idx] = { ...next[idx], [field]: val };
-      return next;
-    });
-  };
-
-  const handleRemoveBaby = (idx: number) => {
-    setBabies((prev) => prev.filter((_, i) => i !== idx));
-  };
-
-  // Filter existing reservations for selected date — fondasional: WIB Date Key (R2), anti split-brain
-  // Tampilan daftar HARUS memuat seluruh reservasi aktif (termasuk yang sedang diedit) — self-exclusion HANYA di guard collision
-  const bookedReservationsForDate = useMemo(() => {
-    if (!bookingDate) return [];
-    const targetDateStr = bookingDate.trim();
-    const sourceList = loadedReservations.length > 0 ? loadedReservations : existingReservations;
-    return sourceList.filter((r) => {
-      if (!r.booking_date || (r.status as string) === 'cancelled' || (r.status as string) === 'rejected') return false;
-      return getWibDateKey(r.booking_date) === targetDateStr;
-    });
-  }, [loadedReservations, existingReservations, bookingDate]);
-
-  // Pre-flight warning: reservasi aktif milik customer yang sama pada tanggal ini — kecualikan diri sendiri saat edit.
-  const customerConflictsForDate = useMemo(() => {
-    if (!customerId || bookedReservationsForDate.length === 0) return [];
-    return bookedReservationsForDate.filter((r: any) => {
-      if (mode === 'edit' && (initialReservation as any)?.id && r.id === (initialReservation as any).id) return false;
-      const rid = r.customer_id || (r.customer as any)?.id;
-      return rid === customerId;
-    });
-  }, [bookedReservationsForDate, customerId, mode, (initialReservation as any)?.id]);
-
-  // Real-Time Collision Guardrail: mendeteksi bentrok jadwal terapis & customer di jam yang dipilih
-  const realtimeCollisions = useMemo(() => {
-    if (!bookingDate || !bookingTime || bookedReservationsForDate.length === 0) {
-      return { staffCollisions: [], customerCollisions: [] };
-    }
-
-    const [slotH, slotM] = bookingTime.split(':').map(Number);
-    if (isNaN(slotH) || isNaN(slotM)) return { staffCollisions: [], customerCollisions: [] };
-
-    const selectedStartMin = slotH * 60 + slotM;
-    const dur = totalScheduledDurationMinutes || 60;
-    const selectedEndMin = selectedStartMin + dur;
-
-    const staffCollisions: Array<{ 
-      id: string; 
-      customerName: string; 
-      time: string; 
-      duration: number; 
-      treatment: string; 
-      staffName: string;
-      collisionType?: 'OVERLAP' | 'INSUFFICIENT_TRAVEL_TIME';
-      requiredMinutes?: number;
-      availableMinutes?: number;
-      distanceKm?: number;
-    }> = [];
-    const customerCollisions: Array<{ id: string; time: string; treatment: string }> = [];
-
-    for (const r of bookedReservationsForDate) {
-      if (mode === 'edit' && (initialReservation as any)?.id && r.id === (initialReservation as any).id) {
-        continue;
-      }
-      if (r.status === 'cancelled') continue;
-
-      const rDate = new Date(r.booking_date!);
-      if (isNaN(rDate.getTime())) continue;
-      const { hours: rH, minutes: rM, timeFormatted } = getWibHoursAndMinutes(r.booking_date!);
-      const rStartMin = rH * 60 + rM;
-      const rDur = (r as any).duration_minutes || 60;
-      const rEndMin = rStartMin + rDur;
-
-      const isOverlap = selectedStartMin < rEndMin && selectedEndMin > rStartMin;
-
-      const rStaffId = r.assigned_staff_id || r.assigned_staff?.id;
-      if (assignedStaffId && rStaffId && rStaffId === assignedStaffId && isOverlap) {
-        const staffObj = effectiveStaffList.find((s) => s.id === assignedStaffId);
-        const timeStr = timeFormatted;
-        staffCollisions.push({
-          id: r.id,
-          customerName: (r.customer as any)?.name || 'Pasien Lain',
-          time: timeStr,
-          duration: rDur,
-          treatment: r.treatment_detail || 'Treatment',
-          staffName: staffObj?.name || 'Bidan Terpilih',
-          collisionType: 'OVERLAP',
-        });
-      }
-
-      // Travel time collision check (only for same staff, non-overlapping bookings)
-      if (assignedStaffId && rStaffId && rStaffId === assignedStaffId && !isOverlap) {
-        const rCust = r.customer as any;
-        const selectedCust = selectedCustomerInfo;
-        
-        // Check gap from previous booking end to selected start
-        if (rEndMin <= selectedStartMin) {
-          const timeGapMinutes = selectedStartMin - rEndMin;
-          const travelCheck = checkTravelTimeSufficiency(
-            rCust?.lat,
-            rCust?.lng,
-            selectedCust?.lat,
-            selectedCust?.lng,
-            timeGapMinutes
-          );
-          if (travelCheck && !travelCheck.sufficient) {
-            const timeStr = timeFormatted;
-            const staffObj = effectiveStaffList.find((s) => s.id === assignedStaffId);
-            staffCollisions.push({
-              id: r.id,
-              customerName: rCust?.name || 'Pasien Sebelumnya',
-              time: timeStr,
-              duration: rDur,
-              treatment: r.treatment_detail || 'Treatment',
-              staffName: staffObj?.name || 'Bidan Terpilih',
-              collisionType: 'INSUFFICIENT_TRAVEL_TIME',
-              requiredMinutes: travelCheck.requiredMinutes,
-              availableMinutes: travelCheck.availableMinutes,
-              distanceKm: travelCheck.distanceKm,
-            });
-          }
-        }
-        
-        // Check gap from selected end to next booking start
-        if (selectedEndMin <= rStartMin) {
-          const timeGapMinutes = rStartMin - selectedEndMin;
-          const travelCheck = checkTravelTimeSufficiency(
-            selectedCust?.lat,
-            selectedCust?.lng,
-            rCust?.lat,
-            rCust?.lng,
-            timeGapMinutes
-          );
-          if (travelCheck && !travelCheck.sufficient) {
-            const timeStr = timeFormatted;
-            const staffObj = effectiveStaffList.find((s) => s.id === assignedStaffId);
-            staffCollisions.push({
-              id: r.id,
-              customerName: rCust?.name || 'Pasien Berikutnya',
-              time: timeStr,
-              duration: rDur,
-              treatment: r.treatment_detail || 'Treatment',
-              staffName: staffObj?.name || 'Bidan Terpilih',
-              collisionType: 'INSUFFICIENT_TRAVEL_TIME',
-              requiredMinutes: travelCheck.requiredMinutes,
-              availableMinutes: travelCheck.availableMinutes,
-              distanceKm: travelCheck.distanceKm,
-            });
-          }
-        }
-      }
-
-      const rCustId = r.customer_id || (r.customer as any)?.id;
-      if (customerId && rCustId === customerId && isOverlap) {
-        const timeStr = timeFormatted;
-        customerCollisions.push({
-          id: r.id,
-          time: timeStr,
-          treatment: r.treatment_detail || r.status,
-        });
-      }
-    }
-
-    return { staffCollisions, customerCollisions };
-  }, [bookingDate, bookingTime, totalScheduledDurationMinutes, assignedStaffId, bookedReservationsForDate, mode, (initialReservation as any)?.id, customerId, effectiveStaffList, selectedCustomerInfo]);
-
-  // Smart Slot Recommendation Generator with Accurate Midwife Arrival & Departure
-  const handleGenerateRecommendations = () => {
-    if (!bookingDate) {
-      toast('Pilih tanggal kunjungan terlebih dahulu', 'error');
-      return;
-    }
-
-    // Filter staff: If specific staff chosen in dropdown, recommend for that staff.
-    // Otherwise, strictly filter for active field therapists (role === 'THERAPIST').
-    let targetStaffList = effectiveStaffList.filter((s) => {
-      if (s.active === false) return false;
-      if (assignedStaffId) return s.id === assignedStaffId;
-      return s.role === 'THERAPIST' || (s.role || '').toLowerCase().includes('therapist');
-    });
-
-    if (targetStaffList.length === 0) {
-      targetStaffList = effectiveStaffList.filter((s) => s.active !== false);
-    }
-
-    if (targetStaffList.length === 0) {
-      toast('Tidak ada staf/terapis aktif yang terdaftar', 'error');
-      return;
-    }
-
-    // Customer Location (Micro-Task 4.3: rantai D-4)
-    const custLat = selectedCard?.lat ?? selectedCustomerInfo?.lat ?? CLINIC_COORDS.lat;
-    const custLng = selectedCard?.lng ?? selectedCustomerInfo?.lng ?? CLINIC_COORDS.lng;
-
-    // Ekstraksi murni recommendSlots (Micro-Task 4.4)
-    const topRecs = recommendSlots({
-      targetStaffList,
-      staffBookingsForDate: bookedReservationsForDate,
-      custLat,
-      custLng,
-      bookingDate,
-      totalDurationMinutes: totalScheduledDurationMinutes,
-      mode,
-      currentReservationId: (initialReservation as any)?.id,
-      clinicCoords: CLINIC_COORDS,
-    });
-
-    setRecommendations(topRecs);
-    setHasCalculatedRecommendations(true);
-
-    if (topRecs.length === 0) {
-      toast('Semua slot terapis penuh pada tanggal ini. Coba pilih tanggal lain.', 'error');
-    } else {
-      toast(`${topRecs.length} rekomendasi jam kunjungan berhasil dihitung untuk ${targetStaffList.map(s => s.name).join(', ')}!`, 'success');
-    }
-  };
-
-  const handleApplyRecommendation = (rec: SlotRecommendation) => {
-    setBookingTime(rec.startTime);
-    setAssignedStaffId(rec.staffId);
-    toast(`Jam diatur ke ${rec.startTime} WIB dengan terapis ${rec.staffName}. Estimasi tiba: ${rec.arrivalTime} WIB.`, 'success');
-  };
-
-  const buildCreatePayload = (force = false) => {
-    let fullBookingIso: string | undefined = undefined;
-    if (bookingDate && bookingTime) {
-      fullBookingIso = buildWibIso(bookingDate, bookingTime);
-    }
-    const treatmentSummary = selectedTreatments.map((t) => t.name).join(' + ');
-    const finalTreatmentDetail = `${treatmentSummary} [Total ${totalScheduledDurationMinutes}m]`;
-    const hasBaby = selectedTreatments.some((t) => t.category === 'BABY' || t.category === 'KIDS');
-    const hasMoms = selectedTreatments.some((t) => t.category === 'MOMS');
-    const rawCategory = hasBaby && hasMoms ? 'BOTH' : selectedTreatments[0]?.category || treatmentCategory;
-    const computedCategory: 'BABY' | 'KIDS' | 'MOMS' | 'BOTH' =
-      rawCategory === 'BUNDLE' ? 'BOTH' :
-      (rawCategory as any) || 'BABY';
-    return {
-      fullBookingIso, finalTreatmentDetail, computedCategory, treatmentSummary,
-      payload: {
-        customerId,
-        treatmentCategory: computedCategory,
-        treatmentDetail: finalTreatmentDetail,
-        bookingDate: fullBookingIso,
-        durationMinutes: totalScheduledDurationMinutes,
-        assignedStaffId: assignedStaffId || undefined,
-        status,
-        notes: notes.trim() || undefined,
-        customerAddressId: customerAddressId || undefined,
-        address: address.trim() || undefined,
-        landmark: landmark.trim() || undefined,
-        babies: babies.filter((b) => b.name.trim().length > 0),
-        purchaseValue: Math.max(0, subtotalTreatments - (Number(discount) || 0)),
-        ongkir: Number(ongkir) || 0,
-        ...(force ? { force: true } : {}),
-      },
-    };
-  };
-
-  // Payload PATCH edit — SSoT tunggal agar jalur simpan biasa & force-override konsisten.
-  const buildEditPayload = (force = false) => {
-    const { fullBookingIso, finalTreatmentDetail, computedCategory } = buildCreatePayload(force);
-    return {
-      customerId,
-      treatmentCategory: computedCategory,
-      treatmentDetail: finalTreatmentDetail,
-      bookingDate: fullBookingIso || null,
-      durationMinutes: totalScheduledDurationMinutes,
-      assignedStaffId: assignedStaffId ? assignedStaffId : null,
-      status,
-      notes: notes.trim() ? notes.trim() : null,
-      customerAddressId: customerAddressId || undefined,
-      address: address.trim() || undefined,
-      landmark: landmark.trim() || undefined,
-      babies: babies.filter((b) => b.name.trim().length > 0),
-      purchaseValue: Math.max(0, subtotalTreatments - (Number(discount) || 0)),
-      ongkir: Number(ongkir) || 0,
-      ...(force ? { force: true } : {}),
-    };
-  };
-
-  // Helper: enrich API response with form state for invoice (R1, R2) — NO discount (purchaseValue already net).
-  // `withInvoice` diteruskan sebagai penanda kontrak agar pemanggil (LiveChatMonitor) tahu
-  // apakah invoice sudah ditangani `onSuccessAndInvoice` (jangan buka modal kedua).
-  const enrichResWithFormState = (savedRes: any, withInvoice = false) => {
-    const formBabies = babies.filter((b) => b.name.trim().length > 0).map((b) => ({ name: b.name.trim(), age: b.ageText.trim() }));
-    // Paritas relasi: sertakan penugasan staff dari form agar pemanggil (list/detail)
-    // tidak sempat menampilkan "Belum ditugaskan" walau backend telat meng-join relasi.
-    const selectedStaffObj = assignedStaffId
-      ? effectiveStaffList.find((s) => s.id === assignedStaffId)
-      : null;
-    const enriched = {
-      ...savedRes,
-      assigned_staff_id: (savedRes?.assigned_staff_id ?? assignedStaffId) || null,
-      assigned_staff:
-        savedRes?.assigned_staff ||
-        (selectedStaffObj
-          ? { id: selectedStaffObj.id, name: selectedStaffObj.name, phone: selectedStaffObj.phone }
-          : null),
-      babies: formBabies,
-      customer_address_id: (savedRes?.customer_address_id ?? customerAddressId) || null,
-      customer: savedRes?.customer || selectedCustomerInfo || undefined,
-      ongkir: Number(ongkir) || 0,
-      _withInvoice: Boolean(withInvoice),
-      // CATATAN: discount TIDAK disertakan — purchaseValue sudah net (subtotal - discount).
-      // Formatter param `discount` = potongan TAMBAHAN yg BELUM masuk purchaseValue. Form-driven selalu 0.
-    };
-    return enriched;
-  };
-
-  const handleForceCreate = async () => {
-    setSubmitting(true);
-    try {
-      // Mode EDIT: force-override WAJIB PATCH reservasi eksisting — bukan POST create
-      // (POST akan menciptakan reservasi duplikat baru).
-      if (mode === 'edit' && initialReservation?.id) {
-        const res = await apiRequest(`/api/admin/reservation/${initialReservation.id}`, {
-          method: 'PATCH',
-          body: JSON.stringify(buildEditPayload(true)),
-        });
-        toast('Perubahan jadwal disimpan dengan override konflik (force).', 'success');
-        setShowConflictModal(false);
-        setConflictInfo(null);
-        discardDraft(true);
-        const savedRes = res?.reservation || res?.data || res || initialReservation;
-        onSuccess(enrichResWithFormState(savedRes));
-        onClose();
-        return;
-      }
-
-      const { payload } = buildCreatePayload(true);
-      const res = await apiRequest('/api/admin/reservation', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
-      toast('Jadwal baru disimpan dengan override konflik (force).', 'success');
-      setShowConflictModal(false);
-      setConflictInfo(null);
-      discardDraft(true);
-      const savedRes = res?.reservation || res?.data || res;
-      const enrichedRes = enrichResWithFormState(savedRes);
-      onSuccess(enrichedRes);
-      onClose();
-    } catch (err: any) {
-      toast(`Gagal menyimpan dengan force: ${err.message || 'Terjadi kesalahan'}`, 'error');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent, withInvoice = false) => {
-    e.preventDefault();
-    if (!customerId) {
-      toast('Pilih customer terlebih dahulu', 'error');
-      return;
-    }
-    if (selectedTreatments.length === 0) {
-      toast('Pilih minimal 1 layanan treatment', 'error');
-      return;
-    }
-    if (!bookingDate) {
-      toast('Pilih tanggal reservasi terlebih dahulu', 'error');
-      return;
-    }
-    if (!bookingTime || !bookingTime.trim()) {
-      toast('Pilih jam mulai reservasi terlebih dahulu', 'error');
-      return;
-    }
-
-    // 🛑 Gerbang submit deterministik bila teks alamat admin belum dikomit (Micro-Task 4.2)
-    if (selectedCard && address.trim() && mismatchActive) {
-      toast('Teks alamat berbeda dgn kartu — pilih: Simpan sebagai Rumah Baru / Perbarui Kartu Terpilih.', 'error');
-      return;
-    }
-
-    // Serialize clean treatment string — hanya nama layanan + label total waktu (tanpa nama bayi/usia)
-    const treatmentSummary = selectedTreatments.map((t) => t.name).join(' + ');
-    const finalTreatmentDetail = `${treatmentSummary} [Total ${totalScheduledDurationMinutes}m]`;
-
-    // Overall category: if both mom & baby exist
-    const hasBaby = selectedTreatments.some((t) => t.category === 'BABY' || t.category === 'KIDS');
-    const hasMoms = selectedTreatments.some((t) => t.category === 'MOMS');
-    const rawCategory = hasBaby && hasMoms ? 'BOTH' : selectedTreatments[0]?.category || treatmentCategory;
-    const computedCategory: 'BABY' | 'KIDS' | 'MOMS' | 'BOTH' =
-      rawCategory === 'BUNDLE' ? 'BOTH' :
-      (rawCategory as any) || 'BABY';
-
-    let forceSubmit = false;
-    if (realtimeCollisions.staffCollisions.length > 0) {
-      const staffName = realtimeCollisions.staffCollisions[0].staffName;
-      const details = realtimeCollisions.staffCollisions
-        .map((c) => `• Pasien Ny. ${c.customerName} (Pukul ${c.time} WIB - ${c.treatment})`)
-        .join('\n');
-      const isConfirmed = await confirm({
-        title: '⚠️ Konfirmasi Jadwal Bentrok',
-        message: `Bidan ${staffName} sudah memiliki jadwal lain di jam ini:\n${details}\n\nApakah Anda yakin ingin tetap menjadwalkan (Force Override)?`,
-        confirmText: 'Ya, Simpan Paksa (Force)',
-        cancelText: 'Batal & Ubah Jam',
-        danger: true,
-      });
-      if (!isConfirmed) {
-        return;
-      }
-      forceSubmit = true;
-    }
-
-    setSubmitting(true);
-    try {
-      if (mode === 'edit' && initialReservation?.id) {
-        try {
-          const res = await apiRequest(`/api/admin/reservation/${initialReservation.id}`, {
-            method: 'PATCH',
-            body: JSON.stringify(buildEditPayload(forceSubmit)),
-          });
-
-          toast('Perubahan reservasi berhasil disimpan!', 'success');
-          discardDraft(true);
-          const savedRes = res?.reservation || res?.data || res || initialReservation;
-          const enrichedRes = enrichResWithFormState(savedRes);
-          onSuccess(enrichedRes);
-          if (withInvoice && onSuccessAndInvoice) {
-            onSuccessAndInvoice(enrichedRes);
-          }
-          onClose();
-        } catch (editErr: any) {
-          const code = editErr?.code || editErr?.error;
-          const existing = editErr?.existingReservation || editErr?.data?.existingReservation;
-          const is409 = editErr?.status === 409 || /409/.test(String(editErr?.message || '')) || /duplicate|bentrok|conflict|sudah memiliki reservasi/i.test(String(editErr?.message || ''));
-          if (code === 'DUPLICATE_BOOKING' || code === 'STAFF_COLLISION' || is409) {
-            setConflictInfo({
-              code: code || 'STAFF_COLLISION',
-              message: editErr?.message || 'Jadwal bentrok dengan reservasi aktif.',
-              existingReservation: existing || null,
-            });
-            setShowConflictModal(true);
-            return;
-          }
-          throw editErr;
-        }
-      } else if (isMultiSession && multiSessionSchedule.length > 0) {
-        // Multi-Session Series Creation dengan payload komersial lengkap
-        const primaryTreatment = selectedTreatments.find((t) => !isAddonService(t));
-        const formBabies = babies.filter((b) => b.name.trim().length > 0).map((b) => ({ name: b.name.trim(), ageText: b.ageText.trim() }));
-        const reqId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `req_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-
-        try {
-          const res = await apiRequest('/api/admin/reservation-series', {
-            method: 'POST',
-            body: JSON.stringify({
-              customerId,
-              treatmentName: primaryTreatment?.name || treatmentSummary,
-              treatmentCategory: computedCategory,
-              totalSessions: multiSessionSchedule.length,
-              purchaseValue: Math.max(0, subtotalTreatments - (Number(discount) || 0)),
-              deliveryFee: Number(ongkir) || 0,
-              customerAddressId: (selectedCustomerInfo?.addresses?.[0]?.id || (selectedCustomerInfo as any)?.customer_address_id) || undefined,
-              discountAmount: Number(discount) || 0,
-              durationMinutes: Number(pureDurationMinutes) || 60,
-              requestId: reqId,
-              assignedStaffId: assignedStaffId || undefined,
-              notes: notes.trim() || undefined,
-              babies: formBabies,
-              sessions: multiSessionSchedule.map((s) => ({
-                sessionNumber: s.sessionNumber,
-                bookingDate: buildWibIso(s.date, s.time),
-                assignedStaffId: s.staffId || assignedStaffId || undefined,
-              })),
-            }),
-          });
-
-          toast(`Paket ${multiSessionSchedule.length} sesi berhasil dibuat!`, 'success');
-          discardDraft(true);
-          const savedRes = res?.data || res;
-          const enrichedRes = enrichResWithFormState(savedRes);
-          onSuccess(enrichedRes);
-          if (withInvoice && onSuccessAndInvoice) {
-            onSuccessAndInvoice(enrichedRes);
-          }
-          onClose();
-        } catch (seriesErr: any) {
-          if (seriesErr?.sessionNumber) {
-            setConflictSessionNumber(seriesErr.sessionNumber);
-          }
-          toast(seriesErr?.message || 'Gagal membuat paket berseri.', 'error');
-          return;
-        }
-      } else {
-        const { payload } = buildCreatePayload(forceSubmit);
-        try {
-          const res = await apiRequest('/api/admin/reservation', {
-            method: 'POST',
-            body: JSON.stringify(payload),
-          });
-          toast('Jadwal reservasi multi-treatment berhasil dibuat!', 'success');
-          discardDraft(true);
-          const savedRes = res?.reservation || res?.data || res;
-          const enrichedRes = enrichResWithFormState(savedRes);
-          onSuccess(enrichedRes);
-          if (withInvoice && onSuccessAndInvoice) {
-            onSuccessAndInvoice(enrichedRes);
-          }
-          onClose();
-         } catch (createErr: any) {
-           const code = createErr?.code || createErr?.error;
-           const existing = createErr?.existingReservation || createErr?.data?.existingReservation;
-           const is409 = createErr?.status === 409 || /409/.test(String(createErr?.message || '')) || /duplicate|bentrok|conflict|sudah memiliki reservasi/i.test(String(createErr?.message || ''));
-           if (code === 'DUPLICATE_BOOKING' || code === 'STAFF_COLLISION' || is409) {
-            setConflictInfo({
-              code: code || 'DUPLICATE_BOOKING',
-              message: createErr?.message || 'Jadwal bentrok dengan reservasi aktif.',
-              existingReservation: existing || null,
-            });
-            setShowConflictModal(true);
-            return;
-          }
-          throw createErr;
-        }
-      }
-    } catch (err: any) {
-      toast(`Gagal ${mode === 'edit' ? 'memperbarui' : 'membuat'} jadwal: ${err.message || 'Terjadi kesalahan'}`, 'error');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleSubmitWithInvoice = (e: React.FormEvent) => {
-    handleSubmit(e, true);
-  };
-
-  // Keyboard Escape, app-swipe-back & popstate listener for mobile back gestures
-  useEffect(() => {
-    if (!isOpen) return;
-
-    try {
-      window.history.pushState({ modal: 'create-reservation' }, '');
-    } catch (_) {}
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (showBookedSlotsModal) {
-          setShowBookedSlotsModal(false);
-        } else {
-          void handleSafeClose();
-        }
-      }
-    };
-
-    const handleSwipeBack = (e: Event) => {
-      e.preventDefault();
-      if (showBookedSlotsModal) {
-        setShowBookedSlotsModal(false);
-      } else {
-        void handleSafeClose();
-      }
-    };
-
-    const handlePopState = () => {
-      if (showBookedSlotsModal) {
-        setShowBookedSlotsModal(false);
-      } else {
-        void handleSafeClose();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('app-swipe-back', handleSwipeBack);
-    window.addEventListener('popstate', handlePopState);
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('app-swipe-back', handleSwipeBack);
-      window.removeEventListener('popstate', handlePopState);
-    };
-  }, [isOpen, showBookedSlotsModal, handleSafeClose]);
-
-  if (!isOpen) return null;
-
-  return createPortal(
-    <div
-      data-modal-active="true"
-      className="fixed inset-0 bg-black/75 backdrop-blur-sm z-[99999] flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto overflow-x-hidden touch-pan-y overscroll-contain animate-fadeIn h-[100dvh] w-[100dvw]"
-      onClick={() => void handleSafeClose()}
-      style={{ touchAction: 'pan-y' }}
-    >
-      <div
-        className="w-full max-w-2xl bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] dark:text-[#e9edef] rounded-none sm:rounded-3xl p-3.5 sm:p-6 shadow-2xl relative my-auto h-[100dvh] sm:h-auto sm:max-h-[90vh] flex flex-col mx-auto overflow-x-hidden touch-pan-y overscroll-contain animate-modalScaleUp"
-        onClick={(e) => e.stopPropagation()}
-        style={{ touchAction: 'pan-y' }}
-      >
-        {/* Close button */}
-        <button
-          data-modal-close="true"
-          onClick={() => void handleSafeClose()}
-          className="absolute top-[calc(0.75rem+env(safe-area-inset-top,0px))] sm:top-4 right-3.5 sm:right-4 p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] transition-colors cursor-pointer"
-        >
-          <X size={18} />
-        </button>
-
-        {/* Modal Header — safe-area Notch */}
-        <div className="mb-4 pr-10 pt-[calc(0.25rem+env(safe-area-inset-top,0px))] sm:pt-0 flex items-start justify-between flex-wrap gap-2">
-          <div>
-            <h3 className="text-base sm:text-lg font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
-              <CalendarIcon size={18} className="text-[#008069] flex-shrink-0" />
-              <span>{mode === 'edit' ? '✏️ Edit Data Reservasi' : isMultiSession ? `📅 Buat Paket ${multiSessionTotal} Sesi` : 'Buat Jadwal Reservasi Baru'}</span>
-            </h3>
-            <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
-              {mode === 'edit'
-                ? 'Perbarui rincian layanan, pasien anak, tanggal, jam, terapis, dan tarif reservasi'
-                : 'Mendukung multi-treatment, reservasi 2 anak, dan rekomendasi jam'}
-            </p>
-          </div>
-
-        </div>
-
-        {/* Pre-flight double-booking warning */}
-        {mode !== 'edit' && customerConflictsForDate.length > 0 && (
-          <div className="mb-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800/50 rounded-xl text-xs text-amber-900 dark:text-amber-200">
-            <p className="font-bold flex items-center space-x-1.5">
-              <span>⚠️ {(selectedCustomerInfo?.name || 'Customer')} sudah memiliki {customerConflictsForDate.length} reservasi aktif pada tanggal ini</span>
-            </p>
-            <ul className="mt-1.5 space-y-1">
-              {customerConflictsForDate.slice(0, 3).map((r: any) => {
-                let timeLabel = '-';
-                try {
-                  timeLabel = `${getWibHoursAndMinutes(r.booking_date!).timeFormatted} WIB`;
-                } catch {}
-                return (
-                  <li key={r.id} className="flex items-center justify-between gap-2">
-                    <span className="truncate">• Pukul {timeLabel} — {r.treatment_detail || r.status}</span>
-                  </li>
-                );
-              })}
-            </ul>
-            <p className="mt-1.5 text-[11px]"> Disarankan alihkan ke mode edit jadwal yang sudah ada daripada membuat duplikat.</p>
-          </div>
-        )}
-
-        {/* Scrollable Form Body — footer aksi dipisah KE LUAR area gulir tetapi tetap
-            DI DALAM <form> (type="submit" & dirty-tracking tetap hidup — anti tombol mati) */}
-        <form ref={formDirtyContainerRef} onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 w-full">
-          <div className="space-y-4 overflow-y-auto overflow-x-hidden pr-1 flex-1 min-h-0 w-full max-w-full touch-pan-y overscroll-contain scroll-pb-32 sm:scroll-pb-8" style={{ WebkitOverflowScrolling: 'touch' as any }}>
-          {/* Draft Restore Banner — di dalam scroll agar ikut tergulir (non-sticky), tidak di mode edit */}
-          {mode !== 'edit' && hasDraft && (
-            <div className="p-2 sm:p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-xl flex items-center justify-between text-[11px] sm:text-xs text-amber-900 dark:text-amber-200 animate-in fade-in">
-              <div className="flex items-center space-x-2">
-                <FileText size={15} className="text-amber-600 shrink-0" />
-                <span>
-                  Ditemukan draf reservasi yang tersimpan <strong>{draftTimeAgo}</strong>.
-                </span>
-              </div>
-              <div className="flex items-center space-x-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={restoreDraft}
-                  className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg shadow-xs transition cursor-pointer"
-                >
-                  Pulihkan
-                </button>
-                <button
-                  type="button"
-                  onClick={() => discardDraft(false)}
-                  className="px-2 py-1 text-amber-800 hover:text-rose-600 text-xs font-semibold cursor-pointer"
-                >
-                  Buang
-                </button>
-              </div>
-            </div>
-          )}
-          {/* Section 1: Customer Picker */}
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider block">
-              Customer / Pasien *
-            </label>
-            {mode === 'edit' ? (
-              <div className="p-3 bg-[#f0f2f5] dark:bg-[#1c272e] border border-[#d1d7db] dark:border-[#374248] rounded-xl flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <div className="flex items-center space-x-2">
-                    <span className="font-bold text-xs text-[#111b21] dark:text-[#e9edef]">{selectedCustomerInfo?.name || 'Bunda'}</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold">Terkunci (Mode Edit)</span>
-                  </div>
-                  <p className="text-xs text-[#667781] dark:text-[#8696a0] font-mono">{selectedCustomerInfo?.phone}</p>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={customerSearch}
-                    onChange={(e) => handleCustomerSearch(e.target.value)}
-                    placeholder="Cari nama atau nomor WhatsApp customer..."
-                    enterKeyHint="search"
-                    inputMode="search"
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck="false"
-                    className="w-full pl-9 pr-4 py-2.5 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-medium"
-                  />
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-[#8696a0] pointer-events-none">
-                    <Search size={14} />
-                  </span>
-                  {customerId && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCustomerId('');
-                        setCustomerSearch('');
-                        setSelectedCustomerInfo(null);
-                      }}
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#8696a0] hover:text-rose-500 cursor-pointer"
-                    >
-                      <X size={14} />
-                    </button>
-                  )}
-                </div>
-
-                {searchingCustomer && (
-                  <p className="text-[11px] text-[#008069] font-semibold animate-pulse">
-                    Mencari data customer...
-                  </p>
-                )}
-
-                {/* Customer search results dropdown */}
-                {customerResults.length > 0 && !customerId && (
-              <div className="border border-[#e9edef] dark:border-[#2a3942] rounded-xl bg-white dark:bg-[#111b21] max-h-48 overflow-y-auto divide-y divide-[#e9edef] dark:divide-[#2a3942] shadow-lg z-20">
-                {customerResults.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => handleSelectCustomer(c)}
-                    className="w-full text-left px-3 py-2.5 hover:bg-[#f8fafc] text-xs text-[#111b21] dark:text-[#e9edef] flex justify-between items-center transition-colors cursor-pointer"
-                  >
-                    <div>
-                      <span className="font-bold">{c.name || 'Bunda'}</span>
-                      <span className="text-[#667781] dark:text-[#8696a0] ml-2 font-mono">{c.phone}</span>
-                      {c.kelurahan && (
-                        <p className="text-[10px] text-[#8696a0]">
-                          {c.kelurahan}, {c.kecamatan}
-                        </p>
-                      )}
-                    </div>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#e8f5f2] text-[#008069] font-bold">
-                      Pilih
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-              </>
-            )}
-
-            {/* Selected Customer Details Banner */}
-            {mode !== 'edit' && selectedCustomerInfo && (
-              <div className="p-3 bg-[#e8f5f2] border border-[#c2e7e0] rounded-xl flex items-start justify-between text-xs text-[#008069]">
-                <div className="space-y-0.5">
-                  <p className="font-bold">{selectedCustomerInfo.name || 'Bunda'} ({selectedCustomerInfo.phone})</p>
-                  {selectedCustomerInfo.kelurahan && (
-                    <p className="text-[11px] text-[#54656f] dark:text-[#aebac1] flex items-center space-x-1">
-                      <MapPin size={11} className="text-[#008069]" />
-                      <span>{selectedCustomerInfo.kelurahan}, {selectedCustomerInfo.kecamatan} ({selectedCustomerInfo.distance_km?.toFixed(1) || '0'} km)</span>
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-            {/* Multi-Address Selector (Micro-Task 4.1: tampil bila >= 1) */}
-            {savedAddresses.length >= 1 && (
-              <div className="p-2.5 bg-[#f0f2f5] dark:bg-[#202c33] rounded-xl border border-[#d1d7db] dark:border-[#2a3942] space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-1">
-                      <Home size={13} className="text-[#008069]" />
-                      <span>Pilih Alamat Rumah ({savedAddresses.length}/10 tersimpan):</span>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCustomerAddressId(null);
-                        setSavedAsNewHouse(true);
-                        toast('Mode alamat baru aktif untuk jadwal ini.', 'info');
-                      }}
-                      className="text-[11px] font-semibold text-[#008069] hover:underline cursor-pointer"
-                    >
-                      + Alamat Baru Untuk Jadwal Ini
-                    </button>
-                  </div>
-                  {savedAddresses.length >= 10 && (
-                    <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded px-1.5 py-0.5">
-                      Kapasitas Penuh (10/10)
-                    </span>
-                  )}
-                </div>
-                {savedAddresses.length >= 10 && (
-                  <p className="text-[11px] text-amber-700 dark:text-amber-300">
-                    Kapasitas kartu tersimpan penuh (maks 10). Alamat baru akan menggantikan alamat sekunder terlama.
-                  </p>
-                )}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                  {savedAddresses.map((addrItem: any) => {
-                    const isSelected = customerAddressId === addrItem.id;
-                    return (
-                      <button
-                        key={addrItem.id}
-                        type="button"
-                        onClick={() => {
-                          setCustomerAddressId(addrItem.id);
-                          setSavedAsNewHouse(false);
-                          if (addrItem.address) setAddress(addrItem.address);
-                          if (addrItem.landmark) setLandmark(addrItem.landmark);
-                          if (addrItem.ongkir != null) {
-                            setOngkir(addrItem.ongkir);
-                          } else if (addrItem.distanceKm) {
-                            const calc = calculateOngkirFromTiers(Number(addrItem.distanceKm), deliveryTiers);
-                            if (!calc.isOutOfCoverage) setOngkir(calc.netOngkir);
-                          }
-                        }}
-                        className={`text-left p-2.5 rounded-lg border text-xs min-h-[44px] transition-all cursor-pointer active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-[#008069] focus-visible:outline-none ${
-                          isSelected
-                            ? 'bg-[#e8f5f2] border-[#008069] text-[#008069] font-medium shadow-sm'
-                            : 'bg-white dark:bg-[#111b21] border-[#e9edef] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:bg-[#f5f6f6]'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between font-bold text-xs">
-                          <span>{addrItem.label || (addrItem.isPrimary ? 'Rumah Utama' : 'Rumah Kedua')}</span>
-                          {addrItem.isPrimary && (
-                            <span className="text-[11px] bg-[#008069]/10 text-[#008069] px-1.5 py-0.5 rounded font-semibold">
-                              Primary
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[11px] truncate text-[#667781] dark:text-[#8696a0] mt-0.5">
-                          {addrItem.address || `${addrItem.kelurahan || ''}, ${addrItem.kecamatan || ''}`}
-                        </p>
-                        {addrItem.distanceKm != null && (
-                          <p className="text-[11px] text-[#8696a0] mt-0.5">
-                            {addrItem.distanceKm} km · Ongkir Rp{(addrItem.ongkir || 0).toLocaleString('id-ID')}
-                          </p>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Alamat jalan fisik & patokan rumah (auto-prefill dari chat/profil) */}
-            {(mode !== 'edit' ? Boolean(selectedCustomerInfo) : true) && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider block">
-                    Alamat Lengkap (Jalan, RT/RW, No. Rumah)
-                  </label>
-                  <input
-                    type="text"
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    placeholder="cth: Jl. Kedungklinter 1 No. 80"
-                    autoComplete="off"
-                    spellCheck="false"
-                    className="w-full px-3 py-2 bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-medium"
-                  />
-                  {(mismatchComputed || savedAsNewHouse || correctingCardId) && (
-                    <div className="mt-1 flex flex-wrap items-center gap-2">
-                      {mismatchActive && (
-                        <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded px-2 py-1">
-                          ⚠️ Teks alamat berbeda dengan kartu terpilih
-                        </span>
-                      )}
-                      {savedAsNewHouse && (
-                        <span className="text-[11px] font-semibold text-[#008069] bg-[#e8f5f2] border border-[#c2e7e0] rounded px-2 py-1 inline-flex items-center gap-1">
-                          <Home size={11} />
-                          Akan disimpan sebagai rumah baru
-                        </span>
-                      )}
-                      {correctingCardId && (
-                        <span className="text-[11px] font-semibold text-sky-700 bg-sky-50 border border-sky-200 rounded px-2 py-1 inline-flex items-center gap-1">
-                          <Pencil size={11} />
-                          Kartu sedang diperbarui
-                        </span>
-                      )}
-                      {!savedAsNewHouse && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCustomerAddressId(null);
-                              setSavedAsNewHouse(true);
-                              toast('Alamat baru akan disimpan sebagai rumah baru saat reservasi disimpan.', 'info');
-                            }}
-                            className="min-h-[44px] inline-flex items-center px-2.5 py-1 text-xs font-bold text-[#008069] bg-[#008069]/10 hover:bg-[#008069]/20 active:scale-[0.98] rounded-lg transition-transform focus-visible:ring-2 focus-visible:ring-[#008069] focus-visible:outline-none cursor-pointer"
-                          >
-                            + Simpan Sebagai Rumah Baru
-                          </button>
-                          {selectedCard && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setCorrectingCardId(selectedCard.id);
-                                setShowAddressDrawer(true);
-                              }}
-                              className="min-h-[44px] inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 active:scale-[0.98] rounded-lg transition-transform focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:outline-none cursor-pointer"
-                            >
-                              <Pencil size={12} />
-                              <span>Perbarui Kartu Ini</span>
-                            </button>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider block">
-                    Patokan / Landmark
-                  </label>
-                  <input
-                    type="text"
-                    value={landmark}
-                    onChange={(e) => setLandmark(e.target.value)}
-                    placeholder="cth: Rolling door putih, yg jual kusen"
-                    autoComplete="off"
-                    spellCheck="false"
-                    className="w-full px-3 py-2 bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-medium"
-                  />
-                </div>
-              </div>
-            )}
-            {/* Active Schedule Warning — anti split-brain duplicate booking */}
-            {mode !== 'edit' && activeReservations.length > 0 && (
-              <div className="mt-2 p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded-xl text-amber-950 dark:text-amber-200">
-                <div className="flex items-center gap-2 font-bold text-sm">
-                  <AlertTriangle className="text-amber-600 dark:text-amber-400 shrink-0" size={18} />
-                  <span>Peringatan: Customer ini memiliki jadwal treatment yang masih aktif!</span>
-                </div>
-                <ul className="mt-1.5 space-y-1">
-                  {activeReservations.slice(0, 3).map((item: any) => {
-                    let label = '—';
-                    try {
-                      label = new Date(item.booking_date).toLocaleString('id-ID', {
-                        weekday: 'short',
-                        day: 'numeric',
-                        month: 'short',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      });
-                    } catch {}
-                    return (
-                      <li key={item.id} className="text-xs text-amber-800 dark:text-amber-300">
-                        Jadwal: <b>{item.treatment_detail || 'Treatment'}</b> pada <b>{label}</b>{' '}
-                        (Status: {item.status})
-                      </li>
-                    );
-                  })}
-                </ul>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  {onEditReservation && (
-                    <button
-                      type="button"
-                      onClick={() => onEditReservation(activeReservations[0])}
-                      className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-semibold hover:bg-amber-700 transition-colors cursor-pointer"
-                    >
-                      ✏️ Edit Reservasi Eksisting
-                    </button>
-                  )}
-                  <span className="text-xs text-amber-700 dark:text-amber-400">
-                    atau lanjutkan jika customer memesan sesi/anak tambahan.
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Section: Data Anak / Bayi (Multi-Anak Support) */}
-          {treatmentCategory !== 'MOMS' && (
-            <div className="space-y-2 p-3.5 bg-[#f8fafc] dark:bg-[#141e24] border border-[#e9edef] dark:border-[#2a3942] rounded-xl">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-[#008069] uppercase tracking-wider flex items-center space-x-1.5">
-                  <Baby size={14} />
-                  <span>Data Pasien Anak / Bayi ({babies.length} Anak)</span>
-                </span>
-                <button
-                  type="button"
-                  onClick={handleAddBaby}
-                  className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#1c272e] border border-[#d1d7db] dark:border-[#374248] text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] shadow-xs flex items-center space-x-1 cursor-pointer active:scale-95"
-                >
-                  <Plus size={12} />
-                  <span>+ Tambah Anak</span>
-                </button>
-              </div>
-
-              {babies.length === 0 ? (
-                <p className="text-[11px] text-[#8696a0] italic">
-                  Belum ada data anak yang diisi (opsional jika perawatan khusus Bunda).
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {babies.map((b, idx) => (
-                    <div key={idx} className="p-2.5 bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl space-y-2 shadow-2xs">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Anak #{idx + 1}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveBaby(idx)}
-                          className="text-[#8696a0] hover:text-rose-600 p-1 cursor-pointer transition"
-                          title="Hapus anak ini"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <input
-                          type="text"
-                          value={b.name}
-                          onChange={(e) => handleUpdateBaby(idx, 'name', e.target.value)}
-                          placeholder="Nama Lengkap / Panggilan Anak"
-                          className="p-2 bg-white dark:bg-[#1c272e] border border-[#d1d7db] dark:border-[#374248] rounded-lg text-xs text-[#111b21] dark:text-[#e9edef]"
-                        />
-                        <input
-                          type="text"
-                          value={b.ageText}
-                          onChange={(e) => handleUpdateBaby(idx, 'ageText', e.target.value)}
-                          placeholder="Usia (misal: 8 bulan / 2 tahun)"
-                          className="p-2 bg-white dark:bg-[#1c272e] border border-[#d1d7db] dark:border-[#374248] rounded-lg text-xs text-[#111b21] dark:text-[#e9edef]"
-                        />
-                      </div>
-                      {/* Quick Age Preset Chips — 1-tap ramah jempol mobile (preset UI presentational, bukan katalog/tarif) */}
-                      <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                        <span className="text-[10px] text-[#8696a0] font-semibold">Pilih Cepat:</span>
-                        {['Newborn', '1 bln', '2 bln', '3 bln', '6 bln', '1 thn', '2 thn'].map((preset) => (
-                          <button
-                            key={preset}
-                            type="button"
-                            onClick={() => handleUpdateBaby(idx, 'ageText', preset)}
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition-colors cursor-pointer active:scale-95 ${
-                              b.ageText?.trim().toLowerCase() === preset.toLowerCase()
-                                ? 'bg-emerald-600 text-white border-emerald-600'
-                                : 'bg-white dark:bg-[#1c272e] border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:bg-emerald-50 hover:text-emerald-700'
-                            }`}
-                          >
-                            {preset}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-
-                  {babies.length > 1 && selectedTreatments.length === 1 && (
-                    <div className="p-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-lg text-[11px] text-amber-800 dark:text-amber-200 flex items-center justify-between">
-                      <span>💡 Anda mengisi 2 anak. Ingin menambah treatment untuk anak ke-2?</span>
-                      <button
-                        type="button"
-                        onClick={() => handleDuplicateTreatment(selectedTreatments[0])}
-                        className="px-2 py-0.5 bg-amber-600 text-white rounded font-bold text-[10px] hover:bg-amber-700 cursor-pointer shrink-0 ml-2 active:scale-95"
-                      >
-                        + Duplikat Layanan
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Section 2: Multi-Treatment Selection (Supports multiple identical treatments for 2 children) */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider block flex items-center space-x-1.5">
-                <Sparkles size={14} className="text-[#008069]" />
-                <span>Pilih Layanan / Treatment ({selectedTreatments.length} Dipilih) *</span>
-              </label>
-              {!showCustomServiceInput && (
-                <button
-                  type="button"
-                  onClick={() => setShowCustomServiceInput(true)}
-                  className="text-xs text-[#008069] hover:underline font-semibold inline-flex items-center gap-1 cursor-pointer"
-                >
-                  + Tambah Treatment Kustom
-                </button>
-              )}
-              {showCustomServiceInput && (
-                <button
-                  type="button"
-                  onClick={() => setShowCustomServiceInput(false)}
-                  className="text-[11px] text-[#008069] font-bold hover:underline cursor-pointer"
-                >
-                  Batal Kustom
-                </button>
-              )}
-            </div>
-
-            {/* Custom service creator input */}
-            {showCustomServiceInput && (
-              <div className="p-3 bg-[#f8fafc] border border-[#e9edef] dark:border-[#2a3942] rounded-xl space-y-2">
-                <p className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Tambah Treatment Manual / Kustom</p>
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
-                  <input
-                    type="text"
-                    value={customServiceName}
-                    onChange={(e) => setCustomServiceName(e.target.value)}
-                    placeholder="Nama treatment kustom"
-                    autoComplete="off"
-                    className="p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-lg text-xs text-[#111b21] dark:text-[#e9edef]"
-                  />
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="number"
-                      value={customServiceDuration}
-                      onChange={(e) => setCustomServiceDuration(e.target.value === '' ? '' : Number(e.target.value))}
-                      placeholder="60"
-                      className="w-20 p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-lg text-xs text-[#111b21] dark:text-[#e9edef]"
-                    />
-                    <span className="text-xs text-[#667781] dark:text-[#8696a0]">mnt</span>
-                    <ToggleSwitch
-                      checked={customIsAddon}
-                      onChange={(next) => setCustomIsAddon(next)}
-                      size="sm"
-                      onLabel="Add-on (0m)"
-                      offLabel="Standar"
-                      title="Add-on: treatment tambahan tanpa buffer perjalanan (0 menit)"
-                    />
-                  </div>
-                  <div className="relative">
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-[#667781] dark:text-[#8696a0]">Rp</span>
-                    <input
-                      type="number"
-                      value={customServicePrice}
-                      onChange={(e) => setCustomServicePrice(e.target.value === '' ? '' : Number(e.target.value))}
-                      placeholder="0"
-                      className="w-full pl-8 pr-2 p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-lg text-xs text-[#111b21] dark:text-[#e9edef]"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleAddCustomTreatment}
-                    className="px-3 py-2 bg-[#008069] text-white rounded-lg text-xs font-bold hover:bg-[#00a884] cursor-pointer"
-                  >
-                    Tambahkan
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Catalog Selector Dropdown Button */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setIsServiceDropdownOpen(!isServiceDropdownOpen)}
-                className="w-full p-2.5 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-left text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs flex items-center justify-between cursor-pointer"
-              >
-                <div className="flex items-center space-x-2 truncate">
-                  <Plus size={14} className="text-[#008069] flex-shrink-0" />
-                  <span className="truncate font-semibold text-[#54656f] dark:text-[#aebac1]">
-                    {selectedTreatments.length > 0
-                      ? `${selectedTreatments.length} treatment dipilih (klik untuk ubah/tambah)...`
-                      : '+ Klik untuk memilih treatment dari katalog layanan...'}
-                  </span>
-                </div>
-                <ChevronDown size={14} className="text-[#8696a0] flex-shrink-0" />
-              </button>
-
-              {/* Dropdown Menu with Stepper Qty and OK/Selesai Confirmation Button */}
-              {isServiceDropdownOpen && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#374248] rounded-2xl shadow-2xl z-40 p-2.5 space-y-2 max-h-72 flex flex-col">
-                  {/* Search inside dropdown */}
-                  <div className="relative shrink-0">
-                    <input
-                      type="text"
-                      name="service-search-input"
-                      value={serviceSearch}
-                      onChange={(e) => setServiceSearch(e.target.value)}
-                      placeholder="Cari layanan (misal: Pijat Bayi, Laktasi, Moksa)..."
-                      enterKeyHint="search"
-                      inputMode="search"
-                      autoComplete="off"
-                      autoCorrect="off"
-                      spellCheck="false"
-                      className="w-full pl-8 pr-3 py-1.5 bg-[#f0f2f5] border border-[#d1d7db] dark:border-[#374248] rounded-lg text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069]"
-                      autoFocus
-                    />
-                    <Search size={13} className="absolute left-2.5 top-2.5 text-[#8696a0]" />
-                  </div>
-
-                  {/* Services List with Quantity Controls */}
-                  <div className="divide-y divide-[#e9edef] dark:divide-[#2a3942] overflow-y-auto flex-1 pr-1">
-                    {filteredServices.map((srv) => {
-                      const count = selectedTreatments.filter((t) => t.serviceId === srv.id).length;
-                      const isAddon = isAddonService(srv);
-                      return (
-                        <div
-                          key={srv.id}
-                          className={`p-2 rounded-lg transition-colors flex items-center justify-between group ${
-                            count > 0 ? 'bg-[#e8f5f2]/70' : 'hover:bg-[#f0f2f5]'
-                          }`}
-                        >
-                          <div className="flex-1 min-w-0 pr-2">
-                            <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
-                              <span className="font-bold text-xs text-[#111b21] dark:text-[#e9edef] group-hover:text-[#008069] truncate">
-                                {srv.name}
-                              </span>
-                              {(() => {
-                                const ageLabel = srv.ageTier?.label || (srv as any).age_label;
-                                if (!ageLabel) return null;
-                                return (
-                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-bold shrink-0 bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800">
-                                    🎯 {ageLabel}
-                                  </span>
-                                );
-                              })()}
-                              <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold shrink-0 ${
-                                isAddon
-                                  ? 'bg-amber-100 text-amber-800'
-                                  : 'bg-[#f0f2f5] text-[#54656f] dark:text-[#aebac1]'
-                              }`}>
-                                {isAddon ? 'Add-on (0m buffer)' : srv.category}
-                              </span>
-                            </div>
-                            <div className="flex items-center space-x-2 text-[10px] text-[#667781] dark:text-[#8696a0] mt-0.5">
-                              <span>Durasi: {srv.durationMinutes} mnt {!isAddon && '(+20m buffer)'}</span>
-                              <span>•</span>
-                              <span className="font-bold text-[#008069]">
-                                Rp {srv.promoPrice ? srv.promoPrice.toLocaleString('id-ID') : srv.originalPrice?.toLocaleString('id-ID')}
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Stepper Quantity Buttons */}
-                          <div className="shrink-0">
-                            {count === 0 ? (
-                              <button
-                                type="button"
-                                onClick={() => handleAddServiceInstance(srv)}
-                                className="px-2.5 py-1 rounded-lg bg-white hover:bg-[#008069] text-[#008069] hover:text-white border border-[#008069] text-xs font-bold transition shadow-2xs active:scale-95 cursor-pointer"
-                              >
-                                + Pilih
-                              </button>
-                            ) : (
-                              <div className="flex items-center space-x-1 bg-white border border-[#c2e7e0] rounded-lg p-0.5 shadow-2xs">
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveLastServiceInstance(srv.id)}
-                                  className="w-6 h-6 rounded bg-[#f0f2f5] hover:bg-rose-100 text-[#54656f] dark:text-[#aebac1] hover:text-rose-700 font-bold text-xs flex items-center justify-center transition cursor-pointer"
-                                  title="Kurangi 1 treatment"
-                                >
-                                  <Minus size={11} />
-                                </button>
-                                <span className="w-5 text-center font-extrabold text-xs text-[#008069]">
-                                  {count}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleAddServiceInstance(srv)}
-                                  className="w-6 h-6 rounded bg-[#008069] hover:bg-[#00a884] text-white font-bold text-xs flex items-center justify-center transition cursor-pointer"
-                                  title="Tambah lagi (misal untuk Anak ke-2)"
-                                >
-                                  <Plus size={11} />
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Bottom Checklist / OK Button */}
-                  <div className="pt-2 border-t border-[#e9edef] dark:border-[#2a3942] flex items-center justify-between shrink-0">
-                    <span className="text-[11px] font-semibold text-[#008069]">
-                      ✓ {selectedTreatments.length} treatment terpilih
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setIsServiceDropdownOpen(false)}
-                      className="px-3.5 py-1.5 bg-[#008069] hover:bg-[#00a884] text-white rounded-lg text-xs font-bold transition flex items-center space-x-1.5 shadow-xs cursor-pointer active:scale-95"
-                    >
-                      <Check size={14} />
-                      <span>Selesai Memilih</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Selected Treatments Chips / List */}
-            {selectedTreatments.length > 0 && (
-              <div className="space-y-2 p-3 bg-[#f8fafc] border border-[#e9edef] dark:border-[#2a3942] rounded-xl">
-                <div className="flex items-center justify-between">
-                  <p className="text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] uppercase tracking-wider">
-                    Daftar Treatment Terpilih ({selectedTreatments.length} Layanan):
-                  </p>
-                  {babies.length > 1 && (
-                    <span className="text-[10px] text-[#008069] font-bold bg-[#e8f5f2] px-2 py-0.5 rounded-full border border-[#c2e7e0]">
-                      2+ Anak Terdaftar
-                    </span>
-                  )}
-                </div>
-
-                <div className="space-y-1.5">
-                  {selectedTreatments.map((t, idx) => {
-                    const isAddon = isAddonService(t);
-                    return (
-                      <div
-                        key={t.instanceId || idx}
-                        className="p-2.5 bg-white dark:bg-[#1c272e] border border-[#e9edef] dark:border-[#2a3942] rounded-xl text-xs shadow-2xs space-y-2"
-                      >
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                          <div className="flex items-start space-x-2 min-w-0">
-                            <span className="h-5 w-5 rounded-full bg-[#e8f5f2] text-[#008069] flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5 sm:mt-0">
-                              #{idx + 1}
-                            </span>
-                            <div className="min-w-0">
-                              <div className="flex items-center flex-wrap gap-1.5">
-                                <span className="font-bold text-[#111b21] dark:text-[#e9edef]">{t.name}</span>
-                                <span className="text-[#667781] dark:text-[#8696a0] text-[11px]">({t.durationMinutes} mnt)</span>
-                                <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
-                                  isAddon
-                                    ? 'bg-amber-100 text-amber-800'
-                                    : 'bg-[#e8f5f2] text-[#008069]'
-                                }`}>
-                                  {isAddon ? 'Add-on (0m buffer)' : 'Layanan Utama (+20m buffer)'}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-between sm:justify-end space-x-2 shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-[#f0f2f5]">
-                            {/* Inline Editable Price Input */}
-                            <div className="flex items-center space-x-1 bg-[#f8fafc] border border-[#d1d7db] dark:border-[#374248] hover:border-[#008069] focus-within:border-[#008069] focus-within:ring-1 focus-within:ring-[#008069] rounded-lg px-2 py-0.5 shadow-2xs transition">
-                              <span className="text-[10px] font-bold text-[#667781] dark:text-[#8696a0]">Rp</span>
-                              <input
-                                type="number"
-                                value={t.price === 0 ? '' : t.price}
-                                onChange={(e) => handleUpdateTreatmentPrice(t.instanceId, e.target.value === '' ? 0 : Number(e.target.value))}
-                                placeholder="0"
-                                step={5000}
-                                min={0}
-                                className="w-20 bg-transparent text-xs font-extrabold text-[#008069] focus:outline-none text-right font-mono"
-                                title="Ubah tarif harga treatment ini jika ada harga khusus"
-                              />
-                            </div>
-
-                            <div className="flex items-center space-x-1">
-                              {/* Duplicate Button for second child */}
-                              {babies.length > 1 && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleDuplicateTreatment(t)}
-                                  className="p-1 rounded-md text-[#008069] hover:bg-[#e8f5f2] transition flex items-center space-x-1 cursor-pointer text-[10px] font-bold border border-[#c2e7e0]"
-                                  title="Duplikat treatment ini untuk anak lainnya"
-                                >
-                                  <Copy size={11} />
-                                  <span className="hidden sm:inline">+ Duplikat Anak</span>
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveTreatment(t.instanceId)}
-                                className="text-[#8696a0] hover:text-rose-600 p-1.5 rounded-md hover:bg-rose-50 cursor-pointer transition"
-                                title="Hapus treatment"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Child Assignment Dropdown (If customer has children) */}
-                        {babies.length > 0 && t.category !== 'MOMS' && (
-                          <div className="flex items-center space-x-2 pt-1.5 border-t border-[#f0f2f5] text-[11px] flex-wrap sm:flex-nowrap gap-1">
-                            <span className="text-[#667781] dark:text-[#8696a0] font-semibold flex items-center space-x-1 shrink-0">
-                              <Baby size={11} className="text-[#008069]" />
-                              <span>Ditujukan untuk:</span>
-                            </span>
-                            <select
-                              value={t.assignedChildIndex ?? 0}
-                              onChange={(e) => handleUpdateTreatmentChild(t.instanceId, Number(e.target.value))}
-                              className="flex-1 min-w-0 max-w-full sm:max-w-xs px-2 py-1 bg-[#f0f2f5] border border-[#d1d7db] dark:border-[#374248] rounded-lg text-xs font-bold text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] cursor-pointer truncate"
-                            >
-                              {babies.map((b, bIdx) => (
-                                <option key={bIdx} value={bIdx}>
-                                  👶 Anak #{bIdx + 1}: {b.name || `Anak ${bIdx + 1}`} {b.ageText ? `(${b.ageText})` : ''}
-                                </option>
-                              ))}
-                              <option value={-1}>👩 Bunda / Umum</option>
-                            </select>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Duration & Buffer Breakdown */}
-                <div className="pt-2 border-t border-[#e9edef] dark:border-[#2a3942] flex flex-wrap items-center gap-2 text-xs">
-                  <span className="px-2.5 py-1 rounded-lg bg-white border border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] font-medium">
-                    🕒 Durasi Layanan: <strong className="text-[#111b21] dark:text-[#e9edef]">{pureDurationMinutes} mnt</strong>
-                  </span>
-                  <span className="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 text-amber-800 dark:text-amber-200 font-medium">
-                    ☕ Buffer Jeda: <strong>+{totalBufferMinutes} mnt</strong> ({mainTreatmentsCount} Utama @20m{addonTreatmentsCount > 0 ? `, ${addonTreatmentsCount} Add-on @0m` : ''})
-                  </span>
-                  <span className="px-2.5 py-1 rounded-lg bg-[#e8f5f2] dark:bg-[#00a884]/15 border border-[#c2e7e0] dark:border-[#00a884]/30 text-[#008069] dark:text-[#00a884] font-bold">
-                    ⏱️ Total Waktu: {totalScheduledDurationMinutes} mnt
-                  </span>
-                  <span className="px-2.5 py-1 rounded-lg bg-[#008069] text-white font-bold">
-                    🏁 Selesai: {calculateEndTime()} WIB
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Section 3: Waktu, Bidan & Ketersediaan Jadwal Terpadu */}
-          <div className="space-y-3 pt-2 border-t border-[#e9edef] dark:border-[#2a3942]">
-            {/* Row 1: Bidan, Tanggal Kunjungan, Status Booking */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {/* 1. Penugasan Bidan / Terapis */}
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider block flex items-center space-x-1">
-                    <UserCheck size={12} className="text-[#008069]" />
-                    <span>Terapis / Bidan</span>
-                  </label>
-                  {user?.id && effectiveStaffList.some((s) => s.id === user.id) && (
-                    <button
-                      type="button"
-                      onClick={() => setAssignedStaffId(user.id)}
-                      className="text-[10px] text-[#008069] font-bold hover:underline flex items-center gap-0.5 cursor-pointer bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800/50 active:scale-95"
-                    >
-                      <span>⚡ Saya</span>
-                    </button>
-                  )}
-                </div>
-                <select
-                  value={assignedStaffId}
-                  onChange={(e) => setAssignedStaffId(e.target.value)}
-                  className="w-full p-2 bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-semibold"
-                >
-                  <option value="">-- Pilih / Acak Bidan --</option>
-                  {effectiveStaffList
-                    .filter((s) => s.active !== false || s.id === assignedStaffId)
-                    .map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} {s.active === false ? '(Nonaktif)' : s.role === 'THERAPIST' ? '(Terapis)' : `(${s.role})`}
-                      </option>
-                    ))}
-                </select>
-              </div>
-
-              {/* 2. Tanggal Kunjungan */}
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider block">
-                    Tanggal Kunjungan *
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setShowBookedSlotsModal(true)}
-                    className="text-[11px] text-[#008069] font-bold hover:underline flex items-center space-x-1 cursor-pointer"
-                  >
-                    <Eye size={12} />
-                    <span>Terisi ({bookedReservationsForDate.length})</span>
-                  </button>
-                </div>
-                <div className="flex items-center space-x-1.5">
-                  <input
-                    type="date"
-                    required
-                    value={bookingDate}
-                    onChange={(e) => {
-                      setBookingDate(e.target.value);
-                      setHasCalculatedRecommendations(false);
-                    }}
-                    className="flex-1 p-2 bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-semibold"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowBookedSlotsModal(true)}
-                    className="p-2 bg-[#e8f5f2] dark:bg-[#00a884]/20 hover:bg-[#c2e7e0] text-[#008069] rounded-xl border border-[#c2e7e0] dark:border-[#00a884]/30 shadow-xs transition cursor-pointer active:scale-95"
-                    title="Lihat Jadwal Terisi Hari Ini"
-                  >
-                    <CalendarDays size={16} />
-                  </button>
-                </div>
-              </div>
-
-              {/* 3. Status Booking */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider block">
-                  Status Pembayaran
-                </label>
-                <select
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value as any)}
-                  className="w-full p-2 bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-semibold"
-                >
-                  <option value="pending">Menunggu Pembayaran (Pending)</option>
-                  <option value="confirmed">Terjadwal Resmi (Confirmed)</option>
-                  <option value="hold">Hold / Ditawarkan Sementara</option>
-                  <option value="completed">Selesai Treatment (Completed)</option>
-                  <option value="cancelled">Dibatalkan (Cancelled)</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Visual Therapist Schedule Strip (08:00 - 18:00 WIB) */}
-            {bookingDate && (
-              <StaffScheduleTimelineStrip
-                selectedStaff={effectiveStaffList.find((s) => s.id === assignedStaffId) || null}
-                allStaff={effectiveStaffList}
-                onSelectStaff={(staffId) => setAssignedStaffId(staffId)}
-                bookingDate={bookingDate}
-                currentSelectedTime={bookingTime}
-                treatmentDurationMinutes={totalScheduledDurationMinutes || 80}
-                bookedReservations={bookedReservationsForDate}
-                onSelectTimeSlot={(slot) => setBookingTime(slot)}
-                currentReservationId={initialReservation?.id || null}
-              />
-            )}
-
-            {/* Jam Mulai (WIB) & Tombol Rekomendasikan Jam */}
-            <div className="p-3 bg-[#f8fafc] dark:bg-[#1c272e] border border-[#d1d7db] dark:border-[#374248] rounded-xl flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center space-x-2">
-                <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] shrink-0">
-                  Jam Mulai (WIB) *:
-                </label>
-                <input
-                  type="time"
-                  required
-                  value={bookingTime}
-                  onChange={(e) => setBookingTime(e.target.value)}
-                  className="w-28 p-2 bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-bold"
-                />
-              </div>
-
-              <button
-                type="button"
-                onClick={handleGenerateRecommendations}
-                className="text-xs text-[#008069] dark:text-[#00a884] font-bold hover:underline flex items-center space-x-1.5 cursor-pointer bg-white dark:bg-[#111b21] px-3 py-2 rounded-xl border border-[#d1d7db] dark:border-[#374248] shadow-2xs active:scale-95"
-              >
-                <Zap size={13} className="text-amber-500 fill-amber-500" />
-                <span>Rekomendasikan Jam</span>
-              </button>
-            </div>
-
-            {/* Real-time Overlap & Travel Time Warning Banner */}
-            {realtimeCollisions.staffCollisions.length > 0 && (
-              <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded-xl text-xs text-amber-900 dark:text-amber-200 space-y-1.5 animate-fadeIn">
-                <p className="font-bold flex items-center gap-1.5 text-amber-800 dark:text-amber-300">
-                  <span>⚠️ Jadwal Bentrok dengan Bidan Terpilih ({realtimeCollisions.staffCollisions[0].staffName})</span>
-                </p>
-                <ul className="space-y-1 text-[11px]">
-                  {realtimeCollisions.staffCollisions.map((b) => (
-                    <li key={b.id} className="flex items-center justify-between gap-2">
-                      <span className="truncate">
-                        • Pasien <strong>Ny. {b.customerName}</strong> ({b.treatment})
-                        {b.collisionType === 'INSUFFICIENT_TRAVEL_TIME' && (
-                          <span className="ml-1.5 px-1.5 py-0.5 text-[9px] bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 rounded font-bold">
-                            WAKTU TEMPIH TIDAK CUKUP ({b.distanceKm?.toFixed(1)}km → butuh ~{b.requiredMinutes}m, tersedia {b.availableMinutes}m)
-                          </span>
-                        )}
-                      </span>
-                      <span className="font-mono font-bold shrink-0">{b.time} WIB ({b.duration}m)</span>
-                    </li>
-                  ))}
-                </ul>
-                <p className="text-[10px] text-amber-700 dark:text-amber-400">
-                  Jam ini beririsan dengan jadwal bidan tersebut (+ buffer 20m) atau waktu tempuh tidak mencukupi. Disarankan pilih jam lain atau klik <strong>Rekomendasikan Jam</strong>.
-                </p>
-              </div>
-            )}
-
-            {/* Recommendations Chips Area with Arrival Timeline */}
-            {recommendations.length > 0 && (
-              <div className="p-3 bg-[#e8f5f2] border border-[#c2e7e0] rounded-xl space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-[#008069] flex items-center space-x-1.5">
-                    <Sparkles size={14} />
-                    <span>Rekomendasi Jam & Estimasi Kedatangan Bidan</span>
-                  </span>
-                  <span className="text-[10px] text-[#54656f] dark:text-[#aebac1]">Klik slot untuk memilih</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {recommendations.map((rec, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => handleApplyRecommendation(rec)}
-                      className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer space-y-2 ${
-                        bookingTime === rec.startTime && assignedStaffId === rec.staffId
-                          ? 'bg-[#008069] text-white border-[#008069] shadow-sm'
-                          : 'bg-white border-[#c2e7e0] hover:bg-white/90 text-[#111b21] dark:text-[#e9edef]'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between w-full">
-                        <div className="flex items-center space-x-2">
-                          <span className="font-extrabold text-sm">{rec.startTime} WIB</span>
-                          <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
-                            bookingTime === rec.startTime && assignedStaffId === rec.staffId
-                              ? 'bg-white/20 text-white'
-                              : 'bg-[#e8f5f2] text-[#008069]'
-                          }`}>
-                            {rec.staffName}
-                          </span>
-                        </div>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          bookingTime === rec.startTime && assignedStaffId === rec.staffId
-                            ? 'bg-white text-[#008069]'
-                            : 'bg-[#e8f5f2] text-[#008069]'
-                        }`}>
-                          Pilih
-                        </span>
-                      </div>
-
-                      {/* Detailed Midwife Arrival & Departure Timeline */}
-                      <div className={`text-[10px] space-y-1 pt-1.5 border-t ${
-                        bookingTime === rec.startTime && assignedStaffId === rec.staffId
-                          ? 'border-white/20 text-white/90'
-                          : 'border-[#f0f2f5] text-[#54656f] dark:text-[#aebac1]'
-                      }`}>
-                        <div className="flex items-center justify-between">
-                          <span className="flex items-center space-x-1">
-                            <Bike size={11} className="opacity-80" />
-                            <span>Bidan Berangkat:</span>
-                          </span>
-                          <strong className="font-mono">{rec.departureTime} WIB</strong>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="flex items-center space-x-1">
-                            <Home size={11} className="opacity-80" />
-                            <span>Estimasi Tiba di Rumah:</span>
-                          </span>
-                          <strong className="font-mono font-bold text-amber-700 bg-amber-50 px-1 rounded">{rec.arrivalTime} WIB</strong>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="flex items-center space-x-1">
-                            <Clock size={11} className="opacity-80" />
-                            <span>Treatment Selesai:</span>
-                          </span>
-                          <strong className="font-mono">{rec.endTime} WIB</strong>
-                        </div>
-                        <p className="text-[9px] opacity-75 truncate pt-0.5">
-                          Rute: ± {rec.distanceKm} km (~{rec.travelMinutes} mnt dari {rec.originDesc})
-                        </p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-                <p className="text-[10px] text-[#54656f] dark:text-[#aebac1] italic">
-                  * Jadwal tiba dihitung 10 menit sebelum treatment dimulai untuk persiapan terapis, cuci tangan, dan sterilisasi alat.
-                </p>
-              </div>
-            )}
-
-            {/* Tombol Buat Sebagai Paket Berseri jika belum aktif */}
-            {!isMultiSession && mode !== 'edit' && (
-              <div className="flex items-center justify-end">
-                <button
-                  type="button"
-                  onClick={() => handleEnableCustomMultiSession(3)}
-                  className="px-2.5 py-1 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/60 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-[11px] font-semibold hover:bg-blue-100 dark:hover:bg-blue-900/40 transition flex items-center space-x-1 cursor-pointer"
-                >
-                  <Plus size={12} />
-                  <span>Buat Sebagai Paket Berseri (Multi-Sesi)</span>
-                </button>
-              </div>
-            )}
-
-            {/* Multi-Session Schedule Builder */}
-            {isMultiSession && multiSessionSchedule.length > 0 && (
-              <div className="p-3 bg-blue-50/80 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/30 rounded-xl space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-blue-800 dark:text-blue-300 flex items-center space-x-1.5">
-                    <CalendarDays size={14} />
-                    <span>Jadwal Paket Berseri ({multiSessionSchedule.length} Sesi)</span>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => { setIsMultiSession(false); setMultiSessionSchedule([]); setConflictSessionNumber(null); }}
-                    className="text-[10px] text-blue-600 hover:text-red-600 font-bold cursor-pointer"
-                  >
-                    Batalkan Mode Paket
-                  </button>
-                </div>
-
-                {/* Preset Interval Selector */}
-                <div className="space-y-1">
-                  <span className="text-[10px] font-semibold text-blue-900 dark:text-blue-200">Pola Interval Kunjungan:</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {[
-                      { id: 'DAILY' as const, label: 'Setiap Hari (1 hari)' },
-                      { id: 'EVERY_2_DAYS' as const, label: '2 Hari Sekali (2 hari)' },
-                      { id: 'EVERY_3_DAYS' as const, label: '3 Hari Sekali (3 hari)' },
-                      { id: 'WEEKLY' as const, label: 'Mingguan (7 hari)' },
-                      { id: 'TWICE_DAILY' as const, label: 'Pagi & Sore' },
-                    ].map((preset) => (
-                      <button
-                        key={preset.id}
-                        type="button"
-                        onClick={() => handleIntervalPresetChange(preset.id)}
-                        className={`px-2 py-1 rounded-md text-[10px] font-bold transition cursor-pointer ${
-                          seriesInterval === preset.id
-                            ? 'bg-blue-600 text-white shadow-xs'
-                            : 'bg-white dark:bg-[#1f2c34] text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700/50 hover:bg-blue-100'
-                        }`}
-                      >
-                        {preset.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Session Rows List */}
-                <div className="max-h-56 overflow-y-auto space-y-1.5 pr-0.5">
-                  {multiSessionSchedule.map((s, idx) => {
-                    const isConflict = conflictSessionNumber === s.sessionNumber;
-                    return (
-                      <div
-                        key={idx}
-                        className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 border transition ${
-                          isConflict
-                            ? 'bg-red-50 dark:bg-red-950/40 border-red-400 dark:border-red-600'
-                            : 'bg-white dark:bg-[#1f2c34] border-blue-100 dark:border-blue-900/50'
-                        }`}
-                      >
-                        <span className={`text-[10px] font-bold w-12 shrink-0 ${isConflict ? 'text-red-700 dark:text-red-400' : 'text-blue-600 dark:text-blue-400'}`}>
-                          Sesi {s.sessionNumber}
-                        </span>
-                        <input
-                          type="date"
-                          value={s.date}
-                          onChange={(e) => {
-                            const newSchedule = [...multiSessionSchedule];
-                            newSchedule[idx].date = e.target.value;
-                            setMultiSessionSchedule(newSchedule);
-                            if (conflictSessionNumber === s.sessionNumber) setConflictSessionNumber(null);
-                          }}
-                          className="flex-1 min-w-0 px-2 py-1 border border-[#d1d7db] dark:border-[#374248] rounded-md text-[11px] text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069]"
-                        />
-                        <input
-                          type="time"
-                          value={s.time}
-                          onChange={(e) => {
-                            const newSchedule = [...multiSessionSchedule];
-                            newSchedule[idx].time = e.target.value;
-                            setMultiSessionSchedule(newSchedule);
-                            if (conflictSessionNumber === s.sessionNumber) setConflictSessionNumber(null);
-                          }}
-                          className="w-20 px-1.5 py-1 border border-[#d1d7db] dark:border-[#374248] rounded-md text-[11px] text-[#111b21] dark:text-[#e9edef] font-bold focus:outline-none focus:border-[#008069]"
-                        />
-                        <select
-                          value={s.staffId}
-                          onChange={(e) => {
-                            const newSchedule = [...multiSessionSchedule];
-                            newSchedule[idx].staffId = e.target.value;
-                            setMultiSessionSchedule(newSchedule);
-                            if (conflictSessionNumber === s.sessionNumber) setConflictSessionNumber(null);
-                          }}
-                          className="w-24 px-1 py-1 border border-[#d1d7db] dark:border-[#374248] rounded-md text-[11px] text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] truncate"
-                        >
-                          <option value="">Default</option>
-                          {staffList.map((st) => (
-                            <option key={st.id} value={st.id}>{st.name}</option>
-                          ))}
-                        </select>
-                        {multiSessionSchedule.length > 2 && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveSessionRow(s.sessionNumber)}
-                            className="p-1 text-gray-400 hover:text-red-500 rounded transition cursor-pointer"
-                            title="Hapus sesi ini"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Footer Controls: Add Session & Summary Note */}
-                <div className="flex items-center justify-between pt-1 border-t border-blue-200/60 dark:border-blue-700/40">
-                  <button
-                    type="button"
-                    onClick={handleAddSessionRow}
-                    className="px-2.5 py-1 rounded-md bg-white dark:bg-[#1f2c34] text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700 text-[11px] font-bold hover:bg-blue-50 transition flex items-center space-x-1 cursor-pointer"
-                  >
-                    <Plus size={12} />
-                    <span>Tambah Sesi</span>
-                  </button>
-                  <p className="text-[10px] text-blue-700 dark:text-blue-300 italic">
-                    * Total {multiSessionSchedule.length} kunjungan terapis. Ongkir dihitung per kunjungan.
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Section: Rincian Biaya & Total Pembayaran */}
-          <div className="p-3.5 bg-gradient-to-br from-[#f8fafc] to-emerald-50/40 dark:from-[#141e24] dark:to-[#00a884]/10 border border-[#e9edef] dark:border-[#2a3942] rounded-xl space-y-3 shadow-2xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-[#008069] uppercase tracking-wider flex items-center space-x-1.5">
-                <Receipt size={14} />
-                <span>Rincian Biaya & Total Pembayaran</span>
-              </span>
-              <span className="text-xs font-mono font-extrabold text-[#008069]">
-                Total: Rp {totalPaymentAmount.toLocaleString('id-ID')}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-              {/* Subtotal Treatments */}
-              <div>
-                <label className="block text-[11px] font-semibold text-[#54656f] dark:text-[#aebac1] mb-1">
-                  Subtotal Layanan ({selectedTreatments.length})
-                </label>
-                <div className="px-3 py-1.5 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-lg text-xs font-bold text-[#111b21] dark:text-[#e9edef] font-mono">
-                  Rp {subtotalTreatments.toLocaleString('id-ID')}
-                </div>
-              </div>
-
-              {/* Ongkir */}
-              <div>
-                <label className="block text-[11px] font-semibold text-[#54656f] dark:text-[#aebac1] mb-1">
-                  Ongkos Kirim (Rp)
-                </label>
-                <input
-                  type="number"
-                  value={ongkir}
-                  onChange={(e) => setOngkir(e.target.value === '' ? '' : Number(e.target.value))}
-                  step={5000}
-                  min={0}
-                  placeholder="0"
-                  className="w-full px-3 py-1.5 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-lg text-xs font-bold text-[#111b21] dark:text-[#e9edef] focus:border-[#008069] focus:outline-none transition font-mono"
-                />
-              </div>
-
-              {/* Diskon / Promo */}
-              <div>
-                <label className="block text-[11px] font-semibold text-rose-600 dark:text-rose-300 mb-1 flex items-center gap-1">
-                  <Percent size={11} />
-                  <span>Diskon Layanan (Rp)</span>
-                  <span className="text-[10px] text-gray-500 dark:text-gray-400 font-normal ml-1">(*Khusus potongan harga layanan, bukan ongkir)</span>
-                </label>
-                <input
-                  type="number"
-                  value={discount}
-                  onChange={(e) => setDiscount(e.target.value === '' ? '' : Number(e.target.value))}
-                  step={5000}
-                  min={0}
-                  placeholder="0"
-                  className="w-full px-3 py-1.5 bg-white border border-rose-200 dark:border-rose-800/40 rounded-lg text-xs font-bold text-rose-600 dark:text-rose-300 placeholder-[#8696a0] focus:border-rose-500 focus:outline-none transition font-mono"
-                />
-              </div>
-            </div>
-
-            {/* Quick Shortcuts */}
-            <div className="flex flex-wrap items-center justify-between gap-1.5 pt-1 border-t border-[#e9edef] dark:border-[#2a3942]/80 text-[10px]">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[#8696a0] font-semibold">Ongkir:</span>
-                <button
-                  type="button"
-                  onClick={() => setOngkir(0)}
-                  className={`px-2 py-0.5 rounded-md font-bold border transition cursor-pointer ${
-                    Number(ongkir) === 0 ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white dark:bg-transparent text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/40 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
-                  }`}
-                >
-                  Free (0)
-                </button>
-                {deliveryTiers.filter(t => (Number(t.fee) - Number(t.promoDiscount || 0)) > 0).map(t => {
-                  const net = Math.max(0, Number(t.fee) - Number(t.promoDiscount || 0));
-                  return (
-                    <button
-                      key={String(t.id || t.maxDist)}
-                      type="button"
-                      onClick={() => setOngkir(net)}
-                      className={`px-2 py-0.5 rounded-md font-semibold border transition cursor-pointer ${
-                        Number(ongkir) === net ? 'bg-[#008069] text-white border-[#008069]' : 'bg-white dark:bg-transparent text-[#54656f] dark:text-[#aebac1] border-[#d1d7db] dark:border-[#374248] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942]'
-                      }`}
-                      title={`Tier s/d ${t.maxDist} km`}
-                    >
-                      {net.toLocaleString('id-ID')}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                <span className="text-rose-600 dark:text-rose-300 font-semibold">Promo:</span>
-                <button
-                  type="button"
-                  onClick={() => setDiscount(0)}
-                  className={`px-2 py-0.5 rounded-md font-semibold border transition cursor-pointer ${
-                    Number(discount) === 0 ? 'bg-gray-700 text-white border-gray-700' : 'bg-white dark:bg-transparent text-gray-700 dark:text-gray-300 border-gray-200 dark:border-[#374248] hover:bg-gray-50 dark:hover:bg-[#2a3942]'
-                  }`}
-                >
-                  0
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDiscount(5000)}
-                  className={`px-2 py-0.5 rounded-md font-bold border transition cursor-pointer ${
-                    Number(discount) === 5000 ? 'bg-rose-600 text-white border-rose-600' : 'bg-white dark:bg-transparent text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800/40 hover:bg-rose-50 dark:hover:bg-rose-950/40'
-                  }`}
-                >
-                  -5.000
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDiscount(10000)}
-                  className={`px-2 py-0.5 rounded-md font-bold border transition cursor-pointer ${
-                    Number(discount) === 10000 ? 'bg-rose-600 text-white border-rose-600' : 'bg-white dark:bg-transparent text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800/40 hover:bg-rose-50 dark:hover:bg-rose-950/40'
-                  }`}
-                >
-                  -10.000
-                </button>
-              </div>
-            </div>
-
-            {/* Grand Total Bar */}
-            <div className="pt-2 border-t border-[#e9edef] dark:border-[#2a3942] flex items-center justify-between text-xs">
-              <div className="text-[#667781] dark:text-[#8696a0]">
-                <span>Total tagihan: </span>
-                <span className="text-[11px] italic text-[#8696a0]">
-                  (Layanan Rp {subtotalTreatments.toLocaleString('id-ID')} + Ongkir Rp {Number(ongkir).toLocaleString('id-ID')}{Number(discount) > 0 ? ` - Promo Rp ${Number(discount).toLocaleString('id-ID')}` : ''})
-                </span>
-              </div>
-              <div className="text-sm sm:text-base font-extrabold text-[#008069] font-mono">
-                Rp {totalPaymentAmount.toLocaleString('id-ID')}
-              </div>
-            </div>
-          </div>
-
-          {/* Section 6: Notes */}
-          <div className="space-y-1">
-            <label className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider block flex items-center space-x-1">
-              <FileText size={12} />
-              <span>Catatan / Keluhan Khusus Pasien</span>
-            </label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Contoh: Pasien minta terapis senior, anak sedang pilek ringan..."
-              rows={2}
-              className="w-full p-2.5 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] resize-none shadow-xs"
-            />
-          </div>
-
-          </div>
-
-          {/* Footer Actions — pinned di bawah layar (flex-col, di luar area gulir,
-              masih DALAM <form>): total & tombol utama selalu terlihat tanpa scroll ke ujung */}
-          <div className="shrink-0 pt-2.5 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] border-t border-[#e9edef] dark:border-[#2a3942] bg-white dark:bg-[#111b21] space-y-2">
-            {/* Mobile: ringkasan total selalu terbaca */}
-            <div className="sm:hidden flex items-center justify-between text-xs px-0.5">
-              <span className="text-[#667781] dark:text-[#8696a0]">Total:</span>
-              <span className="font-extrabold text-[#008069] font-mono text-sm">
-                Rp {totalPaymentAmount.toLocaleString('id-ID')}
-              </span>
-            </div>
-
-            {/* Mobile (< 640px): hierarki stacked — tombol utama full-width 46px */}
-            <div className="sm:hidden space-y-2">
-              {onSuccessAndInvoice ? (
-                <button
-                  type="button"
-                  disabled={submitting}
-                  onClick={handleSubmitWithInvoice}
-                  className="w-full min-h-[46px] px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:opacity-50 text-white text-xs font-bold flex items-center justify-center space-x-2 shadow-sm transition cursor-pointer"
-                  title="Simpan reservasi dan langsung masukkan format invoice ke chat WhatsApp"
-                >
-                  <Receipt size={16} />
-                  <span>Simpan & Masukkan Invoice ke Chat</span>
-                </button>
-              ) : (
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="w-full min-h-[46px] px-4 py-2.5 rounded-xl bg-[#008069] hover:bg-[#00a884] active:scale-95 disabled:opacity-50 text-white text-xs font-bold flex items-center justify-center space-x-2 shadow-sm transition cursor-pointer"
-                >
-                  <Check size={16} />
-                  <span className="truncate">{submitting ? 'Menyimpan...' : (mode === 'edit' ? 'Simpan Perubahan Reservasi' : isMultiSession ? `Buat Paket ${multiSessionTotal} Sesi` : 'Simpan & Buat Jadwal')}</span>
-                </button>
-              )}
-              <div className="flex items-center space-x-2">
-                <button
-                  type="button"
-                  onClick={() => void handleSafeClose()}
-                  className="flex-1 min-h-[42px] px-3 py-2 rounded-xl border border-[#d1d7db] dark:border-[#374248] text-xs font-semibold text-[#54656f] dark:text-[#aebac1] hover:bg-[#f0f2f5] transition-colors cursor-pointer active:scale-95 text-center"
-                >
-                  Batal
-                </button>
-                {onSuccessAndInvoice && (
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="flex-[2] min-h-[42px] px-3 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] active:scale-95 disabled:opacity-50 text-white text-xs font-semibold flex items-center justify-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
-                  >
-                    <Check size={14} />
-                    <span className="truncate">{submitting ? 'Menyimpan...' : (mode === 'edit' ? 'Simpan Perubahan' : isMultiSession ? `Paket ${multiSessionTotal} Sesi` : 'Simpan Jadwal Saja')}</span>
-                  </button>
-                )}
-                {mode !== 'edit' && (
-                  <button
-                    type="button"
-                    onClick={saveDraftManually}
-                    className="min-h-[42px] w-[42px] shrink-0 rounded-xl bg-white dark:bg-[#1c272e] border border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:bg-amber-50 hover:text-amber-700 transition flex items-center justify-center cursor-pointer shadow-2xs active:scale-95"
-                    title="Simpan draf lokal"
-                  >
-                    <BookmarkPlus size={16} className="text-amber-600" />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Desktop (>= 640px): baris horizontal rapi */}
-            <div className="hidden sm:flex items-center justify-between">
-              {mode !== 'edit' ? (
-                <button
-                  type="button"
-                  onClick={saveDraftManually}
-                  className="px-3 py-2 rounded-xl bg-white border border-[#d1d7db] dark:border-[#374248] text-xs font-bold text-[#54656f] dark:text-[#aebac1] hover:bg-amber-50 hover:text-amber-700 hover:border-amber-300 transition flex items-center space-x-1.5 cursor-pointer shadow-2xs"
-                  title="Simpan draf lokal selama 1 jam"
-                >
-                  <BookmarkPlus size={14} className="text-amber-600" />
-                  <span>Simpan Draf</span>
-                </button>
-              ) : (
-                <div />
-              )}
-              <div className="flex items-center space-x-2">
-                <button
-                  type="button"
-                  onClick={() => void handleSafeClose()}
-                  className="px-4 py-2 rounded-xl border border-[#d1d7db] dark:border-[#374248] text-xs font-semibold text-[#54656f] dark:text-[#aebac1] hover:bg-[#f0f2f5] transition-colors cursor-pointer active:scale-95"
-                >
-                  Batal
-                </button>
-                {onSuccessAndInvoice && (
-                  <button
-                    type="button"
-                    disabled={submitting}
-                    onClick={handleSubmitWithInvoice}
-                    className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:opacity-50 text-white text-xs font-bold flex items-center space-x-1.5 shadow-xs transition cursor-pointer"
-                    title="Simpan reservasi dan langsung masukkan format invoice ke chat WhatsApp"
-                  >
-                    <Receipt size={14} />
-                    <span>Simpan & Masukkan Invoice ke Chat</span>
-                  </button>
-                )}
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-5 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] active:scale-95 disabled:opacity-50 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
-                >
-                  <Check size={14} />
-                  <span>{submitting ? 'Menyimpan...' : (mode === 'edit' ? 'Simpan Perubahan Reservasi' : isMultiSession ? `Buat Paket ${multiSessionTotal} Sesi` : 'Simpan & Buat Jadwal')}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </form>
-
-        {/* ========================================================================= */}
-        {/* MODAL / DRAWER: LIHAT JADWAL TERISI (CALENDAR PEEK) */}
-        {/* ========================================================================= */}
-        {showBookedSlotsModal && (
-          <div
-            className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn overflow-y-auto overflow-x-hidden touch-pan-y overscroll-contain"
-            onClick={() => setShowBookedSlotsModal(false)}
-            style={{ touchAction: 'pan-y' }}
-          >
-            <div
-              className="w-full max-w-lg bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] dark:text-[#e9edef] rounded-2xl p-4 sm:p-5 shadow-2xl space-y-4 max-h-[85vh] flex flex-col mx-auto overflow-x-hidden touch-pan-y overscroll-contain"
-              onClick={(e) => e.stopPropagation()}
-              style={{ touchAction: 'pan-y' }}
-            >
-              <div className="flex items-center justify-between border-b border-[#e9edef] dark:border-[#2a3942] pb-3">
-                <div>
-                  <h3 className="text-base font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
-                    <CalendarDays className="text-[#008069]" size={18} />
-                    <span>Jadwal Terisi pada {bookingDate || 'Hari Ini'}</span>
-                  </h3>
-                  <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
-                    {bookedReservationsForDate.length} reservasi terdaftar pada tanggal ini
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowBookedSlotsModal(false)}
-                  className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] cursor-pointer"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              {/* Bookings Timeline List */}
-              <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-                {loadingReservations ? (
-                  <div className="p-8 text-center text-xs text-gray-500 animate-pulse" aria-busy="true">
-                    Memuat jadwal terisi...
-                  </div>
-                ) : bookedReservationsForDate.length === 0 ? (
-                  <div className="p-8 text-center bg-[#f8fafc] border border-dashed border-[#d1d7db] dark:border-[#374248] rounded-2xl">
-                    <CheckCircle2 size={32} className="text-[#008069] mx-auto mb-2 opacity-80" />
-                    <p className="text-sm font-bold text-[#111b21] dark:text-[#e9edef]">Hari Ini Masih Kosong</p>
-                    <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-1">
-                      Belum ada jadwal reservasi yang terisi pada tanggal ini. Seluruh slot jam tersedia!
-                    </p>
-                  </div>
-                ) : (
-                  bookedReservationsForDate.map((res) => {
-                    const { timeFormatted: startTimeStr } = getWibHoursAndMinutes(res.booking_date!);
-                    const cust = res.customer as any;
-                    const isHold = res.status === 'hold';
-                    const isEditingThis = mode === 'edit' && (initialReservation as any)?.id && res.id === (initialReservation as any).id;
-                    return (
-                      <div
-                        key={res.id}
-                        className={`p-3 bg-white dark:bg-[#1c272e] border rounded-xl shadow-2xs space-y-1.5 ${isEditingThis ? 'border-cyan-300 bg-cyan-50/40 dark:border-cyan-700' : 'border-[#e9edef] dark:border-[#2a3942]'}`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className={`px-2 py-0.5 rounded-lg text-xs font-bold font-mono border ${isHold ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
-                            {isHold ? '🟡' : '🟢'} {startTimeStr} WIB {isHold ? '— Hold Ditawarkan' : '— Terjadwal Resmi'}
-                          </span>
-                          <div className="flex items-center gap-1.5">
-                            {isEditingThis && (
-                              <span className="px-2 py-0.5 rounded-lg text-xs font-bold bg-cyan-50 text-cyan-700 border border-cyan-300">Sedang Diedit</span>
-                            )}
-                            <span className="text-xs font-bold text-[#008069] bg-[#e8f5f2] px-2 py-0.5 rounded-full">
-                              {resolveStaffName(res, effectiveStaffList) || 'Terapis Belum Ditugaskan'}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="text-xs space-y-0.5">
-                          <p className="font-bold text-[#111b21] dark:text-[#e9edef]">
-                            {(cust?.name || 'Bunda')} {(cust?.phone ? `(${cust.phone})` : '')}
-                          </p>
-                          <p className="text-[#54656f] dark:text-[#aebac1] text-[11px] line-clamp-1">
-                            {res.treatment_detail || res.treatment_category}
-                          </p>
-                          {cust?.kelurahan && (
-                            <p className="text-[10px] text-[#8696a0] flex items-center space-x-1">
-                              <MapPin size={10} className="text-[#008069]" />
-                              <span>{cust.kelurahan}, {cust.kecamatan}</span>
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-
-              <div className="pt-3 border-t border-[#e9edef] dark:border-[#2a3942] flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => setShowBookedSlotsModal(false)}
-                  className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold cursor-pointer"
-                >
-                  Tutup Pratinjau
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 409 Conflict resolution dialog */}
-        {showConflictModal && conflictInfo && (
-          <div className="fixed inset-0 bg-black/70 z-[100000] flex items-center justify-center p-4" onClick={() => setShowConflictModal(false)}>
-            <div className="w-full max-w-md bg-white dark:bg-[#111b21] rounded-2xl p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-              <h4 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef]">
-                {conflictInfo.code === 'STAFF_COLLISION' ? '⛔ Jadwal Terapis Bentrok' : '⛔ Duplikat Booking Terdeteksi'}
-              </h4>
-              <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-1.5">
-                {conflictInfo.message}
-                {conflictInfo.existingReservation?.booking_date && (
-                  <span> Jadwal existing: {new Date(conflictInfo.existingReservation.booking_date).toLocaleString('id-ID')}.</span>
-                )}
-              </p>
-              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const existingRes = conflictInfo.existingReservation;
-                    setShowConflictModal(false);
-                    setConflictInfo(null);
-                    toast('Batalkan duplikat — membuka jadwal yang sudah ada.', 'info');
-                    onClose();
-                    if (existingRes && onEditReservation) {
-                      onEditReservation(existingRes);
-                    }
-                  }}
-                  className="px-3 py-2 rounded-xl border border-[#d1d7db] text-xs font-bold text-[#111b21] hover:bg-[#f0f2f5] cursor-pointer"
-                >
-                  Batal & Buka Jadwal Existing
-                </button>
-                <button
-                  type="button"
-                  disabled={submitting}
-                  onClick={handleForceCreate}
-                  className="px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-bold cursor-pointer"
-                >
-                  {submitting ? 'Menyimpan...' : (mode === 'edit' ? 'Tetap Simpan Perubahan (Force)' : 'Tetap Simpan Baru (Force)')}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      {/* AddressBookDrawer Overlay untuk Perbarui Kartu Terpilih (Micro-Task 4.2) */}
-      {showAddressDrawer && (customerId || selectedCustomerInfo?.id) && (
-        <AddressBookDrawer
-          customer={selectedCustomerInfo ? { id: selectedCustomerInfo.id, name: selectedCustomerInfo.name } : { id: customerId }}
-          initialEditingCardId={correctingCardId}
-          onClose={() => {
-            setShowAddressDrawer(false);
-            setCorrectingCardId(null);
-          }}
-          onChanged={async () => {
-            const cid = selectedCustomerInfo?.id || customerId;
-            if (cid) {
-              try {
-                const res = await apiRequest<{ success: boolean; data: any }>(
-                  `/api/admin/customers/${cid}`
-                );
-                if (res?.success && res.data) {
-                  setSelectedCustomerInfo(res.data);
-                  if (correctingCardId) {
-                    const updatedCard = (res.data.saved_addresses || []).find((a: any) => a.id === correctingCardId);
-                    if (updatedCard) {
-                      if (updatedCard.address) setAddress(updatedCard.address);
-                      if (updatedCard.landmark) setLandmark(updatedCard.landmark);
-                      if (updatedCard.ongkir != null) setOngkir(updatedCard.ongkir);
-                    }
-                  }
-                }
-              } catch {}
-            }
-            setShowAddressDrawer(false);
-            setCorrectingCardId(null);
-          }}
-        />
-      )}
-      </div>
-    </div>,
-    document.body
-  );
-};
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { apiRequest } from '../../services/api';
+import { useUiFeedback } from '../common/UiFeedback';
+import { ToggleSwitch } from '../common/ToggleSwitch';
+import { 
+  X, 
+  Calendar as CalendarIcon, 
+  Search, 
+  Baby, 
+  Sparkles, 
+  Clock, 
+  ChevronDown, 
+  Check, 
+  Plus, 
+  Minus,
+  MapPin,
+  FileText,
+  Eye,
+  Trash2,
+  CalendarDays,
+  UserCheck,
+  Zap,
+  Bike,
+  Home,
+  Copy,
+  CheckCircle2,
+  Receipt,
+  Percent,
+  BookmarkPlus,
+  AlertTriangle,
+  Pencil,
+} from 'lucide-react';
+import { ClinicServiceItem, StaffOption, QuickSlotTarget } from './types';
+import { Reservation } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
+import { calculateOngkirFromTiers, DeliveryTierItem } from '../../utils/deliveryTierCalculator';
+import { useFormDraft } from '../../hooks/useFormDraft';
+import { calculateHaversineKm as calculateHaversine, checkTravelTimeSufficiency, estimateTravelMinutesKm } from '../../utils/geoUtils';
+import { 
+  parseTreatmentsFromDetail, 
+  DEFAULT_CLINIC_SERVICES_FALLBACK, 
+  isAddonService, 
+  SelectedTreatmentItem 
+} from '../../utils/treatmentParser';
+import { StaffScheduleTimelineStrip } from './StaffScheduleTimelineStrip';
+import { matchCatalogService } from '../../utils/treatmentStringParser';
+import { getWibDateKey, getTodayWibDateKey, getTodayWibDate, getWibHoursAndMinutes, buildWibIso } from '../../utils/dateWib';
+import { resolveStreetAddress } from '../../utils/reservationAddress';
+import { addressesMatch as addressesMatchMirror } from '../../utils/addressMatch';
+import { resolveStaffName } from '../../utils/resolveStaffName';
+import { AddressBookDrawer } from '../customer/AddressBookDrawer';
+import { recommendSlots } from '../../utils/slotRecommendations';
+
+// Koordinat klinik fallback — tech-debt tercatat (tenant-aware penuh butuh
+// endpoint settings baru; lihat KNOWN_ISSUES). Rumus jarak terpusat di geoUtils.
+const CLINIC_COORDS = {
+  lat: -7.34886,
+  lng: 112.751677,
+  name: 'Kala Moms and Baby Spa (Klinik)',
+};
+
+function formatMinutesToTime(totalMinutes: number): string {
+const h = Math.floor(totalMinutes / 60) % 24;
+  const m = totalMinutes % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+export interface SlotRecommendation {
+  startTime: string;
+  departureTime: string;
+  arrivalTime: string;
+  endTime: string;
+  staffId: string;
+  staffName: string;
+  distanceKm: number;
+  travelMinutes: number;
+  originDesc: string;
+  score: number;
+}
+
+/**
+ * Resolusi Ongkir Default Pelanggan (SSOT Ongkir Promo).
+ * Mengutamakan harga promo (hasil kesepakatan chat atau kartu alamat tersimpan atau tier netOngkir)
+ * daripada kolom legacy customer.ongkir yang mungkin masih memegang tarif normal kotor.
+ */
+function resolveCustomerDefaultOngkir(
+  cust: any,
+  deliveryTiers: DeliveryTierItem[] = []
+): number | '' {
+  if (!cust) return 0;
+
+  // 1. Prioritas Tertinggi: Ongkir Promo dari Kesepakatan Chat WhatsApp
+  const estOngkir = cust.preferences?.distance_estimate?.ongkir;
+  if (typeof estOngkir === 'number' && !isNaN(estOngkir) && estOngkir >= 0) {
+    return estOngkir;
+  }
+
+  // 2. Prioritas Kedua: Kartu Alamat Tersimpan (Buku Alamat)
+  const addrs = Array.isArray(cust.preferences?.saved_addresses) ? cust.preferences.saved_addresses : [];
+  const primaryAddr = addrs.find((a: any) => a.isPrimary) || addrs[0];
+  if (typeof primaryAddr?.ongkir === 'number' && !isNaN(primaryAddr.ongkir) && primaryAddr.ongkir >= 0) {
+    return primaryAddr.ongkir;
+  }
+
+  // 3. Prioritas Ketiga: Hitung Otomatis dari Jarak km menggunakan Tier (Net Ongkir = Promo)
+  // Tidak mensyaratkan deliveryTiers.length > 0 agar memanfaatkan fallback internal (anti race-condition)
+  const dist = Number(cust.distance_km || cust.distanceKm);
+  if (dist > 0) {
+    const calc = calculateOngkirFromTiers(dist, deliveryTiers);
+    if (!calc.isOutOfCoverage) {
+      return calc.netOngkir;
+    }
+  }
+
+  // 4. Prioritas Keempat: Kolom Profil customer.ongkir
+  if (cust.ongkir !== undefined && cust.ongkir !== null && !isNaN(Number(cust.ongkir)) && Number(cust.ongkir) >= 0) {
+    return Number(cust.ongkir);
+  }
+
+  return 0;
+}
+
+interface CreateReservationModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: (newReservation?: any) => void;
+  staffList: StaffOption[];
+  initialSlotTarget?: QuickSlotTarget | null;
+  initialCustomer?: any | null;
+  initialCustomerId?: string;
+  existingReservations?: Reservation[];
+  mode?: 'create' | 'edit';
+  initialReservation?: Reservation | any;
+  /** Opsional: buka detail/edit reservasi eksisting dari warning jadwal aktif. */
+  onEditReservation?: (reservation: any) => void;
+
+  // Smart Pre-Fill Pipeline
+  initialTreatmentName?: string | null;
+  initialTreatmentCategory?: 'BABY' | 'MOMS' | 'BOTH' | 'KIDS' | 'BUNDLE' | null;
+  initialBabies?: Array<{ name: string; ageText: string }> | null;
+  initialNotes?: string | null;
+  /** Alamat jalan fisik (prefill dari chat/profil customer) — dipersist ke preferences.address. */
+  initialAddress?: string | null;
+  /** Patokan/landmark rumah (prefill) — dipersist ke preferences.landmark. */
+  initialLandmark?: string | null;
+  onSuccessAndInvoice?: (newReservation: any) => void;
+}
+
+export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
+  isOpen,
+  onClose,
+  onSuccess,
+  staffList,
+  initialSlotTarget,
+  initialCustomer,
+  initialCustomerId,
+  existingReservations = [],
+  mode = 'create',
+  initialReservation,
+  onEditReservation,
+  initialTreatmentName,
+  initialTreatmentCategory,
+  initialBabies,
+  initialNotes,
+  initialAddress,
+  initialLandmark,
+  onSuccessAndInvoice,
+}) => {
+  const { user } = useAuth();
+  const { toast, confirm } = useUiFeedback();
+  const [submitting, setSubmitting] = useState(false);
+
+  // Form State
+  const [customerId, setCustomerId] = useState('');
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [selectedCustomerInfo, setSelectedCustomerInfo] = useState<any | null>(null);
+  const [customerResults, setCustomerResults] = useState<any[]>([]);
+  const [searchingCustomer, setSearchingCustomer] = useState(false);
+
+  // Service Catalog
+  const [services, setServices] = useState<ClinicServiceItem[]>(DEFAULT_CLINIC_SERVICES_FALLBACK);
+  const [loadingServices, setLoadingServices] = useState(false);
+  const [serviceSearch, setServiceSearch] = useState('');
+  const [isServiceDropdownOpen, setIsServiceDropdownOpen] = useState(false);
+
+  // Multi-Treatment Selection (Supports multiple instances of the same treatment for 2 children)
+  const [selectedTreatments, setSelectedTreatments] = useState<SelectedTreatmentItem[]>([]);
+  const [customServiceName, setCustomServiceName] = useState('');
+  const [customServiceDuration, setCustomServiceDuration] = useState<number | ''>(60);
+  const [customServicePrice, setCustomServicePrice] = useState<number | ''>(0);
+  const [customCategory, setCustomCategory] = useState<'BABY' | 'MOMS' | 'BOTH' | 'KIDS' | 'BUNDLE'>('BABY');
+  const [customIsAddon, setCustomIsAddon] = useState(false);
+  const [showCustomServiceInput, setShowCustomServiceInput] = useState(false);
+
+  // Category Pills (Filter / Overall)
+  const [treatmentCategory, setTreatmentCategory] = useState<'BABY' | 'MOMS' | 'BOTH' | 'KIDS' | 'BUNDLE'>('BABY');
+
+  // Date & Time — Fase 2R: cabut silent default 09:00 (anti-jam-senyap), required gate di handleSubmit
+  const [bookingDate, setBookingDate] = useState('');
+  const [bookingTime, setBookingTime] = useState('');
+
+  // Staff & Status — fondasional: dukung semua state pembayaran
+  const [assignedStaffId, setAssignedStaffId] = useState('');
+  const [status, setStatus] = useState<'pending' | 'confirmed' | 'completed' | 'cancelled' | 'hold'>('confirmed');
+  const [notes, setNotes] = useState('');
+
+  // Alamat jalan fisik & patokan rumah (persist ke preferences.address/landmark)
+  const [address, setAddress] = useState(initialAddress || '');
+  const [landmark, setLandmark] = useState(initialLandmark || '');
+  const [customerAddressId, setCustomerAddressId] = useState<string | null>(initialReservation?.customer_address_id || null);
+  // R3 — Status "akan disimpan sebagai rumah baru" (chip persisten, bukan toast sekali-lewat).
+  const [savedAsNewHouse, setSavedAsNewHouse] = useState(false);
+  const [correctingCardId, setCorrectingCardId] = useState<string | null>(null);
+  const [showAddressDrawer, setShowAddressDrawer] = useState(false);
+
+  const savedAddresses: any[] = useMemo(() => {
+    if (!selectedCustomerInfo) return [];
+    if (Array.isArray(selectedCustomerInfo.saved_addresses)) return selectedCustomerInfo.saved_addresses;
+    if (Array.isArray(selectedCustomerInfo.preferences?.saved_addresses)) return selectedCustomerInfo.preferences.saved_addresses;
+    return [];
+  }, [selectedCustomerInfo]);
+
+  // Silang-cek mismatch dan selectedCard dipromosikan ke useMemo (Micro-Task 4.2)
+  const selectedCard = useMemo(
+    () => savedAddresses.find((a: any) => a.id === customerAddressId),
+    [savedAddresses, customerAddressId]
+  );
+
+  const mismatchComputed = useMemo(() => {
+    if (!selectedCard || !address.trim()) return false;
+    const region = {
+      kelurahan: selectedCard.kelurahan,
+      kecamatan: selectedCard.kecamatan,
+      kota: selectedCard.kota,
+    };
+    return !addressesMatchMirror(
+      { ...region, address: selectedCard.address },
+      { ...region, address }
+    );
+  }, [selectedCard, address]);
+
+  const mismatchActive = mismatchComputed && !savedAsNewHouse && !correctingCardId;
+
+  // Sinkronisasi alamat/patokan saat modal dibuka / customer berganti (anti-stale props).
+  // Prioritas: bila customer terpilih SAMA dengan konteks chat (initialCustomerId),
+  // hasil ekstraksi chat (initialAddress) diutamakan; bila admin memilih customer LAIN,
+  // alamat profil customer tersebut yang diutamakan.
+  useEffect(() => {
+    if (!isOpen) return;
+    const prefAddress = selectedCustomerInfo?.preferences?.address || selectedCustomerInfo?.address || '';
+    const prefLandmark = selectedCustomerInfo?.preferences?.landmark || selectedCustomerInfo?.preferences?.address_notes || selectedCustomerInfo?.address_notes || '';
+    // W3: fallback alamat jalan dari raw_text reservasi (edit reservasi lama yang
+    // alamatnya hanya hidup di formulir chat) — paritas dengan modal detail.
+    const rawAddress = resolveStreetAddress(initialReservation, selectedCustomerInfo) || '';
+    const isInitialCustomer =
+      !initialCustomerId || !selectedCustomerInfo?.id || selectedCustomerInfo.id === initialCustomerId;
+    // F-B3: di mode edit, data DB/profil adalah OTORITAS — hasil ekstraksi chat
+    // (initialAddress) hanya fallback terakhir, agar banner ramping tidak menimpa
+    // alamat profil yang lengkap (bug Syarifa). Di create, chat tetap prioritas.
+    const addr = mode === 'edit'
+      ? (prefAddress || rawAddress || initialAddress || '')
+      : (isInitialCustomer ? (initialAddress || prefAddress || rawAddress || '') : (prefAddress || ''));
+    setAddress(addr);
+    const lm = mode === 'edit'
+      ? (prefLandmark || initialLandmark || '')
+      : (isInitialCustomer ? (initialLandmark || prefLandmark || '') : (prefLandmark || ''));
+    setLandmark(lm);
+  }, [isOpen, mode, initialAddress, initialLandmark, initialCustomerId, selectedCustomerInfo, initialReservation]);
+
+  // Sinkronisasi pilihan alamat saat customer atau reservasi berganti
+  useEffect(() => {
+    if (!isOpen) return;
+    if (initialReservation?.customer_address_id) {
+      setCustomerAddressId(initialReservation.customer_address_id);
+    } else if (savedAddresses.length > 0 && !customerAddressId) {
+      const primary = savedAddresses.find((a: any) => a.isPrimary) || savedAddresses[0];
+      if (primary) {
+        setCustomerAddressId(primary.id);
+      }
+    }
+  }, [isOpen, initialReservation, savedAddresses]);
+
+  // Self-healing staff list jika props kosong (misal dibuka dari Live Chat sebelum parent selesai fetch)
+  const [internalStaffList, setInternalStaffList] = useState<StaffOption[]>(staffList || []);
+  useEffect(() => {
+    if (staffList && staffList.length > 0) {
+      setInternalStaffList(staffList);
+    } else if (isOpen) {
+      apiRequest('/api/admin/staff')
+        .then((res: any) => {
+          const list = res?.data || (Array.isArray(res) ? res : []);
+          if (Array.isArray(list) && list.length > 0) setInternalStaffList(list);
+        })
+        .catch(() => {});
+    }
+  }, [staffList, isOpen]);
+  const effectiveStaffList = useMemo(() => {
+    return internalStaffList && internalStaffList.length > 0 ? internalStaffList : (staffList || []);
+  }, [internalStaffList, staffList]);
+
+  // Payment Breakdown & Discounts
+  const [ongkir, setOngkir] = useState<number | ''>(0);
+  const [discount, setDiscount] = useState<number | ''>(0);
+
+  // Multi-Session Package State
+  type SeriesIntervalPreset = 'DAILY' | 'EVERY_2_DAYS' | 'EVERY_3_DAYS' | 'WEEKLY' | 'TWICE_DAILY';
+  const [isMultiSession, setIsMultiSession] = useState(false);
+  const [multiSessionTotal, setMultiSessionTotal] = useState(0);
+  const [seriesInterval, setSeriesInterval] = useState<SeriesIntervalPreset>('DAILY');
+  const [conflictSessionNumber, setConflictSessionNumber] = useState<number | null>(null);
+  const [multiSessionSchedule, setMultiSessionSchedule] = useState<Array<{
+    sessionNumber: number;
+    date: string;
+    time: string;
+    staffId: string;
+  }>>([]);
+
+  const buildSeriesSchedule = (
+    total: number,
+    interval: SeriesIntervalPreset,
+    startDateStr: string,
+    startTimeStr: string,
+    defaultStaffId: string
+  ) => {
+    const schedule = [];
+    const baseDate = startDateStr ? new Date(`${startDateStr}T00:00:00`) : getTodayWibDate();
+    const baseTime = startTimeStr || '09:00';
+
+    for (let i = 0; i < total; i++) {
+      let dayOffset = 0;
+      let time = baseTime;
+
+      if (interval === 'DAILY') {
+        dayOffset = i;
+      } else if (interval === 'EVERY_2_DAYS') {
+        dayOffset = i * 2;
+      } else if (interval === 'EVERY_3_DAYS') {
+        dayOffset = i * 3;
+      } else if (interval === 'WEEKLY') {
+        dayOffset = i * 7;
+      } else if (interval === 'TWICE_DAILY') {
+        dayOffset = Math.floor(i / 2);
+        time = i % 2 === 0 ? baseTime : '15:00';
+      }
+
+      const d = new Date(baseDate);
+      d.setDate(d.getDate() + dayOffset);
+      const dateStr = getWibDateKey(d);
+      schedule.push({
+        sessionNumber: i + 1,
+        date: dateStr,
+        time,
+        staffId: defaultStaffId || '',
+      });
+    }
+    return schedule;
+  };
+
+  const handleIntervalPresetChange = (newInterval: SeriesIntervalPreset) => {
+    setSeriesInterval(newInterval);
+    const startD = multiSessionSchedule[0]?.date || bookingDate || getWibDateKey(getTodayWibDate());
+    const startT = multiSessionSchedule[0]?.time || bookingTime || '09:00';
+    const total = multiSessionSchedule.length > 0 ? multiSessionSchedule.length : (multiSessionTotal || 3);
+    const updated = buildSeriesSchedule(total, newInterval, startD, startT, assignedStaffId || '');
+    setMultiSessionSchedule(updated);
+  };
+
+  const handleAddSessionRow = () => {
+    const current = [...multiSessionSchedule];
+    const nextNum = current.length + 1;
+    let nextDate = bookingDate || getWibDateKey(getTodayWibDate());
+    let nextTime = bookingTime || '09:00';
+    if (current.length > 0) {
+      const last = current[current.length - 1];
+      const d = new Date(`${last.date}T00:00:00`);
+      const offset = seriesInterval === 'EVERY_2_DAYS' ? 2 : seriesInterval === 'EVERY_3_DAYS' ? 3 : seriesInterval === 'WEEKLY' ? 7 : 1;
+      d.setDate(d.getDate() + offset);
+      nextDate = getWibDateKey(d);
+      nextTime = last.time;
+    }
+    current.push({
+      sessionNumber: nextNum,
+      date: nextDate,
+      time: nextTime,
+      staffId: assignedStaffId || '',
+    });
+    setMultiSessionSchedule(current);
+    setMultiSessionTotal(current.length);
+  };
+
+  const handleRemoveSessionRow = (sessionNumber: number) => {
+    if (multiSessionSchedule.length <= 2) {
+      toast('Minimal paket berseri adalah 2 sesi.', 'info');
+      return;
+    }
+    const filtered = multiSessionSchedule
+      .filter((s) => s.sessionNumber !== sessionNumber)
+      .map((s, idx) => ({ ...s, sessionNumber: idx + 1 }));
+    setMultiSessionSchedule(filtered);
+    setMultiSessionTotal(filtered.length);
+  };
+
+  const handleEnableCustomMultiSession = (initialCount = 3) => {
+    setIsMultiSession(true);
+    setMultiSessionTotal(initialCount);
+    const startD = bookingDate || getWibDateKey(getTodayWibDate());
+    const startT = bookingTime || '09:00';
+    const schedule = buildSeriesSchedule(initialCount, seriesInterval, startD, startT, assignedStaffId || '');
+    setMultiSessionSchedule(schedule);
+  };
+
+  // Delivery Tiers State (SaaS-Ready from DB)
+  const [deliveryTiers, setDeliveryTiers] = useState<DeliveryTierItem[]>([]);
+
+  useEffect(() => {
+    apiRequest('/api/admin/delivery-tiers')
+      .then((res) => {
+        const list = Array.isArray(res) ? res : res?.data || [];
+        if (Array.isArray(list) && list.length > 0) {
+          setDeliveryTiers(list);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Live Reservations Synchronizer
+  const [loadedReservations, setLoadedReservations] = useState<Reservation[]>([]);
+  const [loadingReservations, setLoadingReservations] = useState(false);
+
+  // Children / Babies (Multi-Anak Support)
+  const [babies, setBabies] = useState<Array<{ name: string; ageText: string }>>([]);
+
+  // (Fase 3: toggle Ringkas/Lengkap dihapus — anti-bloat, tombol kustom selalu terlihat)
+
+  // Modals & Recommendations UI
+  const [showBookedSlotsModal, setShowBookedSlotsModal] = useState(false);
+  const [recommendations, setRecommendations] = useState<SlotRecommendation[]>([]);
+  const [hasCalculatedRecommendations, setHasCalculatedRecommendations] = useState(false);
+  const initializedEditIdRef = useRef<string | null>(null);
+  const hydratedWithLiveCatalogRef = useRef<boolean>(false);
+  // Double-booking conflict UX (409 DUPLICATE_BOOKING / STAFF_COLLISION)
+  const [conflictInfo, setConflictInfo] = useState<{ code: string; message: string; existingReservation: any } | null>(null);
+  const [showConflictModal, setShowConflictModal] = useState(false);
+
+  // Form Draft Persistence Hook (1-hour TTL) — payload lengkap termasuk multi-sesi & kustom
+  const currentFormPayload = useMemo(() => ({
+    customerId,
+    customerSearch,
+    selectedCustomerInfo,
+    treatmentCategory,
+    bookingDate,
+    bookingTime,
+    assignedStaffId,
+    status,
+    notes,
+    address,
+    landmark,
+    customerAddressId,
+    ongkir,
+    discount,
+    babies,
+    selectedTreatments,
+    isMultiSession,
+    multiSessionTotal,
+    multiSessionSchedule,
+    customServiceName,
+    customServiceDuration,
+    customServicePrice,
+    customCategory,
+    customIsAddon,
+    showCustomServiceInput,
+  }), [
+    customerId,
+    customerSearch,
+    selectedCustomerInfo,
+    treatmentCategory,
+    bookingDate,
+    bookingTime,
+    assignedStaffId,
+    status,
+    notes,
+    address,
+    landmark,
+    customerAddressId,
+    ongkir,
+    discount,
+    babies,
+    selectedTreatments,
+    isMultiSession,
+    multiSessionTotal,
+    multiSessionSchedule,
+    customServiceName,
+    customServiceDuration,
+    customServicePrice,
+    customCategory,
+    customIsAddon,
+    showCustomServiceInput,
+  ]);
+
+  const handleRestoreDraft = (restored: any) => {
+    if (!restored) return;
+    // 4.4 Sanitasi tanggal & re-validasi harga saat restore
+    let sanitizedDate = restored.bookingDate;
+    if (sanitizedDate) {
+      try {
+        const todayKey = getWibDateKey(new Date());
+        if (sanitizedDate < todayKey) {
+          sanitizedDate = todayKey;
+          toast(`Tanggal draf sudah lewat — disesuaikan ke hari ini (${todayKey}).`, 'info');
+        }
+      } catch {}
+    }
+    // Re-sinkronisasi harga dengan katalog aktif (hindari tarif usang) — hanya bila katalog tersedia
+    let sanitizedTreatments = restored.selectedTreatments;
+    if (Array.isArray(sanitizedTreatments) && sanitizedTreatments.length > 0 && services.length > 0) {
+      sanitizedTreatments = sanitizedTreatments.map((t: any) => {
+        const norm = (t.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const match = services.find((s: any) => s.name.toLowerCase().replace(/[^a-z0-9]/g, '') === norm);
+        if (match && (match as any).promoPrice != null) {
+          return { ...t, price: (match as any).promoPrice ?? (match as any).price ?? t.price };
+        }
+        return t;
+      });
+    }
+    if (restored.customerId !== undefined) setCustomerId(restored.customerId);
+    if (restored.customerSearch !== undefined) setCustomerSearch(restored.customerSearch);
+    if (restored.selectedCustomerInfo !== undefined) setSelectedCustomerInfo(restored.selectedCustomerInfo);
+    if (restored.treatmentCategory !== undefined) setTreatmentCategory(restored.treatmentCategory);
+    if (sanitizedDate !== undefined) setBookingDate(sanitizedDate);
+    if (restored.bookingTime !== undefined) setBookingTime(restored.bookingTime);
+    if (restored.assignedStaffId !== undefined) setAssignedStaffId(restored.assignedStaffId);
+    if (restored.status !== undefined) setStatus(restored.status);
+    if (restored.notes !== undefined) setNotes(restored.notes);
+    if (restored.address !== undefined) setAddress(restored.address);
+    if (restored.landmark !== undefined) setLandmark(restored.landmark);
+    if (restored.customerAddressId !== undefined) setCustomerAddressId(restored.customerAddressId);
+    if (restored.ongkir !== undefined) setOngkir(restored.ongkir);
+    if (restored.discount !== undefined) setDiscount(restored.discount);
+    if (restored.babies !== undefined) setBabies(restored.babies);
+    if (sanitizedTreatments !== undefined) setSelectedTreatments(sanitizedTreatments);
+    if (restored.isMultiSession !== undefined) setIsMultiSession(restored.isMultiSession);
+    if (restored.multiSessionTotal !== undefined) setMultiSessionTotal(restored.multiSessionTotal);
+    if (restored.multiSessionSchedule !== undefined) setMultiSessionSchedule(restored.multiSessionSchedule);
+    if (restored.customServiceName !== undefined) setCustomServiceName(restored.customServiceName);
+    if (restored.customServiceDuration !== undefined) setCustomServiceDuration(restored.customServiceDuration);
+    if (restored.customServicePrice !== undefined) setCustomServicePrice(restored.customServicePrice);
+    if (restored.customCategory !== undefined) setCustomCategory(restored.customCategory);
+    if (restored.customIsAddon !== undefined) setCustomIsAddon(restored.customIsAddon);
+    if (restored.showCustomServiceInput !== undefined) setShowCustomServiceInput(restored.showCustomServiceInput);
+    setIsFormDirty(false);
+  };
+
+  const resetModalState = useCallback(() => {
+    setCustomerId('');
+    setCustomerSearch('');
+    setSelectedCustomerInfo(null);
+    setCustomerResults([]);
+    setSelectedTreatments([]);
+    setCustomServiceName('');
+    setCustomServiceDuration(60);
+    setCustomServicePrice(0);
+    setCustomCategory('BABY');
+    setCustomIsAddon(false);
+    setShowCustomServiceInput(false);
+    setBookingDate('');
+    setBookingTime('');
+    setAssignedStaffId('');
+    setStatus('confirmed');
+    setNotes('');
+    setAddress('');
+    setLandmark('');
+    setOngkir(0);
+    setDiscount(0);
+    setIsMultiSession(false);
+    setMultiSessionTotal(0);
+    setMultiSessionSchedule([]);
+    setBabies([]);
+    setRecommendations([]);
+    setHasCalculatedRecommendations(false);
+    setIsFormDirty(false);
+    setConflictInfo(null);
+    setShowConflictModal(false);
+    setServiceSearch('');
+    setIsServiceDropdownOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) {
+      resetModalState();
+      initializedEditIdRef.current = null;
+    }
+  }, [isOpen]);
+
+  const isReservationDraftMeaningful = useCallback((data: typeof currentFormPayload) => {
+    if (!data) return false;
+    const hasTreatments = Array.isArray(data.selectedTreatments) && data.selectedTreatments.length > 0;
+    const hasBabies = Array.isArray(data.babies) && data.babies.some((b: any) => b?.name?.trim() || b?.ageText?.trim());
+    const hasNotes = Boolean(data.notes && data.notes.trim().length > 0);
+    const hasDiscount = typeof data.discount === 'number' && data.discount > 0;
+    const hasAssignedStaff = Boolean(data.assignedStaffId && data.assignedStaffId.trim().length > 0);
+    const hasMultiSession = Boolean((data as any).isMultiSession || (Array.isArray((data as any).multiSessionSchedule) && (data as any).multiSessionSchedule.length > 0));
+    const hasCustom = Boolean((data as any).customServiceName && String((data as any).customServiceName).trim().length > 0);
+
+    return hasTreatments || hasBabies || hasNotes || hasDiscount || hasAssignedStaff || hasMultiSession || hasCustom;
+  }, []);
+
+  const effectiveCustomerId = customerId || (initialCustomer as any)?.id || initialCustomerId || '';
+
+  // Peringatan Jadwal Aktif — cegah split-brain duplicate booking (customer sudah
+  // punya reservasi confirmed/hold hari ini atau ke depan). Hanya mode create.
+  const [activeReservations, setActiveReservations] = useState<any[]>([]);
+  useEffect(() => {
+    if (!isOpen || mode === 'edit' || !effectiveCustomerId) {
+      setActiveReservations([]);
+      return;
+    }
+    let cancelled = false;
+    apiRequest(`/api/admin/customers/${effectiveCustomerId}/active-reservations`)
+      .then((res: any) => {
+        if (cancelled) return;
+        const list = Array.isArray(res?.data) ? res.data : [];
+        setActiveReservations(list);
+      })
+      .catch(() => {
+        if (!cancelled) setActiveReservations([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, mode, effectiveCustomerId]);
+  // Isolasi ketat: HANYA aktifkan draf jika customer sudah teridentifikasi (anti-leakage)
+  const draftKey = effectiveCustomerId ? `reservation_cust_${effectiveCustomerId}` : '';
+  const [isFormDirty, setIsFormDirty] = useState(false);
+  const { hasDraft, draftTimeAgo, saveDraftManually, restoreDraft, discardDraft } = useFormDraft(
+    draftKey,
+    currentFormPayload,
+    handleRestoreDraft,
+    {
+      enabled: Boolean(isOpen && mode !== 'edit' && draftKey),
+      isMeaningful: isReservationDraftMeaningful,
+      isDirty: isFormDirty,
+    }
+  );
+  const formDirtyContainerRef = useRef<HTMLFormElement>(null);
+
+  // Safe close dengan konfirmasi draf (anti window.confirm — useUiFeedback)
+  const handleSafeClose = useCallback(async () => {
+    if (isFormDirty && hasDraft) {
+      const wantToDiscard = await confirm({
+        title: 'Tinggalkan Formulir?',
+        message: 'Terdapat perubahan yang belum disimpan. Apakah ingin membuang draf ini?',
+        confirmText: 'Ya, Buang Draf',
+        cancelText: 'Simpan Draf',
+        danger: true,
+      });
+      if (wantToDiscard) {
+        discardDraft(true);
+        setIsFormDirty(false);
+      }
+    } else if (isFormDirty && isReservationDraftMeaningful(currentFormPayload)) {
+      // Ada ketikan bermakna yang belum sempat jadi draf (debounce belum fire) — tawarkan simpan
+      const wantToDiscard = await confirm({
+        title: 'Tinggalkan Formulir?',
+        message: 'Terdapat perubahan yang belum disimpan. Apakah ingin membuang perubahan ini?',
+        confirmText: 'Ya, Buang',
+        cancelText: 'Tetap di Form',
+        danger: true,
+      });
+      if (!wantToDiscard) return;
+      discardDraft(true);
+      setIsFormDirty(false);
+    }
+    onClose();
+  }, [isFormDirty, hasDraft, confirm, discardDraft, isReservationDraftMeaningful, currentFormPayload, onClose]);
+
+  // Dirty tracking via DOM events (input/change/click button) — anti phantom auto-save
+  useEffect(() => {
+    if (!isOpen || mode === 'edit') return;
+    const el = formDirtyContainerRef.current;
+    if (!el) return;
+    const mark = () => setIsFormDirty(true);
+    el.addEventListener('input', mark);
+    el.addEventListener('change', mark);
+    const clickMark = (e: Event) => {
+      const t = e.target as HTMLElement;
+      if (t.closest('button')) mark();
+    };
+    el.addEventListener('click', clickMark);
+    return () => {
+      el.removeEventListener('input', mark);
+      el.removeEventListener('change', mark);
+      el.removeEventListener('click', clickMark);
+    };
+  }, [isOpen, mode]);
+
+  // Fase 2 — Soft-keyboard handling (mobile): saat input menerima fokus, gulir ke
+  // tengah area form agar tidak tertutup keyboard virtual. Gerbang deterministik:
+  // HANYA viewport < 640px (desktop keyboard-fisik tidak perlu auto-scroll janky).
+  useEffect(() => {
+    if (!isOpen) return;
+    const container = formDirtyContainerRef.current;
+    if (!container) return;
+    if (typeof window.matchMedia === 'function' && !window.matchMedia('(max-width: 639px)').matches) return;
+    let scrollTimer: number | undefined;
+    const handleFocusIn = (e: FocusEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      const tag = target.tagName?.toLowerCase();
+      if (tag !== 'input' && tag !== 'textarea' && tag !== 'select') return;
+      window.clearTimeout(scrollTimer);
+      scrollTimer = window.setTimeout(() => {
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 120);
+    };
+    container.addEventListener('focusin', handleFocusIn);
+    return () => {
+      window.clearTimeout(scrollTimer);
+      container.removeEventListener('focusin', handleFocusIn);
+    };
+  }, [isOpen]);
+
+  // Load clinic services catalog with auto-repair
+  useEffect(() => {
+    async function loadCatalog() {
+      try {
+        setLoadingServices(true);
+        const res = await apiRequest('/api/admin/services');
+        const list = Array.isArray(res) ? res : res?.data || [];
+        const activeList = list.filter((s: ClinicServiceItem) => s.isActive !== false);
+        const finalList = activeList.length > 0 ? activeList : DEFAULT_CLINIC_SERVICES_FALLBACK;
+        setServices(finalList);
+
+        // Auto-repair any selected treatments that currently have price === 0
+        setSelectedTreatments((prev) => {
+          if (!prev || prev.length === 0) return prev;
+          let changed = false;
+          const next = prev.map((t) => {
+            if (!t.price || t.price === 0) {
+              const matched = matchCatalogService(t.name, finalList as any);
+              if (matched) {
+                changed = true;
+                return {
+                  ...t,
+                  price: matched.promoPrice || matched.originalPrice || 0,
+                  serviceId: t.serviceId.startsWith('custom-') ? matched.id : t.serviceId,
+                };
+              }
+            }
+            return t;
+          });
+          return changed ? next : prev;
+        });
+      } catch {
+        setServices(DEFAULT_CLINIC_SERVICES_FALLBACK);
+      } finally {
+        setLoadingServices(false);
+      }
+    }
+    if (isOpen) {
+      loadCatalog();
+    }
+  }, [isOpen]);
+
+  // FASE 3.1: reaktif per-tanggal — selaras WIB backend, fallback prop existingReservations (R5)
+  useEffect(() => {
+    if (!isOpen) return;
+    if (bookingDate) {
+      setLoadingReservations(true);
+      apiRequest(`/api/admin/reservations?startDate=${bookingDate}&endDate=${bookingDate}&status=all&pageSize=100`)
+        .then((res) => {
+          const list = Array.isArray(res) ? res : res?.reservations || res?.data || [];
+          setLoadedReservations(list);
+        })
+        .catch((err) => {
+          console.error('Gagal memuat jadwal reservasi untuk modal:', err);
+        })
+        .finally(() => setLoadingReservations(false));
+      return;
+    }
+    // Fallback saat bookingDate kosong (mis. edit tanpa tanggal): pakai prop atau fetch 300
+    if (Array.isArray(existingReservations) && existingReservations.length > 0) {
+      setLoadedReservations(existingReservations);
+    } else {
+      setLoadingReservations(true);
+      apiRequest('/api/admin/reservations?pageSize=300')
+        .then((res) => {
+          const list = Array.isArray(res) ? res : res?.reservations || res?.data || [];
+          setLoadedReservations(list);
+        })
+        .catch((err) => {
+          console.error('Gagal memuat jadwal reservasi untuk modal:', err);
+        })
+        .finally(() => setLoadingReservations(false));
+    }
+  }, [isOpen, bookingDate, existingReservations]);
+
+  // Sync initial target slot if opened via calendar slot click
+  useEffect(() => {
+    if (isOpen && initialSlotTarget) {
+      // Dukung dua bentuk date: Date object (kalender) & string YYYY-MM-DD (LiveChat)
+      const rawDate: any = (initialSlotTarget as any).date;
+      if (typeof rawDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+        setBookingDate(rawDate);
+      } else if (rawDate) {
+        setBookingDate(getWibDateKey(rawDate));
+      }
+      // Prioritas timeStr (HH:MM dari chat), fallback hour
+      const ts = (initialSlotTarget as any).timeStr as string | undefined;
+      if (ts && /^\d{1,2}:\d{2}$/.test(ts)) {
+        setBookingTime(ts);
+      } else {
+        const hh = String((initialSlotTarget as any).hour ?? 9).padStart(2, '0');
+        setBookingTime(`${hh}:00`);
+      }
+      if ((initialSlotTarget as any).staffId) {
+        setAssignedStaffId((initialSlotTarget as any).staffId);
+      }
+    } else if (isOpen && !bookingDate && mode !== 'edit') {
+      // Fallback hari ini HANYA untuk mode pembuatan baru, JANGAN untuk mode edit.
+      // Fase 2R: jam dibiarkan kosong (required) — anti silent 09:00.
+      setBookingDate(getTodayWibDateKey());
+      setBookingTime('');
+    }
+  }, [isOpen, initialSlotTarget, mode]);
+
+  // Auto-populate customer if initialCustomer is provided
+  // F-B2: mode edit TIDAK memakai auto-populate dari prop (bisa ramping/sintetik);
+  // sumber kebenaran edit = efek hidrasi edit + fetch detail. auto-populate hanya create.
+  useEffect(() => {
+    if (mode === 'edit') return;
+    if (isOpen && initialCustomer) {
+      handleSelectCustomer(initialCustomer);
+    } else if (isOpen && initialCustomerId && !customerId) {
+      apiRequest(`/api/admin/customers/${initialCustomerId}`)
+        .then((res) => {
+          const c = res?.customer || res?.data || res;
+          if (c?.id) handleSelectCustomer(c);
+        })
+        .catch(() => {});
+    }
+  }, [isOpen, initialCustomer, initialCustomerId, mode]);
+
+  // Pre-fill state when opened in edit mode — Fase 3R anti-race hidrasi katalog
+  useEffect(() => {
+    if (isOpen && mode === 'edit' && initialReservation) {
+      const isLiveCatalogReady = services !== DEFAULT_CLINIC_SERVICES_FALLBACK && services.length > 0;
+      const alreadyHydratedForm = initializedEditIdRef.current === initialReservation.id;
+
+      if (alreadyHydratedForm) {
+        // Anti-race: form utama SUDAH terhidrasi. Saat katalog live tiba di latar
+        // belakang, HANYA remap harga/durasi treatment — DILARANG menimpa pilihan
+        // admin (assignedStaffId, tanggal, customer, catatan) yang mungkin sudah diedit.
+        if (hydratedWithLiveCatalogRef.current) return;
+        if (!isLiveCatalogReady) return;
+        hydratedWithLiveCatalogRef.current = true;
+        if (initialReservation.treatment_detail) {
+          try {
+            const rawBabies = initialReservation.customer?.children || (initialReservation as any).children || (initialReservation as any).baby_details || [];
+            const parsed = parseTreatmentsFromDetail(initialReservation.treatment_detail, services, initialReservation.purchase_value, rawBabies as any);
+            if (parsed.length > 0) setSelectedTreatments(parsed);
+          } catch {}
+        }
+        return;
+      }
+
+      // Hidrasi form utama — hanya SEKALI per reservasi.
+      initializedEditIdRef.current = initialReservation.id;
+      if (isLiveCatalogReady) hydratedWithLiveCatalogRef.current = true;
+
+      const res = initialReservation;
+      const cust = res.customer;
+      if (cust) {
+        setCustomerId(cust.id || res.customer_id || '');
+        setSelectedCustomerInfo(cust);
+        setCustomerSearch(`${cust.name || 'Bunda'} (${cust.phone || ''})`);
+        const existingFee = res.delivery_fee ?? (res as any).ongkir;
+        if (existingFee !== undefined && existingFee !== null && !isNaN(Number(existingFee))) {
+          setOngkir(Number(existingFee));
+        } else {
+          setOngkir(resolveCustomerDefaultOngkir(cust, deliveryTiers));
+        }
+      } else if (res.customer_id) {
+        setCustomerId(res.customer_id);
+      }
+      // F-B1: deep hydration berbasis KELENGKAPAN (bukan truthiness). Bootstrap
+      // LiveChat membawa objek ramping (tanpa preferences/children/raw_text) tapi
+      // tetap truthy → dulu fetch dilewati. Bila customer/reservasi tidak lengkap,
+      // ambil 1x detail kanonik `GET /reservation/:id` (customer+children+baby_details).
+      const custHasLocation = Boolean(cust?.preferences?.address || cust?.preferences?.full_address || cust?.address);
+      const custHasChildren = Array.isArray(cust?.children) && cust.children.length > 0;
+      const resHasRaw = Boolean((res as any).raw_text);
+      const needsFullFetch = Boolean(res.id) && (!cust || (!custHasLocation && !custHasChildren) || !resHasRaw);
+      if (needsFullFetch) {
+        apiRequest(`/api/admin/reservation/${res.id}`)
+          .then((r: any) => {
+            const data = r?.data || r;
+            const c = data?.customer;
+            if (c?.id) {
+              setCustomerId(c.id);
+              setSelectedCustomerInfo(c);
+              setCustomerSearch(`${c.name || 'Bunda'} (${c.phone || ''})`);
+              const existingFee = (data as any)?.delivery_fee ?? (data as any)?.ongkir ?? res.delivery_fee ?? (res as any).ongkir;
+              if (existingFee !== undefined && existingFee !== null && !isNaN(Number(existingFee))) {
+                setOngkir(Number(existingFee));
+              } else {
+                setOngkir(resolveCustomerDefaultOngkir(c, deliveryTiers));
+              }
+            }
+            const fullBabies = (c?.children && c.children.length > 0)
+              ? c.children
+              : ((data?.children && data.children.length > 0) ? data.children : (data?.baby_details || []));
+            if (Array.isArray(fullBabies) && fullBabies.length > 0) {
+              setBabies(fullBabies.map((b: any) => ({ name: b.name || '', ageText: b.current_age || b.raw_age_text || b.age || b.ageText || '' })));
+            }
+            const fullAddress = resolveStreetAddress(data, c) || c?.preferences?.address || c?.address || '';
+            if (fullAddress) setAddress(fullAddress);
+            const fullLandmark = c?.preferences?.landmark || c?.preferences?.address_notes || (data?.customer as any)?.preferences?.landmark || '';
+            if (fullLandmark) setLandmark(fullLandmark);
+          })
+          .catch(() => {});
+      }
+
+      if (res.treatment_category) {
+        const cat = res.treatment_category as any;
+        setTreatmentCategory(cat === 'BUNDLE' ? 'BOTH' : cat);
+      }
+
+      if (res.booking_date) {
+        try {
+          const d = new Date(res.booking_date);
+          if (!isNaN(d.getTime())) {
+            setBookingDate(getWibDateKey(d));
+            const { timeFormatted } = getWibHoursAndMinutes(d);
+            setBookingTime(timeFormatted);
+          }
+        } catch {}
+      }
+
+      // Selalu tetapkan nilai pasti, jangan biarkan stale state dari modal sebelumnya
+      setAssignedStaffId(res.assigned_staff_id || (res as any).assigned_staff?.id || '');
+
+       // Hold tetap 'hold' saat dibuka; flip ke confirmed hanya saat Simpan ditekan.
+       const validStatus = (['pending', 'confirmed', 'completed', 'cancelled', 'hold'].includes(res.status) ? res.status : 'confirmed');
+      setStatus(validStatus as any);
+      const extractedNotes = res.notes || (() => {
+        if (!res.raw_text) return '';
+        const match = res.raw_text.match(/(?:^|\n)Catatan:\s*([\s\S]*)$/i);
+        return match ? match[1].trim() : '';
+      })();
+      setNotes(extractedNotes);
+
+      // W3: hidrasi alamat/patokan eksplisit saat edit (anti field kosong) — prioritas
+      // initialAddress (chat) → preferences → kolom legacy → raw_text form.
+      const editAddress =
+        initialAddress
+        || cust?.preferences?.address
+        || cust?.address
+        || (res as any).address
+        || resolveStreetAddress(res, cust)
+        || '';
+      if (editAddress) setAddress(editAddress);
+      const editLandmark =
+        initialLandmark
+        || cust?.preferences?.landmark
+        || cust?.preferences?.address_notes
+        || (res.customer as any)?.preferences?.landmark
+        || '';
+      if (editLandmark) setLandmark(editLandmark);
+
+      // Children / babies pre-fill — fallback ke baby_details untuk reservasi lama
+      const rawBabies = cust?.children || res.children || (res as any).baby_details || [];
+      if (Array.isArray(rawBabies) && rawBabies.length > 0) {
+        setBabies(
+          rawBabies.map((b: any) => ({
+            name: b.name || '',
+            ageText: b.ageText || b.age || b.raw_age_text || b.current_age || '',
+          }))
+        );
+      }
+
+      // Treatments pre-fill — sertakan babies untuk mapping assignedChildIndex yang benar
+      if (res.treatment_detail) {
+        try {
+          const parsed = parseTreatmentsFromDetail(res.treatment_detail, services, res.purchase_value, rawBabies as any);
+          if (parsed.length > 0) {
+            setSelectedTreatments(parsed);
+          }
+        } catch {}
+      }
+    } else if (!isOpen) {
+      initializedEditIdRef.current = null;
+      hydratedWithLiveCatalogRef.current = false;
+    }
+  }, [isOpen, mode, initialReservation, services, initialAddress, initialLandmark]);
+
+  // Customer search
+  const handleCustomerSearch = async (query: string) => {
+    setCustomerSearch(query);
+    if (!query || query.length < 2) {
+      setCustomerResults([]);
+      return;
+    }
+    setSearchingCustomer(true);
+    try {
+      const params = new URLSearchParams({ search: query, pageSize: '8' });
+      const res = await apiRequest(`/api/admin/customers?${params.toString()}`);
+      setCustomerResults(res?.customers || res?.data || []);
+    } catch {
+      setCustomerResults([]);
+    } finally {
+      setSearchingCustomer(false);
+    }
+  };
+
+  const handleSelectCustomer = (c: any) => {
+    setCustomerId(c.id);
+    setSelectedCustomerInfo(c);
+    setCustomerSearch(`${c.name || 'Bunda'} (${c.phone})`);
+    setCustomerResults([]);
+
+    if (c.children && c.children.length > 0) {
+      setBabies(
+        c.children.map((child: any) => ({
+          name: child.name,
+          ageText: child.current_age || child.raw_age_text || '',
+        }))
+      );
+    } else if (initialBabies && initialBabies.length > 0) {
+      setBabies(initialBabies.map((b) => ({ name: b.name || '', ageText: b.ageText || '' })));
+    }
+
+    // Auto calculate & fill ongkir from customer profile / distance via DB delivery tiers (SSOT Promo)
+    setOngkir(resolveCustomerDefaultOngkir(c, deliveryTiers));
+  };
+
+  // Filter services by search term
+  const filteredServices = useMemo(() => {
+    if (!serviceSearch.trim()) return services;
+    const q = serviceSearch.toLowerCase();
+    return services.filter(
+      (s) =>
+        s.name.toLowerCase().includes(q) ||
+        s.category.toLowerCase().includes(q) ||
+        (s.description && s.description.toLowerCase().includes(q))
+    );
+  }, [services, serviceSearch]);
+
+  // Multi-treatment handler: Supports adding multiple instances (for 2 children)
+  const handleAddServiceInstance = (srv: ClinicServiceItem, targetChildIndex?: number) => {
+    const isAddon = isAddonService(srv);
+
+    // Business Rule Check: Add-on cannot stand alone.
+    // If trying to add an Add-on and there are no main (non-addon) treatments selected yet:
+    const hasMainService = selectedTreatments.some((t) => !isAddonService(t));
+    if (isAddon && !hasMainService) {
+      toast(`Layanan "${srv.name}" adalah Add-on dan tidak bisa berdiri sendiri. Silakan pilih minimal 1 layanan utama terlebih dahulu.`, 'error');
+      return;
+    }
+
+    const existingForService = selectedTreatments.filter((t) => t.serviceId === srv.id);
+    const nextChildIndex = targetChildIndex !== undefined 
+      ? targetChildIndex 
+      : Math.min(existingForService.length, Math.max(0, babies.length - 1));
+
+    const newItem: SelectedTreatmentItem = {
+      instanceId: `inst-${srv.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      serviceId: srv.id,
+      name: srv.name,
+      category: srv.category,
+      durationMinutes: srv.durationMinutes || (isAddon ? 15 : 60),
+      price: srv.promoPrice || srv.originalPrice || 0,
+      isAddon,
+      assignedChildIndex: nextChildIndex,
+    };
+    setSelectedTreatments((prev) => [...prev, newItem]);
+    if (!isAddon && srv.category !== 'ADD_ON') {
+      setTreatmentCategory(srv.category as any);
+    }
+
+    // Detect multi-session treatment and generate schedule
+    if (srv.totalSessions && srv.totalSessions > 1) {
+      setIsMultiSession(true);
+      setMultiSessionTotal(srv.totalSessions);
+      const isNewborn2Days = (srv.name || '').toLowerCase().includes('2 hari') || (srv.name || '').toLowerCase().includes('newborn');
+      const defaultInterval: SeriesIntervalPreset = isNewborn2Days ? 'EVERY_2_DAYS' : 'DAILY';
+      setSeriesInterval(defaultInterval);
+      const tomorrow = getTodayWibDate();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowStr = getWibDateKey(tomorrow);
+      const schedule = buildSeriesSchedule(srv.totalSessions, defaultInterval, tomorrowStr, '09:00', assignedStaffId || '');
+      setMultiSessionSchedule(schedule);
+    }
+  };
+
+  const handleRemoveLastServiceInstance = (serviceId: string) => {
+    setSelectedTreatments((prev) => {
+      const idx = prev.map((t) => t.serviceId).lastIndexOf(serviceId);
+      if (idx === -1) return prev;
+      const next = prev.filter((_, i) => i !== idx);
+      const remainingMain = next.filter((t) => !isAddonService(t));
+      const remainingAddons = next.filter((t) => isAddonService(t));
+      if (remainingMain.length === 0 && remainingAddons.length > 0) {
+        toast('Perhatian: Reservasi yang tersisa hanya berisi layanan add-on. Harap tambahkan layanan utama.', 'info');
+      }
+      return next;
+    });
+  };
+
+  const handleDuplicateTreatment = (item: SelectedTreatmentItem) => {
+    const nextChildIndex = (item.assignedChildIndex !== undefined && item.assignedChildIndex < babies.length - 1)
+      ? item.assignedChildIndex + 1
+      : item.assignedChildIndex ?? 0;
+
+    const newItem: SelectedTreatmentItem = {
+      ...item,
+      instanceId: `inst-${item.serviceId}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      assignedChildIndex: nextChildIndex,
+    };
+    setSelectedTreatments((prev) => [...prev, newItem]);
+    toast(`Treatment "${item.name}" berhasil ditambahkan untuk anak berikutnya!`, 'success');
+  };
+
+  const handleUpdateTreatmentChild = (instanceId: string, childIdx: number) => {
+    setSelectedTreatments((prev) =>
+      prev.map((t) => (t.instanceId === instanceId ? { ...t, assignedChildIndex: childIdx } : t))
+    );
+  };
+
+  // Smart Pre-Fill Pipeline (Live Chat / Quick Booking handoff)
+  const prefillTreatmentMatchedRef = useRef(false);
+  useEffect(() => {
+    if (!isOpen) {
+      prefillTreatmentMatchedRef.current = false;
+      return;
+    }
+
+    // 1. Data anak dari chat (jika state masih kosong) — berlaku juga untuk mode edit hold.
+    if (initialBabies && initialBabies.length > 0 && babies.length === 0) {
+      setBabies(initialBabies.map((b) => ({ name: b.name || '', ageText: (b as any).ageText || (b as any).age || '' })));
+    }
+    if (mode === 'edit') return;
+
+    // 2. Catatan awal dari chat
+    if (initialNotes && !notes.trim()) {
+      setNotes(initialNotes);
+    }
+
+    // 3. Treatment category awal
+    if (initialTreatmentCategory) {
+      setTreatmentCategory(initialTreatmentCategory);
+    }
+
+    // 4. Auto-match treatment ke katalog dinamis database.
+    // F-B4: tunggu katalog LIVE (jangan kunci ke fallback statis) agar harga/nama
+    // resmi DB yang dipakai, bukan fallback JSON.
+    const isLiveCatalogReady = services !== DEFAULT_CLINIC_SERVICES_FALLBACK && services.length > 0;
+    if (initialTreatmentName && selectedTreatments.length === 0 && !prefillTreatmentMatchedRef.current && isLiveCatalogReady) {
+      const matched = matchCatalogService(initialTreatmentName, services as any);
+      if (matched) {
+        prefillTreatmentMatchedRef.current = true;
+        handleAddServiceInstance(matched);
+      }
+    }
+  }, [
+    isOpen,
+    initialBabies,
+    initialNotes,
+    initialTreatmentCategory,
+    initialTreatmentName,
+    services,
+    selectedTreatments.length,
+    babies.length,
+    notes,
+  ]);
+
+  const handleAddCustomTreatment = () => {
+    if (!customServiceName.trim()) {
+      toast('Nama treatment kustom wajib diisi', 'error');
+      return;
+    }
+    const isAddon = customIsAddon;
+    const hasMainService = selectedTreatments.some((t) => !isAddonService(t));
+    if (isAddon && !hasMainService) {
+      toast(`Layanan kustom "${customServiceName}" adalah Add-on dan tidak bisa berdiri sendiri. Silakan pilih minimal 1 layanan utama terlebih dahulu.`, 'error');
+      return;
+    }
+
+    const newItem: SelectedTreatmentItem = {
+      instanceId: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      serviceId: `custom-${Date.now()}`,
+      name: customServiceName.trim(),
+      category: customCategory,
+      durationMinutes: Math.max(10, Number(customServiceDuration) || 60),
+      price: Number(customServicePrice) || 0,
+      isAddon,
+      assignedChildIndex: 0,
+    };
+    setSelectedTreatments((prev) => [...prev, newItem]);
+    setCustomServiceName('');
+    setCustomServicePrice(0);
+    setCustomIsAddon(false);
+    setShowCustomServiceInput(false);
+  };
+
+  const handleRemoveTreatment = (instanceId: string) => {
+    setSelectedTreatments((prev) => {
+      const next = prev.filter((t) => t.instanceId !== instanceId);
+      const remainingMain = next.filter((t) => !isAddonService(t));
+      const remainingAddons = next.filter((t) => isAddonService(t));
+      if (remainingMain.length === 0 && remainingAddons.length > 0) {
+        toast('Perhatian: Reservasi yang tersisa hanya berisi layanan add-on. Harap tambahkan layanan utama.', 'info');
+      }
+      return next;
+    });
+  };
+
+  const handleUpdateTreatmentPrice = (instanceId: string, newPrice: number) => {
+    setSelectedTreatments((prev) =>
+      prev.map((t) => (t.instanceId === instanceId ? { ...t, price: Math.max(0, isNaN(newPrice) ? 0 : newPrice) } : t))
+    );
+  };
+
+  // Duration & Buffer Calculation: +20 min per MAIN treatment (Addon like moksa = 0 buffer)
+  const pureDurationMinutes = useMemo(() => {
+    if (selectedTreatments.length === 0) return 60;
+    return selectedTreatments.reduce((sum, t) => sum + (t.durationMinutes || 0), 0);
+  }, [selectedTreatments]);
+
+  const subtotalTreatments = useMemo(() => {
+    return selectedTreatments.reduce((sum, t) => sum + (Number(t.price) || 0), 0);
+  }, [selectedTreatments]);
+
+  const totalPaymentAmount = useMemo(() => {
+    const sub = Number(subtotalTreatments) || 0;
+    const ong = Number(ongkir) || 0;
+    const disc = Number(discount) || 0;
+    return Math.max(0, sub + ong - disc);
+  }, [subtotalTreatments, ongkir, discount]);
+
+  const mainTreatmentsCount = useMemo(() => {
+    return selectedTreatments.filter((t) => !isAddonService(t)).length;
+  }, [selectedTreatments]);
+
+  const addonTreatmentsCount = useMemo(() => {
+    return selectedTreatments.filter((t) => isAddonService(t)).length;
+  }, [selectedTreatments]);
+
+  // Fase 4R: buffer kanonis tunggal 20 menit per kunjungan (selaras backend resolveDurationBreakdown) — anti-snowball
+  const totalBufferMinutes = useMemo(() => {
+    if (selectedTreatments.length === 0) return 20;
+    if (mainTreatmentsCount === 0) return 10;
+    return 20; // satu buffer per kunjungan bila ada layanan utama (bundle = durasi penuh)
+  }, [selectedTreatments, mainTreatmentsCount]);
+
+  const totalScheduledDurationMinutes = useMemo(() => {
+    return pureDurationMinutes + totalBufferMinutes;
+  }, [pureDurationMinutes, totalBufferMinutes]);
+
+  // End time calculation
+  const calculateEndTime = () => {
+    if (!bookingTime) return '';
+    const [h, m] = bookingTime.split(':').map(Number);
+    const totalMinutes = h * 60 + m + totalScheduledDurationMinutes;
+    return formatMinutesToTime(totalMinutes);
+  };
+
+  // Babies Handlers
+  const handleAddBaby = () => {
+    setBabies((prev) => [...prev, { name: '', ageText: '' }]);
+  };
+
+  const handleUpdateBaby = (idx: number, field: 'name' | 'ageText', val: string) => {
+    setBabies((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], [field]: val };
+      return next;
+    });
+  };
+
+  const handleRemoveBaby = (idx: number) => {
+    setBabies((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  // Filter existing reservations for selected date — fondasional: WIB Date Key (R2), anti split-brain
+  // Tampilan daftar HARUS memuat seluruh reservasi aktif (termasuk yang sedang diedit) — self-exclusion HANYA di guard collision
+  const bookedReservationsForDate = useMemo(() => {
+    if (!bookingDate) return [];
+    const targetDateStr = bookingDate.trim();
+    const sourceList = loadedReservations.length > 0 ? loadedReservations : existingReservations;
+    return sourceList.filter((r) => {
+      if (!r.booking_date || (r.status as string) === 'cancelled' || (r.status as string) === 'rejected') return false;
+      return getWibDateKey(r.booking_date) === targetDateStr;
+    });
+  }, [loadedReservations, existingReservations, bookingDate]);
+
+  // Pre-flight warning: reservasi aktif milik customer yang sama pada tanggal ini — kecualikan diri sendiri saat edit.
+  const customerConflictsForDate = useMemo(() => {
+    if (!customerId || bookedReservationsForDate.length === 0) return [];
+    return bookedReservationsForDate.filter((r: any) => {
+      if (mode === 'edit' && (initialReservation as any)?.id && r.id === (initialReservation as any).id) return false;
+      const rid = r.customer_id || (r.customer as any)?.id;
+      return rid === customerId;
+    });
+  }, [bookedReservationsForDate, customerId, mode, (initialReservation as any)?.id]);
+
+  // Real-Time Collision Guardrail: mendeteksi bentrok jadwal terapis & customer di jam yang dipilih
+  const realtimeCollisions = useMemo(() => {
+    if (!bookingDate || !bookingTime || bookedReservationsForDate.length === 0) {
+      return { staffCollisions: [], customerCollisions: [] };
+    }
+
+    const [slotH, slotM] = bookingTime.split(':').map(Number);
+    if (isNaN(slotH) || isNaN(slotM)) return { staffCollisions: [], customerCollisions: [] };
+
+    const selectedStartMin = slotH * 60 + slotM;
+    const dur = totalScheduledDurationMinutes || 60;
+    const selectedEndMin = selectedStartMin + dur;
+
+    const staffCollisions: Array<{ 
+      id: string; 
+      customerName: string; 
+      time: string; 
+      duration: number; 
+      treatment: string; 
+      staffName: string;
+      collisionType?: 'OVERLAP' | 'INSUFFICIENT_TRAVEL_TIME';
+      requiredMinutes?: number;
+      availableMinutes?: number;
+      distanceKm?: number;
+    }> = [];
+    const customerCollisions: Array<{ id: string; time: string; treatment: string }> = [];
+
+    for (const r of bookedReservationsForDate) {
+      if (mode === 'edit' && (initialReservation as any)?.id && r.id === (initialReservation as any).id) {
+        continue;
+      }
+      if (r.status === 'cancelled') continue;
+
+      const rDate = new Date(r.booking_date!);
+      if (isNaN(rDate.getTime())) continue;
+      const { hours: rH, minutes: rM, timeFormatted } = getWibHoursAndMinutes(r.booking_date!);
+      const rStartMin = rH * 60 + rM;
+      const rDur = (r as any).duration_minutes || 60;
+      const rEndMin = rStartMin + rDur;
+
+      const isOverlap = selectedStartMin < rEndMin && selectedEndMin > rStartMin;
+
+      const rStaffId = r.assigned_staff_id || r.assigned_staff?.id;
+      if (assignedStaffId && rStaffId && rStaffId === assignedStaffId && isOverlap) {
+        const staffObj = effectiveStaffList.find((s) => s.id === assignedStaffId);
+        const timeStr = timeFormatted;
+        staffCollisions.push({
+          id: r.id,
+          customerName: (r.customer as any)?.name || 'Pasien Lain',
+          time: timeStr,
+          duration: rDur,
+          treatment: r.treatment_detail || 'Treatment',
+          staffName: staffObj?.name || 'Bidan Terpilih',
+          collisionType: 'OVERLAP',
+        });
+      }
+
+      // Travel time collision check (only for same staff, non-overlapping bookings)
+      if (assignedStaffId && rStaffId && rStaffId === assignedStaffId && !isOverlap) {
+        const rCust = r.customer as any;
+        const selectedCust = selectedCustomerInfo;
+        
+        // Check gap from previous booking end to selected start
+        if (rEndMin <= selectedStartMin) {
+          const timeGapMinutes = selectedStartMin - rEndMin;
+          const travelCheck = checkTravelTimeSufficiency(
+            rCust?.lat,
+            rCust?.lng,
+            selectedCust?.lat,
+            selectedCust?.lng,
+            timeGapMinutes
+          );
+          if (travelCheck && !travelCheck.sufficient) {
+            const timeStr = timeFormatted;
+            const staffObj = effectiveStaffList.find((s) => s.id === assignedStaffId);
+            staffCollisions.push({
+              id: r.id,
+              customerName: rCust?.name || 'Pasien Sebelumnya',
+              time: timeStr,
+              duration: rDur,
+              treatment: r.treatment_detail || 'Treatment',
+              staffName: staffObj?.name || 'Bidan Terpilih',
+              collisionType: 'INSUFFICIENT_TRAVEL_TIME',
+              requiredMinutes: travelCheck.requiredMinutes,
+              availableMinutes: travelCheck.availableMinutes,
+              distanceKm: travelCheck.distanceKm,
+            });
+          }
+        }
+        
+        // Check gap from selected end to next booking start
+        if (selectedEndMin <= rStartMin) {
+          const timeGapMinutes = rStartMin - selectedEndMin;
+          const travelCheck = checkTravelTimeSufficiency(
+            selectedCust?.lat,
+            selectedCust?.lng,
+            rCust?.lat,
+            rCust?.lng,
+            timeGapMinutes
+          );
+          if (travelCheck && !travelCheck.sufficient) {
+            const timeStr = timeFormatted;
+            const staffObj = effectiveStaffList.find((s) => s.id === assignedStaffId);
+            staffCollisions.push({
+              id: r.id,
+              customerName: rCust?.name || 'Pasien Berikutnya',
+              time: timeStr,
+              duration: rDur,
+              treatment: r.treatment_detail || 'Treatment',
+              staffName: staffObj?.name || 'Bidan Terpilih',
+              collisionType: 'INSUFFICIENT_TRAVEL_TIME',
+              requiredMinutes: travelCheck.requiredMinutes,
+              availableMinutes: travelCheck.availableMinutes,
+              distanceKm: travelCheck.distanceKm,
+            });
+          }
+        }
+      }
+
+      const rCustId = r.customer_id || (r.customer as any)?.id;
+      if (customerId && rCustId === customerId && isOverlap) {
+        const timeStr = timeFormatted;
+        customerCollisions.push({
+          id: r.id,
+          time: timeStr,
+          treatment: r.treatment_detail || r.status,
+        });
+      }
+    }
+
+    return { staffCollisions, customerCollisions };
+  }, [bookingDate, bookingTime, totalScheduledDurationMinutes, assignedStaffId, bookedReservationsForDate, mode, (initialReservation as any)?.id, customerId, effectiveStaffList, selectedCustomerInfo]);
+
+  // Smart Slot Recommendation Generator with Accurate Midwife Arrival & Departure
+  const handleGenerateRecommendations = () => {
+    if (!bookingDate) {
+      toast('Pilih tanggal kunjungan terlebih dahulu', 'error');
+      return;
+    }
+
+    // Filter staff: If specific staff chosen in dropdown, recommend for that staff.
+    // Otherwise, strictly filter for active field therapists (role === 'THERAPIST').
+    let targetStaffList = effectiveStaffList.filter((s) => {
+      if (s.active === false) return false;
+      if (assignedStaffId) return s.id === assignedStaffId;
+      return s.role === 'THERAPIST' || (s.role || '').toLowerCase().includes('therapist');
+    });
+
+    if (targetStaffList.length === 0) {
+      targetStaffList = effectiveStaffList.filter((s) => s.active !== false);
+    }
+
+    if (targetStaffList.length === 0) {
+      toast('Tidak ada staf/terapis aktif yang terdaftar', 'error');
+      return;
+    }
+
+    // Customer Location (Micro-Task 4.3: rantai D-4)
+    const custLat = selectedCard?.lat ?? selectedCustomerInfo?.lat ?? CLINIC_COORDS.lat;
+    const custLng = selectedCard?.lng ?? selectedCustomerInfo?.lng ?? CLINIC_COORDS.lng;
+
+    // Ekstraksi murni recommendSlots (Micro-Task 4.4)
+    const topRecs = recommendSlots({
+      targetStaffList,
+      staffBookingsForDate: bookedReservationsForDate,
+      custLat,
+      custLng,
+      bookingDate,
+      totalDurationMinutes: totalScheduledDurationMinutes,
+      mode,
+      currentReservationId: (initialReservation as any)?.id,
+      clinicCoords: CLINIC_COORDS,
+    });
+
+    setRecommendations(topRecs);
+    setHasCalculatedRecommendations(true);
+
+    if (topRecs.length === 0) {
+      toast('Semua slot terapis penuh pada tanggal ini. Coba pilih tanggal lain.', 'error');
+    } else {
+      toast(`${topRecs.length} rekomendasi jam kunjungan berhasil dihitung untuk ${targetStaffList.map(s => s.name).join(', ')}!`, 'success');
+    }
+  };
+
+  const handleApplyRecommendation = (rec: SlotRecommendation) => {
+    setBookingTime(rec.startTime);
+    setAssignedStaffId(rec.staffId);
+    toast(`Jam diatur ke ${rec.startTime} WIB dengan terapis ${rec.staffName}. Estimasi tiba: ${rec.arrivalTime} WIB.`, 'success');
+  };
+
+  const buildCreatePayload = (force = false) => {
+    let fullBookingIso: string | undefined = undefined;
+    if (bookingDate && bookingTime) {
+      fullBookingIso = buildWibIso(bookingDate, bookingTime);
+    }
+    const treatmentSummary = selectedTreatments.map((t) => t.name).join(' + ');
+    const finalTreatmentDetail = `${treatmentSummary} [Total ${totalScheduledDurationMinutes}m]`;
+    const hasBaby = selectedTreatments.some((t) => t.category === 'BABY' || t.category === 'KIDS');
+    const hasMoms = selectedTreatments.some((t) => t.category === 'MOMS');
+    const rawCategory = hasBaby && hasMoms ? 'BOTH' : selectedTreatments[0]?.category || treatmentCategory;
+    const computedCategory: 'BABY' | 'KIDS' | 'MOMS' | 'BOTH' =
+      rawCategory === 'BUNDLE' ? 'BOTH' :
+      (rawCategory as any) || 'BABY';
+    return {
+      fullBookingIso, finalTreatmentDetail, computedCategory, treatmentSummary,
+      payload: {
+        customerId,
+        treatmentCategory: computedCategory,
+        treatmentDetail: finalTreatmentDetail,
+        bookingDate: fullBookingIso,
+        durationMinutes: totalScheduledDurationMinutes,
+        assignedStaffId: assignedStaffId || undefined,
+        status,
+        notes: notes.trim() || undefined,
+        customerAddressId: customerAddressId || undefined,
+        address: address.trim() || undefined,
+        landmark: landmark.trim() || undefined,
+        babies: babies.filter((b) => b.name.trim().length > 0),
+        purchaseValue: Math.max(0, subtotalTreatments - (Number(discount) || 0)),
+        ongkir: Number(ongkir) || 0,
+        ...(force ? { force: true } : {}),
+      },
+    };
+  };
+
+  // Payload PATCH edit — SSoT tunggal agar jalur simpan biasa & force-override konsisten.
+  const buildEditPayload = (force = false) => {
+    const { fullBookingIso, finalTreatmentDetail, computedCategory } = buildCreatePayload(force);
+    return {
+      customerId,
+      treatmentCategory: computedCategory,
+      treatmentDetail: finalTreatmentDetail,
+      bookingDate: fullBookingIso || null,
+      durationMinutes: totalScheduledDurationMinutes,
+      assignedStaffId: assignedStaffId ? assignedStaffId : null,
+      status,
+      notes: notes.trim() ? notes.trim() : null,
+      customerAddressId: customerAddressId || undefined,
+      address: address.trim() || undefined,
+      landmark: landmark.trim() || undefined,
+      babies: babies.filter((b) => b.name.trim().length > 0),
+      purchaseValue: Math.max(0, subtotalTreatments - (Number(discount) || 0)),
+      ongkir: Number(ongkir) || 0,
+      ...(force ? { force: true } : {}),
+    };
+  };
+
+  // Helper: enrich API response with form state for invoice (R1, R2) — NO discount (purchaseValue already net).
+  // `withInvoice` diteruskan sebagai penanda kontrak agar pemanggil (LiveChatMonitor) tahu
+  // apakah invoice sudah ditangani `onSuccessAndInvoice` (jangan buka modal kedua).
+  const enrichResWithFormState = (savedRes: any, withInvoice = false) => {
+    const formBabies = babies.filter((b) => b.name.trim().length > 0).map((b) => ({ name: b.name.trim(), age: b.ageText.trim() }));
+    // Paritas relasi: sertakan penugasan staff dari form agar pemanggil (list/detail)
+    // tidak sempat menampilkan "Belum ditugaskan" walau backend telat meng-join relasi.
+    const selectedStaffObj = assignedStaffId
+      ? effectiveStaffList.find((s) => s.id === assignedStaffId)
+      : null;
+    const enriched = {
+      ...savedRes,
+      assigned_staff_id: (savedRes?.assigned_staff_id ?? assignedStaffId) || null,
+      assigned_staff:
+        savedRes?.assigned_staff ||
+        (selectedStaffObj
+          ? { id: selectedStaffObj.id, name: selectedStaffObj.name, phone: selectedStaffObj.phone }
+          : null),
+      babies: formBabies,
+      customer_address_id: (savedRes?.customer_address_id ?? customerAddressId) || null,
+      customer: savedRes?.customer || selectedCustomerInfo || undefined,
+      ongkir: Number(ongkir) || 0,
+      _withInvoice: Boolean(withInvoice),
+      // CATATAN: discount TIDAK disertakan — purchaseValue sudah net (subtotal - discount).
+      // Formatter param `discount` = potongan TAMBAHAN yg BELUM masuk purchaseValue. Form-driven selalu 0.
+    };
+    return enriched;
+  };
+
+  const handleForceCreate = async () => {
+    setSubmitting(true);
+    try {
+      // Mode EDIT: force-override WAJIB PATCH reservasi eksisting — bukan POST create
+      // (POST akan menciptakan reservasi duplikat baru).
+      if (mode === 'edit' && initialReservation?.id) {
+        const res = await apiRequest(`/api/admin/reservation/${initialReservation.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(buildEditPayload(true)),
+        });
+        toast('Perubahan jadwal disimpan dengan override konflik (force).', 'success');
+        setShowConflictModal(false);
+        setConflictInfo(null);
+        discardDraft(true);
+        const savedRes = res?.reservation || res?.data || res || initialReservation;
+        onSuccess(enrichResWithFormState(savedRes));
+        onClose();
+        return;
+      }
+
+      const { payload } = buildCreatePayload(true);
+      const res = await apiRequest('/api/admin/reservation', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      toast('Jadwal baru disimpan dengan override konflik (force).', 'success');
+      setShowConflictModal(false);
+      setConflictInfo(null);
+      discardDraft(true);
+      const savedRes = res?.reservation || res?.data || res;
+      const enrichedRes = enrichResWithFormState(savedRes);
+      onSuccess(enrichedRes);
+      onClose();
+    } catch (err: any) {
+      toast(`Gagal menyimpan dengan force: ${err.message || 'Terjadi kesalahan'}`, 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent, withInvoice = false) => {
+    e.preventDefault();
+    if (!customerId) {
+      toast('Pilih customer terlebih dahulu', 'error');
+      return;
+    }
+    if (selectedTreatments.length === 0) {
+      toast('Pilih minimal 1 layanan treatment', 'error');
+      return;
+    }
+    if (!bookingDate) {
+      toast('Pilih tanggal reservasi terlebih dahulu', 'error');
+      return;
+    }
+    if (!bookingTime || !bookingTime.trim()) {
+      toast('Pilih jam mulai reservasi terlebih dahulu', 'error');
+      return;
+    }
+
+    // 🛑 Gerbang submit deterministik bila teks alamat admin belum dikomit (Micro-Task 4.2)
+    if (selectedCard && address.trim() && mismatchActive) {
+      toast('Teks alamat berbeda dgn kartu — pilih: Simpan sebagai Rumah Baru / Perbarui Kartu Terpilih.', 'error');
+      return;
+    }
+
+    // Serialize clean treatment string — hanya nama layanan + label total waktu (tanpa nama bayi/usia)
+    const treatmentSummary = selectedTreatments.map((t) => t.name).join(' + ');
+    const finalTreatmentDetail = `${treatmentSummary} [Total ${totalScheduledDurationMinutes}m]`;
+
+    // Overall category: if both mom & baby exist
+    const hasBaby = selectedTreatments.some((t) => t.category === 'BABY' || t.category === 'KIDS');
+    const hasMoms = selectedTreatments.some((t) => t.category === 'MOMS');
+    const rawCategory = hasBaby && hasMoms ? 'BOTH' : selectedTreatments[0]?.category || treatmentCategory;
+    const computedCategory: 'BABY' | 'KIDS' | 'MOMS' | 'BOTH' =
+      rawCategory === 'BUNDLE' ? 'BOTH' :
+      (rawCategory as any) || 'BABY';
+
+    let forceSubmit = false;
+    if (realtimeCollisions.staffCollisions.length > 0) {
+      const staffName = realtimeCollisions.staffCollisions[0].staffName;
+      const details = realtimeCollisions.staffCollisions
+        .map((c) => `• Pasien Ny. ${c.customerName} (Pukul ${c.time} WIB - ${c.treatment})`)
+        .join('\n');
+      const isConfirmed = await confirm({
+        title: '⚠️ Konfirmasi Jadwal Bentrok',
+        message: `Bidan ${staffName} sudah memiliki jadwal lain di jam ini:\n${details}\n\nApakah Anda yakin ingin tetap menjadwalkan (Force Override)?`,
+        confirmText: 'Ya, Simpan Paksa (Force)',
+        cancelText: 'Batal & Ubah Jam',
+        danger: true,
+      });
+      if (!isConfirmed) {
+        return;
+      }
+      forceSubmit = true;
+    }
+
+    setSubmitting(true);
+    try {
+      if (mode === 'edit' && initialReservation?.id) {
+        try {
+          const res = await apiRequest(`/api/admin/reservation/${initialReservation.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(buildEditPayload(forceSubmit)),
+          });
+
+          toast('Perubahan reservasi berhasil disimpan!', 'success');
+          discardDraft(true);
+          const savedRes = res?.reservation || res?.data || res || initialReservation;
+          const enrichedRes = enrichResWithFormState(savedRes);
+          onSuccess(enrichedRes);
+          if (withInvoice && onSuccessAndInvoice) {
+            onSuccessAndInvoice(enrichedRes);
+          }
+          onClose();
+        } catch (editErr: any) {
+          const code = editErr?.code || editErr?.error;
+          const existing = editErr?.existingReservation || editErr?.data?.existingReservation;
+          const is409 = editErr?.status === 409 || /409/.test(String(editErr?.message || '')) || /duplicate|bentrok|conflict|sudah memiliki reservasi/i.test(String(editErr?.message || ''));
+          if (code === 'DUPLICATE_BOOKING' || code === 'STAFF_COLLISION' || is409) {
+            setConflictInfo({
+              code: code || 'STAFF_COLLISION',
+              message: editErr?.message || 'Jadwal bentrok dengan reservasi aktif.',
+              existingReservation: existing || null,
+            });
+            setShowConflictModal(true);
+            return;
+          }
+          throw editErr;
+        }
+      } else if (isMultiSession && multiSessionSchedule.length > 0) {
+        // Multi-Session Series Creation dengan payload komersial lengkap
+        const primaryTreatment = selectedTreatments.find((t) => !isAddonService(t));
+        const formBabies = babies.filter((b) => b.name.trim().length > 0).map((b) => ({ name: b.name.trim(), ageText: b.ageText.trim() }));
+        const reqId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `req_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+        try {
+          const res = await apiRequest('/api/admin/reservation-series', {
+            method: 'POST',
+            body: JSON.stringify({
+              customerId,
+              treatmentName: primaryTreatment?.name || treatmentSummary,
+              treatmentCategory: computedCategory,
+              totalSessions: multiSessionSchedule.length,
+              purchaseValue: Math.max(0, subtotalTreatments - (Number(discount) || 0)),
+              deliveryFee: Number(ongkir) || 0,
+              customerAddressId: customerAddressId || (selectedCustomerInfo?.addresses?.[0]?.id || (selectedCustomerInfo as any)?.customer_address_id) || undefined,
+              discountAmount: Number(discount) || 0,
+              durationMinutes: Number(totalScheduledDurationMinutes) || Number(pureDurationMinutes) || 60,
+              requestId: reqId,
+              assignedStaffId: assignedStaffId || undefined,
+              notes: notes.trim() || undefined,
+              babies: formBabies,
+              sessions: multiSessionSchedule.map((s) => ({
+                sessionNumber: s.sessionNumber,
+                bookingDate: buildWibIso(s.date, s.time),
+                assignedStaffId: s.staffId || assignedStaffId || undefined,
+              })),
+            }),
+          });
+
+          toast(`Paket ${multiSessionSchedule.length} sesi berhasil dibuat!`, 'success');
+          discardDraft(true);
+          const savedRes = res?.data || res;
+          const enrichedRes = enrichResWithFormState(savedRes);
+          onSuccess(enrichedRes);
+          if (withInvoice && onSuccessAndInvoice) {
+            onSuccessAndInvoice(enrichedRes);
+          }
+          onClose();
+        } catch (seriesErr: any) {
+          const sessionNum = seriesErr?.data?.sessionNumber ?? seriesErr?.sessionNumber;
+          if (sessionNum) {
+            setConflictSessionNumber(sessionNum);
+          }
+          toast(seriesErr?.message || seriesErr?.data?.error || 'Gagal membuat paket berseri.', 'error');
+          return;
+        }
+      } else {
+        const { payload } = buildCreatePayload(forceSubmit);
+        try {
+          const res = await apiRequest('/api/admin/reservation', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+          });
+          toast('Jadwal reservasi multi-treatment berhasil dibuat!', 'success');
+          discardDraft(true);
+          const savedRes = res?.reservation || res?.data || res;
+          const enrichedRes = enrichResWithFormState(savedRes);
+          onSuccess(enrichedRes);
+          if (withInvoice && onSuccessAndInvoice) {
+            onSuccessAndInvoice(enrichedRes);
+          }
+          onClose();
+         } catch (createErr: any) {
+           const code = createErr?.code || createErr?.error;
+           const existing = createErr?.existingReservation || createErr?.data?.existingReservation;
+           const is409 = createErr?.status === 409 || /409/.test(String(createErr?.message || '')) || /duplicate|bentrok|conflict|sudah memiliki reservasi/i.test(String(createErr?.message || ''));
+           if (code === 'DUPLICATE_BOOKING' || code === 'STAFF_COLLISION' || is409) {
+            setConflictInfo({
+              code: code || 'DUPLICATE_BOOKING',
+              message: createErr?.message || 'Jadwal bentrok dengan reservasi aktif.',
+              existingReservation: existing || null,
+            });
+            setShowConflictModal(true);
+            return;
+          }
+          throw createErr;
+        }
+      }
+    } catch (err: any) {
+      toast(`Gagal ${mode === 'edit' ? 'memperbarui' : 'membuat'} jadwal: ${err.message || 'Terjadi kesalahan'}`, 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSubmitWithInvoice = (e: React.FormEvent) => {
+    handleSubmit(e, true);
+  };
+
+  // Keyboard Escape, app-swipe-back & popstate listener for mobile back gestures
+  useEffect(() => {
+    if (!isOpen) return;
+
+    try {
+      window.history.pushState({ modal: 'create-reservation' }, '');
+    } catch (_) {}
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (showBookedSlotsModal) {
+          setShowBookedSlotsModal(false);
+        } else {
+          void handleSafeClose();
+        }
+      }
+    };
+
+    const handleSwipeBack = (e: Event) => {
+      e.preventDefault();
+      if (showBookedSlotsModal) {
+        setShowBookedSlotsModal(false);
+      } else {
+        void handleSafeClose();
+      }
+    };
+
+    const handlePopState = () => {
+      if (showBookedSlotsModal) {
+        setShowBookedSlotsModal(false);
+      } else {
+        void handleSafeClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('app-swipe-back', handleSwipeBack);
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('app-swipe-back', handleSwipeBack);
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [isOpen, showBookedSlotsModal, handleSafeClose]);
+
+  if (!isOpen) return null;
+
+  return createPortal(
+    <div
+      data-modal-active="true"
+      className="fixed inset-0 bg-black/75 backdrop-blur-sm z-[99999] flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto overflow-x-hidden touch-pan-y overscroll-contain animate-fadeIn h-[100dvh] w-[100dvw]"
+      onClick={() => void handleSafeClose()}
+      style={{ touchAction: 'pan-y' }}
+    >
+      <div
+        className="w-full max-w-2xl bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] dark:text-[#e9edef] rounded-none sm:rounded-3xl p-3.5 sm:p-6 shadow-2xl relative my-auto h-[100dvh] sm:h-auto sm:max-h-[90vh] flex flex-col mx-auto overflow-x-hidden touch-pan-y overscroll-contain animate-modalScaleUp"
+        onClick={(e) => e.stopPropagation()}
+        style={{ touchAction: 'pan-y' }}
+      >
+        {/* Close button */}
+        <button
+          data-modal-close="true"
+          onClick={() => void handleSafeClose()}
+          className="absolute top-[calc(0.75rem+env(safe-area-inset-top,0px))] sm:top-4 right-3.5 sm:right-4 p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] transition-colors cursor-pointer"
+        >
+          <X size={18} />
+        </button>
+
+        {/* Modal Header — safe-area Notch */}
+        <div className="mb-4 pr-10 pt-[calc(0.25rem+env(safe-area-inset-top,0px))] sm:pt-0 flex items-start justify-between flex-wrap gap-2">
+          <div>
+            <h3 className="text-base sm:text-lg font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
+              <CalendarIcon size={18} className="text-[#008069] flex-shrink-0" />
+              <span>{mode === 'edit' ? '✏️ Edit Data Reservasi' : isMultiSession ? `📅 Buat Paket ${multiSessionTotal} Sesi` : 'Buat Jadwal Reservasi Baru'}</span>
+            </h3>
+            <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
+              {mode === 'edit'
+                ? 'Perbarui rincian layanan, pasien anak, tanggal, jam, terapis, dan tarif reservasi'
+                : 'Mendukung multi-treatment, reservasi 2 anak, dan rekomendasi jam'}
+            </p>
+          </div>
+
+        </div>
+
+        {/* Pre-flight double-booking warning */}
+        {mode !== 'edit' && customerConflictsForDate.length > 0 && (
+          <div className="mb-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800/50 rounded-xl text-xs text-amber-900 dark:text-amber-200">
+            <p className="font-bold flex items-center space-x-1.5">
+              <span>⚠️ {(selectedCustomerInfo?.name || 'Customer')} sudah memiliki {customerConflictsForDate.length} reservasi aktif pada tanggal ini</span>
+            </p>
+            <ul className="mt-1.5 space-y-1">
+              {customerConflictsForDate.slice(0, 3).map((r: any) => {
+                let timeLabel = '-';
+                try {
+                  timeLabel = `${getWibHoursAndMinutes(r.booking_date!).timeFormatted} WIB`;
+                } catch {}
+                return (
+                  <li key={r.id} className="flex items-center justify-between gap-2">
+                    <span className="truncate">• Pukul {timeLabel} — {r.treatment_detail || r.status}</span>
+                  </li>
+                );
+              })}
+            </ul>
+            <p className="mt-1.5 text-[11px]"> Disarankan alihkan ke mode edit jadwal yang sudah ada daripada membuat duplikat.</p>
+          </div>
+        )}
+
+        {/* Scrollable Form Body — footer aksi dipisah KE LUAR area gulir tetapi tetap
+            DI DALAM <form> (type="submit" & dirty-tracking tetap hidup — anti tombol mati) */}
+        <form ref={formDirtyContainerRef} onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 w-full">
+          <div className="space-y-4 overflow-y-auto overflow-x-hidden pr-1 flex-1 min-h-0 w-full max-w-full touch-pan-y overscroll-contain scroll-pb-32 sm:scroll-pb-8" style={{ WebkitOverflowScrolling: 'touch' as any }}>
+          {/* Draft Restore Banner — di dalam scroll agar ikut tergulir (non-sticky), tidak di mode edit */}
+          {mode !== 'edit' && hasDraft && (
+            <div className="p-2 sm:p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-xl flex items-center justify-between text-[11px] sm:text-xs text-amber-900 dark:text-amber-200 animate-in fade-in">
+              <div className="flex items-center space-x-2">
+                <FileText size={15} className="text-amber-600 shrink-0" />
+                <span>
+                  Ditemukan draf reservasi yang tersimpan <strong>{draftTimeAgo}</strong>.
+                </span>
+              </div>
+              <div className="flex items-center space-x-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={restoreDraft}
+                  className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg shadow-xs transition cursor-pointer"
+                >
+                  Pulihkan
+                </button>
+                <button
+                  type="button"
+                  onClick={() => discardDraft(false)}
+                  className="px-2 py-1 text-amber-800 hover:text-rose-600 text-xs font-semibold cursor-pointer"
+                >
+                  Buang
+                </button>
+              </div>
+            </div>
+          )}
+          {/* Section 1: Customer Picker */}
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider block">
+              Customer / Pasien *
+            </label>
+            {mode === 'edit' ? (
+              <div className="p-3 bg-[#f0f2f5] dark:bg-[#1c272e] border border-[#d1d7db] dark:border-[#374248] rounded-xl flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <div className="flex items-center space-x-2">
+                    <span className="font-bold text-xs text-[#111b21] dark:text-[#e9edef]">{selectedCustomerInfo?.name || 'Bunda'}</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold">Terkunci (Mode Edit)</span>
+                  </div>
+                  <p className="text-xs text-[#667781] dark:text-[#8696a0] font-mono">{selectedCustomerInfo?.phone}</p>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={customerSearch}
+                    onChange={(e) => handleCustomerSearch(e.target.value)}
+                    placeholder="Cari nama atau nomor WhatsApp customer..."
+                    enterKeyHint="search"
+                    inputMode="search"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck="false"
+                    className="w-full pl-9 pr-4 py-2.5 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-medium"
+                  />
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-[#8696a0] pointer-events-none">
+                    <Search size={14} />
+                  </span>
+                  {customerId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomerId('');
+                        setCustomerSearch('');
+                        setSelectedCustomerInfo(null);
+                      }}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#8696a0] hover:text-rose-500 cursor-pointer"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+
+                {searchingCustomer && (
+                  <p className="text-[11px] text-[#008069] font-semibold animate-pulse">
+                    Mencari data customer...
+                  </p>
+                )}
+
+                {/* Customer search results dropdown */}
+                {customerResults.length > 0 && !customerId && (
+              <div className="border border-[#e9edef] dark:border-[#2a3942] rounded-xl bg-white dark:bg-[#111b21] max-h-48 overflow-y-auto divide-y divide-[#e9edef] dark:divide-[#2a3942] shadow-lg z-20">
+                {customerResults.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => handleSelectCustomer(c)}
+                    className="w-full text-left px-3 py-2.5 hover:bg-[#f8fafc] text-xs text-[#111b21] dark:text-[#e9edef] flex justify-between items-center transition-colors cursor-pointer"
+                  >
+                    <div>
+                      <span className="font-bold">{c.name || 'Bunda'}</span>
+                      <span className="text-[#667781] dark:text-[#8696a0] ml-2 font-mono">{c.phone}</span>
+                      {c.kelurahan && (
+                        <p className="text-[10px] text-[#8696a0]">
+                          {c.kelurahan}, {c.kecamatan}
+                        </p>
+                      )}
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#e8f5f2] text-[#008069] font-bold">
+                      Pilih
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+              </>
+            )}
+
+            {/* Selected Customer Details Banner */}
+            {mode !== 'edit' && selectedCustomerInfo && (
+              <div className="p-3 bg-[#e8f5f2] border border-[#c2e7e0] rounded-xl flex items-start justify-between text-xs text-[#008069]">
+                <div className="space-y-0.5">
+                  <p className="font-bold">{selectedCustomerInfo.name || 'Bunda'} ({selectedCustomerInfo.phone})</p>
+                  {selectedCustomerInfo.kelurahan && (
+                    <p className="text-[11px] text-[#54656f] dark:text-[#aebac1] flex items-center space-x-1">
+                      <MapPin size={11} className="text-[#008069]" />
+                      <span>{selectedCustomerInfo.kelurahan}, {selectedCustomerInfo.kecamatan} ({selectedCustomerInfo.distance_km?.toFixed(1) || '0'} km)</span>
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+            {/* Multi-Address Selector (Micro-Task 4.1: tampil bila >= 1) */}
+            {savedAddresses.length >= 1 && (
+              <div className="p-2.5 bg-[#f0f2f5] dark:bg-[#202c33] rounded-xl border border-[#d1d7db] dark:border-[#2a3942] space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-1">
+                      <Home size={13} className="text-[#008069]" />
+                      <span>Pilih Alamat Rumah ({savedAddresses.length}/10 tersimpan):</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomerAddressId(null);
+                        setSavedAsNewHouse(true);
+                        toast('Mode alamat baru aktif untuk jadwal ini.', 'info');
+                      }}
+                      className="text-[11px] font-semibold text-[#008069] hover:underline cursor-pointer"
+                    >
+                      + Alamat Baru Untuk Jadwal Ini
+                    </button>
+                  </div>
+                  {savedAddresses.length >= 10 && (
+                    <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded px-1.5 py-0.5">
+                      Kapasitas Penuh (10/10)
+                    </span>
+                  )}
+                </div>
+                {savedAddresses.length >= 10 && (
+                  <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                    Kapasitas kartu tersimpan penuh (maks 10). Alamat baru akan menggantikan alamat sekunder terlama.
+                  </p>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                  {savedAddresses.map((addrItem: any) => {
+                    const isSelected = customerAddressId === addrItem.id;
+                    return (
+                      <button
+                        key={addrItem.id}
+                        type="button"
+                        onClick={() => {
+                          setCustomerAddressId(addrItem.id);
+                          setSavedAsNewHouse(false);
+                          if (addrItem.address) setAddress(addrItem.address);
+                          if (addrItem.landmark) setLandmark(addrItem.landmark);
+                          if (addrItem.ongkir != null) {
+                            setOngkir(addrItem.ongkir);
+                          } else if (addrItem.distanceKm) {
+                            const calc = calculateOngkirFromTiers(Number(addrItem.distanceKm), deliveryTiers);
+                            if (!calc.isOutOfCoverage) setOngkir(calc.netOngkir);
+                          }
+                        }}
+                        className={`text-left p-2.5 rounded-lg border text-xs min-h-[44px] transition-all cursor-pointer active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-[#008069] focus-visible:outline-none ${
+                          isSelected
+                            ? 'bg-[#e8f5f2] border-[#008069] text-[#008069] font-medium shadow-sm'
+                            : 'bg-white dark:bg-[#111b21] border-[#e9edef] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:bg-[#f5f6f6]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between font-bold text-xs">
+                          <span>{addrItem.label || (addrItem.isPrimary ? 'Rumah Utama' : 'Rumah Kedua')}</span>
+                          {addrItem.isPrimary && (
+                            <span className="text-[11px] bg-[#008069]/10 text-[#008069] px-1.5 py-0.5 rounded font-semibold">
+                              Primary
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] truncate text-[#667781] dark:text-[#8696a0] mt-0.5">
+                          {addrItem.address || `${addrItem.kelurahan || ''}, ${addrItem.kecamatan || ''}`}
+                        </p>
+                        {addrItem.distanceKm != null && (
+                          <p className="text-[11px] text-[#8696a0] mt-0.5">
+                            {addrItem.distanceKm} km · Ongkir Rp{(addrItem.ongkir || 0).toLocaleString('id-ID')}
+                          </p>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Alamat jalan fisik & patokan rumah (auto-prefill dari chat/profil) */}
+            {(mode !== 'edit' ? Boolean(selectedCustomerInfo) : true) && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider block">
+                    Alamat Lengkap (Jalan, RT/RW, No. Rumah)
+                  </label>
+                  <input
+                    type="text"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    placeholder="cth: Jl. Kedungklinter 1 No. 80"
+                    autoComplete="off"
+                    spellCheck="false"
+                    className="w-full px-3 py-2 bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-medium"
+                  />
+                  {(mismatchComputed || savedAsNewHouse || correctingCardId) && (
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      {mismatchActive && (
+                        <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded px-2 py-1">
+                          ⚠️ Teks alamat berbeda dengan kartu terpilih
+                        </span>
+                      )}
+                      {savedAsNewHouse && (
+                        <span className="text-[11px] font-semibold text-[#008069] bg-[#e8f5f2] border border-[#c2e7e0] rounded px-2 py-1 inline-flex items-center gap-1">
+                          <Home size={11} />
+                          Akan disimpan sebagai rumah baru
+                        </span>
+                      )}
+                      {correctingCardId && (
+                        <span className="text-[11px] font-semibold text-sky-700 bg-sky-50 border border-sky-200 rounded px-2 py-1 inline-flex items-center gap-1">
+                          <Pencil size={11} />
+                          Kartu sedang diperbarui
+                        </span>
+                      )}
+                      {!savedAsNewHouse && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCustomerAddressId(null);
+                              setSavedAsNewHouse(true);
+                              toast('Alamat baru akan disimpan sebagai rumah baru saat reservasi disimpan.', 'info');
+                            }}
+                            className="min-h-[44px] inline-flex items-center px-2.5 py-1 text-xs font-bold text-[#008069] bg-[#008069]/10 hover:bg-[#008069]/20 active:scale-[0.98] rounded-lg transition-transform focus-visible:ring-2 focus-visible:ring-[#008069] focus-visible:outline-none cursor-pointer"
+                          >
+                            + Simpan Sebagai Rumah Baru
+                          </button>
+                          {selectedCard && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCorrectingCardId(selectedCard.id);
+                                setShowAddressDrawer(true);
+                              }}
+                              className="min-h-[44px] inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 active:scale-[0.98] rounded-lg transition-transform focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:outline-none cursor-pointer"
+                            >
+                              <Pencil size={12} />
+                              <span>Perbarui Kartu Ini</span>
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider block">
+                    Patokan / Landmark
+                  </label>
+                  <input
+                    type="text"
+                    value={landmark}
+                    onChange={(e) => setLandmark(e.target.value)}
+                    placeholder="cth: Rolling door putih, yg jual kusen"
+                    autoComplete="off"
+                    spellCheck="false"
+                    className="w-full px-3 py-2 bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-medium"
+                  />
+                </div>
+              </div>
+            )}
+            {/* Active Schedule Warning — anti split-brain duplicate booking */}
+            {mode !== 'edit' && activeReservations.length > 0 && (
+              <div className="mt-2 p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded-xl text-amber-950 dark:text-amber-200">
+                <div className="flex items-center gap-2 font-bold text-sm">
+                  <AlertTriangle className="text-amber-600 dark:text-amber-400 shrink-0" size={18} />
+                  <span>Peringatan: Customer ini memiliki jadwal treatment yang masih aktif!</span>
+                </div>
+                <ul className="mt-1.5 space-y-1">
+                  {activeReservations.slice(0, 3).map((item: any) => {
+                    let label = '—';
+                    try {
+                      label = new Date(item.booking_date).toLocaleString('id-ID', {
+                        weekday: 'short',
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      });
+                    } catch {}
+                    return (
+                      <li key={item.id} className="text-xs text-amber-800 dark:text-amber-300">
+                        Jadwal: <b>{item.treatment_detail || 'Treatment'}</b> pada <b>{label}</b>{' '}
+                        (Status: {item.status})
+                      </li>
+                    );
+                  })}
+                </ul>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {onEditReservation && (
+                    <button
+                      type="button"
+                      onClick={() => onEditReservation(activeReservations[0])}
+                      className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-semibold hover:bg-amber-700 transition-colors cursor-pointer"
+                    >
+                      ✏️ Edit Reservasi Eksisting
+                    </button>
+                  )}
+                  <span className="text-xs text-amber-700 dark:text-amber-400">
+                    atau lanjutkan jika customer memesan sesi/anak tambahan.
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Section: Data Anak / Bayi (Multi-Anak Support) */}
+          {treatmentCategory !== 'MOMS' && (
+            <div className="space-y-2 p-3.5 bg-[#f8fafc] dark:bg-[#141e24] border border-[#e9edef] dark:border-[#2a3942] rounded-xl">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-[#008069] uppercase tracking-wider flex items-center space-x-1.5">
+                  <Baby size={14} />
+                  <span>Data Pasien Anak / Bayi ({babies.length} Anak)</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={handleAddBaby}
+                  className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#1c272e] border border-[#d1d7db] dark:border-[#374248] text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] shadow-xs flex items-center space-x-1 cursor-pointer active:scale-95"
+                >
+                  <Plus size={12} />
+                  <span>+ Tambah Anak</span>
+                </button>
+              </div>
+
+              {babies.length === 0 ? (
+                <p className="text-[11px] text-[#8696a0] italic">
+                  Belum ada data anak yang diisi (opsional jika perawatan khusus Bunda).
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {babies.map((b, idx) => (
+                    <div key={idx} className="p-2.5 bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl space-y-2 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Anak #{idx + 1}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveBaby(idx)}
+                          className="text-[#8696a0] hover:text-rose-600 p-1 cursor-pointer transition"
+                          title="Hapus anak ini"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          value={b.name}
+                          onChange={(e) => handleUpdateBaby(idx, 'name', e.target.value)}
+                          placeholder="Nama Lengkap / Panggilan Anak"
+                          className="p-2 bg-white dark:bg-[#1c272e] border border-[#d1d7db] dark:border-[#374248] rounded-lg text-xs text-[#111b21] dark:text-[#e9edef]"
+                        />
+                        <input
+                          type="text"
+                          value={b.ageText}
+                          onChange={(e) => handleUpdateBaby(idx, 'ageText', e.target.value)}
+                          placeholder="Usia (misal: 8 bulan / 2 tahun)"
+                          className="p-2 bg-white dark:bg-[#1c272e] border border-[#d1d7db] dark:border-[#374248] rounded-lg text-xs text-[#111b21] dark:text-[#e9edef]"
+                        />
+                      </div>
+                      {/* Quick Age Preset Chips — 1-tap ramah jempol mobile (preset UI presentational, bukan katalog/tarif) */}
+                      <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                        <span className="text-[10px] text-[#8696a0] font-semibold">Pilih Cepat:</span>
+                        {['Newborn', '1 bln', '2 bln', '3 bln', '6 bln', '1 thn', '2 thn'].map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => handleUpdateBaby(idx, 'ageText', preset)}
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition-colors cursor-pointer active:scale-95 ${
+                              b.ageText?.trim().toLowerCase() === preset.toLowerCase()
+                                ? 'bg-emerald-600 text-white border-emerald-600'
+                                : 'bg-white dark:bg-[#1c272e] border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:bg-emerald-50 hover:text-emerald-700'
+                            }`}
+                          >
+                            {preset}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+
+                  {babies.length > 1 && selectedTreatments.length === 1 && (
+                    <div className="p-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-lg text-[11px] text-amber-800 dark:text-amber-200 flex items-center justify-between">
+                      <span>💡 Anda mengisi 2 anak. Ingin menambah treatment untuk anak ke-2?</span>
+                      <button
+                        type="button"
+                        onClick={() => handleDuplicateTreatment(selectedTreatments[0])}
+                        className="px-2 py-0.5 bg-amber-600 text-white rounded font-bold text-[10px] hover:bg-amber-700 cursor-pointer shrink-0 ml-2 active:scale-95"
+                      >
+                        + Duplikat Layanan
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Section 2: Multi-Treatment Selection (Supports multiple identical treatments for 2 children) */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider block flex items-center space-x-1.5">
+                <Sparkles size={14} className="text-[#008069]" />
+                <span>Pilih Layanan / Treatment ({selectedTreatments.length} Dipilih) *</span>
+              </label>
+              {!showCustomServiceInput && (
+                <button
+                  type="button"
+                  onClick={() => setShowCustomServiceInput(true)}
+                  className="text-xs text-[#008069] hover:underline font-semibold inline-flex items-center gap-1 cursor-pointer"
+                >
+                  + Tambah Treatment Kustom
+                </button>
+              )}
+              {showCustomServiceInput && (
+                <button
+                  type="button"
+                  onClick={() => setShowCustomServiceInput(false)}
+                  className="text-[11px] text-[#008069] font-bold hover:underline cursor-pointer"
+                >
+                  Batal Kustom
+                </button>
+              )}
+            </div>
+
+            {/* Custom service creator input */}
+            {showCustomServiceInput && (
+              <div className="p-3 bg-[#f8fafc] border border-[#e9edef] dark:border-[#2a3942] rounded-xl space-y-2">
+                <p className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Tambah Treatment Manual / Kustom</p>
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                  <input
+                    type="text"
+                    value={customServiceName}
+                    onChange={(e) => setCustomServiceName(e.target.value)}
+                    placeholder="Nama treatment kustom"
+                    autoComplete="off"
+                    className="p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-lg text-xs text-[#111b21] dark:text-[#e9edef]"
+                  />
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="number"
+                      value={customServiceDuration}
+                      onChange={(e) => setCustomServiceDuration(e.target.value === '' ? '' : Number(e.target.value))}
+                      placeholder="60"
+                      className="w-20 p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-lg text-xs text-[#111b21] dark:text-[#e9edef]"
+                    />
+                    <span className="text-xs text-[#667781] dark:text-[#8696a0]">mnt</span>
+                    <ToggleSwitch
+                      checked={customIsAddon}
+                      onChange={(next) => setCustomIsAddon(next)}
+                      size="sm"
+                      onLabel="Add-on (0m)"
+                      offLabel="Standar"
+                      title="Add-on: treatment tambahan tanpa buffer perjalanan (0 menit)"
+                    />
+                  </div>
+                  <div className="relative">
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-[#667781] dark:text-[#8696a0]">Rp</span>
+                    <input
+                      type="number"
+                      value={customServicePrice}
+                      onChange={(e) => setCustomServicePrice(e.target.value === '' ? '' : Number(e.target.value))}
+                      placeholder="0"
+                      className="w-full pl-8 pr-2 p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-lg text-xs text-[#111b21] dark:text-[#e9edef]"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddCustomTreatment}
+                    className="px-3 py-2 bg-[#008069] text-white rounded-lg text-xs font-bold hover:bg-[#00a884] cursor-pointer"
+                  >
+                    Tambahkan
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Catalog Selector Dropdown Button */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsServiceDropdownOpen(!isServiceDropdownOpen)}
+                className="w-full p-2.5 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-left text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs flex items-center justify-between cursor-pointer"
+              >
+                <div className="flex items-center space-x-2 truncate">
+                  <Plus size={14} className="text-[#008069] flex-shrink-0" />
+                  <span className="truncate font-semibold text-[#54656f] dark:text-[#aebac1]">
+                    {selectedTreatments.length > 0
+                      ? `${selectedTreatments.length} treatment dipilih (klik untuk ubah/tambah)...`
+                      : '+ Klik untuk memilih treatment dari katalog layanan...'}
+                  </span>
+                </div>
+                <ChevronDown size={14} className="text-[#8696a0] flex-shrink-0" />
+              </button>
+
+              {/* Dropdown Menu with Stepper Qty and OK/Selesai Confirmation Button */}
+              {isServiceDropdownOpen && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#374248] rounded-2xl shadow-2xl z-40 p-2.5 space-y-2 max-h-72 flex flex-col">
+                  {/* Search inside dropdown */}
+                  <div className="relative shrink-0">
+                    <input
+                      type="text"
+                      name="service-search-input"
+                      value={serviceSearch}
+                      onChange={(e) => setServiceSearch(e.target.value)}
+                      placeholder="Cari layanan (misal: Pijat Bayi, Laktasi, Moksa)..."
+                      enterKeyHint="search"
+                      inputMode="search"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      spellCheck="false"
+                      className="w-full pl-8 pr-3 py-1.5 bg-[#f0f2f5] border border-[#d1d7db] dark:border-[#374248] rounded-lg text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069]"
+                      autoFocus
+                    />
+                    <Search size={13} className="absolute left-2.5 top-2.5 text-[#8696a0]" />
+                  </div>
+
+                  {/* Services List with Quantity Controls */}
+                  <div className="divide-y divide-[#e9edef] dark:divide-[#2a3942] overflow-y-auto flex-1 pr-1">
+                    {filteredServices.map((srv) => {
+                      const count = selectedTreatments.filter((t) => t.serviceId === srv.id).length;
+                      const isAddon = isAddonService(srv);
+                      return (
+                        <div
+                          key={srv.id}
+                          className={`p-2 rounded-lg transition-colors flex items-center justify-between group ${
+                            count > 0 ? 'bg-[#e8f5f2]/70' : 'hover:bg-[#f0f2f5]'
+                          }`}
+                        >
+                          <div className="flex-1 min-w-0 pr-2">
+                            <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                              <span className="font-bold text-xs text-[#111b21] dark:text-[#e9edef] group-hover:text-[#008069] truncate">
+                                {srv.name}
+                              </span>
+                              {(() => {
+                                const ageLabel = srv.ageTier?.label || (srv as any).age_label;
+                                if (!ageLabel) return null;
+                                return (
+                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-bold shrink-0 bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800">
+                                    🎯 {ageLabel}
+                                  </span>
+                                );
+                              })()}
+                              <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold shrink-0 ${
+                                isAddon
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-[#f0f2f5] text-[#54656f] dark:text-[#aebac1]'
+                              }`}>
+                                {isAddon ? 'Add-on (0m buffer)' : srv.category}
+                              </span>
+                            </div>
+                            <div className="flex items-center space-x-2 text-[10px] text-[#667781] dark:text-[#8696a0] mt-0.5">
+                              <span>Durasi: {srv.durationMinutes} mnt {!isAddon && '(+20m buffer)'}</span>
+                              <span>•</span>
+                              <span className="font-bold text-[#008069]">
+                                Rp {srv.promoPrice ? srv.promoPrice.toLocaleString('id-ID') : srv.originalPrice?.toLocaleString('id-ID')}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Stepper Quantity Buttons */}
+                          <div className="shrink-0">
+                            {count === 0 ? (
+                              <button
+                                type="button"
+                                onClick={() => handleAddServiceInstance(srv)}
+                                className="px-2.5 py-1 rounded-lg bg-white hover:bg-[#008069] text-[#008069] hover:text-white border border-[#008069] text-xs font-bold transition shadow-2xs active:scale-95 cursor-pointer"
+                              >
+                                + Pilih
+                              </button>
+                            ) : (
+                              <div className="flex items-center space-x-1 bg-white border border-[#c2e7e0] rounded-lg p-0.5 shadow-2xs">
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveLastServiceInstance(srv.id)}
+                                  className="w-6 h-6 rounded bg-[#f0f2f5] hover:bg-rose-100 text-[#54656f] dark:text-[#aebac1] hover:text-rose-700 font-bold text-xs flex items-center justify-center transition cursor-pointer"
+                                  title="Kurangi 1 treatment"
+                                >
+                                  <Minus size={11} />
+                                </button>
+                                <span className="w-5 text-center font-extrabold text-xs text-[#008069]">
+                                  {count}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleAddServiceInstance(srv)}
+                                  className="w-6 h-6 rounded bg-[#008069] hover:bg-[#00a884] text-white font-bold text-xs flex items-center justify-center transition cursor-pointer"
+                                  title="Tambah lagi (misal untuk Anak ke-2)"
+                                >
+                                  <Plus size={11} />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Bottom Checklist / OK Button */}
+                  <div className="pt-2 border-t border-[#e9edef] dark:border-[#2a3942] flex items-center justify-between shrink-0">
+                    <span className="text-[11px] font-semibold text-[#008069]">
+                      ✓ {selectedTreatments.length} treatment terpilih
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsServiceDropdownOpen(false)}
+                      className="px-3.5 py-1.5 bg-[#008069] hover:bg-[#00a884] text-white rounded-lg text-xs font-bold transition flex items-center space-x-1.5 shadow-xs cursor-pointer active:scale-95"
+                    >
+                      <Check size={14} />
+                      <span>Selesai Memilih</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Selected Treatments Chips / List */}
+            {selectedTreatments.length > 0 && (
+              <div className="space-y-2 p-3 bg-[#f8fafc] border border-[#e9edef] dark:border-[#2a3942] rounded-xl">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] uppercase tracking-wider">
+                    Daftar Treatment Terpilih ({selectedTreatments.length} Layanan):
+                  </p>
+                  {babies.length > 1 && (
+                    <span className="text-[10px] text-[#008069] font-bold bg-[#e8f5f2] px-2 py-0.5 rounded-full border border-[#c2e7e0]">
+                      2+ Anak Terdaftar
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  {selectedTreatments.map((t, idx) => {
+                    const isAddon = isAddonService(t);
+                    return (
+                      <div
+                        key={t.instanceId || idx}
+                        className="p-2.5 bg-white dark:bg-[#1c272e] border border-[#e9edef] dark:border-[#2a3942] rounded-xl text-xs shadow-2xs space-y-2"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="flex items-start space-x-2 min-w-0">
+                            <span className="h-5 w-5 rounded-full bg-[#e8f5f2] text-[#008069] flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5 sm:mt-0">
+                              #{idx + 1}
+                            </span>
+                            <div className="min-w-0">
+                              <div className="flex items-center flex-wrap gap-1.5">
+                                <span className="font-bold text-[#111b21] dark:text-[#e9edef]">{t.name}</span>
+                                <span className="text-[#667781] dark:text-[#8696a0] text-[11px]">({t.durationMinutes} mnt)</span>
+                                <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                                  isAddon
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : 'bg-[#e8f5f2] text-[#008069]'
+                                }`}>
+                                  {isAddon ? 'Add-on (0m buffer)' : 'Layanan Utama (+20m buffer)'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between sm:justify-end space-x-2 shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-[#f0f2f5]">
+                            {/* Inline Editable Price Input */}
+                            <div className="flex items-center space-x-1 bg-[#f8fafc] border border-[#d1d7db] dark:border-[#374248] hover:border-[#008069] focus-within:border-[#008069] focus-within:ring-1 focus-within:ring-[#008069] rounded-lg px-2 py-0.5 shadow-2xs transition">
+                              <span className="text-[10px] font-bold text-[#667781] dark:text-[#8696a0]">Rp</span>
+                              <input
+                                type="number"
+                                value={t.price === 0 ? '' : t.price}
+                                onChange={(e) => handleUpdateTreatmentPrice(t.instanceId, e.target.value === '' ? 0 : Number(e.target.value))}
+                                placeholder="0"
+                                step={5000}
+                                min={0}
+                                className="w-20 bg-transparent text-xs font-extrabold text-[#008069] focus:outline-none text-right font-mono"
+                                title="Ubah tarif harga treatment ini jika ada harga khusus"
+                              />
+                            </div>
+
+                            <div className="flex items-center space-x-1">
+                              {/* Duplicate Button for second child */}
+                              {babies.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDuplicateTreatment(t)}
+                                  className="p-1 rounded-md text-[#008069] hover:bg-[#e8f5f2] transition flex items-center space-x-1 cursor-pointer text-[10px] font-bold border border-[#c2e7e0]"
+                                  title="Duplikat treatment ini untuk anak lainnya"
+                                >
+                                  <Copy size={11} />
+                                  <span className="hidden sm:inline">+ Duplikat Anak</span>
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveTreatment(t.instanceId)}
+                                className="text-[#8696a0] hover:text-rose-600 p-1.5 rounded-md hover:bg-rose-50 cursor-pointer transition"
+                                title="Hapus treatment"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Child Assignment Dropdown (If customer has children) */}
+                        {babies.length > 0 && t.category !== 'MOMS' && (
+                          <div className="flex items-center space-x-2 pt-1.5 border-t border-[#f0f2f5] text-[11px] flex-wrap sm:flex-nowrap gap-1">
+                            <span className="text-[#667781] dark:text-[#8696a0] font-semibold flex items-center space-x-1 shrink-0">
+                              <Baby size={11} className="text-[#008069]" />
+                              <span>Ditujukan untuk:</span>
+                            </span>
+                            <select
+                              value={t.assignedChildIndex ?? 0}
+                              onChange={(e) => handleUpdateTreatmentChild(t.instanceId, Number(e.target.value))}
+                              className="flex-1 min-w-0 max-w-full sm:max-w-xs px-2 py-1 bg-[#f0f2f5] border border-[#d1d7db] dark:border-[#374248] rounded-lg text-xs font-bold text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] cursor-pointer truncate"
+                            >
+                              {babies.map((b, bIdx) => (
+                                <option key={bIdx} value={bIdx}>
+                                  👶 Anak #{bIdx + 1}: {b.name || `Anak ${bIdx + 1}`} {b.ageText ? `(${b.ageText})` : ''}
+                                </option>
+                              ))}
+                              <option value={-1}>👩 Bunda / Umum</option>
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Duration & Buffer Breakdown */}
+                <div className="pt-2 border-t border-[#e9edef] dark:border-[#2a3942] flex flex-wrap items-center gap-2 text-xs">
+                  <span className="px-2.5 py-1 rounded-lg bg-white border border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] font-medium">
+                    🕒 Durasi Layanan: <strong className="text-[#111b21] dark:text-[#e9edef]">{pureDurationMinutes} mnt</strong>
+                  </span>
+                  <span className="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 text-amber-800 dark:text-amber-200 font-medium">
+                    ☕ Buffer Jeda: <strong>+{totalBufferMinutes} mnt</strong> ({mainTreatmentsCount} Utama @20m{addonTreatmentsCount > 0 ? `, ${addonTreatmentsCount} Add-on @0m` : ''})
+                  </span>
+                  <span className="px-2.5 py-1 rounded-lg bg-[#e8f5f2] dark:bg-[#00a884]/15 border border-[#c2e7e0] dark:border-[#00a884]/30 text-[#008069] dark:text-[#00a884] font-bold">
+                    ⏱️ Total Waktu: {totalScheduledDurationMinutes} mnt
+                  </span>
+                  <span className="px-2.5 py-1 rounded-lg bg-[#008069] text-white font-bold">
+                    🏁 Selesai: {calculateEndTime()} WIB
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Section 3: Waktu, Bidan & Ketersediaan Jadwal Terpadu */}
+          <div className="space-y-3 pt-2 border-t border-[#e9edef] dark:border-[#2a3942]">
+            {/* Row 1: Bidan, Tanggal Kunjungan, Status Booking */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* 1. Penugasan Bidan / Terapis */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider block flex items-center space-x-1">
+                    <UserCheck size={12} className="text-[#008069]" />
+                    <span>Terapis / Bidan</span>
+                  </label>
+                  {user?.id && effectiveStaffList.some((s) => s.id === user.id) && (
+                    <button
+                      type="button"
+                      onClick={() => setAssignedStaffId(user.id)}
+                      className="text-[10px] text-[#008069] font-bold hover:underline flex items-center gap-0.5 cursor-pointer bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800/50 active:scale-95"
+                    >
+                      <span>⚡ Saya</span>
+                    </button>
+                  )}
+                </div>
+                <select
+                  value={assignedStaffId}
+                  onChange={(e) => setAssignedStaffId(e.target.value)}
+                  className="w-full p-2 bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-semibold"
+                >
+                  <option value="">-- Pilih / Acak Bidan --</option>
+                  {effectiveStaffList
+                    .filter((s) => s.active !== false || s.id === assignedStaffId)
+                    .map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} {s.active === false ? '(Nonaktif)' : s.role === 'THERAPIST' ? '(Terapis)' : `(${s.role})`}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {/* 2. Tanggal Kunjungan */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider block">
+                    Tanggal Kunjungan *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowBookedSlotsModal(true)}
+                    className="text-[11px] text-[#008069] font-bold hover:underline flex items-center space-x-1 cursor-pointer"
+                  >
+                    <Eye size={12} />
+                    <span>Terisi ({bookedReservationsForDate.length})</span>
+                  </button>
+                </div>
+                <div className="flex items-center space-x-1.5">
+                  <input
+                    type="date"
+                    required
+                    value={bookingDate}
+                    onChange={(e) => {
+                      setBookingDate(e.target.value);
+                      setHasCalculatedRecommendations(false);
+                    }}
+                    className="flex-1 p-2 bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-semibold"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowBookedSlotsModal(true)}
+                    className="p-2 bg-[#e8f5f2] dark:bg-[#00a884]/20 hover:bg-[#c2e7e0] text-[#008069] rounded-xl border border-[#c2e7e0] dark:border-[#00a884]/30 shadow-xs transition cursor-pointer active:scale-95"
+                    title="Lihat Jadwal Terisi Hari Ini"
+                  >
+                    <CalendarDays size={16} />
+                  </button>
+                </div>
+              </div>
+
+              {/* 3. Status Booking */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider block">
+                  Status Pembayaran
+                </label>
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as any)}
+                  className="w-full p-2 bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-semibold"
+                >
+                  <option value="pending">Menunggu Pembayaran (Pending)</option>
+                  <option value="confirmed">Terjadwal Resmi (Confirmed)</option>
+                  <option value="hold">Hold / Ditawarkan Sementara</option>
+                  <option value="completed">Selesai Treatment (Completed)</option>
+                  <option value="cancelled">Dibatalkan (Cancelled)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Visual Therapist Schedule Strip (08:00 - 18:00 WIB) */}
+            {bookingDate && (
+              <StaffScheduleTimelineStrip
+                selectedStaff={effectiveStaffList.find((s) => s.id === assignedStaffId) || null}
+                allStaff={effectiveStaffList}
+                onSelectStaff={(staffId) => setAssignedStaffId(staffId)}
+                bookingDate={bookingDate}
+                currentSelectedTime={bookingTime}
+                treatmentDurationMinutes={totalScheduledDurationMinutes || 80}
+                bookedReservations={bookedReservationsForDate}
+                onSelectTimeSlot={(slot) => setBookingTime(slot)}
+                currentReservationId={initialReservation?.id || null}
+              />
+            )}
+
+            {/* Jam Mulai (WIB) & Tombol Rekomendasikan Jam */}
+            <div className="p-3 bg-[#f8fafc] dark:bg-[#1c272e] border border-[#d1d7db] dark:border-[#374248] rounded-xl flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center space-x-2">
+                <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] shrink-0">
+                  Jam Mulai (WIB) *:
+                </label>
+                <input
+                  type="time"
+                  required
+                  value={bookingTime}
+                  onChange={(e) => setBookingTime(e.target.value)}
+                  className="w-28 p-2 bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-bold"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleGenerateRecommendations}
+                className="text-xs text-[#008069] dark:text-[#00a884] font-bold hover:underline flex items-center space-x-1.5 cursor-pointer bg-white dark:bg-[#111b21] px-3 py-2 rounded-xl border border-[#d1d7db] dark:border-[#374248] shadow-2xs active:scale-95"
+              >
+                <Zap size={13} className="text-amber-500 fill-amber-500" />
+                <span>Rekomendasikan Jam</span>
+              </button>
+            </div>
+
+            {/* Real-time Overlap & Travel Time Warning Banner */}
+            {realtimeCollisions.staffCollisions.length > 0 && (
+              <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded-xl text-xs text-amber-900 dark:text-amber-200 space-y-1.5 animate-fadeIn">
+                <p className="font-bold flex items-center gap-1.5 text-amber-800 dark:text-amber-300">
+                  <span>⚠️ Jadwal Bentrok dengan Bidan Terpilih ({realtimeCollisions.staffCollisions[0].staffName})</span>
+                </p>
+                <ul className="space-y-1 text-[11px]">
+                  {realtimeCollisions.staffCollisions.map((b) => (
+                    <li key={b.id} className="flex items-center justify-between gap-2">
+                      <span className="truncate">
+                        • Pasien <strong>Ny. {b.customerName}</strong> ({b.treatment})
+                        {b.collisionType === 'INSUFFICIENT_TRAVEL_TIME' && (
+                          <span className="ml-1.5 px-1.5 py-0.5 text-[9px] bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 rounded font-bold">
+                            WAKTU TEMPIH TIDAK CUKUP ({b.distanceKm?.toFixed(1)}km → butuh ~{b.requiredMinutes}m, tersedia {b.availableMinutes}m)
+                          </span>
+                        )}
+                      </span>
+                      <span className="font-mono font-bold shrink-0">{b.time} WIB ({b.duration}m)</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-[10px] text-amber-700 dark:text-amber-400">
+                  Jam ini beririsan dengan jadwal bidan tersebut (+ buffer 20m) atau waktu tempuh tidak mencukupi. Disarankan pilih jam lain atau klik <strong>Rekomendasikan Jam</strong>.
+                </p>
+              </div>
+            )}
+
+            {/* Recommendations Chips Area with Arrival Timeline */}
+            {recommendations.length > 0 && (
+              <div className="p-3 bg-[#e8f5f2] border border-[#c2e7e0] rounded-xl space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-[#008069] flex items-center space-x-1.5">
+                    <Sparkles size={14} />
+                    <span>Rekomendasi Jam & Estimasi Kedatangan Bidan</span>
+                  </span>
+                  <span className="text-[10px] text-[#54656f] dark:text-[#aebac1]">Klik slot untuk memilih</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {recommendations.map((rec, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => handleApplyRecommendation(rec)}
+                      className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer space-y-2 ${
+                        bookingTime === rec.startTime && assignedStaffId === rec.staffId
+                          ? 'bg-[#008069] text-white border-[#008069] shadow-sm'
+                          : 'bg-white border-[#c2e7e0] hover:bg-white/90 text-[#111b21] dark:text-[#e9edef]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-extrabold text-sm">{rec.startTime} WIB</span>
+                          <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                            bookingTime === rec.startTime && assignedStaffId === rec.staffId
+                              ? 'bg-white/20 text-white'
+                              : 'bg-[#e8f5f2] text-[#008069]'
+                          }`}>
+                            {rec.staffName}
+                          </span>
+                        </div>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          bookingTime === rec.startTime && assignedStaffId === rec.staffId
+                            ? 'bg-white text-[#008069]'
+                            : 'bg-[#e8f5f2] text-[#008069]'
+                        }`}>
+                          Pilih
+                        </span>
+                      </div>
+
+                      {/* Detailed Midwife Arrival & Departure Timeline */}
+                      <div className={`text-[10px] space-y-1 pt-1.5 border-t ${
+                        bookingTime === rec.startTime && assignedStaffId === rec.staffId
+                          ? 'border-white/20 text-white/90'
+                          : 'border-[#f0f2f5] text-[#54656f] dark:text-[#aebac1]'
+                      }`}>
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center space-x-1">
+                            <Bike size={11} className="opacity-80" />
+                            <span>Bidan Berangkat:</span>
+                          </span>
+                          <strong className="font-mono">{rec.departureTime} WIB</strong>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center space-x-1">
+                            <Home size={11} className="opacity-80" />
+                            <span>Estimasi Tiba di Rumah:</span>
+                          </span>
+                          <strong className="font-mono font-bold text-amber-700 bg-amber-50 px-1 rounded">{rec.arrivalTime} WIB</strong>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center space-x-1">
+                            <Clock size={11} className="opacity-80" />
+                            <span>Treatment Selesai:</span>
+                          </span>
+                          <strong className="font-mono">{rec.endTime} WIB</strong>
+                        </div>
+                        <p className="text-[9px] opacity-75 truncate pt-0.5">
+                          Rute: ± {rec.distanceKm} km (~{rec.travelMinutes} mnt dari {rec.originDesc})
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-[#54656f] dark:text-[#aebac1] italic">
+                  * Jadwal tiba dihitung 10 menit sebelum treatment dimulai untuk persiapan terapis, cuci tangan, dan sterilisasi alat.
+                </p>
+              </div>
+            )}
+
+            {/* Tombol Buat Sebagai Paket Berseri jika belum aktif */}
+            {!isMultiSession && mode !== 'edit' && (
+              <div className="flex items-center justify-end">
+                <button
+                  type="button"
+                  onClick={() => handleEnableCustomMultiSession(3)}
+                  className="px-2.5 py-1 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/60 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-[11px] font-semibold hover:bg-blue-100 dark:hover:bg-blue-900/40 transition flex items-center space-x-1 cursor-pointer"
+                >
+                  <Plus size={12} />
+                  <span>Buat Sebagai Paket Berseri (Multi-Sesi)</span>
+                </button>
+              </div>
+            )}
+
+            {/* Multi-Session Schedule Builder */}
+            {isMultiSession && multiSessionSchedule.length > 0 && (
+              <div className="p-3 bg-blue-50/80 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/30 rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-blue-800 dark:text-blue-300 flex items-center space-x-1.5">
+                    <CalendarDays size={14} />
+                    <span>Jadwal Paket Berseri ({multiSessionSchedule.length} Sesi)</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => { setIsMultiSession(false); setMultiSessionSchedule([]); setConflictSessionNumber(null); }}
+                    className="text-[10px] text-blue-600 hover:text-red-600 font-bold cursor-pointer"
+                  >
+                    Batalkan Mode Paket
+                  </button>
+                </div>
+
+                {/* Preset Interval Selector */}
+                <div className="space-y-1">
+                  <span className="text-[10px] font-semibold text-blue-900 dark:text-blue-200">Pola Interval Kunjungan:</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { id: 'DAILY' as const, label: 'Setiap Hari (1 hari)' },
+                      { id: 'EVERY_2_DAYS' as const, label: '2 Hari Sekali (2 hari)' },
+                      { id: 'EVERY_3_DAYS' as const, label: '3 Hari Sekali (3 hari)' },
+                      { id: 'WEEKLY' as const, label: 'Mingguan (7 hari)' },
+                      { id: 'TWICE_DAILY' as const, label: 'Pagi & Sore' },
+                    ].map((preset) => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => handleIntervalPresetChange(preset.id)}
+                        className={`px-2 py-1 rounded-md text-[10px] font-bold transition cursor-pointer ${
+                          seriesInterval === preset.id
+                            ? 'bg-blue-600 text-white shadow-xs'
+                            : 'bg-white dark:bg-[#1f2c34] text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700/50 hover:bg-blue-100'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Session Rows List */}
+                <div className="max-h-56 overflow-y-auto space-y-1.5 pr-0.5">
+                  {multiSessionSchedule.map((s, idx) => {
+                    const isConflict = conflictSessionNumber === s.sessionNumber;
+                    return (
+                      <div
+                        key={idx}
+                        className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 border transition ${
+                          isConflict
+                            ? 'bg-red-50 dark:bg-red-950/40 border-red-400 dark:border-red-600'
+                            : 'bg-white dark:bg-[#1f2c34] border-blue-100 dark:border-blue-900/50'
+                        }`}
+                      >
+                        <span className={`text-[10px] font-bold w-12 shrink-0 ${isConflict ? 'text-red-700 dark:text-red-400' : 'text-blue-600 dark:text-blue-400'}`}>
+                          Sesi {s.sessionNumber}
+                        </span>
+                        <input
+                          type="date"
+                          value={s.date}
+                          onChange={(e) => {
+                            const newSchedule = [...multiSessionSchedule];
+                            newSchedule[idx].date = e.target.value;
+                            setMultiSessionSchedule(newSchedule);
+                            if (conflictSessionNumber === s.sessionNumber) setConflictSessionNumber(null);
+                          }}
+                          className="flex-1 min-w-0 px-2 py-1 border border-[#d1d7db] dark:border-[#374248] rounded-md text-[11px] text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069]"
+                        />
+                        <input
+                          type="time"
+                          value={s.time}
+                          onChange={(e) => {
+                            const newSchedule = [...multiSessionSchedule];
+                            newSchedule[idx].time = e.target.value;
+                            setMultiSessionSchedule(newSchedule);
+                            if (conflictSessionNumber === s.sessionNumber) setConflictSessionNumber(null);
+                          }}
+                          className="w-20 px-1.5 py-1 border border-[#d1d7db] dark:border-[#374248] rounded-md text-[11px] text-[#111b21] dark:text-[#e9edef] font-bold focus:outline-none focus:border-[#008069]"
+                        />
+                        <select
+                          value={s.staffId}
+                          onChange={(e) => {
+                            const newSchedule = [...multiSessionSchedule];
+                            newSchedule[idx].staffId = e.target.value;
+                            setMultiSessionSchedule(newSchedule);
+                            if (conflictSessionNumber === s.sessionNumber) setConflictSessionNumber(null);
+                          }}
+                          className="w-24 px-1 py-1 border border-[#d1d7db] dark:border-[#374248] rounded-md text-[11px] text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] truncate"
+                        >
+                          <option value="">Default</option>
+                          {staffList.map((st) => (
+                            <option key={st.id} value={st.id}>{st.name}</option>
+                          ))}
+                        </select>
+                        {multiSessionSchedule.length > 2 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSessionRow(s.sessionNumber)}
+                            className="p-1 text-gray-400 hover:text-red-500 rounded transition cursor-pointer"
+                            title="Hapus sesi ini"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Footer Controls: Add Session & Summary Note */}
+                <div className="flex items-center justify-between pt-1 border-t border-blue-200/60 dark:border-blue-700/40">
+                  <button
+                    type="button"
+                    onClick={handleAddSessionRow}
+                    className="px-2.5 py-1 rounded-md bg-white dark:bg-[#1f2c34] text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700 text-[11px] font-bold hover:bg-blue-50 transition flex items-center space-x-1 cursor-pointer"
+                  >
+                    <Plus size={12} />
+                    <span>Tambah Sesi</span>
+                  </button>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-300 italic">
+                    * Total {multiSessionSchedule.length} kunjungan terapis. Ongkir dihitung per kunjungan.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Section: Rincian Biaya & Total Pembayaran */}
+          <div className="p-3.5 bg-gradient-to-br from-[#f8fafc] to-emerald-50/40 dark:from-[#141e24] dark:to-[#00a884]/10 border border-[#e9edef] dark:border-[#2a3942] rounded-xl space-y-3 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-[#008069] uppercase tracking-wider flex items-center space-x-1.5">
+                <Receipt size={14} />
+                <span>Rincian Biaya & Total Pembayaran</span>
+              </span>
+              <span className="text-xs font-mono font-extrabold text-[#008069]">
+                Total: Rp {totalPaymentAmount.toLocaleString('id-ID')}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {/* Subtotal Treatments */}
+              <div>
+                <label className="block text-[11px] font-semibold text-[#54656f] dark:text-[#aebac1] mb-1">
+                  Subtotal Layanan ({selectedTreatments.length})
+                </label>
+                <div className="px-3 py-1.5 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-lg text-xs font-bold text-[#111b21] dark:text-[#e9edef] font-mono">
+                  Rp {subtotalTreatments.toLocaleString('id-ID')}
+                </div>
+              </div>
+
+              {/* Ongkir */}
+              <div>
+                <label className="block text-[11px] font-semibold text-[#54656f] dark:text-[#aebac1] mb-1">
+                  Ongkos Kirim (Rp)
+                </label>
+                <input
+                  type="number"
+                  value={ongkir}
+                  onChange={(e) => setOngkir(e.target.value === '' ? '' : Number(e.target.value))}
+                  step={5000}
+                  min={0}
+                  placeholder="0"
+                  className="w-full px-3 py-1.5 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-lg text-xs font-bold text-[#111b21] dark:text-[#e9edef] focus:border-[#008069] focus:outline-none transition font-mono"
+                />
+              </div>
+
+              {/* Diskon / Promo */}
+              <div>
+                <label className="block text-[11px] font-semibold text-rose-600 dark:text-rose-300 mb-1 flex items-center gap-1">
+                  <Percent size={11} />
+                  <span>Diskon Layanan (Rp)</span>
+                  <span className="text-[10px] text-gray-500 dark:text-gray-400 font-normal ml-1">(*Khusus potongan harga layanan, bukan ongkir)</span>
+                </label>
+                <input
+                  type="number"
+                  value={discount}
+                  onChange={(e) => setDiscount(e.target.value === '' ? '' : Number(e.target.value))}
+                  step={5000}
+                  min={0}
+                  placeholder="0"
+                  className="w-full px-3 py-1.5 bg-white border border-rose-200 dark:border-rose-800/40 rounded-lg text-xs font-bold text-rose-600 dark:text-rose-300 placeholder-[#8696a0] focus:border-rose-500 focus:outline-none transition font-mono"
+                />
+              </div>
+            </div>
+
+            {/* Quick Shortcuts */}
+            <div className="flex flex-wrap items-center justify-between gap-1.5 pt-1 border-t border-[#e9edef] dark:border-[#2a3942]/80 text-[10px]">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[#8696a0] font-semibold">Ongkir:</span>
+                <button
+                  type="button"
+                  onClick={() => setOngkir(0)}
+                  className={`px-2 py-0.5 rounded-md font-bold border transition cursor-pointer ${
+                    Number(ongkir) === 0 ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white dark:bg-transparent text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/40 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
+                  }`}
+                >
+                  Free (0)
+                </button>
+                {deliveryTiers.filter(t => (Number(t.fee) - Number(t.promoDiscount || 0)) > 0).map(t => {
+                  const net = Math.max(0, Number(t.fee) - Number(t.promoDiscount || 0));
+                  return (
+                    <button
+                      key={String(t.id || t.maxDist)}
+                      type="button"
+                      onClick={() => setOngkir(net)}
+                      className={`px-2 py-0.5 rounded-md font-semibold border transition cursor-pointer ${
+                        Number(ongkir) === net ? 'bg-[#008069] text-white border-[#008069]' : 'bg-white dark:bg-transparent text-[#54656f] dark:text-[#aebac1] border-[#d1d7db] dark:border-[#374248] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942]'
+                      }`}
+                      title={`Tier s/d ${t.maxDist} km`}
+                    >
+                      {net.toLocaleString('id-ID')}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-rose-600 dark:text-rose-300 font-semibold">Promo:</span>
+                <button
+                  type="button"
+                  onClick={() => setDiscount(0)}
+                  className={`px-2 py-0.5 rounded-md font-semibold border transition cursor-pointer ${
+                    Number(discount) === 0 ? 'bg-gray-700 text-white border-gray-700' : 'bg-white dark:bg-transparent text-gray-700 dark:text-gray-300 border-gray-200 dark:border-[#374248] hover:bg-gray-50 dark:hover:bg-[#2a3942]'
+                  }`}
+                >
+                  0
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDiscount(5000)}
+                  className={`px-2 py-0.5 rounded-md font-bold border transition cursor-pointer ${
+                    Number(discount) === 5000 ? 'bg-rose-600 text-white border-rose-600' : 'bg-white dark:bg-transparent text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800/40 hover:bg-rose-50 dark:hover:bg-rose-950/40'
+                  }`}
+                >
+                  -5.000
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDiscount(10000)}
+                  className={`px-2 py-0.5 rounded-md font-bold border transition cursor-pointer ${
+                    Number(discount) === 10000 ? 'bg-rose-600 text-white border-rose-600' : 'bg-white dark:bg-transparent text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800/40 hover:bg-rose-50 dark:hover:bg-rose-950/40'
+                  }`}
+                >
+                  -10.000
+                </button>
+              </div>
+            </div>
+
+            {/* Grand Total Bar */}
+            <div className="pt-2 border-t border-[#e9edef] dark:border-[#2a3942] flex items-center justify-between text-xs">
+              <div className="text-[#667781] dark:text-[#8696a0]">
+                <span>Total tagihan: </span>
+                <span className="text-[11px] italic text-[#8696a0]">
+                  (Layanan Rp {subtotalTreatments.toLocaleString('id-ID')} + Ongkir Rp {Number(ongkir).toLocaleString('id-ID')}{Number(discount) > 0 ? ` - Promo Rp ${Number(discount).toLocaleString('id-ID')}` : ''})
+                </span>
+              </div>
+              <div className="text-sm sm:text-base font-extrabold text-[#008069] font-mono">
+                Rp {totalPaymentAmount.toLocaleString('id-ID')}
+              </div>
+            </div>
+          </div>
+
+          {/* Section 6: Notes */}
+          <div className="space-y-1">
+            <label className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider block flex items-center space-x-1">
+              <FileText size={12} />
+              <span>Catatan / Keluhan Khusus Pasien</span>
+            </label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Contoh: Pasien minta terapis senior, anak sedang pilek ringan..."
+              rows={2}
+              className="w-full p-2.5 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] resize-none shadow-xs"
+            />
+          </div>
+
+          </div>
+
+          {/* Footer Actions — pinned di bawah layar (flex-col, di luar area gulir,
+              masih DALAM <form>): total & tombol utama selalu terlihat tanpa scroll ke ujung */}
+          <div className="shrink-0 pt-2.5 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] border-t border-[#e9edef] dark:border-[#2a3942] bg-white dark:bg-[#111b21] space-y-2">
+            {/* Mobile: ringkasan total selalu terbaca */}
+            <div className="sm:hidden flex items-center justify-between text-xs px-0.5">
+              <span className="text-[#667781] dark:text-[#8696a0]">Total:</span>
+              <span className="font-extrabold text-[#008069] font-mono text-sm">
+                Rp {totalPaymentAmount.toLocaleString('id-ID')}
+              </span>
+            </div>
+
+            {/* Mobile (< 640px): hierarki stacked — tombol utama full-width 46px */}
+            <div className="sm:hidden space-y-2">
+              {onSuccessAndInvoice ? (
+                <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={handleSubmitWithInvoice}
+                  className="w-full min-h-[46px] px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:opacity-50 text-white text-xs font-bold flex items-center justify-center space-x-2 shadow-sm transition cursor-pointer"
+                  title="Simpan reservasi dan langsung masukkan format invoice ke chat WhatsApp"
+                >
+                  <Receipt size={16} />
+                  <span>Simpan & Masukkan Invoice ke Chat</span>
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="w-full min-h-[46px] px-4 py-2.5 rounded-xl bg-[#008069] hover:bg-[#00a884] active:scale-95 disabled:opacity-50 text-white text-xs font-bold flex items-center justify-center space-x-2 shadow-sm transition cursor-pointer"
+                >
+                  <Check size={16} />
+                  <span className="truncate">{submitting ? 'Menyimpan...' : (mode === 'edit' ? 'Simpan Perubahan Reservasi' : isMultiSession ? `Buat Paket ${multiSessionTotal} Sesi` : 'Simpan & Buat Jadwal')}</span>
+                </button>
+              )}
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => void handleSafeClose()}
+                  className="flex-1 min-h-[42px] px-3 py-2 rounded-xl border border-[#d1d7db] dark:border-[#374248] text-xs font-semibold text-[#54656f] dark:text-[#aebac1] hover:bg-[#f0f2f5] transition-colors cursor-pointer active:scale-95 text-center"
+                >
+                  Batal
+                </button>
+                {onSuccessAndInvoice && (
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="flex-[2] min-h-[42px] px-3 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] active:scale-95 disabled:opacity-50 text-white text-xs font-semibold flex items-center justify-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
+                  >
+                    <Check size={14} />
+                    <span className="truncate">{submitting ? 'Menyimpan...' : (mode === 'edit' ? 'Simpan Perubahan' : isMultiSession ? `Paket ${multiSessionTotal} Sesi` : 'Simpan Jadwal Saja')}</span>
+                  </button>
+                )}
+                {mode !== 'edit' && (
+                  <button
+                    type="button"
+                    onClick={saveDraftManually}
+                    className="min-h-[42px] w-[42px] shrink-0 rounded-xl bg-white dark:bg-[#1c272e] border border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:bg-amber-50 hover:text-amber-700 transition flex items-center justify-center cursor-pointer shadow-2xs active:scale-95"
+                    title="Simpan draf lokal"
+                  >
+                    <BookmarkPlus size={16} className="text-amber-600" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Desktop (>= 640px): baris horizontal rapi */}
+            <div className="hidden sm:flex items-center justify-between">
+              {mode !== 'edit' ? (
+                <button
+                  type="button"
+                  onClick={saveDraftManually}
+                  className="px-3 py-2 rounded-xl bg-white border border-[#d1d7db] dark:border-[#374248] text-xs font-bold text-[#54656f] dark:text-[#aebac1] hover:bg-amber-50 hover:text-amber-700 hover:border-amber-300 transition flex items-center space-x-1.5 cursor-pointer shadow-2xs"
+                  title="Simpan draf lokal selama 1 jam"
+                >
+                  <BookmarkPlus size={14} className="text-amber-600" />
+                  <span>Simpan Draf</span>
+                </button>
+              ) : (
+                <div />
+              )}
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => void handleSafeClose()}
+                  className="px-4 py-2 rounded-xl border border-[#d1d7db] dark:border-[#374248] text-xs font-semibold text-[#54656f] dark:text-[#aebac1] hover:bg-[#f0f2f5] transition-colors cursor-pointer active:scale-95"
+                >
+                  Batal
+                </button>
+                {onSuccessAndInvoice && (
+                  <button
+                    type="button"
+                    disabled={submitting}
+                    onClick={handleSubmitWithInvoice}
+                    className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:opacity-50 text-white text-xs font-bold flex items-center space-x-1.5 shadow-xs transition cursor-pointer"
+                    title="Simpan reservasi dan langsung masukkan format invoice ke chat WhatsApp"
+                  >
+                    <Receipt size={14} />
+                    <span>Simpan & Masukkan Invoice ke Chat</span>
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-5 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] active:scale-95 disabled:opacity-50 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
+                >
+                  <Check size={14} />
+                  <span>{submitting ? 'Menyimpan...' : (mode === 'edit' ? 'Simpan Perubahan Reservasi' : isMultiSession ? `Buat Paket ${multiSessionTotal} Sesi` : 'Simpan & Buat Jadwal')}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </form>
+
+        {/* ========================================================================= */}
+        {/* MODAL / DRAWER: LIHAT JADWAL TERISI (CALENDAR PEEK) */}
+        {/* ========================================================================= */}
+        {showBookedSlotsModal && (
+          <div
+            className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn overflow-y-auto overflow-x-hidden touch-pan-y overscroll-contain"
+            onClick={() => setShowBookedSlotsModal(false)}
+            style={{ touchAction: 'pan-y' }}
+          >
+            <div
+              className="w-full max-w-lg bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] dark:text-[#e9edef] rounded-2xl p-4 sm:p-5 shadow-2xl space-y-4 max-h-[85vh] flex flex-col mx-auto overflow-x-hidden touch-pan-y overscroll-contain"
+              onClick={(e) => e.stopPropagation()}
+              style={{ touchAction: 'pan-y' }}
+            >
+              <div className="flex items-center justify-between border-b border-[#e9edef] dark:border-[#2a3942] pb-3">
+                <div>
+                  <h3 className="text-base font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
+                    <CalendarDays className="text-[#008069]" size={18} />
+                    <span>Jadwal Terisi pada {bookingDate || 'Hari Ini'}</span>
+                  </h3>
+                  <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
+                    {bookedReservationsForDate.length} reservasi terdaftar pada tanggal ini
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowBookedSlotsModal(false)}
+                  className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Bookings Timeline List */}
+              <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+                {loadingReservations ? (
+                  <div className="p-8 text-center text-xs text-gray-500 animate-pulse" aria-busy="true">
+                    Memuat jadwal terisi...
+                  </div>
+                ) : bookedReservationsForDate.length === 0 ? (
+                  <div className="p-8 text-center bg-[#f8fafc] border border-dashed border-[#d1d7db] dark:border-[#374248] rounded-2xl">
+                    <CheckCircle2 size={32} className="text-[#008069] mx-auto mb-2 opacity-80" />
+                    <p className="text-sm font-bold text-[#111b21] dark:text-[#e9edef]">Hari Ini Masih Kosong</p>
+                    <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-1">
+                      Belum ada jadwal reservasi yang terisi pada tanggal ini. Seluruh slot jam tersedia!
+                    </p>
+                  </div>
+                ) : (
+                  bookedReservationsForDate.map((res) => {
+                    const { timeFormatted: startTimeStr } = getWibHoursAndMinutes(res.booking_date!);
+                    const cust = res.customer as any;
+                    const isHold = res.status === 'hold';
+                    const isEditingThis = mode === 'edit' && (initialReservation as any)?.id && res.id === (initialReservation as any).id;
+                    return (
+                      <div
+                        key={res.id}
+                        className={`p-3 bg-white dark:bg-[#1c272e] border rounded-xl shadow-2xs space-y-1.5 ${isEditingThis ? 'border-cyan-300 bg-cyan-50/40 dark:border-cyan-700' : 'border-[#e9edef] dark:border-[#2a3942]'}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`px-2 py-0.5 rounded-lg text-xs font-bold font-mono border ${isHold ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                            {isHold ? '🟡' : '🟢'} {startTimeStr} WIB {isHold ? '— Hold Ditawarkan' : '— Terjadwal Resmi'}
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            {isEditingThis && (
+                              <span className="px-2 py-0.5 rounded-lg text-xs font-bold bg-cyan-50 text-cyan-700 border border-cyan-300">Sedang Diedit</span>
+                            )}
+                            <span className="text-xs font-bold text-[#008069] bg-[#e8f5f2] px-2 py-0.5 rounded-full">
+                              {resolveStaffName(res, effectiveStaffList) || 'Terapis Belum Ditugaskan'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="text-xs space-y-0.5">
+                          <p className="font-bold text-[#111b21] dark:text-[#e9edef]">
+                            {(cust?.name || 'Bunda')} {(cust?.phone ? `(${cust.phone})` : '')}
+                          </p>
+                          <p className="text-[#54656f] dark:text-[#aebac1] text-[11px] line-clamp-1">
+                            {res.treatment_detail || res.treatment_category}
+                          </p>
+                          {cust?.kelurahan && (
+                            <p className="text-[10px] text-[#8696a0] flex items-center space-x-1">
+                              <MapPin size={10} className="text-[#008069]" />
+                              <span>{cust.kelurahan}, {cust.kecamatan}</span>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="pt-3 border-t border-[#e9edef] dark:border-[#2a3942] flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowBookedSlotsModal(false)}
+                  className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold cursor-pointer"
+                >
+                  Tutup Pratinjau
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 409 Conflict resolution dialog */}
+        {showConflictModal && conflictInfo && (
+          <div className="fixed inset-0 bg-black/70 z-[100000] flex items-center justify-center p-4" onClick={() => setShowConflictModal(false)}>
+            <div className="w-full max-w-md bg-white dark:bg-[#111b21] rounded-2xl p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <h4 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef]">
+                {conflictInfo.code === 'STAFF_COLLISION' ? '⛔ Jadwal Terapis Bentrok' : '⛔ Duplikat Booking Terdeteksi'}
+              </h4>
+              <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-1.5">
+                {conflictInfo.message}
+                {conflictInfo.existingReservation?.booking_date && (
+                  <span> Jadwal existing: {new Date(conflictInfo.existingReservation.booking_date).toLocaleString('id-ID')}.</span>
+                )}
+              </p>
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const existingRes = conflictInfo.existingReservation;
+                    setShowConflictModal(false);
+                    setConflictInfo(null);
+                    toast('Batalkan duplikat — membuka jadwal yang sudah ada.', 'info');
+                    onClose();
+                    if (existingRes && onEditReservation) {
+                      onEditReservation(existingRes);
+                    }
+                  }}
+                  className="px-3 py-2 rounded-xl border border-[#d1d7db] text-xs font-bold text-[#111b21] hover:bg-[#f0f2f5] cursor-pointer"
+                >
+                  Batal & Buka Jadwal Existing
+                </button>
+                <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={handleForceCreate}
+                  className="px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-bold cursor-pointer"
+                >
+                  {submitting ? 'Menyimpan...' : (mode === 'edit' ? 'Tetap Simpan Perubahan (Force)' : 'Tetap Simpan Baru (Force)')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      {/* AddressBookDrawer Overlay untuk Perbarui Kartu Terpilih (Micro-Task 4.2) */}
+      {showAddressDrawer && (customerId || selectedCustomerInfo?.id) && (
+        <AddressBookDrawer
+          customer={selectedCustomerInfo ? { id: selectedCustomerInfo.id, name: selectedCustomerInfo.name } : { id: customerId }}
+          initialEditingCardId={correctingCardId}
+          onClose={() => {
+            setShowAddressDrawer(false);
+            setCorrectingCardId(null);
+          }}
+          onChanged={async () => {
+            const cid = selectedCustomerInfo?.id || customerId;
+            if (cid) {
+              try {
+                const res = await apiRequest<{ success: boolean; data: any }>(
+                  `/api/admin/customers/${cid}`
+                );
+                if (res?.success && res.data) {
+                  setSelectedCustomerInfo(res.data);
+                  if (correctingCardId) {
+                    const updatedCard = (res.data.saved_addresses || []).find((a: any) => a.id === correctingCardId);
+                    if (updatedCard) {
+                      if (updatedCard.address) setAddress(updatedCard.address);
+                      if (updatedCard.landmark) setLandmark(updatedCard.landmark);
+                      if (updatedCard.ongkir != null) setOngkir(updatedCard.ongkir);
+                    }
+                  }
+                }
+              } catch {}
+            }
+            setShowAddressDrawer(false);
+            setCorrectingCardId(null);
+          }}
+        />
+      )}
+      </div>
+    </div>,
+    document.body
+  );
+};

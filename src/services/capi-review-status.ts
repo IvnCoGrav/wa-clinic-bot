@@ -39,8 +39,14 @@ export function resolveNextPurchaseReviewStatus(
  * selain itu masuk antrean CAPI sebagai pending.
  */
 export function resolvePurchaseReviewOnConfirm(
-  r: { purchase_review_status?: string | null; purchase_event_sent_at?: Date | string | null } | null | undefined
-): 'pending' | 'approved' | 'ignored_outlier' {
+  r: {
+    purchase_review_status?: string | null;
+    purchase_event_sent_at?: Date | string | null;
+    series_id?: string | null;
+    session_number?: number | null;
+  } | null | undefined
+): 'pending' | 'approved' | 'ignored_outlier' | typeof PURCHASE_REVIEW_NOT_APPLICABLE {
+  if (r?.series_id && ((r as any).session_number ?? 1) > 1) return PURCHASE_REVIEW_NOT_APPLICABLE;
   if (isPurchaseAlreadyApproved(r)) return 'approved';
   if (r?.purchase_review_status === 'ignored_outlier') return 'ignored_outlier';
   return 'pending';

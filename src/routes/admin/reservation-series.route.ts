@@ -61,8 +61,9 @@ export async function reservationSeriesRoutes(fastify: FastifyInstance) {
         force,
       } = request.body || {};
 
-      if (!customerId || !treatmentName || !totalSessions || !sessions?.length) {
-        return reply.status(400).send({ success: false, error: 'customerId, treatmentName, totalSessions, dan sessions wajib diisi.' });
+      const total = Number(totalSessions);
+      if (!customerId || !treatmentName || !Number.isInteger(total) || total < 2 || !sessions?.length) {
+        return reply.status(400).send({ success: false, error: 'customerId, treatmentName, totalSessions (min 2), dan sessions wajib diisi.' });
       }
 
       try {

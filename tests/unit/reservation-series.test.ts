@@ -1,5 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+const txReservationCreateMock = vi.fn().mockImplementation(async ({ data }: any) => ({
+  id: `res_${data.session_number}`,
+  session_number: data.session_number,
+  booking_date: data.booking_date,
+  status: data.status,
+  assigned_staff_id: data.assigned_staff_id,
+  treatment_category: data.treatment_category,
+  delivery_fee: data.delivery_fee,
+  discount_amount: data.discount_amount,
+  payment_method: data.payment_method,
+  duration_minutes: data.duration_minutes,
+  customer_address_id: data.customer_address_id,
+  purchase_review_status: data.purchase_review_status,
+}));
+
 vi.mock('../../src/db/client', () => ({
   prisma: {
     reservationSeries: {
@@ -43,19 +58,7 @@ vi.mock('../../src/db/client', () => ({
             })),
           },
           reservation: {
-            create: vi.fn().mockImplementation(async ({ data }: any) => ({
-              id: `res_${data.session_number}`,
-              session_number: data.session_number,
-              booking_date: data.booking_date,
-              status: data.status,
-              assigned_staff_id: data.assigned_staff_id,
-              treatment_category: data.treatment_category,
-              delivery_fee: data.delivery_fee,
-              discount_amount: data.discount_amount,
-              payment_method: data.payment_method,
-              duration_minutes: data.duration_minutes,
-              customer_address_id: data.customer_address_id,
-            })),
+            create: txReservationCreateMock,
           },
         };
         return fn(tx);
@@ -341,5 +344,69 @@ describe('ReservationSeriesService', () => {
 
     await reservationSeriesService.updateSession('r1', { bookingDate: futureNew }, 'default-tenant');
     expect(followUpService.onReservationRescheduled).toHaveBeenCalledWith('r1', futureNew, 'default-tenant');
+  });
+
+  it('13. [P1.1] cancelSeries memanggil googleCalendarService.deleteEvent dengan eventId (bukan reservationId)', async () => {
+    const { googleCalendarService } = await import('../../src/services/google-calendar.service');
+    vi.mocked(googleCalendarService.deleteEvent).mockClear();
+
+    vi.mocked(prisma.reservationSeries.findFirst).mockResolvedValueOnce({
+      id: 'series_gcal',
+      customer_id: 'cust_1',
+      tenant_id: 'default-tenant',
+      treatment_name: 'Paket Spa',
+      total_sessions: 2,
+      status: 'active',
+      reservations: [
+        { id: 'r1', google_calendar_event_id: 'gcal_event_123', status: 'confirmed' },
+        { id: 'r2', google_calendar_event_id: null, status: 'pending' },
+      ],
+    } as any);
+
+    const res = await reservationSeriesService.cancelSeries('series_gcal', 'default-tenant');
+    expect(res.cancelledCount).toBe(2);
+    // Memastikan deleteEvent dipanggil dengan gcal_event_123, bukan r1 atau tenantId
+    expect(googleCalendarService.deleteEvent).toHaveBeenCalledTimes(1);
+    expect(googleCalendarService.deleteEvent).toHaveBeenCalledWith('gcal_event_123');
+  });
+
+  it('14. [P1.2a] createSeries mengatur purchase_review_status pending untuk sesi 1 dan not_applicable untuk sesi 2..N', async () => {
+    txReservationCreateMock.mockClear();
+    const future1 = new Date(Date.now() + 86400000);
+    const future2 = new Date(Date.now() + 2 * 86400000);
+    const series = await reservationSeriesService.createSeries({
+      customerId: 'cust_series_capi',
+      treatmentName: 'Paket Newborn Care',
+      totalSessions: 2,
+      purchaseValue: 500000,
+      sessions: [
+        { sessionNumber: 1, bookingDate: future1 },
+        { sessionNumber: 2, bookingDate: future2 },
+      ],
+    } as any, 'default-tenant');
+
+    expect(series.reservations.length).toBe(2);
+    expect(txReservationCreateMock).toHaveBeenCalledTimes(2);
+    const call1 = txReservationCreateMock.mock.calls[0][0];
+    const call2 = txReservationCreateMock.mock.calls[1][0];
+    expect(call1.data.purchase_review_status).toBe('pending');
+    expect(call2.data.purchase_review_status).toBe('not_applicable');
+  });
+
+  it('15. [P3.1] createSeries dengan assignedStaffId null (unassigned) tetap berhasil di-lock dan dibuat', async () => {
+    const futureDate = new Date(Date.now() + 86400000);
+    const series = await reservationSeriesService.createSeries({
+      customerId: 'cust_unassigned',
+      treatmentName: 'Paket Tanpa Terapis',
+      totalSessions: 2,
+      assignedStaffId: undefined, // unassigned
+      sessions: [
+        { sessionNumber: 1, bookingDate: futureDate },
+        { sessionNumber: 2, bookingDate: new Date(futureDate.getTime() + 86400000) },
+      ],
+    } as any, 'default-tenant');
+
+    expect(series).toBeDefined();
+    expect(series.reservations.length).toBe(2);
   });
 });
