@@ -95,14 +95,24 @@ export const LeakageGrid: React.FC<{ report: MetaPerformanceReport }> = ({ repor
             </p>
             <div className="grid grid-cols-2 gap-1.5">
               {([
-                ['Sudah Closing', d.mqlDropOff.converted, 'text-[#008069]'],
-                ['Tanpa Reservasi', d.mqlDropOff.noReservation, 'text-[#111b21]'],
-                ['Batal', d.mqlDropOff.cancelled, 'text-amber-700'],
-                ['Di Luar Area', d.mqlDropOff.outOfCoverage, 'text-rose-600'],
-              ] as const).map(([label, val, cls]) => (
-                <div key={label} className="flex items-center justify-between rounded-lg border border-[#e9edef] bg-[#f8fafc] px-2.5 py-1.5 text-[11px]">
-                  <span className="text-[#5b6b73]">{label}</span>
-                  <span className={`font-mono font-bold ${cls}`}>{fmtNum(val)}</span>
+                [
+                  'Sudah Closing',
+                  d.mqlDropOff.converted,
+                  'text-[#008069]',
+                  d.mqlDropOff.convertedFirstTime !== undefined
+                    ? `${fmtNum(d.mqlDropOff.convertedFirstTime)} Baru · ${fmtNum(d.mqlDropOff.convertedRepeat ?? 0)} Repeat`
+                    : undefined,
+                ],
+                ['Tanpa Reservasi', d.mqlDropOff.noReservation, 'text-[#111b21]', undefined],
+                ['Batal', d.mqlDropOff.cancelled, 'text-amber-700', undefined],
+                ['Di Luar Area', d.mqlDropOff.outOfCoverage, 'text-rose-600', undefined],
+              ] as const).map(([label, val, cls, sub]) => (
+                <div key={label} className="flex flex-col justify-between rounded-lg border border-[#e9edef] bg-[#f8fafc] px-2.5 py-1.5 text-[11px]">
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-[#5b6b73]">{label}</span>
+                    <span className={`font-mono font-bold ${cls}`}>{fmtNum(val)}</span>
+                  </div>
+                  {sub && <span className="text-[10px] text-[#64748b] mt-0.5">{sub}</span>}
                 </div>
               ))}
             </div>

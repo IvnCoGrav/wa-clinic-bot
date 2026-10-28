@@ -23,17 +23,24 @@ export const TherapistUtilizationCard: React.FC<{ report: MetaPerformanceReport 
       <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
         <Activity size={16} className="text-[#008069]" /> Kapasitas & Utilisasi Terapis
       </h3>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
         <div className="rounded-xl border border-[#e9edef] bg-[#f8fafc] px-3 py-2">
           <p className="text-[10px] uppercase font-bold text-[#8696a0]">Terapis Aktif</p>
-          <p className="text-sm font-extrabold text-[#111b21]">{fmtNum(cap.activeTherapists)}</p>
+          <p className="text-sm font-extrabold text-[#111b21]">{fmtNum(cap.activeTherapists)} orang</p>
+        </div>
+        <div className="rounded-xl border border-[#e9edef] bg-[#f8fafc] px-3 py-2">
+          <p className="text-[10px] uppercase font-bold text-[#8696a0]">Kapasitas Slot</p>
+          <p className="text-sm font-extrabold text-[#111b21]">
+            {fmtNum(cap.totalSlotsCapacity)} <span className="text-[10px] font-normal text-[#64748b]">slot</span>
+          </p>
+          <p className="text-[9px] text-[#8696a0]">@{cap.dailySlotsPerTherapist || 4} slot/terapis/hari</p>
         </div>
         <div className="rounded-xl border border-[#e9edef] bg-[#f8fafc] px-3 py-2">
           <p className="text-[10px] uppercase font-bold text-[#8696a0]">Booking Periode</p>
           <p className="text-sm font-extrabold text-[#111b21]">{fmtNum(cap.bookingCount)}</p>
         </div>
         <div className="rounded-xl border border-[#e9edef] bg-[#f8fafc] px-3 py-2">
-          <p className="text-[10px] uppercase font-bold text-[#8696a0]">Utilisasi</p>
+          <p className="text-[10px] uppercase font-bold text-[#8696a0]">Utilisasi Slot</p>
           <p className="text-sm font-extrabold text-[#111b21]">
             {cap.utilizationPct !== null ? fmtPct(cap.utilizationPct, 1) : '-'}
           </p>
@@ -44,7 +51,7 @@ export const TherapistUtilizationCard: React.FC<{ report: MetaPerformanceReport 
       </span>
       <p className="text-[11px] text-[#8696a0] flex items-start gap-1">
         <Info size={12} className="mt-0.5 shrink-0" />
-        Kapasitas = terapis aktif x jumlah hari periode. Pita utilisasi (65% / 85%) masih provisional.
+        Kapasitas dihitung berbasis slot riil: {cap.activeTherapists} terapis aktif &times; {cap.dailySlotsPerTherapist || 4} slot per hari &times; jumlah hari periode.
       </p>
     </section>
   );

@@ -24,6 +24,9 @@ export interface UnifiedMonthlyCohortRow {
   repeatM3: CohortMonthlyPeriodMetric | null;
   repeatM4: CohortMonthlyPeriodMetric | null;
   repeatM5: CohortMonthlyPeriodMetric | null;
+  cumulativeRepeatCount?: number;
+  cumulativeRepeatPct?: number;
+  avgDaysToSecondVisit?: number | null;
   totalRealizedRevenue: number;
   revenuePerPatient: number;
   adSpend: number | null;
@@ -122,6 +125,8 @@ export interface MetaPerformanceReport {
     mqlDropOff: {
       mqlTotal: number;
       converted: number;
+      convertedFirstTime?: number;
+      convertedRepeat?: number;
       dropped: number;
       outOfCoverage: number;
       cancelled: number;
@@ -140,6 +145,8 @@ export interface MetaPerformanceReport {
   cohortPlanning: CohortPlanningMetrics;
   therapistCapacity: {
     activeTherapists: number;
+    dailySlotsPerTherapist?: number;
+    totalSlotsCapacity?: number;
     bookingCount: number;
     utilizationPct: number | null;
     band: 'AMAN' | 'OPTIMAL' | 'PENUH' | 'UNKNOWN';
@@ -154,3 +161,23 @@ export const fmtPct = (v?: number | null, digits = 2): string =>
 
 export const fmtNum = (v?: number | null): string =>
   typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString('id-ID') : '-';
+
+export function fmtCompactCurrency(val: number | null | undefined): string {
+  if (val === null || val === undefined) return '-';
+  if (val === 0) return '0';
+  const abs = Math.abs(val);
+  const sign = val < 0 ? '-' : '';
+  if (abs >= 1_000_000_000) {
+    const num = abs / 1_000_000_000;
+    return `${sign}${num % 1 === 0 ? num.toFixed(0) : num.toFixed(1).replace(/\.0$/, '')}b`;
+  }
+  if (abs >= 1_000_000) {
+    const num = abs / 1_000_000;
+    return `${sign}${num % 1 === 0 ? num.toFixed(0) : num.toFixed(1).replace(/\.0$/, '')}m`;
+  }
+  if (abs >= 1_000) {
+    const num = abs / 1_000;
+    return `${sign}${num % 1 === 0 ? num.toFixed(0) : num.toFixed(1).replace(/\.0$/, '')}k`;
+  }
+  return `${sign}${abs}`;
+}

@@ -115,6 +115,9 @@ export interface UnifiedMonthlyCohortRow {
   repeatM3: CohortMonthlyPeriodMetric | null;
   repeatM4: CohortMonthlyPeriodMetric | null;
   repeatM5: CohortMonthlyPeriodMetric | null;
+  cumulativeRepeatCount?: number;
+  cumulativeRepeatPct?: number;
+  avgDaysToSecondVisit?: number | null;
   totalRealizedRevenue: number;
   revenuePerPatient: number;
   adSpend: number | null;
@@ -211,6 +214,8 @@ export interface MetaPerformanceReport {
     mqlDropOff: {
       mqlTotal: number;
       converted: number;
+      convertedFirstTime?: number;
+      convertedRepeat?: number;
       dropped: number;
       outOfCoverage: number;
       cancelled: number;
@@ -234,6 +239,8 @@ export interface MetaPerformanceReport {
   /** Kapasitas & utilisasi terapis (DB-driven: jumlah Staff aktif per hari). */
   therapistCapacity: {
     activeTherapists: number;
+    dailySlotsPerTherapist?: number;
+    totalSlotsCapacity?: number;
     bookingCount: number;
     utilizationPct: number | null;
     band: 'AMAN' | 'OPTIMAL' | 'PENUH' | 'UNKNOWN';
@@ -555,8 +562,10 @@ export async function buildMonthlyCohorts(params: BuildMonthlyCohortsParams): Pr
     });
   }
 
-  const allMonths = Array.from(new Set(patientInfos.map((p) => p.cohortMonth))).sort((a, b) => (a < b ? 1 : -1));
-  if (!allMonths.includes(currentWibMonth)) {
+  let allMonths = Array.from(new Set(patientInfos.map((p) => p.cohortMonth)))
+    .filter((m) => m !== '2025-08' && m >= '2026-01')
+    .sort((a, b) => (a < b ? 1 : -1));
+  if (!allMonths.includes(currentWibMonth) && currentWibMonth >= '2026-01') {
     allMonths.unshift(currentWibMonth);
   }
 
@@ -632,6 +641,32 @@ export async function buildMonthlyCohorts(params: BuildMonthlyCohortsParams): Pr
       const repeatM4 = await computePeriod(4);
       const repeatM5 = await computePeriod(5);
 
+      // Cumulative repeat (pasien unik yang memiliki >= 2 reservasi qualifying)
+      let cumulativeRepeatCount = 0;
+      let totalDaysToSecondVisit = 0;
+      let secondVisitCount = 0;
+
+      for (const p of cohortPatients) {
+        const qualifyingReservations = (p.reservations || []).filter(
+          (r: any) => isQualifyingStatus(r?.status) && !isSandboxed(r?.customer),
+        );
+        if (qualifyingReservations.length >= 2) {
+          cumulativeRepeatCount += 1;
+          const firstDate = qualifyingReservations[0].booking_date
+            ? new Date(qualifyingReservations[0].booking_date)
+            : new Date(qualifyingReservations[0].created_at);
+          const secondDate = qualifyingReservations[1].booking_date
+            ? new Date(qualifyingReservations[1].booking_date)
+            : new Date(qualifyingReservations[1].created_at);
+          const daysDiff = Math.max(0, Math.floor((secondDate.getTime() - firstDate.getTime()) / MS_PER_DAY));
+          totalDaysToSecondVisit += daysDiff;
+          secondVisitCount += 1;
+        }
+      }
+
+      const cumulativeRepeatPct = cohortSize > 0 ? round2((cumulativeRepeatCount / cohortSize) * 100) : 0;
+      const avgDaysToSecondVisit = secondVisitCount > 0 ? Math.round(totalDaysToSecondVisit / secondVisitCount) : null;
+
       const totalRealizedRevenue =
         initialRevenue + (repeatM1?.revenue || 0) + (repeatM2?.revenue || 0) + (repeatM3?.revenue || 0) + (repeatM4?.revenue || 0) + (repeatM5?.revenue || 0);
       const revenuePerPatient = cohortSize > 0 ? Math.round(totalRealizedRevenue / cohortSize) : 0;
@@ -696,6 +731,9 @@ export async function buildMonthlyCohorts(params: BuildMonthlyCohortsParams): Pr
         repeatM3,
         repeatM4,
         repeatM5,
+        cumulativeRepeatCount,
+        cumulativeRepeatPct,
+        avgDaysToSecondVisit,
         totalRealizedRevenue,
         revenuePerPatient,
         adSpend,
@@ -803,6 +841,9 @@ export async function buildMonthlyCohorts(params: BuildMonthlyCohortsParams): Pr
       repeatM3: null,
       repeatM4: null,
       repeatM5: null,
+      cumulativeRepeatCount: undefined,
+      cumulativeRepeatPct: undefined,
+      avgDaysToSecondVisit: null,
       totalRealizedRevenue,
       revenuePerPatient,
       adSpend,
@@ -1008,7 +1049,30 @@ export async function getMetaPerformanceReport(
     ? await (pvModel.count({ where: { ...baseWhere, ...dateWhere } }) as Promise<number>).catch(() => 0)
     : 0;
 
-  const mqlCohort = cohortCustomers.filter((c) => c.is_mql);
+  // Pelanggan aktif pada rentang tanggal ini (chat matched atau konversi first-ever)
+  const rangeMatchedCustomerIds = new Set<string>();
+  for (const a of rangeClicks) {
+    if (a.customerId) {
+      rangeMatchedCustomerIds.add(a.customerId);
+    }
+  }
+  for (const [cid, firstEver] of firstEverByCustomer.entries()) {
+    const t = new Date(firstEver.created_at).getTime();
+    if (t >= start.getTime() && t <= end.getTime()) {
+      rangeMatchedCustomerIds.add(cid);
+    }
+  }
+
+  const isMqlInPeriod = (c: any): boolean => {
+    if (!c?.is_mql) return false;
+    if (c.mql_triggered_at) {
+      const mt = new Date(c.mql_triggered_at).getTime();
+      if (mt >= start.getTime() && mt <= end.getTime()) return true;
+    }
+    return rangeMatchedCustomerIds.has(c.id);
+  };
+
+  const mqlCohort = cohortCustomers.filter((c) => isMqlInPeriod(c));
   const mqlLeads = mqlCohort.length;
 
   // ── KPI CAC / LTV ─────────────────────────────────────────────────────────
@@ -1039,7 +1103,7 @@ export async function getMetaPerformanceReport(
 
   const campaignDetail = new Map<string, { mql: number; buyers: number; initialRevenue: number }>();
 
-  for (const customerId of cohortCustomerIds) {
+  for (const customerId of rangeMatchedCustomerIds) {
     const ad = earliestAdByCustomer.get(customerId);
     const ch = ad ? channelOf(ad) : 'PROMO_CTA';
     const camp = sanitizeUtmCampaign(ad?.utmCampaign);
@@ -1313,10 +1377,16 @@ export async function getMetaPerformanceReport(
     (r) => isQualifying(r) && r.booking_date && rangeDayKeys.has(wibDateKey(new Date(r.booking_date))),
   ).length;
   if (activeTherapists !== null) {
-    const capacity = activeTherapists * rangeDayKeys.size;
-    const utilizationPct = capacity > 0 ? round2((bookingCount / capacity) * 100) : null;
+    const dailySlotsPerTherapist =
+      typeof tenantSettings?.dailySlotsPerTherapist === 'number' && tenantSettings.dailySlotsPerTherapist > 0
+        ? tenantSettings.dailySlotsPerTherapist
+        : 4;
+    const totalSlotsCapacity = activeTherapists * dailySlotsPerTherapist * rangeDayKeys.size;
+    const utilizationPct = totalSlotsCapacity > 0 ? round2((bookingCount / totalSlotsCapacity) * 100) : null;
     therapistCapacity = {
       activeTherapists,
+      dailySlotsPerTherapist,
+      totalSlotsCapacity,
       bookingCount,
       utilizationPct,
       band: capacityBandFor(utilizationPct),
@@ -1344,20 +1414,40 @@ export async function getMetaPerformanceReport(
     if (a.customerId && c?.is_mql) mqlCustomerIds.add(a.customerId);
   }
   let converted = 0;
+  let convertedFirstTime = 0;
+  let convertedRepeat = 0;
   let outOfCoverage = 0;
   let cancelled = 0;
   let noReservation = 0;
   for (const cid of mqlCustomerIds) {
     const res = (allQualifyingResByCustomer.get(cid) || []).filter((r) => !isSandboxed(r.customer));
-    if (res.some((r) => isQualifyingStatus(r.status))) converted += 1;
-    else if (res.some((r) => String(r.status).toLowerCase() === 'cancelled')) cancelled += 1;
-    else if (customerMap.get(cid)?.is_out_of_coverage) outOfCoverage += 1;
-    else noReservation += 1;
+    if (res.some((r) => isQualifyingStatus(r.status))) {
+      converted += 1;
+      const firstEver = firstEverByCustomer.get(cid);
+      if (firstEver) {
+        const createdAt = new Date(firstEver.created_at).getTime();
+        if (createdAt >= start.getTime() && createdAt <= end.getTime()) {
+          convertedFirstTime += 1;
+        } else {
+          convertedRepeat += 1;
+        }
+      } else {
+        convertedRepeat += 1;
+      }
+    } else if (res.some((r) => String(r.status).toLowerCase() === 'cancelled')) {
+      cancelled += 1;
+    } else if (customerMap.get(cid)?.is_out_of_coverage) {
+      outOfCoverage += 1;
+    } else {
+      noReservation += 1;
+    }
   }
   const mqlTotal = mqlCustomerIds.size;
   const mqlDropOff = {
     mqlTotal,
     converted,
+    convertedFirstTime,
+    convertedRepeat,
     dropped: mqlTotal - converted,
     outOfCoverage,
     cancelled,

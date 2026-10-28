@@ -366,8 +366,10 @@ describe('meta-performance-analytics: retensi & kapasitas', () => {
     const r = await getMetaPerformanceReport({ tenantId: T, startDate: '2026-08-01', endDate: '2026-08-10' });
     expect(r.therapistCapacity).not.toBeNull();
     expect(r.therapistCapacity!.activeTherapists).toBe(3);
+    expect(r.therapistCapacity!.dailySlotsPerTherapist).toBe(4);
+    expect(r.therapistCapacity!.totalSlotsCapacity).toBe(120); // 3 terapis * 4 slot * 10 hari
     expect(r.therapistCapacity!.bookingCount).toBe(1);
-    expect(r.therapistCapacity!.utilizationPct).toBe(3.33); // 1 / (3 * 10 hari)
+    expect(r.therapistCapacity!.utilizationPct).toBe(0.83); // 1 / 120 slot
     expect(r.therapistCapacity!.band).toBe('AMAN');
   });
 
@@ -398,6 +400,8 @@ describe('meta-performance-analytics: retensi & kapasitas', () => {
     const d = r.leakageDiagnostics.mqlDropOff;
     expect(d.mqlTotal).toBe(4);
     expect(d.converted).toBe(1);
+    expect(d.convertedFirstTime).toBe(1);
+    expect(d.convertedRepeat).toBe(0);
     expect(d.cancelled).toBe(1);
     expect(d.outOfCoverage).toBe(1);
     expect(d.noReservation).toBe(1);
@@ -873,5 +877,72 @@ describe('meta-performance-analytics: Mesin Kohort Bulanan & Omzet Treatment Mur
     expect(mayRow.repeatM5?.revenue).toBe(130000);
     expect(mayRow.repeatM5?.status).toBe('ONGOING');
     expect(mayRow.totalRealizedRevenue).toBe(350000);
+  });
+
+  it('menghitung cumulative repeat rate dan jeda rata-rata hari ke kunjungan kedua (avgDaysToSecondVisit)', async () => {
+    const c1 = cust('c_rep1', T, { phone: '0811111111' });
+    const c2 = cust('c_rep2', T, { phone: '0822222222' });
+
+    // c1: first visit 2026-06-01, second visit 2026-06-21 (delta 20 hari)
+    const r1_1 = {
+      id: 'r1_1', tenant_id: T, customer_id: 'c_rep1', created_at: '2026-06-01T03:00:00.000Z',
+      booking_date: '2026-06-01T03:00:00.000Z', status: 'completed', purchase_value: 100000,
+      treatment_detail: 'Pijat Bayi', delivery_fee: 0, customer: c1,
+    };
+    const r1_2 = {
+      id: 'r1_2', tenant_id: T, customer_id: 'c_rep1', created_at: '2026-06-21T03:00:00.000Z',
+      booking_date: '2026-06-21T03:00:00.000Z', status: 'completed', purchase_value: 100000,
+      treatment_detail: 'Pijat Bayi', delivery_fee: 0, customer: c1,
+    };
+
+    // c2: first visit 2026-06-05, second visit 2026-07-05 (delta 30 hari)
+    const r2_1 = {
+      id: 'r2_1', tenant_id: T, customer_id: 'c_rep2', created_at: '2026-06-05T03:00:00.000Z',
+      booking_date: '2026-06-05T03:00:00.000Z', status: 'completed', purchase_value: 100000,
+      treatment_detail: 'Pijat Bayi', delivery_fee: 0, customer: c2,
+    };
+    const r2_2 = {
+      id: 'r2_2', tenant_id: T, customer_id: 'c_rep2', created_at: '2026-07-05T03:00:00.000Z',
+      booking_date: '2026-07-05T03:00:00.000Z', status: 'completed', purchase_value: 100000,
+      treatment_detail: 'Pijat Bayi', delivery_fee: 0, customer: c2,
+    };
+
+    const result = await buildMonthlyCohorts({
+      tenantId: T,
+      historyReservations: [r1_1, r1_2, r2_1, r2_2],
+      rangeReservations: [],
+      matchedAds: [],
+      now: new Date('2026-10-26T09:00:00.000Z'),
+      treatmentFeeOf: async (r) => r.purchase_value,
+    });
+
+    const junRow = result.monthlyCohorts.find((r) => r.cohortMonth === '2026-06' && r.channel === 'ALL')!;
+    expect(junRow).toBeDefined();
+    expect(junRow.cohortSize).toBe(2);
+    expect(junRow.cumulativeRepeatCount).toBe(2);
+    expect(junRow.cumulativeRepeatPct).toBe(100);
+    // (20 hari + 30 hari) / 2 = 25 hari
+    expect(junRow.avgDaysToSecondVisit).toBe(25);
+  });
+
+  it('mengecualikan outlier masa lalu 2025-08 dari kohort bulanan', async () => {
+    const cOld = cust('c_old', T);
+    const rOld = {
+      id: 'r_old', tenant_id: T, customer_id: 'c_old', created_at: '2025-08-10T03:00:00.000Z',
+      booking_date: '2025-08-10T03:00:00.000Z', status: 'completed', purchase_value: 100000,
+      treatment_detail: 'Pijat Bayi', delivery_fee: 0, customer: cOld,
+    };
+
+    const result = await buildMonthlyCohorts({
+      tenantId: T,
+      historyReservations: [rOld],
+      rangeReservations: [],
+      matchedAds: [],
+      now: new Date('2026-10-26T09:00:00.000Z'),
+      treatmentFeeOf: async (r) => r.purchase_value,
+    });
+
+    const oldRow = result.monthlyCohorts.find((r) => r.cohortMonth === '2025-08');
+    expect(oldRow).toBeUndefined();
   });
 });

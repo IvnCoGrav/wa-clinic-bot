@@ -17,6 +17,7 @@ import {
   CohortChannel,
   fmtRupiah,
   fmtNum,
+  fmtCompactCurrency,
 } from './types';
 
 interface CohortRetentionTableProps {
@@ -39,11 +40,12 @@ export const CohortRetentionTable: React.FC<CohortRetentionTableProps> = ({ repo
   const calculatedMaxCac =
     matureLtv !== null ? Math.round(matureLtv * (marginInput / 100)) : null;
 
-  // Pilih dataset sesuai viewMode
-  const sourceRows: UnifiedMonthlyCohortRow[] =
+  // Pilih dataset sesuai viewMode dan kecualikan outlier masa lalu 2025-08
+  const sourceRows: UnifiedMonthlyCohortRow[] = (
     viewMode === 'ROLLING_90'
       ? report.rolling3MonthCohorts || []
-      : report.monthlyCohorts || [];
+      : report.monthlyCohorts || []
+  ).filter((r) => r.cohortMonth !== '2025-08');
 
   // Filter baris sesuai channel pill
   const filteredRows = sourceRows.filter((r) => r.channel === selectedChannel);
@@ -114,7 +116,7 @@ export const CohortRetentionTable: React.FC<CohortRetentionTableProps> = ({ repo
           </span>
         </p>
         <p className="text-[10px] text-[#64748b]">
-          {fmtRupiah(metric.revenue)}
+          {fmtCompactCurrency(metric.revenue)}
         </p>
         {metric.status === 'ONGOING' && (
           <span className="text-[9px] text-amber-600 font-sans font-medium">
@@ -266,12 +268,13 @@ export const CohortRetentionTable: React.FC<CohortRetentionTableProps> = ({ repo
 
       {/* ── Tabel Kohort ────────────────────────────────────────── */}
       <div className="overflow-x-auto">
-        <table className="w-full text-xs min-w-[980px]">
+        <table className="w-full text-xs min-w-[1240px]">
           <thead>
             <tr className="text-left uppercase font-bold text-[#667781] border-b border-[#e9edef] bg-[#f8fafc]">
               <th className="py-2.5 px-3">Kohort</th>
-              <th className="py-2.5 px-3">Kanal</th>
               <th className="py-2.5 px-3 text-right">Pasien Baru</th>
+              <th className="py-2.5 px-3 text-right" title="Pasien unik yang pernah melakukan kunjungan kedua atau lebih">Retensi Kumulatif</th>
+              <th className="py-2.5 px-3 text-right" title="Rata-rata hari dari kunjungan pertama ke kunjungan kedua">Jeda Kunjungan #2</th>
               <th className="py-2.5 px-3 text-right">Biaya Iklan</th>
               <th className="py-2.5 px-3 text-right">Real CAC</th>
               <th className="py-2.5 px-3 text-right">Kunjungan #1</th>
@@ -282,6 +285,8 @@ export const CohortRetentionTable: React.FC<CohortRetentionTableProps> = ({ repo
               <th className="py-2.5 px-3 text-right">Repeat M+5</th>
               <th className="py-2.5 px-3 text-right">Total Omzet</th>
               <th className="py-2.5 px-3 text-right">Nilai/Pasien</th>
+              <th className="py-2.5 px-3 text-right">Laba Kotor ({marginInput}%)</th>
+              <th className="py-2.5 px-3 text-right">Laba Bersih</th>
               <th className="py-2.5 px-3 text-right">ROAS</th>
               <th className="py-2.5 px-3 text-center">Status</th>
             </tr>
@@ -289,13 +294,20 @@ export const CohortRetentionTable: React.FC<CohortRetentionTableProps> = ({ repo
           <tbody>
             {filteredRows.length === 0 ? (
               <tr>
-                <td colSpan={15} className="text-center py-6 text-slate-400 italic">
+                <td colSpan={18} className="text-center py-6 text-slate-400 italic">
                   Tidak ada data kohort untuk kanal ini pada periode yang dipilih.
                 </td>
               </tr>
             ) : (
               filteredRows.map((r, idx) => {
                 const isEven = idx % 2 === 0;
+                const grossProfit = Math.round(r.totalRealizedRevenue * (marginInput / 100));
+                const netProfit =
+                  r.channel === 'ORGANIC'
+                    ? grossProfit
+                    : r.adSpend !== null && r.adSpend > 0
+                    ? grossProfit - r.adSpend
+                    : null;
                 return (
                   <tr
                     key={`${r.cohortMonth}-${r.channel}`}
@@ -319,11 +331,6 @@ export const CohortRetentionTable: React.FC<CohortRetentionTableProps> = ({ repo
                       </div>
                     </td>
 
-                    {/* Kanal */}
-                    <td className="py-2.5 px-3 whitespace-nowrap">
-                      {channelBadge(r.channel)}
-                    </td>
-
                     {/* Pasien Baru */}
                     <td className="py-2.5 px-3 text-right font-mono">
                       <span className="font-bold text-[#111b21]">{fmtNum(r.cohortSize)}</span>
@@ -337,12 +344,35 @@ export const CohortRetentionTable: React.FC<CohortRetentionTableProps> = ({ repo
                       )}
                     </td>
 
+                    {/* Retensi Kumulatif */}
+                    <td className="py-2.5 px-3 text-right font-mono whitespace-nowrap">
+                      {r.cumulativeRepeatCount !== undefined && r.cumulativeRepeatPct !== undefined ? (
+                        <span className="font-semibold text-[#111b21]">
+                          {r.cumulativeRepeatPct.toFixed(0)}%{' '}
+                          <span className="text-[#64748b] font-normal">
+                            ({fmtNum(r.cumulativeRepeatCount)})
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="text-[#cbd5e1]">-</span>
+                      )}
+                    </td>
+
+                    {/* Jeda Kunjungan #2 */}
+                    <td className="py-2.5 px-3 text-right font-mono whitespace-nowrap text-[#54656f]">
+                      {r.avgDaysToSecondVisit !== null && r.avgDaysToSecondVisit !== undefined ? (
+                        <span>{r.avgDaysToSecondVisit} hr</span>
+                      ) : (
+                        <span className="text-[#cbd5e1]">-</span>
+                      )}
+                    </td>
+
                     {/* Biaya Iklan */}
                     <td className="py-2.5 px-3 text-right font-mono text-[#54656f] whitespace-nowrap">
                       {r.channel === 'ORGANIC' ? (
                         <span className="text-[#cbd5e1]">-</span>
                       ) : r.adSpend !== null && r.adSpend > 0 ? (
-                        fmtRupiah(r.adSpend)
+                        fmtCompactCurrency(r.adSpend)
                       ) : (
                         <span className="text-slate-400 italic text-[11px]">Belum diisi</span>
                       )}
@@ -353,13 +383,13 @@ export const CohortRetentionTable: React.FC<CohortRetentionTableProps> = ({ repo
                       {r.channel === 'ORGANIC' || r.channel === 'ALL' ? (
                         <span className="text-[#cbd5e1]">-</span>
                       ) : (
-                        fmtRupiah(r.cac)
+                        fmtCompactCurrency(r.cac)
                       )}
                     </td>
 
                     {/* Kunjungan #1 */}
                     <td className="py-2.5 px-3 text-right font-mono whitespace-nowrap">
-                      <p className="font-semibold text-[#111b21]">{fmtRupiah(r.initialRevenue)}</p>
+                      <p className="font-semibold text-[#111b21]">{fmtCompactCurrency(r.initialRevenue)}</p>
                       {r.initialUpcomingOrders > 0 && (
                         <p className="text-[10px] text-amber-700 font-sans">
                           +{r.initialUpcomingOrders} terjadwal
@@ -394,12 +424,36 @@ export const CohortRetentionTable: React.FC<CohortRetentionTableProps> = ({ repo
 
                     {/* Total Realized Revenue */}
                     <td className="py-2.5 px-3 text-right font-mono font-bold text-[#008069] whitespace-nowrap">
-                      {fmtRupiah(r.totalRealizedRevenue)}
+                      {fmtCompactCurrency(r.totalRealizedRevenue)}
                     </td>
 
                     {/* Nilai / Pasien */}
                     <td className="py-2.5 px-3 text-right font-mono font-semibold text-[#111b21] whitespace-nowrap">
-                      {fmtRupiah(r.revenuePerPatient)}
+                      {fmtCompactCurrency(r.revenuePerPatient)}
+                    </td>
+
+                    {/* Laba Kotor */}
+                    <td className="py-2.5 px-3 text-right font-mono font-semibold text-[#0f172a] whitespace-nowrap">
+                      {fmtCompactCurrency(grossProfit)}
+                    </td>
+
+                    {/* Laba Bersih */}
+                    <td className="py-2.5 px-3 text-right font-mono whitespace-nowrap">
+                      {netProfit !== null ? (
+                        <span
+                          className={`px-1.5 py-0.5 rounded font-bold ${
+                            netProfit > 0
+                              ? 'text-emerald-700 bg-emerald-50'
+                              : netProfit < 0
+                              ? 'text-rose-700 bg-rose-50'
+                              : 'text-slate-600'
+                          }`}
+                        >
+                          {netProfit > 0 ? `+${fmtCompactCurrency(netProfit)}` : fmtCompactCurrency(netProfit)}
+                        </span>
+                      ) : (
+                        <span className="text-[#cbd5e1]">-</span>
+                      )}
                     </td>
 
                     {/* Kumulatif ROAS */}

@@ -57,7 +57,17 @@ export const ChannelTable: React.FC<{ report: MetaPerformanceReport }> = ({ repo
                 <td className="py-2.5 px-3 font-semibold text-[#111b21]">{CHANNEL_LABEL[r.channel] || r.channel}</td>
                 <td className="py-2.5 px-3 text-right font-mono">{fmtNum(r.leads)}</td>
                 <td className="py-2.5 px-3 text-right font-mono">{fmtNum(r.mql)}</td>
-                <td className="py-2.5 px-3 text-right font-mono font-bold text-[#008069]">{fmtNum(r.firstTimeBuyers)}</td>
+                <td className="py-2.5 px-3 text-right font-mono font-bold text-[#008069]">
+                  {fmtNum(r.firstTimeBuyers)}
+                  {r.firstTimeBuyers > 0 && r.firstTimeBuyers < 20 && (
+                    <span
+                      className="ml-1 px-1 py-0.2 rounded text-[9px] font-bold bg-slate-200 text-slate-700 font-sans"
+                      title="Sampel kecil (<20 pasien)"
+                    >
+                      &lt;20
+                    </span>
+                  )}
+                </td>
                 <td className="py-2.5 px-3 text-right font-mono">{fmtRupiah(r.initialRevenue)}</td>
                 <td className="py-2.5 px-3 text-right font-mono">{fmtRupiah(r.aov)}</td>
                 <td className="py-2.5 px-3 text-right font-mono">
