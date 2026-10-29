@@ -24,6 +24,7 @@ import { formatReservationKelurahan } from '../../utils/reservationAddress';
 import { getStaffColor } from '../../utils/staffColors';
 import { getTreatmentCategoryMeta } from '../../utils/treatmentCategoryIcon';
 import { computeDayCardLod } from '../../utils/calendarCardLod';
+import { stripHonorific } from '../../utils/patientName';
 
 const HOURS = Array.from({ length: 16 }, (_, i) => i + 6); // 6am - 9pm
 
@@ -320,14 +321,11 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
               const CategoryIcon = categoryMeta?.Icon;
               const isPaid = Boolean((res as any).purchase_occurred_at);
               // F-32: elemen dibuang dari prioritas terendah (detail → area) agar
-              // baris bidan di bawah TIDAK terpotong. Baris bidan tidak pernah digating.
+              // baris bidan di bawah TIDAK terpotong. Baris bidan tidak pernah dibatasi LOD.
               const { showDetail: canShowDetail, showArea: canShowArea } = computeDayCardLod(pos.heightPx);
 
-              const rawName = res.customer?.name || 'Pasien';
-              const cleanName = rawName
-                .replace(/^(?:Bunda|Ibu|Ny\.|Nn\.|Sdri\.|Mama|Mom|Moms)\s+/i, '')
-                .trim();
-              const displayName = cleanName || rawName;
+              // Nama pasien: gelar sapaan dibuang lewat seam tunggal (patientName.ts).
+              const displayName = stripHonorific(res.customer?.name) || 'Pasien';
               const cleanDetail = cleanTreatmentDetailForDisplay(res.treatment_detail, res.treatment_category);
               // Daerah kunjungan — kelurahan saja (F-33); cadangan kecamatan.
               const areaLabel = formatReservationKelurahan(res);

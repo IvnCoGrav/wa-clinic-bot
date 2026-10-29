@@ -5,6 +5,7 @@ import { resolveReservationDuration } from '../../utils/durationCalculator';
 import { getWibDateKey, getTodayWibDateKey } from '../../utils/dateWib';
 import { resolveStaffId } from '../../utils/resolveStaffName';
 import { getStaffColor } from '../../utils/staffColors';
+import { stripHonorific } from '../../utils/patientName';
 
 interface MonthScheduleGridProps {
   selectedDate: Date;
@@ -112,7 +113,7 @@ export const MonthScheduleGrid: React.FC<MonthScheduleGridProps> = ({
             <div
               key={idx}
               onClick={() => onSelectDate(item.date)}
-              className={`min-h-[105px] sm:min-h-[125px] p-1.5 sm:p-2 relative flex flex-col justify-start gap-1 transition-colors cursor-pointer select-none group ${
+              className={`min-h-[96px] sm:min-h-[120px] p-0.5 sm:p-1.5 relative flex flex-col justify-start gap-0.5 sm:gap-1 transition-colors cursor-pointer select-none group ${
                 isSelected
                   ? 'bg-emerald-50/30 dark:bg-emerald-950/30 ring-1 ring-[#008069] dark:ring-[#00a884]'
                   : item.isCurrentMonth
@@ -123,7 +124,7 @@ export const MonthScheduleGrid: React.FC<MonthScheduleGridProps> = ({
               {/* Date number header */}
               <div className="flex items-center justify-between w-full">
                 <span
-                  className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full ${
+                  className={`text-[10px] sm:text-xs font-bold w-4 h-4 sm:w-5 sm:h-5 flex items-center justify-center rounded-full ${
                     currentDay
                       ? 'bg-[#008069] text-white'
                       : isSelected
@@ -136,7 +137,7 @@ export const MonthScheduleGrid: React.FC<MonthScheduleGridProps> = ({
                   {item.date.getDate()}
                 </span>
                 {events.length > 0 && (
-                  <span className={`text-[10px] font-bold font-mono ${
+                  <span className={`text-[9px] sm:text-[10px] font-bold font-mono ${
                     currentDay ? 'text-[#008069] dark:text-[#00a884]' : isSelected ? 'text-[#111b21] dark:text-[#e9edef]' : 'text-[#667781] dark:text-[#8696a0]'
                   }`}>
                     {events.length}
@@ -145,8 +146,8 @@ export const MonthScheduleGrid: React.FC<MonthScheduleGridProps> = ({
               </div>
 
               {/* Event pills (Full-width, pure static labels, no buttons, no icons) */}
-              <div className="space-y-1 w-full overflow-hidden flex-1">
-                {events.slice(0, 3).map((res) => {
+              <div className="space-y-0.5 w-full overflow-hidden flex-1">
+                {events.slice(0, 4).map((res) => {
                   const bDate = new Date(res.booking_date!);
                   const duration = resolveReservationDuration(res);
                   const endDate = new Date(bDate.getTime() + duration * 60000);
@@ -161,12 +162,13 @@ export const MonthScheduleGrid: React.FC<MonthScheduleGridProps> = ({
                   const staffPillColor = isHold
                     ? 'bg-amber-100 dark:bg-[#2e2009] text-amber-900 dark:text-amber-200 border-dashed border-amber-400 dark:border-amber-800/60 font-bold'
                     : getStaffColor(resolveStaffId(res), staffList).card;
-                  const nameDisplay = isHold ? `[HOLD] ${res.customer?.name || 'Pasien'}` : (res.customer?.name || 'Bunda');
+                  const cleanName = stripHonorific(res.customer?.name) || 'Pasien';
+                  const nameDisplay = isHold ? `[HOLD] ${cleanName}` : cleanName;
 
                   return (
                     <div
                       key={res.id}
-                      className={`w-full px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-semibold truncate border block leading-tight ${staffPillColor}`}
+                      className={`w-full px-1 py-0.5 rounded-[2px] sm:rounded text-[9px] sm:text-[10px] font-semibold truncate border block leading-tight ${staffPillColor}`}
                       title={`${nameDisplay} (${startTimeStr} - ${endTimeStr}) - ${res.treatment_detail || res.treatment_category}`}
                     >
                       <span className="truncate block font-medium">
@@ -175,9 +177,9 @@ export const MonthScheduleGrid: React.FC<MonthScheduleGridProps> = ({
                     </div>
                   );
                 })}
-                {events.length > 3 && (
+                {events.length > 4 && (
                   <div className="w-full text-center text-[9px] text-[#008069] dark:text-[#00a884] font-bold pt-0.5 truncate">
-                    +{events.length - 3} lainnya
+                    +{events.length - 4} lainnya
                   </div>
                 )}
               </div>

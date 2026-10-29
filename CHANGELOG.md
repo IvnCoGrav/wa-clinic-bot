@@ -4,6 +4,20 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-29 - Fix: Legenda Hanya Bidan Aktif + Nama Pasien Kanonis & Sel Bulanan Padat (Fase 1 queue / F-35…F-37)
+
+- **Latar Belakang & Akar Masalah**:
+  - **F-35 (legenda menampilkan "bidan" yang bukan bidan)**: `GET /api/admin/staff` mengembalikan **seluruh** staff tenant tanpa filter `active` (`orderBy created_at desc`). Akun uji nonaktif (`Bidan Testing Yusi`, `active=false`) ikut tampil di legenda, dan karena warna diturunkan dari **indeks urutan daftar**, akun nonaktif juga memakan slot palet.
+  - **F-36 (nama pasien tidak konsisten)**: view Bulanan memakai `customer.name` **mentah**, sedangkan Harian & Mingguan memakai regex inline yang **diduplikasi persis** di dua file. Produksi: **276/1001** customer bergelar → pill 390px menampilkan "Bunda Annisa…" yang terpotong jadi "Bu…".
+  - **F-37 (sel Bulanan boros ruang)**: tinggi sel 105px, padding 6-8px, tanggal 24×24px, dan hanya 3 pill — nama pasien terpotong walau selnya tinggi.
+- **Arsitektur & Perubahan**:
+  - `utils/staffColors.ts`: seam baru **`isActiveStaff()`** + **`filterActiveStaff()`**. `active === false` dibuang; field `active` yang tidak dikirim dianggap aktif (payload parsial/endpoint lama tidak mengosongkan legenda). **Urutan tidak diubah** saat menyaring — warna kartu tetap dihitung dari daftar penuh (`getStaffColor(id, staffList)`), sehingga warna legenda identik dengan warna kartu.
+  - `components/calendar/StaffColorLegend.tsx`: memakai `filterActiveStaff()` (bukan filter ad-hoc di komponen).
+  - `utils/patientName.ts` (baru): **`stripHonorific()`** — satu seam untuk ketiga grid. Gelar hanya dipotong bila diikuti spasi + sisa nama (`Bundaku`, `Bunda2`, `Ani Bunda` aman); nama yang seluruhnya gelar → `''` → pemanggil memakai fallback jujur `'Pasien'`. **Sengaja bukan `cleanBundaName()`** karena fungsi itu juga memotong nama wilayah di ekor nama.
+  - `MonthScheduleGrid.tsx`: tata letak sel dirapatkan di lapis model (bukan kosmetik) — `min-h-[96px] sm:min-h-[120px] p-0.5 sm:p-1.5 gap-0.5 sm:gap-1`, tanggal `w-4 h-4 sm:w-5 sm:h-5 text-[10px] sm:text-xs`, counter `text-[9px] sm:text-[10px]`, pill `px-1 py-0.5 rounded-[2px] sm:rounded`, dan **kapasitas pill 3 → 4** (`slice(0,4)`, sisa `- 4`).
+  - `DayScheduleGrid.tsx` / `WeekScheduleGrid.tsx`: regex nama inline dihapus, memakai `stripHonorific()`.
+- **Gerbang Regresi**: `tsc && vite build` hijau; 2 file test baru (17 kasus adversarial — 6 baris staff produksi asli, 4 nama pasien produksi, nama berkarakter khusus `Nur'aini`/`Siti-Nurhaliza`, input tipe salah).
+
 #### 2026-10-29 - Fix: Kartu Kalender Bebas Teks Berlebih + Nama Bidan Kanonis (Fase 5–9 / F-31…F-34)
 
 - **Latar Belakang & Akar Masalah**:

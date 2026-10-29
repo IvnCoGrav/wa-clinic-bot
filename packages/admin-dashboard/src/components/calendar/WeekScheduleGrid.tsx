@@ -29,6 +29,7 @@ export { extractDurationMinutes } from '../../utils/durationCalculator';
 import { resolveReservationDuration } from '../../utils/durationCalculator';
 import { resolveStaffId, resolveStaffName, staffShortName } from '../../utils/resolveStaffName';
 import { formatReservationArea } from '../../utils/reservationAddress';
+import { stripHonorific } from '../../utils/patientName';
 import { getStaffColor } from '../../utils/staffColors';
 
 interface PositionedEvent {
@@ -616,11 +617,9 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                       ? 'bg-amber-50/95 dark:bg-[#33230a] border-2 border-dashed border-amber-500 dark:border-amber-800/40 text-amber-950 dark:text-amber-100 hover:bg-amber-100/90 dark:hover:bg-[#422e0c]'
                       : staffColor.card;
 
-                    const rawName = res.customer?.name || 'Pasien';
-                    const cleanName = rawName
-                      .replace(/^(?:Bunda|Ibu|Ny\.|Nn\.|Sdri\.|Mama|Mom|Moms)\s+/i, '')
-                      .trim();
-                    const firstName = cleanName.split(/\s+/)[0] || cleanName;
+                    // Nama pasien: gelar sapaan dibuang lewat seam tunggal (patientName.ts).
+                    const cleanName = stripHonorific(res.customer?.name) || 'Pasien';
+                    const firstName = cleanName.split(' ')[0] || cleanName;
 
                     // Daerah kunjungan (bukan nama treatment) — lihat formatReservationArea.
                     const areaLabel = formatReservationArea(res);
