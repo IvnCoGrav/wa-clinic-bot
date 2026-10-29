@@ -136,3 +136,30 @@ export function shortStaffLabel(name: string | null | undefined): string {
   const clean = staffDisplayName(name);
   return clean ? clean.split(' ')[0] : 'Tanpa nama';
 }
+
+/**
+ * Staff yang masih aktif (F-35).
+ *
+ * `GET /api/admin/staff` mengembalikan SELURUH staff tenant — termasuk akun uji
+ * yang sudah dinonaktifkan — sehingga legenda menampilkan "bidan" yang bukan
+ * bidan aktif. Field `active` yang tidak dikirim dianggap aktif agar payload
+ * parsial/endpoint lama tidak mengosongkan legenda.
+ */
+export function isActiveStaff(staff: { active?: boolean | null } | null | undefined): boolean {
+  if (!staff) return false;
+  return staff.active !== false;
+}
+
+/**
+ * Saring daftar staff ke yang aktif, **tanpa mengubah urutan**.
+ *
+ * Urutan penting: warna kartu diturunkan dari indeks pada daftar penuh
+ * (`getStaffColor`), jadi menyaring untuk tampilan tidak boleh menggeser warna.
+ * Karena itu pemanggil tetap memakai daftar penuh saat memanggil `getStaffColor`.
+ */
+export function filterActiveStaff<T extends { active?: boolean | null }>(
+  staffList?: T[] | null
+): T[] {
+  if (!Array.isArray(staffList)) return [];
+  return staffList.filter(isActiveStaff);
+}

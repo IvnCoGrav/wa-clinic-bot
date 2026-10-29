@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { getStaffColor } from '../../utils/staffColors';
+import { filterActiveStaff, getStaffColor } from '../../utils/staffColors';
 import { staffDisplayName } from '../../utils/resolveStaffName';
 
 interface StaffColorLegendProps {
-  staffList?: Array<{ id: string; name: string }> | null;
+  staffList?: Array<{ id: string; name: string; active?: boolean | null }> | null;
   className?: string;
 }
 
@@ -18,13 +18,16 @@ interface StaffColorLegendProps {
  * F-31: label memakai `staffDisplayName()` sehingga yang tampil "Hanifah",
  * bukan "Bidan" (dulu `split(' ')[0]` memotong gelar, bukan nama).
  *
+ * F-35: hanya bidan **aktif** yang ditampilkan (`filterActiveStaff`). Warna tetap
+ * dihitung dari daftar penuh agar identik dengan warna kartu kalender.
+ *
  * Sengaja memakai pola toggle yang sudah dipakai dashboard (`useState(false)` +
  * `ChevronDown`/`ChevronUp`) — tidak ada dependency atau komponen baru.
  */
 export const StaffColorLegend: React.FC<StaffColorLegendProps> = ({ staffList, className = '' }) => {
   const [open, setOpen] = useState(false);
 
-  const staff = (staffList || []).filter((s) => s && s.id && s.name);
+  const staff = filterActiveStaff((staffList || []).filter((s) => s && s.id && s.name));
   if (staff.length === 0) return null;
 
   const preview = staff.slice(0, 4);
