@@ -4,6 +4,54 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-29 - Fix & Feat: Remediasi Fondasional Pasca-Audit Menyeluruh (Phase 1–8)
+
+- **Latar Belakang & Akar Masalah (Audit 2026-10-29)**:
+  - Audit sistem menemukan celah keamanan multi-tenant, inkonsistensi formula tagihan di FE/BE, hardcode periode analitik, estimasi ongkir tanpa batas kedaluwarsa, merge alamat longgar, bypass penulisan nama master, dan potensi balapan race condition identitas anak.
+- **Arsitektur & Perubahan (Solusi Fondasional Berdasarkan Mandat Staged-Phase)**:
+  - **Phase 1 (Keamanan Tenant)**: Mengganti seluruh `DEFAULT_TENANT_ID` hardcode di `customers.subroute.ts` dengan `tenantOf(request)` dan me-resolve ID customer selalu berpasangan dengan `tenantId` (A-013).
+  - **Phase 2 (Seam Tagihan & Evaluasi Pembayaran)**: Menyatukan logika tagihan ke fungsi domain murni `resolveExpectedPayment` dan `evaluatePaymentProof`. Menghidupkan `discount_amount` di API & Prisma. Menghapus regex parsing `parseReceiptAmountFromRawText` di FE dan BE (A-002, A-014).
+  - **Phase 3 (Konfigurasi Analitik per Tenant)**: Memindahkan hardcode periode kohort (`2026-01`, `2025-08`) dan kapasitas slot harian (`4`) ke `Tenant.settings.metaPerformanceSettings` yang dapat dikonfigurasi dinamis per tenant (A-001).
+  - **Phase 4 (Estimasi Ongkir Ber-TTL & Terikat Alamat)**: Estimasi ongkir chat diperkaya dengan `address_key` (5 digit desimal GPS + alamat) dan `expires_at` (TTL dari tenant, default 14 hari). Pola rapuh `addrs[0]` dieliminasi total (A-004).
+  - **Phase 5 (Merge Alamat Eksplisit)**: Penyatuan kartu alamat lintas kecamatan diperketat hanya bila memiliki penanda nomor/blok/RT-RW eksplisit berangka (A-005).
+  - **Phase 6 (Konvergensi Penulis Nama Customer)**: Menambahkan kolom `name_source` dan `whatsapp_push_name` pada tabel `customers`. Seluruh jalur tulis dialihkan ke seam kanonis `updateCustomerName` berbasis *Hierarchy of Truth* (A-012).
+  - **Phase 7 (Identitas Anak Atomik)**: Menambahkan kolom `name_norm`, `first_reservation_id`, `last_reservation_id` serta unique compound index `[customer_id, name_norm]` pada tabel `children`. Dedup anak menggunakan `prisma.child.upsert` atomik tanpa balapan race condition (A-006).
+  - **Phase 8 (Dokumentasi & Standar Metrik)**: Pembuatan `docs/METRIC_DEFINITIONS.md`, pembaruan retroaktif changelog, serta standarisasi ID di `docs/KNOWN_ISSUES.md`.
+
+#### 2026-10-28 - Feat: Perbaikan Saringan Kohort Semua Pasien & Perhitungan Repeat Order M+5 (8c1dd757)
+
+- **Latar Belakang & Perubahan**:
+  - Penyesuaian rentang tanggal kohort untuk mengevaluasi repeat order pelanggan hingga 5 bulan pasca kunjungan pertama (M+0 s/d M+5).
+  - Sinkronisasi saringan pasien aktif agar mencakup seluruh kohort valid.
+
+#### 2026-10-27 - Refactor: UI Dashboard Cleanup & Catatan Perubahan Kontrak Backend (c9cbf1e1)
+
+- **Latar Belakang & Catatan Operasional (A-007)**:
+  - Pembersihan AI slop pada dashboard admin dan komentar kode.
+  - *Catatan Penting*: Commit ini juga menyertakan modifikasi kontrak backend pada `src/routes/admin/analytics.subroute.ts`, `src/routes/admin/livechat.subroute.ts`, `src/routes/admin/reservation-crud.route.ts`, `src/services/conversation.service.ts`, dan `src/services/live-chat.service.ts` (tenant-aware analytics, total livechat, dan kontrak `/reservations/count`).
+  - *Aturan Kebijakan Baru*: Mulai 2026-10-29, commit berlabel `refactor` dilarang mengubah fungsionalitas `src/` selain komentar atau formatting.
+
+#### 2026-10-27 - Feat: Overhaul Retensi Repeat Order Kohort Bulanan & LTV Matang (ffece481)
+
+- **Latar Belakang & Perubahan**:
+  - Perhitungan analitik performa Meta Ads, agregasi spend kanal bulanan (CTWA/LPWA), serta estimasi LTV matang berbasis riwayat transaksi riil.
+
+#### 2026-10-26 - Fix: Penanganan Duplikasi Alamat Split-Brain & Dedup Case-Insensitive Anak (aacd9cd3)
+
+- **Latar Belakang & Perubahan**:
+  - Implementasi deduplikasi nama anak case-insensitive via `findFirst(mode: 'insensitive')`.
+  - Penanganan split-brain alamat pada penyimpanan riwayat kartu alamat customer.
+
+#### 2026-10-25 - Feat: Validasi Nominal Bukti Transfer & Deteksi Mismatch Pembayaran (e2ae2b86)
+
+- **Latar Belakang & Perubahan**:
+  - Ekstraksi nominal transfer dari bukti pembayaran (struk OCR/vision) dan perbandingan awal terhadap nilai reservasi.
+
+#### 2026-10-24 - Fix: SSOT Auto-Fill Ongkir Promo di Admin Modal & Sinkronisasi Kanonis Sheets (d3b9c816)
+
+- **Latar Belakang & Perubahan**:
+  - Penyelarasan pengisian otomatis nilai ongkir promo pada modal admin dan sinkronisasi baris spreadsheet Google Sheets.
+
 #### 2026-10-28 - Fix: Penyempurnaan Integritas Penamaan Master Customer (Anti-Locking Pushname Non-Manusia & Otoritas Form Reservasi)
 
 - **Latar Belakang & Akar Masalah**:

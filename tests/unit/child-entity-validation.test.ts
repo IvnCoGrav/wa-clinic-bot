@@ -14,6 +14,8 @@ describe('Child Entity Validation & Ghost Error Prevention Suite', () => {
       expect(isValidChildName('Brea Sheeza Alrescha')).toBe(true);
       expect(isValidChildName('Azmy Nur Rahmaniyah (Ara)')).toBe(true);
       expect(isValidChildName('Alessia')).toBe(true);
+      expect(isValidChildName('Hamilatus')).toBe(true);
+      expect(isValidChildName('Anifa')).toBe(true);
     });
 
     it('strictly rejects temporal conversational adverbs (e.g. Bunda Nisa incident)', () => {

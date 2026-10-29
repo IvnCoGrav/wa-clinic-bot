@@ -3,6 +3,48 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 285. [Child] Dedup Nama Anak Rentan Balapan Race Condition Webhook (2026-10-29, RESOLVED)
+
+- **Status:** RESOLVED di Phase 7 (`d5e83a6a`).
+- **Akar Masalah (A-006):** Pencarian anak eksisting menggunakan pola `findFirst` non-atomik yang rentan balapan jika dua pesan WhatsApp masuk serentak. Selain itu, `reservation_id` anak tertimpa pada reservasi kedua sehingga tautan awal hilang.
+- **Solusi Fondasional:** Menambahkan kolom `name_norm` (lower + trim), `first_reservation_id`, `last_reservation_id`, dan unique constraint `@@unique([customer_id, name_norm])`. Penyimpanan anak dilakukan lewat satu operasi `prisma.child.upsert` atomik.
+
+## 284. [Identity] Nama Customer Rentan Tertimpa Data Ambigu / Admin Edit Tanpa Provenance (2026-10-29, RESOLVED)
+
+- **Status:** RESOLVED di Phase 6 (`5f63739f`).
+- **Akar Masalah (A-012):** Terdapat 2 jalur penulisan nama di admin yang melewati gerbang proteksi nama (`updateCustomer` dan `reservation-dispatch.route.ts:1245`), serta ketiadaan audit provenance asal nama.
+- **Solusi Fondasional:** Menambahkan kolom `name_source` (`manual_override`, `admin`, `reservation`, `chat_greeting`, `sync`) dan `whatsapp_push_name` pada tabel `customers`. Seluruh penulisan nama dialihkan ke satu write-seam kanonis ber-provenance `updateCustomerName` berbasis *Hierarchy of Truth*.
+
+## 283. [Delivery] Estimasi Ongkir Chat Lama Tanpa expires_at / address_key Diabaikan Fail-Closed (2026-10-29, RESOLVED)
+
+- **Status:** RESOLVED di Phase 4 (`da229860`).
+- **Akar Masalah (A-004):** `getLastDeliveryFee` memprioritaskan estimasi jarak chat mentah tanpa batas waktu (TTL) dan tanpa verifikasi apakah customer sudah berpindah alamat, mengalahkan tarif ongkir resmi di buku alamat kartu aktif.
+- **Solusi Fondasional:** Objek estimasi ongkir diperkaya dengan `address_key` (koordinat desimal 5 digit + alamat) dan `expires_at` (TTL dinamis dari `Tenant.settings.deliverySettings.estimateTtlDays`, default 14 hari). Estimasi tanpa `expires_at` atau dengan `address_key` berbeda otomatis diabaikan (*fail-closed*). Pola rapuh `addrs[0]` dihapus 100%.
+
+## 282. [Tenant] Kebocoran Lintas Tenant di customers.subroute.ts via DEFAULT_TENANT_ID (2026-10-29, RESOLVED)
+
+- **Status:** RESOLVED di Phase 1 (`ec60b11b`).
+- **Akar Masalah (A-013):** Terdapat 26 titik pemakaian `DEFAULT_TENANT_ID` statis di dalam `src/routes/admin/customers.subroute.ts`, sehingga tenant kedua dapat membaca dan memodifikasi data pelanggan tenant pertama.
+- **Solusi Fondasional:** Seluruh pemanggilan diganti dengan `tenantOf(request)` dan lookup customer selalu berpasangan dengan `tenantId` (`where: { id, tenant_id }`).
+
+## 281. [Analytics] Definisi Metrik Berubah 2026-10-28 Tanpa Snapshot Historis (2026-10-29, RESOLVED)
+
+- **Status:** RESOLVED di Phase 3 (`a496c813`) & Phase 8 via `docs/METRIC_DEFINITIONS.md`.
+- **Akar Masalah (A-001, A-008):** Periode kohort (`2026-01`, `2025-08`) dan kapasitas harian terapis (`4`) di-hardcode di kode TypeScript, dan perubahan definisi MQL pada 28 Okt 2026 mengubah pembukuan historis.
+- **Solusi Fondasional:** Seluruh ambang analitik dipindahkan ke konfigurasi database `Tenant.settings.metaPerformanceSettings`. Dibuat dokumen kamus kanonis `docs/METRIC_DEFINITIONS.md` sebagai panduan pembukuan metrik lintas divisi.
+
+## 280. [Payment] Parsing Regex parseReceiptAmountFromRawText di FE/BE Rapuh (2026-10-29, RESOLVED)
+
+- **Status:** RESOLVED di Phase 2 (`354cc86e`).
+- **Akar Masalah (A-002):** Backend dan Frontend menduplikasi logika evaluasi bukti pembayaran dengan mem-parsing token `[RECEIPT_AMOUNT:xxx]` dari field teks bebas `raw_text`, rentan terhadap modifikasi teks atau race condition.
+- **Solusi Fondasional:** Dibuat fungsi domain tunggal `resolveExpectedPayment` dan `evaluatePaymentProof` di backend. Objek evaluasi terstruktur `paymentEvaluation` dikirim langsung ke frontend. Seluruh pemanggilan regex parsing `parseReceiptAmountFromRawText` di FE dan BE dihapus 100%.
+
+## 279. [Payment] discount_amount Tidak Pernah Ditulis Sebelum Phase 2 (2026-10-29, RESOLVED)
+
+- **Status:** RESOLVED di Phase 2 (`354cc86e`).
+- **Akar Masalah (A-014):** Kolom `discount_amount` pada tabel `reservations` tidak pernah ditulis oleh kode mana pun, sehingga diskon hanya muncul di pratinjau invoice tapi tidak tersimpan di database.
+- **Solusi Fondasional:** Menghidupkan parameter `discountAmount` pada endpoint `PATCH /api/admin/reservations/:id/details`, validasi clamping diskon terhadap nilai layanan, dan menyertakan `discount_amount` dalam perhitungan tagihan kanonis.
+
 ## 277. [Landing/Copy] Ulasan & Testimoni Layanan Publik (`layanan.html`) (2026-10-27, OPEN - LOW)
 
 - **Status:** OPEN (Menunggu keputusan bisnis pemilik klinik: format review WhatsApp asli vs studi kasus).
@@ -24,7 +66,8 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Status:** OPEN (low impact: tidak ada tenant dengan nilai eksplisit `SUPPRESS_REPEAT` per verifikasi DB live 2026-10-22; backfill belum diperlukan).
 - **Gejala / Akar Masalah:** Image runner hanya menyalin `dist/`, `services_custom.json`, `delivery_tiers_custom.json`, dan `packages/admin-dashboard/dist`; direktori `scripts/` tidak ikut. `docker compose exec app npx tsx scripts/...` gagal `ERR_MODULE_NOT_FOUND`. `tsx` juga devDependency (tidak terpasang di runner).
 - **Dampak:** Skrip migrasi/backfill satu-kali tidak bisa dieksekusi lewat container; harus dijalankan dari host dengan Node+`tsx`+dependensi, atau via SQL manual.
-- **Rencana Masa Depan:** Pindahkan util backfill ke `src/scripts/` (ikut ter-compile ke `dist/`) atau buat service one-off di compose dengan mount `./scripts`; verifikasi di staging sebelum dipakai.
+- **Catatan Observasi (2026-10-29):** Commit `0103714a` memindahkan satu skrip (`src/scripts/backfill-meta-purchase-policy.ts`), tetapi skrip lain di `scripts/` tetap berada di luar build image runner produksi.
+- **Rencana Masa Depan:** Pindahkan util backfill yang dibutuhkan di server ke `src/scripts/` (ikut ter-compile ke `dist/`) atau buat service one-off di compose dengan mount `./scripts`; verifikasi di staging sebelum dipakai.
 
 ## 273. [Baseline Eval] Baseline Evaluasi LLM: CM-07/CM-08 Pre-Existing & Eval Berbayar Manual-Only (2026-10-21, OPEN)
 
@@ -43,7 +86,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - Sekarang admin dashboard telah dilengkapi Tab "Advanced 4-Section Prompt" di `AiPersona.tsx` yang memungkinkan admin mengedit ke-4 seksi prompt secara visual, menyimpan versi baru secara berkesinambungan (live versioning) dengan audit trail, serta menampilkan peringatan prioritas prompt yang transparan.
   - Backend `settings.subroute.ts` menyediakan endpoint `GET|PUT /api/admin/persona/prompt-config` dengan validasi ketat, dan unit test `tests/unit/admin-persona-prompt-config.test.ts` mengunci perilakunya.
 
-## 272. [Meta Ads / CAPI] Tahap B Post-Audit CAPI: Hardening Export, event_id Deterministik, action_source & Matching Geo (2026-10-22 — IMPLEMENTED, VERIF AKUN METAL OPEN)
+## 278. [Meta Ads / CAPI] Tahap B Post-Audit CAPI: Hardening Export, event_id Deterministik, action_source & Matching Geo (2026-10-22 — IMPLEMENTED, VERIF AKUN METAL OPEN)
 
 - **Status:** IMPLEMENTED + PARSIAL TERVERIFIKASI LIVE (2026-10-22). Repeat order live test LULUS; CTWA/payload dasar diterima Meta (HTTP 200, events_received=1, tanpa warning); verifikasi visual Test Events & dedup PageView masih tertunda.
 - **Konteks:** Tahap A audit CAPI (A-001…A-012) menghasilkan persetujuan Tahap B dari user pada 2026-10-22 dengan kontrak test-first.
