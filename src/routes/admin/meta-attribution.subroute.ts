@@ -466,8 +466,8 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/meta-performance',
     async (request: FastifyRequest<{ Querystring: any }>, reply: FastifyReply) => {
       const query: any = request.query || {};
-      // tenantId dari konteks request (bukan hardcode default tersembunyi).
-      const tenantId = (request as any).staffTenantId || DEFAULT_TENANT_ID;
+      // tenantId dari konteks request (fail-closed, bukan hardcode default).
+      const tenantId = tenantOf(request);
       const parsed = MetaPerformanceQuerySchema.safeParse({
         tenantId,
         startDate: typeof query.startDate === 'string' && query.startDate ? query.startDate : undefined,

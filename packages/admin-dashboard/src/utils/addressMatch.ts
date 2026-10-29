@@ -126,6 +126,9 @@ export function addressesMatch(
   const kotaKompatibel = !hasText(a.kota) || !hasText(b.kota) || aKota === bKota;
 
   if (sameStreet && kotaKompatibel) {
+    // Dua kelurahan berbeda di kecamatan yang sama TETAP TIDAK cocok (Rumah-2 sah).
+    if (sameKec && !kelKompatibel) return false;
+
     const within3km = !bothCoords(a, b) || haversineMeters(a as any, b as any) <= 3000;
     if (within3km) {
       // 1. Cross kelurahan <-> kecamatan (mis. tertukar pada form intake)
