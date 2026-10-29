@@ -54,6 +54,7 @@ import {
   Home,
 } from 'lucide-react';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
+import { VoiceNotePlayer } from '../../components/common/VoiceNotePlayer';
 import {
   extractMedia,
   extractLocation,
@@ -156,7 +157,7 @@ function AddressUpdatedAtChip({ updatedAt }: { updatedAt?: string | null }) {
   const label = hours < 1 ? 'kurang dari 1 jam' : `${Math.floor(hours)} jam`;
   return (
     <span
-      className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-md"
+      className="inline-flex items-center gap-1 text-[10px] font-semibold text-warning bg-warning-soft border border-warning-line px-1.5 py-0.5 rounded-md"
       title="Alamat pelanggan dikoreksi (via chat/staf) dan sudah terserap ke tugas ini."
     >
       <RefreshCw size={10} />
@@ -264,156 +265,6 @@ function extractQuotedMessage(msg: ChatMessage, maskPhone = true): NonNullable<C
   }
   return null;
 }
-
-// VoiceNotePlayer ringan untuk StaffToday (re-use pola LiveChatMonitor)
-const VoiceNotePlayer: React.FC<{ src: string }> = ({ src }) => {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [playing, setPlaying] = useState(false);
-  const [current, setCurrent] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [hasError, setHasError] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
-
-  const fmt = (s: number) => {
-    if (!isFinite(s) || isNaN(s)) return '0:00';
-    const m = Math.floor(s / 60);
-    const sec = Math.floor(s % 60).toString().padStart(2, '0');
-    return `${m}:${sec}`;
-  };
-
-  useEffect(() => {
-    let isCancelled = false;
-    let localBlobUrl: string | null = null;
-    setIsLoading(true);
-    setHasError(false);
-
-    fetch(src, { credentials: 'include' })
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const blob = await res.blob();
-        if (isCancelled) return;
-        localBlobUrl = URL.createObjectURL(blob);
-        setBlobUrl(localBlobUrl);
-        setIsLoading(false);
-      })
-      .catch(() => {
-        if (isCancelled) return;
-        setHasError(true);
-        setIsLoading(false);
-      });
-
-    return () => {
-      isCancelled = true;
-      if (localBlobUrl) {
-        URL.revokeObjectURL(localBlobUrl);
-      }
-    };
-  }, [src, retryCount]);
-
-  useEffect(() => {
-    const a = audioRef.current;
-    if (!a) return;
-    setHasError(false);
-    const onTime = () => setCurrent(a.currentTime);
-    const onMeta = () => setDuration(a.duration);
-    const onEnd = () => setPlaying(false);
-    const onError = () => { setHasError(true); setPlaying(false); };
-    a.addEventListener('timeupdate', onTime);
-    a.addEventListener('loadedmetadata', onMeta);
-    a.addEventListener('ended', onEnd);
-    a.addEventListener('error', onError);
-    return () => {
-      a.removeEventListener('timeupdate', onTime);
-      a.removeEventListener('loadedmetadata', onMeta);
-      a.removeEventListener('ended', onEnd);
-      a.removeEventListener('error', onError);
-    };
-  }, [blobUrl]);
-
-  const toggle = () => {
-    const a = audioRef.current;
-    if (!a || isLoading) return;
-    if (playing) {
-      a.pause();
-      setPlaying(false);
-    } else {
-      a.play().then(() => setPlaying(true)).catch(() => setHasError(true));
-    }
-  };
-
-  const seek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = Number(e.target.value);
-    if (audioRef.current) audioRef.current.currentTime = v;
-    setCurrent(v);
-  };
-
-  return (
-    <div className="flex items-center gap-2.5 py-1 min-w-[180px] max-w-[260px]">
-      <button
-        type="button"
-        onClick={hasError ? () => setRetryCount((c) => c + 1) : toggle}
-        disabled={isLoading}
-        title={hasError ? 'Coba lagi memuat audio' : playing ? 'Jeda' : 'Putar rekaman'}
-        className={`w-10 h-10 rounded-full text-white flex items-center justify-center shrink-0 shadow-xs active:scale-95 transition disabled:opacity-50 ${
-          hasError ? 'bg-amber-500 hover:bg-amber-600' : 'bg-[#008069]'
-        }`}
-      >
-        {isLoading ? (
-          <RefreshCw size={16} className="animate-spin text-white" />
-        ) : hasError ? (
-          <RefreshCw size={16} />
-        ) : playing ? (
-          <span className="w-3 h-3 bg-white rounded-sm" />
-        ) : (
-          <Play size={16} className="ml-0.5 fill-white" />
-        )}
-      </button>
-      <div className="flex-1 min-w-0">
-        {hasError ? (
-          <div className="text-[11px] font-semibold text-amber-700">
-            Audio belum siap / gagal dimuat.{' '}
-            <button
-              type="button"
-              onClick={() => setRetryCount((c) => c + 1)}
-              className="underline text-[#008069] hover:text-[#00a884] font-medium mr-1.5"
-            >
-              Coba lagi
-            </button>
-            {blobUrl && (
-              <a
-                href={blobUrl}
-                download="voice_note.oga"
-                className="underline text-[#008069] hover:text-[#00a884]"
-              >
-                Unduh
-              </a>
-            )}
-          </div>
-        ) : (
-          <>
-            <input
-              type="range"
-              min={0}
-              max={duration || 100}
-              value={current}
-              onChange={seek}
-              disabled={isLoading}
-              className="w-full accent-[#008069] h-1"
-            />
-            <div className="flex justify-between text-[10px] font-mono text-[#667781] mt-0.5">
-              <span>{fmt(current)}</span>
-              <span>{fmt(duration)}</span>
-            </div>
-          </>
-        )}
-      </div>
-      <Volume2 size={14} className={hasError ? 'text-amber-500 shrink-0' : 'text-[#008069] shrink-0'} />
-      {blobUrl && <audio ref={audioRef} src={blobUrl} preload="metadata" className="hidden" />}
-    </div>
-  );
-};
 
 interface StaffTodayProps {
   defaultTab?: 'today' | 'upcoming' | 'completed';
@@ -608,35 +459,35 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     const cat = (category || '').toUpperCase();
     if (cat === 'BABY') {
       return {
-        icon: <Baby size={18} className="text-sky-600" />,
-        bg: 'bg-sky-100 border-sky-200 text-sky-700',
-        badge: 'bg-sky-50 text-sky-700 border-sky-200',
-        borderAccent: 'border-l-sky-500 bg-sky-50/20',
+        icon: <Baby size={18} className="text-info" />,
+        bg: 'bg-info-soft border-info-line text-info',
+        badge: 'bg-info-soft text-info border-info-line',
+        borderAccent: 'border-l-sky-500 bg-info-soft/20',
         label: 'Baby Spa',
       };
     }
     if (cat === 'MOMS') {
       return {
-        icon: <Heart size={18} className="text-purple-600" />,
-        bg: 'bg-purple-100 border-purple-200 text-purple-700',
-        badge: 'bg-purple-50 text-purple-700 border-purple-200',
-        borderAccent: 'border-l-purple-500 bg-purple-50/20',
+        icon: <Heart size={18} className="text-violet" />,
+        bg: 'bg-violet-soft border-violet-line text-violet',
+        badge: 'bg-violet-soft text-violet border-violet-line',
+        borderAccent: 'border-l-purple-500 bg-violet-soft/20',
         label: 'Moms Spa',
       };
     }
     if (cat === 'BOTH' || cat === 'KIDS') {
       return {
-        icon: <Smile size={18} className="text-emerald-600" />,
-        bg: 'bg-emerald-100 border-emerald-200 text-emerald-700',
-        badge: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-        borderAccent: 'border-l-emerald-500 bg-emerald-50/20',
+        icon: <Smile size={18} className="text-success" />,
+        bg: 'bg-success-soft border-success-line text-success',
+        badge: 'bg-success-soft text-success border-success-line',
+        borderAccent: 'border-l-emerald-500 bg-success-soft/20',
         label: 'Moms & Baby',
       };
     }
     return {
-      icon: <User size={18} className="text-teal-600" />,
-      bg: 'bg-teal-100 dark:bg-teal-950/40 border-teal-200 dark:border-teal-800/40 text-teal-700 dark:text-[#2dd4bf]',
-      badge: 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-[#2dd4bf] border-teal-200 dark:border-teal-800/40',
+      icon: <User size={18} className="text-success" />,
+      bg: 'bg-teal-100 dark:bg-teal-950/40 border-teal-200 dark:border-teal-800/40 text-teal-700 dark:text-accent',
+      badge: 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-accent border-teal-200 dark:border-teal-800/40',
       borderAccent: 'border-l-teal-500 bg-teal-50/20 dark:bg-teal-950/20',
       label: 'Treatment',
     };
@@ -2914,15 +2765,15 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   }, {});
 
   return (
-    <div className="h-[100dvh] max-h-[100dvh] w-full max-w-full overflow-hidden bg-[#f0f2f5] dark:bg-[#0b141a] text-[#111b21] dark:text-[#e9edef] flex flex-col font-sans select-none antialiased">
+    <div className="h-[100dvh] max-h-[100dvh] w-full max-w-full overflow-hidden bg-app text-ink flex flex-col font-sans select-none antialiased">
       {/* WhatsApp Web Minimalist Clean Top Bar — hidden on mobile when chat active (fondasional gating) */}
-      <header className={`${mobileView === 'chat' && activeTab === 'today' ? 'hidden md:block' : 'block'} bg-white dark:bg-[#111b21] border-b border-[#e9edef] dark:border-[#202c33] px-3 sm:px-4 py-2.5 sticky top-0 z-30 shadow-xs pt-[calc(0.625rem+env(safe-area-inset-top,0px))] md:pt-2.5 pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))] shrink-0`}>
+      <header className={`${mobileView === 'chat' && activeTab === 'today' ? 'hidden md:block' : 'block'} bg-surface border-b border-divider dark:border-divider px-3 sm:px-4 py-2.5 sticky top-0 z-30 shadow-xs pt-[calc(0.625rem+env(safe-area-inset-top,0px))] md:pt-2.5 pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))] shrink-0`}>
         <div className="flex items-center justify-between gap-2 sm:gap-4 max-w-7xl mx-auto w-full">
           <div className="flex items-center space-x-2.5 min-w-0">
             {mobileView === 'chat' && activeTab === 'today' && (
               <button
                 onClick={handleBackToList}
-                className="md:hidden p-2 rounded-full bg-[#f0f2f5] hover:bg-[#e9edef] text-[#54656f] transition-all active:scale-95 border border-[#e9edef] flex-shrink-0"
+                className="md:hidden p-2 rounded-full bg-fill-1 hover:bg-fill-2 text-ink-2 transition-all active:scale-95 border border-divider flex-shrink-0"
                 title="Kembali ke daftar kunjungan"
                 aria-label="Kembali"
               >
@@ -2934,40 +2785,40 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             <button
               type="button"
               onClick={() => setShowStaffProfileModal(true)}
-              className="h-9 w-9 rounded-full bg-[#008069] text-white hover:bg-[#00a884] flex items-center justify-center shadow-xs transition-all active:scale-95 flex-shrink-0"
+              className="h-9 w-9 rounded-full bg-accent text-white hover:bg-accent-hover flex items-center justify-center shadow-xs transition-all active:scale-95 flex-shrink-0"
               title="Buka profil staff & logout"
             >
               <UserCheck size={18} />
             </button>
 
             <div className="min-w-0">
-              <h1 className="font-bold text-sm sm:text-base text-[#111b21] dark:text-[#e9edef] tracking-tight truncate">
+              <h1 className="font-bold text-sm sm:text-base text-ink tracking-tight truncate">
                 {currentStaff?.name || 'Terapis'}
               </h1>
-              <p className="text-[11px] text-[#667781] truncate flex items-center gap-1">
+              <p className="text-[11px] text-ink-2 truncate flex items-center gap-1">
                 <span>{tasks.length} Hari Ini • {upcomingTasks.length} Mendatang</span>
-                <span className="text-[9px] text-[#8696a0] font-mono">({APP_VERSION})</span>
+                <span className="text-[9px] text-ink-3 font-mono">({APP_VERSION})</span>
               </p>
             </div>
           </div>
 
           {/* Navigation Tab Switcher (Hari Ini vs Jadwal Mendatang vs Selesai) */}
           {!(mobileView === 'chat' && activeTab === 'today') && (
-            <div className="hidden sm:flex items-center bg-[#f0f2f5] dark:bg-[#111b21] p-1 rounded-xl border border-[#e9edef] dark:border-[#202c33]">
+            <div className="hidden sm:flex items-center bg-fill-1 p-1 rounded-xl border border-divider dark:border-divider">
               <button
                 type="button"
                 onClick={() => handleTabChange('today')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                   activeTab === 'today'
-                    ? 'bg-white text-[#008069] shadow-xs'
-                    : 'text-[#54656f] hover:text-[#111b21]'
+                    ? 'bg-surface text-accent shadow-xs'
+                    : 'text-ink-2 hover:text-ink'
                 }`}
               >
-                <Calendar size={13} className={activeTab === 'today' ? 'text-[#008069]' : 'text-[#667781]'} />
+                <Calendar size={13} className={activeTab === 'today' ? 'text-accent' : 'text-ink-2'} />
                 <span>Hari Ini</span>
                 <span
                   className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                    activeTab === 'today' ? 'bg-[#d9fdd3] dark:bg-[#00a884]/20 text-[#008069] dark:text-[#00a884]' : 'bg-[#e9edef] dark:bg-[#202c33] text-[#667781] dark:text-[#8696a0]'
+                    activeTab === 'today' ? 'bg-bubble-out dark:bg-accent/20 text-accent' : 'bg-fill-2 dark:bg-fill-1 text-ink-2'
                   }`}
                 >
                   {activeTodayTasks.length}
@@ -2979,15 +2830,15 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 onClick={() => handleTabChange('upcoming')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                   activeTab === 'upcoming'
-                    ? 'bg-white text-[#008069] shadow-xs'
-                    : 'text-[#54656f] hover:text-[#111b21]'
+                    ? 'bg-surface text-accent shadow-xs'
+                    : 'text-ink-2 hover:text-ink'
                 }`}
               >
-                <Clock size={13} className={activeTab === 'upcoming' ? 'text-[#008069]' : 'text-[#667781]'} />
+                <Clock size={13} className={activeTab === 'upcoming' ? 'text-accent' : 'text-ink-2'} />
                 <span>Jadwal Mendatang</span>
                 <span
                   className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                    activeTab === 'upcoming' ? 'bg-[#d9fdd3] dark:bg-[#00a884]/20 text-[#008069] dark:text-[#00a884]' : 'bg-[#e9edef] dark:bg-[#202c33] text-[#667781] dark:text-[#8696a0]'
+                    activeTab === 'upcoming' ? 'bg-bubble-out dark:bg-accent/20 text-accent' : 'bg-fill-2 dark:bg-fill-1 text-ink-2'
                   }`}
                 >
                   {upcomingTasks.length}
@@ -2999,15 +2850,15 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 onClick={() => handleTabChange('completed')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                   activeTab === 'completed'
-                    ? 'bg-white text-[#008069] shadow-xs'
-                    : 'text-[#54656f] hover:text-[#111b21]'
+                    ? 'bg-surface text-accent shadow-xs'
+                    : 'text-ink-2 hover:text-ink'
                 }`}
               >
-                <CheckCircle2 size={13} className={activeTab === 'completed' ? 'text-[#008069]' : 'text-[#667781]'} />
+                <CheckCircle2 size={13} className={activeTab === 'completed' ? 'text-accent' : 'text-ink-2'} />
                 <span>Selesai</span>
                 <span
                   className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                    activeTab === 'completed' ? 'bg-[#d9fdd3] dark:bg-[#00a884]/20 text-[#008069] dark:text-[#00a884]' : 'bg-[#e9edef] dark:bg-[#202c33] text-[#667781] dark:text-[#8696a0]'
+                    activeTab === 'completed' ? 'bg-bubble-out dark:bg-accent/20 text-accent' : 'bg-fill-2 dark:bg-fill-1 text-ink-2'
                   }`}
                 >
                   {combinedCompletedTasks.length}
@@ -3025,8 +2876,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
               <span
                 className={`h-2.5 w-2.5 rounded-full ${
                   sseConnected
-                    ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]'
-                    : 'bg-rose-500 animate-pulse shadow-[0_0_8px_rgba(244,63,94,0.6)]'
+                    ? 'bg-success shadow-[0_0_8px_rgba(16,185,129,0.6)]'
+                    : 'bg-danger animate-pulse shadow-[0_0_8px_rgba(244,63,94,0.6)]'
                 }`}
               />
             </div>
@@ -3035,17 +2886,17 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             <button
               onClick={() => fetchTasks(false)}
               disabled={loading}
-              className="p-2 rounded-full bg-white dark:bg-[#202c33] hover:bg-[#e9edef] dark:hover:bg-[#2a3942] text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] transition-all disabled:opacity-50 active:scale-95 border border-[#e9edef] dark:border-[#2a3942] shadow-xs"
+              className="p-2 rounded-full bg-surface hover:bg-fill-2 text-ink-2 hover:text-ink dark:hover:text-ink transition-all disabled:opacity-50 active:scale-95 border border-divider shadow-xs"
               title="Muat Ulang Data"
             >
-              <RefreshCw size={14} className={loading ? 'animate-spin text-[#008069]' : ''} />
+              <RefreshCw size={14} className={loading ? 'animate-spin text-accent' : ''} />
             </button>
 
             {/* Hamburger Button (Garis Tiga untuk buka Sidebar Menu Kanan) */}
             <button
               type="button"
               onClick={() => setShowMenuDrawer(true)}
-              className="p-2 rounded-full bg-[#f0f2f5] dark:bg-[#202c33] hover:bg-[#e9edef] dark:hover:bg-[#2a3942] text-[#111b21] dark:text-[#e9edef] hover:text-[#008069] dark:hover:text-[#00a884] transition-all active:scale-95 border border-[#e9edef] dark:border-[#2a3942] shadow-xs flex items-center justify-center"
+              className="p-2 rounded-full bg-fill-1 hover:bg-fill-2 text-ink hover:text-accent dark:hover:text-accent-hover transition-all active:scale-95 border border-divider shadow-xs flex items-center justify-center"
               title="Buka Menu Navigasi"
               aria-label="Menu"
             >
@@ -3058,8 +2909,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       {/* Offline / sinyal lemah connectivity banner (lapangan).
           Fase 1.3: tampilkan juga saat koneksi ada tapi SSE putus (1-bar). */}
       {(!isOnline || !sseConnected) && (
-        <div className="bg-amber-100 border-b border-amber-300 px-4 py-2 text-amber-900 text-xs flex items-center gap-2 z-20 shrink-0">
-          <WifiOff size={15} className="flex-shrink-0 text-amber-600" />
+        <div className="bg-warning-soft border-b border-warning-line px-4 py-2 text-warning text-xs flex items-center gap-2 z-20 shrink-0">
+          <WifiOff size={15} className="flex-shrink-0 text-warning" />
           <span className="font-semibold">
             {!isOnline
               ? 'Koneksi internet terputus. Menunggu sinyal seluler...'
@@ -3070,12 +2921,12 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
       {/* Error notification banner */}
       {errorMessage && (
-        <div className="bg-rose-50 border-b border-rose-200 px-4 py-2 text-rose-700 text-xs flex items-center justify-between z-20">
+        <div className="bg-danger-soft border-b border-danger-line px-4 py-2 text-danger text-xs flex items-center justify-between z-20">
           <div className="flex items-center space-x-2">
-            <AlertTriangle size={14} className="flex-shrink-0 text-rose-500" />
+            <AlertTriangle size={14} className="flex-shrink-0 text-danger" />
             <span>{errorMessage}</span>
           </div>
-          <button onClick={() => setErrorMessage(null)} className="text-rose-600 font-bold ml-2 hover:text-rose-800">
+          <button onClick={() => setErrorMessage(null)} className="text-danger font-bold ml-2 hover:text-danger">
             ✕
           </button>
         </div>
@@ -3096,22 +2947,22 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             <div
               className={`${
                 mobileView === 'chat' ? 'hidden md:flex' : 'flex'
-              } w-full md:w-[420px] flex-col border-r border-[#e9edef] dark:border-[#202c33] bg-[#f0f2f5] dark:bg-[#111b21] overflow-hidden flex-shrink-0 min-h-0 h-full animate-fadeIn`}
+              } w-full md:w-[420px] flex-col border-r border-divider dark:border-divider bg-fill-1 overflow-hidden flex-shrink-0 min-h-0 h-full animate-fadeIn`}
             >
               {/* Panel Search & Header */}
-              <div className="p-3 bg-white dark:bg-[#111b21] border-b border-[#e9edef] dark:border-[#202c33] space-y-2.5">
+              <div className="p-3 bg-surface border-b border-divider dark:border-divider space-y-2.5">
                 <div className="flex items-center justify-between px-1">
                   <div className="flex items-center space-x-2">
-                    <Calendar size={16} className="text-[#008069]" />
-                    <h2 className="font-bold text-sm text-[#111b21] dark:text-[#e9edef]">Jadwal Kunjungan Hari Ini</h2>
+                    <Calendar size={16} className="text-accent" />
+                    <h2 className="font-bold text-sm text-ink">Jadwal Kunjungan Hari Ini</h2>
                   </div>
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#d9fdd3] text-[#008069] border border-[#00a884]/30">
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-bubble-out text-accent border border-accent/30">
                     {tasks.length} Pasien
                   </span>
                 </div>
 
                 <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-[#54656f]">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-ink-2">
                     <Search size={14} />
                   </span>
                   <input
@@ -3119,12 +2970,12 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Cari pasien, alamat, atau layanan..."
-                    className="w-full pl-9 pr-4 py-2 rounded-lg bg-[#f0f2f5] dark:bg-[#202c33] text-[16px] sm:text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#667781] dark:placeholder-[#8696a0] focus:outline-none focus:ring-1 focus:ring-[#008069] transition-all"
+                    className="w-full pl-9 pr-4 py-2 rounded-lg bg-fill-1 text-[16px] sm:text-xs text-ink placeholder-ink-3 dark:placeholder-ink-3 focus:outline-none focus:ring-1 focus:ring-accent transition-all"
                   />
                   {searchQuery && (
                     <button
                       onClick={() => setSearchQuery('')}
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#667781] hover:text-[#111b21] text-xs"
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-ink-2 hover:text-ink text-xs"
                     >
                       ✕
                     </button>
@@ -3133,7 +2984,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
                 {/* Supervisor Scope Filter: Tugas Saya vs Semua Terapis Tim */}
                 {isSupervisor && (
-                  <div className="flex items-center p-1 bg-[#f0f2f5] dark:bg-[#202c33] rounded-xl border border-[#e9edef] dark:border-[#2a3942] gap-1">
+                  <div className="flex items-center p-1 bg-fill-1 rounded-xl border border-divider gap-1">
                     <button
                       type="button"
                       onClick={() => {
@@ -3142,8 +2993,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                       }}
                       className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
                         scopeFilter === 'mine'
-                          ? 'bg-white text-[#008069] shadow-xs'
-                          : 'text-[#54656f] hover:text-[#111b21]'
+                          ? 'bg-surface text-accent shadow-xs'
+                          : 'text-ink-2 hover:text-ink'
                       }`}
                     >
                       <span>🛵</span>
@@ -3157,8 +3008,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                       }}
                       className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
                         scopeFilter === 'all'
-                          ? 'bg-[#008069] text-white shadow-xs'
-                          : 'text-[#54656f] hover:text-[#111b21]'
+                          ? 'bg-accent text-white shadow-xs'
+                          : 'text-ink-2 hover:text-ink'
                       }`}
                     >
                       <span>👥</span>
@@ -3174,13 +3025,13 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     onClick={() => setTodayFilter('all')}
                     className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
                       todayFilter === 'all'
-                        ? 'bg-[#111b21] text-white shadow-xs'
-                        : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef] hover:text-[#111b21]'
+                        ? 'bg-ink text-white shadow-xs'
+                        : 'bg-fill-1 text-ink-2 hover:bg-fill-2 hover:text-ink'
                     }`}
                   >
                     <span>Semua</span>
                     <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                      todayFilter === 'all' ? 'bg-white/20 text-white' : 'bg-[#e9edef] text-[#54656f]'
+                      todayFilter === 'all' ? 'bg-white/20 text-white' : 'bg-fill-2 text-ink-2'
                     }`}>
                       {tasks.length}
                     </span>
@@ -3190,13 +3041,13 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     onClick={() => setTodayFilter('pending')}
                     className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
                       todayFilter === 'pending'
-                        ? 'bg-[#008069] text-white shadow-xs'
-                        : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef] hover:text-[#111b21]'
+                        ? 'bg-accent text-white shadow-xs'
+                        : 'bg-fill-1 text-ink-2 hover:bg-fill-2 hover:text-ink'
                     }`}
                   >
                     <span>Perlu Dikunjungi</span>
                     <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                      todayFilter === 'pending' ? 'bg-white/20 text-white' : 'bg-[#e9edef] text-[#54656f]'
+                      todayFilter === 'pending' ? 'bg-white/20 text-white' : 'bg-fill-2 text-ink-2'
                     }`}>
                       {pendingTodayTasks.length}
                     </span>
@@ -3206,13 +3057,13 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     onClick={() => setTodayFilter('completed')}
                     className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
                       todayFilter === 'completed'
-                        ? 'bg-[#008069] text-white shadow-xs'
-                        : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef] hover:text-[#111b21]'
+                        ? 'bg-accent text-white shadow-xs'
+                        : 'bg-fill-1 text-ink-2 hover:bg-fill-2 hover:text-ink'
                     }`}
                   >
                     <span>Selesai</span>
                     <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                      todayFilter === 'completed' ? 'bg-white/20 text-white' : 'bg-[#e9edef] text-[#54656f]'
+                      todayFilter === 'completed' ? 'bg-white/20 text-white' : 'bg-fill-2 text-ink-2'
                     }`}>
                       {completedTodayTasks.length}
                     </span>
@@ -3221,19 +3072,19 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
               </div>
 
               {/* Task cards scroll area with proper background & space-y-3 spacing between cards */}
-              <div className="flex-1 overflow-y-auto p-3 pb-20 sm:pb-3 bg-[#f0f2f5] space-y-3">
+              <div className="flex-1 overflow-y-auto p-3 pb-20 sm:pb-3 bg-fill-1 space-y-3">
                 {loading ? (
-                  <div className="flex flex-col justify-center items-center h-48 space-y-3 text-[#667781]">
-                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#008069] border-t-transparent"></div>
+                  <div className="flex flex-col justify-center items-center h-48 space-y-3 text-ink-2">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent"></div>
                     <span className="text-xs font-medium">Memuat daftar tugas...</span>
                   </div>
                 ) : filteredTasks.length === 0 ? (
-                  <div className="text-center py-16 px-4 text-[#667781] space-y-2 bg-white rounded-2xl border border-[#e9edef] shadow-xs">
-                    <CheckCircle2 size={40} className="mx-auto text-[#008069]/40 mb-2" />
-                    <p className="text-sm font-semibold text-[#111b21]">
+                  <div className="text-center py-16 px-4 text-ink-2 space-y-2 bg-surface rounded-2xl border border-divider shadow-xs">
+                    <CheckCircle2 size={40} className="mx-auto text-accent/40 mb-2" />
+                    <p className="text-sm font-semibold text-ink">
                       {searchQuery ? 'Tidak ada jadwal yang cocok' : 'Belum ada jadwal tugas hari ini'}
                     </p>
-                    <p className="text-xs text-[#667781] max-w-xs mx-auto">
+                    <p className="text-xs text-ink-2 max-w-xs mx-auto">
                       {searchQuery
                         ? 'Coba kata kunci nama pasien atau alamat lain.'
                         : 'Pasien yang dijadwalkan oleh admin akan muncul otomatis di sini.'}
@@ -3249,10 +3100,10 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     return (
                       <div
                         key={task.reservationId}
-                        className={`p-3.5 rounded-2xl transition-all duration-200 text-left relative bg-white shadow-xs border ${
+                        className={`p-3.5 rounded-2xl transition-all duration-200 text-left relative bg-surface shadow-xs border ${
                           isSelected
-                            ? 'border-[#008069] ring-2 ring-[#008069]/30 shadow-md animate-pulseGlow'
-                            : 'border-[#e9edef] hover:border-[#008069]/40 hover:shadow-sm active:scale-[0.98]'
+                            ? 'border-accent ring-2 ring-accent/30 shadow-md animate-pulseGlow'
+                            : 'border-divider hover:border-accent/40 hover:shadow-sm active:scale-[0.98]'
                         } ${catInfo.borderAccent} border-l-4`}
                       >
                         {/* Header: Customer Icon & Name & Time (KLIK BARIS INI = DETAIL CUSTOMER) */}
@@ -3261,7 +3112,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                             e.stopPropagation();
                             setDetailModalTask(task);
                           }}
-                          className="flex items-start justify-between gap-2 mb-1 p-1 -m-1 rounded-xl hover:bg-[#f0f2f5] dark:hover:bg-[#202c33] transition cursor-pointer group"
+                          className="flex items-start justify-between gap-2 mb-1 p-1 -m-1 rounded-xl hover:bg-fill-1 transition cursor-pointer group"
                           title="Klik untuk melihat detail lengkap pasien"
                         >
                           <div className="flex items-center space-x-2.5 min-w-0">
@@ -3272,15 +3123,15 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                 name={task.customerName}
                                 size="md"
                               />
-                              <span className="absolute -top-1.5 -left-1.5 px-1.5 py-0.2 rounded-full bg-[#008069] text-white text-[9px] font-extrabold shadow-xs">
+                              <span className="absolute -top-1.5 -left-1.5 px-1.5 py-0.2 rounded-full bg-accent text-white text-[9px] font-extrabold shadow-xs">
                                 #{idx + 1}
                               </span>
                             </div>
                             <div className="min-w-0">
-                              <h3 className="font-semibold text-sm text-[#111b21] dark:text-[#e9edef] truncate group-hover:text-[#008069] transition">
+                              <h3 className="font-semibold text-sm text-ink truncate group-hover:text-accent transition">
                                 {task.customerName || 'Customer'}
                               </h3>
-                              <p className="text-[11px] text-[#008069] font-medium line-clamp-2">
+                              <p className="text-[11px] text-accent font-medium line-clamp-2">
                                 {task.treatmentDetail || 'Treatment Spa'}
                               </p>
                             </div>
@@ -3288,35 +3139,35 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
                           <div className="flex items-center space-x-1.5 flex-shrink-0">
                             {task.status === 'completed' ? (
-                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-200 flex items-center gap-1">
+                              <span className="text-[10px] font-bold text-success bg-success-soft px-1.5 py-0.5 rounded-md border border-success-line flex items-center gap-1">
                                 <CheckCircle2 size={10} />
                                 <span>Selesai</span>
                               </span>
                             ) : task.arrivedAt ? (
-                              <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded-md border border-blue-200 flex items-center gap-1 animate-pulse">
+                              <span className="text-[10px] font-bold text-info bg-info-soft px-1.5 py-0.5 rounded-md border border-info-line flex items-center gap-1 animate-pulse">
                                 <span>📍</span>
                                 <span>Tiba</span>
                               </span>
                             ) : task.otwSentAt ? (
                               <span
-                                className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-md border border-amber-200 flex items-center gap-1"
+                                className="text-[10px] font-bold text-warning bg-warning-soft px-1.5 py-0.5 rounded-md border border-warning-line flex items-center gap-1"
                                 title="Sedang menuju lokasi pasien"
                               >
                                 <span>🛵</span>
                                 <span>Dalam Perjalanan</span>
                               </span>
                             ) : isScheduleOngoing(task) ? (
-                              <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-md border border-amber-200 flex items-center gap-1 animate-pulse">
-                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block animate-ping" />
+                              <span className="text-[10px] font-bold text-warning bg-warning-soft px-1.5 py-0.5 rounded-md border border-warning-line flex items-center gap-1 animate-pulse">
+                                <span className="w-1.5 h-1.5 rounded-full bg-warning inline-block animate-ping" />
                                 <span>Berlangsung</span>
                               </span>
                             ) : isScheduleOverdue(task) ? (
-                              <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded-md border border-rose-200 flex items-center gap-1">
+                              <span className="text-[10px] font-bold text-danger bg-danger-soft px-1.5 py-0.5 rounded-md border border-danger-line flex items-center gap-1">
                                 <AlertCircle size={10} />
                                 <span>Perlu Selesai</span>
                               </span>
                             ) : null}
-                            <div className="flex items-center space-x-1 text-[11px] font-semibold text-[#008069] bg-[#d9fdd3] px-2 py-0.5 rounded-md whitespace-nowrap border border-[#00a884]/30">
+                            <div className="flex items-center space-x-1 text-[11px] font-semibold text-accent bg-bubble-out px-2 py-0.5 rounded-md whitespace-nowrap border border-accent/30">
                               <Clock size={11} />
                               <span>{formatTime(task.bookingDate).split(' ')[0]}</span>
                             </div>
@@ -3326,24 +3177,24 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                         {/* Area Bawah: Alamat, Foto Rumah, & Tombol Aksi */}
                         <div>
                           {/* Alamat & Jarak dari Klinik */}
-                          <div className="text-xs text-[#54656f] mb-2 mt-2 bg-[#f0f2f5] p-2.5 rounded-xl border border-[#e9edef] space-y-2">
+                          <div className="text-xs text-ink-2 mb-2 mt-2 bg-fill-1 p-2.5 rounded-xl border border-divider space-y-2">
                             <div className="flex items-start gap-1.5">
-                              <MapPin size={13} className="text-[#008069] mt-0.5 flex-shrink-0" />
+                              <MapPin size={13} className="text-accent mt-0.5 flex-shrink-0" />
                               <div className="flex-1 min-w-0">
-                                <p className="text-xs text-[#111b21] leading-snug">{task.address.fullText}</p>
+                                <p className="text-xs text-ink leading-snug">{task.address.fullText}</p>
                                 <div className="mt-1 flex flex-wrap items-center gap-1.5">
                                   <AccuracyBadge source={task.address.locationSource} />
                                   <AddressUpdatedAtChip updatedAt={task.address.addressUpdatedAt} />
                                 </div>
                               {task.address.distanceKm != null && (
-                                <p className="text-[10px] font-semibold text-[#008069] mt-0.5 flex items-center gap-1">
+                                <p className="text-[10px] font-semibold text-accent mt-0.5 flex items-center gap-1">
                                   <Compass size={10} />
                                   <span>
                                     {task.address.distanceSource === 'PREVIOUS_PATIENT' && task.address.originName
                                       ? `Jarak: ${task.address.distanceKm.toFixed(1)} km dari ${task.address.originName}`
                                       : `Jarak: ${task.address.distanceKm.toFixed(1)} km dari klinik`}
                                     {task.address.estimatedMinutes != null && (
-                                      <span className="text-[#54656f] font-normal ml-1">
+                                      <span className="text-ink-2 font-normal ml-1">
                                         (±{task.address.estimatedMinutes} mnt perjalanan)
                                       </span>
                                     )}
@@ -3371,7 +3222,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                   toast('Alamat disalin ke clipboard. Tempel di Waze/Gojek! 📋', 'success');
                                 }
                               }}
-                              className="p-1.5 rounded-lg text-[#54656f] hover:text-[#008069] hover:bg-white border border-[#e9edef] transition active:scale-95 flex-shrink-0"
+                              className="p-1.5 rounded-lg text-ink-2 hover:text-accent hover:bg-surface border border-divider transition active:scale-95 flex-shrink-0"
                               title="Salin alamat lengkap untuk Waze/Gojek"
                             >
                               <Copy size={12} />
@@ -3380,14 +3231,14 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
                           {/* Foto Depan Rumah & Patokan Landmark */}
                           {task.address.housePhotoUrl ? (
-                            <div className="flex items-center gap-2 p-1.5 rounded-lg bg-white border border-[#e9edef]">
+                            <div className="flex items-center gap-2 p-1.5 rounded-lg bg-surface border border-divider">
                               <div
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setZoomImageKind('house');
                                   setZoomImageUrl(task.address.housePhotoUrl || null);
                                 }}
-                                className="h-11 w-11 rounded-lg bg-[#f0f2f5] overflow-hidden flex-shrink-0 relative group cursor-pointer border border-[#e9edef]"
+                                className="h-11 w-11 rounded-lg bg-fill-1 overflow-hidden flex-shrink-0 relative group cursor-pointer border border-divider"
                                 title="Klik untuk memperbesar foto rumah"
                               >
                                 <img
@@ -3400,15 +3251,15 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                 </div>
                               </div>
                               <div className="flex-1 min-w-0">
-                                <span className="text-[10px] font-bold text-[#008069] uppercase tracking-wider block">
+                                <span className="text-[10px] font-bold text-accent uppercase tracking-wider block">
                                   🏠 Foto Depan Rumah
                                 </span>
                                 {task.address.landmark ? (
-                                  <p className="text-[11px] text-[#111b21] truncate font-medium">
+                                  <p className="text-[11px] text-ink truncate font-medium">
                                     Patokan: {task.address.landmark}
                                   </p>
                                 ) : (
-                                  <p className="text-[10px] text-[#667781] truncate">Panduan visual tersimpan</p>
+                                  <p className="text-[10px] text-ink-2 truncate">Panduan visual tersimpan</p>
                                 )}
                               </div>
                               <button
@@ -3417,7 +3268,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                   e.stopPropagation();
                                   handleOpenUpdateLocationModal(task);
                                 }}
-                                className="p-1.5 text-xs text-[#008069] hover:bg-[#e8f5f2] rounded-lg transition-all border border-[#e9edef] flex-shrink-0"
+                                className="p-1.5 text-xs text-accent hover:bg-accent-soft rounded-lg transition-all border border-divider flex-shrink-0"
                                 title="Perbarui titik lokasi / foto rumah"
                               >
                                 <PenLine size={12} />
@@ -3430,10 +3281,10 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                 e.stopPropagation();
                                 handleOpenUpdateLocationModal(task);
                               }}
-                              className="w-full flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 text-[11px] font-bold border border-amber-300 shadow-2xs transition-all active:scale-95"
+                              className="w-full flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-warning-soft hover:bg-warning-line text-warning text-[11px] font-bold border border-warning-line shadow-2xs transition-all active:scale-95"
                               title="Ambil foto rumah untuk panduan visual kunjungan"
                             >
-                              <Camera size={13} className="text-amber-600" />
+                              <Camera size={13} className="text-warning" />
                               <span>📸 Butuh Foto Rumah • Ambil Foto Sekarang</span>
                             </button>
                           )}
@@ -3443,16 +3294,16 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                             Bidan langsung hafal ciri pagar/rumah sebelum mengetuk pintu. */}
                         {(task.address.landmark || task.address.addressDetail) && (
                           <div className="mb-2 flex items-start gap-2 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/30 border-2 border-amber-300 dark:border-amber-900/50 text-amber-900 dark:text-amber-200">
-                            <Home size={14} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                            <Home size={14} className="text-warning flex-shrink-0 mt-0.5" />
                             <div className="min-w-0 flex-1">
-                              <p className="text-[10px] font-extrabold uppercase tracking-wide text-amber-700">
+                              <p className="text-[10px] font-extrabold uppercase tracking-wide text-warning">
                                 Patokan Rumah
                               </p>
                               {task.address.landmark && (
                                 <p className="text-[12px] font-bold leading-snug">{task.address.landmark}</p>
                               )}
                               {task.address.addressDetail && (
-                                <p className="text-[11px] text-amber-800 leading-snug">{task.address.addressDetail}</p>
+                                <p className="text-[11px] text-warning leading-snug">{task.address.addressDetail}</p>
                               )}
                             </div>
                           </div>
@@ -3469,12 +3320,12 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               return (
                                 <span
                                   key={i}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#e7f8e8] dark:bg-[#00a884]/20 text-[#008069] dark:text-[#00a884] text-[11px] font-medium border border-[#00a884]/20 dark:border-[#00a884]/40"
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-bubble-out dark:bg-accent/20 text-accent text-[11px] font-medium border border-accent/20 dark:border-accent/40"
                                 >
                                   <Baby size={11} />
                                   <span>{formatPatientName(child.name)}</span>
                                   {ageLabel && (
-                                    <span className="text-[#667781]">({ageLabel})</span>
+                                    <span className="text-ink-2">({ageLabel})</span>
                                   )}
                                 </span>
                               );
@@ -3485,7 +3336,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                         {/* Cuplikan Catatan Klinis / Keluhan (dari CS/LiveChat) */}
                         {task.adminNotes && (
                           <div className="mb-2 flex items-start gap-1.5 px-2 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 text-amber-900 dark:text-amber-200 text-[11px] font-medium">
-                            <AlertCircle size={12} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                            <AlertCircle size={12} className="text-warning flex-shrink-0 mt-0.5" />
                             <span className="line-clamp-2" title={task.adminNotes}>
                               <strong>Keluhan/Catatan:</strong> {task.adminNotes}
                             </span>
@@ -3493,15 +3344,15 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                         )}
 
                         {/* Total Biaya & Status Bayar */}
-                        <div className="flex items-center justify-between text-xs pt-1 border-t border-[#f0f2f5]">
-                          <div className="flex items-center gap-1 text-[#667781]">
-                            <CreditCard size={12} className="text-[#008069]" />
+                        <div className="flex items-center justify-between text-xs pt-1 border-t border-divider">
+                          <div className="flex items-center gap-1 text-ink-2">
+                            <CreditCard size={12} className="text-accent" />
                             <span>Biaya:</span>
-                            <span className="text-[#111b21] font-bold">
+                            <span className="text-ink font-bold">
                               {formatRupiah(task.pricing.totalFee)}
                             </span>
                             {task.pricing.deliveryFee > 0 && (
-                              <span className="text-[10px] text-[#667781] font-medium ml-1">
+                              <span className="text-[10px] text-ink-2 font-medium ml-1">
                                 (ongkir {formatRupiah(task.pricing.deliveryFee)})
                               </span>
                             )}
@@ -3519,7 +3370,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                   setPaymentModalTask(task);
                                 }
                               }}
-                              className="text-[10px] font-extrabold uppercase tracking-wide text-white bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 rounded-full shadow-xs transition-all active:scale-95 flex items-center gap-1"
+                              className="text-[10px] font-extrabold uppercase tracking-wide text-on-solid bg-success hover:bg-success-hover px-2.5 py-1 rounded-full shadow-xs transition-all active:scale-95 flex items-center gap-1"
                               title={task.pricing.proofUrl ? 'Lihat bukti pembayaran yang tersimpan' : 'Unggah bukti pembayaran / invoice susulan'}
                             >
                               <CheckCircle2 size={12} />
@@ -3531,7 +3382,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               <button
                                 type="button"
                                 onClick={(e) => handleOpenQrisFast(task, e)}
-                                className="text-[10px] font-bold text-[#008069] bg-[#d9fdd3] hover:bg-[#cbf7c3] px-2 py-0.5 rounded-full border border-[#00a884]/30 transition-all active:scale-95 flex items-center gap-1 shadow-2xs"
+                                className="text-[10px] font-bold text-accent bg-bubble-out hover:bg-accent-soft px-2 py-0.5 rounded-full border border-accent/30 transition-all active:scale-95 flex items-center gap-1 shadow-2xs"
                                 title="Tampilkan barcode QRIS langsung ke pasien"
                               >
                                 <QrCode size={11} />
@@ -3543,7 +3394,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                   e.stopPropagation();
                                   setPaymentModalTask(task);
                                 }}
-                                className="text-[10px] font-extrabold uppercase tracking-wide text-white bg-rose-600 hover:bg-rose-700 px-2.5 py-1 rounded-full border border-rose-700 transition-all active:scale-95 flex items-center gap-1 shadow-xs"
+                                className="text-[10px] font-extrabold uppercase tracking-wide text-on-solid bg-danger hover:bg-danger-hover px-2.5 py-1 rounded-full border border-danger transition-all active:scale-95 flex items-center gap-1 shadow-xs"
                                 title="Klik untuk mencatat pembayaran transaksi ini"
                               >
                                 <CreditCard size={12} />
@@ -3586,18 +3437,18 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                       e.stopPropagation();
                                       handleOpenChat(task);
                                     }}
-                                    className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold text-[#008069] bg-[#d9fdd3] hover:bg-[#c2e7e0] rounded-xl transition-all active:scale-95 border border-[#00a884]/30 shadow-xs"
+                                    className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold text-accent bg-bubble-out hover:bg-accent-soft/80 rounded-xl transition-all active:scale-95 border border-accent/30 shadow-xs"
                                     title="Buka Ruang Percakapan WhatsApp Pasien"
                                   >
-                                    <MessageSquare size={15} className="text-[#008069]" />
+                                    <MessageSquare size={15} className="text-accent" />
                                     <span>Chat</span>
                                   </button>
                                 ) : (
                                   <div
-                                    className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold text-[#8696a0] bg-[#f0f2f5] rounded-xl border border-[#e9edef] cursor-not-allowed"
+                                    className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold text-ink-3 bg-fill-1 rounded-xl border border-divider cursor-not-allowed"
                                     title={chatLockedTitle(task)}
                                   >
-                                    <MessageSquare size={15} className="text-[#8696a0]" />
+                                    <MessageSquare size={15} className="text-ink-3" />
                                     <span>Chat Terkunci</span>
                                   </div>
                                 )
@@ -3611,8 +3462,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                     onClick={(e) => requestNavigation(task, e)}
                                     className={`flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold rounded-xl transition-all active:scale-95 shadow-xs cursor-pointer ${
                                       needsNavigationPreflight(task.address?.locationSource)
-                                        ? 'text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300'
-                                        : 'text-white bg-[#008069] hover:bg-[#00a884]'
+                                        ? 'text-warning bg-warning-soft hover:bg-warning border border-warning-line'
+                                        : 'text-white bg-accent hover:bg-accent-hover'
                                     }`}
                                     title={needsNavigationPreflight(task.address?.locationSource) ? 'Titik estimasi — konfirmasi patokan dulu' : 'Buka ulang peta navigasi'}
                                   >
@@ -3620,7 +3471,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                     <span>{needsNavigationPreflight(task.address?.locationSource) ? 'Navigasi (Estimasi)' : 'Navigasi'}</span>
                                   </button>
                                 ) : (
-                                  <div className="text-[10px] text-[#667781] flex items-center justify-center min-h-[44px] py-2.5 rounded-xl bg-[#f0f2f5] border border-[#e9edef]">
+                                  <div className="text-[10px] text-ink-2 flex items-center justify-center min-h-[44px] py-2.5 rounded-xl bg-fill-1 border border-divider">
                                     Tanpa Peta
                                   </div>
                                 )
@@ -3632,7 +3483,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                   type="button"
                                   disabled={isSendingOtw}
                                   onClick={(e) => requestNavigation(task, e)}
-                                  className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold rounded-xl transition-all active:scale-95 shadow-xs text-[#008069] bg-[#d9fdd3] hover:bg-[#cbf7c3] border border-[#00a884]/30"
+                                  className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold rounded-xl transition-all active:scale-95 shadow-xs text-accent bg-bubble-out hover:bg-accent-soft border border-accent/30"
                                   title="Kirim info OTW ke pasien & buka peta navigasi"
                                 >
                                   <Navigation size={15} />
@@ -3648,8 +3499,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                   onClick={(e) => handleCompleteVisit(task, e)}
                                   className={`flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold rounded-xl transition-all active:scale-95 shadow-xs disabled:opacity-60 ${
                                     isTerminal
-                                      ? 'text-emerald-700 bg-emerald-50 border border-emerald-200'
-                                      : 'text-white bg-[#008069] hover:bg-[#00a884]' + (completingVisitId === task.reservationId ? '' : ' animate-action-pulse')
+                                      ? 'text-success bg-success-soft border border-success-line'
+                                      : 'text-white bg-accent hover:bg-accent-hover' + (completingVisitId === task.reservationId ? '' : ' animate-action-pulse')
                                   }`}
                                   title={isTerminal ? 'Kunjungan telah selesai' : 'Tandai tindakan selesai dan kunjungan tuntas'}
                                 >
@@ -3667,7 +3518,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                   type="button"
                                   disabled={sendingArrivalId === task.reservationId}
                                   onClick={(e) => handleRecordArrival(task, e)}
-                                  className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all active:scale-95 shadow-xs disabled:opacity-50"
+                                  className="flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold text-on-solid bg-info hover:bg-info-hover rounded-xl transition-all active:scale-95 shadow-xs disabled:opacity-50"
                                   title="Infokan ke pasien dan klinik bahwa Anda sudah sampai di lokasi"
                                 >
                                   {sendingArrivalId === task.reservationId ? (
@@ -3687,10 +3538,10 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                   onClick={(e) => requestNavigation(task, e)}
                                   className={`flex items-center justify-center space-x-1.5 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold rounded-xl transition-all active:scale-95 shadow-xs ${
                                     navUrl && needsNavigationPreflight(task.address?.locationSource)
-                                      ? 'text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300'
+                                      ? 'text-warning bg-warning-soft hover:bg-warning border border-warning-line'
                                       : navUrl || isOtwAllowed(task)
-                                        ? 'text-white bg-[#008069] hover:bg-[#00a884]'
-                                        : 'text-[#667781] bg-[#e9edef] opacity-75 cursor-pointer border border-[#d1d7db]'
+                                        ? 'text-white bg-accent hover:bg-accent-hover'
+                                        : 'text-ink-2 bg-fill-2 opacity-75 cursor-pointer border border-divider'
                                   }`}
                                   title={
                                     navUrl
@@ -3714,10 +3565,10 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
                         {/* Bar Terapis Penanggung Jawab & Delegasi (Khusus Supervisor / Mode Tim) */}
                         {isSupervisor && (
-                          <div className="flex items-center justify-between mt-2 pt-2 border-t border-[#e9edef] text-xs">
+                          <div className="flex items-center justify-between mt-2 pt-2 border-t border-divider text-xs">
                             <div className="flex items-center gap-1.5 min-w-0">
-                              <span className="text-[10px] text-[#667781] font-semibold flex-shrink-0">Terapis:</span>
-                              <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-800 text-[10px] font-bold border border-purple-200 truncate">
+                              <span className="text-[10px] text-ink-2 font-semibold flex-shrink-0">Terapis:</span>
+                              <span className="px-2 py-0.5 rounded-md bg-violet-soft text-violet text-[10px] font-bold border border-violet-line truncate">
                                 {task.assignedStaff?.name || 'Belum Ditugaskan'}
                               </span>
                             </div>
@@ -3728,7 +3579,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                 setReassignModalTask(task);
                                 setReassignSelectedStaffId(task.assignedStaff?.id || '');
                               }}
-                              className="px-2.5 py-1 rounded-lg bg-white hover:bg-purple-50 text-purple-700 text-[10px] font-bold border border-purple-200 shadow-2xs transition-all active:scale-95 flex items-center gap-1 flex-shrink-0"
+                              className="px-2.5 py-1 rounded-lg bg-surface hover:bg-violet-soft text-violet text-[10px] font-bold border border-violet-line shadow-2xs transition-all active:scale-95 flex items-center gap-1 flex-shrink-0"
                               title="Ganti / Delegasikan terapis penanggung jawab"
                             >
                               <ArrowRightLeft size={11} />
@@ -3748,17 +3599,17 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             <div
               className={`${
                 mobileView === 'list' ? 'hidden md:flex' : 'flex'
-              } flex-1 flex-col bg-[#efeae2] dark:bg-[#0b141a] overflow-hidden relative min-h-0 h-full`}
+              } flex-1 flex-col bg-content overflow-hidden relative min-h-0 h-full`}
             >
               {selectedTask ? (
                 <>
                   {/* WhatsApp Web Chat Header — safe-area for notch/Dynamic Island */}
-                  <div className="bg-[#f0f2f5] dark:bg-[#111b21] border-b border-[#e9edef] dark:border-[#202c33] px-4 pt-[calc(0.625rem+env(safe-area-inset-top,0px))] md:pt-2.5 pb-2.5 flex items-center justify-between gap-3 shadow-xs z-10 shrink-0">
+                  <div className="bg-fill-1 border-b border-divider dark:border-divider px-4 pt-[calc(0.625rem+env(safe-area-inset-top,0px))] md:pt-2.5 pb-2.5 flex items-center justify-between gap-3 shadow-xs z-10 shrink-0">
                     <div className="flex items-center space-x-2.5 min-w-0">
                       {/* Mobile Back to List Button */}
                       <button
                         onClick={handleBackToList}
-                        className="md:hidden p-2 rounded-full bg-white hover:bg-[#e9edef] text-[#54656f] transition-all active:scale-95 border border-[#e9edef] flex-shrink-0"
+                        className="md:hidden p-2 rounded-full bg-surface hover:bg-fill-2 text-ink-2 transition-all active:scale-95 border border-divider flex-shrink-0"
                         title="Kembali ke daftar kunjungan"
                         aria-label="Kembali"
                       >
@@ -3768,7 +3619,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                       {/* Customer Info Header - Klik untuk melihat Detail Pasien */}
                       <div
                         onClick={() => setDetailModalTask(selectedTask)}
-                        className="flex items-center space-x-2.5 min-w-0 p-1 -m-1 rounded-xl hover:bg-[#e9edef] transition cursor-pointer group"
+                        className="flex items-center space-x-2.5 min-w-0 p-1 -m-1 rounded-xl hover:bg-fill-2 transition cursor-pointer group"
                         title="Klik untuk melihat detail lengkap pasien"
                       >
                         {/* Customer Avatar */}
@@ -3780,14 +3631,14 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
                         <div className="min-w-0">
                           <div className="flex items-center space-x-2">
-                            <h2 className="font-semibold text-[#111b21] dark:text-[#e9edef] text-sm truncate group-hover:text-[#008069] transition">
+                            <h2 className="font-semibold text-ink text-sm truncate group-hover:text-accent transition">
                               {selectedTask.customerName || 'Customer'}
                             </h2>
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#d9fdd3] text-[#008069] font-bold border border-[#00a884]/30 whitespace-nowrap">
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-bubble-out text-accent font-bold border border-accent/30 whitespace-nowrap">
                               {formatTime(selectedTask.bookingDate)}
                             </span>
                           </div>
-                          <p className="text-[11px] text-[#667781] truncate mt-0.5">
+                          <p className="text-[11px] text-ink-2 truncate mt-0.5">
                             {selectedTask.treatmentDetail || 'Treatment'} • {selectedTask.address.fullText}
                           </p>
                         </div>
@@ -3802,8 +3653,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                           onClick={(e) => requestNavigation(selectedTask, e)}
                           className={`h-9 w-9 flex items-center justify-center rounded-lg shadow-xs transition-all active:scale-95 cursor-pointer ${
                             needsNavigationPreflight(selectedTask.address?.locationSource)
-                              ? 'bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300'
-                              : 'bg-[#008069] hover:bg-[#00a884] text-white'
+                              ? 'bg-warning-soft hover:bg-warning text-warning border border-warning-line'
+                              : 'bg-accent hover:bg-accent-hover text-white'
                           }`}
                           title={needsNavigationPreflight(selectedTask.address?.locationSource) ? 'Titik estimasi — konfirmasi patokan dulu' : 'Buka Peta Navigasi Google Maps & Mulai Perjalanan'}
                         >
@@ -3815,8 +3666,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                         onClick={() => setPaymentModalTask(selectedTask)}
                         className={`h-9 w-9 flex items-center justify-center rounded-lg text-xs font-semibold transition-all shadow-xs active:scale-95 ${
                           selectedTask.pricing.paymentStatus === 'LUNAS'
-                            ? 'bg-[#d9fdd3] text-[#008069] border border-[#00a884]/30'
-                            : 'bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300'
+                            ? 'bg-bubble-out text-accent border border-accent/30'
+                            : 'bg-warning-soft hover:bg-warning text-warning border border-warning-line'
                         }`}
                         title={
                           selectedTask.pricing.paymentStatus === 'LUNAS'
@@ -3831,7 +3682,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                        {/* Anti-OTW Trap: jika jadwal sudah terlewat (overdue), bypass langsung ke tombol Selesai */}
                        {selectedTask.status === 'completed' ? (
                          <div
-                           className="h-9 w-9 flex items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-xs"
+                           className="h-9 w-9 flex items-center justify-center rounded-lg bg-success-soft text-success border border-success-line shadow-xs"
                            title="Kunjungan telah selesai"
                          >
                            <CheckCircle2 size={16} />
@@ -3840,7 +3691,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                          <button
                            onClick={() => handleCompleteVisit(selectedTask)}
                            disabled={completingVisitId === selectedTask.reservationId}
-                           className={`h-9 w-9 flex items-center justify-center rounded-lg bg-[#008069] hover:bg-[#00a884] text-white transition-all shadow-xs active:scale-95 disabled:opacity-50 ${
+                           className={`h-9 w-9 flex items-center justify-center rounded-lg bg-accent hover:bg-accent-hover text-white transition-all shadow-xs active:scale-95 disabled:opacity-50 ${
                              completingVisitId === selectedTask.reservationId ? '' : 'animate-action-pulse'
                            }`}
                            title="Tandai Tindakan Selesai"
@@ -3855,7 +3706,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                          <button
                            onClick={() => handleRecordArrival(selectedTask)}
                            disabled={sendingArrivalId === selectedTask.reservationId}
-                           className="h-9 w-9 flex items-center justify-center rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-xs active:scale-95 disabled:opacity-50"
+                           className="h-9 w-9 flex items-center justify-center rounded-lg bg-info hover:bg-info-hover text-on-solid transition-all shadow-xs active:scale-95 disabled:opacity-50"
                            title="Tandai Sudah Sampai di Lokasi"
                          >
                            {sendingArrivalId === selectedTask.reservationId ? (
@@ -3870,8 +3721,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                             disabled={sendingOtwId === selectedTask.reservationId}
                             className={`h-9 w-9 flex items-center justify-center rounded-lg transition-all border shadow-xs active:scale-95 ${
                              isOtwAllowed(selectedTask) || selectedTask.navigationUrl || selectedTask.mapsUrl
-                               ? 'bg-[#d9fdd3] hover:bg-[#cbf7c3] text-[#008069] border-[#00a884]/30'
-                               : 'bg-[#f0f2f5] text-[#667781] border-[#e9edef]'
+                               ? 'bg-bubble-out hover:bg-accent-soft text-accent border-accent/30'
+                               : 'bg-fill-1 text-ink-2 border-divider'
                            }`}
                           title={
                             selectedTask.navigationUrl || selectedTask.mapsUrl
@@ -3882,7 +3733,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                           }
                         >
                           {sendingOtwId === selectedTask.reservationId ? (
-                            <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#008069] border-t-transparent" />
+                            <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
                           ) : (
                             <Navigation2 size={16} />
                           )}
@@ -3895,23 +3746,23 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                   <div
                     ref={chatContainerRef}
                     onScroll={handleChatScroll}
-                    className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-3 bg-[#efeae2] relative"
+                    className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-3 bg-content relative"
                     style={{
-                      backgroundImage: `radial-gradient(#d1c7b8 1px, transparent 1px)`,
+                      backgroundImage: 'radial-gradient(rgb(var(--c-strong)) 1px, transparent 1px)',
                       backgroundSize: '24px 24px',
                       WebkitOverflowScrolling: 'touch',
                     }}
                   >
                     {loadingMessages ? (
-                      <div className="flex justify-center items-center h-48 space-x-2 text-[#667781] text-xs">
-                        <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#008069] border-t-transparent"></div>
+                      <div className="flex justify-center items-center h-48 space-x-2 text-ink-2 text-xs">
+                        <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent border-t-transparent"></div>
                         <span>Memuat riwayat chat...</span>
                       </div>
                     ) : messages.length === 0 ? (
-                      <div className="text-center py-20 text-[#667781] text-xs space-y-2">
-                        <MessageSquare size={36} className="mx-auto text-[#d1c7b8] mb-1" />
-                        <p className="font-semibold text-[#111b21]">Belum ada riwayat pesan</p>
-                        <p className="text-[#667781]">Ketik balasan di bawah untuk mengirim pesan langsung ke WhatsApp pasien.</p>
+                      <div className="text-center py-20 text-ink-2 text-xs space-y-2">
+                        <MessageSquare size={36} className="mx-auto text-ink-3 mb-1" />
+                        <p className="font-semibold text-ink">Belum ada riwayat pesan</p>
+                        <p className="text-ink-2">Ketik balasan di bawah untuk mengirim pesan langsung ke WhatsApp pasien.</p>
                       </div>
                     ) : (
                       messages.map((msg, idx) => {
@@ -3954,7 +3805,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                           <React.Fragment key={msg.id || `msg-${idx}`}>
                             {isDifferentDay && separatorLabel && (
                               <div className="flex justify-center my-1.5">
-                                <div className="bg-white dark:bg-[#182229] text-[#54656f] dark:text-[#8696a0] text-[11px] font-medium px-3 py-1 rounded-lg text-center shadow-xs border border-[#e9edef] dark:border-[#202c33]">
+                                <div className="bg-surface text-ink-2 text-[11px] font-medium px-3 py-1 rounded-lg text-center shadow-xs border border-divider dark:border-divider">
                                   {separatorLabel}
                                 </div>
                               </div>
@@ -3963,28 +3814,28 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               className={`flex flex-col ${isInbound ? 'items-start' : 'items-end'} animate-popIn`}
                             >
                               {/* Sender Label Tag */}
-                              <div className="text-[10px] text-[#667781] mb-0.5 px-1.5 flex items-center space-x-1" title={fullDateTitle}>
+                              <div className="text-[10px] text-ink-2 mb-0.5 px-1.5 flex items-center space-x-1" title={fullDateTitle}>
                                 {isInbound ? (
                                   <>
-                                    <User size={10} className="text-[#54656f]" />
-                                    <span className="font-medium text-[#111b21]">
+                                    <User size={10} className="text-ink-2" />
+                                    <span className="font-medium text-ink">
                                       {selectedTask.customerName || 'Customer'}
                                     </span>
                                   </>
                                 ) : isBot ? (
                                   <>
-                                    <Bot size={10} className="text-[#008069]" />
-                                    <span className="font-medium text-[#008069]">Bot Asisten Klinik</span>
+                                    <Bot size={10} className="text-accent" />
+                                    <span className="font-medium text-accent">Bot Asisten Klinik</span>
                                   </>
                                 ) : isStaff ? (
                                   <>
-                                    <UserCheck size={10} className="text-sky-600" />
-                                    <span className="font-medium text-sky-700">
+                                    <UserCheck size={10} className="text-info" />
+                                    <span className="font-medium text-info">
                                       {msg.sender_name || staff?.name || 'Terapis'}
                                     </span>
                                   </>
                                 ) : (
-                                  <span className="font-medium text-[#54656f]">Admin</span>
+                                  <span className="font-medium text-ink-2">Admin</span>
                                 )}
                                 <span>•</span>
                                 <span title={fullDateTitle}>{timeStr} WIB</span>
@@ -3994,28 +3845,28 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               <div
                                 className={`relative group max-w-[85%] sm:max-w-[70%] p-3 rounded-2xl text-xs leading-relaxed shadow-xs transition-all ${
                                   isRevoked
-                                    ? 'bg-[#f0f2f5] text-[#667781] border border-[#e9edef] italic'
+                                    ? 'bg-fill-1 text-ink-2 border border-divider italic'
                                     : isInbound
-                                    ? 'bg-white text-[#111b21] rounded-tl-xs border border-[#e9edef]'
+                                    ? 'bg-surface text-ink rounded-tl-xs border border-divider'
                                     : isBot
-                                    ? 'bg-[#e8f5f2] text-[#111b21] rounded-tr-xs border border-[#c2e7e0]'
-                                    : 'bg-[#d9fdd3] text-[#111b21] rounded-tr-xs border border-[#00a884]/20'
+                                    ? 'bg-accent-soft text-ink rounded-tr-xs border border-accent/30'
+                                    : 'bg-bubble-out text-ink rounded-tr-xs border border-accent/20'
                                 }`}
                               >
                                 {isRevoked ? (
-                                  <div className="flex items-center gap-1.5 py-0.5 text-[#667781]">
-                                    <Ban size={12} className="text-[#8696a0] shrink-0" />
+                                  <div className="flex items-center gap-1.5 py-0.5 text-ink-2">
+                                    <Ban size={12} className="text-ink-3 shrink-0" />
                                     <span className="italic">🚫 Pesan ini telah ditarik</span>
                                   </div>
                                 ) : (
                                   <>
                                     {/* Quoted Message Preview */}
                                     {quotedMsg && (
-                                      <div className="mb-2 p-2 rounded-lg border-l-[3px] border-[#00a884] bg-black/[0.04] text-[11px] leading-snug">
-                                        <p className="font-bold text-[10px] text-[#008069] truncate mb-0.5">
+                                      <div className="mb-2 p-2 rounded-lg border-l-[3px] border-accent bg-black/[0.04] text-[11px] leading-snug">
+                                        <p className="font-bold text-[10px] text-accent truncate mb-0.5">
                                           {quotedMsg.sender_name || (quotedMsg.direction === 'INBOUND' ? (selectedTask.customerName || 'Customer') : 'Bidan / CS')}
                                         </p>
-                                        <p className="text-[11px] text-[#54656f] truncate">
+                                        <p className="text-[11px] text-ink-2 truncate">
                                           {quotedMsg.media ? (
                                             <span className="flex items-center gap-1">📷 Foto {quotedMsg.content && !/^\[(IMAGE|MEDIA)/.test(quotedMsg.content) ? `• ${quotedMsg.content.slice(0, 60)}` : ''}</span>
                                           ) : (
@@ -4027,20 +3878,20 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
                                     {/* Share Location Card */}
                                     {isLocationMsg && locData && (
-                                      <div className="mb-2 p-2.5 rounded-xl bg-[#f0f2f5] border border-[#d1d7db] flex items-center gap-2.5">
-                                        <div className="w-9 h-9 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                                      <div className="mb-2 p-2.5 rounded-xl bg-fill-1 border border-divider flex items-center gap-2.5">
+                                        <div className="w-9 h-9 rounded-xl bg-danger-soft text-danger flex items-center justify-center shrink-0">
                                           <MapPin size={16} />
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                          <p className="font-bold text-[12px] text-[#111b21] leading-tight flex items-center gap-1">
+                                          <p className="font-bold text-[12px] text-ink leading-tight flex items-center gap-1">
                                             <span>📍 {locData.isLive ? 'Live Location Pasien' : 'Share Location Pasien'}</span>
-                                            {locData.isLive && <span className="inline-block w-2 h-2 rounded-full bg-rose-500 animate-pulse" />}
+                                            {locData.isLive && <span className="inline-block w-2 h-2 rounded-full bg-danger animate-pulse" />}
                                           </p>
-                                          <p className="text-[10px] text-[#667781] font-mono truncate mt-0.5">
+                                          <p className="text-[10px] text-ink-2 font-mono truncate mt-0.5">
                                             {locData.latitude.toFixed(6)}, {locData.longitude.toFixed(6)}
                                           </p>
                                           {(locData.name || locData.address) && (
-                                            <p className="text-[11px] text-[#111b21] truncate mt-0.5 font-medium">
+                                            <p className="text-[11px] text-ink truncate mt-0.5 font-medium">
                                               {locData.name || locData.address}
                                             </p>
                                           )}
@@ -4049,7 +3900,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                           href={locData.url || `https://www.google.com/maps/search/?api=1&query=${locData.latitude},${locData.longitude}`}
                                           target="_blank"
                                           rel="noopener noreferrer"
-                                          className="px-3 py-1.5 bg-[#008069] hover:bg-[#00a884] text-white rounded-lg text-[11px] font-bold transition shadow-xs flex items-center gap-1 shrink-0 active:scale-95"
+                                          className="px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-[11px] font-bold transition shadow-xs flex items-center gap-1 shrink-0 active:scale-95"
                                           title="Buka lokasi di Google Maps"
                                         >
                                           <span>Buka Google Maps</span>
@@ -4083,7 +3934,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                       const displayText = resolveMessageDisplayText({ content: msg.content, media }, { maskPhone: !isSupervisor });
                                       if (!displayText) {
                                         if (hasVisual) return null;
-                                        return <div className="text-[11px] italic text-[#667781]">[Pesan tanpa teks]</div>;
+                                        return <div className="text-[11px] italic text-ink-2">[Pesan tanpa teks]</div>;
                                       }
                                       return <div className="whitespace-pre-wrap break-words select-text">{displayText}</div>;
                                     })()}
@@ -4091,9 +3942,9 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                 )}
 
                                 {/* Meta Info & Delivery Ticks */}
-                                <div className="flex items-center justify-end space-x-1.5 mt-1 pt-0.5 text-[10px] text-[#667781]">
+                                <div className="flex items-center justify-end space-x-1.5 mt-1 pt-0.5 text-[10px] text-ink-2">
                                   {((msg as any).is_edited || msg.is_edited || (msg as any).payload_raw?.is_edited) && !isRevoked && (
-                                    <span className="text-[9px] text-[#667781] italic">diedit</span>
+                                    <span className="text-[9px] text-ink-2 italic">diedit</span>
                                   )}
                                   <span title={fullDateTitle}>{timeStr}</span>
                                   {!isInbound && !isRevoked && (
@@ -4112,13 +3963,13 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                       }
                                     >
                                       {msg.delivery_status === 'read' ? (
-                                        <CheckCheck size={13} className="text-[#53bdeb] stroke-[2.5]" />
+                                        <CheckCheck size={13} className="text-info stroke-[2.5]" />
                                       ) : msg.delivery_status === 'delivered' ? (
-                                        <CheckCheck size={13} className="text-[#8696a0]" />
+                                        <CheckCheck size={13} className="text-ink-3" />
                                       ) : msg.delivery_status === 'failed' ? (
-                                        <AlertCircle size={12} className="text-rose-500" />
+                                        <AlertCircle size={12} className="text-danger" />
                                       ) : (
-                                        <Check size={12} className="text-[#8696a0]" />
+                                        <Check size={12} className="text-ink-3" />
                                       )}
                                     </span>
                                   )}
@@ -4127,7 +3978,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                   {isStaff && !isRevoked && !media && !isAudioMsg && (msg.created_at ? (Date.now() - new Date(msg.created_at).getTime() <= 15 * 60 * 1000) : false) && (gatewayCapability?.supportsEdit ?? true) && (
                                     <button
                                       onClick={() => handleStartEdit(msg)}
-                                      className="opacity-0 group-hover:opacity-100 hover:text-[#008069] transition-opacity p-0.5 ml-1"
+                                      className="opacity-0 group-hover:opacity-100 hover:text-accent transition-opacity p-0.5 ml-1"
                                       title="Edit pesan ini (maksimal 15 menit)"
                                     >
                                       <PenLine size={11} />
@@ -4139,11 +3990,11 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                     <button
                                       onClick={() => handleRevokeMessage(msg)}
                                       disabled={revokingId === msg.id}
-                                      className="opacity-0 group-hover:opacity-100 hover:text-rose-600 transition-opacity p-0.5 ml-1"
+                                      className="opacity-0 group-hover:opacity-100 hover:text-danger transition-opacity p-0.5 ml-1"
                                       title="Tarik pesan ini dari WhatsApp"
                                     >
                                       {revokingId === msg.id ? (
-                                        <div className="h-2.5 w-2.5 animate-spin rounded-full border border-rose-500 border-t-transparent"></div>
+                                        <div className="h-2.5 w-2.5 animate-spin rounded-full border border-danger border-t-transparent"></div>
                                       ) : (
                                         <Trash2 size={11} />
                                       )}
@@ -4162,12 +4013,12 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
                   {/* Fase 1.2: antrean pesan gagal — tombol "Coba Kirim Lagi" tanpa ketik ulang */}
                   {failedMessages.filter((f) => f.conversationId === selectedTask.conversationId).length > 0 && (
-                    <div className="bg-rose-50 border-t border-rose-200 px-3 py-2 space-y-1.5 shrink-0">
+                    <div className="bg-danger-soft border-t border-danger-line px-3 py-2 space-y-1.5 shrink-0">
                       {failedMessages
                         .filter((f) => f.conversationId === selectedTask.conversationId)
                         .map((f) => (
-                          <div key={f.clientTempId} className="flex items-center gap-2 text-[11px] text-rose-800">
-                            <AlertCircle size={13} className="flex-shrink-0 text-rose-500" />
+                          <div key={f.clientTempId} className="flex items-center gap-2 text-[11px] text-danger">
+                            <AlertCircle size={13} className="flex-shrink-0 text-danger" />
                             <span className="flex-1 min-w-0 truncate">
                               {f.image && !f.text ? '📷 Foto' : f.text || '(pesan)'} — gagal terkirim
                             </span>
@@ -4175,7 +4026,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               type="button"
                               disabled={retryingTempId === f.clientTempId}
                               onClick={() => handleRetryFailedMessage(f)}
-                              className="px-2 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-semibold disabled:opacity-50 active:scale-95 flex items-center gap-1 shrink-0"
+                              className="px-2 py-1 rounded-lg bg-danger hover:bg-danger-hover text-on-solid font-semibold disabled:opacity-50 active:scale-95 flex items-center gap-1 shrink-0"
                             >
                               {retryingTempId === f.clientTempId ? (
                                 <span className="h-3 w-3 animate-spin rounded-full border border-white border-t-transparent" />
@@ -4192,7 +4043,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                   {/* WhatsApp Quick Reply Input Bar */}
                   <form
                     onSubmit={handleSendReply}
-                    className="bg-[#f0f2f5] dark:bg-[#111b21] border-t border-[#e9edef] dark:border-[#202c33] p-2.5 sm:p-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] md:pb-3 z-10 space-y-2 shrink-0"
+                    className="bg-fill-1 border-t border-divider dark:border-divider p-2.5 sm:p-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] md:pb-3 z-10 space-y-2 shrink-0"
                   >
                     {/* Quick Reply Template Chips for Fast Field Messaging */}
                     <div
@@ -4204,14 +4055,14 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                         type="button"
                         disabled={isSendingPaymentInfo}
                         onClick={() => selectedTask && handleSendPaymentInfo(selectedTask)}
-                        className="h-[44px] w-[44px] min-h-[44px] min-w-[44px] rounded-full bg-[#d9fdd3] hover:bg-[#cbf7c3] text-[#008069] border border-[#00a884]/40 flex items-center justify-center transition-all duration-150 hover:scale-105 active:scale-95 shadow-xs flex-shrink-0 disabled:opacity-50 select-none cursor-pointer"
+                        className="h-[44px] w-[44px] min-h-[44px] min-w-[44px] rounded-full bg-bubble-out hover:bg-accent-soft text-accent border border-accent/40 flex items-center justify-center transition-all duration-150 hover:scale-105 active:scale-95 shadow-xs flex-shrink-0 disabled:opacity-50 select-none cursor-pointer"
                         title="Kirim QRIS & Rekening Bank Resmi ke WhatsApp Pasien"
                         aria-label="Kirim QRIS & Rekening Bank"
                       >
                         {isSendingPaymentInfo ? (
-                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#008069] border-t-transparent" />
+                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
                         ) : (
-                          <CreditCard size={18} className="text-[#008069]" />
+                          <CreditCard size={18} className="text-accent" />
                         )}
                       </button>
 
@@ -4243,7 +4094,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               }, 0);
                             }
                           }}
-                          className="text-xs font-semibold bg-white dark:bg-[#202c33] hover:bg-[#e8f5f2] dark:hover:bg-[#2a3942] text-[#008069] dark:text-[#00a884] border border-[#00a884]/30 min-h-[44px] px-3.5 py-2.5 rounded-full whitespace-nowrap transition-transform duration-150 hover:scale-105 active:scale-95 shadow-2xs flex-shrink-0 inline-flex items-center select-none"
+                          className="text-xs font-semibold bg-surface hover:bg-accent-soft dark:hover:bg-fill-2 text-accent border border-accent/30 min-h-[44px] px-3.5 py-2.5 rounded-full whitespace-nowrap transition-transform duration-150 hover:scale-105 active:scale-95 shadow-2xs flex-shrink-0 inline-flex items-center select-none"
                         >
                           {chip.label}
                         </button>
@@ -4251,19 +4102,19 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     </div>
 
                     {selectedImage && (
-                      <div className="flex items-center space-x-2 bg-white border border-[#e9edef] rounded-xl p-2">
+                      <div className="flex items-center space-x-2 bg-surface border border-divider rounded-xl p-2">
                         <img
                           src={selectedImage.preview}
                           alt="Lampiran"
-                          className="h-12 w-12 object-cover rounded-lg border border-[#e9edef]"
+                          className="h-12 w-12 object-cover rounded-lg border border-divider"
                         />
-                        <span className="flex-1 text-xs text-[#54656f] truncate">
+                        <span className="flex-1 text-xs text-ink-2 truncate">
                           {selectedImage.file.name}
                         </span>
                         <button
                           type="button"
                           onClick={() => setSelectedImage(null)}
-                          className="p-1.5 rounded-lg text-rose-600 bg-rose-50 hover:bg-rose-100 transition"
+                          className="p-1.5 rounded-lg text-danger bg-danger-soft hover:bg-danger-line transition"
                           title="Hapus lampiran"
                         >
                           <X size={14} />
@@ -4283,7 +4134,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                         type="button"
                         onClick={() => chatFileInputRef.current?.click()}
                         disabled={sending}
-                        className="h-10 w-10 rounded-xl bg-white dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] text-[#008069] dark:text-[#00a884] hover:bg-[#e8f5f2] dark:hover:bg-[#2a3942] transition shadow-xs flex items-center justify-center flex-shrink-0 disabled:opacity-40 active:scale-95"
+                        className="h-10 w-10 rounded-xl bg-surface border border-divider text-accent hover:bg-accent-soft dark:hover:bg-fill-2 transition shadow-xs flex items-center justify-center flex-shrink-0 disabled:opacity-40 active:scale-95"
                         title="Buka Kamera & Ambil Foto Langsung"
                         aria-label="Kamera"
                       >
@@ -4300,7 +4151,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                         type="button"
                         onClick={() => chatGalleryInputRef.current?.click()}
                         disabled={sending}
-                        className="h-10 w-10 rounded-xl bg-white dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] text-[#008069] dark:text-[#00a884] hover:bg-[#e8f5f2] dark:hover:bg-[#2a3942] transition shadow-xs flex items-center justify-center flex-shrink-0 disabled:opacity-40 active:scale-95"
+                        className="h-10 w-10 rounded-xl bg-surface border border-divider text-accent hover:bg-accent-soft dark:hover:bg-fill-2 transition shadow-xs flex items-center justify-center flex-shrink-0 disabled:opacity-40 active:scale-95"
                         title="Pilih Foto / Screenshot dari Galeri"
                         aria-label="Galeri"
                       >
@@ -4315,14 +4166,14 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                           placeholder={`Ketik balasan sebagai ~ ${staff?.name || 'Terapis'}...`}
                           disabled={sending}
                           style={{ fontSize: '16px' }}
-                          className="w-full resize-none bg-white dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] focus:border-[#008069] focus:ring-1 focus:ring-[#008069] text-[#111b21] dark:text-[#e9edef] rounded-xl px-3.5 py-2 text-[16px] sm:text-sm focus:outline-none placeholder-[#667781] dark:placeholder-[#8696a0] transition-colors disabled:opacity-50 shadow-xs min-h-[40px] max-h-[130px] leading-relaxed block"
+                          className="w-full resize-none bg-surface border border-divider focus:border-accent focus:ring-1 focus:ring-accent text-ink rounded-xl px-3.5 py-2 text-[16px] sm:text-sm focus:outline-none placeholder-ink-3 dark:placeholder-ink-3 transition-colors disabled:opacity-50 shadow-xs min-h-[40px] max-h-[130px] leading-relaxed block"
                         />
                       </div>
 
                       <button
                         type="submit"
                         disabled={(!replyText.trim() && !selectedImage) || sending}
-                        className="h-10 w-10 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white font-semibold shadow-xs flex items-center justify-center transition-all disabled:opacity-40 disabled:hover:bg-[#008069] flex-shrink-0 active:scale-95"
+                        className="h-10 w-10 rounded-xl bg-accent hover:bg-accent-hover text-white font-semibold shadow-xs flex items-center justify-center transition-all disabled:opacity-40 disabled:hover:bg-accent flex-shrink-0 active:scale-95"
                         title="Kirim Pesan"
                       >
                         {sending ? (
@@ -4335,13 +4186,13 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                   </form>
                 </>
               ) : (
-                <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-[#667781] space-y-4 bg-[#f0f2f5]/40">
-                  <div className="h-16 w-16 rounded-3xl bg-white flex items-center justify-center text-[#008069] shadow-xs border border-[#e9edef]">
+                <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-ink-2 space-y-4 bg-fill-1/40">
+                  <div className="h-16 w-16 rounded-3xl bg-surface flex items-center justify-center text-accent shadow-xs border border-divider">
                     <MessageSquare size={32} />
                   </div>
                   <div className="space-y-1 max-w-sm">
-                    <h3 className="font-bold text-[#111b21] text-base">Pilih Jadwal Pasien</h3>
-                    <p className="text-xs text-[#667781] leading-relaxed">
+                    <h3 className="font-bold text-ink text-base">Pilih Jadwal Pasien</h3>
+                    <p className="text-xs text-ink-2 leading-relaxed">
                       Pilih salah satu jadwal kunjungan pasien di sebelah kiri untuk melihat rincian lokasi, petunjuk arah peta, status pembayaran, dan berkirim pesan langsung melalui WhatsApp.
                     </p>
                   </div>
@@ -4356,7 +4207,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           <div className="flex-1 overflow-y-auto p-4 pb-20 sm:p-6 max-w-5xl mx-auto w-full space-y-6 animate-fadeIn">
             {/* Search Bar */}
             <div className="relative">
-              <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-[#54656f]">
+              <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-ink-2">
                 <Search size={16} />
               </span>
               <input
@@ -4364,12 +4215,12 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Cari pasien, alamat, atau layanan..."
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-[#e9edef] focus:border-[#008069] text-[16px] sm:text-sm text-[#111b21] placeholder-[#667781] focus:outline-none transition-all shadow-xs"
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-surface border border-divider focus:border-accent text-[16px] sm:text-sm text-ink placeholder-ink-3 focus:outline-none transition-all shadow-xs"
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-[#667781] hover:text-[#111b21] text-xs font-bold"
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-ink-2 hover:text-ink text-xs font-bold"
                 >
                   ✕
                 </button>
@@ -4377,18 +4228,18 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             </div>
 
             {loading ? (
-              <div className="flex flex-col justify-center items-center h-64 space-y-3 text-[#667781]">
-                <div className="h-7 w-7 animate-spin rounded-full border-2 border-[#008069] border-t-transparent"></div>
+              <div className="flex flex-col justify-center items-center h-64 space-y-3 text-ink-2">
+                <div className="h-7 w-7 animate-spin rounded-full border-2 border-accent border-t-transparent"></div>
                 <span className="text-xs font-medium">Memuat jadwal reservasi mendatang...</span>
               </div>
             ) : Object.keys(groupedUpcoming).length === 0 ? (
-              <div className="text-center py-20 px-4 text-[#667781] space-y-3 bg-white rounded-2xl border border-[#e9edef] shadow-xs">
-                <CheckCircle2 size={48} className="mx-auto text-[#008069]/40" />
+              <div className="text-center py-20 px-4 text-ink-2 space-y-3 bg-surface rounded-2xl border border-divider shadow-xs">
+                <CheckCircle2 size={48} className="mx-auto text-accent/40" />
                 <div className="space-y-1 max-w-sm mx-auto">
-                  <h3 className="text-base font-bold text-[#111b21]">
+                  <h3 className="text-base font-bold text-ink">
                     {searchQuery ? 'Tidak Ada Jadwal yang Cocok' : 'Belum Ada Jadwal Mendatang'}
                   </h3>
-                  <p className="text-xs text-[#667781] leading-relaxed">
+                  <p className="text-xs text-ink-2 leading-relaxed">
                     {searchQuery
                       ? 'Coba gunakan kata kunci pencarian yang lain.'
                       : 'Reservasi pasien untuk hari esok dan seterusnya yang ditugaskan kepada Anda akan tampil di sini.'}
@@ -4400,9 +4251,9 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 <div key={dateLabel} className="space-y-3">
                   {/* Date Header Pill */}
                   <div className="flex items-center space-x-2 pt-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-[#008069]"></span>
-                    <h2 className="font-bold text-sm text-[#111b21]">{dateLabel}</h2>
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-white text-[#54656f] border border-[#e9edef]">
+                    <span className="h-2.5 w-2.5 rounded-full bg-accent"></span>
+                    <h2 className="font-bold text-sm text-ink">{dateLabel}</h2>
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-surface text-ink-2 border border-divider">
                       {items.length} Kunjungan
                     </span>
                   </div>
@@ -4414,12 +4265,12 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                       return (
                         <div
                           key={item.reservationId}
-                          className={`bg-white dark:bg-[#111b21] rounded-2xl p-4 border border-[#e9edef] dark:border-[#202c33] shadow-xs hover:border-[#008069]/40 transition-all space-y-3 text-left ${catInfo.borderAccent} border-l-4`}
+                          className={`bg-surface rounded-2xl p-4 border border-divider dark:border-divider shadow-xs hover:border-accent/40 transition-all space-y-3 text-left ${catInfo.borderAccent} border-l-4`}
                         >
                           {/* Header: Name & Time (KLIK BARIS INI = DETAIL PASIEN) */}
                           <div
                             onClick={() => setDetailModalTask(item)}
-                            className="flex items-start justify-between gap-2 p-1 -m-1 rounded-xl hover:bg-[#f0f2f5] dark:hover:bg-[#202c33] transition cursor-pointer group"
+                            className="flex items-start justify-between gap-2 p-1 -m-1 rounded-xl hover:bg-fill-1 transition cursor-pointer group"
                             title="Klik untuk melihat detail lengkap pasien"
                           >
                             <div className="flex items-center space-x-2.5 min-w-0">
@@ -4430,40 +4281,40 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                 {catInfo.icon}
                               </div>
                               <div className="min-w-0">
-                                <h3 className="font-bold text-sm text-[#111b21] truncate group-hover:text-[#008069] transition">
+                                <h3 className="font-bold text-sm text-ink truncate group-hover:text-accent transition">
                                   {item.customerName || 'Customer'}
                                 </h3>
-                                <p className="text-xs text-[#008069] font-medium line-clamp-2">
+                                <p className="text-xs text-accent font-medium line-clamp-2">
                                   {item.treatmentDetail || 'Treatment Layanan Spa'}
                                 </p>
                               </div>
                             </div>
 
-                            <div className="flex items-center space-x-1 text-xs font-semibold text-[#008069] bg-[#d9fdd3] px-2.5 py-1 rounded-lg whitespace-nowrap border border-[#00a884]/30 flex-shrink-0">
+                            <div className="flex items-center space-x-1 text-xs font-semibold text-accent bg-bubble-out px-2.5 py-1 rounded-lg whitespace-nowrap border border-accent/30 flex-shrink-0">
                               <Clock size={12} />
                               <span>{formatTime(item.bookingDate)}</span>
                             </div>
                           </div>
 
                           {/* Alamat & Jarak dari Klinik */}
-                          <div className="text-xs text-[#54656f] dark:text-[#8696a0] bg-[#f0f2f5] dark:bg-[#182229] p-2.5 rounded-xl border border-[#e9edef] dark:border-[#202c33] space-y-2">
+                          <div className="text-xs text-ink-2 bg-surface-2 p-2.5 rounded-xl border border-divider dark:border-divider space-y-2">
                             <div className="flex items-start gap-1.5">
-                              <MapPin size={14} className="text-[#008069] mt-0.5 flex-shrink-0" />
+                              <MapPin size={14} className="text-accent mt-0.5 flex-shrink-0" />
                               <div className="flex-1 min-w-0">
-                                <p className="text-xs text-[#111b21] leading-snug">{item.address.fullText}</p>
+                                <p className="text-xs text-ink leading-snug">{item.address.fullText}</p>
                                 <div className="mt-1 flex flex-wrap items-center gap-1.5">
                                   <AccuracyBadge source={item.address.locationSource} />
                                   <AddressUpdatedAtChip updatedAt={item.address.addressUpdatedAt} />
                                 </div>
                                 {item.address.distanceKm != null && (
-                                  <p className="text-[10px] font-semibold text-[#008069] mt-1 flex items-center gap-1">
+                                  <p className="text-[10px] font-semibold text-accent mt-1 flex items-center gap-1">
                                     <Compass size={11} />
                                     <span>
                                       {item.address.distanceSource === 'PREVIOUS_PATIENT' && item.address.originName
                                         ? `Jarak: ${item.address.distanceKm.toFixed(1)} km dari ${item.address.originName}`
                                         : `Jarak: ${item.address.distanceKm.toFixed(1)} km dari klinik`}
                                       {item.address.estimatedMinutes != null && (
-                                        <span className="text-[#54656f] font-normal ml-1">
+                                        <span className="text-ink-2 font-normal ml-1">
                                           (±{item.address.estimatedMinutes} mnt perjalanan)
                                         </span>
                                       )}
@@ -4475,14 +4326,14 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
                             {/* Foto Depan Rumah & Patokan Landmark */}
                             {item.address.housePhotoUrl ? (
-                              <div className="flex items-center gap-2 p-1.5 rounded-lg bg-white border border-[#e9edef]">
+                              <div className="flex items-center gap-2 p-1.5 rounded-lg bg-surface border border-divider">
                                 <div
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setZoomImageKind('house');
                                     setZoomImageUrl(item.address.housePhotoUrl || null);
                                   }}
-                                  className="h-11 w-11 rounded-lg bg-[#f0f2f5] overflow-hidden flex-shrink-0 relative group cursor-pointer border border-[#e9edef]"
+                                  className="h-11 w-11 rounded-lg bg-fill-1 overflow-hidden flex-shrink-0 relative group cursor-pointer border border-divider"
                                   title="Klik untuk memperbesar foto rumah"
                                 >
                                   <img
@@ -4495,15 +4346,15 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                   </div>
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <span className="text-[10px] font-bold text-[#008069] uppercase tracking-wider block">
+                                  <span className="text-[10px] font-bold text-accent uppercase tracking-wider block">
                                     🏠 Foto Depan Rumah
                                   </span>
                                   {item.address.landmark ? (
-                                    <p className="text-[11px] text-[#111b21] truncate font-medium">
+                                    <p className="text-[11px] text-ink truncate font-medium">
                                       Patokan: {item.address.landmark}
                                     </p>
                                   ) : (
-                                    <p className="text-[10px] text-[#667781] truncate">Panduan visual tersimpan</p>
+                                    <p className="text-[10px] text-ink-2 truncate">Panduan visual tersimpan</p>
                                   )}
                                 </div>
                                 <button
@@ -4512,7 +4363,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                     e.stopPropagation();
                                     handleOpenUpdateLocationModal(item);
                                   }}
-                                  className="p-1.5 text-xs text-[#008069] hover:bg-[#e8f5f2] rounded-lg transition-all border border-[#e9edef] flex-shrink-0"
+                                  className="p-1.5 text-xs text-accent hover:bg-accent-soft rounded-lg transition-all border border-divider flex-shrink-0"
                                   title="Perbarui titik lokasi / foto rumah"
                                 >
                                   <PenLine size={12} />
@@ -4525,7 +4376,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                   e.stopPropagation();
                                   handleOpenUpdateLocationModal(item);
                                 }}
-                                className="w-full flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg bg-white hover:bg-[#e8f5f2] text-[#008069] text-[11px] font-semibold border border-dashed border-[#00a884]/40 transition-all active:scale-95"
+                                className="w-full flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg bg-surface hover:bg-accent-soft text-accent text-[11px] font-semibold border border-dashed border-accent/40 transition-all active:scale-95"
                               >
                                 <Camera size={12} />
                                 <span>+ Update Titik Lokasi & Foto Rumah</span>
@@ -4539,12 +4390,12 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               {item.children.map((child, i) => (
                                 <span
                                   key={i}
-                                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-[#e7f8e8] text-[#008069] text-xs font-medium border border-[#00a884]/20"
+                                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-bubble-out text-accent text-xs font-medium border border-accent/20"
                                 >
                                   <Baby size={12} />
                                   <span>{formatPatientName(child.name)}</span>
                                   {child.rawAgeText && (
-                                    <span className="text-[#667781]">({formatChildAgeText(child.rawAgeText)})</span>
+                                    <span className="text-ink-2">({formatChildAgeText(child.rawAgeText)})</span>
                                   )}
                                 </span>
                               ))}
@@ -4552,29 +4403,29 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                           )}
 
                           {/* Total Biaya & Peta Navigasi */}
-                          <div className="flex items-center justify-between pt-2 border-t border-[#f0f2f5]">
-                            <div className="flex items-center gap-1 text-xs text-[#667781]">
-                              <CreditCard size={13} className="text-[#008069]" />
+                          <div className="flex items-center justify-between pt-2 border-t border-divider">
+                            <div className="flex items-center gap-1 text-xs text-ink-2">
+                              <CreditCard size={13} className="text-accent" />
                               <span>Biaya:</span>
-                              <strong className="text-[#111b21] ml-0.5">{formatRupiah(item.pricing.totalFee)}</strong>
+                              <strong className="text-ink ml-0.5">{formatRupiah(item.pricing.totalFee)}</strong>
                             </div>
 
                             <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] text-[#667781] bg-[#f0f2f5] px-2 py-0.5 rounded-md border border-[#e9edef] hidden sm:inline">
+                              <span className="text-[10px] text-ink-2 bg-fill-1 px-2 py-0.5 rounded-md border border-divider hidden sm:inline">
                                 Chat aktif di hari-H
                               </span>
                               {item.navigationUrl || item.mapsUrl ? (
                                 <button
                                   type="button"
                                   onClick={(e) => requestNavigation(item, e)}
-                                  className="flex items-center space-x-1 py-1.5 px-3 text-xs font-semibold text-white bg-[#008069] hover:bg-[#00a884] rounded-lg transition-all active:scale-95 shadow-xs"
+                                  className="flex items-center space-x-1 py-1.5 px-3 text-xs font-semibold text-white bg-accent hover:bg-accent-hover rounded-lg transition-all active:scale-95 shadow-xs"
                                   title="Buka Peta Google Maps"
                                 >
                                   <Navigation size={12} />
                                   <span>Peta Rute</span>
                                 </button>
                               ) : (
-                                <span className="text-[11px] text-[#667781]">Tanpa Peta</span>
+                                <span className="text-[11px] text-ink-2">Tanpa Peta</span>
                               )}
                             </div>
                           </div>
@@ -4593,14 +4444,14 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           <div className="flex-1 overflow-y-auto p-4 pb-20 sm:p-6 max-w-5xl mx-auto w-full space-y-6 animate-fadeIn">
             {/* Header / Summary Metrics */}
             <div className="grid grid-cols-1 gap-3.5">
-              <div className="bg-white p-4 rounded-2xl border border-[#e9edef] shadow-xs flex items-center space-x-3.5">
-                <div className="h-11 w-11 rounded-2xl bg-[#d9fdd3] text-[#008069] flex items-center justify-center flex-shrink-0 border border-[#00a884]/30">
+              <div className="bg-surface p-4 rounded-2xl border border-divider shadow-xs flex items-center space-x-3.5">
+                <div className="h-11 w-11 rounded-2xl bg-bubble-out text-accent flex items-center justify-center flex-shrink-0 border border-accent/30">
                   <CheckCircle2 size={22} />
                 </div>
                 <div>
-                  <div className="text-[11px] font-bold text-[#667781] uppercase tracking-wider">Total Selesai</div>
-                  <div className="text-lg font-extrabold text-[#111b21]">
-                    {completedTasks.length} <span className="text-xs font-semibold text-[#667781]">Treatment</span>
+                  <div className="text-[11px] font-bold text-ink-2 uppercase tracking-wider">Total Selesai</div>
+                  <div className="text-lg font-extrabold text-ink">
+                    {completedTasks.length} <span className="text-xs font-semibold text-ink-2">Treatment</span>
                   </div>
                 </div>
               </div>
@@ -4608,7 +4459,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
             {/* Search Bar */}
             <div className="relative">
-              <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-[#54656f]">
+              <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-ink-2">
                 <Search size={16} />
               </span>
               <input
@@ -4616,12 +4467,12 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Cari pasien, alamat, atau layanan..."
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-[#e9edef] focus:border-[#008069] text-[16px] sm:text-sm text-[#111b21] placeholder-[#667781] focus:outline-none transition-all shadow-xs"
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-surface border border-divider focus:border-accent text-[16px] sm:text-sm text-ink placeholder-ink-3 focus:outline-none transition-all shadow-xs"
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-[#667781] hover:text-[#111b21] text-xs font-bold"
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-ink-2 hover:text-ink text-xs font-bold"
                 >
                   ✕
                 </button>
@@ -4629,18 +4480,18 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             </div>
 
             {loading ? (
-              <div className="flex flex-col justify-center items-center h-64 space-y-3 text-[#667781]">
-                <div className="h-7 w-7 animate-spin rounded-full border-2 border-[#008069] border-t-transparent"></div>
+              <div className="flex flex-col justify-center items-center h-64 space-y-3 text-ink-2">
+                <div className="h-7 w-7 animate-spin rounded-full border-2 border-accent border-t-transparent"></div>
                 <span className="text-xs font-medium">Memuat riwayat treatment selesai...</span>
               </div>
             ) : Object.keys(groupedCompleted).length === 0 ? (
-              <div className="text-center py-20 px-4 text-[#667781] space-y-3 bg-white rounded-2xl border border-[#e9edef] shadow-xs">
-                <CheckCircle2 size={48} className="mx-auto text-[#008069]/40" />
+              <div className="text-center py-20 px-4 text-ink-2 space-y-3 bg-surface rounded-2xl border border-divider shadow-xs">
+                <CheckCircle2 size={48} className="mx-auto text-accent/40" />
                 <div className="space-y-1 max-w-sm mx-auto">
-                  <h3 className="text-base font-bold text-[#111b21]">
+                  <h3 className="text-base font-bold text-ink">
                     {searchQuery ? 'Tidak Ada Riwayat yang Cocok' : 'Belum Ada Treatment Selesai'}
                   </h3>
-                  <p className="text-xs text-[#667781] leading-relaxed">
+                  <p className="text-xs text-ink-2 leading-relaxed">
                     {searchQuery
                       ? 'Coba gunakan kata kunci pencarian yang lain.'
                       : 'Riwayat tugas treatment yang telah Anda selesaikan atau dibayar akan otomatis tercatat di sini.'}
@@ -4652,9 +4503,9 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 <div key={dateLabel} className="space-y-3">
                   {/* Date Header Pill */}
                   <div className="flex items-center space-x-2 pt-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-600"></span>
-                    <h2 className="font-bold text-sm text-[#111b21]">{dateLabel}</h2>
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-white text-[#54656f] border border-[#e9edef]">
+                    <span className="h-2.5 w-2.5 rounded-full bg-success"></span>
+                    <h2 className="font-bold text-sm text-ink">{dateLabel}</h2>
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-surface text-ink-2 border border-divider">
                       {items.length} Selesai
                     </span>
                   </div>
@@ -4666,12 +4517,12 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                       return (
                         <div
                           key={item.reservationId}
-                          className={`bg-white dark:bg-[#111b21] rounded-2xl p-4 border border-[#e9edef] dark:border-[#202c33] shadow-xs hover:border-emerald-500/40 transition-all space-y-3 text-left ${catInfo.borderAccent} border-l-4`}
+                          className={`bg-surface rounded-2xl p-4 border border-divider dark:border-divider shadow-xs hover:border-emerald-500/40 transition-all space-y-3 text-left ${catInfo.borderAccent} border-l-4`}
                         >
                           {/* Header: Name & Completed Badge (KLIK BARIS INI = DETAIL PASIEN) */}
                           <div
                             onClick={() => setDetailModalTask(item)}
-                            className="flex items-start justify-between gap-2 p-1 -m-1 rounded-xl hover:bg-[#f0f2f5] dark:hover:bg-[#202c33] transition cursor-pointer group"
+                            className="flex items-start justify-between gap-2 p-1 -m-1 rounded-xl hover:bg-fill-1 transition cursor-pointer group"
                             title="Klik untuk melihat detail lengkap pasien"
                           >
                             <div className="flex items-center space-x-2.5 min-w-0">
@@ -4682,33 +4533,33 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                 size="md"
                               />
                               <div className="min-w-0">
-                                <h3 className="font-bold text-sm text-[#111b21] truncate group-hover:text-[#008069] transition">
+                                <h3 className="font-bold text-sm text-ink truncate group-hover:text-accent transition">
                                   {item.customerName || 'Customer'}
                                 </h3>
-                                <p className="text-xs text-[#008069] font-medium line-clamp-2">
+                                <p className="text-xs text-accent font-medium line-clamp-2">
                                   {item.treatmentDetail || 'Treatment Layanan Spa'}
                                 </p>
                               </div>
                             </div>
 
-                            <div className="flex items-center space-x-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg whitespace-nowrap border border-emerald-200 flex-shrink-0">
-                              <CheckCheck size={13} className="text-emerald-600" />
+                            <div className="flex items-center space-x-1 text-xs font-semibold text-success bg-success-soft px-2.5 py-1 rounded-lg whitespace-nowrap border border-success-line flex-shrink-0">
+                              <CheckCheck size={13} className="text-success" />
                               <span>Selesai</span>
                             </div>
                           </div>
 
                           {/* Alamat & Jarak dari Klinik */}
-                          <div className="text-xs text-[#54656f] dark:text-[#8696a0] bg-[#f0f2f5] dark:bg-[#182229] p-2.5 rounded-xl border border-[#e9edef] dark:border-[#202c33] space-y-2">
+                          <div className="text-xs text-ink-2 bg-surface-2 p-2.5 rounded-xl border border-divider dark:border-divider space-y-2">
                             <div className="flex items-start gap-1.5">
-                              <MapPin size={14} className="text-[#008069] mt-0.5 flex-shrink-0" />
+                              <MapPin size={14} className="text-accent mt-0.5 flex-shrink-0" />
                               <div className="flex-1 min-w-0">
-                                <p className="text-xs text-[#111b21] leading-snug">{item.address.fullText}</p>
+                                <p className="text-xs text-ink leading-snug">{item.address.fullText}</p>
                                 <div className="mt-1 flex flex-wrap items-center gap-1.5">
                                   <AccuracyBadge source={item.address.locationSource} />
                                   <AddressUpdatedAtChip updatedAt={item.address.addressUpdatedAt} />
                                 </div>
                                 {item.address.distanceKm != null && (
-                                  <p className="text-[10px] font-semibold text-[#008069] mt-1 flex items-center gap-1">
+                                  <p className="text-[10px] font-semibold text-accent mt-1 flex items-center gap-1">
                                     <Compass size={11} />
                                     <span>Jarak: {item.address.distanceKm.toFixed(1)} km dari klinik</span>
                                   </p>
@@ -4718,14 +4569,14 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
                             {/* Foto Depan Rumah & Patokan Landmark */}
                             {item.address.housePhotoUrl && (
-                              <div className="flex items-center gap-2 p-1.5 rounded-lg bg-white border border-[#e9edef]">
+                              <div className="flex items-center gap-2 p-1.5 rounded-lg bg-surface border border-divider">
                                 <div
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setZoomImageKind('house');
                                     setZoomImageUrl(item.address.housePhotoUrl || null);
                                   }}
-                                  className="h-11 w-11 rounded-lg bg-[#f0f2f5] overflow-hidden flex-shrink-0 relative group cursor-pointer border border-[#e9edef]"
+                                  className="h-11 w-11 rounded-lg bg-fill-1 overflow-hidden flex-shrink-0 relative group cursor-pointer border border-divider"
                                   title="Klik untuk memperbesar foto rumah"
                                 >
                                   <img
@@ -4738,15 +4589,15 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                   </div>
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <span className="text-[10px] font-bold text-[#008069] uppercase tracking-wider block">
+                                  <span className="text-[10px] font-bold text-accent uppercase tracking-wider block">
                                     🏠 Foto Depan Rumah
                                   </span>
                                   {item.address.landmark ? (
-                                    <p className="text-[11px] text-[#111b21] truncate font-medium">
+                                    <p className="text-[11px] text-ink truncate font-medium">
                                       Patokan: {item.address.landmark}
                                     </p>
                                   ) : (
-                                    <p className="text-[10px] text-[#667781] truncate">Panduan visual tersimpan</p>
+                                    <p className="text-[10px] text-ink-2 truncate">Panduan visual tersimpan</p>
                                   )}
                                 </div>
                               </div>
@@ -4759,12 +4610,12 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                               {item.children.map((child, i) => (
                                 <span
                                   key={i}
-                                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-[#e7f8e8] text-[#008069] text-xs font-medium border border-[#00a884]/20"
+                                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-bubble-out text-accent text-xs font-medium border border-accent/20"
                                 >
                                   <Baby size={12} />
                                   <span>{formatPatientName(child.name)}</span>
                                   {child.rawAgeText && (
-                                    <span className="text-[#667781]">({formatChildAgeText(child.rawAgeText)})</span>
+                                    <span className="text-ink-2">({formatChildAgeText(child.rawAgeText)})</span>
                                   )}
                                 </span>
                               ))}
@@ -4772,13 +4623,13 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                           )}
 
                           {/* Status Pembayaran & Detail Button */}
-                          <div className="pt-2 border-t border-[#f0f2f5] space-y-1.5">
-                            <div className="flex items-center gap-1 text-xs text-[#667781] flex-wrap">
-                              <CreditCard size={13} className="text-emerald-600" />
-                              <strong className="text-emerald-700 font-bold ml-0.5">
+                          <div className="pt-2 border-t border-divider space-y-1.5">
+                            <div className="flex items-center gap-1 text-xs text-ink-2 flex-wrap">
+                              <CreditCard size={13} className="text-success" />
+                              <strong className="text-success font-bold ml-0.5">
                                 {formatRupiah(item.pricing.totalFee)}
                               </strong>
-                              <span className="text-[10px] px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded font-semibold ml-1">
+                              <span className="text-[10px] px-1.5 py-0.5 bg-success-soft text-success rounded font-semibold ml-1">
                                 {item.pricing.paymentStatusLabel}
                               </span>
                             </div>
@@ -4792,10 +4643,10 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                       e.stopPropagation();
                                       handleOpenChat(item);
                                     }}
-                                    className="min-h-[44px] py-2 px-2 text-xs font-semibold text-[#54656f] bg-[#f0f2f5] hover:bg-[#e9edef] rounded-lg transition-all active:scale-95 border border-[#e9edef] flex items-center justify-center gap-1"
+                                    className="min-h-[44px] py-2 px-2 text-xs font-semibold text-ink-2 bg-fill-1 hover:bg-fill-2 rounded-lg transition-all active:scale-95 border border-divider flex items-center justify-center gap-1"
                                     title="Buka Riwayat Chat WhatsApp"
                                   >
-                                    <MessageSquare size={13} className="text-[#008069]" />
+                                    <MessageSquare size={13} className="text-accent" />
                                     <span>Chat</span>
                                   </button>
                                 )}
@@ -4803,7 +4654,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                 <button
                                   type="button"
                                   onClick={(e) => handleOpenQrisFast(item, e)}
-                                  className="min-h-[44px] py-2 px-2 text-xs font-bold text-[#008069] bg-[#d9fdd3] hover:bg-[#c2e7e0] rounded-lg transition-all active:scale-95 border border-[#00a884]/30 flex items-center justify-center gap-1"
+                                  className="min-h-[44px] py-2 px-2 text-xs font-bold text-accent bg-bubble-out hover:bg-accent-soft/80 rounded-lg transition-all active:scale-95 border border-accent/30 flex items-center justify-center gap-1"
                                   title="Tampilkan barcode QRIS langsung ke pasien"
                                 >
                                   <QrCode size={13} />
@@ -4816,10 +4667,10 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                     e.stopPropagation();
                                     setPaymentModalTask(item);
                                   }}
-                                  className="min-h-[44px] py-2 px-2 text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 rounded-lg transition-all active:scale-95 border border-amber-300 flex items-center justify-center gap-1"
+                                  className="min-h-[44px] py-2 px-2 text-xs font-bold text-warning bg-warning-soft hover:bg-warning rounded-lg transition-all active:scale-95 border border-warning-line flex items-center justify-center gap-1"
                                   title="Catat pembayaran / unggah bukti transfer pasien"
                                 >
-                                  <CreditCard size={13} className="text-amber-700" />
+                                  <CreditCard size={13} className="text-warning" />
                                   <span>Catat Bayar</span>
                                 </button>
 
@@ -4831,7 +4682,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                       handleSendPaymentInfo(item);
                                     }}
                                     disabled={isSendingPaymentInfo}
-                                    className="min-h-[44px] py-2 px-2 text-xs font-bold text-[#008069] bg-[#d9fdd3] hover:bg-[#c2e7e0] rounded-lg transition-all active:scale-95 border border-[#00a884]/30 disabled:opacity-50 flex items-center justify-center gap-1"
+                                    className="min-h-[44px] py-2 px-2 text-xs font-bold text-accent bg-bubble-out hover:bg-accent-soft/80 rounded-lg transition-all active:scale-95 border border-accent/30 disabled:opacity-50 flex items-center justify-center gap-1"
                                     title="Kirim rincian tagihan & QRIS ke WhatsApp pasien"
                                   >
                                     <MessageSquare size={13} />
@@ -4842,7 +4693,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                 <button
                                   type="button"
                                   onClick={() => setDetailModalTask(item)}
-                                  className="min-h-[44px] py-2 px-2 text-xs font-semibold text-[#008069] bg-[#d9fdd3] hover:bg-[#c2e7e0] rounded-lg transition-all active:scale-95 border border-[#00a884]/30 flex items-center justify-center gap-1"
+                                  className="min-h-[44px] py-2 px-2 text-xs font-semibold text-accent bg-bubble-out hover:bg-accent-soft/80 rounded-lg transition-all active:scale-95 border border-accent/30 flex items-center justify-center gap-1"
                                   title="Lihat Detail Lengkap Pasien"
                                 >
                                   <Info size={13} />
@@ -4859,10 +4710,10 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                         e.stopPropagation();
                                         handleOpenChat(item);
                                       }}
-                                      className="min-h-[44px] py-2 px-3 text-xs font-semibold text-[#54656f] bg-[#f0f2f5] hover:bg-[#e9edef] rounded-lg transition-all active:scale-95 border border-[#e9edef] flex items-center gap-1"
+                                      className="min-h-[44px] py-2 px-3 text-xs font-semibold text-ink-2 bg-fill-1 hover:bg-fill-2 rounded-lg transition-all active:scale-95 border border-divider flex items-center gap-1"
                                       title="Buka Riwayat Chat WhatsApp"
                                     >
-                                      <MessageSquare size={13} className="text-[#008069]" />
+                                      <MessageSquare size={13} className="text-accent" />
                                       <span>Chat</span>
                                     </button>
                                   )}
@@ -4878,7 +4729,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                         setPaymentModalTask(item);
                                       }
                                     }}
-                                    className="min-h-[44px] py-2 px-3 text-xs font-bold text-[#008069] bg-[#d9fdd3] hover:bg-[#c2e7e0] rounded-lg transition-all active:scale-95 border border-[#00a884]/30 flex items-center gap-1"
+                                    className="min-h-[44px] py-2 px-3 text-xs font-bold text-accent bg-bubble-out hover:bg-accent-soft/80 rounded-lg transition-all active:scale-95 border border-accent/30 flex items-center gap-1"
                                     title={item.pricing.proofUrl ? 'Lihat bukti pembayaran tersimpan' : 'Unggah bukti pembayaran / invoice susulan'}
                                   >
                                     <CheckCircle2 size={13} />
@@ -4889,7 +4740,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                                 <button
                                   type="button"
                                   onClick={() => setDetailModalTask(item)}
-                                  className="min-h-[44px] py-2 px-3 text-xs font-semibold text-[#008069] bg-[#d9fdd3] hover:bg-[#c2e7e0] rounded-lg transition-all active:scale-95 border border-[#00a884]/30 flex items-center gap-1"
+                                  className="min-h-[44px] py-2 px-3 text-xs font-semibold text-accent bg-bubble-out hover:bg-accent-soft/80 rounded-lg transition-all active:scale-95 border border-accent/30 flex items-center gap-1"
                                   title="Lihat Detail Lengkap Pasien"
                                 >
                                   <Info size={13} />
@@ -4930,12 +4781,12 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
         {/* Drawer Body (Notch-safe, lebar optimal mobile) */}
         <div
-          className={`relative w-[75vw] sm:w-[280px] max-w-[300px] sm:max-w-[280px] bg-white h-full shadow-2xl flex flex-col z-10 transform transition-transform duration-300 ease-out ${
+          className={`relative w-[75vw] sm:w-[280px] max-w-[300px] sm:max-w-[280px] bg-surface h-full shadow-2xl flex flex-col z-10 transform transition-transform duration-300 ease-out ${
             showMenuDrawer ? 'translate-x-0' : 'translate-x-full'
           }`}
         >
             {/* Drawer Header — safe-area atas agar tidak tertutup notch / Dynamic Island */}
-            <div className="px-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pb-3 bg-[#008069] text-white flex items-center justify-between shadow-xs">
+            <div className="px-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pb-3 bg-accent text-white flex items-center justify-between shadow-xs">
               <div className="flex items-center space-x-2 min-w-0">
                 <div className="h-8 w-8 rounded-full bg-white/20 flex items-center justify-center text-white border border-white/30 flex-shrink-0">
                   <UserCheck size={16} />
@@ -4958,7 +4809,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
             {/* Navigation Menu List */}
             <div className="flex-1 overflow-y-auto p-2.5 space-y-1.5">
-              <div className="px-1.5 py-0.5 text-[10px] font-bold text-[#667781] uppercase tracking-wider">
+              <div className="px-1.5 py-0.5 text-[10px] font-bold text-ink-2 uppercase tracking-wider">
                 Menu Jadwal
               </div>
 
@@ -4971,28 +4822,28 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 }}
                 className={`w-full flex items-center justify-between p-2 rounded-xl transition-all text-left ${
                   activeTab === 'today'
-                    ? 'bg-[#d9fdd3] text-[#008069] font-bold shadow-xs border border-[#00a884]/30'
-                    : 'bg-[#f0f2f5] dark:bg-[#202c33] hover:bg-[#e9edef] dark:hover:bg-[#2a3942] text-[#111b21] dark:text-[#e9edef]'
+                    ? 'bg-bubble-out text-accent font-bold shadow-xs border border-accent/30'
+                    : 'bg-fill-1 hover:bg-fill-2 text-ink'
                 }`}
               >
                 <div className="flex items-center space-x-2 min-w-0">
                   <div
                     className={`h-7 w-7 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                      activeTab === 'today' ? 'bg-[#008069] text-white' : 'bg-white dark:bg-[#111b21] text-[#008069] dark:text-[#00a884] shadow-xs'
+                      activeTab === 'today' ? 'bg-accent text-white' : 'bg-surface text-accent shadow-xs'
                     }`}
                   >
                     <Calendar size={14} />
                   </div>
                   <div className="min-w-0">
                     <div className="text-xs font-semibold truncate">Hari Ini</div>
-                    <div className="text-[10px] text-[#667781] font-normal truncate hidden sm:block">
+                    <div className="text-[10px] text-ink-2 font-normal truncate hidden sm:block">
                       Pasien aktif
                     </div>
                   </div>
                 </div>
                 <span
                   className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-1 ${
-                    activeTab === 'today' ? 'bg-[#008069] text-white' : 'bg-white dark:bg-[#202c33] text-[#008069] dark:text-[#00a884] border border-[#e9edef] dark:border-[#2a3942]'
+                    activeTab === 'today' ? 'bg-accent text-white' : 'bg-surface text-accent border border-divider'
                   }`}
                 >
                   {tasks.length}
@@ -5008,28 +4859,28 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 }}
                 className={`w-full flex items-center justify-between p-2 rounded-xl transition-all text-left ${
                   activeTab === 'upcoming'
-                    ? 'bg-[#d9fdd3] text-[#008069] font-bold shadow-xs border border-[#00a884]/30'
-                    : 'bg-[#f0f2f5] dark:bg-[#202c33] hover:bg-[#e9edef] dark:hover:bg-[#2a3942] text-[#111b21] dark:text-[#e9edef]'
+                    ? 'bg-bubble-out text-accent font-bold shadow-xs border border-accent/30'
+                    : 'bg-fill-1 hover:bg-fill-2 text-ink'
                 }`}
               >
                 <div className="flex items-center space-x-2 min-w-0">
                   <div
                     className={`h-7 w-7 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                      activeTab === 'upcoming' ? 'bg-[#008069] text-white' : 'bg-white dark:bg-[#111b21] text-[#008069] dark:text-[#00a884] shadow-xs'
+                      activeTab === 'upcoming' ? 'bg-accent text-white' : 'bg-surface text-accent shadow-xs'
                     }`}
                   >
                     <Clock size={14} />
                   </div>
                   <div className="min-w-0">
                     <div className="text-xs font-semibold truncate">Mendatang</div>
-                    <div className="text-[10px] text-[#667781] font-normal truncate hidden sm:block">
+                    <div className="text-[10px] text-ink-2 font-normal truncate hidden sm:block">
                       Hari esok+
                     </div>
                   </div>
                 </div>
                 <span
                   className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-1 ${
-                    activeTab === 'upcoming' ? 'bg-[#008069] text-white' : 'bg-white dark:bg-[#202c33] text-[#008069] dark:text-[#00a884] border border-[#e9edef] dark:border-[#2a3942]'
+                    activeTab === 'upcoming' ? 'bg-accent text-white' : 'bg-surface text-accent border border-divider'
                   }`}
                 >
                   {upcomingTasks.length}
@@ -5045,28 +4896,28 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 }}
                 className={`w-full flex items-center justify-between p-2 rounded-xl transition-all text-left ${
                   activeTab === 'completed'
-                    ? 'bg-[#d9fdd3] text-[#008069] font-bold shadow-xs border border-[#00a884]/30'
-                    : 'bg-[#f0f2f5] dark:bg-[#202c33] hover:bg-[#e9edef] dark:hover:bg-[#2a3942] text-[#111b21] dark:text-[#e9edef]'
+                    ? 'bg-bubble-out text-accent font-bold shadow-xs border border-accent/30'
+                    : 'bg-fill-1 hover:bg-fill-2 text-ink'
                 }`}
               >
                 <div className="flex items-center space-x-2 min-w-0">
                   <div
                     className={`h-7 w-7 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                      activeTab === 'completed' ? 'bg-[#008069] text-white' : 'bg-white dark:bg-[#111b21] text-[#008069] dark:text-[#00a884] shadow-xs'
+                      activeTab === 'completed' ? 'bg-accent text-white' : 'bg-surface text-accent shadow-xs'
                     }`}
                   >
                     <CheckCircle2 size={14} />
                   </div>
                   <div className="min-w-0">
                     <div className="text-xs font-semibold truncate">Selesai</div>
-                    <div className="text-[10px] text-[#667781] font-normal truncate hidden sm:block">
+                    <div className="text-[10px] text-ink-2 font-normal truncate hidden sm:block">
                       Riwayat
                     </div>
                   </div>
                 </div>
                 <span
                   className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-1 ${
-                    activeTab === 'completed' ? 'bg-[#008069] text-white' : 'bg-white dark:bg-[#202c33] text-[#008069] dark:text-[#00a884] border border-[#e9edef] dark:border-[#2a3942]'
+                    activeTab === 'completed' ? 'bg-accent text-white' : 'bg-surface text-accent border border-divider'
                   }`}
                 >
                   {completedTasks.length}
@@ -5075,7 +4926,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             </div>
 
             {/* Drawer Footer Actions — safe-area bawah untuk home indicator iPhone */}
-            <div className="p-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] border-t border-[#e9edef] dark:border-[#202c33] bg-[#f0f2f5] dark:bg-[#182229] space-y-1.5">
+            <div className="p-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] border-t border-divider dark:border-divider bg-surface-2 space-y-1.5">
               {isSupervisor && (
                 <button
                   type="button"
@@ -5083,7 +4934,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     setShowMenuDrawer(false);
                     window.location.href = '/admin/overview';
                   }}
-                  className="w-full flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-[11px] font-bold text-white shadow-xs transition-all active:scale-95"
+                  className="w-full flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-xl bg-accent hover:bg-accent-hover text-[11px] font-bold text-white shadow-xs transition-all active:scale-95"
                 >
                   <LayoutDashboard size={13} className="flex-shrink-0" />
                   <span className="truncate">Buka Portal Admin / CS</span>
@@ -5096,15 +4947,15 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                   setShowMenuDrawer(false);
                   setShowStaffProfileModal(true);
                 }}
-                className="w-full flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-xl bg-white dark:bg-[#202c33] hover:bg-[#e9edef] dark:hover:bg-[#2a3942] text-[11px] font-semibold text-[#111b21] dark:text-[#e9edef] border border-[#e9edef] dark:border-[#2a3942] shadow-xs transition-all active:scale-95"
+                className="w-full flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-xl bg-surface hover:bg-fill-2 text-[11px] font-semibold text-ink border border-divider shadow-xs transition-all active:scale-95"
               >
-                <Info size={13} className="text-[#008069] flex-shrink-0" />
+                <Info size={13} className="text-accent flex-shrink-0" />
                 <span className="truncate">Profil Akun</span>
               </button>
 
               {/* Seksi Preferensi & Pengaturan: Notifikasi + Mode Terang/Gelap */}
-              <div className="pt-2 mt-1 border-t border-[#e9edef]">
-                <div className="px-1.5 pb-1.5 text-[10px] font-bold text-[#667781] uppercase tracking-wider">
+              <div className="pt-2 mt-1 border-t border-divider">
+                <div className="px-1.5 pb-1.5 text-[10px] font-bold text-ink-2 uppercase tracking-wider">
                   Preferensi & Pengaturan
                 </div>
 
@@ -5114,8 +4965,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                   disabled={pushSyncing}
                   className={`w-full flex items-center justify-between p-2 rounded-xl border transition-all active:scale-95 shadow-xs disabled:opacity-60 ${
                     pushStatus === 'granted'
-                      ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
-                      : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
+                      ? 'bg-success-soft hover:bg-success-line text-success border-success-line'
+                      : 'bg-warning-soft hover:bg-warning-line text-warning border-warning-line'
                   }`}
                   title={
                     pushStatus === 'granted'
@@ -5134,14 +4985,14 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     </span>
                   </span>
                   <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
-                    pushStatus === 'granted' ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white'
+                    pushStatus === 'granted' ? 'bg-success text-on-solid' : 'bg-warning text-on-solid'
                   }`}>
                     {pushStatus === 'granted' ? 'ON' : 'OFF'}
                   </span>
                 </button>
 
-                <div className="mt-1.5 flex items-center justify-between p-2 rounded-xl bg-[#f0f2f5] dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942]">
-                  <span className="flex items-center space-x-2 min-w-0 text-[#111b21]">
+                <div className="mt-1.5 flex items-center justify-between p-2 rounded-xl bg-fill-1 border border-divider">
+                  <span className="flex items-center space-x-2 min-w-0 text-ink">
                     <span className="text-[11px] font-semibold truncate">Mode Terang / Gelap</span>
                   </span>
                   <ThemeToggle size={15} />
@@ -5162,14 +5013,14 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     logout();
                   }
                 }}
-                className="w-full flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-[11px] font-semibold text-rose-600 border border-rose-200 shadow-xs transition-all active:scale-95"
+                className="w-full flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-xl bg-danger-soft hover:bg-danger-line text-[11px] font-semibold text-danger border border-danger-line shadow-xs transition-all active:scale-95"
               >
                 <LogOut size={13} className="flex-shrink-0" />
                 <span className="truncate">Keluar</span>
               </button>
 
               {/* Version & Build Timestamp */}
-              <div className="pt-1 text-center text-[9px] text-[#8696a0] truncate">
+              <div className="pt-1 text-center text-[9px] text-ink-3 truncate">
                 Staff Portal {APP_VERSION}
               </div>
             </div>
@@ -5185,67 +5036,67 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           onClick={() => setShowStaffProfileModal(false)}
         >
           <div
-            className="bg-white dark:bg-[#111b21] rounded-3xl p-6 w-full max-w-sm shadow-2xl border border-[#e9edef] dark:border-[#202c33] space-y-5 text-center relative animate-modalScaleUp"
+            className="bg-surface rounded-3xl p-6 w-full max-w-sm shadow-2xl border border-divider dark:border-divider space-y-5 text-center relative animate-modalScaleUp"
             onClick={(e) => e.stopPropagation()}
           >
             <button
               onClick={() => setShowStaffProfileModal(false)}
-              className="absolute top-4 right-4 p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition"
+              className="absolute top-4 right-4 p-1.5 rounded-full text-ink-3 hover:text-ink hover:bg-fill-1 transition"
             >
               <X size={18} />
             </button>
 
             {/* Avatar Icon */}
-            <div className="mx-auto h-20 w-20 rounded-3xl bg-[#e8f5f2] border-2 border-[#c2e7e0] text-[#008069] flex items-center justify-center shadow-inner">
+            <div className="mx-auto h-20 w-20 rounded-3xl bg-accent-soft border-2 border-accent/30 text-accent flex items-center justify-center shadow-inner">
               <UserCheck size={40} />
             </div>
 
             {/* Staff Info */}
             <div className="space-y-1">
-              <h3 className="font-bold text-lg text-[#111b21]">
+              <h3 className="font-bold text-lg text-ink">
                 {currentStaff?.name || 'Terapis'}
               </h3>
-              <p className="text-xs text-[#667781] font-mono">
+              <p className="text-xs text-ink-2 font-mono">
                 {currentStaff?.phone || 'Akun Sistem'}
               </p>
-              <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-[#d9fdd3] text-[#008069] border border-[#00a884]/30 mt-1">
+              <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-bubble-out text-accent border border-accent/30 mt-1">
                 {isSupervisor ? 'Supervisor CS & Terapis' : 'Staff Terapis Lapangan'}
               </span>
             </div>
 
             {/* Telegram Dispatch Card */}
-            <div className="p-3.5 bg-[#f8fafc] border border-emerald-200 rounded-2xl text-left space-y-2">
+            <div className="p-3.5 bg-surface-2 border border-success-line rounded-2xl text-left space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-[#111b21] flex items-center space-x-1.5">
-                  <Send size={13} className="text-[#008069]" />
+                <span className="text-xs font-bold text-ink flex items-center space-x-1.5">
+                  <Send size={13} className="text-accent" />
                   <span>Notifikasi Telegram Tugas</span>
                 </span>
                 {telegramPairingInfo?.isConnected ? (
-                  <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                    <CheckCircle2 size={10} className="text-emerald-600" />
+                  <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-success-soft text-success">
+                    <CheckCircle2 size={10} className="text-success" />
                     <span>Terhubung</span>
                   </span>
                 ) : (
-                  <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
+                  <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-warning-soft text-warning">
                     <span>Belum Aktif</span>
                   </span>
                 )}
               </div>
 
-              <p className="text-[11px] text-[#667781] leading-relaxed">
+              <p className="text-[11px] text-ink-2 leading-relaxed">
                 Terima rincian jadwal kunjungan pasien, patokan rumah, navigasi Google Maps, dan status bayar langsung di Telegram pribadi Anda.
               </p>
 
               {loadingTelegramInfo ? (
-                <div className="text-[11px] text-[#8696a0] animate-pulse">Memeriksa status Telegram...</div>
+                <div className="text-[11px] text-ink-3 animate-pulse">Memeriksa status Telegram...</div>
               ) : telegramPairingInfo?.isConnected ? (
                 <div className="pt-1 flex items-center justify-between text-[11px]">
-                  <span className="text-[#54656f] text-[10px] font-mono">ID: {telegramPairingInfo.telegramChatId}</span>
+                  <span className="text-ink-2 text-[10px] font-mono">ID: {telegramPairingInfo.telegramChatId}</span>
                   <a
                     href={telegramPairingInfo.directLink}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[#008069] hover:underline font-bold text-[11px]"
+                    className="text-accent hover:underline font-bold text-[11px]"
                   >
                     Buka Bot Telegram &rarr;
                   </a>
@@ -5256,7 +5107,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     href={telegramPairingInfo?.directLink}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="w-full py-2 px-3 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs"
+                    className="w-full py-2 px-3 bg-accent hover:bg-accent-hover text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs"
                   >
                     <Send size={13} />
                     <span>Sambungkan Telegram Saya (1-Klik)</span>
@@ -5280,7 +5131,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     logout();
                   }
                 }}
-                className="w-full py-3 px-4 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-2xl text-sm font-bold transition flex items-center justify-center space-x-2 shadow-xs"
+                className="w-full py-3 px-4 bg-danger-soft hover:bg-danger-line text-danger border border-danger-line rounded-2xl text-sm font-bold transition flex items-center justify-center space-x-2 shadow-xs"
               >
                 <LogOut size={16} />
                 <span>Keluar Akun (Logout)</span>
@@ -5299,14 +5150,14 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           onClick={() => setDetailModalTask(null)}
         >
           <div
-            className="bg-white dark:bg-[#111b21] rounded-t-3xl sm:rounded-3xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] dark:border-[#202c33] space-y-4 text-left relative max-h-[88dvh] sm:max-h-[90vh] overflow-y-auto animate-modalScaleUp"
+            className="bg-surface rounded-t-3xl sm:rounded-3xl p-6 w-full max-w-md shadow-2xl border border-divider dark:border-divider space-y-4 text-left relative max-h-[88dvh] sm:max-h-[90vh] overflow-y-auto animate-modalScaleUp"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Mobile drag handle */}
-            <div className="w-12 h-1.5 bg-[#d1d7db] dark:bg-[#374248] rounded-full mx-auto -mt-2 mb-2 sm:hidden shrink-0" />
+            <div className="w-12 h-1.5 bg-strong rounded-full mx-auto -mt-2 mb-2 sm:hidden shrink-0" />
 
             {/* Modal Header */}
-            <div className="flex items-start justify-between border-b border-[#e9edef] pb-3">
+            <div className="flex items-start justify-between border-b border-divider pb-3">
               <div className="flex items-center space-x-3">
                 <CustomerAvatar
                   src={detailModalTask.customerProfilePictureUrl}
@@ -5314,10 +5165,10 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                   size="lg"
                 />
                 <div>
-                  <h3 className="font-bold text-base text-[#111b21]">
+                  <h3 className="font-bold text-base text-ink">
                     {detailModalTask.customerName || 'Customer'}
                   </h3>
-                  <div className="flex items-center space-x-1.5 text-xs text-[#008069] font-semibold mt-0.5">
+                  <div className="flex items-center space-x-1.5 text-xs text-accent font-semibold mt-0.5">
                     <Clock size={12} />
                     <span>{formatTime(detailModalTask.bookingDate)}</span>
                   </div>
@@ -5325,29 +5176,29 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
               </div>
               <button
                 onClick={() => setDetailModalTask(null)}
-                className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition"
+                className="p-1.5 rounded-full text-ink-3 hover:text-ink hover:bg-fill-1 transition"
               >
                 <X size={18} />
               </button>
             </div>
 
             {/* Treatment & Category */}
-            <div className="p-3.5 rounded-2xl bg-[#f8fafc] border border-[#e9edef] space-y-1.5">
-              <span className="text-[10px] font-bold text-[#667781] uppercase tracking-wider block">
+            <div className="p-3.5 rounded-2xl bg-surface-2 border border-divider space-y-1.5">
+              <span className="text-[10px] font-bold text-ink-2 uppercase tracking-wider block">
                 Layanan & Treatment
               </span>
-              <p className="text-sm font-bold text-[#111b21]">
+              <p className="text-sm font-bold text-ink">
                 {detailModalTask.treatmentDetail || 'Treatment Layanan Spa'}
               </p>
-              <span className="inline-block px-2.5 py-0.5 rounded-md text-xs font-semibold bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0]">
+              <span className="inline-block px-2.5 py-0.5 rounded-md text-xs font-semibold bg-accent-soft text-accent border border-accent/30">
                 Kategori: {getCategoryIcon(detailModalTask.treatmentCategory).label}
               </span>
             </div>
 
             {/* Alamat & Jarak */}
-            <div className="p-3.5 rounded-2xl bg-[#f8fafc] border border-[#e9edef] space-y-2.5">
+            <div className="p-3.5 rounded-2xl bg-surface-2 border border-divider space-y-2.5">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-[#667781] uppercase tracking-wider block">
+                <span className="text-[10px] font-bold text-ink-2 uppercase tracking-wider block">
                   Alamat Lokasi Kunjungan
                 </span>
                 <button
@@ -5357,15 +5208,15 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     setDetailModalTask(null);
                     handleOpenUpdateLocationModal(t);
                   }}
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#008069] hover:underline"
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-accent hover:underline"
                 >
                   <PenLine size={11} />
                   <span>Update Titik & Foto</span>
                 </button>
               </div>
 
-              <div className="flex items-start space-x-2 text-xs text-[#111b21]">
-                <MapPin size={15} className="text-[#008069] mt-0.5 flex-shrink-0" />
+              <div className="flex items-start space-x-2 text-xs text-ink">
+                <MapPin size={15} className="text-accent mt-0.5 flex-shrink-0" />
                 <div className="leading-relaxed flex-1 min-w-0">
                   <p className="font-medium">{detailModalTask.address.fullText}</p>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
@@ -5373,14 +5224,14 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     <AddressUpdatedAtChip updatedAt={detailModalTask.address.addressUpdatedAt} />
                   </div>
                   {detailModalTask.address.distanceKm != null && (
-                    <p className="text-[11px] font-semibold text-[#008069] mt-1 flex items-center space-x-1">
+                    <p className="text-[11px] font-semibold text-accent mt-1 flex items-center space-x-1">
                       <Compass size={12} />
                       <span>
                         {detailModalTask.address.distanceSource === 'PREVIOUS_PATIENT' && detailModalTask.address.originName
                           ? `${detailModalTask.address.distanceKm.toFixed(1)} km dari ${detailModalTask.address.originName}`
                           : `${detailModalTask.address.distanceKm.toFixed(1)} km dari klinik`}
                         {detailModalTask.address.estimatedMinutes != null && (
-                          <span className="text-[#667781] font-normal ml-1">
+                          <span className="text-ink-2 font-normal ml-1">
                             (±{detailModalTask.address.estimatedMinutes} menit)
                           </span>
                         )}
@@ -5392,14 +5243,14 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
               {/* Foto Depan Rumah & Patokan Landmark */}
               {detailModalTask.address.housePhotoUrl ? (
-                <div className="flex items-center gap-2.5 p-2 rounded-xl bg-white border border-[#e9edef] mt-1">
+                <div className="flex items-center gap-2.5 p-2 rounded-xl bg-surface border border-divider mt-1">
                   <div
                     onClick={(e) => {
                       e.stopPropagation();
                       setZoomImageKind('house');
                       setZoomImageUrl(detailModalTask.address.housePhotoUrl || null);
                     }}
-                    className="h-14 w-14 rounded-xl bg-[#f0f2f5] overflow-hidden flex-shrink-0 relative group cursor-pointer border border-[#e9edef]"
+                    className="h-14 w-14 rounded-xl bg-fill-1 overflow-hidden flex-shrink-0 relative group cursor-pointer border border-divider"
                     title="Klik untuk memperbesar foto rumah"
                   >
                     <img
@@ -5412,15 +5263,15 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     </div>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <span className="text-[10px] font-bold text-[#008069] uppercase tracking-wider block">
+                    <span className="text-[10px] font-bold text-accent uppercase tracking-wider block">
                       🏠 Foto Tampak Depan Rumah
                     </span>
                     {detailModalTask.address.landmark ? (
-                      <p className="text-xs text-[#111b21] font-semibold mt-0.5">
+                      <p className="text-xs text-ink font-semibold mt-0.5">
                         Patokan: {detailModalTask.address.landmark}
                       </p>
                     ) : (
-                      <p className="text-[11px] text-[#667781]">Panduan visual tersimpan</p>
+                      <p className="text-[11px] text-ink-2">Panduan visual tersimpan</p>
                     )}
                   </div>
                 </div>
@@ -5432,7 +5283,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     setDetailModalTask(null);
                     handleOpenUpdateLocationModal(t);
                   }}
-                  className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-white hover:bg-[#e8f5f2] text-[#008069] text-xs font-semibold border border-dashed border-[#00a884]/40 transition-all active:scale-95"
+                  className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-surface hover:bg-accent-soft text-accent text-xs font-semibold border border-dashed border-accent/40 transition-all active:scale-95"
                 >
                   <Camera size={13} />
                   <span>+ Tambah Foto Depan Rumah & Update GPS</span>
@@ -5442,25 +5293,25 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
             {/* Fase 5r — Ringkasan Pasien (catatan karakter dari LiveChat) */}
             {detailModalTask.adminNotes && (
-              <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 space-y-1.5">
-                <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider block flex items-center gap-1">
+              <div className="p-3.5 rounded-2xl bg-warning-soft border border-warning-line space-y-1.5">
+                <span className="text-[10px] font-bold text-warning uppercase tracking-wider block flex items-center gap-1">
                   📋 Ringkasan Pasien — Catatan Khusus
                 </span>
-                <p className="text-xs text-amber-950 whitespace-pre-wrap leading-relaxed">{detailModalTask.adminNotes}</p>
+                <p className="text-xs text-warning whitespace-pre-wrap leading-relaxed">{detailModalTask.adminNotes}</p>
               </div>
             )}
 
             {/* Data Anak */}
             {detailModalTask.children && detailModalTask.children.length > 0 && (
-              <div className="p-3.5 rounded-2xl bg-[#f8fafc] border border-[#e9edef] space-y-1.5">
-                <span className="text-[10px] font-bold text-[#667781] uppercase tracking-wider block">
+              <div className="p-3.5 rounded-2xl bg-surface-2 border border-divider space-y-1.5">
+                <span className="text-[10px] font-bold text-ink-2 uppercase tracking-wider block">
                   Data Pasien Anak
                 </span>
                 <div className="flex flex-wrap gap-1.5">
                   {detailModalTask.children.map((c, idx) => (
                     <span
                       key={idx}
-                      className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-xl bg-sky-50 text-sky-800 border border-sky-200 text-xs font-semibold"
+                      className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-xl bg-info-soft text-info border border-info-line text-xs font-semibold"
                     >
                       <Baby size={13} />
                       <span>{formatPatientName(c.name)} {c.rawAgeText ? `(${formatChildAgeText(c.rawAgeText)})` : ''}</span>
@@ -5471,34 +5322,34 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             )}
 
             {/* Rincian Finansial / Pembayaran */}
-            <div className="p-3.5 rounded-2xl bg-[#f8fafc] border border-[#e9edef] space-y-2">
-              <span className="text-[10px] font-bold text-[#667781] uppercase tracking-wider block">
+            <div className="p-3.5 rounded-2xl bg-surface-2 border border-divider space-y-2">
+              <span className="text-[10px] font-bold text-ink-2 uppercase tracking-wider block">
                 Rincian Biaya & Status Pembayaran
               </span>
               <div className="space-y-1 text-xs">
-                <div className="flex justify-between text-[#667781]">
+                <div className="flex justify-between text-ink-2">
                   <span>Biaya Layanan:</span>
                   <span>{formatRupiah(detailModalTask.pricing.treatmentFee)}</span>
                 </div>
-                <div className="flex justify-between text-[#667781]">
+                <div className="flex justify-between text-ink-2">
                   <span>Ongkos Kirim:</span>
                   <span>{formatRupiah(detailModalTask.pricing.deliveryFee)}</span>
                 </div>
-                <div className="flex justify-between font-bold text-[#111b21] pt-1 border-t border-[#e9edef]">
+                <div className="flex justify-between font-bold text-ink pt-1 border-t border-divider">
                   <span>Total Tagihan:</span>
-                  <span className="text-[#008069] text-sm">{formatRupiah(detailModalTask.pricing.totalFee)}</span>
+                  <span className="text-accent text-sm">{formatRupiah(detailModalTask.pricing.totalFee)}</span>
                 </div>
               </div>
 
               <div className="pt-2 flex items-center justify-between">
-                <span className="text-xs text-[#667781]">Status Pembayaran:</span>
+                <span className="text-xs text-ink-2">Status Pembayaran:</span>
                 {detailModalTask.pricing.paymentStatus === 'LUNAS' ? (
-                  <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-[#d9fdd3] text-[#008069] border border-[#00a884]/30 flex items-center space-x-1">
+                  <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-bubble-out text-accent border border-accent/30 flex items-center space-x-1">
                     <CheckCircle2 size={12} />
                     <span>LUNAS</span>
                   </span>
                 ) : (
-                  <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300 flex items-center space-x-1">
+                  <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-warning-soft text-warning border border-warning-line flex items-center space-x-1">
                     <CreditCard size={12} />
                     <span>TAGIH DI TEMPAT</span>
                   </span>
@@ -5512,10 +5363,10 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     <button
                       type="button"
                       onClick={() => setPaymentModalTask(detailModalTask)}
-                      className="flex-1 min-w-[160px] py-2.5 px-3 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 active:scale-95"
+                      className="flex-1 min-w-[160px] py-2.5 px-3 bg-warning-soft hover:bg-warning text-warning border border-warning-line rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 active:scale-95"
                       title="Catat pembayaran & unggah bukti transfer pasien"
                     >
-                      <CreditCard size={14} className="text-amber-700" />
+                      <CreditCard size={14} className="text-warning" />
                       <span>Catat Pembayaran & Unggah Bukti</span>
                     </button>
                     {detailModalTask.conversationId && (
@@ -5523,7 +5374,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                         type="button"
                         onClick={() => handleSendPaymentInfo(detailModalTask)}
                         disabled={isSendingPaymentInfo}
-                        className="flex-1 min-w-[160px] py-2.5 px-3 bg-[#d9fdd3] hover:bg-[#c2e7e0] text-[#008069] border border-[#00a884]/30 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 active:scale-95 disabled:opacity-50"
+                        className="flex-1 min-w-[160px] py-2.5 px-3 bg-bubble-out hover:bg-accent-soft/80 text-accent border border-accent/30 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 active:scale-95 disabled:opacity-50"
                         title="Kirim rincian tagihan & QRIS ke WhatsApp pasien"
                       >
                         <MessageSquare size={14} />
@@ -5542,7 +5393,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                         setPaymentModalTask(detailModalTask);
                       }
                     }}
-                    className="flex-1 min-w-[160px] py-2.5 px-3 bg-[#d9fdd3] hover:bg-[#c2e7e0] text-[#008069] border border-[#00a884]/30 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 active:scale-95"
+                    className="flex-1 min-w-[160px] py-2.5 px-3 bg-bubble-out hover:bg-accent-soft/80 text-accent border border-accent/30 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 active:scale-95"
                     title={detailModalTask.pricing.proofUrl ? 'Lihat bukti pembayaran tersimpan' : 'Unggah bukti pembayaran / invoice susulan'}
                   >
                     <CheckCircle2 size={14} />
@@ -5562,10 +5413,10 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     setDetailModalTask(null);
                     handleOpenChat(t);
                   }}
-                  className="flex-1 py-3 px-4 bg-[#d9fdd3] hover:bg-[#c2e7e0] text-[#008069] border border-[#00a884]/30 rounded-2xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs cursor-pointer active:scale-95"
+                  className="flex-1 py-3 px-4 bg-bubble-out hover:bg-accent-soft/80 text-accent border border-accent/30 rounded-2xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs cursor-pointer active:scale-95"
                   title="Buka Chat WhatsApp Pasien"
                 >
-                  <MessageSquare size={14} className="text-[#008069]" />
+                  <MessageSquare size={14} className="text-accent" />
                   <span>Chat Pasien</span>
                 </button>
               )}
@@ -5575,8 +5426,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                   onClick={(e) => requestNavigation(detailModalTask, e)}
                   className={`flex-1 py-3 px-4 rounded-2xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs cursor-pointer active:scale-95 ${
                     needsNavigationPreflight(detailModalTask.address?.locationSource)
-                      ? 'bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300'
-                      : 'bg-[#008069] hover:bg-[#00a884] text-white'
+                      ? 'bg-warning-soft hover:bg-warning text-warning border border-warning-line'
+                      : 'bg-accent hover:bg-accent-hover text-white'
                   }`}
                 >
                   <Navigation size={14} />
@@ -5585,7 +5436,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
               )}
               <button
                 onClick={() => setDetailModalTask(null)}
-                className="py-3 px-5 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] rounded-2xl text-xs font-bold transition shadow-xs"
+                className="py-3 px-5 bg-surface hover:bg-fill-1 border border-divider text-ink rounded-2xl text-xs font-bold transition shadow-xs"
               >
                 Tutup
               </button>
@@ -5603,19 +5454,19 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           onClick={() => setPaymentModalTask(null)}
         >
           <div
-            className="bg-white dark:bg-[#111b21] rounded-t-3xl sm:rounded-3xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] dark:border-[#202c33] space-y-4 text-left animate-modalScaleUp max-h-[88dvh] sm:max-h-[90vh] overflow-y-auto"
+            className="bg-surface rounded-t-3xl sm:rounded-3xl p-6 w-full max-w-md shadow-2xl border border-divider dark:border-divider space-y-4 text-left animate-modalScaleUp max-h-[88dvh] sm:max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Mobile drag handle */}
-            <div className="w-12 h-1.5 bg-[#d1d7db] dark:bg-[#374248] rounded-full mx-auto -mt-2 mb-2 sm:hidden shrink-0" />
+            <div className="w-12 h-1.5 bg-strong rounded-full mx-auto -mt-2 mb-2 sm:hidden shrink-0" />
 
             <div className="flex items-start justify-between">
               <div>
-                <h3 className="text-base font-bold text-[#111b21] flex items-center space-x-2">
-                  <CreditCard className="text-[#008069]" size={20} />
+                <h3 className="text-base font-bold text-ink flex items-center space-x-2">
+                  <CreditCard className="text-accent" size={20} />
                   <span>Catat Pembayaran Pasien</span>
                 </h3>
-                <p className="text-xs text-[#667781] mt-0.5">
+                <p className="text-xs text-ink-2 mt-0.5">
                   {paymentModalTask.customerName || 'Pasien'} • {paymentModalTask.treatmentDetail || 'Treatment'}
                 </p>
               </div>
@@ -5626,21 +5477,21 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                   setProofImageB64(null);
                   setPaymentMethod('CASH');
                 }}
-                className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition"
+                className="p-1.5 rounded-full text-ink-3 hover:text-ink hover:bg-fill-1 transition"
               >
                 <X size={18} />
               </button>
             </div>
 
             {/* Total Tagihan Banner */}
-            <div className="bg-[#f0f2f5] p-3.5 rounded-2xl border border-[#e9edef] flex items-center justify-between">
+            <div className="bg-fill-1 p-3.5 rounded-2xl border border-divider flex items-center justify-between">
               <div>
-                <span className="text-xs text-[#667781] block">Total Tagihan:</span>
-                <span className="text-base font-bold text-[#008069]">
+                <span className="text-xs text-ink-2 block">Total Tagihan:</span>
+                <span className="text-base font-bold text-accent">
                   {formatRupiah(paymentModalTask.pricing.totalFee)}
                 </span>
               </div>
-              <span className="text-[11px] font-semibold px-2.5 py-1 bg-white text-[#54656f] rounded-xl border border-[#e9edef]">
+              <span className="text-[11px] font-semibold px-2.5 py-1 bg-surface text-ink-2 rounded-xl border border-divider">
                 Ongkir: {formatRupiah(paymentModalTask.pricing.deliveryFee)}
               </span>
             </div>
@@ -5648,7 +5499,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             {/* Form */}
             <form onSubmit={handleSubmitPayment} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-[#111b21] mb-2">
+                <label className="block text-xs font-semibold text-ink mb-2">
                   Metode Pembayaran:
                 </label>
                 <div className="grid grid-cols-3 gap-2">
@@ -5659,8 +5510,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                       onClick={() => setPaymentMethod(method)}
                       className={`py-2 px-3 rounded-xl text-xs font-semibold border transition-all ${
                         paymentMethod === method
-                          ? 'bg-[#008069] text-white border-[#008069] shadow-xs'
-                          : 'bg-white text-[#54656f] border-[#e9edef] hover:bg-[#f0f2f5]'
+                          ? 'bg-accent text-white border-accent shadow-xs'
+                          : 'bg-surface text-ink-2 border-divider hover:bg-fill-1'
                       }`}
                     >
                       {method === 'CASH' ? '💵 Tunai' : method === 'TRANSFER' ? '🏦 Transfer' : '📱 QRIS'}
@@ -5671,17 +5522,17 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
               {/* Dynamic Payment Info Details (Data-Driven from Clinic Policy / Tenant Settings) */}
               {paymentMethod === 'QRIS' && (
-                <div className="p-3 bg-[#f8fafc] rounded-2xl border border-[#e9edef] space-y-2">
+                <div className="p-3 bg-surface-2 rounded-2xl border border-divider space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-[#111b21] flex items-center gap-1.5">
-                      <QrCode size={15} className="text-[#008069]" />
+                    <span className="text-xs font-bold text-ink flex items-center gap-1.5">
+                      <QrCode size={15} className="text-accent" />
                       <span>Barcode QRIS Klinik</span>
                     </span>
                     {paymentInfo?.qrisImageUrl && (
                       <button
                         type="button"
                         onClick={() => setQrisZoomModal(true)}
-                        className="text-[11px] font-bold text-[#008069] hover:underline flex items-center gap-1 cursor-pointer"
+                        className="text-[11px] font-bold text-accent hover:underline flex items-center gap-1 cursor-pointer"
                       >
                         <span>Perbesar Layar</span>
                       </button>
@@ -5689,15 +5540,15 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                   </div>
 
                   {loadingPaymentInfo ? (
-                    <div className="py-6 flex flex-col items-center justify-center space-y-2 text-[#667781]">
-                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#008069] border-t-transparent" />
+                    <div className="py-6 flex flex-col items-center justify-center space-y-2 text-ink-2">
+                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
                       <span className="text-[11px]">Memuat QRIS resmi...</span>
                     </div>
                   ) : paymentInfo?.qrisImageUrl ? (
                     <div className="flex flex-col items-center space-y-2">
                       <div
                         onClick={() => setQrisZoomModal(true)}
-                        className="p-2 bg-white rounded-xl border border-[#d1d7db] shadow-xs cursor-pointer hover:border-[#008069] transition group"
+                        className="p-2 bg-surface rounded-xl border border-divider shadow-xs cursor-pointer hover:border-accent transition group"
                         title="Ketuk untuk memperbesar QRIS ke layar penuh"
                       >
                         <img
@@ -5706,30 +5557,30 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                           className="w-44 h-44 object-contain rounded-lg group-hover:scale-[1.02] transition-transform"
                         />
                       </div>
-                      <p className="text-[11px] text-[#667781] text-center">
+                      <p className="text-[11px] text-ink-2 text-center">
                         Tunjukkan QRIS di atas kepada pasien untuk discan langsung via GoPay, OVO, Dana, BCA Mobile, dll.
                       </p>
                     </div>
                   ) : (
-                    <div className="py-4 px-3 text-center text-xs text-amber-800 bg-amber-50 rounded-xl border border-amber-200">
+                    <div className="py-4 px-3 text-center text-xs text-warning bg-warning-soft rounded-xl border border-warning-line">
                       Gambar QRIS belum dikonfigurasi di pengaturan klinik. Silakan minta admin mengunggah QRIS atau gunakan transfer rekening.
                     </div>
                   )}
                   {paymentInfo?.instructions && (
-                    <p className="text-[10px] text-[#8696a0] italic text-center">{paymentInfo.instructions}</p>
+                    <p className="text-[10px] text-ink-3 italic text-center">{paymentInfo.instructions}</p>
                   )}
                 </div>
               )}
 
               {paymentMethod === 'TRANSFER' && (
-                <div className="p-3 bg-[#f8fafc] rounded-2xl border border-[#e9edef] space-y-2.5">
-                  <span className="text-xs font-bold text-[#111b21] block">
+                <div className="p-3 bg-surface-2 rounded-2xl border border-divider space-y-2.5">
+                  <span className="text-xs font-bold text-ink block">
                     Rekening Resmi Klinik:
                   </span>
 
                   {loadingPaymentInfo ? (
-                    <div className="py-6 flex flex-col items-center justify-center space-y-2 text-[#667781]">
-                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#008069] border-t-transparent" />
+                    <div className="py-6 flex flex-col items-center justify-center space-y-2 text-ink-2">
+                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
                       <span className="text-[11px]">Memuat rekening...</span>
                     </div>
                   ) : paymentInfo?.bankAccounts && paymentInfo.bankAccounts.length > 0 ? (
@@ -5737,21 +5588,21 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                       {paymentInfo.bankAccounts.map((acc, idx) => (
                         <div
                           key={idx}
-                          className="p-2.5 bg-white rounded-xl border border-[#e9edef] flex items-center justify-between shadow-2xs"
+                          className="p-2.5 bg-surface rounded-xl border border-divider flex items-center justify-between shadow-2xs"
                         >
                           <div className="min-w-0">
-                            <span className="text-xs font-bold text-[#111b21] block">{acc.bank}</span>
-                            <span className="font-mono text-xs font-semibold text-[#008069] tracking-wider block">
+                            <span className="text-xs font-bold text-ink block">{acc.bank}</span>
+                            <span className="font-mono text-xs font-semibold text-accent tracking-wider block">
                               {acc.accountNumber}
                             </span>
-                            <span className="text-[10px] text-[#667781] block truncate">
+                            <span className="text-[10px] text-ink-2 block truncate">
                               a.n. {acc.accountName}
                             </span>
                           </div>
                           <button
                             type="button"
                             onClick={() => handleCopyAccountNumber(acc.accountNumber, acc.bank)}
-                            className="px-2.5 py-1.5 rounded-lg bg-[#f0f2f5] hover:bg-[#d9fdd3] text-[#54656f] hover:text-[#008069] text-xs font-bold transition flex items-center gap-1 border border-[#e9edef] active:scale-95 flex-shrink-0 cursor-pointer"
+                            className="px-2.5 py-1.5 rounded-lg bg-fill-1 hover:bg-bubble-out text-ink-2 hover:text-accent text-xs font-bold transition flex items-center gap-1 border border-divider active:scale-95 flex-shrink-0 cursor-pointer"
                             title="Salin nomor rekening"
                           >
                             <Copy size={12} />
@@ -5761,20 +5612,20 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                       ))}
                     </div>
                   ) : (
-                    <div className="py-3 px-3 text-center text-xs text-amber-800 bg-amber-50 rounded-xl border border-amber-200">
+                    <div className="py-3 px-3 text-center text-xs text-warning bg-warning-soft rounded-xl border border-warning-line">
                       Rekening bank belum terdaftar di pengaturan klinik.
                     </div>
                   )}
                   {paymentInfo?.instructions && (
-                    <p className="text-[10px] text-[#8696a0] italic text-center">{paymentInfo.instructions}</p>
+                    <p className="text-[10px] text-ink-3 italic text-center">{paymentInfo.instructions}</p>
                   )}
                 </div>
               )}
 
               {paymentMethod === 'CASH' && (
-                <div className="p-3 bg-emerald-50/60 rounded-2xl border border-emerald-200 text-xs text-emerald-900 space-y-1">
+                <div className="p-3 bg-success-soft/60 rounded-2xl border border-success-line text-xs text-success space-y-1">
                   <span className="font-bold block">💵 Pembayaran Tunai di Tempat</span>
-                  <p className="text-[11px] text-emerald-800 leading-relaxed">
+                  <p className="text-[11px] text-success leading-relaxed">
                     Terima uang tunai pas sejumlah{' '}
                     <strong className="font-bold">{formatRupiah(paymentModalTask.pricing.totalFee)}</strong>.
                     Bukti foto struk tidak diwajibkan untuk metode tunai.
@@ -5785,7 +5636,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
               {/* Upload Proof if Non-Cash */}
               {paymentMethod !== 'CASH' && (
                 <div className="space-y-2">
-                  <label className="block text-xs font-semibold text-[#111b21]">
+                  <label className="block text-xs font-semibold text-ink">
                     Foto Bukti Pembayaran (Wajib):
                   </label>
                   <input
@@ -5796,7 +5647,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     className="hidden"
                   />
                   {proofImageB64 ? (
-                    <div className="relative rounded-xl overflow-hidden border border-[#e9edef] bg-black/5 flex items-center justify-center max-h-48">
+                    <div className="relative rounded-xl overflow-hidden border border-divider bg-black/5 flex items-center justify-center max-h-48">
                       <img src={proofImageB64} alt="Bukti bayar" className="object-contain max-h-48 w-auto" />
                       <button
                         type="button"
@@ -5810,9 +5661,9 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="w-full py-4 border-2 border-dashed border-[#d1d7db] hover:border-[#008069] rounded-2xl flex flex-col items-center justify-center text-xs text-[#667781] hover:text-[#008069] transition bg-[#f8fafc]"
+                      className="w-full py-4 border-2 border-dashed border-divider hover:border-accent rounded-2xl flex flex-col items-center justify-center text-xs text-ink-2 hover:text-accent transition bg-surface-2"
                     >
-                      <Upload size={20} className="mb-1 text-[#8696a0]" />
+                      <Upload size={20} className="mb-1 text-ink-3" />
                       <span>Ketuk untuk pilih atau ambil foto bukti transfer</span>
                     </button>
                   )}
@@ -5820,7 +5671,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
               )}
 
               {/* Submit Buttons */}
-              <div className="flex justify-end space-x-2 pt-3 border-t border-[#e9edef]">
+              <div className="flex justify-end space-x-2 pt-3 border-t border-divider">
                 <button
                   type="button"
                   onClick={() => {
@@ -5828,14 +5679,14 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     setProofImageB64(null);
                     setPaymentMethod('CASH');
                   }}
-                  className="px-4 py-2.5 rounded-xl border border-[#d1d7db] text-xs font-semibold text-[#54656f] hover:bg-[#f0f2f5] transition"
+                  className="px-4 py-2.5 rounded-xl border border-divider text-xs font-semibold text-ink-2 hover:bg-fill-1 transition"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={submittingPayment || (paymentMethod !== 'CASH' && !proofImageB64)}
-                  className="px-5 py-2.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
+                  className="px-5 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
                 >
                   {submittingPayment ? (
                     <>
@@ -5864,26 +5715,26 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           onClick={() => setQrisZoomModal(false)}
         >
           <div
-            className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl flex flex-col items-center space-y-4 animate-modalScaleUp text-center relative"
+            className="bg-surface rounded-3xl p-6 max-w-sm w-full shadow-2xl flex flex-col items-center space-y-4 animate-modalScaleUp text-center relative"
             onClick={(e) => e.stopPropagation()}
           >
             <button
               type="button"
               onClick={() => setQrisZoomModal(false)}
-              className="absolute top-3 right-3 p-2 rounded-full bg-[#f0f2f5] hover:bg-[#e9edef] text-[#54656f] transition"
+              className="absolute top-3 right-3 p-2 rounded-full bg-fill-1 hover:bg-fill-2 text-ink-2 transition"
               title="Tutup QRIS"
             >
               <X size={18} />
             </button>
 
             <div className="space-y-1 pt-2">
-              <h3 className="font-bold text-base text-[#111b21]">Scan QRIS Resmi Klinik</h3>
-              <p className="text-xs text-[#667781]">
+              <h3 className="font-bold text-base text-ink">Scan QRIS Resmi Klinik</h3>
+              <p className="text-xs text-ink-2">
                 Arahkan kamera e-wallet / mobile banking pasien ke barcode di bawah ini
               </p>
             </div>
 
-            <div className="p-4 bg-white rounded-2xl border-2 border-[#e9edef] shadow-inner">
+            <div className="p-4 bg-surface rounded-2xl border-2 border-divider shadow-inner">
               <img
                 src={paymentInfo?.qrisImageUrl || ''}
                 alt="QRIS Fullscreen"
@@ -5894,7 +5745,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             <button
               type="button"
               onClick={() => setQrisZoomModal(false)}
-              className="w-full py-2.5 rounded-xl bg-[#008069] text-white text-xs font-bold hover:bg-[#00a884] transition active:scale-95 shadow-xs"
+              className="w-full py-2.5 rounded-xl bg-accent text-white text-xs font-bold hover:bg-accent-hover transition active:scale-95 shadow-xs"
             >
               Tutup Tampilan QRIS
             </button>
@@ -5911,20 +5762,20 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           onClick={() => setUpdateLocationModalTask(null)}
         >
           <div
-            className="bg-white dark:bg-[#111b21] rounded-3xl p-5 sm:p-6 w-full max-w-md shadow-2xl border border-[#e9edef] dark:border-[#202c33] space-y-4 text-left relative max-h-[92vh] overflow-y-auto animate-modalScaleUp"
+            className="bg-surface rounded-3xl p-5 sm:p-6 w-full max-w-md shadow-2xl border border-divider dark:border-divider space-y-4 text-left relative max-h-[92vh] overflow-y-auto animate-modalScaleUp"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-start justify-between border-b border-[#e9edef] pb-3">
+            <div className="flex items-start justify-between border-b border-divider pb-3">
               <div className="flex items-center space-x-2.5">
-                <div className="h-10 w-10 rounded-2xl bg-[#e8f5f2] text-[#008069] flex items-center justify-center border border-[#c2e7e0] shadow-xs">
+                <div className="h-10 w-10 rounded-2xl bg-accent-soft text-accent flex items-center justify-center border border-accent/30 shadow-xs">
                   <MapPin size={20} />
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-[#111b21]">
+                  <h3 className="font-bold text-base text-ink">
                     {locModalMode === 'view' ? 'Panduan Lokasi Tersimpan' : 'Update Lokasi & Foto Rumah'}
                   </h3>
-                  <p className="text-xs text-[#667781] truncate max-w-[220px]">
+                  <p className="text-xs text-ink-2 truncate max-w-[220px]">
                     {updateLocationModalTask.customerName || 'Customer'}
                   </p>
                 </div>
@@ -5932,7 +5783,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
               <button
                 onClick={() => setUpdateLocationModalTask(null)}
-                className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition"
+                className="p-1.5 rounded-full text-ink-3 hover:text-ink hover:bg-fill-1 transition"
               >
                 <X size={18} />
               </button>
@@ -5942,7 +5793,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
               <div className="space-y-4">
                 {/* Foto Rumah Tersimpan */}
                 {updateLocationModalTask.address.housePhotoUrl ? (
-                  <div className="relative rounded-2xl overflow-hidden border border-[#e9edef] bg-black/5 flex items-center justify-center max-h-56 group">
+                  <div className="relative rounded-2xl overflow-hidden border border-divider bg-black/5 flex items-center justify-center max-h-56 group">
                     <img
                       src={updateLocationModalTask.address.housePhotoUrl}
                       alt="Foto Rumah"
@@ -5961,76 +5812,76 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     </button>
                   </div>
                 ) : (
-                  <div className="p-5 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 text-center text-xs text-[#8696a0] space-y-1">
-                    <ImageIcon size={24} className="mx-auto text-slate-400" />
+                  <div className="p-5 rounded-2xl border-2 border-dashed border-divider bg-surface-2 text-center text-xs text-ink-3 space-y-1">
+                    <ImageIcon size={24} className="mx-auto text-ink-3" />
                     <p>Belum ada foto tampak depan rumah</p>
                   </div>
                 )}
 
                 {/* Info Titik GPS */}
                 {updateLocationModalTask.address.lat != null && updateLocationModalTask.address.lng != null ? (
-                  <div className="p-3.5 bg-[#d9fdd3]/70 border border-[#00a884]/40 rounded-2xl space-y-2">
+                  <div className="p-3.5 bg-bubble-out/70 border border-accent/40 rounded-2xl space-y-2">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-1.5 text-xs font-bold text-[#008069]">
-                        <CheckCircle2 size={15} className="text-[#008069]" />
+                      <div className="flex items-center space-x-1.5 text-xs font-bold text-accent">
+                        <CheckCircle2 size={15} className="text-accent" />
                         <span>Titik GPS Terkunci</span>
                       </div>
                       <a
                         href={`https://www.google.com/maps/dir/?api=1&destination=${updateLocationModalTask.address.lat},${updateLocationModalTask.address.lng}&travelmode=two-wheeler`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="px-2.5 py-1 rounded-lg bg-[#008069] text-white text-[11px] font-bold hover:bg-[#00a884] transition inline-flex items-center gap-1 shadow-2xs"
+                        className="px-2.5 py-1 rounded-lg bg-accent text-white text-[11px] font-bold hover:bg-accent-hover transition inline-flex items-center gap-1 shadow-2xs"
                       >
                         <span>Buka Maps</span>
                         <ExternalLink size={11} />
                       </a>
                     </div>
-                    <p className="text-xs font-mono text-[#111b21] bg-white/80 px-2.5 py-1.5 rounded-xl border border-[#00a884]/20">
+                    <p className="text-xs font-mono text-ink bg-white/80 px-2.5 py-1.5 rounded-xl border border-accent/20">
                       📍 {updateLocationModalTask.address.lat.toFixed(6)}, {updateLocationModalTask.address.lng.toFixed(6)}
                     </p>
                   </div>
                 ) : (
-                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center gap-2">
-                    <AlertTriangle size={15} className="shrink-0 text-amber-600" />
+                  <div className="p-3 bg-warning-soft border border-warning-line rounded-xl text-xs text-warning flex items-center gap-2">
+                    <AlertTriangle size={15} className="shrink-0 text-warning" />
                     <span>Belum ada titik GPS presisi untuk pasien ini.</span>
                   </div>
                 )}
 
                 {/* Info Patokan */}
                 {updateLocationModalTask.address.landmark && (
-                  <div className="p-3.5 bg-sky-50 border border-sky-200 rounded-2xl space-y-1">
-                    <span className="text-[10px] font-bold text-sky-800 uppercase tracking-wider block">
+                  <div className="p-3.5 bg-info-soft border border-info-line rounded-2xl space-y-1">
+                    <span className="text-[10px] font-bold text-info uppercase tracking-wider block">
                       🏷️ Patokan / Ciri Rumah:
                     </span>
-                    <p className="text-xs font-medium text-[#111b21]">
+                    <p className="text-xs font-medium text-ink">
                       {updateLocationModalTask.address.landmark}
                     </p>
                   </div>
                 )}
 
                 {/* Info Alamat Pasien */}
-                <div className="p-3 rounded-xl bg-[#f8fafc] border border-[#e9edef] text-xs text-[#54656f] space-y-1">
-                  <span className="text-[10px] font-bold text-[#667781] uppercase tracking-wider block">
+                <div className="p-3 rounded-xl bg-surface-2 border border-divider text-xs text-ink-2 space-y-1">
+                  <span className="text-[10px] font-bold text-ink-2 uppercase tracking-wider block">
                     Alamat Tercatat:
                   </span>
-                  <p className="text-xs text-[#111b21] font-medium leading-snug">
+                  <p className="text-xs text-ink font-medium leading-snug">
                     {updateLocationModalTask.address.fullText}
                   </p>
                 </div>
 
                 {/* Action Buttons */}
-                <div className="flex justify-end space-x-2 pt-3 border-t border-[#e9edef]">
+                <div className="flex justify-end space-x-2 pt-3 border-t border-divider">
                   <button
                     type="button"
                     onClick={() => setUpdateLocationModalTask(null)}
-                    className="px-4 py-2.5 rounded-xl border border-[#d1d7db] text-xs font-semibold text-[#54656f] hover:bg-[#f0f2f5] transition"
+                    className="px-4 py-2.5 rounded-xl border border-divider text-xs font-semibold text-ink-2 hover:bg-fill-1 transition"
                   >
                     Tutup
                   </button>
                   <button
                     type="button"
                     onClick={() => setLocModalMode('edit')}
-                    className="px-5 py-2.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-xs active:scale-95"
+                    className="px-5 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-xs active:scale-95"
                   >
                     <Pencil size={13} />
                     <span>Edit / Perbarui Panduan</span>
@@ -6043,7 +5894,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                   <button
                     type="button"
                     onClick={() => setLocModalMode('view')}
-                    className="text-xs font-bold text-[#008069] hover:underline flex items-center gap-1 cursor-pointer mb-1"
+                    className="text-xs font-bold text-accent hover:underline flex items-center gap-1 cursor-pointer mb-1"
                   >
                     <ArrowLeft size={13} />
                     <span>Kembali ke Panduan Tersimpan</span>
@@ -6051,18 +5902,18 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 )}
 
                 {/* Info Alamat Pasien */}
-                <div className="p-3 rounded-xl bg-[#f8fafc] border border-[#e9edef] text-xs text-[#54656f] space-y-1">
-                  <span className="text-[10px] font-bold text-[#667781] uppercase tracking-wider block">
+                <div className="p-3 rounded-xl bg-surface-2 border border-divider text-xs text-ink-2 space-y-1">
+                  <span className="text-[10px] font-bold text-ink-2 uppercase tracking-wider block">
                     Alamat Tercatat:
                   </span>
-                  <p className="text-xs text-[#111b21] font-medium leading-snug">
+                  <p className="text-xs text-ink font-medium leading-snug">
                     {updateLocationModalTask.address.fullText}
                   </p>
                 </div>
 
                 {/* Bagian 1: Koordinat GPS Otomatis */}
                 <div className="space-y-2">
-                  <label className="block text-xs font-bold text-[#111b21]">
+                  <label className="block text-xs font-bold text-ink">
                     1. Titik Koordinat GPS Rumah Pasien:
                   </label>
 
@@ -6070,7 +5921,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     type="button"
                     onClick={handleGetCurrentGps}
                     disabled={locGettingGps}
-                    className="w-full min-h-[46px] py-2.5 px-3 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center justify-center space-x-2 shadow-xs active:scale-95 disabled:opacity-50"
+                    className="w-full min-h-[46px] py-2.5 px-3 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-bold transition flex items-center justify-center space-x-2 shadow-xs active:scale-95 disabled:opacity-50"
                   >
                     {locGettingGps ? (
                       <>
@@ -6089,25 +5940,25 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     <div
                       className={`p-2.5 rounded-xl border text-xs flex items-center justify-between transition ${
                         (locCoords.accuracy ?? 999) <= 10
-                          ? 'bg-[#d9fdd3]/70 border-[#00a884]/30 text-[#008069]'
-                          : 'bg-amber-50 border-amber-200 text-amber-800'
+                          ? 'bg-bubble-out/70 border-accent/30 text-accent'
+                          : 'bg-warning-soft border-warning-line text-warning'
                       }`}
                     >
                       <div>
                         <div className="font-bold flex items-center gap-1">
                           {(locCoords.accuracy ?? 999) <= 10 ? (
                             <>
-                              <CheckCircle2 size={13} className="text-[#008069]" />
+                              <CheckCircle2 size={13} className="text-accent" />
                               <span>GPS Sangat Akurat (≤10m)</span>
                             </>
                           ) : (
                             <>
-                              <AlertTriangle size={13} className="text-amber-600" />
+                              <AlertTriangle size={13} className="text-warning" />
                               <span>Akurasi Cukup (±{locCoords.accuracy}m)</span>
                             </>
                           )}
                         </div>
-                        <div className="font-mono text-[11px] text-[#54656f] mt-0.5">
+                        <div className="font-mono text-[11px] text-ink-2 mt-0.5">
                           {locCoords.lat.toFixed(6)}, {locCoords.lng.toFixed(6)}
                           {locCoords.accuracy ? ` (Akurasi: ±${locCoords.accuracy}m)` : ''}
                         </div>
@@ -6117,7 +5968,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                           type="button"
                           onClick={handleGetCurrentGps}
                           disabled={locGettingGps}
-                          className="p-1.5 rounded-lg bg-white border border-[#e9edef] hover:bg-[#f0f2f5] text-[#54656f] text-[11px] font-semibold flex items-center gap-1 shadow-xs"
+                          className="p-1.5 rounded-lg bg-surface border border-divider hover:bg-fill-1 text-ink-2 text-[11px] font-semibold flex items-center gap-1 shadow-xs"
                           title="Kunci Ulang GPS"
                         >
                           <RefreshCw size={11} className={locGettingGps ? 'animate-spin' : ''} />
@@ -6127,7 +5978,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                           href={`https://maps.google.com/?q=${locCoords.lat},${locCoords.lng}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="p-1.5 rounded-lg bg-white text-[#008069] border border-[#00a884]/30 hover:bg-[#e8f5f2] text-xs font-semibold flex items-center gap-1 shadow-xs"
+                          className="p-1.5 rounded-lg bg-surface text-accent border border-accent/30 hover:bg-accent-soft text-xs font-semibold flex items-center gap-1 shadow-xs"
                           title="Cek di Google Maps"
                         >
                           <Navigation size={12} />
@@ -6136,7 +5987,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                       </div>
                     </div>
                   ) : (
-                    <p className="text-[11px] text-[#8696a0] italic">
+                    <p className="text-[11px] text-ink-3 italic">
                       * Berdirilah di luar pagar/depan rumah pasien lalu tekan tombol GPS di atas (target akurasi ≤ 10m).
                     </p>
                   )}
@@ -6145,11 +5996,11 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 {/* Bagian 2: Foto Tampak Depan Rumah */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <label className="block text-xs font-bold text-[#111b21]">
+                    <label className="block text-xs font-bold text-ink">
                       2. Foto Tampak Depan Rumah:
                     </label>
                     {locProcessingPhoto && (
-                      <span className="text-[10px] text-[#008069] font-medium animate-pulse">
+                      <span className="text-[10px] text-accent font-medium animate-pulse">
                         Mengompres foto...
                       </span>
                     )}
@@ -6179,7 +6030,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                   />
 
                   {locHousePhotoB64 ? (
-                    <div className="relative rounded-2xl overflow-hidden border border-[#e9edef] bg-black/5 flex items-center justify-center max-h-48">
+                    <div className="relative rounded-2xl overflow-hidden border border-divider bg-black/5 flex items-center justify-center max-h-48">
                       <img
                         src={locHousePhotoB64}
                         alt="Tampak Depan Rumah"
@@ -6197,7 +6048,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                         <button
                           type="button"
                           onClick={() => setLocHousePhotoB64(null)}
-                          className="p-1.5 rounded-full bg-rose-600 text-white hover:bg-rose-700 transition"
+                          className="p-1.5 rounded-full bg-danger text-on-solid hover:bg-danger-hover transition"
                           title="Hapus foto"
                         >
                           <X size={13} />
@@ -6210,22 +6061,22 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                         type="button"
                         onClick={() => locHouseCameraInputRef.current?.click()}
                         disabled={locProcessingPhoto}
-                        className="min-h-[46px] py-3 px-3 rounded-2xl bg-emerald-50 hover:bg-emerald-100 border-2 border-dashed border-emerald-300 text-[#008069] text-xs font-bold transition flex flex-col items-center justify-center gap-1 cursor-pointer shadow-xs active:scale-[0.98]"
+                        className="min-h-[46px] py-3 px-3 rounded-2xl bg-success-soft hover:bg-success-line border-2 border-dashed border-success-line text-accent text-xs font-bold transition flex flex-col items-center justify-center gap-1 cursor-pointer shadow-xs active:scale-[0.98]"
                       >
-                        <Camera size={18} className="text-[#008069]" />
+                        <Camera size={18} className="text-accent" />
                         <span>📸 Buka Kamera</span>
-                        <span className="text-[10px] text-[#54656f] font-normal">Foto depan rumah</span>
+                        <span className="text-[10px] text-ink-2 font-normal">Foto depan rumah</span>
                       </button>
 
                       <button
                         type="button"
                         onClick={() => locHouseGalleryInputRef.current?.click()}
                         disabled={locProcessingPhoto}
-                        className="min-h-[46px] py-3 px-3 rounded-2xl bg-slate-50 hover:bg-slate-100 border-2 border-dashed border-slate-300 text-slate-700 text-xs font-bold transition flex flex-col items-center justify-center gap-1 cursor-pointer shadow-xs active:scale-[0.98]"
+                        className="min-h-[46px] py-3 px-3 rounded-2xl bg-surface-2 hover:bg-fill-2 border-2 border-dashed border-strong text-ink text-xs font-bold transition flex flex-col items-center justify-center gap-1 cursor-pointer shadow-xs active:scale-[0.98]"
                       >
-                        <ImageIcon size={18} className="text-[#54656f]" />
+                        <ImageIcon size={18} className="text-ink-2" />
                         <span>🖼️ Pilih Galeri</span>
-                        <span className="text-[10px] text-[#8696a0] font-normal">Dari album foto</span>
+                        <span className="text-[10px] text-ink-3 font-normal">Dari album foto</span>
                       </button>
                     </div>
                   )}
@@ -6233,7 +6084,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
                 {/* Bagian 3: Patokan Landmark */}
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-[#111b21]">
+                  <label className="block text-xs font-bold text-ink">
                     3. Catatan Patokan / Ancer-ancer Rumah:
                   </label>
                   <input
@@ -6241,17 +6092,17 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     value={locLandmark}
                     onChange={(e) => setLocLandmark(e.target.value)}
                     placeholder="Contoh: Pagar hitam, samping toko berkah, seberang masjid"
-                    className="w-full px-3.5 py-2.5 bg-white border border-[#e9edef] rounded-xl text-[16px] sm:text-sm text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] transition shadow-xs"
+                    className="w-full px-3.5 py-2.5 bg-surface border border-divider rounded-xl text-[16px] sm:text-sm text-ink placeholder-ink-3 focus:outline-none focus:border-accent transition shadow-xs"
                   />
                 </div>
 
                 {/* Tombol Simpan */}
-                <div className="flex justify-end space-x-2 pt-3 border-t border-[#e9edef]">
+                <div className="flex justify-end space-x-2 pt-3 border-t border-divider">
                   <button
                     type="button"
                     onClick={() => (hasSavedLocData ? setLocModalMode('view') : setUpdateLocationModalTask(null))}
                     disabled={submittingLoc}
-                    className="px-4 py-2.5 rounded-xl border border-[#d1d7db] text-xs font-semibold text-[#54656f] hover:bg-[#f0f2f5] transition"
+                    className="px-4 py-2.5 rounded-xl border border-divider text-xs font-semibold text-ink-2 hover:bg-fill-1 transition"
                   >
                     Batal
                   </button>
@@ -6259,7 +6110,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     type="button"
                     onClick={handleSaveLocation}
                     disabled={submittingLoc}
-                    className="px-5 py-2.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
+                    className="px-5 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
                   >
                     {submittingLoc ? (
                       <>
@@ -6320,52 +6171,52 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       {/* ========================================================================= */}
       {editingMsg && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#202c33] rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
-            <div className="flex justify-between items-center px-5 py-3.5 border-b border-[#e9edef] bg-[#f8fafc]">
+          <div className="bg-surface border border-divider dark:border-divider rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="flex justify-between items-center px-5 py-3.5 border-b border-divider bg-surface-2">
               <div className="flex items-center space-x-2">
-                <div className="p-1.5 rounded-lg bg-[#e8f5f2] text-[#008069]">
+                <div className="p-1.5 rounded-lg bg-accent-soft text-accent">
                   <PenLine size={16} />
                 </div>
-                <h3 className="text-sm font-bold text-[#111b21]">Edit Pesan WhatsApp</h3>
+                <h3 className="text-sm font-bold text-ink">Edit Pesan WhatsApp</h3>
               </div>
               <button
                 type="button"
                 onClick={() => setEditingMsg(null)}
                 disabled={isEditingSaving}
-                className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#e9edef] transition text-xs font-bold"
+                className="p-1.5 rounded-lg text-ink-3 hover:text-ink hover:bg-fill-2 transition text-xs font-bold"
               >
                 ✕
               </button>
             </div>
 
             <div className="p-5 space-y-3.5">
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-800 space-y-1">
+              <div className="p-3 bg-warning-soft border border-warning-line rounded-xl text-[11px] text-warning space-y-1">
                 <p className="font-bold flex items-center gap-1.5">
-                  <Info size={13} className="text-amber-600 shrink-0" />
+                  <Info size={13} className="text-warning shrink-0" />
                   Batas Waktu Edit WhatsApp: 15 Menit
                 </p>
-                <p className="text-amber-700 leading-relaxed">
+                <p className="text-warning leading-relaxed">
                   WhatsApp hanya mengizinkan pengeditan pesan dalam 15 menit pertama. Pesan yang diedit akan otomatis memiliki label <i>(Diedit)</i> di HP penerima.
                 </p>
               </div>
 
               <div className="space-y-1.5">
-                <label className="block text-[11px] font-bold text-[#111b21]">Isi Pesan Baru</label>
+                <label className="block text-[11px] font-bold text-ink">Isi Pesan Baru</label>
                 <textarea
                   value={editContent}
                   onChange={(e) => setEditContent(e.target.value)}
                   rows={4}
                   placeholder="Ketik perbaikan teks pesan..."
-                  className="w-full bg-white border border-[#d1d7db] rounded-xl p-3 text-[16px] sm:text-sm text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] transition shadow-xs leading-relaxed"
+                  className="w-full bg-surface border border-divider rounded-xl p-3 text-[16px] sm:text-sm text-ink placeholder-ink-3 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition shadow-xs leading-relaxed"
                 />
               </div>
 
-              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#e9edef]">
+              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-divider">
                 <button
                   type="button"
                   onClick={() => setEditingMsg(null)}
                   disabled={isEditingSaving}
-                  className="px-4 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] rounded-xl text-xs font-semibold transition"
+                  className="px-4 py-2 bg-surface hover:bg-fill-1 border border-divider text-ink rounded-xl text-xs font-semibold transition"
                 >
                   Batal
                 </button>
@@ -6373,7 +6224,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                   type="button"
                   onClick={handleSaveEdit}
                   disabled={isEditingSaving || !editContent.trim()}
-                  className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs"
+                  className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs"
                 >
                   {isEditingSaving ? (
                     <>
@@ -6402,17 +6253,17 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           onClick={() => setReassignModalTask(null)}
         >
           <div
-            className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#202c33] rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden animate-scaleUp"
+            className="bg-surface border border-divider dark:border-divider rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden animate-scaleUp"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex justify-between items-center px-4 py-3.5 border-b border-[#e9edef] bg-[#f8fafc]">
+            <div className="flex justify-between items-center px-4 py-3.5 border-b border-divider bg-surface-2">
               <div className="flex items-center space-x-2">
-                <div className="p-1.5 rounded-lg bg-purple-50 text-purple-700">
+                <div className="p-1.5 rounded-lg bg-violet-soft text-violet">
                   <ArrowRightLeft size={16} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-[#111b21]">Delegasikan Jadwal</h3>
-                  <p className="text-[10px] text-[#667781] truncate max-w-[200px]">
+                  <h3 className="text-sm font-bold text-ink">Delegasikan Jadwal</h3>
+                  <p className="text-[10px] text-ink-2 truncate max-w-[200px]">
                     Pasien: {reassignModalTask.customerName || 'Bunda'}
                   </p>
                 </div>
@@ -6421,28 +6272,28 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 type="button"
                 onClick={() => setReassignModalTask(null)}
                 disabled={submittingReassign}
-                className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#e9edef] transition text-xs font-bold"
+                className="p-1.5 rounded-lg text-ink-3 hover:text-ink hover:bg-fill-2 transition text-xs font-bold"
               >
                 ✕
               </button>
             </div>
 
             <div className="p-4 space-y-3.5">
-              <div className="p-2.5 bg-[#f0f2f5] rounded-xl text-xs space-y-1">
-                <p className="text-[11px] text-[#667781]">
-                  Treatment: <span className="font-semibold text-[#111b21]">{reassignModalTask.treatmentDetail || 'Spa Homecare'}</span>
+              <div className="p-2.5 bg-fill-1 rounded-xl text-xs space-y-1">
+                <p className="text-[11px] text-ink-2">
+                  Treatment: <span className="font-semibold text-ink">{reassignModalTask.treatmentDetail || 'Spa Homecare'}</span>
                 </p>
-                <p className="text-[11px] text-[#667781]">
-                  Terapis Saat Ini: <span className="font-bold text-purple-700">{reassignModalTask.assignedStaff?.name || 'Belum Ditugaskan'}</span>
+                <p className="text-[11px] text-ink-2">
+                  Terapis Saat Ini: <span className="font-bold text-violet">{reassignModalTask.assignedStaff?.name || 'Belum Ditugaskan'}</span>
                 </p>
               </div>
 
               <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-[#111b21]">Pilih Terapis Pengganti / Baru:</label>
+                <label className="block text-xs font-bold text-ink">Pilih Terapis Pengganti / Baru:</label>
                 <select
                   value={reassignSelectedStaffId}
                   onChange={(e) => setReassignSelectedStaffId(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl bg-[#f0f2f5] border-0 text-xs font-semibold text-[#111b21] focus:outline-none focus:ring-2 focus:ring-[#008069]"
+                  className="w-full px-3 py-2.5 rounded-xl bg-fill-1 border-0 text-xs font-semibold text-ink focus:outline-none focus:ring-2 focus:ring-accent"
                 >
                   <option value="" disabled>-- Pilih Terapis Tim --</option>
                   {teamMembers.map((m) => (
@@ -6453,12 +6304,12 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 </select>
               </div>
 
-              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#e9edef]">
+              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-divider">
                 <button
                   type="button"
                   onClick={() => setReassignModalTask(null)}
                   disabled={submittingReassign}
-                  className="px-4 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] rounded-xl text-xs font-semibold transition"
+                  className="px-4 py-2 bg-surface hover:bg-fill-1 border border-divider text-ink rounded-xl text-xs font-semibold transition"
                 >
                   Batal
                 </button>
@@ -6485,7 +6336,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                       setSubmittingReassign(false);
                     }
                   }}
-                  className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs"
+                  className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs"
                 >
                   {submittingReassign ? (
                     <>
@@ -6511,21 +6362,21 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       {!(mobileView === 'chat' && activeTab === 'today') && (
         <nav
           aria-label="Navigasi Utama Bawah"
-          className="sm:hidden sticky bottom-0 z-30 bg-white dark:bg-[#111b21] border-t border-[#e9edef] dark:border-[#202c33] shadow-[0_-2px_8px_rgba(0,0,0,0.06)] flex items-stretch justify-around gap-1 px-1 pt-1 pb-[max(0.25rem,env(safe-area-inset-bottom,0px))] shrink-0"
+          className="sm:hidden sticky bottom-0 z-30 bg-surface border-t border-divider dark:border-divider shadow-[0_-2px_8px_rgba(0,0,0,0.06)] flex items-stretch justify-around gap-1 px-1 pt-1 pb-[max(0.25rem,env(safe-area-inset-bottom,0px))] shrink-0"
         >
           <button
             type="button"
             onClick={() => handleTabChange('today')}
             aria-current={activeTab === 'today' ? 'page' : undefined}
             className={`relative flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[58px] rounded-xl transition-all active:scale-95 ${
-              activeTab === 'today' ? 'text-[#008069] dark:text-[#00a884] bg-[#d9fdd3] dark:bg-[#00a884]/20' : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#202c33]'
+              activeTab === 'today' ? 'text-accent bg-bubble-out dark:bg-accent/20' : 'text-ink-2 hover:text-ink dark:hover:text-ink hover:bg-fill-1'
             }`}
           >
             <Calendar size={20} />
             <span className="text-[11px] font-bold leading-none">Hari Ini</span>
             {activeTodayTasks.length > 0 && (
               <span className={`absolute top-1 right-[22%] min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${
-                activeTab === 'today' ? 'bg-[#008069] text-white' : 'bg-[#e9edef] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0]'
+                activeTab === 'today' ? 'bg-accent text-white' : 'bg-fill-2 dark:bg-fill-1 text-ink-2'
               }`}>
                 {activeTodayTasks.length}
               </span>
@@ -6537,14 +6388,14 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             onClick={() => handleTabChange('upcoming')}
             aria-current={activeTab === 'upcoming' ? 'page' : undefined}
             className={`relative flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[58px] rounded-xl transition-all active:scale-95 ${
-              activeTab === 'upcoming' ? 'text-[#008069] dark:text-[#00a884] bg-[#d9fdd3] dark:bg-[#00a884]/20' : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#202c33]'
+              activeTab === 'upcoming' ? 'text-accent bg-bubble-out dark:bg-accent/20' : 'text-ink-2 hover:text-ink dark:hover:text-ink hover:bg-fill-1'
             }`}
           >
             <Clock size={20} />
             <span className="text-[11px] font-bold leading-none">Mendatang</span>
             {upcomingTasks.length > 0 && (
               <span className={`absolute top-1 right-[22%] min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${
-                activeTab === 'upcoming' ? 'bg-[#008069] text-white' : 'bg-[#e9edef] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0]'
+                activeTab === 'upcoming' ? 'bg-accent text-white' : 'bg-fill-2 dark:bg-fill-1 text-ink-2'
               }`}>
                 {upcomingTasks.length}
               </span>
@@ -6556,14 +6407,14 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             onClick={() => handleTabChange('completed')}
             aria-current={activeTab === 'completed' ? 'page' : undefined}
             className={`relative flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[58px] rounded-xl transition-all active:scale-95 ${
-              activeTab === 'completed' ? 'text-[#008069] dark:text-[#00a884] bg-[#d9fdd3] dark:bg-[#00a884]/20' : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#202c33]'
+              activeTab === 'completed' ? 'text-accent bg-bubble-out dark:bg-accent/20' : 'text-ink-2 hover:text-ink dark:hover:text-ink hover:bg-fill-1'
             }`}
           >
             <CheckCircle2 size={20} />
             <span className="text-[11px] font-bold leading-none">Selesai</span>
             {combinedCompletedTasks.length > 0 && (
               <span className={`absolute top-1 right-[22%] min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${
-                activeTab === 'completed' ? 'bg-[#008069] text-white' : 'bg-[#e9edef] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0]'
+                activeTab === 'completed' ? 'bg-accent text-white' : 'bg-fill-2 dark:bg-fill-1 text-ink-2'
               }`}>
                 {combinedCompletedTasks.length}
               </span>

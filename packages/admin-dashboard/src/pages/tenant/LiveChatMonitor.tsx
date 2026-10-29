@@ -80,6 +80,7 @@ import { LiveChatComposer, LiveChatComposerHandle } from '../../components/livec
 import { AdminCopilotPanel } from '../../components/copilot/AdminCopilotPanel';
 import { ChatExport } from './ChatExport';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
+import { VoiceNotePlayer } from '../../components/common/VoiceNotePlayer';
 import {
   extractMedia,
   extractLocation,
@@ -331,162 +332,6 @@ interface LiveChatItem {
 
 // Katalog emoji & favorit dimiliki LiveChatComposer (Fase A v3) — single source of truth.
 
-// 3.3: Voice Note audio player (WhatsApp PTT) — jangan lempar ke <MediaImage>
-const VoiceNotePlayer: React.FC<{ src: string }> = ({ src }) => {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [playing, setPlaying] = useState(false);
-  const [current, setCurrent] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [hasError, setHasError] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
-
-  const fmt = (s: number) => {
-    if (!isFinite(s) || isNaN(s)) return '0:00';
-    const m = Math.floor(s / 60);
-    const sec = Math.floor(s % 60).toString().padStart(2, '0');
-    return `${m}:${sec}`;
-  };
-
-  useEffect(() => {
-    let isCancelled = false;
-    let localBlobUrl: string | null = null;
-    setIsLoading(true);
-    setHasError(false);
-
-    fetch(src, { credentials: 'include' })
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const blob = await res.blob();
-        if (isCancelled) return;
-        localBlobUrl = URL.createObjectURL(blob);
-        setBlobUrl(localBlobUrl);
-        setIsLoading(false);
-      })
-      .catch(() => {
-        if (isCancelled) return;
-        setHasError(true);
-        setIsLoading(false);
-      });
-
-    return () => {
-      isCancelled = true;
-      if (localBlobUrl) {
-        URL.revokeObjectURL(localBlobUrl);
-      }
-    };
-  }, [src, retryCount]);
-
-  useEffect(() => {
-    setHasError(false);
-    const a = audioRef.current;
-    if (!a) return;
-    const onTime = () => setCurrent(a.currentTime);
-    const onMeta = () => setDuration(a.duration);
-    const onEnd = () => setPlaying(false);
-    const onError = () => { setHasError(true); setPlaying(false); };
-    a.addEventListener('timeupdate', onTime);
-    a.addEventListener('loadedmetadata', onMeta);
-    a.addEventListener('ended', onEnd);
-    a.addEventListener('error', onError);
-    return () => {
-      a.removeEventListener('timeupdate', onTime);
-      a.removeEventListener('loadedmetadata', onMeta);
-      a.removeEventListener('ended', onEnd);
-      a.removeEventListener('error', onError);
-    };
-  }, [blobUrl]);
-
-  const toggle = () => {
-    const a = audioRef.current;
-    if (!a || hasError || isLoading) return;
-    if (playing) {
-      a.pause();
-      setPlaying(false);
-    } else {
-      a.play().then(() => setPlaying(true)).catch(() => setHasError(true));
-    }
-  };
-
-  const seek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = Number(e.target.value);
-    if (audioRef.current) audioRef.current.currentTime = v;
-    setCurrent(v);
-  };
-
-  if (hasError) {
-    return (
-      <div className="flex items-center gap-2 py-1.5 min-w-[180px] max-w-[260px] text-amber-700">
-        <button
-          type="button"
-          onClick={() => setRetryCount((c) => c + 1)}
-          title="Coba lagi memuat audio"
-          className="w-8 h-8 rounded-full bg-amber-500 hover:bg-amber-600 text-white flex items-center justify-center shrink-0 active:scale-95 transition"
-        >
-          <RefreshCw size={13} />
-        </button>
-        <div className="flex-1 min-w-0 text-[11px] leading-tight">
-          <p className="font-bold">Audio belum siap / gagal</p>
-          <p className="text-amber-600/80">
-            <button
-              type="button"
-              onClick={() => setRetryCount((c) => c + 1)}
-              className="underline text-[#008069] hover:text-[#00a884] font-medium mr-1.5"
-            >
-              Coba lagi
-            </button>
-            {blobUrl && (
-              <a
-                href={blobUrl}
-                download="voice_note.oga"
-                className="underline text-[#008069] hover:text-[#00a884]"
-              >
-                Unduh
-              </a>
-            )}
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex items-center gap-2.5 py-1 min-w-[180px] max-w-[260px]">
-      <button
-        type="button"
-        onClick={toggle}
-        disabled={isLoading}
-        className="w-8 h-8 rounded-full bg-[#008069] text-white flex items-center justify-center shrink-0 shadow-xs active:scale-95 transition disabled:opacity-50"
-      >
-        {isLoading ? (
-          <RefreshCw size={13} className="animate-spin text-white" />
-        ) : playing ? (
-          <span className="w-2.5 h-2.5 bg-white rounded-sm" />
-        ) : (
-          <Play size={14} className="ml-0.5 fill-white" />
-        )}
-      </button>
-      <div className="flex-1 min-w-0">
-        <input
-          type="range"
-          min={0}
-          max={duration || 100}
-          value={current}
-          onChange={seek}
-          disabled={isLoading}
-          className="w-full accent-[#008069] h-1"
-        />
-        <div className="flex justify-between text-[10px] font-mono text-[#667781] mt-0.5">
-          <span>{fmt(current)}</span>
-          <span>{fmt(duration)}</span>
-        </div>
-      </div>
-      {blobUrl && <audio ref={audioRef} src={blobUrl} preload="metadata" className="hidden" />}
-    </div>
-  );
-};
-
 export const LiveChatMonitor: React.FC = () => {
   const { toast, confirm } = useUiFeedback();
   const { user } = useAuth();
@@ -523,7 +368,7 @@ export const LiveChatMonitor: React.FC = () => {
   const [isHidingMessageId, setIsHidingMessageId] = useState<string | null>(null);
   const [isThreadLoading, setIsThreadLoading] = useState(false);
   const activeThreadRequestIdRef = useRef(0);
-  // #160: percakapan yang bubble-nya sudah termuat — dipakai mencegah flash spinner
+  // Issue 160: percakapan yang bubble-nya sudah termuat — dipakai mencegah flash spinner
   // saat refresh thread yang sama (SSE reconnect / refresh manual).
   const loadedThreadConvIdRef = useRef<string | null>(null);
   // Cursor pagination riwayat lama (infinite scroll up)
@@ -650,7 +495,7 @@ export const LiveChatMonitor: React.FC = () => {
   // Indikator unread global dari DB (bukan hanya 50 chat pertama) — akurat walau
   // chat unread berada di luar halaman yang termuat.
   const [totalUnreadCount, setTotalUnreadCount] = useState(0);
-  // Ref mirror agar closure SSE (mount sekali) melihat filter terkini — gerbang anti-kedip #160.
+  // Ref mirror agar closure SSE (mount sekali) melihat filter terkini — gerbang anti-kedip Issue 160.
   const sourceFilterRef = useRef<SourceFilter>('all');
   useEffect(() => { sourceFilterRef.current = sourceFilter; }, [sourceFilter]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1419,7 +1264,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       const labelParam = labelFilter !== 'all' ? `&label=${encodeURIComponent(labelFilter)}` : '';
       // Sandbox (chat test/QA) dipanggil bila mode sandbox aktif, default memuat real.
       // Baca dari REF (bukan state) agar pemanggil dari closure SSE mount-once tetap
-      // memakai filter terkini — mencegah reload mode salah (bug #160).
+      // memakai filter terkini — mencegah reload mode salah (bug Issue 160).
       const backendMode = sourceFilterRef.current === 'sandbox' ? 'sandbox' : 'real';
       // Filter unread/reservation dikirim ke server agar paginasi & hasMore akurat
       // dari total sesungguhnya di DB, bukan hasil filter 50 item di memori browser.
@@ -1442,7 +1287,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         // KECUALI saat pencarian aktif: jangan paksa masuk chat yang tidak cocok keyword.
         const isSearchActive = !!(search && search.trim());
         const rawActive = !isSearchActive ? chatsRef.current.find((c) => c.conversationId === selectedIdRef.current) : null;
-        // Ghost-chat guard (#160 + tab terfilter): chat aktif HANYA dipertahankan
+        // Ghost-chat guard (Issue 160 + tab terfilter): chat aktif HANYA dipertahankan
         // (a) bila modenya cocok (real/sandbox), dan (b) di tab 'all'/'sandbox'.
         // Di tab unread/reservation, chat yang baru saja dibaca TIDAK boleh "nyangkut".
         const canPreserveActive = activeSource === 'all' || activeSource === 'sandbox';
@@ -1558,7 +1403,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     const reqId = ++activeThreadRequestIdRef.current;
     const effectiveFocus = focusMessageId || pendingFocusMessageIdRef.current || undefined;
     if (focusMessageId) pendingFocusMessageIdRef.current = focusMessageId;
-    // #160 flash-spinner guard: refresh percakapan yang SAMA (SSE reconnect / refresh
+    // Issue 160 flash-spinner guard: refresh percakapan yang SAMA (SSE reconnect / refresh
     // manual) TIDAK boleh menyembunyikan bubble yang sudah tampil di balik spinner.
     // Spinner hanya untuk pergantian percakapan atau muat pertama.
     const isRefreshSameThread = isSameConversation(loadedThreadConvIdRef.current, conversationId);
@@ -1643,7 +1488,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           }
         }
 
-        loadedThreadConvIdRef.current = conversationId; // #160: tandai thread ini sudah termuat
+        loadedThreadConvIdRef.current = conversationId; // Issue 160: tandai thread ini sudah termuat
         // Direct jump: DOM #msg-<focus> sudah ada setelah batch focus-window termuat.
         if (effectiveFocus) {
           pendingFocusMessageIdRef.current = null;
@@ -2107,7 +1952,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       autoDeepSearchDoneRef.current = '';
       return;
     }
-    // #160-4: saat keyword berasal dari pencarian daftar (bukan toolbar in-chat),
+    // Issue 160-4: saat keyword berasal dari pencarian daftar (bukan toolbar in-chat),
     // pastikan toolbar pencarian dalam-chat terbuka otomatis agar banner hasil &
     // navigasi match tampil tanpa perlu klik manual lagi.
     if (!inChatSearchOpen) {
@@ -2481,7 +2326,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
             chatsRef.current = sorted;
           } else if (shouldReloadForSseEvent(payload, sourceFilterRef.current)) {
             // Percakapan baru muncul → reload daftar dari awal.
-            // #160: HANYA bila mode event cocok dengan filter aktif — mencegah
+            // Issue 160: HANYA bila mode event cocok dengan filter aktif — mencegah
             // thrashing/kedip saat event real masuk di filter Sandbox (dan sebaliknya).
             loadChats(true);
           }
@@ -3184,8 +3029,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     const el = document.getElementById(`msg-${msgId}`);
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      el.classList.add('ring-3', 'ring-[#008069]', 'bg-emerald-50/50');
-      setTimeout(() => el.classList.remove('ring-3', 'ring-[#008069]', 'bg-emerald-50/50'), 2000);
+      el.classList.add('ring-3', 'ring-accent', 'bg-success-soft/50');
+      setTimeout(() => el.classList.remove('ring-3', 'ring-accent', 'bg-success-soft/50'), 2000);
     } else if (selectedChat?.conversationId) {
       // Belum termuat di paginasi saat ini: trigger focusMessageId
       void loadThread(selectedChat.conversationId, msgId);
@@ -4339,22 +4184,22 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
   return (
     <div data-no-swipe-menu="true" className="h-full flex flex-col min-h-0 space-y-0 lg:space-y-1.5 p-0 lg:p-1.5 lg:pb-0">
       {/* Top Header (Desktop / Large screen only - on mobile it scrolls with the list) */}
-      <div className="hidden lg:flex justify-between items-center bg-white border border-[#e9edef] rounded-xl px-2.5 sm:px-3 py-1 sm:py-1.5 shadow-xs shrink-0">
+      <div className="hidden lg:flex justify-between items-center bg-surface border border-divider rounded-xl px-2.5 sm:px-3 py-1 sm:py-1.5 shadow-xs shrink-0">
         <div className="flex items-center space-x-2">
-          <h1 className="text-sm sm:text-base font-bold text-[#111b21] tracking-tight flex items-center space-x-1.5">
-            <MessageSquare className="text-[#008069]" size={18} />
+          <h1 className="text-sm sm:text-base font-bold text-ink tracking-tight flex items-center space-x-1.5">
+            <MessageSquare className="text-accent" size={18} />
             <span>Live Chat Monitor</span>
           </h1>
           {/* Total Conversations Badge directly next to Title */}
-          <span className="px-2 py-0.5 rounded-full bg-[#e8f5f2] text-[#008069] text-xs font-bold font-mono border border-[#c2e7e0]" title="Total percakapan aktif yang dimuat">
+          <span className="px-2 py-0.5 rounded-full bg-accent-soft text-accent text-xs font-bold font-mono border border-accent/30" title="Total percakapan aktif yang dimuat">
             {filteredChats.length} total
           </span>
           {/* Real-time Status Icon Indicator */}
           <div
-            className="flex items-center space-x-1 px-2 py-0.5 bg-[#f0f2f5] border border-[#e9edef] rounded-full text-[10px] font-semibold text-[#54656f]"
+            className="flex items-center space-x-1 px-2 py-0.5 bg-fill-1 border border-divider rounded-full text-[10px] font-semibold text-ink-2"
             title={sseConnected ? 'Status: Real-time Terhubung (SSE Aktif)' : 'Status: Menyambungkan kembali ke server...'}
           >
-            <span className={`h-2 w-2 rounded-full ${sseConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500 animate-pulse'}`} />
+            <span className={`h-2 w-2 rounded-full ${sseConnected ? 'bg-success animate-pulse' : 'bg-warning animate-pulse'}`} />
             <span>{sseConnected ? 'Live' : 'Reconnecting'}</span>
           </div>
           {/* Early Warning keterlambatan Bidan — ikon pulse persisten selama delay aktif. */}
@@ -4367,8 +4212,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
               }}
               className={`flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                 delayAlert.level === 'critical'
-                  ? 'bg-red-50 border-red-300 text-red-700'
-                  : 'bg-amber-50 border-amber-300 text-amber-700'
+                  ? 'bg-danger-soft border-danger-line text-danger'
+                  : 'bg-warning-soft border-warning-line text-warning'
               }`}
               title={`Bidan${delayAlert.staffName ? ' ' + delayAlert.staffName : ''} diprediksi terlambat ${delayAlert.delayMinutes} menit${delayAlert.formattedArrivalWib ? ' (tiba ±' + delayAlert.formattedArrivalWib + ' WIB)' : ''}`}
             >
@@ -4386,7 +4231,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
               p.set('action', 'export');
               setSearchParams(p, { replace: true });
             }}
-            className="p-1.5 rounded-lg bg-white border border-[#d1d7db] text-[#54656f] hover:text-[#008069] hover:border-[#008069] shadow-2xs transition flex items-center justify-center"
+            className="p-1.5 rounded-lg bg-surface border border-divider text-ink-2 hover:text-accent hover:border-accent shadow-2xs transition flex items-center justify-center"
             title="Ekspor Chat (Daily Export)"
           >
             <FileText size={14} />
@@ -4409,7 +4254,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           <button
             onClick={() => setShowSyncInfoModal(true)}
             disabled={bgSyncProgress.isSyncing}
-            className="p-1.5 rounded-lg bg-[#008069] hover:bg-[#00a884] text-white shadow-2xs transition flex items-center justify-center disabled:opacity-50 cursor-pointer"
+            className="p-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white shadow-2xs transition flex items-center justify-center disabled:opacity-50 cursor-pointer"
             title="Sinkronisasi Seluruh Chat WhatsApp (Background)"
           >
             <RefreshCw size={14} className={bgSyncProgress.isSyncing ? 'animate-spin' : ''} />
@@ -4421,16 +4266,16 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       {!chatBotActive && (
         <div className="hidden lg:flex p-2 sm:p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800/40 text-amber-900 dark:text-amber-200 text-xs font-semibold items-center justify-between shadow-2xs shrink-0 animate-fadeIn">
           <div className="flex items-center space-x-2 min-w-0">
-            <ShieldAlert size={16} className="text-amber-600 dark:text-[#f59e0b] shrink-0" />
+            <ShieldAlert size={16} className="text-amber-600 dark:text-warning shrink-0" />
             <div className="truncate">
-              <span className="font-bold text-amber-700 dark:text-[#f59e0b]">CHATBOT AI NONAKTIF:</span>{' '}
+              <span className="font-bold text-amber-700 dark:text-warning">CHATBOT AI NONAKTIF:</span>{' '}
               <span className="text-amber-800 dark:text-amber-200">AI diam, dialihkan ke CS manual. Follow-Up & balasan Live Chat manual tetap aktif.</span>
             </div>
           </div>
           <button
             onClick={() => handleToggleGlobalBot(true)}
             disabled={togglingBotCutoff}
-            className="px-2.5 py-1 text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition shrink-0 ml-2 cursor-pointer shadow-2xs"
+            className="px-2.5 py-1 text-[11px] font-bold text-on-solid bg-success hover:bg-success-hover rounded-lg transition shrink-0 ml-2 cursor-pointer shadow-2xs"
           >
             Aktifkan AI
           </button>
@@ -4439,11 +4284,11 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
       {/* Real-time Background Sync Banner (desktop: global di atas; mobile: duplikat ringkas di dalam scroll daftar) */}
       {bgSyncProgress.isSyncing && (
-        <div className="hidden lg:flex p-2 sm:p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-[11px] font-medium items-center justify-between shadow-2xs shrink-0 animate-fadeIn">
+        <div className="hidden lg:flex p-2 sm:p-2.5 rounded-xl bg-success-soft border border-success-line text-success text-[11px] font-medium items-center justify-between shadow-2xs shrink-0 animate-fadeIn">
           <div className="flex items-center space-x-2 min-w-0">
-            <RefreshCw size={14} className="text-[#008069] animate-spin shrink-0" />
+            <RefreshCw size={14} className="text-accent animate-spin shrink-0" />
             <div className="truncate">
-              <span className="font-bold text-[#008069]">Sinkronisasi Background Berjalan:</span>{' '}
+              <span className="font-bold text-accent">Sinkronisasi Background Berjalan:</span>{' '}
               <span>
                 {bgSyncProgress.syncedChats} / {bgSyncProgress.totalChats || '?'} chat ({bgSyncProgress.syncedMessages} pesan baru)
                 {bgSyncProgress.currentChatName ? ` • Sedang memproses: ${bgSyncProgress.currentChatName}` : ''}
@@ -4452,7 +4297,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           </div>
           <button
             onClick={handleCancelBackgroundSync}
-            className="px-2.5 py-0.5 text-[10px] font-bold text-rose-700 bg-rose-100 hover:bg-rose-200 border border-rose-200 rounded-md transition shrink-0 ml-2 cursor-pointer shadow-2xs"
+            className="px-2.5 py-0.5 text-[10px] font-bold text-danger bg-danger-soft hover:bg-danger border border-danger-line rounded-md transition shrink-0 ml-2 cursor-pointer shadow-2xs"
           >
             Batalkan
           </button>
@@ -4460,15 +4305,15 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       )}
 
       {syncProgress && !bgSyncProgress.isSyncing && (
-        <div className="hidden lg:flex p-2 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-[11px] font-medium items-center space-x-2 shrink-0">
-          <RefreshCw size={12} className="text-sky-600 animate-spin" />
+        <div className="hidden lg:flex p-2 rounded-xl bg-info-soft border border-info-line text-info text-[11px] font-medium items-center space-x-2 shrink-0">
+          <RefreshCw size={12} className="text-info animate-spin" />
           <span>{syncProgress}</span>
         </div>
       )}
 
       {errorMessage && (
-        <div className="hidden lg:flex p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-medium items-center space-x-2 shrink-0">
-          <AlertTriangle size={13} className="text-rose-600" />
+        <div className="hidden lg:flex p-2 rounded-xl bg-danger-soft border border-danger-line text-danger text-[11px] font-medium items-center space-x-2 shrink-0">
+          <AlertTriangle size={13} className="text-danger" />
           <span>{errorMessage}</span>
         </div>
       )}
@@ -4478,7 +4323,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           {/* Loading: strip status AI-off mobile (toggle ada di sticky search bar) */}
           {!chatBotActive && <AiOffStrip />}
           <div className="flex-1 flex justify-center items-center py-20">
-            <Loader className="animate-spin text-[#008069]" size={32} />
+            <Loader className="animate-spin text-accent" size={32} />
           </div>
         </div>
       ) : (
@@ -4489,7 +4334,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
             onTouchMove={handleListTouchMove}
             onTouchEnd={() => { listTouchStartRef.current = null; }}
             onTouchCancel={() => { listTouchStartRef.current = null; }}
-            className={`${mobileView === 'chat' ? 'hidden lg:flex' : 'flex animate-mobile-list-enter lg:animate-none'} w-full lg:w-[320px] xl:w-[360px] lg:shrink-0 flex-col h-full bg-white border-0 lg:border border-[#e9edef] rounded-none lg:rounded-2xl shadow-none lg:shadow-xs overflow-hidden min-h-0`}
+            className={`${mobileView === 'chat' ? 'hidden lg:flex' : 'flex animate-mobile-list-enter lg:animate-none'} w-full lg:w-[320px] xl:w-[360px] lg:shrink-0 flex-col h-full bg-surface border-0 lg:border border-divider rounded-none lg:rounded-2xl shadow-none lg:shadow-xs overflow-hidden min-h-0`}
           >
             {/* Scrollable Container covering entire panel: Header & filter bar scroll off, Searchbar sticks at top-0 */}
             <div
@@ -4498,25 +4343,25 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
               style={{ overscrollBehavior: 'contain' }}
             >
               {/* Mobile Page Header (Inside scroll flow so it scrolls off on scroll down) */}
-              <div className="flex lg:hidden justify-between items-center pb-2 border-b border-[#f0f2f5] mb-1.5">
+              <div className="flex lg:hidden justify-between items-center pb-2 border-b border-divider mb-1.5">
                 <div className="flex items-center space-x-2">
-                  <h1 className="text-sm font-bold text-[#111b21] tracking-tight flex items-center space-x-1.5">
-                    <MessageSquare className="text-[#008069]" size={16} />
+                  <h1 className="text-sm font-bold text-ink tracking-tight flex items-center space-x-1.5">
+                    <MessageSquare className="text-accent" size={16} />
                     <span>Live Chat</span>
                   </h1>
-                  <span className="px-2 py-0.5 rounded-full bg-[#e8f5f2] text-[#008069] text-xs font-bold font-mono border border-[#c2e7e0]" title="Total percakapan aktif yang dimuat">
+                  <span className="px-2 py-0.5 rounded-full bg-accent-soft text-accent text-xs font-bold font-mono border border-accent/30" title="Total percakapan aktif yang dimuat">
                     {filteredChats.length} total
                   </span>
-                  <div className="flex items-center space-x-1 px-1.5 py-0.5 bg-[#f0f2f5] border border-[#e9edef] rounded-full text-[10px] font-semibold text-[#54656f]">
-                    <span className={`h-1.5 w-1.5 rounded-full ${sseConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500 animate-pulse'}`} />
+                  <div className="flex items-center space-x-1 px-1.5 py-0.5 bg-fill-1 border border-divider rounded-full text-[10px] font-semibold text-ink-2">
+                    <span className={`h-1.5 w-1.5 rounded-full ${sseConnected ? 'bg-success animate-pulse' : 'bg-warning animate-pulse'}`} />
                     <span>{sseConnected ? 'Live' : 'Offline'}</span>
                   </div>
                   {delayAlert && (
                     <div
                       className={`flex items-center space-x-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold border ${
                         delayAlert.level === 'critical'
-                          ? 'bg-red-50 border-red-300 text-red-700'
-                          : 'bg-amber-50 border-amber-300 text-amber-700'
+                          ? 'bg-danger-soft border-danger-line text-danger'
+                          : 'bg-warning-soft border-warning-line text-warning'
                       }`}
                       title={`Bidan diprediksi terlambat ${delayAlert.delayMinutes} menit`}
                     >
@@ -4537,8 +4382,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       aria-pressed={copilotOpen}
                       className={`lg:hidden p-1.5 rounded-lg border transition flex items-center justify-center cursor-pointer shadow-2xs active:scale-95 touch-manipulation ${
                         copilotOpen
-                          ? 'bg-[#d9fdd3] dark:bg-[#00a884]/20 border-[#00a884]/40 text-[#008069] dark:text-[#00a884] ring-2 ring-[#00a884]/30'
-                          : 'bg-[#f0f2f5] dark:bg-[#2a3942] border-[#e9edef] dark:border-[#374248] text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef]'
+                          ? 'bg-bubble-out dark:bg-accent/20 border-accent/40 text-accent ring-2 ring-accent/30'
+                          : 'bg-fill-1 dark:bg-fill-2 border-divider dark:border-strong text-ink-3 hover:text-ink dark:hover:text-ink'
                       }`}
                     >
                       <Bot size={15} />
@@ -4548,7 +4393,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   <button
                     onClick={() => setShowSyncInfoModal(true)}
                     disabled={bgSyncProgress.isSyncing}
-                    className="p-1.5 rounded-lg bg-[#008069] text-white shadow-2xs transition flex items-center justify-center disabled:opacity-50 cursor-pointer"
+                    className="p-1.5 rounded-lg bg-accent text-white shadow-2xs transition flex items-center justify-center disabled:opacity-50 cursor-pointer"
                     title="Sinkronisasi Seluruh Chat WhatsApp"
                   >
                     <RefreshCw size={13} className={bgSyncProgress.isSyncing ? 'animate-spin' : ''} />
@@ -4559,7 +4404,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     onClick={openMobileMenu}
                     aria-label="Buka Menu"
                     title="Buka Menu Navigasi"
-                    className="lg:hidden p-1.5 rounded-lg bg-[#f0f2f5] dark:bg-[#2a3942] text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef] transition active:scale-95 touch-manipulation cursor-pointer shadow-2xs flex items-center justify-center"
+                    className="lg:hidden p-1.5 rounded-lg bg-fill-1 dark:bg-fill-2 text-ink-2 dark:text-ink-2 hover:text-ink dark:hover:text-ink transition active:scale-95 touch-manipulation cursor-pointer shadow-2xs flex items-center justify-center"
                   >
                     <Menu size={15} />
                   </button>
@@ -4571,40 +4416,40 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
               {/* Mobile Sync/Error Warnings (ikut scroll bersama daftar; desktop memakai banner global di atas) */}
               {bgSyncProgress.isSyncing && (
-                <div className="lg:hidden mb-1.5 p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-[11px] font-medium flex items-center justify-between shadow-2xs animate-fadeIn">
+                <div className="lg:hidden mb-1.5 p-2 rounded-xl bg-success-soft border border-success-line text-success text-[11px] font-medium flex items-center justify-between shadow-2xs animate-fadeIn">
                   <div className="flex items-center space-x-1.5 min-w-0">
-                    <RefreshCw size={13} className="text-[#008069] animate-spin shrink-0" />
+                    <RefreshCw size={13} className="text-accent animate-spin shrink-0" />
                     <span className="truncate">
-                      <span className="font-bold text-[#008069]">Sync:</span>{' '}
+                      <span className="font-bold text-accent">Sync:</span>{' '}
                       {bgSyncProgress.syncedChats} / {bgSyncProgress.totalChats || '?'} chat ({bgSyncProgress.syncedMessages} baru)
                     </span>
                   </div>
                   <button
                     onClick={handleCancelBackgroundSync}
-                    className="px-2 py-0.5 text-[10px] font-bold text-rose-700 bg-rose-100 hover:bg-rose-200 border border-rose-200 rounded-md transition shrink-0 ml-2 cursor-pointer shadow-2xs"
+                    className="px-2 py-0.5 text-[10px] font-bold text-danger bg-danger-soft hover:bg-danger border border-danger-line rounded-md transition shrink-0 ml-2 cursor-pointer shadow-2xs"
                   >
                     Batal
                   </button>
                 </div>
               )}
               {syncProgress && !bgSyncProgress.isSyncing && (
-                <div className="lg:hidden mb-1.5 p-2 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-[11px] font-medium flex items-center space-x-1.5 shadow-2xs">
-                  <RefreshCw size={12} className="text-sky-600 animate-spin shrink-0" />
+                <div className="lg:hidden mb-1.5 p-2 rounded-xl bg-info-soft border border-info-line text-info text-[11px] font-medium flex items-center space-x-1.5 shadow-2xs">
+                  <RefreshCw size={12} className="text-info animate-spin shrink-0" />
                   <span className="truncate">{syncProgress}</span>
                 </div>
               )}
               {errorMessage && (
-                <div className="lg:hidden mb-1.5 p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-medium flex items-center space-x-1.5 shadow-2xs">
-                  <AlertTriangle size={12} className="text-rose-600 shrink-0" />
+                <div className="lg:hidden mb-1.5 p-2 rounded-xl bg-danger-soft border border-danger-line text-danger text-[11px] font-medium flex items-center space-x-1.5 shadow-2xs">
+                  <AlertTriangle size={12} className="text-danger shrink-0" />
                   <span className="truncate">{errorMessage}</span>
                 </div>
               )}
 
               {/* Header Toolbar: Source Filter + Label Dropdown (Normal in-flow, scrolls away on scroll down) */}
-              <div className="pb-1.5 border-b border-[#f0f2f5]">
+              <div className="pb-1.5 border-b border-divider">
                 <div className="flex items-center justify-between gap-1.5">
                   {/* Filter sumber percakapan: WhatsApp Asli, Semua, Sandbox (Ikon Saja + Press Hold Tooltip) */}
-                  <div className="relative flex items-center space-x-0.5 p-0.5 bg-[#f0f2f5] border border-[#e9edef] rounded-lg shrink-0">
+                  <div className="relative flex items-center space-x-0.5 p-0.5 bg-fill-1 border border-divider rounded-lg shrink-0">
                     {[
                       { value: 'all', title: 'Semua Percakapan WhatsApp', icon: Layers },
                       { value: 'unread', title: 'Pesan Belum Dibaca (Unread)', icon: MessageSquareDot },
@@ -4614,8 +4459,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       const Icon = opt.icon;
                       const isActive = sourceFilter === opt.value;
                       const activeClass = opt.value === 'sandbox'
-                        ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-[#aebac1] border border-purple-200 dark:border-[#2a3942] shadow-2xs'
-                        : 'bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] shadow-2xs';
+                        ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-ink-2 border border-purple-200 dark:border-divider shadow-2xs'
+                        : 'bg-accent-soft text-accent border border-accent/30 shadow-2xs';
                       const hasUnreadBadge = opt.value === 'unread' && (totalUnreadCount > 0 || chats.some(c => !c.isSandboxTest && ((c.unreadCount || 0) > 0 || c.isManualUnread)));
                       return (
                         <button
@@ -4631,12 +4476,12 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           }}
                           title={opt.title}
                           className={`p-1.5 rounded-md transition flex items-center justify-center cursor-pointer relative ${
-                            isActive ? activeClass : 'text-[#667781] hover:text-[#111b21]'
+                            isActive ? activeClass : 'text-ink-2 hover:text-ink'
                           }`}
                         >
                           <Icon size={13} />
                           {hasUnreadBadge && (
-                            <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-[#25D366] ring-1 ring-white" />
+                            <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-success ring-1 ring-white" />
                           )}
                         </button>
                       );
@@ -4644,8 +4489,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
                     {/* Press-Hold Floating Tooltip */}
                     {iconTooltip && (
-                      <div className="absolute top-full left-0 mt-1 z-50 px-2 py-1 bg-[#111b21] text-white text-[10px] font-bold rounded-lg shadow-lg animate-fadeIn whitespace-nowrap pointer-events-none flex items-center space-x-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#25D366]" />
+                      <div className="absolute top-full left-0 mt-1 z-50 px-2 py-1 bg-ink text-white text-[10px] font-bold rounded-lg shadow-lg animate-fadeIn whitespace-nowrap pointer-events-none flex items-center space-x-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-success" />
                         <span>{iconTooltip}</span>
                       </div>
                     )}
@@ -4657,7 +4502,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       <select
                         value={reservationStaffFilter}
                         onChange={(e) => setReservationStaffFilter(e.target.value)}
-                        className="w-full px-2 py-1 bg-white border border-[#d1d7db] rounded-lg text-[11px] font-semibold text-[#111b21] focus:outline-none focus:border-[#008069] cursor-pointer shadow-2xs truncate"
+                        className="w-full px-2 py-1 bg-surface border border-divider rounded-lg text-[11px] font-semibold text-ink focus:outline-none focus:border-accent cursor-pointer shadow-2xs truncate"
                         title="Filter bidan yang bertugas"
                       >
                         <option value="all">Semua Bidan</option>
@@ -4680,7 +4525,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           // 3.4: forward ke server agar paginasi konsisten
                           setTimeout(() => loadChats(true, searchQuery, true), 0);
                         }}
-                        className="w-full px-2 py-1 bg-white border border-[#d1d7db] rounded-lg text-[11px] font-semibold text-[#111b21] focus:outline-none focus:border-[#008069] cursor-pointer shadow-2xs truncate"
+                        className="w-full px-2 py-1 bg-surface border border-divider rounded-lg text-[11px] font-semibold text-ink focus:outline-none focus:border-accent cursor-pointer shadow-2xs truncate"
                       >
                         <option value="all">Semua Label</option>
                         <option value="human_request">Human Request</option>
@@ -4694,9 +4539,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       onClick={handleMarkAllAsRead}
                       tabIndex={mobileView === 'chat' ? -1 : 0}
                       title="Tandai semua percakapan sebagai telah dibaca"
-                      className="p-1 bg-white hover:bg-[#e8f5f2] border border-[#d1d7db] hover:border-[#c2e7e0] text-[#54656f] hover:text-[#008069] rounded-lg transition flex items-center justify-center shrink-0 cursor-pointer shadow-2xs active:scale-95"
+                      className="p-1 bg-surface hover:bg-accent-soft border border-divider hover:border-accent/30 text-ink-2 hover:text-accent rounded-lg transition flex items-center justify-center shrink-0 cursor-pointer shadow-2xs active:scale-95"
                     >
-                      <MailCheck size={14} className="text-[#008069]" />
+                      <MailCheck size={14} className="text-accent" />
                     </button>
                   </div>
                 </div>
@@ -4704,12 +4549,12 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
               {/* 🔍 Search Bar Input: STICKY AT TOP ONLY (Searchbar & AI Toggle Stick Bersama Saat Scroll di Mobile) */}
               {(isDesktop || mobileView === 'list') && (
-                <div className="sticky top-0 z-20 bg-white py-1.5 border-b border-[#f0f2f5] shadow-xs -mx-1 px-1">
+                <div className="sticky top-0 z-20 bg-surface py-1.5 border-b border-divider shadow-xs -mx-1 px-1">
                   <div className="flex items-center gap-1.5">
                     <div className="relative flex-1 min-w-0">
-                      <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-[#8696a0]">
+                      <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-ink-3">
                         {isSearching ? (
-                          <Loader size={13} className="animate-spin text-[#008069]" />
+                          <Loader size={13} className="animate-spin text-accent" />
                         ) : (
                           <Search size={13} />
                         )}
@@ -4730,7 +4575,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           }
                         }}
                         placeholder="Cari nama, no. HP, atau keyword chat..."
-                        className="w-full pl-8 pr-7 py-1.5 bg-[#f0f2f5] hover:bg-[#e9edef] focus:bg-white border border-[#e9edef] focus:border-[#008069] rounded-lg text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:ring-1 focus:ring-[#008069]/20 transition-all shadow-2xs"
+                        className="w-full pl-8 pr-7 py-1.5 bg-fill-1 hover:bg-fill-2 focus:bg-surface border border-divider focus:border-accent rounded-lg text-xs text-ink placeholder-ink-3 focus:outline-none focus:ring-1 focus:ring-accent/20 transition-all shadow-2xs"
                       />
                       {searchQuery && (
                         <button
@@ -4745,7 +4590,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                             // Unified clear: 1 klik X menutup toolbar in-chat, hapus <mark>, reset scroll.
                             handleClearInChatSearch();
                           }}
-                          className="absolute inset-y-0 right-0 pr-2 flex items-center text-[#8696a0] hover:text-[#111b21] cursor-pointer"
+                          className="absolute inset-y-0 right-0 pr-2 flex items-center text-ink-3 hover:text-ink cursor-pointer"
                           title="Hapus pencarian"
                         >
                           <X size={13} />
@@ -4772,12 +4617,12 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
               {/* Chat Cards or Empty State */}
               {filteredChats.length === 0 ? (
-                <div className="flex flex-col items-center justify-center p-6 text-center text-[#667781] text-xs min-h-[180px]">
+                <div className="flex flex-col items-center justify-center p-6 text-center text-ink-2 text-xs min-h-[180px]">
                   {searchQuery ? (
                     <>
-                      <Search className="mx-auto text-[#8696a0] mb-2 opacity-50" size={24} />
-                      <p className="font-bold text-[#111b21]">Tidak ada hasil pencarian</p>
-                      <p className="text-[#667781] text-[10px] mt-0.5">
+                      <Search className="mx-auto text-ink-3 mb-2 opacity-50" size={24} />
+                      <p className="font-bold text-ink">Tidak ada hasil pencarian</p>
+                      <p className="text-ink-2 text-[10px] mt-0.5">
                         Tidak ditemukan chat dengan kata kunci &quot;{searchQuery}&quot;
                       </p>
                       <button
@@ -4791,34 +4636,34 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           loadChats(true, '', true);
                           handleClearInChatSearch();
                         }}
-                        className="mt-2.5 px-2.5 py-1 rounded-lg bg-[#f0f2f5] hover:bg-[#e9edef] text-[#008069] text-[11px] font-semibold transition cursor-pointer"
+                        className="mt-2.5 px-2.5 py-1 rounded-lg bg-fill-1 hover:bg-fill-2 text-accent text-[11px] font-semibold transition cursor-pointer"
                       >
                         Reset Pencarian
                       </button>
                     </>
                   ) : sourceFilter === 'unread' ? (
                     <>
-                      <CheckCircle className="mx-auto text-[#008069] mb-2" size={24} />
-                      <p className="font-bold text-[#111b21]">Semua pesan sudah dibaca! 🎉</p>
-                      <p className="text-[#667781] text-[10px] mt-0.5">
+                      <CheckCircle className="mx-auto text-accent mb-2" size={24} />
+                      <p className="font-bold text-ink">Semua pesan sudah dibaca! 🎉</p>
+                      <p className="text-ink-2 text-[10px] mt-0.5">
                         Tidak ada percakapan yang menunggu dibalas saat ini.
                       </p>
                     </>
                   ) : sourceFilter === 'reservation' ? (
                     <>
-                      <ShoppingBag className="mx-auto text-[#008069] mb-2" size={24} />
-                      <p className="font-bold text-[#111b21]">Belum ada reservasi aktif</p>
-                      <p className="text-[#667781] text-[10px] mt-0.5">
+                      <ShoppingBag className="mx-auto text-accent mb-2" size={24} />
+                      <p className="font-bold text-ink">Belum ada reservasi aktif</p>
+                      <p className="text-ink-2 text-[10px] mt-0.5">
                         Percakapan dengan booking pending, hold, atau terjadwal akan muncul di sini.
                       </p>
                     </>
                   ) : (
                     <>
-                      <CheckCircle className="mx-auto text-[#008069] mb-2" size={24} />
-                      <p className="font-bold text-[#111b21]">
+                      <CheckCircle className="mx-auto text-accent mb-2" size={24} />
+                      <p className="font-bold text-ink">
                         {chats.length === 0 ? 'Belum ada percakapan' : 'Tidak ada percakapan untuk filter ini'}
                       </p>
-                      <p className="text-[#667781] text-[10px] mt-0.5">
+                      <p className="text-ink-2 text-[10px] mt-0.5">
                         {chats.length === 0
                           ? 'Percakapan baru akan muncul secara real-time.'
                           : 'Coba ubah label atau kata kunci, atau reset filter di bawah.'}
@@ -4827,7 +4672,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                         <button
                           type="button"
                           onClick={() => { setLabelFilter('all'); setTimeout(() => loadChats(true, searchQuery, true), 0); }}
-                          className="mt-2.5 px-2.5 py-1 rounded-lg bg-[#008069] hover:bg-[#00a884] text-white text-[11px] font-semibold transition cursor-pointer shadow-xs"
+                          className="mt-2.5 px-2.5 py-1 rounded-lg bg-accent hover:bg-accent-hover text-white text-[11px] font-semibold transition cursor-pointer shadow-xs"
                         >
                           Reset Filter Label
                         </button>
@@ -4949,11 +4794,11 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                         userSelect: 'none',
                         WebkitTouchCallout: 'none',
                       }}
-                      className={`bg-white dark:bg-[#111b21] rounded-xl px-2 pt-1.5 border transition-all duration-150 active:scale-[0.985] cursor-pointer text-left flex flex-col justify-between space-y-1 shadow-2xs relative select-none touch-manipulation ${
+                      className={`bg-white dark:bg-surface rounded-xl px-2 pt-1.5 border transition-all duration-150 active:scale-[0.985] cursor-pointer text-left flex flex-col justify-between space-y-1 shadow-2xs relative select-none touch-manipulation ${
                         chat.isFrustrated
                           ? 'border-rose-400 dark:border-rose-600/70 border-l-4 border-l-rose-500 bg-rose-50/40 dark:bg-rose-950/20 hover:bg-rose-100/60 dark:hover:bg-rose-950/30'
                           : isSelected
-                          ? `border-[#008069] dark:border-[#00a884] bg-[#e8f5f2]/80 dark:bg-[#00a884]/15 ${
+                          ? `border-accent dark:border-accent bg-accent-soft/80 dark:bg-accent/15 ${
                               (chat as any).hasActiveHold
                                 ? 'border-l-4 border-l-amber-500'
                                 : (chat as any).hasPendingBooking
@@ -4967,14 +4812,14 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           : isMedical
                             ? 'border-rose-300 dark:border-rose-700/60 bg-rose-50/40 dark:bg-rose-950/20 hover:bg-rose-50/70 dark:hover:bg-rose-950/30 active:bg-rose-100/50'
                             : (chat as any).hasActiveHold
-                              ? 'border-[#e9edef] dark:border-[#2a3942] border-l-4 border-l-amber-500 bg-amber-100/90 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-900/40 active:bg-amber-200/70'
+                              ? 'border-divider dark:border-divider border-l-4 border-l-amber-500 bg-amber-100/90 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-900/40 active:bg-amber-200/70'
                               : (chat as any).hasUpcomingBooking
-                                ? 'border-[#e9edef] dark:border-[#2a3942] border-l-4 border-l-emerald-500 bg-emerald-50/65 dark:bg-emerald-950/30 hover:bg-emerald-100/60 dark:hover:bg-emerald-900/40 active:bg-emerald-100'
+                                ? 'border-divider dark:border-divider border-l-4 border-l-emerald-500 bg-emerald-50/65 dark:bg-emerald-950/30 hover:bg-emerald-100/60 dark:hover:bg-emerald-900/40 active:bg-emerald-100'
                                 : (chat as any).hasPendingBooking
-                                  ? 'border-[#e9edef] dark:border-[#2a3942] border-l-4 border-l-sky-500 bg-sky-100/90 dark:bg-sky-950/30 hover:bg-sky-100 dark:hover:bg-sky-900/40 active:bg-sky-200/70'
+                                  ? 'border-divider dark:border-divider border-l-4 border-l-sky-500 bg-sky-100/90 dark:bg-sky-950/30 hover:bg-sky-100 dark:hover:bg-sky-900/40 active:bg-sky-200/70'
                                   : sharelocCard.needed && sharelocCard.borderClass
-                                    ? `border-[#e9edef] dark:border-[#2a3942] ${sharelocCard.borderClass} ${sharelocCard.urgent ? 'bg-orange-50/40 dark:bg-orange-950/20' : 'bg-amber-50/40 dark:bg-amber-950/20'} hover:bg-[#f8fafc] dark:hover:bg-[#202c33]`
-                                    : 'border-[#e9edef] dark:border-[#2a3942] hover:border-[#c2e7e0] dark:hover:border-[#00a884]/50 hover:bg-[#f8fafc] dark:hover:bg-[#202c33] active:bg-[#f0f2f5] dark:active:bg-[#222e35]'
+                                    ? `border-divider dark:border-divider ${sharelocCard.borderClass} ${sharelocCard.urgent ? 'bg-orange-50/40 dark:bg-orange-950/20' : 'bg-amber-50/40 dark:bg-amber-950/20'} hover:bg-surface-2 dark:hover:bg-fill-1`
+                                    : 'border-divider dark:border-divider hover:border-accent/30 dark:hover:border-accent/50 hover:bg-surface-2 dark:hover:bg-fill-1 active:bg-fill-1 dark:active:bg-fill-2'
                       }`}
                     >
                       {/* Top Row: Avatar, Name, Group 1 Labels (Under Name), & Release/Bot Icon + Badges */}
@@ -4987,14 +4832,14 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                             size="sm"
                           />
                           <div className="space-y-0.5 min-w-0">
-                            <h4 className="font-bold text-[#111b21] dark:text-[#e9edef] text-xs flex items-center space-x-1.5 truncate">
+                            <h4 className="font-bold text-ink text-xs flex items-center space-x-1.5 truncate">
                               {chat.isPinned && (
                                 <span title="Percakapan Disematkan (Pin)" className="inline-flex shrink-0">
-                                  <Pin size={11} className="text-[#008069] fill-current" />
+                                  <Pin size={11} className="text-accent fill-current" />
                                 </span>
                               )}
                               <span className="truncate">{chatName}</span>
-                              <span className="text-[10px] text-[#667781] dark:text-[#8696a0] font-normal flex-shrink-0">({chat.customerPhone || 'Unknown'})</span>
+                              <span className="text-[10px] text-ink-2 font-normal flex-shrink-0">({chat.customerPhone || 'Unknown'})</span>
                             </h4>
 
                             {/* GRUP 1: Label Kustom Pelanggan (CRM Tags di bawah nama & nomor) + HOLD/Terjadwal Badge */}
@@ -5003,20 +4848,20 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                 <span
                                   title="Butuh Respon Segera (Menunggu balasan > 60 menit)"
                                   aria-label="Butuh respon segera, menunggu balasan lebih dari 60 menit"
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-[#f87171] ring-1 ring-rose-300 dark:ring-rose-800/40 shadow-2xs shrink-0 cursor-help"
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-danger ring-1 ring-rose-300 dark:ring-rose-800/40 shadow-2xs shrink-0 cursor-help"
                                 >
                                   <span className="relative flex h-2 w-2">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-600"></span>
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-danger opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-danger"></span>
                                   </span>
-                                  <AlertTriangle size={11} className="text-rose-600 dark:text-[#f87171] shrink-0" />
+                                  <AlertTriangle size={11} className="text-rose-600 dark:text-danger shrink-0" />
                                 </span>
                               )}
                               {(chat.customerLabels || []).map((lbl) => (
                                 <span
                                   key={lbl.id}
                                   className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold text-white shadow-2xs"
-                                  style={{ backgroundColor: lbl.color || '#008069' }}
+                                  style={{ backgroundColor: lbl.color || 'rgb(var(--c-accent))' }}
                                   title={`Label: ${lbl.name}${lbl.description ? ` (${lbl.description})` : ''}`}
                                 >
                                   {lbl.name}
@@ -5054,14 +4899,14 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                   const staff = ar?.assigned_staff;
                                   if (staff?.name) {
                                     return (
-                                      <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-violet-100 dark:bg-violet-950/60 text-violet-800 dark:text-[#aebac1] ring-1 ring-violet-300 dark:ring-[#2a3942] shadow-2xs">
+                                      <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-violet-100 dark:bg-violet-950/60 text-violet-800 dark:text-ink-2 ring-1 ring-violet-300 dark:ring-divider shadow-2xs">
                                         👩‍⚕️ Bidan {staff.name}
                                       </span>
                                     );
                                   }
                                   if (ar && !ar.assigned_staff_id) {
                                     return (
-                                      <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-[#f59e0b] ring-1 ring-amber-300 dark:ring-amber-800/40 shadow-2xs">
+                                      <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-warning ring-1 ring-amber-300 dark:ring-amber-800/40 shadow-2xs">
                                         ⚠️ Belum Ada Bidan
                                       </span>
                                     );
@@ -5084,8 +4929,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                               title="Kembalikan percakapan ke Bot AI"
                               className={`p-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center shadow-2xs disabled:opacity-50 ${
                                 isMedical
-                                  ? 'bg-rose-100 hover:bg-rose-200 text-rose-700 border border-rose-300'
-                                  : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/60 dark:text-[#aebac1] dark:border-[#2a3942]'
+                                  ? 'bg-danger-soft hover:bg-danger text-danger border border-danger-line'
+                                  : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/60 dark:text-ink-2 dark:border-divider'
                               }`}
                             >
                               {releasingId === chat.conversationId ? (
@@ -5103,14 +4948,14 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                             {(chat.unreadCount || 0) > 0 ? (
                               chat.isManualUnread ? (
                                 <span
-                                  className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-[#005c4b] shadow-2xs ring-1 ring-white/50"
+                                  className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-accent-hover shadow-2xs ring-1 ring-white/50"
                                   title="Ditandai belum dibaca (Manual)"
                                 >
-                                  <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                                  <span className="w-1.5 h-1.5 rounded-full bg-surface" />
                                 </span>
                               ) : (
                                 <span
-                                  className="inline-flex items-center justify-center min-w-[19px] h-[19px] px-1 text-[10px] font-bold text-white bg-[#25D366] rounded-full shadow-2xs"
+                                  className="inline-flex items-center justify-center min-w-[19px] h-[19px] px-1 text-[10px] font-bold text-on-solid bg-success rounded-full shadow-2xs"
                                   title={`${chat.unreadCount} pesan belum dibaca`}
                                 >
                                   {chat.unreadCount}
@@ -5119,7 +4964,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                             ) : chat.isAwaitingReply ? (
                               <span
                                 title="Sudah dibaca, menunggu balasan"
-                                className="w-2.5 h-2.5 rounded-full bg-[#8696a0] shadow-2xs ring-1.5 ring-white inline-block"
+                                className="w-2.5 h-2.5 rounded-full bg-ink-3 shadow-2xs ring-1.5 ring-white inline-block"
                               />
                             ) : null}
                           </div>
@@ -5143,22 +4988,22 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           : null;
                         if (searchQuery.trim() && matchedSnippet) {
                           return (
-                            <div className="mt-1 p-1.5 rounded bg-amber-50/60 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/20 text-[11px] text-[#111b21] dark:text-slate-200 line-clamp-2 leading-tight flex gap-1.5 items-start">
-                              <Search size={10} className="shrink-0 mt-0.5 text-amber-600 dark:text-[#f59e0b]/60" />
+                            <div className="mt-1 p-1.5 rounded bg-amber-50/60 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/20 text-[11px] text-ink dark:text-slate-200 line-clamp-2 leading-tight flex gap-1.5 items-start">
+                              <Search size={10} className="shrink-0 mt-0.5 text-amber-600 dark:text-warning/60" />
                               <span className="flex-1 min-w-0">&quot;{renderHighlightedText(extractSmartSearchSnippet(matchedSnippet, searchQuery), searchQuery)}&quot;</span>
                             </div>
                           );
                         }
                         if (draftText) {
                           return (
-                            <p className="text-xs text-[#008069] dark:text-[#00a884] line-clamp-1 leading-snug font-medium flex items-center gap-1" title={`Draf belum terkirim: ${draftText}`}>
+                            <p className="text-xs text-accent line-clamp-1 leading-snug font-medium flex items-center gap-1" title={`Draf belum terkirim: ${draftText}`}>
                               <PenLine size={11} className="shrink-0" />
                               <span className="truncate">Draft: {draftText}</span>
                             </p>
                           );
                         }
                         return (
-                          <p className="text-xs text-[#54656f] dark:text-[#aebac1] line-clamp-1 italic leading-snug">
+                          <p className="text-xs text-ink-2 dark:text-ink-2 line-clamp-1 italic leading-snug">
                             &quot;{preview || 'Tidak ada pesan'}&quot;
                           </p>
                         );
@@ -5172,14 +5017,14 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                             ? 'bg-emerald-50/90 dark:bg-emerald-950/50 border-emerald-200/70 dark:border-emerald-800/40 text-emerald-900 dark:text-emerald-200'
                             : (chat as any).hasPendingBooking
                               ? 'bg-sky-100/90 dark:bg-sky-950/50 border-sky-300/70 dark:border-sky-800/40 text-sky-950 dark:text-sky-200'
-                              : 'bg-[#f8fafc]/60 dark:bg-black/35 border-[#e9edef] dark:border-[#2a3942] text-[#667781] dark:text-[#aebac1]'
+                              : 'bg-surface-2/60 dark:bg-black/35 border-divider dark:border-divider text-ink-2 dark:text-ink-2'
                       }`}>
                         <span className="flex items-center flex-wrap gap-1.5">
 
                           {/* Medis Badge (icon-only) */}
                           {isMedical && (
                             <span
-                              className="inline-flex items-center p-1 rounded text-[9px] font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-[#f87171] border border-rose-200 dark:border-rose-800/40"
+                              className="inline-flex items-center p-1 rounded text-[9px] font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-danger border border-rose-200 dark:border-rose-800/40"
                               title="Medical Concern / Emergency — Butuh respon medis"
                             >
                               <AlertTriangle size={8} />
@@ -5190,7 +5035,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           {chat.isMql && !(chat.purchaseCount && chat.purchaseCount > 0) && (
                             <span
                               title={`MQL (${chat.mqlBubbleCount ?? 0} Bubble)`}
-                              className="inline-flex items-center p-1 rounded text-[9px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-[#00a884] border border-emerald-200 dark:border-emerald-800/40"
+                              className="inline-flex items-center p-1 rounded text-[9px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-accent border border-emerald-200 dark:border-emerald-800/40"
                             >
                               <Zap size={8} />
                             </span>
@@ -5206,8 +5051,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                               }
                               className={`inline-flex items-center space-x-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold border ${
                                 chat.purchaseCount === 1
-                                  ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-[#00a884] border-emerald-200 dark:border-emerald-800/40'
-                                  : 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-[#f59e0b] border-amber-200 dark:border-amber-800/40'
+                                  ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-accent border-emerald-200 dark:border-emerald-800/40'
+                                  : 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-warning border-amber-200 dark:border-amber-800/40'
                               }`}
                             >
                               <ShoppingBag size={8} className="mr-0.5" />
@@ -5219,7 +5064,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           {chat.trafficSource === 'meta' && (
                             <span
                               title="Traffic Iklan Meta"
-                              className="inline-flex items-center p-1 rounded text-[9px] font-bold bg-sky-100 dark:bg-sky-950/60 text-sky-800 dark:text-[#38bdf8] border border-sky-200 dark:border-sky-800/40"
+                              className="inline-flex items-center p-1 rounded text-[9px] font-bold bg-sky-100 dark:bg-sky-950/60 text-sky-800 dark:text-info border border-sky-200 dark:border-sky-800/40"
                             >
                               <Facebook size={8} />
                             </span>
@@ -5229,7 +5074,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           {chat.trafficSource === 'legacy' && !(chat.purchaseCount && chat.purchaseCount > 0) && (
                             <span
                               title="Pasien Legacy (Data hasil migrasi arsip riwayat WhatsApp lama)"
-                              className="inline-flex items-center p-1 rounded text-[9px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-[#aebac1] border border-purple-200 dark:border-[#2a3942]"
+                              className="inline-flex items-center p-1 rounded text-[9px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-ink-2 border border-purple-200 dark:border-divider"
                             >
                               <Archive size={8} />
                             </span>
@@ -5238,7 +5083,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           {/* Sandbox Badge */}
                           {chat.isSandboxTest && (
                             <span
-                              className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-[#aebac1] border border-purple-200 dark:border-[#2a3942]"
+                              className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-ink-2 border border-purple-200 dark:border-divider"
                               title="Chat simulasi / sandbox"
                             >
                               Sandbox
@@ -5249,20 +5094,20 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                         {/* Timestamp & Status Alur (chip CS / Bot) */}
                         <span className="flex items-center gap-1.5">
                           {chat.lastMessageAt && (
-                            <span className="text-[#667781] dark:text-[#aebac1] font-sans text-[10px]">
+                            <span className="text-ink-2 dark:text-ink-2 font-sans text-[10px]">
                               {formatLastChat(chat.lastMessageAt)}
                             </span>
                           )}
                           {chat.currentState === 'HUMAN_HANDLING' ? (
                             <span
-                              className="inline-flex items-center p-1 rounded-full text-[9px] font-bold bg-amber-100 dark:bg-amber-950/30 text-amber-800 dark:text-[#f59e0b] border border-amber-200 dark:border-amber-800/40"
+                              className="inline-flex items-center p-1 rounded-full text-[9px] font-bold bg-amber-100 dark:bg-amber-950/30 text-amber-800 dark:text-warning border border-amber-200 dark:border-amber-800/40"
                               title="Ditangani CS (manual)"
                             >
                               <User size={10} />
                             </span>
                           ) : (
                             <span
-                              className="inline-flex items-center p-1 rounded-full text-[9px] font-bold bg-emerald-100 dark:bg-emerald-950/30 text-emerald-800 dark:text-[#00a884] border border-emerald-200 dark:border-emerald-800/40"
+                              className="inline-flex items-center p-1 rounded-full text-[9px] font-bold bg-emerald-100 dark:bg-emerald-950/30 text-emerald-800 dark:text-accent border border-emerald-200 dark:border-emerald-800/40"
                               title={`Alur: ${chat.currentState}`}
                             >
                               <Bot size={10} />
@@ -5278,9 +5123,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     <button
                       onClick={() => loadChats(false)}
                       disabled={loadingMore}
-                      className="px-3.5 py-1.5 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] rounded-xl text-xs font-semibold text-[#111b21] transition shadow-xs disabled:opacity-50 flex items-center space-x-1.5"
+                      className="px-3.5 py-1.5 bg-surface hover:bg-fill-1 border border-divider rounded-xl text-xs font-semibold text-ink transition shadow-xs disabled:opacity-50 flex items-center space-x-1.5"
                     >
-                      {loadingMore && <Loader size={11} className="animate-spin text-[#008069]" />}
+                      {loadingMore && <Loader size={11} className="animate-spin text-accent" />}
                       <span>{loadingMore ? 'Memuat...' : 'Muat lebih banyak'}</span>
                     </button>
                   </div>
@@ -5296,11 +5141,11 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
             className={`${mobileView === 'list' ? 'hidden lg:flex' : 'flex animate-mobile-chat-enter lg:animate-none'} flex-1 min-w-0 h-full min-h-0 flex-col`}
           >
             {selectedChat ? (
-              <div className="bg-white border-0 lg:border border-[#e9edef] rounded-none lg:rounded-2xl p-1 sm:p-2 md:p-2.5 pb-0 sm:pb-0 md:pb-0 h-full flex flex-col justify-between shadow-none lg:shadow-xs overflow-hidden min-h-0">
+              <div className="bg-surface border-0 lg:border border-divider rounded-none lg:rounded-2xl p-1 sm:p-2 md:p-2.5 pb-0 sm:pb-0 md:pb-0 h-full flex flex-col justify-between shadow-none lg:shadow-xs overflow-hidden min-h-0">
                 {/* Header Info: Clickable Card to view full customer detail modal */}
-                <div className="border-b border-[#e9edef] pb-1 sm:pb-1.5 space-y-1 shrink-0">
+                <div className="border-b border-divider pb-1 sm:pb-1.5 space-y-1 shrink-0">
                   {selectedChat.isSandboxTest && (
-                    <div className="flex items-center space-x-2 px-2 py-0.5 rounded-lg bg-purple-50 border border-purple-200 text-purple-700 text-[10px] font-bold uppercase tracking-wider">
+                    <div className="flex items-center space-x-2 px-2 py-0.5 rounded-lg bg-violet-soft border border-violet-line text-violet text-[10px] font-bold uppercase tracking-wider">
                       <FlaskConical size={11} />
                       <span>QA TEST — chat simulasi</span>
                     </div>
@@ -5311,7 +5156,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       <button
                         type="button"
                         onClick={handleBackToList}
-                        className="lg:hidden flex items-center justify-center w-10 h-10 min-w-[40px] min-h-[40px] -ml-1 mr-2 rounded-xl bg-[#f0f2f5] hover:bg-[#e9edef] active:bg-[#d1d7db] text-[#111b21] transition shrink-0 active:scale-95 touch-manipulation z-20 cursor-pointer shadow-2xs"
+                        className="lg:hidden flex items-center justify-center w-10 h-10 min-w-[40px] min-h-[40px] -ml-1 mr-2 rounded-xl bg-fill-1 hover:bg-fill-2 active:bg-strong text-ink transition shrink-0 active:scale-95 touch-manipulation z-20 cursor-pointer shadow-2xs"
                         title="Kembali ke daftar percakapan"
                         aria-label="Kembali ke daftar percakapan"
                       >
@@ -5321,7 +5166,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       {/* Clickable Customer Header Box */}
                       <div
                         onClick={() => handleOpenCustomerDetail(selectedChat)}
-                        className="flex items-center space-x-2.5 p-1 -m-1 rounded-xl hover:bg-[#f8fafc] cursor-pointer transition border border-transparent hover:border-[#e9edef] group min-w-0 flex-1"
+                        className="flex items-center space-x-2.5 p-1 -m-1 rounded-xl hover:bg-surface-2 cursor-pointer transition border border-transparent hover:border-divider group min-w-0 flex-1"
                         title="Klik untuk melihat detail lengkap profil customer"
                       >
                         <CustomerAvatar
@@ -5331,12 +5176,12 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           size="sm"
                         />
                         <div className="min-w-0 flex flex-col justify-center">
-                          <h3 className="text-xs sm:text-sm font-bold text-[#111b21] flex items-center space-x-1 group-hover:text-[#008069] transition truncate leading-none">
+                          <h3 className="text-xs sm:text-sm font-bold text-ink flex items-center space-x-1 group-hover:text-accent transition truncate leading-none">
                             <span className="truncate">{selectedChat.customerName || 'Customer'}</span>
-                            <ExternalLink size={11} className="text-[#8696a0] group-hover:text-[#008069] shrink-0" />
+                            <ExternalLink size={11} className="text-ink-3 group-hover:text-accent shrink-0" />
                           </h3>
                           <div className="flex items-center space-x-1.5 mt-1 flex-wrap gap-y-1">
-                            <p className="text-[11px] text-[#667781] font-mono leading-none">
+                            <p className="text-[11px] text-ink-2 font-mono leading-none">
                               {selectedChat.customerPhone || 'Unknown'}
                             </p>
 
@@ -5345,7 +5190,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                               <span
                                 key={lbl.id}
                                 className="w-2.5 h-2.5 rounded-full inline-block shrink-0 shadow-2xs cursor-help ring-1 ring-white"
-                                style={{ backgroundColor: lbl.color || '#008069' }}
+                                style={{ backgroundColor: lbl.color || 'rgb(var(--c-accent))' }}
                                 title={`Label: ${lbl.name}${lbl.description ? ` (${lbl.description})` : ''}`}
                               />
                             ))}
@@ -5372,7 +5217,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                               <button
                                 type="button"
                                 onClick={() => setLabelPopoverOpen(!labelPopoverOpen)}
-                                className="no-touch-min inline-flex items-center justify-center w-4 h-4 min-w-[16px] min-h-[16px] max-h-[16px] aspect-square rounded-full text-[10px] font-bold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#54656f] hover:text-[#008069] border border-[#d1d7db] transition shadow-2xs active:scale-95 ml-0.5 shrink-0"
+                                className="no-touch-min inline-flex items-center justify-center w-4 h-4 min-w-[16px] min-h-[16px] max-h-[16px] aspect-square rounded-full text-[10px] font-bold bg-fill-1 hover:bg-fill-2 text-ink-2 hover:text-accent border border-divider transition shadow-2xs active:scale-95 ml-0.5 shrink-0"
                                 title="Tambah / Kelola Label Pasien"
                                 aria-label="Tambah Label"
                               >
@@ -5381,21 +5226,21 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
                             {/* Label Picker Popover */}
                             {labelPopoverOpen && (
-                              <div className="absolute left-0 top-full mt-1.5 z-30 w-52 bg-white border border-[#e9edef] rounded-xl shadow-lg p-2 space-y-1">
-                                <div className="flex justify-between items-center px-1.5 pb-1 border-b border-[#f0f2f5] text-[11px] font-bold text-[#667781]">
+                              <div className="absolute left-0 top-full mt-1.5 z-30 w-52 bg-surface border border-divider rounded-xl shadow-lg p-2 space-y-1">
+                                <div className="flex justify-between items-center px-1.5 pb-1 border-b border-divider text-[11px] font-bold text-ink-2">
                                   <span>PILIH LABEL</span>
                                   <button
                                     type="button"
                                     onClick={() => setLabelPopoverOpen(false)}
-                                    className="text-[#8696a0] hover:text-[#111b21] text-xs font-semibold"
+                                    className="text-ink-3 hover:text-ink text-xs font-semibold"
                                   >
                                     ✕
                                   </button>
                                 </div>
                                 {allLabels.length === 0 ? (
-                                  <p className="text-[11px] text-[#667781] p-2 text-center">
+                                  <p className="text-[11px] text-ink-2 p-2 text-center">
                                     Belum ada label.{' '}
-                                    <a href="/admin/labels" className="text-[#008069] underline font-semibold">
+                                    <a href="/admin/labels" className="text-accent underline font-semibold">
                                       Buat label
                                     </a>
                                   </p>
@@ -5410,7 +5255,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                           onClick={() => handleToggleLabel(selectedChat.customerId, lbl)}
                                           disabled={togglingLabelId === lbl.id}
                                           className={`w-full text-left px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition ${
-                                            isChecked ? 'bg-[#e8f5f2] text-[#008069]' : 'hover:bg-[#f0f2f5] text-[#111b21]'
+                                            isChecked ? 'bg-accent-soft text-accent' : 'hover:bg-fill-1 text-ink'
                                           }`}
                                         >
                                           <span className="flex items-center space-x-2 truncate">
@@ -5420,7 +5265,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                             />
                                             <span className="truncate">{lbl.name}</span>
                                           </span>
-                                          {isChecked && <Check size={13} className="text-[#008069] shrink-0" />}
+                                          {isChecked && <Check size={13} className="text-accent shrink-0" />}
                                         </button>
                                       );
                                     })}
@@ -5441,7 +5286,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           type="button"
                           onClick={() => setDispatchDrawerOpen(true)}
                           title="Buka Radar OTW Bidan"
-                          className="xl:hidden inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] text-xs font-bold shadow-2xs active:scale-95 transition"
+                          className="xl:hidden inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-accent-soft text-accent border border-accent/30 text-xs font-bold shadow-2xs active:scale-95 transition"
                         >
                           <Radar size={14} />
                           <span className="hidden sm:inline">Radar OTW</span>
@@ -5473,7 +5318,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                         type="button"
                         onClick={() => setInChatSearchOpen((v) => !v)}
                         title={inChatSearchOpen ? 'Tutup pencarian dalam chat' : 'Cari dalam chat'}
-                        className={`p-1.5 rounded-xl border transition shadow-2xs ${inChatSearchOpen ? 'bg-[#008069] text-white border-[#008069]' : 'bg-white dark:bg-[#2a3942] border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] hover:bg-[#f0f2f5] dark:hover:bg-[#374248]'}`}
+                        className={`p-1.5 rounded-xl border transition shadow-2xs ${inChatSearchOpen ? 'bg-accent text-white border-accent' : 'bg-white dark:bg-fill-2 border-divider dark:border-strong text-ink-2 dark:text-ink-2 hover:text-ink hover:bg-fill-1 dark:hover:bg-strong'}`}
                       >
                         <Search size={14} />
                       </button>
@@ -5482,7 +5327,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           onClick={() => handleRelease(selectedChat)}
                           disabled={releasingId === selectedChat.conversationId}
                           title="Kembalikan percakapan ke Bot AI"
-                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50 cursor-pointer"
+                          className="px-3 py-1.5 bg-info hover:bg-info-hover text-on-solid rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50 cursor-pointer"
                         >
                           <Bot size={14} />
                           <span className="hidden sm:inline">Kembalikan ke Bot</span>
@@ -5492,9 +5337,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           onClick={() => handleTakeover(selectedChat)}
                           disabled={releasingId === selectedChat.conversationId}
                           title="Ambil alih percakapan (CS / Manual). Bot AI akan dinonaktifkan untuk percakapan ini."
-                          className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-300 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
+                          className="px-3 py-1.5 bg-warning-soft hover:bg-warning-line text-warning border border-warning-line rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
                         >
-                          <User size={14} className="text-amber-600" />
+                          <User size={14} className="text-warning" />
                           <span>Ambil Alih (CS)</span>
                         </button>
                       )}
@@ -5520,7 +5365,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                         title="Tampilkan detail banner"
                       >
                         <span className={`w-1.5 h-1.5 rounded-full animate-pulse shrink-0 ${
-                          activeHoldReservation ? 'bg-amber-500' : activeConfirmedReservation ? 'bg-emerald-500' : 'bg-sky-500'
+                          activeHoldReservation ? 'bg-warning' : activeConfirmedReservation ? 'bg-success' : 'bg-info'
                         }`} />
                         <span>
                           {(() => {
@@ -5542,11 +5387,11 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 {activeHoldReservation && (
                   <div className={`mx-1.5 mb-1.5 px-3 py-1.5 min-h-[40px] rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition-all bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent dark:from-amber-500/10 dark:via-transparent dark:to-transparent border-amber-300/80 dark:border-amber-600/50 text-amber-950 dark:text-amber-100`}>
                     <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
-                      <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                      <span className="w-2 h-2 rounded-full bg-warning animate-pulse shrink-0" />
                       <div className="flex flex-col justify-center leading-tight min-w-0">
-                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-amber-800 dark:text-[#f59e0b]">HOLD</span>
+                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-amber-800 dark:text-warning">HOLD</span>
                         <span className="flex items-center gap-1 min-w-0 text-amber-950 dark:text-amber-100">
-                          <Clock size={11} className="text-amber-700 dark:text-[#f59e0b] shrink-0" />
+                          <Clock size={11} className="text-amber-700 dark:text-warning shrink-0" />
                           <span className="font-semibold truncate text-[11px]">
                             {activeHoldReservation.booking_date
                               ? new Date(activeHoldReservation.booking_date).toLocaleDateString('id-ID', {
@@ -5570,7 +5415,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       <button
                         type="button"
                         onClick={() => handleConvertHoldToBooking(activeHoldReservation)}
-                        className="inline-flex items-center gap-1.5 h-[30px] px-3 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-700 hover:to-amber-600 active:scale-95 text-white font-bold rounded-full text-xs leading-none transition-all shadow-xs cursor-pointer whitespace-nowrap shrink-0"
+                        className="inline-flex items-center gap-1.5 h-[30px] px-3 bg-gradient-to-r from-warning to-warning hover:from-warning hover:to-warning active:scale-95 text-white font-bold rounded-full text-xs leading-none transition-all shadow-xs cursor-pointer whitespace-nowrap shrink-0"
                         title="Lengkapi data booking reservasi ini"
                       >
                         <PenLine size={13} className="shrink-0" />
@@ -5604,7 +5449,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       <button
                         type="button"
                         onClick={() => setIsBannerCollapsed(true)}
-                        className="md:hidden inline-flex items-center justify-center h-[30px] w-[30px] text-amber-700 dark:text-[#f59e0b] hover:bg-amber-500/15 active:scale-95 rounded-full transition-all shrink-0"
+                        className="md:hidden inline-flex items-center justify-center h-[30px] w-[30px] text-amber-700 dark:text-warning hover:bg-amber-500/15 active:scale-95 rounded-full transition-all shrink-0"
                         title="Ciutkan banner"
                       >
                         <ChevronUp size={14} className="stroke-[2.5]" />
@@ -5621,11 +5466,11 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     ? 'bg-rose-50/95 dark:bg-rose-950/60 border-rose-300 dark:border-rose-700/60 text-rose-950 dark:text-rose-100'
                     : 'bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700/60 text-emerald-950 dark:text-emerald-100';
                   const iconColor = isMismatch
-                    ? 'text-rose-600 dark:text-[#f87171]'
-                    : 'text-emerald-700 dark:text-[#00a884]';
+                    ? 'text-rose-600 dark:text-danger'
+                    : 'text-emerald-700 dark:text-accent';
                   const headerColor = isMismatch
-                    ? 'text-rose-800 dark:text-[#f87171]'
-                    : 'text-emerald-800 dark:text-[#00a884]';
+                    ? 'text-rose-800 dark:text-danger'
+                    : 'text-emerald-800 dark:text-accent';
                   const subtextColor = isMismatch
                     ? 'text-rose-900 dark:text-rose-200'
                     : 'text-emerald-900 dark:text-emerald-200';
@@ -5644,7 +5489,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                               BUKTI TRANSFER ({currentActiveReservation.payment_method || 'Transfer'})
                             </span>
                             {isMismatch && (
-                              <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-rose-600 text-white uppercase tracking-wider shadow-2xs">
+                              <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-danger text-on-solid uppercase tracking-wider shadow-2xs">
                                 NOMINAL TIDAK SESUAI
                               </span>
                             )}
@@ -5692,7 +5537,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                 toast(`Gagal memproses persetujuan: ${err?.message || 'Terjadi kesalahan'}`, 'error');
                               }
                             }}
-                            className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-2xs"
+                            className="px-2.5 py-1 rounded-lg bg-success hover:bg-success-hover text-on-solid text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-2xs"
                             title="Tandai pembayaran telah diverifikasi CS"
                           >
                             <CheckCircle size={13} />
@@ -5713,11 +5558,11 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                        className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden text-left cursor-pointer hover:opacity-90 transition-opacity"
                        title="Lihat Ringkasan Jadwal & Bukti Bayar Pasien"
                      >
-                       <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                       <span className="w-2 h-2 rounded-full bg-success animate-pulse shrink-0" />
                        <div className="flex flex-col justify-center leading-tight min-w-0">
-                         <span className="font-extrabold text-[9px] uppercase tracking-wider text-emerald-800 dark:text-[#00a884]">JADWAL</span>
+                         <span className="font-extrabold text-[9px] uppercase tracking-wider text-emerald-800 dark:text-accent">JADWAL</span>
                          <span className="flex items-center gap-1 min-w-0 text-emerald-950 dark:text-emerald-100">
-                           <Clock size={11} className="text-emerald-700 dark:text-[#00a884] shrink-0" />
+                           <Clock size={11} className="text-emerald-700 dark:text-accent shrink-0" />
                            <span className="font-semibold truncate text-[11px]">
                              {activeConfirmedReservation.booking_date
                                ? new Date(activeConfirmedReservation.booking_date).toLocaleDateString('id-ID', {
@@ -5745,7 +5590,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                            setActiveEditingConfirmedReservation(activeConfirmedReservation);
                            setShowQuickBookingModal(true);
                          }}
-                         className={`inline-flex items-center justify-center bg-transparent border-transparent active:scale-95 text-emerald-700 dark:text-[#00a884] hover:text-emerald-900 dark:hover:text-emerald-100 transition-all cursor-pointer shrink-0 ${chatBotActive ? 'w-7 h-4' : 'h-[30px] w-[30px]'}`}
+                         className={`inline-flex items-center justify-center bg-transparent border-transparent active:scale-95 text-emerald-700 dark:text-accent hover:text-emerald-900 dark:hover:text-emerald-100 transition-all cursor-pointer shrink-0 ${chatBotActive ? 'w-7 h-4' : 'h-[30px] w-[30px]'}`}
                          title="Ubah Jadwal, Jam, atau Bidan Bertugas"
                        >
                          <PenLine size={chatBotActive ? 12 : 14} className="shrink-0" />
@@ -5768,7 +5613,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                             toast('Gagal menandai selesai.', 'error');
                           }
                         }}
-                        className={`inline-flex items-center justify-center bg-transparent border-transparent active:scale-95 text-emerald-700 dark:text-[#00a884] hover:text-emerald-900 dark:hover:text-emerald-100 transition-all cursor-pointer shrink-0 ${chatBotActive ? 'w-7 h-4' : 'h-[30px] w-[30px]'}`}
+                        className={`inline-flex items-center justify-center bg-transparent border-transparent active:scale-95 text-emerald-700 dark:text-accent hover:text-emerald-900 dark:hover:text-emerald-100 transition-all cursor-pointer shrink-0 ${chatBotActive ? 'w-7 h-4' : 'h-[30px] w-[30px]'}`}
                         title="Tandai reservasi telah selesai treatment"
                       >
                         <CheckCircle size={chatBotActive ? 12 : 14} className="shrink-0" />
@@ -5776,7 +5621,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       <button
                         type="button"
                         onClick={() => setIsBannerCollapsed(true)}
-                        className="md:hidden inline-flex items-center justify-center h-[30px] w-[30px] text-emerald-700 dark:text-[#00a884] hover:bg-emerald-500/15 active:scale-95 rounded-full transition-all shrink-0"
+                        className="md:hidden inline-flex items-center justify-center h-[30px] w-[30px] text-emerald-700 dark:text-accent hover:bg-emerald-500/15 active:scale-95 rounded-full transition-all shrink-0"
                         title="Ciutkan banner"
                       >
                         <ChevronUp size={14} className="stroke-[2.5]" />
@@ -5789,11 +5634,11 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 {!activeHoldReservation && !activeConfirmedReservation && activePendingReservation && (
                   <div className={`mx-1.5 mb-1.5 px-3 py-1.5 min-h-[40px] rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition-all bg-gradient-to-r from-sky-500/10 via-sky-500/5 to-transparent dark:from-sky-500/20 dark:via-sky-500/10 dark:to-transparent border-sky-300/80 dark:border-sky-600/50 text-sky-950 dark:text-sky-100`}>
                     <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
-                      <span className="w-2 h-2 rounded-full bg-sky-500 animate-pulse shrink-0" />
+                      <span className="w-2 h-2 rounded-full bg-info animate-pulse shrink-0" />
                       <div className="flex flex-col justify-center leading-tight min-w-0">
-                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-sky-800 dark:text-[#38bdf8]">PENDING</span>
+                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-sky-800 dark:text-info">PENDING</span>
                         <span className="flex items-center gap-1 min-w-0 text-sky-950 dark:text-sky-100">
-                          <Clock size={11} className="text-sky-700 dark:text-[#38bdf8] shrink-0" />
+                          <Clock size={11} className="text-sky-700 dark:text-info shrink-0" />
                           <span className="font-semibold truncate text-[11px]">
                             {activePendingReservation.booking_date
                               ? new Date(activePendingReservation.booking_date).toLocaleDateString('id-ID', {
@@ -5817,7 +5662,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       <button
                         type="button"
                         onClick={() => handleConfirmPendingBooking(activePendingReservation)}
-                        className="inline-flex items-center gap-1.5 h-[30px] px-3 bg-gradient-to-r from-sky-600 to-sky-500 hover:from-sky-700 hover:to-sky-600 active:scale-95 text-white font-bold rounded-full text-xs leading-none transition-all shadow-xs cursor-pointer whitespace-nowrap shrink-0"
+                        className="inline-flex items-center gap-1.5 h-[30px] px-3 bg-gradient-to-r from-info to-info hover:from-info hover:to-info active:scale-95 text-white font-bold rounded-full text-xs leading-none transition-all shadow-xs cursor-pointer whitespace-nowrap shrink-0"
                         title="Konfirmasi dan jadwalkan booking ini"
                       >
                         <Check size={13} strokeWidth={2.5} className="shrink-0" />
@@ -5826,7 +5671,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       <button
                         type="button"
                         onClick={() => setIsBannerCollapsed(true)}
-                        className="md:hidden inline-flex items-center justify-center h-[30px] w-[30px] text-sky-700 dark:text-[#38bdf8] hover:bg-sky-500/15 active:scale-95 rounded-full transition-all shrink-0"
+                        className="md:hidden inline-flex items-center justify-center h-[30px] w-[30px] text-sky-700 dark:text-info hover:bg-sky-500/15 active:scale-95 rounded-full transition-all shrink-0"
                         title="Ciutkan banner"
                       >
                         <ChevronUp size={14} className="stroke-[2.5]" />
@@ -5841,9 +5686,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 {showFormReservasiBanner && formBannerExtracted && (
                   <div className="mx-1.5 mb-1.5 px-3 py-2 min-h-[44px] rounded-xl border flex items-center justify-between gap-2 text-xs shadow-xs shrink-0 animate-fadeIn bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-transparent border-emerald-300 dark:border-emerald-700 text-emerald-950 dark:text-emerald-100">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-success animate-pulse shrink-0" />
                       <div className="flex flex-col justify-center leading-tight min-w-0">
-                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-emerald-800 dark:text-[#00a884]">
+                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-emerald-800 dark:text-accent">
                           {formBannerExtracted.hasExplicitReservationForm
                             ? 'FORM RESERVASI MASUK'
                             : 'KESEPAKATAN JADWAL TERDETEKSI (CHAT)'}
@@ -5859,7 +5704,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       <button
                         type="button"
                         onClick={() => void handleOpenQuickReservation()}
-                        className="inline-flex items-center gap-1.5 h-[34px] px-3.5 bg-[#008069] hover:bg-[#00a884] active:scale-95 text-white font-bold rounded-xl text-xs shadow-xs cursor-pointer whitespace-nowrap"
+                        className="inline-flex items-center gap-1.5 h-[34px] px-3.5 bg-accent hover:bg-accent-hover active:scale-95 text-white font-bold rounded-xl text-xs shadow-xs cursor-pointer whitespace-nowrap"
                         title="Buka form reservasi dengan data chat yang sudah terisi"
                       >
                         <CalendarPlus size={14} />
@@ -5868,7 +5713,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       <button
                         type="button"
                         onClick={() => setDismissedFormBanner(formBannerKey)}
-                        className="inline-flex items-center justify-center w-[30px] h-[30px] text-emerald-700 dark:text-[#00a884] hover:bg-emerald-500/15 active:scale-95 rounded-full transition shrink-0"
+                        className="inline-flex items-center justify-center w-[30px] h-[30px] text-emerald-700 dark:text-accent hover:bg-emerald-500/15 active:scale-95 rounded-full transition shrink-0"
                         title="Abaikan banner form ini"
                       >
                         <X size={14} strokeWidth={2.5} />
@@ -5882,7 +5727,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 {showNeutralExistingReservationBanner && matchedExistingReservation && (
                   <div className="mx-1.5 mb-1.5 px-3 py-2 min-h-[44px] rounded-xl border flex items-center justify-between gap-2 text-xs shadow-xs shrink-0 animate-fadeIn bg-slate-500/10 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <span className="w-2.5 h-2.5 rounded-full bg-slate-400 shrink-0" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-fill-2 shrink-0" />
                       <div className="flex flex-col justify-center leading-tight min-w-0">
                         <span className="font-extrabold text-[9px] uppercase tracking-wider text-slate-600 dark:text-slate-400">
                           RESERVASI SUDAH TERCATAT (OTOMATIS)
@@ -5896,7 +5741,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       <button
                         type="button"
                         onClick={() => setSelectedReservation(matchedExistingReservation)}
-                        className="inline-flex items-center gap-1.5 h-[34px] px-3.5 bg-slate-700 hover:bg-slate-800 active:scale-95 text-white font-bold rounded-xl text-xs shadow-xs cursor-pointer whitespace-nowrap"
+                        className="inline-flex items-center gap-1.5 h-[34px] px-3.5 bg-ink-2 hover:bg-ink active:scale-95 text-surface font-bold rounded-xl text-xs shadow-xs cursor-pointer whitespace-nowrap"
                         title="Lihat detail reservasi yang sudah tercatat"
                       >
                         <Calendar size={14} />
@@ -5918,9 +5763,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 {showUnregisteredVisitBanner && selectedChat && (
                   <div className="mx-1.5 mb-1.5 px-3 py-2 min-h-[44px] rounded-xl border flex items-center justify-between gap-2 text-xs shadow-xs shrink-0 animate-fadeIn bg-gradient-to-r from-amber-500/10 via-orange-500/5 to-transparent border-amber-300 dark:border-amber-700 text-amber-950 dark:text-amber-100">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-warning animate-pulse shrink-0" />
                       <div className="flex flex-col justify-center leading-tight min-w-0">
-                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-amber-800 dark:text-[#f59e0b]">
+                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-amber-800 dark:text-warning">
                           PERINGATAN KUNJUNGAN LAPANGAN
                         </span>
                         <span className="font-semibold truncate text-[11px]">
@@ -5932,7 +5777,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       <button
                         type="button"
                         onClick={() => void handleOpenQuickReservation()}
-                        className="inline-flex items-center gap-1.5 h-[34px] px-3.5 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-bold rounded-xl text-xs shadow-xs cursor-pointer whitespace-nowrap"
+                        className="inline-flex items-center gap-1.5 h-[34px] px-3.5 bg-warning hover:bg-warning-hover active:scale-95 text-on-solid font-bold rounded-xl text-xs shadow-xs cursor-pointer whitespace-nowrap"
                         title="Buat reservasi sekarang dengan data chat yang ada"
                       >
                         <CalendarPlus size={14} />
@@ -5944,18 +5789,18 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
                 {/* In-chat search toolbar (terpisah dari pencarian daftar kiri) */}
                 {inChatSearchOpen && (
-                  <div className="mx-1 mb-1 p-1.5 bg-[#f8fafc] dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl flex items-center gap-1.5 animate-fadeIn shrink-0">
-                    <Search size={14} className="text-[#8696a0] shrink-0 ml-1" />
+                  <div className="mx-1 mb-1 p-1.5 bg-surface-2 dark:bg-surface border border-divider dark:border-divider rounded-xl flex items-center gap-1.5 animate-fadeIn shrink-0">
+                    <Search size={14} className="text-ink-3 shrink-0 ml-1" />
                     <input
                       type="text"
                       value={inChatSearchQuery}
                       onChange={(e) => setInChatSearchQuery(e.target.value)}
                       placeholder="Cari dalam percakapan ini… (min. 2 huruf)"
-                      className="flex-1 bg-transparent text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none min-w-0"
+                      className="flex-1 bg-transparent text-xs text-ink placeholder-ink-3 focus:outline-none min-w-0"
                       autoFocus
                     />
                     {inChatSearchQuery && (
-                      <button type="button" onClick={handleClearInChatSearch} className="p-1 rounded-lg hover:bg-[#e9edef] dark:hover:bg-[#374248] text-[#8696a0]">
+                      <button type="button" onClick={handleClearInChatSearch} className="p-1 rounded-lg hover:bg-fill-2 dark:hover:bg-strong text-ink-3">
                         <X size={14} />
                       </button>
                     )}
@@ -6009,19 +5854,19 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       loadOlderMessages();
                     }
                   }}
-                  className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-1.5 sm:p-2.5 md:p-3 space-y-1.5 sm:space-y-2 my-1 sm:my-1.5 rounded-lg sm:rounded-xl border border-[#e9edef] bg-[#efeae2]"
+                  className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-1.5 sm:p-2.5 md:p-3 space-y-1.5 sm:space-y-2 my-1 sm:my-1.5 rounded-lg sm:rounded-xl border border-divider bg-content"
                   style={{
                     backgroundImage: currentTheme === 'dark'
                       ? 'radial-gradient(rgba(255, 255, 255, 0.04) 0.75px, transparent 0.75px)'
-                      : 'radial-gradient(#d1d7db 0.75px, transparent 0.75px)',
+                      : 'radial-gradient(rgb(var(--c-strong)) 0.75px, transparent 0.75px)',
                     backgroundSize: '16px 16px',
                     overscrollBehavior: 'contain',
                   }}
                 >
                   {/* Indikator riwayat lama di puncak chat */}
                   {hasMoreOlderMessages && isLoadingOlder && (
-                    <div className="mx-auto w-fit flex items-center gap-2 px-3 py-1.5 my-1 rounded-full bg-white/90 dark:bg-[#202c33]/90 border border-[#e9edef] dark:border-[#2a3942] shadow-xs text-[11px] text-[#667781] dark:text-[#8696a0] animate-fadeIn select-none">
-                      <Loader size={12} className="animate-spin text-[#008069]" />
+                    <div className="mx-auto w-fit flex items-center gap-2 px-3 py-1.5 my-1 rounded-full bg-white/90 dark:bg-fill-1/90 border border-divider dark:border-divider shadow-xs text-[11px] text-ink-2 animate-fadeIn select-none">
+                      <Loader size={12} className="animate-spin text-accent" />
                       <span>Memuat riwayat chat sebelumnya...</span>
                     </div>
                   )}
@@ -6030,30 +5875,30 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       <button
                         type="button"
                         onClick={loadOlderMessages}
-                        className="px-3 py-1.5 rounded-full bg-white/90 dark:bg-[#202c33]/90 border border-[#e9edef] dark:border-[#2a3942] shadow-xs text-[11px] font-semibold text-[#008069] dark:text-[#00a884] hover:bg-[#e8f5f2] dark:hover:bg-[#00a884]/15 transition active:scale-95 cursor-pointer"
+                        className="px-3 py-1.5 rounded-full bg-white/90 dark:bg-fill-1/90 border border-divider dark:border-divider shadow-xs text-[11px] font-semibold text-accent hover:bg-accent-soft dark:hover:bg-accent-hover/15 transition active:scale-95 cursor-pointer"
                       >
                         ↑ Muat pesan sebelumnya
                       </button>
                     </div>
                   )}
                   {!hasMoreOlderMessages && !isThreadLoading && messages.length > 50 && (
-                    <div className="mx-auto w-fit my-1 px-3 py-1 rounded-full bg-black/5 dark:bg-white/10 text-[10px] text-[#8696a0] select-none">
+                    <div className="mx-auto w-fit my-1 px-3 py-1 rounded-full bg-black/5 dark:bg-white/10 text-[10px] text-ink-3 select-none">
                       Awal dari riwayat percakapan
                     </div>
                   )}
                   {/* Floating In-Chat Search Navigation Bar — terpisah dari pencarian daftar */}
                   {effectiveInChatQuery && messages.length > 0 && matchingMessageIds.length > 0 && (
-                    <div className="sticky top-1 z-30 mx-auto w-fit max-w-[94%] bg-amber-50/95 backdrop-blur-md border border-amber-300 shadow-md rounded-full px-3 py-1.5 flex items-center gap-2 text-xs text-amber-900 animate-fadeIn select-none">
-                      <Search size={13} className="text-amber-600 shrink-0" />
+                    <div className="sticky top-1 z-30 mx-auto w-fit max-w-[94%] bg-warning-soft/95 backdrop-blur-md border border-warning-line shadow-md rounded-full px-3 py-1.5 flex items-center gap-2 text-xs text-warning animate-fadeIn select-none">
+                      <Search size={13} className="text-warning shrink-0" />
                       <span className="truncate">
-                        Hasil pencarian: <span className="font-semibold text-amber-950">"{inChatSearchQuery}"</span> ({currentMatchIndex + 1} dari {matchingMessageIds.length})
+                        Hasil pencarian: <span className="font-semibold text-warning">"{inChatSearchQuery}"</span> ({currentMatchIndex + 1} dari {matchingMessageIds.length})
                       </span>
-                      <div className="flex items-center gap-0.5 border-l border-amber-200 pl-1.5 shrink-0">
+                      <div className="flex items-center gap-0.5 border-l border-warning-line pl-1.5 shrink-0">
                         <button
                           type="button"
                           title="Pesan Sebelumnya (Lebih Lama)"
                           onClick={handlePrevMatch}
-                          className="p-1 rounded-full hover:bg-amber-200/70 text-amber-800 transition active:scale-90 cursor-pointer"
+                          className="p-1 rounded-full hover:bg-warning/70 text-warning transition active:scale-90 cursor-pointer"
                         >
                           <ChevronUp size={14} />
                         </button>
@@ -6061,7 +5906,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           type="button"
                           title="Pesan Berikutnya (Lebih Baru)"
                           onClick={handleNextMatch}
-                          className="p-1 rounded-full hover:bg-amber-200/70 text-amber-800 transition active:scale-90 cursor-pointer"
+                          className="p-1 rounded-full hover:bg-warning/70 text-warning transition active:scale-90 cursor-pointer"
                         >
                           <ChevronDown size={14} />
                         </button>
@@ -6069,7 +5914,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           type="button"
                           title="Tutup Navigasi Pencarian"
                           onClick={handleClearInChatSearch}
-                          className="p-1 rounded-full hover:bg-amber-200/70 text-amber-600 hover:text-amber-900 ml-0.5 transition active:scale-90 cursor-pointer"
+                          className="p-1 rounded-full hover:bg-warning/70 text-warning hover:text-warning ml-0.5 transition active:scale-90 cursor-pointer"
                         >
                           <X size={14} />
                         </button>
@@ -6078,8 +5923,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   )}
 
                   {effectiveInChatQuery && messages.length > 0 && matchingMessageIds.length === 0 && (
-                    <div className="sticky top-1 z-30 mx-auto w-fit max-w-[94%] bg-slate-50/95 backdrop-blur-md border border-slate-300 shadow-sm rounded-full px-3 py-1 flex items-center gap-2 text-xs text-slate-600 animate-fadeIn select-none">
-                      <Info size={13} className="text-slate-500 shrink-0" />
+                    <div className="sticky top-1 z-30 mx-auto w-fit max-w-[94%] bg-surface-2/95 backdrop-blur-md border border-strong shadow-sm rounded-full px-3 py-1 flex items-center gap-2 text-xs text-ink-2 animate-fadeIn select-none">
+                      <Info size={13} className="text-ink-2 shrink-0" />
                       <span className="truncate">
                         Tidak ada bubble pesan berisi <span className="font-semibold">"{inChatSearchQuery}"</span> di percakapan ini
                       </span>
@@ -6088,7 +5933,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           type="button"
                           onClick={handleDeepSearchInHistory}
                           disabled={isDeepSearching}
-                          className="shrink-0 ml-1 px-2 py-0.5 rounded-full bg-[#008069] hover:bg-[#00a884] disabled:opacity-50 text-white text-[10px] font-bold transition active:scale-95 cursor-pointer flex items-center gap-1"
+                          className="shrink-0 ml-1 px-2 py-0.5 rounded-full bg-accent hover:bg-accent-hover disabled:opacity-50 text-white text-[10px] font-bold transition active:scale-95 cursor-pointer flex items-center gap-1"
                         >
                           {isDeepSearching ? (
                             <Loader size={11} className="animate-spin" />
@@ -6102,7 +5947,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                         type="button"
                         title="Tutup"
                         onClick={handleClearInChatSearch}
-                        className="p-0.5 rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-700 ml-1 transition active:scale-90 cursor-pointer"
+                        className="p-0.5 rounded-full hover:bg-fill-2 text-ink-3 hover:text-ink ml-1 transition active:scale-90 cursor-pointer"
                       >
                         <X size={13} />
                       </button>
@@ -6110,13 +5955,13 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   )}
 
                   {isThreadLoading ? (
-                    <div className="h-full flex flex-col items-center justify-center text-center text-[#667781] text-xs py-16 animate-fadeIn">
-                      <Loader className="animate-spin text-[#008069] mb-2" size={26} />
-                      <p className="font-semibold text-[#54656f]">Memuat riwayat chat...</p>
+                    <div className="h-full flex flex-col items-center justify-center text-center text-ink-2 text-xs py-16 animate-fadeIn">
+                      <Loader className="animate-spin text-accent mb-2" size={26} />
+                      <p className="font-semibold text-ink-2">Memuat riwayat chat...</p>
                     </div>
                   ) : messages.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-center text-[#667781] text-xs">
-                      <MessageCircle size={32} className="mb-2 text-[#8696a0]" />
+                    <div className="h-full flex flex-col items-center justify-center text-center text-ink-2 text-xs">
+                      <MessageCircle size={32} className="mb-2 text-ink-3" />
                       <p>Belum ada pesan di percakapan ini.</p>
                     </div>
                   ) : (
@@ -6168,7 +6013,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                         <React.Fragment key={msg.id}>
                           {showDateSeparator && (
                             <div className="flex justify-center my-2 sm:my-2.5">
-                              <div className="bg-white/95 backdrop-blur-xs px-3 py-1 rounded-lg text-[11px] font-semibold text-[#54656f] shadow-2xs border border-black/5 select-none tracking-wide">
+                              <div className="bg-white/95 backdrop-blur-xs px-3 py-1 rounded-lg text-[11px] font-semibold text-ink-2 shadow-2xs border border-black/5 select-none tracking-wide">
                                 {formatChatDateSeparator(msg.created_at)}
                               </div>
                             </div>
@@ -6177,16 +6022,16 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                             id={`msg-${msg.id}`}
                             className={`flex ${isCustomer ? 'justify-start' : 'justify-end'} group relative ${
                               isCurrentActiveMatch
-                                ? 'transition-transform duration-150 ring-3 ring-amber-400/90 bg-amber-200/30 rounded-2xl p-1 -m-1 shadow-md scale-[1.01]'
+                                ? 'transition-transform duration-150 ring-3 ring-warning/90 bg-warning-line/30 rounded-2xl p-1 -m-1 shadow-md scale-[1.01]'
                                 : isMatchBubble
-                                ? 'transition-colors duration-150 ring-1 ring-amber-300/60 bg-amber-100/20 rounded-2xl p-0.5 -m-0.5'
+                                ? 'transition-colors duration-150 ring-1 ring-warning/60 bg-warning-soft/20 rounded-2xl p-0.5 -m-0.5'
                                 : ''
                             }`}
                           >
                             {/* Floating WhatsApp-Style Quick Emoji Reaction Toolbar */}
                             {activeReactionMsgId === msg.id && (
                               <div
-                                className={`absolute -top-10 ${isCustomer ? 'left-0' : 'right-0'} z-30 bg-white border border-[#d1d7db] rounded-full shadow-lg px-2 py-1 flex items-center gap-1 animate-fadeIn select-none`}
+                                className={`absolute -top-10 ${isCustomer ? 'left-0' : 'right-0'} z-30 bg-surface border border-divider rounded-full shadow-lg px-2 py-1 flex items-center gap-1 animate-fadeIn select-none`}
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 {QUICK_REACTIONS.map((em) => {
@@ -6197,7 +6042,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                       type="button"
                                       onClick={() => handleToggleReaction(msg, em)}
                                       className={`w-7 h-7 flex items-center justify-center text-base rounded-full hover:scale-125 transition active:scale-95 ${
-                                        isSelected ? 'bg-[#d9fdd3] ring-2 ring-[#008069]' : 'hover:bg-[#f0f2f5]'
+                                        isSelected ? 'bg-bubble-out ring-2 ring-accent' : 'hover:bg-fill-1'
                                       }`}
                                       title={`Reaksi ${em}${isSelected ? ' (klik untuk batal)' : ''}`}
                                     >
@@ -6208,8 +6053,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                 <button
                                   type="button"
                                   onClick={() => setCustomEmojiMsgId(customEmojiMsgId === msg.id ? null : msg.id)}
-                                  className={`w-7 h-7 flex items-center justify-center text-xs rounded-full hover:bg-[#f0f2f5] transition ${
-                                    customEmojiMsgId === msg.id ? 'bg-[#e8f5f2] text-[#008069]' : 'text-[#54656f]'
+                                  className={`w-7 h-7 flex items-center justify-center text-xs rounded-full hover:bg-fill-1 transition ${
+                                    customEmojiMsgId === msg.id ? 'bg-accent-soft text-accent' : 'text-ink-2'
                                   }`}
                                   title="Pilih emoji lainnya"
                                 >
@@ -6221,7 +6066,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                             {/* Extra Emoji Grid Popup */}
                             {activeReactionMsgId === msg.id && customEmojiMsgId === msg.id && (
                               <div
-                                className={`absolute -top-28 ${isCustomer ? 'left-0' : 'right-0'} z-40 bg-white border border-[#d1d7db] rounded-2xl shadow-xl p-2 grid grid-cols-6 gap-1 animate-fadeIn select-none`}
+                                className={`absolute -top-28 ${isCustomer ? 'left-0' : 'right-0'} z-40 bg-surface border border-divider rounded-2xl shadow-xl p-2 grid grid-cols-6 gap-1 animate-fadeIn select-none`}
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 {EXTRA_REACTIONS.map((em) => {
@@ -6232,7 +6077,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                       type="button"
                                       onClick={() => handleToggleReaction(msg, em)}
                                       className={`w-7 h-7 flex items-center justify-center text-base rounded-full hover:scale-125 transition active:scale-95 ${
-                                        isSelected ? 'bg-[#d9fdd3] ring-2 ring-[#008069]' : 'hover:bg-[#f0f2f5]'
+                                        isSelected ? 'bg-bubble-out ring-2 ring-accent' : 'hover:bg-fill-1'
                                       }`}
                                       title={`Reaksi ${em}`}
                                     >
@@ -6248,33 +6093,33 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                 isInternalNote
                                   ? 'bg-amber-50 dark:bg-amber-950/40 border border-dashed border-amber-300 dark:border-amber-700 text-amber-950 dark:text-amber-100 rounded-tr-none'
                                   : isRevoked
-                                  ? 'bg-[#f0f2f5] text-[#667781] border border-[#d1d7db]'
+                                  ? 'bg-fill-1 text-ink-2 border border-divider'
                                   : isMessageHidden
                                   ? isCustomer
                                     ? 'bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-tl-none'
                                     : 'bg-slate-200/90 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-200 rounded-tr-none'
                                   : isCustomer
-                                    ? 'bg-white text-[#111b21] rounded-tl-none border border-black/5 dark:bg-[#202c33] dark:text-[#e9edef] dark:border-[#2a3942]'
+                                    ? 'bg-white text-ink rounded-tl-none border border-black/5 dark:bg-fill-1 dark:text-ink dark:border-divider'
                                     : isAdmin
-                                      ? 'bg-[#d9fdd3] text-[#111b21] rounded-tr-none border border-[#00a884]/20 dark:bg-[#005c4b] dark:text-[#e9edef] dark:border-[#00a884]/30'
-                                      : 'bg-white text-[#111b21] rounded-tr-none border-l-4 border-[#008069] dark:bg-[#005c4b]/80 dark:text-[#e9edef] dark:border-l-4 dark:border-[#00a884]'
+                                      ? 'bg-bubble-out text-ink rounded-tr-none border border-accent/20'
+                                      : 'bg-bubble-out text-ink rounded-tr-none border-l-4 border-accent dark:border-l-4 dark:border-accent'
                               }`}
                             >
                               {isMessagePinned && !isRevoked && (
-                                <div className="flex items-center gap-1 text-[10px] font-semibold text-amber-700 dark:text-[#f59e0b] mb-1 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800 w-fit select-none">
-                                  <Pin size={10} className="text-amber-600 fill-amber-500" />
+                                <div className="flex items-center gap-1 text-[10px] font-semibold text-amber-700 dark:text-warning mb-1 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800 w-fit select-none">
+                                  <Pin size={10} className="text-warning fill-warning" />
                                   <span>Disematkan{msg.pinned_by ? ` • ${msg.pinned_by}` : ''}</span>
                                 </div>
                               )}
                               {isInternalNote && !isRevoked && (
-                                <span className="flex items-center gap-1 text-[10px] font-bold mb-0.5 text-amber-700 dark:text-[#f59e0b]">
+                                <span className="flex items-center gap-1 text-[10px] font-bold mb-0.5 text-amber-700 dark:text-warning">
                                   <Lock size={10} />
                                   <span>Catatan Internal — {msg.sender_name || 'Staf'}</span>
                                 </span>
                               )}
                               {(!hasMediaOnly || (!isCustomer && !isAdmin)) && !isRevoked && !isInternalNote && (
                                 <span className={`block text-[10px] font-bold mb-0.5 flex items-center space-x-1 ${
-                                  isCustomer ? 'text-[#667781]' : isAdmin ? 'text-[#008069]' : 'text-[#008069]'
+                                  isCustomer ? 'text-ink-2' : isAdmin ? 'text-accent' : 'text-accent'
                                 }`}>
                                   {!isCustomer && !isAdmin && <Bot size={10} />}
                                   <span>{senderLabel(msg)}</span>
@@ -6286,25 +6131,25 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                 <div
                                   className={`mb-1.5 p-1.5 rounded-md border-l-[3px] text-[11px] leading-snug cursor-pointer transition select-none ${
                                     isCustomer
-                                      ? 'bg-black/[0.04] hover:bg-black/[0.07] border-[#008069]'
-                                      : 'bg-black/[0.05] hover:bg-black/[0.08] border-[#008069]'
+                                      ? 'bg-black/[0.04] hover:bg-black/[0.07] border-accent'
+                                      : 'bg-black/[0.05] hover:bg-black/[0.08] border-accent'
                                   }`}
                                   onClick={() => {
                                     if (quotedMsg.id || quotedMsg.wa_message_id) {
                                       const targetElem = document.getElementById(`msg-${quotedMsg.id}`) || document.getElementById(`msg-${quotedMsg.wa_message_id}`);
                                       if (targetElem) {
                                         targetElem.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                        targetElem.classList.add('ring-2', 'ring-[#008069]');
-                                        setTimeout(() => targetElem.classList.remove('ring-2', 'ring-[#008069]'), 1200);
+                                        targetElem.classList.add('ring-2', 'ring-accent');
+                                        setTimeout(() => targetElem.classList.remove('ring-2', 'ring-accent'), 1200);
                                       }
                                     }
                                   }}
                                   title="Klik untuk melihat pesan asli"
                                 >
-                                  <p className="font-bold text-[10px] text-[#008069] truncate mb-0.5">
+                                  <p className="font-bold text-[10px] text-accent truncate mb-0.5">
                                     {quotedMsg.sender_name || (quotedMsg.direction === 'INBOUND' ? (selectedChat.customerName || 'Customer') : 'Bidan / CS')}
                                   </p>
-                                  <p className="text-[11px] text-[#54656f] truncate font-sans">
+                                  <p className="text-[11px] text-ink-2 truncate font-sans">
                                     {quotedMsg.media ? (
                                       <span className="flex items-center gap-1">
                                         <span>📷</span>
@@ -6335,20 +6180,20 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         download
-                                        className="flex items-center gap-2.5 p-2.5 rounded-xl bg-[#f0f2f5] border border-[#d1d7db] hover:bg-[#e8f5f2] transition text-left max-w-[260px]"
+                                        className="flex items-center gap-2.5 p-2.5 rounded-xl bg-fill-1 border border-divider hover:bg-accent-soft transition text-left max-w-[260px]"
                                       >
-                                        <span className="w-8 h-8 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
+                                        <span className="w-8 h-8 rounded-lg bg-info-soft text-info flex items-center justify-center shrink-0">
                                           <FileText size={16} />
                                         </span>
                                         <span className="flex-1 min-w-0">
-                                          <span className="block text-xs font-bold text-[#111b21] truncate">
+                                          <span className="block text-xs font-bold text-ink truncate">
                                             {String(docData.fileName || 'Dokumen').slice(0, 48)}
                                           </span>
-                                          <span className="block text-[10px] text-[#667781]">
+                                          <span className="block text-[10px] text-ink-2">
                                             {docData.fileSize ? `${Math.round(Number(docData.fileSize) / 1024)} KB • Ketuk untuk unduh` : 'Ketuk untuk unduh'}
                                           </span>
                                         </span>
-                                        <Download size={14} className="text-[#8696a0] shrink-0" />
+                                        <Download size={14} className="text-ink-3 shrink-0" />
                                       </a>
                                     </div>
                                   )}
@@ -6362,7 +6207,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                         className="rounded-lg max-h-[240px] w-full bg-black"
                                       />
                                       {videoData.caption && (
-                                        <span className="block mt-1 text-[11px] text-slate-700 break-words">
+                                        <span className="block mt-1 text-[11px] text-ink break-words">
                                           {(effectiveInChatQuery || searchQuery) ? renderHighlightedText(videoData.caption, effectiveInChatQuery || searchQuery) : videoData.caption}
                                         </span>
                                       )}
@@ -6371,16 +6216,16 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
                                   {/* 4. Contact vCard */}
                                   {contactData && (
-                                    <div className="my-1 p-2 bg-[#f0f2f5] hover:bg-[#e8f5f2] rounded-xl border border-[#d1d7db] transition flex items-center space-x-2.5 text-left max-w-[260px]">
-                                      <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                                    <div className="my-1 p-2 bg-fill-1 hover:bg-accent-soft rounded-xl border border-divider transition flex items-center space-x-2.5 text-left max-w-[260px]">
+                                      <div className="w-8 h-8 rounded-lg bg-success-soft text-success flex items-center justify-center shrink-0">
                                         <User size={16} />
                                       </div>
                                       <div className="flex-1 min-w-0">
-                                        <p className="font-bold text-[12px] text-[#111b21] leading-tight truncate">
+                                        <p className="font-bold text-[12px] text-ink leading-tight truncate">
                                           {contactData.displayName || 'Kontak WhatsApp'}
                                         </p>
                                         {contactData.phoneNumber && (
-                                          <p className="text-[11px] text-[#667781] font-mono truncate mt-0.5">
+                                          <p className="text-[11px] text-ink-2 font-mono truncate mt-0.5">
                                             {contactData.phoneNumber}
                                           </p>
                                         )}
@@ -6388,7 +6233,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                       {contactData.phoneNumber && (
                                         <a
                                           href={`tel:${contactData.phoneNumber}`}
-                                          className="px-2 py-1 bg-[#008069] hover:bg-[#00a884] text-white rounded-lg text-[10px] font-bold transition shrink-0"
+                                          className="px-2 py-1 bg-accent hover:bg-accent-hover text-white rounded-lg text-[10px] font-bold transition shrink-0"
                                           title="Hubungi kontak"
                                         >
                                           Telepon
@@ -6411,20 +6256,20 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
                                   {/* 6. Location (Pin GPS & Live Location) */}
                                   {locData && (
-                                    <div className="my-1 p-2 bg-[#f0f2f5] hover:bg-[#e8f5f2] rounded-xl border border-[#d1d7db] transition flex items-center space-x-2.5 text-left">
-                                      <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                                    <div className="my-1 p-2 bg-fill-1 hover:bg-accent-soft rounded-xl border border-divider transition flex items-center space-x-2.5 text-left">
+                                      <div className="w-8 h-8 rounded-lg bg-danger-soft text-danger flex items-center justify-center shrink-0">
                                         <MapPin size={17} />
                                       </div>
                                       <div className="flex-1 min-w-0">
-                                        <p className="font-bold text-[12px] text-[#111b21] leading-tight flex items-center gap-1">
+                                        <p className="font-bold text-[12px] text-ink leading-tight flex items-center gap-1">
                                           <span>{locData.isLive ? 'Live Location WhatsApp' : 'Lokasi Pin WhatsApp'}</span>
-                                          {locData.isLive && <span className="inline-block w-2 h-2 rounded-full bg-rose-500 animate-pulse" />}
+                                          {locData.isLive && <span className="inline-block w-2 h-2 rounded-full bg-danger animate-pulse" />}
                                         </p>
-                                        <p className="text-[10px] text-[#667781] font-mono truncate mt-0.5">
+                                        <p className="text-[10px] text-ink-2 font-mono truncate mt-0.5">
                                           {locData.latitude}, {locData.longitude}
                                         </p>
                                         {(locData.name || locData.address) && (
-                                          <p className="text-[11px] text-[#111b21] truncate mt-0.5 font-medium">
+                                          <p className="text-[11px] text-ink truncate mt-0.5 font-medium">
                                             {locData.name || locData.address}
                                           </p>
                                         )}
@@ -6433,7 +6278,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                         href={locData.url || getGoogleMapsDirectionUrl(locData.latitude, locData.longitude, locData.name || locData.address || null, 'gps_pin')}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="px-2.5 py-1.5 bg-[#008069] hover:bg-[#00a884] text-white rounded-lg text-[11px] font-bold transition shadow-xs flex items-center space-x-1 shrink-0 active:scale-95"
+                                        className="px-2.5 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-[11px] font-bold transition shadow-xs flex items-center space-x-1 shrink-0 active:scale-95"
                                         title="Buka lokasi di Google Maps"
                                       >
                                         <span>Peta</span>
@@ -6449,7 +6294,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                     if (!displayText) {
                                       if (hasVisual) return null;
                                       return (
-                                        <p className="font-sans italic text-[#667781] py-0.5 text-[11px]">
+                                        <p className="font-sans italic text-ink-2 py-0.5 text-[11px]">
                                           [Pesan tanpa teks]
                                         </p>
                                       );
@@ -6463,37 +6308,37 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                 </>
                               )}
                               {isRevoked && (
-                                <p className="font-sans whitespace-pre-wrap italic text-[#667781] flex items-center space-x-1.5 py-0.5">
-                                  <Ban size={12} className="text-[#8696a0] shrink-0" />
+                                <p className="font-sans whitespace-pre-wrap italic text-ink-2 flex items-center space-x-1.5 py-0.5">
+                                  <Ban size={12} className="text-ink-3 shrink-0" />
                                   <span>Pesan ini telah ditarik</span>
                                 </p>
                               )}
                               {isMessageHidden && !isRevoked && (
                                 <div className="flex items-center justify-between gap-1.5 mt-1 pt-1 border-t border-slate-300/60 dark:border-slate-600/60 text-[10px] text-slate-500 dark:text-slate-400 select-none">
                                   <span className="flex items-center gap-1 font-medium truncate">
-                                    <EyeOff size={11} className="text-slate-400 shrink-0" />
+                                    <EyeOff size={11} className="text-ink-3 shrink-0" />
                                     <span className="truncate">Disembunyikan dari Staf Bidan{msg.hidden_by ? ` • oleh ${msg.hidden_by}` : ''}</span>
                                   </span>
                                   <button
                                     type="button"
                                     disabled={isHidingMessageId === msg.id}
                                     onClick={() => handleToggleMessageHide(msg, false)}
-                                    className="text-[#008069] dark:text-[#25d366] hover:underline font-bold cursor-pointer shrink-0 text-[10px]"
+                                    className="text-accent dark:text-accent hover:underline font-bold cursor-pointer shrink-0 text-[10px]"
                                     title="Pulihkan pesan agar terlihat kembali oleh staf bidan"
                                   >
                                     Pulihkan
                                   </button>
                                 </div>
                               )}
-                              <div className="flex items-center justify-end space-x-1 mt-0.5 text-right select-none text-[10px] text-[#667781]">
+                              <div className="flex items-center justify-end space-x-1 mt-0.5 text-right select-none text-[10px] text-ink-2">
                                 {isEdited && !isRevoked && (
-                                  <span className="text-[9px] text-[#667781] italic mr-0.5">diedit</span>
+                                  <span className="text-[9px] text-ink-2 italic mr-0.5">diedit</span>
                                 )}
                                 <span>
                                   {msg.created_at ? formatWibTime(msg.created_at) : ''}
                                 </span>
                                 {isInternalNote && !isRevoked && (
-                                  <span className="text-[9px] text-amber-700 dark:text-[#f59e0b] italic ml-0.5">
+                                  <span className="text-[9px] text-amber-700 dark:text-warning italic ml-0.5">
                                     Hanya tim klinik • tidak dikirim ke WhatsApp
                                   </span>
                                 )}
@@ -6511,13 +6356,13 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                     }
                                   >
                                     {msg.delivery_status === 'read' ? (
-                                      <CheckCheck size={13} className="text-[#53bdeb] stroke-[2.5]" />
+                                      <CheckCheck size={13} className="text-info stroke-[2.5]" />
                                     ) : msg.delivery_status === 'delivered' ? (
-                                      <CheckCheck size={13} className="text-[#8696a0]" />
+                                      <CheckCheck size={13} className="text-ink-3" />
                                     ) : msg.delivery_status === 'failed' ? (
-                                      <AlertCircle size={12} className="text-rose-500" />
+                                      <AlertCircle size={12} className="text-danger" />
                                     ) : (
-                                      <Check size={12} className="text-[#8696a0]" />
+                                      <Check size={12} className="text-ink-3" />
                                     )}
                                   </span>
                                 )}
@@ -6528,7 +6373,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                       e.stopPropagation();
                                       void handleCopyMessageText(resolveMessageDisplayText({ content: msg.content, media: msg.media }) || msg.content || '');
                                     }}
-                                    className="ml-0.5 p-0.5 rounded text-[#8696a0] hover:text-[#008069] hover:bg-[#e8f5f2] transition active:scale-90"
+                                    className="ml-0.5 p-0.5 rounded text-ink-3 hover:text-accent hover:bg-accent-soft transition active:scale-90"
                                     title="Salin seluruh teks pesan"
                                   >
                                     <Copy size={11} />
@@ -6544,8 +6389,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                     }}
                                     className={`ml-0.5 p-0.5 rounded transition active:scale-90 ${
                                       activeReactionMsgId === msg.id || myReaction
-                                        ? 'text-[#008069] bg-[#e8f5f2]'
-                                        : 'text-[#8696a0] hover:text-[#008069] hover:bg-[#e8f5f2]'
+                                        ? 'text-accent bg-accent-soft'
+                                        : 'text-ink-3 hover:text-accent hover:bg-accent-soft'
                                     }`}
                                     title={myReaction ? `Reaksi Anda: ${myReaction.emoji} (klik untuk ubah/batal)` : 'Beri reaksi emotikon'}
                                   >
@@ -6559,7 +6404,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                       e.stopPropagation();
                                       handleSelectReply(msg);
                                     }}
-                                    className="ml-0.5 p-0.5 rounded text-[#8696a0] hover:text-[#008069] hover:bg-[#e8f5f2] transition active:scale-90"
+                                    className="ml-0.5 p-0.5 rounded text-ink-3 hover:text-accent hover:bg-accent-soft transition active:scale-90"
                                     title="Balas pesan ini"
                                   >
                                     <Reply size={11} />
@@ -6569,7 +6414,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                   <button
                                     type="button"
                                     onClick={() => handleStartEdit(msg)}
-                                    className="ml-0.5 p-0.5 rounded text-[#8696a0] hover:text-[#008069] hover:bg-[#e8f5f2] transition active:scale-90"
+                                    className="ml-0.5 p-0.5 rounded text-ink-3 hover:text-accent hover:bg-accent-soft transition active:scale-90"
                                     title="Edit pesan (maksimal 15 menit)"
                                   >
                                     <PenLine size={11} />
@@ -6580,11 +6425,11 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                     type="button"
                                     disabled={revokingId === msg.id}
                                     onClick={() => handleRevokeMessage(msg)}
-                                    className="ml-0.5 p-0.5 rounded text-[#8696a0] hover:text-rose-600 hover:bg-rose-50 transition active:scale-90"
+                                    className="ml-0.5 p-0.5 rounded text-ink-3 hover:text-danger hover:bg-danger-soft transition active:scale-90"
                                     title="Tarik / Hapus pesan untuk semua orang (Delete for Everyone)"
                                   >
                                     {revokingId === msg.id ? (
-                                      <div className="h-2.5 w-2.5 animate-spin rounded-full border border-rose-500 border-t-transparent" />
+                                      <div className="h-2.5 w-2.5 animate-spin rounded-full border border-danger border-t-transparent" />
                                     ) : (
                                       <Trash2 size={11} />
                                     )}
@@ -6598,14 +6443,14 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                     className={`ml-0.5 p-0.5 rounded transition active:scale-90 ${
                                       isMessagePinned
                                         ? 'text-amber-600 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 font-bold'
-                                        : 'text-[#8696a0] hover:text-amber-600 hover:bg-amber-50'
+                                        : 'text-ink-3 hover:text-warning hover:bg-warning-soft'
                                     }`}
                                     title={isMessagePinned ? 'Lepas sematan pesan (Unpin)' : 'Sematkan pesan ini (Pin ke atas)'}
                                   >
                                     {isPinningMessageId === msg.id ? (
-                                      <div className="h-2.5 w-2.5 animate-spin rounded-full border border-amber-500 border-t-transparent" />
+                                      <div className="h-2.5 w-2.5 animate-spin rounded-full border border-warning border-t-transparent" />
                                     ) : (
-                                      <Pin size={11} className={isMessagePinned ? 'fill-amber-500 text-amber-600' : ''} />
+                                      <Pin size={11} className={isMessagePinned ? 'fill-warning text-warning' : ''} />
                                     )}
                                   </button>
                                 )}
@@ -6616,13 +6461,13 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                     onClick={() => handleToggleMessageHide(msg, !isMessageHidden)}
                                     className={`ml-0.5 p-0.5 rounded transition active:scale-90 ${
                                       isMessageHidden
-                                        ? 'text-slate-600 bg-slate-100 hover:bg-slate-200'
-                                        : 'text-[#8696a0] hover:text-slate-700 hover:bg-slate-100'
+                                        ? 'text-ink-2 bg-fill-1 hover:bg-fill-2'
+                                        : 'text-ink-3 hover:text-ink hover:bg-fill-2'
                                     }`}
                                     title={isMessageHidden ? 'Tampilkan kembali pesan ini (Unhide)' : 'Sembunyikan bubble ini di dashboard (Hide internal)'}
                                   >
                                     {isHidingMessageId === msg.id ? (
-                                      <div className="h-2.5 w-2.5 animate-spin rounded-full border border-slate-500 border-t-transparent" />
+                                      <div className="h-2.5 w-2.5 animate-spin rounded-full border border-strong border-t-transparent" />
                                     ) : (
                                       <EyeOff size={11} />
                                     )}
@@ -6633,7 +6478,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                               {/* Reaction Badges (WhatsApp Style Pill attached to bottom corner of bubble) */}
                               {groupedReactions.length > 0 && !isRevoked && (
                                 <div
-                                  className={`absolute -bottom-2.5 ${isCustomer ? 'left-2' : 'right-2'} z-10 flex items-center bg-white border border-[#d1d7db] rounded-full px-1.5 py-0.5 shadow-xs text-[11px] gap-1 select-none hover:shadow-md cursor-pointer transition`}
+                                  className={`absolute -bottom-2.5 ${isCustomer ? 'left-2' : 'right-2'} z-10 flex items-center bg-surface border border-divider rounded-full px-1.5 py-0.5 shadow-xs text-[11px] gap-1 select-none hover:shadow-md cursor-pointer transition`}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setActiveReactionMsgId(activeReactionMsgId === msg.id ? null : msg.id);
@@ -6644,7 +6489,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                   {groupedReactions.map((g) => (
                                     <span key={g.emoji} className="flex items-center gap-0.5">
                                       <span>{g.emoji}</span>
-                                      {g.count > 1 && <span className="text-[10px] text-[#667781] font-bold">{g.count}</span>}
+                                      {g.count > 1 && <span className="text-[10px] text-ink-2 font-bold">{g.count}</span>}
                                     </span>
                                   ))}
                                 </div>
@@ -6661,7 +6506,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 {/* Reply Composer */}
                 <div className="chat-composer-container pt-0.5 shrink-0 bg-transparent pb-0 border-t-0">
                   {selectedChat.isSandboxTest ? (
-                    <div className="flex items-center justify-center space-x-2 px-3 py-2.5 rounded-xl bg-purple-50 border border-purple-200 text-purple-700 text-xs font-semibold">
+                    <div className="flex items-center justify-center space-x-2 px-3 py-2.5 rounded-xl bg-violet-soft border border-violet-line text-violet text-xs font-semibold">
                       <FlaskConical size={13} />
                       <span>Chat sandbox — balasan admin diblokir otomatis</span>
                     </div>
@@ -6709,10 +6554,10 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   </div>
               </div>
             ) : (
-              <div className="bg-white border border-[#e9edef] rounded-2xl p-8 h-full flex flex-col justify-center items-center text-center text-[#667781] text-xs shadow-xs">
-                <MessageSquare size={44} className="mb-3 text-[#8696a0]" />
-                <p className="font-bold text-[#111b21] text-sm">Pilih Percakapan</p>
-                <p className="text-[#667781] max-w-sm mt-1">
+              <div className="bg-surface border border-divider rounded-2xl p-8 h-full flex flex-col justify-center items-center text-center text-ink-2 text-xs shadow-xs">
+                <MessageSquare size={44} className="mb-3 text-ink-3" />
+                <p className="font-bold text-ink text-sm">Pilih Percakapan</p>
+                <p className="text-ink-2 max-w-sm mt-1">
                   Pilih salah satu percakapan dari daftar di sebelah kiri untuk melihat thread dan membalas langsung.
                 </p>
               </div>
@@ -6758,17 +6603,17 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           onClick={() => setDispatchDrawerOpen(false)}
         >
           <div
-            className="h-full w-full max-w-sm bg-[#f8fafc] shadow-2xl p-3 overflow-y-auto animate-fadeIn"
+            className="h-full w-full max-w-sm bg-surface-2 shadow-2xl p-3 overflow-y-auto animate-fadeIn"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-2 px-1">
-              <span className="text-sm font-bold text-[#111b21] flex items-center gap-1.5">
-                <Radar size={16} className="text-[#008069]" /> Radar OTW Bidan
+              <span className="text-sm font-bold text-ink flex items-center gap-1.5">
+                <Radar size={16} className="text-accent" /> Radar OTW Bidan
               </span>
               <button
                 type="button"
                 onClick={() => setDispatchDrawerOpen(false)}
-                className="p-1.5 rounded-lg hover:bg-[#e9edef] text-[#54656f]"
+                className="p-1.5 rounded-lg hover:bg-fill-2 text-ink-2"
                 aria-label="Tutup radar OTW"
               >
                 ✕
@@ -6799,9 +6644,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       {/* Customer Detail Modal */}
       {customerDetailModalOpen && (
         <div data-modal-active="true" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white border border-[#e9edef] rounded-2xl w-full max-w-xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+          <div className="bg-surface border border-divider rounded-2xl w-full max-w-xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
             {/* Modal Header */}
-            <div className="flex justify-between items-center px-5 py-4 border-b border-[#e9edef] bg-[#f8fafc]">
+            <div className="flex justify-between items-center px-5 py-4 border-b border-divider bg-surface-2">
               <div className="flex items-center space-x-3">
                 <CustomerAvatar
                   src={customerDetailData?.profile_picture_url || selectedChat?.customerProfilePictureUrl}
@@ -6810,10 +6655,10 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   size="md"
                 />
                 <div>
-                  <h3 className="text-base font-bold text-[#111b21]">
+                  <h3 className="text-base font-bold text-ink">
                     {customerDetailData?.name || selectedChat?.customerName || 'Customer'}
                   </h3>
-                  <p className="text-xs text-[#667781] font-mono">
+                  <p className="text-xs text-ink-2 font-mono">
                     {customerDetailData?.phone || selectedChat?.customerPhone || '-'}
                   </p>
                 </div>
@@ -6822,33 +6667,33 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 type="button"
                 data-modal-close="true"
                 onClick={() => setCustomerDetailModalOpen(false)}
-                className="p-2 rounded-xl text-[#8696a0] hover:text-[#111b21] hover:bg-[#e9edef] transition text-sm font-bold"
+                className="p-2 rounded-xl text-ink-3 hover:text-ink hover:bg-fill-2 transition text-sm font-bold"
               >
                 ✕
               </button>
             </div>
 
             {/* Modal Body */}
-            <div className="p-5 space-y-5 overflow-y-auto flex-1 text-xs text-[#111b21]">
+            <div className="p-5 space-y-5 overflow-y-auto flex-1 text-xs text-ink">
               {customerDetailLoading ? (
                 <div className="py-12 flex justify-center items-center">
-                  <Loader size={24} className="animate-spin text-[#008069]" />
+                  <Loader size={24} className="animate-spin text-accent" />
                 </div>
               ) : (
                 <>
                   {/* Quick Metric Cards */}
                   <div className="grid grid-cols-3 gap-2.5">
-                    <div className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-xl text-center space-y-1">
-                      <p className="text-[10px] text-[#667781] font-semibold uppercase">Total Order</p>
-                      <p className="text-base font-bold text-[#111b21]">{customerDetailData?.purchaseCount || customerDetailData?.reservations?.length || 0}x</p>
+                    <div className="p-3 bg-surface-2 border border-divider rounded-xl text-center space-y-1">
+                      <p className="text-[10px] text-ink-2 font-semibold uppercase">Total Order</p>
+                      <p className="text-base font-bold text-ink">{customerDetailData?.purchaseCount || customerDetailData?.reservations?.length || 0}x</p>
                     </div>
-                    <div className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-xl text-center space-y-1">
-                      <p className="text-[10px] text-[#667781] font-semibold uppercase">LTV (Value)</p>
-                      <p className="text-base font-bold text-[#008069]">{formatRpShort(customerDetailData?.ltv || 0)}</p>
+                    <div className="p-3 bg-surface-2 border border-divider rounded-xl text-center space-y-1">
+                      <p className="text-[10px] text-ink-2 font-semibold uppercase">LTV (Value)</p>
+                      <p className="text-base font-bold text-accent">{formatRpShort(customerDetailData?.ltv || 0)}</p>
                     </div>
-                    <div className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-xl text-center space-y-1">
-                      <p className="text-[10px] text-[#667781] font-semibold uppercase">Segment</p>
-                      <p className="text-xs font-bold text-[#111b21] truncate">
+                    <div className="p-3 bg-surface-2 border border-divider rounded-xl text-center space-y-1">
+                      <p className="text-[10px] text-ink-2 font-semibold uppercase">Segment</p>
+                      <p className="text-xs font-bold text-ink truncate">
                         {customerDetailData?.is_legacy_source ? 'Legacy' : (customerDetailData?.purchaseCount > 0 ? 'Repeat' : 'New Customer')}
                       </p>
                     </div>
@@ -6856,13 +6701,13 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
                   {/* Customer Labels Section */}
                   <div className="space-y-2">
-                    <h4 className="font-bold text-[#667781] uppercase tracking-wider text-[11px] flex items-center space-x-1.5">
+                    <h4 className="font-bold text-ink-2 uppercase tracking-wider text-[11px] flex items-center space-x-1.5">
                       <Tag size={12} />
                       <span>Label Pasien</span>
                     </h4>
                     <div className="flex flex-wrap gap-1.5">
                       {(customerDetailData?.labels || []).length === 0 ? (
-                        <p className="text-[#8696a0] italic">Belum ada label kustom.</p>
+                        <p className="text-ink-3 italic">Belum ada label kustom.</p>
                       ) : (
                         customerDetailData.labels.map((cl: any) => {
                           const lbl = cl.label || cl;
@@ -6870,7 +6715,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                             <span
                               key={lbl.id}
                               className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold text-white shadow-2xs"
-                              style={{ backgroundColor: lbl.color || '#008069' }}
+                              style={{ backgroundColor: lbl.color || 'rgb(var(--c-accent))' }}
                               title={lbl.description ? `${lbl.name}: ${lbl.description}` : lbl.name}
                             >
                               {lbl.name}
@@ -6884,7 +6729,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   {/* Detail Alamat & Lokasi */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <h4 className="font-bold text-[#667781] uppercase tracking-wider text-[11px] flex items-center space-x-1.5">
+                      <h4 className="font-bold text-ink-2 uppercase tracking-wider text-[11px] flex items-center space-x-1.5">
                         <MapPin size={12} />
                         <span>Alamat & Lokasi</span>
                       </h4>
@@ -6892,7 +6737,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                         type="button"
                         onClick={handleRefreshLocation}
                         disabled={refreshingLocation}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed bg-white border-[#e9edef] hover:bg-[#f0f2f5] text-[#008069] hover:border-[#008069]"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed bg-surface border-divider hover:bg-fill-1 text-accent hover:border-accent"
                         title="Pindai riwayat chat & hitung ulang jarak/ongkir berdasar shareloc paling valid (Bidan → Customer → DB → Geocoding)"
                       >
                         <RefreshCw size={12} className={refreshingLocation ? 'animate-spin' : ''} />
@@ -6917,17 +6762,17 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                             {badge.label}
                           </span>
                           {customerDetailData?.preferences?.location_refreshed_at ? (
-                            <span className="text-[10px] text-[#8696a0]">
+                            <span className="text-[10px] text-ink-3">
                               {new Date(customerDetailData.preferences.location_refreshed_at).toLocaleString('id-ID')}
                             </span>
                           ) : null}
                         </div>
                       );
                     })()}
-                    <div className="p-3 rounded-xl border border-[#e9edef] bg-[#f8fafc] space-y-2">
+                    <div className="p-3 rounded-xl border border-divider bg-surface-2 space-y-2">
                       <div>
-                        <p className="text-[10px] text-[#667781] font-semibold uppercase">Alamat Lengkap</p>
-                        <p className="font-medium text-[#111b21]">{customerDetailData?.preferences?.address || customerDetailData?.address || customerDetailData?.kelurahan || selectedChat?.kelurahan || '-'}</p>
+                        <p className="text-[10px] text-ink-2 font-semibold uppercase">Alamat Lengkap</p>
+                        <p className="font-medium text-ink">{customerDetailData?.preferences?.address || customerDetailData?.address || customerDetailData?.kelurahan || selectedChat?.kelurahan || '-'}</p>
                         {savedAddressCount > 1 && (
                           <div className="pt-1">
                             <button
@@ -6936,7 +6781,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                 const cid = customerDetailData?.id || selectedChat?.customerId;
                                 if (cid) setAddrBookCustomer({ id: cid, name: customerDetailData?.name || selectedChat?.customerName });
                               }}
-                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] hover:bg-[#c2e7e0] transition active:scale-[0.98] focus-visible:ring-2 cursor-pointer"
+                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-accent-soft text-accent border border-accent/30 hover:bg-accent-soft/80 transition active:scale-[0.98] focus-visible:ring-2 cursor-pointer"
                               title="Lihat semua alamat tersimpan"
                             >
                               <MapPin size={11} />
@@ -6945,45 +6790,45 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           </div>
                         )}
                         {(customerDetailData?.preferences?.landmark || customerDetailData?.preferences?.address_notes) && (
-                          <p className="text-[11px] text-[#008069] mt-0.5 font-medium">📍 Patokan: {customerDetailData?.preferences?.landmark || customerDetailData?.preferences?.address_notes}</p>
+                          <p className="text-[11px] text-accent mt-0.5 font-medium">📍 Patokan: {customerDetailData?.preferences?.landmark || customerDetailData?.preferences?.address_notes}</p>
                         )}
                         {customerDetailData?.kelurahan && (
-                          <p className="text-[10px] text-[#8696a0] mt-0.5">Kel. {customerDetailData.kelurahan}{customerDetailData?.kecamatan ? `, Kec. ${customerDetailData.kecamatan}` : ''}</p>
+                          <p className="text-[10px] text-ink-3 mt-0.5">Kel. {customerDetailData.kelurahan}{customerDetailData?.kecamatan ? `, Kec. ${customerDetailData.kecamatan}` : ''}</p>
                         )}
                       </div>
-                      <div className="grid grid-cols-2 gap-2 pt-1 border-t border-[#e9edef]">
+                      <div className="grid grid-cols-2 gap-2 pt-1 border-t border-divider">
                         <div>
-                          <p className="text-[10px] text-[#667781] font-semibold uppercase">Kecamatan</p>
-                          <p className="font-medium text-[#111b21]">{customerDetailData?.kecamatan || selectedChat?.kecamatan || '-'}</p>
+                          <p className="text-[10px] text-ink-2 font-semibold uppercase">Kecamatan</p>
+                          <p className="font-medium text-ink">{customerDetailData?.kecamatan || selectedChat?.kecamatan || '-'}</p>
                         </div>
                         <div>
-                          <p className="text-[10px] text-[#667781] font-semibold uppercase">Kota / Kabupaten</p>
-                          <p className="font-medium text-[#111b21]">{customerDetailData?.kota || selectedChat?.kota || '-'}</p>
+                          <p className="text-[10px] text-ink-2 font-semibold uppercase">Kota / Kabupaten</p>
+                          <p className="font-medium text-ink">{customerDetailData?.kota || selectedChat?.kota || '-'}</p>
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-2 pt-1 border-t border-[#e9edef]">
+                      <div className="grid grid-cols-2 gap-2 pt-1 border-t border-divider">
                         <div>
-                          <p className="text-[10px] text-[#667781] font-semibold uppercase">Jarak & Ongkir</p>
-                          <p className="font-bold text-[#008069]">
+                          <p className="text-[10px] text-ink-2 font-semibold uppercase">Jarak & Ongkir</p>
+                          <p className="font-bold text-accent">
                             {(customerDetailData?.distance_km != null ? customerDetailData.distance_km : selectedChat?.distanceKm != null ? selectedChat.distanceKm : null) != null
                               ? `${customerDetailData?.distance_km ?? selectedChat?.distanceKm} km`
                               : '-'} (Rp {Number(customerDetailData?.ongkir ?? selectedChat?.ongkir ?? 0).toLocaleString('id-ID')})
                           </p>
                         </div>
                         <div>
-                          <p className="text-[10px] text-[#667781] font-semibold uppercase">Koordinat GPS</p>
+                          <p className="text-[10px] text-ink-2 font-semibold uppercase">Koordinat GPS</p>
                           {customerDetailData?.lat && customerDetailData?.lng ? (
                             <a
                               href={getGoogleMapsDirectionUrl(customerDetailData.lat, customerDetailData.lng, (customerDetailData as any)?.preferences?.address || (customerDetailData as any)?.address || (customerDetailData as any)?.kelurahan || null, resolveEffectiveLocationSource(customerDetailData))}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-[11px] font-bold text-sky-600 hover:underline flex items-center space-x-1"
+                              className="text-[11px] font-bold text-info hover:underline flex items-center space-x-1"
                             >
                               <span>{Number(customerDetailData.lat).toFixed(4)}, {Number(customerDetailData.lng).toFixed(4)}</span>
                               <ExternalLink size={10} />
                             </a>
                           ) : (
-                            <p className="text-[11px] text-[#8696a0] italic">Belum shareloc</p>
+                            <p className="text-[11px] text-ink-3 italic">Belum shareloc</p>
                           )}
                         </div>
                       </div>
@@ -6992,20 +6837,20 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
                   {/* Children / Anak Data */}
                   <div className="space-y-2">
-                    <h4 className="font-bold text-[#667781] uppercase tracking-wider text-[11px]">
+                    <h4 className="font-bold text-ink-2 uppercase tracking-wider text-[11px]">
                       Data Anak / Bayi ({customerDetailData?.children?.length || 0})
                     </h4>
                     {(customerDetailData?.children || []).length === 0 ? (
-                      <div className="p-3 rounded-xl border border-dashed border-[#d1d7db] bg-[#f8fafc] text-center space-y-1">
-                        <p className="text-xs text-[#8696a0]">Belum ada data anak tercatat.</p>
-                        <p className="text-[10px] text-[#667781]">Data anak otomatis terdata saat customer mengisi form pemesanan atau menyebutkan usia anak di chat WhatsApp.</p>
+                      <div className="p-3 rounded-xl border border-dashed border-divider bg-surface-2 text-center space-y-1">
+                        <p className="text-xs text-ink-3">Belum ada data anak tercatat.</p>
+                        <p className="text-[10px] text-ink-2">Data anak otomatis terdata saat customer mengisi form pemesanan atau menyebutkan usia anak di chat WhatsApp.</p>
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {customerDetailData.children.map((ch: any) => (
-                          <div key={ch.id} className="p-2.5 rounded-xl border border-[#e9edef] bg-white space-y-0.5">
-                            <p className="font-bold text-[#111b21]">{ch.name || 'Anak'}</p>
-                            <p className="text-[#667781] text-[11px]">
+                          <div key={ch.id} className="p-2.5 rounded-xl border border-divider bg-surface space-y-0.5">
+                            <p className="font-bold text-ink">{ch.name || 'Anak'}</p>
+                            <p className="text-ink-2 text-[11px]">
                               {ch.current_age ? `Usia: ${ch.current_age}` : formatClinicalAge(ch.birth_date) ? `Usia: ${formatClinicalAge(ch.birth_date)}` : ch.age_months ? `Usia: ${ch.age_months} bulan` : ch.birth_date ? `Lahir: ${new Date(ch.birth_date).toLocaleDateString('id-ID')}` : ch.raw_age_text ? `Usia: ${ch.raw_age_text}` : '-'}
                             </p>
                           </div>
@@ -7016,12 +6861,12 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
                   {/* Riwayat Reservasi */}
                   <div className="space-y-2">
-                    <h4 className="font-bold text-[#667781] uppercase tracking-wider text-[11px] flex items-center space-x-1.5">
+                    <h4 className="font-bold text-ink-2 uppercase tracking-wider text-[11px] flex items-center space-x-1.5">
                       <Calendar size={12} />
                       <span>Riwayat Reservasi ({customerDetailData?.reservations?.length || 0})</span>
                     </h4>
                     {(customerDetailData?.reservations || []).length === 0 ? (
-                      <p className="text-[#8696a0] italic">Belum pernah membuat reservasi.</p>
+                      <p className="text-ink-3 italic">Belum pernah membuat reservasi.</p>
                     ) : (
                       <>
                         <div className="space-y-1.5 max-h-48 overflow-y-auto">
@@ -7029,26 +6874,26 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                             <div
                               key={r.id}
                               onClick={() => handleOpenReservationDetail(r.id)}
-                              className="p-2.5 rounded-xl border border-[#e9edef] bg-white flex justify-between items-center cursor-pointer hover:border-[#008069] hover:bg-[#f8fafc] active:scale-[0.98] transition group"
+                              className="p-2.5 rounded-xl border border-divider bg-surface flex justify-between items-center cursor-pointer hover:border-accent hover:bg-surface-2 active:scale-[0.98] transition group"
                               title="Klik untuk lihat detail reservasi"
                             >
                               <div className="flex-1 min-w-0">
-                                <p className="font-bold text-[#111b21] group-hover:text-[#008069] truncate">
+                                <p className="font-bold text-ink group-hover:text-accent truncate">
                                   {getCleanTreatmentName(r.treatment_detail || r.raw_text)}
                                 </p>
                                 <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                                  <p className="text-[11px] text-[#667781]">
+                                  <p className="text-[11px] text-ink-2">
                                     {r.booking_date
                                       ? new Date(r.booking_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
                                       : new Date(r.created_at).toLocaleDateString('id-ID')}
                                   </p>
                                   {r.purchase_value ? (
-                                    <span className="text-[11px] font-bold text-[#008069] font-mono">
+                                    <span className="text-[11px] font-bold text-accent font-mono">
                                       • Rp {r.purchase_value.toLocaleString('id-ID')}
                                     </span>
                                   ) : null}
                                 </div>
-                                <p className="text-[10px] text-[#008069] font-semibold flex items-center space-x-1 mt-0.5">
+                                <p className="text-[10px] text-accent font-semibold flex items-center space-x-1 mt-0.5">
                                   <User size={10} />
                                   <span>Bidan: {resolveStaffName(r, reservationStaffList) || 'Belum ditugaskan'}</span>
                                 </p>
@@ -7060,17 +6905,17 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                     e.stopPropagation();
                                     handleGenerateAndInsertInvoice(r);
                                   }}
-                                  className="p-1.5 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 transition shadow-2xs group-hover:border-sky-300"
+                                  className="p-1.5 rounded-lg bg-info-soft hover:bg-info-line text-info border border-info-line transition shadow-2xs group-hover:border-info-line"
                                   title="Generate & Masukkan Format Invoice ke Box Chat WhatsApp"
                                 >
                                   <Receipt size={13} />
                                 </button>
                                 <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
                                   r.status === 'confirmed' || r.status === 'en_route'
-                                  ? 'bg-emerald-100 text-emerald-800'
+                                  ? 'bg-success-soft text-success'
                                   : r.status === 'pending'
-                                    ? 'bg-amber-100 text-amber-800'
-                                    : 'bg-gray-100 text-gray-700'
+                                    ? 'bg-warning-soft text-warning'
+                                    : 'bg-fill-1 text-ink'
                                 }`}>
                                   {r.status}
                                 </span>
@@ -7078,7 +6923,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                             </div>
                           ))}
                         </div>
-                        <p className="text-[10px] text-[#8696a0] italic flex items-center space-x-1"><Eye size={10} /><span>Klik card untuk lihat detail lengkap</span></p>
+                        <p className="text-[10px] text-ink-3 italic flex items-center space-x-1"><Eye size={10} /><span>Klik card untuk lihat detail lengkap</span></p>
                       </>
                     )}
                   </div>
@@ -7103,23 +6948,23 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 border-t border-[#e9edef] bg-[#f8fafc] flex justify-end space-x-2">
+            <div className="p-4 border-t border-divider bg-surface-2 flex justify-end space-x-2">
               <button
                 type="button"
                 onClick={() => {
                   const cid = customerDetailData?.id || selectedChat?.customerId;
                   if (cid) setAddrBookCustomer({ id: cid, name: customerDetailData?.name || selectedChat?.customerName });
                 }}
-                className="min-h-[44px] px-3.5 py-2 bg-white hover:bg-[#f0f2f5] text-[#111b21] border border-[#d1d7db] text-xs font-bold rounded-xl transition shadow-xs inline-flex items-center space-x-1.5 active:scale-[0.98] focus-visible:ring-2 cursor-pointer"
+                className="min-h-[44px] px-3.5 py-2 bg-surface hover:bg-fill-1 text-ink border border-divider text-xs font-bold rounded-xl transition shadow-xs inline-flex items-center space-x-1.5 active:scale-[0.98] focus-visible:ring-2 cursor-pointer"
                 title="Buka Buku Alamat"
               >
-                <MapPin size={14} className="text-[#008069]" />
+                <MapPin size={14} className="text-accent" />
                 <span>Buku Alamat{savedAddressCount > 0 ? ` (${savedAddressCount})` : ''}</span>
               </button>
               <button
                 type="button"
                 onClick={() => setCustomerDetailEditMode(true)}
-                className="min-h-[44px] px-4 py-2 bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] text-xs font-bold rounded-xl transition shadow-xs flex items-center space-x-1.5 active:scale-[0.98] focus-visible:ring-2 cursor-pointer"
+                className="min-h-[44px] px-4 py-2 bg-accent-soft hover:bg-accent-soft/80 text-accent border border-accent/30 text-xs font-bold rounded-xl transition shadow-xs flex items-center space-x-1.5 active:scale-[0.98] focus-visible:ring-2 cursor-pointer"
               >
                 <PenLine size={14} />
                 <span>Edit Profil</span>
@@ -7127,7 +6972,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
               <button
                 type="button"
                 onClick={() => setCustomerDetailModalOpen(false)}
-                className="px-4 py-2 bg-[#111b21] hover:bg-black text-white text-xs font-bold rounded-xl transition shadow-xs"
+                className="px-4 py-2 bg-ink hover:bg-black text-white text-xs font-bold rounded-xl transition shadow-xs"
               >
                 Tutup
               </button>
@@ -7224,17 +7069,17 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
             onClick={() => setProofModalReservation(null)}
           >
             <div
-              className="w-full max-w-md bg-white border border-[#e9edef] rounded-3xl p-4 sm:p-5 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto animate-modalScaleUp"
+              className="w-full max-w-md bg-surface border border-divider rounded-3xl p-4 sm:p-5 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto animate-modalScaleUp"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between border-b border-[#e9edef] pb-3">
-                <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
-                  <Receipt size={16} className="text-[#008069] flex-shrink-0" />
+              <div className="flex items-center justify-between border-b border-divider pb-3">
+                <h3 className="text-sm font-bold text-ink flex items-center space-x-2">
+                  <Receipt size={16} className="text-accent flex-shrink-0" />
                   <span>Bukti Pembayaran</span>
                 </h3>
                 <button
                   onClick={() => setProofModalReservation(null)}
-                  className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition cursor-pointer"
+                  className="p-1.5 rounded-full text-ink-3 hover:text-ink hover:bg-fill-1 transition cursor-pointer"
                 >
                   <X size={18} />
                 </button>
@@ -7244,64 +7089,64 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 const modalEval = evaluatePaymentProof(proofModalReservation);
                 if (!modalEval.isMismatch) return null;
                 return (
-                  <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 space-y-1.5">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-rose-700">
+                  <div className="p-3 rounded-2xl bg-danger-soft border border-danger-line text-danger space-y-1.5">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-danger">
                       <AlertTriangle size={15} className="shrink-0" />
                       <span>Peringatan: Nominal Transfer Tidak Sesuai Tagihan</span>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-rose-200">
+                    <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-danger-line">
                       <div>
-                        <span className="text-[10px] text-rose-600 block uppercase font-bold">Total Tagihan:</span>
+                        <span className="text-[10px] text-danger block uppercase font-bold">Total Tagihan:</span>
                         <strong>Rp {modalEval.totalExpected.toLocaleString('id-ID')}</strong>
                       </div>
                       <div>
-                        <span className="text-[10px] text-rose-600 block uppercase font-bold">Nominal di Struk:</span>
-                        <strong className="text-rose-700 font-extrabold">Rp {modalEval.receiptAmount?.toLocaleString('id-ID')}</strong>
+                        <span className="text-[10px] text-danger block uppercase font-bold">Nominal di Struk:</span>
+                        <strong className="text-danger font-extrabold">Rp {modalEval.receiptAmount?.toLocaleString('id-ID')}</strong>
                       </div>
                     </div>
-                    <div className="text-[11px] font-semibold text-rose-800">
+                    <div className="text-[11px] font-semibold text-danger">
                       Selisih: {modalEval.isUnderpaid ? `Kurang Rp ${Math.abs(modalEval.difference).toLocaleString('id-ID')}` : `Lebih Rp ${modalEval.difference.toLocaleString('id-ID')}`}
                     </div>
                   </div>
                 );
               })()}
 
-              <div className="text-xs space-y-1.5 bg-[#f8fafc] border border-[#e9edef] rounded-2xl p-3.5">
+              <div className="text-xs space-y-1.5 bg-surface-2 border border-divider rounded-2xl p-3.5">
                 <div className="flex justify-between">
-                  <span className="text-[#667781]">Pasien:</span>
-                  <span className="font-bold text-[#111b21]">
+                  <span className="text-ink-2">Pasien:</span>
+                  <span className="font-bold text-ink">
                     {selectedChat?.customerName || 'Bunda'} ({selectedChat?.customerPhone || '-'})
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[#667781]">Metode:</span>
-                  <span className="font-bold text-[#111b21]">{proofModalReservation.payment_method || 'Transfer'}</span>
+                  <span className="text-ink-2">Metode:</span>
+                  <span className="font-bold text-ink">{proofModalReservation.payment_method || 'Transfer'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[#667781]">Tagihan Resmi:</span>
-                  <span className="font-bold text-[#111b21]">
+                  <span className="text-ink-2">Tagihan Resmi:</span>
+                  <span className="font-bold text-ink">
                     {proofModalReservation.purchase_value ? `Rp ${proofModalReservation.purchase_value.toLocaleString('id-ID')}` : '-'}
                   </span>
                 </div>
                 {proofModalReservation.receipt_amount != null && (
                   <div className="flex justify-between">
-                    <span className="text-[#667781]">Nominal di Struk:</span>
-                    <span className="font-bold text-rose-600">
+                    <span className="text-ink-2">Nominal di Struk:</span>
+                    <span className="font-bold text-danger">
                       Rp {proofModalReservation.receipt_amount.toLocaleString('id-ID')}
                     </span>
                   </div>
                 )}
-                <div className="flex justify-between items-center pt-1 border-t border-[#e9edef]">
-                  <span className="text-[#667781]">Status Review:</span>
+                <div className="flex justify-between items-center pt-1 border-t border-divider">
+                  <span className="text-ink-2">Status Review:</span>
                   <span className={`font-semibold uppercase ${
-                    proofModalReservation.purchase_review_status === 'approved' ? 'text-emerald-700' : 'text-amber-700'
+                    proofModalReservation.purchase_review_status === 'approved' ? 'text-success' : 'text-warning'
                   }`}>
                     {proofModalReservation.purchase_review_status || 'pending'}
                   </span>
                 </div>
               </div>
 
-              <div className="rounded-2xl overflow-hidden border border-[#e9edef] bg-[#f8fafc]">
+              <div className="rounded-2xl overflow-hidden border border-divider bg-surface-2">
                 <img
                   src={proofModalReservation.proof_url!}
                   alt="Bukti pembayaran"
@@ -7309,11 +7154,11 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 />
               </div>
 
-              <div className="flex justify-end space-x-2 pt-2 border-t border-[#e9edef]">
+              <div className="flex justify-end space-x-2 pt-2 border-t border-divider">
                 <button
                   type="button"
                   onClick={() => setProofModalReservation(null)}
-                  className="px-4 py-2 rounded-xl border border-[#d1d7db] text-xs font-semibold text-[#54656f] hover:bg-[#f0f2f5] transition cursor-pointer"
+                  className="px-4 py-2 rounded-xl border border-divider text-xs font-semibold text-ink-2 hover:bg-fill-1 transition cursor-pointer"
                 >
                   Tutup
                 </button>
@@ -7321,7 +7166,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   href={proofModalReservation.proof_url!}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-4 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-1.5"
+                  className="px-4 py-2 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-1.5"
                 >
                   <ExternalLink size={13} />
                   <span>Buka Gambar Penuh</span>
@@ -7502,14 +7347,14 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         >
           {/* Mobile Bottom Action Sheet (sm:hidden) */}
           <div
-            className="sm:hidden w-full bg-white rounded-t-2xl shadow-2xl p-4 space-y-3 animate-in slide-in-from-bottom duration-200 border-t border-[#e9edef]"
+            className="sm:hidden w-full bg-surface rounded-t-2xl shadow-2xl p-4 space-y-3 animate-in slide-in-from-bottom duration-200 border-t border-divider"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Grab Handle */}
-            <div className="w-10 h-1 bg-[#d1d7db] rounded-full mx-auto" />
+            <div className="w-10 h-1 bg-strong rounded-full mx-auto" />
 
             {/* Header info */}
-            <div className="flex items-center space-x-3 pb-2 border-b border-[#f0f2f5]">
+            <div className="flex items-center space-x-3 pb-2 border-b border-divider">
               <CustomerAvatar
                 src={contextMenu.chat.customerProfilePictureUrl}
                 name={contextMenu.chat.customerName || 'Customer'}
@@ -7517,10 +7362,10 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 size="sm"
               />
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold text-[#111b21] truncate">
+                <p className="text-xs font-bold text-ink truncate">
                   {contextMenu.chat.customerName || 'Customer'}
                 </p>
-                <p className="text-[11px] text-[#667781] font-mono">
+                <p className="text-[11px] text-ink-2 font-mono">
                   {contextMenu.chat.customerPhone || 'Unknown'}
                 </p>
               </div>
@@ -7531,25 +7376,25 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
               <button
                 type="button"
                 onClick={() => handleTogglePin(contextMenu.chat)}
-                className="w-full px-3.5 py-3 text-left rounded-xl bg-[#f8fafc] hover:bg-[#f0f2f5] active:bg-[#e9edef] flex items-center space-x-3 transition font-medium text-xs text-[#111b21] cursor-pointer"
+                className="w-full px-3.5 py-3 text-left rounded-xl bg-surface-2 hover:bg-fill-1 active:bg-fill-2 flex items-center space-x-3 transition font-medium text-xs text-ink cursor-pointer"
               >
-                <Pin size={16} className={contextMenu.chat.isPinned ? 'text-[#008069] fill-current' : 'text-[#54656f]'} />
+                <Pin size={16} className={contextMenu.chat.isPinned ? 'text-accent fill-current' : 'text-ink-2'} />
                 <span>{contextMenu.chat.isPinned ? 'Lepas Sematan (Unpin dari Atas)' : 'Sematkan Percakapan (Pin ke Atas)'}</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => handleToggleReadStatus(contextMenu.chat)}
-                className="w-full px-3.5 py-3 text-left rounded-xl bg-[#f8fafc] hover:bg-[#f0f2f5] active:bg-[#e9edef] flex items-center space-x-3 transition font-medium text-xs text-[#111b21] cursor-pointer"
+                className="w-full px-3.5 py-3 text-left rounded-xl bg-surface-2 hover:bg-fill-1 active:bg-fill-2 flex items-center space-x-3 transition font-medium text-xs text-ink cursor-pointer"
               >
                 {(contextMenu.chat.unreadCount || 0) > 0 || contextMenu.chat.isManualUnread ? (
                   <>
-                    <MailCheck size={16} className="text-emerald-600" />
+                    <MailCheck size={16} className="text-success" />
                     <span>Tandai Sudah Dibaca</span>
                   </>
                 ) : (
                   <>
-                    <Mail size={16} className="text-[#005c4b]" />
+                    <Mail size={16} className="text-accent" />
                     <span>Tandai Belum Dibaca (Badge Hijau Tua)</span>
                   </>
                 )}
@@ -7566,7 +7411,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     handleTakeover(c);
                   }
                 }}
-                className="w-full px-3.5 py-3 text-left rounded-xl bg-[#f8fafc] hover:bg-[#f0f2f5] active:bg-[#e9edef] flex items-center space-x-3 transition font-medium text-xs text-[#54656f] cursor-pointer"
+                className="w-full px-3.5 py-3 text-left rounded-xl bg-surface-2 hover:bg-fill-1 active:bg-fill-2 flex items-center space-x-3 transition font-medium text-xs text-ink-2 cursor-pointer"
               >
                 {contextMenu.chat.isHumanHandling ? (
                   <>
@@ -7575,7 +7420,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   </>
                 ) : (
                   <>
-                    <User size={16} className="text-amber-600" />
+                    <User size={16} className="text-warning" />
                     <span>Ambil Alih Manual (CS)</span>
                   </>
                 )}
@@ -7587,31 +7432,31 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 <button
                   type="button"
                   onClick={() => handleDismissFrustration(contextMenu.chat)}
-                  className="w-full px-3.5 py-3 text-left rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 active:bg-rose-200/70 flex items-center space-x-3 transition font-medium text-xs text-rose-600 dark:text-[#f87171] cursor-pointer"
+                  className="w-full px-3.5 py-3 text-left rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 active:bg-rose-200/70 flex items-center space-x-3 transition font-medium text-xs text-rose-600 dark:text-danger cursor-pointer"
                 >
-                  <BellOff size={16} className="text-rose-600 dark:text-[#f87171]" />
+                  <BellOff size={16} className="text-rose-600 dark:text-danger" />
                   <span>Padamkan Peringatan SLA</span>
                 </button>
               </div>
             )}
 
             {/* System Labels Section */}
-            <div className="pt-2 pb-1 border-t border-[#f0f2f5] space-y-1.5">
-              <div className="flex items-center justify-between px-1 text-[11px] font-bold text-[#667781]">
+            <div className="pt-2 pb-1 border-t border-divider space-y-1.5">
+              <div className="flex items-center justify-between px-1 text-[11px] font-bold text-ink-2">
                 <span className="flex items-center space-x-1.5">
-                  <Tag size={13} className="text-[#008069]" />
+                  <Tag size={13} className="text-accent" />
                   <span>Label Pasien (Sistem CRM)</span>
                 </span>
                 <a
                   href="/admin/labels"
-                  className="text-[10px] text-[#008069] hover:underline font-semibold"
+                  className="text-[10px] text-accent hover:underline font-semibold"
                   onClick={(e) => e.stopPropagation()}
                 >
                   Kelola Label
                 </a>
               </div>
               {allLabels.length === 0 ? (
-                <p className="text-[11px] text-[#8696a0] px-1 py-0.5">Belum ada label sistem.</p>
+                <p className="text-[11px] text-ink-3 px-1 py-0.5">Belum ada label sistem.</p>
               ) : (
                 <div className="flex flex-wrap gap-1.5 pt-0.5 max-h-36 overflow-y-auto overscroll-contain" data-no-select="true">
                   {allLabels.map((lbl) => {
@@ -7625,16 +7470,16 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                         className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer shadow-2xs border active:scale-95 ${
                           isAssigned
                             ? 'text-white border-transparent'
-                            : 'bg-[#f8fafc] text-[#54656f] border-[#d1d7db] hover:bg-[#f0f2f5]'
+                            : 'bg-surface-2 text-ink-2 border-divider hover:bg-fill-1'
                         }`}
                         style={{
-                          backgroundColor: isAssigned ? lbl.color || '#008069' : undefined,
+                          backgroundColor: isAssigned ? lbl.color || 'rgb(var(--c-accent))' : undefined,
                         }}
                         title={`Klik untuk ${isAssigned ? 'lepas' : 'pasang'} label ${lbl.name}`}
                       >
                         <span
                           className="w-2 h-2 rounded-full shrink-0"
-                          style={{ backgroundColor: isAssigned ? '#ffffff' : lbl.color }}
+                          style={{ backgroundColor: isAssigned ? 'rgb(var(--c-surface))' : lbl.color }}
                         />
                         <span>{lbl.name}</span>
                         {isAssigned && <Check size={12} className="text-white shrink-0 ml-0.5 stroke-[3]" />}
@@ -7649,7 +7494,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
             <button
               type="button"
               onClick={() => setContextMenu(null)}
-              className="w-full py-3 bg-[#f0f2f5] active:bg-[#e9edef] text-[#111b21] font-bold text-xs rounded-xl transition cursor-pointer"
+              className="w-full py-3 bg-fill-1 active:bg-fill-2 text-ink font-bold text-xs rounded-xl transition cursor-pointer"
             >
               Batal
             </button>
@@ -7663,34 +7508,34 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
               top: Math.min(contextMenu.y, Math.max(0, (typeof window !== 'undefined' ? window.innerHeight : 0) - 420)),
               zIndex: 51,
             }}
-            className="hidden sm:block bg-white border border-[#d1d7db] rounded-xl shadow-2xl py-1.5 w-64 text-xs text-[#111b21] animate-in fade-in zoom-in-95 origin-top-left duration-100 divide-y divide-[#f0f2f5] max-h-[70vh] overflow-y-auto overscroll-contain"
+            className="hidden sm:block bg-surface border border-divider rounded-xl shadow-2xl py-1.5 w-64 text-xs text-ink animate-in fade-in zoom-in-95 origin-top-left duration-100 divide-y divide-divider max-h-[70vh] overflow-y-auto overscroll-contain"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-3.5 py-2 text-[11px] font-bold text-[#667781] truncate">
+            <div className="px-3.5 py-2 text-[11px] font-bold text-ink-2 truncate">
               {contextMenu.chat.customerName || contextMenu.chat.customerPhone || 'Opsi Percakapan'}
             </div>
             <div className="py-1">
               <button
                 type="button"
                 onClick={() => handleTogglePin(contextMenu.chat)}
-                className="w-full px-3.5 py-2.5 text-left hover:bg-[#f5f6f6] flex items-center space-x-2.5 transition font-medium cursor-pointer"
+                className="w-full px-3.5 py-2.5 text-left hover:bg-fill-1 flex items-center space-x-2.5 transition font-medium cursor-pointer"
               >
-                <Pin size={14} className={contextMenu.chat.isPinned ? 'text-[#008069] fill-current' : 'text-[#54656f]'} />
+                <Pin size={14} className={contextMenu.chat.isPinned ? 'text-accent fill-current' : 'text-ink-2'} />
                 <span>{contextMenu.chat.isPinned ? 'Lepas Sematan (Unpin)' : 'Sematkan Chat (Pin ke Atas)'}</span>
               </button>
               <button
                 type="button"
                 onClick={() => handleToggleReadStatus(contextMenu.chat)}
-                className="w-full px-3.5 py-2.5 text-left hover:bg-[#f5f6f6] flex items-center space-x-2.5 transition font-medium cursor-pointer"
+                className="w-full px-3.5 py-2.5 text-left hover:bg-fill-1 flex items-center space-x-2.5 transition font-medium cursor-pointer"
               >
                 {(contextMenu.chat.unreadCount || 0) > 0 || contextMenu.chat.isManualUnread ? (
                   <>
-                    <MailCheck size={14} className="text-emerald-600" />
+                    <MailCheck size={14} className="text-success" />
                     <span>Tandai Sudah Dibaca</span>
                   </>
                 ) : (
                   <>
-                    <Mail size={14} className="text-[#005c4b]" />
+                    <Mail size={14} className="text-accent" />
                     <span>Tandai Belum Dibaca (Hijau Tua)</span>
                   </>
                 )}
@@ -7708,7 +7553,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     handleTakeover(c);
                   }
                 }}
-                className="w-full px-3.5 py-2.5 text-left hover:bg-[#f5f6f6] flex items-center space-x-2.5 transition text-[#54656f] font-medium cursor-pointer"
+                className="w-full px-3.5 py-2.5 text-left hover:bg-fill-1 flex items-center space-x-2.5 transition text-ink-2 font-medium cursor-pointer"
               >
                 {contextMenu.chat.isHumanHandling ? (
                   <>
@@ -7717,7 +7562,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   </>
                 ) : (
                   <>
-                    <User size={14} className="text-amber-600" />
+                    <User size={14} className="text-warning" />
                     <span>Ambil Alih Manual (CS)</span>
                   </>
                 )}
@@ -7728,9 +7573,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 <button
                   type="button"
                   onClick={() => handleDismissFrustration(contextMenu.chat)}
-                  className="w-full px-3.5 py-2.5 text-left hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center space-x-2.5 transition font-medium cursor-pointer text-rose-600 dark:text-[#f87171]"
+                  className="w-full px-3.5 py-2.5 text-left hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center space-x-2.5 transition font-medium cursor-pointer text-rose-600 dark:text-danger"
                 >
-                  <BellOff size={14} className="text-rose-600 dark:text-[#f87171]" />
+                  <BellOff size={14} className="text-rose-600 dark:text-danger" />
                   <span>Padamkan Peringatan SLA</span>
                 </button>
               </div>
@@ -7738,21 +7583,21 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
             {/* System Labels Section (Desktop) */}
             <div className="py-2 px-3 space-y-1.5">
-              <div className="flex items-center justify-between text-[11px] font-bold text-[#667781]">
+              <div className="flex items-center justify-between text-[11px] font-bold text-ink-2">
                 <span className="flex items-center space-x-1">
-                  <Tag size={12} className="text-[#008069]" />
+                  <Tag size={12} className="text-accent" />
                   <span>Label Sistem (CRM)</span>
                 </span>
                 <a
                   href="/admin/labels"
-                  className="text-[10px] text-[#008069] hover:underline font-semibold"
+                  className="text-[10px] text-accent hover:underline font-semibold"
                   onClick={(e) => e.stopPropagation()}
                 >
                   Kelola
                 </a>
               </div>
               {allLabels.length === 0 ? (
-                <p className="text-[11px] text-[#8696a0] py-0.5">Belum ada label sistem.</p>
+                <p className="text-[11px] text-ink-3 py-0.5">Belum ada label sistem.</p>
               ) : (
                 <div className="flex flex-wrap gap-1 pt-0.5 max-h-32 overflow-y-auto overscroll-contain">
                   {allLabels.map((lbl) => {
@@ -7766,16 +7611,16 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                         className={`px-2 py-1 rounded-lg text-[11px] font-semibold flex items-center space-x-1 transition cursor-pointer shadow-2xs border ${
                           isAssigned
                             ? 'text-white border-transparent'
-                            : 'bg-[#f8fafc] text-[#54656f] border-[#d1d7db] hover:bg-[#f0f2f5]'
+                            : 'bg-surface-2 text-ink-2 border-divider hover:bg-fill-1'
                         }`}
                         style={{
-                          backgroundColor: isAssigned ? lbl.color || '#008069' : undefined,
+                          backgroundColor: isAssigned ? lbl.color || 'rgb(var(--c-accent))' : undefined,
                         }}
                         title={`Klik untuk ${isAssigned ? 'lepas' : 'pasang'} label ${lbl.name}`}
                       >
                         <span
                           className="w-1.5 h-1.5 rounded-full shrink-0"
-                          style={{ backgroundColor: isAssigned ? '#ffffff' : lbl.color }}
+                          style={{ backgroundColor: isAssigned ? 'rgb(var(--c-surface))' : lbl.color }}
                         />
                         <span>{lbl.name}</span>
                         {isAssigned && <Check size={11} className="text-white shrink-0 ml-0.5 stroke-[3]" />}
@@ -7792,52 +7637,52 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       {/* Edit Message Modal */}
       {editingMsg && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white border border-[#e9edef] rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
-            <div className="flex justify-between items-center px-5 py-3.5 border-b border-[#e9edef] bg-[#f8fafc]">
+          <div className="bg-surface border border-divider rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="flex justify-between items-center px-5 py-3.5 border-b border-divider bg-surface-2">
               <div className="flex items-center space-x-2">
-                <div className="p-1.5 rounded-lg bg-[#e8f5f2] text-[#008069]">
+                <div className="p-1.5 rounded-lg bg-accent-soft text-accent">
                   <PenLine size={16} />
                 </div>
-                <h3 className="text-sm font-bold text-[#111b21]">Edit Pesan WhatsApp</h3>
+                <h3 className="text-sm font-bold text-ink">Edit Pesan WhatsApp</h3>
               </div>
               <button
                 type="button"
                 onClick={() => setEditingMsg(null)}
                 disabled={isEditingSaving}
-                className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#e9edef] transition text-xs font-bold"
+                className="p-1.5 rounded-lg text-ink-3 hover:text-ink hover:bg-fill-2 transition text-xs font-bold"
               >
                 ✕
               </button>
             </div>
 
             <div className="p-5 space-y-3.5">
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-800 space-y-1">
+              <div className="p-3 bg-warning-soft border border-warning-line rounded-xl text-[11px] text-warning space-y-1">
                 <p className="font-bold flex items-center gap-1.5">
-                  <Info size={13} className="text-amber-600 shrink-0" />
+                  <Info size={13} className="text-warning shrink-0" />
                   Batas Waktu Edit WhatsApp: 15 Menit
                 </p>
-                <p className="text-amber-700 leading-relaxed">
+                <p className="text-warning leading-relaxed">
                   WhatsApp hanya mengizinkan pengeditan pesan dalam 15 menit pertama. Pesan yang diedit akan otomatis memiliki label <i>(Diedit)</i> di HP penerima.
                 </p>
               </div>
 
               <div className="space-y-1.5">
-                <label className="block text-[11px] font-bold text-[#111b21]">Isi Pesan Baru</label>
+                <label className="block text-[11px] font-bold text-ink">Isi Pesan Baru</label>
                 <textarea
                   value={editContent}
                   onChange={(e) => setEditContent(e.target.value)}
                   rows={4}
                   placeholder="Ketik perbaikan teks pesan..."
-                  className="w-full bg-white border border-[#d1d7db] rounded-xl p-3 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] transition shadow-xs leading-relaxed"
+                  className="w-full bg-surface border border-divider rounded-xl p-3 text-xs text-ink placeholder-ink-3 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition shadow-xs leading-relaxed"
                 />
               </div>
 
-              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#e9edef]">
+              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-divider">
                 <button
                   type="button"
                   onClick={() => setEditingMsg(null)}
                   disabled={isEditingSaving}
-                  className="px-4 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] rounded-xl text-xs font-semibold transition"
+                  className="px-4 py-2 bg-surface hover:bg-fill-1 border border-divider text-ink rounded-xl text-xs font-semibold transition"
                 >
                   Batal
                 </button>
@@ -7845,7 +7690,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   type="button"
                   onClick={handleSaveEdit}
                   disabled={isEditingSaving || !editContent.trim()}
-                  className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs"
+                  className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs"
                 >
                   {isEditingSaving ? (
                     <>
@@ -7868,10 +7713,10 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       {/* Chat Export Modal (konsolidasi dari page ChatExport — via ?action=export) */}
       {(searchParams.get('action') === 'export' || searchParams.get('export') === '1') && (
         <div className="fixed inset-0 z-[10000] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn" onClick={() => { const p = new URLSearchParams(searchParams.toString()); p.delete('action'); p.delete('export'); setSearchParams(p, { replace: true }); }}>
-          <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[85vh] overflow-y-auto shadow-2xl border border-[#e9edef] p-4 sm:p-5" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-surface rounded-2xl w-full max-w-3xl max-h-[85vh] overflow-y-auto shadow-2xl border border-divider p-4 sm:p-5" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold text-[#111b21]">Ekspor Chat</h3>
-              <button onClick={() => { const p = new URLSearchParams(searchParams.toString()); p.delete('action'); p.delete('export'); setSearchParams(p, { replace: true }); }} className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5]"><X size={16} /></button>
+              <h3 className="text-sm font-bold text-ink">Ekspor Chat</h3>
+              <button onClick={() => { const p = new URLSearchParams(searchParams.toString()); p.delete('action'); p.delete('export'); setSearchParams(p, { replace: true }); }} className="p-1.5 rounded-lg text-ink-3 hover:text-ink hover:bg-fill-1"><X size={16} /></button>
             </div>
             <ChatExport />
           </div>
@@ -7881,31 +7726,31 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       {/* 📋 Modal Informasi & Konfirmasi Sinkronisasi WhatsApp */}
       {showSyncInfoModal && (
         <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-[#e9edef] space-y-4 animate-scaleUp">
+          <div className="bg-surface rounded-2xl max-w-md w-full p-5 shadow-2xl border border-divider space-y-4 animate-scaleUp">
             {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-[#f0f2f5]">
+            <div className="flex items-center justify-between pb-3 border-b border-divider">
               <div className="flex items-center space-x-2.5">
-                <div className="p-2 rounded-xl bg-[#e8f5f2] text-[#008069]">
+                <div className="p-2 rounded-xl bg-accent-soft text-accent">
                   <RefreshCw size={20} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-[#111b21]">Sinkronisasi WhatsApp</h3>
-                  <p className="text-[11px] text-[#667781]">Penyelarasan Riwayat Chat di Background</p>
+                  <h3 className="text-sm font-bold text-ink">Sinkronisasi WhatsApp</h3>
+                  <p className="text-[11px] text-ink-2">Penyelarasan Riwayat Chat di Background</p>
                 </div>
               </div>
               <button
                 onClick={() => setShowSyncInfoModal(false)}
-                className="p-1 text-[#8696a0] hover:text-[#111b21] rounded-lg hover:bg-[#f0f2f5] transition cursor-pointer"
+                className="p-1 text-ink-3 hover:text-ink rounded-lg hover:bg-fill-1 transition cursor-pointer"
               >
                 <X size={18} />
               </button>
             </div>
 
             {/* Konten Penjelasan */}
-            <div className="space-y-3 text-xs text-[#54656f]">
+            <div className="space-y-3 text-xs text-ink-2">
               {/* Apa yang dilakukan */}
-              <div className="p-3 bg-[#f8fafc] border border-[#e2e8f0] rounded-xl space-y-1">
-                <p className="font-bold text-[#111b21] flex items-center space-x-1.5">
+              <div className="p-3 bg-surface-2 border border-divider rounded-xl space-y-1">
+                <p className="font-bold text-ink flex items-center space-x-1.5">
                   <span>⚙️</span>
                   <span>Apa yang dilakukan?</span>
                 </p>
@@ -7916,44 +7761,44 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
               {/* Data yang disinkronkan */}
               <div className="space-y-1.5">
-                <p className="font-bold text-[#111b21] flex items-center space-x-1.5">
+                <p className="font-bold text-ink flex items-center space-x-1.5">
                   <span>📥</span>
                   <span>Data yang disinkronkan (Scrape):</span>
                 </p>
                 <ul className="space-y-1 text-[11px] pl-1">
                   <li className="flex items-start space-x-2">
-                    <span className="text-[#008069] font-bold">✓</span>
+                    <span className="text-accent font-bold">✓</span>
                     <span><strong>Daftar Kontak & Customer:</strong> Deteksi nomor baru dan update nama pelanggan.</span>
                   </li>
                   <li className="flex items-start space-x-2">
-                    <span className="text-[#008069] font-bold">✓</span>
+                    <span className="text-accent font-bold">✓</span>
                     <span><strong>Riwayat Percakapan:</strong> Pesan teks, lampiran media (foto/gambar), dan status kirim/baca.</span>
                   </li>
                   <li className="flex items-start space-x-2">
-                    <span className="text-[#008069] font-bold">✓</span>
+                    <span className="text-accent font-bold">✓</span>
                     <span><strong>Foto Profil WhatsApp:</strong> Cache foto profil customer untuk notifikasi mobile & avatar.</span>
                   </li>
                 </ul>
               </div>
 
               {/* Estimasi Waktu */}
-              <div className="p-2.5 bg-amber-50 border border-amber-200/80 rounded-xl space-y-1 text-amber-900">
+              <div className="p-2.5 bg-warning-soft border border-warning-line/80 rounded-xl space-y-1 text-warning">
                 <p className="font-bold flex items-center space-x-1.5 text-[11px]">
                   <span>⏱️</span>
                   <span>Estimasi Waktu Bekerja di Background:</span>
                 </p>
-                <p className="text-[11px] leading-relaxed text-amber-800">
+                <p className="text-[11px] leading-relaxed text-warning">
                   Estimasi <strong>~1 - 3 menit</strong> (tergantung banyaknya riwayat chat WhatsApp). Anda dapat tetap menggunakan dashboard dan membuka percakapan seperti biasa tanpa menunggu.
                 </p>
               </div>
             </div>
 
             {/* Action Buttons */}
-            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#f0f2f5]">
+            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-divider">
               <button
                 type="button"
                 onClick={() => setShowSyncInfoModal(false)}
-                className="px-3.5 py-1.5 text-xs font-semibold text-[#54656f] hover:text-[#111b21] hover:bg-[#f0f2f5] rounded-xl transition cursor-pointer"
+                className="px-3.5 py-1.5 text-xs font-semibold text-ink-2 hover:text-ink hover:bg-fill-1 rounded-xl transition cursor-pointer"
               >
                 Batal
               </button>
@@ -7963,7 +7808,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   setShowSyncInfoModal(false);
                   handleStartBackgroundFullSync();
                 }}
-                className="px-4 py-1.5 text-xs font-bold text-white bg-[#008069] hover:bg-[#00a884] rounded-xl shadow-xs transition flex items-center space-x-1.5 cursor-pointer"
+                className="px-4 py-1.5 text-xs font-bold text-white bg-accent hover:bg-accent-hover rounded-xl shadow-xs transition flex items-center space-x-1.5 cursor-pointer"
               >
                 <RefreshCw size={12} />
                 <span>Mulai Sinkronisasi Sekarang</span>

@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "check:tokens": "node scripts/check-design-tokens.mjs",
+    "check:dark-parity": "node scripts/check-dark-parity.mjs",
+    "check:design": "npm run check:tokens && npm run check:dark-parity"
   },
   "dependencies": {
     "lucide-react": "^0.435.0",

@@ -262,8 +262,8 @@ export function getLocationBadgeConfig(
     return {
       source: 'manual_staff',
       label: explicitLabel || '📍 Terverifikasi Staf',
-      badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-      dotColor: '#008069',
+      badgeClass: 'bg-success-soft text-success border-success-line',
+      dotColor: 'rgb(var(--c-accent))',
     };
   }
 
@@ -273,9 +273,9 @@ export function getLocationBadgeConfig(
       source: 'gps_pin',
       label: explicitLabel || (isCustomerShareloc ? '🔵 Shareloc Customer' : '📍 Titik Presisi'),
       badgeClass: isCustomerShareloc
-        ? 'bg-sky-50 text-sky-700 border-sky-200'
-        : 'bg-[#d9fdd3] text-[#008069] border-[#b7e4c7]',
-      dotColor: isCustomerShareloc ? '#0284c7' : '#008069',
+        ? 'bg-info-soft text-info border-info-line'
+        : 'bg-bubble-out text-accent border-accent/30',
+      dotColor: isCustomerShareloc ? 'rgb(var(--c-info))' : 'rgb(var(--c-accent))',
     };
   }
 
@@ -286,17 +286,17 @@ export function getLocationBadgeConfig(
       // REVISI-1 Tahap 4.1: label jujur — titik DB bukan pin GPS rumah.
       label: explicitLabel || (isDbCoords ? '🟡 Estimasi (Titik DB)' : '⚪ Estimasi Wilayah'),
       badgeClass: isDbCoords
-        ? 'bg-amber-50 text-amber-700 border-amber-200'
-        : 'bg-gray-50 text-gray-700 border-gray-200',
-      dotColor: isDbCoords ? '#d97706' : '#64748b',
+        ? 'bg-warning-soft text-warning border-warning-line'
+        : 'bg-surface-2 text-ink border-divider',
+      dotColor: isDbCoords ? 'rgb(var(--c-warning))' : 'rgb(var(--c-ink-2))',
     };
   }
 
   return {
     source: null,
     label: explicitLabel || '⚪ Estimasi Wilayah',
-    badgeClass: 'bg-gray-50 text-gray-700 border-gray-200',
-    dotColor: '#64748b',
+    badgeClass: 'bg-surface-2 text-ink border-divider',
+    dotColor: 'rgb(var(--c-ink-2))',
   };
 }
 

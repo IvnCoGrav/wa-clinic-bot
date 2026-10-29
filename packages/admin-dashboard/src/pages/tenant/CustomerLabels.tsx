@@ -175,11 +175,11 @@ export const CustomerLabels: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h1 className="text-xl font-bold text-[#111b21] tracking-tight flex items-center space-x-2">
-            <Tag className="text-[#008069]" size={22} />
+          <h1 className="text-xl font-bold text-ink tracking-tight flex items-center space-x-2">
+            <Tag className="text-accent" size={22} />
             <span>Customer Labels</span>
           </h1>
-          <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
+          <p className="text-xs text-ink-3 mt-0.5">
             Kelola master label dan kategori khusus untuk menandai customer di Live Chat & Database.
           </p>
         </div>
@@ -187,23 +187,23 @@ export const CustomerLabels: React.FC = () => {
           <button
             onClick={loadLabels}
             disabled={loading}
-            className="p-2 rounded-xl bg-white border border-[#d1d7db] hover:bg-[#f0f2f5] text-[#54656f] transition shadow-xs disabled:opacity-50"
+            className="p-2 rounded-xl bg-surface border border-divider hover:bg-fill-1 text-ink-2 transition shadow-xs disabled:opacity-50"
             title="Refresh Label"
           >
-            <RefreshCw size={15} className={loading ? 'animate-spin text-[#008069]' : ''} />
+            <RefreshCw size={15} className={loading ? 'animate-spin text-accent' : ''} />
           </button>
           <button
             onClick={handleSeedDefaults}
             disabled={loading}
-            className="px-3 py-2 bg-white border border-[#d1d7db] hover:bg-[#f0f2f5] text-[#111b21] rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
+            className="px-3 py-2 bg-surface border border-divider hover:bg-fill-1 text-ink rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
             title="Muat label bawaan sistem (Hold, Admin CS, Skip, Pending Payment, dll)"
           >
-            <Tag size={13} className="text-[#008069]" />
+            <Tag size={13} className="text-accent" />
             <span>Muat Label Bawaan</span>
           </button>
           <button
             onClick={handleOpenCreate}
-            className="px-3.5 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs active:scale-95"
+            className="px-3.5 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs active:scale-95"
           >
             <Plus size={15} />
             <span>Tambah Label</span>
@@ -214,26 +214,26 @@ export const CustomerLabels: React.FC = () => {
       {/* Content */}
       {loading ? (
         <div className="flex justify-center items-center py-20">
-          <Loader className="animate-spin text-[#008069]" size={32} />
+          <Loader className="animate-spin text-accent" size={32} />
         </div>
       ) : labels.length === 0 ? (
-        <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-12 text-center text-[#667781] dark:text-[#8696a0] text-xs shadow-xs">
-          <Tag className="mx-auto text-[#8696a0] mb-3" size={40} />
-          <p className="font-bold text-[#111b21] dark:text-[#e9edef] text-sm">Belum Ada Label</p>
-          <p className="text-[#667781] max-w-sm mx-auto mt-1">
+        <div className="bg-surface border border-divider rounded-2xl p-12 text-center text-ink-3 text-xs shadow-xs">
+          <Tag className="mx-auto text-ink-3 mb-3" size={40} />
+          <p className="font-bold text-ink text-sm">Belum Ada Label</p>
+          <p className="text-ink-3 max-w-sm mx-auto mt-1">
             Klik tombol di bawah untuk memuat label bawaan (Hold, Admin CS, Skip, Pending Payment, Repeat Order, Medis, dll) atau buat label kustom baru.
           </p>
           <div className="flex items-center justify-center space-x-3 mt-4">
             <button
               onClick={handleSeedDefaults}
-              className="px-4 py-2 bg-white border border-[#d1d7db] hover:bg-[#f0f2f5] text-[#111b21] rounded-xl text-xs font-bold transition inline-flex items-center space-x-1.5 shadow-xs"
+              className="px-4 py-2 bg-surface border border-divider hover:bg-fill-1 text-ink rounded-xl text-xs font-bold transition inline-flex items-center space-x-1.5 shadow-xs"
             >
-              <Tag size={14} className="text-[#008069]" />
+              <Tag size={14} className="text-accent" />
               <span>Muat Label Bawaan</span>
             </button>
             <button
               onClick={handleOpenCreate}
-              className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold transition inline-flex items-center space-x-1.5 shadow-xs"
+              className="px-4 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-bold transition inline-flex items-center space-x-1.5 shadow-xs"
             >
               <Plus size={14} />
               <span>Buat Label Kustom</span>
@@ -245,7 +245,7 @@ export const CustomerLabels: React.FC = () => {
           {labels.map((label) => (
             <div
               key={label.id}
-              className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] hover:border-[#c2e7e0] dark:hover:border-[#008069] rounded-2xl p-4 transition shadow-xs flex flex-col justify-between space-y-3"
+              className="bg-surface border border-divider hover:border-divider dark:hover:border-accent rounded-2xl p-4 transition shadow-xs flex flex-col justify-between space-y-3"
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-center space-x-2.5 min-w-0">
@@ -255,9 +255,9 @@ export const CustomerLabels: React.FC = () => {
                   />
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] truncate">{label.name}</h3>
+                      <h3 className="text-sm font-bold text-ink truncate">{label.name}</h3>
                       {label.is_system && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-[#f0f2f5] text-[#54656f] border border-[#d1d7db]" title="Label bawaan sistem yang dilindungi">
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-fill-1 text-ink-2 border border-divider" title="Label bawaan sistem yang dilindungi">
                           Bawaan Sistem
                         </span>
                       )}
@@ -269,7 +269,7 @@ export const CustomerLabels: React.FC = () => {
                       {label.name}
                     </span>
                     {label.description && (
-                      <p className="text-[11px] text-[#667781] mt-1.5 line-clamp-2 leading-relaxed">
+                      <p className="text-[11px] text-ink-3 mt-1.5 line-clamp-2 leading-relaxed">
                         {label.description}
                       </p>
                     )}
@@ -278,14 +278,14 @@ export const CustomerLabels: React.FC = () => {
                 <div className="flex items-center space-x-1 shrink-0 ml-2">
                   <button
                     onClick={() => handleOpenEdit(label)}
-                    className="p-1.5 rounded-lg text-[#667781] hover:text-[#008069] hover:bg-[#f0f2f5] transition"
+                    className="p-1.5 rounded-lg text-ink-3 hover:text-accent hover:bg-fill-1 transition"
                     title="Edit Label"
                   >
                     <Edit2 size={14} />
                   </button>
                   {label.is_system ? (
                     <span
-                      className="p-1.5 text-[#cbd5e1] cursor-not-allowed"
+                      className="p-1.5 text-ink-3 cursor-not-allowed"
                       title="Label bawaan sistem tidak dapat dihapus demi keamanan fitur"
                     >
                       <Trash2 size={14} className="opacity-40" />
@@ -293,7 +293,7 @@ export const CustomerLabels: React.FC = () => {
                   ) : (
                     <button
                       onClick={() => handleDelete(label)}
-                      className="p-1.5 rounded-lg text-[#667781] hover:text-rose-600 hover:bg-rose-50 transition"
+                      className="p-1.5 rounded-lg text-ink-3 hover:text-danger hover:bg-danger-soft transition"
                       title="Hapus Label"
                     >
                       <Trash2 size={14} />
@@ -302,12 +302,12 @@ export const CustomerLabels: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between pt-2 border-t border-[#f0f2f5] text-[11px] text-[#667781]">
+              <div className="flex items-center justify-between pt-2 border-t border-divider text-[11px] text-ink-3">
                 <span className="flex items-center space-x-1">
-                  <Users size={12} className="text-[#8696a0]" />
+                  <Users size={12} className="text-ink-3" />
                   <span>{label._count?.customers || 0} customer ditandai</span>
                 </span>
-                <span className="font-mono text-[10px] text-[#8696a0]">{label.color}</span>
+                <span className="font-mono text-[10px] text-ink-3">{label.color}</span>
               </div>
             </div>
           ))}
@@ -317,15 +317,15 @@ export const CustomerLabels: React.FC = () => {
       {/* Create / Edit Modal */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] rounded-2xl w-full max-w-md p-6 shadow-xl space-y-4">
-            <div className="flex justify-between items-center pb-2 border-b border-[#e9edef] dark:border-[#2a3942]">
-              <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
-                <Tag size={16} className="text-[#008069]" />
+          <div className="bg-surface border border-divider text-ink rounded-2xl w-full max-w-md p-6 shadow-xl space-y-4">
+            <div className="flex justify-between items-center pb-2 border-b border-divider">
+              <h3 className="text-sm font-bold text-ink flex items-center space-x-2">
+                <Tag size={16} className="text-accent" />
                 <span>{editingLabel ? 'Edit Label Customer' : 'Tambah Label Baru'}</span>
               </h3>
               <button
                 onClick={() => setModalOpen(false)}
-                className="text-[#667781] hover:text-[#111b21] text-xs font-semibold p-1"
+                className="text-ink-3 hover:text-ink text-xs font-semibold p-1"
               >
                 ✕
               </button>
@@ -333,35 +333,35 @@ export const CustomerLabels: React.FC = () => {
 
             <form onSubmit={handleSave} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-[#111b21] dark:text-[#e9edef] mb-1">
-                  Nama Label <span className="text-rose-500">*</span>
+                <label className="block text-xs font-bold text-ink mb-1">
+                  Nama Label <span className="text-danger">*</span>
                 </label>
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Contoh: VIP Mom, Follow Up Medis, dll."
-                  className="wa-input w-full px-3 py-2"
+                  className="w-full bg-surface border border-divider rounded-xl px-3 py-2 text-xs text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs transition"
                   autoFocus
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#111b21] mb-1">
-                  Deskripsi Label <span className="text-[#8696a0] font-normal">(Opsional)</span>
+                <label className="block text-xs font-bold text-ink mb-1">
+                  Deskripsi Label <span className="text-ink-3 font-normal">(Opsional)</span>
                 </label>
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Keterangan singkat fungsi / arti label..."
                   rows={2}
-                  className="wa-textarea w-full px-3 py-2"
+                  className="w-full bg-surface border border-divider rounded-xl px-3 py-2 text-xs text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs transition resize-none"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#111b21] mb-1.5">
+                <label className="block text-xs font-bold text-ink mb-1.5">
                   Pilih Warna Label
                 </label>
                 <div className="flex flex-wrap gap-2 mb-2.5">
@@ -372,7 +372,7 @@ export const CustomerLabels: React.FC = () => {
                       onClick={() => setColor(c)}
                       className={`w-7 h-7 rounded-full flex items-center justify-center transition border ${
                         color.toLowerCase() === c.toLowerCase()
-                          ? 'ring-2 ring-offset-1 ring-[#111b21] scale-110'
+                          ? 'ring-2 ring-offset-1 ring-ink scale-110'
                           : 'hover:scale-105 border-black/10'
                       }`}
                       style={{ backgroundColor: c }}
@@ -390,21 +390,21 @@ export const CustomerLabels: React.FC = () => {
                     type="color"
                     value={color}
                     onChange={(e) => setColor(e.target.value)}
-                    className="w-8 h-8 rounded-lg cursor-pointer border border-[#d1d7db] p-0.5"
+                    className="w-8 h-8 rounded-lg cursor-pointer border border-divider p-0.5"
                   />
                   <input
                     type="text"
                     value={color}
                     onChange={(e) => setColor(e.target.value)}
                     placeholder="#008069"
-                    className="flex-1 px-3 py-1.5 border border-[#d1d7db] rounded-xl text-xs font-mono focus:outline-none focus:border-[#008069]"
+                    className="flex-1 px-3 py-1.5 border border-divider rounded-xl text-xs font-mono focus:outline-none focus:border-accent"
                   />
                 </div>
               </div>
 
               {/* Preview Badge */}
-              <div className="p-3 bg-[#f0f2f5] rounded-xl border border-[#e9edef] flex items-center justify-between">
-                <span className="text-xs text-[#667781]">Preview Tampilan:</span>
+              <div className="p-3 bg-fill-1 rounded-xl border border-divider flex items-center justify-between">
+                <span className="text-xs text-ink-3">Preview Tampilan:</span>
                 <span
                   className="px-2.5 py-1 rounded-md text-xs font-bold text-white shadow-xs"
                   style={{ backgroundColor: color }}
@@ -413,19 +413,19 @@ export const CustomerLabels: React.FC = () => {
                 </span>
               </div>
 
-              <div className="flex justify-end space-x-2 pt-2 border-t border-[#e9edef]">
+              <div className="flex justify-end space-x-2 pt-2 border-t border-divider">
                 <button
                   type="button"
                   onClick={() => setModalOpen(false)}
                   disabled={saving}
-                  className="px-3.5 py-2 rounded-xl text-xs font-semibold text-[#54656f] hover:bg-[#f0f2f5] transition"
+                  className="px-3.5 py-2 rounded-xl text-xs font-semibold text-ink-2 hover:bg-fill-1 transition"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={saving || !name.trim()}
-                  className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs"
+                  className="px-4 py-2 bg-accent hover:bg-accent disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs"
                 >
                   {saving && <Loader size={13} className="animate-spin" />}
                   <span>{saving ? 'Menyimpan...' : editingLabel ? 'Simpan Perubahan' : 'Tambah Label'}</span>

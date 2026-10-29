@@ -327,13 +327,13 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'confirmed':
-        return <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-semibold">Confirmed</span>;
+        return <span className="px-2.5 py-0.5 rounded-full bg-success-soft border border-success-line text-success text-xs font-semibold">Confirmed</span>;
       case 'completed':
-        return <span className="px-2.5 py-0.5 rounded-full bg-sky-100 border border-sky-200 text-sky-800 text-xs font-semibold">Completed</span>;
+        return <span className="px-2.5 py-0.5 rounded-full bg-info-soft border border-info-line text-info text-xs font-semibold">Completed</span>;
       case 'cancelled':
-        return <span className="px-2.5 py-0.5 rounded-full bg-rose-100 border border-rose-200 text-rose-800 text-xs font-semibold">Cancelled</span>;
+        return <span className="px-2.5 py-0.5 rounded-full bg-danger-soft border border-danger-line text-danger text-xs font-semibold">Cancelled</span>;
       default:
-        return <span className="px-2.5 py-0.5 rounded-full bg-amber-100 border border-amber-200 text-amber-800 text-xs font-semibold">Pending</span>;
+        return <span className="px-2.5 py-0.5 rounded-full bg-warning-soft border border-warning-line text-warning text-xs font-semibold">Pending</span>;
     }
   };
 
@@ -418,16 +418,16 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-2xl bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#202c33] rounded-t-3xl sm:rounded-3xl p-4 sm:p-6 space-y-4 sm:space-y-5 shadow-2xl relative max-h-[88dvh] sm:max-h-[90vh] overflow-y-auto animate-modalScaleUp"
+        className="w-full max-w-2xl bg-surface border border-divider rounded-t-3xl sm:rounded-3xl p-4 sm:p-6 space-y-4 sm:space-y-5 shadow-2xl relative max-h-[88dvh] sm:max-h-[90vh] overflow-y-auto animate-modalScaleUp"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Mobile drag handle */}
-        <div className="w-12 h-1.5 bg-[#d1d7db] dark:bg-[#374248] rounded-full mx-auto -mt-1 mb-2 sm:hidden shrink-0" />
+        <div className="w-12 h-1.5 bg-divider dark:bg-divider rounded-full mx-auto -mt-1 mb-2 sm:hidden shrink-0" />
 
         <button
           data-modal-close="true"
           onClick={onClose}
-          className="absolute top-[max(1rem,env(safe-area-inset-top))] right-[max(1rem,env(safe-area-inset-right))] p-2 rounded-full text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#202c33] active:scale-95 transition-colors cursor-pointer"
+          className="absolute top-[max(1rem,env(safe-area-inset-top))] right-[max(1rem,env(safe-area-inset-right))] p-2 rounded-full text-ink-3 hover:text-ink dark:hover:text-ink hover:bg-fill-1 active:scale-95 transition-colors cursor-pointer"
         >
           <X size={18} />
         </button>
@@ -435,11 +435,11 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
         {/* Modal Header */}
         <div className="flex items-start justify-between pr-8 flex-wrap gap-2">
           <div>
-            <h3 className="text-base sm:text-lg font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
-              <Info size={18} className="text-[#008069] flex-shrink-0" />
+            <h3 className="text-base sm:text-lg font-bold text-ink flex items-center space-x-2">
+              <Info size={18} className="text-accent flex-shrink-0" />
               <span>Detail Reservasi</span>
             </h3>
-            <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
+            <p className="text-xs text-ink-3 mt-0.5">
               Kelola penugasan terapis, tanggal jadwal, dan status pembayaran
             </p>
           </div>
@@ -447,7 +447,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
           <button
             type="button"
             onClick={() => setIsEditing(true)}
-            className="px-3 py-1.5 rounded-xl bg-white dark:bg-[#202c33] hover:bg-emerald-50 dark:hover:bg-[#2a3942] text-[#008069] dark:text-[#00a884] border border-emerald-300 dark:border-emerald-700 text-xs font-bold transition flex items-center space-x-1.5 shadow-2xs cursor-pointer"
+            className="px-3 py-1.5 rounded-xl bg-surface hover:bg-emerald-50 dark:hover:bg-fill-2 text-accent border border-emerald-300 dark:border-emerald-700 text-xs font-bold transition flex items-center space-x-1.5 shadow-2xs cursor-pointer"
             title="Buka Form Ubah Jadwal/Data Reservasi"
           >
             <PenLine size={13} />
@@ -462,20 +462,20 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
           {/* Info contents split layout */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 text-xs">
               <div className="space-y-3">
-                <div className="p-3.5 rounded-xl bg-[#f8fafc] dark:bg-[#182229] border border-[#e9edef] dark:border-[#202c33] space-y-2">
+                <div className="p-3.5 rounded-xl bg-surface-2 border border-divider space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-[#667781] dark:text-[#8696a0] font-bold block uppercase">Data Pasien</span>
+                    <span className="text-[11px] text-ink-3 font-bold block uppercase">Data Pasien</span>
                     {getStatusBadge(displayReservation.status)}
                   </div>
-                  <div className="flex items-center space-x-2 text-[#111b21] dark:text-[#e9edef]">
-                    <User size={15} className="text-[#8696a0] flex-shrink-0" />
+                  <div className="flex items-center space-x-2 text-ink">
+                    <User size={15} className="text-ink-3 flex-shrink-0" />
                     <span className="font-semibold break-all">
                       {displayReservation.customer?.name || 'Bunda'} ({displayReservation.customer?.phone})
                     </span>
                   </div>
                   {displayReservation.customer?.kelurahan && (
-                    <div className="flex items-center space-x-2 text-[#54656f] dark:text-[#8696a0] text-[11px]">
-                      <MapPin size={13} className="text-[#8696a0] flex-shrink-0" />
+                    <div className="flex items-center space-x-2 text-ink-2 text-[11px]">
+                      <MapPin size={13} className="text-ink-3 flex-shrink-0" />
                       <span className="break-words">
                         {displayReservation.customer?.kelurahan}, {displayReservation.customer?.kecamatan}, {displayReservation.customer?.kota}
                       </span>
@@ -485,8 +485,8 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                     const detailAddr = getDetailedAddress(reservation);
                     if (!detailAddr || detailAddr === displayReservation.customer?.kelurahan) return null;
                     return (
-                      <div className="flex items-start space-x-2 text-[#111b21] dark:text-[#e9edef] text-[11px]">
-                        <MapPin size={13} className="text-[#008069] flex-shrink-0 mt-0.5" />
+                      <div className="flex items-start space-x-2 text-ink text-[11px]">
+                        <MapPin size={13} className="text-accent flex-shrink-0 mt-0.5" />
                         <span className="break-words font-medium">{detailAddr}</span>
                       </div>
                     );
@@ -494,8 +494,8 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
 
                   {/* Info Moms (kehamilan / nifas) — badge dinamis, bukan teks mentah */}
                   {momGestationalBadge((reservation as any).mom_gestational_info) && (
-                    <div className="mt-2 pt-2 border-t border-[#e9edef] dark:border-[#202c33]">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-pink-50 dark:bg-pink-950/40 text-pink-800 dark:text-[#f472b6] border border-pink-200 dark:border-pink-800/40 text-[11px] font-bold">
+                    <div className="mt-2 pt-2 border-t border-divider">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-pink-50 dark:bg-pink-950/40 text-pink-800 dark:text-rose-400 border border-pink-200 dark:border-pink-800/40 text-[11px] font-bold">
                         {momGestationalBadge((reservation as any).mom_gestational_info)}
                       </span>
                     </div>
@@ -503,18 +503,18 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
 
                   {/* Baby / Anak info */}
                   {getBabyRows(reservation).length > 0 && (
-                    <div className="mt-2 pt-2 border-t border-[#e9edef] dark:border-[#202c33] space-y-1.5">
-                      <span className="text-[11px] text-[#008069] font-bold uppercase tracking-wider block">
+                    <div className="mt-2 pt-2 border-t border-divider space-y-1.5">
+                      <span className="text-[11px] text-accent font-bold uppercase tracking-wider block">
                         Bayi / Anak ({getBabyRows(reservation).length})
                       </span>
                       {getBabyRows(reservation).map((baby, i) => (
-                        <div key={i} className="flex items-center space-x-2 text-[#111b21] dark:text-[#e9edef]">
-                          <Baby size={14} className="text-[#008069] flex-shrink-0" />
+                        <div key={i} className="flex items-center space-x-2 text-ink">
+                          <Baby size={14} className="text-accent flex-shrink-0" />
                           <span className="break-words">
                             <span className="font-semibold">{baby.name || '-'}</span>
-                            <span className="text-[#54656f] text-xs"> · {baby.age || '?'}</span>
+                            <span className="text-ink-2 text-xs"> · {baby.age || '?'}</span>
                             {baby.regAge && baby.regAge !== baby.age && (
-                              <span className="text-[#8696a0] text-[11px] ml-1">
+                              <span className="text-ink-3 text-[11px] ml-1">
                                 (saat booking: {baby.regAge})
                               </span>
                             )}
@@ -525,17 +525,17 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                   )}
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-[#f8fafc] dark:bg-[#182229] border border-[#e9edef] dark:border-[#202c33] space-y-2.5">
-                  <span className="text-[11px] text-[#667781] dark:text-[#8696a0] font-bold block uppercase">Lokasi & Pengiriman</span>
+                <div className="p-3.5 rounded-xl bg-surface-2 border border-divider space-y-2.5">
+                  <span className="text-[11px] text-ink-3 font-bold block uppercase">Lokasi & Pengiriman</span>
                   <div className="flex justify-between text-xs">
-                    <span className="text-[#667781] dark:text-[#8696a0]">Jarak dari Cabang</span>
-                    <span className="text-[#111b21] dark:text-[#e9edef] font-bold">
+                    <span className="text-ink-3">Jarak dari Cabang</span>
+                    <span className="text-ink font-bold">
                       {resolvedDistanceKm !== null ? `${resolvedDistanceKm.toFixed(1)} km` : '—'}
                     </span>
                   </div>
                   <div className="flex justify-between text-xs">
-                    <span className="text-[#667781] dark:text-[#8696a0]">Ongkir</span>
-                    <span className="text-[#111b21] dark:text-[#e9edef] font-bold">
+                    <span className="text-ink-3">Ongkir</span>
+                    <span className="text-ink font-bold">
                       {(() => {
                         const card = (displayReservation as any).customer_address;
                         const effectiveOngkir = card?.ongkir ?? displayReservation.customer?.ongkir;
@@ -543,7 +543,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                       })()}
                     </span>
                   </div>
-                  <div className="flex justify-between text-xs text-[#008069]">
+                  <div className="flex justify-between text-xs text-accent">
                     <span>Status Jarak</span>
                     <span className="font-bold">Haversine 1.6x Terkalibrasi</span>
                   </div>
@@ -554,8 +554,8 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                     if (!card) return null;
                     return (
                       <div className="flex justify-between text-xs">
-                        <span className="text-[#667781] dark:text-[#8696a0]">Kartu Alamat</span>
-                        <span className="text-[#111b21] dark:text-[#e9edef] font-bold">
+                        <span className="text-ink-3">Kartu Alamat</span>
+                        <span className="text-ink font-bold">
                           {card.label}
                           {` (${card.is_primary ? 'Utama' : 'Kedua'})`}
                           {card.ongkir != null ? ` · Ongkir Rp ${Number(card.ongkir).toLocaleString('id-ID')}` : ''}
@@ -584,11 +584,11 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
 
                     if (!housePhoto && !effectiveLandmark && !mapsUrl) {
                       return (
-                        <div className="mt-2 pt-2 border-t border-[#e9edef] dark:border-[#202c33]">
+                        <div className="mt-2 pt-2 border-t border-divider">
                           <button
                             type="button"
                             onClick={() => onOpenEditLocation?.(reservation)}
-                            className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-white dark:bg-[#202c33] hover:bg-[#e8f5f2] dark:hover:bg-[#2a3942] text-[#008069] dark:text-[#00a884] text-xs font-semibold border border-dashed border-[#00a884]/40 transition shadow-xs"
+                            className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-surface hover:bg-accent-soft dark:hover:bg-fill-2 text-accent text-xs font-semibold border border-dashed border-accent/40 transition shadow-xs"
                           >
                             <Camera size={13} />
                             <span>+ Tambah Foto Rumah & Patokan</span>
@@ -598,9 +598,9 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                     }
 
                     return (
-                      <div className="mt-2 pt-2 border-t border-[#e9edef] dark:border-[#202c33] space-y-2">
+                      <div className="mt-2 pt-2 border-t border-divider space-y-2">
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-[#008069] font-bold uppercase tracking-wider block">
+                          <span className="text-[11px] text-accent font-bold uppercase tracking-wider block">
                             Panduan Lokasi & Foto Rumah
                           </span>
                           <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${locBadge.badgeClass}`} title="Status akurasi titik lokasi">
@@ -612,7 +612,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                                 href={mapsUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-[11px] text-[#008069] hover:underline font-semibold flex items-center gap-1"
+                                className="text-[11px] text-accent hover:underline font-semibold flex items-center gap-1"
                               >
                                 <Navigation size={11} />
                                 <span>Maps</span>
@@ -621,7 +621,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                             <button
                               type="button"
                               onClick={() => onOpenEditLocation?.(reservation)}
-                              className="text-[11px] text-[#008069] hover:underline font-semibold flex items-center gap-1"
+                              className="text-[11px] text-accent hover:underline font-semibold flex items-center gap-1"
                               title="Edit foto rumah / patokan / titik koordinat"
                             >
                               <PenLine size={11} />
@@ -633,9 +633,9 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                         {housePhoto && (
                           <div
                             onClick={() => onHousePhotoView?.(housePhoto)}
-                            className="flex items-center gap-2.5 p-2 rounded-xl bg-white dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] cursor-pointer"
+                            className="flex items-center gap-2.5 p-2 rounded-xl bg-surface border border-divider cursor-pointer"
                           >
-                            <div className="h-14 w-14 rounded-xl bg-[#f0f2f5] dark:bg-[#111b21] overflow-hidden flex-shrink-0 relative group border border-[#e9edef] dark:border-[#2a3942]">
+                            <div className="h-14 w-14 rounded-xl bg-fill-1 dark:bg-surface overflow-hidden flex-shrink-0 relative group border border-divider">
                               <img
                                 src={housePhoto}
                                 alt="Foto Depan Rumah"
@@ -646,18 +646,18 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                               </div>
                             </div>
                             <div className="flex-1 min-w-0">
-                              <span className="text-[10px] font-bold text-[#008069] uppercase tracking-wider block">
+                              <span className="text-[10px] font-bold text-accent uppercase tracking-wider block">
                                 🏠 Foto Tampak Depan Rumah
                               </span>
                               {effectiveLandmark ? (
-                                <p className="text-xs text-[#111b21] dark:text-[#e9edef] font-semibold mt-0.5 leading-snug">
+                                <p className="text-xs text-ink font-semibold mt-0.5 leading-snug">
                                   Patokan: {effectiveLandmark}
                                 </p>
                               ) : (
-                                <p className="text-[11px] text-[#667781]">Foto panduan tersimpan</p>
+                                <p className="text-[11px] text-ink-3">Foto panduan tersimpan</p>
                               )}
                               {prefs?.location_updated_by_staff_name && (
-                                <p className="text-[10px] text-[#8696a0] mt-0.5">
+                                <p className="text-[10px] text-ink-3 mt-0.5">
                                   Diperbarui oleh: {prefs.location_updated_by_staff_name}
                                 </p>
                               )}
@@ -666,11 +666,11 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                         )}
 
                         {!housePhoto && effectiveLandmark && (
-                          <div className="p-2 rounded-xl bg-white dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] text-xs">
-                            <span className="text-[10px] font-bold text-[#008069] uppercase tracking-wider block">
+                          <div className="p-2 rounded-xl bg-surface border border-divider text-xs">
+                            <span className="text-[10px] font-bold text-accent uppercase tracking-wider block">
                               📍 Patokan Rumah
                             </span>
-                            <p className="text-xs text-[#111b21] dark:text-[#e9edef] font-semibold mt-0.5">{effectiveLandmark}</p>
+                            <p className="text-xs text-ink font-semibold mt-0.5">{effectiveLandmark}</p>
                           </div>
                         )}
                       </div>
@@ -679,22 +679,22 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                 </div>
 
                 {/* Bukti Bayar (upload + lihat) */}
-                <div className="p-3.5 rounded-xl bg-[#f8fafc] dark:bg-[#182229] border border-[#e9edef] dark:border-[#202c33] space-y-2">
-                  <span className="text-[11px] text-[#667781] dark:text-[#8696a0] font-bold block uppercase">Bukti Bayar</span>
+                <div className="p-3.5 rounded-xl bg-surface-2 border border-divider space-y-2">
+                  <span className="text-[11px] text-ink-3 font-bold block uppercase">Bukti Bayar</span>
                   {(() => {
                     const proofEval = evaluatePaymentProof(displayReservation);
                     if (!proofEval.isMismatch) return null;
                     return (
-                      <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs space-y-1">
-                        <div className="flex items-center gap-1.5 font-bold text-rose-700">
+                      <div className="p-2.5 rounded-xl bg-danger-soft border border-danger-line text-danger text-xs space-y-1">
+                        <div className="flex items-center gap-1.5 font-bold text-danger">
                           <AlertTriangle size={13} className="shrink-0" />
                           <span>Peringatan: Nominal Bukti Transfer Tidak Sesuai</span>
                         </div>
-                        <div className="text-[11px] grid grid-cols-2 gap-1 pt-1 border-t border-rose-200">
+                        <div className="text-[11px] grid grid-cols-2 gap-1 pt-1 border-t border-danger-line">
                           <div>Tagihan Resmi: <strong className="text-xs">Rp {proofEval.totalExpected.toLocaleString('id-ID')}</strong></div>
-                          <div>Nominal di Struk: <strong className="text-xs text-rose-700 font-extrabold">Rp {proofEval.receiptAmount?.toLocaleString('id-ID')}</strong></div>
+                          <div>Nominal di Struk: <strong className="text-xs text-danger font-extrabold">Rp {proofEval.receiptAmount?.toLocaleString('id-ID')}</strong></div>
                         </div>
-                        <div className="text-[11px] font-semibold text-rose-800">
+                        <div className="text-[11px] font-semibold text-danger">
                           Selisih: {proofEval.isUnderpaid ? `Kurang Rp ${Math.abs(proofEval.difference).toLocaleString('id-ID')}` : `Lebih Rp ${proofEval.difference.toLocaleString('id-ID')}`}
                         </div>
                       </div>
@@ -705,17 +705,17 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                       <img
                         src={displayReservation.proof_url}
                         alt="Bukti bayar"
-                        className="h-14 w-14 object-cover rounded-lg border border-[#e9edef] dark:border-[#2a3942] shadow-xs bg-white dark:bg-[#202c33]"
+                        className="h-14 w-14 object-cover rounded-lg border border-divider shadow-xs bg-surface"
                       />
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs text-[#54656f] truncate">
-                          Metode: <span className="font-bold text-[#111b21]">{getPaymentMethodLabel(displayReservation.payment_method)}</span>
+                        <p className="text-xs text-ink-2 truncate">
+                          Metode: <span className="font-bold text-ink">{getPaymentMethodLabel(displayReservation.payment_method)}</span>
                         </p>
-                        <p className="text-[10px] text-[#8696a0]">Bukti tersimpan (versi ringan)</p>
+                        <p className="text-[10px] text-ink-3">Bukti tersimpan (versi ringan)</p>
                       </div>
                       <button
                         onClick={() => onProofView?.(reservation)}
-                        className="p-2 rounded-lg bg-[#e8f5f2] hover:bg-[#c2e7e0] dark:bg-[#00a884]/20 dark:hover:bg-[#00a884]/30 text-[#008069] dark:text-[#00a884] border border-[#c2e7e0] dark:border-[#00a884]/40 transition flex items-center justify-center"
+                        className="p-2 rounded-lg bg-accent-soft hover:bg-accent-soft dark:bg-accent-soft dark:hover:bg-accent-hover/30 text-accent border border-divider dark:border-accent/40 transition flex items-center justify-center"
                         title="Lihat Detail Bukti Bayar"
                       >
                         <Eye size={15} />
@@ -723,7 +723,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                       <button
                         onClick={handleProofRemoveClick}
                         disabled={proofUploading}
-                        className="p-2 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-950/50 text-rose-600 dark:text-[#f87171] border border-rose-200 dark:border-rose-900/40 transition flex items-center justify-center disabled:opacity-50"
+                        className="p-2 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-950/50 text-rose-600 dark:text-danger border border-rose-200 dark:border-rose-900/40 transition flex items-center justify-center disabled:opacity-50"
                         title="Hapus Bukti Bayar"
                       >
                         <Trash2 size={14} />
@@ -733,10 +733,10 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                     <button
                       onClick={() => proofFileInputRef.current?.click()}
                       disabled={proofUploading}
-                      className="w-full py-3 rounded-xl border-2 border-dashed border-[#d1d7db] dark:border-[#2a3942] hover:border-[#008069] hover:bg-[#e8f5f2]/20 text-xs text-[#54656f] dark:text-[#8696a0] hover:text-[#008069] dark:hover:text-[#00a884] font-semibold transition flex items-center justify-center space-x-2 disabled:opacity-50"
+                      className="w-full py-3 rounded-xl border-2 border-dashed border-divider hover:border-accent hover:bg-accent-soft/20 text-xs text-ink-2 hover:text-accent font-semibold transition flex items-center justify-center space-x-2 disabled:opacity-50"
                     >
                       {proofUploading ? (
-                        <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#008069] border-t-transparent"></div>
+                        <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-accent border-t-transparent"></div>
                       ) : (
                         <Upload size={14} />
                       )}
@@ -755,10 +755,10 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
 
               {/* Edit Schedule section */}
               <div className="space-y-3">
-                <div className="p-3.5 rounded-xl bg-[#f8fafc] dark:bg-[#182229] border border-[#e9edef] dark:border-[#202c33] space-y-2.5">
+                <div className="p-3.5 rounded-xl bg-surface-2 border border-divider space-y-2.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-[#667781] dark:text-[#8696a0] font-bold block uppercase">Layanan &amp; Jadwal</span>
-                    <span className="font-bold text-xs text-[#008069] font-mono">
+                    <span className="text-[11px] text-ink-3 font-bold block uppercase">Layanan &amp; Jadwal</span>
+                    <span className="font-bold text-xs text-accent font-mono">
                       {displayReservation.purchase_value ? `Rp ${displayReservation.purchase_value.toLocaleString('id-ID')}` : 'Rp -'}
                     </span>
                   </div>
@@ -770,47 +770,47 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                     </div>
                   ) : null}
 
-                  <div className="p-2.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] space-y-1">
-                    <span className="text-[10px] font-bold text-[#008069] uppercase tracking-wider block">
+                  <div className="p-2.5 rounded-xl bg-surface border border-divider space-y-1">
+                    <span className="text-[10px] font-bold text-accent uppercase tracking-wider block">
                       {displayReservation.treatment_category}
                     </span>
-                    <p className="text-xs font-semibold text-[#111b21] dark:text-[#e9edef]">
+                    <p className="text-xs font-semibold text-ink">
                       {getCleanTreatmentName(displayReservation.treatment_detail)}
                     </p>
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {getTotalDurationLabel(displayReservation.treatment_detail) && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f0f2f5] dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] text-[10px] font-bold text-[#54656f] dark:text-[#8696a0]">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-fill-1 dark:bg-surface border border-divider text-[10px] font-bold text-ink-2">
                           {getTotalDurationLabel(displayReservation.treatment_detail)}
                         </span>
                       )}
                     </div>
                   </div>
 
-                  <span className="text-[11px] text-[#667781] dark:text-[#8696a0] font-bold block uppercase pt-1">Atur Jam Jadwal</span>
+                  <span className="text-[11px] text-ink-3 font-bold block uppercase pt-1">Atur Jam Jadwal</span>
                   <input
                     type="datetime-local"
                     value={editDate}
                     onChange={(e) => setEditDate(e.target.value)}
-                    className="w-full p-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-lg text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full p-2 bg-surface border border-divider rounded-lg text-xs text-ink focus:outline-none focus:border-accent shadow-xs"
                   />
                   <button
                     onClick={handleSaveEditDate}
-                    className="w-full py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-lg text-xs font-semibold transition shadow-xs"
+                    className="w-full py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-lg text-xs font-semibold transition shadow-xs"
                   >
                     Simpan Jadwal Kunjungan
                   </button>
                 </div>
 
                 {/* Staff Assignment */}
-                <div className="p-3.5 rounded-xl bg-[#f8fafc] dark:bg-[#182229] border border-[#e9edef] dark:border-[#202c33] space-y-2">
+                <div className="p-3.5 rounded-xl bg-surface-2 border border-divider space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-[#667781] dark:text-[#8696a0] font-bold block uppercase">Penugasan Staff / Terapis</span>
+                    <span className="text-[11px] text-ink-3 font-bold block uppercase">Penugasan Staff / Terapis</span>
                     {user?.id && displayReservation.assigned_staff_id !== user.id && (
                       <button
                         type="button"
                         onClick={() => handleAssignStaffClick(user.id)}
                         disabled={assigningStaff}
-                        className="text-[10px] text-[#008069] font-bold hover:underline flex items-center gap-1 cursor-pointer bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200"
+                        className="text-[10px] text-accent font-bold hover:underline flex items-center gap-1 cursor-pointer bg-success-soft px-2 py-0.5 rounded-md border border-success-line"
                       >
                         <span>⚡ Tugaskan ke Saya</span>
                       </button>
@@ -820,7 +820,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                     value={displayReservation.assigned_staff_id || ''}
                     onChange={(e) => handleAssignStaffClick(e.target.value || null)}
                     disabled={assigningStaff}
-                    className="w-full p-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-lg text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full p-2 bg-surface border border-divider rounded-lg text-xs text-ink focus:outline-none focus:border-accent shadow-xs"
                   >
                     <option value="">-- Belum Ditugaskan --</option>
                     {staffList
@@ -832,7 +832,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                       ))}
                   </select>
                   {displayReservation.assigned_staff && (
-                    <p className="text-xs text-[#008069] font-bold">
+                    <p className="text-xs text-accent font-bold">
                       Ditugaskan ke: {displayReservation.assigned_staff.name}
                     </p>
                   )}
@@ -840,11 +840,11 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
 
                 {/* Google Calendar sync notifier */}
                 {googleCalendarMockActive && (
-                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 flex items-start space-x-2.5 text-xs">
-                    <AlertTriangle className="flex-shrink-0 mt-0.5 text-amber-600" size={15} />
+                  <div className="p-3 rounded-xl bg-warning-soft border border-warning-line text-warning flex items-start space-x-2.5 text-xs">
+                    <AlertTriangle className="flex-shrink-0 mt-0.5 text-warning" size={15} />
                     <div>
                       <p className="font-bold">Google Calendar: Mode Mock Aktif</p>
-                      <p className="mt-0.5 text-[10px] text-amber-700">
+                      <p className="mt-0.5 text-[10px] text-warning">
                         Sinkronisasi berjalan dalam simulasi lokal.
                       </p>
                     </div>
@@ -855,45 +855,45 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
 
             {/* Raw Text Log */}
             <div className="space-y-1.5">
-              <span className="text-[11px] text-[#667781] dark:text-[#8696a0] font-bold block uppercase flex items-center space-x-1">
+              <span className="text-[11px] text-ink-3 font-bold block uppercase flex items-center space-x-1">
                 <FileText size={12} />
                 <span>Format Teks Chat Asli / Detail</span>
               </span>
-              <pre className="p-3 bg-[#f8fafc] dark:bg-[#111b21] border border-[#e9edef] dark:border-[#202c33] rounded-xl text-[11px] text-[#54656f] dark:text-[#8696a0] font-mono overflow-auto max-h-28 whitespace-pre-wrap break-all">
+              <pre className="p-3 bg-surface-2 border border-divider rounded-xl text-[11px] text-ink-2 font-mono overflow-auto max-h-28 whitespace-pre-wrap break-all">
                 {displayReservation.raw_text}
               </pre>
             </div>
 
             {/* Meta CAPI Status Badge — terpisah dari tombol operasional */}
             <div className="flex items-center gap-2 text-[11px]">
-              <span className="text-[10px] font-bold text-[#667781] uppercase tracking-wider">Meta CAPI:</span>
+              <span className="text-[10px] font-bold text-ink-3 uppercase tracking-wider">Meta CAPI:</span>
               {(reservation as any).purchase_event_sent_at ? (
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 font-semibold">
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-success-soft border border-success-line text-success font-semibold">
                   ✓ Purchase Terkirim {new Date((reservation as any).purchase_event_sent_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
                 </span>
               ) : (reservation as any).purchase_review_status === 'ignored_outlier' ? (
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-gray-100 border border-gray-200 text-gray-600 font-semibold">
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-fill-1 border border-divider text-ink-2 font-semibold">
                   Diabaikan (Outlier)
                 </span>
               ) : (reservation as any).purchase_review_status === 'pending' ? (
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-700 font-semibold">
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-warning-soft border border-warning-line text-warning font-semibold">
                   ⏳ Dalam Antrean Queue
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-50 border border-slate-200 text-slate-600 font-semibold">
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-surface-2 border border-divider text-ink-2 font-semibold">
                   Belum Terkirim
                 </span>
               )}
             </div>
 
             {/* Actions button footer */}
-            <div className="pt-3.5 border-t border-[#e9edef] dark:border-[#202c33] flex flex-col-reverse sm:flex-row gap-2.5 sm:gap-2 justify-between items-stretch sm:items-center">
+            <div className="pt-3.5 border-t border-divider flex flex-col-reverse sm:flex-row gap-2.5 sm:gap-2 justify-between items-stretch sm:items-center">
               {/* Left Action Group: Batalkan & Hapus */}
               <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                 {displayReservation.status !== 'cancelled' && (
                   <button
                     onClick={handleCancelClick}
-                    className="flex-1 sm:flex-initial justify-center px-3.5 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 text-amber-800 dark:text-[#f59e0b] hover:bg-amber-100 dark:hover:bg-amber-950/50 transition text-xs font-semibold flex items-center space-x-1.5 shadow-xs cursor-pointer"
+                    className="flex-1 sm:flex-initial justify-center px-3.5 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 text-amber-800 dark:text-warning hover:bg-amber-100 dark:hover:bg-amber-950/50 transition text-xs font-semibold flex items-center space-x-1.5 shadow-xs cursor-pointer"
                     title="Batalkan reservasi (Status berubah menjadi Cancelled)"
                   >
                     <X size={14} />
@@ -903,7 +903,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
 
                 <button
                   onClick={handleDeletePermanentClick}
-                  className="flex-1 sm:flex-initial justify-center px-3.5 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 text-rose-700 dark:text-[#f87171] hover:bg-rose-100 dark:hover:bg-rose-950/50 transition text-xs font-semibold flex items-center space-x-1.5 shadow-xs cursor-pointer"
+                  className="flex-1 sm:flex-initial justify-center px-3.5 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 text-rose-700 dark:text-danger hover:bg-rose-100 dark:hover:bg-rose-950/50 transition text-xs font-semibold flex items-center space-x-1.5 shadow-xs cursor-pointer"
                   title="Hapus data reservasi secara permanen dari database"
                 >
                   <Trash2 size={14} />
@@ -915,7 +915,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
               <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
                 <button
                   onClick={() => setIsEditing(true)}
-                  className="flex-1 sm:flex-initial justify-center px-3.5 py-2 rounded-xl bg-white dark:bg-[#202c33] border border-emerald-300 dark:border-emerald-700 text-[#008069] dark:text-[#00a884] hover:bg-emerald-50 dark:hover:bg-[#2a3942] transition text-xs font-bold flex items-center space-x-1.5 shadow-2xs cursor-pointer"
+                  className="flex-1 sm:flex-initial justify-center px-3.5 py-2 rounded-xl bg-surface border border-emerald-300 dark:border-emerald-700 text-accent hover:bg-emerald-50 dark:hover:bg-fill-2 transition text-xs font-bold flex items-center space-x-1.5 shadow-2xs cursor-pointer"
                   title="Buka Form Ubah Jadwal/Data Reservasi"
                 >
                   <PenLine size={13} />
@@ -931,10 +931,10 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                         displayReservation.customer?.phone || undefined
                       )
                     }
-                    className="flex-1 sm:flex-initial justify-center px-3.5 py-2 rounded-xl bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-900/40 text-sky-700 dark:text-[#38bdf8] hover:bg-sky-100 dark:hover:bg-sky-950/50 transition text-xs font-semibold flex items-center space-x-1.5 shadow-xs cursor-pointer"
+                    className="flex-1 sm:flex-initial justify-center px-3.5 py-2 rounded-xl bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-900/40 text-sky-700 dark:text-info hover:bg-sky-100 dark:hover:bg-sky-950/50 transition text-xs font-semibold flex items-center space-x-1.5 shadow-xs cursor-pointer"
                     title="Lihat riwayat chat WhatsApp customer ini"
                   >
-                    <MessageSquare size={14} className="text-sky-600" />
+                    <MessageSquare size={14} className="text-info" />
                     <span>Riwayat Chat</span>
                   </button>
                 )}
@@ -943,19 +943,19 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                   onClick={handleCopyInvoice}
                   className={`flex-1 sm:flex-initial justify-center px-3.5 py-2 rounded-xl border text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer ${
                     copiedInvoice
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                      : 'bg-white dark:bg-[#202c33] border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] shadow-xs'
+                      ? 'bg-success-soft text-success border-success-line'
+                      : 'bg-surface border-divider text-ink hover:bg-fill-1 shadow-xs'
                   }`}
                   title="Salin rincian format reservasi & payment untuk WhatsApp"
                 >
-                  <Receipt size={14} className={copiedInvoice ? 'text-emerald-600' : 'text-[#008069]'} />
+                  <Receipt size={14} className={copiedInvoice ? 'text-success' : 'text-accent'} />
                   <span>{copiedInvoice ? 'Invoice Tersalin!' : 'Salin Invoice WA'}</span>
                 </button>
 
                 {displayReservation.status === 'hold' && (
                   <button
                     onClick={handleConfirmClick}
-                    className="flex-1 sm:flex-initial justify-center px-5 py-2 rounded-xl bg-[#008069] text-white hover:bg-[#00a884] text-xs font-semibold flex items-center space-x-1.5 transition shadow-xs cursor-pointer"
+                    className="flex-1 sm:flex-initial justify-center px-5 py-2 rounded-xl bg-accent text-accent-ink hover:bg-accent-hover text-xs font-semibold flex items-center space-x-1.5 transition shadow-xs cursor-pointer"
                   >
                     <Check size={14} />
                     <span>Konfirmasi / Jadwalkan</span>
@@ -965,7 +965,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                 {displayReservation.status === 'confirmed' && (
                   <button
                     onClick={handleCompleteClick}
-                    className="flex-1 sm:flex-initial justify-center px-5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold flex items-center space-x-1.5 transition shadow-xs cursor-pointer"
+                    className="flex-1 sm:flex-initial justify-center px-5 py-2 rounded-xl bg-info hover:bg-info-hover text-on-solid text-xs font-semibold flex items-center space-x-1.5 transition shadow-xs cursor-pointer"
                   >
                     <CheckCircle size={14} />
                     <span>Tandai Selesai</span>
@@ -974,13 +974,13 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
 
                 {displayReservation.status === 'completed' && (
                   <div className="flex items-center space-x-2">
-                    <span className="px-3 py-1.5 rounded-xl bg-sky-100 border border-sky-200 text-sky-800 text-xs font-bold flex items-center space-x-1">
-                      <CheckCheck size={14} className="text-sky-600" />
+                    <span className="px-3 py-1.5 rounded-xl bg-info-soft border border-info-line text-info text-xs font-bold flex items-center space-x-1">
+                      <CheckCheck size={14} className="text-info" />
                       <span>Treatment Selesai</span>
                     </span>
                     <button
                       onClick={() => handleStatusChangeClick('confirmed')}
-                      className="px-2.5 py-1.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] text-xs font-semibold transition cursor-pointer"
+                      className="px-2.5 py-1.5 rounded-xl bg-surface border border-divider text-ink-2 hover:text-ink dark:hover:text-ink text-xs font-semibold transition cursor-pointer"
                       title="Kembalikan ke status Terjadwal"
                     >
                       Ubah Status

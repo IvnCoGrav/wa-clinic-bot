@@ -55,15 +55,15 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
 
   // Color variants for active state
   const activeBg = {
-    emerald: 'bg-[#008069]',
-    indigo: 'bg-indigo-600',
-    rose: 'bg-rose-600',
+    emerald: 'bg-accent',
+    indigo: 'bg-info',
+    rose: 'bg-danger',
   }[variant];
 
   const activeBadge = {
-    emerald: 'bg-emerald-100 dark:bg-[#00a884]/20 text-emerald-800 dark:text-[#00a884] border-emerald-300 dark:border-[#00a884]/40',
-    indigo: 'bg-indigo-100 dark:bg-[#202c33]/20 text-indigo-800 dark:text-[#aebac1] border-indigo-300 dark:border-[#2a3942]',
-    rose: 'bg-rose-100 dark:bg-rose-950/40 text-rose-800 dark:text-[#f87171] border-rose-300 dark:border-rose-800/40',
+    emerald: 'bg-accent-soft text-accent border-accent/40',
+    indigo: 'bg-info-soft text-info border-info-line',
+    rose: 'bg-danger-soft text-danger border-danger-line',
   }[variant];
 
   // Size styling maps
@@ -96,7 +96,7 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
       className={`inline-flex items-center gap-1 font-bold rounded-md border font-mono transition-colors uppercase select-none ${badgeTextSizes} ${
         checked
           ? activeBadge
-          : 'bg-slate-100 dark:bg-[#2a3942] text-slate-600 dark:text-[#8696a0] border-slate-200 dark:border-[#374248]'
+          : 'bg-fill-1 text-ink-3 border-divider'
       }`}
     >
       {loading ? (
@@ -106,11 +106,11 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
           className={`w-1.5 h-1.5 rounded-full ${
             checked
               ? variant === 'emerald'
-                ? 'bg-[#008069]'
+                ? 'bg-accent'
                 : variant === 'indigo'
-                ? 'bg-indigo-600'
-                : 'bg-rose-600'
-              : 'bg-slate-400'
+                ? 'bg-info'
+                : 'bg-danger'
+              : 'bg-ink-3'
           }`}
         />
       )}
@@ -133,7 +133,7 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
           {label && (
             <label
               htmlFor={id}
-              className={`text-xs font-bold text-[#111b21] dark:text-[#e9edef] select-none ${
+              className={`text-xs font-bold text-ink select-none ${
                 !disabled ? 'cursor-pointer' : ''
               }`}
             >
@@ -141,7 +141,7 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
             </label>
           )}
           {description && (
-            <p className="text-[11px] text-[#667781] dark:text-[#8696a0] leading-relaxed select-none">
+            <p className="text-[11px] text-ink-3 leading-relaxed select-none">
               {description}
             </p>
           )}
@@ -155,14 +155,14 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
         aria-checked={checked}
         disabled={disabled || loading}
         onKeyDown={handleKeyDown}
-        className={`relative inline-flex flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-150 ease-out focus:outline-none focus:ring-2 focus:ring-[#008069]/30 focus:ring-offset-1 ${trackSizes} ${
-          checked ? activeBg : 'bg-[#cbd5e1] dark:bg-[#374248]'
+        className={`relative inline-flex flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-150 ease-out focus:outline-none focus:ring-2 focus:ring-accent/40 focus:ring-offset-1 ${trackSizes} ${
+          checked ? activeBg : 'bg-fill-2 border border-divider'
         } ${disabled || loading ? 'cursor-not-allowed opacity-70' : ''}`}
       >
         <span className="sr-only">{checked ? onLabel : offLabel}</span>
         <span
           aria-hidden="true"
-          className={`pointer-events-none inline-flex items-center justify-center rounded-full bg-white shadow-sm ring-0 transition-transform duration-150 ease-out ${thumbSizes} ${
+          className={`pointer-events-none inline-flex items-center justify-center rounded-full bg-white shadow-xs ring-0 transition-transform duration-150 ease-out ${thumbSizes} ${
             checked ? thumbTranslates : 'translate-x-0.5'
           }`}
         >
@@ -170,7 +170,7 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
             <Loader2
               size={size === 'sm' ? 8 : 10}
               className={`animate-spin ${
-                checked ? 'text-[#008069]' : 'text-slate-400'
+                checked ? 'text-accent' : 'text-ink-3'
               }`}
             />
           )}

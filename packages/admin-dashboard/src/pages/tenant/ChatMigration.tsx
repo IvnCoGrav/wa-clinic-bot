@@ -315,11 +315,11 @@ export const ChatMigration: React.FC = () => {
       {/* Header & Description */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h1 className="text-xl font-bold text-[#111b21] dark:text-[#e9edef] tracking-tight flex items-center space-x-2">
-            <Database className="text-[#008069]" size={22} />
+          <h1 className="text-xl font-bold text-ink tracking-tight flex items-center space-x-2">
+            <Database className="text-accent" size={22} />
             <span>Migrasi & Seeding Riwayat Chat</span>
           </h1>
-          <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
+          <p className="text-xs text-ink-3 mt-0.5">
             Ekstrak data kontak, form reservasi, dan LTV dari database lokal ke antrean staging CRM.
           </p>
         </div>
@@ -328,19 +328,19 @@ export const ChatMigration: React.FC = () => {
           <button
             onClick={loadStagingData}
             disabled={loading}
-            className="p-2 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#54656f] hover:bg-[#f0f2f5] hover:text-[#111b21] dark:text-[#e9edef] transition shadow-xs disabled:opacity-50"
+            className="p-2 rounded-xl bg-surface border border-divider text-ink-2 hover:bg-fill-1 hover:text-ink transition shadow-xs disabled:opacity-50"
             title="Refresh antrean staging"
           >
-            <RefreshCw size={14} className={loading ? 'animate-spin text-[#008069]' : ''} />
+            <RefreshCw size={14} className={loading ? 'animate-spin text-accent' : ''} />
           </button>
         </div>
       </div>
 
       {/* Sync Status / Empty State Banners */}
       {syncStatus.isSyncing && (
-        <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between text-xs text-amber-800 animate-pulse">
+        <div className="p-3.5 bg-warning-soft border border-warning-line rounded-2xl flex items-center justify-between text-xs text-warning animate-pulse">
           <div className="flex items-center space-x-2">
-            <Loader className="animate-spin text-amber-600 shrink-0" size={16} />
+            <Loader className="animate-spin text-warning shrink-0" size={16} />
             <span>
               <strong>Sinkronisasi riwayat WhatsApp sedang berlangsung di latar belakang...</strong> Ekstraksi data
               dikunci sementara hingga sinkronisasi selesai agar data lengkap.
@@ -350,16 +350,16 @@ export const ChatMigration: React.FC = () => {
       )}
 
       {!syncStatus.isSyncing && localStats.conversationCount === 0 && (
-        <div className="p-4 bg-sky-50 border border-sky-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-sky-900">
+        <div className="p-4 bg-info-soft border border-info-line rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-info">
           <div>
-            <p className="font-bold text-sky-950">Database percakapan lokal masih kosong</p>
-            <p className="text-sky-750 mt-0.5">
+            <p className="font-bold text-info">Database percakapan lokal masih kosong</p>
+            <p className="text-info mt-0.5">
               Jalankan "Sync Riwayat WhatsApp" di Live Chat Monitor terlebih dahulu untuk menyedot chat ke database lokal.
             </p>
           </div>
           <a
             href="/admin/live-chat"
-            className="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-bold transition shadow-xs whitespace-nowrap"
+            className="px-3.5 py-1.5 bg-info hover:bg-info-hover text-on-solid rounded-xl font-bold transition shadow-xs whitespace-nowrap"
           >
             Buka Live Chat Monitor &rarr;
           </a>
@@ -367,15 +367,15 @@ export const ChatMigration: React.FC = () => {
       )}
 
       {/* Control Banner Card */}
-      <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
+      <div className="bg-surface border border-divider rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
           {/* Left info */}
           <div className="space-y-1">
             <div className="flex items-center space-x-2">
-              <FileText size={16} className="text-[#008069]" />
-              <h3 className="font-bold text-sm text-[#111b21] dark:text-[#e9edef]">Ekstraksi & Parsing Form Reservasi (Lokal)</h3>
+              <FileText size={16} className="text-accent" />
+              <h3 className="font-bold text-sm text-ink">Ekstraksi & Parsing Form Reservasi (Lokal)</h3>
             </div>
-            <p className="text-xs text-[#667781] dark:text-[#8696a0] max-w-xl leading-relaxed">
+            <p className="text-xs text-ink-3 max-w-xl leading-relaxed">
               Ekstraktor memindai seluruh riwayat pesan di database lokal ({localStats.conversationCount} percakapan, {localStats.messageCount} pesan), mendeteksi form pemesanan layanan, nama anak/bayi, dan menghitung estimasi LTV pelanggan tanpa membebani WhatsApp.
             </p>
           </div>
@@ -385,7 +385,7 @@ export const ChatMigration: React.FC = () => {
             <button
               onClick={handleRunExtraction}
               disabled={extracting || syncStatus.isSyncing || localStats.conversationCount === 0}
-              className="px-4 py-2.5 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
+              className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
               title={
                 syncStatus.isSyncing
                   ? 'Sinkronisasi sedang berjalan di latar belakang'
@@ -401,7 +401,7 @@ export const ChatMigration: React.FC = () => {
             <button
               onClick={handleCommitApproved}
               disabled={committing}
-              className="px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
+              className="px-4 py-2.5 bg-info hover:bg-info-hover text-on-solid rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
             >
               {committing ? <Loader size={14} className="animate-spin" /> : <CheckCircle size={14} />}
               <span>{committing ? 'Menyimpan...' : 'Commit Data Approved'}</span>
@@ -413,7 +413,7 @@ export const ChatMigration: React.FC = () => {
       {/* Filter Tabs & Bulk Actions */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         {/* Status Tabs */}
-        <div className="flex flex-wrap items-center gap-1.5 p-1 bg-[#f0f2f5] rounded-2xl w-fit text-xs">
+        <div className="flex flex-wrap items-center gap-1.5 p-1 bg-fill-1 rounded-2xl w-fit text-xs">
           {[
             { key: 'COMMITTED', label: 'Selesai Masuk DB (Committed)', count: statusCounts.COMMITTED },
             { key: 'PENDING', label: 'Perlu Review (Pending)', count: statusCounts.PENDING },
@@ -428,16 +428,16 @@ export const ChatMigration: React.FC = () => {
               }}
               className={`px-3 py-1.5 rounded-xl font-bold transition flex items-center space-x-1.5 ${
                 statusFilter === tab.key
-                  ? 'bg-white text-[#111b21] dark:text-[#e9edef] shadow-xs'
-                  : 'text-[#54656f] hover:text-[#111b21] dark:text-[#e9edef]'
+                  ? 'bg-surface text-ink shadow-xs'
+                  : 'text-ink-2 hover:text-ink'
               }`}
             >
               <span>{tab.label}</span>
               <span
                 className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
                   statusFilter === tab.key
-                    ? 'bg-[#e8f5f2] text-[#008069]'
-                    : 'bg-[#e2e8f0] text-[#64748b]'
+                    ? 'bg-accent-soft text-accent'
+                    : 'bg-fill-2 text-ink-3'
                 }`}
               >
                 {tab.count}
@@ -451,7 +451,7 @@ export const ChatMigration: React.FC = () => {
           <button
             onClick={handleBulkApprovePurchases}
             disabled={bulkApproving}
-            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
+            className="px-3.5 py-2 bg-success hover:bg-success-hover text-on-solid rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
             title="Setujui seluruh kontak yang memiliki form reservasi & nilai transaksi sekaligus"
           >
             {bulkApproving ? <Loader size={13} className="animate-spin" /> : <CheckCheck size={13} />}
@@ -464,8 +464,8 @@ export const ChatMigration: React.FC = () => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
         {/* Sub-Filter: Semua vs Pembeli vs Prospek */}
         <div className="flex items-center space-x-2 text-xs">
-          <span className="text-[11px] font-semibold text-[#667781] dark:text-[#8696a0]">Filter:</span>
-          <div className="flex items-center space-x-1 bg-[#f0f2f5] p-0.5 rounded-xl">
+          <span className="text-[11px] font-semibold text-ink-3">Filter:</span>
+          <div className="flex items-center space-x-1 bg-fill-1 p-0.5 rounded-xl">
             {[
               { key: 'ALL', label: 'Semua Kontak' },
               { key: 'PURCHASED', label: '🎯 Pembeli (Ada Reservasi)' },
@@ -479,8 +479,8 @@ export const ChatMigration: React.FC = () => {
                 }}
                 className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
                   purchaseFilter === sub.key
-                    ? 'bg-white text-[#111b21] dark:text-[#e9edef] shadow-2xs font-bold'
-                    : 'text-[#54656f] hover:text-[#111b21] dark:text-[#e9edef]'
+                    ? 'bg-surface text-ink shadow-2xs font-bold'
+                    : 'text-ink-2 hover:text-ink'
                 }`}
               >
                 {sub.label}
@@ -493,13 +493,13 @@ export const ChatMigration: React.FC = () => {
         <div className="flex items-center space-x-2 w-full md:w-auto">
           {/* Search Box */}
           <form onSubmit={handleSearchSubmit} className="relative flex-1 md:w-56">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8696a0]" size={14} />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" size={14} />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Cari nama, HP, lokasi..."
-              className="w-full pl-8 pr-3 py-1.5 bg-[#f0f2f5] focus:bg-white border border-transparent focus:border-[#008069] rounded-xl text-xs outline-none transition"
+              className="w-full pl-8 pr-3 py-1.5 bg-fill-1 focus:bg-surface border border-transparent focus:border-accent rounded-xl text-xs outline-none transition"
             />
           </form>
 
@@ -513,7 +513,7 @@ export const ChatMigration: React.FC = () => {
                 setSortOrder(o as any);
                 setPage(1);
               }}
-              className="px-2.5 py-1.5 bg-[#f0f2f5] border border-transparent focus:border-[#008069] rounded-xl text-xs font-medium text-[#111b21] dark:text-[#e9edef] outline-none cursor-pointer"
+              className="px-2.5 py-1.5 bg-fill-1 border border-transparent focus:border-accent rounded-xl text-xs font-medium text-ink outline-none cursor-pointer"
             >
               <option value="leadCreatedAt-desc">🕒 Chat Pertama: Terkini</option>
               <option value="leadCreatedAt-asc">🕒 Chat Pertama: Terlama</option>
@@ -530,16 +530,16 @@ export const ChatMigration: React.FC = () => {
       </div>
 
       {/* Table & Staging Content */}
-      <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl overflow-hidden shadow-xs">
+      <div className="bg-surface border border-divider rounded-2xl overflow-hidden shadow-xs">
         {loading ? (
           <div className="flex justify-center items-center py-20">
-            <Loader className="animate-spin text-[#008069]" size={32} />
+            <Loader className="animate-spin text-accent" size={32} />
           </div>
         ) : items.length === 0 ? (
-          <div className="text-center py-16 text-[#667781] dark:text-[#8696a0] text-xs">
-            <Database className="mx-auto text-[#8696a0] mb-2" size={32} />
-            <p className="font-bold text-[#111b21] dark:text-[#e9edef]">Tidak ada data staging dengan status {statusFilter}</p>
-            <p className="text-[11px] text-[#8696a0] mt-1">
+          <div className="text-center py-16 text-ink-3 text-xs">
+            <Database className="mx-auto text-ink-3 mb-2" size={32} />
+            <p className="font-bold text-ink">Tidak ada data staging dengan status {statusFilter}</p>
+            <p className="text-[11px] text-ink-3 mt-1">
               Klik tombol "Mulai Ekstraksi Chat" di atas untuk memindai room chat WhatsApp.
             </p>
           </div>
@@ -547,23 +547,23 @@ export const ChatMigration: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="border-b border-[#e9edef] bg-[#f8fafc] dark:bg-[#202c33] text-[#667781] dark:text-[#8696a0] font-bold uppercase text-[10px] tracking-wider select-none">
+                <tr className="border-b border-divider bg-surface-2 text-ink-3 font-bold uppercase text-[10px] tracking-wider select-none">
                   {/* Sortable Header: Kontak */}
                   <th
                     onClick={() => handleSort('name')}
-                    className="py-3 px-4 cursor-pointer hover:bg-[#edf2f7] transition"
+                    className="py-3 px-4 cursor-pointer hover:bg-fill-1 transition"
                     title="Klik untuk mengurutkan berdasarkan nama / kontak"
                   >
                     <div className="flex items-center space-x-1.5">
                       <span>Kontak / Customer</span>
                       {sortBy === 'name' ? (
                         sortOrder === 'asc' ? (
-                          <ArrowUp size={12} className="text-[#008069]" />
+                          <ArrowUp size={12} className="text-accent" />
                         ) : (
-                          <ArrowDown size={12} className="text-[#008069]" />
+                          <ArrowDown size={12} className="text-accent" />
                         )
                       ) : (
-                        <ArrowUpDown size={11} className="text-[#a0aec0] opacity-50 hover:opacity-100" />
+                        <ArrowUpDown size={11} className="text-ink-3 opacity-50 hover:opacity-100" />
                       )}
                     </div>
                   </th>
@@ -571,19 +571,19 @@ export const ChatMigration: React.FC = () => {
                   {/* Sortable Header: LTV */}
                   <th
                     onClick={() => handleSort('ltv')}
-                    className="py-3 px-4 cursor-pointer hover:bg-[#edf2f7] transition"
+                    className="py-3 px-4 cursor-pointer hover:bg-fill-1 transition"
                     title="Klik untuk mengurutkan berdasarkan nominal LTV"
                   >
                     <div className="flex items-center space-x-1.5">
                       <span>LTV</span>
                       {sortBy === 'ltv' ? (
                         sortOrder === 'asc' ? (
-                          <ArrowUp size={12} className="text-[#008069]" />
+                          <ArrowUp size={12} className="text-accent" />
                         ) : (
-                          <ArrowDown size={12} className="text-[#008069]" />
+                          <ArrowDown size={12} className="text-accent" />
                         )
                       ) : (
-                        <ArrowUpDown size={11} className="text-[#a0aec0] opacity-50 hover:opacity-100" />
+                        <ArrowUpDown size={11} className="text-ink-3 opacity-50 hover:opacity-100" />
                       )}
                     </div>
                   </th>
@@ -591,19 +591,19 @@ export const ChatMigration: React.FC = () => {
                   {/* Sortable Header: Chat Pertama */}
                   <th
                     onClick={() => handleSort('leadCreatedAt')}
-                    className="py-3 px-4 cursor-pointer hover:bg-[#edf2f7] transition"
+                    className="py-3 px-4 cursor-pointer hover:bg-fill-1 transition"
                     title="Klik untuk mengurutkan berdasarkan waktu pesan pertama"
                   >
                     <div className="flex items-center space-x-1.5">
                       <span>Chat Pertama</span>
                       {sortBy === 'leadCreatedAt' ? (
                         sortOrder === 'asc' ? (
-                          <ArrowUp size={12} className="text-[#008069]" />
+                          <ArrowUp size={12} className="text-accent" />
                         ) : (
-                          <ArrowDown size={12} className="text-[#008069]" />
+                          <ArrowDown size={12} className="text-accent" />
                         )
                       ) : (
-                        <ArrowUpDown size={11} className="text-[#a0aec0] opacity-50 hover:opacity-100" />
+                        <ArrowUpDown size={11} className="text-ink-3 opacity-50 hover:opacity-100" />
                       )}
                     </div>
                   </th>
@@ -611,19 +611,19 @@ export const ChatMigration: React.FC = () => {
                   {/* Sortable Header: Form Reservasi */}
                   <th
                     onClick={() => handleSort('firstPurchaseAt')}
-                    className="py-3 px-4 cursor-pointer hover:bg-[#edf2f7] transition"
+                    className="py-3 px-4 cursor-pointer hover:bg-fill-1 transition"
                     title="Klik untuk mengurutkan berdasarkan waktu reservasi"
                   >
                     <div className="flex items-center space-x-1.5">
                       <span>Form Reservasi & Treatment</span>
                       {sortBy === 'firstPurchaseAt' ? (
                         sortOrder === 'asc' ? (
-                          <ArrowUp size={12} className="text-[#008069]" />
+                          <ArrowUp size={12} className="text-accent" />
                         ) : (
-                          <ArrowDown size={12} className="text-[#008069]" />
+                          <ArrowDown size={12} className="text-accent" />
                         )
                       ) : (
-                        <ArrowUpDown size={11} className="text-[#a0aec0] opacity-50 hover:opacity-100" />
+                        <ArrowUpDown size={11} className="text-ink-3 opacity-50 hover:opacity-100" />
                       )}
                     </div>
                   </th>
@@ -632,17 +632,17 @@ export const ChatMigration: React.FC = () => {
                   <th className="py-3 px-4 text-right">Aksi</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#e9edef]">
+              <tbody className="divide-y divide-divider">
                 {items.map((item) => {
                   const res = item.extractedReservationJson;
                   const ltvValue = item.ltv ?? res?.payment?.totalPrice ?? (item.firstPurchaseAt ? 70000 : 0);
                   return (
-                    <tr key={item.id} className="hover:bg-[#f8fafc] dark:bg-[#202c33] transition">
+                    <tr key={item.id} className="hover:bg-surface-2 transition">
                       {/* Kontak */}
                       <td className="py-3.5 px-4 font-medium">
-                        <p className="font-bold text-[#111b21] dark:text-[#e9edef]">{item.name || 'Bunda Customer'}</p>
-                        <p className="text-xs text-[#667781] dark:text-[#8696a0] font-mono mt-0.5">{item.phoneNumber}</p>
-                        <span className="text-[10px] text-[#8696a0]">
+                        <p className="font-bold text-ink">{item.name || 'Bunda Customer'}</p>
+                        <p className="text-xs text-ink-3 font-mono mt-0.5">{item.phoneNumber}</p>
+                        <span className="text-[10px] text-ink-3">
                           {item.rawMessagesCount} pesan tercatat
                         </span>
                       </td>
@@ -650,15 +650,15 @@ export const ChatMigration: React.FC = () => {
                       {/* LTV */}
                       <td className="py-3.5 px-4">
                         <div>
-                          <p className="font-bold font-mono text-[#008069] text-xs">
+                          <p className="font-bold font-mono text-accent text-xs">
                             Rp {ltvValue.toLocaleString('id-ID')}
                           </p>
                           {res?.payment?.ongkir ? (
-                            <p className="text-[10px] text-[#8696a0]">
+                            <p className="text-[10px] text-ink-3">
                               (ongkir Rp {res.payment.ongkir.toLocaleString('id-ID')})
                             </p>
                           ) : item.extractedLocation ? (
-                            <p className="text-[10px] text-[#8696a0] truncate max-w-[130px]" title={item.extractedLocation}>
+                            <p className="text-[10px] text-ink-3 truncate max-w-[130px]" title={item.extractedLocation}>
                               {item.extractedLocation}
                             </p>
                           ) : null}
@@ -666,8 +666,8 @@ export const ChatMigration: React.FC = () => {
                       </td>
 
                       {/* Chat Pertama */}
-                      <td className="py-3.5 px-4 whitespace-nowrap text-[#54656f]">
-                        <p className="font-semibold text-[#111b21] dark:text-[#e9edef]">
+                      <td className="py-3.5 px-4 whitespace-nowrap text-ink-2">
+                        <p className="font-semibold text-ink">
                           {item.leadCreatedAt
                             ? new Date(item.leadCreatedAt).toLocaleDateString('id-ID', {
                                 day: '2-digit',
@@ -676,7 +676,7 @@ export const ChatMigration: React.FC = () => {
                               })
                             : '-'}
                         </p>
-                        <p className="text-[10px] text-[#8696a0]">
+                        <p className="text-[10px] text-ink-3">
                           {item.leadCreatedAt
                             ? new Date(item.leadCreatedAt).toLocaleTimeString('id-ID', {
                                 hour: '2-digit',
@@ -691,27 +691,27 @@ export const ChatMigration: React.FC = () => {
                         {res ? (
                           <div className="space-y-1">
                             <div className="flex items-center space-x-1.5">
-                              <span className="px-1.5 py-0.5 rounded bg-[#e8f5f2] border border-[#c2e7e0] text-[#008069] text-[10px] font-bold">
+                              <span className="px-1.5 py-0.5 rounded bg-accent-soft border border-divider text-accent text-[10px] font-bold">
                                 {res.treatmentCategory || 'BABY'}
                               </span>
-                              <span className="font-semibold text-[#111b21] dark:text-[#e9edef] truncate max-w-[160px]" title={res.treatmentDetail}>
+                              <span className="font-semibold text-ink truncate max-w-[160px]" title={res.treatmentDetail}>
                                 {res.treatmentDetail || 'Layanan Spa'}
                               </span>
                             </div>
                             {res.bookingDate && (
-                              <p className="text-[10px] text-[#667781] dark:text-[#8696a0] flex items-center space-x-1">
+                              <p className="text-[10px] text-ink-3 flex items-center space-x-1">
                                 <Calendar size={10} />
                                 <span>Jadwal: {new Date(res.bookingDate).toLocaleDateString('id-ID')}</span>
                               </p>
                             )}
                             {res.address && (
-                              <p className="text-[10px] text-[#8696a0] truncate max-w-[200px]" title={res.address}>
+                              <p className="text-[10px] text-ink-3 truncate max-w-[200px]" title={res.address}>
                                 Alamat: {res.address}
                               </p>
                             )}
                           </div>
                         ) : (
-                          <span className="text-[#8696a0] italic text-[11px]">Tidak ada form reservasi</span>
+                          <span className="text-ink-3 italic text-[11px]">Tidak ada form reservasi</span>
                         )}
                       </td>
 
@@ -720,12 +720,12 @@ export const ChatMigration: React.FC = () => {
                         <span
                           className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
                             item.status === 'APPROVED'
-                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                              ? 'bg-success-soft text-success border border-success-line'
                               : item.status === 'COMMITTED'
-                              ? 'bg-sky-100 text-sky-800 border border-sky-200'
+                              ? 'bg-info-soft text-info border border-info-line'
                               : item.status === 'REJECTED'
-                              ? 'bg-rose-100 text-rose-800 border border-rose-200'
-                              : 'bg-amber-100 text-amber-800 border border-amber-200'
+                              ? 'bg-danger-soft text-danger border border-danger-line'
+                              : 'bg-warning-soft text-warning border border-warning-line'
                           }`}
                         >
                           {item.status}
@@ -738,7 +738,7 @@ export const ChatMigration: React.FC = () => {
                           {/* Raw Messages Button */}
                           <button
                             onClick={() => setSelectedRawItem(item)}
-                            className="p-1.5 rounded-lg bg-[#f0f2f5] hover:bg-[#e2e8f0] text-[#54656f] transition"
+                            className="p-1.5 rounded-lg bg-fill-1 hover:bg-fill-2 text-ink-2 transition"
                             title="Lihat Histori Pesan Mentah"
                           >
                             <FileText size={13} />
@@ -748,7 +748,7 @@ export const ChatMigration: React.FC = () => {
                             <>
                               <button
                                 onClick={() => handleUpdateStatus(item.id, 'APPROVED')}
-                                className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-semibold transition flex items-center space-x-1"
+                                className="px-2.5 py-1 rounded-lg bg-success-soft hover:bg-success-line text-success border border-success-line text-xs font-semibold transition flex items-center space-x-1"
                                 title="Setujui data ini untuk dimasukkan ke database"
                               >
                                 <Check size={12} />
@@ -757,7 +757,7 @@ export const ChatMigration: React.FC = () => {
 
                               <button
                                 onClick={() => handleUpdateStatus(item.id, 'REJECTED')}
-                                className="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-semibold transition"
+                                className="px-2 py-1 rounded-lg bg-danger-soft hover:bg-danger-line text-danger border border-danger-line text-xs font-semibold transition"
                                 title="Tolak data ini"
                               >
                                 <X size={12} />
@@ -768,7 +768,7 @@ export const ChatMigration: React.FC = () => {
                           {item.status === 'APPROVED' && (
                             <button
                               onClick={() => handleUpdateStatus(item.id, 'PENDING')}
-                              className="px-2 py-1 rounded-lg bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#54656f] text-xs font-semibold hover:bg-[#f0f2f5] transition"
+                              className="px-2 py-1 rounded-lg bg-surface border border-divider text-ink-2 text-xs font-semibold hover:bg-fill-1 transition"
                               title="Kembalikan ke status Pending"
                             >
                               Reset
@@ -802,38 +802,38 @@ export const ChatMigration: React.FC = () => {
           onClick={() => setSelectedRawItem(null)}
         >
           <div
-            className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl w-full max-w-xl max-h-[85vh] flex flex-col shadow-xl overflow-hidden"
+            className="bg-surface border border-divider rounded-2xl w-full max-w-xl max-h-[85vh] flex flex-col shadow-xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-4 border-b border-[#e9edef] bg-[#f8fafc] dark:bg-[#202c33] flex justify-between items-center">
+            <div className="p-4 border-b border-divider bg-surface-2 flex justify-between items-center">
               <div>
-                <h3 className="font-bold text-sm text-[#111b21] dark:text-[#e9edef]">
+                <h3 className="font-bold text-sm text-ink">
                   Riwayat Pesan: {selectedRawItem.name || selectedRawItem.phoneNumber}
                 </h3>
-                <p className="text-[11px] text-[#667781] dark:text-[#8696a0]">{selectedRawItem.phoneNumber}</p>
+                <p className="text-[11px] text-ink-3">{selectedRawItem.phoneNumber}</p>
               </div>
               <button
                 onClick={() => setSelectedRawItem(null)}
-                className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef] hover:bg-[#e9edef] transition"
+                className="p-1.5 rounded-lg text-ink-3 hover:text-ink hover:bg-fill-2 transition"
               >
                 <X size={16} />
               </button>
             </div>
 
-            <div className="p-4 overflow-y-auto space-y-2.5 bg-[#f8fafc] dark:bg-[#202c33] flex-1">
+            <div className="p-4 overflow-y-auto space-y-2.5 bg-surface-2 flex-1">
               {!selectedRawItem.rawMessagesJson || selectedRawItem.rawMessagesJson.length === 0 ? (
-                <p className="text-center py-8 text-xs text-[#8696a0]">Tidak ada pesan teks tersimpan.</p>
+                <p className="text-center py-8 text-xs text-ink-3">Tidak ada pesan teks tersimpan.</p>
               ) : (
                 selectedRawItem.rawMessagesJson.map((msg: any, idx: number) => (
                   <div
                     key={idx}
                     className={`p-3 rounded-xl text-xs space-y-1 ${
                       msg.fromMe
-                        ? 'bg-[#d9fdd3] text-[#111b21] dark:text-[#e9edef] ml-6 border border-[#00a884]/20'
-                        : 'bg-white text-[#111b21] dark:text-[#e9edef] mr-6 border border-[#e9edef] shadow-2xs'
+                        ? 'bg-bubble-out text-ink ml-6 border border-accent/20'
+                        : 'bg-surface text-ink mr-6 border border-divider shadow-2xs'
                     }`}
                   >
-                    <div className="flex justify-between items-center text-[10px] text-[#667781] dark:text-[#8696a0]">
+                    <div className="flex justify-between items-center text-[10px] text-ink-3">
                       <span className="font-bold">{msg.fromMe ? 'Bot / Admin' : 'Customer'}</span>
                       {msg.timestamp && (
                         <span>{formatSafeTimestamp(msg.timestamp)}</span>
@@ -845,10 +845,10 @@ export const ChatMigration: React.FC = () => {
               )}
             </div>
 
-            <div className="p-3 border-t border-[#e9edef] bg-[#f8fafc] dark:bg-[#202c33] flex justify-end">
+            <div className="p-3 border-t border-divider bg-surface-2 flex justify-end">
               <button
                 onClick={() => setSelectedRawItem(null)}
-                className="px-4 py-2 bg-white hover:bg-[#e9edef] border border-[#d1d7db] text-[#111b21] dark:text-[#e9edef] rounded-xl text-xs font-semibold transition shadow-xs"
+                className="px-4 py-2 bg-surface hover:bg-fill-2 border border-divider text-ink rounded-xl text-xs font-semibold transition shadow-xs"
               >
                 Tutup
               </button>

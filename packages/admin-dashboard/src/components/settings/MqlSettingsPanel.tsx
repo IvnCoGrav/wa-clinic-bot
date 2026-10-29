@@ -43,18 +43,18 @@ export const MqlSettingsPanel: React.FC<Props> = ({
       />
 
       {/* MQL Automation Settings */}
-      <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-3 shadow-xs">
-        <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
-          <Volume2 className="text-[#008069]" size={16} />
+      <div className="bg-surface border border-divider rounded-2xl p-5 space-y-3 shadow-xs">
+        <h3 className="text-sm font-bold text-ink flex items-center space-x-2">
+          <Volume2 className="text-accent" size={16} />
           <span>MQL Automation (Otomatisasi Lead)</span>
         </h3>
-        <p className="text-xs text-[#667781] dark:text-[#8696a0] leading-relaxed">
+        <p className="text-xs text-ink-3 leading-relaxed">
           Atur ambang batas bubble chat untuk mengonversi lead potensial menjadi Marketing Qualified Lead (MQL) secara otomatis.
         </p>
 
         <div className="space-y-3 pt-1">
           <div className="space-y-1">
-            <label className="text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] block">
+            <label className="text-[11px] font-bold text-ink block">
               Ambang Batas Bubble Chat (Default: 5)
             </label>
             <input
@@ -63,14 +63,14 @@ export const MqlSettingsPanel: React.FC<Props> = ({
               max={50}
               value={mqlThresholdBubbles}
               onChange={(e) => setMqlThresholdBubbles(parseInt(e.target.value, 10) || 5)}
-              className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+              className="w-full bg-surface border border-divider rounded-xl px-3 py-2 text-xs text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent shadow-xs"
             />
           </div>
 
-          <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#f8fafc] dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942]">
+          <div className="flex items-center justify-between p-3.5 rounded-xl bg-surface-2 border border-divider">
             <div>
-              <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] block">Otomatisasi Auto-Lead</span>
-              <span className="text-[11px] text-[#667781] dark:text-[#8696a0]">Tandai customer sebagai MQL otomatis saat batas tercapai</span>
+              <span className="text-xs font-bold text-ink block">Otomatisasi Auto-Lead</span>
+              <span className="text-[11px] text-ink-3">Tandai customer sebagai MQL otomatis saat batas tercapai</span>
             </div>
             <ToggleSwitch
               checked={mqlAutoLeadEnabled}
@@ -85,7 +85,7 @@ export const MqlSettingsPanel: React.FC<Props> = ({
             <button
               onClick={handleSaveMql}
               disabled={savingMql}
-              className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 disabled:opacity-50 shadow-xs"
+              className="px-4 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 disabled:opacity-50 shadow-xs"
             >
               <Save size={12} />
               <span>{savingMql ? 'Menyimpan...' : 'Simpan MQL Settings'}</span>
@@ -95,18 +95,18 @@ export const MqlSettingsPanel: React.FC<Props> = ({
       </div>
 
       {/* Live Chat Media Retention Settings */}
-      <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-3 shadow-xs">
-        <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
-          <ImageIcon className="text-[#008069]" size={16} />
+      <div className="bg-surface border border-divider rounded-2xl p-5 space-y-3 shadow-xs">
+        <h3 className="text-sm font-bold text-ink flex items-center space-x-2">
+          <ImageIcon className="text-accent" size={16} />
           <span>Retensi Media Live Chat</span>
         </h3>
-        <p className="text-xs text-[#667781] dark:text-[#8696a0] leading-relaxed">
+        <p className="text-xs text-ink-3 leading-relaxed">
           Atur durasi penyimpanan file media (gambar &amp; dokumen) Live Chat sebelum dibersihkan otomatis oleh sistem maintenance.
         </p>
 
         <div className="space-y-3 pt-1">
           <div className="space-y-1">
-            <label className="text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] block">
+            <label className="text-[11px] font-bold text-ink block">
               Masa Retensi Media (Hari, 1-3650)
             </label>
             <input
@@ -115,9 +115,9 @@ export const MqlSettingsPanel: React.FC<Props> = ({
               max={3650}
               value={mediaRetentionDays}
               onChange={(e) => setMediaRetentionDays(e.target.value)}
-              className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+              className="w-full bg-surface border border-divider rounded-xl px-3 py-2 text-xs text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent shadow-xs"
             />
-            <span className="text-[10px] text-[#8696a0] mt-0.5 block">
+            <span className="text-[10px] text-ink-3 mt-0.5 block">
               Fallback default environment: {mediaEnvFallbackDays} hari.
             </span>
           </div>
@@ -126,7 +126,7 @@ export const MqlSettingsPanel: React.FC<Props> = ({
             <button
               onClick={handleSaveMediaRetention}
               disabled={savingMediaRetention}
-              className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 disabled:opacity-50 shadow-xs"
+              className="px-4 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 disabled:opacity-50 shadow-xs"
             >
               <Save size={12} />
               <span>{savingMediaRetention ? 'Menyimpan...' : 'Simpan Retensi Media'}</span>

@@ -346,23 +346,23 @@ export const AiModelSettingsPanel: React.FC = () => {
   };
 
   return (
-    <div className="bg-white dark:bg-[#111b21] rounded-xl border border-[#e9edef] dark:border-[#222e35] p-0 shadow-sm overflow-hidden">
+    <div className="bg-surface rounded-xl border border-divider p-0 shadow-sm overflow-hidden">
       <style>{`@keyframes slideUp{from{transform:translateY(12px);opacity:0}to{transform:translateY(0);opacity:1}}@keyframes fadeInScale{from{transform:scale(0.97);opacity:0}to{transform:scale(1);opacity:1}}`}</style>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-[#e9edef] dark:border-[#222e35]">
+      <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-divider">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-[#1a2a24] text-[#00a884] flex items-center justify-center">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-accent-soft text-accent flex items-center justify-center">
             <Bot size={22} />
           </div>
           <div>
-            <h2 className="text-sm sm:text-base font-bold text-[#111b21] dark:text-white">🤖 Pusat Kendali Model AI Bot (WhatsApp Response)</h2>
-            <p className="text-xs text-[#667781] dark:text-[#8696a0]">Kelola karakter & kecepatan Bidan Yusi dengan 1 klik — tanpa istilah teknis membingungkan.</p>
+            <h2 className="text-sm sm:text-base font-bold text-ink dark:text-white">🤖 Pusat Kendali Model AI Bot (WhatsApp Response)</h2>
+            <p className="text-xs text-ink-3">Kelola karakter & kecepatan Bidan Yusi dengan 1 klik — tanpa istilah teknis membingungkan.</p>
           </div>
         </div>
         <button
           onClick={fetchConfigs}
           disabled={loading}
-          className="p-2.5 text-[#667781] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-white hover:bg-[#f0f2f5] dark:hover:bg-[#202c33] rounded-xl transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+          className="p-2.5 text-ink-3 hover:text-ink dark:hover:text-white hover:bg-fill-1 rounded-xl transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
           title="Segarkan data"
         >
           <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
@@ -370,12 +370,12 @@ export const AiModelSettingsPanel: React.FC = () => {
       </div>
 
       {/* Status Server */}
-      <div className="px-4 sm:px-6 py-4 bg-[#f8fafc] dark:bg-[#0a1014] border-b border-[#e9edef] dark:border-[#222e35]">
+      <div className="px-4 sm:px-6 py-4 bg-surface-2 border-b border-divider">
         <div className="flex items-center gap-2 mb-3">
-          <Activity size={14} className="text-[#00a884]" />
-          <span className="text-xs font-bold text-[#111b21] dark:text-white tracking-wide">🩺 STATUS SERVER</span>
+          <Activity size={14} className="text-accent" />
+          <span className="text-xs font-bold text-ink dark:text-white tracking-wide">🩺 STATUS SERVER</span>
           {switchingProvider && (
-            <span className="ml-auto inline-flex items-center gap-1 text-xs text-[#00a884] font-medium">
+            <span className="ml-auto inline-flex items-center gap-1 text-xs text-accent font-medium">
               <RefreshCw size={12} className="animate-spin" /> Mengganti provider...
             </span>
           )}
@@ -386,29 +386,29 @@ export const AiModelSettingsPanel: React.FC = () => {
             onClick={() => handleSwitchProvider('SUMOPOD')}
             className={`p-3.5 rounded-xl border text-left transition-colors duration-150 ease-out touch-manipulation active:scale-[0.98] min-h-[48px] flex flex-col justify-between ${
               activeProvider === 'SUMOPOD'
-                ? 'border-[#00a884] bg-emerald-50/70 dark:bg-[#1a2a24] shadow-xs ring-1 ring-[#00a884]'
-                : 'border-[#d1d7db] dark:border-[#2a3942] bg-white dark:bg-[#1f2c34] [@media(hover:hover)]:hover:border-slate-400 opacity-90 [@media(hover:hover)]:hover:opacity-100'
+                ? 'border-accent bg-emerald-50/70 dark:bg-accent-soft shadow-xs ring-1 ring-accent'
+                : 'border-divider bg-surface [@media(hover:hover)]:hover:border-strong opacity-90 [@media(hover:hover)]:hover:opacity-100'
             }`}
           >
             <div className="flex items-start justify-between gap-2 mb-1">
               <div className="flex items-center gap-2">
                 <span className="text-base">⚡</span>
                 <div>
-                  <span className="text-xs font-bold text-[#111b21] dark:text-white block">Server Utama (SumoPod)</span>
-                  <span className="text-[10px] text-[#667781] dark:text-[#8696a0] font-mono">https://ai.sumopod.com/v1</span>
+                  <span className="text-xs font-bold text-ink dark:text-white block">Server Utama (SumoPod)</span>
+                  <span className="text-[10px] text-ink-3 font-mono">https://ai.sumopod.com/v1</span>
                 </div>
               </div>
               {activeProvider === 'SUMOPOD' ? (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#00a884] text-white">● Aktif</span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-accent text-accent-ink">● Aktif</span>
               ) : (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 dark:bg-[#202c33] text-[#667781] dark:text-[#8696a0]">Pilih</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 dark:bg-fill-1 text-ink-3">Pilih</span>
               )}
             </div>
             <div className="flex items-center justify-between text-[11px] pt-1">
-              <span className={providersStatus?.sumopod?.configured ? 'text-emerald-700 dark:text-[#00a884] font-semibold' : 'text-slate-500 dark:text-[#8696a0]'}>
+              <span className={providersStatus?.sumopod?.configured ? 'text-emerald-700 dark:text-accent font-semibold' : 'text-slate-500 dark:text-ink-3'}>
                 {providersStatus?.sumopod?.configured ? '🟢 Kunci API Terhubung' : '○ Key di .env'}
               </span>
-              <span className="text-[11px] text-[#667781] dark:text-[#8696a0]">Latensi P50: 1.1s • 5 model resmi</span>
+              <span className="text-[11px] text-ink-3">Latensi P50: 1.1s • 5 model resmi</span>
             </div>
           </button>
           <button
@@ -416,45 +416,45 @@ export const AiModelSettingsPanel: React.FC = () => {
             onClick={() => handleSwitchProvider('KENARI')}
             className={`p-3.5 rounded-xl border text-left transition-colors duration-150 ease-out touch-manipulation active:scale-[0.98] min-h-[48px] flex flex-col justify-between ${
               activeProvider === 'KENARI'
-                ? 'border-[#00a884] bg-emerald-50/70 dark:bg-[#1a2a24] shadow-xs ring-1 ring-[#00a884]'
-                : 'border-[#d1d7db] dark:border-[#2a3942] bg-white dark:bg-[#1f2c34] [@media(hover:hover)]:hover:border-slate-400 opacity-90 [@media(hover:hover)]:hover:opacity-100'
+                ? 'border-accent bg-emerald-50/70 dark:bg-accent-soft shadow-xs ring-1 ring-accent'
+                : 'border-divider bg-surface [@media(hover:hover)]:hover:border-strong opacity-90 [@media(hover:hover)]:hover:opacity-100'
             }`}
           >
             <div className="flex items-start justify-between gap-2 mb-1">
               <div className="flex items-center gap-2">
                 <span className="text-base">🦜</span>
                 <div>
-                  <span className="text-xs font-bold text-[#111b21] dark:text-white block">Server Cadangan (Kenari)</span>
-                  <span className="text-[10px] text-[#667781] dark:text-[#8696a0] font-mono">https://kenari.id/v1</span>
+                  <span className="text-xs font-bold text-ink dark:text-white block">Server Cadangan (Kenari)</span>
+                  <span className="text-[10px] text-ink-3 font-mono">https://kenari.id/v1</span>
                 </div>
               </div>
               {activeProvider === 'KENARI' ? (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#00a884] text-white">● Aktif</span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-accent text-accent-ink">● Aktif</span>
               ) : (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 dark:bg-[#202c33] text-[#667781] dark:text-[#8696a0]">Pilih</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 dark:bg-fill-1 text-ink-3">Pilih</span>
               )}
             </div>
             <div className="flex items-center justify-between text-[11px] pt-1">
-              <span className={providersStatus?.kenari?.configured ? 'text-emerald-700 dark:text-[#00a884] font-semibold' : 'text-slate-500 dark:text-[#8696a0]'}>
+              <span className={providersStatus?.kenari?.configured ? 'text-emerald-700 dark:text-accent font-semibold' : 'text-slate-500 dark:text-ink-3'}>
                 {providersStatus?.kenari?.configured ? '🟢 Kunci API Terhubung' : '○ Key di .env'}
               </span>
-              <span className="text-[11px] text-[#667781] dark:text-[#8696a0]">Auto-failover siaga bila SumoPod gangguan</span>
+              <span className="text-[11px] text-ink-3">Auto-failover siaga bila SumoPod gangguan</span>
             </div>
           </button>
         </div>
       </div>
 
       {loading ? (
-        <div className="py-12 text-center text-xs text-[#8696a0] dark:text-[#667781]">
-          <RefreshCw size={24} className="animate-spin mx-auto mb-2 text-[#00a884]" />
+        <div className="py-12 text-center text-xs text-ink-3 dark:text-ink-3">
+          <RefreshCw size={24} className="animate-spin mx-auto mb-2 text-accent" />
           Memuat konfigurasi model AI...
         </div>
       ) : (
         <>
           {/* Section 1: Pilih Mode Kerja Bot (1-Click Presets) */}
           <div className="px-4 sm:px-6 py-5">
-            <h3 className="text-sm font-bold text-[#111b21] dark:text-white flex items-center gap-2 mb-3">
-              <Zap size={16} className="text-amber-500" /> Mode Kerja Bot (Preset 1-Klik)
+            <h3 className="text-sm font-bold text-ink dark:text-white flex items-center gap-2 mb-3">
+              <Zap size={16} className="text-warning" /> Mode Kerja Bot (Preset 1-Klik)
             </h3>
             <div className="grid grid-cols-1 gap-3">
               {PRESET_CARDS.map((preset) => {
@@ -466,32 +466,32 @@ export const AiModelSettingsPanel: React.FC = () => {
                     onClick={() => handleSelectPreset(preset.id)}
                     className={`w-full text-left p-4 rounded-xl border-2 transition-[border-color,background-color,box-shadow] duration-150 ease-out touch-manipulation active:scale-[0.98] min-h-[48px] ${
                       isSelected
-                        ? 'border-[#00a884] bg-emerald-50/50 dark:bg-[#1a2a24] ring-1 ring-[#00a884]'
-                        : 'border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#1f2c34] [@media(hover:hover)]:hover:border-emerald-200 [@media(hover:hover)]:dark:hover:border-[#00a884]/50'
+                        ? 'border-accent bg-emerald-50/50 dark:bg-accent-soft ring-1 ring-accent'
+                        : 'border-divider bg-surface-2 [@media(hover:hover)]:hover:border-emerald-200 [@media(hover:hover)]:dark:hover:border-accent/50'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-start gap-3">
-                        <span className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-[#00a884] bg-[#00a884]' : 'border-[#d1d7db] dark:border-[#2a3942] bg-white dark:bg-[#111b21]'}`}>
+                        <span className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-accent bg-accent' : 'border-divider bg-surface'}`}>
                           {isSelected && <Check size={12} className="text-white" />}
                         </span>
                         <div>
-                          <div className="text-sm font-bold text-[#111b21] dark:text-white flex items-center gap-1">
-                            {preset.title} {preset.star && <span className="text-amber-500">⭐</span>}
+                          <div className="text-sm font-bold text-ink dark:text-white flex items-center gap-1">
+                            {preset.title} {preset.star && <span className="text-warning">⭐</span>}
                           </div>
-                          <div className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">Model: <strong className="text-[#111b21] dark:text-white font-mono">{preset.model}</strong></div>
+                          <div className="text-xs text-ink-3 mt-0.5">Model: <strong className="text-ink dark:text-white font-mono">{preset.model}</strong></div>
                           <div className="flex flex-wrap gap-1.5 mt-2">
-                            <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white dark:bg-[#0a1014] border border-[#e9edef] dark:border-[#222e35] text-[#111b21] dark:text-white">
+                            <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white dark:bg-app border border-divider text-ink dark:text-white">
                               {preset.icon} {preset.speed}
                             </span>
-                            <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white dark:bg-[#0a1014] border border-[#e9edef] dark:border-[#222e35] text-[#111b21] dark:text-white">
+                            <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white dark:bg-app border border-divider text-ink dark:text-white">
                               💬 {preset.charm}
                             </span>
-                            <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white dark:bg-[#0a1014] border border-[#e9edef] dark:border-[#222e35] text-[#111b21] dark:text-white">
+                            <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white dark:bg-app border border-divider text-ink dark:text-white">
                               💰 {preset.cost}
                             </span>
                           </div>
-                          <div className="text-[11px] text-[#8696a0] dark:text-[#667781] mt-1">{preset.note}</div>
+                          <div className="text-[11px] text-ink-3 dark:text-ink-3 mt-1">{preset.note}</div>
                         </div>
                       </div>
                     </div>
@@ -509,32 +509,32 @@ export const AiModelSettingsPanel: React.FC = () => {
                     onClick={() => handleSelectPreset(preset.id)}
                     className={`w-full text-left p-4 rounded-xl border-2 transition-[border-color,background-color,box-shadow] duration-150 ease-out touch-manipulation active:scale-[0.98] min-h-[48px] ${
                       isSelected
-                        ? 'border-[#00a884] bg-emerald-50/50 dark:bg-[#1a2a24] ring-1 ring-[#00a884]'
-                        : 'border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#1f2c34] [@media(hover:hover)]:hover:border-emerald-200 [@media(hover:hover)]:dark:hover:border-[#00a884]/50'
+                        ? 'border-accent bg-emerald-50/50 dark:bg-accent-soft ring-1 ring-accent'
+                        : 'border-divider bg-surface-2 [@media(hover:hover)]:hover:border-emerald-200 [@media(hover:hover)]:dark:hover:border-accent/50'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-start gap-3">
-                        <span className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-[#00a884] bg-[#00a884]' : 'border-[#d1d7db] dark:border-[#2a3942] bg-white dark:bg-[#111b21]'}`}>
+                        <span className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-accent bg-accent' : 'border-divider bg-surface'}`}>
                           {isSelected && <Check size={12} className="text-white" />}
                         </span>
                         <div>
-                          <div className="text-sm font-bold text-[#111b21] dark:text-white flex items-center gap-1">
+                          <div className="text-sm font-bold text-ink dark:text-white flex items-center gap-1">
                             {preset.title}
                           </div>
-                          <div className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">Model: <strong className="text-[#111b21] dark:text-white font-mono">{preset.model}</strong></div>
+                          <div className="text-xs text-ink-3 mt-0.5">Model: <strong className="text-ink dark:text-white font-mono">{preset.model}</strong></div>
                           <div className="flex flex-wrap gap-1.5 mt-2">
-                            <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white dark:bg-[#0a1014] border border-[#e9edef] dark:border-[#222e35] text-[#111b21] dark:text-white">
+                            <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white dark:bg-app border border-divider text-ink dark:text-white">
                               {preset.icon} {preset.speed}
                             </span>
-                            <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white dark:bg-[#0a1014] border border-[#e9edef] dark:border-[#222e35] text-[#111b21] dark:text-white">
+                            <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white dark:bg-app border border-divider text-ink dark:text-white">
                               💬 {preset.charm}
                             </span>
-                            <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white dark:bg-[#0a1014] border border-[#e9edef] dark:border-[#222e35] text-[#111b21] dark:text-white">
+                            <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white dark:bg-app border border-divider text-ink dark:text-white">
                               💰 {preset.cost}
                             </span>
                           </div>
-                          <div className="text-[11px] text-[#8696a0] dark:text-[#667781] mt-1">{preset.note}</div>
+                          <div className="text-[11px] text-ink-3 dark:text-ink-3 mt-1">{preset.note}</div>
                         </div>
                       </div>
                     </div>
@@ -543,11 +543,11 @@ export const AiModelSettingsPanel: React.FC = () => {
               })()}
               {/* Indikator Mode Kustom — model/parameter manual di luar preset standar */}
               {selectedPreset === 'CUSTOM' && (
-                <div className="w-full text-left p-4 rounded-xl border-2 border-dashed border-[#d1d7db] dark:border-[#2a3942] bg-white dark:bg-[#1f2c34] min-h-[48px]">
-                  <div className="text-sm font-bold text-[#111b21] dark:text-white flex items-center gap-1">
+                <div className="w-full text-left p-4 rounded-xl border-2 border-dashed border-divider bg-surface min-h-[48px]">
+                  <div className="text-sm font-bold text-ink dark:text-white flex items-center gap-1">
                     🎛️ Mode Kustom (Manual)
                   </div>
-                  <div className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
+                  <div className="text-xs text-ink-3 mt-0.5">
                     Model dan parameter disesuaikan secara manual di luar preset standar klinik. Pilihan ini tidak akan ditimpa saat menyimpan.
                   </div>
                 </div>
@@ -556,13 +556,13 @@ export const AiModelSettingsPanel: React.FC = () => {
           </div>
 
           {/* Section: Dual-Model Pipeline (Call 1 Router & Call 2 Persona Generator) */}
-          <div className="px-4 sm:px-6 py-5 border-t border-[#e9edef] dark:border-[#222e35] bg-gradient-to-b from-[#f8fafc]/50 to-white dark:from-[#0a1014]/50 dark:to-[#111b21]">
+          <div className="px-4 sm:px-6 py-5 border-t border-divider bg-surface-2">
             <div className="flex items-center justify-between gap-2 mb-3">
               <div className="flex items-center gap-2">
                 <span className="text-base">⚡🔀</span>
                 <div>
-                  <h3 className="text-sm font-bold text-[#111b21] dark:text-white">Arsitektur Dual-Model Pipeline (V3 Agent)</h3>
-                  <p className="text-xs text-[#667781] dark:text-[#8696a0]">
+                  <h3 className="text-sm font-bold text-ink dark:text-white">Arsitektur Dual-Model Pipeline (V3 Agent)</h3>
+                  <p className="text-xs text-ink-3">
                     Pemisahan model untuk Call 1 (routing cepat & hemat) dan Call 2 (persona Bidan Yusi yang ramah).
                   </p>
                 </div>
@@ -578,39 +578,39 @@ export const AiModelSettingsPanel: React.FC = () => {
                 const modelsList = activeProvider === 'KENARI' ? KENARI_MODELS : SUMOPOD_MODELS;
                 const behavior = describeModelBehavior(currentModel);
                 return (
-                  <div className="p-4 rounded-xl border border-[#d1d7db] dark:border-[#2a3942] bg-white dark:bg-[#1f2c34] shadow-xs flex flex-col justify-between">
+                  <div className="p-4 rounded-xl border border-divider bg-surface shadow-xs flex flex-col justify-between">
                     <div>
                       <div className="flex items-center justify-between gap-2 mb-2">
-                        <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#111b21] dark:text-white">
-                          <Compass size={14} className="text-sky-500" /> Call 1: Tool Routing & Slot Extractor
+                        <span className="inline-flex items-center gap-1.5 text-xs font-bold text-ink dark:text-white">
+                          <Compass size={14} className="text-info" /> Call 1: Tool Routing & Slot Extractor
                         </span>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 dark:bg-[#0f2a33] text-sky-800 dark:text-[#38bdf8]">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 dark:bg-info-soft text-sky-800 dark:text-info">
                           🎰 Extractor
                         </span>
                       </div>
-                      <p className="text-xs text-[#667781] dark:text-[#8696a0] mb-3 leading-relaxed">
+                      <p className="text-xs text-ink-3 mb-3 leading-relaxed">
                         Mengevaluasi pemanggilan tool (ongkir, katalog, SOP) secara atomik. Parameter thinking hanya dikirim ke model yang mendukungnya (GLM); model DeepSeek/Qwen tidak menerimanya.
                       </p>
                       <div className="flex flex-wrap gap-1.5 mb-3">
-                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-[#143d2f] text-emerald-700 dark:text-[#00a884] font-medium">
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-accent-soft text-emerald-700 dark:text-accent font-medium">
                           {behavior.latency}
                         </span>
-                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-[#202c33] text-slate-700 dark:text-slate-300 font-medium">
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-fill-1 text-slate-700 dark:text-slate-300 font-medium">
                           {behavior.thinking}
                         </span>
-                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-50 dark:bg-[#2a2414] text-amber-700 dark:text-[#f59e0b] font-medium">
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-50 dark:bg-warning-soft text-amber-700 dark:text-warning font-medium">
                           💰 Hemat Token
                         </span>
                       </div>
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-[#667781] dark:text-[#8696a0] mb-1">
+                      <label className="block text-[11px] font-semibold text-ink-3 mb-1">
                         Model Call 1 (Router & Extractor):
                       </label>
                       <select
                         value={currentModel}
                         onChange={(e) => handleChangeAdvanced('INTENT_CLASSIFICATION', 'modelName', e.target.value)}
-                        className="w-full bg-slate-50 dark:bg-[#0a1014] border border-[#d1d7db] dark:border-[#2a3942] rounded-lg px-3 py-2.5 text-xs font-mono text-[#111b21] dark:text-white focus:outline-none focus:border-[#00a884] min-h-[44px]"
+                        className="w-full bg-slate-50 dark:bg-app border border-divider rounded-lg px-3 py-2.5 text-xs font-mono text-ink dark:text-white focus:outline-none focus:border-accent min-h-[44px]"
                       >
                         {modelsList.map((m) => (
                           <option key={`router-${m}`} value={m}>
@@ -633,39 +633,39 @@ export const AiModelSettingsPanel: React.FC = () => {
                 const currentModel = chatConfig?.modelName || defaultChatModel;
                 const modelsList = activeProvider === 'KENARI' ? KENARI_MODELS : SUMOPOD_MODELS;
                 return (
-                  <div className="p-4 rounded-xl border border-[#d1d7db] dark:border-[#2a3942] bg-white dark:bg-[#1f2c34] shadow-xs flex flex-col justify-between">
+                  <div className="p-4 rounded-xl border border-divider bg-surface shadow-xs flex flex-col justify-between">
                     <div>
                       <div className="flex items-center justify-between gap-2 mb-2">
-                        <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#111b21] dark:text-white">
-                          <MessageSquare size={14} className="text-[#00a884]" /> Call 2: Balasan Persona Bidan Yusi
+                        <span className="inline-flex items-center gap-1.5 text-xs font-bold text-ink dark:text-white">
+                          <MessageSquare size={14} className="text-accent" /> Call 2: Balasan Persona Bidan Yusi
                         </span>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-[#143d2f] text-emerald-800 dark:text-[#00a884]">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-accent-soft text-emerald-800 dark:text-accent">
                           💬 Generator
                         </span>
                       </div>
-                      <p className="text-xs text-[#667781] dark:text-[#8696a0] mb-3 leading-relaxed">
+                      <p className="text-xs text-ink-3 mb-3 leading-relaxed">
                         Menyusun balasan akhir yang hangat, ramah, dan empatis untuk Bunda berdasarkan fakta tool yang telah diambil.
                       </p>
                       <div className="flex flex-wrap gap-1.5 mb-3">
-                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-[#143d2f] text-emerald-700 dark:text-[#00a884] font-medium">
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-accent-soft text-emerald-700 dark:text-accent font-medium">
                           🩺 Persona Bidan Yusi
                         </span>
-                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-blue-50 dark:bg-[#0f2a33] text-blue-700 dark:text-[#aebac1] font-medium">
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-blue-50 dark:bg-info-soft text-blue-700 dark:text-ink-2 font-medium">
                           🛡️ Guardrails Aktif
                         </span>
-                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-purple-50 dark:bg-[#241a2f] text-purple-700 dark:text-[#aebac1] font-medium">
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-purple-50 dark:bg-surface-2 text-purple-700 dark:text-ink-2 font-medium">
                           ✨ Bahasa Alami
                         </span>
                       </div>
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-[#667781] dark:text-[#8696a0] mb-1">
+                      <label className="block text-[11px] font-semibold text-ink-3 mb-1">
                         Model Call 2 (Persona Generator):
                       </label>
                       <select
                         value={currentModel}
                         onChange={(e) => handleChangeAdvanced('CHAT_REPLY', 'modelName', e.target.value)}
-                        className="w-full bg-slate-50 dark:bg-[#0a1014] border border-[#d1d7db] dark:border-[#2a3942] rounded-lg px-3 py-2.5 text-xs font-mono text-[#111b21] dark:text-white focus:outline-none focus:border-[#00a884] min-h-[44px]"
+                        className="w-full bg-slate-50 dark:bg-app border border-divider rounded-lg px-3 py-2.5 text-xs font-mono text-ink dark:text-white focus:outline-none focus:border-accent min-h-[44px]"
                       >
                         {modelsList.map((m) => (
                           <option key={`generator-${m}`} value={m}>
@@ -684,12 +684,12 @@ export const AiModelSettingsPanel: React.FC = () => {
           </div>
 
           {/* Mini Simulator — smoke-test konektivitas (bukan uji klinis RAG penuh) */}
-          <div className="px-4 sm:px-6 py-4 border-t border-[#e9edef] dark:border-[#222e35] bg-[#f8fafc] dark:bg-[#0a1014]">
+          <div className="px-4 sm:px-6 py-4 border-t border-divider bg-surface-2">
             <div className="flex items-center gap-2 mb-3">
-              <Beaker size={16} className="text-[#00a884]" />
-              <h3 className="text-xs font-bold text-[#111b21] dark:text-white tracking-wide">🧪 Uji Konektivitas Model (Smoke-Test 1 Detik — tanpa RAG/katalog)</h3>
+              <Beaker size={16} className="text-accent" />
+              <h3 className="text-xs font-bold text-ink dark:text-white tracking-wide">🧪 Uji Konektivitas Model (Smoke-Test 1 Detik — tanpa RAG/katalog)</h3>
             </div>
-            <p className="text-xs text-[#667781] dark:text-[#8696a0] mb-3">Smoke-test konektivitas SumoPod/Kenari: tanpa data RAG klinik/katalog/tarif. “Tanya Harga” bisa berhalusinasi — bukan indikasi bot rusak. Latensi nyata ~1–2s.</p>
+            <p className="text-xs text-ink-3 mb-3">Smoke-test konektivitas SumoPod/Kenari: tanpa data RAG klinik/katalog/tarif. “Tanya Harga” bisa berhalusinasi — bukan indikasi bot rusak. Latensi nyata ~1–2s.</p>
             <div className="flex flex-wrap gap-2 mb-3">
               {(['flu','price','schedule'] as TestScenario[]).map((sc) => {
                 const labels: Record<TestScenario,string> = { flu: '🤧 Tanya Bapil', price: '💰 Tanya Harga', schedule: '📅 Tanya Jadwal' };
@@ -702,8 +702,8 @@ export const AiModelSettingsPanel: React.FC = () => {
                     onClick={() => handleTestScenario(sc)}
                     className={`px-4 py-2.5 rounded-xl text-xs font-semibold border transition-[border-color,background-color,box-shadow] duration-150 ease-out touch-manipulation active:scale-[0.98] min-h-[48px] min-w-[48px] ${
                       isTesting
-                        ? 'bg-amber-50 dark:bg-[#2a2414] border-amber-200 dark:border-amber-700/50 text-amber-700 dark:text-[#f59e0b]'
-                        : 'bg-white dark:bg-[#1f2c34] border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-white [@media(hover:hover)]:hover:border-[#00a884] [@media(hover:hover)]:hover:bg-emerald-50 [@media(hover:hover)]:dark:hover:bg-[#1a2a24]'
+                        ? 'bg-amber-50 dark:bg-warning-soft border-amber-200 dark:border-amber-700/50 text-amber-700 dark:text-warning'
+                        : 'bg-surface border-divider text-ink dark:text-white [@media(hover:hover)]:hover:border-accent [@media(hover:hover)]:hover:bg-emerald-50 [@media(hover:hover)]:dark:hover:bg-accent-soft'
                     }`}
                   >
                     {isTesting ? <span className="inline-flex items-center gap-1"><RefreshCw size={12} className="animate-spin" /> Menghubungi model AI...</span> : labels[sc]}
@@ -713,16 +713,16 @@ export const AiModelSettingsPanel: React.FC = () => {
             </div>
             {/* Pulse loading */}
             {testingScenario && (
-              <div className="p-3 rounded-xl bg-amber-50 dark:bg-[#2a2414] border border-amber-200 dark:border-amber-900/30 text-xs text-amber-800 dark:text-amber-200 animate-pulse">
+              <div className="p-3 rounded-xl bg-amber-50 dark:bg-warning-soft border border-amber-200 dark:border-amber-900/30 text-xs text-amber-800 dark:text-amber-200 animate-pulse">
                 Menghubungi model AI... mohon tunggu 1–2 detik ⏳
               </div>
             )}
             {testResult && !testingScenario && (
-              <div className={`p-3 rounded-xl border text-xs transition-all duration-200 ease-out ${testResult.success ? 'bg-emerald-50 dark:bg-[#14261f] border-emerald-200 dark:border-emerald-900/40 text-[#111b21] dark:text-white' : 'bg-red-50 dark:bg-[#2a1414] border-red-200 dark:border-red-900/40 text-red-800 dark:text-red-200'}`} style={{ animation: 'fadeInScale 200ms ease-out' }}>
+              <div className={`p-3 rounded-xl border text-xs transition-all duration-200 ease-out ${testResult.success ? 'bg-emerald-50 dark:bg-accent-soft border-emerald-200 dark:border-emerald-900/40 text-ink dark:text-white' : 'bg-red-50 dark:bg-danger-soft border-red-200 dark:border-red-900/40 text-red-800 dark:text-red-200'}`} style={{ animation: 'fadeInScale 200ms ease-out' }}>
                 {testResult.success ? (
                   <>
-                    <div className="font-semibold flex items-center gap-1 mb-1">✅ Model Berfungsi Normal {testResult.latencyMs !== undefined && <span className="ml-1 px-1.5 py-0.5 rounded bg-white dark:bg-[#0a1014] border text-[11px] font-mono">Latensi: {(testResult.latencyMs!/1000).toFixed(2)} detik • Token: {testResult.tokenEstimate ?? '-'} • {testResult.modelUsed} ({testResult.providerUsed})</span>}</div>
-                    <div className="bg-white dark:bg-[#0a1014] rounded-lg p-2.5 border border-[#e9edef] dark:border-[#222e35] text-[#111b21] dark:text-white leading-relaxed">
+                    <div className="font-semibold flex items-center gap-1 mb-1">✅ Model Berfungsi Normal {testResult.latencyMs !== undefined && <span className="ml-1 px-1.5 py-0.5 rounded bg-white dark:bg-app border text-[11px] font-mono">Latensi: {(testResult.latencyMs!/1000).toFixed(2)} detik • Token: {testResult.tokenEstimate ?? '-'} • {testResult.modelUsed} ({testResult.providerUsed})</span>}</div>
+                    <div className="bg-white dark:bg-app rounded-lg p-2.5 border border-divider text-ink dark:text-white leading-relaxed">
                       Bidan Yusi: &quot;{testResult.replySnippet}&quot;
                     </div>
                   </>
@@ -732,21 +732,21 @@ export const AiModelSettingsPanel: React.FC = () => {
               </div>
             )}
             {!testResult && !testingScenario && (
-              <div className="p-3 rounded-xl bg-white dark:bg-[#1f2c34] border border-dashed border-[#d1d7db] dark:border-[#2a3942] text-xs text-[#8696a0] dark:text-[#667781] text-center">
+              <div className="p-3 rounded-xl bg-surface border border-dashed border-divider text-xs text-ink-3 dark:text-ink-3 text-center">
                 Klik salah satu skenario di atas untuk melihat preview balasan Bidan Yusi ✨
               </div>
             )}
           </div>
 
           {/* Collapsible Advanced */}
-          <div className="px-4 sm:px-6 py-3 border-t border-[#e9edef] dark:border-[#222e35]">
+          <div className="px-4 sm:px-6 py-3 border-t border-divider">
             <button
               type="button"
               onClick={() => setShowAdvanced(!showAdvanced)}
-              className="w-full flex items-center justify-between gap-2 px-3 py-3 rounded-xl bg-white dark:bg-[#1f2c34] border border-[#e9edef] dark:border-[#2a3942] text-xs font-semibold text-[#111b21] dark:text-white hover:bg-[#f8fafc] dark:hover:bg-[#202c33] transition-colors min-h-[48px]"
+              className="w-full flex items-center justify-between gap-2 px-3 py-3 rounded-xl bg-surface border border-divider text-xs font-semibold text-ink dark:text-white hover:bg-surface-2 dark:hover:bg-fill-1 transition-colors min-h-[48px]"
             >
               <span className="flex items-center gap-2">{showAdvanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />} ⚙️ Pengaturan Teknis Lanjutan (NLU Extractor, QC Verifier, Summarizer)</span>
-              <span className="text-[11px] text-[#667781] dark:text-[#8696a0]">{showAdvanced ? 'Tutup' : 'Buka'}</span>
+              <span className="text-[11px] text-ink-3">{showAdvanced ? 'Tutup' : 'Buka'}</span>
             </button>
             {showAdvanced && (
               <div className="mt-3 space-y-3">
@@ -767,22 +767,22 @@ export const AiModelSettingsPanel: React.FC = () => {
                   const isNlu = cfg.task === 'INTENT_CLASSIFICATION';
                   const nluOffRec = isNlu && cfg.provider !== 'SumoPod';
                   return (
-                    <div key={cfg.task} className={`p-3 rounded-xl border ${isChatHero ? 'border-[#00a884]/30 bg-emerald-50/30 dark:bg-[#1a2a24]/50' : 'border-[#e9edef] dark:border-[#222e35] bg-[#f8fafc] dark:bg-[#1f2c34]'} transition-all`}>
+                    <div key={cfg.task} className={`p-3 rounded-xl border ${isChatHero ? 'border-accent/30 bg-emerald-50/30 dark:bg-accent-soft/50' : 'border-divider bg-surface-2'} transition-all`}>
                       <div className="flex items-center gap-2 mb-2 flex-wrap">
-                        <span className="text-xs font-bold text-[#111b21] dark:text-white">{meta.label}</span>
-                        <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-[#143d2f] text-emerald-800 dark:text-[#00a884]">{meta.badge}</span>
-                        {isChatHero && <span className="text-[10px] text-[#00a884] font-semibold">— Hero (disinkron preset)</span>}
-                        {isNlu && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 dark:bg-[#0f2a33] text-sky-700 dark:text-[#38bdf8] border border-sky-200 dark:border-sky-700/40">Rekomendasi: SumoPod netra — P50 1.8s</span>}
-                        {isNlu && nluOffRec && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-[#2a2414] text-amber-800 dark:text-[#f59e0b] border border-amber-200 dark:border-amber-700/50">⚠️ Di luar SumoPod berisiko latensi &gt;1.8s</span>}
+                        <span className="text-xs font-bold text-ink dark:text-white">{meta.label}</span>
+                        <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-accent-soft text-emerald-800 dark:text-accent">{meta.badge}</span>
+                        {isChatHero && <span className="text-[10px] text-accent font-semibold">— Hero (disinkron preset)</span>}
+                        {isNlu && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 dark:bg-info-soft text-sky-700 dark:text-info border border-sky-200 dark:border-sky-700/40">Rekomendasi: SumoPod netra — P50 1.8s</span>}
+                        {isNlu && nluOffRec && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-warning-soft text-amber-800 dark:text-warning border border-amber-200 dark:border-amber-700/50">⚠️ Di luar SumoPod berisiko latensi &gt;1.8s</span>}
                       </div>
-                      <p className="text-[11px] text-[#667781] dark:text-[#8696a0] mb-2">{cfg.description}</p>
+                      <p className="text-[11px] text-ink-3 mb-2">{cfg.description}</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
                         <div>
-                          <label className="block text-[11px] font-semibold text-[#667781] dark:text-[#8696a0] mb-1">Provider AI</label>
+                          <label className="block text-[11px] font-semibold text-ink-3 mb-1">Provider AI</label>
                           <select
                             value={cfg.provider}
                             onChange={(e) => handleChangeAdvanced(cfg.task, 'provider', e.target.value)}
-                            className="w-full bg-white dark:bg-[#0a1014] border border-[#d1d7db] dark:border-[#2a3942] rounded-lg px-3 py-2.5 text-[#111b21] dark:text-white focus:outline-none focus:border-[#00a884] min-h-[44px] text-base sm:text-xs"
+                            className="w-full bg-white dark:bg-app border border-divider rounded-lg px-3 py-2.5 text-ink dark:text-white focus:outline-none focus:border-accent min-h-[44px] text-base sm:text-xs"
                           >
                             <option value="SumoPod">SumoPod (Server Utama Klinik)</option>
                             <option value="Kenari">Kenari (Server Cadangan)</option>
@@ -791,18 +791,18 @@ export const AiModelSettingsPanel: React.FC = () => {
                           </select>
                         </div>
                         <div>
-                          <label className="block text-[11px] font-semibold text-[#667781] dark:text-[#8696a0] mb-1">Nama Model</label>
+                          <label className="block text-[11px] font-semibold text-ink-3 mb-1">Nama Model</label>
                           <input
                             type="text"
                             value={cfg.modelName}
                             list="ai-model-suggestions"
                             onChange={(e) => handleChangeAdvanced(cfg.task, 'modelName', e.target.value)}
                             placeholder="Pilih dari katalog resmi"
-                            className="w-full bg-white dark:bg-[#0a1014] border border-[#d1d7db] dark:border-[#2a3942] rounded-lg px-3 py-2.5 text-[#111b21] dark:text-white font-mono text-base sm:text-xs focus:outline-none focus:border-[#00a884] min-h-[44px]"
+                            className="w-full bg-white dark:bg-app border border-divider rounded-lg px-3 py-2.5 text-ink dark:text-white font-mono text-base sm:text-xs focus:outline-none focus:border-accent min-h-[44px]"
                           />
                         </div>
                         <div>
-                          <label className="block text-[11px] font-semibold text-[#667781] dark:text-[#8696a0] mb-1">Temperature ({cfg.temperature})</label>
+                          <label className="block text-[11px] font-semibold text-ink-3 mb-1">Temperature ({cfg.temperature})</label>
                           <input
                             type="range"
                             min="0"
@@ -810,22 +810,22 @@ export const AiModelSettingsPanel: React.FC = () => {
                             step="0.05"
                             value={cfg.temperature}
                             onChange={(e) => handleChangeAdvanced(cfg.task, 'temperature', parseFloat(e.target.value))}
-                            className="w-full accent-[#00a884] h-2 bg-slate-200 dark:bg-[#2a3942] rounded-lg cursor-pointer mt-2 touch-manipulation"
+                            className="w-full accent-accent h-2 bg-slate-200 dark:bg-divider rounded-lg cursor-pointer mt-2 touch-manipulation"
                             style={{ touchAction: 'manipulation' } as any}
                           />
                         </div>
                         <div>
-                          <label className="block text-[11px] font-semibold text-[#667781] dark:text-[#8696a0] mb-1">Max Tokens</label>
+                          <label className="block text-[11px] font-semibold text-ink-3 mb-1">Max Tokens</label>
                           <input
                             type="number"
                             value={cfg.maxTokens}
                             onChange={(e) => handleChangeAdvanced(cfg.task, 'maxTokens', parseInt(e.target.value, 10) || 512)}
-                            className="w-full bg-white dark:bg-[#0a1014] border border-[#d1d7db] dark:border-[#2a3942] rounded-lg px-3 py-2.5 text-[#111b21] dark:text-white focus:outline-none focus:border-[#00a884] min-h-[44px] text-base sm:text-xs"
+                            className="w-full bg-white dark:bg-app border border-divider rounded-lg px-3 py-2.5 text-ink dark:text-white focus:outline-none focus:border-accent min-h-[44px] text-base sm:text-xs"
                           />
                         </div>
                         {cfg.confidenceThreshold !== undefined && (
                           <div>
-                            <label className="block text-[11px] font-semibold text-[#667781] dark:text-[#8696a0] mb-1">
+                            <label className="block text-[11px] font-semibold text-ink-3 mb-1">
                               Confidence Threshold ({Number(cfg.confidenceThreshold).toFixed(2)})
                             </label>
                             <input
@@ -835,7 +835,7 @@ export const AiModelSettingsPanel: React.FC = () => {
                               step="0.05"
                               value={cfg.confidenceThreshold}
                               onChange={(e) => handleChangeAdvanced(cfg.task, 'confidenceThreshold', parseFloat(e.target.value))}
-                              className="w-full accent-[#00a884] h-2 bg-slate-200 dark:bg-[#2a3942] rounded-lg cursor-pointer mt-2 touch-manipulation"
+                              className="w-full accent-accent h-2 bg-slate-200 dark:bg-divider rounded-lg cursor-pointer mt-2 touch-manipulation"
                               style={{ touchAction: 'manipulation' } as any}
                             />
                           </div>
@@ -851,13 +851,13 @@ export const AiModelSettingsPanel: React.FC = () => {
           {/* Sticky Floating Save Bar — anti lupa simpan (dirty) */}
           {dirty && !loading && (
             <div className="fixed bottom-0 inset-x-0 z-40 px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-2 pointer-events-none">
-              <div className="mx-auto max-w-3xl bg-white dark:bg-[#1f2c34] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl shadow-xl shadow-black/10 dark:shadow-none px-4 py-3 flex items-center gap-3 pointer-events-auto transition-all duration-200 ease-out" style={{ animation: 'slideUp 200ms cubic-bezier(0.23, 1, 0.32, 1)' }}>
-                <span className="flex-1 text-xs font-semibold text-[#111b21] dark:text-white flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" /> Ada perubahan belum disimpan</span>
+              <div className="mx-auto max-w-3xl bg-surface border border-divider rounded-2xl shadow-xl shadow-black/10 dark:shadow-none px-4 py-3 flex items-center gap-3 pointer-events-auto transition-all duration-200 ease-out" style={{ animation: 'slideUp 200ms cubic-bezier(0.23, 1, 0.32, 1)' }}>
+                <span className="flex-1 text-xs font-semibold text-ink dark:text-white flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" /> Ada perubahan belum disimpan</span>
                 <button
                   type="button"
                   onClick={fetchConfigs}
                   disabled={savingAll}
-                  className="px-4 py-2.5 rounded-xl text-xs font-semibold border border-[#d1d7db] dark:border-[#2a3942] bg-white dark:bg-[#111b21] text-[#111b21] dark:text-white touch-manipulation active:scale-[0.98] min-h-[44px] disabled:opacity-50"
+                  className="px-4 py-2.5 rounded-xl text-xs font-semibold border border-divider bg-surface text-ink dark:text-white touch-manipulation active:scale-[0.98] min-h-[44px] disabled:opacity-50"
                 >
                   Batal
                 </button>
@@ -865,7 +865,7 @@ export const AiModelSettingsPanel: React.FC = () => {
                   type="button"
                   onClick={handleSaveAll}
                   disabled={savingAll}
-                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-[#00a884] hover:bg-[#008f6f] text-white shadow-sm touch-manipulation active:scale-[0.98] min-h-[44px] disabled:opacity-60 inline-flex items-center gap-1.5"
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-accent hover:bg-accent-hover text-accent-ink shadow-sm touch-manipulation active:scale-[0.98] min-h-[44px] disabled:opacity-60 inline-flex items-center gap-1.5"
                 >
                   {savingAll ? <><RefreshCw size={14} className="animate-spin" /> Menyimpan...</> : <><Save size={14} /> Simpan</>}
                 </button>
@@ -874,13 +874,13 @@ export const AiModelSettingsPanel: React.FC = () => {
           )}
 
           {/* Footer Actions (fallback desktop) */}
-          <div className="px-4 sm:px-6 py-4 border-t border-[#e9edef] dark:border-[#222e35] bg-white dark:bg-[#111b21] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pb-6 sm:pb-4">
+          <div className="px-4 sm:px-6 py-4 border-t border-divider bg-surface flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pb-6 sm:pb-4">
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={handleResetDefaults}
                 disabled={resetting || savingAll}
-                className="inline-flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl border border-[#d1d7db] dark:border-[#2a3942] bg-white dark:bg-[#1f2c34] text-[#111b21] dark:text-white text-xs font-semibold hover:bg-slate-50 dark:hover:bg-[#202c33] transition-colors disabled:opacity-50 min-h-[48px]"
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl border border-divider bg-surface text-ink dark:text-white text-xs font-semibold hover:bg-slate-50 dark:hover:bg-fill-1 transition-colors disabled:opacity-50 min-h-[48px]"
               >
                 {resetting ? <RefreshCw size={14} className="animate-spin" /> : <RotateCcw size={14} />} Kembalikan ke Rekomendasi Default
               </button>
@@ -891,13 +891,13 @@ export const AiModelSettingsPanel: React.FC = () => {
                 onClick={handleSaveAll}
                 disabled={savingAll || resetting || !dirty}
                 className={`inline-flex items-center justify-center gap-1.5 px-6 py-3 rounded-xl text-xs font-bold shadow-sm dark:shadow-none transition-[border-color,background-color,box-shadow] duration-150 ease-out touch-manipulation active:scale-[0.98] min-h-[48px] ${
-                  dirty ? 'bg-[#00a884] hover:bg-[#008f6f] text-white shadow-emerald-200 dark:shadow-none' : 'bg-slate-200 dark:bg-[#2a3942] text-[#667781] dark:text-[#8696a0] cursor-not-allowed'
+                  dirty ? 'bg-accent hover:bg-accent-hover text-accent-ink shadow-emerald-200 dark:shadow-none' : 'bg-slate-200 dark:bg-divider text-ink-3 cursor-not-allowed'
                 } disabled:opacity-60`}
               >
                 {savingAll ? (<><RefreshCw size={14} className="animate-spin" /> Menyimpan...</>) : (<><Save size={14} /> 💾 Simpan Semua Perubahan</>)}
               </button>
-              <span className="text-[11px] text-[#667781] dark:text-[#8696a0] text-center sm:text-right">
-                ✨ Perubahan langsung aktif pada pesan WhatsApp berikutnya tanpa perlu restart {dirty && <span className="text-amber-600 dark:text-[#f59e0b] font-semibold">• Ada perubahan belum disimpan</span>}
+              <span className="text-[11px] text-ink-3 text-center sm:text-right">
+                ✨ Perubahan langsung aktif pada pesan WhatsApp berikutnya tanpa perlu restart {dirty && <span className="text-amber-600 dark:text-warning font-semibold">• Ada perubahan belum disimpan</span>}
               </span>
             </div>
           </div>

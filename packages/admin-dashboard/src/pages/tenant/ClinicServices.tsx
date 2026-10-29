@@ -371,16 +371,16 @@ export const ClinicServices: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Top-level Tabs: Katalog vs Ongkir */}
-      <div className="flex items-center gap-2 border-b border-[#e9edef] dark:border-[#2a3942] pb-0">
+      <div className="flex items-center gap-2 border-b border-divider pb-0">
         <button
           onClick={() => setSearchParams({}, { replace: true })}
-          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition -mb-px ${activeMainTab === 'CATALOG' ? 'border-[#008069] text-[#008069]' : 'border-transparent text-[#667781] hover:text-[#111b21]'}`}
+          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition -mb-px ${activeMainTab === 'CATALOG' ? 'border-accent text-accent' : 'border-transparent text-ink-3 hover:text-ink'}`}
         >
           Katalog Layanan
         </button>
         <button
           onClick={() => setSearchParams({ tab: 'delivery' }, { replace: true })}
-          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition -mb-px ${activeMainTab === 'DELIVERY' ? 'border-[#008069] text-[#008069]' : 'border-transparent text-[#667781] hover:text-[#111b21]'}`}
+          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition -mb-px ${activeMainTab === 'DELIVERY' ? 'border-accent text-accent' : 'border-transparent text-ink-3 hover:text-ink'}`}
         >
           Tarif Ongkir &amp; Delivery
         </button>
@@ -393,17 +393,17 @@ export const ClinicServices: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h1 className="text-xl font-bold text-[#111b21] dark:text-[#e9edef] tracking-tight flex items-center space-x-2">
-            <Activity className="text-[#008069]" size={22} />
+          <h1 className="text-xl font-bold text-ink tracking-tight flex items-center space-x-2">
+            <Activity className="text-accent" size={22} />
             <span>Katalog Layanan & Treatment</span>
           </h1>
-          <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
+          <p className="text-xs text-ink-3 mt-0.5">
             Kelola data paket treatment, paket hemat bundle, layanan tambahan add-on, durasi, harga promo, dan kriteria usia untuk rekomendasi WhatsApp AI.
           </p>
         </div>
         <button
           onClick={openAddModal}
-          className="px-3.5 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
+          className="px-3.5 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
         >
           <Plus size={14} />
           <span>Tambah Layanan</span>
@@ -412,57 +412,57 @@ export const ClinicServices: React.FC = () => {
 
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-white dark:bg-[#111b21] dark:text-[#e9edef] p-3.5 rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs flex items-center space-x-3">
-          <div className="p-2.5 bg-emerald-50 text-[#008069] rounded-xl">
+        <div className="bg-surface dark:text-ink p-3.5 rounded-2xl border border-divider shadow-xs flex items-center space-x-3">
+          <div className="p-2.5 bg-success-soft text-accent rounded-xl">
             <Activity size={18} />
           </div>
           <div>
-            <div className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold">Total Layanan</div>
-            <div className="text-base font-bold text-[#111b21] dark:text-[#e9edef]">{services.length} Item</div>
+            <div className="text-[10px] text-ink-3 uppercase font-bold">Total Layanan</div>
+            <div className="text-base font-bold text-ink">{services.length} Item</div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-[#111b21] dark:text-[#e9edef] p-3.5 rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs flex items-center space-x-3">
-          <div className="p-2.5 bg-indigo-50 text-indigo-700 rounded-xl">
+        <div className="bg-surface dark:text-ink p-3.5 rounded-2xl border border-divider shadow-xs flex items-center space-x-3">
+          <div className="p-2.5 bg-info-soft text-info rounded-xl">
             <Package size={18} />
           </div>
           <div>
-            <div className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold">Paket Bundle</div>
-            <div className="text-base font-bold text-indigo-700">{counts.bundle} Paket</div>
+            <div className="text-[10px] text-ink-3 uppercase font-bold">Paket Bundle</div>
+            <div className="text-base font-bold text-info">{counts.bundle} Paket</div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-[#111b21] dark:text-[#e9edef] p-3.5 rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs flex items-center space-x-3">
-          <div className="p-2.5 bg-rose-50 text-rose-700 rounded-xl">
+        <div className="bg-surface dark:text-ink p-3.5 rounded-2xl border border-divider shadow-xs flex items-center space-x-3">
+          <div className="p-2.5 bg-danger-soft text-danger rounded-xl">
             <PlusCircle size={18} />
           </div>
           <div>
-            <div className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold">Layanan Add-on</div>
-            <div className="text-base font-bold text-rose-700">{counts.addon} Item</div>
+            <div className="text-[10px] text-ink-3 uppercase font-bold">Layanan Add-on</div>
+            <div className="text-base font-bold text-danger">{counts.addon} Item</div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-[#111b21] dark:text-[#e9edef] p-3.5 rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs flex items-center space-x-3">
-          <div className="p-2.5 bg-sky-50 text-sky-700 rounded-xl">
+        <div className="bg-surface dark:text-ink p-3.5 rounded-2xl border border-divider shadow-xs flex items-center space-x-3">
+          <div className="p-2.5 bg-info-soft text-info rounded-xl">
             <Layers size={18} />
           </div>
           <div>
-            <div className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold">Layanan Mandiri</div>
-            <div className="text-base font-bold text-sky-700">{counts.baby + counts.kids + counts.moms} Item</div>
+            <div className="text-[10px] text-ink-3 uppercase font-bold">Layanan Mandiri</div>
+            <div className="text-base font-bold text-info">{counts.baby + counts.kids + counts.moms} Item</div>
           </div>
         </div>
       </div>
 
       {/* Filter Tabs & Search Bar */}
-      <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 bg-white dark:bg-[#111b21] p-2.5 rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs">
+      <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 bg-surface p-2.5 rounded-2xl border border-divider shadow-xs">
         {/* Category Tabs */}
         <div className="flex items-center space-x-1 overflow-x-auto pb-1 sm:pb-0">
           <button
             onClick={() => setSelectedTab('ALL')}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
               selectedTab === 'ALL'
-                ? 'bg-[#008069] text-white shadow-xs'
-                : 'text-[#54656f] dark:text-[#aebac1] hover:bg-[#f0f2f5]'
+                ? 'bg-accent text-accent-ink shadow-xs'
+                : 'text-ink-2 hover:bg-fill-1'
             }`}
           >
             Semua ({counts.all})
@@ -471,8 +471,8 @@ export const ClinicServices: React.FC = () => {
             onClick={() => setSelectedTab('BABY')}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
               selectedTab === 'BABY'
-                ? 'bg-sky-700 text-white shadow-xs'
-                : 'text-[#54656f] dark:text-[#aebac1] hover:bg-[#f0f2f5]'
+                ? 'bg-info text-on-solid shadow-xs'
+                : 'text-ink-2 hover:bg-fill-1'
             }`}
           >
             Baby ({counts.baby})
@@ -481,8 +481,8 @@ export const ClinicServices: React.FC = () => {
             onClick={() => setSelectedTab('KIDS')}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
               selectedTab === 'KIDS'
-                ? 'bg-amber-700 text-white shadow-xs'
-                : 'text-[#54656f] dark:text-[#aebac1] hover:bg-[#f0f2f5]'
+                ? 'bg-warning text-on-solid shadow-xs'
+                : 'text-ink-2 hover:bg-fill-1'
             }`}
           >
             Kids ({counts.kids})
@@ -491,8 +491,8 @@ export const ClinicServices: React.FC = () => {
             onClick={() => setSelectedTab('MOMS')}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
               selectedTab === 'MOMS'
-                ? 'bg-purple-700 text-white shadow-xs'
-                : 'text-[#54656f] dark:text-[#aebac1] hover:bg-[#f0f2f5]'
+                ? 'bg-violet text-on-solid shadow-xs'
+                : 'text-ink-2 hover:bg-fill-1'
             }`}
           >
             Moms ({counts.moms})
@@ -501,8 +501,8 @@ export const ClinicServices: React.FC = () => {
             onClick={() => setSelectedTab('BUNDLE')}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition flex items-center space-x-1 ${
               selectedTab === 'BUNDLE'
-                ? 'bg-indigo-700 text-white shadow-xs'
-                : 'text-indigo-700 bg-indigo-50 hover:bg-indigo-100'
+                ? 'bg-info text-on-solid shadow-xs'
+                : 'text-info bg-info-soft hover:bg-info-line'
             }`}
           >
             <Package size={12} />
@@ -512,8 +512,8 @@ export const ClinicServices: React.FC = () => {
             onClick={() => setSelectedTab('ADD_ON')}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition flex items-center space-x-1 ${
               selectedTab === 'ADD_ON'
-                ? 'bg-rose-700 text-white shadow-xs'
-                : 'text-rose-700 bg-rose-50 hover:bg-rose-100'
+                ? 'bg-danger text-on-solid shadow-xs'
+                : 'text-danger bg-danger-soft hover:bg-danger-line'
             }`}
           >
             <PlusCircle size={12} />
@@ -523,18 +523,18 @@ export const ClinicServices: React.FC = () => {
 
         {/* Search */}
         <div className="relative min-w-[220px]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8696a0]" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Cari layanan / kata kunci..."
-            className="w-full pl-8 pr-3 py-1.5 bg-[#f8fafc] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] focus:bg-white transition"
+            className="w-full pl-8 pr-3 py-1.5 bg-surface-2 border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent focus:bg-surface transition"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef]"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-3 hover:text-ink"
             >
               <X size={12} />
             </button>
@@ -544,12 +544,12 @@ export const ClinicServices: React.FC = () => {
 
       {loading ? (
         <div className="flex justify-center items-center py-20">
-          <Loader className="animate-spin text-[#008069]" size={32} />
+          <Loader className="animate-spin text-accent" size={32} />
         </div>
       ) : (
-        <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl overflow-hidden shadow-xs">
+        <div className="bg-surface border border-divider rounded-2xl overflow-hidden shadow-xs">
           {/* Mobile Card Stack (< md) */}
-          <div className="md:hidden divide-y divide-[#e9edef] dark:divide-[#2a3942]">
+          <div className="md:hidden divide-y divide-divider">
             {filteredServices.map(srv => {
               const isBundle = srv.category === 'BUNDLE' || srv.serviceType === 'BUNDLE' || (Array.isArray(srv.bundleItemIds) && srv.bundleItemIds.length >= 2);
               const isAddon = srv.category === 'ADD_ON' || srv.serviceType === 'ADD_ON' || srv.isAddon === true;
@@ -564,53 +564,53 @@ export const ClinicServices: React.FC = () => {
                   <div className="flex items-start justify-between gap-2">
                     <div className="space-y-1">
                       <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
-                        <span className="font-bold text-[#111b21] dark:text-[#e9edef] text-sm">{srv.name}</span>
+                        <span className="font-bold text-ink text-sm">{srv.name}</span>
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
                           isBundle
-                            ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
+                            ? 'bg-info-soft text-info border border-info-line'
                             : isAddon
-                              ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                              ? 'bg-danger-soft text-danger border border-danger-line'
                               : srv.category === 'BABY' 
-                                ? 'bg-sky-100 text-sky-800 border border-sky-200' 
+                                ? 'bg-info-soft text-info border border-info-line' 
                                 : srv.category === 'KIDS'
-                                  ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                  ? 'bg-warning-soft text-warning border border-warning-line'
                                   : srv.category === 'MOMS'
-                                    ? 'bg-purple-100 text-purple-800 border border-purple-200'
-                                    : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                    ? 'bg-violet-soft text-violet border border-violet-line'
+                                    : 'bg-success-soft text-success border border-success-line'
                         }`}>
                           {isBundle ? 'BUNDLE' : isAddon ? 'ADD-ON' : srv.category}
                         </span>
                       </div>
-                      <div className="text-[10px] text-[#8696a0] font-mono">ID: {srv.id}</div>
+                      <div className="text-[10px] text-ink-3 font-mono">ID: {srv.id}</div>
                     </div>
-                    <div className="flex items-center space-x-1 shrink-0 text-xs text-[#54656f] dark:text-[#aebac1]">
-                      <Clock size={12} className="text-[#8696a0]" />
+                    <div className="flex items-center space-x-1 shrink-0 text-xs text-ink-2">
+                      <Clock size={12} className="text-ink-3" />
                       <span>{srv.durationMinutes || 0} mnt</span>
                     </div>
                   </div>
 
                   {srv.description && (
-                    <p className="text-xs text-[#54656f] dark:text-[#aebac1] line-clamp-2">{srv.description}</p>
+                    <p className="text-xs text-ink-2 line-clamp-2">{srv.description}</p>
                   )}
 
                   {srv.ageTier?.label && (
-                    <div className="text-[11px] text-[#667781] dark:text-[#8696a0]">
-                      Target: <span className="font-medium text-[#111b21] dark:text-[#e9edef]">{srv.ageTier.label}</span>
+                    <div className="text-[11px] text-ink-3">
+                      Target: <span className="font-medium text-ink">{srv.ageTier.label}</span>
                     </div>
                   )}
 
                   {/* Bundle Components */}
                   {isBundle && bundleComponents.length > 0 && (
-                    <div className="p-2.5 bg-indigo-50/70 dark:bg-[#202c33] border border-indigo-100 dark:border-[#2a3942] rounded-xl space-y-1.5">
-                      <div className="text-[10px] font-bold text-indigo-900 dark:text-[#aebac1] flex items-center space-x-1">
-                        <Package size={11} className="text-indigo-600" />
+                    <div className="p-2.5 bg-indigo-50/70 dark:bg-fill-1 border border-indigo-100 dark:border-divider rounded-xl space-y-1.5">
+                      <div className="text-[10px] font-bold text-indigo-900 dark:text-ink-2 flex items-center space-x-1">
+                        <Package size={11} className="text-info" />
                         <span>Termasuk {bundleComponents.length} Layanan:</span>
                       </div>
                       <div className="flex flex-wrap gap-1">
                         {bundleComponents.map((c) => (
                           <span
                             key={c.id}
-                            className="inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-medium bg-white dark:bg-transparent text-indigo-800 dark:text-[#aebac1] border border-indigo-200 dark:border-[#2a3942]"
+                            className="inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-medium bg-white dark:bg-transparent text-indigo-800 dark:text-ink-2 border border-indigo-200 dark:border-divider"
                           >
                             {c.name}
                           </span>
@@ -623,16 +623,16 @@ export const ClinicServices: React.FC = () => {
                   <div className="flex items-center justify-between pt-1">
                     <div className="space-y-0.5">
                       {origPrice > 0 && origPrice !== promPrice && (
-                        <div className="text-xs text-[#8696a0] line-through">
+                        <div className="text-xs text-ink-3 line-through">
                           Rp {origPrice.toLocaleString('id-ID')}
                         </div>
                       )}
-                      <div className="flex items-center space-x-1 text-sm font-bold text-[#008069]">
+                      <div className="flex items-center space-x-1 text-sm font-bold text-accent">
                         <Tag size={13} />
                         <span>Rp {promPrice.toLocaleString('id-ID')}</span>
                       </div>
                       {savings > 0 && (
-                        <span className="text-[10px] text-emerald-600 font-semibold">
+                        <span className="text-[10px] text-success font-semibold">
                           Hemat Rp {savings.toLocaleString('id-ID')} ({savingsPercent}%)
                         </span>
                       )}
@@ -646,10 +646,10 @@ export const ClinicServices: React.FC = () => {
                         onLabel="Aktif"
                         offLabel="Nonaktif"
                       />
-                      <div className="flex items-center space-x-1 pl-1 border-l border-[#e9edef] dark:border-[#2a3942]">
+                      <div className="flex items-center space-x-1 pl-1 border-l border-divider">
                         <button
                           onClick={() => openEditModal(srv)}
-                          className="w-9 h-9 flex items-center justify-center rounded-xl bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#aebac1] active:scale-95 transition"
+                          className="w-9 h-9 flex items-center justify-center rounded-xl bg-fill-1 text-ink-2 active:scale-95 transition"
                           title="Edit Layanan"
                         >
                           <Edit3 size={15} />
@@ -669,7 +669,7 @@ export const ClinicServices: React.FC = () => {
             })}
 
             {filteredServices.length === 0 && (
-              <div className="p-8 text-center text-xs text-[#667781] dark:text-[#8696a0]">
+              <div className="p-8 text-center text-xs text-ink-3">
                 {searchQuery
                   ? 'Tidak ada layanan yang cocok dengan pencarian Anda.'
                   : 'Belum ada layanan pada kategori ini. Klik "Tambah Layanan" untuk mulai.'}
@@ -679,9 +679,9 @@ export const ClinicServices: React.FC = () => {
 
           {/* Desktop Table (>= md) */}
           <div className="hidden md:block overflow-x-auto">
-            <table className="w-full text-left text-xs text-[#111b21] dark:text-[#e9edef]">
+            <table className="w-full text-left text-xs text-ink">
               <thead>
-                <tr className="border-b border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#1c272e] text-[#667781] dark:text-[#8696a0] font-bold uppercase text-[10px]">
+                <tr className="border-b border-divider bg-surface-2 dark:bg-surface-2 text-ink-3 font-bold uppercase text-[10px]">
                   <th className="px-4 py-3.5">Layanan / Detail Paket</th>
                   <th className="px-4 py-3.5">Tipe & Kategori</th>
                   <th className="px-4 py-3.5">Target Usia</th>
@@ -692,7 +692,7 @@ export const ClinicServices: React.FC = () => {
                   <th className="px-4 py-3.5 text-right">Aksi</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#e9edef]">
+              <tbody className="divide-y divide-divider">
                 {filteredServices.map(srv => {
                   const isBundle = srv.category === 'BUNDLE' || srv.serviceType === 'BUNDLE' || (Array.isArray(srv.bundleItemIds) && srv.bundleItemIds.length >= 2);
                   const isAddon = srv.category === 'ADD_ON' || srv.serviceType === 'ADD_ON' || srv.isAddon === true;
@@ -705,37 +705,37 @@ export const ClinicServices: React.FC = () => {
                   return (
                     <tr
                       key={srv.id}
-                      className={`hover:bg-[#f8fafc] dark:hover:bg-[#202c33] transition-colors ${!srv.isActive ? 'opacity-50' : ''}`}
+                      className={`hover:bg-surface-2 dark:hover:bg-fill-1 transition-colors ${!srv.isActive ? 'opacity-50' : ''}`}
                     >
                       <td className="px-4 py-3.5">
                         <div className="flex items-center space-x-1.5">
-                          <span className="font-bold text-[#111b21] dark:text-[#e9edef] text-xs">{srv.name}</span>
+                          <span className="font-bold text-ink text-xs">{srv.name}</span>
                           {isBundle && (
-                            <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-800 rounded-md text-[9px] font-bold uppercase">
+                            <span className="px-1.5 py-0.5 bg-info-soft text-info rounded-md text-[9px] font-bold uppercase">
                               Bundle
                             </span>
                           )}
                           {isAddon && (
-                            <span className="px-1.5 py-0.5 bg-rose-100 text-rose-800 rounded-md text-[9px] font-bold uppercase">
+                            <span className="px-1.5 py-0.5 bg-danger-soft text-danger rounded-md text-[9px] font-bold uppercase">
                               Add-on
                             </span>
                           )}
                         </div>
-                        <div className="text-[10px] text-[#8696a0] font-mono mt-0.5">ID: {srv.id}</div>
-                        <div className="text-[11px] text-[#54656f] dark:text-[#aebac1] mt-0.5 line-clamp-1">{srv.description}</div>
+                        <div className="text-[10px] text-ink-3 font-mono mt-0.5">ID: {srv.id}</div>
+                        <div className="text-[11px] text-ink-2 mt-0.5 line-clamp-1">{srv.description}</div>
 
                         {/* Bundle Component Pills */}
                         {isBundle && bundleComponents.length > 0 && (
-                          <div className="mt-2 p-2 bg-indigo-50/70 dark:bg-[#202c33] border border-indigo-100 dark:border-[#2a3942] rounded-xl space-y-1">
-                            <div className="text-[10px] font-bold text-indigo-900 dark:text-[#aebac1] flex items-center space-x-1">
-                              <Package size={11} className="text-indigo-600" />
+                          <div className="mt-2 p-2 bg-indigo-50/70 dark:bg-fill-1 border border-indigo-100 dark:border-divider rounded-xl space-y-1">
+                            <div className="text-[10px] font-bold text-indigo-900 dark:text-ink-2 flex items-center space-x-1">
+                              <Package size={11} className="text-info" />
                               <span>Termasuk {bundleComponents.length} Layanan Eksisting:</span>
                             </div>
                             <div className="flex flex-wrap gap-1">
                               {bundleComponents.map((c) => (
                                 <span
                                   key={c.id}
-                                  className="inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-medium bg-white dark:bg-transparent text-indigo-800 dark:text-[#aebac1] border border-indigo-200 dark:border-[#2a3942]"
+                                  className="inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-medium bg-white dark:bg-transparent text-indigo-800 dark:text-ink-2 border border-indigo-200 dark:border-divider"
                                 >
                                   {c.name} (Rp {Number(c.originalPrice || 0).toLocaleString('id-ID')})
                                 </span>
@@ -746,7 +746,7 @@ export const ClinicServices: React.FC = () => {
 
                         {/* Addon Guidance Pill */}
                         {isAddon && (
-                          <div className="mt-1 text-[10px] text-rose-700 flex items-center space-x-1">
+                          <div className="mt-1 text-[10px] text-danger flex items-center space-x-1">
                             <Info size={11} />
                             <span>Wajib dikombinasikan dengan layanan utama.</span>
                           </div>
@@ -756,41 +756,41 @@ export const ClinicServices: React.FC = () => {
                       <td className="px-4 py-3.5">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
                           isBundle
-                            ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
+                            ? 'bg-info-soft text-info border border-info-line'
                             : isAddon
-                              ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                              ? 'bg-danger-soft text-danger border border-danger-line'
                               : srv.category === 'BABY' 
-                                ? 'bg-sky-100 text-sky-800 border border-sky-200' 
+                                ? 'bg-info-soft text-info border border-info-line' 
                                 : srv.category === 'KIDS'
-                                  ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                  ? 'bg-warning-soft text-warning border border-warning-line'
                                   : srv.category === 'MOMS'
-                                    ? 'bg-purple-100 text-purple-800 border border-purple-200'
-                                    : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                    ? 'bg-violet-soft text-violet border border-violet-line'
+                                    : 'bg-success-soft text-success border border-success-line'
                         }`}>
                           {isBundle ? 'BUNDLE' : isAddon ? 'ADD-ON' : srv.category}
                         </span>
                       </td>
 
-                      <td className="px-4 py-3.5 text-xs text-[#54656f] dark:text-[#aebac1]">{srv.ageTier?.label || 'Semua Usia'}</td>
+                      <td className="px-4 py-3.5 text-xs text-ink-2">{srv.ageTier?.label || 'Semua Usia'}</td>
 
-                      <td className="px-4 py-3.5 text-xs text-[#54656f] dark:text-[#aebac1]">
+                      <td className="px-4 py-3.5 text-xs text-ink-2">
                         <div className="flex items-center space-x-1">
-                          <Clock size={12} className="text-[#8696a0]" />
+                          <Clock size={12} className="text-ink-3" />
                           <span>{srv.durationMinutes || 0} mnt</span>
                         </div>
                       </td>
 
-                      <td className="px-4 py-3.5 text-xs text-[#8696a0] text-right line-through">
+                      <td className="px-4 py-3.5 text-xs text-ink-3 text-right line-through">
                         Rp {origPrice.toLocaleString('id-ID')}
                       </td>
 
                       <td className="px-4 py-3.5 text-xs text-right">
-                        <div className="flex items-center justify-end space-x-0.5 font-bold text-[#008069]">
+                        <div className="flex items-center justify-end space-x-0.5 font-bold text-accent">
                           <Tag size={11} />
                           <span>Rp {promPrice.toLocaleString('id-ID')}</span>
                         </div>
                         {savings > 0 && (
-                          <div className="text-[10px] text-emerald-600 font-semibold mt-0.5">
+                          <div className="text-[10px] text-success font-semibold mt-0.5">
                             Hemat Rp {savings.toLocaleString('id-ID')} ({savingsPercent}%)
                           </div>
                         )}
@@ -811,14 +811,14 @@ export const ClinicServices: React.FC = () => {
                         <div className="flex items-center justify-end space-x-1">
                           <button
                             onClick={() => openEditModal(srv)}
-                            className="p-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:text-[#e9edef] transition border border-[#d1d7db] dark:border-[#374248] shadow-xs"
+                            className="p-1.5 rounded-xl bg-surface hover:bg-fill-1 text-ink-2 hover:text-ink transition border border-divider shadow-xs"
                             title="Edit Layanan"
                           >
                             <Edit3 size={12} />
                           </button>
                           <button
                             onClick={() => handleDelete(srv.id)}
-                            className="p-1.5 rounded-xl bg-white hover:bg-rose-50 text-rose-600 hover:text-rose-700 transition border border-[#d1d7db] dark:border-[#374248] shadow-xs"
+                            className="p-1.5 rounded-xl bg-surface hover:bg-danger-soft text-danger hover:text-danger transition border border-divider shadow-xs"
                             title="Hapus Layanan"
                           >
                             <Trash2 size={12} />
@@ -830,7 +830,7 @@ export const ClinicServices: React.FC = () => {
                 })}
                 {filteredServices.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-4 py-12 text-center text-xs text-[#667781] dark:text-[#8696a0]">
+                    <td colSpan={8} className="px-4 py-12 text-center text-xs text-ink-3">
                       {searchQuery
                         ? 'Tidak ada layanan yang cocok dengan pencarian Anda.'
                         : 'Belum ada layanan pada kategori ini. Klik "Tambah Layanan" untuk mulai.'}
@@ -850,25 +850,25 @@ export const ClinicServices: React.FC = () => {
           onClick={() => setIsModalOpen(false)}
         >
           <div
-            className="bg-white dark:bg-[#111b21] dark:text-[#e9edef] border border-[#e9edef] dark:border-[#2a3942] rounded-t-3xl sm:rounded-2xl w-full max-w-xl overflow-hidden flex flex-col shadow-xl animate-in fade-in zoom-in-95 duration-150 max-h-[88dvh] sm:max-h-[85vh]"
+            className="bg-surface dark:text-ink border border-divider rounded-t-3xl sm:rounded-2xl w-full max-w-xl overflow-hidden flex flex-col shadow-xl animate-in fade-in zoom-in-95 duration-150 max-h-[88dvh] sm:max-h-[85vh]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="w-12 h-1.5 bg-[#d1d7db] dark:bg-[#374248] rounded-full mx-auto mt-2.5 sm:hidden shrink-0" />
+            <div className="w-12 h-1.5 bg-divider dark:bg-divider rounded-full mx-auto mt-2.5 sm:hidden shrink-0" />
             
             {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-[#e9edef] dark:border-[#2a3942] flex justify-between items-center bg-[#f8fafc] dark:bg-[#1c272e]">
+            <div className="px-6 py-4 border-b border-divider flex justify-between items-center bg-surface-2 dark:bg-surface-2">
               <div>
-                <h3 className="font-bold text-[#111b21] dark:text-[#e9edef] text-sm flex items-center space-x-2">
-                  <Activity className="text-[#008069]" size={16} />
+                <h3 className="font-bold text-ink text-sm flex items-center space-x-2">
+                  <Activity className="text-accent" size={16} />
                   <span>{editingService ? `Edit Layanan: ${editingService.name}` : 'Tambah Layanan Baru'}</span>
                 </h3>
-                <p className="text-[11px] text-[#667781] dark:text-[#8696a0] mt-0.5">
+                <p className="text-[11px] text-ink-3 mt-0.5">
                   Tentukan tipe layanan, komponen gabungan (bundle), durasi, dan harga khusus.
                 </p>
               </div>
               <button 
                 onClick={() => setIsModalOpen(false)}
-                className="p-2 rounded-xl text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#202c33] active:scale-95 transition"
+                className="p-2 rounded-xl text-ink-3 hover:text-ink hover:bg-fill-1 active:scale-95 transition"
               >
                 <X size={18} />
               </button>
@@ -879,15 +879,15 @@ export const ClinicServices: React.FC = () => {
               
               {/* Service Type Switcher */}
               <div className="space-y-1.5">
-                <label className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold block">Jenis / Sifat Layanan</label>
+                <label className="text-[10px] text-ink-3 uppercase font-bold block">Jenis / Sifat Layanan</label>
                 <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => handleChangeServiceType('STANDARD')}
                     className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition ${
                       formServiceType === 'STANDARD'
-                        ? 'border-[#008069] bg-[#008069]/5 dark:bg-[#00a884]/15 text-[#008069] dark:text-[#00a884] font-bold shadow-xs'
-                        : 'border-[#d1d7db] dark:border-[#374248] bg-white dark:bg-transparent text-[#54656f] dark:text-[#aebac1] hover:bg-[#f8fafc] dark:hover:bg-[#202c33]'
+                        ? 'border-accent bg-accent/5 dark:bg-accent-soft text-accent font-bold shadow-xs'
+                        : 'border-divider bg-white dark:bg-transparent text-ink-2 hover:bg-surface-2 dark:hover:bg-fill-1'
                     }`}
                   >
                     <div className="flex items-center justify-between">
@@ -902,8 +902,8 @@ export const ClinicServices: React.FC = () => {
                     onClick={() => handleChangeServiceType('BUNDLE')}
                     className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition ${
                       formServiceType === 'BUNDLE'
-                        ? 'border-indigo-600 bg-indigo-50 dark:bg-[#202c33] text-indigo-800 dark:text-[#aebac1] font-bold shadow-xs'
-                        : 'border-[#d1d7db] dark:border-[#374248] bg-white dark:bg-transparent text-[#54656f] dark:text-[#aebac1] hover:bg-[#f8fafc] dark:hover:bg-[#202c33]'
+                        ? 'border-indigo-600 bg-indigo-50 dark:bg-fill-1 text-indigo-800 dark:text-ink-2 font-bold shadow-xs'
+                        : 'border-divider bg-white dark:bg-transparent text-ink-2 hover:bg-surface-2 dark:hover:bg-fill-1'
                     }`}
                   >
                     <div className="flex items-center justify-between">
@@ -921,8 +921,8 @@ export const ClinicServices: React.FC = () => {
                     onClick={() => handleChangeServiceType('ADD_ON')}
                     className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition ${
                       formServiceType === 'ADD_ON'
-                        ? 'border-rose-600 bg-rose-50 dark:bg-rose-950/30 text-rose-800 dark:text-[#f87171] font-bold shadow-xs'
-                        : 'border-[#d1d7db] dark:border-[#374248] bg-white dark:bg-transparent text-[#54656f] dark:text-[#aebac1] hover:bg-[#f8fafc] dark:hover:bg-[#202c33]'
+                        ? 'border-rose-600 bg-rose-50 dark:bg-rose-950/30 text-rose-800 dark:text-danger font-bold shadow-xs'
+                        : 'border-divider bg-white dark:bg-transparent text-ink-2 hover:bg-surface-2 dark:hover:bg-fill-1'
                     }`}
                   >
                     <div className="flex items-center justify-between">
@@ -939,23 +939,23 @@ export const ClinicServices: React.FC = () => {
 
               {/* BUNDLE COMPONENT PICKER */}
               {formServiceType === 'BUNDLE' && (
-                <div className="p-3.5 bg-indigo-50/70 dark:bg-[#202c33] border border-indigo-200 dark:border-[#2a3942] rounded-2xl space-y-3">
+                <div className="p-3.5 bg-indigo-50/70 dark:bg-fill-1 border border-indigo-200 dark:border-divider rounded-2xl space-y-3">
                   <div className="flex items-start justify-between">
                     <div>
                       <div className="text-xs font-bold text-indigo-950 dark:text-indigo-200 flex items-center space-x-1.5">
-                        <Package size={14} className="text-indigo-600" />
+                        <Package size={14} className="text-info" />
                         <span>Pilih Layanan Penyusun Bundle (Minimal 2 Layanan)</span>
                       </div>
-                      <p className="text-[11px] text-indigo-800/80 mt-0.5">
+                      <p className="text-[11px] text-info/80 mt-0.5">
                         Centang layanan eksisting yang akan digabungkan menjadi satu paket dengan harga hemat.
                       </p>
                     </div>
-                    <span className="px-2 py-0.5 bg-indigo-200 text-indigo-900 rounded-lg text-[10px] font-bold">
+                    <span className="px-2 py-0.5 bg-info-line text-info rounded-lg text-[10px] font-bold">
                       {formBundleItemIds.length} Terpilih
                     </span>
                   </div>
 
-                  <div className="max-h-40 overflow-y-auto space-y-1.5 bg-white dark:bg-[#111b21] p-2.5 rounded-xl border border-indigo-200 dark:border-[#2a3942]">
+                  <div className="max-h-40 overflow-y-auto space-y-1.5 bg-surface p-2.5 rounded-xl border border-indigo-200 dark:border-divider">
                     {candidateBundleServices.map((cand) => {
                       const isSelected = formBundleItemIds.includes(cand.id);
                       return (
@@ -963,8 +963,8 @@ export const ClinicServices: React.FC = () => {
                           key={cand.id}
                           className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition text-xs ${
                             isSelected
-                              ? 'bg-indigo-100/70 text-indigo-950 font-semibold border border-indigo-300'
-                              : 'hover:bg-gray-50 text-[#111b21] dark:text-[#e9edef]'
+                              ? 'bg-info-soft/70 text-info font-semibold border border-info-line'
+                              : 'hover:bg-fill-1 text-ink'
                           }`}
                         >
                           <div className="flex items-center space-x-2.5">
@@ -972,13 +972,13 @@ export const ClinicServices: React.FC = () => {
                               type="checkbox"
                               checked={isSelected}
                               onChange={() => handleToggleBundleItem(cand.id)}
-                              className="rounded text-indigo-600 focus:ring-indigo-500"
+                              className="rounded text-info focus:ring-info"
                             />
                             <span>{cand.name}</span>
                           </div>
-                          <div className="text-[11px] text-[#667781] dark:text-[#8696a0] space-x-2">
+                          <div className="text-[11px] text-ink-3 space-x-2">
                             <span>{cand.durationMinutes} mnt</span>
-                            <span className="font-semibold text-indigo-900">Rp {cand.originalPrice.toLocaleString('id-ID')}</span>
+                            <span className="font-semibold text-info">Rp {cand.originalPrice.toLocaleString('id-ID')}</span>
                           </div>
                         </label>
                       );
@@ -986,14 +986,14 @@ export const ClinicServices: React.FC = () => {
                   </div>
 
                   {/* Realtime Bundle Calculations */}
-                    <div className="p-2.5 bg-white dark:bg-[#111b21] rounded-xl border border-indigo-100 dark:border-[#2a3942] space-y-1.5">
-                    <div className="flex justify-between text-xs text-[#54656f] dark:text-[#aebac1]">
+                    <div className="p-2.5 bg-surface rounded-xl border border-indigo-100 dark:border-divider space-y-1.5">
+                    <div className="flex justify-between text-xs text-ink-2">
                       <span>Total Durasi Penyusun:</span>
-                      <span className="font-bold text-[#111b21] dark:text-[#e9edef]">{bundleComponentDetails.totalDuration} Menit</span>
+                      <span className="font-bold text-ink">{bundleComponentDetails.totalDuration} Menit</span>
                     </div>
-                    <div className="flex justify-between text-xs text-[#54656f] dark:text-[#aebac1]">
+                    <div className="flex justify-between text-xs text-ink-2">
                       <span>Total Harga Normal Satuan:</span>
-                      <span className="font-bold text-[#111b21] dark:text-[#e9edef]">Rp {bundleComponentDetails.totalOriginalPrice.toLocaleString('id-ID')}</span>
+                      <span className="font-bold text-ink">Rp {bundleComponentDetails.totalOriginalPrice.toLocaleString('id-ID')}</span>
                     </div>
 
                     {formBundleItemIds.length >= 2 ? (
@@ -1013,7 +1013,7 @@ export const ClinicServices: React.FC = () => {
                         </div>
                       )
                     ) : (
-                      <div className="text-[11px] text-amber-700 flex items-center space-x-1">
+                      <div className="text-[11px] text-warning flex items-center space-x-1">
                         <AlertCircle size={12} />
                         <span>Pilih minimal 2 layanan untuk mengaktifkan paket bundle.</span>
                       </div>
@@ -1025,10 +1025,10 @@ export const ClinicServices: React.FC = () => {
               {/* ADD-ON GUIDANCE BANNER */}
               {formServiceType === 'ADD_ON' && (
                 <div className="p-3 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/40 rounded-2xl text-rose-900 dark:text-rose-200 text-xs flex items-start space-x-2">
-                  <Info size={16} className="text-rose-600 shrink-0 mt-0.5" />
+                  <Info size={16} className="text-danger shrink-0 mt-0.5" />
                   <div>
                     <div className="font-bold">Layanan Tambahan (Add-on)</div>
-                    <div className="text-[11px] text-rose-800/90 mt-0.5">
+                    <div className="text-[11px] text-danger/90 mt-0.5">
                       Layanan ini tidak bisa berdiri sendiri. Customer di WhatsApp maupun staf di form reservasi wajib memilih minimal satu layanan utama sebelum dapat menambahkan layanan add-on ini.
                     </div>
                   </div>
@@ -1037,36 +1037,36 @@ export const ClinicServices: React.FC = () => {
 
               {!editingService && (
                 <div className="space-y-1">
-                  <label className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold block">ID Layanan (Unik)</label>
+                  <label className="text-[10px] text-ink-3 uppercase font-bold block">ID Layanan (Unik)</label>
                   <input
                     type="text"
                     value={formId}
                     onChange={(e) => setFormId(e.target.value)}
                     placeholder="Contoh: paket-bundling-ceria (kosongkan untuk generate otomatis)"
-                    className="w-full p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs"
                   />
                 </div>
               )}
 
               <div className="space-y-1">
-                <label className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold block">Nama Layanan / Treatment</label>
+                <label className="text-[10px] text-ink-3 uppercase font-bold block">Nama Layanan / Treatment</label>
                 <input
                   type="text"
                   required
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
                   placeholder="Contoh: Paket Pijat Ceria + Sinar Moksa"
-                  className="w-full p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
+                  className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold block">Kategori</label>
+                  <label className="text-[10px] text-ink-3 uppercase font-bold block">Kategori</label>
                   <select
                     value={formCategory}
                     onChange={(e) => setFormCategory(e.target.value as any)}
-                    className="w-full p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs"
                   >
                     {formServiceType === 'BUNDLE' ? (
                       <option value="BUNDLE">BUNDLE (Paket Gabungan)</option>
@@ -1090,56 +1090,56 @@ export const ClinicServices: React.FC = () => {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold block">Durasi Pengerjaan (Menit)</label>
+                  <label className="text-[10px] text-ink-3 uppercase font-bold block">Durasi Pengerjaan (Menit)</label>
                   <input
                     type="number"
                     required
                     value={formDuration}
                     onChange={(e) => setFormDuration(e.target.value === '' ? '' : Number(e.target.value))}
                     placeholder="40"
-                    className="w-full p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-1">
-                  <label className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold block">Min Usia (Bulan)</label>
+                  <label className="text-[10px] text-ink-3 uppercase font-bold block">Min Usia (Bulan)</label>
                   <input
                     type="number"
                     required
                     value={formMinAge}
                     onChange={(e) => setFormMinAge(e.target.value === '' ? '' : Number(e.target.value))}
                     placeholder="0"
-                    className="w-full p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold block">Max Usia (Bulan)</label>
+                  <label className="text-[10px] text-ink-3 uppercase font-bold block">Max Usia (Bulan)</label>
                   <input
                     type="number"
                     value={formMaxAge}
                     onChange={(e) => setFormMaxAge(e.target.value === '' ? '' : Number(e.target.value))}
                     placeholder="Infinity"
-                    className="w-full p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold block">Label Usia (UI)</label>
+                  <label className="text-[10px] text-ink-3 uppercase font-bold block">Label Usia (UI)</label>
                   <input
                     type="text"
                     required
                     value={formAgeLabel}
                     onChange={(e) => setFormAgeLabel(e.target.value)}
                     placeholder="0 - 24 Bulan"
-                    className="w-full p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold block">
+                  <label className="text-[10px] text-ink-3 uppercase font-bold block">
                     {formServiceType === 'BUNDLE' ? 'Total Harga Normal Gabungan (Rp)' : 'Harga Normal (Rp)'}
                   </label>
                   <input
@@ -1148,11 +1148,11 @@ export const ClinicServices: React.FC = () => {
                     value={formOriginalPrice}
                     onChange={(e) => setFormOriginalPrice(e.target.value === '' ? '' : Number(e.target.value))}
                     placeholder="0"
-                    className="w-full p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold block">
+                  <label className="text-[10px] text-ink-3 uppercase font-bold block">
                     {formServiceType === 'BUNDLE' ? 'Harga Paket Bundle Hemat (Rp)' : 'Harga Promo (Rp)'}
                   </label>
                   <input
@@ -1161,13 +1161,13 @@ export const ClinicServices: React.FC = () => {
                     value={formPromoPrice}
                     onChange={(e) => setFormPromoPrice(e.target.value === '' ? '' : Number(e.target.value))}
                     placeholder="0"
-                    className="w-full p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-bold text-[#008069]"
+                    className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs font-bold text-accent"
                   />
                 </div>
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold block">Jumlah Sesi Paket (Opsional)</label>
+                <label className="text-[10px] text-ink-3 uppercase font-bold block">Jumlah Sesi Paket (Opsional)</label>
                 <input
                   type="number"
                   min={1}
@@ -1175,28 +1175,28 @@ export const ClinicServices: React.FC = () => {
                   value={formTotalSessions}
                   onChange={(e) => setFormTotalSessions(e.target.value === '' ? '' : Number(e.target.value))}
                   placeholder="Contoh: 14 (kosongkan jika bukan paket sesi)"
-                  className="w-full p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
+                  className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs"
                 />
-                <p className="text-[10px] text-[#8696a0]">Jika diisi, layanan ini akan menawarkan pembuatan paket multi-sesi otomatis saat reservasi.</p>
+                <p className="text-[10px] text-ink-3">Jika diisi, layanan ini akan menawarkan pembuatan paket multi-sesi otomatis saat reservasi.</p>
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold block">Deskripsi & Manfaat Treatment</label>
+                <label className="text-[10px] text-ink-3 uppercase font-bold block">Deskripsi & Manfaat Treatment</label>
                 <textarea
                   rows={3}
                   required
                   value={formDescription}
                   onChange={(e) => setFormDescription(e.target.value)}
                   placeholder="Deskripsikan secara lengkap manfaat treatment ini..."
-                  className="w-full p-2.5 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] leading-relaxed resize-none focus:outline-none focus:border-[#008069] shadow-xs"
+                  className="w-full p-2.5 bg-surface border border-divider rounded-xl text-xs text-ink leading-relaxed resize-none focus:outline-none focus:border-accent shadow-xs"
                 />
               </div>
 
               <div className="pt-2">
-                <div className="flex items-center justify-between p-3 rounded-xl bg-[#f8fafc] border border-[#e9edef] dark:border-[#2a3942]">
+                <div className="flex items-center justify-between p-3 rounded-xl bg-surface-2 border border-divider">
                   <div>
-                    <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] block">Status Layanan</span>
-                    <span className="text-[11px] text-[#667781] dark:text-[#8696a0]">Tampilkan di katalog WhatsApp AI Bot & Kalender Reservasi</span>
+                    <span className="text-xs font-bold text-ink block">Status Layanan</span>
+                    <span className="text-[11px] text-ink-3">Tampilkan di katalog WhatsApp AI Bot & Kalender Reservasi</span>
                   </div>
                   <ToggleSwitch
                     checked={formIsActive}
@@ -1209,18 +1209,18 @@ export const ClinicServices: React.FC = () => {
               </div>
 
               {/* Modal Actions */}
-              <div className="flex justify-end space-x-2 pt-3 border-t border-[#e9edef] dark:border-[#2a3942]">
+              <div className="flex justify-end space-x-2 pt-3 border-t border-divider">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] dark:border-[#374248] text-[#111b21] dark:text-[#e9edef] rounded-xl text-xs font-semibold transition flex items-center space-x-1 shadow-xs"
+                  className="px-4 py-2 bg-surface hover:bg-fill-1 border border-divider text-ink rounded-xl text-xs font-semibold transition flex items-center space-x-1 shadow-xs"
                 >
                   <X size={13} />
                   <span>Batal</span>
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold transition flex items-center space-x-1 shadow-xs"
+                  className="px-4 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-bold transition flex items-center space-x-1 shadow-xs"
                 >
                   <Check size={13} />
                   <span>Simpan Layanan</span>

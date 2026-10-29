@@ -48,21 +48,21 @@ export const OtwConfirmModal: React.FC<OtwConfirmModalProps> = ({
       aria-label="Konfirmasi berangkat OTW"
     >
       <div
-        className="bg-white dark:bg-[#111b21] rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 w-full max-w-md shadow-2xl border border-[#e9edef] dark:border-[#2a3942] space-y-4 text-left animate-modalScaleUp max-h-[90dvh] overflow-y-auto"
+        className="bg-surface rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 w-full max-w-md shadow-2xl border border-divider space-y-4 text-left animate-modalScaleUp max-h-[90dvh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-12 h-1.5 bg-[#d1d7db] dark:bg-[#374248] rounded-full mx-auto -mt-2 mb-1 sm:hidden" />
+        <div className="w-12 h-1.5 bg-strong rounded-full mx-auto -mt-2 mb-1 sm:hidden" />
 
         <div className="flex items-start justify-between">
-          <h3 className="text-base font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
-            <Navigation className="text-[#008069] flex-shrink-0" size={20} />
+          <h3 className="text-base font-bold text-ink flex items-center space-x-2">
+            <Navigation className="text-accent flex-shrink-0" size={20} />
             <span>Mulai Jalan (OTW)</span>
           </h3>
           <button
             type="button"
             onClick={onClose}
             disabled={sending}
-            className="text-[#667781] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] p-1 rounded-full hover:bg-[#f0f2f5] dark:hover:bg-[#202c33] disabled:opacity-40"
+            className="text-ink-2 hover:text-ink p-1 rounded-full hover:bg-fill-1 disabled:opacity-40"
             aria-label="Tutup"
           >
             <X size={18} />
@@ -73,7 +73,7 @@ export const OtwConfirmModal: React.FC<OtwConfirmModalProps> = ({
         <div
           className={`rounded-xl border p-3 text-xs leading-relaxed flex items-start gap-2 ${
             hasGps
-              ? 'border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-[#00a884]'
+              ? 'border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-accent'
               : 'border-amber-300 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200'
           }`}
         >
@@ -108,10 +108,10 @@ export const OtwConfirmModal: React.FC<OtwConfirmModalProps> = ({
 
         {/* Pratinjau pesan ke pasien */}
         <div className="space-y-1.5">
-          <p className="text-[11px] font-semibold text-[#667781] dark:text-[#8696a0]">
+          <p className="text-[11px] font-semibold text-ink-2">
             Pesan WhatsApp ke {patientName}:
           </p>
-          <p className="text-xs text-[#111b21] dark:text-[#e9edef] leading-relaxed whitespace-pre-wrap bg-[#f0f2f5] dark:bg-[#202c33] p-3.5 rounded-xl border border-[#e9edef] dark:border-[#2a3942]">
+          <p className="text-xs text-ink leading-relaxed whitespace-pre-wrap bg-fill-1 p-3.5 rounded-xl border border-divider">
             {draft}
           </p>
         </div>
@@ -121,7 +121,7 @@ export const OtwConfirmModal: React.FC<OtwConfirmModalProps> = ({
             type="button"
             onClick={onConfirm}
             disabled={sending}
-            className="w-full min-h-[48px] flex items-center justify-center space-x-2 py-3 px-4 bg-[#008069] hover:bg-[#00a884] text-white rounded-2xl text-sm font-bold transition active:scale-[0.98] shadow-xs disabled:opacity-50"
+            className="w-full min-h-[48px] flex items-center justify-center space-x-2 py-3 px-4 bg-accent hover:bg-accent-hover text-white rounded-2xl text-sm font-bold transition active:scale-[0.98] shadow-xs disabled:opacity-50"
           >
             {sending ? (
               <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
@@ -134,7 +134,7 @@ export const OtwConfirmModal: React.FC<OtwConfirmModalProps> = ({
             type="button"
             onClick={onClose}
             disabled={sending}
-            className="w-full min-h-[44px] py-2.5 px-4 bg-white dark:bg-[#202c33] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] border border-[#d1d7db] dark:border-[#2a3942] text-[#54656f] dark:text-[#e9edef] rounded-2xl text-xs font-bold transition active:scale-[0.98] disabled:opacity-40"
+            className="w-full min-h-[44px] py-2.5 px-4 bg-surface hover:bg-fill-1 border border-divider text-ink-2 dark:text-ink rounded-2xl text-xs font-bold transition active:scale-[0.98] disabled:opacity-40"
           >
             Batal
           </button>

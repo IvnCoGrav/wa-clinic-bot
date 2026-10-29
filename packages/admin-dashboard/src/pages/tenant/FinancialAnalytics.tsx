@@ -45,6 +45,7 @@ import {
 import { stripBufferMetadata, cleanTreatmentName } from '../../utils/treatmentStringParser';
 import { resolveStaffName } from '../../utils/resolveStaffName';
 import { useTheme } from '../../contexts/ThemeContext';
+import { chartTheme } from '../../lib/chartTheme';
 
 interface MonthlyKpiSummary {
   totalRevenue: number;
@@ -134,8 +135,8 @@ interface MonthlyAnalyticsData {
   transactions: TransactionLedgerItem[];
 }
 
-const CATEGORY_COLORS = ['#008069', '#0284c7', '#8b5cf6', '#f59e0b', '#ec4899', '#10b981', '#64748b'];
-const PAYMENT_COLORS = ['#059669', '#0284c7', '#d97706', '#dc2626'];
+const CATEGORY_COLORS = chartTheme.series;
+const PAYMENT_COLORS = [chartTheme.series[0], chartTheme.series[1], chartTheme.series[3], chartTheme.danger];
 
 function formatRupiah(amount: number): string {
   return 'Rp ' + (amount || 0).toLocaleString('id-ID');
@@ -162,18 +163,18 @@ function getLedgerPaymentLabel(status: TransactionLedgerItem['paymentStatus']): 
 
 function getLedgerPaymentClass(status: TransactionLedgerItem['paymentStatus']): string {
   if (status === 'LUNAS') {
-    return 'bg-[#d9fdd3] dark:bg-[#005c4b]/50 text-[#008069] dark:text-[#4ae3b5] border border-[#00a884]/30';
+    return 'bg-bubble-out text-accent border border-accent/30';
   }
   if (status === 'SELESAI_BELUM_VERIFIKASI') {
-    return 'bg-sky-100 dark:bg-[#202c33]/20 text-sky-800 dark:text-[#38bdf8] border border-sky-300 dark:border-sky-800/40';
+    return 'bg-sky-100 dark:bg-fill-1/20 text-sky-800 dark:text-info border border-sky-300 dark:border-sky-800/40';
   }
-  return 'bg-amber-100 dark:bg-amber-950/30 text-amber-800 dark:text-[#f59e0b] border border-amber-300';
+  return 'bg-amber-100 dark:bg-amber-950/30 text-amber-800 dark:text-warning border border-amber-300';
 }
 
 export const FinancialAnalytics: React.FC = () => {
   const { toast } = useUiFeedback();
   const { resolved } = useTheme();
-  const gridStroke = resolved === 'dark' ? '#2a3942' : '#f0f2f5';
+  const gridStroke = chartTheme.grid.stroke;
 
   const now = new Date();
   const [selectedYear, setSelectedYear] = useState<number>(now.getFullYear());
@@ -293,17 +294,17 @@ export const FinancialAnalytics: React.FC = () => {
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
       {/* Top Header & Time Controls */}
-      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#e9edef] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-surface p-4 sm:p-5 rounded-2xl border border-divider shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center space-x-2.5">
-            <div className="h-10 w-10 rounded-xl bg-[#008069] text-white flex items-center justify-center shadow-xs">
+            <div className="h-10 w-10 rounded-xl bg-accent text-accent-ink flex items-center justify-center shadow-xs">
               <TrendingUp size={22} />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-[#111b21] tracking-tight">
+              <h1 className="text-xl font-bold text-ink tracking-tight">
                 Transaksi & Pendapatan
               </h1>
-              <p className="text-xs text-[#54656f] mt-0.5">
+              <p className="text-xs text-ink-2 mt-0.5">
                 Rekap performa omset, tren pendapatan harian, dan buku besar reservasi klinik.
               </p>
             </div>
@@ -313,13 +314,13 @@ export const FinancialAnalytics: React.FC = () => {
         {/* Month Selector Controls & Export */}
         <div className="flex flex-wrap items-center gap-2">
           {/* Quick Month Filter Pills */}
-          <div className="inline-flex p-1 rounded-xl bg-[#f0f2f5] border border-[#e9edef]">
+          <div className="inline-flex p-1 rounded-xl bg-fill-1 border border-divider">
             <button
               onClick={() => setMonthOffset(0)}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 isCurrentMonth
-                  ? 'bg-white text-[#008069] shadow-xs ring-1 ring-[#008069]/20'
-                  : 'text-[#54656f] hover:text-[#111b21]'
+                  ? 'bg-surface text-accent shadow-xs ring-1 ring-accent/20'
+                  : 'text-ink-2 hover:text-ink'
               }`}
             >
               Bulan Ini
@@ -328,8 +329,8 @@ export const FinancialAnalytics: React.FC = () => {
               onClick={() => setMonthOffset(-1)}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 isLastMonth
-                  ? 'bg-white text-[#008069] shadow-xs ring-1 ring-[#008069]/20'
-                  : 'text-[#54656f] hover:text-[#111b21]'
+                  ? 'bg-surface text-accent shadow-xs ring-1 ring-accent/20'
+                  : 'text-ink-2 hover:text-ink'
               }`}
             >
               Bulan Lalu
@@ -337,8 +338,8 @@ export const FinancialAnalytics: React.FC = () => {
           </div>
 
           {/* Month & Year Combined Dropdown */}
-          <div className="flex items-center space-x-1.5 bg-white border border-[#d1d7db] rounded-xl px-2 py-1 shadow-xs">
-            <Calendar size={14} className="text-[#008069] ml-1 shrink-0" />
+          <div className="flex items-center space-x-1.5 bg-surface border border-divider rounded-xl px-2 py-1 shadow-xs">
+            <Calendar size={14} className="text-accent ml-1 shrink-0" />
             <select
               value={`${selectedYear}-${String(selectedMonth).padStart(2, '0')}`}
               onChange={(e) => {
@@ -346,7 +347,7 @@ export const FinancialAnalytics: React.FC = () => {
                 setSelectedYear(y);
                 setSelectedMonth(m);
               }}
-              className="bg-transparent text-xs font-bold text-[#111b21] focus:outline-none cursor-pointer py-1"
+              className="bg-transparent text-xs font-bold text-ink focus:outline-none cursor-pointer py-1"
             >
               {Array.from({ length: 24 }, (_, i) => {
                 const d = new Date();
@@ -367,7 +368,7 @@ export const FinancialAnalytics: React.FC = () => {
           <button
             onClick={handleExportCsv}
             disabled={exporting || loading}
-            className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] disabled:opacity-50 text-white text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer"
+            className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-accent hover:bg-accent disabled:opacity-50 text-white text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer"
             title="Download Spreadsheet Excel / CSV"
           >
             <FileSpreadsheet size={15} />
@@ -378,10 +379,10 @@ export const FinancialAnalytics: React.FC = () => {
           <button
             onClick={fetchAnalytics}
             disabled={loading}
-            className="p-2 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] transition shadow-xs disabled:opacity-50 cursor-pointer"
+            className="p-2 rounded-xl bg-surface border border-divider text-ink-2 hover:text-ink dark:hover:text-ink hover:bg-fill-1 transition shadow-xs disabled:opacity-50 cursor-pointer"
             title="Muat Ulang Data"
           >
-            <RefreshCw size={15} className={loading ? 'animate-spin text-[#008069]' : ''} />
+            <RefreshCw size={15} className={loading ? 'animate-spin text-accent' : ''} />
           </button>
         </div>
       </div>
@@ -389,54 +390,54 @@ export const FinancialAnalytics: React.FC = () => {
       {/* 4 Top KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Card 1: Total Revenue */}
-        <div className="bg-white dark:bg-[#111b21] p-4 sm:p-5 rounded-2xl border border-[#e9edef] dark:border-[#202c33] shadow-xs relative overflow-hidden group hover:border-[#008069] transition">
+        <div className="bg-surface p-4 sm:p-5 rounded-2xl border border-divider shadow-xs relative overflow-hidden group hover:border-accent transition">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-xs font-bold text-[#54656f] dark:text-[#8696a0] uppercase tracking-wider">
+              <p className="text-xs font-bold text-ink-2 uppercase tracking-wider">
                 Total Omset ({data?.monthName || 'Bulan Ini'})
               </p>
-              <h3 className="text-2xl font-black text-[#111b21] dark:text-[#e9edef] mt-1.5 tracking-tight">
+              <h3 className="text-2xl font-black text-ink mt-1.5 tracking-tight">
                 {formatRupiah(kpi.totalRevenue)}
               </h3>
             </div>
-            <div className="h-10 w-10 rounded-xl bg-emerald-50 text-[#008069] border border-emerald-100 flex items-center justify-center shadow-2xs shrink-0">
+            <div className="h-10 w-10 rounded-xl bg-success-soft text-accent border border-success-line flex items-center justify-center shadow-2xs shrink-0">
               <DollarSign size={20} />
             </div>
           </div>
-          <div className="mt-3 pt-3 border-t border-[#f0f2f5] dark:border-[#202c33] flex items-center justify-between text-xs">
-            <span className="text-[#008069] font-bold">
+          <div className="mt-3 pt-3 border-t border-divider dark:border-divider flex items-center justify-between text-xs">
+            <span className="text-accent font-bold">
               ✓ Lunas: {formatRupiah(kpi.lunasRevenue)}
             </span>
-            <span className="text-amber-700 font-semibold">
+            <span className="text-warning font-semibold">
               Tagih: {formatRupiah(kpi.pendingRevenue)}
             </span>
           </div>
         </div>
 
         {/* Card 2: Total Bookings */}
-        <div className="bg-white dark:bg-[#111b21] p-4 sm:p-5 rounded-2xl border border-[#e9edef] dark:border-[#202c33] shadow-xs relative overflow-hidden group hover:border-sky-500 transition">
+        <div className="bg-surface p-4 sm:p-5 rounded-2xl border border-divider shadow-xs relative overflow-hidden group hover:border-info transition">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-xs font-bold text-[#54656f] dark:text-[#8696a0] uppercase tracking-wider">
+              <p className="text-xs font-bold text-ink-2 uppercase tracking-wider">
                 Total Reservasi
               </p>
-              <h3 className="text-2xl font-black text-[#111b21] dark:text-[#e9edef] mt-1.5 tracking-tight">
-                {kpi.totalBookings} <span className="text-sm font-semibold text-[#54656f]">Kunjungan</span>
+              <h3 className="text-2xl font-black text-ink mt-1.5 tracking-tight">
+                {kpi.totalBookings} <span className="text-sm font-semibold text-ink-2">Kunjungan</span>
               </h3>
             </div>
-            <div className="h-10 w-10 rounded-xl bg-sky-50 text-sky-600 border border-sky-100 flex items-center justify-center shadow-2xs shrink-0">
+            <div className="h-10 w-10 rounded-xl bg-info-soft text-info border border-info-line flex items-center justify-center shadow-2xs shrink-0">
               <CalendarDays size={20} />
             </div>
           </div>
-          <div className="mt-3 pt-3 border-t border-[#f0f2f5] dark:border-[#202c33] flex items-center justify-between text-xs text-[#54656f]">
-            <span className="text-[#008069] font-semibold">
+          <div className="mt-3 pt-3 border-t border-divider dark:border-divider flex items-center justify-between text-xs text-ink-2">
+            <span className="text-accent font-semibold">
               {kpi.completedBookings} Selesai
             </span>
-            <span className="text-sky-700 font-semibold">
+            <span className="text-info font-semibold">
               {kpi.upcomingBookings} Mendatang
             </span>
             {kpi.cancelledBookings > 0 && (
-              <span className="text-rose-600 font-semibold">
+              <span className="text-danger font-semibold">
                 {kpi.cancelledBookings} Batal
               </span>
             )}
@@ -444,66 +445,66 @@ export const FinancialAnalytics: React.FC = () => {
         </div>
 
         {/* Card 3: Average Order Value (AOV) */}
-        <div className="bg-white dark:bg-[#111b21] p-4 sm:p-5 rounded-2xl border border-[#e9edef] dark:border-[#202c33] shadow-xs relative overflow-hidden group hover:border-purple-500 transition">
+        <div className="bg-surface p-4 sm:p-5 rounded-2xl border border-divider shadow-xs relative overflow-hidden group hover:border-violet transition">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-xs font-bold text-[#54656f] dark:text-[#8696a0] uppercase tracking-wider">
+              <p className="text-xs font-bold text-ink-2 uppercase tracking-wider">
                 Rata-rata Order (AOV)
               </p>
-              <h3 className="text-2xl font-black text-[#111b21] dark:text-[#e9edef] mt-1.5 tracking-tight">
+              <h3 className="text-2xl font-black text-ink mt-1.5 tracking-tight">
                 {formatRupiah(kpi.aov)}
               </h3>
             </div>
-            <div className="h-10 w-10 rounded-xl bg-purple-50 text-purple-600 border border-purple-100 flex items-center justify-center shadow-2xs shrink-0">
+            <div className="h-10 w-10 rounded-xl bg-violet-soft text-violet border border-violet-line flex items-center justify-center shadow-2xs shrink-0">
               <ShoppingBag size={20} />
             </div>
           </div>
-          <div className="mt-3 pt-3 border-t border-[#f0f2f5] dark:border-[#202c33] flex items-center justify-between text-xs text-[#54656f]">
+          <div className="mt-3 pt-3 border-t border-divider dark:border-divider flex items-center justify-between text-xs text-ink-2">
             <span>Nominal belanja rata-rata per transaksi</span>
           </div>
         </div>
 
         {/* Card 4: Repeat Customer Rate */}
-        <div className="bg-white dark:bg-[#111b21] p-4 sm:p-5 rounded-2xl border border-[#e9edef] dark:border-[#202c33] shadow-xs relative overflow-hidden group hover:border-amber-500 transition">
+        <div className="bg-surface p-4 sm:p-5 rounded-2xl border border-divider shadow-xs relative overflow-hidden group hover:border-warning transition">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-xs font-bold text-[#54656f] dark:text-[#8696a0] uppercase tracking-wider">
+              <p className="text-xs font-bold text-ink-2 uppercase tracking-wider">
                 Rasio Pasien Langganan
               </p>
-              <h3 className="text-2xl font-black text-[#111b21] dark:text-[#e9edef] mt-1.5 tracking-tight">
-                {kpi.repeatRatePercentage}% <span className="text-sm font-semibold text-[#54656f]">Repeat</span>
+              <h3 className="text-2xl font-black text-ink mt-1.5 tracking-tight">
+                {kpi.repeatRatePercentage}% <span className="text-sm font-semibold text-ink-2">Repeat</span>
               </h3>
             </div>
-            <div className="h-10 w-10 rounded-xl bg-amber-50 text-amber-600 border border-amber-100 flex items-center justify-center shadow-2xs shrink-0">
+            <div className="h-10 w-10 rounded-xl bg-warning-soft text-warning border border-warning-line flex items-center justify-center shadow-2xs shrink-0">
               <Users size={20} />
             </div>
           </div>
-          <div className="mt-3 pt-3 border-t border-[#f0f2f5] dark:border-[#202c33] flex items-center justify-between text-xs text-[#54656f]">
-            <span className="text-[#008069] font-semibold">{kpi.repeatCustomersCount} Pasien Lama</span>
-            <span className="text-sky-700 font-semibold">{kpi.newCustomersCount} Pasien Baru</span>
+          <div className="mt-3 pt-3 border-t border-divider dark:border-divider flex items-center justify-between text-xs text-ink-2">
+            <span className="text-accent font-semibold">{kpi.repeatCustomersCount} Pasien Lama</span>
+            <span className="text-info font-semibold">{kpi.newCustomersCount} Pasien Baru</span>
           </div>
         </div>
       </div>
 
       {/* Daily Revenue History Chart */}
-      <div className="bg-white dark:bg-[#111b21] p-4 sm:p-6 rounded-2xl border border-[#e9edef] dark:border-[#202c33] shadow-xs space-y-4">
+      <div className="bg-surface p-4 sm:p-6 rounded-2xl border border-divider shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
-            <h2 className="text-base font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
-              <BarChart2 size={18} className="text-[#008069]" />
+            <h2 className="text-base font-bold text-ink flex items-center gap-2">
+              <BarChart2 size={18} className="text-accent" />
               <span>Histori Pendapatan Harian ({data?.monthName} {selectedYear})</span>
             </h2>
-            <p className="text-xs text-[#54656f] mt-0.5">
+            <p className="text-xs text-ink-2 mt-0.5">
               Grafik persebaran omset harian (Tgl 1 s/d {data?.dailyTrend?.length || 30})
             </p>
           </div>
-          <div className="flex items-center space-x-3 text-xs font-semibold text-[#54656f]">
+          <div className="flex items-center space-x-3 text-xs font-semibold text-ink-2">
             <div className="flex items-center space-x-1.5">
-              <div className="w-3 h-3 rounded bg-[#008069]" />
+              <div className="w-3 h-3 rounded bg-accent" />
               <span>Lunas</span>
             </div>
             <div className="flex items-center space-x-1.5">
-              <div className="w-3 h-3 rounded bg-amber-400" />
+              <div className="w-3 h-3 rounded bg-warning" />
               <span>Tagih di Tempat</span>
             </div>
           </div>
@@ -516,13 +517,13 @@ export const FinancialAnalytics: React.FC = () => {
               <XAxis
                 dataKey="day"
                 tickLine={false}
-                stroke="#8696a0"
+                stroke={chartTheme.axis.stroke}
                 fontSize={11}
                 tickFormatter={(d) => `Tgl ${d}`}
               />
               <YAxis
                 tickLine={false}
-                stroke="#8696a0"
+                stroke={chartTheme.axis.stroke}
                 fontSize={11}
                 tickFormatter={(val) => formatCompactRupiah(val)}
               />
@@ -531,19 +532,19 @@ export const FinancialAnalytics: React.FC = () => {
                   if (active && payload && payload.length) {
                     const item = payload[0].payload as DailyRevenuePoint;
                     return (
-                      <div className="bg-white dark:bg-[#202c33] p-3 rounded-xl shadow-lg border border-[#e9edef] dark:border-[#2a3942] text-xs space-y-1.5">
-                        <p className="font-bold text-[#111b21] dark:text-[#e9edef] border-b border-[#f0f2f5] dark:border-[#2a3942] pb-1">
+                      <div className="bg-surface p-3 rounded-xl shadow-lg border border-divider text-xs space-y-1.5">
+                        <p className="font-bold text-ink border-b border-divider dark:border-divider pb-1">
                           {item.dayName}, {item.dateStr}
                         </p>
-                        <p className="text-[#008069] font-bold">
+                        <p className="text-accent font-bold">
                           ✓ Lunas: {formatRupiah(item.lunasRevenue)}
                         </p>
                         {item.pendingRevenue > 0 && (
-                          <p className="text-amber-700 font-semibold">
+                          <p className="text-warning font-semibold">
                             ⏳ Tagih: {formatRupiah(item.pendingRevenue)}
                           </p>
                         )}
-                        <p className="text-[#111b21] font-bold pt-1 border-t border-[#f0f2f5] dark:border-[#202c33]">
+                        <p className="text-ink font-bold pt-1 border-t border-divider dark:border-divider">
                           Total Omset: {formatRupiah(item.revenue)} ({item.bookingsCount} Pasien)
                         </p>
                       </div>
@@ -552,8 +553,8 @@ export const FinancialAnalytics: React.FC = () => {
                   return null;
                 }}
               />
-              <Bar dataKey="lunasRevenue" stackId="a" fill="#008069" radius={[0, 0, 0, 0]} />
-              <Bar dataKey="pendingRevenue" stackId="a" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="lunasRevenue" stackId="a" fill={chartTheme.accent} radius={[0, 0, 0, 0]} />
+              <Bar dataKey="pendingRevenue" stackId="a" fill={chartTheme.series[3]} radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -562,9 +563,9 @@ export const FinancialAnalytics: React.FC = () => {
       {/* Grid 2 Columns: Breakdowns & Leaderboards */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Category Breakdown (Donut Chart) */}
-        <div className="bg-white dark:bg-[#111b21] p-4 sm:p-5 rounded-2xl border border-[#e9edef] dark:border-[#202c33] shadow-xs space-y-4">
-          <h2 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
-            <PieIcon size={16} className="text-[#008069]" />
+        <div className="bg-surface p-4 sm:p-5 rounded-2xl border border-divider shadow-xs space-y-4">
+          <h2 className="text-sm font-bold text-ink flex items-center gap-2">
+            <PieIcon size={16} className="text-accent" />
             <span>Kategori Layanan</span>
           </h2>
           <div className="h-56 w-full">
@@ -591,12 +592,12 @@ export const FinancialAnalytics: React.FC = () => {
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-full flex items-center justify-center text-xs text-[#8696a0]">
+              <div className="h-full flex items-center justify-center text-xs text-ink-3">
                 Belum ada transaksi di bulan ini
               </div>
             )}
           </div>
-          <div className="space-y-1.5 pt-2 border-t border-[#f0f2f5] dark:border-[#202c33] text-xs">
+          <div className="space-y-1.5 pt-2 border-t border-divider dark:border-divider text-xs">
             {(data?.categoryBreakdown || []).map((cat, idx) => (
               <div key={idx} className="flex items-center justify-between text-xs">
                 <div className="flex items-center space-x-2">
@@ -604,13 +605,13 @@ export const FinancialAnalytics: React.FC = () => {
                     className="w-2.5 h-2.5 rounded-full shrink-0"
                     style={{ backgroundColor: CATEGORY_COLORS[idx % CATEGORY_COLORS.length] }}
                   />
-                  <span className="font-semibold text-[#111b21] dark:text-[#e9edef] truncate max-w-[120px]">
+                  <span className="font-semibold text-ink truncate max-w-[120px]">
                     {cat.label}
                   </span>
                 </div>
                 <div className="text-right font-mono">
-                  <span className="font-bold text-[#111b21] dark:text-[#e9edef]">{formatCompactRupiah(cat.revenue)}</span>
-                  <span className="text-[#8696a0] ml-1.5 text-[11px]">({cat.percentage}%)</span>
+                  <span className="font-bold text-ink">{formatCompactRupiah(cat.revenue)}</span>
+                  <span className="text-ink-3 ml-1.5 text-[11px]">({cat.percentage}%)</span>
                 </div>
               </div>
             ))}
@@ -618,19 +619,19 @@ export const FinancialAnalytics: React.FC = () => {
         </div>
 
         {/* Middle: Payment Methods & Top Services */}
-        <div className="bg-white dark:bg-[#111b21] p-4 sm:p-5 rounded-2xl border border-[#e9edef] dark:border-[#202c33] shadow-xs space-y-4">
-          <h2 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
-            <CreditCard size={16} className="text-[#008069]" />
+        <div className="bg-surface p-4 sm:p-5 rounded-2xl border border-divider shadow-xs space-y-4">
+          <h2 className="text-sm font-bold text-ink flex items-center gap-2">
+            <CreditCard size={16} className="text-accent" />
             <span>Metode Pembayaran</span>
           </h2>
           <div className="space-y-2.5">
             {(data?.paymentBreakdown || []).map((pay, idx) => (
               <div key={idx} className="space-y-1">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-[#111b21] dark:text-[#e9edef]">{pay.label}</span>
-                  <span className="font-mono font-bold text-[#008069]">{formatRupiah(pay.revenue)} ({pay.percentage}%)</span>
+                  <span className="font-semibold text-ink">{pay.label}</span>
+                  <span className="font-mono font-bold text-accent">{formatRupiah(pay.revenue)} ({pay.percentage}%)</span>
                 </div>
-                <div className="h-2 w-full bg-[#f0f2f5] dark:bg-[#202c33] rounded-full overflow-hidden">
+                <div className="h-2 w-full bg-fill-1 rounded-full overflow-hidden">
                   <div
                     className="h-full rounded-full transition-all duration-300"
                     style={{
@@ -643,20 +644,20 @@ export const FinancialAnalytics: React.FC = () => {
             ))}
           </div>
 
-          <div className="pt-4 border-t border-[#f0f2f5] dark:border-[#202c33] space-y-3">
-            <h3 className="text-xs font-bold text-[#54656f] dark:text-[#8696a0] uppercase tracking-wider">
+          <div className="pt-4 border-t border-divider dark:border-divider space-y-3">
+            <h3 className="text-xs font-bold text-ink-2 uppercase tracking-wider">
               Top Layanan Paling Laris
             </h3>
             <div className="space-y-2">
               {(data?.topServices || []).slice(0, 4).map((s, idx) => (
-                <div key={idx} className="flex items-center justify-between text-xs bg-[#f8fafc] dark:bg-[#182229] p-2 rounded-xl border border-[#e9edef] dark:border-[#202c33]">
+                <div key={idx} className="flex items-center justify-between text-xs bg-surface-2 p-2 rounded-xl border border-divider">
                   <div className="flex items-center space-x-2 min-w-0 pr-2">
-                    <span className="h-5 w-5 rounded-full bg-[#e8f5f2] text-[#008069] flex items-center justify-center font-bold text-[10px] shrink-0">
+                    <span className="h-5 w-5 rounded-full bg-accent-soft text-accent flex items-center justify-center font-bold text-[10px] shrink-0">
                       {idx + 1}
                     </span>
-                    <span className="font-semibold text-[#111b21] dark:text-[#e9edef] truncate">{cleanTreatmentName(stripBufferMetadata(s.serviceName))}</span>
+                    <span className="font-semibold text-ink truncate">{cleanTreatmentName(stripBufferMetadata(s.serviceName))}</span>
                   </div>
-                  <span className="font-bold text-[#008069] shrink-0 font-mono text-[11px]">
+                  <span className="font-bold text-accent shrink-0 font-mono text-[11px]">
                     {s.count}x ({formatCompactRupiah(s.estimatedRevenue)})
                   </span>
                 </div>
@@ -666,9 +667,9 @@ export const FinancialAnalytics: React.FC = () => {
         </div>
 
         {/* Right: Staff Leaderboard */}
-        <div className="bg-white dark:bg-[#111b21] p-4 sm:p-5 rounded-2xl border border-[#e9edef] dark:border-[#202c33] shadow-xs space-y-4">
-          <h2 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
-            <Award size={16} className="text-[#008069]" />
+        <div className="bg-surface p-4 sm:p-5 rounded-2xl border border-divider shadow-xs space-y-4">
+          <h2 className="text-sm font-bold text-ink flex items-center gap-2">
+            <Award size={16} className="text-accent" />
             <span>Leaderboard Terapis</span>
           </h2>
           <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
@@ -676,36 +677,36 @@ export const FinancialAnalytics: React.FC = () => {
               data.staffPerformance.map((staff, idx) => (
                 <div
                   key={staff.staffId}
-                  className="flex items-center justify-between p-2.5 bg-[#f8fafc] dark:bg-[#182229] hover:bg-[#e8f5f2]/40 dark:hover:bg-[#202c33] rounded-xl border border-[#e9edef] dark:border-[#202c33] transition"
+                  className="flex items-center justify-between p-2.5 bg-surface-2 hover:bg-accent-soft/40 dark:hover:bg-fill-1 rounded-xl border border-divider transition"
                 >
                   <div className="flex items-center space-x-2.5 min-w-0 pr-2">
                     <div className={`h-8 w-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
                       idx === 0
-                        ? 'bg-amber-100 text-amber-800 border border-amber-300 shadow-2xs'
+                        ? 'bg-warning-soft text-warning border border-warning-line shadow-2xs'
                         : idx === 1
-                        ? 'bg-slate-200 text-slate-700'
-                        : 'bg-[#e9edef] text-[#54656f]'
+                        ? 'bg-fill-2 text-ink'
+                        : 'bg-fill-2 text-ink-2'
                     }`}>
                       {idx + 1}
                     </div>
                     <div className="min-w-0">
-                      <h4 className="font-bold text-xs text-[#111b21] dark:text-[#e9edef] truncate">
+                      <h4 className="font-bold text-xs text-ink truncate">
                         {staff.staffName}
                       </h4>
-                      <p className="text-[10px] text-[#54656f]">
+                      <p className="text-[10px] text-ink-2">
                         {staff.completedBookings} / {staff.totalBookings} kunjungan
                       </p>
                     </div>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="font-bold text-xs text-[#008069] font-mono">
+                    <p className="font-bold text-xs text-accent font-mono">
                       {formatCompactRupiah(staff.revenueGenerated)}
                     </p>
                   </div>
                 </div>
               ))
             ) : (
-              <div className="text-center py-8 text-xs text-[#8696a0]">
+              <div className="text-center py-8 text-xs text-ink-3">
                 Belum ada data penugasan terapis
               </div>
             )}
@@ -714,11 +715,11 @@ export const FinancialAnalytics: React.FC = () => {
       </div>
 
       {/* Transaction Ledger Table */}
-      <div className="bg-white dark:bg-[#111b21] rounded-2xl border border-[#e9edef] dark:border-[#202c33] shadow-xs overflow-hidden space-y-4">
+      <div className="bg-surface rounded-2xl border border-divider shadow-xs overflow-hidden space-y-4">
         {/* Table Controls */}
-        <div className="p-4 sm:p-5 border-b border-[#e9edef] dark:border-[#202c33] flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="p-4 sm:p-5 border-b border-divider flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="relative w-full sm:w-80">
-            <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-[#8696a0]">
+            <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-ink-3">
               <Search size={14} />
             </span>
             <input
@@ -726,7 +727,7 @@ export const FinancialAnalytics: React.FC = () => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Cari pasien, ID, menu, atau terapis..."
-              className="w-full pl-9 pr-3.5 py-2 rounded-xl bg-[#f0f2f5] dark:bg-[#202c33] border-0 text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] text-xs focus:outline-none focus:ring-2 focus:ring-[#008069] min-h-[38px]"
+              className="w-full pl-9 pr-3.5 py-2 rounded-xl bg-fill-1 border-0 text-ink placeholder:text-ink-3 text-xs focus:outline-none focus:ring-2 focus:ring-accent min-h-[38px]"
             />
           </div>
 
@@ -735,8 +736,8 @@ export const FinancialAnalytics: React.FC = () => {
               onClick={() => setStatusFilter('ALL')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
                 statusFilter === 'ALL'
-                  ? 'bg-[#008069] text-white shadow-xs'
-                  : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0] hover:bg-[#e9edef] dark:hover:bg-[#2a3942]'
+                  ? 'bg-accent text-accent-ink shadow-xs'
+                  : 'bg-fill-1 text-ink-2 hover:bg-fill-2 dark:hover:bg-fill-2'
               }`}
             >
               Semua ({(data?.transactions || []).length})
@@ -745,8 +746,8 @@ export const FinancialAnalytics: React.FC = () => {
               onClick={() => setStatusFilter('LUNAS')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
                 statusFilter === 'LUNAS'
-                  ? 'bg-[#008069] text-white shadow-xs'
-                  : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0] hover:bg-[#e9edef] dark:hover:bg-[#2a3942]'
+                  ? 'bg-accent text-accent-ink shadow-xs'
+                  : 'bg-fill-1 text-ink-2 hover:bg-fill-2 dark:hover:bg-fill-2'
               }`}
             >
               ✓ Lunas
@@ -755,8 +756,8 @@ export const FinancialAnalytics: React.FC = () => {
               onClick={() => setStatusFilter('TAGIH_DI_TEMPAT')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
                 statusFilter === 'TAGIH_DI_TEMPAT'
-                  ? 'bg-[#008069] text-white shadow-xs'
-                  : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0] hover:bg-[#e9edef] dark:hover:bg-[#2a3942]'
+                  ? 'bg-accent text-accent-ink shadow-xs'
+                  : 'bg-fill-1 text-ink-2 hover:bg-fill-2 dark:hover:bg-fill-2'
               }`}
             >
               ⏳ Tagih di Tempat
@@ -765,8 +766,8 @@ export const FinancialAnalytics: React.FC = () => {
               onClick={() => setStatusFilter('SELESAI_BELUM_VERIFIKASI')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
                 statusFilter === 'SELESAI_BELUM_VERIFIKASI'
-                  ? 'bg-[#008069] text-white shadow-xs'
-                  : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0] hover:bg-[#e9edef] dark:hover:bg-[#2a3942]'
+                  ? 'bg-accent text-accent-ink shadow-xs'
+                  : 'bg-fill-1 text-ink-2 hover:bg-fill-2 dark:hover:bg-fill-2'
               }`}
             >
               Selesai — Belum Verifikasi
@@ -775,14 +776,14 @@ export const FinancialAnalytics: React.FC = () => {
         </div>
 
         {/* Mobile Card Stack (< md) */}
-        <div className="md:hidden divide-y divide-[#f0f2f5] dark:divide-[#2a3942]">
+        <div className="md:hidden divide-y divide-divider">
           {loading ? (
-            <div className="py-8 text-center text-[#8696a0] text-xs">
-              <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-[#008069] border-t-transparent mb-2"></div>
+            <div className="py-8 text-center text-ink-3 text-xs">
+              <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent mb-2"></div>
               <p>Memuat buku besar transaksi...</p>
             </div>
           ) : filteredTransactions.length === 0 ? (
-            <div className="py-8 text-center text-[#8696a0] text-xs px-4">
+            <div className="py-8 text-center text-ink-3 text-xs px-4">
               Tidak ada catatan transaksi yang sesuai dengan filter.
             </div>
           ) : (
@@ -790,12 +791,12 @@ export const FinancialAnalytics: React.FC = () => {
               <div
                 key={`mobile-tx-${tx.id}`}
                 onClick={() => setSelectedTx(tx)}
-                className="p-4 space-y-2.5 bg-white dark:bg-[#111b21] hover:bg-[#f8fafc] dark:hover:bg-[#1c272e] transition-colors cursor-pointer active:scale-[0.99] touch-manipulation"
+                className="p-4 space-y-2.5 bg-surface hover:bg-surface-2 transition-colors cursor-pointer active:scale-[0.99] touch-manipulation"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <span className="font-mono text-[11px] text-[#667781] dark:text-[#8696a0] flex items-center gap-1">
-                      <Clock size={11} className="text-[#008069] dark:text-[#00a884]" />
+                    <span className="font-mono text-[11px] text-ink-3 flex items-center gap-1">
+                      <Clock size={11} className="text-accent" />
                       <span>
                         {tx.bookingDate
                           ? new Date(tx.bookingDate).toLocaleString('id-ID', {
@@ -807,10 +808,10 @@ export const FinancialAnalytics: React.FC = () => {
                           : '-'}
                       </span>
                     </span>
-                    <h3 className="font-bold text-sm text-[#111b21] dark:text-[#e9edef] mt-0.5 flex items-center gap-1.5">
+                    <h3 className="font-bold text-sm text-ink mt-0.5 flex items-center gap-1.5">
                       <span>{tx.customerName}</span>
                       {tx.isRepeatOrder && (
-                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-[#e8f5f2] dark:bg-[#00a884]/20 text-[#008069] dark:text-[#00a884] border border-[#c2e7e0] dark:border-[#00a884]/30">
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-accent-soft text-accent border border-divider dark:border-accent/30">
                           Repeat
                         </span>
                       )}
@@ -818,7 +819,7 @@ export const FinancialAnalytics: React.FC = () => {
                   </div>
 
                   <div className="text-right shrink-0">
-                    <span className="font-extrabold text-sm text-[#008069] dark:text-[#00a884] block font-mono">
+                    <span className="font-extrabold text-sm text-accent block font-mono">
                       {formatRupiah(tx.totalFee)}
                     </span>
                     <span
@@ -831,16 +832,16 @@ export const FinancialAnalytics: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="text-xs text-[#54656f] dark:text-[#aebac1] line-clamp-1 font-medium">
+                <div className="text-xs text-ink-2 line-clamp-1 font-medium">
                   {(() => {
                     const clean = stripBufferMetadata(tx.treatmentDetail);
                     return clean.split(/\s*\+\s*/).map((s) => cleanTreatmentName(s)).join(' + ') || clean;
                   })()}
                 </div>
 
-                <div className="flex items-center justify-between text-[11px] text-[#8696a0] pt-1 border-t border-[#f0f2f5] dark:border-[#202c33] dark:border-[#2a3942]">
+                <div className="flex items-center justify-between text-[11px] text-ink-3 pt-1 border-t border-divider dark:border-divider dark:border-divider">
                   <span className="truncate">
-                    Terapis: <strong className="text-[#111b21] dark:text-[#e9edef]">{resolveStaffName(tx) || 'Belum ditugaskan'}</strong>
+                    Terapis: <strong className="text-ink">{resolveStaffName(tx) || 'Belum ditugaskan'}</strong>
                   </span>
                   <span className="truncate">{tx.location || '-'}</span>
                 </div>
@@ -851,8 +852,8 @@ export const FinancialAnalytics: React.FC = () => {
 
         {/* Desktop Table (>= md) */}
         <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-left text-xs text-[#111b21]">
-            <thead className="bg-[#f8fafc] dark:bg-[#182229] text-[#54656f] dark:text-[#8696a0] uppercase text-[10px] font-bold border-b border-[#e9edef] dark:border-[#202c33]">
+          <table className="w-full text-left text-xs text-ink">
+            <thead className="bg-surface-2 text-ink-2 uppercase text-[10px] font-bold border-b border-divider">
               <tr>
                 <th className="py-3 px-4">Tanggal & Jam</th>
                 <th className="py-3 px-4">Pasien</th>
@@ -863,17 +864,17 @@ export const FinancialAnalytics: React.FC = () => {
                 <th className="py-3 px-4">Status Bayar</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#f0f2f5] dark:divide-[#202c33]">
+            <tbody className="divide-y divide-divider">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-[#8696a0]">
-                    <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-[#008069] border-t-transparent mb-2"></div>
+                  <td colSpan={7} className="py-8 text-center text-ink-3">
+                    <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent mb-2"></div>
                     <p>Memuat buku besar transaksi...</p>
                   </td>
                 </tr>
               ) : filteredTransactions.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-[#8696a0]">
+                  <td colSpan={7} className="py-8 text-center text-ink-3">
                     Tidak ada catatan transaksi yang sesuai dengan filter.
                   </td>
                 </tr>
@@ -882,7 +883,7 @@ export const FinancialAnalytics: React.FC = () => {
                   <tr
                     key={tx.id}
                     onClick={() => setSelectedTx(tx)}
-                    className="hover:bg-[#f8fafc] dark:hover:bg-[#1c272e] transition-colors cursor-pointer group"
+                    className="hover:bg-surface-2 transition-colors cursor-pointer group"
                   >
                     <td className="py-3 px-4 whitespace-nowrap font-mono text-[11px]">
                       {tx.bookingDate
@@ -895,39 +896,39 @@ export const FinancialAnalytics: React.FC = () => {
                         : '-'}
                     </td>
                     <td className="py-3 px-4 whitespace-nowrap">
-                      <div className="font-bold text-[#111b21] dark:text-[#e9edef] group-hover:text-[#008069] transition">
+                      <div className="font-bold text-ink group-hover:text-accent transition">
                         {tx.customerName}
                       </div>
-                      <div className="text-[10px] text-[#8696a0] font-mono">
+                      <div className="text-[10px] text-ink-3 font-mono">
                         {tx.customerPhoneMasked}
                         {tx.isRepeatOrder && (
-                          <span className="ml-1 text-[#008069] font-bold">● Repeat</span>
+                          <span className="ml-1 text-accent font-bold">● Repeat</span>
                         )}
                       </div>
                     </td>
                     <td className="py-3 px-4 max-w-xs">
-                      <div className="font-semibold text-[#111b21] truncate" title={stripBufferMetadata(tx.treatmentDetail)}>
+                      <div className="font-semibold text-ink truncate" title={stripBufferMetadata(tx.treatmentDetail)}>
                         {(() => {
                           const clean = stripBufferMetadata(tx.treatmentDetail);
                           return clean.split(/\s*\+\s*/).map((s) => cleanTreatmentName(s)).join(' + ') || clean;
                         })()}
                       </div>
-                      <div className="text-[10px] text-[#54656f]">
+                      <div className="text-[10px] text-ink-2">
                         Kategori: {tx.category}
                       </div>
                     </td>
                     <td className="py-3 px-4 whitespace-nowrap">
-                      <span className="font-semibold text-[#008069]">
+                      <span className="font-semibold text-accent">
                         {tx.assignedStaffName}
                       </span>
                     </td>
-                    <td className="py-3 px-4 max-w-xs truncate text-[#54656f]">
+                    <td className="py-3 px-4 max-w-xs truncate text-ink-2">
                       {tx.location}
                     </td>
-                    <td className="py-3 px-4 whitespace-nowrap text-right font-mono font-bold text-[#111b21] dark:text-[#e9edef]">
+                    <td className="py-3 px-4 whitespace-nowrap text-right font-mono font-bold text-ink">
                       {formatRupiah(tx.totalFee)}
                       {tx.deliveryFee > 0 && (
-                        <div className="text-[10px] text-[#8696a0] font-normal">
+                        <div className="text-[10px] text-ink-3 font-normal">
                           Ongkir: {formatRupiah(tx.deliveryFee)}
                         </div>
                       )}
@@ -954,27 +955,27 @@ export const FinancialAnalytics: React.FC = () => {
       {/* Transaction Detail Modal */}
       {selectedTx && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#111b21] w-full max-w-lg rounded-2xl shadow-2xl border border-[#e9edef] dark:border-[#202c33] overflow-hidden animate-scaleIn">
-            <div className="p-4 sm:p-5 border-b border-[#e9edef] dark:border-[#202c33] flex items-center justify-between bg-[#f8fafc] dark:bg-[#182229]">
+          <div className="bg-surface w-full max-w-lg rounded-2xl shadow-2xl border border-divider overflow-hidden animate-scaleIn">
+            <div className="p-4 sm:p-5 border-b border-divider flex items-center justify-between bg-surface-2">
               <div className="flex items-center space-x-2">
-                <FileSpreadsheet size={18} className="text-[#008069]" />
-                <h3 className="font-bold text-sm text-[#111b21] dark:text-[#e9edef]">
+                <FileSpreadsheet size={18} className="text-accent" />
+                <h3 className="font-bold text-sm text-ink">
                   Rincian Transaksi
                 </h3>
               </div>
               <button
                 onClick={() => setSelectedTx(null)}
-                className="p-1 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-white transition"
+                className="p-1 rounded-full text-ink-3 hover:text-ink hover:bg-surface transition"
               >
                 <X size={18} />
               </button>
             </div>
 
             <div className="p-5 space-y-4 text-xs">
-              <div className="flex justify-between items-center bg-[#f0f2f5] dark:bg-[#182229] p-3 rounded-xl">
+              <div className="flex justify-between items-center bg-fill-1 dark:bg-surface-2 p-3 rounded-xl">
                 <div>
-                  <span className="text-[10px] text-[#54656f] uppercase font-bold">No. Reservasi</span>
-                  <p className="font-mono font-bold text-[#111b21]">{selectedTx.id}</p>
+                  <span className="text-[10px] text-ink-2 uppercase font-bold">No. Reservasi</span>
+                  <p className="font-mono font-bold text-ink">{selectedTx.id}</p>
                 </div>
                 <div>
                   <span
@@ -990,52 +991,52 @@ export const FinancialAnalytics: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 bg-[#f8fafc] dark:bg-[#182229] rounded-xl border border-[#e9edef] dark:border-[#202c33]">
-                  <span className="text-[10px] text-[#54656f] uppercase font-bold">Pasien</span>
-                  <p className="font-bold text-sm text-[#111b21] mt-0.5">{selectedTx.customerName}</p>
-                  <p className="text-[#8696a0] font-mono text-[11px]">{selectedTx.customerPhoneMasked}</p>
+                <div className="p-3 bg-surface-2 rounded-xl border border-divider">
+                  <span className="text-[10px] text-ink-2 uppercase font-bold">Pasien</span>
+                  <p className="font-bold text-sm text-ink mt-0.5">{selectedTx.customerName}</p>
+                  <p className="text-ink-3 font-mono text-[11px]">{selectedTx.customerPhoneMasked}</p>
                 </div>
-                <div className="p-3 bg-[#f8fafc] dark:bg-[#182229] rounded-xl border border-[#e9edef] dark:border-[#202c33]">
-                  <span className="text-[10px] text-[#54656f] uppercase font-bold">Terapis</span>
-                  <p className="font-bold text-sm text-[#008069] mt-0.5">{selectedTx.assignedStaffName}</p>
-                  <p className="text-[#8696a0] text-[11px]">Penanggung Jawab</p>
+                <div className="p-3 bg-surface-2 rounded-xl border border-divider">
+                  <span className="text-[10px] text-ink-2 uppercase font-bold">Terapis</span>
+                  <p className="font-bold text-sm text-accent mt-0.5">{selectedTx.assignedStaffName}</p>
+                  <p className="text-ink-3 text-[11px]">Penanggung Jawab</p>
                 </div>
               </div>
 
-              <div className="p-3 bg-[#f8fafc] dark:bg-[#182229] rounded-xl border border-[#e9edef] dark:border-[#202c33] space-y-1">
-                <span className="text-[10px] text-[#54656f] uppercase font-bold">Menu Treatment</span>
-                <p className="font-semibold text-[#111b21] dark:text-[#e9edef]">{(() => {
+              <div className="p-3 bg-surface-2 rounded-xl border border-divider space-y-1">
+                <span className="text-[10px] text-ink-2 uppercase font-bold">Menu Treatment</span>
+                <p className="font-semibold text-ink">{(() => {
                   const clean = stripBufferMetadata(selectedTx.treatmentDetail);
                   return clean.split(/\s*\+\s*/).map((s) => cleanTreatmentName(s)).join(' + ') || clean;
                 })()}</p>
-                <p className="text-[11px] text-[#8696a0]">Kategori: {selectedTx.category}</p>
+                <p className="text-[11px] text-ink-3">Kategori: {selectedTx.category}</p>
               </div>
 
-              <div className="p-3 bg-[#f8fafc] dark:bg-[#182229] rounded-xl border border-[#e9edef] dark:border-[#202c33] space-y-1">
-                <span className="text-[10px] text-[#54656f] uppercase font-bold">Alamat / Lokasi</span>
-                <p className="text-[#111b21]">{selectedTx.location}</p>
+              <div className="p-3 bg-surface-2 rounded-xl border border-divider space-y-1">
+                <span className="text-[10px] text-ink-2 uppercase font-bold">Alamat / Lokasi</span>
+                <p className="text-ink">{selectedTx.location}</p>
               </div>
 
               <div className="p-3.5 bg-emerald-50/60 dark:bg-emerald-950/20 rounded-xl border border-emerald-200 dark:border-emerald-800/40 space-y-2">
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-[#54656f]">Biaya Layanan Treatment:</span>
-                  <span className="font-mono font-bold text-[#111b21]">{formatRupiah(selectedTx.treatmentFee)}</span>
+                  <span className="text-ink-2">Biaya Layanan Treatment:</span>
+                  <span className="font-mono font-bold text-ink">{formatRupiah(selectedTx.treatmentFee)}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-[#54656f]">Ongkos Kirim (Transport):</span>
-                  <span className="font-mono font-bold text-[#111b21]">{formatRupiah(selectedTx.deliveryFee)}</span>
+                  <span className="text-ink-2">Ongkos Kirim (Transport):</span>
+                  <span className="font-mono font-bold text-ink">{formatRupiah(selectedTx.deliveryFee)}</span>
                 </div>
-                <div className="flex justify-between items-center text-sm font-black text-[#008069] dark:text-[#00a884] pt-2 border-t border-emerald-200 dark:border-emerald-800/40">
+                <div className="flex justify-between items-center text-sm font-black text-accent pt-2 border-t border-emerald-200 dark:border-emerald-800/40">
                   <span>TOTAL PEMBAYARAN:</span>
                   <span className="font-mono">{formatRupiah(selectedTx.totalFee)}</span>
                 </div>
               </div>
             </div>
 
-            <div className="p-4 bg-[#f8fafc] dark:bg-[#182229] border-t border-[#e9edef] dark:border-[#202c33] flex justify-end">
+            <div className="p-4 bg-surface-2 border-t border-divider flex justify-end">
               <button
                 onClick={() => setSelectedTx(null)}
-                className="px-4 py-2 rounded-xl bg-[#008069] text-white text-xs font-bold hover:bg-[#00a884] transition"
+                className="px-4 py-2 rounded-xl bg-accent text-accent-ink text-xs font-bold hover:bg-accent transition"
               >
                 Tutup
               </button>

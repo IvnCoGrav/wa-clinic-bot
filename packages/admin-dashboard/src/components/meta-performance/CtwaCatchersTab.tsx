@@ -65,7 +65,7 @@ const TagInput: React.FC<{
               }
             }}
             placeholder={placeholder}
-            className="flex-1 text-xs border border-[#e9edef] dark:border-[#2a3942] bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] rounded-lg px-3 py-2 resize-none focus:outline-none focus:border-[#008069]"
+            className="flex-1 text-xs border border-divider bg-surface text-ink rounded-lg px-3 py-2 resize-none focus:outline-none focus:border-accent"
           />
         ) : (
           <input
@@ -78,13 +78,13 @@ const TagInput: React.FC<{
               }
             }}
             placeholder={placeholder}
-            className="flex-1 text-xs border border-[#e9edef] dark:border-[#2a3942] bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] rounded-lg px-3 py-2 focus:outline-none focus:border-[#008069]"
+            className="flex-1 text-xs border border-divider bg-surface text-ink rounded-lg px-3 py-2 focus:outline-none focus:border-accent"
           />
         )}
         <button
           type="button"
           onClick={add}
-          className="px-3 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-lg text-xs font-semibold transition"
+          className="px-3 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-lg text-xs font-semibold transition"
         >
           <Plus size={14} />
         </button>
@@ -94,10 +94,10 @@ const TagInput: React.FC<{
           {values.map((v) => (
             <span
               key={v}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px]"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-success-soft text-success border border-success-line text-[11px]"
             >
               <span className="max-w-[240px] truncate">{v}</span>
-              <button type="button" onClick={() => onChange(values.filter((x) => x !== v))} className="hover:text-red-600">
+              <button type="button" onClick={() => onChange(values.filter((x) => x !== v))} className="hover:text-danger">
                 <X size={11} />
               </button>
             </span>
@@ -245,10 +245,10 @@ export const CtwaCatchersTab: React.FC = () => {
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
-            <Target size={16} className="text-[#008069]" /> Greeting Catchers CTWA
+          <h3 className="text-sm font-bold text-ink flex items-center gap-2">
+            <Target size={16} className="text-accent" /> Greeting Catchers CTWA
           </h3>
-          <p className="text-xs text-[#667781] mt-0.5 max-w-2xl">
+          <p className="text-xs text-ink-2 mt-0.5 max-w-2xl">
             Petakan kalimat pembuka iklan Click-to-WhatsApp ke nama kampanye. Berguna saat metadata
             referral Meta hilang di jalan — pencocokan tahan typo &amp; slang, dengan guard kata kunci jangkar.
           </p>
@@ -256,13 +256,13 @@ export const CtwaCatchersTab: React.FC = () => {
         <div className="flex gap-2">
           <button
             onClick={load}
-            className="px-3 py-2 border border-[#e9edef] rounded-xl text-xs font-semibold text-[#667781] hover:bg-[#f0f2f5] flex items-center gap-1.5"
+            className="px-3 py-2 border border-divider rounded-xl text-xs font-semibold text-ink-2 hover:bg-fill-1 flex items-center gap-1.5"
           >
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Muat Ulang
           </button>
           <button
             onClick={openCreate}
-            className="px-3.5 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs"
+            className="px-3.5 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs"
           >
             <Plus size={13} /> Tambah Kampanye
           </button>
@@ -271,50 +271,50 @@ export const CtwaCatchersTab: React.FC = () => {
 
       {/* Campaign list */}
       {loading ? (
-        <div className="bg-white border border-[#e9edef] rounded-2xl p-10 flex items-center justify-center text-[#8696a0]">
-          <Loader size={16} className="animate-spin text-[#008069] mr-2" /> Memuat kampanye...
+        <div className="bg-surface border border-divider rounded-2xl p-10 flex items-center justify-center text-ink-3">
+          <Loader size={16} className="animate-spin text-accent mr-2" /> Memuat kampanye...
         </div>
       ) : rows.length === 0 ? (
-        <div className="bg-white border border-dashed border-[#e9edef] rounded-2xl p-10 text-center text-[#8696a0] text-sm">
+        <div className="bg-surface border border-dashed border-divider rounded-2xl p-10 text-center text-ink-3 text-sm">
           Belum ada kampanye catcher. Tambahkan untuk mulai mencocokkan kalimat iklan.
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           {rows.map((row) => (
-            <div key={row.id} className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#202c33] rounded-2xl p-4 space-y-3">
+            <div key={row.id} className="bg-surface border border-divider rounded-2xl p-4 space-y-3">
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-sm text-[#111b21] dark:text-[#e9edef]">{row.campaign_name}</span>
-                    <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-sky-50 text-sky-800 border border-sky-200">
+                    <span className="font-bold text-sm text-ink">{row.campaign_name}</span>
+                    <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-info-soft text-info border border-info-line">
                       {row.source}
                     </span>
                     <span
                       className={`text-[10px] px-2 py-0.5 rounded-full border ${
                         row.is_active
-                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                          : 'bg-slate-100 text-slate-600 border-slate-200'
+                          ? 'bg-success-soft text-success border-success-line'
+                          : 'bg-fill-1 text-ink-2 border-divider'
                       }`}
                     >
                       {row.is_active ? 'Aktif' : 'Nonaktif'}
                     </span>
                   </div>
-                  <div className="text-[11px] text-[#667781] mt-1">
-                    Sensitivitas: <span className="font-semibold text-[#111b21]">{pct(row.similarity_threshold)}</span>
+                  <div className="text-[11px] text-ink-2 mt-1">
+                    Sensitivitas: <span className="font-semibold text-ink">{pct(row.similarity_threshold)}</span>
                   </div>
                 </div>
                 <div className="flex gap-1.5">
                   <button
                     onClick={() => openEdit(row)}
                     title="Edit"
-                    className="w-8 h-8 rounded-lg border border-[#e9edef] text-[#667781] hover:text-[#008069] hover:bg-[#f0f2f5] flex items-center justify-center"
+                    className="w-8 h-8 rounded-lg border border-divider text-ink-2 hover:text-accent hover:bg-fill-1 flex items-center justify-center"
                   >
                     <Pencil size={14} />
                   </button>
                   <button
                     onClick={() => handleDelete(row)}
                     title="Hapus"
-                    className="w-8 h-8 rounded-lg border border-[#e9edef] text-[#667781] hover:text-red-600 hover:bg-red-50 flex items-center justify-center"
+                    className="w-8 h-8 rounded-lg border border-divider text-ink-2 hover:text-danger hover:bg-danger-soft flex items-center justify-center"
                   >
                     <Trash2 size={14} />
                   </button>
@@ -322,10 +322,10 @@ export const CtwaCatchersTab: React.FC = () => {
               </div>
 
               <div>
-                <div className="text-[10px] font-bold uppercase tracking-wider text-[#8696a0] mb-1">Template Sapaan</div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-ink-3 mb-1">Template Sapaan</div>
                 <div className="flex flex-wrap gap-1.5">
                   {row.greetings.map((g, i) => (
-                    <span key={i} className="text-[11px] px-2 py-0.5 rounded-full bg-[#f0f2f5] dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] border border-[#e9edef] dark:border-[#2a3942] max-w-full truncate">
+                    <span key={i} className="text-[11px] px-2 py-0.5 rounded-full bg-fill-1 text-ink border border-divider max-w-full truncate">
                       {g}
                     </span>
                   ))}
@@ -334,12 +334,12 @@ export const CtwaCatchersTab: React.FC = () => {
 
               {row.anchor_keywords?.length > 0 && (
                 <div>
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#8696a0] mb-1 flex items-center gap-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-ink-3 mb-1 flex items-center gap-1">
                     <ShieldCheck size={11} /> Kata Kunci Jangkar
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {row.anchor_keywords.map((a, i) => (
-                      <span key={i} className="text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                      <span key={i} className="text-[11px] px-2 py-0.5 rounded-full bg-warning-soft text-warning border border-warning-line">
                         {a}
                       </span>
                     ))}
@@ -352,11 +352,11 @@ export const CtwaCatchersTab: React.FC = () => {
       )}
 
       {/* Simulator */}
-      <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#202c33] rounded-2xl p-4 space-y-3">
-        <h4 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
-          <FlaskConical size={15} className="text-[#008069]" /> Simulator Interaktif
+      <div className="bg-surface border border-divider rounded-2xl p-4 space-y-3">
+        <h4 className="text-sm font-bold text-ink flex items-center gap-2">
+          <FlaskConical size={15} className="text-accent" /> Simulator Interaktif
         </h4>
-        <p className="text-xs text-[#667781]">
+        <p className="text-xs text-ink-2">
           Ketik contoh pesan calon pasien untuk melihat kampanye yang tertangkap &amp; skor kemiripan.
         </p>
         <div className="flex gap-2">
@@ -367,39 +367,39 @@ export const CtwaCatchersTab: React.FC = () => {
               if (e.key === 'Enter') handleSimulate();
             }}
             placeholder="cth: halo min mau tny prmo baby spa sby"
-            className="flex-1 text-xs border border-[#e9edef] dark:border-[#2a3942] bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] rounded-lg px-3 py-2 focus:outline-none focus:border-[#008069]"
+            className="flex-1 text-xs border border-divider bg-surface text-ink rounded-lg px-3 py-2 focus:outline-none focus:border-accent"
           />
           <button
             onClick={handleSimulate}
             disabled={simLoading}
-            className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-lg text-xs font-semibold disabled:opacity-50 flex items-center gap-1.5"
+            className="px-4 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-lg text-xs font-semibold disabled:opacity-50 flex items-center gap-1.5"
           >
             {simLoading ? <Loader size={13} className="animate-spin" /> : <FlaskConical size={13} />} Uji
           </button>
         </div>
 
         {simResult && (
-          <div className="space-y-2 border-t border-[#e9edef] dark:border-[#202c33] pt-3">
+          <div className="space-y-2 border-t border-divider pt-3">
             <div className="flex flex-wrap items-center gap-2">
               <span
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
                   simResult.matched
-                    ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                    : 'bg-slate-100 text-slate-700 border-slate-200'
+                    ? 'bg-success-soft text-success border-success-line'
+                    : 'bg-fill-1 text-ink border-divider'
                 }`}
               >
                 {simResult.matched ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
                 {simResult.matched ? `Match: ${simResult.bestMatch?.campaignName || '-'}` : 'Tidak Match'}
               </span>
-              <span className="text-xs text-[#667781]">
-                Skor: <span className="font-bold text-[#111b21]">{pct(simResult.similarityScore)}</span>
+              <span className="text-xs text-ink-2">
+                Skor: <span className="font-bold text-ink">{pct(simResult.similarityScore)}</span>
                 {' '}(efektif {pct(simResult.effectiveScore)})
               </span>
               <span
                 className={`text-[11px] px-2 py-0.5 rounded-full border ${
                   simResult.anchorCheckPassed
-                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                    : 'bg-amber-50 text-amber-800 border-amber-200'
+                    ? 'bg-success-soft text-success border-success-line'
+                    : 'bg-warning-soft text-warning border-warning-line'
                 }`}
               >
                 {simResult.anchorCheckPassed ? 'Anchor lolos' : 'Anchor gagal'}
@@ -409,12 +409,12 @@ export const CtwaCatchersTab: React.FC = () => {
 
             {simResult.diagnostics?.length > 0 && (
               <div className="space-y-1">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-[#8696a0]">Diagnostik per Template</div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-ink-3">Diagnostik per Template</div>
                 {simResult.diagnostics.map((d, i) => (
                   <div key={i} className="flex items-center gap-2 text-[11px]">
-                    <div className="h-1.5 rounded-full bg-[#008069]" style={{ width: `${Math.max(2, d.score * 100)}px` }} />
-                    <span className="text-[#667781] w-12 shrink-0">{pct(d.score)}</span>
-                    <span className="text-[#111b21] truncate">{d.template}</span>
+                    <div className="h-1.5 rounded-full bg-accent" style={{ width: `${Math.max(2, d.score * 100)}px` }} />
+                    <span className="text-ink-2 w-12 shrink-0">{pct(d.score)}</span>
+                    <span className="text-ink truncate">{d.template}</span>
                   </div>
                 ))}
               </div>
@@ -426,35 +426,35 @@ export const CtwaCatchersTab: React.FC = () => {
       {/* Modal */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
-          <div className="bg-white dark:bg-[#111b21] rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto border border-[#e9edef] dark:border-[#202c33]">
-            <div className="flex items-start justify-between border-b border-[#e9edef] dark:border-[#202c33] pb-3">
-              <h4 className="text-base font-bold text-[#111b21] dark:text-[#e9edef]">
+          <div className="bg-surface rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto border border-divider">
+            <div className="flex items-start justify-between border-b border-divider pb-3">
+              <h4 className="text-base font-bold text-ink">
                 {editingId ? 'Edit Kampanye Catcher' : 'Tambah Kampanye Catcher'}
               </h4>
               <button
                 onClick={() => setModalOpen(false)}
-                className="w-8 h-8 rounded-xl bg-[#f0f2f5] hover:bg-[#e9edef] text-[#667781] flex items-center justify-center"
+                className="w-8 h-8 rounded-xl bg-fill-1 hover:bg-fill-2 text-ink-2 flex items-center justify-center"
               >
                 <X size={15} />
               </button>
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Nama Kampanye</label>
+              <label className="text-xs font-bold text-ink">Nama Kampanye</label>
               <input
                 value={fCampaign}
                 onChange={(e) => setFCampaign(e.target.value)}
                 placeholder="cth: IG-BABYSPA"
-                className="w-full text-xs border border-[#e9edef] dark:border-[#2a3942] bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] rounded-lg px-3 py-2 focus:outline-none focus:border-[#008069]"
+                className="w-full text-xs border border-divider bg-surface text-ink rounded-lg px-3 py-2 focus:outline-none focus:border-accent"
               />
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Platform</label>
+              <label className="text-xs font-bold text-ink">Platform</label>
               <select
                 value={fSource}
                 onChange={(e) => setFSource(e.target.value)}
-                className="w-full text-xs border border-[#e9edef] dark:border-[#2a3942] bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] rounded-lg px-3 py-2 focus:outline-none focus:border-[#008069]"
+                className="w-full text-xs border border-divider bg-surface text-ink rounded-lg px-3 py-2 focus:outline-none focus:border-accent"
               >
                 {SOURCE_OPTIONS.map((s) => (
                   <option key={s} value={s}>
@@ -465,7 +465,7 @@ export const CtwaCatchersTab: React.FC = () => {
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Template Sapaan (multi)</label>
+              <label className="text-xs font-bold text-ink">Template Sapaan (multi)</label>
               <TagInput
                 values={fGreetings}
                 onChange={setFGreetings}
@@ -475,20 +475,20 @@ export const CtwaCatchersTab: React.FC = () => {
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Kata Kunci Jangkar (opsional)</label>
+              <label className="text-xs font-bold text-ink">Kata Kunci Jangkar (opsional)</label>
               <TagInput
                 values={fAnchors}
                 onChange={setFAnchors}
                 placeholder="cth: baby spa, surabaya"
               />
-              <p className="text-[11px] text-[#8696a0]">
+              <p className="text-[11px] text-ink-3">
                 Kosongkan bila ingin catcher generik (murni andalkan kemiripan teks).
               </p>
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">
-                Sensitivitas Kemiripan: <span className="text-[#008069]">{fThreshold}%</span>
+              <label className="text-xs font-bold text-ink">
+                Sensitivitas Kemiripan: <span className="text-accent">{fThreshold}%</span>
               </label>
               <input
                 type="range"
@@ -496,30 +496,30 @@ export const CtwaCatchersTab: React.FC = () => {
                 max={95}
                 value={fThreshold}
                 onChange={(e) => setFThreshold(Number(e.target.value))}
-                className="w-full accent-[#008069]"
+                className="w-full accent-accent"
               />
-              <div className="flex justify-between text-[10px] text-[#8696a0]">
+              <div className="flex justify-between text-[10px] text-ink-3">
                 <span>50% (longgar)</span>
                 <span>95% (ketat)</span>
               </div>
             </div>
 
-            <label className="flex items-center gap-2 text-xs font-semibold text-[#111b21]">
-              <input type="checkbox" checked={fActive} onChange={(e) => setFActive(e.target.checked)} className="accent-[#008069]" />
+            <label className="flex items-center gap-2 text-xs font-semibold text-ink">
+              <input type="checkbox" checked={fActive} onChange={(e) => setFActive(e.target.checked)} className="accent-accent" />
               Aktif
             </label>
 
-            <div className="flex justify-end gap-2 border-t border-[#e9edef] pt-3">
+            <div className="flex justify-end gap-2 border-t border-divider pt-3">
               <button
                 onClick={() => setModalOpen(false)}
-                className="px-4 py-2 border border-[#e9edef] rounded-xl text-xs font-semibold text-[#667781] hover:bg-[#f0f2f5]"
+                className="px-4 py-2 border border-divider rounded-xl text-xs font-semibold text-ink-2 hover:bg-fill-1"
               >
                 Batal
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold disabled:opacity-50 flex items-center gap-1.5"
+                className="px-4 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-semibold disabled:opacity-50 flex items-center gap-1.5"
               >
                 {saving && <Loader size={13} className="animate-spin" />} Simpan
               </button>

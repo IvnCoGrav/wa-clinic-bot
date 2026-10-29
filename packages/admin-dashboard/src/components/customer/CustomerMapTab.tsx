@@ -38,7 +38,7 @@ const REGIONAL_MAX_BOUNDS: [[number, number], [number, number]] = [
   [-8.50, 111.00],
   [-6.50, 114.50],
 ];
-const RING_COLORS = ['#008069', '#2563eb', '#e11d48'];
+const RING_COLORS = ['rgb(var(--c-accent))', 'rgb(var(--c-info))', 'rgb(var(--c-danger))'];
 
 // Basemap Peta Jalan: CARTO light_nolabels (OSM data, tanpa label/POI) via API key dari .env,
 // filter grayscale — sangat simple, hanya jalan. Tanpa key, fallback otomatis ke
@@ -364,7 +364,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
             if (level === 'regency_border') {
               // Kota / Kabupaten: Hijau tebal tegas
               return {
-                color: '#008069',
+                color: 'rgb(var(--c-accent))',
                 weight: 3.2,
                 opacity: 0.95,
                 fill: false,
@@ -375,7 +375,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
             if (level === 'district_border') {
               // Kecamatan: Orange sedang
               return {
-                color: '#f97316',
+                color: 'rgb(var(--c-caution))',
                 weight: 1.8,
                 opacity: 0.85,
                 fill: false,
@@ -385,9 +385,9 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
             }
             // Kelurahan / Desa: poligon biru pudar lembut (hierarki warna: hijau → orange → biru pudar)
             return {
-              fillColor: '#eff6ff',
+              fillColor: 'rgb(var(--c-info-soft))',
               fillOpacity: 0.65,
-              color: '#93c5fd',
+              color: 'rgb(var(--c-info-line))',
               weight: 0.8,
               opacity: 0.9,
               dashArray: '2, 3',
@@ -404,17 +404,17 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
             if (p && p.level === 'village') {
               layer.bindTooltip(
                 `<div style="font-family:inherit;font-size:11px;line-height:1.4">` +
-                  `<b style="color:#0369a1">${escapeHtml(p.village || 'Kelurahan')}</b><br/>` +
-                  `<span style="color:#64748b">Kec. ${escapeHtml(p.district || '')} · ${escapeHtml(p.regency || '')}</span>` +
+                  `<b style="color:rgb(var(--c-info))">${escapeHtml(p.village || 'Kelurahan')}</b><br/>` +
+                  `<span style="color:rgb(var(--c-ink-2))">Kec. ${escapeHtml(p.district || '')} · ${escapeHtml(p.regency || '')}</span>` +
                 `</div>`,
                 { sticky: false, direction: 'auto', opacity: 0.95 }
               );
               layer.on({
                 mouseover: (e: any) => {
                   e.target.setStyle({
-                    fillColor: '#bae6fd',
+                    fillColor: 'rgb(var(--c-info-soft))',
                     fillOpacity: 0.85,
-                    color: '#0284c7',
+                    color: 'rgb(var(--c-info))',
                     weight: 1.5,
                     opacity: 1,
                     dashArray: undefined,
@@ -466,8 +466,8 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
     dispersedPoints.forEach((p) => {
       const loc = locationVisual(p);
       const isManualStaff = loc.source === 'manual_staff';
-      const fillColor = isManualStaff ? '#7c3aed' : markerColor(p);
-      const strokeColor = isManualStaff ? '#ffffff' : loc.borderColor;
+      const fillColor = isManualStaff ? 'rgb(var(--c-d3))' : markerColor(p);
+      const strokeColor = isManualStaff ? 'rgb(var(--c-surface))' : loc.borderColor;
       const strokeWidth = 2;
       const radius = loc.radius;
       const marker = L.circleMarker([p.renderLat, p.renderLng], {
@@ -492,31 +492,31 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
       const accuracy = loc.label;
       const distanceText =
         typeof p.distance_km === 'number'
-          ? `<div style="color:#667781">📏 Jarak: ${p.distance_km} km dari Basecamp</div>`
+          ? `<div style="color:rgb(var(--c-ink-2))">📏 Jarak: ${p.distance_km} km dari Basecamp</div>`
           : '';
       const staffBadge = isManualStaff
-        ? `<div style="display:inline-block;margin-top:4px;padding:2px 8px;border-radius:6px;background:#f3e8ff;color:#7c3aed;font-weight:700">🛠️ Diedit Bidan/Staf</div>`
+        ? `<div style="display:inline-block;margin-top:4px;padding:2px 8px;border-radius:6px;background:rgb(var(--c-accent-soft));color:rgb(var(--c-accent));font-weight:700">🛠️ Diedit Bidan/Staf</div>`
         : '';
 
       const detailBtn =
         onSelectCustomer && p.id
           ? `<button type="button" data-customer-id="${escapeHtml(p.id)}"
                style="display:block;width:100%;margin-top:8px;padding:6px;border:none;border-radius:8px;
-                      background:#008069;color:#fff;font-weight:600;font-size:11px;cursor:pointer">
+                      background:rgb(var(--c-accent));color:rgb(var(--c-accent-ink));font-weight:600;font-size:11px;cursor:pointer">
                Lihat Detail Pelanggan
              </button>`
           : '';
       marker.bindPopup(
         `<div style="font-family:inherit;font-size:12px;line-height:1.5;min-width:180px">
-          <div style="font-weight:700;color:#111b21;margin-bottom:2px">${name}</div>
-          <div style="color:#667781">${area}</div>
-          <div style="color:#667781">${phone}</div>
-          <div style="display:inline-block;margin-top:4px;padding:1px 6px;border-radius:6px;background:#f0f2f5;color:${fillColor};font-weight:600">${statusLabel}</div>
+          <div style="font-weight:700;color:rgb(var(--c-ink));margin-bottom:2px">${name}</div>
+          <div style="color:rgb(var(--c-ink-2))">${area}</div>
+          <div style="color:rgb(var(--c-ink-2))">${phone}</div>
+          <div style="display:inline-block;margin-top:4px;padding:1px 6px;border-radius:6px;background:rgb(var(--c-fill-1));color:${fillColor};font-weight:600">${statusLabel}</div>
           ${staffBadge}
-          <div style="color:#667781;margin-top:2px">${accuracy}</div>
+          <div style="color:rgb(var(--c-ink-2));margin-top:2px">${accuracy}</div>
           ${distanceText}
           <a href="${getGoogleMapsDirectionUrl(p.lat, p.lng)}" target="_blank" rel="noopener noreferrer"
-             style="display:inline-block;margin-top:6px;color:#008069;font-weight:600">Navigasi &rarr;</a>
+             style="display:inline-block;margin-top:6px;color:rgb(var(--c-accent));font-weight:600">Navigasi &rarr;</a>
           ${detailBtn}
         </div>`
       );
@@ -589,18 +589,18 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
 
     const basecamp = L.circleMarker([clinic.lat, clinic.lng], {
       radius: 9,
-      color: '#ffffff',
+      color: 'rgb(var(--c-surface))',
       weight: 2.5,
-      fillColor: '#e11d48',
+      fillColor: 'rgb(var(--c-danger))',
       fillOpacity: 1,
     });
     basecamp.bindPopup(
       `<div style="font-family:inherit;font-size:12px;line-height:1.5;min-width:160px">
-        <div style="font-weight:700;color:#111b21">${escapeHtml(clinic.name)}</div>
-        <div style="color:#667781">Basecamp Klinik</div>
-        <div style="color:#667781">Jangkauan maks ${clinic.maxCoverageKm} km</div>
+        <div style="font-weight:700;color:rgb(var(--c-ink))">${escapeHtml(clinic.name)}</div>
+        <div style="color:rgb(var(--c-ink-2))">Basecamp Klinik</div>
+        <div style="color:rgb(var(--c-ink-2))">Jangkauan maks ${clinic.maxCoverageKm} km</div>
         <a href="${getGoogleMapsDirectionUrl(clinic.lat, clinic.lng)}" target="_blank" rel="noopener noreferrer"
-           style="display:inline-block;margin-top:6px;color:#008069;font-weight:600">Navigasi &rarr;</a>
+           style="display:inline-block;margin-top:6px;color:rgb(var(--c-accent));font-weight:600">Navigasi &rarr;</a>
       </div>`
     );
     basecamp.addTo(group);
@@ -640,22 +640,22 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h1 className="text-xl font-bold text-[#111b21] dark:text-[#e9edef] tracking-tight flex items-center space-x-2">
-            <MapPin className="text-[#008069]" size={22} />
+          <h1 className="text-xl font-bold text-ink tracking-tight flex items-center space-x-2">
+            <MapPin className="text-accent" size={22} />
             <span>Sebaran Pelanggan</span>
           </h1>
-          <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
+          <p className="text-xs text-ink-2 mt-0.5">
             Peta sebaran pelanggan interaktif dengan pilihan Peta Jalan dan Area Vektor (Surabaya & Sidoarjo). Klik titik lalu tekan "Lihat Detail Pelanggan".
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           {/* Switcher Mode Peta */}
-          <div className="inline-flex rounded-xl bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#2a3942] p-0.5 shadow-xs text-xs font-semibold">
+          <div className="inline-flex rounded-xl bg-surface border border-divider p-0.5 shadow-xs text-xs font-semibold">
             <button
               type="button"
               onClick={() => setMapMode('streets')}
               className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${
-                mapMode === 'streets' ? 'bg-[#008069] text-white shadow-xs' : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef]'
+                mapMode === 'streets' ? 'bg-accent text-white shadow-xs' : 'text-ink-2 hover:text-ink'
               }`}
               title="Tampilkan peta jalan CartoDB"
             >
@@ -665,7 +665,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
               type="button"
               onClick={() => setMapMode('area')}
               className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${
-                mapMode === 'area' ? 'bg-[#008069] text-white shadow-xs' : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef]'
+                mapMode === 'area' ? 'bg-accent text-white shadow-xs' : 'text-ink-2 hover:text-ink'
               }`}
               title="Tampilkan siluet area batas wilayah Surabaya & Sidoarjo tanpa jalan"
             >
@@ -673,16 +673,16 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
             </button>
           </div>
 
-          <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#54656f] dark:text-[#8696a0] text-xs font-semibold shadow-xs cursor-pointer select-none">
+          <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface border border-divider text-ink-2 text-xs font-semibold shadow-xs cursor-pointer select-none">
             <input
               type="checkbox"
               checked={showRadius}
               onChange={(e) => setShowRadius(e.target.checked)}
-              className="accent-[#008069]"
+              className="accent-accent"
             />
             <span>Tampilkan Radius</span>
           </label>
-          <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#54656f] dark:text-[#8696a0] text-xs font-semibold shadow-xs cursor-pointer select-none">
+          <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface border border-divider text-ink-2 text-xs font-semibold shadow-xs cursor-pointer select-none">
             <input
               type="checkbox"
               checked={showAllCities}
@@ -690,7 +690,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
                 hasInitialFittedRef.current = false;
                 setShowAllCities(e.target.checked);
               }}
-              className="accent-[#008069]"
+              className="accent-accent"
             />
             <span>Semua wilayah</span>
           </label>
@@ -700,7 +700,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
               hasInitialFittedRef.current = false;
               setKotaFilter(e.target.value);
             }}
-            className="px-3 py-1.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] text-xs font-semibold shadow-xs focus:outline-none focus:border-[#008069]"
+            className="px-3 py-1.5 rounded-xl bg-surface border border-divider text-ink text-xs font-semibold shadow-xs focus:outline-none focus:border-accent"
           >
             <option value="">Semua Kota</option>
             {kotaOptions.map((k) => (
@@ -715,10 +715,10 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
               loadPoints(showAllCities, true);
             }}
             disabled={loading}
-            className="px-3 py-1.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#54656f] dark:text-[#8696a0] hover:bg-[#f0f2f5] hover:text-[#111b21] dark:text-[#e9edef] transition shadow-xs disabled:opacity-50 flex items-center space-x-1.5 text-xs font-semibold cursor-pointer"
+            className="px-3 py-1.5 rounded-xl bg-surface border border-divider text-ink-2 hover:bg-fill-1 hover:text-ink transition shadow-xs disabled:opacity-50 flex items-center space-x-1.5 text-xs font-semibold cursor-pointer"
             title="Refresh titik peta"
           >
-            <RefreshCw size={13} className={loading ? 'animate-spin text-[#008069]' : ''} />
+            <RefreshCw size={13} className={loading ? 'animate-spin text-accent' : ''} />
             <span>Refresh</span>
           </button>
         </div>
@@ -726,40 +726,40 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
 
       {/* Ringkasan KPI Spasial */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="bg-white dark:bg-[#111b21] p-3.5 rounded-xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs">
-          <span className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider">Total Terpetakan</span>
-          <p className="text-lg font-bold text-[#111b21] dark:text-[#e9edef] mt-1">{metrics.totalPoints} titik</p>
-          <span className="text-[10px] text-[#667781] dark:text-[#8696a0]">{metrics.preciseCount} presisi · {metrics.estimatedCount} estimasi</span>
+        <div className="bg-surface p-3.5 rounded-xl border border-divider shadow-xs">
+          <span className="text-[11px] font-bold text-ink-2 uppercase tracking-wider">Total Terpetakan</span>
+          <p className="text-lg font-bold text-ink mt-1">{metrics.totalPoints} titik</p>
+          <span className="text-[10px] text-ink-2">{metrics.preciseCount} presisi · {metrics.estimatedCount} estimasi</span>
         </div>
-        <div className="bg-white dark:bg-[#111b21] p-3.5 rounded-xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs">
-          <span className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider">Keterjangkauan</span>
-          <p className="text-lg font-bold text-[#008069] mt-1">{metrics.inCoveragePercent}%</p>
-          <span className="text-[10px] text-[#667781] dark:text-[#8696a0]">{metrics.inCoverageCount} dalam · {metrics.outOfCoverageCount} luar</span>
+        <div className="bg-surface p-3.5 rounded-xl border border-divider shadow-xs">
+          <span className="text-[11px] font-bold text-ink-2 uppercase tracking-wider">Keterjangkauan</span>
+          <p className="text-lg font-bold text-accent mt-1">{metrics.inCoveragePercent}%</p>
+          <span className="text-[10px] text-ink-2">{metrics.inCoverageCount} dalam · {metrics.outOfCoverageCount} luar</span>
         </div>
-        <div className="bg-white dark:bg-[#111b21] p-3.5 rounded-xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs">
-          <span className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider">Rata-rata Jarak</span>
-          <p className="text-lg font-bold text-[#111b21] dark:text-[#e9edef] mt-1">
+        <div className="bg-surface p-3.5 rounded-xl border border-divider shadow-xs">
+          <span className="text-[11px] font-bold text-ink-2 uppercase tracking-wider">Rata-rata Jarak</span>
+          <p className="text-lg font-bold text-ink mt-1">
             {metrics.averageDistanceKm != null ? `${metrics.averageDistanceKm} km` : '-'}
           </p>
-          <span className="text-[10px] text-[#667781] dark:text-[#8696a0]">dari basecamp</span>
+          <span className="text-[10px] text-ink-2">dari basecamp</span>
         </div>
-        <div className="bg-white dark:bg-[#111b21] p-3.5 rounded-xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs">
-          <span className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider">Top Wilayah</span>
+        <div className="bg-surface p-3.5 rounded-xl border border-divider shadow-xs">
+          <span className="text-[11px] font-bold text-ink-2 uppercase tracking-wider">Top Wilayah</span>
           {metrics.topKecamatan.length > 0 ? (
-            <p className="text-[11px] font-semibold text-[#111b21] dark:text-[#e9edef] mt-1 leading-snug">
+            <p className="text-[11px] font-semibold text-ink mt-1 leading-snug">
               {metrics.topKecamatan.map((k, i) => `${i + 1}. ${k.name} (${k.count})`).join(' · ')}
             </p>
           ) : (
-            <p className="text-lg font-bold text-[#111b21] dark:text-[#e9edef] mt-1">-</p>
+            <p className="text-lg font-bold text-ink mt-1">-</p>
           )}
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#667781] dark:text-[#8696a0]">
+      <div className="flex flex-wrap items-center gap-2 text-[11px] text-ink-2">
         {([
-          { key: 'reserved' as SpatialStatus, label: 'Sudah Reservasi', color: '#008069' },
-          { key: 'mql' as SpatialStatus, label: 'MQL (Tertarik)', color: '#2563eb' },
-          { key: 'out_of_coverage' as SpatialStatus, label: 'Di luar jangkauan', color: '#94a3b8' },
+          { key: 'reserved' as SpatialStatus, label: 'Sudah Reservasi', color: 'rgb(var(--c-accent))' },
+          { key: 'mql' as SpatialStatus, label: 'MQL (Tertarik)', color: 'rgb(var(--c-info))' },
+          { key: 'out_of_coverage' as SpatialStatus, label: 'Di luar jangkauan', color: 'rgb(var(--c-ink-3))' },
         ]).map((item) => {
           const hidden = hiddenStatuses.has(item.key);
           return (
@@ -768,7 +768,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
               type="button"
               onClick={() => toggleStatus(item.key)}
               className={`inline-chip no-touch-min flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition cursor-pointer font-semibold ${
-                hidden ? 'opacity-40 line-through bg-[#f0f2f5] border-[#d1d7db]' : 'bg-white border-[#d1d7db]'
+                hidden ? 'opacity-40 line-through bg-fill-1 border-divider' : 'bg-surface border-divider'
               }`}
               title={hidden ? `Tampilkan ${item.label}` : `Sembunyikan ${item.label}`}
             >
@@ -780,14 +780,14 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
         <span className="flex items-center gap-1.5 px-2.5 py-1">
           <span
             className="w-2.5 h-2.5 rounded-full"
-            style={{ border: '2px solid #ffffff', background: '#008069', boxShadow: '0 0 0 1px #cbd5e1', display: 'inline-block' }}
+            style={{ border: '2px solid rgb(var(--c-surface))', background: 'rgb(var(--c-accent))', boxShadow: '0 0 0 1px rgb(var(--c-divider))', display: 'inline-block' }}
           />
           📍 GPS Akurat
         </span>
         <span className="flex items-center gap-1.5 px-2.5 py-1">
           <span
             className="w-2.5 h-2.5 rounded-full"
-            style={{ border: '2px dashed #64748b', display: 'inline-block' }}
+            style={{ border: '2px dashed rgb(var(--c-ink-2))', display: 'inline-block' }}
           />
           ⚪ Estimasi Wilayah
         </span>
@@ -795,35 +795,35 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
           type="button"
           onClick={() => setOnlyStaffFilter((prev) => !prev)}
           className={`inline-chip no-touch-min flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition cursor-pointer font-semibold ${
-            onlyStaffFilter ? 'bg-[#7c3aed] text-white border-[#7c3aed]' : 'bg-white border-[#d1d7db] text-[#54656f] dark:text-[#8696a0]'
+            onlyStaffFilter ? 'bg-accent-soft text-accent border-accent' : 'bg-surface border-divider text-ink-2'
           }`}
           title={onlyStaffFilter ? 'Tampilkan semua titik' : 'Hanya titik diedit staf'}
         >
           <span
             className="w-2.5 h-2.5 rounded-full"
-            style={{ background: '#7c3aed', border: '1px solid #ffffff', display: 'inline-block' }}
+            style={{ background: 'rgb(var(--c-d3))', border: '1px solid rgb(var(--c-surface))', display: 'inline-block' }}
           />
           🛠️ {onlyStaffFilter ? 'Menampilkan Hanya Diedit Staf' : 'Diedit Bidan/Staf'}
         </button>
         {clinic && (
           <span className="flex items-center gap-1.5 px-2.5 py-1">
-            <span className="w-2.5 h-2.5 rounded-full" style={{ background: '#e11d48', display: 'inline-block' }} />
+            <span className="w-2.5 h-2.5 rounded-full" style={{ background: 'rgb(var(--c-danger))', display: 'inline-block' }} />
             Basecamp
           </span>
         )}
         {mapMode === 'area' && (
-          <div className="flex items-center gap-2.5 px-2.5 py-1 bg-[#f8fafc] border border-[#e2e8f0] rounded-full text-[11px] font-medium text-[#475569]">
-            <span className="font-bold text-[#111b21] dark:text-[#e9edef]">Batas:</span>
+          <div className="flex items-center gap-2.5 px-2.5 py-1 bg-surface-2 border border-divider rounded-full text-[11px] font-medium text-ink-2">
+            <span className="font-bold text-ink">Batas:</span>
             <span className="flex items-center gap-1">
-              <span className="w-3 h-1 rounded-xs bg-[#008069] inline-block" />
+              <span className="w-3 h-1 rounded-xs bg-accent inline-block" />
               Kota (Hijau)
             </span>
             <span className="flex items-center gap-1">
-              <span className="w-3 h-0.5 rounded-xs bg-[#f97316] inline-block" />
+              <span className="w-3 h-0.5 rounded-xs bg-caution inline-block" />
               Kecamatan (Orange)
             </span>
             <span className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-xs bg-[#eff6ff] border border-[#93c5fd] inline-block" />
+              <span className="w-2.5 h-2.5 rounded-xs bg-info-soft border border-info-line inline-block" />
               Kelurahan (Biru pudar)
             </span>
           </div>
@@ -832,15 +832,15 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
       </div>
 
       {leafletFailed ? (
-        <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-8 text-center">
-          <AlertTriangle className="mx-auto text-amber-500 mb-2" size={28} />
-          <p className="text-sm font-semibold text-[#111b21] dark:text-[#e9edef]">Peta gagal dimuat</p>
-          <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-1">
+        <div className="bg-surface border border-divider rounded-2xl p-8 text-center">
+          <AlertTriangle className="mx-auto text-warning mb-2" size={28} />
+          <p className="text-sm font-semibold text-ink">Peta gagal dimuat</p>
+          <p className="text-xs text-ink-2 mt-1">
             Pustaka peta (CDN) tidak dapat diakses. Periksa koneksi internet lalu coba lagi.
           </p>
         </div>
       ) : (
-        <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl overflow-hidden shadow-xs relative">
+        <div className="bg-surface border border-divider rounded-2xl overflow-hidden shadow-xs relative">
           <div
             ref={mapContainerRef}
             className="customer-map-osm-gray"
@@ -848,12 +848,12 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
               height: '580px',
               width: '100%',
               minHeight: '580px',
-              background: mapMode === 'area' ? '#f1f5f9' : '#eef1f4',
+              background: mapMode === 'area' ? 'rgb(var(--c-app))' : 'rgb(var(--c-fill-1))',
             }}
           />
           {/* Floating Quick Controls */}
           <div className="absolute bottom-3 right-3 z-[400] flex flex-col items-end gap-1.5">
-            <div className="flex flex-col bg-white dark:bg-[#111b21] rounded-xl shadow-md border border-[#e9edef] dark:border-[#2a3942] overflow-hidden">
+            <div className="flex flex-col bg-surface rounded-xl shadow-md border border-divider overflow-hidden">
               <button
                 type="button"
                 onClick={() => {
@@ -861,7 +861,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
                   if (!m || !clinic) return;
                   try { m.flyTo([clinic.lat, clinic.lng], 13, { duration: 0.6 }); } catch {}
                 }}
-                className="px-2.5 py-1.5 text-[11px] font-semibold text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#202c33] border-b border-[#e9edef] dark:border-[#2a3942] flex items-center gap-1.5"
+                className="px-2.5 py-1.5 text-[11px] font-semibold text-ink hover:bg-fill-1 border-b border-divider flex items-center gap-1.5"
                 title="Fokus ke Basecamp Klinik"
               >
                 <span>🎯</span> Fokus Basecamp
@@ -876,17 +876,17 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
                     if (b && b.isValid && b.isValid()) m.fitBounds(b, { padding: [40, 40], maxZoom: 14 });
                   } catch {}
                 }}
-                className="px-2.5 py-1.5 text-[11px] font-semibold text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#202c33] flex items-center gap-1.5"
+                className="px-2.5 py-1.5 text-[11px] font-semibold text-ink hover:bg-fill-1 flex items-center gap-1.5"
                 title="Pas-kan semua titik terlihat"
               >
                 <span>🗺️</span> Pas-kan Semua
               </button>
             </div>
-            <div className="flex bg-white dark:bg-[#111b21] rounded-xl shadow-md border border-[#e9edef] dark:border-[#2a3942] overflow-hidden">
+            <div className="flex bg-surface rounded-xl shadow-md border border-divider overflow-hidden">
               <button
                 type="button"
                 onClick={() => { try { mapRef.current?.zoomIn(); } catch {} }}
-                className="px-3 py-1.5 text-sm font-bold text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#202c33] border-r border-[#e9edef] dark:border-[#2a3942]"
+                className="px-3 py-1.5 text-sm font-bold text-ink hover:bg-fill-1 border-r border-divider"
                 title="Zoom in"
               >
                 +
@@ -894,34 +894,34 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
               <button
                 type="button"
                 onClick={() => { try { mapRef.current?.zoomOut(); } catch {} }}
-                className="px-3 py-1.5 text-sm font-bold text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#202c33]"
+                className="px-3 py-1.5 text-sm font-bold text-ink hover:bg-fill-1"
                 title="Zoom out"
               >
                 −
               </button>
             </div>
-            <div className="px-2 py-1 bg-white/90 dark:bg-[#111b21]/90 backdrop-blur rounded-full text-[10px] font-semibold text-[#54656f] dark:text-[#8696a0] border border-[#e9edef] dark:border-[#2a3942] shadow-sm">
+            <div className="px-2 py-1 bg-surface/90 backdrop-blur rounded-full text-[10px] font-semibold text-ink-2 border border-divider shadow-sm">
               Zoom {currentZoom}x
             </div>
           </div>
           {loading && (
             <div className="absolute inset-0 bg-white/60 dark:bg-black/60 flex items-center justify-center z-[1001]">
-              <RefreshCw className="animate-spin text-[#008069]" size={24} />
+              <RefreshCw className="animate-spin text-accent" size={24} />
             </div>
           )}
           {!loading && mapMode === 'area' && geoLoading && (
             <div className="absolute inset-0 bg-white/40 dark:bg-black/40 flex items-center justify-center z-10 pointer-events-none">
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white dark:bg-[#111b21] shadow-sm border border-[#e9edef] dark:border-[#2a3942]">
-                <RefreshCw className="animate-spin text-[#008069]" size={14} />
-                <span className="text-xs font-semibold text-[#54656f] dark:text-[#8696a0]">Memuat batas wilayah…</span>
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface shadow-sm border border-divider">
+                <RefreshCw className="animate-spin text-accent" size={14} />
+                <span className="text-xs font-semibold text-ink-2">Memuat batas wilayah…</span>
               </div>
             </div>
           )}
           {!loading && visiblePoints.length === 0 && !error && (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none z-10">
-              <MapPin className="text-[#94a3b8] mb-2" size={28} />
-              <p className="text-sm font-semibold text-[#111b21] dark:text-[#e9edef]">Tidak ada titik untuk ditampilkan</p>
-              <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-1">
+              <MapPin className="text-ink-3 mb-2" size={28} />
+              <p className="text-sm font-semibold text-ink">Tidak ada titik untuk ditampilkan</p>
+              <p className="text-xs text-ink-2 mt-1">
                 {kotaFilter
                   ? 'Coba pilih kota lain atau reset filter.'
                   : 'Titik muncul setelah pelanggan membagikan lokasi atau admin mengisi koordinat.'}
@@ -930,11 +930,11 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
           )}
           {error && !loading && (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center z-10">
-              <AlertTriangle className="text-red-500 mb-2" size={28} />
-              <p className="text-sm font-semibold text-[#111b21] dark:text-[#e9edef]">{error}</p>
+              <AlertTriangle className="text-danger mb-2" size={28} />
+              <p className="text-sm font-semibold text-ink">{error}</p>
               <button
                 onClick={() => loadPoints(showAllCities, true)}
-                className="mt-3 px-3 py-1.5 rounded-xl bg-[#008069] text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                className="mt-3 px-3 py-1.5 rounded-xl bg-accent text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
               >
                 <RefreshCw size={13} /> Coba lagi
               </button>

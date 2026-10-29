@@ -68,14 +68,14 @@ export const AiRouterPanel: React.FC<Props> = ({
   return (
     <div className="space-y-6">
       {/* AI Rollout Scope Panel — dipangkas dari AiRouterPanel: toggle stub router dihapus (V1 retired) */}
-      <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-4 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-[#f0f2f5] dark:border-[#2a3942] pb-3">
+      <div className="bg-surface border border-divider rounded-2xl p-5 space-y-4 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-divider dark:border-divider pb-3">
           <div className="space-y-0.5">
-            <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
-              <Zap className="text-amber-500" size={16} />
+            <h3 className="text-sm font-bold text-ink flex items-center space-x-2">
+              <Zap className="text-warning" size={16} />
               <span>AI Rollout Scope (Target Pelanggan AI)</span>
             </h3>
-            <p className="text-xs text-[#667781] dark:text-[#8696a0] leading-relaxed">
+            <p className="text-xs text-ink-3 leading-relaxed">
               Batasi balasan AI hanya untuk pelanggan baru agar pelanggan legacy (lama) tetap ditangani secara personal oleh staf manusia.
             </p>
           </div>
@@ -83,13 +83,13 @@ export const AiRouterPanel: React.FC<Props> = ({
           {/* Auto-save status indicator */}
           <div className="flex items-center gap-1.5 shrink-0">
             {savingAiScope ? (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-[#008069] text-xs font-semibold border border-emerald-200">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-success-soft text-accent text-xs font-semibold border border-success-line">
                 <Loader2 size={13} className="animate-spin" />
                 <span>Menyimpan ke server...</span>
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#f0f2f5] text-[#54656f] dark:text-[#8696a0] text-[11px] font-medium">
-                <Check size={13} className="text-[#008069]" />
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-fill-1 text-ink-2 text-[11px] font-medium">
+                <Check size={13} className="text-accent" />
                 <span>Otomatis tersimpan</span>
               </span>
             )}
@@ -99,15 +99,15 @@ export const AiRouterPanel: React.FC<Props> = ({
         <div className="space-y-4">
           {/* Target Audience Scope Radio */}
           <div className="space-y-1.5">
-            <label className="text-[11px] uppercase tracking-wider font-bold text-[#667781] dark:text-[#8696a0] block">
+            <label className="text-[11px] uppercase tracking-wider font-bold text-ink-3 block">
               Pilihan Target Pelanggan
             </label>
             <div className="flex flex-wrap items-center gap-3">
               <label
                 className={`flex items-center space-x-2 px-3.5 py-2.5 rounded-xl border text-xs font-semibold cursor-pointer transition shadow-xs ${
                   aiScope === 'NEW_ONLY'
-                    ? 'border-[#008069] bg-emerald-50/50 text-[#008069]'
-                    : 'border-[#e9edef] bg-white text-[#111b21] dark:text-[#e9edef] hover:bg-[#f8fafc]'
+                    ? 'border-accent bg-success-soft/50 text-accent'
+                    : 'border-divider bg-surface text-ink hover:bg-surface-2'
                 }`}
               >
                 <input
@@ -117,7 +117,7 @@ export const AiRouterPanel: React.FC<Props> = ({
                   checked={aiScope === 'NEW_ONLY'}
                   onChange={() => handleUpdateAiScope('NEW_ONLY', aiScopeCutoffAt)}
                   disabled={savingAiScope}
-                  className="text-[#008069] focus:ring-[#008069]"
+                  className="text-accent focus:ring-accent"
                 />
                 <span>NEW_ONLY (Hanya Pelanggan Baru Mulai Tanggal Cutoff)</span>
               </label>
@@ -125,8 +125,8 @@ export const AiRouterPanel: React.FC<Props> = ({
               <label
                 className={`flex items-center space-x-2 px-3.5 py-2.5 rounded-xl border text-xs font-semibold cursor-pointer transition shadow-xs ${
                   aiScope === 'ALL'
-                    ? 'border-[#008069] bg-emerald-50/50 text-[#008069]'
-                    : 'border-[#e9edef] bg-white text-[#111b21] dark:text-[#e9edef] hover:bg-[#f8fafc]'
+                    ? 'border-accent bg-success-soft/50 text-accent'
+                    : 'border-divider bg-surface text-ink hover:bg-surface-2'
                 }`}
               >
                 <input
@@ -136,7 +136,7 @@ export const AiRouterPanel: React.FC<Props> = ({
                   checked={aiScope === 'ALL'}
                   onChange={() => handleUpdateAiScope('ALL', aiScopeCutoffAt)}
                   disabled={savingAiScope}
-                  className="text-[#008069] focus:ring-[#008069]"
+                  className="text-accent focus:ring-accent"
                 />
                 <span>ALL (Semua Pelanggan Lama &amp; Baru)</span>
               </label>
@@ -146,9 +146,9 @@ export const AiRouterPanel: React.FC<Props> = ({
           {/* Direct Manual CS Handoff Toggles (Legacy & Repeat Customer) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
             {/* Legacy Customer Bypass Toggle */}
-            <div className="p-3.5 rounded-xl bg-[#f8fafc] dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] space-y-2.5">
+            <div className="p-3.5 rounded-xl bg-surface-2 border border-divider space-y-2.5">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Pasien Legacy (CS Manual)</span>
+                <span className="text-xs font-bold text-ink">Pasien Legacy (CS Manual)</span>
                 <ToggleSwitch
                   checked={legacyBypassBot}
                   onChange={(next) => handleUpdateAiScope(undefined, undefined, next, undefined)}
@@ -159,15 +159,15 @@ export const AiRouterPanel: React.FC<Props> = ({
                   size="md"
                 />
               </div>
-              <p className="text-xs text-[#667781] dark:text-[#8696a0] leading-relaxed">
+              <p className="text-xs text-ink-3 leading-relaxed">
                 Semua kontak legacy (arsip chat lama &amp; impor kontak) otomatis dialihkan ke penanganan CS manusia. Bot tidak akan membalas.
               </p>
             </div>
 
             {/* Repeat Patient Bypass Toggle */}
-            <div className="p-3.5 rounded-xl bg-[#f8fafc] dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] space-y-2.5">
+            <div className="p-3.5 rounded-xl bg-surface-2 border border-divider space-y-2.5">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Pasien Pernah Treatment (CS Manual)</span>
+                <span className="text-xs font-bold text-ink">Pasien Pernah Treatment (CS Manual)</span>
                 <ToggleSwitch
                   checked={repeatPatientBypassBot}
                   onChange={(next) => handleUpdateAiScope(undefined, undefined, undefined, next)}
@@ -178,7 +178,7 @@ export const AiRouterPanel: React.FC<Props> = ({
                   size="md"
                 />
               </div>
-              <p className="text-xs text-[#667781] dark:text-[#8696a0] leading-relaxed">
+              <p className="text-xs text-ink-3 leading-relaxed">
                 Pasien yang sudah pernah reservasi/treatment terkonfirmasi otomatis dialihkan ke penanganan personal CS manusia. Bot tidak akan membalas.
               </p>
             </div>
@@ -186,13 +186,13 @@ export const AiRouterPanel: React.FC<Props> = ({
 
           {/* Date Picker Section - Only shown when NEW_ONLY */}
           {aiScope === 'NEW_ONLY' && (
-            <div className="p-4 rounded-2xl bg-[#f8fafc] dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] space-y-3">
+            <div className="p-4 rounded-2xl bg-surface-2 border border-divider space-y-3">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-1.5">
-                  <Calendar className="text-[#008069]" size={15} />
+                <label className="text-xs font-bold text-ink flex items-center space-x-1.5">
+                  <Calendar className="text-accent" size={15} />
                   <span>Tanggal Cutoff Pelanggan Baru</span>
                 </label>
-                <span className="text-[11px] text-[#667781] dark:text-[#8696a0]">Pilih tanggal (tanpa jam)</span>
+                <span className="text-[11px] text-ink-3">Pilih tanggal (tanpa jam)</span>
               </div>
 
               <div className="flex flex-col sm:flex-row sm:items-center gap-3">
@@ -203,18 +203,18 @@ export const AiRouterPanel: React.FC<Props> = ({
                     value={aiScopeCutoffAt}
                     onChange={(e) => handleUpdateAiScope('NEW_ONLY', e.target.value)}
                     disabled={savingAiScope}
-                    className="w-full bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3.5 py-2 text-xs font-bold text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs cursor-pointer disabled:opacity-50"
+                    className="w-full bg-surface border border-divider rounded-xl px-3.5 py-2 text-xs font-bold text-ink focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs cursor-pointer disabled:opacity-50"
                   />
                 </div>
 
                 {/* Quick Presets */}
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[10px] uppercase font-bold text-[#8696a0] mr-1">Preset:</span>
+                  <span className="text-[10px] uppercase font-bold text-ink-3 mr-1">Preset:</span>
                   <button
                     type="button"
                     onClick={() => handleSetPresetDate(0)}
                     disabled={savingAiScope}
-                    className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#2a3942] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] text-[#111b21] dark:text-[#e9edef] text-[11px] font-semibold transition disabled:opacity-50 shadow-2xs"
+                    className="px-2.5 py-1.5 rounded-lg bg-surface border border-divider hover:bg-fill-1 text-ink text-[11px] font-semibold transition disabled:opacity-50 shadow-2xs"
                   >
                     Hari Ini
                   </button>
@@ -222,7 +222,7 @@ export const AiRouterPanel: React.FC<Props> = ({
                     type="button"
                     onClick={() => handleSetPresetDate(1)}
                     disabled={savingAiScope}
-                    className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#2a3942] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] text-[#111b21] dark:text-[#e9edef] text-[11px] font-semibold transition disabled:opacity-50 shadow-2xs"
+                    className="px-2.5 py-1.5 rounded-lg bg-surface border border-divider hover:bg-fill-1 text-ink text-[11px] font-semibold transition disabled:opacity-50 shadow-2xs"
                   >
                     Kemarin
                   </button>
@@ -230,7 +230,7 @@ export const AiRouterPanel: React.FC<Props> = ({
                     type="button"
                     onClick={handleSetFirstOfMonth}
                     disabled={savingAiScope}
-                    className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#2a3942] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] text-[#111b21] dark:text-[#e9edef] text-[11px] font-semibold transition disabled:opacity-50 shadow-2xs"
+                    className="px-2.5 py-1.5 rounded-lg bg-surface border border-divider hover:bg-fill-1 text-ink text-[11px] font-semibold transition disabled:opacity-50 shadow-2xs"
                   >
                     Awal Bulan Ini
                   </button>
@@ -239,10 +239,10 @@ export const AiRouterPanel: React.FC<Props> = ({
 
               {/* Dynamic Explanatory Banner */}
               {aiScopeCutoffAt && (
-                <div className="flex items-start space-x-2 text-xs text-[#54656f] dark:text-[#8696a0] bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl p-3 shadow-2xs">
-                  <Clock className="text-[#008069] shrink-0 mt-0.5" size={14} />
+                <div className="flex items-start space-x-2 text-xs text-ink-2 bg-surface border border-divider rounded-xl p-3 shadow-2xs">
+                  <Clock className="text-accent shrink-0 mt-0.5" size={14} />
                   <p className="leading-relaxed">
-                    Pelanggan yang pertama kali chat mulai <strong className="text-[#111b21] dark:text-[#e9edef]">{formatIndonesianDate(aiScopeCutoffAt)}</strong> akan otomatis dilayani bot AI. Pelanggan yang terdaftar sebelum tanggal tersebut disenyapkan (<em>silent auto-hold</em>) dan diteruskan ke admin manusia.
+                    Pelanggan yang pertama kali chat mulai <strong className="text-ink">{formatIndonesianDate(aiScopeCutoffAt)}</strong> akan otomatis dilayani bot AI. Pelanggan yang terdaftar sebelum tanggal tersebut disenyapkan (<em>silent auto-hold</em>) dan diteruskan ke admin manusia.
                   </p>
                 </div>
               )}
@@ -251,21 +251,21 @@ export const AiRouterPanel: React.FC<Props> = ({
 
           {/* Scope Summary Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-1">
-            <div className="p-3 rounded-xl bg-[#f8fafc] dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942]">
-              <span className="text-[10px] uppercase font-bold text-[#667781] dark:text-[#8696a0] block">Total Pelanggan</span>
-              <span className="text-base font-extrabold text-[#111b21] dark:text-[#e9edef]">{aiScopeSummary.totalCustomers}</span>
+            <div className="p-3 rounded-xl bg-surface-2 border border-divider">
+              <span className="text-[10px] uppercase font-bold text-ink-3 block">Total Pelanggan</span>
+              <span className="text-base font-extrabold text-ink">{aiScopeSummary.totalCustomers}</span>
             </div>
-            <div className="p-3 rounded-xl bg-[#f8fafc] dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942]">
-              <span className="text-[10px] uppercase font-bold text-[#008069] block">Pelanggan Baru (AI)</span>
-              <span className="text-base font-extrabold text-[#008069]">{aiScopeSummary.newCustomers}</span>
+            <div className="p-3 rounded-xl bg-surface-2 border border-divider">
+              <span className="text-[10px] uppercase font-bold text-accent block">Pelanggan Baru (AI)</span>
+              <span className="text-base font-extrabold text-accent">{aiScopeSummary.newCustomers}</span>
             </div>
-            <div className="p-3 rounded-xl bg-[#f8fafc] dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942]">
-              <span className="text-[10px] uppercase font-bold text-amber-700 block">Legacy (Skip AI)</span>
-              <span className="text-base font-extrabold text-amber-700">{aiScopeSummary.legacyCustomers}</span>
+            <div className="p-3 rounded-xl bg-surface-2 border border-divider">
+              <span className="text-[10px] uppercase font-bold text-warning block">Legacy (Skip AI)</span>
+              <span className="text-base font-extrabold text-warning">{aiScopeSummary.legacyCustomers}</span>
             </div>
-            <div className="p-3 rounded-xl bg-[#f8fafc] dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942]">
-              <span className="text-[10px] uppercase font-bold text-[#667781] dark:text-[#8696a0] block">Silenced by Scope</span>
-              <span className="text-base font-extrabold text-[#54656f] dark:text-[#8696a0]">{aiScopeSummary.silencedByScope}</span>
+            <div className="p-3 rounded-xl bg-surface-2 border border-divider">
+              <span className="text-[10px] uppercase font-bold text-ink-3 block">Silenced by Scope</span>
+              <span className="text-base font-extrabold text-ink-2">{aiScopeSummary.silencedByScope}</span>
             </div>
           </div>
         </div>

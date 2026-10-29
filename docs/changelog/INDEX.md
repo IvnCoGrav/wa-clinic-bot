@@ -5,8 +5,14 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 622
+Total entri terindeks: 628
 
+- 2026-10-29 | Refactor: Konsolidasi Komponen Input Kanonis, Adopsi StatusChip, dan Ekstraksi Komponen Be
+- 2026-10-29 | Fix: Kontras WCAG AA Dipenuhi, Warna Status Jadi Satu Sumber, dan CSS Legacy Dibersihkan (
+- 2026-10-29 | Test: Kontrak Test Design System Diperbarui ke Token + `paid` di `statusTone` Diaktifkan (
+- 2026-10-29 | Fix: Paritas Mode Gelap Dipulihkan — Migrasi Semantik 1.971 Kelas Palet & 362 `bg-white`
+- 2026-10-29 | Feat: Tuntas Migrasi Seluruh UI ke Design System Kanonis v2 (Batch B1 s.d. B9 & Pembersiha
+- 2026-10-29 | Feat: Eksekusi Fase 0 s.d. 3 Design System Kanonis v2 (Kanal RGB, Primitif UI, Shell & Tem
 - 2026-10-29 | Fix: Seam Pemilih Mode Kalender & Eliminasi Reset Status Duplikat (F-46, F-47)
 - 2026-10-29 | Feat: Kalender Full-Bleed di HP + Gutter Jam Ramping 28px (Fase A & B queue / F-39, F-44)
 - 2026-10-29 | Fix: Seam Rentang Minggu (F-43) + Invoice Tanpa Regex Wilayah (F-29, F-45)

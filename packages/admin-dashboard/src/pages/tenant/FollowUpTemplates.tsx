@@ -293,17 +293,17 @@ export const FollowUpTemplates: React.FC = () => {
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16">
       {/* Header Section */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-[#e9edef] shadow-xs">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-surface p-5 rounded-2xl border border-divider shadow-xs">
         <div>
           <div className="flex items-center space-x-2.5">
-            <div className="w-10 h-10 rounded-xl bg-[#e8f5f2] border border-[#c2e7e0] flex items-center justify-center text-[#008069]">
+            <div className="w-10 h-10 rounded-xl bg-accent-soft border border-divider flex items-center justify-center text-accent">
               <MessageSquareText size={22} />
             </div>
             <div>
-              <h2 className="text-xl font-bold tracking-tight text-[#111b21]">
+              <h2 className="text-xl font-bold tracking-tight text-ink">
                 Rolling Template Follow-Up & Reminder
               </h2>
-              <p className="text-xs text-[#54656f] mt-0.5">
+              <p className="text-xs text-ink-2 mt-0.5">
                 Kelola variasi pesan otomatis WhatsApp. Tersedia 3 varian dinamis per skenario untuk rotasi anti-bot & personalisasi ramah.
               </p>
             </div>
@@ -314,12 +314,12 @@ export const FollowUpTemplates: React.FC = () => {
           <button
             onClick={() => loadTemplates(false)}
             disabled={refreshing || loading}
-            className="h-10 px-4 rounded-xl bg-white dark:bg-[#202c33] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] transition-all duration-150 active:scale-[0.98] flex items-center space-x-2 text-xs font-semibold shadow-xs disabled:opacity-60"
+            className="h-10 px-4 rounded-xl bg-surface hover:bg-fill-1 border border-divider text-ink transition-all duration-150 active:scale-[0.98] flex items-center space-x-2 text-xs font-semibold shadow-xs disabled:opacity-60"
             title="Muat ulang template dari database"
           >
             <RefreshCw
               size={14}
-              className={`text-[#008069] ${refreshing ? 'animate-spin' : ''}`}
+              className={`text-accent ${refreshing ? 'animate-spin' : ''}`}
             />
             <span>{refreshing ? 'Menyinkronkan...' : 'Sinkronkan Data'}</span>
           </button>
@@ -327,16 +327,16 @@ export const FollowUpTemplates: React.FC = () => {
       </div>
 
       {/* Quick Guide & Interactive Placeholder Library */}
-      <div className="bg-gradient-to-r from-[#f0fdf4] to-[#e8f5f2] dark:from-[#0f1f1b] dark:to-[#0c1317] border border-[#c2e7e0] dark:border-[#00a884]/25 rounded-2xl p-4.5 shadow-xs">
+      <div className="bg-surface-2 border border-divider dark:border-accent/25 rounded-2xl p-4.5 shadow-xs">
         <div className="flex flex-col sm:flex-row items-start justify-between gap-3">
           <div className="flex items-start space-x-3">
-            <div className="p-2 rounded-xl bg-white/80 dark:bg-[#202c33] border border-[#c2e7e0] dark:border-[#00a884]/30 text-[#008069] dark:text-[#00a884] mt-0.5 shadow-xs">
+            <div className="p-2 rounded-xl bg-white/80 dark:bg-fill-1 border border-divider dark:border-accent/30 text-accent mt-0.5 shadow-xs">
               <Tag size={16} />
             </div>
             <div>
-              <h4 className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] uppercase tracking-wide flex items-center gap-1.5">
+              <h4 className="text-xs font-bold text-ink uppercase tracking-wide flex items-center gap-1.5">
                 <span>Variabel Pintar (Placeholder)</span>
-                <span className="text-[10px] font-normal text-[#54656f] dark:text-[#aebac1] normal-case bg-white dark:bg-[#202c33] px-2 py-0.5 rounded-full border border-[#c2e7e0] dark:border-[#00a884]/30">
+                <span className="text-[10px] font-normal text-ink-2 normal-case bg-surface px-2 py-0.5 rounded-full border border-divider dark:border-accent/30">
                   Klik chip di bawah untuk menyisipkan
                 </span>
               </h4>
@@ -344,17 +344,17 @@ export const FollowUpTemplates: React.FC = () => {
                 {AVAILABLE_PLACEHOLDERS.map((p) => (
                   <div
                     key={p.tag}
-                    className="inline-flex items-center bg-white dark:bg-[#202c33] px-2.5 py-1.5 rounded-xl border border-[#c2e7e0] dark:border-[#00a884]/30 shadow-xs text-xs"
+                    className="inline-flex items-center bg-surface px-2.5 py-1.5 rounded-xl border border-divider dark:border-accent/30 shadow-xs text-xs"
                   >
-                    <code className="text-[#008069] dark:text-[#00a884] font-bold font-mono mr-1.5">{p.tag}</code>
-                    <span className="text-[#54656f] dark:text-[#aebac1] text-[11px]">({p.label})</span>
+                    <code className="text-accent font-bold font-mono mr-1.5">{p.tag}</code>
+                    <span className="text-ink-2 text-[11px]">({p.label})</span>
                   </div>
                 ))}
               </div>
             </div>
           </div>
-          <div className="text-[11px] text-[#54656f] dark:text-[#aebac1] bg-white/70 dark:bg-[#202c33] p-2.5 rounded-xl border border-[#c2e7e0]/60 dark:border-[#00a884]/25 max-w-sm">
-            <span className="font-semibold text-[#111b21] dark:text-[#e9edef]">💡 Tips Format WhatsApp:</span> Gunakan <code className="text-[#008069] dark:text-[#00a884]">*tebal*</code>, <code className="text-[#008069] dark:text-[#00a884]">_miring_</code>, atau emoji ramah untuk meningkatkan kenyamanan pasien.
+          <div className="text-[11px] text-ink-2 bg-white/70 dark:bg-fill-1 p-2.5 rounded-xl border border-divider/60 dark:border-accent/25 max-w-sm">
+            <span className="font-semibold text-ink">💡 Tips Format WhatsApp:</span> Gunakan <code className="text-accent">*tebal*</code>, <code className="text-accent">_miring_</code>, atau emoji ramah untuk meningkatkan kenyamanan pasien.
           </div>
         </div>
       </div>
@@ -377,15 +377,15 @@ export const FollowUpTemplates: React.FC = () => {
                 onClick={() => setSelectedCategory(cat.id)}
                 className={`h-9 px-3.5 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all duration-150 whitespace-nowrap active:scale-[0.98] ${
                   isActive
-                    ? 'bg-[#008069] text-white shadow-sm font-bold'
-                    : 'bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#202c33] text-[#54656f] dark:text-[#8696a0] hover:bg-[#f0f2f5] dark:hover:bg-[#202c33] hover:text-[#111b21] dark:hover:text-[#e9edef]'
+                    ? 'bg-accent text-accent-ink shadow-sm font-bold'
+                    : 'bg-surface border border-divider dark:border-divider text-ink-2 hover:bg-fill-1 hover:text-ink dark:hover:text-ink'
                 }`}
               >
-                <Icon size={14} className={isActive ? 'text-white' : 'text-[#8696a0]'} />
+                <Icon size={14} className={isActive ? 'text-white' : 'text-ink-3'} />
                 <span>{cat.label}</span>
                 <span
                   className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                    isActive ? 'bg-white/20 text-white' : 'bg-[#f0f2f5] text-[#54656f]'
+                    isActive ? 'bg-white/20 text-white' : 'bg-fill-1 text-ink-2'
                   }`}
                 >
                   {count}
@@ -397,18 +397,18 @@ export const FollowUpTemplates: React.FC = () => {
 
         {/* Instant Search Bar */}
         <div className="relative min-w-[240px] sm:max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8696a0]" size={15} />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" size={15} />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Cari skenario / keyword..."
-            className="w-full h-9 pl-9 pr-8 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs transition"
+            className="w-full h-9 pl-9 pr-8 bg-surface border border-divider rounded-xl text-xs text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs transition"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8696a0] hover:text-[#111b21]"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-3 hover:text-ink"
             >
               <X size={14} />
             </button>
@@ -418,15 +418,15 @@ export const FollowUpTemplates: React.FC = () => {
 
       {/* Main Content Area */}
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-24 bg-white border border-[#e9edef] rounded-2xl">
-          <RefreshCw className="animate-spin text-[#008069] mb-3" size={32} />
-          <p className="text-xs font-semibold text-[#54656f]">Memuat seluruh template follow-up...</p>
+        <div className="flex flex-col items-center justify-center py-24 bg-surface border border-divider rounded-2xl">
+          <RefreshCw className="animate-spin text-accent mb-3" size={32} />
+          <p className="text-xs font-semibold text-ink-2">Memuat seluruh template follow-up...</p>
         </div>
       ) : filteredTypes.length === 0 ? (
-        <div className="text-center py-16 bg-white border border-[#e9edef] rounded-2xl p-6">
-          <MessageSquareText size={36} className="text-[#8696a0] mx-auto mb-2 opacity-50" />
-          <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef]">Tidak ada template ditemukan</h3>
-          <p className="text-xs text-[#54656f] mt-1 max-w-sm mx-auto">
+        <div className="text-center py-16 bg-surface border border-divider rounded-2xl p-6">
+          <MessageSquareText size={36} className="text-ink-3 mx-auto mb-2 opacity-50" />
+          <h3 className="text-sm font-bold text-ink">Tidak ada template ditemukan</h3>
+          <p className="text-xs text-ink-2 mt-1 max-w-sm mx-auto">
             {searchQuery
               ? `Tidak ada hasil yang cocok dengan kata kunci "${searchQuery}". Coba gunakan istilah lain.`
               : 'Tidak ada template untuk kategori ini.'}
@@ -434,7 +434,7 @@ export const FollowUpTemplates: React.FC = () => {
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="mt-3 px-3 py-1.5 rounded-lg bg-[#e8f5f2] text-[#008069] text-xs font-bold hover:bg-[#d0ece7] transition"
+              className="mt-3 px-3 py-1.5 rounded-lg bg-accent-soft text-accent text-xs font-bold hover:bg-accent-soft transition"
             >
               Hapus Pencarian
             </button>
@@ -453,21 +453,21 @@ export const FollowUpTemplates: React.FC = () => {
             return (
               <div
                 key={type}
-                className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#202c33] rounded-2xl p-5 md:p-6 shadow-xs hover:border-[#d1d7db] dark:hover:border-[#2a3942] transition-colors"
+                className="bg-surface border border-divider rounded-2xl p-5 md:p-6 shadow-xs hover:border-divider dark:hover:border-divider transition-colors"
               >
                 {/* Skenario Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3.5 border-b border-[#e9edef]">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3.5 border-b border-divider">
                   <div className="space-y-0.5">
                     <div className="flex items-center space-x-2">
-                      <div className="w-6 h-6 rounded-lg bg-[#e8f5f2] text-[#008069] flex items-center justify-center">
+                      <div className="w-6 h-6 rounded-lg bg-accent-soft text-accent flex items-center justify-center">
                         <Tag size={13} />
                       </div>
-                      <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef]">{config.label}</h3>
-                      <span className="px-2 py-0.5 rounded-full bg-[#f0f2f5] text-[#54656f] text-[10px] font-bold">
+                      <h3 className="text-sm font-bold text-ink">{config.label}</h3>
+                      <span className="px-2 py-0.5 rounded-full bg-fill-1 text-ink-2 text-[10px] font-bold">
                         {items.length} Varian Rotasi
                       </span>
                     </div>
-                    <p className="text-[11px] text-[#54656f] pl-8">{config.description}</p>
+                    <p className="text-[11px] text-ink-2 pl-8">{config.description}</p>
                   </div>
                 </div>
 
@@ -486,24 +486,24 @@ export const FollowUpTemplates: React.FC = () => {
                         key={key}
                         className={`flex flex-col justify-between p-4 rounded-xl border transition-all ${
                           isDirty
-                            ? 'bg-[#fcfdfd] dark:bg-[#182229] border-[#008069]/40 ring-1 ring-[#008069]/20 shadow-xs'
-                            : 'bg-[#fcfcfc] dark:bg-[#182229] border-[#e9edef] dark:border-[#202c33] hover:border-[#d1d7db] dark:hover:border-[#2a3942]'
+                            ? 'bg-surface dark:bg-surface-2 border-accent/40 ring-1 ring-accent/20 shadow-xs'
+                            : 'bg-surface dark:bg-surface-2 border-divider hover:border-divider dark:hover:border-divider'
                         }`}
                       >
                         {/* Variant Top Bar */}
                         <div>
-                          <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#f0f2f5] dark:border-[#202c33]">
+                          <div className="flex items-center justify-between pb-2 mb-2 border-b border-divider dark:border-divider">
                             <div className="flex items-center space-x-2">
-                              <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] bg-white dark:bg-[#202c33] px-2 py-0.5 rounded-md border border-[#e9edef] dark:border-[#2a3942] shadow-2xs">
+                              <span className="text-xs font-bold text-ink bg-surface px-2 py-0.5 rounded-md border border-divider shadow-2xs">
                                 Varian #{item.variant}
                               </span>
                               {!item.isDefault ? (
-                                <span className="px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[9px] font-bold flex items-center gap-1">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                <span className="px-2 py-0.5 rounded-full bg-success-soft border border-success-line text-success text-[9px] font-bold flex items-center gap-1">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-success"></span>
                                   KUSTOM
                                 </span>
                               ) : (
-                                <span className="px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-[9px] font-semibold">
+                                <span className="px-2 py-0.5 rounded-full bg-fill-1 border border-divider text-ink-2 text-[9px] font-semibold">
                                   DEFAULT
                                 </span>
                               )}
@@ -514,7 +514,7 @@ export const FollowUpTemplates: React.FC = () => {
                               <button
                                 onClick={() => handleReset(item.type, item.variant)}
                                 disabled={isSaving}
-                                className="h-7 px-2 rounded-lg bg-white hover:bg-rose-50 border border-[#d1d7db] hover:border-rose-200 text-[#54656f] hover:text-rose-600 text-[11px] font-semibold transition-all flex items-center space-x-1 active:scale-[0.98] shadow-2xs disabled:opacity-50"
+                                className="h-7 px-2 rounded-lg bg-surface hover:bg-danger-soft border border-divider hover:border-danger-line text-ink-2 hover:text-danger text-[11px] font-semibold transition-all flex items-center space-x-1 active:scale-[0.98] shadow-2xs disabled:opacity-50"
                                 title="Kembalikan varian ini ke teks default sistem"
                               >
                                 <RotateCcw size={11} />
@@ -525,7 +525,7 @@ export const FollowUpTemplates: React.FC = () => {
 
                           {/* Click-to-insert placeholder pills */}
                           <div className="flex flex-wrap items-center gap-1 mb-2">
-                            <span className="text-[10px] text-[#8696a0] font-medium mr-0.5">Sisipkan:</span>
+                            <span className="text-[10px] text-ink-3 font-medium mr-0.5">Sisipkan:</span>
                             {AVAILABLE_PLACEHOLDERS
                               .filter((p) => !(p.tag === '{time}' && (item.type === 'REMINDER_H0' || item.type === 'REMINDER_H1')))
                               .map((p) => (
@@ -533,7 +533,7 @@ export const FollowUpTemplates: React.FC = () => {
                                 key={p.tag}
                                 type="button"
                                 onClick={() => insertPlaceholder(item.type, item.variant, p.tag)}
-                                className="px-1.5 py-0.5 bg-white hover:bg-[#e8f5f2] border border-[#d1d7db] hover:border-[#008069] text-[#008069] rounded text-[10px] font-mono font-bold transition active:scale-95 shadow-2xs"
+                                className="px-1.5 py-0.5 bg-surface hover:bg-accent-soft border border-divider hover:border-accent text-accent rounded text-[10px] font-mono font-bold transition active:scale-95 shadow-2xs"
                                 title={`Sisipkan ${p.tag} (${p.label}) ke kursor`}
                               >
                                 +{p.tag}
@@ -551,17 +551,17 @@ export const FollowUpTemplates: React.FC = () => {
                               value={item.text}
                               onChange={(e) => updateText(item.type, item.variant, e.target.value)}
                               placeholder="Tulis draf pesan follow-up di sini..."
-                              className="w-full p-3 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] leading-relaxed resize-none focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-2xs transition"
+                              className="w-full p-3 bg-surface border border-divider rounded-xl text-xs text-ink placeholder:text-ink-3 leading-relaxed resize-none focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-2xs transition"
                             />
                           </div>
                         </div>
 
                         {/* Card Bottom Bar (Char Count & Action Button) */}
-                        <div className="flex items-center justify-between pt-3 mt-2 border-t border-[#f0f2f5] dark:border-[#202c33]">
+                        <div className="flex items-center justify-between pt-3 mt-2 border-t border-divider dark:border-divider">
                           <div className="flex items-center space-x-1.5">
-                            <span className="text-[11px] text-[#8696a0] font-mono">{charCount} kar</span>
+                            <span className="text-[11px] text-ink-3 font-mono">{charCount} kar</span>
                             {isDirty && (
-                              <span className="inline-flex items-center px-1.5 py-0.2 rounded-md bg-amber-50 text-amber-700 text-[10px] font-semibold border border-amber-200">
+                              <span className="inline-flex items-center px-1.5 py-0.2 rounded-md bg-warning-soft text-warning text-[10px] font-semibold border border-warning-line">
                                 Belum disimpan
                               </span>
                             )}
@@ -572,10 +572,10 @@ export const FollowUpTemplates: React.FC = () => {
                             disabled={isSaving}
                             className={`h-9 px-4 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all duration-150 active:scale-[0.98] shadow-xs ${
                               isJustSaved
-                                ? 'bg-emerald-600 text-white font-bold'
+                                ? 'bg-success text-on-solid font-bold'
                                 : isDirty
-                                ? 'bg-[#008069] hover:bg-[#00a884] text-white font-bold ring-2 ring-emerald-300'
-                                : 'bg-[#008069] hover:bg-[#00a884] text-white'
+                                ? 'bg-accent hover:bg-accent-hover text-accent-ink font-bold ring-2 ring-success'
+                                : 'bg-accent hover:bg-accent-hover text-accent-ink'
                             }`}
                           >
                             {isSaving ? (

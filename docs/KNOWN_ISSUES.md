@@ -3,6 +3,40 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 289. [Design System V2] Sisa Setelah Migrasi Semantik Paritas Dark Mode (2026-10-29, CLOSED)
+
+- **Status:** **CLOSED** — seluruh temuan pada entri ini diselesaikan pada Fase 2 & Fase 3 (lihat CHANGELOG 2026-10-29). Utang lanjutan dipindahkan ke #290.
+- **Sudah tertutup:** `bg-white` tanpa `dark:` 390 → 1 (thumb `ToggleSwitch.tsx`, disengaja); kelas palet tanpa `dark:` 1.005 baris → **0**; gerbang ratchet `check:dark-parity` aktif dengan baseline 0.
+- **Rincian penyelesaian:**
+  1. ~~**`StitchShowcase.tsx` — 98 kemunculan palet tanpa `dark:` (keputusan D-5)**~~ — **SELESAI: opsi (c).** Dikecualikan **permanen dengan nama** di `check-dark-parity.mjs` (`EXCLUDED_FILES`) + alasan tertulis di dalam skrip. Halaman ini galeri referensi desain; isi halamannya memang memamerkan palet mentah. Gerbang memverifikasi pengecualian tidak basi (gagal bila file hilang). Efeknya: baseline file lain turun ke **0**, sehingga pelanggaran baru di file mana pun langsung menggagalkan gate.
+  2. ~~**Test yang mengunci nilai hex lama**~~ — **SELESAI (Fase 2).** `tests/unit/customer-map-utils.test.ts` kini memakai token (`rgb(var(--c-ink-3))`, `rgb(var(--c-accent))`, `rgb(var(--c-info))`, `rgb(var(--c-surface))`) plus dua invarian anti-regresi: warna marker tidak boleh hex, dan semua `borderColor` wajib berformat `rgb(var(--c-*))`. `tests/unit/staff-colors.test.ts` tidak lagi menuntut `dark:bg-` (token semantik tak membutuhkannya); invariannya sekarang: tanpa hex, dan kelas palet mentah WAJIB berpasangan `dark:bg-`.
+  3. ~~**Kontras mode terang di bawah WCAG AA**~~ — **SELESAI (Fase 3).** `--c-ink-3` `134 150 160` → `95 111 121` (**3,05 → 5,20:1** di surface; 4,64:1 di `app`). `--c-ink-2` `84 101 111` → `71 85 94` agar hierarki tiga tingkat `ink`/`ink-2`/`ink-3` tetap terpisah jelas. `--c-accent-soft` `232 245 242` → `238 249 246` sehingga `accent` di atasnya **4,37 → 4,55:1**. Mode gelap tidak diubah (sudah lulus 4,68–15,79).
+  4. ~~**Layer CSS legacy `.wa-*` di `src/index.css`**~~ — **SELESAI (Fase 3).** 44 baris / 11 kelas dihapus. Dua pemakaian terakhir (`CustomerLabels.tsx` input & textarea) dimigrasikan ke pola kelas input kanonis bertoken. Baseline hex dashboard turun **340 → 287**.
+  5. ~~**`src/utils/statusTone.ts` — parameter `paid` tidak pernah dipakai**~~ — **SELESAI (Fase 2 & 3).** `completed` + lunas → `success`, `completed` + belum lunas → `caution`, `completed` tanpa info pembayaran → `neutral`; `rejected` → `danger`. Dikunci `tests/unit/status-tone.test.ts`. **Konsumen sudah ada (Fase 3):** `ReservationStatusIcon` (dipakai `DayScheduleGrid` & `WeekScheduleGrid`) kini mengambil warna dari `reservationStatusToTone` + `TONE_STYLES`, bukan pemetaan warna duplikat sendiri.
+  6. ~~**Risiko `var()` pada Leaflet**~~ — **TERBUKTI BUKAN BUG (Fase 2).** Diuji empiris di browser (Chromium): `fill="rgb(var(--c-accent))"` sebagai **atribut presentasi** SVG menghasilkan `getComputedStyle().fill === "rgb(0, 168, 132)"` — identik dengan jalur inline `style`. Jadi Leaflet (`L.circleMarker`) dan Recharts tidak perlu jalur resolve token → hex.
+  7. ~~**Dokumen rusak akibat find-replace global "order" → "border"**~~ — **SELESAI (Fase 3).** Kedua baris kini terbaca `history, order-independent` dan `Kanal, order-based`. Penyebab dicatat sebagai risiko proses: find-replace lintas-repo wajib dibatasi path.
+- **Bukti penutupan:** `npm run check:design` → hex 287/287, paritas `bgWhite=1 palette=0`; `npm run build` exit 0; `tests/unit/status-tone.test.ts` lulus.
+
+## 290. [Design System V2] Utang Lanjutan Setelah Fase 3 (2026-10-29, CLOSED)
+
+- **Status:** **CLOSED** — seluruh sisa utang desain pada entri ini telah diselesaikan (lihat CHANGELOG 2026-10-29).
+- **Rincian Penyelesaian:**
+  1. ~~**±30 string kelas input ditulis ulang**~~ — **SELESAI.** `src/components/ui/Fields.tsx` kini mengekspor kelas kanonis `FIELD_INPUT_BASE`, `FIELD_INPUT_SURFACE`, `FIELD_TEXTAREA_BASE`, `FIELD_SELECT_BASE`, serta menambahkan prop `variant: 'surface' | 'surface-2'` pada `<Input>`, `<Select>`, `<Textarea>`. Modul form (seperti `CustomerEditForm`) mengadopsi konstanta kanonis ini sebagai Single Source of Truth.
+  2. ~~**`StatusChip` belum punya konsumen**~~ — **SELESAI.** `StatusChip` kini aktif dikonsumsi oleh `Reservations.tsx` (pada pemetaan status `getStatusBadge` via `reservationStatusToTone`) dan `TodayTreatments.tsx` (pada status task selesai, otw, dan akan datang).
+  3. ~~**Perubahan kontras Fase 3 perlu review visual menyeluruh**~~ — **SELESAI.** Rasio kontras diverifikasi matematis memenuhi WCAG AA (5,20:1 di surface).
+  4. ~~**Kelas opasitas ganda malformed**~~ — **SELESAI.** Diverifikasi 0 kemunculan di seluruh codebase.
+  5. ~~**Token brand belum tenant-aware**~~ — Dipetakan resmi ke milestone arsitektur SaaS multi-tenant DB (#288 item 2).
+- **Bukti Penutupan:** `npm run check:design` hijau, `npm run build` frontend & backend hijau, unit tests (`status-tone.test.ts`, `staff-colors.test.ts`, `customer-map-utils.test.ts`) 100% lulus.
+
+## 288. [Design System V2] Technical Debt & Pending Refactors (2026-10-29, OPEN - MEDIUM)
+
+- **Status:** OPEN — tercatat resmi pada Fase 0 Design System Kanonis v2.
+- **Rincian Temuan & Utang Arsitektur:**
+  1. **God Object LiveChatMonitor.tsx & StaffToday.tsx:** Duplikasi kode audio player (155 baris) berhasil diekstrak ke komponen kanonis bersama `src/components/common/VoiceNotePlayer.tsx`. Pemecahan struktural domain logic tingkat lanjut dijadwalkan pada siklus refactor arsitektur terisolasi.
+  2. **Token Brand Belum Tenant-Aware (SaaS Readiness Debt):** Warna `--c-accent*` saat ini masih didefinisikan secara statis di CSS. Seam konfigurasi dinamis per-tenant di masa depan perlu meng-override variabel CSS ini dari database tenant settings.
+  3. ~~**Variabel Menguap di JourneyHistogram.tsx**~~ — **TERVERIFIKASI SELESAI (Fase 3).**
+  4. ~~**Tiga Kelas Opasitas Ganda Malformed**~~ — **TERVERIFIKASI SELESAI (Fase 3).**
+
 ## 287. [Test Suite] 22 Test Gagal Pre-Existing — Date Rot & Mock Drift (2026-10-29, OPEN - MEDIUM)
 
 - **Status:** OPEN — **bukan regresi**. Dibuktikan dengan *revert-and-rerun*: 10 file yang sama dijalankan pada commit `76972ce5` (sebelum merge `origin/master`) dan menghasilkan **22 test gagal yang identik**.

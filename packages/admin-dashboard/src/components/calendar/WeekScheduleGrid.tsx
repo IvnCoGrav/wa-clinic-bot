@@ -144,14 +144,6 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
   const hasAutoScrolledRef = useRef(false);
 
   // === Sinkronisasi scroll 1 arah + penjaga gema (anti-getar) ===
-  // Grid → penggaris atas: aman, karena penggaris tidak sedang dipegang jari.
-  // Penggaris atas → grid: HANYA saat penggaris benar-benar disentuh user, dan
-  // event gema akibat tulisan programatik kita sendiri diabaikan.
-  //
-  // Sebelumnya kedua arah aktif tanpa penjaga waktu. Saat jari menggeser grid,
-  // browser menggerakkan grid di lapisan compositor sehingga `scrollLeft` yang
-  // dibaca JS tertinggal beberapa frame. Nilai basi itu ditulis balik ke grid
-  // → grid "ditarik mundur" tiap frame → getar kiri-kanan.
   const topTouchingRef = useRef(false);
   const lastTopWriteRef = useRef(0);
   const TOP_SYNC_ECHO_MS = 300;
@@ -160,7 +152,6 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
     const container = containerRef.current;
     const top = topScrollbarRef.current;
     if (!container || !top) return;
-    // Jangan pernah menulis posisi ke elemen yang sedang dipegang jari.
     if (topTouchingRef.current) return;
     const currentScrollLeft = container.scrollLeft;
     if (Math.abs(currentScrollLeft - top.scrollLeft) < 1) return;
@@ -172,14 +163,12 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
     const container = containerRef.current;
     const top = topScrollbarRef.current;
     if (!container || !top) return;
-    // Abaikan event gema dari tulisan kita sendiri (baris di atas).
     if (performance.now() - lastTopWriteRef.current < TOP_SYNC_ECHO_MS) return;
     container.scrollLeft = top.scrollLeft;
   };
 
   const handleTopPointerDown = () => {
     topTouchingRef.current = true;
-    // Buka penjaga gema segera agar tarikan user langsung terasa.
     lastTopWriteRef.current = 0;
   };
 
@@ -293,8 +282,6 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
     }
   };
 
-  // F-43: 7 kolom hari berasal dari seam yang SAMA dengan parameter API
-  // (getWeekDateRange) agar grid & data tidak pernah menyimpang.
   const weekDays: Date[] = getWeekRange(selectedDate).days;
 
   const isSameDay = (d1: Date, d2: Date) => {
@@ -303,12 +290,6 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
 
   const isToday = (d: Date) => getWibDateKey(d) === getTodayWibDateKey();
 
-  /**
-   * Reveal kolom hari terpilih dengan MENGUKUR DOM, bukan konstanta lebar kolom.
-   * Konstanta `DAY_COL_WIDTH` (140px) tidak sama dengan lebar riil saat grid
-   * memakai `minmax(140px, 1fr)` di layar lebar, sehingga posisi geser lama
-   * meleset dan hari tujuan tetap tak terlihat.
-   */
   const revealDayColumn = (idx: number, behavior: ScrollBehavior = 'smooth') => {
     const el = containerRef.current;
     const col = dayColumnRefs.current[idx];
@@ -317,7 +298,6 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
     const elRect = el.getBoundingClientRect();
     const colRect = col.getBoundingClientRect();
 
-    // Sudah terlihat penuh di area yang tidak tertutup kolom jam sticky?
     const visibleLeft = elRect.left + TIME_GUTTER;
     if (colRect.left >= visibleLeft - 1 && colRect.right <= elRect.right + 1) return;
 
@@ -327,11 +307,8 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
   };
 
   const formatHourLabel = formatHourLabelUtil;
-
   const selectedDateKey = getWibDateKey(selectedDate);
 
-  // Auto-scroll VERTIKAL sekali saat kalender pertama dimuat (posisi jam sekarang).
-  // Sumbu horizontal ditangani effect "reveal" di bawah.
   useEffect(() => {
     if (hasAutoScrolledRef.current) return;
     const el = containerRef.current;
@@ -347,9 +324,6 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
     hasAutoScrolledRef.current = true;
   }, []);
 
-  // Reveal kolom hari terpilih SETIAP kali tanggal berubah — termasuk saat
-  // chevron header halaman melompat seminggu (dulu tidak pernah menggeser view).
-  // Sekaligus memusatkan pill hari aktif agar Senin/Sabtu selalu terjangkau.
   useEffect(() => {
     const idx = weekDays.findIndex((d) => isSameDay(d, selectedDate));
     if (idx === -1) return;
@@ -371,7 +345,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
   const minCardHeight = zoomLevel === 'compact' ? 32 : 50;
 
   return (
-    <div className="bg-white dark:bg-[#111b21] rounded-none border-y border-x-0 border-[#e9edef] dark:border-[#2a3942] shadow-xs sm:rounded-2xl sm:border-x overflow-hidden flex flex-col relative group/calendar">
+    <div className="bg-surface rounded-none border-y border-x-0 border-divider shadow-xs sm:rounded-2xl sm:border-x overflow-hidden flex flex-col relative group/calendar">
       {/* Floating Zoom Controls Bar (Desktop & Tablet) */}
       <div className="absolute top-3 right-3 z-40 hidden sm:block">
         <CalendarZoomControls zoomState={zoomState} variant="floating" />
@@ -381,7 +355,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
       <div
         data-horizontal-scroll="true"
         data-no-swipe-back="true"
-        className="flex items-center justify-between border-b border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#182229] px-2 py-1.5 z-30 shrink-0 select-none"
+        className="flex items-center justify-between border-b border-divider bg-surface-2 px-2 py-1.5 z-30 shrink-0 select-none"
       >
         <div className="flex items-center gap-1">
           <button
@@ -389,15 +363,14 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
             onClick={() => {
               const prev = new Date(selectedDate);
               prev.setDate(prev.getDate() - 1);
-              // Reveal ditangani effect [selectedDateKey] — aman lintas minggu.
               onSelectDate(prev);
             }}
-            className="p-1.5 rounded-lg hover:bg-white dark:hover:bg-[#202c33] border border-transparent hover:border-[#d1d7db] dark:hover:border-[#374248] text-[#54656f] dark:text-[#aebac1] transition-all cursor-pointer"
+            className="p-1.5 rounded-lg hover:bg-fill-1 border border-transparent hover:border-divider text-ink-2 transition-all cursor-pointer"
             title="Hari Sebelumnya"
           >
             <ChevronLeft size={16} />
           </button>
-          <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] hidden sm:inline px-1">
+          <span className="text-xs font-bold text-ink hidden sm:inline px-1">
             Navigasi Hari:
           </span>
         </div>
@@ -423,15 +396,14 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                 data-day-pill="true"
                 data-active={isSel ? 'true' : 'false'}
                 onClick={() => {
-                  // Reveal kolom + pusatkan pill ditangani effect [selectedDateKey].
                   onSelectDate(d);
                 }}
                 className={`px-2.5 py-1 rounded-xl text-xs font-semibold flex items-center space-x-1 transition-all cursor-pointer shrink-0 ${
                   isSel
-                    ? 'bg-[#008069] dark:bg-[#00a884] text-white shadow-xs'
+                    ? 'bg-accent text-accent-ink shadow-xs'
                     : isTod
-                    ? 'bg-[#e8f5f2] dark:bg-[#00a884]/20 text-[#008069] dark:text-[#00a884] border border-[#c2e7e0] dark:border-[#00a884]/30'
-                    : 'bg-white dark:bg-[#202c33] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] text-[#54656f] dark:text-[#aebac1] border border-[#e9edef] dark:border-[#2a3942]'
+                    ? 'bg-accent-soft text-accent border border-accent/30'
+                    : 'bg-surface hover:bg-fill-1 text-ink-2 border border-divider'
                 }`}
               >
                 <span>{dayName}</span>
@@ -446,10 +418,9 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
           onClick={() => {
             const next = new Date(selectedDate);
             next.setDate(next.getDate() + 1);
-            // Reveal ditangani effect [selectedDateKey] — aman lintas minggu.
             onSelectDate(next);
           }}
-          className="p-1.5 rounded-lg hover:bg-white dark:hover:bg-[#202c33] border border-transparent hover:border-[#d1d7db] dark:hover:border-[#374248] text-[#54656f] dark:text-[#aebac1] transition-all cursor-pointer"
+          className="p-1.5 rounded-lg hover:bg-fill-1 border border-transparent hover:border-divider text-ink-2 transition-all cursor-pointer"
           title="Hari Berikutnya"
         >
           <ChevronRight size={16} />
@@ -459,7 +430,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
       {/* Legenda warna per bidan (hanya tampil bila daftar bidan tersedia) */}
       <StaffColorLegend staffList={staffList} />
 
-      {/* Dedicated Top Horizontal Scrollbar Track (1:1 Synchronized with 1008px Calendar Grid) */}
+      {/* Dedicated Top Horizontal Scrollbar Track */}
       <div
         ref={topScrollbarRef}
         data-horizontal-scroll="true"
@@ -468,7 +439,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
         onPointerDown={handleTopPointerDown}
         onPointerUp={handleTopPointerUp}
         onPointerCancel={handleTopPointerUp}
-        className="overflow-x-auto overflow-y-hidden h-5 sm:h-3.5 bg-[#f0f2f5] dark:bg-[#111b21] border-b border-[#e9edef] dark:border-[#2a3942] select-none cursor-pointer touch-pan-x"
+        className="overflow-x-auto overflow-y-hidden h-5 sm:h-3.5 bg-app border-b border-divider select-none cursor-pointer touch-pan-x"
         style={{
           touchAction: 'pan-x pan-y',
         }}
@@ -493,15 +464,15 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
         onTouchCancel={handleTouchEnd}
         className="cal-2d overflow-x-auto overflow-y-auto max-h-[720px] select-none cursor-grab active:cursor-grabbing"
       >
-        <div className="w-full divide-y divide-[#e9edef] dark:divide-[#2a3942]" style={{ minWidth: `${GRID_MIN_WIDTH}px` }}>
+        <div className="w-full divide-y divide-divider" style={{ minWidth: `${GRID_MIN_WIDTH}px` }}>
           {/* Sticky Header: Day Names & Dates */}
           <div
-            className="sticky top-0 z-30 grid divide-x divide-[#e9edef] dark:divide-[#2a3942] border-b border-[#e9edef] dark:border-[#2a3942] bg-[#fafafa] dark:bg-[#182229] shadow-xs"
+            className="sticky top-0 z-30 grid divide-x divide-divider border-b border-divider bg-surface-2 shadow-xs"
             style={{ gridTemplateColumns: GRID_TEMPLATE_COLUMNS }}
           >
-            {/* Top-left corner box — ikon jam menggantikan teks "GMT+7" */}
+            {/* Top-left corner box */}
             <div
-              className="sticky left-0 z-40 bg-[#fafafa] dark:bg-[#182229] border-r border-[#e9edef] dark:border-[#2a3942] flex items-center justify-center p-1 text-[10px] font-bold text-[#8696a0] shadow-[2px_0_5px_rgba(0,0,0,0.06)] dark:shadow-[2px_0_5px_rgba(0,0,0,0.3)]"
+              className="sticky left-0 z-40 bg-surface-2 border-r border-divider flex items-center justify-center p-1 text-[10px] font-bold text-ink-3 shadow-[2px_0_5px_rgba(0,0,0,0.06)] dark:shadow-[2px_0_5px_rgba(0,0,0,0.3)]"
               title="Waktu Indonesia Barat (WIB)"
               aria-label="Waktu Indonesia Barat (WIB)"
             >
@@ -524,21 +495,20 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                   data-day-column={i}
                   onClick={() => {
                     if (dragMovedRef.current) return;
-                    // Reveal kolom ditangani effect [selectedDateKey].
                     onSelectDate(day);
                   }}
                   className={`p-2 sm:p-2.5 text-center flex flex-col items-center justify-center transition-all cursor-pointer ${
                     isSelected
-                      ? 'bg-[#111b21] dark:bg-[#00a884]/20 text-white dark:text-[#00a884] shadow-sm ring-1 ring-black/10 dark:ring-[#00a884]/40'
+                      ? 'bg-ink text-surface shadow-sm ring-1 ring-divider'
                       : currentDay
-                      ? 'bg-[#e8f5f2] dark:bg-[#008069]/20 text-[#008069] dark:text-[#00a884] font-semibold hover:bg-[#d5ebe6] dark:hover:bg-[#008069]/30'
-                      : 'hover:bg-[#f0f2f5] dark:hover:bg-[#202c33] text-[#54656f] dark:text-[#aebac1] bg-[#fafafa] dark:bg-[#182229]'
+                      ? 'bg-accent-soft text-accent font-semibold hover:bg-accent-soft/80'
+                      : 'hover:bg-fill-1 text-ink-2 bg-surface-2'
                   }`}
                 >
-                  <span className={`text-[11px] font-medium uppercase tracking-wider ${isSelected ? 'text-gray-300 dark:text-[#00a884]' : currentDay ? 'text-[#008069] dark:text-[#00a884]' : 'text-[#8696a0]'}`}>
+                  <span className={`text-[11px] font-medium uppercase tracking-wider ${isSelected ? 'text-surface/80' : currentDay ? 'text-accent' : 'text-ink-3'}`}>
                     {dayName}
                   </span>
-                  <span className={`text-base sm:text-lg font-extrabold mt-0.5 ${isSelected ? 'text-white dark:text-[#e9edef]' : currentDay ? 'text-[#008069] dark:text-[#00a884]' : 'text-[#111b21] dark:text-[#e9edef]'}`}>
+                  <span className={`text-base sm:text-lg font-extrabold mt-0.5 ${isSelected ? 'text-surface' : currentDay ? 'text-accent' : 'text-ink'}`}>
                     {dayNum}
                   </span>
                 </button>
@@ -548,16 +518,16 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
 
           {/* Continuous Multi-Hour Timeline Canvas */}
           <div
-            className="grid divide-x divide-[#e9edef] dark:divide-[#2a3942] relative"
+            className="grid divide-x divide-divider relative"
             style={{ gridTemplateColumns: GRID_TEMPLATE_COLUMNS, height: `${HOURS.length * hourHeight}px`, minHeight: `${HOURS.length * hourHeight}px` }}
           >
             {/* Time label column (frozen horizontally on scroll) */}
-            <div className="sticky left-0 z-20 bg-[#fafafa] dark:bg-[#182229] divide-y divide-[#e9edef] dark:divide-[#2a3942] border-r border-[#e9edef] dark:border-[#2a3942] shadow-[2px_0_5px_rgba(0,0,0,0.06)] dark:shadow-[2px_0_5px_rgba(0,0,0,0.3)]">
+            <div className="sticky left-0 z-20 bg-surface-2 divide-y divide-divider border-r border-divider shadow-[2px_0_5px_rgba(0,0,0,0.06)] dark:shadow-[2px_0_5px_rgba(0,0,0,0.3)]">
               {HOURS.map((hour) => (
                 <div
                   key={hour}
                   style={{ height: `${hourHeight}px` }}
-                  className="py-1 pl-0 pr-0.5 text-right text-[10px] sm:text-xs font-semibold font-mono tabular-nums text-[#8696a0] select-none flex items-start justify-end pt-1.5"
+                  className="py-1 pl-0 pr-0.5 text-right text-[10px] sm:text-xs font-semibold font-mono tabular-nums text-ink-3 select-none flex items-start justify-end pt-1.5"
                 >
                   <span title={formatHourLabelLong(hour)}>{formatHourLabel(hour)}</span>
                 </div>
@@ -575,8 +545,8 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
               return (
                 <div
                   key={dayIdx}
-                  className={`relative divide-y divide-[#e9edef] dark:divide-[#2a3942] transition-colors ${
-                    isSelectedDay ? 'bg-emerald-50/20 dark:bg-[#00a884]/10' : ''
+                  className={`relative divide-y divide-divider transition-colors ${
+                    isSelectedDay ? 'bg-accent-soft/20' : ''
                   }`}
                 >
                   {/* Background Hourly Slot Grids & Hover Add Buttons */}
@@ -584,7 +554,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                     <div
                       key={hour}
                       style={{ height: `${hourHeight}px` }}
-                      className="relative group/slot hover:bg-gray-50/60 dark:hover:bg-[#202c33]/40 transition-colors"
+                      className="relative group/slot hover:bg-fill-1/40 transition-colors"
                     >
                       <button
                         onClick={(e) => {
@@ -595,7 +565,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                           }
                           onQuickAdd({ date: day, hour });
                         }}
-                        className="w-full h-full absolute inset-0 z-0 border border-transparent hover:border-dashed hover:border-[#008069] dark:hover:border-[#00a884] hover:bg-[#e8f5f2]/40 dark:hover:bg-[#00a884]/15 text-transparent hover:text-[#008069] dark:hover:text-[#00a884] flex items-center justify-center transition-all opacity-0 group-hover/slot:opacity-100 cursor-pointer"
+                        className="w-full h-full absolute inset-0 z-0 border border-transparent hover:border-dashed hover:border-accent hover:bg-accent-soft/40 text-transparent hover:text-accent flex items-center justify-center transition-all opacity-0 group-hover/slot:opacity-100 cursor-pointer"
                         title={`Tambah Jadwal pada ${day.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' })} jam ${formatHourLabelLong(hour)}`}
                       >
                         <Plus size={14} className="transform scale-90 group-hover/slot:scale-110 transition-transform" />
@@ -611,17 +581,13 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                       .toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })
                       .replace('.', ':');
                     const isHold = res.status === 'hold';
-                    // Warna kartu = bidan penanggung jawab (bukan kategori treatment).
                     const staffColor = getStaffColor(resolveStaffId(res), staffList);
                     const categoryStyles = isHold
-                      ? 'bg-amber-50/95 dark:bg-[#33230a] border-2 border-dashed border-amber-500 dark:border-amber-800/40 text-amber-950 dark:text-amber-100 hover:bg-amber-100/90 dark:hover:bg-[#422e0c]'
+                      ? 'bg-warning-soft border-2 border-dashed border-warning-line text-warning hover:bg-warning-soft/90'
                       : staffColor.card;
 
-                    // Nama pasien: gelar sapaan dibuang lewat seam tunggal (patientName.ts).
                     const cleanName = stripHonorific(res.customer?.name) || 'Pasien';
                     const firstName = cleanName.split(' ')[0] || cleanName;
-
-                    // Daerah kunjungan (bukan nama treatment) — lihat formatReservationArea.
                     const areaLabel = formatReservationArea(res);
 
                     const evWidth =
@@ -653,10 +619,10 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                         {zoomLevel === 'compact' ? (
                           /* COMPACT VIEW LOD (<65px) */
                           <div className="flex items-center justify-between gap-1 h-full">
-                            <span className={`font-extrabold text-[10.5px] truncate leading-tight ${isHold ? 'text-amber-950 dark:text-amber-100' : 'text-[#111b21] dark:text-[#e9edef]'}`}>
+                            <span className={`font-extrabold text-[10.5px] truncate leading-tight ${isHold ? 'text-warning' : 'text-ink'}`}>
                               {isHold ? `[HOLD] ${firstName}` : firstName}
                             </span>
-                            <span className="font-mono text-[9px] font-bold text-[#54656f] dark:text-[#aebac1] shrink-0">
+                            <span className="font-mono text-[9px] font-bold text-ink-2 shrink-0">
                               {startTimeStr}
                             </span>
                           </div>
@@ -665,25 +631,25 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                           <>
                             {/* Baris Atas: Jam Mulai & Status Badge */}
                             <div className="flex items-center justify-between text-[10px] sm:text-[10.5px] font-bold shrink-0">
-                              <span className={`flex items-center space-x-1 font-mono ${isHold ? 'text-amber-950 dark:text-amber-100' : 'text-[#111b21] dark:text-[#e9edef]'}`}>
+                              <span className={`flex items-center space-x-1 font-mono ${isHold ? 'text-warning' : 'text-ink'}`}>
                                 <Clock size={10} className="opacity-75 shrink-0" />
                                 <span>{startTimeStr}</span>
                               </span>
                               <div className="flex items-center space-x-1 shrink-0">
                                 {res.session_number != null && res.total_sessions != null && (
-                                  <span className="inline-flex items-center px-1 py-0.2 rounded-full text-[8px] sm:text-[8.5px] font-bold bg-blue-600/10 dark:bg-[#202c33]/20 text-blue-800 dark:text-[#aebac1]">
+                                  <span className="inline-flex items-center px-1 py-0.2 rounded-full text-[8px] sm:text-[8.5px] font-bold bg-info-soft text-info">
                                     Sesi {res.session_number}/{res.total_sessions}
                                   </span>
                                 )}
                                 {res.status === 'hold' ? (
-                                  <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[8px] sm:text-[8.5px] font-black bg-amber-500 text-slate-950 ring-1 ring-amber-300 dark:ring-amber-300/60 shadow-2xs">
+                                  <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[8px] sm:text-[8.5px] font-black bg-warning text-surface ring-1 ring-warning-line shadow-2xs">
                                     <Clock size={9} className="mr-0.5" />
                                     HOLD
                                   </span>
                                 ) : (
                                   <ReservationStatusIcon
                                     status={res.status}
-                                    paid={Boolean((res as any).purchase_occurred_at)}
+                                    paid={(res as any).purchase_occurred_at ? true : undefined}
                                   />
                                 )}
                               </div>
@@ -692,7 +658,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                             {/* Baris Tengah: Nama Pasien & Detail Layanan */}
                             <div className="my-auto py-0.5 overflow-hidden space-y-0.5">
                               <h5
-                                className={`font-extrabold text-xs truncate leading-tight ${isHold ? 'text-amber-950 dark:text-amber-100' : 'text-[#111b21] dark:text-[#e9edef]'}`}
+                                className={`font-extrabold text-xs truncate leading-tight ${isHold ? 'text-warning' : 'text-ink'}`}
                                 title={res.customer?.name || ''}
                               >
                                 {zoomLevel === 'detailed' ? cleanName : firstName}
@@ -709,14 +675,14 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                             </div>
 
                             {/* Baris Bawah: Nama Terapis & Durasi */}
-                            <div className="pt-0.5 border-t border-black/10 dark:border-white/10 flex items-center justify-between text-[9px] sm:text-[9.5px] opacity-85 shrink-0">
-                              <div className="flex items-center space-x-1 truncate font-semibold text-[#54656f] dark:text-[#aebac1]">
-                                <User size={9} className="shrink-0 text-[#008069] dark:text-[#00a884]" />
+                            <div className="pt-0.5 border-t border-divider flex items-center justify-between text-[9px] sm:text-[9.5px] opacity-85 shrink-0">
+                              <div className="flex items-center space-x-1 truncate font-semibold text-ink-2">
+                                <User size={9} className="shrink-0 text-accent" />
                                 <span className="truncate">
                                   {staffShortName(resolveStaffName(res, staffList)) || 'Unassigned'}
                                 </span>
                               </div>
-                              <span className="font-mono font-bold text-[8.5px] px-1 py-0.2 rounded bg-black/5 dark:bg-white/10 shrink-0 ml-1">
+                              <span className="font-mono font-bold text-[8.5px] px-1 py-0.2 rounded bg-fill-2 shrink-0 ml-1">
                                 {pos.duration}m
                               </span>
                             </div>
@@ -733,7 +699,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
       </div>
 
       {/* Floating Bottom Toolbar for Mobile Screen */}
-      <div className="p-2 sm:hidden flex justify-end border-t border-[#e9edef] dark:border-[#2a3942] bg-[#fafafa] dark:bg-[#182229]">
+      <div className="p-2 sm:hidden flex justify-end border-t border-divider bg-surface-2">
         <CalendarZoomControls zoomState={zoomState} variant="inline" />
       </div>
     </div>

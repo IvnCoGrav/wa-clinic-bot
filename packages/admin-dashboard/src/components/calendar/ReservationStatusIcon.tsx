@@ -1,9 +1,17 @@
 import React from 'react';
-import { AlertCircle, CheckCheck, CheckCircle2, XCircle } from 'lucide-react';
+import { AlertCircle, CheckCheck, CheckCircle2, Navigation, XCircle } from 'lucide-react';
+import { toneRingClass } from '../../lib/statusTones';
+import { reservationStatusToTone } from '../../utils/statusTone';
+import { normalizeReservationStatus } from '../../utils/reservationStatus';
 
 interface ReservationStatusIconProps {
   status?: string | null;
-  /** `purchase_occurred_at` — dipakai untuk membedakan "Terjadwal" vs "Terjadwal • Lunas". */
+  /**
+   * Status pembayaran (`purchase_occurred_at`).
+   * - `true`  → pembayaran tercatat ("Lunas").
+   * - `false` → sistem YAKIN belum lunas (mis. invoice menandai tagihan terbuka).
+   * - `undefined` → tidak diketahui (kolom kosong di DB BUKAN berarti belum lunas).
+   */
   paid?: boolean;
   className?: string;
 }
@@ -12,7 +20,6 @@ interface StatusVisual {
   /** Teks asli — wajib ada sebagai tooltip & `aria-label`, bukan sekadar ikon. */
   label: string;
   icon: React.ReactNode;
-  pillClass: string;
 }
 
 /**
@@ -29,22 +36,25 @@ interface StatusVisual {
  *   (makna "Lunas" tidak hilang walau teksnya dibuang).
  * - `pending`/lainnya → ikon peringatan.
  *
+ * Warna TIDAK ditentukan di sini: seluruhnya berasal dari `reservationStatusToTone`
+ * + `TONE_STYLES`, agar tidak ada dua sumber kebenaran warna status.
+ *
  * Semua bentuk ikon wajib membawa `aria-label` + `title` berisi teks aslinya
  * agar informasi tidak hilang untuk pembaca layar dan desktop (hover).
  */
 export const ReservationStatusIcon: React.FC<ReservationStatusIconProps> = ({
   status,
-  paid = false,
+  paid,
   className = '',
 }) => {
   const visual = resolveStatusVisual(status, paid);
 
   if (!visual) return null;
 
-  if (status === 'hold') {
+  if (normalizeReservationStatus(status) === 'hold') {
     return (
       <span
-        className={`inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-black bg-amber-500 text-slate-950 ring-1 ring-amber-300 dark:ring-amber-300/60 shadow-2xs shrink-0 ${className}`}
+        className={`inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-black bg-warning text-on-solid ring-1 ring-warning-line shadow-2xs shrink-0 ${className}`}
         title={visual.label}
       >
         HOLD
@@ -57,58 +67,38 @@ export const ReservationStatusIcon: React.FC<ReservationStatusIconProps> = ({
       role="img"
       aria-label={visual.label}
       title={visual.label}
-      className={`inline-flex items-center justify-center p-0.5 rounded-full ring-1 shrink-0 ${visual.pillClass} ${className}`}
+      className={`inline-flex items-center justify-center p-0.5 rounded-full ring-1 shrink-0 ${toneRingClass(reservationStatusToTone(status, paid))} ${className}`}
     >
       {visual.icon}
     </span>
   );
 };
 
-function resolveStatusVisual(status?: string | null, paid = false): StatusVisual | null {
-  switch (status) {
+function resolveStatusVisual(status?: string | null, paid?: boolean): StatusVisual | null {
+  const norm = normalizeReservationStatus(status);
+
+  switch (norm) {
     case 'hold':
-      return {
-        label: 'HOLD — slot ditahan sementara',
-        icon: null,
-        pillClass: '',
-      };
+      return { label: 'HOLD — slot ditahan sementara', icon: null };
+    case 'en_route':
+    case 'on_the_way':
+    case 'otw':
+      return { label: 'Menuju lokasi pasien', icon: <Navigation size={11} aria-hidden="true" /> };
     case 'confirmed':
       return paid
-        ? {
-            label: 'Terjadwal • Lunas',
-            icon: <CheckCheck size={11} aria-hidden="true" />,
-            pillClass: 'bg-emerald-600/10 dark:bg-emerald-950/30 text-emerald-700 dark:text-[#00a884] ring-emerald-500/30',
-          }
-        : {
-            label: 'Terjadwal',
-            icon: <CheckCircle2 size={11} aria-hidden="true" />,
-            pillClass: 'bg-emerald-600/10 dark:bg-emerald-950/30 text-emerald-700 dark:text-[#00a884] ring-emerald-500/30',
-          };
+        ? { label: 'Terjadwal • Lunas', icon: <CheckCheck size={11} aria-hidden="true" /> }
+        : { label: 'Terjadwal', icon: <CheckCircle2 size={11} aria-hidden="true" /> };
     case 'completed':
-      return {
-        label: 'Selesai',
-        icon: <CheckCircle2 size={11} aria-hidden="true" />,
-        pillClass: 'bg-slate-500/10 dark:bg-slate-500/20 text-slate-600 dark:text-[#aebac1] ring-slate-400/30',
-      };
+      if (paid) return { label: 'Selesai • Lunas', icon: <CheckCheck size={11} aria-hidden="true" /> };
+      if (paid === false) return { label: 'Selesai • Belum lunas', icon: <CheckCircle2 size={11} aria-hidden="true" /> };
+      return { label: 'Selesai', icon: <CheckCircle2 size={11} aria-hidden="true" /> };
     case 'cancelled':
-      return {
-        label: 'Batal',
-        icon: <XCircle size={11} aria-hidden="true" />,
-        pillClass: 'bg-rose-600/10 dark:bg-rose-950/30 text-rose-700 dark:text-[#fb7185] ring-rose-500/30',
-      };
+      return { label: 'Batal', icon: <XCircle size={11} aria-hidden="true" /> };
+    case 'rejected':
+      return { label: 'Ditolak', icon: <XCircle size={11} aria-hidden="true" /> };
     case 'pending':
-      return {
-        label: 'Pending — menunggu konfirmasi',
-        icon: <AlertCircle size={11} aria-hidden="true" />,
-        pillClass: 'bg-amber-600/10 dark:bg-amber-950/30 text-amber-700 dark:text-[#f59e0b] ring-amber-500/30',
-      };
+      return { label: 'Pending — menunggu konfirmasi', icon: <AlertCircle size={11} aria-hidden="true" /> };
     default:
-      return status
-        ? {
-            label: status,
-            icon: <AlertCircle size={11} aria-hidden="true" />,
-            pillClass: 'bg-amber-600/10 dark:bg-amber-950/30 text-amber-700 dark:text-[#f59e0b] ring-amber-500/30',
-          }
-        : null;
+      return norm ? { label: status ?? norm, icon: <AlertCircle size={11} aria-hidden="true" /> } : null;
   }
 }

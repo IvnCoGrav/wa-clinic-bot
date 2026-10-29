@@ -56,6 +56,7 @@ import { isEnRouteStatus } from '../../utils/reservationStatus';
 import { FleetMapModal, type FleetMapTask } from '../../components/maps/FleetMapModal';
 import { getTodayWibDateKey } from '../../utils/dateWib';
 import { needsHousePhoto, resolveLocModalMode } from '../staff/housePhotoGuard';
+import { StatusChip } from '../../components/ui/StatusChip';
 
 interface TaskChild {
   name: string;
@@ -240,31 +241,31 @@ export const TodayTreatments: React.FC = () => {
     const cat = (category || '').toUpperCase();
     if (cat === 'BABY') {
       return {
-        icon: <Baby size={15} className="text-sky-600" />,
-        badge: 'bg-sky-50 border-sky-200 text-sky-700',
+        icon: <Baby size={15} className="text-info" />,
+        badge: 'bg-info-soft border-info-line text-info',
         borderAccent: 'border-l-4 border-l-sky-500',
         label: 'Baby Spa',
       };
     }
     if (cat === 'MOMS') {
       return {
-        icon: <Heart size={15} className="text-purple-600" />,
-        badge: 'bg-purple-50 border-purple-200 text-purple-700',
+        icon: <Heart size={15} className="text-violet" />,
+        badge: 'bg-violet-soft border-violet-line text-violet',
         borderAccent: 'border-l-4 border-l-purple-500',
         label: 'Moms Spa',
       };
     }
     if (cat === 'BOTH' || cat === 'KIDS') {
       return {
-        icon: <Smile size={15} className="text-emerald-600" />,
-        badge: 'bg-emerald-50 border-emerald-200 text-emerald-700',
+        icon: <Smile size={15} className="text-success" />,
+        badge: 'bg-success-soft border-success-line text-success',
         borderAccent: 'border-l-4 border-l-emerald-500',
         label: 'Moms & Baby',
       };
     }
     return {
-      icon: <User size={15} className="text-teal-600" />,
-      badge: 'bg-teal-50 border-teal-200 text-teal-700',
+      icon: <User size={15} className="text-success" />,
+      badge: 'bg-success-soft border-success-line text-success',
       borderAccent: 'border-l-4 border-l-teal-500',
       label: 'Treatment',
     };
@@ -807,29 +808,29 @@ export const TodayTreatments: React.FC = () => {
   return (
     <div className="space-y-5 animate-fadeIn pb-12">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#e9edef] dark:border-[#2a3942]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-divider">
         <div className="flex items-center space-x-3.5">
-          <div className="h-12 w-12 rounded-2xl bg-[#008069] text-white flex items-center justify-center shadow-sm shrink-0">
+          <div className="h-12 w-12 rounded-2xl bg-accent text-accent-ink flex items-center justify-center shadow-sm shrink-0">
             <CalendarDays size={24} />
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-xl sm:text-2xl font-black text-[#111b21] dark:text-[#e9edef] tracking-tight">
+              <h1 className="text-xl sm:text-2xl font-black text-ink tracking-tight">
                 {dateTab === 'today' ? 'Treatment Hari Ini' : dateTab === 'tomorrow' ? 'Treatment Besok' : 'Jadwal Treatment'}
               </h1>
               <span className={`px-2.5 py-0.5 rounded-full text-xs font-extrabold border ${
                 dateTab === 'tomorrow'
-                  ? 'bg-purple-50 text-purple-700 border-purple-200'
-                  : 'bg-[#e8f5f2] text-[#008069] border-[#c2e7e0]'
+                  ? 'bg-violet-soft text-violet border-violet-line'
+                  : 'bg-accent-soft text-accent border-divider'
               }`}>
                 {filteredTasks.length} Jadwal
               </span>
             </div>
-            <p className="text-xs text-[#54656f] dark:text-[#aebac1] mt-1 flex items-center gap-1.5 font-medium">
-              <Calendar size={13} className="text-[#008069] shrink-0" />
-              <span className="font-semibold text-[#111b21] dark:text-[#e9edef]">{displayDateText}</span>
+            <p className="text-xs text-ink-2 mt-1 flex items-center gap-1.5 font-medium">
+              <Calendar size={13} className="text-accent shrink-0" />
+              <span className="font-semibold text-ink">{displayDateText}</span>
               {dateTab === 'tomorrow' && (
-                <span className="text-[11px] px-1.5 py-0.2 rounded bg-purple-100 text-purple-800 font-bold ml-1">
+                <span className="text-[11px] px-1.5 py-0.2 rounded bg-violet-soft text-violet font-bold ml-1">
                   Besok
                 </span>
               )}
@@ -840,14 +841,14 @@ export const TodayTreatments: React.FC = () => {
         {/* Date Segmented Tabs & Scope Select */}
         <div className="flex flex-wrap items-center gap-2">
           {/* Segmented Date Control */}
-          <div className="inline-flex p-1 rounded-2xl bg-[#f0f2f5] dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] shadow-2xs">
+          <div className="inline-flex p-1 rounded-2xl bg-fill-1 dark:bg-surface border border-divider shadow-2xs">
             <button
               type="button"
               onClick={() => setDateTab('today')}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer ${
                 dateTab === 'today'
-                  ? 'bg-white dark:bg-[#202c33] text-[#008069] dark:text-[#00a884] shadow-xs ring-1 ring-[#008069]/20'
-                  : 'text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef]'
+                  ? 'bg-surface text-accent shadow-xs ring-1 ring-accent/20'
+                  : 'text-ink-2 hover:text-ink dark:hover:text-ink'
               }`}
             >
               📅 Hari Ini
@@ -857,8 +858,8 @@ export const TodayTreatments: React.FC = () => {
               onClick={() => setDateTab('tomorrow')}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer ${
                 dateTab === 'tomorrow'
-                  ? 'bg-white dark:bg-[#202c33] text-purple-700 dark:text-[#aebac1] shadow-xs ring-1 ring-purple-500/20'
-                  : 'text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef]'
+                  ? 'bg-surface text-purple-700 dark:text-ink-2 shadow-xs ring-1 ring-purple-500/20'
+                  : 'text-ink-2 hover:text-ink dark:hover:text-ink'
               }`}
             >
               ✨ Besok
@@ -875,8 +876,8 @@ export const TodayTreatments: React.FC = () => {
                 }}
                 className={`text-xs font-bold px-2.5 py-1.5 rounded-xl border-0 bg-transparent cursor-pointer focus:outline-none dark:[color-scheme:dark] ${
                   dateTab === 'custom'
-                    ? 'bg-white dark:bg-[#202c33] text-sky-700 dark:text-[#38bdf8] shadow-xs ring-1 ring-sky-500/20'
-                    : 'text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef]'
+                    ? 'bg-surface text-sky-700 dark:text-info shadow-xs ring-1 ring-sky-500/20'
+                    : 'text-ink-2 hover:text-ink dark:hover:text-ink'
                 }`}
                 title="Pilih Tanggal Tertentu"
               />
@@ -888,7 +889,7 @@ export const TodayTreatments: React.FC = () => {
             <select
               value={scopeFilter}
               onChange={(e) => setScopeFilter(e.target.value)}
-              className="bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] text-[#111b21] dark:text-[#e9edef] text-xs font-bold rounded-xl px-3 py-2 pr-8 focus:outline-none focus:border-[#008069] shadow-xs cursor-pointer appearance-none min-h-[38px]"
+              className="bg-surface border border-divider text-ink text-xs font-bold rounded-xl px-3 py-2 pr-8 focus:outline-none focus:border-accent shadow-xs cursor-pointer appearance-none min-h-[38px]"
             >
               <option value="mine">🛵 Tugas Saya</option>
               {isSupervisor && <option value="all">👥 Semua Terapis</option>}
@@ -902,7 +903,7 @@ export const TodayTreatments: React.FC = () => {
                 </optgroup>
               )}
             </select>
-            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-[#54656f]">
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-ink-2">
               <ChevronDown size={14} />
             </div>
           </div>
@@ -910,29 +911,29 @@ export const TodayTreatments: React.FC = () => {
           {/* Metrics Modal Toggle */}
           <button
             onClick={() => setShowMetricsModal(true)}
-            className="p-2.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#374248] transition shadow-xs active:scale-[0.98] cursor-pointer min-h-[38px] min-w-[38px] flex items-center justify-center"
+            className="p-2.5 rounded-xl bg-surface border border-divider text-ink hover:bg-fill-1 transition shadow-xs active:scale-[0.98] cursor-pointer min-h-[38px] min-w-[38px] flex items-center justify-center"
             title="Rekap Ringkasan Metrik"
           >
-            <BarChart3 size={16} className="text-[#008069]" />
+            <BarChart3 size={16} className="text-accent" />
           </button>
 
           {/* Fase 4 (plan 2026-10-02): Peta Sebaran Armada Hari Ini */}
           <button
             onClick={() => setShowFleetMap(true)}
-            className="p-2.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#374248] transition shadow-xs active:scale-[0.98] cursor-pointer min-h-[38px] min-w-[38px] flex items-center justify-center"
+            className="p-2.5 rounded-xl bg-surface border border-divider text-ink hover:bg-fill-1 transition shadow-xs active:scale-[0.98] cursor-pointer min-h-[38px] min-w-[38px] flex items-center justify-center"
             title="Peta Sebaran Hari Ini"
           >
-            <MapPin size={16} className="text-[#008069]" />
+            <MapPin size={16} className="text-accent" />
           </button>
 
           {/* Reload Button */}
           <button
             onClick={() => fetchTasks()}
             disabled={loading}
-            className="p-2.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#374248] transition shadow-xs disabled:opacity-50 active:scale-[0.98] cursor-pointer min-h-[38px] min-w-[38px] flex items-center justify-center"
+            className="p-2.5 rounded-xl bg-surface border border-divider text-ink-2 hover:text-ink dark:hover:text-ink hover:bg-fill-1 transition shadow-xs disabled:opacity-50 active:scale-[0.98] cursor-pointer min-h-[38px] min-w-[38px] flex items-center justify-center"
             title="Muat Ulang Tugas"
           >
-            <RefreshCw size={15} className={loading ? 'animate-spin text-[#008069]' : ''} />
+            <RefreshCw size={15} className={loading ? 'animate-spin text-accent' : ''} />
           </button>
         </div>
       </div>
@@ -941,11 +942,11 @@ export const TodayTreatments: React.FC = () => {
       {dateTab !== 'today' && (
         <div className={`p-3.5 rounded-2xl border flex items-center justify-between text-xs font-semibold ${
           dateTab === 'tomorrow'
-            ? 'bg-purple-50/70 dark:bg-[#202c33] border-purple-200 dark:border-[#2a3942] text-purple-900 dark:text-purple-200'
+            ? 'bg-purple-50/70 dark:bg-fill-1 border-purple-200 dark:border-divider text-purple-900 dark:text-purple-200'
             : 'bg-sky-50/70 dark:bg-sky-950/30 border-sky-200 dark:border-sky-800/40 text-sky-900 dark:text-sky-200'
         }`}>
           <div className="flex items-center gap-2.5">
-            <Info size={16} className={dateTab === 'tomorrow' ? 'text-purple-600' : 'text-sky-600'} />
+            <Info size={16} className={dateTab === 'tomorrow' ? 'text-violet' : 'text-info'} />
             <span>
               {dateTab === 'tomorrow'
                 ? `Menampilkan jadwal persiapan treatment untuk BESOK (${displayDateText}). Anda dapat meninjau rute dan mendelegasikan terapis lebih awal.`
@@ -954,7 +955,7 @@ export const TodayTreatments: React.FC = () => {
           </div>
           <button
             onClick={() => setDateTab('today')}
-            className="px-3 py-1 bg-white border border-current rounded-xl text-xs font-bold hover:bg-white/80 transition cursor-pointer shrink-0 ml-2"
+            className="px-3 py-1 bg-surface border border-current rounded-xl text-xs font-bold hover:bg-white/80 transition cursor-pointer shrink-0 ml-2"
           >
             Kembali ke Hari Ini
           </button>
@@ -962,9 +963,9 @@ export const TodayTreatments: React.FC = () => {
       )}
 
       {/* Filter & Search Bar */}
-      <div className="bg-white dark:bg-[#111b21] p-3.5 rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
+      <div className="bg-surface p-3.5 rounded-2xl border border-divider shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="relative w-full sm:w-80">
-          <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-[#8696a0]">
+          <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-ink-3">
             <Search size={14} />
           </span>
           <input
@@ -972,7 +973,7 @@ export const TodayTreatments: React.FC = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Cari pasien, alamat, terapis, atau treatment..."
-            className="w-full pl-9 pr-3.5 py-2 rounded-xl bg-[#f0f2f5] dark:bg-[#202c33] border-0 text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] text-xs focus:outline-none focus:ring-2 focus:ring-[#008069] min-h-[38px]"
+            className="w-full pl-9 pr-3.5 py-2 rounded-xl bg-fill-1 border-0 text-ink placeholder:text-ink-3 text-xs focus:outline-none focus:ring-2 focus:ring-accent min-h-[38px]"
           />
         </div>
 
@@ -981,8 +982,8 @@ export const TodayTreatments: React.FC = () => {
             onClick={() => setStatusFilter('UPCOMING')}
             className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
               statusFilter === 'UPCOMING'
-                ? 'bg-[#008069] text-white shadow-xs'
-                : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#aebac1] hover:bg-[#e9edef] dark:hover:bg-[#374248]'
+                ? 'bg-accent text-accent-ink shadow-xs'
+                : 'bg-fill-1 text-ink-2 hover:bg-fill-2 dark:hover:bg-fill-2'
             }`}
           >
             Akan Datang ({upcomingCount})
@@ -991,8 +992,8 @@ export const TodayTreatments: React.FC = () => {
             onClick={() => setStatusFilter('COMPLETED')}
             className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
               statusFilter === 'COMPLETED'
-                ? 'bg-[#008069] text-white shadow-xs'
-                : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#aebac1] hover:bg-[#e9edef] dark:hover:bg-[#374248]'
+                ? 'bg-accent text-accent-ink shadow-xs'
+                : 'bg-fill-1 text-ink-2 hover:bg-fill-2 dark:hover:bg-fill-2'
             }`}
           >
             Selesai ({completedCount})
@@ -1001,8 +1002,8 @@ export const TodayTreatments: React.FC = () => {
             onClick={() => setStatusFilter('OTW')}
             className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
               statusFilter === 'OTW'
-                ? 'bg-[#008069] text-white shadow-xs'
-                : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#aebac1] hover:bg-[#e9edef] dark:hover:bg-[#374248]'
+                ? 'bg-accent text-accent-ink shadow-xs'
+                : 'bg-fill-1 text-ink-2 hover:bg-fill-2 dark:hover:bg-fill-2'
             }`}
           >
             OTW ({otwCount})
@@ -1011,8 +1012,8 @@ export const TodayTreatments: React.FC = () => {
             onClick={() => setStatusFilter('ALL')}
             className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
               statusFilter === 'ALL'
-                ? 'bg-[#008069] text-white shadow-xs'
-                : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#aebac1] hover:bg-[#e9edef] dark:hover:bg-[#374248]'
+                ? 'bg-accent text-accent-ink shadow-xs'
+                : 'bg-fill-1 text-ink-2 hover:bg-fill-2 dark:hover:bg-fill-2'
             }`}
           >
             Semua ({totalCount})
@@ -1022,19 +1023,19 @@ export const TodayTreatments: React.FC = () => {
 
       {/* Task List Cards */}
       {loading ? (
-        <div className="bg-white dark:bg-[#111b21] rounded-2xl border border-[#e9edef] dark:border-[#2a3942] p-12 text-center text-[#667781] dark:text-[#aebac1] shadow-xs">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-3 border-[#008069] border-t-transparent mb-3"></div>
-          <p className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Memuat daftar tugas treatment...</p>
+        <div className="bg-surface rounded-2xl border border-divider p-12 text-center text-ink-3 dark:text-ink-2 shadow-xs">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-3 border-accent border-t-transparent mb-3"></div>
+          <p className="text-xs font-bold text-ink">Memuat daftar tugas treatment...</p>
         </div>
       ) : filteredTasks.length === 0 ? (
-        <div className="bg-white dark:bg-[#111b21] rounded-2xl border border-[#e9edef] dark:border-[#2a3942] p-12 text-center text-[#667781] dark:text-[#aebac1] shadow-xs space-y-3">
-          <Calendar size={40} className="mx-auto text-[#8696a0]" />
-          <h3 className="font-bold text-sm text-[#111b21] dark:text-[#e9edef]">
+        <div className="bg-surface rounded-2xl border border-divider p-12 text-center text-ink-3 dark:text-ink-2 shadow-xs space-y-3">
+          <Calendar size={40} className="mx-auto text-ink-3" />
+          <h3 className="font-bold text-sm text-ink">
             {dateTab === 'tomorrow'
               ? 'Belum ada reservasi treatment terjadwal untuk besok'
               : 'Tidak ada jadwal treatment yang cocok'}
           </h3>
-          <p className="text-xs text-[#8696a0] max-w-md mx-auto">
+          <p className="text-xs text-ink-3 max-w-md mx-auto">
             {searchQuery
               ? 'Coba ganti kata kunci pencarian.'
               : dateTab === 'tomorrow'
@@ -1057,20 +1058,20 @@ export const TodayTreatments: React.FC = () => {
               <div
                 key={task.reservationId}
                 onClick={() => setDetailModalTask(task)}
-                className={`bg-white dark:bg-[#111b21] rounded-2xl border dark:border-[#2a3942] p-5 shadow-xs transition-all space-y-4 relative cursor-pointer group hover:shadow-md ${catCfg.borderAccent} ${
+                className={`bg-surface rounded-2xl border dark:border-divider p-5 shadow-xs transition-all space-y-4 relative cursor-pointer group hover:shadow-md ${catCfg.borderAccent} ${
                   isCompleted
                     ? 'border-emerald-200 dark:border-emerald-800/40 bg-emerald-50/10 dark:bg-emerald-950/20'
                     : isOtw
                     ? 'border-sky-300 dark:border-sky-800/40 bg-sky-50/15 dark:bg-sky-950/20 ring-1 ring-sky-300 dark:ring-sky-800/30'
-                    : 'border-[#e9edef] hover:border-[#008069] dark:hover:border-[#00a884]'
+                    : 'border-divider hover:border-accent'
                 }`}
               >
                 {/* Card Top: Sequence Number, Time, Avatar, Status, Assigned Staff */}
-                <div className="flex items-start justify-between gap-3 border-b border-[#f0f2f5] dark:border-[#2a3942] pb-3">
+                <div className="flex items-start justify-between gap-3 border-b border-divider dark:border-divider pb-3">
                   <div className="flex items-center space-x-3.5">
                     {/* Sequence Badge */}
                     <div
-                      className="h-9 w-9 rounded-xl bg-[#f0f2f5] dark:bg-[#202c33] group-hover:bg-[#e8f5f2] dark:group-hover:bg-[#00a884]/15 border border-[#d1d7db] dark:border-[#374248] group-hover:border-[#c2e7e0] text-[#111b21] dark:text-[#e9edef] group-hover:text-[#008069] flex flex-col items-center justify-center shrink-0 transition-colors shadow-2xs"
+                      className="h-9 w-9 rounded-xl bg-fill-1 group-hover:bg-accent-soft dark:group-hover:bg-accent/15 border border-divider group-hover:border-divider text-ink group-hover:text-accent flex flex-col items-center justify-center shrink-0 transition-colors shadow-2xs"
                       title={`Urutan Kunjungan #${index + 1}`}
                     >
                       <span className="text-[9px] font-bold uppercase leading-none opacity-60">No</span>
@@ -1082,25 +1083,25 @@ export const TodayTreatments: React.FC = () => {
                         <img
                           src={task.customerProfilePictureUrl}
                           alt={task.customerName || 'Pasien'}
-                          className="h-11 w-11 rounded-2xl object-cover border border-[#c2e7e0] shadow-xs"
+                          className="h-11 w-11 rounded-2xl object-cover border border-divider shadow-xs"
                           onError={(e) => {
                             (e.target as HTMLElement).style.display = 'none';
                           }}
                         />
                       ) : (
-                        <div className="h-11 w-11 rounded-2xl bg-[#e8f5f2] border border-[#c2e7e0] text-[#008069] flex items-center justify-center font-extrabold text-sm shadow-xs">
+                        <div className="h-11 w-11 rounded-2xl bg-accent-soft border border-divider text-accent flex items-center justify-center font-extrabold text-sm shadow-xs">
                           {(task.customerName || 'P').charAt(0).toUpperCase()}
                         </div>
                       )}
                       {/* Waktu Mulai Saja di Foto/Avatar */}
-                      <span className="absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded-md bg-[#111b21] text-white text-[9px] font-mono font-bold shadow-xs whitespace-nowrap">
+                      <span className="absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded-md bg-ink text-surface text-[9px] font-mono font-bold shadow-xs whitespace-nowrap">
                         {formatTime(task.bookingDate)}
                       </span>
                     </div>
 
                     <div>
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <h3 className="font-bold text-sm text-[#111b21] dark:text-[#e9edef] group-hover:text-[#008069] transition">
+                        <h3 className="font-bold text-sm text-ink group-hover:text-accent transition">
                           {formatPatientName(task.customerName)}
                         </h3>
                         <span
@@ -1109,22 +1110,22 @@ export const TodayTreatments: React.FC = () => {
                         >
                           {catCfg.icon}
                         </span>
-                        <span className="text-xs font-semibold text-[#54656f] dark:text-[#aebac1] hidden sm:inline">
+                        <span className="text-xs font-semibold text-ink-2 hidden sm:inline">
                           ({formatTimeRange(task.bookingDate, parsedTreatments.totalMinutes)})
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-1 text-[11px] text-[#54656f] dark:text-[#aebac1] mt-0.5 font-mono" title="Terapis Penanggung Jawab">
-                        <UserCheck size={13} className="text-[#008069] shrink-0" />
-                        <span className="font-bold text-[#008069] truncate">{task.assignedStaff?.name || 'Belum Ditugaskan'}</span>
+                      <div className="flex items-center gap-1 text-[11px] text-ink-2 mt-0.5 font-mono" title="Terapis Penanggung Jawab">
+                        <UserCheck size={13} className="text-accent shrink-0" />
+                        <span className="font-bold text-accent truncate">{task.assignedStaff?.name || 'Belum Ditugaskan'}</span>
                       </div>
 
                       {task.customerStats && (
                         <div className="flex items-center gap-1.5 mt-1 text-[10px]">
-                          <span className="inline-flex items-center px-1.5 py-0.2 rounded-md bg-[#e8f5f2] text-[#008069] font-bold">
+                          <span className="inline-flex items-center px-1.5 py-0.2 rounded-md bg-accent-soft text-accent font-bold">
                             {task.customerStats.totalTreatments > 1 ? `${task.customerStats.totalTreatments}x Treatment` : 'Pasien Baru (1x)'}
                           </span>
-                          <span className="text-[#8696a0] font-mono">
+                          <span className="text-ink-3 font-mono">
                             LTV: {formatRupiah(task.customerStats.ltv)}
                           </span>
                         </div>
@@ -1134,26 +1135,17 @@ export const TodayTreatments: React.FC = () => {
 
                   <div className="flex flex-col items-end gap-1">
                       {isCompleted ? (
-                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#d9fdd3] dark:bg-[#005c4b] text-[#008069] dark:text-[#e9edef] border border-[#00a884]/30 flex items-center gap-1">
-                          <CheckCircle2 size={12} />
-                          <span>Selesai</span>
-                        </span>
+                        <StatusChip tone="success" label="Selesai" icon={<CheckCircle2 size={12} />} />
                       ) : isOtw ? (
-                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-sky-100 dark:bg-sky-950/40 text-sky-800 dark:text-[#38bdf8] border border-sky-300 dark:border-sky-800/40 flex items-center gap-1">
-                          <Navigation2 size={12} />
-                          <span>Sedang OTW</span>
-                        </span>
+                        <StatusChip tone="info" label="Sedang OTW" icon={<Navigation2 size={12} />} />
                       ) : (
-                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-[#f59e0b] border border-amber-300 dark:border-amber-800/40 flex items-center gap-1">
-                          <Clock size={12} />
-                          <span>Akan Datang</span>
-                        </span>
+                        <StatusChip tone="warning" label="Akan Datang" icon={<Clock size={12} />} />
                       )}
 
                     {isLunas ? (
-                      <span className="text-[10px] font-bold text-[#008069]">✓ Lunas</span>
+                      <span className="text-[10px] font-bold text-accent">✓ Lunas</span>
                     ) : (
-                      <span className="text-[10px] font-bold text-amber-700">Tagih: {formatRupiah(task.pricing.totalFee)}</span>
+                      <span className="text-[10px] font-bold text-warning">Tagih: {formatRupiah(task.pricing.totalFee)}</span>
                     )}
                   </div>
                 </div>
@@ -1162,8 +1154,8 @@ export const TodayTreatments: React.FC = () => {
                 <div className="space-y-2 text-xs">
                   <div className="space-y-1">
                     {parsedTreatments.items.map((treatmentName, idx) => (
-                        <div key={idx} className="font-semibold text-[#111b21] dark:text-[#e9edef] flex items-start gap-2">
-                        <span className="h-5 w-5 rounded-full bg-[#e8f5f2] text-[#008069] flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">
+                        <div key={idx} className="font-semibold text-ink flex items-start gap-2">
+                        <span className="h-5 w-5 rounded-full bg-accent-soft text-accent flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">
                           {idx + 1}
                         </span>
                         <span className="leading-tight pt-0.5">{treatmentName}</span>
@@ -1174,8 +1166,8 @@ export const TodayTreatments: React.FC = () => {
                   {/* Total Estimasi Waktu Layanan & Data Anak */}
                   <div className="flex flex-wrap items-center gap-2 pt-1">
                     {parsedTreatments.totalMinutes > 0 && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-[#f59e0b] border border-amber-200 dark:border-amber-800/40 text-[11px] font-bold">
-                        <Timer size={12} className="text-amber-600" />
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-warning border border-amber-200 dark:border-amber-800/40 text-[11px] font-bold">
+                        <Timer size={12} className="text-warning" />
                         <span>Total Durasi: {parsedTreatments.totalMinutes} Menit</span>
                       </span>
                     )}
@@ -1184,7 +1176,7 @@ export const TodayTreatments: React.FC = () => {
                       task.children.map((c, idx) => (
                         <span
                           key={idx}
-                          className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-lg bg-sky-50 dark:bg-sky-950/30 text-sky-800 dark:text-[#38bdf8] border border-sky-200 dark:border-sky-800/40 text-[11px]"
+                          className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-lg bg-sky-50 dark:bg-sky-950/30 text-sky-800 dark:text-info border border-sky-200 dark:border-sky-800/40 text-[11px]"
                         >
                           <Baby size={11} />
                           <span>{formatPatientName(c.name)} {c.currentAge ? `(${c.currentAge})` : c.rawAgeText ? `(${formatChildAgeText(c.rawAgeText)})` : ''}</span>
@@ -1195,35 +1187,35 @@ export const TodayTreatments: React.FC = () => {
                 </div>
 
                 {/* Address, Chain Route & Landmark */}
-                <div className="p-3 bg-[#f8fafc] dark:bg-[#1c272e] rounded-xl border border-[#e9edef] dark:border-[#2a3942] space-y-1.5 text-xs">
-                  <div className="flex items-start gap-1.5 text-[#111b21] dark:text-[#e9edef]">
-                    <MapPin size={14} className="text-[#008069] mt-0.5 shrink-0" />
+                <div className="p-3 bg-surface-2 dark:bg-surface-2 rounded-xl border border-divider space-y-1.5 text-xs">
+                  <div className="flex items-start gap-1.5 text-ink">
+                    <MapPin size={14} className="text-accent mt-0.5 shrink-0" />
                     <span className="line-clamp-2">{task.address.fullText || 'Alamat belum tercatat lengkap'}</span>
                   </div>
                   
                   {task.address.landmark && (
-                    <p className="text-[11px] text-[#54656f] dark:text-[#aebac1] pl-5">
-                      <span className="font-bold text-[#111b21] dark:text-[#e9edef]">Patokan:</span> {task.address.landmark}
+                    <p className="text-[11px] text-ink-2 pl-5">
+                      <span className="font-bold text-ink">Patokan:</span> {task.address.landmark}
                     </p>
                   )}
 
                   {/* Chain Route Smart Indicator */}
                   {task.address.distanceKm !== null && (
                     <div className="pl-5 pt-0.5 flex flex-wrap items-center gap-2 text-[11px]">
-                      <span className="font-bold text-[#008069] font-mono">
+                      <span className="font-bold text-accent font-mono">
                         📍 ±{task.address.distanceKm.toFixed(1)} km
                       </span>
                       {task.address.distanceSource === 'PREVIOUS_PATIENT' ? (
-                          <span className="px-2 py-0.2 rounded-md bg-purple-50 dark:bg-[#202c33] text-purple-700 dark:text-[#aebac1] border border-purple-200 dark:border-[#2a3942] font-medium text-[10px]">
+                          <span className="px-2 py-0.2 rounded-md bg-purple-50 dark:bg-fill-1 text-purple-700 dark:text-ink-2 border border-purple-200 dark:border-divider font-medium text-[10px]">
                           Rute Berantai dari {task.address.originName || 'Pasien Sebelumnya'}
                         </span>
                       ) : (
-                          <span className="px-2 py-0.2 rounded-md bg-gray-100 dark:bg-[#2a3942] text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-[#374248] font-medium text-[10px]">
+                          <span className="px-2 py-0.2 rounded-md bg-gray-100 dark:bg-divider text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-divider font-medium text-[10px]">
                           Dari Klinik
                         </span>
                       )}
                       {task.address.estimatedMinutes && (
-                        <span className="text-[#8696a0] text-[10px] font-mono">
+                        <span className="text-ink-3 text-[10px] font-mono">
                           (Est. {task.address.estimatedMinutes} menit)
                         </span>
                       )}
@@ -1239,11 +1231,11 @@ export const TodayTreatments: React.FC = () => {
                           e.stopPropagation();
                           setZoomImageUrl(task.address.housePhotoUrl || null);
                         }}
-                        className="group relative inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white border border-[#d1d7db] text-[11px] font-bold text-[#54656f] hover:text-[#008069] hover:border-[#008069] transition shadow-2xs cursor-pointer"
+                        className="group relative inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-surface border border-divider text-[11px] font-bold text-ink-2 hover:text-accent hover:border-accent transition shadow-2xs cursor-pointer"
                       >
-                        <ImageIcon size={13} className="text-[#008069]" />
+                        <ImageIcon size={13} className="text-accent" />
                         <span>Lihat Foto Depan Rumah Pasien</span>
-                        <Maximize2 size={11} className="text-[#8696a0] group-hover:scale-110 transition" />
+                        <Maximize2 size={11} className="text-ink-3 group-hover:scale-110 transition" />
                       </button>
                     </div>
                   )}
@@ -1254,7 +1246,7 @@ export const TodayTreatments: React.FC = () => {
                   const mapsDirectionUrl = task.navigationUrl || task.mapsUrl || getGoogleMapsDirectionUrl(task.address.lat, task.address.lng, task.address.fullText || task.address.kelurahan);
                   return (
                     <div
-                      className="pt-3 border-t border-[#f0f2f5] space-y-2.5"
+                      className="pt-3 border-t border-divider space-y-2.5"
                       onClick={(e) => e.stopPropagation()}
                     >
                       {/* Primary Actions Row: OTW & Catat Lunas (Full-width prominent cards on mobile) */}
@@ -1266,10 +1258,10 @@ export const TodayTreatments: React.FC = () => {
                               disabled={sendingOtwId === task.reservationId || !otwReady}
                               className={`flex-1 py-3 px-4 rounded-xl text-white text-xs font-bold transition flex items-center justify-center gap-2 shadow-xs active:scale-[0.98] touch-manipulation cursor-pointer ${
                                 dateTab !== 'today'
-                                  ? 'bg-gray-300 text-gray-600 border border-gray-300 cursor-not-allowed opacity-80'
+                                  ? 'bg-fill-2 text-ink-2 border border-strong cursor-not-allowed opacity-80'
                                   : otwReady
-                                  ? 'bg-[#008069] hover:bg-[#00a884]'
-                                  : 'bg-slate-400 cursor-not-allowed opacity-70'
+                                  ? 'bg-accent hover:bg-accent'
+                                  : 'bg-fill-2 cursor-not-allowed opacity-70'
                               }`}
                               title={
                                 dateTab !== 'today'
@@ -1297,7 +1289,7 @@ export const TodayTreatments: React.FC = () => {
                                 setPaymentMethod('CASH');
                                 setProofImageB64(null);
                               }}
-                              className="flex-1 py-3 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition flex items-center justify-center gap-2 shadow-xs active:scale-[0.98] touch-manipulation cursor-pointer"
+                              className="flex-1 py-3 px-4 rounded-xl bg-warning hover:bg-warning-hover text-on-solid text-xs font-bold transition flex items-center justify-center gap-2 shadow-xs active:scale-[0.98] touch-manipulation cursor-pointer"
                             >
                               <CreditCard size={14} />
                               <span>Catat Lunas ({formatRupiah(task.pricing.totalFee)})</span>
@@ -1313,10 +1305,10 @@ export const TodayTreatments: React.FC = () => {
                           href={mapsDirectionUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="py-2.5 px-3 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] text-[#111b21] dark:text-[#e9edef] hover:bg-[#e8f5f2] dark:hover:bg-[#00a884]/15 hover:border-[#008069] dark:hover:border-[#00a884]/40 text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition active:scale-95 touch-manipulation cursor-pointer"
+                          className="py-2.5 px-3 rounded-xl bg-surface border border-divider text-ink hover:bg-accent-soft dark:hover:bg-accent/15 hover:border-accent/40 text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition active:scale-95 touch-manipulation cursor-pointer"
                           title="Buka Peta Navigasi Google Maps"
                         >
-                          <Navigation size={14} className="text-[#008069]" />
+                          <Navigation size={14} className="text-accent" />
                           <span>Maps</span>
                         </a>
 
@@ -1325,22 +1317,22 @@ export const TodayTreatments: React.FC = () => {
                           onClick={() => handleOpenLocationModal(task)}
                           className={`py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition active:scale-95 touch-manipulation cursor-pointer ${
                             needsHousePhoto(task)
-                              ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:border-amber-700/60 dark:text-[#f59e0b]'
-                              : 'bg-white dark:bg-[#202c33] border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#374248]'
+                              ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:border-amber-700/60 dark:text-warning'
+                              : 'bg-surface border-divider text-ink-2 hover:text-ink dark:hover:text-ink hover:bg-fill-1'
                           }`}
                           title={needsHousePhoto(task) ? 'Foto rumah belum ada • Klik untuk unggah' : 'Update Titik GPS & Foto Rumah Pasien'}
                         >
-                          <Camera size={14} className={needsHousePhoto(task) ? 'text-amber-600 dark:text-[#f59e0b]' : ''} />
+                          <Camera size={14} className={needsHousePhoto(task) ? 'text-amber-600 dark:text-warning' : ''} />
                           <span>{needsHousePhoto(task) ? 'Butuh Foto' : 'Lokasi'}</span>
                         </button>
 
                         {/* Chat WhatsApp Pasien */}
                         <button
                           onClick={() => handleOpenChat(task)}
-                          className="py-2.5 px-3 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:text-[#008069] dark:hover:text-[#00a884] hover:bg-[#e8f5f2] dark:hover:bg-[#00a884]/15 text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition active:scale-95 touch-manipulation cursor-pointer"
+                          className="py-2.5 px-3 rounded-xl bg-surface border border-divider text-ink-2 hover:text-accent hover:bg-accent-soft dark:hover:bg-accent/15 text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition active:scale-95 touch-manipulation cursor-pointer"
                           title="Buka Live Chat WhatsApp Pasien"
                         >
-                          <MessageSquare size={14} className="text-[#008069]" />
+                          <MessageSquare size={14} className="text-accent" />
                           <span>Chat</span>
                         </button>
 
@@ -1348,7 +1340,7 @@ export const TodayTreatments: React.FC = () => {
                         {isSupervisor && (
                           <button
                             onClick={() => handleOpenReassign(task)}
-                            className="col-span-3 sm:col-span-1 py-2.5 px-3 rounded-xl bg-purple-50 dark:bg-[#202c33] hover:bg-purple-100 dark:hover:bg-purple-500/20 text-purple-700 dark:text-[#aebac1] border border-purple-200 dark:border-[#2a3942] text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 touch-manipulation cursor-pointer"
+                            className="col-span-3 sm:col-span-1 py-2.5 px-3 rounded-xl bg-purple-50 dark:bg-fill-1 hover:bg-purple-100 dark:hover:bg-purple-500/20 text-purple-700 dark:text-ink-2 border border-purple-200 dark:border-divider text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 touch-manipulation cursor-pointer"
                             title={task.assignedStaff ? 'Ganti Terapis yang Ditugaskan' : 'Delegasikan Jadwal ke Terapis Lain'}
                           >
                             <UserCheck size={14} />
@@ -1376,25 +1368,25 @@ export const TodayTreatments: React.FC = () => {
             onClick={() => setDetailModalTask(null)}
           >
             <div
-              className="bg-white dark:bg-[#111b21] dark:text-[#e9edef] rounded-2xl sm:rounded-3xl p-5 sm:p-6 w-full max-w-lg shadow-2xl border border-[#e9edef] dark:border-[#2a3942] space-y-4 text-left relative max-h-[85dvh] sm:max-h-[80dvh] overflow-y-auto overscroll-contain animate-modalScaleUp"
+              className="bg-surface dark:text-ink rounded-2xl sm:rounded-3xl p-5 sm:p-6 w-full max-w-lg shadow-2xl border border-divider space-y-4 text-left relative max-h-[85dvh] sm:max-h-[80dvh] overflow-y-auto overscroll-contain animate-modalScaleUp"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header Detail */}
-              <div className="flex items-start justify-between border-b border-[#e9edef] dark:border-[#2a3942] pb-3">
+              <div className="flex items-start justify-between border-b border-divider pb-3">
                 <div className="flex items-center space-x-3">
                   {detailModalTask.customerProfilePictureUrl ? (
                     <img
                       src={detailModalTask.customerProfilePictureUrl}
                       alt={detailModalTask.customerName || 'Pasien'}
-                      className="h-12 w-12 rounded-2xl object-cover border border-[#c2e7e0] shadow-xs"
+                      className="h-12 w-12 rounded-2xl object-cover border border-divider shadow-xs"
                     />
                   ) : (
-                    <div className="h-12 w-12 rounded-2xl bg-[#e8f5f2] border border-[#c2e7e0] text-[#008069] flex items-center justify-center font-extrabold text-base shadow-xs">
+                    <div className="h-12 w-12 rounded-2xl bg-accent-soft border border-divider text-accent flex items-center justify-center font-extrabold text-base shadow-xs">
                       {(detailModalTask.customerName || 'P').charAt(0).toUpperCase()}
                     </div>
                   )}
                   <div>
-                    <h3 className="font-bold text-base text-[#111b21] dark:text-[#e9edef] flex items-center gap-1.5">
+                    <h3 className="font-bold text-base text-ink flex items-center gap-1.5">
                       <span>{formatPatientName(detailModalTask.customerName)}</span>
                       <span
                         className={`p-1 rounded-md border ${getCategoryIcon(detailModalTask.treatmentCategory).badge} inline-flex items-center justify-center`}
@@ -1403,9 +1395,9 @@ export const TodayTreatments: React.FC = () => {
                         {getCategoryIcon(detailModalTask.treatmentCategory).icon}
                       </span>
                     </h3>
-                    <p className="text-xs text-[#54656f] dark:text-[#aebac1] mt-0.5">
+                    <p className="text-xs text-ink-2 mt-0.5">
                       Jam Kunjungan:{' '}
-                      <span className="font-bold text-[#111b21] dark:text-[#e9edef]">
+                      <span className="font-bold text-ink">
                         {formatTimeRange(
                           detailModalTask.bookingDate,
                           parseNumberedTreatments(detailModalTask.treatmentDetail).totalMinutes
@@ -1414,13 +1406,13 @@ export const TodayTreatments: React.FC = () => {
                     </p>
                     {detailModalTask.customerStats && (
                       <div className="flex items-center gap-2 mt-1 text-[11px]">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-[#e8f5f2] text-[#008069] font-bold">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-accent-soft text-accent font-bold">
                           {detailModalTask.customerStats.totalTreatments > 1
                             ? `${detailModalTask.customerStats.totalTreatments}x Treatment`
                             : 'Pasien Baru (1x)'}
                         </span>
-                        <span className="text-[#54656f] dark:text-[#aebac1] font-mono">
-                          LTV: <strong className="text-[#111b21] dark:text-[#e9edef]">{formatRupiah(detailModalTask.customerStats.ltv)}</strong>
+                        <span className="text-ink-2 font-mono">
+                          LTV: <strong className="text-ink">{formatRupiah(detailModalTask.customerStats.ltv)}</strong>
                         </span>
                       </div>
                     )}
@@ -1429,21 +1421,21 @@ export const TodayTreatments: React.FC = () => {
 
                 <button
                   onClick={() => setDetailModalTask(null)}
-                  className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] transition cursor-pointer"
+                  className="p-1.5 rounded-full text-ink-3 hover:text-ink dark:hover:text-ink hover:bg-fill-1 transition cursor-pointer"
                 >
                   <X size={18} />
                 </button>
               </div>
 
               {/* Treatment & Layanan */}
-              <div className="p-3.5 bg-[#f8fafc] rounded-2xl border border-[#e9edef] space-y-2">
-                <span className="text-[10px] font-bold text-[#54656f] uppercase tracking-wider block">
+              <div className="p-3.5 bg-surface-2 rounded-2xl border border-divider space-y-2">
+                <span className="text-[10px] font-bold text-ink-2 uppercase tracking-wider block">
                   Layanan Treatment Dipesan
                 </span>
                 <div className="space-y-1 text-xs">
                   {parseNumberedTreatments(detailModalTask.treatmentDetail).items.map((it, idx) => (
-                    <div key={idx} className="font-semibold text-[#111b21] flex items-start gap-2">
-                      <span className="h-5 w-5 rounded-full bg-[#e8f5f2] text-[#008069] flex items-center justify-center font-bold text-[10px] shrink-0">
+                    <div key={idx} className="font-semibold text-ink flex items-start gap-2">
+                      <span className="h-5 w-5 rounded-full bg-accent-soft text-accent flex items-center justify-center font-bold text-[10px] shrink-0">
                         {idx + 1}
                       </span>
                       <span>{it}</span>
@@ -1453,8 +1445,8 @@ export const TodayTreatments: React.FC = () => {
 
                 {parseNumberedTreatments(detailModalTask.treatmentDetail).totalMinutes > 0 && (
                   <div className="pt-1">
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold">
-                      <Timer size={12} className="text-amber-600" />
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-warning-soft text-warning border border-warning-line text-xs font-bold">
+                      <Timer size={12} className="text-warning" />
                       <span>Total Estimasi Waktu: {parseNumberedTreatments(detailModalTask.treatmentDetail).totalMinutes} Menit</span>
                     </span>
                   </div>
@@ -1463,15 +1455,15 @@ export const TodayTreatments: React.FC = () => {
 
               {/* Data Pasien Anak */}
               {detailModalTask.children && detailModalTask.children.length > 0 && (
-                <div className="p-3.5 bg-[#f8fafc] rounded-2xl border border-[#e9edef] space-y-1.5">
-                  <span className="text-[10px] font-bold text-[#54656f] uppercase tracking-wider block">
+                <div className="p-3.5 bg-surface-2 rounded-2xl border border-divider space-y-1.5">
+                  <span className="text-[10px] font-bold text-ink-2 uppercase tracking-wider block">
                     Data Pasien Anak
                   </span>
                   <div className="flex flex-wrap gap-1.5">
                     {detailModalTask.children.map((c, idx) => (
                       <span
                         key={idx}
-                        className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-xl bg-sky-50 text-sky-800 border border-sky-200 text-xs font-semibold"
+                        className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-xl bg-info-soft text-info border border-info-line text-xs font-semibold"
                       >
                         <Baby size={13} />
                         <span>{formatPatientName(c.name)} {c.currentAge ? `(${c.currentAge})` : c.rawAgeText ? `(${formatChildAgeText(c.rawAgeText)})` : ''}</span>
@@ -1482,15 +1474,15 @@ export const TodayTreatments: React.FC = () => {
               )}
 
               {/* Alamat & Lokasi */}
-              <div className="p-3.5 bg-[#f8fafc] dark:bg-[#1c272e] rounded-2xl border border-[#e9edef] dark:border-[#2a3942] space-y-2">
-                <span className="text-[10px] font-bold text-[#54656f] dark:text-[#aebac1] uppercase tracking-wider block">
+              <div className="p-3.5 bg-surface-2 dark:bg-surface-2 rounded-2xl border border-divider space-y-2">
+                <span className="text-[10px] font-bold text-ink-2 uppercase tracking-wider block">
                   Alamat & Titik Lokasi
                 </span>
-                <p className="text-xs text-[#111b21] dark:text-[#e9edef] leading-relaxed">{detailModalTask.address.fullText}</p>
+                <p className="text-xs text-ink leading-relaxed">{detailModalTask.address.fullText}</p>
                 
                 {detailModalTask.address.landmark && (
-                  <p className="text-xs text-[#54656f] dark:text-[#aebac1]">
-                    <span className="font-bold text-[#111b21] dark:text-[#e9edef]">Patokan:</span> {detailModalTask.address.landmark}
+                  <p className="text-xs text-ink-2">
+                    <span className="font-bold text-ink">Patokan:</span> {detailModalTask.address.landmark}
                   </p>
                 )}
 
@@ -1499,7 +1491,7 @@ export const TodayTreatments: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setZoomImageUrl(detailModalTask.address.housePhotoUrl || null)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-[#d1d7db] text-xs font-bold text-[#008069] shadow-2xs hover:bg-[#e8f5f2] cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface border border-divider text-xs font-bold text-accent shadow-2xs hover:bg-accent-soft cursor-pointer"
                     >
                       <ImageIcon size={14} />
                       <span>Lihat Foto Depan Rumah (Zoom)</span>
@@ -1509,34 +1501,34 @@ export const TodayTreatments: React.FC = () => {
               </div>
 
               {/* Rincian Finansial */}
-              <div className="p-3.5 bg-[#f8fafc] dark:bg-[#1c272e] rounded-2xl border border-[#e9edef] dark:border-[#2a3942] space-y-2 text-xs">
-                <span className="text-[10px] font-bold text-[#54656f] dark:text-[#aebac1] uppercase tracking-wider block">
+              <div className="p-3.5 bg-surface-2 dark:bg-surface-2 rounded-2xl border border-divider space-y-2 text-xs">
+                <span className="text-[10px] font-bold text-ink-2 uppercase tracking-wider block">
                   Rincian Biaya & Status Pembayaran
                 </span>
                 <div className="space-y-1">
-                  <div className="flex justify-between text-[#54656f] dark:text-[#aebac1]">
+                  <div className="flex justify-between text-ink-2">
                     <span>Biaya Layanan:</span>
                     <span>{formatRupiah(detailModalTask.pricing.treatmentFee)}</span>
                   </div>
-                  <div className="flex justify-between text-[#54656f] dark:text-[#aebac1]">
+                  <div className="flex justify-between text-ink-2">
                     <span>Ongkos Kirim:</span>
                     <span>{formatRupiah(detailModalTask.pricing.deliveryFee)}</span>
                   </div>
-                  <div className="flex justify-between font-bold text-[#111b21] dark:text-[#e9edef] pt-1 border-t border-[#e9edef] dark:border-[#2a3942]">
+                  <div className="flex justify-between font-bold text-ink pt-1 border-t border-divider">
                     <span>Total Tagihan:</span>
-                    <span className="text-[#008069] text-sm">{formatRupiah(detailModalTask.pricing.totalFee)}</span>
+                    <span className="text-accent text-sm">{formatRupiah(detailModalTask.pricing.totalFee)}</span>
                   </div>
                 </div>
 
                 <div className="pt-2 flex items-center justify-between">
-                  <span className="text-xs text-[#54656f] dark:text-[#aebac1]">Status Pembayaran:</span>
+                  <span className="text-xs text-ink-2">Status Pembayaran:</span>
                   {detailModalTask.pricing.paymentStatus === 'LUNAS' ? (
-                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-[#d9fdd3] dark:bg-[#005c4b] text-[#008069] dark:text-[#e9edef] border border-[#00a884]/30 flex items-center space-x-1">
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-bubble-out text-accent border border-accent/30 flex items-center space-x-1">
                       <CheckCircle2 size={12} />
                       <span>LUNAS</span>
                     </span>
                   ) : (
-                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 dark:bg-amber-950/40 text-amber-900 dark:text-[#f59e0b] border border-amber-300 dark:border-amber-800/40 flex items-center space-x-1">
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 dark:bg-amber-950/40 text-amber-900 dark:text-warning border border-amber-300 dark:border-amber-800/40 flex items-center space-x-1">
                       <CreditCard size={12} />
                       <span>TAGIH DI TEMPAT</span>
                     </span>
@@ -1553,7 +1545,7 @@ export const TodayTreatments: React.FC = () => {
                       href={detailMapsUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex-1 py-2.5 px-4 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs cursor-pointer active:scale-[0.98]"
+                      className="flex-1 py-2.5 px-4 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs cursor-pointer active:scale-[0.98]"
                     >
                       <Navigation size={14} />
                       <span>Buka Google Maps</span>
@@ -1567,15 +1559,15 @@ export const TodayTreatments: React.FC = () => {
                     setDetailModalTask(null);
                     handleOpenChat(t);
                   }}
-                  className="py-2.5 px-4 bg-white dark:bg-[#202c33] hover:bg-[#f0f2f5] dark:hover:bg-[#374248] border border-[#d1d7db] dark:border-[#374248] text-[#111b21] dark:text-[#e9edef] rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer"
+                  className="py-2.5 px-4 bg-surface hover:bg-fill-1 border border-divider text-ink rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer"
                 >
-                  <MessageSquare size={14} className="text-[#008069]" />
+                  <MessageSquare size={14} className="text-accent" />
                   <span>Chat WA</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setDetailModalTask(null)}
-                  className="py-2.5 px-4 bg-white dark:bg-[#202c33] hover:bg-[#f0f2f5] dark:hover:bg-[#374248] border border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] rounded-xl text-xs font-bold transition cursor-pointer"
+                  className="py-2.5 px-4 bg-surface hover:bg-fill-1 border border-divider text-ink-2 rounded-xl text-xs font-bold transition cursor-pointer"
                 >
                   Tutup
                 </button>
@@ -1594,65 +1586,65 @@ export const TodayTreatments: React.FC = () => {
             onClick={() => setShowMetricsModal(false)}
           >
             <div
-              className="bg-white dark:bg-[#111b21] dark:text-[#e9edef] rounded-3xl p-6 w-full max-w-lg shadow-2xl border border-[#e9edef] dark:border-[#2a3942] space-y-4 text-left relative max-h-[85dvh] sm:max-h-[80dvh] overflow-y-auto overscroll-contain animate-modalScaleUp"
+              className="bg-surface dark:text-ink rounded-3xl p-6 w-full max-w-lg shadow-2xl border border-divider space-y-4 text-left relative max-h-[85dvh] sm:max-h-[80dvh] overflow-y-auto overscroll-contain animate-modalScaleUp"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-start justify-between border-b border-[#e9edef] pb-3">
+              <div className="flex items-start justify-between border-b border-divider pb-3">
                 <div className="flex items-center space-x-2.5">
-                  <div className="h-10 w-10 rounded-2xl bg-[#e8f5f2] text-[#008069] flex items-center justify-center border border-[#c2e7e0] shadow-xs">
+                  <div className="h-10 w-10 rounded-2xl bg-accent-soft text-accent flex items-center justify-center border border-divider shadow-xs">
                     <BarChart3 size={20} />
                   </div>
                   <div>
-                    <h3 className="font-bold text-base text-[#111b21] dark:text-[#e9edef]">
+                    <h3 className="font-bold text-base text-ink">
                       Rekap Metrik Treatment {dateTab === 'today' ? 'Hari Ini' : dateTab === 'tomorrow' ? 'Besok' : displayDateText}
                     </h3>
-                    <p className="text-xs text-[#54656f] dark:text-[#aebac1]">{displayDateText}</p>
+                    <p className="text-xs text-ink-2">{displayDateText}</p>
                   </div>
                 </div>
                 <button
                   onClick={() => setShowMetricsModal(false)}
-                  className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] transition cursor-pointer"
+                  className="p-1.5 rounded-full text-ink-3 hover:text-ink dark:hover:text-ink hover:bg-fill-1 transition cursor-pointer"
                 >
                   <X size={18} />
                 </button>
               </div>
 
               <div className="grid grid-cols-2 gap-3 pt-1">
-                <div className="bg-[#f8fafc] dark:bg-[#1c272e] rounded-2xl border border-[#e9edef] dark:border-[#2a3942] p-4">
-                  <span className="text-[11px] font-bold text-[#54656f] dark:text-[#aebac1] uppercase tracking-wider block">Total Treatment</span>
-                  <p className="text-2xl font-black text-[#111b21] dark:text-[#e9edef] mt-1">{totalCount}</p>
-                  <span className="text-[11px] text-[#8696a0]">Kunjungan terjadwal</span>
+                <div className="bg-surface-2 dark:bg-surface-2 rounded-2xl border border-divider p-4">
+                  <span className="text-[11px] font-bold text-ink-2 uppercase tracking-wider block">Total Treatment</span>
+                  <p className="text-2xl font-black text-ink mt-1">{totalCount}</p>
+                  <span className="text-[11px] text-ink-3">Kunjungan terjadwal</span>
                 </div>
 
                 <div className="bg-emerald-50/40 dark:bg-emerald-950/30 rounded-2xl border border-emerald-200 dark:border-emerald-800/40 p-4">
-                  <span className="text-[11px] font-bold text-emerald-700 dark:text-[#00a884] uppercase tracking-wider block">Selesai</span>
-                  <p className="text-2xl font-black text-emerald-700 dark:text-[#e9edef] mt-1">{completedCount}</p>
-                  <span className="text-[11px] text-emerald-600 dark:text-[#8696a0]">Pasien telah ditangani</span>
+                  <span className="text-[11px] font-bold text-emerald-700 dark:text-accent uppercase tracking-wider block">Selesai</span>
+                  <p className="text-2xl font-black text-emerald-700 dark:text-ink mt-1">{completedCount}</p>
+                  <span className="text-[11px] text-emerald-600 dark:text-ink-3">Pasien telah ditangani</span>
                 </div>
 
                 <div className="bg-sky-50/40 dark:bg-sky-950/30 rounded-2xl border border-sky-200 dark:border-sky-800/40 p-4">
-                  <span className="text-[11px] font-bold text-sky-700 dark:text-[#38bdf8] uppercase tracking-wider block">Sedang OTW</span>
-                  <p className="text-2xl font-black text-sky-700 dark:text-[#e9edef] mt-1">{otwCount}</p>
-                  <span className="text-[11px] text-sky-600 dark:text-[#8696a0]">Dalam perjalanan</span>
+                  <span className="text-[11px] font-bold text-sky-700 dark:text-info uppercase tracking-wider block">Sedang OTW</span>
+                  <p className="text-2xl font-black text-sky-700 dark:text-ink mt-1">{otwCount}</p>
+                  <span className="text-[11px] text-sky-600 dark:text-ink-3">Dalam perjalanan</span>
                 </div>
 
                 <div className="bg-amber-50/40 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-800/40 p-4">
-                  <span className="text-[11px] font-bold text-amber-700 dark:text-[#f59e0b] uppercase tracking-wider block">Status Lunas</span>
-                  <p className="text-2xl font-black text-amber-700 dark:text-[#e9edef] mt-1">{lunasCount} / {totalCount}</p>
-                  <span className="text-[11px] text-amber-600 dark:text-[#8696a0]">{totalCount - lunasCount} Tagih di tempat</span>
+                  <span className="text-[11px] font-bold text-amber-700 dark:text-warning uppercase tracking-wider block">Status Lunas</span>
+                  <p className="text-2xl font-black text-amber-700 dark:text-ink mt-1">{lunasCount} / {totalCount}</p>
+                  <span className="text-[11px] text-amber-600 dark:text-ink-3">{totalCount - lunasCount} Tagih di tempat</span>
                 </div>
               </div>
 
-              <div className="p-4 bg-[#f8fafc] dark:bg-[#1c272e] rounded-2xl border border-[#e9edef] dark:border-[#2a3942] flex items-center justify-between text-xs">
-                <span className="font-bold text-[#54656f] dark:text-[#aebac1]">Total Nilai Transaksi:</span>
-                <span className="font-black text-sm text-[#008069] dark:text-[#00a884]">{formatRupiah(totalRevenue)}</span>
+              <div className="p-4 bg-surface-2 dark:bg-surface-2 rounded-2xl border border-divider flex items-center justify-between text-xs">
+                <span className="font-bold text-ink-2">Total Nilai Transaksi:</span>
+                <span className="font-black text-sm text-accent">{formatRupiah(totalRevenue)}</span>
               </div>
 
               <div className="flex justify-end pt-2">
                 <button
                   type="button"
                   onClick={() => setShowMetricsModal(false)}
-                  className="px-5 py-2.5 rounded-xl bg-[#008069] text-white text-xs font-bold hover:bg-[#00a884] transition cursor-pointer shadow-xs"
+                  className="px-5 py-2.5 rounded-xl bg-accent text-accent-ink text-xs font-bold hover:bg-accent transition cursor-pointer shadow-xs"
                 >
                   Tutup Rekap
                 </button>
@@ -1706,50 +1698,50 @@ export const TodayTreatments: React.FC = () => {
             onClick={() => setReassignTask(null)}
           >
             <div
-              className="bg-white dark:bg-[#111b21] dark:text-[#e9edef] rounded-2xl sm:rounded-3xl w-full max-w-md max-h-[85dvh] sm:max-h-[80dvh] flex flex-col shadow-2xl border border-[#e9edef] dark:border-[#2a3942] overflow-hidden animate-modalScaleUp relative"
+              className="bg-surface dark:text-ink rounded-2xl sm:rounded-3xl w-full max-w-md max-h-[85dvh] sm:max-h-[80dvh] flex flex-col shadow-2xl border border-divider overflow-hidden animate-modalScaleUp relative"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="px-5 py-4 border-b border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#1c272e] flex items-start justify-between shrink-0">
+              <div className="px-5 py-4 border-b border-divider bg-surface-2 dark:bg-surface-2 flex items-start justify-between shrink-0">
                 <div className="flex items-center space-x-2.5">
-                  <div className="h-10 w-10 rounded-2xl bg-purple-100 dark:bg-[#202c33] text-purple-700 dark:text-[#aebac1] flex items-center justify-center border border-purple-200 dark:border-[#2a3942] shadow-xs">
+                  <div className="h-10 w-10 rounded-2xl bg-purple-100 dark:bg-fill-1 text-purple-700 dark:text-ink-2 flex items-center justify-center border border-purple-200 dark:border-divider shadow-xs">
                     <UserCheck size={20} />
                   </div>
                   <div>
-                    <h3 className="font-bold text-base text-[#111b21] dark:text-[#e9edef]">
+                    <h3 className="font-bold text-base text-ink">
                       {reassignTask.assignedStaff ? 'Ganti Terapis Jadwal' : 'Delegasikan Jadwal'}
                     </h3>
-                    <p className="text-xs text-[#54656f] dark:text-[#aebac1] truncate max-w-[220px]">
+                    <p className="text-xs text-ink-2 truncate max-w-[220px]">
                       {reassignTask.customerName || 'Pasien'}
                     </p>
                   </div>
                 </div>
                 <button
                   onClick={() => setReassignTask(null)}
-                  className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] transition cursor-pointer"
+                  className="p-1.5 rounded-full text-ink-3 hover:text-ink dark:hover:text-ink hover:bg-fill-1 transition cursor-pointer"
                 >
                   <X size={18} />
                 </button>
               </div>
 
               <form onSubmit={handleSaveReassign} className="flex-1 overflow-y-auto p-5 space-y-4 text-left overscroll-contain">
-                <div className="p-3.5 bg-[#f8fafc] dark:bg-[#1c272e] rounded-2xl border border-[#e9edef] dark:border-[#2a3942] space-y-1.5 text-xs">
-                  <p className="text-[#54656f] dark:text-[#aebac1]">
-                    Jam Kunjungan: <span className="font-bold text-[#111b21] dark:text-[#e9edef]">{formatTime(reassignTask.bookingDate)}</span>
+                <div className="p-3.5 bg-surface-2 dark:bg-surface-2 rounded-2xl border border-divider space-y-1.5 text-xs">
+                  <p className="text-ink-2">
+                    Jam Kunjungan: <span className="font-bold text-ink">{formatTime(reassignTask.bookingDate)}</span>
                   </p>
-                  <p className="text-[#54656f] dark:text-[#aebac1]">
-                    Treatment: <span className="font-bold text-[#111b21] dark:text-[#e9edef]">{reassignTask.treatmentDetail}</span>
+                  <p className="text-ink-2">
+                    Treatment: <span className="font-bold text-ink">{reassignTask.treatmentDetail}</span>
                   </p>
-                  <p className="text-[#54656f] dark:text-[#aebac1]">
-                    Terapis Saat Ini: <span className="font-bold text-purple-700 dark:text-[#aebac1]">{reassignTask.assignedStaff?.name || 'Belum Ditugaskan'}</span>
+                  <p className="text-ink-2">
+                    Terapis Saat Ini: <span className="font-bold text-purple-700 dark:text-ink-2">{reassignTask.assignedStaff?.name || 'Belum Ditugaskan'}</span>
                   </p>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Pilih Terapis Pengganti:</label>
+                  <label className="block text-xs font-bold text-ink">Pilih Terapis Pengganti:</label>
                   <select
                     value={reassignStaffId}
                     onChange={(e) => setReassignStaffId(e.target.value)}
-                    className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] rounded-xl p-3 text-xs text-[#111b21] dark:text-[#e9edef] font-semibold focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full bg-surface border border-divider rounded-xl p-3 text-xs text-ink font-semibold focus:outline-none focus:border-accent shadow-xs"
                   >
                     <option value="">-- Pilih Staf Terapis --</option>
                     {teamMembers.map((m) => (
@@ -1760,18 +1752,18 @@ export const TodayTreatments: React.FC = () => {
                   </select>
                 </div>
 
-                <div className="flex items-center justify-end space-x-2 pt-3 border-t border-[#e9edef] dark:border-[#2a3942]">
+                <div className="flex items-center justify-end space-x-2 pt-3 border-t border-divider">
                   <button
                     type="button"
                     onClick={() => setReassignTask(null)}
-                    className="px-4 py-2.5 rounded-xl border border-[#d1d7db] dark:border-[#374248] text-xs font-semibold text-[#54656f] dark:text-[#aebac1] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] transition cursor-pointer"
+                    className="px-4 py-2.5 rounded-xl border border-divider text-xs font-semibold text-ink-2 hover:bg-fill-1 transition cursor-pointer"
                   >
                     Batal
                   </button>
                   <button
                     type="submit"
                     disabled={submittingReassign || !reassignStaffId}
-                    className="px-5 py-2.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50 cursor-pointer"
+                    className="px-5 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50 cursor-pointer"
                   >
                     {submittingReassign ? <span>Menyimpan...</span> : <span>{reassignTask.assignedStaff ? 'Simpan Ganti Terapis' : 'Simpan Delegasi'}</span>}
                   </button>
@@ -1792,24 +1784,24 @@ export const TodayTreatments: React.FC = () => {
             onClick={() => setPaymentTask(null)}
           >
             <div
-              className="bg-white dark:bg-[#111b21] dark:text-[#e9edef] rounded-2xl sm:rounded-3xl w-full max-w-md max-h-[85dvh] sm:max-h-[80dvh] flex flex-col shadow-2xl border border-[#e9edef] dark:border-[#2a3942] overflow-hidden animate-modalScaleUp relative"
+              className="bg-surface dark:text-ink rounded-2xl sm:rounded-3xl w-full max-w-md max-h-[85dvh] sm:max-h-[80dvh] flex flex-col shadow-2xl border border-divider overflow-hidden animate-modalScaleUp relative"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="px-5 py-4 border-b border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#1c272e] flex items-start justify-between shrink-0">
+              <div className="px-5 py-4 border-b border-divider bg-surface-2 dark:bg-surface-2 flex items-start justify-between shrink-0">
                 <div className="flex items-center space-x-2.5">
-                  <div className="h-10 w-10 rounded-2xl bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-[#f59e0b] flex items-center justify-center border border-amber-200 dark:border-amber-800/40 shadow-xs">
+                  <div className="h-10 w-10 rounded-2xl bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-warning flex items-center justify-center border border-amber-200 dark:border-amber-800/40 shadow-xs">
                     <CreditCard size={20} />
                   </div>
                   <div>
-                    <h3 className="font-bold text-base text-[#111b21] dark:text-[#e9edef]">Catat Pembayaran Lunas</h3>
-                    <p className="text-xs text-[#54656f] dark:text-[#aebac1] truncate max-w-[220px]">
+                    <h3 className="font-bold text-base text-ink">Catat Pembayaran Lunas</h3>
+                    <p className="text-xs text-ink-2 truncate max-w-[220px]">
                       {paymentTask.customerName || 'Pasien'}
                     </p>
                   </div>
                 </div>
                 <button
                   onClick={() => setPaymentTask(null)}
-                  className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] transition cursor-pointer"
+                  className="p-1.5 rounded-full text-ink-3 hover:text-ink dark:hover:text-ink hover:bg-fill-1 transition cursor-pointer"
                 >
                   <X size={18} />
                 </button>
@@ -1817,22 +1809,22 @@ export const TodayTreatments: React.FC = () => {
 
               <form onSubmit={handleSavePayment} className="flex-1 overflow-y-auto p-5 space-y-4 text-left overscroll-contain">
                 <div className="p-3.5 bg-amber-50/50 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-800/40 text-xs space-y-1">
-                  <div className="flex justify-between text-[#54656f] dark:text-[#aebac1]">
+                  <div className="flex justify-between text-ink-2">
                     <span>Biaya Layanan:</span>
                     <span>{formatRupiah(paymentTask.pricing.treatmentFee)}</span>
                   </div>
-                  <div className="flex justify-between text-[#54656f] dark:text-[#aebac1]">
+                  <div className="flex justify-between text-ink-2">
                     <span>Ongkos Kirim:</span>
                     <span>{formatRupiah(paymentTask.pricing.deliveryFee)}</span>
                   </div>
-                  <div className="flex justify-between font-bold text-[#111b21] dark:text-[#e9edef] pt-1 border-t border-amber-200 dark:border-amber-800/40">
+                  <div className="flex justify-between font-bold text-ink pt-1 border-t border-amber-200 dark:border-amber-800/40">
                     <span>Total Tagihan:</span>
-                    <span className="text-[#008069] text-sm">{formatRupiah(paymentTask.pricing.totalFee)}</span>
+                    <span className="text-accent text-sm">{formatRupiah(paymentTask.pricing.totalFee)}</span>
                   </div>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Metode Pembayaran:</label>
+                  <label className="block text-xs font-bold text-ink">Metode Pembayaran:</label>
                   <div className="grid grid-cols-3 gap-2">
                     {(['CASH', 'TRANSFER', 'QRIS'] as const).map((m) => (
                       <button
@@ -1841,8 +1833,8 @@ export const TodayTreatments: React.FC = () => {
                         onClick={() => setPaymentMethod(m)}
                         className={`py-2 px-3 rounded-xl text-xs font-bold border transition cursor-pointer ${
                           paymentMethod === m
-                            ? 'bg-[#008069] text-white border-[#008069] shadow-xs'
-                            : 'bg-white dark:bg-[#202c33] text-[#54656f] dark:text-[#aebac1] border-[#d1d7db] dark:border-[#374248] hover:bg-[#f0f2f5] dark:hover:bg-[#374248]'
+                            ? 'bg-accent text-accent-ink border-accent shadow-xs'
+                            : 'bg-surface text-ink-2 border-divider hover:bg-fill-1'
                         }`}
                       >
                         {m === 'CASH' ? '💵 Tunai' : m === 'TRANSFER' ? '🏦 Transfer' : '📱 QRIS'}
@@ -1853,7 +1845,7 @@ export const TodayTreatments: React.FC = () => {
 
                 {paymentMethod !== 'CASH' && (
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Upload Bukti Transfer:</label>
+                    <label className="block text-xs font-bold text-ink">Upload Bukti Transfer:</label>
                     <input
                       type="file"
                       accept="image/*"
@@ -1865,7 +1857,7 @@ export const TodayTreatments: React.FC = () => {
                           reader.readAsDataURL(file);
                         }
                       }}
-                      className="w-full text-xs text-[#54656f] file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#e8f5f2] file:text-[#008069] hover:file:bg-[#c2e7e0] cursor-pointer"
+                      className="w-full text-xs text-ink-2 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-accent-soft file:text-accent hover:file:bg-accent-soft/80 cursor-pointer"
                     />
                     {proofImageB64 && (
                       <div className="relative mt-2 rounded-xl overflow-hidden border">
@@ -1883,18 +1875,18 @@ export const TodayTreatments: React.FC = () => {
                   </div>
                 )}
 
-                <div className="flex items-center justify-end space-x-2 pt-3 border-t border-[#e9edef] dark:border-[#2a3942]">
+                <div className="flex items-center justify-end space-x-2 pt-3 border-t border-divider">
                   <button
                     type="button"
                     onClick={() => setPaymentTask(null)}
-                    className="px-4 py-2.5 rounded-xl border border-[#d1d7db] dark:border-[#374248] text-xs font-semibold text-[#54656f] dark:text-[#aebac1] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] transition cursor-pointer"
+                    className="px-4 py-2.5 rounded-xl border border-divider text-xs font-semibold text-ink-2 hover:bg-fill-1 transition cursor-pointer"
                   >
                     Batal
                   </button>
                   <button
                     type="submit"
                     disabled={submittingPayment}
-                    className="px-5 py-2.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50 cursor-pointer"
+                    className="px-5 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50 cursor-pointer"
                   >
                     {submittingPayment ? <span>Menyimpan...</span> : <span>Simpan Status Lunas</span>}
                   </button>
@@ -1915,26 +1907,26 @@ export const TodayTreatments: React.FC = () => {
             onClick={() => setLocationTask(null)}
           >
             <div
-              className="bg-white dark:bg-[#111b21] dark:text-[#e9edef] rounded-2xl sm:rounded-3xl w-full max-w-md max-h-[85dvh] sm:max-h-[80dvh] flex flex-col shadow-2xl border border-[#e9edef] dark:border-[#2a3942] overflow-hidden animate-modalScaleUp relative"
+              className="bg-surface dark:text-ink rounded-2xl sm:rounded-3xl w-full max-w-md max-h-[85dvh] sm:max-h-[80dvh] flex flex-col shadow-2xl border border-divider overflow-hidden animate-modalScaleUp relative"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="px-5 py-4 border-b border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#1c272e] flex items-start justify-between shrink-0">
+              <div className="px-5 py-4 border-b border-divider bg-surface-2 dark:bg-surface-2 flex items-start justify-between shrink-0">
                 <div className="flex items-center space-x-2.5">
-                  <div className="h-10 w-10 rounded-2xl bg-[#e8f5f2] dark:bg-[#00a884]/15 text-[#008069] dark:text-[#00a884] flex items-center justify-center border border-[#c2e7e0] dark:border-[#00a884]/30 shadow-xs">
+                  <div className="h-10 w-10 rounded-2xl bg-accent-soft text-accent flex items-center justify-center border border-divider dark:border-accent/30 shadow-xs">
                     <MapPin size={20} />
                   </div>
                   <div>
-                    <h3 className="font-bold text-base text-[#111b21] dark:text-[#e9edef]">
+                    <h3 className="font-bold text-base text-ink">
                       {locModalMode === 'view' ? 'Panduan Lokasi Tersimpan' : 'Update Lokasi & Foto Rumah'}
                     </h3>
-                    <p className="text-xs text-[#54656f] dark:text-[#aebac1] truncate max-w-[220px]">
+                    <p className="text-xs text-ink-2 truncate max-w-[220px]">
                       {locationTask.customerName || 'Pasien'}
                     </p>
                   </div>
                 </div>
                 <button
                   onClick={() => setLocationTask(null)}
-                  className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] transition cursor-pointer"
+                  className="p-1.5 rounded-full text-ink-3 hover:text-ink dark:hover:text-ink hover:bg-fill-1 transition cursor-pointer"
                 >
                   <X size={18} />
                 </button>
@@ -1944,7 +1936,7 @@ export const TodayTreatments: React.FC = () => {
                 <div className="flex-1 overflow-y-auto p-5 space-y-4 text-left overscroll-contain">
                   {/* Foto Rumah Tersimpan */}
                   {locationTask.address.housePhotoUrl ? (
-                    <div className="relative rounded-2xl overflow-hidden border border-[#e9edef] bg-black/5 flex items-center justify-center max-h-56 group">
+                    <div className="relative rounded-2xl overflow-hidden border border-divider bg-black/5 flex items-center justify-center max-h-56 group">
                       <img
                         src={locationTask.address.housePhotoUrl}
                         alt="Foto Rumah"
@@ -1960,37 +1952,37 @@ export const TodayTreatments: React.FC = () => {
                       </button>
                     </div>
                   ) : (
-                    <div className="p-5 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 text-center text-xs text-[#8696a0] space-y-1">
-                      <ImageIcon size={24} className="mx-auto text-slate-400" />
+                    <div className="p-5 rounded-2xl border-2 border-dashed border-divider bg-surface-2 text-center text-xs text-ink-3 space-y-1">
+                      <ImageIcon size={24} className="mx-auto text-ink-3" />
                       <p>Belum ada foto tampak depan rumah</p>
                     </div>
                   )}
 
                   {/* Info Titik GPS */}
                   {locationTask.address.lat && locationTask.address.lng ? (
-                    <div className="p-3.5 bg-[#d9fdd3]/70 dark:bg-[#005c4b]/60 border border-[#00a884]/40 rounded-2xl space-y-2">
+                    <div className="p-3.5 bg-bubble-out/70 border border-accent/40 rounded-2xl space-y-2">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-1.5 text-xs font-bold text-[#008069] dark:text-[#e9edef]">
-                          <CheckCircle2 size={15} className="text-[#008069] dark:text-[#00a884]" />
+                        <div className="flex items-center space-x-1.5 text-xs font-bold text-accent dark:text-ink">
+                          <CheckCircle2 size={15} className="text-accent" />
                           <span>Titik GPS Terkunci</span>
                         </div>
                         <a
                           href={getGoogleMapsDirectionUrl(locationTask.address.lat, locationTask.address.lng, locationTask.address.fullText || locationTask.address.kelurahan || null)}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="px-2.5 py-1 rounded-lg bg-[#008069] text-white text-[11px] font-bold hover:bg-[#00a884] transition inline-flex items-center gap-1 shadow-2xs"
+                          className="px-2.5 py-1 rounded-lg bg-accent text-accent-ink text-[11px] font-bold hover:bg-accent transition inline-flex items-center gap-1 shadow-2xs"
                         >
                           <span>Buka Maps</span>
                           <ExternalLink size={11} />
                         </a>
                       </div>
-                      <p className="text-xs font-mono text-[#111b21] dark:text-[#e9edef] bg-white/80 dark:bg-black/30 px-2.5 py-1.5 rounded-xl border border-[#00a884]/20">
+                      <p className="text-xs font-mono text-ink bg-white/80 dark:bg-black/30 px-2.5 py-1.5 rounded-xl border border-accent/20">
                         📍 {locationTask.address.lat.toFixed(6)}, {locationTask.address.lng.toFixed(6)}
                       </p>
                     </div>
                   ) : (
                     <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-xl text-xs text-amber-800 dark:text-amber-200 flex items-center gap-2">
-                      <AlertTriangle size={15} className="shrink-0 text-amber-600" />
+                      <AlertTriangle size={15} className="shrink-0 text-warning" />
                       <span>Belum ada titik GPS presisi untuk pasien ini.</span>
                     </div>
                   )}
@@ -1998,38 +1990,38 @@ export const TodayTreatments: React.FC = () => {
                   {/* Info Patokan */}
                   {locationTask.address.landmark && (
                     <div className="p-3.5 bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800/40 rounded-2xl space-y-1">
-                      <span className="text-[10px] font-bold text-sky-800 dark:text-[#38bdf8] uppercase tracking-wider block">
+                      <span className="text-[10px] font-bold text-sky-800 dark:text-info uppercase tracking-wider block">
                         🏷️ Patokan / Ciri Rumah:
                       </span>
-                      <p className="text-xs font-medium text-[#111b21] dark:text-[#e9edef]">
+                      <p className="text-xs font-medium text-ink">
                         {locationTask.address.landmark}
                       </p>
                     </div>
                   )}
 
                   {/* Info Alamat Tercatat */}
-                  <div className="p-3 rounded-xl bg-[#f8fafc] dark:bg-[#1c272e] border border-[#e9edef] dark:border-[#2a3942] text-xs text-[#54656f] dark:text-[#aebac1] space-y-1">
-                    <span className="text-[10px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider block">
+                  <div className="p-3 rounded-xl bg-surface-2 dark:bg-surface-2 border border-divider text-xs text-ink-2 space-y-1">
+                    <span className="text-[10px] font-bold text-ink-3 uppercase tracking-wider block">
                       Alamat Tercatat:
                     </span>
-                    <p className="text-xs text-[#111b21] dark:text-[#e9edef] font-medium leading-snug">
+                    <p className="text-xs text-ink font-medium leading-snug">
                       {locationTask.address.fullText || `${locationTask.address.kelurahan || ''}, ${locationTask.address.kecamatan || ''}`}
                     </p>
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="flex items-center justify-end space-x-2 pt-3 border-t border-[#e9edef] dark:border-[#2a3942]">
+                  <div className="flex items-center justify-end space-x-2 pt-3 border-t border-divider">
                     <button
                       type="button"
                       onClick={() => setLocationTask(null)}
-                      className="px-4 py-2.5 rounded-xl border border-[#d1d7db] dark:border-[#374248] text-xs font-semibold text-[#54656f] dark:text-[#aebac1] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] transition cursor-pointer"
+                      className="px-4 py-2.5 rounded-xl border border-divider text-xs font-semibold text-ink-2 hover:bg-fill-1 transition cursor-pointer"
                     >
                       Tutup
                     </button>
                     <button
                       type="button"
                       onClick={() => setLocModalMode('edit')}
-                      className="px-5 py-2.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-xs cursor-pointer active:scale-95"
+                      className="px-5 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink text-xs font-bold transition flex items-center space-x-1.5 shadow-xs cursor-pointer active:scale-95"
                     >
                       <Pencil size={13} />
                       <span>Edit / Perbarui Data</span>
@@ -2042,7 +2034,7 @@ export const TodayTreatments: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setLocModalMode('view')}
-                      className="text-xs font-bold text-[#008069] hover:underline flex items-center gap-1 cursor-pointer mb-1"
+                      className="text-xs font-bold text-accent hover:underline flex items-center gap-1 cursor-pointer mb-1"
                     >
                       <ArrowLeft size={13} />
                       <span>Kembali ke Panduan Tersimpan</span>
@@ -2050,21 +2042,21 @@ export const TodayTreatments: React.FC = () => {
                   )}
 
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Patokan Rumah (Landmark):</label>
+                    <label className="block text-xs font-bold text-ink">Patokan Rumah (Landmark):</label>
                     <input
                       type="text"
                       value={locLandmark}
                       onChange={(e) => setLocLandmark(e.target.value)}
                       placeholder="Contoh: Pagar hitam, depan pos satpam blok C..."
-                      className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] rounded-xl p-3 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+                      className="w-full bg-surface border border-divider rounded-xl p-3 text-xs text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent shadow-xs"
                     />
                   </div>
 
                   {/* Smart GPS & Maps Link Section */}
-                  <div className="space-y-3 bg-[#f8fafc] dark:bg-[#1c272e] -mx-5 p-5 rounded-2xl border border-[#e9edef] dark:border-[#2a3942]">
+                  <div className="space-y-3 bg-surface-2 dark:bg-surface-2 -mx-5 p-5 rounded-2xl border border-divider">
                     <div className="flex items-center justify-between">
-                      <label className="block text-xs font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-1.5">
-                        <Crosshair size={13} className="text-[#008069]" />
+                      <label className="block text-xs font-bold text-ink flex items-center space-x-1.5">
+                        <Crosshair size={13} className="text-accent" />
                         <span>Kunci Titik GPS Pasien:</span>
                       </label>
                       {locCoords && (
@@ -2072,7 +2064,7 @@ export const TodayTreatments: React.FC = () => {
                           href={getGoogleMapsDirectionUrl(locCoords.lat, locCoords.lng, locLandmark || locationTask?.address?.fullText || null)}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-[11px] font-bold text-[#008069] hover:underline inline-flex items-center gap-1"
+                          className="text-[11px] font-bold text-accent hover:underline inline-flex items-center gap-1"
                         >
                           <span>Lihat Maps</span>
                           <ExternalLink size={11} />
@@ -2082,8 +2074,8 @@ export const TodayTreatments: React.FC = () => {
 
                     {/* Assistant 1: Tempel Link Maps */}
                     <div className="space-y-1">
-                      <label className="block text-[10px] font-semibold text-[#54656f] flex items-center gap-1">
-                        <Link2 size={11} className="text-[#008069]" />
+                      <label className="block text-[10px] font-semibold text-ink-2 flex items-center gap-1">
+                        <Link2 size={11} className="text-accent" />
                         <span>Tempel Link Shareloc / Google Maps Pasien:</span>
                       </label>
                       <div className="flex space-x-1.5">
@@ -2092,13 +2084,13 @@ export const TodayTreatments: React.FC = () => {
                           value={locMapsUrlInput}
                           onChange={(e) => handlePasteLocMapsUrl(e.target.value)}
                           placeholder="Paste link Google Maps / shareloc di sini..."
-                          className="flex-1 px-3 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-2xs"
+                          className="flex-1 px-3 py-2 bg-surface border border-divider rounded-xl text-xs text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent shadow-2xs"
                         />
                         <button
                           type="button"
                           onClick={() => handlePasteLocMapsUrl(locMapsUrlInput)}
                           disabled={locMapsResolving || !locMapsUrlInput.trim()}
-                          className="px-3 py-2 bg-white dark:bg-[#202c33] hover:bg-[#e8f5f2] dark:hover:bg-[#2a3942] border border-[#c2e7e0] dark:border-[#374248] text-[#008069] dark:text-[#00a884] rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-2xs disabled:opacity-50 cursor-pointer"
+                          className="px-3 py-2 bg-surface hover:bg-accent-soft dark:hover:bg-fill-2 border border-divider text-accent rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-2xs disabled:opacity-50 cursor-pointer"
                           title="Cari koordinat dari tautan"
                         >
                           {locMapsResolving ? <Loader size={12} className="animate-spin" /> : <Search size={12} />}
@@ -2106,7 +2098,7 @@ export const TodayTreatments: React.FC = () => {
                         </button>
                       </div>
                       {locMapsResolving && (
-                        <p className="text-[11px] text-[#008069] dark:text-[#00a884] flex items-center gap-1.5 animate-pulse mt-1">
+                        <p className="text-[11px] text-accent flex items-center gap-1.5 animate-pulse mt-1">
                           <Loader size={12} className="animate-spin" />
                           <span>Sedang mengurai tautan Google Maps...</span>
                         </p>
@@ -2119,7 +2111,7 @@ export const TodayTreatments: React.FC = () => {
                         type="button"
                         onClick={() => handleGetGps()}
                         disabled={locGettingGps}
-                        className="py-2.5 px-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-950/50 text-[#008069] dark:text-[#00a884] border border-emerald-300 dark:border-emerald-800/40 text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer shadow-2xs active:scale-[0.98]"
+                        className="py-2.5 px-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-950/50 text-accent border border-emerald-300 dark:border-emerald-800/40 text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer shadow-2xs active:scale-[0.98]"
                       >
                         <Crosshair size={13} className={locGettingGps ? 'animate-spin' : ''} />
                         <span>{locGettingGps ? 'Mengunci...' : '📍 Kunci GPS Saya'}</span>
@@ -2129,7 +2121,7 @@ export const TodayTreatments: React.FC = () => {
                         type="button"
                         onClick={handleGeocodeLocAddress}
                         disabled={locGeocoding}
-                        className="py-2.5 px-3 rounded-xl bg-sky-50 dark:bg-sky-950/30 hover:bg-sky-100 dark:hover:bg-sky-950/50 text-sky-800 dark:text-[#38bdf8] border border-sky-300 dark:border-sky-800/40 text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer shadow-2xs active:scale-[0.98]"
+                        className="py-2.5 px-3 rounded-xl bg-sky-50 dark:bg-sky-950/30 hover:bg-sky-100 dark:hover:bg-sky-950/50 text-sky-800 dark:text-info border border-sky-300 dark:border-sky-800/40 text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer shadow-2xs active:scale-[0.98]"
                       >
                         <Search size={13} className={locGeocoding ? 'animate-spin' : ''} />
                         <span>{locGeocoding ? 'Mencari...' : '🔍 Cari dari Alamat'}</span>
@@ -2138,28 +2130,28 @@ export const TodayTreatments: React.FC = () => {
 
                     {/* Coordinate Status Badge */}
                     {locCoords ? (
-                      <div className="p-2.5 bg-[#d9fdd3]/70 dark:bg-[#005c4b]/60 border border-[#00a884]/40 rounded-xl flex items-center justify-between text-xs text-[#008069] dark:text-[#e9edef]">
+                      <div className="p-2.5 bg-bubble-out/70 border border-accent/40 rounded-xl flex items-center justify-between text-xs text-accent">
                         <div className="flex items-center space-x-1.5 font-mono font-bold">
-                          <CheckCircle2 size={14} className="text-[#008069] dark:text-[#00a884] shrink-0" />
+                          <CheckCircle2 size={14} className="text-accent shrink-0" />
                           <span>Titik: {locCoords.lat.toFixed(6)}, {locCoords.lng.toFixed(6)}</span>
-                          {locCoords.accuracy && <span className="text-[10px] text-[#54656f] dark:text-[#aebac1]">(±{locCoords.accuracy}m)</span>}
+                          {locCoords.accuracy && <span className="text-[10px] text-ink-2">(±{locCoords.accuracy}m)</span>}
                         </div>
                         <button
                           type="button"
                           onClick={() => setLocCoords(null)}
-                          className="text-[10px] text-rose-600 dark:text-[#f87171] hover:underline font-semibold"
+                          className="text-[10px] text-rose-600 dark:text-danger hover:underline font-semibold"
                         >
                           Hapus
                         </button>
                       </div>
                     ) : (
-                      <p className="text-[11px] text-[#8696a0] italic">
+                      <p className="text-[11px] text-ink-3 italic">
                         Belum ada titik koordinat. Gunakan tombol di atas atau tempel link Maps.
                       </p>
                     )}
 
                     {locGpsError && (
-                      <p className="text-[11px] text-rose-600 dark:text-[#f87171] bg-rose-50 dark:bg-rose-950/30 p-2 rounded-lg border border-rose-200 dark:border-rose-800/40">
+                      <p className="text-[11px] text-rose-600 dark:text-danger bg-rose-50 dark:bg-rose-950/30 p-2 rounded-lg border border-rose-200 dark:border-rose-800/40">
                         {locGpsError}
                       </p>
                     )}
@@ -2169,16 +2161,16 @@ export const TodayTreatments: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setLocShowManualCoords(!locShowManualCoords)}
-                        className="text-[11px] text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef] font-semibold flex items-center gap-1 transition"
+                        className="text-[11px] text-ink-2 hover:text-ink dark:hover:text-ink font-semibold flex items-center gap-1 transition"
                       >
                         <span>{locShowManualCoords ? 'Sembunyikan Input Manual' : 'Input Koordinat Manual (Angka)'}</span>
                         {locShowManualCoords ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                       </button>
 
                       {locShowManualCoords && (
-                        <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-[#e9edef]">
+                        <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-divider">
                           <div className="space-y-1">
-                            <label className="block text-[10px] text-[#667781]">Latitude</label>
+                            <label className="block text-[10px] text-ink-3">Latitude</label>
                             <input
                               type="text"
                               value={locCoords?.lat ?? ''}
@@ -2187,11 +2179,11 @@ export const TodayTreatments: React.FC = () => {
                                 setLocCoords((prev) => ({ lat: val, lng: prev?.lng || 0 }));
                               }}
                               placeholder="-7.3488"
-                              className="w-full px-3 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] transition"
+                              className="w-full px-3 py-2 bg-surface border border-divider rounded-xl text-xs text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent transition"
                             />
                           </div>
                           <div className="space-y-1">
-                            <label className="block text-[10px] text-[#667781]">Longitude</label>
+                            <label className="block text-[10px] text-ink-3">Longitude</label>
                             <input
                               type="text"
                               value={locCoords?.lng ?? ''}
@@ -2200,7 +2192,7 @@ export const TodayTreatments: React.FC = () => {
                                 setLocCoords((prev) => ({ lat: prev?.lat || 0, lng: val }));
                               }}
                               placeholder="112.7516"
-                              className="w-full px-3 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] transition"
+                              className="w-full px-3 py-2 bg-surface border border-divider rounded-xl text-xs text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent transition"
                             />
                           </div>
                         </div>
@@ -2211,9 +2203,9 @@ export const TodayTreatments: React.FC = () => {
                   {/* Foto Rumah dengan Pilihan Eksplisit Kamera / Galeri */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <label className="block text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Foto Tampak Depan Rumah:</label>
+                      <label className="block text-xs font-bold text-ink">Foto Tampak Depan Rumah:</label>
                       {locProcessingPhoto && (
-                        <span className="text-[11px] text-[#008069] font-medium animate-pulse">
+                        <span className="text-[11px] text-accent font-medium animate-pulse">
                           Mengompres foto...
                         </span>
                       )}
@@ -2243,7 +2235,7 @@ export const TodayTreatments: React.FC = () => {
                     />
 
                     {locHousePhotoB64 ? (
-                      <div className="relative rounded-2xl overflow-hidden border border-[#e9edef] bg-black/5 flex items-center justify-center max-h-48">
+                      <div className="relative rounded-2xl overflow-hidden border border-divider bg-black/5 flex items-center justify-center max-h-48">
                         <img src={locHousePhotoB64} alt="Rumah" className="object-contain max-h-48 w-auto rounded-xl" />
                         <div className="absolute top-2 right-2 flex items-center gap-1.5">
                           <button
@@ -2257,7 +2249,7 @@ export const TodayTreatments: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => setLocHousePhotoB64(null)}
-                            className="p-1.5 rounded-full bg-rose-600 text-white hover:bg-rose-700 transition shadow-md cursor-pointer"
+                            className="p-1.5 rounded-full bg-danger text-on-solid hover:bg-danger-hover transition shadow-md cursor-pointer"
                             title="Hapus Foto"
                           >
                             <X size={13} />
@@ -2270,39 +2262,39 @@ export const TodayTreatments: React.FC = () => {
                           type="button"
                           onClick={() => locHouseCameraInputRef.current?.click()}
                           disabled={locProcessingPhoto}
-                          className="py-3.5 px-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-950/50 border-2 border-dashed border-emerald-300 dark:border-emerald-800/40 text-[#008069] dark:text-[#00a884] text-xs font-bold transition flex flex-col items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-[0.98]"
+                          className="py-3.5 px-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-950/50 border-2 border-dashed border-emerald-300 dark:border-emerald-800/40 text-accent text-xs font-bold transition flex flex-col items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-[0.98]"
                         >
-                          <Camera size={20} className="text-[#008069]" />
+                          <Camera size={20} className="text-accent" />
                           <span>📸 Ambil Kamera</span>
-                          <span className="text-[10px] text-[#54656f] font-normal">Buka kamera HP langsung</span>
+                          <span className="text-[10px] text-ink-2 font-normal">Buka kamera HP langsung</span>
                         </button>
 
                         <button
                           type="button"
                           onClick={() => locHouseGalleryInputRef.current?.click()}
                           disabled={locProcessingPhoto}
-                          className="py-3.5 px-3 rounded-2xl bg-slate-50 dark:bg-[#1c272e] hover:bg-slate-100 dark:hover:bg-[#2a3942] border-2 border-dashed border-slate-300 dark:border-[#374248] text-slate-700 dark:text-[#aebac1] text-xs font-bold transition flex flex-col items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-[0.98]"
+                          className="py-3.5 px-3 rounded-2xl bg-slate-50 dark:bg-surface-2 hover:bg-slate-100 dark:hover:bg-fill-2 border-2 border-dashed border-slate-300 dark:border-divider text-slate-700 dark:text-ink-2 text-xs font-bold transition flex flex-col items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-[0.98]"
                         >
-                          <ImageIcon size={20} className="text-[#54656f]" />
+                          <ImageIcon size={20} className="text-ink-2" />
                           <span>🖼️ Pilih Galeri</span>
-                          <span className="text-[10px] text-[#8696a0] font-normal">Dari album foto / file</span>
+                          <span className="text-[10px] text-ink-3 font-normal">Dari album foto / file</span>
                         </button>
                       </div>
                     )}
                   </div>
 
-                  <div className="flex items-center justify-end space-x-2 pt-3 border-t border-[#e9edef] dark:border-[#2a3942]">
+                  <div className="flex items-center justify-end space-x-2 pt-3 border-t border-divider">
                     <button
                       type="button"
                       onClick={() => (hasSavedLocData ? setLocModalMode('view') : setLocationTask(null))}
-                      className="px-4 py-2.5 rounded-xl border border-[#d1d7db] dark:border-[#374248] text-xs font-semibold text-[#54656f] dark:text-[#aebac1] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] transition cursor-pointer"
+                      className="px-4 py-2.5 rounded-xl border border-divider text-xs font-semibold text-ink-2 hover:bg-fill-1 transition cursor-pointer"
                     >
                       Batal
                     </button>
                     <button
                       type="submit"
                       disabled={locSaving}
-                      className="px-5 py-2.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50 cursor-pointer active:scale-95"
+                      className="px-5 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50 cursor-pointer active:scale-95"
                     >
                       {locSaving ? <span>Menyimpan...</span> : <span>Simpan Lokasi</span>}
                     </button>
@@ -2324,18 +2316,18 @@ export const TodayTreatments: React.FC = () => {
             onClick={() => setChatModalTask(null)}
           >
             <div
-              className="bg-white dark:bg-[#111b21] dark:text-[#e9edef] rounded-2xl sm:rounded-3xl w-full max-w-lg max-h-[85dvh] sm:max-h-[80dvh] flex flex-col shadow-2xl border border-[#e9edef] dark:border-[#2a3942] overflow-hidden animate-modalScaleUp relative"
+              className="bg-surface dark:text-ink rounded-2xl sm:rounded-3xl w-full max-w-lg max-h-[85dvh] sm:max-h-[80dvh] flex flex-col shadow-2xl border border-divider overflow-hidden animate-modalScaleUp relative"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="px-5 py-3.5 border-b border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#1c272e] flex items-center justify-between shrink-0">
+              <div className="px-5 py-3.5 border-b border-divider bg-surface-2 dark:bg-surface-2 flex items-center justify-between shrink-0">
                 <div className="flex items-center space-x-2.5">
-                  <div className="h-9 w-9 rounded-full bg-[#008069] text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                  <div className="h-9 w-9 rounded-full bg-accent text-accent-ink flex items-center justify-center font-bold text-xs shadow-xs">
                     {chatModalTask.customerName?.charAt(0) || 'P'}
                   </div>
                   <div>
-                    <h3 className="font-bold text-sm text-[#111b21] dark:text-[#e9edef]">{chatModalTask.customerName || 'Pasien'}</h3>
-                    <p className="text-[10px] text-[#008069] dark:text-[#00a884] font-medium">WhatsApp Pasien</p>
+                    <h3 className="font-bold text-sm text-ink">{chatModalTask.customerName || 'Pasien'}</h3>
+                    <p className="text-[10px] text-accent font-medium">WhatsApp Pasien</p>
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
@@ -2343,14 +2335,14 @@ export const TodayTreatments: React.FC = () => {
                     href="/admin/live-chat"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="px-2.5 py-1 rounded-lg bg-[#e8f5f2] text-[#008069] hover:bg-[#c2e7e0] text-xs font-bold transition flex items-center gap-1 border border-[#c2e7e0]"
+                    className="px-2.5 py-1 rounded-lg bg-accent-soft text-accent hover:bg-accent-soft text-xs font-bold transition flex items-center gap-1 border border-divider"
                     title="Buka Halaman Live Chat Lengkap di Tab Baru"
                   >
                     <span>Live Chat Penuh ↗</span>
                   </a>
                   <button
                     onClick={() => setChatModalTask(null)}
-                    className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-[#e9edef] dark:hover:bg-[#2a3942] transition cursor-pointer"
+                    className="p-1.5 rounded-full text-ink-3 hover:text-ink dark:hover:text-ink hover:bg-fill-2 dark:hover:bg-fill-2 transition cursor-pointer"
                   >
                     <X size={18} />
                   </button>
@@ -2358,36 +2350,36 @@ export const TodayTreatments: React.FC = () => {
               </div>
 
               {/* Quick Replies Templates Bar */}
-              <div className="p-2 border-b border-[#e9edef] dark:border-[#2a3942] bg-[#f0f2f5] dark:bg-[#111b21] flex items-center gap-1.5 overflow-x-auto shrink-0">
+              <div className="p-2 border-b border-divider bg-fill-1 dark:bg-surface flex items-center gap-1.5 overflow-x-auto shrink-0">
                 <button
                   type="button"
                   onClick={() => setReplyText(`Halo Bunda ${chatModalTask.customerName || ''}, saya dari Kala Moms & Baby Spa. Mau konfirmasi jadwal treatment ya Bun 🙏`)}
-                  className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] text-[11px] font-bold text-[#54656f] dark:text-[#aebac1] hover:text-[#008069] hover:border-[#008069] transition shrink-0 cursor-pointer"
+                  className="px-2.5 py-1 rounded-lg bg-surface border border-divider text-[11px] font-bold text-ink-2 hover:text-accent hover:border-accent transition shrink-0 cursor-pointer"
                 >
                   👋 Sapa Pasien
                 </button>
                 <button
                   type="button"
                   onClick={() => setReplyText(`Bunda ${chatModalTask.customerName || ''}, saya sudah meluncur OTW ke lokasi Bunda ya 🛵 Estimasi sampai sekitar 15-20 menit.`)}
-                  className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] text-[11px] font-bold text-[#54656f] dark:text-[#aebac1] hover:text-[#008069] hover:border-[#008069] transition shrink-0 cursor-pointer"
+                  className="px-2.5 py-1 rounded-lg bg-surface border border-divider text-[11px] font-bold text-ink-2 hover:text-accent hover:border-accent transition shrink-0 cursor-pointer"
                 >
                   🛵 Meluncur OTW
                 </button>
                 <button
                   type="button"
                   onClick={() => setReplyText(`Halo Bunda, saya sudah sampai di depan rumah/lokasi Bunda ya 🏠`)}
-                  className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] text-[11px] font-bold text-[#54656f] dark:text-[#aebac1] hover:text-[#008069] hover:border-[#008069] transition shrink-0 cursor-pointer"
+                  className="px-2.5 py-1 rounded-lg bg-surface border border-divider text-[11px] font-bold text-ink-2 hover:text-accent hover:border-accent transition shrink-0 cursor-pointer"
                 >
                   🏠 Sudah Sampai
                 </button>
               </div>
 
               {/* Message History */}
-              <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-2 bg-[#efeae2]/30 dark:bg-[#0b141a] overscroll-contain">
+              <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-2 bg-content/30 dark:bg-app overscroll-contain">
                 {loadingChat ? (
-                  <div className="text-center py-10 text-xs text-[#54656f]">Memuat riwayat chat...</div>
+                  <div className="text-center py-10 text-xs text-ink-2">Memuat riwayat chat...</div>
                 ) : chatMessages.length === 0 ? (
-                  <div className="text-center py-10 text-xs text-[#8696a0]">Belum ada pesan tercatat.</div>
+                  <div className="text-center py-10 text-xs text-ink-3">Belum ada pesan tercatat.</div>
                 ) : (
                   <>
                     {chatMessages.map((m: any) => {
@@ -2396,11 +2388,11 @@ export const TodayTreatments: React.FC = () => {
                         <div key={m.id} className={`flex ${isOut ? 'justify-end' : 'justify-start'}`}>
                           <div
                             className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-xs shadow-xs ${
-                              isOut ? 'bg-[#d9fdd3] dark:bg-[#005c4b] text-[#111b21] dark:text-[#e9edef] rounded-tr-xs' : 'bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] rounded-tl-xs'
+                              isOut ? 'bg-bubble-out text-ink rounded-tr-xs' : 'bg-surface text-ink rounded-tl-xs'
                             }`}
                           >
                             <p className="whitespace-pre-wrap break-words">{m.content}</p>
-                            <span className="block text-[9px] text-[#8696a0] text-right mt-1 font-mono">
+                            <span className="block text-[9px] text-ink-3 text-right mt-1 font-mono">
                               {formatTime(m.created_at)}
                             </span>
                           </div>
@@ -2414,15 +2406,15 @@ export const TodayTreatments: React.FC = () => {
 
               {/* Selected Image Attachment Preview */}
               {selectedChatImage && (
-                <div className="p-2 border-t border-[#e9edef] dark:border-[#2a3942] bg-white dark:bg-[#111b21] flex items-center justify-between shrink-0">
+                <div className="p-2 border-t border-divider bg-surface flex items-center justify-between shrink-0">
                   <div className="flex items-center space-x-2">
                     <img src={selectedChatImage.preview} alt="Lampiran" className="h-10 w-10 object-cover rounded-lg border" />
-                    <span className="text-xs text-[#54656f] dark:text-[#aebac1] font-medium">{selectedChatImage.file.name}</span>
+                    <span className="text-xs text-ink-2 font-medium">{selectedChatImage.file.name}</span>
                   </div>
                   <button
                     type="button"
                     onClick={() => setSelectedChatImage(null)}
-                    className="p-1 text-rose-500 hover:text-rose-700 cursor-pointer"
+                    className="p-1 text-danger hover:text-danger cursor-pointer"
                   >
                     <X size={16} />
                   </button>
@@ -2430,7 +2422,7 @@ export const TodayTreatments: React.FC = () => {
               )}
 
               {/* Input Reply */}
-              <form onSubmit={handleSendReply} className="p-3 border-t border-[#e9edef] dark:border-[#2a3942] bg-white dark:bg-[#111b21] flex items-center gap-2 shrink-0">
+              <form onSubmit={handleSendReply} className="p-3 border-t border-divider bg-surface flex items-center gap-2 shrink-0">
                 <input
                   type="file"
                   ref={chatFileInputRef}
@@ -2446,7 +2438,7 @@ export const TodayTreatments: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => chatFileInputRef.current?.click()}
-                  className="p-2 text-[#54656f] hover:text-[#008069] hover:bg-[#f0f2f5] rounded-xl transition cursor-pointer"
+                  className="p-2 text-ink-2 hover:text-accent hover:bg-fill-1 rounded-xl transition cursor-pointer"
                   title="Lampirkan Gambar"
                 >
                   <Camera size={18} />
@@ -2457,12 +2449,12 @@ export const TodayTreatments: React.FC = () => {
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
                   placeholder="Ketik pesan balasan ke pasien..."
-                  className="flex-1 px-3.5 py-2 rounded-xl bg-[#f0f2f5] dark:bg-[#2a3942] border-0 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:ring-2 focus:ring-[#008069]"
+                  className="flex-1 px-3.5 py-2 rounded-xl bg-fill-1 dark:bg-divider border-0 text-xs text-ink placeholder:text-ink-3 focus:outline-none focus:ring-2 focus:ring-accent"
                 />
                 <button
                   type="submit"
                   disabled={sendingChat || (!replyText.trim() && !selectedChatImage)}
-                  className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-xs cursor-pointer"
+                  className="px-4 py-2 bg-accent hover:bg-accent disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-xs cursor-pointer"
                 >
                   <Send size={13} />
                   <span>Kirim</span>

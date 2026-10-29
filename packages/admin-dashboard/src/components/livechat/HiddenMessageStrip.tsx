@@ -24,9 +24,9 @@ export const HiddenMessageStrip: React.FC<HiddenMessageStripProps> = ({
   if (isRevealedLocally) {
     // Tampilan ketika bubble sedang dibuka sementara di browser staf ini
     return (
-      <div className="flex items-center justify-between gap-2 px-2.5 py-1 mb-1 bg-amber-500/10 dark:bg-amber-950/40/10 border border-amber-500/20 rounded-md text-[10px] text-amber-700 dark:text-[#f59e0b] select-none">
+      <div className="flex items-center justify-between gap-2 px-2.5 py-1 mb-1 bg-amber-500/10 dark:bg-warning-soft border border-amber-500/20 rounded-md text-[10px] text-amber-700 dark:text-warning select-none">
         <span className="flex items-center gap-1 font-semibold truncate">
-          <Eye size={12} className="shrink-0 text-amber-600" />
+          <Eye size={12} className="shrink-0 text-warning" />
           <span>Tampilan Sementara (Pesan Disembunyikan{hiddenBy ? ` oleh ${hiddenBy}` : ''})</span>
         </span>
         <div className="flex items-center gap-1.5 shrink-0">
@@ -42,7 +42,7 @@ export const HiddenMessageStrip: React.FC<HiddenMessageStripProps> = ({
             type="button"
             disabled={isUnhiding}
             onClick={onUnhidePermanent}
-            className="px-1.5 py-0.5 rounded text-[9px] font-bold text-white bg-amber-600 hover:bg-amber-700 transition active:scale-95 disabled:opacity-50 cursor-pointer flex items-center gap-1"
+            className="px-1.5 py-0.5 rounded text-[9px] font-bold text-on-solid bg-warning hover:bg-warning-hover transition active:scale-95 disabled:opacity-50 cursor-pointer flex items-center gap-1"
             title="Tampilkan kembali secara permanen untuk semua admin"
           >
             {isUnhiding ? (
@@ -60,8 +60,8 @@ export const HiddenMessageStrip: React.FC<HiddenMessageStripProps> = ({
   // Tampilan collapsed (tertutup) default
   return (
     <div className="flex justify-center my-1 select-none animate-fadeIn">
-      <div className="flex items-center gap-2 px-3 py-1 bg-slate-100/90 dark:bg-slate-800/80 backdrop-blur-xs border border-dashed border-slate-300 dark:border-slate-700 rounded-lg text-[11px] text-[#667781] dark:text-slate-400 shadow-2xs">
-        <EyeOff size={13} className="shrink-0 text-slate-400" />
+      <div className="flex items-center gap-2 px-3 py-1 bg-slate-100/90 dark:bg-slate-800/80 backdrop-blur-xs border border-dashed border-slate-300 dark:border-slate-700 rounded-lg text-[11px] text-ink-2 dark:text-slate-400 shadow-2xs">
+        <EyeOff size={13} className="shrink-0 text-ink-3" />
         <span className="truncate">
           Pesan disembunyikan internal{hiddenBy ? ` • oleh ${hiddenBy}` : ''}
         </span>
@@ -69,7 +69,7 @@ export const HiddenMessageStrip: React.FC<HiddenMessageStripProps> = ({
           <button
             type="button"
             onClick={onToggleRevealLocal}
-            className="px-2 py-0.5 rounded bg-white dark:bg-slate-700 hover:bg-emerald-50 dark:hover:bg-slate-600 hover:text-[#008069] dark:hover:text-emerald-300 border border-slate-200 dark:border-slate-600 font-semibold text-[10px] transition active:scale-95 cursor-pointer flex items-center gap-1"
+            className="px-2 py-0.5 rounded bg-white dark:bg-slate-700 hover:bg-emerald-50 dark:hover:bg-slate-600 hover:text-accent dark:hover:text-emerald-300 border border-slate-200 dark:border-slate-600 font-semibold text-[10px] transition active:scale-95 cursor-pointer flex items-center gap-1"
             title="Lihat isi pesan sementara di layar Anda"
           >
             <Eye size={11} />
@@ -83,7 +83,7 @@ export const HiddenMessageStrip: React.FC<HiddenMessageStripProps> = ({
             title="Tampilkan kembali untuk semua admin"
           >
             {isUnhiding ? (
-              <Loader2 size={11} className="animate-spin text-amber-600" />
+              <Loader2 size={11} className="animate-spin text-warning" />
             ) : (
               <Undo2 size={11} />
             )}

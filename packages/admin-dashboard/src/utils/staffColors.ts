@@ -16,7 +16,7 @@
  * 2. **Aman dark mode.** Setiap entri punya pasangan latar gelap + aksen
  *    terang, mengikuti palet teduh anti-neon yang sudah dipakai dashboard.
  * 3. **Kelas Tailwind literal.** Semua kelas ditulis utuh di file ini agar
- *    terdeteksi pemindai Tailwind (`content: ./src/**\/*.{js,ts,jsx,tsx}`).
+ *    terdeteksi pemindai Tailwind (lihat tailwind.config.js).
  */
 
 import { staffDisplayName } from './resolveStaffName';
@@ -34,71 +34,71 @@ export interface StaffColorTheme {
 export const STAFF_COLOR_PALETTE: StaffColorTheme[] = [
   // 1. Hijau — warna utama WhatsApp Clinic
   {
-    card: 'bg-[#dcfce7] dark:bg-[#0d2e1e] border-l-4 border-[#16a34a] dark:border-l-[#4ade80] text-[#14532d] dark:text-[#dcfce7] hover:bg-[#bbf7d0] dark:hover:bg-[#14422c] border border-transparent dark:border-[#4ade80]/30',
-    badge: 'bg-[#16a34a]/10 dark:bg-[#16a34a]/25 text-[#16a34a] dark:text-[#4ade80]',
-    dot: 'bg-[#16a34a] dark:bg-[#4ade80]',
+    card: 'bg-emerald-100 dark:bg-emerald-950/70 border-l-4 border-emerald-600 dark:border-l-emerald-400 text-emerald-900 dark:text-emerald-100 hover:bg-emerald-200 dark:hover:bg-emerald-900/80 border border-transparent dark:border-emerald-400/30',
+    badge: 'bg-emerald-600/10 dark:bg-emerald-500/25 text-emerald-700 dark:text-emerald-300',
+    dot: 'bg-emerald-600 dark:bg-emerald-400',
   },
   // 2. Biru langit
   {
-    card: 'bg-[#e0f2fe] dark:bg-[#0c2438] border-l-4 border-[#0284c7] dark:border-l-[#38bdf8] text-[#0c4a6e] dark:text-[#e0f2fe] hover:bg-[#bae6fd] dark:hover:bg-[#12334e] border border-transparent dark:border-[#38bdf8]/30',
-    badge: 'bg-[#0284c7]/10 dark:bg-[#0284c7]/25 text-[#0284c7] dark:text-[#38bdf8]',
-    dot: 'bg-[#0284c7] dark:bg-[#38bdf8]',
+    card: 'bg-sky-100 dark:bg-sky-950/70 border-l-4 border-sky-600 dark:border-l-sky-400 text-sky-900 dark:text-sky-100 hover:bg-sky-200 dark:hover:bg-sky-900/80 border border-transparent dark:border-sky-400/30',
+    badge: 'bg-sky-600/10 dark:bg-sky-500/25 text-sky-700 dark:text-sky-300',
+    dot: 'bg-sky-600 dark:bg-sky-400',
   },
   // 3. Ungu
   {
-    card: 'bg-[#f3e8ff] dark:bg-[#251438] border-l-4 border-[#9333ea] dark:border-l-[#c084fc] text-[#581c87] dark:text-[#f3e8ff] hover:bg-[#ebd5ff] dark:hover:bg-[#321c4a] border border-transparent dark:border-[#c084fc]/30',
-    badge: 'bg-[#9333ea]/10 dark:bg-[#9333ea]/25 text-[#9333ea] dark:text-[#c084fc]',
-    dot: 'bg-[#9333ea] dark:bg-[#c084fc]',
+    card: 'bg-purple-100 dark:bg-purple-950/70 border-l-4 border-purple-600 dark:border-l-purple-400 text-purple-900 dark:text-purple-100 hover:bg-purple-200 dark:hover:bg-purple-900/80 border border-transparent dark:border-purple-400/30',
+    badge: 'bg-purple-600/10 dark:bg-purple-500/25 text-purple-700 dark:text-purple-300',
+    dot: 'bg-purple-600 dark:bg-purple-400',
   },
   // 4. Amber
   {
-    card: 'bg-[#fef3c7] dark:bg-[#2e2009] border-l-4 border-[#d97706] dark:border-l-[#fbbf24] text-[#78350f] dark:text-[#fef3c7] hover:bg-[#fde68a] dark:hover:bg-[#402d0d] border border-transparent dark:border-[#fbbf24]/30',
-    badge: 'bg-[#d97706]/10 dark:bg-[#d97706]/25 text-[#d97706] dark:text-[#fbbf24]',
-    dot: 'bg-[#d97706] dark:bg-[#fbbf24]',
+    card: 'bg-amber-100 dark:bg-amber-950/70 border-l-4 border-amber-600 dark:border-l-amber-400 text-amber-900 dark:text-amber-100 hover:bg-amber-200 dark:hover:bg-amber-900/80 border border-transparent dark:border-amber-400/30',
+    badge: 'bg-amber-600/10 dark:bg-amber-500/25 text-amber-700 dark:text-amber-300',
+    dot: 'bg-amber-600 dark:bg-amber-400',
   },
   // 5. Toska
   {
-    card: 'bg-[#ccfbf1] dark:bg-[#0b2b28] border-l-4 border-[#0d9488] dark:border-l-[#2dd4bf] text-[#115e59] dark:text-[#ccfbf1] hover:bg-[#99f6e4] dark:hover:bg-[#123e3a] border border-transparent dark:border-[#2dd4bf]/30',
-    badge: 'bg-[#0d9488]/10 dark:bg-[#0d9488]/25 text-[#0d9488] dark:text-[#2dd4bf]',
-    dot: 'bg-[#0d9488] dark:bg-[#2dd4bf]',
+    card: 'bg-teal-100 dark:bg-teal-950/70 border-l-4 border-teal-600 dark:border-l-teal-400 text-teal-900 dark:text-teal-100 hover:bg-teal-200 dark:hover:bg-teal-900/80 border border-transparent dark:border-teal-400/30',
+    badge: 'bg-teal-600/10 dark:bg-teal-500/25 text-teal-700 dark:text-teal-300',
+    dot: 'bg-teal-600 dark:bg-teal-400',
   },
   // 6. Mawar
   {
-    card: 'bg-[#ffe4e6] dark:bg-[#3a1219] border-l-4 border-[#e11d48] dark:border-l-[#fb7185] text-[#881337] dark:text-[#ffe4e6] hover:bg-[#fecdd3] dark:hover:bg-[#4a1620] border border-transparent dark:border-[#fb7185]/30',
-    badge: 'bg-[#e11d48]/10 dark:bg-[#e11d48]/25 text-[#be123c] dark:text-[#fb7185]',
-    dot: 'bg-[#e11d48] dark:bg-[#fb7185]',
+    card: 'bg-rose-100 dark:bg-rose-950/70 border-l-4 border-rose-600 dark:border-l-rose-400 text-rose-900 dark:text-rose-100 hover:bg-rose-200 dark:hover:bg-rose-900/80 border border-transparent dark:border-rose-400/30',
+    badge: 'bg-rose-600/10 dark:bg-rose-500/25 text-rose-700 dark:text-rose-300',
+    dot: 'bg-rose-600 dark:bg-rose-400',
   },
   // 7. Indigo
   {
-    card: 'bg-[#e0e7ff] dark:bg-[#161a3a] border-l-4 border-[#4f46e5] dark:border-l-[#818cf8] text-[#312e81] dark:text-[#e0e7ff] hover:bg-[#c7d2fe] dark:hover:bg-[#1d2350] border border-transparent dark:border-[#818cf8]/30',
-    badge: 'bg-[#4f46e5]/10 dark:bg-[#4f46e5]/25 text-[#4338ca] dark:text-[#818cf8]',
-    dot: 'bg-[#4f46e5] dark:bg-[#818cf8]',
+    card: 'bg-indigo-100 dark:bg-indigo-950/70 border-l-4 border-indigo-600 dark:border-l-indigo-400 text-indigo-900 dark:text-indigo-100 hover:bg-indigo-200 dark:hover:bg-indigo-900/80 border border-transparent dark:border-indigo-400/30',
+    badge: 'bg-indigo-600/10 dark:bg-indigo-500/25 text-indigo-700 dark:text-indigo-300',
+    dot: 'bg-indigo-600 dark:bg-indigo-400',
   },
   // 8. Limau
   {
-    card: 'bg-[#ecfccb] dark:bg-[#1c2a0c] border-l-4 border-[#65a30d] dark:border-l-[#a3e635] text-[#365314] dark:text-[#ecfccb] hover:bg-[#d9f99d] dark:hover:bg-[#25380f] border border-transparent dark:border-[#a3e635]/30',
-    badge: 'bg-[#65a30d]/10 dark:bg-[#65a30d]/25 text-[#4d7c0f] dark:text-[#a3e635]',
-    dot: 'bg-[#65a30d] dark:bg-[#a3e635]',
+    card: 'bg-lime-100 dark:bg-lime-950/70 border-l-4 border-lime-600 dark:border-l-lime-400 text-lime-900 dark:text-lime-100 hover:bg-lime-200 dark:hover:bg-lime-900/80 border border-transparent dark:border-lime-400/30',
+    badge: 'bg-lime-600/10 dark:bg-lime-500/25 text-lime-700 dark:text-lime-300',
+    dot: 'bg-lime-600 dark:bg-lime-400',
   },
   // 9. Sian
   {
-    card: 'bg-[#cffafe] dark:bg-[#0a2830] border-l-4 border-[#0891b2] dark:border-l-[#22d3ee] text-[#164e63] dark:text-[#cffafe] hover:bg-[#a5f3fc] dark:hover:bg-[#0f3540] border border-transparent dark:border-[#22d3ee]/30',
-    badge: 'bg-[#0891b2]/10 dark:bg-[#0891b2]/25 text-[#0e7490] dark:text-[#22d3ee]',
-    dot: 'bg-[#0891b2] dark:bg-[#22d3ee]',
+    card: 'bg-cyan-100 dark:bg-cyan-950/70 border-l-4 border-cyan-600 dark:border-l-cyan-400 text-cyan-900 dark:text-cyan-100 hover:bg-cyan-200 dark:hover:bg-cyan-900/80 border border-transparent dark:border-cyan-400/30',
+    badge: 'bg-cyan-600/10 dark:bg-cyan-500/25 text-cyan-700 dark:text-cyan-300',
+    dot: 'bg-cyan-600 dark:bg-cyan-400',
   },
   // 10. Fuchsia
   {
-    card: 'bg-[#fae8ff] dark:bg-[#2f1038] border-l-4 border-[#c026d3] dark:border-l-[#e879f9] text-[#701a75] dark:text-[#fae8ff] hover:bg-[#f5d0fe] dark:hover:bg-[#3d1647] border border-transparent dark:border-[#e879f9]/30',
-    badge: 'bg-[#c026d3]/10 dark:bg-[#c026d3]/25 text-[#a21caf] dark:text-[#e879f9]',
-    dot: 'bg-[#c026d3] dark:bg-[#e879f9]',
+    card: 'bg-fuchsia-100 dark:bg-fuchsia-950/70 border-l-4 border-fuchsia-600 dark:border-l-fuchsia-400 text-fuchsia-900 dark:text-fuchsia-100 hover:bg-fuchsia-200 dark:hover:bg-fuchsia-900/80 border border-transparent dark:border-fuchsia-400/30',
+    badge: 'bg-fuchsia-600/10 dark:bg-fuchsia-500/25 text-fuchsia-700 dark:text-fuchsia-300',
+    dot: 'bg-fuchsia-600 dark:bg-fuchsia-400',
   },
 ];
 
 /** Warna netral untuk reservasi yang belum punya bidan. */
 export const UNASSIGNED_STAFF_COLOR: StaffColorTheme = {
-  card: 'bg-[#f0f2f5] dark:bg-[#202c33] border-l-4 border-[#8696a0] dark:border-l-[#8696a0] text-[#3b4a54] dark:text-[#e9edef] hover:bg-[#e9edef] dark:hover:bg-[#2a3942] border border-transparent dark:border-[#8696a0]/30',
-  badge: 'bg-[#8696a0]/15 dark:bg-[#8696a0]/25 text-[#54656f] dark:text-[#aebac1]',
-  dot: 'bg-[#8696a0] dark:bg-[#aebac1]',
+  card: 'bg-fill-1 border-l-4 border-strong text-ink hover:bg-fill-2 border border-transparent dark:border-strong/30',
+  badge: 'bg-strong/20 text-ink-2',
+  dot: 'bg-strong',
 };
 
 const hashToIndex = (value: string): number => {

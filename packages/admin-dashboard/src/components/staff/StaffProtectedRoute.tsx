@@ -26,8 +26,8 @@ export const StaffProtectedRoute: React.FC<StaffProtectedRouteProps> = ({ childr
   // Tampilkan loading hanya saat kedua context masih dalam proses verifikasi
   if (staffLoading && authLoading) {
     return (
-      <div className="flex h-[100dvh] min-h-[100dvh] items-center justify-center bg-[#f0f2f5]">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#008069] border-t-transparent"></div>
+      <div className="flex h-[100dvh] min-h-[100dvh] items-center justify-center bg-app">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-accent border-t-transparent"></div>
       </div>
     );
   }
@@ -41,8 +41,8 @@ export const StaffProtectedRoute: React.FC<StaffProtectedRouteProps> = ({ childr
   }
 
   return (
-    <div className="flex h-[100dvh] min-h-[100dvh] items-center justify-center bg-[#f0f2f5]">
-      <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#008069] border-t-transparent"></div>
+    <div className="flex h-[100dvh] min-h-[100dvh] items-center justify-center bg-app">
+      <div className="h-10 w-10 animate-spin rounded-full border-4 border-accent border-t-transparent"></div>
     </div>
   );
 };

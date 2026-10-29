@@ -52,12 +52,12 @@ const fmtTime = (iso?: string | null) => {
 
 function StatCard({ label, value, tone = 'default', sub }: { label: string; value: React.ReactNode; tone?: 'ok' | 'warn' | 'err' | 'default'; sub?: string }) {
   const toneCls =
-    tone === 'ok' ? 'text-[#008069]' : tone === 'warn' ? 'text-amber-700' : tone === 'err' ? 'text-rose-600' : 'text-[#111b21]';
+    tone === 'ok' ? 'text-accent' : tone === 'warn' ? 'text-warning' : tone === 'err' ? 'text-danger' : 'text-ink';
   return (
-    <div className="bg-white border border-[#e9edef] rounded-2xl p-4 flex flex-col gap-1 shadow-xs">
-      <p className="text-[11px] uppercase font-bold text-[#667781] tracking-wider">{label}</p>
+    <div className="bg-surface border border-divider rounded-2xl p-4 flex flex-col gap-1 shadow-xs">
+      <p className="text-[11px] uppercase font-bold text-ink-3 tracking-wider">{label}</p>
       <p className={`text-2xl font-extrabold ${toneCls}`}>{value}</p>
-      {sub && <p className="text-xs text-[#8696a0] truncate">{sub}</p>}
+      {sub && <p className="text-xs text-ink-3 truncate">{sub}</p>}
     </div>
   );
 }
@@ -65,16 +65,16 @@ function StatCard({ label, value, tone = 'default', sub }: { label: string; valu
 function SectionHeader({ title, onRefresh, loading, auto }: { title: string; onRefresh: () => void; loading: boolean; auto?: boolean }) {
   return (
     <div className="flex items-center justify-between mb-4">
-      <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">{title}</h3>
+      <h3 className="text-sm font-bold text-ink flex items-center gap-2">{title}</h3>
       <div className="flex items-center gap-3">
-        {auto && <span className="text-xs text-[#8696a0]">auto-refresh 5s</span>}
+        {auto && <span className="text-xs text-ink-3">auto-refresh 5s</span>}
         <button
           onClick={onRefresh}
           disabled={loading}
-          className="p-2 rounded-xl bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] hover:text-[#111b21] transition shadow-xs disabled:opacity-50"
+          className="p-2 rounded-xl bg-surface hover:bg-fill-1 border border-divider text-ink-2 hover:text-ink transition shadow-xs disabled:opacity-50"
           title="Refresh"
         >
-          <RefreshCw size={13} className={loading ? 'animate-spin text-[#008069]' : ''} />
+          <RefreshCw size={13} className={loading ? 'animate-spin text-accent' : ''} />
         </button>
       </div>
     </div>
@@ -84,8 +84,8 @@ function SectionHeader({ title, onRefresh, loading, auto }: { title: string; onR
 function ErrNote({ note }: { note?: string }) {
   if (!note) return null;
   return (
-    <div className="flex items-center gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-2 mb-3 shadow-xs">
-      <AlertTriangle size={14} className="text-amber-600 shrink-0" />
+    <div className="flex items-center gap-2 text-xs text-warning bg-warning-soft border border-warning-line rounded-xl px-3.5 py-2 mb-3 shadow-xs">
+      <AlertTriangle size={14} className="text-warning shrink-0" />
       <span>{note}</span>
     </div>
   );
@@ -95,10 +95,10 @@ function Badge({ ok, label }: { ok: boolean; label: string }) {
   return (
     <span
       className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${
-        ok ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-rose-100 text-rose-800 border border-rose-200'
+        ok ? 'bg-success-soft text-success border border-success-line' : 'bg-danger-soft text-danger border border-danger-line'
       }`}
     >
-      {ok ? <CheckCircle2 size={11} className="text-emerald-600" /> : <XCircle size={11} className="text-rose-600" />}
+      {ok ? <CheckCircle2 size={11} className="text-success" /> : <XCircle size={11} className="text-danger" />}
       {label}
     </span>
   );
@@ -162,14 +162,14 @@ function SystemSection() {
         <StatCard label="Messages" value={data?.counts?.messages ?? '-'} />
       </div>
 
-      <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-4 shadow-xs">
-        <h4 className="text-xs font-bold text-[#111b21] flex items-center gap-2">
-          <Cpu size={15} className="text-[#008069]" /> <span>Feature Flags</span>
+      <div className="bg-surface border border-divider rounded-2xl p-5 space-y-4 shadow-xs">
+        <h4 className="text-xs font-bold text-ink flex items-center gap-2">
+          <Cpu size={15} className="text-accent" /> <span>Feature Flags</span>
         </h4>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="text-left text-[11px] uppercase font-bold text-[#667781] border-b border-[#e9edef] bg-[#f8fafc]">
+              <tr className="text-left text-[11px] uppercase font-bold text-ink-3 border-b border-divider bg-surface-2">
                 <th className="py-2.5 px-3">Flag</th>
                 <th className="py-2.5 px-3">Fungsi</th>
                 <th className="py-2.5 px-3">Nilai</th>
@@ -177,12 +177,12 @@ function SystemSection() {
             </thead>
             <tbody>
               {(data?.featureFlags || []).map((f) => (
-                <tr key={f.key} className="border-b border-[#e9edef] last:border-0 hover:bg-[#f8fafc] transition-colors">
-                  <td className="py-2.5 px-3 font-mono text-xs text-[#111b21] font-semibold">{f.key}</td>
-                  <td className="py-2.5 px-3 text-xs text-[#667781]">{f.label}</td>
+                <tr key={f.key} className="border-b border-divider last:border-0 hover:bg-surface-2 transition-colors">
+                  <td className="py-2.5 px-3 font-mono text-xs text-ink font-semibold">{f.key}</td>
+                  <td className="py-2.5 px-3 text-xs text-ink-3">{f.label}</td>
                   <td className="py-2.5 px-3">
                     {f.value === 'unset' ? (
-                      <span className="text-[#8696a0] text-xs">unset</span>
+                      <span className="text-ink-3 text-xs">unset</span>
                     ) : (
                       <Badge ok={f.value === true} label={String(f.value)} />
                     )}
@@ -193,12 +193,12 @@ function SystemSection() {
           </table>
         </div>
         {data && data.secretKeysPresent.length > 0 && (
-          <p className="text-xs text-[#8696a0]">
-            <ShieldAlert size={12} className="inline mr-1 text-amber-600" />
+          <p className="text-xs text-ink-3">
+            <ShieldAlert size={12} className="inline mr-1 text-warning" />
             Secret keys terpasang tapi disembunyikan: {data.secretKeysPresent.join(', ')}
           </p>
         )}
-        <p className="text-xs text-[#8696a0]">
+        <p className="text-xs text-ink-3">
           Log buffer: {data?.logBuffer?.installed ? 'aktif' : 'tidak terpasang'} · log={data?.logBuffer?.stats?.log ?? 0} warn={data?.logBuffer?.stats?.warn ?? 0} error={data?.logBuffer?.stats?.error ?? 0}
         </p>
       </div>
@@ -251,32 +251,32 @@ function LogsSection() {
   }, [load]);
 
   const levelColor = (l: string) =>
-    l === 'error' ? 'text-rose-700 font-bold' : l === 'warn' ? 'text-amber-700 font-bold' : l === 'info' ? 'text-[#008069] font-bold' : 'text-[#667781]';
+    l === 'error' ? 'text-danger font-bold' : l === 'warn' ? 'text-warning font-bold' : l === 'info' ? 'text-accent font-bold' : 'text-ink-3';
 
   return (
     <div className="space-y-4">
       <SectionHeader title="Log Buffer (in-memory)" onRefresh={load} loading={loading} auto />
       {!installed && <ErrNote note="Log buffer belum terpasang — restart server agar console log tertangkap." />}
-      <div className="flex flex-wrap items-center gap-1.5 bg-white border border-[#e9edef] rounded-xl p-1 w-fit shadow-xs">
+      <div className="flex flex-wrap items-center gap-1.5 bg-surface border border-divider rounded-xl p-1 w-fit shadow-xs">
         {(['all', 'error', 'warn', 'info', 'log'] as const).map((l) => (
           <button
             key={l}
             onClick={() => setLevel(l)}
             className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${
-              level === l ? 'bg-[#008069] text-white shadow-xs' : 'text-[#667781] hover:text-[#111b21]'
+              level === l ? 'bg-accent text-accent-ink shadow-xs' : 'text-ink-3 hover:text-ink'
             }`}
           >
             {l.toUpperCase()} {l !== 'all' && <span className="opacity-70">({stats[l] ?? 0})</span>}
           </button>
         ))}
       </div>
-      <div className="bg-white border border-[#e9edef] rounded-2xl p-4 max-h-[70vh] overflow-y-auto font-mono text-xs shadow-xs space-y-1">
-        {entries.length === 0 && <p className="text-[#8696a0]">Belum ada log.</p>}
+      <div className="bg-surface border border-divider rounded-2xl p-4 max-h-[70vh] overflow-y-auto font-mono text-xs shadow-xs space-y-1">
+        {entries.length === 0 && <p className="text-ink-3">Belum ada log.</p>}
         {entries.map((e) => (
-          <div key={e.id} className="flex gap-3 border-b border-[#e9edef] py-1.5 last:border-0">
-            <span className="text-[#8696a0] whitespace-nowrap">{new Date(e.ts).toLocaleTimeString('id-ID')}</span>
+          <div key={e.id} className="flex gap-3 border-b border-divider py-1.5 last:border-0">
+            <span className="text-ink-3 whitespace-nowrap">{new Date(e.ts).toLocaleTimeString('id-ID')}</span>
             <span className={`w-12 shrink-0 uppercase ${levelColor(e.level)}`}>{e.level}</span>
-            <span className="text-[#111b21] whitespace-pre-wrap break-all">{e.msg}</span>
+            <span className="text-ink whitespace-pre-wrap break-all">{e.msg}</span>
           </div>
         ))}
       </div>
@@ -319,10 +319,10 @@ function MessagesSection() {
     <div className="space-y-4">
       <SectionHeader title="Message Trace (terbaru)" onRefresh={load} loading={loading} />
       {data.dbNote && <ErrNote note={data.dbNote} />}
-      <div className="bg-white border border-[#e9edef] rounded-2xl p-4 overflow-x-auto shadow-xs">
+      <div className="bg-surface border border-divider rounded-2xl p-4 overflow-x-auto shadow-xs">
         <table className="w-full text-xs">
           <thead>
-            <tr className="text-left uppercase font-bold text-[#667781] border-b border-[#e9edef] bg-[#f8fafc]">
+            <tr className="text-left uppercase font-bold text-ink-3 border-b border-divider bg-surface-2">
               <th className="py-2.5 px-3">Waktu</th>
               <th className="py-2.5 px-3">Arah</th>
               <th className="py-2.5 px-3">Customer</th>
@@ -333,25 +333,25 @@ function MessagesSection() {
           <tbody>
             {(data?.entries || []).length === 0 && (
               <tr>
-                <td colSpan={5} className="py-4 text-center text-[#8696a0]">Belum ada pesan.</td>
+                <td colSpan={5} className="py-4 text-center text-ink-3">Belum ada pesan.</td>
               </tr>
             )}
             {(data?.entries || []).map((m) => (
-              <tr key={m.id} className="border-b border-[#e9edef] last:border-0 align-top hover:bg-[#f8fafc] transition-colors">
-                <td className="py-2.5 px-3 whitespace-nowrap text-[#667781]">{fmtTime(m.created_at)}</td>
+              <tr key={m.id} className="border-b border-divider last:border-0 align-top hover:bg-surface-2 transition-colors">
+                <td className="py-2.5 px-3 whitespace-nowrap text-ink-3">{fmtTime(m.created_at)}</td>
                 <td className="py-2.5 px-3">
                   {m.direction === 'INBOUND' ? (
-                    <span className="inline-flex items-center gap-1 text-[#008069] font-bold"><Activity size={11} /> IN</span>
+                    <span className="inline-flex items-center gap-1 text-accent font-bold"><Activity size={11} /> IN</span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 text-sky-700 font-bold"><MessageSquare size={11} /> OUT</span>
+                    <span className="inline-flex items-center gap-1 text-info font-bold"><MessageSquare size={11} /> OUT</span>
                   )}
                 </td>
-                <td className="py-2.5 px-3 text-[#111b21] font-semibold">
+                <td className="py-2.5 px-3 text-ink font-semibold">
                   {m.customerName || '?'}
-                  <span className="block text-[#667781] font-mono text-[11px] font-normal">{m.customerPhone}</span>
+                  <span className="block text-ink-3 font-mono text-[11px] font-normal">{m.customerPhone}</span>
                 </td>
-                <td className="py-2.5 px-3 font-mono text-[10px] text-[#8696a0] max-w-[100px] truncate" title={m.wa_message_id ?? ''}>{m.wa_message_id ?? '-'}</td>
-                <td className="py-2.5 px-3 text-[#111b21] whitespace-pre-wrap break-all max-w-[420px]">{m.content}</td>
+                <td className="py-2.5 px-3 font-mono text-[10px] text-ink-3 max-w-[100px] truncate" title={m.wa_message_id ?? ''}>{m.wa_message_id ?? '-'}</td>
+                <td className="py-2.5 px-3 text-ink whitespace-pre-wrap break-all max-w-[420px]">{m.content}</td>
               </tr>
             ))}
           </tbody>
@@ -413,11 +413,11 @@ function ConversationsSection() {
       <SectionHeader title="Conversation State Trace (terbaru)" onRefresh={load} loading={loading} />
       {data.dbNote && <ErrNote note={data.dbNote} />}
       <div className="flex items-center gap-2">
-        <label className="text-[11px] uppercase font-bold text-[#667781]">Filter Eskalasi</label>
+        <label className="text-[11px] uppercase font-bold text-ink-3">Filter Eskalasi</label>
         <select
           value={escFilter}
           onChange={(e) => setEscFilter(e.target.value)}
-          className="px-2.5 py-1.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+          className="px-2.5 py-1.5 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs"
         >
           <option value="all">Semua</option>
           <option value="none">Tanpa eskalasi</option>
@@ -427,12 +427,12 @@ function ConversationsSection() {
             </option>
           ))}
         </select>
-        <span className="text-xs text-[#8696a0]">{filteredEntries.length} / {(data?.entries || []).length} baris</span>
+        <span className="text-xs text-ink-3">{filteredEntries.length} / {(data?.entries || []).length} baris</span>
       </div>
-      <div className="bg-white border border-[#e9edef] rounded-2xl p-4 overflow-x-auto shadow-xs">
+      <div className="bg-surface border border-divider rounded-2xl p-4 overflow-x-auto shadow-xs">
         <table className="w-full text-xs">
           <thead>
-            <tr className="text-left uppercase font-bold text-[#667781] border-b border-[#e9edef] bg-[#f8fafc]">
+            <tr className="text-left uppercase font-bold text-ink-3 border-b border-divider bg-surface-2">
               <th className="py-2.5 px-3">Customer</th>
               <th className="py-2.5 px-3">State</th>
               <th className="py-2.5 px-3">Human Handling</th>
@@ -445,29 +445,29 @@ function ConversationsSection() {
           <tbody>
             {filteredEntries.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-4 text-center text-[#8696a0]">Belum ada conversation.</td>
+                <td colSpan={7} className="py-4 text-center text-ink-3">Belum ada conversation.</td>
               </tr>
             )}
             {filteredEntries.map((c) => (
-              <tr key={c.id} className="border-b border-[#e9edef] last:border-0 hover:bg-[#f8fafc] transition-colors">
-                <td className="py-2.5 px-3 text-[#111b21] font-semibold">
+              <tr key={c.id} className="border-b border-divider last:border-0 hover:bg-surface-2 transition-colors">
+                <td className="py-2.5 px-3 text-ink font-semibold">
                   {c.customerName || '?'}
-                  <span className="block text-[#667781] font-mono text-[11px] font-normal">{c.customerPhone}</span>
+                  <span className="block text-ink-3 font-mono text-[11px] font-normal">{c.customerPhone}</span>
                 </td>
                 <td className="py-2.5 px-3">
-                  <span className="px-2 py-0.5 rounded-full bg-[#f8fafc] text-[#111b21] border border-[#d1d7db] text-[10px] font-mono font-medium">{c.current_state}</span>
+                  <span className="px-2 py-0.5 rounded-full bg-surface-2 text-ink border border-divider text-[10px] font-mono font-medium">{c.current_state}</span>
                 </td>
-                <td className="py-2.5 px-3">{c.is_human_handling ? <Badge ok label="HUMAN" /> : <span className="text-[#8696a0]">bot</span>}</td>
-                <td className="py-2.5 px-3 text-[#667781]">{c.escalation_reason || '-'}</td>
+                <td className="py-2.5 px-3">{c.is_human_handling ? <Badge ok label="HUMAN" /> : <span className="text-ink-3">bot</span>}</td>
+                <td className="py-2.5 px-3 text-ink-3">{c.escalation_reason || '-'}</td>
                 <td className="py-2.5 px-3">
                   {c.consecutive_unknown_count > 0 ? (
-                    <span className="text-amber-700 font-bold">{c.consecutive_unknown_count}</span>
+                    <span className="text-warning font-bold">{c.consecutive_unknown_count}</span>
                   ) : (
-                    <span className="text-[#8696a0]">0</span>
+                    <span className="text-ink-3">0</span>
                   )}
                 </td>
-                <td className="py-2.5 px-3 text-[#667781]">{c.location_attempts}</td>
-                <td className="py-2.5 px-3 text-[#667781] whitespace-nowrap">{fmtTime(c.last_message_at)}</td>
+                <td className="py-2.5 px-3 text-ink-3">{c.location_attempts}</td>
+                <td className="py-2.5 px-3 text-ink-3 whitespace-nowrap">{fmtTime(c.last_message_at)}</td>
               </tr>
             ))}
           </tbody>
@@ -529,26 +529,26 @@ interface GroupedCustomerLlmLogs {
 const getFlowBadge = (flowType: string, isDirectReply = false) => {
   switch (flowType) {
     case 'NLU_EXTRACTOR':
-      return { label: '1. NLU Extractor', short: 'NLU EXT', icon: '🎰', cls: 'bg-violet-50 dark:bg-[#202c33] text-violet-800 dark:text-[#aebac1] border-violet-200 dark:border-[#2a3942]' };
+      return { label: '1. NLU Extractor', short: 'NLU EXT', icon: '🎰', cls: 'bg-violet-50 dark:bg-fill-1 text-violet-800 dark:text-ink-2 border-violet-200 dark:border-divider' };
     case 'SLOT_EXTRACTOR':
-      return { label: '1. NLU Extractor (legacy)', short: 'SLOT EXT', icon: '🎰', cls: 'bg-violet-50 dark:bg-[#202c33] text-violet-800 dark:text-[#aebac1] border-violet-200 dark:border-[#2a3942]' };
+      return { label: '1. NLU Extractor (legacy)', short: 'SLOT EXT', icon: '🎰', cls: 'bg-violet-50 dark:bg-fill-1 text-violet-800 dark:text-ink-2 border-violet-200 dark:border-divider' };
     case 'V3_ROUTING':
       if (isDirectReply) {
-        return { label: '⚡ Direct Reply (1 Call)', short: 'DIRECT', icon: '⚡', cls: 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-[#00a884] border-emerald-200 dark:border-emerald-800/40' };
+        return { label: '⚡ Direct Reply (1 Call)', short: 'DIRECT', icon: '⚡', cls: 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-accent border-emerald-200 dark:border-emerald-800/40' };
       }
-      return { label: '2. Tool Routing (Call 1)', short: 'ROUTING', icon: '🧭', cls: 'bg-sky-50 dark:bg-[#202c33] text-sky-900 dark:text-[#38bdf8] border-sky-300 dark:border-sky-800/40' };
+      return { label: '2. Tool Routing (Call 1)', short: 'ROUTING', icon: '🧭', cls: 'bg-sky-50 dark:bg-fill-1 text-sky-900 dark:text-info border-sky-300 dark:border-sky-800/40' };
     case 'V3_GENERATION':
-      return { label: '3. Reply Generation (Call 2)', short: 'GENERATION', icon: '🎯', cls: 'bg-fuchsia-50 dark:bg-[#202c33] text-fuchsia-800 dark:text-[#aebac1] border-fuchsia-200 dark:border-[#2a3942]' };
+      return { label: '3. Reply Generation (Call 2)', short: 'GENERATION', icon: '🎯', cls: 'bg-fuchsia-50 dark:bg-fill-1 text-fuchsia-800 dark:text-ink-2 border-fuchsia-200 dark:border-divider' };
     case 'V3_REPROMPT':
-      return { label: '4. Reprompt / Self-Correction', short: 'REPROMPT', icon: '🔧', cls: 'bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-[#f59e0b] border-amber-300 dark:border-amber-800/40' };
+      return { label: '4. Reprompt / Self-Correction', short: 'REPROMPT', icon: '🔧', cls: 'bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-warning border-amber-300 dark:border-amber-800/40' };
     case 'SLOT_GENERATOR':
-      return { label: 'Slot Generator (legacy)', short: 'SLOT GEN', icon: '🎯', cls: 'bg-fuchsia-50 dark:bg-[#202c33] text-fuchsia-800 dark:text-[#aebac1] border-fuchsia-200 dark:border-[#2a3942]' };
+      return { label: 'Slot Generator (legacy)', short: 'SLOT GEN', icon: '🎯', cls: 'bg-fuchsia-50 dark:bg-fill-1 text-fuchsia-800 dark:text-ink-2 border-fuchsia-200 dark:border-divider' };
     case 'SLOT_FAST_FAQ':
-      return { label: 'Fast FAQ (legacy)', short: 'FAST FAQ', icon: '⚡', cls: 'bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-[#f59e0b] border-amber-300 dark:border-amber-800/40' };
+      return { label: 'Fast FAQ (legacy)', short: 'FAST FAQ', icon: '⚡', cls: 'bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-warning border-amber-300 dark:border-amber-800/40' };
     case 'V3_AGENT':
-      return { label: 'V3 Agent (legacy monolitik)', short: 'V3 AGENT', icon: '🤖', cls: 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-900 dark:text-[#00a884] border-emerald-300 dark:border-emerald-800/40' };
+      return { label: 'V3 Agent (legacy monolitik)', short: 'V3 AGENT', icon: '🤖', cls: 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-900 dark:text-accent border-emerald-300 dark:border-emerald-800/40' };
     default:
-      return { label: flowType, short: flowType, icon: '⚡', cls: 'bg-slate-50 dark:bg-[#2a3942] text-slate-800 dark:text-slate-200 border-slate-200 dark:border-[#374248]' };
+      return { label: flowType, short: flowType, icon: '⚡', cls: 'bg-slate-50 dark:bg-divider text-slate-800 dark:text-slate-200 border-slate-200 dark:border-divider' };
   }
 };
 
@@ -762,21 +762,21 @@ function LlmLogsSection() {
   return (
     <div className="space-y-4">
       {/* Top Header with Live Indicator & Action Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-[#111b21] p-4 rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface p-4 rounded-2xl border border-divider shadow-xs">
         <div>
           <div className="flex items-center gap-2">
-            <h3 className="text-base font-extrabold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
+            <h3 className="text-base font-extrabold text-ink flex items-center gap-2">
               <span>🧠 Dedicated LLM Execution Tracing</span>
             </h3>
             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-              autoSync ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-[#00a884] border border-emerald-200 dark:border-emerald-800/40' : 'bg-slate-100 dark:bg-[#2a3942] text-slate-600 dark:text-[#aebac1]'
+              autoSync ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-accent border border-emerald-200 dark:border-emerald-800/40' : 'bg-slate-100 dark:bg-divider text-slate-600 dark:text-ink-2'
             }`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${autoSync ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+              <span className={`w-1.5 h-1.5 rounded-full ${autoSync ? 'bg-success animate-pulse' : 'bg-fill-2'}`} />
               {autoSync ? 'Auto-Sync 6s' : 'Jeda'}
             </span>
           </div>
-          <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
-            Observability V3 Agent Pipeline: <span className="font-semibold text-[#111b21] dark:text-[#e9edef]">NLU Extractor ➔ Tool Routing (Call 1) ➔ Tools Executed ➔ Reply Generation (Call 2)</span>.
+          <p className="text-xs text-ink-3 mt-0.5">
+            Observability V3 Agent Pipeline: <span className="font-semibold text-ink">NLU Extractor ➔ Tool Routing (Call 1) ➔ Tools Executed ➔ Reply Generation (Call 2)</span>.
           </p>
         </div>
 
@@ -786,38 +786,38 @@ function LlmLogsSection() {
             className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-xs ${
               autoSync
               ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-200 border-emerald-300 dark:border-emerald-800/40 hover:bg-emerald-100 dark:hover:bg-emerald-950/50'
-              : 'bg-white dark:bg-transparent text-slate-700 dark:text-[#aebac1] border-slate-200 dark:border-[#374248] hover:bg-slate-50 dark:hover:bg-[#2a3942]'
+              : 'bg-white dark:bg-transparent text-slate-700 dark:text-ink-2 border-slate-200 dark:border-divider hover:bg-slate-50 dark:hover:bg-fill-2'
             }`}
             title={autoSync ? 'Jeda Sinkronisasi Otomatis' : 'Aktifkan Sinkronisasi Otomatis'}
           >
-            {autoSync ? <Pause size={13} className="text-emerald-700 dark:text-[#00a884]" /> : <Play size={13} className="text-slate-600 dark:text-[#aebac1]" />}
+            {autoSync ? <Pause size={13} className="text-emerald-700 dark:text-accent" /> : <Play size={13} className="text-slate-600 dark:text-ink-2" />}
             <span>{autoSync ? 'Pause' : 'Play'}</span>
           </button>
 
           <button
             onClick={() => loadLogs(false)}
             disabled={loading}
-            className="px-3 py-1.5 rounded-xl bg-white dark:bg-transparent hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] border border-[#d1d7db] dark:border-[#374248] text-xs font-bold text-[#111b21] dark:text-[#e9edef] transition shadow-xs flex items-center gap-1.5 disabled:opacity-50"
+            className="px-3 py-1.5 rounded-xl bg-white dark:bg-transparent hover:bg-fill-1 border border-divider text-xs font-bold text-ink transition shadow-xs flex items-center gap-1.5 disabled:opacity-50"
             title="Refresh Manual"
           >
-            <RefreshCw size={13} className={loading ? 'animate-spin text-[#008069]' : 'text-slate-600'} />
+            <RefreshCw size={13} className={loading ? 'animate-spin text-accent' : 'text-ink-2'} />
             <span>Refresh</span>
           </button>
 
           <button
             onClick={handleExportJson}
             disabled={groupedData.length === 0}
-            className="px-3 py-1.5 rounded-xl bg-white dark:bg-transparent hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] border border-[#d1d7db] dark:border-[#374248] text-xs font-bold text-[#111b21] dark:text-[#e9edef] transition shadow-xs flex items-center gap-1.5 disabled:opacity-50"
+            className="px-3 py-1.5 rounded-xl bg-white dark:bg-transparent hover:bg-fill-1 border border-divider text-xs font-bold text-ink transition shadow-xs flex items-center gap-1.5 disabled:opacity-50"
             title="Export Debug Data as JSON"
           >
-            <Download size={13} className="text-slate-600" />
+            <Download size={13} className="text-ink-2" />
             <span>Export JSON</span>
           </button>
 
           <button
             onClick={handleClearBuffer}
             disabled={groupedData.length === 0}
-            className="px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-950/50 border border-rose-200 dark:border-rose-800/40 text-xs font-bold text-rose-700 dark:text-[#f87171] transition shadow-xs flex items-center gap-1.5 disabled:opacity-40"
+            className="px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-950/50 border border-rose-200 dark:border-rose-800/40 text-xs font-bold text-rose-700 dark:text-danger transition shadow-xs flex items-center gap-1.5 disabled:opacity-40"
             title="Hapus / Reset Buffer LLM Logs"
           >
             <Trash2 size={13} />
@@ -828,49 +828,49 @@ function LlmLogsSection() {
 
       {/* Aggregate Stats Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-        <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl p-3 flex items-center gap-3 shadow-2xs">
-          <div className="w-8 h-8 rounded-lg bg-teal-50 dark:bg-[#202c33] border border-teal-200 dark:border-teal-800/40 flex items-center justify-center text-teal-700 dark:text-[#2dd4bf]">
+        <div className="bg-surface border border-divider rounded-xl p-3 flex items-center gap-3 shadow-2xs">
+          <div className="w-8 h-8 rounded-lg bg-teal-50 dark:bg-fill-1 border border-teal-200 dark:border-teal-800/40 flex items-center justify-center text-teal-700 dark:text-accent">
             <Phone size={15} />
           </div>
           <div>
-            <p className="text-[10px] uppercase font-bold text-slate-500 dark:text-[#8696a0] tracking-wider">Pasien Aktif</p>
-            <p className="text-base font-extrabold text-slate-900 dark:text-[#e9edef]">{totalCustomers}</p>
+            <p className="text-[10px] uppercase font-bold text-slate-500 dark:text-ink-3 tracking-wider">Pasien Aktif</p>
+            <p className="text-base font-extrabold text-slate-900 dark:text-ink">{totalCustomers}</p>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl p-3 flex items-center gap-3 shadow-2xs">
-          <div className="w-8 h-8 rounded-lg bg-sky-50 dark:bg-[#202c33] border border-sky-200 dark:border-sky-800/40 flex items-center justify-center text-sky-700 dark:text-[#38bdf8]">
+        <div className="bg-surface border border-divider rounded-xl p-3 flex items-center gap-3 shadow-2xs">
+          <div className="w-8 h-8 rounded-lg bg-sky-50 dark:bg-fill-1 border border-sky-200 dark:border-sky-800/40 flex items-center justify-center text-sky-700 dark:text-info">
             <MessageSquare size={15} />
           </div>
           <div>
-            <p className="text-[10px] uppercase font-bold text-slate-500 dark:text-[#8696a0] tracking-wider">Bubble Diproses</p>
-            <p className="text-base font-extrabold text-slate-900 dark:text-[#e9edef]">{totalBubbles}</p>
+            <p className="text-[10px] uppercase font-bold text-slate-500 dark:text-ink-3 tracking-wider">Bubble Diproses</p>
+            <p className="text-base font-extrabold text-slate-900 dark:text-ink">{totalBubbles}</p>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl p-3 flex items-center gap-3 shadow-2xs">
-          <div className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-[#202c33] border border-purple-200 dark:border-[#2a3942] flex items-center justify-center text-purple-700 dark:text-[#aebac1]">
+        <div className="bg-surface border border-divider rounded-xl p-3 flex items-center gap-3 shadow-2xs">
+          <div className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-fill-1 border border-purple-200 dark:border-divider flex items-center justify-center text-purple-700 dark:text-ink-2">
             <BrainCircuit size={15} />
           </div>
           <div>
-            <p className="text-[10px] uppercase font-bold text-slate-500 dark:text-[#8696a0] tracking-wider">Total AI Steps</p>
-            <p className="text-base font-extrabold text-purple-900 dark:text-[#aebac1]">{totalAiSteps}</p>
+            <p className="text-[10px] uppercase font-bold text-slate-500 dark:text-ink-3 tracking-wider">Total AI Steps</p>
+            <p className="text-base font-extrabold text-purple-900 dark:text-ink-2">{totalAiSteps}</p>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl p-3 flex items-center gap-3 shadow-2xs">
-          <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 flex items-center justify-center text-emerald-700 dark:text-[#00a884]">
+        <div className="bg-surface border border-divider rounded-xl p-3 flex items-center gap-3 shadow-2xs">
+          <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 flex items-center justify-center text-emerald-700 dark:text-accent">
             <Zap size={15} />
           </div>
           <div>
-            <p className="text-[10px] uppercase font-bold text-slate-500 dark:text-[#8696a0] tracking-wider">V3 Pipeline</p>
-            <p className="text-base font-extrabold text-emerald-900 dark:text-[#00a884]">Routing → Generation</p>
+            <p className="text-[10px] uppercase font-bold text-slate-500 dark:text-ink-3 tracking-wider">V3 Pipeline</p>
+            <p className="text-base font-extrabold text-emerald-900 dark:text-accent">Routing → Generation</p>
           </div>
         </div>
       </div>
 
       {/* Filter Controls & Search */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 bg-white dark:bg-[#111b21] p-3 rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 bg-surface p-3 rounded-2xl border border-divider shadow-xs">
         {/* Flow Filters */}
         <div className="flex flex-wrap items-center gap-1.5">
           {[
@@ -885,8 +885,8 @@ function LlmLogsSection() {
               onClick={() => setFlowFilter(f.id)}
               className={`px-2.5 py-1 rounded-xl text-xs font-bold transition shadow-2xs ${
                 flowFilter === f.id
-                ? 'bg-[#008069] text-white border border-[#008069]'
-                : 'bg-white dark:bg-transparent text-[#54656f] dark:text-[#aebac1] border border-[#d1d7db] dark:border-[#374248] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942]'
+                ? 'bg-accent text-accent-ink border border-accent'
+                : 'bg-white dark:bg-transparent text-ink-2 border border-divider hover:bg-fill-1'
               }`}
             >
               {f.label}
@@ -900,7 +900,7 @@ function LlmLogsSection() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-2.5 py-1.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] text-xs font-semibold text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-2xs"
+            className="px-2.5 py-1.5 rounded-xl bg-surface border border-divider text-xs font-semibold text-ink focus:outline-none focus:border-accent shadow-2xs"
           >
             <option value="all">Semua Status</option>
             <option value="SUCCESS">✅ SUCCESS</option>
@@ -914,15 +914,15 @@ function LlmLogsSection() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Cari nomor, reasoning, teks..."
-            className="w-full sm:w-44 px-3 py-1.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] text-xs text-[#111b21] dark:text-[#e9edef] placeholder:text-[#8696a0] dark:placeholder:text-[#8696a0] focus:outline-none focus:border-[#008069] shadow-2xs"
+            className="w-full sm:w-44 px-3 py-1.5 rounded-xl bg-surface border border-divider text-xs text-ink placeholder:text-ink-3 dark:placeholder:text-ink-3 focus:outline-none focus:border-accent shadow-2xs"
           />
 
           {/* View Switcher */}
-          <div className="flex bg-[#e9edef] dark:bg-[#2a3942] p-0.5 rounded-xl text-xs font-bold shrink-0">
+          <div className="flex bg-fill-1 dark:bg-divider p-0.5 rounded-xl text-xs font-bold shrink-0">
             <button
               onClick={() => setViewMode('grouped')}
               className={`px-2.5 py-1 rounded-lg transition ${
-                viewMode === 'grouped' ? 'bg-white dark:bg-[#202c33] text-[#008069] dark:text-[#00a884] shadow-xs' : 'text-[#667781] dark:text-[#aebac1]'
+                viewMode === 'grouped' ? 'bg-surface text-accent shadow-xs' : 'text-ink-3 dark:text-ink-2'
               }`}
             >
               Pohon 3-Level
@@ -930,7 +930,7 @@ function LlmLogsSection() {
             <button
               onClick={() => setViewMode('flat')}
               className={`px-2.5 py-1 rounded-lg transition ${
-                viewMode === 'flat' ? 'bg-white dark:bg-[#202c33] text-[#008069] dark:text-[#00a884] shadow-xs' : 'text-[#667781] dark:text-[#aebac1]'
+                viewMode === 'flat' ? 'bg-surface text-accent shadow-xs' : 'text-ink-3 dark:text-ink-2'
               }`}
             >
               Flat Feed
@@ -945,7 +945,7 @@ function LlmLogsSection() {
                 const anyOpen = Object.keys(expandedPhones).length > 0;
                 toggleAllAccordions(!anyOpen);
               }}
-              className="px-2 py-1.5 rounded-xl bg-white dark:bg-transparent border border-[#d1d7db] dark:border-[#374248] hover:bg-slate-50 dark:hover:bg-[#2a3942] text-[11px] font-semibold text-slate-700 dark:text-[#aebac1] transition"
+              className="px-2 py-1.5 rounded-xl bg-white dark:bg-transparent border border-divider hover:bg-slate-50 dark:hover:bg-fill-2 text-[11px] font-semibold text-slate-700 dark:text-ink-2 transition"
               title="Buka / Tutup Semua Accordion"
             >
               {Object.keys(expandedPhones).length > 0 ? 'Tutup Semua' : 'Buka Semua'}
@@ -958,7 +958,7 @@ function LlmLogsSection() {
       {viewMode === 'grouped' && (
         <div className="space-y-3">
           {filteredGrouped.length === 0 ? (
-            <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-10 text-center text-xs text-[#8696a0] shadow-xs">
+            <div className="bg-surface border border-divider rounded-2xl p-10 text-center text-xs text-ink-3 shadow-xs">
               {searchQuery ? 'Tidak ada riwayat chat/LLM yang cocok dengan pencarian.' : 'Belum ada eksekusi LLM yang tercatat di buffer.'}
             </div>
           ) : (
@@ -968,27 +968,27 @@ function LlmLogsSection() {
               return (
                 <div
                   key={cust.customerPhone}
-                  className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] hover:border-[#b4ded5] dark:hover:border-[#00a884]/40 rounded-2xl shadow-xs transition overflow-hidden text-left"
+                  className="bg-surface border border-divider hover:border-accent dark:hover:border-accent/40 rounded-2xl shadow-xs transition overflow-hidden text-left"
                 >
                   {/* LEVEL 1: CUSTOMER HEADER */}
                   <div
                     onClick={() => togglePhone(cust.customerPhone)}
-                    className="p-4 bg-[#f8fafc] dark:bg-[#1c272e] hover:bg-[#f0f4f7] dark:hover:bg-[#2a3942] cursor-pointer flex items-center justify-between gap-3 border-b border-[#e9edef] dark:border-[#2a3942] select-none"
+                    className="p-4 bg-surface-2 dark:bg-surface-2 hover:bg-fill-1 dark:hover:bg-fill-2 cursor-pointer flex items-center justify-between gap-3 border-b border-divider select-none"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-[#e8f5f2] border border-[#008069]/30 flex items-center justify-center text-[#008069] font-bold text-xs shadow-2xs">
+                      <div className="w-9 h-9 rounded-full bg-accent-soft border border-accent/30 flex items-center justify-center text-accent font-bold text-xs shadow-2xs">
                         <Phone size={15} />
                       </div>
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-extrabold text-sm text-[#111b21] dark:text-[#e9edef]">
+                          <span className="font-extrabold text-sm text-ink">
                             {cust.customerName || 'Pasien'}
                           </span>
-                          <span className="font-mono text-xs text-[#008069] dark:text-[#00a884] bg-white dark:bg-[#2a3942] px-2 py-0.5 rounded-md border border-[#b4ded5] dark:border-[#00a884]/30 font-semibold">
+                          <span className="font-mono text-xs text-accent bg-white dark:bg-divider px-2 py-0.5 rounded-md border border-accent/40 dark:border-accent/30 font-semibold">
                             {formatPhoneDisplay(cust.customerPhone)}
                           </span>
                         </div>
-                        <p className="text-[11px] text-[#8696a0] mt-0.5 flex items-center gap-1.5 flex-wrap">
+                        <p className="text-[11px] text-ink-3 mt-0.5 flex items-center gap-1.5 flex-wrap">
                           <span>{cust.totalBubbles} Percakapan Masuk</span>
                           <span>•</span>
                           <span>{cust.totalAiCalls} Panggilan AI</span>
@@ -999,16 +999,16 @@ function LlmLogsSection() {
                     </div>
 
                     <div className="flex items-center gap-2.5">
-                      <span className="text-xs font-bold text-[#008069] dark:text-[#00a884] bg-[#e8f5f2] dark:bg-[#00a884]/15 px-3 py-1 rounded-full border border-[#008069]/20 dark:border-[#00a884]/30 hidden sm:inline-block">
+                      <span className="text-xs font-bold text-accent bg-accent-soft px-3 py-1 rounded-full border border-accent/20 dark:border-accent/30 hidden sm:inline-block">
                         {cust.totalBubbles} Percakapan
                       </span>
-                      {isPhoneExpanded ? <ChevronDown size={18} className="text-[#667781] dark:text-[#aebac1]" /> : <ChevronRight size={18} className="text-[#667781] dark:text-[#aebac1]" />}
+                      {isPhoneExpanded ? <ChevronDown size={18} className="text-ink-3 dark:text-ink-2" /> : <ChevronRight size={18} className="text-ink-3 dark:text-ink-2" />}
                     </div>
                   </div>
 
                   {/* LEVEL 2: CHAT BUBBLES WITH PIPELINE STEPPERS */}
                   {isPhoneExpanded && (
-                    <div className="p-4 space-y-3.5 bg-[#fdfefe] dark:bg-black">
+                    <div className="p-4 space-y-3.5 bg-surface dark:bg-app">
                       {cust.bubbles.map((bubble, bIdx) => {
                         const isBubbleExpanded = !!expandedBubbles[bubble.correlationId];
                         const totalBubbleDuration = bubble.aiCalls.reduce((acc, c) => acc + (c.durationMs || 0), 0);
@@ -1017,25 +1017,25 @@ function LlmLogsSection() {
                         return (
                           <div
                             key={bubble.correlationId}
-                            className="border border-[#e2e8f0] dark:border-[#374248] rounded-2xl bg-white dark:bg-[#141e24] shadow-xs overflow-hidden transition"
+                            className="border border-divider dark:border-divider rounded-2xl bg-white dark:bg-surface shadow-xs overflow-hidden transition"
                           >
                             {/* BUBBLE HEADER WITH PIPELINE PREVIEW */}
                             <div
                               onClick={() => toggleBubble(bubble.correlationId)}
-                              className="p-3.5 bg-white dark:bg-[#141e24] hover:bg-slate-50 dark:hover:bg-[#1c272e] cursor-pointer flex flex-col gap-2.5 border-b border-slate-100 dark:border-[#2a3942] select-none"
+                              className="p-3.5 bg-white dark:bg-surface hover:bg-slate-50 dark:hover:bg-surface-2 cursor-pointer flex flex-col gap-2.5 border-b border-slate-100 dark:border-divider select-none"
                             >
                               <div className="flex items-start justify-between gap-3">
                                 <div className="flex items-start gap-2.5">
-                                  <div className="p-1.5 rounded-lg bg-sky-100 text-sky-800 shrink-0 mt-0.5">
+                                  <div className="p-1.5 rounded-lg bg-info-soft text-info shrink-0 mt-0.5">
                                     <MessageSquare size={14} />
                                   </div>
                                   <div>
                                     <div className="flex items-center gap-2 flex-wrap">
-                                      <span className="text-xs font-extrabold text-slate-900 dark:text-[#e9edef]">
+                                      <span className="text-xs font-extrabold text-slate-900 dark:text-ink">
                                         Bubble #{bIdx + 1}: &ldquo;{bubble.customerInput}&rdquo;
                                       </span>
                                     </div>
-                                    <span className="text-[10px] font-mono text-slate-500 dark:text-[#8696a0] mt-0.5 block">
+                                    <span className="text-[10px] font-mono text-slate-500 dark:text-ink-3 mt-0.5 block">
                                       Waktu Masuk: {fmtTime(bubble.timestamp)}
                                     </span>
                                   </div>
@@ -1043,16 +1043,16 @@ function LlmLogsSection() {
 
                                 <div className="flex items-center gap-2 shrink-0">
                                   {totalBubbleDuration > 0 && (
-                                    <span className="text-[10px] font-mono font-semibold text-slate-600 dark:text-[#aebac1] bg-slate-100 dark:bg-[#2a3942] px-2 py-0.5 rounded-md border border-slate-200 dark:border-[#374248]">
+                                    <span className="text-[10px] font-mono font-semibold text-slate-600 dark:text-ink-2 bg-slate-100 dark:bg-divider px-2 py-0.5 rounded-md border border-slate-200 dark:border-divider">
                                       ⏱️ Total {totalBubbleDuration}ms
                                     </span>
                                   )}
-                                  {isBubbleExpanded ? <ChevronDown size={16} className="text-slate-400 dark:text-[#8696a0]" /> : <ChevronRight size={16} className="text-slate-400 dark:text-[#8696a0]" />}
+                                  {isBubbleExpanded ? <ChevronDown size={16} className="text-slate-400 dark:text-ink-3" /> : <ChevronRight size={16} className="text-slate-400 dark:text-ink-3" />}
                                 </div>
                               </div>
 
                               {/* PIPELINE STEPPER VISUALIZATION */}
-                              <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-slate-100/80 dark:border-[#2a3942]">
+                              <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-slate-100/80 dark:border-divider">
                                 {bubble.aiCalls.map((step, sIdx) => {
                                   const badge = getFlowBadge(step.flowType, isDirectReplyCall(step));
                                   const isSuccess = step.status === 'SUCCESS';
@@ -1064,11 +1064,11 @@ function LlmLogsSection() {
                                         <span>{badge.icon}</span>
                                         <span>{badge.short}</span>
                                         <span className={`w-1.5 h-1.5 rounded-full ml-0.5 ${
-                                          isSuccess ? 'bg-emerald-500' : isFallback ? 'bg-amber-500' : 'bg-rose-500'
+                                          isSuccess ? 'bg-success' : isFallback ? 'bg-warning' : 'bg-danger'
                                         }`} />
                                       </div>
                                       {sIdx < bubble.aiCalls.length - 1 && (
-                                        <ArrowRight size={11} className="text-slate-300 dark:text-[#4a5a65] shrink-0" />
+                                        <ArrowRight size={11} className="text-slate-300 dark:text-ink-3 shrink-0" />
                                       )}
                                     </React.Fragment>
                                   );
@@ -1080,7 +1080,7 @@ function LlmLogsSection() {
 
                             {/* LEVEL 3: INDIVIDUAL AI CALLS (TAILORED DETAIL CARDS) */}
                             {isBubbleExpanded && (
-                              <div className="p-4 bg-slate-50/60 dark:bg-black/30 space-y-3.5">
+                              <div className="p-4 bg-slate-50/60 dark:bg-app/30 space-y-3.5">
                                 {bubble.aiCalls.map((call, cIdx) => {
                                   const badge = getFlowBadge(call.flowType, isDirectReplyCall(call));
                                   const displayReasoning = call.rawReasoning || call.reasoning || 'Tidak ada reasoning teks terpisah.';
@@ -1090,10 +1090,10 @@ function LlmLogsSection() {
                                   return (
                                     <div
                                       key={call.id || cIdx}
-                                      className="bg-white dark:bg-[#111b21] border border-slate-200 dark:border-[#374248] rounded-xl p-4 shadow-xs space-y-3"
+                                      className="bg-surface border border-slate-200 dark:border-divider rounded-xl p-4 shadow-xs space-y-3"
                                     >
                                       {/* AI Step Header Bar */}
-                                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-[#2a3942] pb-2.5">
+                                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-divider pb-2.5">
                                         <div className="flex items-center gap-2 flex-wrap">
                                           <span className={`px-2.5 py-0.5 rounded-full text-xs font-extrabold border ${badge.cls} flex items-center gap-1`}>
                                             <span>{badge.icon}</span>
@@ -1101,25 +1101,25 @@ function LlmLogsSection() {
                                           </span>
 
                                           {call.modelUsed && (
-                                            <span className="text-[10px] font-mono text-purple-700 dark:text-[#aebac1] bg-purple-50 dark:bg-[#202c33] px-2 py-0.5 rounded-md border border-purple-200 dark:border-[#2a3942] font-semibold">
+                                            <span className="text-[10px] font-mono text-purple-700 dark:text-ink-2 bg-purple-50 dark:bg-fill-1 px-2 py-0.5 rounded-md border border-purple-200 dark:border-divider font-semibold">
                                               {call.modelUsed}
                                             </span>
                                           )}
                                           {(call.actualProvider || call.actualModel) && (
-                                            <span className="text-[10px] font-mono text-sky-700 dark:text-[#38bdf8] bg-sky-50 dark:bg-[#202c33] px-2 py-0.5 rounded-md border border-sky-200 dark:border-sky-800/40 font-semibold" title={call.actualModel ? `Model aktual: ${call.actualModel}` : undefined}>
+                                            <span className="text-[10px] font-mono text-sky-700 dark:text-info bg-sky-50 dark:bg-fill-1 px-2 py-0.5 rounded-md border border-sky-200 dark:border-sky-800/40 font-semibold" title={call.actualModel ? `Model aktual: ${call.actualModel}` : undefined}>
                                               {(call.actualProvider || 'Provider')} {call.actualModel && call.actualModel !== call.modelUsed ? `· ${call.actualModel}` : ''}
                                               {call.status === 'FALLBACK' && ' ⚠️ fallback'}
                                             </span>
                                           )}
 
                                           {call.durationMs !== undefined && (
-                                            <span className="text-[10px] font-mono text-slate-600 dark:text-[#aebac1] bg-slate-100 dark:bg-[#2a3942] px-2 py-0.5 rounded-md border border-transparent dark:border-[#374248]">
+                                            <span className="text-[10px] font-mono text-slate-600 dark:text-ink-2 bg-slate-100 dark:bg-divider px-2 py-0.5 rounded-md border border-transparent dark:border-divider">
                                               ⏱️ {call.durationMs}ms
                                             </span>
                                           )}
 
                                           {call.confidenceScore !== undefined && (
-                                            <span className="text-[10px] font-mono text-cyan-800 dark:text-[#38bdf8] bg-cyan-50 dark:bg-[#202c33] px-2 py-0.5 rounded-md border border-cyan-200 dark:border-cyan-800/40 font-bold">
+                                            <span className="text-[10px] font-mono text-cyan-800 dark:text-info bg-cyan-50 dark:bg-fill-1 px-2 py-0.5 rounded-md border border-cyan-200 dark:border-cyan-800/40 font-bold">
                                               Confidence: {Math.round(call.confidenceScore * 100)}%
                                             </span>
                                           )}
@@ -1129,10 +1129,10 @@ function LlmLogsSection() {
                                           <span
                                             className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
                                               call.status === 'SUCCESS'
-                                              ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-[#00a884] border border-emerald-200 dark:border-emerald-800/40'
+                                              ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-accent border border-emerald-200 dark:border-emerald-800/40'
                                               : call.status === 'FALLBACK'
-                                              ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-[#f59e0b] border border-amber-200 dark:border-amber-800/40'
-                                              : 'bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-[#f87171] border border-rose-200 dark:border-rose-800/40'
+                                              ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-warning border border-amber-200 dark:border-amber-800/40'
+                                              : 'bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-danger border border-rose-200 dark:border-rose-800/40'
                                             }`}
                                           >
                                             {call.status}
@@ -1141,10 +1141,10 @@ function LlmLogsSection() {
                                           <button
                                             type="button"
                                             onClick={() => copyText(call.id, JSON.stringify(call, null, 2))}
-                                            className="text-[10px] font-semibold text-slate-600 dark:text-[#aebac1] hover:text-slate-900 dark:hover:text-[#e9edef] flex items-center gap-1 bg-slate-50 dark:bg-[#2a3942] hover:bg-slate-100 dark:hover:bg-[#374248] px-2 py-0.5 rounded border border-slate-200 dark:border-[#374248]"
+                                            className="text-[10px] font-semibold text-slate-600 dark:text-ink-2 hover:text-slate-900 dark:hover:text-ink flex items-center gap-1 bg-slate-50 dark:bg-divider hover:bg-slate-100 dark:hover:bg-fill-2 px-2 py-0.5 rounded border border-slate-200 dark:border-divider"
                                             title="Salin JSON Langkah Ini"
                                           >
-                                            {copiedId === call.id ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} />}
+                                            {copiedId === call.id ? <Check size={11} className="text-success" /> : <Copy size={11} />}
                                             <span>{copiedId === call.id ? 'Tersalin' : 'JSON'}</span>
                                           </button>
                                         </div>
@@ -1153,7 +1153,7 @@ function LlmLogsSection() {
                                       {/* ERROR BANNER — pesan error teknis konkret */}
                                       {call.status === 'ERROR' && (
                                         <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800/60 rounded-xl p-3 space-y-1">
-                                          <span className="text-[10px] font-bold text-rose-800 dark:text-[#f87171] uppercase tracking-wider block">
+                                          <span className="text-[10px] font-bold text-rose-800 dark:text-danger uppercase tracking-wider block">
                                             ⛔ Error Eksekusi LLM
                                           </span>
                                           <p className="text-rose-950 dark:text-rose-200 font-mono text-[11px] font-semibold whitespace-pre-wrap break-words">
@@ -1166,14 +1166,14 @@ function LlmLogsSection() {
                                       {(call.flowType === 'NLU_EXTRACTOR' || call.flowType === 'SLOT_EXTRACTOR' || call.flowType === 'SLOT_GENERATOR' || call.flowType === 'SLOT_FAST_FAQ' || call.flowType === 'V3_ROUTING' || call.flowType === 'V3_GENERATION' || call.flowType === 'V3_REPROMPT' || call.flowType === 'V3_AGENT') && (
                                         <div className="space-y-2.5 text-xs">
                                           <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                                            <div className="bg-violet-50/70 dark:bg-[#202c33] border border-violet-200 dark:border-[#2a3942] rounded-xl p-3 space-y-1">
-                                              <span className="text-[10px] font-bold text-violet-800 dark:text-[#aebac1] uppercase tracking-wider block">
+                                            <div className="bg-violet-50/70 dark:bg-fill-1 border border-violet-200 dark:border-divider rounded-xl p-3 space-y-1">
+                                              <span className="text-[10px] font-bold text-violet-800 dark:text-ink-2 uppercase tracking-wider block">
                                                 🎰 Input Pasien / Slot State
                                               </span>
                                               <p className="text-violet-950 dark:text-violet-200 font-medium whitespace-pre-wrap">{call.customerInput || '-'}</p>
                                             </div>
                                             <div className="bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 rounded-xl p-3 space-y-1">
-                                              <span className="text-[10px] font-bold text-emerald-800 dark:text-[#00a884] uppercase tracking-wider block">
+                                              <span className="text-[10px] font-bold text-emerald-800 dark:text-accent uppercase tracking-wider block">
                                                 🎯 Output Keputusan Slot / Balasan
                                               </span>
                                               <p className="text-emerald-950 dark:text-emerald-200 font-medium whitespace-pre-wrap">{call.finalReply || '-'}</p>
@@ -1182,8 +1182,8 @@ function LlmLogsSection() {
 
                                           {/* Reasoning Ringkas */}
                                           {(call.reasoning || call.rawReasoning) && (
-                                            <div className="bg-purple-50/80 dark:bg-[#202c33] border border-purple-200 dark:border-[#2a3942] rounded-xl p-3 space-y-1">
-                                              <span className="text-[10px] font-bold text-purple-900 dark:text-[#aebac1] uppercase tracking-wider block">
+                                            <div className="bg-purple-50/80 dark:bg-fill-1 border border-purple-200 dark:border-divider rounded-xl p-3 space-y-1">
+                                              <span className="text-[10px] font-bold text-purple-900 dark:text-ink-2 uppercase tracking-wider block">
                                                 🧠 AI Reasoning & Context Analysis
                                               </span>
                                               <p className="text-purple-950 dark:text-purple-200 font-medium text-xs whitespace-pre-wrap">{call.reasoning || call.rawReasoning}</p>
@@ -1192,15 +1192,15 @@ function LlmLogsSection() {
 
                                           {/* Token & biaya per-call */}
                                           {((call as any).promptTokens !== undefined || (call as any).completionTokens !== undefined || (call as any).costIdr !== undefined || (call as any).cachedPromptTokens !== undefined || (call as any).reasoningTokens !== undefined) && (
-                                            <div className="bg-sky-50/70 dark:bg-[#202c33] border border-sky-200 dark:border-sky-800/40 rounded-xl p-3 space-y-1">
-                                              <span className="text-[10px] font-bold text-sky-900 dark:text-[#38bdf8] uppercase tracking-wider block">
+                                            <div className="bg-sky-50/70 dark:bg-fill-1 border border-sky-200 dark:border-sky-800/40 rounded-xl p-3 space-y-1">
+                                              <span className="text-[10px] font-bold text-sky-900 dark:text-info uppercase tracking-wider block">
                                                 📊 Token & Biaya
                                               </span>
                                               <p className="text-sky-950 dark:text-sky-200 font-mono text-[11px] font-semibold">
                                                 📥 {(call as any).promptTokens ?? '-'} tokens | 📤 {(call as any).completionTokens ?? '-'} tokens{(call as any).totalTokens !== undefined ? ` | Σ ${(call as any).totalTokens}` : ''}{(call as any).costIdr !== undefined ? ` | Rp ${Number((call as any).costIdr).toLocaleString('id-ID')}` : ''}
                                               </p>
                                               {((call as any).cachedPromptTokens !== undefined || (call as any).reasoningTokens !== undefined) && (
-                                                <p className="text-sky-800 dark:text-[#38bdf8] font-mono text-[10px]">
+                                                <p className="text-sky-800 dark:text-info font-mono text-[10px]">
                                                   {((call as any).cachedPromptTokens !== undefined) && <>💾 Cache Hit: {(call as any).cachedPromptTokens} tokens</>}
                                                   {((call as any).cachedPromptTokens !== undefined && (call as any).reasoningTokens !== undefined) && ' | '}
                                                   {((call as any).reasoningTokens !== undefined) && <>🧠 Thinking: {(call as any).reasoningTokens} tokens</>}
@@ -1211,12 +1211,12 @@ function LlmLogsSection() {
 
                                           {/* Tools yang diputuskan LLM */}
                                           {Array.isArray((call as any).toolsCalled) && (call as any).toolsCalled.length > 0 && (
-                                            <div className="bg-teal-50/70 dark:bg-[#202c33] border border-teal-200 dark:border-teal-800/40 rounded-xl p-3 space-y-1.5">
-                                              <span className="text-[10px] font-bold text-teal-900 dark:text-[#2dd4bf] uppercase tracking-wider block">
+                                            <div className="bg-teal-50/70 dark:bg-fill-1 border border-teal-200 dark:border-teal-800/40 rounded-xl p-3 space-y-1.5">
+                                              <span className="text-[10px] font-bold text-teal-900 dark:text-accent uppercase tracking-wider block">
                                                 🛠️ Tools Called ({(call as any).toolsCalled.length})
                                               </span>
                                               {(call as any).toolsCalled.map((t: any, ti: number) => (
-                                                <div key={ti} className="bg-white dark:bg-black/30 border border-teal-200 dark:border-teal-800/40 rounded-lg p-2">
+                                                <div key={ti} className="bg-white dark:bg-app/30 border border-teal-200 dark:border-teal-800/40 rounded-lg p-2">
                                                   <p className="font-mono text-[11px] font-bold text-teal-900 dark:text-teal-200">{t?.name}</p>
                                                   <pre className="font-mono text-[10px] text-slate-700 dark:text-slate-300 whitespace-pre-wrap overflow-x-auto max-h-28">{JSON.stringify(t?.args ?? {}, null, 2)}</pre>
                                                 </div>
@@ -1226,11 +1226,11 @@ function LlmLogsSection() {
 
                                           {/* Ground Truth / Fakta DB */}
                                           {call.groundTruthUsed && Object.keys(call.groundTruthUsed).length > 0 && (
-                                            <div className="bg-slate-50 dark:bg-[#1c272e] border border-slate-200 dark:border-[#374248] rounded-xl p-3 space-y-1">
-                                              <span className="text-[10px] font-bold text-slate-700 dark:text-[#aebac1] uppercase tracking-wider block">
+                                            <div className="bg-slate-50 dark:bg-surface-2 border border-slate-200 dark:border-divider rounded-xl p-3 space-y-1">
+                                              <span className="text-[10px] font-bold text-slate-700 dark:text-ink-2 uppercase tracking-wider block">
                                                 📊 Ground Truth / Fakta DB Terinjeksi
                                               </span>
-                                              <pre className="text-slate-800 dark:text-[#d1d7db] font-mono text-[10px] whitespace-pre-wrap overflow-x-auto max-h-36">
+                                              <pre className="text-slate-800 dark:text-ink-2 font-mono text-[10px] whitespace-pre-wrap overflow-x-auto max-h-36">
                                                 {typeof call.groundTruthUsed === 'string'
                                                   ? call.groundTruthUsed
                                                   : JSON.stringify(call.groundTruthUsed, null, 2)}
@@ -1240,17 +1240,17 @@ function LlmLogsSection() {
 
                                           {/* Full prompt payload */}
                                           {call.promptPayload && (
-                                            <div className="bg-slate-50 dark:bg-[#1c272e] border border-slate-200 dark:border-[#374248] rounded-xl p-3 space-y-1">
+                                            <div className="bg-slate-50 dark:bg-surface-2 border border-slate-200 dark:border-divider rounded-xl p-3 space-y-1">
                                               <button
                                                 type="button"
                                                 onClick={() => toggleDetail(`${detailKey}_prompt`)}
-                                                className="text-[10px] font-bold text-slate-700 dark:text-[#aebac1] uppercase tracking-wider flex items-center gap-1"
+                                                className="text-[10px] font-bold text-slate-700 dark:text-ink-2 uppercase tracking-wider flex items-center gap-1"
                                               >
                                                 {expandedDetails[`${detailKey}_prompt`] ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                                                 <span>Lihat Full Prompt</span>
                                               </button>
                                               {expandedDetails[`${detailKey}_prompt`] && (
-                                                <pre className="text-slate-800 dark:text-[#d1d7db] font-mono text-[10px] whitespace-pre-wrap overflow-x-auto max-h-64">
+                                                <pre className="text-slate-800 dark:text-ink-2 font-mono text-[10px] whitespace-pre-wrap overflow-x-auto max-h-64">
                                                   {JSON.stringify(call.promptPayload, null, 2)}
                                                 </pre>
                                               )}
@@ -1259,21 +1259,21 @@ function LlmLogsSection() {
 
                                           {/* Raw LLM JSON / Output */}
                                           {call.rawReasoning && (
-                                            <div className="bg-slate-900 text-slate-100 rounded-xl p-3 space-y-1.5 shadow-inner">
-                                              <div className="flex items-center justify-between border-b border-slate-700 pb-1.5">
-                                                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider font-mono">
+                                            <div className="bg-fill-2 text-ink-3 rounded-xl p-3 space-y-1.5 shadow-inner">
+                                              <div className="flex items-center justify-between border-b border-strong pb-1.5">
+                                                <span className="text-[10px] font-bold text-success uppercase tracking-wider font-mono">
                                                   🔍 Raw LLM Output (JSON / Text)
                                                 </span>
                                                 <button
                                                   type="button"
                                                   onClick={() => copyText(`${call.id}_raw`, call.rawReasoning || '')}
-                                                  className="text-[10px] font-semibold text-slate-300 hover:text-white flex items-center gap-1 bg-slate-800 px-2 py-0.5 rounded border border-slate-700 transition-colors"
+                                                  className="text-[10px] font-semibold text-ink-2 hover:text-ink flex items-center gap-1 bg-fill-2 px-2 py-0.5 rounded border border-strong transition-colors"
                                                 >
-                                                  {copiedId === `${call.id}_raw` ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                                                  {copiedId === `${call.id}_raw` ? <Check size={11} className="text-success" /> : <Copy size={11} />}
                                                   <span>Salin</span>
                                                 </button>
                                               </div>
-                                              <pre className="text-slate-200 font-mono text-[10px] whitespace-pre-wrap overflow-x-auto max-h-56">
+                                              <pre className="text-ink-3 font-mono text-[10px] whitespace-pre-wrap overflow-x-auto max-h-56">
                                                 {call.rawReasoning}
                                               </pre>
                                             </div>
@@ -1292,21 +1292,21 @@ function LlmLogsSection() {
                                         call.flowType !== 'V3_AGENT' && (
                                           <div className="space-y-2.5 text-xs">
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                                              <div className="bg-slate-50 dark:bg-[#1c272e] border border-slate-200 dark:border-[#374248] rounded-xl p-3 space-y-1">
-                                                <span className="text-[10px] font-bold text-slate-700 dark:text-[#aebac1] uppercase tracking-wider block">
+                                              <div className="bg-slate-50 dark:bg-surface-2 border border-slate-200 dark:border-divider rounded-xl p-3 space-y-1">
+                                                <span className="text-[10px] font-bold text-slate-700 dark:text-ink-2 uppercase tracking-wider block">
                                                   📥 Input
                                                 </span>
-                                                <p className="text-slate-900 dark:text-[#e9edef] font-medium whitespace-pre-wrap">{call.customerInput || '-'}</p>
+                                                <p className="text-slate-900 dark:text-ink font-medium whitespace-pre-wrap">{call.customerInput || '-'}</p>
                                               </div>
-                                              <div className="bg-slate-50 dark:bg-[#1c272e] border border-slate-200 dark:border-[#374248] rounded-xl p-3 space-y-1">
-                                                <span className="text-[10px] font-bold text-slate-700 dark:text-[#aebac1] uppercase tracking-wider block">
+                                              <div className="bg-slate-50 dark:bg-surface-2 border border-slate-200 dark:border-divider rounded-xl p-3 space-y-1">
+                                                <span className="text-[10px] font-bold text-slate-700 dark:text-ink-2 uppercase tracking-wider block">
                                                   📤 Output
                                                 </span>
-                                                <p className="text-slate-900 dark:text-[#e9edef] font-medium whitespace-pre-wrap">{call.finalReply || '-'}</p>
+                                                <p className="text-slate-900 dark:text-ink font-medium whitespace-pre-wrap">{call.finalReply || '-'}</p>
                                               </div>
                                             </div>
                                             {call.reasoning && (
-                                              <div className="bg-purple-50 dark:bg-[#202c33] border border-purple-200 dark:border-[#2a3942] rounded-xl p-3 text-purple-950 dark:text-purple-200 font-mono text-[11px] whitespace-pre-wrap">
+                                              <div className="bg-purple-50 dark:bg-fill-1 border border-purple-200 dark:border-divider rounded-xl p-3 text-purple-950 dark:text-purple-200 font-mono text-[11px] whitespace-pre-wrap">
                                                 {call.reasoning}
                                               </div>
                                             )}
@@ -1333,7 +1333,7 @@ function LlmLogsSection() {
       {viewMode === 'flat' && (
         <div className="space-y-3">
           {flatLogs.length === 0 ? (
-            <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-10 text-center text-xs text-[#8696a0] shadow-xs">
+            <div className="bg-surface border border-divider rounded-2xl p-10 text-center text-xs text-ink-3 shadow-xs">
               Belum ada log LLM flat tercatat.
             </div>
           ) : (
@@ -1342,37 +1342,37 @@ function LlmLogsSection() {
               const displayReasoning = log.rawReasoning || log.reasoning || '-';
 
               return (
-                <div key={log.id} className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] hover:border-slate-300 dark:hover:border-[#374248] rounded-2xl p-4 shadow-xs space-y-3 text-left transition">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#f0f2f5] dark:border-[#2a3942] pb-2">
+                <div key={log.id} className="bg-surface border border-divider hover:border-slate-300 dark:hover:border-divider rounded-2xl p-4 shadow-xs space-y-3 text-left transition">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-divider dark:border-divider pb-2">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${badge.cls} flex items-center gap-1`}>
                         <span>{badge.icon}</span>
                         <span>{badge.label}</span>
                       </span>
-                      <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">
+                      <span className="text-xs font-bold text-ink">
                         {log.customerName || formatPhoneDisplay(log.customerPhone)}
                       </span>
                       {log.modelUsed && (
-                        <span className="text-[10px] font-mono text-purple-700 dark:text-[#aebac1] bg-purple-50 dark:bg-[#202c33] px-2 py-0.5 rounded-md border border-purple-200 dark:border-[#2a3942] font-semibold">
+                        <span className="text-[10px] font-mono text-purple-700 dark:text-ink-2 bg-purple-50 dark:bg-fill-1 px-2 py-0.5 rounded-md border border-purple-200 dark:border-divider font-semibold">
                           {log.modelUsed}
                         </span>
                       )}
                       {log.durationMs !== undefined && (
-                        <span className="text-[10px] font-mono text-slate-600 dark:text-[#aebac1] bg-slate-100 dark:bg-[#2a3942] px-2 py-0.5 rounded-md border border-transparent dark:border-[#374248]">
+                        <span className="text-[10px] font-mono text-slate-600 dark:text-ink-2 bg-slate-100 dark:bg-divider px-2 py-0.5 rounded-md border border-transparent dark:border-divider">
                           ⏱️ {log.durationMs}ms
                         </span>
                       )}
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-mono text-[#8696a0]">{fmtTime(log.timestamp)}</span>
+                      <span className="text-[10px] font-mono text-ink-3">{fmtTime(log.timestamp)}</span>
                       <span
                         className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                           log.status === 'SUCCESS'
-                          ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-[#00a884] border border-emerald-200 dark:border-emerald-800/40'
+                          ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-accent border border-emerald-200 dark:border-emerald-800/40'
                           : log.status === 'FALLBACK'
-                          ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-[#f59e0b] border border-amber-200 dark:border-amber-800/40'
-                          : 'bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-[#f87171] border border-rose-200 dark:border-rose-800/40'
+                          ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-warning border border-amber-200 dark:border-amber-800/40'
+                          : 'bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-danger border border-rose-200 dark:border-rose-800/40'
                         }`}
                       >
                         {log.status}
@@ -1382,20 +1382,20 @@ function LlmLogsSection() {
 
                   {log.customerInput && (
                     <div className="bg-sky-50/70 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800/40 rounded-xl p-3">
-                      <span className="text-[10px] font-bold text-sky-800 dark:text-[#38bdf8] uppercase block mb-1">Input / Prompt</span>
+                      <span className="text-[10px] font-bold text-sky-800 dark:text-info uppercase block mb-1">Input / Prompt</span>
                       <p className="text-sky-950 dark:text-sky-200 text-xs font-medium whitespace-pre-wrap">{log.customerInput}</p>
                     </div>
                   )}
 
-                  <div className="bg-purple-50/60 dark:bg-[#202c33] border border-purple-200 dark:border-[#2a3942] rounded-xl p-3">
+                  <div className="bg-purple-50/60 dark:bg-fill-1 border border-purple-200 dark:border-divider rounded-xl p-3">
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-[10px] font-bold text-purple-800 dark:text-[#aebac1] uppercase block">Reasoning &amp; CoT</span>
+                      <span className="text-[10px] font-bold text-purple-800 dark:text-ink-2 uppercase block">Reasoning &amp; CoT</span>
                       <button
                         type="button"
                         onClick={() => copyText(log.id, displayReasoning)}
-                        className="text-[10px] font-semibold text-purple-700 dark:text-[#aebac1] flex items-center gap-1 bg-white dark:bg-transparent px-1.5 py-0.5 rounded border border-purple-200 dark:border-[#2a3942]"
+                        className="text-[10px] font-semibold text-purple-700 dark:text-ink-2 flex items-center gap-1 bg-white dark:bg-transparent px-1.5 py-0.5 rounded border border-purple-200 dark:border-divider"
                       >
-                        {copiedId === log.id ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} />}
+                        {copiedId === log.id ? <Check size={11} className="text-success" /> : <Copy size={11} />}
                         <span>Salin</span>
                       </button>
                     </div>
@@ -1403,7 +1403,7 @@ function LlmLogsSection() {
                   </div>
 
                   <div className="bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 rounded-xl p-3">
-                    <span className="text-[10px] font-bold text-emerald-800 dark:text-[#00a884] uppercase block mb-1">Output Akhir</span>
+                    <span className="text-[10px] font-bold text-emerald-800 dark:text-accent uppercase block mb-1">Output Akhir</span>
                     <p className="text-emerald-950 dark:text-emerald-200 font-medium text-xs whitespace-pre-wrap">{log.finalReply || '-'}</p>
                   </div>
                 </div>
@@ -1422,16 +1422,16 @@ export const Debug: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#e9edef]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-divider">
         <div>
-          <h2 className="text-xl font-bold text-[#111b21] flex items-center gap-2">
-            <Bug size={22} className="text-[#008069]" /> <span>System Debug</span>
+          <h2 className="text-xl font-bold text-ink flex items-center gap-2">
+            <Bug size={22} className="text-accent" /> <span>System Debug</span>
           </h2>
-          <p className="text-xs text-[#667781] mt-0.5">Observability, tracing &amp; maintenance — semua read-only.</p>
+          <p className="text-xs text-ink-3 mt-0.5">Observability, tracing &amp; maintenance — semua read-only.</p>
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-1.5 border-b border-[#e9edef] pb-3">
+      <div className="flex flex-wrap gap-1.5 border-b border-divider pb-3">
         {TABS.map((t) => {
           const Icon = t.icon;
           const active = tab === t.id;
@@ -1441,11 +1441,11 @@ export const Debug: React.FC = () => {
               onClick={() => setTab(t.id)}
               className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition ${
                 active
-                  ? 'bg-[#e8f5f2] border-l-4 border-[#008069] text-[#008069] font-bold shadow-xs'
-                  : 'text-[#667781] hover:bg-white hover:text-[#111b21]'
+                  ? 'bg-accent-soft border-l-4 border-accent text-accent font-bold shadow-xs'
+                  : 'text-ink-3 hover:bg-surface hover:text-ink'
               }`}
             >
-              <Icon size={15} className={active ? 'text-[#008069]' : 'text-[#8696a0]'} />
+              <Icon size={15} className={active ? 'text-accent' : 'text-ink-3'} />
               <span>{t.label}</span>
             </button>
           );
@@ -1458,7 +1458,7 @@ export const Debug: React.FC = () => {
       {tab === 'messages' && <MessagesSection />}
       {tab === 'conversations' && <ConversationsSection />}
 
-      <p className="text-xs text-[#8696a0]">
+      <p className="text-xs text-ink-3">
         <Clock size={11} className="inline mr-1" />
         Debug page data diambil langsung dari server via /api/admin/debug/* — read-only, tidak ada mutasi.
       </p>

@@ -561,22 +561,22 @@ const LiveChatComposerInner = (
   return (
     <>
       {replyingTo && (
-        <div className="flex items-center justify-between bg-white px-3 py-2 border-l-4 border-[#008069] rounded-t-xl mb-0 shadow-xs border border-b-0 border-[#e9edef] animate-fadeIn">
+        <div className="flex items-center justify-between bg-surface px-3 py-2 border-l-4 border-accent rounded-t-xl mb-0 shadow-xs border border-b-0 border-divider animate-fadeIn">
           <div className="flex-1 min-w-0 pr-2">
             <div className="flex items-center space-x-1.5">
-              <Reply size={12} className="text-[#008069] shrink-0" />
-              <span className="text-[11px] font-bold text-[#008069] truncate">
+              <Reply size={12} className="text-accent shrink-0" />
+              <span className="text-[11px] font-bold text-accent truncate">
                 Membalas {replyingTo.senderLabel}
               </span>
             </div>
-            <p className="text-[11px] text-[#54656f] truncate mt-0.5 pl-4">
+            <p className="text-[11px] text-ink-2 truncate mt-0.5 pl-4">
               {replyingTo.preview}
             </p>
           </div>
           <button
             type="button"
             onClick={onCancelReply}
-            className="p-1 text-[#8696a0] hover:text-rose-500 hover:bg-rose-50 rounded-full transition active:scale-90"
+            className="p-1 text-ink-3 hover:text-danger hover:bg-danger-soft rounded-full transition active:scale-90"
             title="Batal membalas"
           >
             <X size={14} />
@@ -589,11 +589,11 @@ const LiveChatComposerInner = (
           <img
             src={selectedImage.preview}
             alt="Preview"
-            className="w-20 h-20 object-cover rounded-lg border border-[#e9edef]"
+            className="w-20 h-20 object-cover rounded-lg border border-divider"
           />
           <button
             onClick={onRemoveImage}
-            className="absolute -top-1.5 -right-1.5 p-0.5 bg-rose-500 text-white rounded-full hover:bg-rose-600 transition"
+            className="absolute -top-1.5 -right-1.5 p-0.5 bg-danger text-on-solid rounded-full hover:bg-danger-hover transition"
           >
             <X size={12} />
           </button>
@@ -601,12 +601,12 @@ const LiveChatComposerInner = (
       )}
 
       {showQuickReplyPopover && (
-        <div ref={quickReplyRef} className="mb-1.5 bg-white border border-[#e9edef] rounded-2xl shadow-xl overflow-hidden z-30 max-h-72 flex flex-col animate-fadeIn">
-          <div className="px-3 py-1.5 bg-[#f8fafc] border-b border-[#e9edef] flex items-center justify-between">
-            <span className="text-[11px] font-bold text-[#008069] flex items-center gap-1"><Zap size={12} /> Balasan Cepat</span>
-            <span className="text-[10px] text-[#8696a0]">{filteredQuickReplies.length} template</span>
+        <div ref={quickReplyRef} className="mb-1.5 bg-surface border border-divider rounded-2xl shadow-xl overflow-hidden z-30 max-h-72 flex flex-col animate-fadeIn">
+          <div className="px-3 py-1.5 bg-surface-2 border-b border-divider flex items-center justify-between">
+            <span className="text-[11px] font-bold text-accent flex items-center gap-1"><Zap size={12} /> Balasan Cepat</span>
+            <span className="text-[10px] text-ink-3">{filteredQuickReplies.length} template</span>
           </div>
-          <div className="overflow-y-auto flex-1 divide-y divide-[#f0f2f5]">
+          <div className="overflow-y-auto flex-1 divide-y divide-divider">
             {filteredQuickReplies.map((qr, idx) => (
               <button
                 key={qr.id}
@@ -614,26 +614,26 @@ const LiveChatComposerInner = (
                 onClick={() => applyQuickReply(qr)}
                 onTouchEnd={(e) => { e.preventDefault(); applyQuickReply(qr); }}
                 onMouseEnter={() => setQuickReplyActiveIdx(idx)}
-                className={`w-full text-left px-3 py-3 sm:py-2 flex items-start gap-2.5 transition cursor-pointer active:scale-[0.99] min-h-[48px] sm:min-h-0 ${idx === quickReplyActiveIdx ? 'bg-[#e8f5f2] border-l-4 border-[#008069]' : 'hover:bg-[#f0f2f5] border-l-4 border-transparent active:bg-[#e8f5f2]'}`}
+                className={`w-full text-left px-3 py-3 sm:py-2 flex items-start gap-2.5 transition cursor-pointer active:scale-[0.99] min-h-[48px] sm:min-h-0 ${idx === quickReplyActiveIdx ? 'bg-accent-soft border-l-4 border-accent' : 'hover:bg-fill-1 border-l-4 border-transparent active:bg-accent-soft'}`}
               >
-                <span className={`shrink-0 px-1.5 py-0.5 rounded-md text-[11px] font-mono font-bold border ${idx === quickReplyActiveIdx ? 'bg-[#008069] text-white border-[#008069]' : 'bg-[#f0f2f5] text-[#008069] border-[#c2e7e0]'}`}>/{qr.shortcut}</span>
+                <span className={`shrink-0 px-1.5 py-0.5 rounded-md text-[11px] font-mono font-bold border ${idx === quickReplyActiveIdx ? 'bg-accent text-white border-accent' : 'bg-fill-1 text-accent border-accent/30'}`}>/{qr.shortcut}</span>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[12px] font-bold text-[#111b21] truncate flex items-center gap-1.5">
+                  <p className="text-[12px] font-bold text-ink truncate flex items-center gap-1.5">
                     {qr.media_type === 'QRIS' ? (
-                      <span title="QRIS Resmi Terlampir" className="inline-flex items-center text-[#008069]"><QrCode size={13} /></span>
+                      <span title="QRIS Resmi Terlampir" className="inline-flex items-center text-accent"><QrCode size={13} /></span>
                     ) : qr.media_type === 'PRICELIST' ? (
-                      <span title="Pricelist Resmi Terlampir" className="inline-flex items-center text-[#008069]"><FileText size={13} /></span>
+                      <span title="Pricelist Resmi Terlampir" className="inline-flex items-center text-accent"><FileText size={13} /></span>
                     ) : qr.image_url || qr.media_type === 'CUSTOM_IMAGE' ? (
-                      <span title="Gambar Terlampir" className="inline-flex items-center text-[#008069]"><ImageIcon size={13} /></span>
+                      <span title="Gambar Terlampir" className="inline-flex items-center text-accent"><ImageIcon size={13} /></span>
                     ) : null}
-                    {qr.title} {qr.category && <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-[#f0f2f5] text-[#54656f] border border-[#e9edef] font-semibold">{qr.category}</span>}
+                    {qr.title} {qr.category && <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-fill-1 text-ink-2 border border-divider font-semibold">{qr.category}</span>}
                   </p>
-                  <p className="text-[11px] text-[#667781] line-clamp-1 truncate">{qr.content.slice(0, 80).replace(/\n/g, ' ')}</p>
+                  <p className="text-[11px] text-ink-2 line-clamp-1 truncate">{qr.content.slice(0, 80).replace(/\n/g, ' ')}</p>
                 </div>
               </button>
             ))}
           </div>
-          <div className="px-2.5 py-1.5 bg-[#fffbeb] border-t border-amber-100 text-[10px] text-amber-700 flex items-center gap-1.5">
+          <div className="px-2.5 py-1.5 bg-warning-soft border-t border-warning-line text-[10px] text-warning flex items-center gap-1.5">
             <span className="hidden sm:inline">↑↓ navigasi • Enter/Tab pilih • Esc tutup</span>
             <span className="sm:hidden">Tap untuk pilih • Geser untuk lihat lainnya</span>
           </div>
@@ -643,7 +643,7 @@ const LiveChatComposerInner = (
       {isInternalMode && (
         <div className="flex sm:hidden items-center justify-between bg-amber-100 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800/40 px-2.5 py-1 rounded-lg mb-1 animate-fadeIn text-[11px] font-bold text-amber-900 dark:text-amber-200">
           <span className="flex items-center space-x-1.5 min-w-0">
-            <Lock size={12} className="text-amber-700 dark:text-[#f59e0b] shrink-0" />
+            <Lock size={12} className="text-amber-700 dark:text-warning shrink-0" />
             <span className="truncate">Mode Catatan Internal (Hanya Staf)</span>
           </span>
           <button
@@ -658,27 +658,27 @@ const LiveChatComposerInner = (
         </div>
       )}
 
-      <div ref={composerWrapperRef} className={`flex items-end space-x-1.5 sm:space-x-2 bg-[#f0f2f5] p-1 sm:p-1.5 md:p-2 pb-[max(0.5rem,env(safe-area-inset-bottom,0.5rem))] border border-[#e9edef] w-full mb-0 ${replyingTo ? 'rounded-b-none border-t-0' : 'rounded-t-xl rounded-b-none'} border-b-0`}>
+      <div ref={composerWrapperRef} className={`flex items-end space-x-1.5 sm:space-x-2 bg-fill-1 p-1 sm:p-1.5 md:p-2 pb-[max(0.5rem,env(safe-area-inset-bottom,0.5rem))] border border-divider w-full mb-0 ${replyingTo ? 'rounded-b-none border-t-0' : 'rounded-t-xl rounded-b-none'} border-b-0`}>
         <div className="relative shrink-0" ref={toolsMenuRef}>
           <button
             type="button"
             onClick={() => setToolsMenuOpen(!toolsMenuOpen)}
             disabled={sending || generatingDraft}
-            className={`w-10 h-10 min-w-[40px] min-h-[40px] sm:w-10 sm:h-10 p-0 bg-white border border-[#d1d7db] hover:border-[#008069] disabled:opacity-40 rounded-xl text-xs font-bold transition flex items-center justify-center shadow-xs active:scale-95 shrink-0 touch-manipulation ${
-              toolsMenuOpen ? 'bg-[#e8f5f2] border-[#008069] text-[#008069]' : 'text-[#54656f] hover:text-[#008069]'
+            className={`w-10 h-10 min-w-[40px] min-h-[40px] sm:w-10 sm:h-10 p-0 bg-surface border border-divider hover:border-accent disabled:opacity-40 rounded-xl text-xs font-bold transition flex items-center justify-center shadow-xs active:scale-95 shrink-0 touch-manipulation ${
+              toolsMenuOpen ? 'bg-accent-soft border-accent text-accent' : 'text-ink-2 hover:text-accent'
             }`}
             title="Fitur & Lampiran (AI Copilot / Gambar)"
             aria-label="Menu Tools & Lampiran"
           >
             {generatingDraft ? (
-              <Loader size={17} className="animate-spin text-amber-500" />
+              <Loader size={17} className="animate-spin text-warning" />
             ) : (
-              <Plus size={17} className={`transition-transform duration-200 ${toolsMenuOpen ? 'rotate-45 text-[#008069]' : ''}`} />
+              <Plus size={17} className={`transition-transform duration-200 ${toolsMenuOpen ? 'rotate-45 text-accent' : ''}`} />
             )}
           </button>
 
           {toolsMenuOpen && (
-            <div className="absolute bottom-full left-0 mb-2 w-60 bg-white border border-[#e9edef] rounded-2xl shadow-xl p-1.5 z-30 origin-bottom-left animate-modalScaleUp space-y-1">
+            <div className="absolute bottom-full left-0 mb-2 w-60 bg-surface border border-divider rounded-2xl shadow-xl p-1.5 z-30 origin-bottom-left animate-modalScaleUp space-y-1">
               <button
                 type="button"
                 onClick={() => {
@@ -686,17 +686,17 @@ const LiveChatComposerInner = (
                   onGenerateAiDraft?.();
                 }}
                 disabled={generatingDraft || sending}
-                className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#111b21] hover:bg-amber-50/80 hover:text-amber-700 transition text-left group disabled:opacity-50"
+                className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-ink hover:bg-warning-soft/80 hover:text-warning transition text-left group disabled:opacity-50"
               >
-                <div className="w-7 h-7 rounded-lg bg-amber-100/80 text-amber-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <div className="w-7 h-7 rounded-lg bg-warning-soft/80 text-warning flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                   <Wand2 size={15} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-[12px] truncate flex items-center gap-1">
                     <span>AI Copilot Draft</span>
-                    <span className="text-[9px] px-1 py-0.2 bg-amber-100 text-amber-800 rounded font-semibold">AI</span>
+                    <span className="text-[9px] px-1 py-0.2 bg-warning-soft text-warning rounded font-semibold">AI</span>
                   </p>
-                  <p className="text-[10px] text-[#667781] truncate">Saran balasan otomatis bidan</p>
+                  <p className="text-[10px] text-ink-2 truncate">Saran balasan otomatis bidan</p>
                 </div>
               </button>
 
@@ -706,14 +706,14 @@ const LiveChatComposerInner = (
                   setToolsMenuOpen(false);
                   onOpenSchedule?.();
                 }}
-                className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#111b21] hover:bg-[#e8f5f2] hover:text-[#008069] transition text-left group"
+                className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-ink hover:bg-accent-soft hover:text-accent transition text-left group"
               >
-                <div className="w-7 h-7 rounded-lg bg-[#e8f5f2] text-[#008069] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <div className="w-7 h-7 rounded-lg bg-accent-soft text-accent flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                   <Calendar size={15} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-[12px] truncate">Cek Jadwal Harian</p>
-                  <p className="text-[10px] text-[#667781] truncate">Lihat kalender & slot kosong</p>
+                  <p className="text-[10px] text-ink-2 truncate">Lihat kalender & slot kosong</p>
                 </div>
               </button>
 
@@ -724,14 +724,14 @@ const LiveChatComposerInner = (
                   onOpenQuickHold?.();
                 }}
                 disabled={sending}
-                className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#111b21] hover:bg-amber-50/80 hover:text-amber-700 transition text-left group disabled:opacity-50"
+                className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-ink hover:bg-warning-soft/80 hover:text-warning transition text-left group disabled:opacity-50"
               >
-                <div className="w-7 h-7 rounded-lg bg-amber-100/80 text-amber-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <div className="w-7 h-7 rounded-lg bg-warning-soft/80 text-warning flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                   <Zap size={15} className="fill-current" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-[12px] truncate">Tahan Slot (Hold)</p>
-                  <p className="text-[10px] text-[#667781] truncate">Kunci tgl & jam negosiasi</p>
+                  <p className="text-[10px] text-ink-2 truncate">Kunci tgl & jam negosiasi</p>
                 </div>
               </button>
 
@@ -742,14 +742,14 @@ const LiveChatComposerInner = (
                   onOpenQuickReservation?.();
                 }}
                 disabled={sending}
-                className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#111b21] hover:bg-emerald-50/80 hover:text-[#008069] transition text-left group disabled:opacity-50"
+                className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-ink hover:bg-success-soft/80 hover:text-accent transition text-left group disabled:opacity-50"
               >
-                <div className="w-7 h-7 rounded-lg bg-emerald-100/80 text-[#008069] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <div className="w-7 h-7 rounded-lg bg-success-soft/80 text-accent flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                   <CalendarPlus size={15} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-[12px] truncate">Buat Reservasi & Invoice</p>
-                  <p className="text-[10px] text-[#667781] truncate">Kunci jadwal & invoice ke chat</p>
+                  <p className="text-[10px] text-ink-2 truncate">Kunci jadwal & invoice ke chat</p>
                 </div>
               </button>
 
@@ -760,21 +760,21 @@ const LiveChatComposerInner = (
                   onGenerateInvoice?.();
                 }}
                 disabled={sending}
-                className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#111b21] transition text-left group disabled:opacity-50 ${
-                  hasActiveReservation ? 'hover:bg-sky-50/80 hover:text-sky-700' : 'hover:bg-[#e8f5f2] hover:text-[#008069]'
+                className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-ink transition text-left group disabled:opacity-50 ${
+                  hasActiveReservation ? 'hover:bg-info-soft/80 hover:text-info' : 'hover:bg-accent-soft hover:text-accent'
                 }`}
                 title={hasActiveReservation
                   ? 'Salin format invoice dari reservasi yang sudah tercatat di kalender'
                   : 'Belum ada jadwal aktif — akan membuka form reservasi agar invoice tercatat di kalender'}
               >
                 <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform ${
-                  hasActiveReservation ? 'bg-sky-100/80 text-sky-600' : 'bg-[#e8f5f2] text-[#008069]'
+                  hasActiveReservation ? 'bg-info-soft/80 text-info' : 'bg-accent-soft text-accent'
                 }`}>
                   <Receipt size={15} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-[12px] truncate">{hasActiveReservation ? 'Salin Invoice Jadwal' : 'Generate Invoice'}</p>
-                  <p className="text-[10px] text-[#667781] truncate">{hasActiveReservation ? 'Dari jadwal aktif tercatat' : 'Belum ada jadwal — buat dulu'}</p>
+                  <p className="text-[10px] text-ink-2 truncate">{hasActiveReservation ? 'Dari jadwal aktif tercatat' : 'Belum ada jadwal — buat dulu'}</p>
                 </div>
               </button>
 
@@ -786,14 +786,14 @@ const LiveChatComposerInner = (
                   inputRef.current?.focus();
                 }}
                 disabled={sending}
-                className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#111b21] hover:bg-amber-50/80 hover:text-amber-800 transition text-left group disabled:opacity-50"
+                className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-ink hover:bg-warning-soft/80 hover:text-warning transition text-left group disabled:opacity-50"
               >
-                <div className="w-7 h-7 rounded-lg bg-amber-100/80 text-amber-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <div className="w-7 h-7 rounded-lg bg-warning-soft/80 text-warning flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                   <StickyNote size={15} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-[12px] truncate">Catatan Internal (Notes)</p>
-                  <p className="text-[10px] text-[#667781] truncate">Catatan khusus staf, tidak dikirim ke WhatsApp</p>
+                  <p className="text-[10px] text-ink-2 truncate">Catatan khusus staf, tidak dikirim ke WhatsApp</p>
                 </div>
               </button>
 
@@ -804,14 +804,14 @@ const LiveChatComposerInner = (
                   onPickImage?.();
                 }}
                 disabled={sending}
-                className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#111b21] hover:bg-[#e8f5f2] hover:text-[#008069] transition text-left group disabled:opacity-50"
+                className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-ink hover:bg-accent-soft hover:text-accent transition text-left group disabled:opacity-50"
               >
-                <div className="w-7 h-7 rounded-lg bg-[#e8f5f2] text-[#008069] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <div className="w-7 h-7 rounded-lg bg-accent-soft text-accent flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                   <ImagePlus size={15} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-[12px] truncate">Lampirkan Gambar</p>
-                  <p className="text-[10px] text-[#667781] truncate">Kirim foto/pricelist (maks 8MB)</p>
+                  <p className="text-[10px] text-ink-2 truncate">Kirim foto/pricelist (maks 8MB)</p>
                 </div>
               </button>
             </div>
@@ -823,18 +823,18 @@ const LiveChatComposerInner = (
             type="button"
             onClick={() => setEmojiPickerOpen(!emojiPickerOpen)}
             disabled={sending}
-            className={`w-9 h-9 sm:w-10 sm:h-10 min-h-[36px] sm:min-h-[38px] p-0 bg-white border border-[#d1d7db] hover:border-[#008069] disabled:opacity-40 rounded-xl text-xs font-bold transition flex items-center justify-center shadow-xs active:scale-95 shrink-0 ${
-              emojiPickerOpen ? 'bg-[#e8f5f2] border-[#008069] text-[#008069]' : 'text-[#54656f] hover:text-[#008069]'
+            className={`w-9 h-9 sm:w-10 sm:h-10 min-h-[36px] sm:min-h-[38px] p-0 bg-surface border border-divider hover:border-accent disabled:opacity-40 rounded-xl text-xs font-bold transition flex items-center justify-center shadow-xs active:scale-95 shrink-0 ${
+              emojiPickerOpen ? 'bg-accent-soft border-accent text-accent' : 'text-ink-2 hover:text-accent'
             }`}
             title="Pilih Emoticon (Khusus Web)"
             aria-label="Pilih Emoticon"
           >
-            <Smile size={18} className={emojiPickerOpen ? 'text-[#008069]' : 'text-[#54656f]'} />
+            <Smile size={18} className={emojiPickerOpen ? 'text-accent' : 'text-ink-2'} />
           </button>
 
           {emojiPickerOpen && (
-            <div className="absolute bottom-full left-0 mb-2 w-80 bg-white border border-[#e9edef] rounded-2xl shadow-2xl p-2.5 z-40 animate-fadeIn flex flex-col gap-2 select-none">
-              <div className="flex items-center justify-between border-b border-[#e9edef] pb-1.5 px-0.5">
+            <div className="absolute bottom-full left-0 mb-2 w-80 bg-surface border border-divider rounded-2xl shadow-2xl p-2.5 z-40 animate-fadeIn flex flex-col gap-2 select-none">
+              <div className="flex items-center justify-between border-b border-divider pb-1.5 px-0.5">
                 <div className="flex items-center space-x-1">
                   {EMOJI_CATEGORIES.map((cat) => (
                     <button
@@ -843,8 +843,8 @@ const LiveChatComposerInner = (
                       onClick={() => setEmojiCategory(cat.id as EmojiCategoryId)}
                       className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-base transition active:scale-95 cursor-pointer ${
                         emojiCategory === cat.id
-                          ? 'bg-[#e8f5f2] text-[#008069] font-bold shadow-xs scale-105'
-                          : 'text-[#54656f] hover:bg-[#f0f2f5]'
+                          ? 'bg-accent-soft text-accent font-bold shadow-xs scale-105'
+                          : 'text-ink-2 hover:bg-fill-1'
                       }`}
                       title={cat.label}
                       aria-label={cat.label}
@@ -856,7 +856,7 @@ const LiveChatComposerInner = (
                 <button
                   type="button"
                   onClick={() => setEmojiPickerOpen(false)}
-                  className="text-[#8696a0] hover:text-[#111b21] p-1.5 rounded-lg hover:bg-[#f0f2f5] transition"
+                  className="text-ink-3 hover:text-ink p-1.5 rounded-lg hover:bg-fill-1 transition"
                   title="Tutup"
                 >
                   <X size={14} />
@@ -872,7 +872,7 @@ const LiveChatComposerInner = (
                     key={`${emoji}-${idx}`}
                     type="button"
                     onClick={() => insertEmoji(emoji)}
-                    className="w-8 h-8 flex items-center justify-center text-lg rounded-lg hover:bg-[#f0f2f5] hover:scale-125 transition-transform active:scale-95 cursor-pointer"
+                    className="w-8 h-8 flex items-center justify-center text-lg rounded-lg hover:bg-fill-1 hover:scale-125 transition-transform active:scale-95 cursor-pointer"
                     title={emoji}
                   >
                     {emoji}
@@ -904,10 +904,10 @@ const LiveChatComposerInner = (
           onPaste={handlePaste}
           onInput={handleInput}
           onKeyDown={handleKeyDown}
-          className={`chat-contenteditable flex-1 w-full min-w-0 rounded-xl border focus:outline-none text-[16px] sm:text-sm text-[#111b21] py-2 px-2.5 sm:px-3 shadow-xs min-h-[38px] max-h-[125px] overflow-y-auto leading-relaxed outline-none ${
+          className={`chat-contenteditable flex-1 w-full min-w-0 rounded-xl border focus:outline-none text-[16px] sm:text-sm text-ink py-2 px-2.5 sm:px-3 shadow-xs min-h-[38px] max-h-[125px] overflow-y-auto leading-relaxed outline-none ${
             isInternalMode
               ? 'bg-amber-50 border-amber-300 focus:border-amber-400 focus:ring-1 focus:ring-amber-300 dark:bg-amber-950/30 dark:border-amber-700'
-              : 'bg-white border-[#d1d7db] focus:border-[#008069] focus:ring-1 focus:ring-[#008069]'
+              : 'bg-surface border-divider focus:border-accent focus:ring-1 focus:ring-accent'
           }`}
           style={{ fontSize: '16px', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}
         />
@@ -917,8 +917,8 @@ const LiveChatComposerInner = (
           disabled={sending}
           className={`hidden sm:flex sm:w-auto sm:px-3 min-w-[40px] min-h-[40px] sm:min-h-[38px] p-0 sm:py-2.5 rounded-xl text-xs font-bold transition items-center justify-center space-x-1.5 shadow-xs shrink-0 active:scale-95 touch-manipulation disabled:opacity-40 cursor-pointer ${
             isInternalMode
-              ? 'bg-amber-500 hover:bg-amber-600 text-white'
-              : 'bg-white border border-[#d1d7db] hover:border-amber-400 text-[#54656f] hover:text-amber-600'
+              ? 'bg-warning hover:bg-warning-hover text-on-solid'
+              : 'bg-surface border border-divider hover:border-warning text-ink-2 hover:text-warning'
           }`}
           title={isInternalMode ? 'Mode Catatan Internal AKTIF — tidak dikirim ke WhatsApp' : 'Aktifkan mode catatan internal (hanya staf)'}
           aria-pressed={isInternalMode}
@@ -929,7 +929,7 @@ const LiveChatComposerInner = (
         <button
           onClick={handleSend}
           disabled={sendDisabled}
-          className="w-10 h-10 sm:w-auto sm:px-4 min-w-[40px] min-h-[40px] sm:min-h-[38px] p-0 sm:py-2.5 bg-[#008069] hover:bg-[#00a884] disabled:opacity-40 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs shrink-0 active:scale-95 touch-manipulation cursor-pointer"
+          className="w-10 h-10 sm:w-auto sm:px-4 min-w-[40px] min-h-[40px] sm:min-h-[38px] p-0 sm:py-2.5 bg-accent hover:bg-accent-hover disabled:opacity-40 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs shrink-0 active:scale-95 touch-manipulation cursor-pointer"
           title="Kirim Balasan"
         >
           <Send size={15} />

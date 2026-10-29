@@ -518,12 +518,12 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150 overscroll-contain overflow-hidden" style={{ overscrollBehavior: 'contain', touchAction: 'pan-y', overscrollBehaviorX: 'none' as any }}>
       <div
-        className="bg-white dark:bg-[#111b21] text-[#111b21] dark:text-[#e9edef] w-full max-w-4xl rounded-none sm:rounded-2xl shadow-2xl border-0 sm:border border-[#e9edef] dark:border-[#2a3942] flex flex-col h-[100dvh] sm:h-auto sm:max-h-[90vh] overflow-hidden overscroll-contain"
+        className="bg-surface text-ink w-full max-w-4xl rounded-none sm:rounded-2xl shadow-2xl border-0 sm:border border-divider flex flex-col h-[100dvh] sm:h-auto sm:max-h-[90vh] overflow-hidden overscroll-contain"
         style={{ overscrollBehavior: 'contain', touchAction: 'pan-y', overscrollBehaviorX: 'none' as any, maxWidth: 'min(100vw - 24px, 56rem)' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header — tipis minimalis 36px + safe-area Notch */}
-        <div className="px-4 pt-[calc(0.5rem+env(safe-area-inset-top,0px))] pb-2 sm:px-4 sm:py-2.5 bg-gradient-to-r from-[#008069] to-[#00a884] text-white flex items-center justify-between shadow-xs shrink-0">
+        <div className="px-4 pt-[calc(0.5rem+env(safe-area-inset-top,0px))] pb-2 sm:px-4 sm:py-2.5 bg-accent text-accent-ink flex items-center justify-between shadow-xs shrink-0">
           <h3 className="font-bold text-sm flex items-center gap-2">
             <Receipt size={16} className="text-white" />
             <span>Invoice WA</span>
@@ -538,20 +538,20 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
         </div>
 
         {/* Modal Body: 2 Columns — di mobile jadi tab Setting / Preview agar keduanya reachable */}
-        <div className="flex flex-1 flex-col min-h-0 bg-[#f8fafc] dark:bg-[#1c272e] lg:grid lg:grid-cols-12 lg:divide-x divide-[#e9edef] dark:divide-[#2a3942] overflow-hidden">
+        <div className="flex flex-1 flex-col min-h-0 bg-surface-2 lg:grid lg:grid-cols-12 lg:divide-x divide-divider overflow-hidden">
           {/* Mobile Tabs — ramping */}
-          <div className="flex lg:hidden shrink-0 border-b border-[#e9edef] dark:border-[#2a3942] bg-white dark:bg-[#111b21] p-1 gap-1">
+          <div className="flex lg:hidden shrink-0 border-b border-divider bg-surface p-1 gap-1">
             <button
               type="button"
               onClick={() => setMobileTab('setting')}
-              className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold border transition ${mobileTab === 'setting' ? 'bg-[#008069] text-white border-[#008069]' : 'bg-white text-[#54656f] border-[#d1d7db]'}`}
+              className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold border transition ${mobileTab === 'setting' ? 'bg-accent text-accent-ink border-accent' : 'bg-surface text-ink-2 border-divider'}`}
             >
               ⚙️ Pengaturan
             </button>
             <button
               type="button"
               onClick={() => setMobileTab('preview')}
-              className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold border transition ${mobileTab === 'preview' ? 'bg-[#008069] text-white border-[#008069]' : 'bg-white text-[#54656f] border-[#d1d7db]'}`}
+              className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold border transition ${mobileTab === 'preview' ? 'bg-accent text-accent-ink border-accent' : 'bg-surface text-ink-2 border-divider'}`}
             >
               📱 Live Preview WA
             </button>
@@ -561,9 +561,9 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
           <div className={`${mobileTab === 'preview' ? 'hidden' : ''} lg:!block lg:col-span-7 p-4 sm:p-5 overflow-y-auto space-y-4 flex-1 min-h-0`}>
             {/* Draft Restore Banner — di dalam scroll agar ikut tergulir */}
             {hasDraft && (
-              <div className="p-2 sm:p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-[11px] sm:text-xs text-amber-900 animate-in fade-in">
+              <div className="p-2 sm:p-3 bg-warning-soft border border-warning-line rounded-xl flex items-center justify-between text-[11px] sm:text-xs text-warning animate-in fade-in">
                 <div className="flex items-center space-x-2">
-                  <FileText size={15} className="text-amber-600 shrink-0" />
+                  <FileText size={15} className="text-warning shrink-0" />
                   <span>
                     Ditemukan draf invoice yang tersimpan <strong>{draftTimeAgo}</strong>.
                   </span>
@@ -572,14 +572,14 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                   <button
                     type="button"
                     onClick={restoreDraft}
-                    className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg shadow-xs transition cursor-pointer"
+                    className="px-2.5 py-1 bg-warning hover:bg-warning-hover text-on-solid font-bold rounded-lg shadow-xs transition cursor-pointer"
                   >
                     Pulihkan
                   </button>
                   <button
                     type="button"
                     onClick={() => discardDraft(false)}
-                    className="px-2 py-1 text-amber-800 hover:text-rose-600 text-xs font-semibold cursor-pointer"
+                    className="px-2 py-1 text-warning hover:text-danger text-xs font-semibold cursor-pointer"
                   >
                     Buang
                   </button>
@@ -587,101 +587,101 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
               </div>
             )}
             {/* Section 1: Jadwal & Waktu */}
-            <div className="p-3.5 bg-white rounded-xl border border-[#e9edef] shadow-2xs space-y-3">
-              <div className="flex items-center space-x-2 text-[#008069] font-bold text-xs">
+            <div className="p-3.5 bg-surface rounded-xl border border-divider shadow-2xs space-y-3">
+              <div className="flex items-center space-x-2 text-accent font-bold text-xs">
                 <Calendar size={14} />
                 <span>Jadwal Reservasi</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block text-[11px] font-semibold text-[#54656f] mb-1">Hari & Tanggal</label>
+                  <label className="block text-[11px] font-semibold text-ink-2 mb-1">Hari & Tanggal</label>
                   <input
                     type="text"
                     value={dateDisplay}
                     onChange={(e) => setDateDisplay(e.target.value)}
                     placeholder="Contoh: Minggu 30 Agustus 2026"
-                    className="w-full px-3 py-1.5 bg-[#f8fafc] border border-[#d1d7db] rounded-lg text-xs text-[#111b21] focus:outline-none focus:border-[#008069]"
+                    className="w-full px-3 py-1.5 bg-surface-2 border border-divider rounded-lg text-xs text-ink focus:outline-none focus:border-accent"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold text-[#54656f] mb-1">Jam Treatment</label>
+                  <label className="block text-[11px] font-semibold text-ink-2 mb-1">Jam Treatment</label>
                   <input
                     type="text"
                     value={timeDisplay}
                     onChange={(e) => setTimeDisplay(e.target.value)}
                     placeholder="Contoh: 12.00-12.30"
-                    className="w-full px-3 py-1.5 bg-[#f8fafc] border border-[#d1d7db] rounded-lg text-xs text-[#111b21] focus:outline-none focus:border-[#008069]"
+                    className="w-full px-3 py-1.5 bg-surface-2 border border-divider rounded-lg text-xs text-ink focus:outline-none focus:border-accent"
                   />
                 </div>
               </div>
             </div>
 
             {/* Section 2: Data Bunda & Alamat */}
-            <div className="p-3.5 bg-white rounded-xl border border-[#e9edef] shadow-2xs space-y-3">
-              <div className="flex items-center space-x-2 text-[#008069] font-bold text-xs">
+            <div className="p-3.5 bg-surface rounded-xl border border-divider shadow-2xs space-y-3">
+              <div className="flex items-center space-x-2 text-accent font-bold text-xs">
                 <User size={14} />
                 <span>Data Pasien & Lokasi</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block text-[11px] font-semibold text-[#54656f] mb-1">Nama Bunda</label>
+                  <label className="block text-[11px] font-semibold text-ink-2 mb-1">Nama Bunda</label>
                   <input
                     type="text"
                     value={bundaName}
                     onChange={(e) => setBundaName(e.target.value)}
                     placeholder="Nama Bunda"
-                    className="w-full px-3 py-1.5 bg-[#f8fafc] border border-[#d1d7db] rounded-lg text-xs text-[#111b21] focus:outline-none focus:border-[#008069]"
+                    className="w-full px-3 py-1.5 bg-surface-2 border border-divider rounded-lg text-xs text-ink focus:outline-none focus:border-accent"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold text-[#54656f] mb-1">No. Handphone</label>
+                  <label className="block text-[11px] font-semibold text-ink-2 mb-1">No. Handphone</label>
                   <input
                     type="text"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="08123456789"
-                    className="w-full px-3 py-1.5 bg-[#f8fafc] border border-[#d1d7db] rounded-lg text-xs text-[#111b21] focus:outline-none focus:border-[#008069]"
+                    className="w-full px-3 py-1.5 bg-surface-2 border border-divider rounded-lg text-xs text-ink focus:outline-none focus:border-accent"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-[11px] font-semibold text-[#54656f] mb-1">Alamat & Shareloc</label>
+                <label className="block text-[11px] font-semibold text-ink-2 mb-1">Alamat & Shareloc</label>
                 <textarea
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
                   rows={2}
                   placeholder="Alamat lengkap customer..."
-                  className="w-full px-3 py-1.5 bg-[#f8fafc] border border-[#d1d7db] rounded-lg text-xs text-[#111b21] focus:outline-none focus:border-[#008069] resize-none"
+                  className="w-full px-3 py-1.5 bg-surface-2 border border-divider rounded-lg text-xs text-ink focus:outline-none focus:border-accent resize-none"
                 />
               </div>
               <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block text-[11px] font-semibold text-[#54656f] mb-1">Kecamatan</label>
+                  <label className="block text-[11px] font-semibold text-ink-2 mb-1">Kecamatan</label>
                   <input
                     type="text"
                     value={kecamatan}
                     onChange={(e) => setKecamatan(e.target.value)}
                     placeholder="Contoh: Sukolilo"
-                    className="w-full px-3 py-1.5 bg-[#f8fafc] border border-[#d1d7db] rounded-lg text-xs text-[#111b21] focus:outline-none focus:border-[#008069]"
+                    className="w-full px-3 py-1.5 bg-surface-2 border border-divider rounded-lg text-xs text-ink focus:outline-none focus:border-accent"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold text-[#54656f] mb-1">Kota / Kab</label>
+                  <label className="block text-[11px] font-semibold text-ink-2 mb-1">Kota / Kab</label>
                   <input
                     type="text"
                     value={kota}
                     onChange={(e) => setKota(e.target.value)}
                     placeholder="Contoh: Surabaya"
-                    className="w-full px-3 py-1.5 bg-[#f8fafc] border border-[#d1d7db] rounded-lg text-xs text-[#111b21] focus:outline-none focus:border-[#008069]"
+                    className="w-full px-3 py-1.5 bg-surface-2 border border-divider rounded-lg text-xs text-ink focus:outline-none focus:border-accent"
                   />
                 </div>
               </div>
             </div>
 
             {/* Section 3: Layanan & Multi-Treatment (1:1 dengan Buat Reservasi Baru) */}
-            <div className="p-3.5 bg-white rounded-xl border border-[#e9edef] shadow-2xs space-y-3">
+            <div className="p-3.5 bg-surface rounded-xl border border-divider shadow-2xs space-y-3">
               <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2 text-[#008069] font-bold text-xs">
+                <div className="flex items-center space-x-2 text-accent font-bold text-xs">
                   <Baby size={14} />
                   <span>Layanan & Pasien</span>
                 </div>
@@ -693,8 +693,8 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                       onClick={() => setCategory(cat)}
                       className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition ${
                         category === cat
-                          ? 'bg-[#008069] text-white shadow-2xs'
-                          : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
+                          ? 'bg-accent text-accent-ink shadow-2xs'
+                          : 'bg-fill-1 text-ink-2 hover:bg-fill-2'
                       }`}
                     >
                       {cat === 'BABY' ? 'Bayi & Kids' : cat === 'MOMS' ? 'Moms Saja' : 'Baby & Moms'}
@@ -706,36 +706,36 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
               {/* Service Multi-Select Search Dropdown matching Buat Reservasi */}
               <div className="space-y-2">
                 <div className="relative">
-                  <label className="block text-[11px] font-semibold text-[#54656f] mb-1">
+                  <label className="block text-[11px] font-semibold text-ink-2 mb-1">
                     Pilih Layanan / Treatment *
                   </label>
                   <button
                     type="button"
                     onClick={() => setIsServiceDropdownOpen(!isServiceDropdownOpen)}
-                    className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs flex justify-between items-center text-[#111b21] hover:border-[#008069] transition shadow-xs cursor-pointer"
+                    className="w-full p-2.5 bg-surface border border-divider rounded-xl text-xs flex justify-between items-center text-ink hover:border-accent transition shadow-xs cursor-pointer"
                   >
-                    <span className="font-semibold text-[#008069]">
+                    <span className="font-semibold text-accent">
                       {selectedTreatments.length === 0
                         ? '+ Pilih Layanan dari Katalog'
                         : `${selectedTreatments.length} treatment dipilih`}
                     </span>
-                    <ChevronDown size={14} className="text-[#8696a0]" />
+                    <ChevronDown size={14} className="text-ink-3" />
                   </button>
 
                   {isServiceDropdownOpen && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#d1d7db] rounded-2xl shadow-2xl z-40 p-2.5 space-y-2 max-h-72 flex flex-col">
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-surface border border-divider rounded-2xl shadow-2xl z-40 p-2.5 space-y-2 max-h-72 flex flex-col">
                       <div className="relative shrink-0">
                         <input
                           type="text"
                           value={serviceSearch}
                           onChange={(e) => setServiceSearch(e.target.value)}
                           placeholder="Cari layanan..."
-                          className="w-full pl-8 pr-3 py-1.5 bg-[#f0f2f5] border border-[#d1d7db] rounded-lg text-xs text-[#111b21] focus:outline-none focus:border-[#008069]"
+                          className="w-full pl-8 pr-3 py-1.5 bg-fill-1 border border-divider rounded-lg text-xs text-ink focus:outline-none focus:border-accent"
                           autoFocus
                         />
-                        <span className="absolute left-2.5 top-2 text-[#8696a0]">🔍</span>
+                        <span className="absolute left-2.5 top-2 text-ink-3">🔍</span>
                       </div>
-                      <div className="divide-y divide-[#e9edef] overflow-y-auto flex-1 pr-1">
+                      <div className="divide-y divide-divider overflow-y-auto flex-1 pr-1">
                         {filteredServices.map((srv) => {
                           const count = selectedTreatments.filter((t) => t.serviceId === String(srv.id || srv.name)).length;
                           const isAddon = isAddonServiceLocal(srv);
@@ -743,7 +743,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                             <div
                               key={String(srv.id || srv.name)}
                               className={`p-2 rounded-lg flex items-center justify-between ${
-                                count > 0 ? 'bg-[#e8f5f2]/70' : ''
+                                count > 0 ? 'bg-accent-soft/70' : ''
                               }`}
                             >
                               <div className="min-w-0 pr-2">
@@ -751,15 +751,15 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                                   <span className="font-bold text-xs truncate">{srv.name}</span>
                                   <span
                                     className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
-                                      isAddon ? 'bg-amber-100 text-amber-800' : 'bg-[#f0f2f5] text-[#54656f]'
+                                      isAddon ? 'bg-warning-soft text-warning' : 'bg-fill-1 text-ink-2'
                                     }`}
                                   >
                                     {isAddon ? 'Add-on' : srv.category}
                                   </span>
                                 </div>
-                                <div className="text-[10px] text-[#667781]">
+                                <div className="text-[10px] text-ink-3">
                                   Durasi {(srv as any).durationMinutes || 60}m •{' '}
-                                  <span className="font-bold text-[#008069]">Rp {formatRp(getServicePrice(srv))}</span>
+                                  <span className="font-bold text-accent">Rp {formatRp(getServicePrice(srv))}</span>
                                 </div>
                               </div>
                               <div className="shrink-0">
@@ -767,24 +767,24 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                                   <button
                                     type="button"
                                     onClick={() => handleAddServiceInstance(srv)}
-                                    className="px-2.5 py-1 rounded-lg bg-white border border-[#008069] text-[#008069] text-xs font-bold cursor-pointer hover:bg-[#e8f5f2]"
+                                    className="px-2.5 py-1 rounded-lg bg-surface border border-accent text-accent text-xs font-bold cursor-pointer hover:bg-accent-soft"
                                   >
                                     + Pilih
                                   </button>
                                 ) : (
-                                  <div className="flex items-center gap-1 bg-white border border-[#c2e7e0] rounded-lg p-0.5">
+                                  <div className="flex items-center gap-1 bg-surface border border-divider rounded-lg p-0.5">
                                     <button
                                       type="button"
                                       onClick={() => handleRemoveLastServiceInstance(String(srv.id || srv.name))}
-                                      className="w-6 h-6 rounded bg-[#f0f2f5] flex items-center justify-center cursor-pointer hover:bg-[#e9edef]"
+                                      className="w-6 h-6 rounded bg-fill-1 flex items-center justify-center cursor-pointer hover:bg-fill-2"
                                     >
                                       <Minus size={11} />
                                     </button>
-                                    <span className="w-5 text-center font-extrabold text-xs text-[#008069]">{count}</span>
+                                    <span className="w-5 text-center font-extrabold text-xs text-accent">{count}</span>
                                     <button
                                       type="button"
                                       onClick={() => handleAddServiceInstance(srv)}
-                                      className="w-6 h-6 rounded bg-[#008069] text-white flex items-center justify-center cursor-pointer hover:bg-[#00a884]"
+                                      className="w-6 h-6 rounded bg-accent text-accent-ink flex items-center justify-center cursor-pointer hover:bg-accent-hover"
                                     >
                                       <Plus size={11} />
                                     </button>
@@ -796,11 +796,11 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                         })}
                       </div>
                       <div className="pt-2 border-t flex justify-between items-center shrink-0">
-                        <span className="text-[11px] font-semibold text-[#008069]">✓ {selectedTreatments.length} terpilih</span>
+                        <span className="text-[11px] font-semibold text-accent">✓ {selectedTreatments.length} terpilih</span>
                         <button
                           type="button"
                           onClick={() => setIsServiceDropdownOpen(false)}
-                          className="px-3.5 py-1.5 bg-[#008069] text-white rounded-lg text-xs font-bold cursor-pointer hover:bg-[#00a884]"
+                          className="px-3.5 py-1.5 bg-accent text-accent-ink rounded-lg text-xs font-bold cursor-pointer hover:bg-accent-hover"
                         >
                           Selesai
                         </button>
@@ -810,34 +810,34 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                 </div>
 
                 {selectedTreatments.length > 0 && (
-                  <div className="space-y-1.5 p-3 bg-[#f8fafc] border rounded-xl">
+                  <div className="space-y-1.5 p-3 bg-surface-2 border rounded-xl">
                     {selectedTreatments.map((t, idx) => (
-                      <div key={t.instanceId} className="p-2.5 bg-white border rounded-xl text-xs flex justify-between items-center shadow-2xs">
+                      <div key={t.instanceId} className="p-2.5 bg-surface border rounded-xl text-xs flex justify-between items-center shadow-2xs">
                         <span>
                           <b>#{idx + 1}</b> {t.name}{' '}
                           <span
                             className={`ml-1 px-1.5 py-0.2 rounded text-[9px] font-bold ${
-                              t.isAddon ? 'bg-amber-100 text-amber-800' : 'bg-[#e8f5f2] text-[#008069]'
+                              t.isAddon ? 'bg-warning-soft text-warning' : 'bg-accent-soft text-accent'
                             }`}
                           >
                             {t.isAddon ? 'Add-on' : 'Utama'}
                           </span>{' '}
-                          <span className="text-[#008069] font-bold ml-1">Rp {formatRp(t.price)}</span>
+                          <span className="text-accent font-bold ml-1">Rp {formatRp(t.price)}</span>
                         </span>
                         <button
                           type="button"
                           onClick={() => handleRemoveTreatment(t.instanceId)}
-                          className="p-1 text-[#8696a0] hover:text-rose-600 cursor-pointer transition"
+                          className="p-1 text-ink-3 hover:text-danger cursor-pointer transition"
                         >
                           <Trash2 size={13} />
                         </button>
                       </div>
                     ))}
-                    <div className="text-xs text-[#54656f] font-mono pt-1">
+                    <div className="text-xs text-ink-2 font-mono pt-1">
                       Subtotal {selectedTreatments.length} layanan:{' '}
-                      <b className="text-[#111b21]">Rp {formatRp(selectedTreatments.reduce((s, t) => s + Number(t.price || 0), 0))}</b>{' '}
+                      <b className="text-ink">Rp {formatRp(selectedTreatments.reduce((s, t) => s + Number(t.price || 0), 0))}</b>{' '}
                       {category === 'BUNDLE' && (
-                        <span className="ml-2 px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-bold">
+                        <span className="ml-2 px-2 py-0.5 bg-success-soft text-success rounded-full text-[10px] font-bold">
                           BUNDLE
                         </span>
                       )}
@@ -847,29 +847,29 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
 
                 {/* Data Anak — 1:1 dengan Buat Reservasi Baru */}
                 {(category === 'BABY' || category === 'BUNDLE') && (
-                  <div className="space-y-2 p-3 bg-[#f8fafc] border rounded-xl">
+                  <div className="space-y-2 p-3 bg-surface-2 border rounded-xl">
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-[#008069]">Data Anak / Bayi ({babies.length})</span>
+                      <span className="text-[11px] font-bold text-accent">Data Anak / Bayi ({babies.length})</span>
                       <button
                         type="button"
                         onClick={() => setBabies([...babies, { name: childName || '', ageText: childAge || '' }])}
-                        className="px-2.5 py-1 rounded-lg bg-white border text-[11px] font-bold flex items-center gap-1 cursor-pointer hover:bg-[#f0f2f5]"
+                        className="px-2.5 py-1 rounded-lg bg-surface border text-[11px] font-bold flex items-center gap-1 cursor-pointer hover:bg-fill-1"
                       >
                         <Plus size={12} />
                         <span>+ Tambah Anak</span>
                       </button>
                     </div>
                     {babies.length === 0 ? (
-                      <p className="text-[11px] text-[#8696a0] italic">Belum ada data anak (opsional jika Moms saja).</p>
+                      <p className="text-[11px] text-ink-3 italic">Belum ada data anak (opsional jika Moms saja).</p>
                     ) : (
                       babies.map((b, idx) => (
-                        <div key={idx} className="p-2.5 bg-white border rounded-xl space-y-2 shadow-2xs">
+                        <div key={idx} className="p-2.5 bg-surface border rounded-xl space-y-2 shadow-2xs">
                           <div className="flex justify-between items-center">
                             <span className="text-xs font-bold">Anak #{idx + 1}</span>
                             <button
                               type="button"
                               onClick={() => setBabies(babies.filter((_, i) => i !== idx))}
-                              className="p-1 text-[#8696a0] hover:text-rose-600 cursor-pointer"
+                              className="p-1 text-ink-3 hover:text-danger cursor-pointer"
                             >
                               <Trash2 size={13} />
                             </button>
@@ -884,7 +884,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                                 setChildName(n[0]?.name || '');
                               }}
                               placeholder="Nama anak"
-                              className="p-2 border rounded-lg text-xs text-[#111b21] bg-white focus:outline-none focus:border-[#008069]"
+                              className="p-2 border rounded-lg text-xs text-ink bg-surface focus:outline-none focus:border-accent"
                             />
                             <input
                               value={b.ageText}
@@ -895,7 +895,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                                 setChildAge(n[0]?.ageText || '');
                               }}
                               placeholder="Usia (8 bulan)"
-                              className="p-2 border rounded-lg text-xs text-[#111b21] bg-white focus:outline-none focus:border-[#008069]"
+                              className="p-2 border rounded-lg text-xs text-ink bg-surface focus:outline-none focus:border-accent"
                             />
                           </div>
                         </div>
@@ -907,35 +907,35 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
             </div>
 
             {/* Section 4: Ongkir otomatis dari jarak + Potongan Promo Ongkir + Diskon Treatment */}
-            <div className="p-3.5 bg-white rounded-xl border border-[#e9edef] shadow-2xs space-y-3">
-              <div className="flex items-center gap-2 text-[#008069] font-bold text-xs">
+            <div className="p-3.5 bg-surface rounded-xl border border-divider shadow-2xs space-y-3">
+              <div className="flex items-center gap-2 text-accent font-bold text-xs">
                 <Truck size={14} />
                 <span>Ongkir & Promo dari Jarak</span>
-                <span className="ml-auto text-[11px] font-mono text-[#111b21]">{formatKm(distanceKm)} km</span>
-                <span className="text-xs font-bold text-[#111b21]">
+                <span className="ml-auto text-[11px] font-mono text-ink">{formatKm(distanceKm)} km</span>
+                <span className="text-xs font-bold text-ink">
                   Net: {Number(netOngkir) === 0 ? 'Free' : `Rp ${formatRp(netOngkir)}`}
                 </span>
               </div>
               {ongkirOutOfCoverage && (
-                <div className="mt-2 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-[10px] font-semibold text-amber-700">
+                <div className="mt-2 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-warning-soft border border-warning-line text-[10px] font-semibold text-warning">
                   <AlertTriangle size={12} />
                   <span>Jarak melebihi jangkauan tier ongkir terjauh — ongkir otomatis 0. Mohon konfirmasi manual.</span>
                 </div>
               )}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <div>
-                  <label className="block text-[11px] font-semibold text-[#54656f] mb-1">Jarak (km)</label>
+                  <label className="block text-[11px] font-semibold text-ink-2 mb-1">Jarak (km)</label>
                   <input
                     type="text"
                     inputMode="decimal"
                     value={distanceKmInput}
                     onChange={(e) => setDistanceKmInput(e.target.value)}
                     placeholder="0"
-                    className="w-full px-3 py-1.5 bg-[#f8fafc] dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] rounded-lg text-xs font-semibold text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] dark:focus:border-[#00a884]"
+                    className="w-full px-3 py-1.5 bg-surface-2 dark:bg-fill-1 border border-divider rounded-lg text-xs font-semibold text-ink focus:outline-none focus:border-accent"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold text-[#54656f] mb-1">Ongkir Normal (Rp)</label>
+                  <label className="block text-[11px] font-semibold text-ink-2 mb-1">Ongkir Normal (Rp)</label>
                   <input
                     type="number"
                     value={ongkir}
@@ -943,11 +943,11 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                     step={5000}
                     min={0}
                     placeholder="0"
-                    className="w-full px-3 py-1.5 bg-[#f8fafc] dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] rounded-lg text-xs font-semibold text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] dark:focus:border-[#00a884]"
+                    className="w-full px-3 py-1.5 bg-surface-2 dark:bg-fill-1 border border-divider rounded-lg text-xs font-semibold text-ink focus:outline-none focus:border-accent"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold text-rose-600 mb-1 flex items-center gap-1">
+                  <label className="block text-[11px] font-semibold text-danger mb-1 flex items-center gap-1">
                     <Percent size={11} />
                     <span>Promo Ongkir (Rp)</span>
                   </label>
@@ -958,20 +958,20 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                     step={5000}
                     min={0}
                     placeholder="0"
-                    className="w-full px-3 py-1.5 bg-rose-50/50 border border-rose-200 rounded-lg text-xs font-bold text-rose-600 focus:outline-none focus:border-rose-500"
+                    className="w-full px-3 py-1.5 bg-danger-soft/50 border border-danger-line rounded-lg text-xs font-bold text-danger focus:outline-none focus:border-danger"
                   />
                 </div>
               </div>
 
               {/* Quick Ongkir & Promo Shortcuts */}
-              <div className="flex flex-wrap items-center justify-between gap-1.5 pt-1 border-t border-[#e9edef]/80 text-[10px]">
+              <div className="flex flex-wrap items-center justify-between gap-1.5 pt-1 border-t border-divider/80 text-[10px]">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[#8696a0] font-semibold">Promo Ongkir:</span>
+                  <span className="text-ink-3 font-semibold">Promo Ongkir:</span>
                   <button
                     type="button"
                     onClick={() => setPromoOngkir(0)}
                     className={`px-2 py-0.5 rounded-md font-semibold border transition cursor-pointer ${
-                      Number(promoOngkir) === 0 ? 'bg-gray-700 text-white border-gray-700' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                      Number(promoOngkir) === 0 ? 'bg-ink-2 text-surface border-ink-2' : 'bg-surface text-ink border-divider hover:bg-fill-1'
                     }`}
                   >
                     0
@@ -980,7 +980,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                     type="button"
                     onClick={() => setPromoOngkir(5000)}
                     className={`px-2 py-0.5 rounded-md font-bold border transition cursor-pointer ${
-                      Number(promoOngkir) === 5000 ? 'bg-rose-600 text-white border-rose-600' : 'bg-white text-rose-700 border-rose-200 hover:bg-rose-50'
+                      Number(promoOngkir) === 5000 ? 'bg-danger text-on-solid border-danger' : 'bg-surface text-danger border-danger-line hover:bg-danger-soft'
                     }`}
                   >
                     -5.000
@@ -989,7 +989,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                     type="button"
                     onClick={() => setPromoOngkir(10000)}
                     className={`px-2 py-0.5 rounded-md font-bold border transition cursor-pointer ${
-                      Number(promoOngkir) === 10000 ? 'bg-rose-600 text-white border-rose-600' : 'bg-white text-rose-700 border-rose-200 hover:bg-rose-50'
+                      Number(promoOngkir) === 10000 ? 'bg-danger text-on-solid border-danger' : 'bg-surface text-danger border-danger-line hover:bg-danger-soft'
                     }`}
                   >
                     -10.000
@@ -997,14 +997,14 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                 </div>
 
                 <div className="flex items-center gap-1.5">
-                  <span className="text-rose-600 font-semibold">Diskon Treatment:</span>
+                  <span className="text-danger font-semibold">Diskon Treatment:</span>
                   {[0, 10, 15, 30, 50].map((p) => (
                     <button
                       key={p}
                       type="button"
                       onClick={() => setDiscountPct(p)}
                       className={`px-2 py-0.5 rounded-md font-semibold border transition cursor-pointer ${
-                        Number(discountPct) === p ? 'bg-rose-600 text-white border-rose-600' : 'bg-white border-rose-200 text-rose-700 hover:bg-rose-50'
+                        Number(discountPct) === p ? 'bg-danger text-on-solid border-danger' : 'bg-surface border-danger-line text-danger hover:bg-danger-soft'
                       }`}
                     >
                       {p === 0 ? '0%' : `${p}%`}
@@ -1013,7 +1013,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                 </div>
               </div>
               {Number(discountPct) > 0 && (
-                <div className="text-xs text-rose-600 font-mono">
+                <div className="text-xs text-danger font-mono">
                   Diskon {discountPct}% dari treatment = <b>- Rp {formatRp(discountAmount)}</b> (tidak potong ongkir)
                 </div>
               )}
@@ -1025,24 +1025,24 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
             id="inv-tab-preview"
             className={`${
               mobileTab === 'setting' ? 'hidden' : ''
-            } lg:!flex lg:col-span-5 p-4 sm:p-5 flex flex-col justify-between bg-[#efeae2]/40 dark:bg-[#0b141a] relative min-h-0 overflow-hidden`}
+            } lg:!flex lg:col-span-5 p-4 sm:p-5 flex flex-col justify-between bg-content/40 relative min-h-0 overflow-hidden`}
           >
             {/* Scrollable Preview Area */}
             <div className="flex-1 overflow-y-auto space-y-3 pr-1 max-h-[50vh] lg:max-h-[52vh]">
               <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-1.5 text-xs font-bold text-[#111b21] dark:text-[#e9edef]">
-                  <Eye size={14} className="text-[#008069]" />
+                <div className="flex items-center space-x-1.5 text-xs font-bold text-ink">
+                  <Eye size={14} className="text-accent" />
                   <span>Live Preview WhatsApp</span>
                 </div>
                 <button
                   type="button"
                   onClick={handleCopy}
-                  className="px-2.5 py-1 rounded-lg bg-white border border-[#d1d7db] text-[11px] font-semibold text-[#54656f] hover:bg-[#f0f2f5] hover:text-[#111b21] transition flex items-center space-x-1 shadow-2xs cursor-pointer"
+                  className="px-2.5 py-1 rounded-lg bg-surface border border-divider text-[11px] font-semibold text-ink-2 hover:bg-fill-1 hover:text-ink transition flex items-center space-x-1 shadow-2xs cursor-pointer"
                 >
                   {copied ? (
                     <>
-                      <Check size={12} className="text-emerald-600" />
-                      <span className="text-emerald-600 font-bold">Tersalin!</span>
+                      <Check size={12} className="text-success" />
+                      <span className="text-success font-bold">Tersalin!</span>
                     </>
                   ) : (
                     <>
@@ -1054,38 +1054,38 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
               </div>
 
               {/* WhatsApp Bubble Simulation */}
-              <div className="p-4 bg-white dark:bg-[#202c33] rounded-2xl rounded-tr-none shadow-md border border-[#e2ddd5] dark:border-[#2a3942] font-mono text-xs text-[#111b21] dark:text-[#e9edef] leading-relaxed whitespace-pre-wrap select-text relative">
+              <div className="p-4 bg-surface rounded-2xl rounded-tr-none shadow-md border border-divider font-mono text-xs text-ink leading-relaxed whitespace-pre-wrap select-text relative">
                 {generatedInvoiceText}
-                <div className="text-[10px] text-[#8696a0] text-right mt-2 flex items-center justify-end space-x-1">
+                <div className="text-[10px] text-ink-3 text-right mt-2 flex items-center justify-end space-x-1">
                   <span>
                     {new Date()
                       .toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
                       .replace(':', '.')}
                   </span>
-                  <Check size={12} className="text-sky-500" />
+                  <Check size={12} className="text-info" />
                 </div>
               </div>
             </div>
 
             {/* Pinned Total Summary Card */}
-            <div className="mt-3 p-3 bg-white dark:bg-[#202c33] rounded-xl border border-[#d1d7db] dark:border-[#374248] shadow-xs space-y-1.5 shrink-0">
-              <div className="flex justify-between text-xs text-[#667781]">
+            <div className="mt-3 p-3 bg-surface rounded-xl border border-divider shadow-xs space-y-1.5 shrink-0">
+              <div className="flex justify-between text-xs text-ink-3">
                 <span>Harga Treatment:</span>
-                <span className="font-semibold text-[#111b21] dark:text-[#e9edef]">Rp {formatRp(treatmentPrice)}</span>
+                <span className="font-semibold text-ink">Rp {formatRp(treatmentPrice)}</span>
               </div>
-              <div className="flex justify-between text-xs text-[#667781]">
+              <div className="flex justify-between text-xs text-ink-3">
                 <span>Ongkos Kirim:</span>
-                <span className="font-semibold text-[#111b21] dark:text-[#e9edef]">
+                <span className="font-semibold text-ink">
                   {Number(ongkir) === 0 ? 'Free' : `Rp ${formatRp(ongkir)}`}
                 </span>
               </div>
               {Number(discountAmount) > 0 && (
-                <div className="flex justify-between text-xs text-rose-600">
+                <div className="flex justify-between text-xs text-danger">
                   <span>Potongan / Promo:</span>
                   <span className="font-semibold">- Rp {formatRp(discountAmount)}</span>
                 </div>
               )}
-              <div className="pt-1.5 border-t border-[#e9edef] flex justify-between text-sm font-bold text-[#008069]">
+              <div className="pt-1.5 border-t border-divider flex justify-between text-sm font-bold text-accent">
                 <span>Total Pembayaran:</span>
                 <span>Rp {formatRp(totalPrice)}</span>
               </div>
@@ -1094,10 +1094,10 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
         </div>
 
         {/* Modal Footer — Ramping, Ikonik, Aman Notch/Home Bar */}
-        <div className="px-4 py-2 sm:px-5 sm:py-2.5 bg-[#f0f2f5] dark:bg-[#111b21] border-t border-[#e9edef] dark:border-[#2a3942] flex items-center justify-between gap-3 shrink-0 z-10 sticky bottom-0 pb-[calc(0.6rem+env(safe-area-inset-bottom,0px))]">
+        <div className="px-4 py-2 sm:px-5 sm:py-2.5 bg-fill-1 dark:bg-surface border-t border-divider flex items-center justify-between gap-3 shrink-0 z-10 sticky bottom-0 pb-[calc(0.6rem+env(safe-area-inset-bottom,0px))]">
           {/* Total Tagihan */}
-          <div className="text-xs text-[#54656f] dark:text-[#aebac1]">
-            Total: <strong className="text-[#008069] font-bold text-sm sm:text-base">Rp {formatRp(totalPrice)}</strong>
+          <div className="text-xs text-ink-2">
+            Total: <strong className="text-accent font-bold text-sm sm:text-base">Rp {formatRp(totalPrice)}</strong>
           </div>
 
           {/* Deretan Tombol Ikon dengan Floating Press Label */}
@@ -1108,13 +1108,13 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                 type="button"
                 onClick={() => { showButtonTip('Draf Disimpan'); saveDraftManually(); }}
                 onTouchStart={() => showButtonTip('Simpan Draf')}
-                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] text-amber-700 dark:text-[#f59e0b] hover:bg-amber-50 dark:hover:bg-[#2a3942] active:scale-90 transition flex items-center justify-center shadow-2xs cursor-pointer"
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-surface border border-divider text-amber-700 dark:text-warning hover:bg-amber-50 dark:hover:bg-fill-2 active:scale-90 transition flex items-center justify-center shadow-2xs cursor-pointer"
                 title="Simpan Draf"
               >
                 <BookmarkPlus size={18} />
               </button>
               {activeButtonTip === 'Simpan Draf' && (
-                <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[#111b21] text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-lg whitespace-nowrap pointer-events-none animate-in fade-in zoom-in-95">
+                <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-ink text-surface text-[10px] font-bold px-2 py-0.5 rounded-md shadow-lg whitespace-nowrap pointer-events-none animate-in fade-in zoom-in-95">
                   Simpan Draf
                 </div>
               )}
@@ -1126,13 +1126,13 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                 type="button"
                 onClick={onClose}
                 onTouchStart={() => showButtonTip('Batal')}
-                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white border border-[#d1d7db] text-[#54656f] hover:bg-[#f8fafc] hover:text-[#111b21] active:scale-90 transition flex items-center justify-center shadow-2xs cursor-pointer"
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-surface border border-divider text-ink-2 hover:bg-surface-2 hover:text-ink active:scale-90 transition flex items-center justify-center shadow-2xs cursor-pointer"
                 title="Batal"
               >
                 <X size={18} />
               </button>
               {activeButtonTip === 'Batal' && (
-                <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[#111b21] text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-lg whitespace-nowrap pointer-events-none animate-in fade-in zoom-in-95">
+                <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-ink text-surface text-[10px] font-bold px-2 py-0.5 rounded-md shadow-lg whitespace-nowrap pointer-events-none animate-in fade-in zoom-in-95">
                   Batal
                 </div>
               )}
@@ -1144,13 +1144,13 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                 type="button"
                 onClick={() => { showButtonTip(copied ? 'Tersalin!' : 'Salin Format'); handleCopy(); }}
                 onTouchStart={() => showButtonTip('Salin Format')}
-                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#e8f5f2] border border-[#c2e7e0] text-[#008069] hover:bg-[#c2e7e0] active:scale-90 transition flex items-center justify-center shadow-2xs cursor-pointer"
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-accent-soft border border-divider text-accent hover:bg-accent-soft active:scale-90 transition flex items-center justify-center shadow-2xs cursor-pointer"
                 title="Salin Format Invoice"
               >
-                {copied ? <Check size={18} className="text-emerald-600" /> : <Copy size={18} />}
+                {copied ? <Check size={18} className="text-success" /> : <Copy size={18} />}
               </button>
               {activeButtonTip === 'Salin Format' && (
-                <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[#111b21] text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-lg whitespace-nowrap pointer-events-none animate-in fade-in zoom-in-95">
+                <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-ink text-surface text-[10px] font-bold px-2 py-0.5 rounded-md shadow-lg whitespace-nowrap pointer-events-none animate-in fade-in zoom-in-95">
                   Salin Format
                 </div>
               )}
@@ -1162,14 +1162,14 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                 type="button"
                 onClick={() => { showButtonTip('Mengirim ke Chat...'); handleInsert(); }}
                 onTouchStart={() => showButtonTip('Masukkan ke Chat WA')}
-                className="h-9 sm:h-10 px-3 sm:px-4 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white active:scale-95 transition flex items-center space-x-1.5 shadow-md cursor-pointer"
+                className="h-9 sm:h-10 px-3 sm:px-4 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink active:scale-95 transition flex items-center space-x-1.5 shadow-md cursor-pointer"
                 title="Masukkan ke Chat WhatsApp"
               >
                 <Send size={16} />
                 <span className="text-xs font-bold hidden xs:inline sm:inline">Kirim ke WA</span>
               </button>
               {activeButtonTip === 'Masukkan ke Chat WA' && (
-                <div className="absolute -top-8 right-0 bg-[#111b21] text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-lg whitespace-nowrap pointer-events-none animate-in fade-in zoom-in-95">
+                <div className="absolute -top-8 right-0 bg-ink text-surface text-[10px] font-bold px-2 py-0.5 rounded-md shadow-lg whitespace-nowrap pointer-events-none animate-in fade-in zoom-in-95">
                   Masukkan ke Chat WA
                 </div>
               )}

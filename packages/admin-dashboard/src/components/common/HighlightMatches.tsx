@@ -24,7 +24,7 @@ export const HighlightMatches: React.FC<{ text: string; query: string; className
       const testRe = new RegExp(`^${escaped}$`, 'i');
       return parts.map((part, i) =>
         testRe.test(part) ? (
-          <mark key={i} className={className || 'bg-amber-300 text-amber-950 font-bold px-0.5 rounded'}>
+          <mark key={i} className={className || 'bg-warning text-warning font-bold px-0.5 rounded'}>
             {part}
           </mark>
         ) : (

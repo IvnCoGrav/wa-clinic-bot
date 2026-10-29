@@ -739,7 +739,7 @@ export const Settings: React.FC = () => {
   if (subTab === 'cs') {
     return (
       <div className="space-y-4">
-        <button onClick={() => setSearchParams({}, { replace: true })} className="text-xs text-[#008069] dark:text-[#00a884] hover:underline flex items-center gap-1">
+        <button onClick={() => setSearchParams({}, { replace: true })} className="text-xs text-accent hover:underline flex items-center gap-1">
           ← Kembali ke Settings
         </button>
         <CustomerService />
@@ -749,7 +749,7 @@ export const Settings: React.FC = () => {
   if (subTab === 'telegram') {
     return (
       <div className="space-y-4">
-        <button onClick={() => setSearchParams({}, { replace: true })} className="text-xs text-[#008069] dark:text-[#00a884] hover:underline flex items-center gap-1">
+        <button onClick={() => setSearchParams({}, { replace: true })} className="text-xs text-accent hover:underline flex items-center gap-1">
           ← Kembali ke Settings
         </button>
         <TelegramIntegration />
@@ -760,23 +760,23 @@ export const Settings: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header & Category Navigation Tabs */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#e9edef] dark:border-[#2a3942] pb-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-divider pb-4">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
-            <SettingsIcon className="text-[#008069] dark:text-[#00a884]" size={22} />
+          <h2 className="text-xl font-bold tracking-tight text-ink flex items-center space-x-2">
+            <SettingsIcon className="text-accent" size={22} />
             <span>Operational Settings</span>
           </h2>
-          <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">Konfigurasi WhatsApp provider, AI router, Meta Pixel/CAPI, dan operasional bot</p>
+          <p className="text-xs text-ink-3 mt-0.5">Konfigurasi WhatsApp provider, AI router, Meta Pixel/CAPI, dan operasional bot</p>
         </div>
 
         {/* Category Filter Tabs */}
-        <div className="flex flex-wrap gap-1.5 p-1 bg-[#f0f2f5] dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl w-full md:w-auto">
+        <div className="flex flex-wrap gap-1.5 p-1 bg-fill-1 dark:bg-surface border border-divider rounded-2xl w-full md:w-auto">
           <button
             onClick={() => setActiveCategory('ALL')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 ${
               activeCategory === 'ALL'
-                ? 'bg-[#008069] text-white shadow-xs'
-                : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-white/60 dark:hover:bg-[#202c33]/60'
+                ? 'bg-accent text-accent-ink shadow-xs'
+                : 'text-ink-2 hover:text-ink dark:hover:text-ink hover:bg-white/60 dark:hover:bg-fill-1/60'
             }`}
           >
             <Layers size={13} />
@@ -786,8 +786,8 @@ export const Settings: React.FC = () => {
             onClick={() => setActiveCategory('CHANNEL_AI')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 ${
               activeCategory === 'CHANNEL_AI'
-                ? 'bg-[#008069] text-white shadow-xs'
-                : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-white/60 dark:hover:bg-[#202c33]/60'
+                ? 'bg-accent text-accent-ink shadow-xs'
+                : 'text-ink-2 hover:text-ink dark:hover:text-ink hover:bg-white/60 dark:hover:bg-fill-1/60'
             }`}
           >
             <MessageCircle size={13} />
@@ -797,8 +797,8 @@ export const Settings: React.FC = () => {
             onClick={() => setActiveCategory('META_MARKETING')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 ${
               activeCategory === 'META_MARKETING'
-                ? 'bg-[#008069] text-white shadow-xs'
-                : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-white/60 dark:hover:bg-[#202c33]/60'
+                ? 'bg-accent text-accent-ink shadow-xs'
+                : 'text-ink-2 hover:text-ink dark:hover:text-ink hover:bg-white/60 dark:hover:bg-fill-1/60'
             }`}
           >
             <BarChart3 size={13} />
@@ -808,8 +808,8 @@ export const Settings: React.FC = () => {
             onClick={() => setActiveCategory('INTEGRATION_REPORTS')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 ${
               activeCategory === 'INTEGRATION_REPORTS'
-                ? 'bg-[#008069] text-white shadow-xs'
-                : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-white/60 dark:hover:bg-[#202c33]/60'
+                ? 'bg-accent text-accent-ink shadow-xs'
+                : 'text-ink-2 hover:text-ink dark:hover:text-ink hover:bg-white/60 dark:hover:bg-fill-1/60'
             }`}
           >
             <Cloud size={13} />
@@ -819,8 +819,8 @@ export const Settings: React.FC = () => {
             onClick={() => setActiveCategory('APP_OPS')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 ${
               activeCategory === 'APP_OPS'
-                ? 'bg-[#008069] text-white shadow-xs'
-                : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-white/60 dark:hover:bg-[#202c33]/60'
+                ? 'bg-accent text-accent-ink shadow-xs'
+                : 'text-ink-2 hover:text-ink dark:hover:text-ink hover:bg-white/60 dark:hover:bg-fill-1/60'
             }`}
           >
             <Smartphone size={13} />
@@ -887,18 +887,18 @@ export const Settings: React.FC = () => {
           />
 
           {/* Global Bot ON/OFF Toggle */}
-          <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-3 shadow-xs">
-            <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
-              <ShieldCheck className="text-[#008069]" size={16} />
+          <div className="bg-surface border border-divider rounded-2xl p-5 space-y-3 shadow-xs">
+            <h3 className="text-sm font-bold text-ink flex items-center space-x-2">
+              <ShieldCheck className="text-accent" size={16} />
               <span>Global Chatbot Toggle</span>
             </h3>
-            <p className="text-xs text-[#667781] leading-relaxed">
+            <p className="text-xs text-ink-3 leading-relaxed">
               Aktifkan atau nonaktifkan bot AI secara global. Saat dinonaktifkan, semua pesan WhatsApp masuk akan otomatis dialihkan ke antrian manusia (Staff / Bidan).
             </p>
-            <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#f8fafc] dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] mt-2">
+            <div className="flex items-center justify-between p-3.5 rounded-xl bg-surface-2 border border-divider mt-2">
               <div>
-                <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] block">AI Auto-Responder Bot</span>
-                <span className="text-[11px] text-[#667781] dark:text-[#8696a0]">Respon otomatis pesan baru oleh bot</span>
+                <span className="text-xs font-bold text-ink block">AI Auto-Responder Bot</span>
+                <span className="text-[11px] text-ink-3">Respon otomatis pesan baru oleh bot</span>
               </div>
               <ToggleSwitch
                 checked={globalBotActive}
@@ -954,15 +954,15 @@ export const Settings: React.FC = () => {
           <PricelistPromoPanel />
 
           {/* Gateway: CTA & Greetings WA (konsolidasi dari rute /admin/customer-service) */}
-          <div className="bg-white border border-[#e9edef] rounded-2xl p-5 shadow-xs">
+          <div className="bg-surface border border-divider rounded-2xl p-5 shadow-xs">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-start gap-3">
-                <div className="p-2.5 rounded-xl bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0]">
+                <div className="p-2.5 rounded-xl bg-accent-soft text-accent border border-divider">
                   <MessageCircle size={18} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-[#111b21]">Template Greetings &amp; Format Tracking CTA</h3>
-                  <p className="text-xs text-[#667781] mt-0.5 leading-relaxed">
+                  <h3 className="text-sm font-bold text-ink">Template Greetings &amp; Format Tracking CTA</h3>
+                  <p className="text-xs text-ink-3 mt-0.5 leading-relaxed">
                     Kelola teks sapaan WhatsApp pembuka, format pelacakan Promo [%ID%], dan pembuat link CTA iklan otomatis.
                   </p>
                 </div>
@@ -970,7 +970,7 @@ export const Settings: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setSearchParams({ tab: 'cs' }, { replace: true })}
-                className="min-h-[36px] px-4 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-[#008069]/40 transition-all text-xs font-bold text-white shadow-xs flex items-center gap-1.5 shrink-0"
+                className="min-h-[36px] px-4 py-2 rounded-xl bg-accent hover:bg-accent active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-accent/40 transition-all text-xs font-bold text-white shadow-xs flex items-center gap-1.5 shrink-0"
               >
                 <span>Buka Pengaturan Greetings &amp; CTA</span>
                 <ArrowRight size={14} />
@@ -1007,74 +1007,74 @@ export const Settings: React.FC = () => {
             <InstallAppPanel />
 
             {/* Coordinate picker & Branch Map */}
-            <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-3 shadow-xs">
-              <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
-                <MapPin className="text-[#008069]" size={16} />
+            <div className="bg-surface border border-divider rounded-2xl p-5 space-y-3 shadow-xs">
+              <h3 className="text-sm font-bold text-ink flex items-center space-x-2">
+                <MapPin className="text-accent" size={16} />
                 <span>Branch Coordinate Picker (Map)</span>
               </h3>
 
               {/* Out of scope Alert banner */}
-              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 flex items-start space-x-2 text-xs">
-                <AlertTriangle className="flex-shrink-0 mt-0.5 text-amber-600" size={14} />
+              <div className="p-3 rounded-xl bg-warning-soft border border-warning-line text-warning flex items-start space-x-2 text-xs">
+                <AlertTriangle className="flex-shrink-0 mt-0.5 text-warning" size={14} />
                 <div>
                   <p className="font-bold">UI Demo Only (Belum Tersambung Backend Tier 2.4)</p>
-                  <p className="mt-0.5 text-[11px] text-amber-700">
+                  <p className="mt-0.5 text-[11px] text-warning">
                     Data koordinat cabang yang diinput di sini hanya tersimpan lokal di browser.
                   </p>
                 </div>
               </div>
 
-              <p className="text-xs text-[#667781]">
+              <p className="text-xs text-ink-3">
                 Atur titik lokasi GPS cabang klinik untuk perhitungan estimasi jarak ongkir homecare.
               </p>
 
               <div className="space-y-3">
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-[#111b21]">Nama Cabang</label>
+                  <label className="text-[11px] font-bold text-ink">Nama Cabang</label>
                   <input
                     type="text"
                     value={branchName}
                     onChange={(e) => setBranchName(e.target.value)}
-                    className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+                    className="w-full p-2.5 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <label className="text-[11px] font-bold text-[#111b21]">Latitude</label>
+                    <label className="text-[11px] font-bold text-ink">Latitude</label>
                     <input
                       type="number"
                       step="0.0001"
                       value={lat}
                       onChange={(e) => setLat(parseFloat(e.target.value))}
-                      className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+                      className="w-full p-2.5 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[11px] font-bold text-[#111b21]">Longitude</label>
+                    <label className="text-[11px] font-bold text-ink">Longitude</label>
                     <input
                       type="number"
                       step="0.0001"
                       value={lng}
                       onChange={(e) => setLng(parseFloat(e.target.value))}
-                      className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+                      className="w-full p-2.5 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs"
                     />
                   </div>
                 </div>
 
                 {/* Simulated Map */}
-                <div className="h-36 rounded-xl bg-[#f8fafc] border border-[#e9edef] relative overflow-hidden flex items-center justify-center">
-                  <Map className="absolute text-[#d1d7db] w-full h-full opacity-30" />
+                <div className="h-36 rounded-xl bg-surface-2 border border-divider relative overflow-hidden flex items-center justify-center">
+                  <Map className="absolute text-strong w-full h-full opacity-30" />
                   <div className="relative text-center space-y-0.5">
-                    <MapPin className="mx-auto text-[#008069] animate-bounce" size={22} />
-                    <p className="text-xs text-[#111b21] font-semibold">{branchName}</p>
-                    <p className="text-[10px] text-[#8696a0]">[{lat}, {lng}]</p>
+                    <MapPin className="mx-auto text-accent animate-bounce" size={22} />
+                    <p className="text-xs text-ink font-semibold">{branchName}</p>
+                    <p className="text-[10px] text-ink-3">[{lat}, {lng}]</p>
                   </div>
                 </div>
 
                 <button
                   onClick={handleSaveBranch}
-                  className="px-3.5 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
+                  className="px-3.5 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
                 >
                   <Check size={13} />
                   <span>Simpan Koordinat Lokasi</span>
@@ -1086,22 +1086,22 @@ export const Settings: React.FC = () => {
           {/* Right column: Tiering Ongkir & Broadcast Engine */}
           <div className="space-y-6">
             {/* Delivery fee tiering */}
-            <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-3 shadow-xs">
+            <div className="bg-surface border border-divider rounded-2xl p-5 space-y-3 shadow-xs">
               <div className="flex justify-between items-center">
-                <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
-                  <Truck className="text-[#008069]" size={16} />
+                <h3 className="text-sm font-bold text-ink flex items-center space-x-2">
+                  <Truck className="text-accent" size={16} />
                   <span>Delivery Fee Tiering (Homecare)</span>
                 </h3>
                 <Link
                   to="/admin/delivery"
-                  className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] text-[11px] font-bold hover:bg-[#d0ece7] transition shadow-2xs"
+                  className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-accent-soft text-accent border border-divider text-[11px] font-bold hover:bg-accent-soft transition shadow-2xs"
                 >
                   <span>Editor Lengkap</span>
                   <ArrowRight size={11} />
                 </Link>
               </div>
 
-              <p className="text-xs text-[#667781] leading-relaxed">
+              <p className="text-xs text-ink-3 leading-relaxed">
                 Tentukan tarif biaya pengiriman normal &amp; potongan promo berdasarkan jarak rute.
               </p>
 
@@ -1109,7 +1109,7 @@ export const Settings: React.FC = () => {
                 {ongkirTiers.map((tier, idx) => (
                   <div key={tier.id} className="grid grid-cols-2 sm:grid-cols-5 gap-2 items-end">
                     <div className="space-y-1">
-                      <label className="text-[10px] text-[#667781] dark:text-[#8696a0] block uppercase font-bold">Max Dist (km)</label>
+                      <label className="text-[10px] text-ink-3 block uppercase font-bold">Max Dist (km)</label>
                       <input
                         type="number"
                         value={tier.maxDist}
@@ -1118,11 +1118,11 @@ export const Settings: React.FC = () => {
                           newTiers[idx].maxDist = parseFloat(e.target.value);
                           setOngkirTiers(newTiers);
                         }}
-                        className="w-full p-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+                        className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs"
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] text-[#667781] dark:text-[#8696a0] block uppercase font-bold">Tarif (Rp)</label>
+                      <label className="text-[10px] text-ink-3 block uppercase font-bold">Tarif (Rp)</label>
                       <input
                         type="number"
                         value={tier.fee}
@@ -1131,11 +1131,11 @@ export const Settings: React.FC = () => {
                           newTiers[idx].fee = parseInt(e.target.value);
                           setOngkirTiers(newTiers);
                         }}
-                        className="w-full p-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+                        className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs"
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] text-[#667781] dark:text-[#8696a0] block uppercase font-bold">Promo (Rp)</label>
+                      <label className="text-[10px] text-ink-3 block uppercase font-bold">Promo (Rp)</label>
                       <input
                         type="number"
                         value={tier.promoDiscount !== undefined ? tier.promoDiscount : 0}
@@ -1144,16 +1144,16 @@ export const Settings: React.FC = () => {
                           newTiers[idx].promoDiscount = parseInt(e.target.value) || 0;
                           setOngkirTiers(newTiers);
                         }}
-                        className="w-full p-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+                        className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs"
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] text-[#667781] dark:text-[#8696a0] block uppercase font-bold">Ongkir Jadi</label>
+                      <label className="text-[10px] text-ink-3 block uppercase font-bold">Ongkir Jadi</label>
                       <div
                         className={`w-full p-2 rounded-xl text-xs font-bold text-center shadow-xs ${
                           (tier.fee || 0) - (tier.promoDiscount || 0) <= 0
-                            ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
-                            : 'bg-[#e8f5f2] border border-[#c2e7e0] text-[#008069]'
+                            ? 'bg-success-soft border border-success-line text-success'
+                            : 'bg-accent-soft border border-divider text-accent'
                         }`}
                       >
                         {Math.max(0, (tier.fee || 0) - (tier.promoDiscount || 0)) === 0
@@ -1166,7 +1166,7 @@ export const Settings: React.FC = () => {
                     <div className="flex space-x-2 items-end pb-1">
                       <button
                         onClick={() => { setOngkirTiers(ongkirTiers.filter(t => t.id !== tier.id)); }}
-                        className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 text-rose-600 dark:text-[#f87171] hover:bg-rose-100 dark:hover:bg-rose-900/40 transition flex justify-center items-center shadow-xs"
+                        className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 text-rose-600 dark:text-danger hover:bg-rose-100 dark:hover:bg-rose-900/40 transition flex justify-center items-center shadow-xs"
                         title="Hapus Tier"
                       >
                         <Trash size={12} />
@@ -1178,7 +1178,7 @@ export const Settings: React.FC = () => {
                 <div className="pt-2 flex justify-between items-center">
                   <button
                     onClick={() => { setOngkirTiers([...ongkirTiers, { id: Date.now(), maxDist: 20, fee: 30000, promoDiscount: 5000 }]); }}
-                    className="px-3 py-1.5 bg-white dark:bg-[#202c33] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs font-semibold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-1 shadow-xs"
+                    className="px-3 py-1.5 bg-surface hover:bg-fill-1 border border-divider rounded-xl text-xs font-semibold text-ink flex items-center space-x-1 shadow-xs"
                   >
                     <Plus size={11} />
                     <span>Tambah Tier</span>
@@ -1186,7 +1186,7 @@ export const Settings: React.FC = () => {
 
                   <button
                     onClick={handleSaveOngkirTiers}
-                    className="px-3.5 py-1.5 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold transition flex items-center space-x-1 shadow-xs"
+                    className="px-3.5 py-1.5 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-semibold transition flex items-center space-x-1 shadow-xs"
                   >
                     <Check size={12} />
                     <span>Simpan Tiers</span>
@@ -1196,61 +1196,61 @@ export const Settings: React.FC = () => {
             </div>
 
             {/* Broadcast & Quiet Hours with Alert Banner */}
-            <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-4 shadow-xs">
+            <div className="bg-surface border border-divider rounded-2xl p-5 space-y-4 shadow-xs">
               {/* Out of scope Alert banner */}
-              <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 flex items-start space-x-2 text-xs">
-                <AlertTriangle className="flex-shrink-0 mt-0.5 text-amber-600" size={15} />
+              <div className="p-3.5 rounded-xl bg-warning-soft border border-warning-line text-warning flex items-start space-x-2 text-xs">
+                <AlertTriangle className="flex-shrink-0 mt-0.5 text-warning" size={15} />
                 <div>
                   <p className="font-bold">Broadcast &amp; Quiet Hours Engine</p>
-                  <p className="mt-0.5 text-[11px] text-amber-700">
+                  <p className="mt-0.5 text-[11px] text-warning">
                     Fitur broadcast campaign terjadwal saat ini bersifat antrian manual.
                   </p>
                 </div>
               </div>
 
               <div className="space-y-3">
-                <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
-                  <Volume2 className="text-[#008069]" size={16} />
+                <h3 className="text-sm font-bold text-ink flex items-center space-x-2">
+                  <Volume2 className="text-accent" size={16} />
                   <span>Broadcast Message Editor</span>
                 </h3>
 
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-[#111b21]">Broadcast Teks</label>
+                  <label className="text-[11px] font-bold text-ink">Broadcast Teks</label>
                   <textarea
                     rows={3}
                     value={broadcastText}
                     onChange={(e) => setBroadcastText(e.target.value)}
                     placeholder="Kirim promo bulanan ke pelanggan loyal..."
-                    className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] resize-none shadow-xs"
+                    className="w-full p-2.5 bg-surface border border-divider rounded-xl text-xs text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent resize-none shadow-xs"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <label className="text-[11px] font-bold text-[#111b21]">Random Delay (detik)</label>
+                    <label className="text-[11px] font-bold text-ink">Random Delay (detik)</label>
                     <input
                       type="number"
                       value={randomDelay}
                       onChange={(e) => setRandomDelay(parseInt(e.target.value) || 0)}
-                      className="w-full p-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+                      className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[11px] font-bold text-[#111b21]">Quiet Hours (Mulai - Selesai)</label>
+                    <label className="text-[11px] font-bold text-ink">Quiet Hours (Mulai - Selesai)</label>
                     <div className="flex space-x-1.5 items-center">
                       <input
                         type="time"
                         value={quietHoursStart}
                         onChange={(e) => setQuietHoursStart(e.target.value)}
-                        className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] text-center focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+                        className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink text-center focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs"
                       />
-                      <span className="text-[#8696a0]">-</span>
+                      <span className="text-ink-3">-</span>
                       <input
                         type="time"
                         value={quietHoursEnd}
                         onChange={(e) => setQuietHoursEnd(e.target.value)}
-                        className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] text-center focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+                        className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink text-center focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs"
                       />
                     </div>
                   </div>
@@ -1258,7 +1258,7 @@ export const Settings: React.FC = () => {
 
                 <button
                   disabled
-                  className="w-full py-2 bg-[#f0f2f5] border border-[#e9edef] text-[#8696a0] rounded-xl text-xs font-semibold cursor-not-allowed flex items-center justify-center space-x-1"
+                  className="w-full py-2 bg-fill-1 border border-divider text-ink-3 rounded-xl text-xs font-semibold cursor-not-allowed flex items-center justify-center space-x-1"
                   title="Menunggu broadcast scheduler"
                 >
                   <span>Antrikan Broadcast Campaign</span>

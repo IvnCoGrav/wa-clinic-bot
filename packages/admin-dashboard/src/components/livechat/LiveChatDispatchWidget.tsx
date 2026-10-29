@@ -161,13 +161,13 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
   const speedKmh = trip?.speed != null ? Math.max(0, trip.speed * 3.6) : null;
 
   return (
-    <div className="rounded-xl border border-[#e9edef] dark:border-[#2a3942] dark:border-[#2a3942] bg-white dark:bg-[#111b21] shadow-xs p-3 space-y-3">
+    <div className="rounded-xl border border-divider bg-surface shadow-xs p-3 space-y-3">
       {isDelayed && (
         <div
           className={`rounded-lg border px-2.5 py-2 text-[11px] space-y-1.5 ${
             delay?.level === 'critical'
-              ? 'border-red-300 bg-red-50 text-red-800'
-              : 'border-amber-300 bg-amber-50 text-amber-800'
+              ? 'border-danger-line bg-danger-soft text-danger'
+              : 'border-warning-line bg-warning-soft text-warning'
           }`}
         >
           <div className="flex items-start gap-1.5 font-semibold">
@@ -180,7 +180,7 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
           <button
             type="button"
             onClick={copyDelayText}
-            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#008069] bg-[#d9fdd3] hover:bg-[#cbf7c3] border border-[#00a884]/30 rounded-md px-2 py-1"
+            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-accent bg-bubble-out hover:bg-accent-soft border border-accent/30 rounded-md px-2 py-1"
           >
             <Copy size={12} /> Salin Pesan Keterlambatan Pasien
           </button>
@@ -188,7 +188,7 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
       )}
 
       {locationSource === 'estimated_area' && onRequestShareloc && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800 space-y-1.5">
+        <div className="rounded-lg border border-warning-line bg-warning-soft px-2.5 py-2 text-[11px] text-warning space-y-1.5">
           <div className="flex items-start gap-1.5 font-semibold">
             <AlertTriangle size={13} className="mt-0.5 flex-shrink-0" />
             <span>Lokasi pasien masih berstatus estimasi (belum ada shareloc presisi). Minta shareloc agar Bidan tidak tersasar.</span>
@@ -196,7 +196,7 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
           <button
             type="button"
             onClick={onRequestShareloc}
-            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-md px-2 py-1"
+            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-warning bg-warning-soft hover:bg-warning border border-warning-line rounded-md px-2 py-1"
           >
             <Send size={12} /> Minta Shareloc
           </button>
@@ -204,7 +204,7 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
       )}
 
       {data?.isStalledOutsideTarget && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800 space-y-1.5">
+        <div className="rounded-lg border border-warning-line bg-warning-soft px-2.5 py-2 text-[11px] text-warning space-y-1.5">
           <div className="flex items-start gap-1.5 font-semibold">
             <AlertTriangle size={13} className="mt-0.5 flex-shrink-0" />
             <span>
@@ -216,7 +216,7 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
           <button
             type="button"
             onClick={onContactStaff}
-            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-md px-2 py-1"
+            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-warning bg-warning-soft hover:bg-warning border border-warning-line rounded-md px-2 py-1"
           >
             <Phone size={12} /> Hubungi Bidan
           </button>
@@ -224,14 +224,14 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
       )}
 
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5 text-xs font-bold text-[#111b21] dark:text-[#e9edef]">
-          <Radar size={14} className={isStandby ? 'text-[#667781] dark:text-[#8696a0]' : isFresh ? 'text-emerald-600' : 'text-amber-500'} />
+        <div className="flex items-center gap-1.5 text-xs font-bold text-ink">
+          <Radar size={14} className={isStandby ? 'text-ink-2' : isFresh ? 'text-success' : 'text-warning'} />
           <span>{isStandby ? 'Persiapan Perjalanan' : 'Pemantauan Perjalanan'}</span>
         </div>
         <div className="flex items-center gap-1">
           {!isStandby && (
             <span
-              className={`w-2 h-2 rounded-full ${isFresh ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'}`}
+              className={`w-2 h-2 rounded-full ${isFresh ? 'bg-success animate-pulse' : 'bg-warning'}`}
               title={isFresh ? 'Data terupdate < 1 menit' : 'Data mungkin tertunda'}
             />
           )}
@@ -239,7 +239,7 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
             <button
               type="button"
               onClick={onRefresh}
-              className="p-1 rounded-md hover:bg-gray-100 text-[#54656f] dark:text-[#8696a0]"
+              className="p-1 rounded-md hover:bg-fill-2 text-ink-2"
               title="Muat ulang"
             >
               <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
@@ -250,13 +250,13 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
 
       {isStandby ? (
         <div className="space-y-2">
-          <p className="text-[11px] text-[#54656f] dark:text-[#8696a0] leading-relaxed">
+          <p className="text-[11px] text-ink-2 leading-relaxed">
             🛵 Bidan{staffName ? ` ${staffName}` : ''} belum memulai navigasi / mengirim pesan OTW.
             Jadwal hari ini sudah tercatat &mdash; pemantauan akan aktif otomatis begitu Bidan menekan tombol
-            <span className="font-semibold text-[#111b21] dark:text-[#e9edef]"> Navigasi</span>.
+            <span className="font-semibold text-ink"> Navigasi</span>.
           </p>
           {data?.customerCoords && data.customerCoords.lat != null && data.customerCoords.lng != null && (
-            <div className="flex items-center gap-1.5 text-[11px] text-[#667781] dark:text-[#8696a0]">
+            <div className="flex items-center gap-1.5 text-[11px] text-ink-2">
               <Map size={12} /> Lokasi pasien tersimpan, siap dipetakan.
             </div>
           )}
@@ -264,7 +264,7 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
             <button
               type="button"
               onClick={onContactStaff}
-              className="w-full inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold text-[#008069] bg-[#d9fdd3] hover:bg-[#cbf7c3] border border-[#00a884]/30 rounded-lg px-2 py-2"
+              className="w-full inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold text-accent bg-bubble-out hover:bg-accent-soft border border-accent/30 rounded-lg px-2 py-2"
             >
               <Phone size={13} /> Hubungi Bidan
             </button>
@@ -272,36 +272,36 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
         </div>
       ) : trip ? (
         <div className="space-y-1.5">
-          <p className="text-sm font-semibold text-[#111b21] dark:text-[#e9edef]">{trip.areaName}</p>
-          <p className="text-[10px] text-[#667781] dark:text-[#8696a0]">Update {formatStale(trip.lastUpdateSec)}</p>
+          <p className="text-sm font-semibold text-ink">{trip.areaName}</p>
+          <p className="text-[10px] text-ink-2">Update {formatStale(trip.lastUpdateSec)}</p>
           {trip.originSource && trip.originSource !== 'gps' && (
-            <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-1.5 py-0.5 inline-block">
+            <p className="text-[10px] text-warning bg-warning-soft border border-warning-line rounded-md px-1.5 py-0.5 inline-block">
               📍 Titik awal estimasi (dari kunjungan sebelumnya) — bukan GPS presisi
             </p>
           )}
           <div className="grid grid-cols-3 gap-2 pt-1">
-            <div className="rounded-lg bg-[#f0f2f5] px-2 py-1.5 text-center">
-              <p className="text-[10px] text-[#667781] dark:text-[#8696a0]">Sisa</p>
-              <p className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">
+            <div className="rounded-lg bg-fill-1 px-2 py-1.5 text-center">
+              <p className="text-[10px] text-ink-2">Sisa</p>
+              <p className="text-xs font-bold text-ink">
                 {data?.remainingKm != null ? `${data.remainingKm} km` : '-'}
               </p>
             </div>
-            <div className="rounded-lg bg-[#f0f2f5] px-2 py-1.5 text-center">
-              <p className="text-[10px] text-[#667781] dark:text-[#8696a0]">Laju</p>
-              <p className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">
+            <div className="rounded-lg bg-fill-1 px-2 py-1.5 text-center">
+              <p className="text-[10px] text-ink-2">Laju</p>
+              <p className="text-xs font-bold text-ink">
                 {speedKmh != null ? `${Math.round(speedKmh)} km/j` : '-'}
               </p>
             </div>
-            <div className="rounded-lg bg-[#f0f2f5] px-2 py-1.5 text-center">
-              <p className="text-[10px] text-[#667781] dark:text-[#8696a0]">ETA</p>
-              <p className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">
+            <div className="rounded-lg bg-fill-1 px-2 py-1.5 text-center">
+              <p className="text-[10px] text-ink-2">ETA</p>
+              <p className="text-xs font-bold text-ink">
                 {data?.etaMinutes != null ? `${data.etaMinutes} mnt` : '-'}
               </p>
             </div>
           </div>
         </div>
       ) : (
-        <p className="text-[11px] text-[#667781] dark:text-[#8696a0]">
+        <p className="text-[11px] text-ink-2">
           {data?.otwSentAt
             ? 'Bidan sudah OTW menuju lokasi pasien (pelacakan GPS kontinu dinonaktifkan).'
             : 'Menunggu Bidan memulai perjalanan.'}
@@ -314,14 +314,14 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
             <button
               type="button"
               onClick={copyReadyText}
-              className="flex-1 inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold text-[#008069] bg-[#d9fdd3] hover:bg-[#cbf7c3] border border-[#00a884]/30 rounded-lg px-2 py-2"
+              className="flex-1 inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold text-accent bg-bubble-out hover:bg-accent-soft border border-accent/30 rounded-lg px-2 py-2"
             >
               <Copy size={13} /> Salin Teks Jawaban Pasien
             </button>
             <button
               type="button"
               onClick={() => setMapOpen(true)}
-              className="inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold text-[#54656f] dark:text-[#8696a0] bg-[#f0f2f5] hover:bg-[#e9edef] border border-[#e9edef] dark:border-[#2a3942] rounded-lg px-2 py-2"
+              className="inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold text-ink-2 bg-fill-1 hover:bg-fill-2 border border-divider rounded-lg px-2 py-2"
               title="Lihat peta"
             >
               <Map size={13} /> Peta
@@ -331,7 +331,7 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
             <button
               type="button"
               onClick={() => onInsertText((data?.readyText || '').trim())}
-              className="w-full inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold text-white bg-[#008069] hover:bg-[#00a884] rounded-lg px-2 py-2"
+              className="w-full inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold text-white bg-accent hover:bg-accent-hover rounded-lg px-2 py-2"
               title="Sisipkan draf posisi Bidan ke kotak pesan (perlu tekan Kirim)"
             >
               <Send size={13} /> Sisipkan ke Kotak Pesan

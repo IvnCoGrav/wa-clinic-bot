@@ -503,34 +503,34 @@ export const CustomerDatabase: React.FC = () => {
 
   const renderSortIcon = (field: string) => {
     if (sortBy !== field) {
-      return <ArrowUpDown size={11} className="text-[#8696a0] opacity-40 group-hover:opacity-100" />;
+      return <ArrowUpDown size={11} className="text-ink-3 opacity-40 group-hover:opacity-100" />;
     }
     return sortOrder === 'asc' ? (
-      <ArrowUp size={11} className="text-[#008069] font-bold" />
+      <ArrowUp size={11} className="text-accent font-bold" />
     ) : (
-      <ArrowDown size={11} className="text-[#008069] font-bold" />
+      <ArrowDown size={11} className="text-accent font-bold" />
     );
   };
 
   return (
     <div className="space-y-6">
       {/* Top-level Tabs: Customers vs Labels */}
-      <div className="flex items-center gap-2 border-b border-[#e9edef] dark:border-[#2a3942] pb-0">
+      <div className="flex items-center gap-2 border-b border-divider pb-0">
         <button
           onClick={() => setSearchParams({}, { replace: true })}
-          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition -mb-px ${activeMainTab === 'CUSTOMERS' ? 'border-[#008069] text-[#008069]' : 'border-transparent text-[#667781] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef]'}`}
+          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition -mb-px ${activeMainTab === 'CUSTOMERS' ? 'border-accent text-accent' : 'border-transparent text-ink-3 hover:text-ink dark:hover:text-ink'}`}
         >
           Daftar Pelanggan
         </button>
         <button
           onClick={() => setSearchParams({ tab: 'labels' }, { replace: true })}
-          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition -mb-px ${activeMainTab === 'LABELS' ? 'border-[#008069] text-[#008069]' : 'border-transparent text-[#667781] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef]'}`}
+          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition -mb-px ${activeMainTab === 'LABELS' ? 'border-accent text-accent' : 'border-transparent text-ink-3 hover:text-ink dark:hover:text-ink'}`}
         >
           Kelola Label
         </button>
         <button
           onClick={() => setSearchParams({ tab: 'map' }, { replace: true })}
-          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition -mb-px ${activeMainTab === 'MAP' ? 'border-[#008069] text-[#008069]' : 'border-transparent text-[#667781] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef]'}`}
+          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition -mb-px ${activeMainTab === 'MAP' ? 'border-accent text-accent' : 'border-transparent text-ink-3 hover:text-ink dark:hover:text-ink'}`}
         >
           Sebaran Peta
         </button>
@@ -546,11 +546,11 @@ export const CustomerDatabase: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h1 className="text-xl font-bold text-[#111b21] dark:text-[#e9edef] tracking-tight flex items-center space-x-2">
-            <Users className="text-[#008069]" size={22} />
+          <h1 className="text-xl font-bold text-ink tracking-tight flex items-center space-x-2">
+            <Users className="text-accent" size={22} />
             <span>Database Customer</span>
           </h1>
-          <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
+          <p className="text-xs text-ink-3 mt-0.5">
             Kelola data customer, wilayah (kecamatan & kota), nilai LTV, riwayat reservasi/anak, riwayat chat, dan kirim event Meta CAPI.
           </p>
         </div>
@@ -561,15 +561,15 @@ export const CustomerDatabase: React.FC = () => {
           <button
             onClick={handleExportAudience}
             disabled={exportingAudience}
-            className="px-3 py-1.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] hover:text-[#111b21] dark:hover:text-[#e9edef] transition shadow-xs disabled:opacity-50 flex items-center space-x-1.5 text-xs font-semibold cursor-pointer"
+            className="px-3 py-1.5 rounded-xl bg-surface border border-divider text-ink-2 hover:bg-fill-1 hover:text-ink dark:hover:text-ink transition shadow-xs disabled:opacity-50 flex items-center space-x-1.5 text-xs font-semibold cursor-pointer"
             title="Unduh CSV nomor pasien (format 62...) untuk Custom Audience Meta"
           >
-            <Download size={13} className={exportingAudience ? 'animate-pulse text-[#008069]' : ''} />
+            <Download size={13} className={exportingAudience ? 'animate-pulse text-accent' : ''} />
             <span>Export Audience</span>
           </button>
           {audienceMeta.lastExportAt && (
             <span
-              className="text-[10px] text-[#667781] whitespace-nowrap"
+              className="text-[10px] text-ink-3 whitespace-nowrap"
               title="Export Custom Audience Meta terakhir (dari Tenant.settings)"
             >
               Terakhir export:{' '}
@@ -582,10 +582,10 @@ export const CustomerDatabase: React.FC = () => {
           <button
             onClick={loadCustomers}
             disabled={loading}
-            className="px-3 py-1.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] hover:text-[#111b21] dark:hover:text-[#e9edef] transition shadow-xs disabled:opacity-50 flex items-center space-x-1.5 text-xs font-semibold cursor-pointer"
+            className="px-3 py-1.5 rounded-xl bg-surface border border-divider text-ink-2 hover:bg-fill-1 hover:text-ink dark:hover:text-ink transition shadow-xs disabled:opacity-50 flex items-center space-x-1.5 text-xs font-semibold cursor-pointer"
             title="Refresh database"
           >
-            <RefreshCw size={13} className={loading ? 'animate-spin text-[#008069]' : ''} />
+            <RefreshCw size={13} className={loading ? 'animate-spin text-accent' : ''} />
             <span>Refresh</span>
           </button>
         </div>
@@ -593,47 +593,47 @@ export const CustomerDatabase: React.FC = () => {
 
       {/* Ringkasan Finansial & Statistik Pelanggan */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="bg-white dark:bg-[#111b21] p-3.5 rounded-xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs">
+        <div className="bg-surface p-3.5 rounded-xl border border-divider shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider">Total Pelanggan</span>
-            <Users size={15} className="text-[#008069]" />
+            <span className="text-[11px] font-bold text-ink-3 uppercase tracking-wider">Total Pelanggan</span>
+            <Users size={15} className="text-accent" />
           </div>
-          <p className="text-lg font-bold text-[#111b21] dark:text-[#e9edef] mt-1">{stats.totalCustomers || totalCount}</p>
-          <span className="text-[10px] text-[#667781] dark:text-[#8696a0]">Kontak WhatsApp Aktif</span>
+          <p className="text-lg font-bold text-ink mt-1">{stats.totalCustomers || totalCount}</p>
+          <span className="text-[10px] text-ink-3">Kontak WhatsApp Aktif</span>
         </div>
 
-        <div className="bg-white dark:bg-[#111b21] p-3.5 rounded-xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs">
+        <div className="bg-surface p-3.5 rounded-xl border border-divider shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider">Pelanggan Pembeli</span>
-            <ShoppingBag size={15} className="text-emerald-600" />
+            <span className="text-[11px] font-bold text-ink-3 uppercase tracking-wider">Pelanggan Pembeli</span>
+            <ShoppingBag size={15} className="text-success" />
           </div>
-          <p className="text-lg font-bold text-emerald-700 mt-1">{stats.totalPurchasers} Kontak</p>
-          <span className="text-[10px] text-emerald-600 font-medium">Memiliki Form Reservasi / Paid</span>
+          <p className="text-lg font-bold text-success mt-1">{stats.totalPurchasers} Kontak</p>
+          <span className="text-[10px] text-success font-medium">Memiliki Form Reservasi / Paid</span>
         </div>
 
-        <div className="bg-white dark:bg-[#111b21] p-3.5 rounded-xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs">
+        <div className="bg-surface p-3.5 rounded-xl border border-divider shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider">Total Omset (LTV)</span>
-            <DollarSign size={15} className="text-[#008069]" />
+            <span className="text-[11px] font-bold text-ink-3 uppercase tracking-wider">Total Omset (LTV)</span>
+            <DollarSign size={15} className="text-accent" />
           </div>
-          <p className="text-lg font-bold text-[#008069] mt-1">{formatCurrency(stats.totalRevenue)}</p>
-          <span className="text-[10px] text-[#667781] dark:text-[#8696a0]">Akumulasi Transaksi Riil</span>
+          <p className="text-lg font-bold text-accent mt-1">{formatCurrency(stats.totalRevenue)}</p>
+          <span className="text-[10px] text-ink-3">Akumulasi Transaksi Riil</span>
         </div>
 
-        <div className="bg-white dark:bg-[#111b21] p-3.5 rounded-xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs">
+        <div className="bg-surface p-3.5 rounded-xl border border-divider shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider">Prospek Tanya-Tanya</span>
-            <MessageSquare size={15} className="text-sky-600" />
+            <span className="text-[11px] font-bold text-ink-3 uppercase tracking-wider">Prospek Tanya-Tanya</span>
+            <MessageSquare size={15} className="text-info" />
           </div>
-          <p className="text-lg font-bold text-sky-700 mt-1">{stats.totalProspects} Kontak</p>
-          <span className="text-[10px] text-sky-600 font-medium">Konsultasi / Belum Reservasi</span>
+          <p className="text-lg font-bold text-info mt-1">{stats.totalProspects} Kontak</p>
+          <span className="text-[10px] text-info font-medium">Konsultasi / Belum Reservasi</span>
         </div>
       </div>
 
       {/* Sub-Filter Segmentasi & Search Bar */}
       <div className="space-y-2.5">
         {/* Desktop Segment Filter Tabs (>= md) */}
-        <div className="hidden md:flex flex-wrap items-center gap-1.5 p-1 bg-[#f0f2f5] dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl w-fit">
+        <div className="hidden md:flex flex-wrap items-center gap-1.5 p-1 bg-fill-1 dark:bg-surface border border-divider rounded-xl w-fit">
           <button
             onClick={() => {
               setSegment('all');
@@ -641,8 +641,8 @@ export const CustomerDatabase: React.FC = () => {
             }}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center space-x-1.5 cursor-pointer ${
               segment === 'all'
-                ? 'bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] shadow-2xs font-bold'
-                : 'text-[#667781] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef]'
+                ? 'bg-surface text-ink shadow-2xs font-bold'
+                : 'text-ink-3 hover:text-ink dark:hover:text-ink'
             }`}
           >
             <Users size={12} />
@@ -655,8 +655,8 @@ export const CustomerDatabase: React.FC = () => {
             }}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center space-x-1.5 cursor-pointer ${
               segment === 'purchased'
-                ? 'bg-emerald-600 text-white shadow-2xs font-bold'
-                : 'text-[#667781] hover:text-[#111b21]'
+                ? 'bg-success text-on-solid shadow-2xs font-bold'
+                : 'text-ink-3 hover:text-ink'
             }`}
           >
             <ShoppingBag size={12} />
@@ -669,8 +669,8 @@ export const CustomerDatabase: React.FC = () => {
             }}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center space-x-1.5 cursor-pointer ${
               segment === 'mql'
-                ? 'bg-amber-600 text-white shadow-2xs font-bold'
-                : 'text-[#667781] hover:text-[#111b21]'
+                ? 'bg-warning text-on-solid shadow-2xs font-bold'
+                : 'text-ink-3 hover:text-ink'
             }`}
           >
             <Zap size={12} className={segment === 'mql' ? 'fill-white' : ''} />
@@ -683,8 +683,8 @@ export const CustomerDatabase: React.FC = () => {
             }}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center space-x-1.5 cursor-pointer ${
               segment === 'prospect'
-                ? 'bg-sky-600 text-white shadow-2xs font-bold'
-                : 'text-[#667781] hover:text-[#111b21]'
+                ? 'bg-info text-on-solid shadow-2xs font-bold'
+                : 'text-ink-3 hover:text-ink'
             }`}
           >
             <MessageSquare size={12} />
@@ -702,14 +702,14 @@ export const CustomerDatabase: React.FC = () => {
                 setSegment(e.target.value as any);
                 setPage(1);
               }}
-              className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] rounded-xl px-3 py-2 text-xs font-semibold text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] dark:focus:border-[#00a884] focus:ring-1 focus:ring-[#008069] dark:focus:ring-[#00a884] shadow-xs cursor-pointer appearance-none pr-7 truncate"
+              className="w-full bg-surface border border-divider rounded-xl px-3 py-2 text-xs font-semibold text-ink focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent dark:focus:ring-accent shadow-xs cursor-pointer appearance-none pr-7 truncate"
             >
               <option value="all">👥 Semua ({stats.totalCustomers || totalCount})</option>
               <option value="purchased">🎯 Pembeli ({stats.totalPurchasers})</option>
               <option value="mql">⚡ MQL Aktif ({stats.totalMql})</option>
               <option value="prospect">💬 Prospek ({stats.totalProspects})</option>
             </select>
-            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[#8696a0]">
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-ink-3">
               <ArrowUpDown size={12} />
             </div>
           </div>
@@ -724,7 +724,7 @@ export const CustomerDatabase: React.FC = () => {
                 setSortOrder(o as 'asc' | 'desc');
                 setPage(1);
               }}
-              className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] rounded-xl px-3 py-2 text-xs font-semibold text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] dark:focus:border-[#00a884] focus:ring-1 focus:ring-[#008069] dark:focus:ring-[#00a884] shadow-xs cursor-pointer appearance-none pr-7 truncate"
+              className="w-full bg-surface border border-divider rounded-xl px-3 py-2 text-xs font-semibold text-ink focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent dark:focus:ring-accent shadow-xs cursor-pointer appearance-none pr-7 truncate"
             >
               <option value="created_at:desc">Terdaftar: Terbaru</option>
               <option value="created_at:asc">Terdaftar: Terlama</option>
@@ -735,7 +735,7 @@ export const CustomerDatabase: React.FC = () => {
               <option value="ltv:asc">LTV Terendah</option>
               <option value="mqlBubbleCount:desc">MQL Bubble Terbanyak</option>
             </select>
-            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[#8696a0]">
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-ink-3">
               <ArrowUpDown size={12} />
             </div>
           </div>
@@ -744,18 +744,18 @@ export const CustomerDatabase: React.FC = () => {
         {/* Search Bar */}
         <form onSubmit={handleSearchSubmit} className="flex gap-2">
           <div className="relative flex-1">
-            <Search className="absolute left-3.5 top-2.5 text-[#8696a0]" size={15} />
+            <Search className="absolute left-3.5 top-2.5 text-ink-3" size={15} />
             <input
               type="text"
               placeholder="Cari berdasarkan No HP, Nama, Kecamatan, atau Kota..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+              className="w-full pl-10 pr-4 py-2 bg-surface border border-divider rounded-xl text-xs text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs"
             />
           </div>
           <button
             type="submit"
-            className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold transition flex items-center space-x-1 shadow-xs cursor-pointer"
+            className="px-4 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-bold transition flex items-center space-x-1 shadow-xs cursor-pointer"
           >
             <span>Cari</span>
           </button>
@@ -764,14 +764,14 @@ export const CustomerDatabase: React.FC = () => {
 
       {/* Retry Error Banner (Phase 2) */}
       {loadError && !loading && (
-        <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 flex items-center justify-between">
-          <span className="text-xs text-rose-700 flex items-center gap-1.5"><AlertCircle size={14}/>{loadError}</span>
-          <button onClick={()=>{setRetryCount(c=>c+1);}} disabled={loading} className="px-3 py-1.5 bg-[#008069] text-white rounded-xl text-xs font-bold disabled:opacity-50 cursor-pointer">Coba Lagi</button>
+        <div className="bg-danger-soft border border-danger-line rounded-xl p-3 flex items-center justify-between">
+          <span className="text-xs text-danger flex items-center gap-1.5"><AlertCircle size={14}/>{loadError}</span>
+          <button onClick={()=>{setRetryCount(c=>c+1);}} disabled={loading} className="px-3 py-1.5 bg-accent text-accent-ink rounded-xl text-xs font-bold disabled:opacity-50 cursor-pointer">Coba Lagi</button>
         </div>
       )}
 
       {/* Customer Table & Mobile Cards */}
-      <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl overflow-hidden shadow-xs relative">
+      <div className="bg-surface border border-divider rounded-2xl overflow-hidden shadow-xs relative">
         {/* Loading Overlay (refresh — data exists) */}
         {loading && customers.length > 0 && (
           <div className="absolute inset-0 z-10 bg-white/60 animate-pulse" />
@@ -782,76 +782,76 @@ export const CustomerDatabase: React.FC = () => {
           <>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 p-4">
               {Array(4).fill(0).map((_, i) => (
-                <div key={i} className="bg-[#f0f2f5] h-[72px] rounded-xl animate-pulse flex flex-col justify-center px-4 space-y-2">
-                  <div className="h-3 w-20 bg-[#d1d7db] rounded" />
-                  <div className="h-6 w-16 bg-[#d1d7db] rounded" />
+                <div key={i} className="bg-fill-1 h-[72px] rounded-xl animate-pulse flex flex-col justify-center px-4 space-y-2">
+                  <div className="h-3 w-20 bg-divider rounded" />
+                  <div className="h-6 w-16 bg-divider rounded" />
                 </div>
               ))}
             </div>
             {/* Skeleton: Search + Segment bar */}
             <div className="px-4 pb-3 space-y-2.5">
-              <div className="h-9 bg-[#f0f2f5] rounded-xl animate-pulse" />
-              <div className="h-9 bg-[#f0f2f5] rounded-xl animate-pulse w-3/4" />
+              <div className="h-9 bg-fill-1 rounded-xl animate-pulse" />
+              <div className="h-9 bg-fill-1 rounded-xl animate-pulse w-3/4" />
             </div>
             {/* Skeleton: Table rows */}
-            <div className="divide-y divide-[#e9edef]">
+            <div className="divide-y divide-divider">
               {Array(15).fill(0).map((_, i) => (
                 <div key={i} className="flex items-center space-x-4 px-4 py-3.5">
-                  <div className="w-8 h-8 rounded-full bg-[#f0f2f5] animate-pulse shrink-0" />
+                  <div className="w-8 h-8 rounded-full bg-fill-1 animate-pulse shrink-0" />
                   <div className="flex-1 space-y-2">
-                    <div className="h-3.5 w-3/4 bg-[#f0f2f5] rounded animate-pulse" />
-                    <div className="h-3 w-1/2 bg-[#f0f2f5] rounded animate-pulse" />
+                    <div className="h-3.5 w-3/4 bg-fill-1 rounded animate-pulse" />
+                    <div className="h-3 w-1/2 bg-fill-1 rounded animate-pulse" />
                   </div>
-                  <div className="h-3 w-1/4 bg-[#f0f2f5] rounded animate-pulse" />
-                  <div className="h-6 w-16 bg-[#f0f2f5] rounded animate-pulse" />
-                  <div className="h-5 w-16 bg-[#f0f2f5] rounded animate-pulse" />
+                  <div className="h-3 w-1/4 bg-fill-1 rounded animate-pulse" />
+                  <div className="h-6 w-16 bg-fill-1 rounded animate-pulse" />
+                  <div className="h-5 w-16 bg-fill-1 rounded animate-pulse" />
                 </div>
               ))}
             </div>
             {/* Skeleton: Pagination */}
-            <div className="px-4 py-3 border-t border-[#e9edef]">
-              <div className="h-8 w-48 bg-[#f0f2f5] rounded animate-pulse" />
+            <div className="px-4 py-3 border-t border-divider">
+              <div className="h-8 w-48 bg-fill-1 rounded animate-pulse" />
             </div>
           </>
         ) : customers.length === 0 ? (
-          <div className="text-center py-16 text-[#667781] text-xs">
-            <AlertCircle className="mx-auto text-[#8696a0] mb-2" size={32} />
-            <p className="font-bold text-[#111b21]">Tidak ada customer ditemukan</p>
+          <div className="text-center py-16 text-ink-3 text-xs">
+            <AlertCircle className="mx-auto text-ink-3 mb-2" size={32} />
+            <p className="font-bold text-ink">Tidak ada customer ditemukan</p>
           </div>
         ) : (
           <>
             {/* Mobile Card List (< md) */}
-            <div className="md:hidden divide-y divide-[#e9edef] dark:divide-[#2a3942]">
+            <div className="md:hidden divide-y divide-divider">
               {customers.map((customer) => (
                 <div
                   key={customer.id}
                   onClick={() => handleOpenDetail(customer)}
-                  className="p-4 space-y-2.5 bg-white dark:bg-[#111b21] hover:bg-[#f8fafc] dark:hover:bg-[#1c272e] active:bg-[#f0f2f5] dark:active:bg-[#202c33] transition cursor-pointer"
+                  className="p-4 space-y-2.5 bg-surface hover:bg-surface-2 active:bg-fill-1 transition cursor-pointer"
                 >
                   {/* Top row: Name/Phone/Location & LTV */}
                   <div className="flex justify-between items-start gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center space-x-1.5">
-                        <span className="font-bold text-sm text-[#111b21] dark:text-[#e9edef] truncate">
+                        <span className="font-bold text-sm text-ink truncate">
                           {customer.name || 'Bunda Customer'}
                         </span>
                         {customer.isMql && (
                           <span
                             title={`MQL (${customer.mqlBubbleCount ?? 0} Bubble)`}
-                            className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 shrink-0"
+                            className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-success-soft text-success border border-success-line shrink-0"
                           >
                             <Zap size={8} className="mr-0.5" />
                             MQL
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center space-x-1.5 text-xs text-[#54656f] dark:text-[#8696a0] mt-0.5">
-                        <Phone size={12} className="text-[#8696a0] shrink-0" />
+                      <div className="flex items-center space-x-1.5 text-xs text-ink-2 mt-0.5">
+                        <Phone size={12} className="text-ink-3 shrink-0" />
                         <span className="font-mono">{customer.phone}</span>
                       </div>
                       {(customer.kecamatan || customer.kota) && (
-                        <div className="flex items-center space-x-1.5 text-xs text-[#54656f] mt-1">
-                          <MapPin size={12} className="text-[#008069] shrink-0" />
+                        <div className="flex items-center space-x-1.5 text-xs text-ink-2 mt-1">
+                          <MapPin size={12} className="text-accent shrink-0" />
                           <span className="truncate">
                             {[customer.kecamatan, customer.kota].filter(Boolean).join(', ')}
                           </span>
@@ -863,33 +863,33 @@ export const CustomerDatabase: React.FC = () => {
                       <div className="text-right">
                         {customer.ltv > 0 ? (
                           <>
-                            <div className="font-bold text-emerald-700 text-sm">
+                            <div className="font-bold text-success text-sm">
                               {formatCurrency(customer.ltv)}
                             </div>
-                            <span className="text-[10px] text-emerald-600 font-medium">
+                            <span className="text-[10px] text-success font-medium">
                               {customer.reservationCount}x transaksi
                             </span>
                           </>
                         ) : (
                           <>
-                            <div className="font-semibold text-slate-500 text-xs bg-slate-100 px-1.5 py-0.5 rounded">
+                            <div className="font-semibold text-ink-2 text-xs bg-fill-1 px-1.5 py-0.5 rounded">
                               Rp 0
                             </div>
-                            <span className="text-[10px] text-[#8696a0]">
+                            <span className="text-[10px] text-ink-3">
                               Prospek
                             </span>
                           </>
                         )}
                       </div>
-                      <ChevronRight size={16} className="text-[#8696a0]" />
+                      <ChevronRight size={16} className="text-ink-3" />
                     </div>
                   </div>
 
                   {/* Ad Campaign (if any) */}
                   {customer.adClick?.utmCampaign && (
-                    <div className="flex items-center space-x-1 text-[11px] text-[#667781] truncate">
-                      <span className="text-[#8696a0]">Campaign:</span>
-                      <span className="text-[#111b21] font-medium truncate">{customer.adClick.utmCampaign}</span>
+                    <div className="flex items-center space-x-1 text-[11px] text-ink-3 truncate">
+                      <span className="text-ink-3">Campaign:</span>
+                      <span className="text-ink font-medium truncate">{customer.adClick.utmCampaign}</span>
                     </div>
                   )}
                 </div>
@@ -900,9 +900,9 @@ export const CustomerDatabase: React.FC = () => {
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#1c272e] text-[#667781] dark:text-[#8696a0] font-bold uppercase text-[10px] tracking-wider select-none">
+                  <tr className="border-b border-divider bg-surface-2 dark:bg-surface-2 text-ink-3 font-bold uppercase text-[10px] tracking-wider select-none">
                     <th
-                      className="py-3 px-4 cursor-pointer hover:text-[#111b21] group transition"
+                      className="py-3 px-4 cursor-pointer hover:text-ink group transition"
                       onClick={() => handleSort('name')}
                     >
                       <div className="flex items-center space-x-1.5">
@@ -911,7 +911,7 @@ export const CustomerDatabase: React.FC = () => {
                       </div>
                     </th>
                     <th
-                      className="py-3 px-4 cursor-pointer hover:text-[#111b21] group transition"
+                      className="py-3 px-4 cursor-pointer hover:text-ink group transition"
                       onClick={() => handleSort('kecamatan')}
                     >
                       <div className="flex items-center space-x-1.5">
@@ -920,7 +920,7 @@ export const CustomerDatabase: React.FC = () => {
                       </div>
                     </th>
                     <th
-                      className="py-3 px-4 cursor-pointer hover:text-[#111b21] group transition"
+                      className="py-3 px-4 cursor-pointer hover:text-ink group transition"
                       onClick={() => handleSort('ltv')}
                     >
                       <div className="flex items-center space-x-1.5">
@@ -929,7 +929,7 @@ export const CustomerDatabase: React.FC = () => {
                       </div>
                     </th>
                     <th
-                      className="py-3 px-4 cursor-pointer hover:text-[#111b21] group transition"
+                      className="py-3 px-4 cursor-pointer hover:text-ink group transition"
                       onClick={() => handleSort('created_at')}
                     >
                       <div className="flex items-center space-x-1.5">
@@ -940,36 +940,36 @@ export const CustomerDatabase: React.FC = () => {
                     <th className="py-3 px-4 text-right">Aksi</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#e9edef] dark:divide-[#2a3942]">
+                <tbody className="divide-y divide-divider">
                   {customers.map((customer) => (
-                    <tr key={customer.id} className="hover:bg-[#f8fafc] dark:hover:bg-[#1c272e] transition text-[#111b21] dark:text-[#e9edef]">
+                    <tr key={customer.id} className="hover:bg-surface-2 transition text-ink">
                       {/* Customer Phone & Name with MQL icon */}
                       <td className="py-3.5 px-4">
                         <div className="flex items-center space-x-2.5">
-                          <div className="w-8 h-8 rounded-full bg-[#e8f5f2] text-[#008069] flex items-center justify-center font-bold text-xs shrink-0">
+                          <div className="w-8 h-8 rounded-full bg-accent-soft text-accent flex items-center justify-center font-bold text-xs shrink-0">
                             {(customer.name || customer.phone || 'B').charAt(0).toUpperCase()}
                           </div>
                           <div className="min-w-0">
                             <div className="flex items-center space-x-1.5">
-                              <span className="font-bold text-[#111b21] truncate">
+                              <span className="font-bold text-ink truncate">
                                 {customer.name || 'Bunda Customer'}
                               </span>
                               {customer.isMql && (
                                 <span
                                   title={`MQL (${customer.mqlBubbleCount ?? 0} Bubble)`}
-                                  className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 shrink-0"
+                                  className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-success-soft text-success border border-success-line shrink-0"
                                 >
                                   <Zap size={8} className="mr-0.5" />
                                   MQL
                                 </span>
                               )}
                             </div>
-                            <div className="flex items-center space-x-1 text-[11px] text-[#667781] font-mono mt-0.5">
-                              <Phone size={11} className="text-[#8696a0] shrink-0" />
+                            <div className="flex items-center space-x-1 text-[11px] text-ink-3 font-mono mt-0.5">
+                              <Phone size={11} className="text-ink-3 shrink-0" />
                               <span>{customer.phone}</span>
                             </div>
                             {customer.adClick?.utmCampaign && (
-                              <p className="text-[10px] text-[#8696a0] truncate max-w-[170px] mt-0.5">
+                              <p className="text-[10px] text-ink-3 truncate max-w-[170px] mt-0.5">
                                 Ad: {customer.adClick.utmCampaign}
                               </p>
                             )}
@@ -981,18 +981,18 @@ export const CustomerDatabase: React.FC = () => {
                       <td className="py-3.5 px-4">
                         {customer.kecamatan || customer.kota ? (
                           <div className="flex items-start space-x-1.5">
-                            <MapPin size={13} className="text-[#008069] shrink-0 mt-0.5" />
+                            <MapPin size={13} className="text-accent shrink-0 mt-0.5" />
                             <div className="min-w-0">
-                              <span className="font-bold text-[#111b21] block truncate text-xs">
+                              <span className="font-bold text-ink block truncate text-xs">
                                 {customer.kecamatan || '-'}
                               </span>
-                              <span className="text-[11px] text-[#667781] block truncate">
+                              <span className="text-[11px] text-ink-3 block truncate">
                                 {customer.kota || '-'}
                               </span>
                             </div>
                           </div>
                         ) : (
-                          <span className="text-[#8696a0] text-xs italic">-</span>
+                          <span className="text-ink-3 text-xs italic">-</span>
                         )}
                       </td>
 
@@ -1000,19 +1000,19 @@ export const CustomerDatabase: React.FC = () => {
                       <td className="py-3.5 px-4">
                         {customer.ltv > 0 ? (
                           <div>
-                            <span className="font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-[11px] inline-block">
+                            <span className="font-bold text-success bg-success-soft border border-success-line px-2 py-0.5 rounded text-[11px] inline-block">
                               {formatCurrency(customer.ltv)}
                             </span>
-                            <span className="text-[10px] text-emerald-600 block mt-0.5 font-medium">
+                            <span className="text-[10px] text-success block mt-0.5 font-medium">
                               {customer.reservationCount}x Transaksi
                             </span>
                           </div>
                         ) : (
                           <div>
-                            <span className="font-semibold text-[#667781] bg-[#f0f2f5] border border-[#e9edef] px-2 py-0.5 rounded text-[10px] inline-block">
+                            <span className="font-semibold text-ink-3 bg-fill-1 border border-divider px-2 py-0.5 rounded text-[10px] inline-block">
                               Rp 0
                             </span>
-                            <span className="text-[10px] text-[#8696a0] block mt-0.5">
+                            <span className="text-[10px] text-ink-3 block mt-0.5">
                               Prospek
                             </span>
                           </div>
@@ -1020,7 +1020,7 @@ export const CustomerDatabase: React.FC = () => {
                       </td>
 
                       {/* Terdaftar */}
-                      <td className="py-3.5 px-4 text-[#54656f] text-[11px] whitespace-nowrap">
+                      <td className="py-3.5 px-4 text-ink-2 text-[11px] whitespace-nowrap">
                         {customer.createdAt ? new Date(customer.createdAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
                       </td>
 
@@ -1029,7 +1029,7 @@ export const CustomerDatabase: React.FC = () => {
                         <div className="flex items-center justify-end space-x-1.5">
                           <button
                             onClick={() => handleOpenDetail(customer)}
-                            className="px-2.5 py-1.5 rounded-xl bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] text-xs font-semibold transition flex items-center space-x-1 shadow-xs cursor-pointer"
+                            className="px-2.5 py-1.5 rounded-xl bg-accent-soft hover:bg-accent-soft text-accent border border-divider text-xs font-semibold transition flex items-center space-x-1 shadow-xs cursor-pointer"
                             title="Lihat Detail Lengkap Pasien"
                           >
                             <Eye size={12} />
@@ -1038,7 +1038,7 @@ export const CustomerDatabase: React.FC = () => {
 
                           <button
                             onClick={() => handleOpenHistory(customer)}
-                            className="px-2.5 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-xs font-semibold transition flex items-center space-x-1 shadow-xs cursor-pointer"
+                            className="px-2.5 py-1.5 rounded-xl bg-info-soft hover:bg-info-line text-info border border-info-line text-xs font-semibold transition flex items-center space-x-1 shadow-xs cursor-pointer"
                             title="Buka Riwayat Chat"
                           >
                             <MessageSquare size={12} />
@@ -1047,7 +1047,7 @@ export const CustomerDatabase: React.FC = () => {
 
                           <button
                             onClick={() => setActiveEventCustomer(customer)}
-                            className="px-2.5 py-1.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold transition flex items-center space-x-1 shadow-xs cursor-pointer"
+                            className="px-2.5 py-1.5 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink text-xs font-semibold transition flex items-center space-x-1 shadow-xs cursor-pointer"
                             title="Kirim Event Meta CAPI"
                           >
                             <Send size={12} />
@@ -1092,25 +1092,25 @@ export const CustomerDatabase: React.FC = () => {
           onClick={() => setActiveEventCustomer(null)}
         >
           <div
-            className="bg-white border border-[#e9edef] rounded-2xl w-full max-w-md shadow-xl overflow-hidden"
+            className="bg-surface border border-divider rounded-2xl w-full max-w-md shadow-xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <form onSubmit={handleSendMetaEvent}>
               {/* Modal Header */}
-              <div className="p-4 border-b border-[#e9edef] dark:border-[#2a3942] flex justify-between items-center bg-[#f8fafc] dark:bg-[#1c272e]">
+              <div className="p-4 border-b border-divider flex justify-between items-center bg-surface-2 dark:bg-surface-2">
                 <div>
-                  <h3 className="font-bold text-[#111b21] text-sm flex items-center space-x-2">
-                    <Send size={15} className="text-[#008069]" />
+                  <h3 className="font-bold text-ink text-sm flex items-center space-x-2">
+                    <Send size={15} className="text-accent" />
                     <span>Send Event ke Meta Pixel / CAPI</span>
                   </h3>
-                  <p className="text-[11px] text-[#667781]">
+                  <p className="text-[11px] text-ink-3">
                     Customer: {activeEventCustomer.phone} ({activeEventCustomer.trackingCode})
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setActiveEventCustomer(null)}
-                  className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition"
+                  className="p-1.5 rounded-lg text-ink-3 hover:text-ink hover:bg-fill-1 transition"
                 >
                   <X size={16} />
                 </button>
@@ -1119,11 +1119,11 @@ export const CustomerDatabase: React.FC = () => {
               {/* Modal Form Content */}
               <div className="p-5 space-y-4 text-xs">
                 <div className="space-y-1.5">
-                  <label className="text-[#111b21] font-bold block">Pilih Event Meta CAPI</label>
+                  <label className="text-ink font-bold block">Pilih Event Meta CAPI</label>
                   <select
                     value={selectedEvent}
                     onChange={(e) => setSelectedEvent(e.target.value)}
-                    className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-[#111b21] text-xs focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+                    className="w-full p-2.5 bg-surface border border-divider rounded-xl text-ink text-xs focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs"
                   >
                     <option value="Lead">Lead (Minimum Qualified Lead)</option>
                     <option value="Purchase">Purchase (Pembelian / Transaksi)</option>
@@ -1137,45 +1137,45 @@ export const CustomerDatabase: React.FC = () => {
                 {(selectedEvent === 'Purchase' || selectedEvent === 'InitiateCheckout') && (
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <label className="text-[#111b21] font-bold block">Nilai Transaksi (Rp)</label>
+                      <label className="text-ink font-bold block">Nilai Transaksi (Rp)</label>
                       <input
                         type="number"
                         placeholder="Contoh: 150000"
                         value={eventValue}
                         onChange={(e) => setEventValue(e.target.value === '' ? '' : Number(e.target.value))}
-                        className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-[#111b21] text-xs focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+                        className="w-full p-2.5 bg-surface border border-divider rounded-xl text-ink text-xs focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs"
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-[#111b21] font-bold block">Mata Uang</label>
+                      <label className="text-ink font-bold block">Mata Uang</label>
                       <input
                         type="text"
                         value={eventCurrency}
                         onChange={(e) => setEventCurrency(e.target.value)}
-                        className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-[#111b21] text-xs font-mono focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+                        className="w-full p-2.5 bg-surface border border-divider rounded-xl text-ink text-xs font-mono focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs"
                       />
                     </div>
                   </div>
                 )}
 
-                <div className="p-3 rounded-xl bg-[#e8f5f2] border border-[#c2e7e0] text-[#008069] text-[11px] leading-relaxed">
+                <div className="p-3 rounded-xl bg-accent-soft border border-divider text-accent text-[11px] leading-relaxed">
                   Event akan dikirim langsung ke Meta Conversions API menggunakan data atribusi (<code>fbclid</code>, <code>fbp</code>, <code>fbc</code>, IP, UserAgent) milik customer.
                 </div>
               </div>
 
               {/* Modal Footer */}
-              <div className="p-4 border-t border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#1c272e] flex justify-end space-x-2">
+              <div className="p-4 border-t border-divider bg-surface-2 dark:bg-surface-2 flex justify-end space-x-2">
                 <button
                   type="button"
                   onClick={() => setActiveEventCustomer(null)}
-                  className="px-4 py-2 bg-white dark:bg-[#202c33] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] border border-[#d1d7db] dark:border-[#374248] text-[#111b21] dark:text-[#e9edef] rounded-xl text-xs font-semibold transition shadow-xs"
+                  className="px-4 py-2 bg-surface hover:bg-fill-1 border border-divider text-ink rounded-xl text-xs font-semibold transition shadow-xs"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={sendingEvent}
-                  className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 disabled:opacity-50 shadow-xs"
+                  className="px-4 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-bold transition flex items-center space-x-1.5 disabled:opacity-50 shadow-xs"
                 >
                   <Send size={12} />
                   <span>{sendingEvent ? 'Mengirim...' : 'Kirim Event Sekarang'}</span>
@@ -1193,40 +1193,40 @@ export const CustomerDatabase: React.FC = () => {
           onClick={() => setActiveDetailCustomer(null)}
         >
           <div
-            className="bg-white border border-[#e9edef] rounded-3xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden"
+            className="bg-surface border border-divider rounded-3xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="p-4 sm:p-5 border-b border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#1c272e] flex justify-between items-start">
+            <div className="p-4 sm:p-5 border-b border-divider bg-surface-2 dark:bg-surface-2 flex justify-between items-start">
               <div className="flex items-center space-x-3">
-                <div className="h-12 w-12 rounded-2xl bg-[#e8f5f2] border border-[#c2e7e0] text-[#008069] flex items-center justify-center font-bold text-lg shadow-xs flex-shrink-0">
+                <div className="h-12 w-12 rounded-2xl bg-accent-soft border border-divider text-accent flex items-center justify-center font-bold text-lg shadow-xs flex-shrink-0">
                   {(detailData?.name || activeDetailCustomer.name || 'B')[0].toUpperCase()}
                 </div>
                 <div>
                   <div className="flex items-center space-x-2">
-                    <h3 className="font-bold text-base text-[#111b21] dark:text-[#e9edef]">
+                    <h3 className="font-bold text-base text-ink">
                       {detailData?.name || activeDetailCustomer.name || 'Bunda Customer'}
                     </h3>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
                       (detailData?.status || activeDetailCustomer.status) === 'legacy'
-                        ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                        ? 'bg-violet-soft text-violet border border-violet-line'
                         : (detailData?.status || activeDetailCustomer.status) === 'blocked'
-                        ? 'bg-rose-100 text-rose-800 border border-rose-200'
-                        : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                        ? 'bg-danger-soft text-danger border border-danger-line'
+                        : 'bg-success-soft text-success border border-success-line'
                     }`}>
                       {detailData?.status || activeDetailCustomer.status || 'Active'}
                     </span>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-[#54656f] mt-0.5">
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-ink-2 mt-0.5">
                     <span className="font-mono flex items-center space-x-1">
-                      <Phone size={12} className="text-[#8696a0]" />
+                      <Phone size={12} className="text-ink-3" />
                       <span>{detailData?.phone || activeDetailCustomer.phone}</span>
                     </span>
                     {(detailData?.kecamatan || activeDetailCustomer.kecamatan || detailData?.kota || activeDetailCustomer.kota) && (
                       <>
                         <span>•</span>
-                        <span className="flex items-center space-x-1 text-[#008069] font-medium">
-                          <MapPin size={12} className="text-[#008069]" />
+                        <span className="flex items-center space-x-1 text-accent font-medium">
+                          <MapPin size={12} className="text-accent" />
                           <span>{[detailData?.kecamatan || activeDetailCustomer.kecamatan, detailData?.kota || activeDetailCustomer.kota].filter(Boolean).join(', ')}</span>
                         </span>
                       </>
@@ -1237,56 +1237,56 @@ export const CustomerDatabase: React.FC = () => {
 
               <button
                 onClick={() => setActiveDetailCustomer(null)}
-                className="p-1.5 rounded-xl text-[#8696a0] hover:text-[#111b21] hover:bg-[#e9edef] transition"
+                className="p-1.5 rounded-xl text-ink-3 hover:text-ink hover:bg-fill-2 transition"
               >
                 <X size={18} />
               </button>
             </div>
 
             {/* Modal Body */}
-            <div className="p-4 sm:p-6 overflow-y-auto space-y-5 text-xs text-[#111b21] dark:text-[#e9edef]">
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-5 text-xs text-ink">
               {loadingDetail ? (
                 <div className="flex flex-col justify-center items-center py-16 space-y-3">
-                  <Loader className="animate-spin text-[#008069]" size={36} />
-                  <p className="text-xs text-[#667781] font-medium">Memuat data lengkap customer...</p>
+                  <Loader className="animate-spin text-accent" size={36} />
+                  <p className="text-xs text-ink-3 font-medium">Memuat data lengkap customer...</p>
                 </div>
               ) : (
                 <>
                   {/* Grid Top Cards: LTV & MQL Status */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                    <div className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-2xl">
-                      <span className="text-[10px] uppercase font-bold text-[#667781] block">Total LTV</span>
-                      <p className="font-bold text-sm text-[#008069] mt-0.5">
+                    <div className="p-3 bg-surface-2 border border-divider rounded-2xl">
+                      <span className="text-[10px] uppercase font-bold text-ink-3 block">Total LTV</span>
+                      <p className="font-bold text-sm text-accent mt-0.5">
                         {formatCurrency(detailData?.ltv ?? activeDetailCustomer.ltv)}
                       </p>
                     </div>
 
-                    <div className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-2xl">
-                      <span className="text-[10px] uppercase font-bold text-[#667781] block">Total Transaksi</span>
-                      <p className="font-bold text-sm text-[#111b21] mt-0.5">
+                    <div className="p-3 bg-surface-2 border border-divider rounded-2xl">
+                      <span className="text-[10px] uppercase font-bold text-ink-3 block">Total Transaksi</span>
+                      <p className="font-bold text-sm text-ink mt-0.5">
                         {(detailData?.reservations?.length ?? activeDetailCustomer.reservationCount)}x Reservasi
                       </p>
                     </div>
 
-                    <div className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-2xl">
-                      <span className="text-[10px] uppercase font-bold text-[#667781] block">Status MQL</span>
+                    <div className="p-3 bg-surface-2 border border-divider rounded-2xl">
+                      <span className="text-[10px] uppercase font-bold text-ink-3 block">Status MQL</span>
                       <div className="mt-0.5">
                         {activeDetailCustomer.isMql ? (
-                          <span className="inline-flex items-center space-x-1 text-emerald-700 font-bold text-xs">
-                            <Zap size={11} className="fill-emerald-600 text-emerald-600" />
+                          <span className="inline-flex items-center space-x-1 text-success font-bold text-xs">
+                            <Zap size={11} className="fill-success text-success" />
                             <span>MQL ({activeDetailCustomer.mqlBubbleCount} Bubble)</span>
                           </span>
                         ) : (
-                          <span className="text-[#667781] font-semibold text-xs">
+                          <span className="text-ink-3 font-semibold text-xs">
                             Regular ({activeDetailCustomer.mqlBubbleCount} Bubble)
                           </span>
                         )}
                       </div>
                     </div>
 
-                    <div className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-2xl">
-                      <span className="text-[10px] uppercase font-bold text-[#667781] block">Terdaftar Sejak</span>
-                      <p className="font-semibold text-xs text-[#54656f] mt-0.5 truncate">
+                    <div className="p-3 bg-surface-2 border border-divider rounded-2xl">
+                      <span className="text-[10px] uppercase font-bold text-ink-3 block">Terdaftar Sejak</span>
+                      <p className="font-semibold text-xs text-ink-2 mt-0.5 truncate">
                         {activeDetailCustomer.createdAt
                           ? new Date(activeDetailCustomer.createdAt).toLocaleDateString('id-ID', {
                               day: 'numeric',
@@ -1299,9 +1299,9 @@ export const CustomerDatabase: React.FC = () => {
                   </div>
 
                   {/* Section 1: Alamat & Lokasi Rumah */}
-                  <div className="p-4 bg-white border border-[#e9edef] rounded-2xl space-y-3 shadow-2xs">
+                  <div className="p-4 bg-surface border border-divider rounded-2xl space-y-3 shadow-2xs">
                     <div className="flex items-center justify-between">
-                      <h4 className="font-bold text-xs text-[#111b21] flex items-center space-x-1.5 text-[#008069]">
+                      <h4 className="font-bold text-xs text-ink flex items-center space-x-1.5 text-accent">
                         <MapPin size={15} />
                         <span>Alamat Lengkap & Logistik Kunjungan</span>
                       </h4>
@@ -1309,7 +1309,7 @@ export const CustomerDatabase: React.FC = () => {
                         type="button"
                         onClick={handleRefreshLocationDb}
                         disabled={refreshingLocationDb}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border bg-white border-[#e9edef] hover:bg-[#f0f2f5] text-[#008069] hover:border-[#008069] transition disabled:opacity-50"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border bg-surface border-divider hover:bg-fill-1 text-accent hover:border-accent transition disabled:opacity-50"
                       >
                         <RefreshCw size={11} className={refreshingLocationDb ? 'animate-spin' : ''} />
                         <span>{refreshingLocationDb ? 'Memperbarui...' : '🔄 Refresh & Hitung Ulang'}</span>
@@ -1333,7 +1333,7 @@ export const CustomerDatabase: React.FC = () => {
                             {badge.label}
                           </span>
                           {detailData?.preferences?.location_refreshed_at ? (
-                            <span className="text-[10px] text-[#8696a0]">
+                            <span className="text-[10px] text-ink-3">
                               {new Date(detailData.preferences.location_refreshed_at).toLocaleString('id-ID')}
                             </span>
                           ) : null}
@@ -1343,8 +1343,8 @@ export const CustomerDatabase: React.FC = () => {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                       <div>
-                        <span className="text-[10px] text-[#667781] font-semibold block uppercase">Alamat Pasien</span>
-                        <p className="text-[#111b21] font-medium mt-0.5">
+                        <span className="text-[10px] text-ink-3 font-semibold block uppercase">Alamat Pasien</span>
+                        <p className="text-ink font-medium mt-0.5">
                           {detailData?.address || detailData?.kelurahan || detailData?.kecamatan
                             ? [detailData?.address, detailData?.kelurahan, detailData?.kecamatan, detailData?.kota]
                                 .filter(Boolean)
@@ -1354,49 +1354,49 @@ export const CustomerDatabase: React.FC = () => {
                       </div>
 
                       <div>
-                        <span className="text-[10px] text-[#667781] font-semibold block uppercase">Patokan / Landmark</span>
-                        <p className="text-[#111b21] font-medium mt-0.5">
+                        <span className="text-[10px] text-ink-3 font-semibold block uppercase">Patokan / Landmark</span>
+                        <p className="text-ink font-medium mt-0.5">
                           {detailData?.address_notes || detailData?.landmark || 'Tidak ada catatan patokan khusus'}
                         </p>
                       </div>
                     </div>
 
                     {/* Coordinates & Delivery Info */}
-                    <div className="pt-2 border-t border-[#f0f2f5] flex flex-wrap items-center justify-between gap-2 text-[11px] text-[#54656f]">
+                    <div className="pt-2 border-t border-divider flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink-2">
                       <div className="flex items-center space-x-2">
                         {detailData?.latitude && detailData?.longitude ? (
                           <a
                             href={getGoogleMapsDirectionUrl(detailData.latitude, detailData.longitude, [detailData?.address, detailData?.kelurahan, detailData?.kecamatan, detailData?.kota].filter(Boolean).join(', ') || null, resolveEffectiveLocationSource(detailData))}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center space-x-1 text-[#008069] font-bold hover:underline"
+                            className="inline-flex items-center space-x-1 text-accent font-bold hover:underline"
                           >
                             <Navigation size={12} />
                             <span>Buka Titik GPS Google Maps</span>
                             <ExternalLink size={10} />
                           </a>
                         ) : (
-                          <span className="text-[#8696a0] italic">Pin GPS belum diset</span>
+                          <span className="text-ink-3 italic">Pin GPS belum diset</span>
                         )}
                       </div>
 
                       {(detailData?.delivery_distance_km || detailData?.delivery_fee) && (
-                        <div className="font-semibold text-[#111b21]">
-                          Jarak: <span className="text-[#008069]">{detailData.delivery_distance_km} km</span> • Ongkir: <span className="text-[#008069]">{formatCurrency(detailData.delivery_fee || 0)}</span>
+                        <div className="font-semibold text-ink">
+                          Jarak: <span className="text-accent">{detailData.delivery_distance_km} km</span> • Ongkir: <span className="text-accent">{formatCurrency(detailData.delivery_fee || 0)}</span>
                         </div>
                       )}
                     </div>
                   </div>
 
                   {/* Section 2: Data Anak / Bayi */}
-                  <div className="p-4 bg-white border border-[#e9edef] rounded-2xl space-y-3 shadow-2xs">
-                    <h4 className="font-bold text-xs text-[#111b21] flex items-center space-x-1.5 text-[#008069]">
+                  <div className="p-4 bg-surface border border-divider rounded-2xl space-y-3 shadow-2xs">
+                    <h4 className="font-bold text-xs text-ink flex items-center space-x-1.5 text-accent">
                       <Baby size={15} />
                       <span>Data Anak / Bayi Pasien ({detailData?.children?.length || 0})</span>
                     </h4>
 
                     {!detailData?.children || detailData.children.length === 0 ? (
-                      <div className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-xl text-center text-xs text-[#8696a0]">
+                      <div className="p-3 bg-surface-2 border border-divider rounded-xl text-center text-xs text-ink-3">
                         Belum ada data profil anak yang tercatat terpisah.
                       </div>
                     ) : (
@@ -1404,16 +1404,16 @@ export const CustomerDatabase: React.FC = () => {
                         {detailData.children.map((child: any) => (
                           <div
                             key={child.id}
-                            className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-xl flex items-center justify-between"
+                            className="p-3 bg-surface-2 border border-divider rounded-xl flex items-center justify-between"
                           >
                             <div>
-                              <p className="font-bold text-[#111b21] text-xs">{child.name || 'Anak Pasien'}</p>
-                              <p className="text-[11px] text-[#667781] mt-0.5">
-                                Usia: <span className="font-semibold text-[#008069]">{child.current_age || formatClinicalAge(child.birth_date) || child.raw_age_text || 'Tidak tercatat'}</span>
+                              <p className="font-bold text-ink text-xs">{child.name || 'Anak Pasien'}</p>
+                              <p className="text-[11px] text-ink-3 mt-0.5">
+                                Usia: <span className="font-semibold text-accent">{child.current_age || formatClinicalAge(child.birth_date) || child.raw_age_text || 'Tidak tercatat'}</span>
                               </p>
                             </div>
                             {child.birth_date && (
-                              <span className="text-[10px] text-[#8696a0] font-mono">
+                              <span className="text-[10px] text-ink-3 font-mono">
                                 Lahir: {new Date(child.birth_date).toLocaleDateString('id-ID')}
                               </span>
                             )}
@@ -1424,21 +1424,21 @@ export const CustomerDatabase: React.FC = () => {
                   </div>
 
                   {/* Section 3: Riwayat Reservasi & Layanan */}
-                  <div className="p-4 bg-white border border-[#e9edef] rounded-2xl space-y-3 shadow-2xs">
-                    <h4 className="font-bold text-xs text-[#111b21] flex items-center space-x-1.5 text-[#008069]">
+                  <div className="p-4 bg-surface border border-divider rounded-2xl space-y-3 shadow-2xs">
+                    <h4 className="font-bold text-xs text-ink flex items-center space-x-1.5 text-accent">
                       <Calendar size={15} />
                       <span>Riwayat Layanan & Reservasi ({detailData?.reservations?.length || 0})</span>
                     </h4>
 
                     {!detailData?.reservations || detailData.reservations.length === 0 ? (
-                      <div className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-xl text-center text-xs text-[#8696a0]">
+                      <div className="p-3 bg-surface-2 border border-divider rounded-xl text-center text-xs text-ink-3">
                         Belum ada riwayat reservasi yang tercatat untuk customer ini.
                       </div>
                     ) : (
                       <div className="overflow-x-auto">
                         <table className="w-full text-left text-xs border-collapse">
                           <thead>
-                            <tr className="border-b border-[#e9edef] bg-[#f8fafc] text-[#667781] text-[10px] uppercase font-bold">
+                            <tr className="border-b border-divider bg-surface-2 text-ink-3 text-[10px] uppercase font-bold">
                               <th className="py-2 px-3">Tanggal</th>
                               <th className="py-2 px-3">Kategori</th>
                               <th className="py-2 px-3">Treatment</th>
@@ -1447,15 +1447,15 @@ export const CustomerDatabase: React.FC = () => {
                               <th className="py-2 px-3 text-right">Status</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-[#e9edef]">
+                          <tbody className="divide-y divide-divider">
                             {detailData.reservations.map((res: any) => (
                               <tr
                                 key={res.id}
                                 onClick={() => handleOpenReservationDetail(res.id)}
-                                className="hover:bg-[#f8fafc] hover:border-[#008069]/20 cursor-pointer transition group"
+                                className="hover:bg-surface-2 hover:border-accent/20 cursor-pointer transition group"
                                 title="Klik untuk lihat detail reservasi"
                               >
-                                <td className="py-2.5 px-3 whitespace-nowrap text-[11px] font-semibold text-[#111b21]">
+                                <td className="py-2.5 px-3 whitespace-nowrap text-[11px] font-semibold text-ink">
                                   {res.booking_date
                                     ? new Date(res.booking_date).toLocaleDateString('id-ID', {
                                         day: '2-digit',
@@ -1465,28 +1465,28 @@ export const CustomerDatabase: React.FC = () => {
                                     : 'Tanpa Jadwal'}
                                 </td>
                                 <td className="py-2.5 px-3">
-                                  <span className="px-1.5 py-0.5 rounded bg-[#f0f2f5] text-[10px] font-bold text-[#54656f]">
+                                  <span className="px-1.5 py-0.5 rounded bg-fill-1 text-[10px] font-bold text-ink-2">
                                     {res.treatment_category}
                                   </span>
                                 </td>
-                                <td className="py-2.5 px-3 text-[#111b21] max-w-[180px] truncate font-medium" title={res.treatment_detail}>
+                                <td className="py-2.5 px-3 text-ink max-w-[180px] truncate font-medium" title={res.treatment_detail}>
                                   {getCleanTreatmentName(res.treatment_detail || res.raw_text)}
                                 </td>
-                                <td className="py-2.5 px-3 text-right text-[11px] font-bold text-emerald-700 whitespace-nowrap">
-                                  {res.purchase_value ? `Rp ${Number(res.purchase_value).toLocaleString('id-ID')}` : <span className="text-[#8696a0] font-normal">-</span>}
+                                <td className="py-2.5 px-3 text-right text-[11px] font-bold text-success whitespace-nowrap">
+                                  {res.purchase_value ? `Rp ${Number(res.purchase_value).toLocaleString('id-ID')}` : <span className="text-ink-3 font-normal">-</span>}
                                 </td>
-                                <td className="py-2.5 px-3 text-[#54656f] text-[11px] group-hover:text-[#008069]">
-                                  {resolveStaffName(res, reservationStaffList) || <span className="text-[#8696a0] italic">-</span>}
+                                <td className="py-2.5 px-3 text-ink-2 text-[11px] group-hover:text-accent">
+                                  {resolveStaffName(res, reservationStaffList) || <span className="text-ink-3 italic">-</span>}
                                 </td>
                                 <td className="py-2.5 px-3 text-right">
                                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
                                     res.status === 'completed'
-                                      ? 'bg-sky-100 text-sky-800 border border-sky-200'
+                                      ? 'bg-info-soft text-info border border-info-line'
                                       : res.status === 'confirmed'
-                                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                      ? 'bg-success-soft text-success border border-success-line'
                                       : res.status === 'cancelled'
-                                      ? 'bg-rose-100 text-rose-800 border border-rose-200'
-                                      : 'bg-amber-100 text-amber-800 border border-amber-200'
+                                      ? 'bg-danger-soft text-danger border border-danger-line'
+                                      : 'bg-warning-soft text-warning border border-warning-line'
                                   }`}>
                                     {res.status === 'completed' ? 'Selesai' : res.status === 'confirmed' ? 'Terjadwal' : res.status === 'cancelled' ? 'Batal' : res.status === 'hold' ? 'Hold' : res.status}
                                   </span>
@@ -1498,14 +1498,14 @@ export const CustomerDatabase: React.FC = () => {
                       </div>
                     )}
                     {detailData?.reservations?.length > 0 && (
-                      <p className="text-[10px] text-[#8696a0] italic flex items-center space-x-1"><Eye size={10} /><span>Klik baris untuk lihat detail lengkap</span></p>
+                      <p className="text-[10px] text-ink-3 italic flex items-center space-x-1"><Eye size={10} /><span>Klik baris untuk lihat detail lengkap</span></p>
                     )}
                   </div>
 
                   {/* Section: Paket Sesi / Session Packages */}
                   {customerSeries.length > 0 && (
-                    <div className="p-4 bg-white border border-[#e9edef] rounded-2xl space-y-3 shadow-2xs">
-                      <h4 className="font-bold text-xs text-[#111b21] flex items-center space-x-1.5 text-[#008069]">
+                    <div className="p-4 bg-surface border border-divider rounded-2xl space-y-3 shadow-2xs">
+                      <h4 className="font-bold text-xs text-ink flex items-center space-x-1.5 text-accent">
                         <Package size={15} />
                         <span>Paket Sesi ({customerSeries.length} aktif)</span>
                       </h4>
@@ -1513,31 +1513,31 @@ export const CustomerDatabase: React.FC = () => {
                         {customerSeries.map((series: any) => {
                           const completedCount = series.completed_sessions ?? (series.reservations?.filter((r: any) => r.status === 'completed').length || 0);
                           const progress = series.total_sessions > 0 ? (completedCount / series.total_sessions) * 100 : 0;
-                          const statusColor = series.status === 'active' ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
-                            : series.status === 'paused' ? 'text-amber-700 bg-amber-50 border-amber-200'
-                            : series.status === 'completed' ? 'text-blue-700 bg-blue-50 border-blue-200'
-                            : 'text-red-700 bg-red-50 border-red-200';
+                          const statusColor = series.status === 'active' ? 'text-success bg-success-soft border-success-line'
+                            : series.status === 'paused' ? 'text-warning bg-warning-soft border-warning-line'
+                            : series.status === 'completed' ? 'text-info bg-info-soft border-info-line'
+                            : 'text-danger bg-danger-soft border-danger-line';
                           return (
-                            <div key={series.id} className="p-3 rounded-xl border border-[#e9edef] bg-[#f8fafc] space-y-2">
+                            <div key={series.id} className="p-3 rounded-xl border border-divider bg-surface-2 space-y-2">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center space-x-2">
-                                  <span className="font-bold text-[11px] text-[#111b21]">{series.treatment_name}</span>
+                                  <span className="font-bold text-[11px] text-ink">{series.treatment_name}</span>
                                   <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-bold uppercase border ${statusColor}`}>
                                     {series.status === 'active' ? 'Aktif' : series.status === 'paused' ? 'Jeda' : series.status === 'completed' ? 'Selesai' : 'Batal'}
                                   </span>
                                 </div>
-                                <span className="text-[10px] text-[#8696a0] font-mono">
+                                <span className="text-[10px] text-ink-3 font-mono">
                                   {completedCount}/{series.total_sessions} sesi
                                 </span>
                               </div>
                               {/* Progress bar */}
-                              <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                              <div className="w-full h-1.5 bg-fill-2 rounded-full overflow-hidden">
                                 <div
-                                  className="h-full bg-[#008069] rounded-full transition-all duration-300"
+                                  className="h-full bg-accent rounded-full transition-all duration-300"
                                   style={{ width: `${progress}%` }}
                                 />
                               </div>
-                              <div className="flex items-center justify-between text-[10px] text-[#8696a0]">
+                              <div className="flex items-center justify-between text-[10px] text-ink-3">
                                 <span>{Math.round(progress)}% selesai</span>
                                 {resolveStaffName(series, reservationStaffList) && <span>Terapis: {resolveStaffName(series, reservationStaffList)}</span>}
                               </div>
@@ -1568,22 +1568,22 @@ export const CustomerDatabase: React.FC = () => {
                   />
 
                   {/* Section 4: Atribusi Meta Ads & Label */}
-                  <div className="p-4 bg-white border border-[#e9edef] rounded-2xl space-y-2 shadow-2xs">
-                    <h4 className="font-bold text-xs text-[#111b21] flex items-center space-x-1.5 text-[#008069]">
+                  <div className="p-4 bg-surface border border-divider rounded-2xl space-y-2 shadow-2xs">
+                    <h4 className="font-bold text-xs text-ink flex items-center space-x-1.5 text-accent">
                       <Tag size={15} />
                       <span>Atribusi Iklan Meta & Tag</span>
                     </h4>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-[#54656f]">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-ink-2">
                       <div>
-                        <span className="font-semibold text-[#8696a0] block">Campaign Iklan:</span>
-                        <p className="font-medium text-[#111b21] truncate">
+                        <span className="font-semibold text-ink-3 block">Campaign Iklan:</span>
+                        <p className="font-medium text-ink truncate">
                           {detailData?.adClick?.utmCampaign || activeDetailCustomer.adClick?.utmCampaign || 'Organik / Langsung'}
                         </p>
                       </div>
                       <div>
-                        <span className="font-semibold text-[#8696a0] block">Source / Medium:</span>
-                        <p className="font-medium text-[#111b21]">
+                        <span className="font-semibold text-ink-3 block">Source / Medium:</span>
+                        <p className="font-medium text-ink">
                           {detailData?.adClick?.utmSource || 'wa'} / {detailData?.adClick?.utmMedium || 'ctwa'}
                         </p>
                       </div>
@@ -1594,7 +1594,7 @@ export const CustomerDatabase: React.FC = () => {
             </div>
 
             {/* Modal Footer with Actions */}
-            <div className="p-4 border-t border-[#e9edef] bg-[#f8fafc] flex flex-wrap items-center justify-between gap-2">
+            <div className="p-4 border-t border-divider bg-surface-2 flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center space-x-2">
                 <button
                   onClick={() => {
@@ -1602,7 +1602,7 @@ export const CustomerDatabase: React.FC = () => {
                     // terbuka di atasnya (zIndex 60) dan kembali ke detail saat ditutup.
                     handleOpenHistory(activeDetailCustomer);
                   }}
-                  className="px-3 py-2 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
+                  className="px-3 py-2 rounded-xl bg-info-soft hover:bg-info-line text-info border border-info-line text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
                 >
                   <MessageSquare size={13} />
                   <span>Riwayat Chat</span>
@@ -1614,7 +1614,7 @@ export const CustomerDatabase: React.FC = () => {
                     setActiveDetailCustomer(null);
                     setActiveEventCustomer(cust);
                   }}
-                  className="px-3 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
+                  className="px-3 py-2 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
                 >
                   <Send size={13} />
                   <span>Kirim Event Meta</span>
@@ -1626,7 +1626,7 @@ export const CustomerDatabase: React.FC = () => {
                 onClick={() =>
                   setAddrBookCustomer({ id: activeDetailCustomer.id, name: activeDetailCustomer.name ?? undefined })
                 }
-                className="px-4 py-2 bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] text-xs font-semibold rounded-xl transition shadow-xs flex items-center space-x-1.5 min-h-[44px] active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-[#00a884]"
+                className="px-4 py-2 bg-accent-soft hover:bg-accent-soft text-accent border border-divider text-xs font-semibold rounded-xl transition shadow-xs flex items-center space-x-1.5 min-h-[44px] active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-accent"
               >
                 <MapPin size={13} />
                 <span>Buku Alamat</span>
@@ -1635,14 +1635,14 @@ export const CustomerDatabase: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setDetailEditMode(true)}
-                className="px-4 py-2 bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] text-xs font-semibold rounded-xl transition shadow-xs flex items-center space-x-1.5"
+                className="px-4 py-2 bg-accent-soft hover:bg-accent-soft text-accent border border-divider text-xs font-semibold rounded-xl transition shadow-xs flex items-center space-x-1.5"
               >
                 <PenLine size={13} />
                 <span>Edit Profil & Data Anak</span>
               </button>
             <button
               onClick={() => setActiveDetailCustomer(null)}
-              className="px-4 py-2 bg-white hover:bg-[#e9edef] border border-[#d1d7db] text-[#111b21] rounded-xl text-xs font-semibold transition shadow-xs ml-auto"
+              className="px-4 py-2 bg-surface hover:bg-fill-2 border border-divider text-ink rounded-xl text-xs font-semibold transition shadow-xs ml-auto"
             >
               Tutup
             </button>

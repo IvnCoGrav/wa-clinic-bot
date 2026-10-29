@@ -177,7 +177,7 @@ export const MediaImage: React.FC<{
     return (
       <div className="inline-block max-w-full">
         <div className="w-48 sm:w-56 h-32 sm:h-36 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-slate-500 text-[10px] space-y-1.5 px-3 text-center">
-          <ImageOff size={18} className="text-slate-400" />
+          <ImageOff size={18} className="text-ink-3" />
           <span className="font-medium text-slate-500 dark:text-slate-400 leading-tight">
             Gambar tidak tersedia
           </span>
@@ -189,11 +189,11 @@ export const MediaImage: React.FC<{
   return (
     <>
       {/* Inline Chat Bubble Thumbnail */}
-      <div className="relative inline-block overflow-hidden rounded-xl group max-w-full min-w-[140px] sm:min-w-[180px] min-h-[100px] sm:min-h-[130px] bg-slate-100/90">
+      <div className="relative inline-block overflow-hidden rounded-xl group max-w-full min-w-[140px] sm:min-w-[180px] min-h-[100px] sm:min-h-[130px] bg-fill-1/90">
         {thumbnailLoading && (
-          <div className="absolute inset-0 rounded-xl bg-slate-100/95 flex flex-col items-center justify-center text-slate-400 z-10 space-y-1">
-            <Loader size={16} className="animate-spin text-[#008069]" />
-            <span className="text-[10px] text-slate-400 font-medium select-none">Memuat...</span>
+          <div className="absolute inset-0 rounded-xl bg-fill-1/95 flex flex-col items-center justify-center text-ink-3 z-10 space-y-1">
+            <Loader size={16} className="animate-spin text-accent" />
+            <span className="text-[10px] text-ink-3 font-medium select-none">Memuat...</span>
           </div>
         )}
         <img
@@ -248,7 +248,7 @@ export const MediaImage: React.FC<{
                 {caption ? caption : 'Lihat Foto'}
               </span>
               {isHdLoaded && (
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500 text-white shrink-0 tracking-wider">
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-success text-on-solid shrink-0 tracking-wider">
                   HD
                 </span>
               )}
@@ -264,7 +264,7 @@ export const MediaImage: React.FC<{
                       type="button"
                       onClick={handleLoadHd}
                       title="Klik untuk memuat resolusi penuh (HD)"
-                      className="flex items-center space-x-1 px-2.5 py-1.5 rounded-full bg-amber-500/90 hover:bg-amber-500 active:bg-amber-600 text-white text-[11px] font-bold shadow-sm transition cursor-pointer touch-manipulation ring-1 ring-amber-300/50"
+                      className="flex items-center space-x-1 px-2.5 py-1.5 rounded-full bg-warning/90 hover:bg-warning active:bg-warning-hover text-on-solid text-[11px] font-bold shadow-sm transition cursor-pointer touch-manipulation ring-1 ring-warning/50"
                     >
                       <ZoomIn size={13} />
                       <span>Muat HD</span>
@@ -272,14 +272,14 @@ export const MediaImage: React.FC<{
                   )}
 
                   {isHdLoading && (
-                    <div className="flex items-center space-x-1 px-2.5 py-1.5 rounded-full bg-slate-800 text-slate-200 text-[11px] font-medium border border-slate-700">
-                      <Loader size={13} className="animate-spin text-amber-400" />
+                    <div className="flex items-center space-x-1 px-2.5 py-1.5 rounded-full bg-fill-2 text-ink-3 text-[11px] font-medium border border-strong">
+                      <Loader size={13} className="animate-spin text-warning" />
                       <span>Memuat HD...</span>
                     </div>
                   )}
 
                   {isHdLoaded && (
-                    <div className="flex items-center space-x-1 px-2.5 py-1.5 rounded-full bg-emerald-600/90 text-white text-[11px] font-bold shadow-xs">
+                    <div className="flex items-center space-x-1 px-2.5 py-1.5 rounded-full bg-success/90 text-white text-[11px] font-bold shadow-xs">
                       <Check size={13} />
                       <span>HD Aktif</span>
                     </div>

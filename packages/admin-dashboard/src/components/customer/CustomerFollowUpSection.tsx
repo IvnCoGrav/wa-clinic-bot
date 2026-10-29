@@ -38,12 +38,12 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 const STATUS_STYLES: Record<string, string> = {
-  QUEUED: 'bg-sky-100 text-sky-800 border-sky-200',
-  PENDING: 'bg-amber-100 text-amber-800 border-amber-200',
-  SENT: 'bg-emerald-100 text-emerald-800 border-emerald-200',
-  CANCELLED: 'bg-gray-100 text-gray-600 border-gray-200',
-  FAILED: 'bg-rose-100 text-rose-800 border-rose-200',
-  SKIPPED: 'bg-gray-100 text-gray-500 border-gray-200',
+  QUEUED: 'bg-info-soft text-info border-info-line',
+  PENDING: 'bg-warning-soft text-warning border-warning-line',
+  SENT: 'bg-success-soft text-success border-success-line',
+  CANCELLED: 'bg-fill-1 text-ink-2 border-divider',
+  FAILED: 'bg-danger-soft text-danger border-danger-line',
+  SKIPPED: 'bg-fill-1 text-ink-2 border-divider',
 };
 
 function humanizeType(type: string, stage: number): string {
@@ -222,17 +222,17 @@ export const CustomerFollowUpSection: React.FC<Props> = ({ customerId, followUps
   };
 
   return (
-    <div className="p-4 bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl space-y-3 shadow-2xs">
+    <div className="p-4 bg-surface border border-divider rounded-2xl space-y-3 shadow-2xs">
       <div className="flex items-center justify-between">
-        <h4 className="font-bold text-xs text-[#111b21] dark:text-[#e9edef] flex items-center gap-1.5">
-          <Clock size={14} className="text-[#008069]" />
+        <h4 className="font-bold text-xs text-ink flex items-center gap-1.5">
+          <Clock size={14} className="text-accent" />
           <span>Antrean Follow-Up ({active.length} aktif)</span>
         </h4>
         {history.length > 0 && (
           <button
             type="button"
             onClick={() => setHistoryOpen((v) => !v)}
-            className="text-[11px] font-semibold text-[#008069] hover:text-[#006b59] flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-[#e8f5f2] transition"
+            className="text-[11px] font-semibold text-accent hover:text-accent-hover flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-accent-soft transition"
           >
             {historyOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
             <span>Riwayat ({history.length})</span>
@@ -241,9 +241,9 @@ export const CustomerFollowUpSection: React.FC<Props> = ({ customerId, followUps
       </div>
 
       {active.length === 0 ? (
-        <div className="p-3 bg-[#f8fafc] dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] rounded-xl text-center">
-          <p className="text-xs text-[#667781] dark:text-[#8696a0]">Tidak ada jadwal follow-up aktif untuk customer ini.</p>
-          <p className="text-[11px] text-[#8696a0] mt-1">Follow-up otomatis akan dibuat setelah reservasi atau jika customer belum purchase.</p>
+        <div className="p-3 bg-surface-2 border border-divider rounded-xl text-center">
+          <p className="text-xs text-ink-2">Tidak ada jadwal follow-up aktif untuk customer ini.</p>
+          <p className="text-[11px] text-ink-3 mt-1">Follow-up otomatis akan dibuat setelah reservasi atau jika customer belum purchase.</p>
         </div>
       ) : (
         <div className="space-y-2.5">
@@ -251,22 +251,22 @@ export const CustomerFollowUpSection: React.FC<Props> = ({ customerId, followUps
             const isExpanded = expandedId === fu.id;
             const overdue = new Date(fu.scheduled_at).getTime() < Date.now();
             return (
-              <div key={fu.id} className={`rounded-xl border p-3 space-y-2 ${overdue ? 'border-amber-200 bg-amber-50/40' : 'border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#202c33]'}`}>
+              <div key={fu.id} className={`rounded-xl border p-3 space-y-2 ${overdue ? 'border-warning-line bg-warning-soft/40' : 'border-divider bg-surface-2'}`}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">{humanizeType(fu.type, fu.stage)}</span>
-                      <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold border ${STATUS_STYLES[fu.status] || 'bg-gray-100 text-gray-700 border-gray-200'}`}>
+                      <span className="text-xs font-bold text-ink">{humanizeType(fu.type, fu.stage)}</span>
+                      <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold border ${STATUS_STYLES[fu.status] || 'bg-fill-1 text-ink border-divider'}`}>
                         {fu.status}
                       </span>
-                      {overdue && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">Terlewat</span>}
+                      {overdue && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-warning-soft text-warning border border-warning-line">Terlewat</span>}
                     </div>
-                    <div className="flex items-center gap-1.5 mt-1 text-[11px] text-[#54656f]">
+                    <div className="flex items-center gap-1.5 mt-1 text-[11px] text-ink-2">
                       <Calendar size={11} className="shrink-0" />
                       <span className="font-medium">{formatWibRelative(fu.scheduled_at, fu.status)}</span>
                     </div>
                     {fu.reservation && (
-                      <p className="text-[11px] text-[#667781] dark:text-[#8696a0] mt-1 truncate">
+                      <p className="text-[11px] text-ink-2 mt-1 truncate">
                         Terkait reservasi: {fu.reservation.treatment_detail || fu.reservation.treatment_category || fu.reservation.id.slice(0, 8)} •{' '}
                         {fu.reservation.booking_date ? new Date(fu.reservation.booking_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : ''}
                       </p>
@@ -275,7 +275,7 @@ export const CustomerFollowUpSection: React.FC<Props> = ({ customerId, followUps
                   <button
                     type="button"
                     onClick={() => setExpandedId(isExpanded ? null : fu.id)}
-                    className="p-1.5 rounded-lg hover:bg-white border border-transparent hover:border-[#e9edef] text-[#667781] dark:text-[#8696a0] transition shrink-0"
+                    className="p-1.5 rounded-lg hover:bg-surface border border-transparent hover:border-divider text-ink-2 transition shrink-0"
                     title={isExpanded ? 'Sembunyikan' : 'Lihat pesan'}
                   >
                     {isExpanded ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -283,11 +283,11 @@ export const CustomerFollowUpSection: React.FC<Props> = ({ customerId, followUps
                 </div>
 
                 {isExpanded && (
-                  <div className="p-2.5 bg-white border border-[#e9edef] rounded-xl text-xs leading-relaxed whitespace-pre-wrap">
+                  <div className="p-2.5 bg-surface border border-divider rounded-xl text-xs leading-relaxed whitespace-pre-wrap">
                     {fu.custom_text ? (
-                      <p className="text-[#111b21] dark:text-[#e9edef]">{fu.custom_text}</p>
+                      <p className="text-ink">{fu.custom_text}</p>
                     ) : (
-                      <p className="text-[#667781] dark:text-[#8696a0] italic">Pratinjau template default: {humanizeType(fu.type, fu.stage)} — teks akan dirender saat pengiriman (varian rolling 1..3).</p>
+                      <p className="text-ink-2 italic">Pratinjau template default: {humanizeType(fu.type, fu.stage)} — teks akan dirender saat pengiriman (varian rolling 1..3).</p>
                     )}
                   </div>
                 )}
@@ -298,7 +298,7 @@ export const CustomerFollowUpSection: React.FC<Props> = ({ customerId, followUps
                       type="button"
                       onClick={() => handleQueue(fu.id)}
                       disabled={queueingId === fu.id}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-[#008069]/20 text-[#008069] hover:bg-[#e8f5f2] text-xs font-semibold transition disabled:opacity-50"
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-surface border border-accent/20 text-accent hover:bg-accent-soft text-xs font-semibold transition disabled:opacity-50"
                     >
                       <Clock size={12} />
                       {queueingId === fu.id ? 'Menjadwalkan...' : 'Jadwalkan'}
@@ -308,7 +308,7 @@ export const CustomerFollowUpSection: React.FC<Props> = ({ customerId, followUps
                     type="button"
                     onClick={() => handleSendNow(fu.id)}
                     disabled={sendingId === fu.id}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition disabled:opacity-50 shadow-xs"
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-xs font-bold transition disabled:opacity-50 shadow-xs"
                   >
                     <Rocket size={12} />
                     {sendingId === fu.id ? 'Mengirim...' : 'Kirim Sekarang'}
@@ -316,7 +316,7 @@ export const CustomerFollowUpSection: React.FC<Props> = ({ customerId, followUps
                   <button
                     type="button"
                     onClick={() => openEdit(fu)}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-[#e9edef] hover:bg-[#f0f2f5] text-[#111b21] dark:text-[#e9edef] text-xs font-semibold transition"
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-surface border border-divider hover:bg-fill-1 text-ink text-xs font-semibold transition"
                   >
                     <Pencil size={12} />
                     Edit / Reschedule
@@ -324,7 +324,7 @@ export const CustomerFollowUpSection: React.FC<Props> = ({ customerId, followUps
                   <button
                     type="button"
                     onClick={() => handleCancel(fu.id)}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-rose-200 hover:bg-rose-50 text-rose-700 text-xs font-semibold transition"
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-surface border border-danger-line hover:bg-danger-soft text-danger text-xs font-semibold transition"
                   >
                     <XCircle size={12} />
                     Batalkan
@@ -337,25 +337,25 @@ export const CustomerFollowUpSection: React.FC<Props> = ({ customerId, followUps
       )}
 
       {historyOpen && history.length > 0 && (
-        <div className="pt-2 border-t border-[#e9edef] space-y-2">
-          <h5 className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider flex items-center gap-1">
+        <div className="pt-2 border-t border-divider space-y-2">
+          <h5 className="text-[11px] font-bold text-ink-2 uppercase tracking-wider flex items-center gap-1">
             <CheckCircle2 size={12} />
             Riwayat ({history.length})
           </h5>
           <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
             {history.map((fu) => (
-              <div key={fu.id} className="p-2.5 rounded-xl border border-[#e9edef] bg-white flex justify-between items-start gap-2">
+              <div key={fu.id} className="p-2.5 rounded-xl border border-divider bg-surface flex justify-between items-start gap-2">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-xs font-semibold text-[#111b21] dark:text-[#e9edef]">{humanizeType(fu.type, fu.stage)}</span>
+                    <span className="text-xs font-semibold text-ink">{humanizeType(fu.type, fu.stage)}</span>
                     <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold border ${STATUS_STYLES[fu.status] || ''}`}>{fu.status}</span>
                   </div>
-                  <p className="text-[11px] text-[#667781] dark:text-[#8696a0] mt-0.5">
+                  <p className="text-[11px] text-ink-2 mt-0.5">
                     {fu.status === 'SENT' && fu.sent_at ? `Terkirim ${new Date(fu.sent_at).toLocaleString('id-ID')}` : `Jadwal ${formatWibRelative(fu.scheduled_at, fu.status)}`}
                   </p>
-                  {fu.cancel_reason && <p className="text-[11px] text-rose-600 mt-0.5">Alasan: {fu.cancel_reason}</p>}
+                  {fu.cancel_reason && <p className="text-[11px] text-danger mt-0.5">Alasan: {fu.cancel_reason}</p>}
                 </div>
-                <span className="text-[10px] text-[#8696a0] shrink-0">{fu.stage ? `Tahap ${fu.stage}` : ''}</span>
+                <span className="text-[10px] text-ink-3 shrink-0">{fu.stage ? `Tahap ${fu.stage}` : ''}</span>
               </div>
             ))}
           </div>
@@ -365,22 +365,22 @@ export const CustomerFollowUpSection: React.FC<Props> = ({ customerId, followUps
       {/* Cancel reason modal inline */}
       {cancellingId && (
         <div className="fixed inset-0 z-[70] bg-black/40 backdrop-blur-xs flex items-center justify-center p-4" onClick={() => setCancellingId(null)}>
-          <div className="bg-white rounded-2xl w-full max-w-md p-4 space-y-3 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-surface rounded-2xl w-full max-w-md p-4 space-y-3 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <h5 className="font-bold text-sm text-[#111b21] dark:text-[#e9edef] flex items-center gap-1.5"><AlertCircle size={16} className="text-rose-600" /> Batalkan Follow-Up</h5>
-              <button onClick={() => setCancellingId(null)} className="p-1 rounded-lg hover:bg-[#f0f2f5]"><X size={16} /></button>
+              <h5 className="font-bold text-sm text-ink flex items-center gap-1.5"><AlertCircle size={16} className="text-danger" /> Batalkan Follow-Up</h5>
+              <button onClick={() => setCancellingId(null)} className="p-1 rounded-lg hover:bg-fill-1"><X size={16} /></button>
             </div>
-            <p className="text-xs text-[#667781] dark:text-[#8696a0]">Alasan pembatalan (opsional) akan disimpan di <code>cancel_reason</code>:</p>
+            <p className="text-xs text-ink-2">Alasan pembatalan (opsional) akan disimpan di <code>cancel_reason</code>:</p>
             <textarea
               value={cancelReason}
               onChange={(e) => setCancelReason(e.target.value)}
               placeholder="Mis. Customer sudah reservasi manual, salah jadwal, dll."
-              className="w-full p-2.5 border border-[#d1d7db] rounded-xl text-xs focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069]"
+              className="w-full p-2.5 border border-strong rounded-xl text-xs focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
               rows={3}
             />
             <div className="flex justify-end gap-2">
-              <button onClick={() => setCancellingId(null)} className="px-4 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs font-semibold">Batal</button>
-              <button onClick={submitCancel} disabled={saving} className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold disabled:opacity-50">
+              <button onClick={() => setCancellingId(null)} className="px-4 py-2 bg-surface border border-strong rounded-xl text-xs font-semibold">Batal</button>
+              <button onClick={submitCancel} disabled={saving} className="px-4 py-2 bg-danger hover:bg-danger-hover text-on-solid rounded-xl text-xs font-bold disabled:opacity-50">
                 {saving ? 'Membatalkan...' : 'Ya, Batalkan'}
               </button>
             </div>
@@ -391,48 +391,48 @@ export const CustomerFollowUpSection: React.FC<Props> = ({ customerId, followUps
       {/* Edit / Reschedule modal */}
       {editing && (
         <div className="fixed inset-0 z-[70] bg-black/40 backdrop-blur-xs flex items-center justify-center p-4" onClick={() => setEditing(null)}>
-          <div className="bg-white rounded-2xl w-full max-w-md p-4 space-y-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-surface rounded-2xl w-full max-w-md p-4 space-y-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <h5 className="font-bold text-sm text-[#111b21] dark:text-[#e9edef] flex items-center gap-1.5"><Pencil size={16} className="text-[#008069]" /> Edit Follow-Up</h5>
-              <button onClick={() => setEditing(null)} className="p-1 rounded-lg hover:bg-[#f0f2f5]"><X size={16} /></button>
+              <h5 className="font-bold text-sm text-ink flex items-center gap-1.5"><Pencil size={16} className="text-accent" /> Edit Follow-Up</h5>
+              <button onClick={() => setEditing(null)} className="p-1 rounded-lg hover:bg-fill-1"><X size={16} /></button>
             </div>
             <div className="space-y-3 text-xs">
               <div>
-                <label className="font-semibold text-[#111b21] dark:text-[#e9edef] block mb-1">Tipe</label>
-                <p className="p-2.5 bg-[#f8fafc] dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] rounded-xl text-[#54656f]">{humanizeType(editing.type, editing.stage)}</p>
+                <label className="font-semibold text-ink block mb-1">Tipe</label>
+                <p className="p-2.5 bg-surface-2 border border-divider rounded-xl text-ink-2">{humanizeType(editing.type, editing.stage)}</p>
               </div>
               <div>
-                <label className="font-semibold text-[#111b21] dark:text-[#e9edef] block mb-1">Tahap (Stage 1..3)</label>
-                <select value={editStage} onChange={(e) => setEditStage(Number(e.target.value))} className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs focus:outline-none focus:border-[#008069]">
+                <label className="font-semibold text-ink block mb-1">Tahap (Stage 1..3)</label>
+                <select value={editStage} onChange={(e) => setEditStage(Number(e.target.value))} className="w-full p-2.5 bg-surface border border-strong rounded-xl text-xs focus:outline-none focus:border-accent">
                   <option value={1}>Tahap 1</option>
                   <option value={2}>Tahap 2</option>
                   <option value={3}>Tahap 3</option>
                 </select>
               </div>
               <div>
-                <label className="font-semibold text-[#111b21] dark:text-[#e9edef] block mb-1">Jadwal Kirim (WIB)</label>
+                <label className="font-semibold text-ink block mb-1">Jadwal Kirim (WIB)</label>
                 <input
                   type="datetime-local"
                   value={editScheduledAt}
                   onChange={(e) => setEditScheduledAt(e.target.value)}
-                  className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069]"
+                  className="w-full p-2.5 bg-surface border border-strong rounded-xl text-xs focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
                 />
-                <p className="text-[11px] text-[#8696a0] mt-1">Disimpan sebagai UTC, ditampilkan WIB.</p>
+                <p className="text-[11px] text-ink-3 mt-1">Disimpan sebagai UTC, ditampilkan WIB.</p>
               </div>
               <div>
-                <label className="font-semibold text-[#111b21] dark:text-[#e9edef] block mb-1">Custom Text (opsional)</label>
+                <label className="font-semibold text-ink block mb-1">Custom Text (opsional)</label>
                 <textarea
                   value={editCustomText}
                   onChange={(e) => setEditCustomText(e.target.value)}
                   placeholder="Kosongkan untuk pakai template default rolling"
-                  className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069]"
+                  className="w-full p-2.5 bg-surface border border-strong rounded-xl text-xs focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
                   rows={4}
                 />
               </div>
             </div>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setEditing(null)} className="px-4 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs font-semibold">Batal</button>
-              <button onClick={submitEdit} disabled={saving} className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold disabled:opacity-50 flex items-center gap-1.5">
+              <button onClick={() => setEditing(null)} className="px-4 py-2 bg-surface border border-strong rounded-xl text-xs font-semibold">Batal</button>
+              <button onClick={submitEdit} disabled={saving} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-xl text-xs font-bold disabled:opacity-50 flex items-center gap-1.5">
                 <Send size={12} />
                 {saving ? 'Menyimpan...' : 'Simpan Perubahan'}
               </button>

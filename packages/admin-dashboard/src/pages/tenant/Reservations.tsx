@@ -65,6 +65,8 @@ import { MonthScheduleGrid } from '../../components/calendar/MonthScheduleGrid';
 import { CreateReservationModal } from '../../components/calendar/CreateReservationModal';
 import { ReservationDetailModal } from '../../components/modals/ReservationDetailModal';
 import { ChatHistoryModal } from '../../components/modals/ChatHistoryModal';
+import { StatusChip } from '../../components/ui/StatusChip';
+import { reservationStatusToTone } from '../../utils/statusTone';
 import { useAuth } from '../../contexts/AuthContext';
 import { resolveStaffName } from '../../utils/resolveStaffName';
 
@@ -687,26 +689,23 @@ export const Reservations: React.FC = () => {
   const filteredReservations = reservations;
 
   const getStatusBadge = (status: string, rawText?: string | null) => {
-    switch (status) {
-      case 'hold':
-        return <span className="px-2.5 py-0.5 rounded-full bg-amber-500 text-white text-xs font-bold shadow-2xs">⏳ Hold</span>;
-      case 'confirmed':
-        return <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-semibold">📅 Terjadwal</span>;
-      case 'en_route':
-        return <span className="px-2.5 py-0.5 rounded-full bg-teal-100 border border-teal-200 text-teal-800 text-xs font-semibold">🛵 Dalam Perjalanan</span>;
-      case 'completed':
-        return <span className="px-2.5 py-0.5 rounded-full bg-sky-100 border border-sky-200 text-sky-800 text-xs font-semibold">✅ Selesai</span>;
-      case 'cancelled':
-        return <span className="px-2.5 py-0.5 rounded-full bg-rose-100 border border-rose-200 text-rose-800 text-xs font-semibold">❌ Batal</span>;
-      case 'pending':
-        // KB-2: same-day request butuh perhatian admin (badge hilang saat status diubah).
-        if (rawText && /\[SAME_DAY_REQUEST\]/i.test(rawText)) {
-          return <span className="px-2.5 py-0.5 rounded-full bg-rose-500 text-white text-xs font-bold shadow-2xs">⏰ Hari Ini — Perlu Cek</span>;
-        }
-        return <span className="px-2.5 py-0.5 rounded-full bg-amber-100 border border-amber-200 text-amber-800 text-xs font-semibold">⏳ Menunggu</span>;
-      default:
-        return <span className="px-2.5 py-0.5 rounded-full bg-amber-100 border border-amber-200 text-amber-800 text-xs font-semibold">⏳ Hold</span>;
+    if (status === 'pending' && rawText && /\[SAME_DAY_REQUEST\]/i.test(rawText)) {
+      return (
+        <span className="px-2.5 py-0.5 rounded-full bg-danger text-on-solid text-xs font-bold shadow-2xs">
+          ⏰ Hari Ini — Perlu Cek
+        </span>
+      );
     }
+    const tone = reservationStatusToTone(status);
+    const labels: Record<string, string> = {
+      hold: '⏳ Hold',
+      confirmed: '📅 Terjadwal',
+      en_route: '🛵 Dalam Perjalanan',
+      completed: '✅ Selesai',
+      cancelled: '❌ Batal',
+      pending: '⏳ Menunggu',
+    };
+    return <StatusChip tone={tone} label={labels[status] || '⏳ Hold'} dot={false} />;
   };
 
   const getPaymentMethodLabel = (m?: string | null) => {
@@ -1004,34 +1003,34 @@ export const Reservations: React.FC = () => {
   return (
     <div className="space-y-5">
       {/* Top Header Bar */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 bg-white dark:bg-[#111b21] p-3.5 sm:p-4 rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 bg-surface p-3.5 sm:p-4 rounded-2xl border border-divider shadow-xs">
         {/* Title & Month Navigation */}
         <div className="flex flex-wrap items-center gap-3">
           <div>
             <div className="flex items-center space-x-2">
-              <h2 className="text-lg sm:text-xl font-black tracking-tight text-[#111b21] dark:text-[#e9edef] capitalize">
+              <h2 className="text-lg sm:text-xl font-black tracking-tight text-ink capitalize">
                 {headerDateTitle}
               </h2>
 
               {/* Date Navigation group placed right next to Month text */}
               {viewMode !== 'table' && (
-                <div className="flex items-center space-x-1 bg-[#f0f2f5] dark:bg-[#1c272e] p-0.5 rounded-lg border border-[#e9edef] dark:border-[#2a3942]">
+                <div className="flex items-center space-x-1 bg-fill-1 p-0.5 rounded-lg border border-divider">
                   <button
                     onClick={handlePrevDate}
-                    className="p-1 rounded-md bg-white dark:bg-[#202c33] hover:bg-gray-100 dark:hover:bg-[#2a3942] text-[#111b21] dark:text-[#e9edef] shadow-2xs transition-colors cursor-pointer"
+                    className="p-1 rounded-md bg-surface hover:bg-gray-100 dark:hover:bg-fill-2 text-ink shadow-2xs transition-colors cursor-pointer"
                     title="Sebelumnya"
                   >
                     <ChevronLeft size={14} />
                   </button>
                   <button
                     onClick={handleToday}
-                    className="px-2 py-0.5 rounded-md bg-white dark:bg-[#202c33] hover:bg-gray-100 dark:hover:bg-[#2a3942] text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
+                    className="px-2 py-0.5 rounded-md bg-surface hover:bg-gray-100 dark:hover:bg-fill-2 text-[11px] font-bold text-ink shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
                   >
                     {viewMode === 'week' ? 'Minggu Ini' : viewMode === 'month' ? 'Bulan Ini' : 'Hari Ini'}
                   </button>
                   <button
                     onClick={handleNextDate}
-                    className="p-1 rounded-md bg-white dark:bg-[#202c33] hover:bg-gray-100 dark:hover:bg-[#2a3942] text-[#111b21] dark:text-[#e9edef] shadow-2xs transition-colors cursor-pointer"
+                    className="p-1 rounded-md bg-surface hover:bg-gray-100 dark:hover:bg-fill-2 text-ink shadow-2xs transition-colors cursor-pointer"
                     title="Berikutnya"
                   >
                     <ChevronRight size={14} />
@@ -1053,7 +1052,7 @@ export const Reservations: React.FC = () => {
                     />
                     <button
                       type="button"
-                      className="p-1 rounded-md bg-white dark:bg-[#202c33] hover:bg-[#e8f5f2] dark:hover:bg-[#2a3942] text-[#54656f] dark:text-[#aebac1] hover:text-[#008069] dark:hover:text-[#00a884] shadow-2xs transition-colors cursor-pointer"
+                      className="p-1 rounded-md bg-surface hover:bg-accent-soft dark:hover:bg-fill-2 text-ink-2 hover:text-accent shadow-2xs transition-colors cursor-pointer"
                       title="Pilih Tanggal Spesifik"
                     >
                       <CalendarIcon size={13} />
@@ -1062,7 +1061,7 @@ export const Reservations: React.FC = () => {
                 </div>
               )}
             </div>
-            <p className="text-[11px] text-[#667781] dark:text-[#8696a0] mt-0.5">
+            <p className="text-[11px] text-ink-3 mt-0.5">
               Jadwal Reservasi
             </p>
           </div>
@@ -1075,7 +1074,7 @@ export const Reservations: React.FC = () => {
             <select
               value={viewMode}
               onChange={(e) => handleViewModeChange(e.target.value as CalendarViewMode)}
-              className="w-full px-3 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs font-bold text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
+              className="w-full px-3 py-2 bg-surface border border-divider rounded-xl text-xs font-bold text-ink focus:outline-none focus:border-accent shadow-xs"
             >
               {VIEW_MODE_OPTIONS.map((opt) => (
                 <option key={opt.mode} value={opt.mode}>
@@ -1086,7 +1085,7 @@ export const Reservations: React.FC = () => {
           </div>
 
           {/* Desktop View Switcher Tabs */}
-          <div className="hidden sm:flex space-x-1 p-1 bg-[#f0f2f5] dark:bg-[#1c272e] rounded-xl shadow-inner text-xs border border-transparent dark:border-[#2a3942]">
+          <div className="hidden sm:flex space-x-1 p-1 bg-fill-1 rounded-xl shadow-inner text-xs border border-transparent dark:border-divider">
             {VIEW_MODE_OPTIONS.map((opt) => {
               const active = viewMode === opt.mode;
               return (
@@ -1096,8 +1095,8 @@ export const Reservations: React.FC = () => {
                   onClick={() => handleViewModeChange(opt.mode)}
                   className={`flex items-center space-x-1 py-1.5 px-3 rounded-lg font-bold transition-all cursor-pointer ${
                     active
-                      ? 'bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] shadow-xs'
-                      : 'text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef]'
+                      ? 'bg-surface text-ink shadow-xs'
+                      : 'text-ink-2 hover:text-ink dark:hover:text-ink'
                   }`}
                 >
                   {VIEW_MODE_ICONS[opt.mode]}
@@ -1114,7 +1113,7 @@ export const Reservations: React.FC = () => {
                 setQuickSlotTarget(null);
                 setShowCreateModal(true);
               }}
-              className="flex items-center space-x-1.5 px-3.5 py-2 bg-[#008069] hover:bg-[#00a884] rounded-xl text-xs font-semibold text-white transition-colors shadow-xs"
+              className="flex items-center space-x-1.5 px-3.5 py-2 bg-accent hover:bg-accent rounded-xl text-xs font-semibold text-white transition-colors shadow-xs"
             >
               <CalendarIcon size={14} />
               <span>+ Buat Jadwal</span>
@@ -1124,10 +1123,10 @@ export const Reservations: React.FC = () => {
                 setLoading(true);
                 loadReservations();
               }}
-              className="p-2 bg-white dark:bg-[#202c33] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-[#111b21] dark:text-[#e9edef] transition-colors shadow-xs"
+              className="p-2 bg-surface hover:bg-fill-1 border border-divider rounded-xl text-ink transition-colors shadow-xs"
               title="Reload Data"
             >
-              <RefreshCw size={14} className={loading ? 'animate-spin text-[#008069]' : 'text-[#667781] dark:text-[#8696a0]'} />
+              <RefreshCw size={14} className={loading ? 'animate-spin text-accent' : 'text-ink-3'} />
             </button>
           </div>
         </div>
@@ -1144,7 +1143,7 @@ export const Reservations: React.FC = () => {
               onChange={(e) =>
                 setFilterState((prev) => ({ ...prev, status: e.target.value as any }))
               }
-              className="flex-1 px-3 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs font-bold text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs truncate"
+              className="flex-1 px-3 py-2 bg-surface border border-divider rounded-xl text-xs font-bold text-ink focus:outline-none focus:border-accent shadow-xs truncate"
             >
               <option value="all">Semua Status ({stats.total})</option>
               <option value="upcoming">📅 Aktif &amp; Mendatang ({stats.upcoming})</option>
@@ -1158,7 +1157,7 @@ export const Reservations: React.FC = () => {
             <select
               value={filterState.staffId}
               onChange={(e) => setFilterState((prev) => ({ ...prev, staffId: e.target.value }))}
-              className="flex-1 px-3 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs font-bold text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs truncate"
+              className="flex-1 px-3 py-2 bg-surface border border-divider rounded-xl text-xs font-bold text-ink focus:outline-none focus:border-accent shadow-xs truncate"
             >
               <option value="all">👥 Semua Terapis</option>
               <option value="unassigned">⚠️ Belum Ada Terapis</option>
@@ -1172,7 +1171,7 @@ export const Reservations: React.FC = () => {
 
           {/* Desktop Status Tabs & Staff Dropdown */}
           <div className="hidden sm:flex flex-wrap items-center justify-between gap-2.5">
-            <div className="flex flex-wrap items-center gap-1.5 p-1 bg-[#f0f2f5] dark:bg-[#1c272e] rounded-2xl border border-transparent dark:border-[#2a3942]">
+            <div className="flex flex-wrap items-center gap-1.5 p-1 bg-fill-1 rounded-2xl border border-transparent dark:border-divider">
               {[
                 { key: 'all', label: 'Semua', count: stats.total },
                 { key: 'upcoming', label: '📅 Aktif & Mendatang', count: stats.upcoming },
@@ -1189,8 +1188,8 @@ export const Reservations: React.FC = () => {
                     filterState.status === tab.key
                       ? tab.isAlert
                         ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-700/50 shadow-xs'
-                        : 'bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] shadow-xs'
-                      : 'text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef]'
+                        : 'bg-surface text-ink shadow-xs'
+                      : 'text-ink-2 hover:text-ink dark:hover:text-ink'
                   }`}
                 >
                   <span>{tab.label}</span>
@@ -1199,10 +1198,10 @@ export const Reservations: React.FC = () => {
                       filterState.status === tab.key
                         ? tab.isAlert
                           ? 'bg-amber-200 dark:bg-amber-900/80 text-amber-900 dark:text-amber-100 font-bold'
-                          : 'bg-[#e8f5f2] dark:bg-[#00a884]/20 text-[#008069] dark:text-[#00a884]'
+                          : 'bg-accent-soft text-accent'
                         : tab.isAlert && tab.count > 0
-                        ? 'bg-amber-200 dark:bg-amber-900/60 text-amber-800 dark:text-[#f59e0b] font-bold animate-pulse'
-                        : 'bg-[#e9edef] dark:bg-[#2a3942] text-[#667781] dark:text-[#8696a0]'
+                        ? 'bg-amber-200 dark:bg-amber-900/60 text-amber-800 dark:text-warning font-bold animate-pulse'
+                        : 'bg-fill-2 text-ink-3'
                     }`}
                   >
                     {tab.count}
@@ -1216,7 +1215,7 @@ export const Reservations: React.FC = () => {
               <select
                 value={filterState.staffId}
                 onChange={(e) => setFilterState((prev) => ({ ...prev, staffId: e.target.value }))}
-                className="px-3 py-1.5 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs font-bold text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
+                className="px-3 py-1.5 bg-surface border border-divider rounded-xl text-xs font-bold text-ink focus:outline-none focus:border-accent shadow-xs"
               >
                 <option value="all">👥 Semua Terapis</option>
                 <option value="unassigned">⚠️ Belum Ada Terapis</option>
@@ -1239,13 +1238,13 @@ export const Reservations: React.FC = () => {
                   setFilterState((prev) => ({ ...prev, searchQuery: e.target.value }))
                 }
                 placeholder="Cari pasien, nomor telepon, atau jenis treatment..."
-                className="w-full pl-9 pr-4 py-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+                className="w-full pl-9 pr-4 py-2.5 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs"
               />
-              <Search size={14} className="absolute left-3 top-3 text-[#8696a0]" />
+              <Search size={14} className="absolute left-3 top-3 text-ink-3" />
               {filterState.searchQuery && (
                 <button
                   onClick={() => setFilterState((prev) => ({ ...prev, searchQuery: '' }))}
-                  className="absolute right-3 top-3 text-[#8696a0] hover:text-[#111b21]"
+                  className="absolute right-3 top-3 text-ink-3 hover:text-ink"
                 >
                   <X size={14} />
                 </button>
@@ -1301,7 +1300,7 @@ export const Reservations: React.FC = () => {
             <div className="space-y-4">
               {/* Bulk Complete Action Bar — muncul saat ada pilihan */}
               {selectedIds.size > 0 && (
-                <div className="sticky top-2 z-30 flex items-center justify-between gap-3 px-4 py-2.5 bg-[#008069] text-white rounded-2xl shadow-lg">
+                <div className="sticky top-2 z-30 flex items-center justify-between gap-3 px-4 py-2.5 bg-accent text-accent-ink rounded-2xl shadow-lg">
                   <span className="text-xs font-bold">
                     {selectedIds.size} reservasi dipilih
                   </span>
@@ -1316,7 +1315,7 @@ export const Reservations: React.FC = () => {
                     <button
                       onClick={handleBulkComplete}
                       disabled={bulkCompleting}
-                      className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white text-[#008069] hover:bg-[#e8f5f2] transition disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+                      className="px-3 py-1.5 rounded-xl text-xs font-bold bg-surface text-accent hover:bg-accent-soft transition disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
                     >
                       {bulkCompleting ? <Loader size={13} className="animate-spin" /> : <CheckCheck size={14} />}
                       <span>{bulkCompleting ? 'Memproses...' : 'Tandai Selesai'}</span>
@@ -1329,13 +1328,13 @@ export const Reservations: React.FC = () => {
               <div className="block md:hidden space-y-3">
                 {/* Mobile Count Bar */}
                 <div className="flex items-center justify-between gap-2 px-1">
-                  <span className="text-[#667781] font-bold text-xs">
+                  <span className="text-ink-3 font-bold text-xs">
                     {totalReservations > 0
                       ? `Menampilkan ${reservations.length} dari ${totalReservations} Reservasi`
                       : '0 Data Reservasi'}
                   </span>
                   {filteredReservations.length > 0 && (
-                    <label className="flex items-center gap-1.5 text-[#54656f] font-bold text-xs cursor-pointer select-none">
+                    <label className="flex items-center gap-1.5 text-ink-2 font-bold text-xs cursor-pointer select-none">
                       <input
                         type="checkbox"
                         checked={filteredReservations.every((r) => selectedIds.has(r.id))}
@@ -1347,7 +1346,7 @@ export const Reservations: React.FC = () => {
                           }
                         }}
                         onChange={toggleSelectAllOnPage}
-                        className="h-4 w-4 accent-[#008069] cursor-pointer"
+                        className="h-4 w-4 accent-accent cursor-pointer"
                       />
                       <span>Pilih semua</span>
                     </label>
@@ -1355,7 +1354,7 @@ export const Reservations: React.FC = () => {
                 </div>
 
                 {filteredReservations.length === 0 ? (
-                  <div className="bg-white border border-[#e9edef] rounded-2xl p-8 text-center text-[#667781] text-xs shadow-xs">
+                  <div className="bg-surface border border-divider rounded-2xl p-8 text-center text-ink-3 text-xs shadow-xs">
                     Tidak ada data reservasi yang sesuai.
                   </div>
                 ) : (
@@ -1363,7 +1362,7 @@ export const Reservations: React.FC = () => {
                     <div
                       key={res.id}
                       onClick={() => setSelectedRes(res)}
-                      className="bg-white rounded-2xl p-4 border border-[#e9edef] shadow-xs space-y-3 cursor-pointer hover:border-[#008069] hover:shadow-md transition"
+                      className="bg-surface rounded-2xl p-4 border border-divider shadow-xs space-y-3 cursor-pointer hover:border-accent hover:shadow-md transition"
                     >
                       <div className="flex justify-between items-start">
                         <div className="flex items-start gap-3">
@@ -1372,19 +1371,19 @@ export const Reservations: React.FC = () => {
                             checked={selectedIds.has(res.id)}
                             onClick={(e) => toggleSelect(res.id, e)}
                             onChange={() => {}}
-                            className="mt-1 h-4 w-4 accent-[#008069] cursor-pointer shrink-0"
+                            className="mt-1 h-4 w-4 accent-accent cursor-pointer shrink-0"
                             aria-label={`Pilih reservasi ${res.customer?.name || 'Bunda'}`}
                           />
                           <div>
-                            <h4 className="font-bold text-[#111b21] text-sm group-hover:text-[#008069] transition">{res.customer?.name || 'Bunda'}</h4>
-                            <p className="text-xs text-[#667781] font-mono mt-0.5">{res.customer?.phone}</p>
+                            <h4 className="font-bold text-ink text-sm group-hover:text-accent transition">{res.customer?.name || 'Bunda'}</h4>
+                            <p className="text-xs text-ink-3 font-mono mt-0.5">{res.customer?.phone}</p>
                             {res.customer && (
                               <div className="flex items-center gap-1.5 mt-1 text-[10px]">
-                                <span className="inline-flex items-center px-1.5 py-0.2 rounded-md bg-[#e8f5f2] text-[#008069] font-bold">
+                                <span className="inline-flex items-center px-1.5 py-0.2 rounded-md bg-accent-soft text-accent font-bold">
                                   {(res.customer.totalTreatments ?? 1) > 1 ? `${res.customer.totalTreatments}x Treatment` : 'Pasien Baru (1x)'}
                                 </span>
                                 {res.customer.ltv !== undefined && (
-                                  <span className="text-[#8696a0] font-mono">
+                                  <span className="text-ink-3 font-mono">
                                     LTV: Rp {res.customer.ltv.toLocaleString('id-ID')}
                                   </span>
                                 )}
@@ -1395,17 +1394,17 @@ export const Reservations: React.FC = () => {
                         <div>{getStatusBadge(res.status, res.raw_text)}</div>
                       </div>
 
-                      <div className="flex items-center justify-between text-xs pt-1 border-t border-[#e9edef]">
-                        <span className="px-2 py-0.5 rounded bg-[#f0f2f5] text-[#54656f] font-semibold text-[10px]">
+                      <div className="flex items-center justify-between text-xs pt-1 border-t border-divider">
+                        <span className="px-2 py-0.5 rounded bg-fill-1 text-ink-2 font-semibold text-[10px]">
                           {res.treatment_category}
                         </span>
-                        <span className="font-bold text-[#008069] bg-[#e8f5f2] px-2 py-0.5 rounded border border-[#c2e7e0] text-xs">
+                        <span className="font-bold text-accent bg-accent-soft px-2 py-0.5 rounded border border-divider text-xs">
                           {res.booking_date ? formatBookingDate(res.booking_date, res.treatment_detail) : 'Belum ada jadwal'}
                         </span>
                       </div>
 
                       {res.treatment_detail && (
-                        <p className="text-xs text-[#54656f] bg-[#f8fafc] p-2.5 rounded-xl border border-[#e9edef] line-clamp-2">
+                        <p className="text-xs text-ink-2 bg-surface-2 p-2.5 rounded-xl border border-divider line-clamp-2">
                           {res.treatment_detail}
                         </p>
                       )}
@@ -1413,12 +1412,12 @@ export const Reservations: React.FC = () => {
                       {(momGestationalBadge(res.mom_gestational_info) || getBabyRows(res).length > 0) && (
                         <div className="flex flex-wrap gap-1.5">
                           {momGestationalBadge(res.mom_gestational_info) && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-lg bg-pink-50 text-pink-800 border border-pink-200 text-[10px] font-bold">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-lg bg-danger-soft text-danger border border-danger-line text-[10px] font-bold">
                               {momGestationalBadge(res.mom_gestational_info)}
                             </span>
                           )}
                           {getBabyRows(res).map((b, i) => (
-                            <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] text-[10px] font-semibold">
+                            <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-accent-soft text-accent border border-divider text-[10px] font-semibold">
                               <Baby size={10} />
                               {b.name}{b.age ? ` · ${b.age}` : ''}
                             </span>
@@ -1430,7 +1429,7 @@ export const Reservations: React.FC = () => {
                         const staffName = resolveStaffName(res, staffList);
                         if (!staffName) return null;
                         return (
-                          <div className="text-xs text-[#008069] font-semibold flex items-center space-x-1">
+                          <div className="text-xs text-accent font-semibold flex items-center space-x-1">
                             <span>Terapis: {staffName}</span>
                           </div>
                         );
@@ -1441,7 +1440,7 @@ export const Reservations: React.FC = () => {
                         return (
                           <div className="pt-1 flex items-center justify-end gap-1.5">
                             {proofEval.isMismatch && (
-                              <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-rose-600 text-white flex items-center gap-1 uppercase tracking-wider">
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-danger text-on-solid flex items-center gap-1 uppercase tracking-wider">
                                 <AlertTriangle size={10} className="shrink-0" />
                                 <span>{proofEval.badgeLabel}</span>
                               </span>
@@ -1453,8 +1452,8 @@ export const Reservations: React.FC = () => {
                               }}
                               className={`px-2.5 py-1 rounded-xl transition text-[11px] font-semibold flex items-center space-x-1 cursor-pointer border ${
                                 proofEval.isMismatch
-                                  ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
-                                  : 'bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border-[#c2e7e0]'
+                                  ? 'bg-danger-soft hover:bg-danger-line text-danger border-danger-line'
+                                  : 'bg-accent-soft hover:bg-accent-soft text-accent border-divider'
                               }`}
                               title={`Lihat Bukti Bayar (${getPaymentMethodLabel(res.payment_method)})`}
                             >
@@ -1470,11 +1469,11 @@ export const Reservations: React.FC = () => {
               </div>
 
               {/* Desktop Table View */}
-              <div className="hidden md:block bg-white border border-[#e9edef] rounded-2xl overflow-hidden shadow-xs">
+              <div className="hidden md:block bg-surface border border-divider rounded-2xl overflow-hidden shadow-xs">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
-                      <tr className="border-b border-[#e9edef] bg-[#f8fafc] text-[#667781] text-xs uppercase tracking-wider font-bold select-none">
+                      <tr className="border-b border-divider bg-surface-2 text-ink-3 text-xs uppercase tracking-wider font-bold select-none">
                         <th className="py-3.5 pl-5 pr-0 w-8">
                           <input
                             type="checkbox"
@@ -1487,20 +1486,20 @@ export const Reservations: React.FC = () => {
                               }
                             }}
                             onChange={toggleSelectAllOnPage}
-                            className="h-4 w-4 accent-[#008069] cursor-pointer align-middle"
+                            className="h-4 w-4 accent-accent cursor-pointer align-middle"
                             title="Pilih semua reservasi di halaman ini"
                             aria-label="Pilih semua reservasi di halaman ini"
                           />
                         </th>
                         <th 
                           onClick={() => handleSort('customer')} 
-                          className="py-3.5 px-5 cursor-pointer hover:bg-[#f0f2f5] transition-colors"
+                          className="py-3.5 px-5 cursor-pointer hover:bg-fill-1 transition-colors"
                           title="Klik untuk mengurutkan nama customer"
                         >
                           <div className="flex items-center gap-1.5">
                             <span>Customer</span>
                             {sortField === 'customer' ? (
-                              sortOrder === 'asc' ? <ArrowUp size={13} className="text-[#008069]" /> : <ArrowDown size={13} className="text-[#008069]" />
+                              sortOrder === 'asc' ? <ArrowUp size={13} className="text-accent" /> : <ArrowDown size={13} className="text-accent" />
                             ) : (
                               <ArrowUpDown size={12} className="opacity-40" />
                             )}
@@ -1508,13 +1507,13 @@ export const Reservations: React.FC = () => {
                         </th>
                         <th 
                           onClick={() => handleSort('category')} 
-                          className="py-3.5 px-5 cursor-pointer hover:bg-[#f0f2f5] transition-colors"
+                          className="py-3.5 px-5 cursor-pointer hover:bg-fill-1 transition-colors"
                           title="Klik untuk mengurutkan kategori layanan"
                         >
                           <div className="flex items-center gap-1.5">
                             <span>Kategori</span>
                             {sortField === 'category' ? (
-                              sortOrder === 'asc' ? <ArrowUp size={13} className="text-[#008069]" /> : <ArrowDown size={13} className="text-[#008069]" />
+                              sortOrder === 'asc' ? <ArrowUp size={13} className="text-accent" /> : <ArrowDown size={13} className="text-accent" />
                             ) : (
                               <ArrowUpDown size={12} className="opacity-40" />
                             )}
@@ -1523,13 +1522,13 @@ export const Reservations: React.FC = () => {
                         <th className="py-3.5 px-5">Detail Layanan</th>
                         <th 
                           onClick={() => handleSort('booking_date')} 
-                          className="py-3.5 px-5 cursor-pointer hover:bg-[#f0f2f5] transition-colors"
+                          className="py-3.5 px-5 cursor-pointer hover:bg-fill-1 transition-colors"
                           title="Klik untuk mengurutkan jadwal kunjungan"
                         >
                           <div className="flex items-center gap-1.5">
                             <span>Jadwal Kunjungan</span>
                             {sortField === 'booking_date' ? (
-                              sortOrder === 'asc' ? <ArrowUp size={13} className="text-[#008069]" /> : <ArrowDown size={13} className="text-[#008069]" />
+                              sortOrder === 'asc' ? <ArrowUp size={13} className="text-accent" /> : <ArrowDown size={13} className="text-accent" />
                             ) : (
                               <ArrowUpDown size={12} className="opacity-40" />
                             )}
@@ -1538,13 +1537,13 @@ export const Reservations: React.FC = () => {
                         <th className="py-3.5 px-5">Terapis</th>
                         <th 
                           onClick={() => handleSort('status')} 
-                          className="py-3.5 px-5 cursor-pointer hover:bg-[#f0f2f5] transition-colors"
+                          className="py-3.5 px-5 cursor-pointer hover:bg-fill-1 transition-colors"
                           title="Klik untuk mengurutkan status"
                         >
                           <div className="flex items-center gap-1.5">
                             <span>Status</span>
                             {sortField === 'status' ? (
-                              sortOrder === 'asc' ? <ArrowUp size={13} className="text-[#008069]" /> : <ArrowDown size={13} className="text-[#008069]" />
+                              sortOrder === 'asc' ? <ArrowUp size={13} className="text-accent" /> : <ArrowDown size={13} className="text-accent" />
                             ) : (
                               <ArrowUpDown size={12} className="opacity-40" />
                             )}
@@ -1554,10 +1553,10 @@ export const Reservations: React.FC = () => {
                         <th className="py-3.5 px-5 text-right">Aksi</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#e9edef] text-xs text-[#111b21]">
+                    <tbody className="divide-y divide-divider text-xs text-ink">
                       {filteredReservations.length === 0 ? (
                         <tr>
-                          <td colSpan={9} className="py-8 text-center text-[#667781] text-xs">
+                          <td colSpan={9} className="py-8 text-center text-ink-3 text-xs">
                             Tidak ada data reservasi yang sesuai.
                           </td>
                         </tr>
@@ -1566,7 +1565,7 @@ export const Reservations: React.FC = () => {
                           <tr
                             key={res.id}
                             onClick={() => setSelectedRes(res)}
-                            className="hover:bg-[#f0f2f5] transition-all cursor-pointer group"
+                            className="hover:bg-fill-1 transition-all cursor-pointer group"
                           >
                             <td className="py-3.5 pl-5 pr-0 w-8">
                               <input
@@ -1574,20 +1573,20 @@ export const Reservations: React.FC = () => {
                                 checked={selectedIds.has(res.id)}
                                 onClick={(e) => toggleSelect(res.id, e)}
                                 onChange={() => {}}
-                                className="h-4 w-4 accent-[#008069] cursor-pointer align-middle"
+                                className="h-4 w-4 accent-accent cursor-pointer align-middle"
                                 aria-label={`Pilih reservasi ${res.customer?.name || 'Bunda'}`}
                               />
                             </td>
                             <td className="py-3.5 px-5 font-medium">
-                              <p className="font-bold text-[#111b21] group-hover:text-[#008069] transition">{res.customer?.name || 'Bunda'}</p>
-                              <p className="text-xs text-[#667781] font-mono">{res.customer?.phone}</p>
+                              <p className="font-bold text-ink group-hover:text-accent transition">{res.customer?.name || 'Bunda'}</p>
+                              <p className="text-xs text-ink-3 font-mono">{res.customer?.phone}</p>
                               {res.customer && (
                                 <div className="flex items-center gap-1.5 mt-0.5 text-[10px]">
-                                  <span className="inline-flex items-center px-1.5 py-0.2 rounded-md bg-[#e8f5f2] text-[#008069] font-bold">
+                                  <span className="inline-flex items-center px-1.5 py-0.2 rounded-md bg-accent-soft text-accent font-bold">
                                     {(res.customer.totalTreatments ?? 1) > 1 ? `${res.customer.totalTreatments}x` : 'Baru (1x)'}
                                   </span>
                                   {res.customer.ltv !== undefined && (
-                                    <span className="text-[#8696a0] font-mono">
+                                    <span className="text-ink-3 font-mono">
                                       LTV: Rp {res.customer.ltv.toLocaleString('id-ID')}
                                     </span>
                                   )}
@@ -1595,14 +1594,14 @@ export const Reservations: React.FC = () => {
                               )}
                             </td>
                             <td className="py-3.5 px-5">
-                              <span className="px-2 py-0.5 rounded bg-[#f0f2f5] text-[11px] text-[#54656f] font-semibold">
+                              <span className="px-2 py-0.5 rounded bg-fill-1 text-[11px] text-ink-2 font-semibold">
                                 {res.treatment_category}
                               </span>
                             </td>
-                            <td className="py-3.5 px-5 max-w-xs truncate text-[#54656f]" title={res.treatment_detail}>
+                            <td className="py-3.5 px-5 max-w-xs truncate text-ink-2" title={res.treatment_detail}>
                               {res.treatment_detail}
                             </td>
-                            <td className="py-3.5 px-5 font-semibold text-[#008069] whitespace-nowrap">
+                            <td className="py-3.5 px-5 font-semibold text-accent whitespace-nowrap">
                               {res.booking_date ? (
                                 formatBookingDate(res.booking_date, res.treatment_detail)
                               ) : (
@@ -1611,7 +1610,7 @@ export const Reservations: React.FC = () => {
                                     e.stopPropagation();
                                     setSelectedRes(res);
                                   }}
-                                  className="px-2 py-1 rounded-lg bg-[#e8f5f2] border border-[#c2e7e0] text-[#008069] hover:bg-[#c2e7e0] text-xs font-semibold transition-all cursor-pointer"
+                                  className="px-2 py-1 rounded-lg bg-accent-soft border border-divider text-accent hover:bg-accent-soft text-xs font-semibold transition-all cursor-pointer"
                                 >
                                   + Atur Jadwal
                                 </button>
@@ -1621,11 +1620,11 @@ export const Reservations: React.FC = () => {
                               {(() => {
                                 const staffName = resolveStaffName(res, staffList);
                                 return staffName ? (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0]">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-accent-soft text-accent border border-divider">
                                     {staffName}
                                   </span>
                                 ) : (
-                                  <span className="text-xs text-[#8696a0] italic">Belum ditugaskan</span>
+                                  <span className="text-xs text-ink-3 italic">Belum ditugaskan</span>
                                 );
                               })()}
                             </td>
@@ -1642,8 +1641,8 @@ export const Reservations: React.FC = () => {
                                       }}
                                       className={`p-2 rounded-xl transition-all flex items-center justify-center cursor-pointer border ${
                                         proofEval.isMismatch
-                                          ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200 shadow-2xs'
-                                          : 'bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border-[#c2e7e0]'
+                                          ? 'bg-danger-soft hover:bg-danger-line text-danger border-danger-line shadow-2xs'
+                                          : 'bg-accent-soft hover:bg-accent-soft text-accent border-divider'
                                       }`}
                                       title={`Lihat Bukti Bayar — ${getPaymentMethodLabel(res.payment_method)}`}
                                     >
@@ -1651,25 +1650,25 @@ export const Reservations: React.FC = () => {
                                     </button>
                                     {proofEval.isMismatch ? (
                                       <span
-                                        className="px-2 py-0.5 rounded-md bg-rose-100 text-rose-700 border border-rose-200 text-[10px] font-bold flex items-center gap-1 cursor-help"
+                                        className="px-2 py-0.5 rounded-md bg-danger-soft text-danger border border-danger-line text-[10px] font-bold flex items-center gap-1 cursor-help"
                                         title={proofEval.description}
                                       >
                                         <AlertTriangle size={11} className="shrink-0" />
                                         <span>Beda: Rp {proofEval.receiptAmount?.toLocaleString('id-ID')}</span>
                                       </span>
                                     ) : res.payment_method ? (
-                                      <span className="px-2 py-0.5 rounded bg-[#f0f2f5] text-[11px] text-[#54656f] font-semibold">
+                                      <span className="px-2 py-0.5 rounded bg-fill-1 text-[11px] text-ink-2 font-semibold">
                                         {getPaymentMethodLabel(res.payment_method)}
                                       </span>
                                     ) : null}
                                   </div>
                                 );
                               })() : res.payment_method ? (
-                                <span className="px-2 py-0.5 rounded bg-[#f0f2f5] text-[11px] text-[#54656f] font-semibold">
+                                <span className="px-2 py-0.5 rounded bg-fill-1 text-[11px] text-ink-2 font-semibold">
                                   {getPaymentMethodLabel(res.payment_method)}
                                 </span>
                               ) : (
-                                <span className="text-[#8696a0] text-xs">-</span>
+                                <span className="text-ink-3 text-xs">-</span>
                               )}
                             </td>
                             <td className="py-3.5 px-5 text-right">
@@ -1678,7 +1677,7 @@ export const Reservations: React.FC = () => {
                                   e.stopPropagation();
                                   setSelectedRes(res);
                                 }}
-                                className="px-3 py-1.5 bg-white hover:bg-[#008069] text-[#111b21] hover:text-white border border-[#d1d7db] rounded-xl text-xs transition-all font-semibold shadow-xs cursor-pointer"
+                                className="px-3 py-1.5 bg-surface hover:bg-accent text-ink hover:text-accent-ink border border-divider rounded-xl text-xs transition-all font-semibold shadow-xs cursor-pointer"
                               >
                                 Manage
                               </button>
@@ -1741,17 +1740,17 @@ export const Reservations: React.FC = () => {
             onClick={() => setProofModal(null)}
           >
             <div
-              className="w-full max-w-md bg-white border border-[#e9edef] rounded-3xl p-4 sm:p-5 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto animate-modalScaleUp"
+              className="w-full max-w-md bg-surface border border-divider rounded-3xl p-4 sm:p-5 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto animate-modalScaleUp"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between border-b border-[#e9edef] pb-3">
-                <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
-                  <Receipt size={16} className="text-[#008069] flex-shrink-0" />
+              <div className="flex items-center justify-between border-b border-divider pb-3">
+                <h3 className="text-sm font-bold text-ink flex items-center space-x-2">
+                  <Receipt size={16} className="text-accent flex-shrink-0" />
                   <span>Bukti Pembayaran</span>
                 </h3>
                 <button
                   onClick={() => setProofModal(null)}
-                  className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition cursor-pointer"
+                  className="p-1.5 rounded-full text-ink-3 hover:text-ink hover:bg-fill-1 transition cursor-pointer"
                 >
                   <X size={18} />
                 </button>
@@ -1761,60 +1760,60 @@ export const Reservations: React.FC = () => {
                 const modalEval = evaluatePaymentProof(proofModal);
                 if (!modalEval.isMismatch) return null;
                 return (
-                  <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 space-y-1.5">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-rose-700">
+                  <div className="p-3 rounded-2xl bg-danger-soft border border-danger-line text-danger space-y-1.5">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-danger">
                       <AlertTriangle size={15} className="shrink-0" />
                       <span>Peringatan: Nominal Transfer Tidak Sesuai Tagihan</span>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-rose-200">
+                    <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-danger-line">
                       <div>
-                        <span className="text-[10px] text-rose-600 block uppercase font-bold">Total Tagihan:</span>
+                        <span className="text-[10px] text-danger block uppercase font-bold">Total Tagihan:</span>
                         <strong>Rp {modalEval.totalExpected.toLocaleString('id-ID')}</strong>
                       </div>
                       <div>
-                        <span className="text-[10px] text-rose-600 block uppercase font-bold">Nominal di Struk:</span>
-                        <strong className="text-rose-700 font-extrabold">Rp {modalEval.receiptAmount?.toLocaleString('id-ID')}</strong>
+                        <span className="text-[10px] text-danger block uppercase font-bold">Nominal di Struk:</span>
+                        <strong className="text-danger font-extrabold">Rp {modalEval.receiptAmount?.toLocaleString('id-ID')}</strong>
                       </div>
                     </div>
-                    <div className="text-[11px] font-semibold text-rose-800">
+                    <div className="text-[11px] font-semibold text-danger">
                       Selisih: {modalEval.isUnderpaid ? `Kurang Rp ${Math.abs(modalEval.difference).toLocaleString('id-ID')}` : `Lebih Rp ${modalEval.difference.toLocaleString('id-ID')}`}
                     </div>
                   </div>
                 );
               })()}
 
-              <div className="text-xs space-y-1.5 bg-[#f8fafc] border border-[#e9edef] rounded-2xl p-3.5">
+              <div className="text-xs space-y-1.5 bg-surface-2 border border-divider rounded-2xl p-3.5">
                 <div className="flex justify-between">
-                  <span className="text-[#667781]">Pasien:</span>
-                  <span className="font-bold text-[#111b21]">
+                  <span className="text-ink-3">Pasien:</span>
+                  <span className="font-bold text-ink">
                     {proofModal.customer?.name || 'Bunda'} ({proofModal.customer?.phone})
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[#667781]">Metode:</span>
-                  <span className="font-bold text-[#111b21]">{getPaymentMethodLabel(proofModal.payment_method)}</span>
+                  <span className="text-ink-3">Metode:</span>
+                  <span className="font-bold text-ink">{getPaymentMethodLabel(proofModal.payment_method)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[#667781]">Tagihan Resmi:</span>
-                  <span className="font-bold text-[#111b21]">
+                  <span className="text-ink-3">Tagihan Resmi:</span>
+                  <span className="font-bold text-ink">
                     {proofModal.purchase_value ? `Rp ${proofModal.purchase_value.toLocaleString('id-ID')}` : '-'}
                   </span>
                 </div>
                 {proofModal.receipt_amount != null && (
                   <div className="flex justify-between">
-                    <span className="text-[#667781]">Nominal di Struk:</span>
-                    <span className="font-bold text-rose-600">
+                    <span className="text-ink-3">Nominal di Struk:</span>
+                    <span className="font-bold text-danger">
                       Rp {proofModal.receipt_amount.toLocaleString('id-ID')}
                     </span>
                   </div>
                 )}
-                <div className="flex justify-between items-center pt-1 border-t border-[#e9edef]">
-                  <span className="text-[#667781]">Status:</span>
+                <div className="flex justify-between items-center pt-1 border-t border-divider">
+                  <span className="text-ink-3">Status:</span>
                   {getStatusBadge(proofModal.status, proofModal.raw_text)}
                 </div>
               </div>
 
-              <div className="rounded-2xl overflow-hidden border border-[#e9edef] bg-[#f8fafc]">
+              <div className="rounded-2xl overflow-hidden border border-divider bg-surface-2">
                 <img
                   src={proofModal.proof_url!}
                   alt="Bukti pembayaran"
@@ -1822,11 +1821,11 @@ export const Reservations: React.FC = () => {
                 />
               </div>
 
-              <div className="flex justify-end space-x-2 pt-2 border-t border-[#e9edef]">
+              <div className="flex justify-end space-x-2 pt-2 border-t border-divider">
                 <button
                   type="button"
                   onClick={() => setProofModal(null)}
-                  className="px-4 py-2 rounded-xl border border-[#d1d7db] text-xs font-semibold text-[#54656f] hover:bg-[#f0f2f5] transition cursor-pointer"
+                  className="px-4 py-2 rounded-xl border border-divider text-xs font-semibold text-ink-2 hover:bg-fill-1 transition cursor-pointer"
                 >
                   Tutup
                 </button>
@@ -1834,7 +1833,7 @@ export const Reservations: React.FC = () => {
                   href={proofModal.proof_url!}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-4 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-1.5"
+                  className="px-4 py-2 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-1.5"
                 >
                   <Maximize2 size={13} />
                   <span>Buka Gambar Penuh</span>
@@ -1853,23 +1852,23 @@ export const Reservations: React.FC = () => {
             onClick={() => setHousePhotoModal(null)}
           >
             <div
-              className="bg-white rounded-3xl p-5 max-w-lg w-full space-y-4 shadow-2xl border border-[#e9edef] relative animate-modalScaleUp"
+              className="bg-surface rounded-3xl p-5 max-w-lg w-full space-y-4 shadow-2xl border border-divider relative animate-modalScaleUp"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between border-b border-[#e9edef] pb-3">
-                <div className="flex items-center space-x-2 text-[#008069]">
+              <div className="flex items-center justify-between border-b border-divider pb-3">
+                <div className="flex items-center space-x-2 text-accent">
                   <Camera size={18} />
-                  <h3 className="font-bold text-sm text-[#111b21]">Foto Tampak Depan Rumah Pasien</h3>
+                  <h3 className="font-bold text-sm text-ink">Foto Tampak Depan Rumah Pasien</h3>
                 </div>
                 <button
                   onClick={() => setHousePhotoModal(null)}
-                  className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition cursor-pointer"
+                  className="p-1.5 rounded-full text-ink-3 hover:text-ink hover:bg-fill-1 transition cursor-pointer"
                 >
                   <X size={18} />
                 </button>
               </div>
 
-              <div className="rounded-2xl overflow-hidden border border-[#e9edef] bg-[#f8fafc]">
+              <div className="rounded-2xl overflow-hidden border border-divider bg-surface-2">
                 <img
                   src={housePhotoModal}
                   alt="Foto depan rumah pasien"
@@ -1877,11 +1876,11 @@ export const Reservations: React.FC = () => {
                 />
               </div>
 
-              <div className="flex justify-end space-x-2 pt-2 border-t border-[#e9edef]">
+              <div className="flex justify-end space-x-2 pt-2 border-t border-divider">
                 <button
                   type="button"
                   onClick={() => setHousePhotoModal(null)}
-                  className="px-4 py-2 rounded-xl border border-[#d1d7db] text-xs font-semibold text-[#54656f] hover:bg-[#f0f2f5] transition cursor-pointer"
+                  className="px-4 py-2 rounded-xl border border-divider text-xs font-semibold text-ink-2 hover:bg-fill-1 transition cursor-pointer"
                 >
                   Tutup
                 </button>
@@ -1889,7 +1888,7 @@ export const Reservations: React.FC = () => {
                   href={housePhotoModal}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-4 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-1.5"
+                  className="px-4 py-2 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-1.5"
                 >
                   <Maximize2 size={13} />
                   <span>Buka Gambar Asli HD</span>
@@ -1909,36 +1908,36 @@ export const Reservations: React.FC = () => {
             onClick={() => setEditLocationModal(null)}
           >
             <div
-              className="bg-white rounded-3xl p-5 sm:p-6 max-w-md w-full space-y-4 shadow-2xl border border-[#e9edef] relative max-h-[92vh] overflow-y-auto animate-modalScaleUp"
+              className="bg-surface rounded-3xl p-5 sm:p-6 max-w-md w-full space-y-4 shadow-2xl border border-divider relative max-h-[92vh] overflow-y-auto animate-modalScaleUp"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="flex items-start justify-between border-b border-[#e9edef] pb-3">
+              <div className="flex items-start justify-between border-b border-divider pb-3">
                 <div className="flex items-center space-x-2.5">
-                  <div className="h-10 w-10 rounded-2xl bg-[#e8f5f2] text-[#008069] flex items-center justify-center border border-[#c2e7e0] shadow-xs">
+                  <div className="h-10 w-10 rounded-2xl bg-accent-soft text-accent flex items-center justify-center border border-divider shadow-xs">
                     <MapPin size={20} />
                   </div>
                   <div>
-                    <h3 className="font-bold text-base text-[#111b21]">Edit Panduan Lokasi & Foto Rumah</h3>
-                    <p className="text-xs text-[#667781] truncate max-w-[220px]">
+                    <h3 className="font-bold text-base text-ink">Edit Panduan Lokasi & Foto Rumah</h3>
+                    <p className="text-xs text-ink-3 truncate max-w-[220px]">
                       {editLocationModal.customer?.name || 'Bunda'} ({editLocationModal.customer?.phone})
                     </p>
                   </div>
                 </div>
                 <button
                   onClick={() => setEditLocationModal(null)}
-                  className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition cursor-pointer"
+                  className="p-1.5 rounded-full text-ink-3 hover:text-ink hover:bg-fill-1 transition cursor-pointer"
                 >
                   <X size={18} />
                 </button>
               </div>
 
               {/* Info Alamat Pasien */}
-              <div className="p-3 rounded-2xl bg-[#f8fafc] border border-[#e9edef] text-xs text-[#54656f] space-y-1">
-                <span className="text-[10px] font-bold text-[#667781] uppercase tracking-wider block">
+              <div className="p-3 rounded-2xl bg-surface-2 border border-divider text-xs text-ink-2 space-y-1">
+                <span className="text-[10px] font-bold text-ink-3 uppercase tracking-wider block">
                   Alamat Pasien:
                 </span>
-                <p className="text-xs text-[#111b21] font-medium leading-snug">
+                <p className="text-xs text-ink font-medium leading-snug">
                   {editLocationModal.customer?.kelurahan
                     ? `${editLocationModal.customer.kelurahan}, ${editLocationModal.customer.kecamatan}, ${editLocationModal.customer.kota}`
                     : 'Alamat belum tercatat lengkap'}
@@ -1947,7 +1946,7 @@ export const Reservations: React.FC = () => {
 
               {/* Bagian 1: Foto Depan Rumah */}
               <div className="space-y-2">
-                <label className="block text-xs font-bold text-[#111b21]">
+                <label className="block text-xs font-bold text-ink">
                   1. Foto Tampak Depan Rumah:
                 </label>
 
@@ -1960,7 +1959,7 @@ export const Reservations: React.FC = () => {
                 />
 
                 {editHousePhotoB64 && !editRemovePhoto ? (
-                  <div className="relative rounded-2xl overflow-hidden border border-[#e9edef] bg-black/5 flex items-center justify-center max-h-48">
+                  <div className="relative rounded-2xl overflow-hidden border border-divider bg-black/5 flex items-center justify-center max-h-48">
                     <img
                       src={editHousePhotoB64}
                       alt="Tampak Depan Rumah"
@@ -1981,7 +1980,7 @@ export const Reservations: React.FC = () => {
                           setEditRemovePhoto(true);
                           setEditHousePhotoB64(null);
                         }}
-                        className="p-1.5 rounded-full bg-rose-600 text-white hover:bg-rose-700 transition shadow-xs cursor-pointer"
+                        className="p-1.5 rounded-full bg-danger text-on-solid hover:bg-danger-hover transition shadow-xs cursor-pointer"
                         title="Hapus foto"
                       >
                         <Trash2 size={13} />
@@ -1992,18 +1991,18 @@ export const Reservations: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => adminHouseFileInputRef.current?.click()}
-                    className="w-full py-4 border-2 border-dashed border-[#d1d7db] hover:border-[#008069] rounded-2xl flex flex-col items-center justify-center text-xs text-[#667781] hover:text-[#008069] transition bg-[#f8fafc] cursor-pointer"
+                    className="w-full py-4 border-2 border-dashed border-divider hover:border-accent rounded-2xl flex flex-col items-center justify-center text-xs text-ink-3 hover:text-accent transition bg-surface-2 cursor-pointer"
                   >
-                    <Upload size={20} className="mb-1 text-[#008069]" />
-                    <span className="font-semibold text-[#111b21]">Unggah Foto Depan Rumah</span>
-                    <span className="text-[10px] text-[#8696a0]">Pilih gambar dari komputer / galeri (maks 12 MB)</span>
+                    <Upload size={20} className="mb-1 text-accent" />
+                    <span className="font-semibold text-ink">Unggah Foto Depan Rumah</span>
+                    <span className="text-[10px] text-ink-3">Pilih gambar dari komputer / galeri (maks 12 MB)</span>
                   </button>
                 )}
               </div>
 
               {/* Bagian 2: Catatan Patokan */}
               <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-[#111b21]">
+                <label className="block text-xs font-bold text-ink">
                   2. Catatan Patokan / Ancer-ancer Rumah:
                 </label>
                 <textarea
@@ -2011,15 +2010,15 @@ export const Reservations: React.FC = () => {
                   value={editLandmark}
                   onChange={(e) => setEditLandmark(e.target.value)}
                   placeholder="Contoh: Pagar hitam gerbang kayu, seberang masjid, samping toko berkah"
-                  className="w-full px-3.5 py-2.5 bg-white border border-[#e9edef] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] transition shadow-xs resize-none"
+                  className="w-full px-3.5 py-2.5 bg-surface border border-divider rounded-xl text-xs text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent transition shadow-xs resize-none"
                 />
               </div>
 
               {/* Bagian 3: Smart Koordinat GPS Rumah Pasien */}
-              <div className="space-y-3 bg-[#f8fafc] -mx-4 p-4 rounded-2xl border border-[#e9edef]">
+              <div className="space-y-3 bg-surface-2 -mx-4 p-4 rounded-2xl border border-divider">
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-bold text-[#111b21] flex items-center space-x-1.5">
-                    <Crosshair size={13} className="text-[#008069]" />
+                  <label className="block text-xs font-bold text-ink flex items-center space-x-1.5">
+                    <Crosshair size={13} className="text-accent" />
                     <span>3. Titik Lokasi GPS Rumah Pasien:</span>
                   </label>
                   {editLat && editLng && (
@@ -2027,7 +2026,7 @@ export const Reservations: React.FC = () => {
                       href={getGoogleMapsDirectionUrl(parseFloat(editLat), parseFloat(editLng), editLandmark || null)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-[11px] font-bold text-[#008069] hover:underline inline-flex items-center gap-1"
+                      className="text-[11px] font-bold text-accent hover:underline inline-flex items-center gap-1"
                     >
                       <span>Lihat Maps</span>
                       <ExternalLink size={11} />
@@ -2037,8 +2036,8 @@ export const Reservations: React.FC = () => {
 
                 {/* Assistant 1: Tempel Link Maps */}
                 <div className="space-y-1">
-                  <label className="block text-[10px] font-semibold text-[#54656f] flex items-center gap-1">
-                    <Link2 size={11} className="text-[#008069]" />
+                  <label className="block text-[10px] font-semibold text-ink-2 flex items-center gap-1">
+                    <Link2 size={11} className="text-accent" />
                     <span>Tempel Link Shareloc / Google Maps Pasien:</span>
                   </label>
                   <div className="flex space-x-1.5">
@@ -2047,13 +2046,13 @@ export const Reservations: React.FC = () => {
                       value={editMapsUrlInput}
                       onChange={(e) => handlePasteEditMapsUrl(e.target.value)}
                       placeholder="Paste link Google Maps / shareloc di sini..."
-                      className="flex-1 px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-2xs"
+                      className="flex-1 px-3 py-2 bg-surface border border-divider rounded-xl text-xs text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent shadow-2xs"
                     />
                     <button
                       type="button"
                       onClick={() => handlePasteEditMapsUrl(editMapsUrlInput)}
                       disabled={editMapsResolving || !editMapsUrlInput.trim()}
-                      className="px-3 py-2 bg-white hover:bg-[#e8f5f2] border border-[#c2e7e0] text-[#008069] rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-2xs disabled:opacity-50 cursor-pointer"
+                      className="px-3 py-2 bg-surface hover:bg-accent-soft border border-divider text-accent rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-2xs disabled:opacity-50 cursor-pointer"
                       title="Cari koordinat dari tautan"
                     >
                       {editMapsResolving ? <Loader size={12} className="animate-spin" /> : <Search size={12} />}
@@ -2061,7 +2060,7 @@ export const Reservations: React.FC = () => {
                     </button>
                   </div>
                   {editMapsResolving && (
-                    <p className="text-[11px] text-[#008069] flex items-center gap-1.5 animate-pulse mt-1">
+                    <p className="text-[11px] text-accent flex items-center gap-1.5 animate-pulse mt-1">
                       <Loader size={12} className="animate-spin" />
                       <span>Sedang mengurai tautan Google Maps...</span>
                     </p>
@@ -2074,7 +2073,7 @@ export const Reservations: React.FC = () => {
                     type="button"
                     onClick={handleLockEditGps}
                     disabled={editGettingGps}
-                    className="py-2.5 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#008069] border border-emerald-300 text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer shadow-2xs active:scale-[0.98]"
+                    className="py-2.5 px-3 rounded-xl bg-success-soft hover:bg-success-line text-accent border border-success-line text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer shadow-2xs active:scale-[0.98]"
                   >
                     <Crosshair size={13} className={editGettingGps ? 'animate-spin' : ''} />
                     <span>{editGettingGps ? 'Mengunci...' : '📍 Kunci GPS Saya'}</span>
@@ -2084,7 +2083,7 @@ export const Reservations: React.FC = () => {
                     type="button"
                     onClick={handleGeocodeEditAddress}
                     disabled={editGeocoding}
-                    className="py-2.5 px-3 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-300 text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer shadow-2xs active:scale-[0.98]"
+                    className="py-2.5 px-3 rounded-xl bg-info-soft hover:bg-info-line text-info border border-info-line text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer shadow-2xs active:scale-[0.98]"
                   >
                     <Search size={13} className={editGeocoding ? 'animate-spin' : ''} />
                     <span>{editGeocoding ? 'Mencari...' : '🔍 Cari dari Alamat'}</span>
@@ -2093,11 +2092,11 @@ export const Reservations: React.FC = () => {
 
                 {/* Coordinate Status Badge */}
                 {editLat && editLng ? (
-                  <div className="p-2.5 bg-[#d9fdd3]/70 border border-[#00a884]/40 rounded-xl flex items-center justify-between text-xs text-[#008069]">
+                  <div className="p-2.5 bg-bubble-out/70 border border-accent/40 rounded-xl flex items-center justify-between text-xs text-accent">
                     <div className="flex items-center space-x-1.5 font-mono font-bold">
-                      <CheckCircle2 size={14} className="text-[#008069] shrink-0" />
+                      <CheckCircle2 size={14} className="text-accent shrink-0" />
                       <span>Titik: {parseFloat(editLat).toFixed(6)}, {parseFloat(editLng).toFixed(6)}</span>
-                      {editGpsAccuracy && <span className="text-[10px] text-[#54656f]">(±{editGpsAccuracy}m)</span>}
+                      {editGpsAccuracy && <span className="text-[10px] text-ink-2">(±{editGpsAccuracy}m)</span>}
                     </div>
                     <button
                       type="button"
@@ -2105,13 +2104,13 @@ export const Reservations: React.FC = () => {
                         setEditLat('');
                         setEditLng('');
                       }}
-                      className="text-[10px] text-rose-600 hover:underline font-semibold"
+                      className="text-[10px] text-danger hover:underline font-semibold"
                     >
                       Hapus
                     </button>
                   </div>
                 ) : (
-                  <p className="text-[11px] text-[#8696a0] italic">
+                  <p className="text-[11px] text-ink-3 italic">
                     Belum ada titik koordinat. Gunakan tombol di atas atau tempel link Maps.
                   </p>
                 )}
@@ -2121,32 +2120,32 @@ export const Reservations: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setEditShowManualCoords(!editShowManualCoords)}
-                    className="text-[11px] text-[#54656f] hover:text-[#111b21] font-semibold flex items-center gap-1 transition"
+                    className="text-[11px] text-ink-2 hover:text-ink font-semibold flex items-center gap-1 transition"
                   >
                     <span>{editShowManualCoords ? 'Sembunyikan Input Manual' : 'Input Koordinat Manual (Angka)'}</span>
                     {editShowManualCoords ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                   </button>
 
                   {editShowManualCoords && (
-                    <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-[#e9edef]">
+                    <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-divider">
                       <div className="space-y-1">
-                        <label className="block text-[10px] text-[#667781]">Latitude</label>
+                        <label className="block text-[10px] text-ink-3">Latitude</label>
                         <input
                           type="text"
                           value={editLat}
                           onChange={(e) => setEditLat(e.target.value)}
                           placeholder="-7.3488"
-                          className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] transition"
+                          className="w-full px-3 py-2 bg-surface border border-divider rounded-xl text-xs text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent transition"
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="block text-[10px] text-[#667781]">Longitude</label>
+                        <label className="block text-[10px] text-ink-3">Longitude</label>
                         <input
                           type="text"
                           value={editLng}
                           onChange={(e) => setEditLng(e.target.value)}
                           placeholder="112.7516"
-                          className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] transition"
+                          className="w-full px-3 py-2 bg-surface border border-divider rounded-xl text-xs text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent transition"
                         />
                       </div>
                     </div>
@@ -2155,12 +2154,12 @@ export const Reservations: React.FC = () => {
               </div>
 
               {/* Modal Actions */}
-              <div className="flex justify-end space-x-2 pt-3 border-t border-[#e9edef]">
+              <div className="flex justify-end space-x-2 pt-3 border-t border-divider">
                 <button
                   type="button"
                   onClick={() => setEditLocationModal(null)}
                   disabled={submittingLocation}
-                  className="px-4 py-2.5 rounded-xl border border-[#d1d7db] text-xs font-semibold text-[#54656f] hover:bg-[#f0f2f5] transition cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl border border-divider text-xs font-semibold text-ink-2 hover:bg-fill-1 transition cursor-pointer"
                 >
                   Batal
                 </button>
@@ -2168,7 +2167,7 @@ export const Reservations: React.FC = () => {
                   type="button"
                   onClick={handleSaveEditLocation}
                   disabled={submittingLocation}
-                  className="px-5 py-2.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50 cursor-pointer"
+                  className="px-5 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50 cursor-pointer"
                 >
                   {submittingLocation ? (
                     <>

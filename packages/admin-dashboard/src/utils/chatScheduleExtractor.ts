@@ -197,7 +197,7 @@ const INVALID_CHILD_NAME_WORDS = new Set([
  */
 export function isValidChildName(name: string | null | undefined): boolean {
   if (!name) return false;
-  const clean = name.trim().replace(/^[-:.,\s]+|[-:.,\s]+$/g, '');
+  const clean = name.trim().replace(/^[:.,\s-]+|[:.,\s-]+$/g, '');
   if (clean.length < 2 || clean.length > 40) return false;
   if (/^(?:usia|umur|treatment|layanan|pilihan|nama|alamat|kec|kota|no|jam|tgl|hari|payment|total|ongkir)\b/i.test(clean)) return false;
   // Fase 0 (sementara, dicatat di KNOWN_ISSUES): tolak adverbia waktu + kurung tak berpasangan
@@ -296,7 +296,7 @@ export function findExistingReservationForSchedule<
   const targetCat = String(treatmentCategory || '').toUpperCase();
   const found = reservations.find((r) => {
     if (!r?.booking_date) return false;
-    // Unifikasi #257-PR: supresi same-day memakai "penghambat jadwal" (termasuk
+    // Unifikasi Issue-257-PR: supresi same-day memakai "penghambat jadwal" (termasuk
     // completed/in_progress hari ini), BUKAN "slot aktif" yang lebih sempit.
     if (!isScheduleBlockingStatus(r.status)) return false;
     const d = r.booking_date instanceof Date ? r.booking_date : new Date(r.booking_date);
@@ -417,7 +417,7 @@ export function cleanBundaName(name?: string | null, kecamatan?: string | null, 
  */
 export function isFormLabelAge(age: string | null | undefined): boolean {
   if (!age) return true;
-  const clean = age.trim().replace(/^[-:.,\s]+|[-:.,\s]+$/g, '');
+  const clean = age.trim().replace(/^[:.,\s-]+|[:.,\s-]+$/g, '');
   if (!clean) return true;
   if (/^(?:treatment|layanan|pilihan|nama|usia|umur|alamat|kec|kota|no|jam|tgl|hari|payment|total|ongkir)\b/i.test(clean)) return true;
   if (clean.includes(':')) return true;

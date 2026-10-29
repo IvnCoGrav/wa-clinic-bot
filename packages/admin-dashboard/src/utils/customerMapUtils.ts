@@ -94,9 +94,9 @@ export function filterPointsByCity<T extends { kota?: string | null }>(
  * 3. MQL (biru)
  */
 export function markerColor(point: MapPointLike): string {
-  if (point.is_out_of_coverage) return '#94a3b8';
-  if (point.has_reservation) return '#008069';
-  return '#2563eb';
+  if (point.is_out_of_coverage) return 'rgb(var(--c-ink-3))';
+  if (point.has_reservation) return 'rgb(var(--c-accent))';
+  return 'rgb(var(--c-info))';
 }
 
 /** Validasi rentang koordinat (lat -90..90, lng -180..180). */
@@ -132,15 +132,15 @@ export interface LocationVisual {
 
 export const UNIFORM_MARKER_RADIUS = 7;
 const LOCATION_VISUALS: Record<LocationSourceKind, Omit<LocationVisual, 'source'>> = {
-  gps_pin: { label: '📍 GPS Akurat', borderColor: '#ffffff', fillOpacity: 0.9, radius: UNIFORM_MARKER_RADIUS },
+  gps_pin: { label: '📍 GPS Akurat', borderColor: 'rgb(var(--c-surface))', fillOpacity: 0.9, radius: UNIFORM_MARKER_RADIUS },
   estimated_area: {
     label: '⚪ Estimasi Wilayah',
-    borderColor: '#64748b',
+    borderColor: 'rgb(var(--c-ink-2))',
     dashArray: '4 3',
     fillOpacity: 0.5,
     radius: UNIFORM_MARKER_RADIUS,
   },
-  manual_staff: { label: '📍 Terverifikasi Staf', borderColor: '#ffffff', fillOpacity: 1, radius: UNIFORM_MARKER_RADIUS },
+  manual_staff: { label: '📍 Terverifikasi Staf', borderColor: 'rgb(var(--c-surface))', fillOpacity: 1, radius: UNIFORM_MARKER_RADIUS },
 };
 
 /**

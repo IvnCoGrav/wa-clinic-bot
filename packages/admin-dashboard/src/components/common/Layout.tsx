@@ -454,7 +454,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   return (
     <div
       style={{ height: isLiveChat ? 'var(--vvh, 100dvh)' : undefined, maxHeight: isLiveChat ? 'var(--vvh, 100dvh)' : undefined }}
-      className={`${isLiveChat ? 'h-[100dvh] max-h-[100dvh] overflow-hidden touch-pan-y' : 'min-h-screen'} bg-[#f0f2f5] dark:bg-[#111b21] text-[#111b21] dark:text-[#e9edef] flex flex-col md:flex-row relative overscroll-y-contain`}
+      className={`${isLiveChat ? 'h-[100dvh] max-h-[100dvh] overflow-hidden touch-pan-y' : 'min-h-screen'} bg-app text-ink flex flex-col md:flex-row relative overscroll-y-contain`}
     >
       {/* ⬅️ Mobile Edge Swipe-Back Floating Indicator (Max 100px with resistance physics) */}
       {swipeBackDistance > 0 && (
@@ -468,8 +468,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           <div
             className={`p-3 rounded-full shadow-2xl backdrop-blur-md border transition-all flex items-center justify-center ${
               swipeBackDistance >= 50
-                ? 'bg-[#008069] text-white border-white/40 ring-4 ring-[#008069]/25 shadow-[#008069]/30'
-                : 'bg-white/95 text-[#008069] border-[#008069]/30 shadow-lg'
+                ? 'bg-accent text-white border-white/40 ring-4 ring-accent/25 shadow-accent/30'
+                : 'bg-surface/95 text-accent border-accent/30 shadow-lg'
             }`}
           >
             <ChevronLeft
@@ -484,25 +484,25 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       {incomingToast && (
         <div
           onClick={() => openChatFromToast(incomingToast.conversationId)}
-          className="fixed top-3 left-3 right-3 sm:left-auto sm:right-6 z-[9999] max-w-sm sm:max-w-md bg-white dark:bg-[#202c33] border border-[#008069]/40 dark:border-[#00a884]/40 rounded-2xl shadow-2xl p-3 flex items-start space-x-3 cursor-pointer hover:bg-[#f8fafc] dark:hover:bg-[#2a3942] transition-all transform animate-in slide-in-from-top-4 fade-in duration-200 select-none backdrop-blur-md mt-[env(safe-area-inset-top,0px)] ml-[env(safe-area-inset-left,0px)] mr-[env(safe-area-inset-right,0px)]"
+          className="fixed top-3 left-3 right-3 sm:left-auto sm:right-6 z-[9999] max-w-sm sm:max-w-md bg-surface-2 border border-accent/40 rounded-2xl shadow-2xl p-3 flex items-start space-x-3 cursor-pointer hover:bg-fill-1 transition-all transform animate-in slide-in-from-top-4 fade-in duration-200 select-none backdrop-blur-md mt-[env(safe-area-inset-top,0px)] ml-[env(safe-area-inset-left,0px)] mr-[env(safe-area-inset-right,0px)]"
         >
-          <div className="h-10 w-10 rounded-full bg-[#008069] text-white flex items-center justify-center shrink-0 font-bold shadow-xs">
+          <div className="h-10 w-10 rounded-full bg-accent text-accent-ink flex items-center justify-center shrink-0 font-bold shadow-xs">
             <MessageSquare size={20} />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-extrabold text-[#111b21] dark:text-[#e9edef] truncate">
+              <p className="text-xs font-extrabold text-ink truncate">
                 {incomingToast.customerName}
               </p>
-              <span className="text-[10px] text-[#667781] font-mono ml-2">
+              <span className="text-[10px] text-ink-3 font-mono ml-2">
                 {incomingToast.createdAt}
               </span>
             </div>
-            <p className="text-xs text-[#54656f] dark:text-[#8696a0] line-clamp-2 mt-0.5 font-medium leading-relaxed">
+            <p className="text-xs text-ink-2 line-clamp-2 mt-0.5 font-medium leading-relaxed">
               {incomingToast.content}
             </p>
             <div className="flex items-center space-x-2 mt-1.5">
-              <span className="text-[10px] font-bold text-[#008069] dark:text-[#00a884] bg-[#e8f5f2] dark:bg-[#00a884]/15 px-2 py-0.5 rounded-md">
+              <span className="text-[10px] font-bold text-accent bg-accent-soft px-2 py-0.5 rounded-md">
                 💬 Ketuk untuk Balas
               </span>
             </div>
@@ -513,7 +513,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               dismissToast();
             }}
             aria-label="Tutup notifikasi"
-            className="text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] p-1 rounded-lg hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] transition cursor-pointer"
+            className="text-ink-3 hover:text-ink p-1 rounded-lg hover:bg-fill-1 transition cursor-pointer"
           >
             <X size={16} />
           </button>
@@ -542,28 +542,28 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       />
 
       {/* Sidebar Navigation (Desktop: Left, Mobile: Slide from Right with total GPU masking when closed) */}
-      <aside className={`fixed inset-y-0 right-0 md:right-auto md:left-0 z-50 w-64 bg-white dark:bg-[#202c33] border-l md:border-l-0 md:border-r border-[#e9edef] dark:border-[#2a3942] flex flex-col transform pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)] ${
+      <aside className={`fixed inset-y-0 right-0 md:right-auto md:left-0 z-50 w-64 bg-sidebar border-l md:border-l-0 md:border-r border-divider flex flex-col transform pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)] ${
         mobileMenuOpen
           ? 'translate-x-0 opacity-100 visible pointer-events-auto'
           : 'translate-x-full opacity-0 invisible pointer-events-none md:opacity-100 md:visible md:pointer-events-auto md:translate-x-0'
       } transition-all duration-300 ease-out shadow-2xl md:shadow-xs`}>
         {/* Brand/Header */}
-        <div className="h-16 border-b border-[#e9edef] dark:border-[#2a3942] bg-white dark:bg-[#202c33] flex items-center justify-between px-5">
+        <div className="h-16 border-b border-divider bg-surface flex items-center justify-between px-5">
           <div className="flex items-center space-x-2.5">
             <img
               src="/admin/apple-touch-icon.png"
               alt="Kala Logo"
-              className="h-8 w-8 rounded-lg object-contain shadow-2xs border border-[#e9edef] dark:border-[#2a3942] shrink-0"
+              className="h-8 w-8 rounded-lg object-contain shadow-2xs border border-divider shrink-0"
             />
             <div className="flex flex-col">
-              <span className="font-extrabold text-sm tracking-wider text-[#111b21] dark:text-[#e9edef] uppercase">KALA SPA</span>
-              <span className="text-[10px] text-[#667781] dark:text-[#8696a0] font-medium leading-none">Management Bot</span>
+              <span className="font-extrabold text-sm tracking-wider text-ink uppercase">KALA SPA</span>
+              <span className="text-[10px] text-ink-3 font-medium leading-none">Management Bot</span>
             </div>
           </div>
           <button
             onClick={dismissMobileMenu}
             aria-label="Tutup menu"
-            className="md:hidden text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] p-2 rounded-xl hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] transition"
+            className="md:hidden text-ink-3 hover:text-ink p-2 rounded-xl hover:bg-fill-1 transition"
           >
             <X size={20} />
           </button>
@@ -600,7 +600,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
             return sortedNavGroups.map((group) => (
               <div key={group.title} className="space-y-1">
-                <div className="px-3 pt-1 pb-0.5 text-[10px] font-extrabold uppercase tracking-wider text-[#8696a0] dark:text-[#8696a0]">
+                <div className="px-3 pt-1 pb-0.5 text-[10px] font-extrabold uppercase tracking-wider text-ink-3">
                   {group.title}
                 </div>
                 {group.items.map((item) => {
@@ -613,17 +613,17 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                       onClick={handleNavClick}
                       className={`flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-150 text-xs ${
                         isActive 
-                          ? 'bg-[#e8f5f2] dark:bg-[#00a884]/15 border-l-4 border-[#008069] dark:border-[#00a884] text-[#008069] dark:text-[#00a884] font-bold shadow-xs'
-                          : 'text-[#54656f] dark:text-[#aebac1] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] hover:text-[#111b21] dark:hover:text-[#e9edef] font-medium'
+                          ? 'bg-accent-soft border-l-4 border-accent text-accent font-bold shadow-xs'
+                          : 'text-ink-2 hover:bg-fill-1 hover:text-ink font-medium'
                       }`}
                     >
-                      <Icon size={17} className={isActive ? 'text-[#008069] dark:text-[#00a884]' : 'text-[#8696a0]'} />
+                      <Icon size={17} className={isActive ? 'text-accent' : 'text-ink-3'} />
                       <span className="flex-1 truncate">{item.name}</span>
                       {!!item.badge && (
                         <span
                           title={`${item.badge} percakapan butuh respons / unread`}
                           className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            isActive ? 'bg-[#008069] dark:bg-[#00a884] text-white' : 'bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-[#f59e0b] border border-amber-200 dark:border-amber-800/40'
+                            isActive ? 'bg-accent text-accent-ink' : 'bg-warning-soft text-warning border border-warning-line'
                           }`}
                         >
                           {item.badge}
@@ -638,27 +638,27 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         </nav>
 
         {/* Quick Controls (Online Status, Sound, & Mode UI) — dipindah dari header mobile */}
-        <div className="px-3 pt-3 pb-2 border-t border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#111b21] space-y-2">
+        <div className="px-3 pt-3 pb-2 border-t border-divider bg-surface-2 space-y-2">
           {/* Status WAHA / Online */}
           <button
             type="button"
             onClick={() => setShowStatusPopover(true)}
             className={`w-full flex items-center justify-between px-3 py-2 rounded-xl border text-xs font-semibold transition active:scale-98 cursor-pointer shadow-2xs ${
               wahaStatus === 'WORKING'
-                ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/40 text-emerald-700 dark:text-[#00a884] hover:bg-emerald-100'
+                ? 'bg-success-soft border-success-line text-success hover:bg-success-soft/80'
                 : wahaStatus === 'SCAN_QR_CODE'
-                ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800/40 text-amber-700 dark:text-[#f59e0b] hover:bg-amber-100'
-                : 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800/40 text-rose-700 dark:text-[#f87171] hover:bg-rose-100'
+                ? 'bg-warning-soft border-warning-line text-warning hover:bg-warning-soft/80'
+                : 'bg-danger-soft border-danger-line text-danger hover:bg-danger-soft/80'
             }`}
             title="Klik untuk melihat status sistem WhatsApp & Server"
           >
             <span className="flex items-center gap-2">
               <span className="relative flex h-2 w-2">
                 <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                  wahaStatus === 'WORKING' ? 'bg-emerald-400' : 'bg-rose-400'
+                  wahaStatus === 'WORKING' ? 'bg-success' : 'bg-danger'
                 }`} />
                 <span className={`relative inline-flex rounded-full h-2 w-2 ${
-                  wahaStatus === 'WORKING' ? 'bg-emerald-500' : 'bg-rose-500'
+                  wahaStatus === 'WORKING' ? 'bg-success' : 'bg-danger'
                 }`} />
               </span>
               <span className="text-[11px] font-bold">
@@ -689,40 +689,40 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 }}
                 className={`flex-1 min-h-[38px] flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-xl border text-xs font-semibold transition active:scale-95 cursor-pointer shadow-2xs ${
                   soundActive
-                    ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/40 text-[#008069] dark:text-[#00a884]'
-                    : 'bg-white dark:bg-[#2a3942] border-[#e9edef] dark:border-[#374248] text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef]'
+                    ? 'bg-success-soft border-success-line text-accent'
+                    : 'bg-surface-2 border-divider text-ink-3 hover:text-ink'
                 }`}
                 title={soundActive ? 'Suara & Push: Aktif (Klik untuk Mute)' : 'Suara & Push: Mati (Klik untuk Aktifkan)'}
               >
-                {soundActive ? <Volume2 size={14} className="text-[#008069] dark:text-[#00a884]" /> : <VolumeX size={14} />}
+                {soundActive ? <Volume2 size={14} className="text-accent" /> : <VolumeX size={14} />}
                 <span className="text-[11px] font-bold">{soundActive ? 'Suara On' : 'Mute'}</span>
               </button>
             )}
 
             {/* Mode UI Theme Button */}
-            <div className="flex-1 min-h-[38px] flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-xl border border-[#e9edef] dark:border-[#374248] bg-white dark:bg-[#2a3942] text-xs font-semibold shadow-2xs">
+            <div className="flex-1 min-h-[38px] flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-xl border border-divider bg-surface-2 text-xs font-semibold shadow-2xs">
               <ThemeToggle size={14} className="!w-6 !h-6 !min-w-[24px] !min-h-[24px] !border-none !bg-transparent !shadow-none" />
-              <span className="text-[11px] font-bold text-[#54656f] dark:text-[#aebac1]">Mode UI</span>
+              <span className="text-[11px] font-bold text-ink-2">Mode UI</span>
             </div>
           </div>
         </div>
 
         {/* User profile / Logout */}
-        <div className="p-3.5 border-t border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#111b21] space-y-2">
+        <div className="p-3.5 border-t border-divider bg-surface-2 space-y-2">
           <div className="flex items-center justify-between">
             <div className="truncate pr-2">
-              <p className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] truncate">
+              <p className="text-xs font-bold text-ink truncate">
                 {user?.name || user?.email || 'Admin'}
               </p>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-[#e8f5f2] dark:bg-[#00a884]/15 text-[#008069] dark:text-[#00a884] border border-[#c2e7e0] dark:border-[#00a884]/30">
+                <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-accent-soft text-accent border border-accent/30">
                   {ROLE_LABELS[currentRole as keyof typeof ROLE_LABELS] || currentRole}
                 </span>
               </div>
             </div>
             <button
               onClick={handleLogout}
-              className="p-2.5 rounded-xl bg-white dark:bg-[#2a3942] hover:bg-rose-50 dark:hover:bg-rose-500/20 text-[#8696a0] hover:text-rose-600 dark:hover:text-rose-300 border border-[#e9edef] dark:border-[#374248] transition-colors shadow-xs"
+              className="p-2.5 rounded-xl bg-surface hover:bg-danger-soft text-ink-3 hover:text-danger border border-divider transition-colors shadow-xs cursor-pointer"
               title="Logout"
               aria-label="Logout"
             >
@@ -749,15 +749,15 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             Modal Status Sistem dirender di luar <header> agar tetap tampil
             saat header hidden di mobile livechat. Desktop & halaman lain
             tetap sticky z-40. */}
-        <header className={`${isLiveChat ? 'hidden lg:block lg:sticky lg:top-0 z-40' : 'sticky top-0 z-40'} border-b border-[#e9edef] dark:border-[#2a3942] bg-white dark:bg-[#202c33] shadow-2xs shrink-0 pt-[env(safe-area-inset-top,0px)] pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))]`}>
+        <header className={`${isLiveChat ? 'hidden lg:block lg:sticky lg:top-0 z-40' : 'sticky top-0 z-40'} border-b border-divider bg-surface shadow-2xs shrink-0 pt-[env(safe-area-inset-top,0px)] pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))]`}>
           <div className="h-12 md:h-13 px-3 sm:px-5 flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <img
                 src="/admin/apple-touch-icon.png"
                 alt="Kala Logo"
-                className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg object-contain shadow-2xs border border-[#e9edef] dark:border-[#2a3942] shrink-0"
+                className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg object-contain shadow-2xs border border-divider shrink-0"
               />
-              <span className="font-extrabold text-xs sm:text-sm tracking-wide text-[#111b21] dark:text-[#e9edef]">
+              <span className="font-extrabold text-xs sm:text-sm tracking-wide text-ink">
                 KALA SPA
               </span>
             </div>
@@ -768,7 +768,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             {redisQueueFallback && (
               <button
                 onClick={() => setShowStatusPopover(!showStatusPopover)}
-                className="hidden md:flex p-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-600 hover:bg-amber-100 transition"
+                className="hidden md:flex p-1.5 rounded-full bg-warning-soft border border-warning-line text-warning hover:bg-warning-line transition"
                 title="Redis Fallback Aktif"
               >
                 <AlertCircle size={15} />
@@ -779,7 +779,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             {wahaStatus === 'WORKING' ? (
               <button
                 onClick={() => setShowStatusPopover(!showStatusPopover)}
-                className="hidden md:flex rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 hover:bg-emerald-100 transition items-center gap-1.5 px-3 py-1.5 text-xs font-semibold h-8 min-h-[34px] cursor-pointer touch-manipulation active:scale-95"
+                className="hidden md:flex rounded-full bg-success-soft border border-success-line text-success hover:bg-success-line transition items-center gap-1.5 px-3 py-1.5 text-xs font-semibold h-8 min-h-[34px] cursor-pointer touch-manipulation active:scale-95"
               >
                 <CheckCircle size={14} />
                 <span className="text-[11px] font-bold">Online</span>
@@ -787,7 +787,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             ) : wahaStatus === 'SCAN_QR_CODE' ? (
               <button
                 onClick={() => setShowStatusPopover(!showStatusPopover)}
-                className="hidden md:flex rounded-full bg-amber-50 border border-amber-200 text-amber-600 hover:bg-amber-100 transition items-center gap-1.5 px-3 py-1.5 text-xs font-semibold h-8 min-h-[34px] cursor-pointer touch-manipulation active:scale-95"
+                className="hidden md:flex rounded-full bg-warning-soft border border-warning-line text-warning hover:bg-warning-line transition items-center gap-1.5 px-3 py-1.5 text-xs font-semibold h-8 min-h-[34px] cursor-pointer touch-manipulation active:scale-95"
               >
                 <QrCode size={14} />
                 <span className="text-[11px] font-bold">Scan QR</span>
@@ -795,7 +795,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             ) : wahaStatus === 'FAILED' ? (
               <button
                 onClick={() => setShowStatusPopover(!showStatusPopover)}
-                className="hidden md:flex rounded-full bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 transition items-center gap-1.5 px-3 py-1.5 text-xs font-semibold h-8 min-h-[34px] cursor-pointer touch-manipulation active:scale-95"
+                className="hidden md:flex rounded-full bg-danger-soft border border-danger-line text-danger hover:bg-danger-line transition items-center gap-1.5 px-3 py-1.5 text-xs font-semibold h-8 min-h-[34px] cursor-pointer touch-manipulation active:scale-95"
               >
                 <AlertCircle size={14} />
                 <span className="text-[11px] font-bold">Offline</span>
@@ -804,7 +804,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               <button
                 onClick={() => setShowStatusPopover(!showStatusPopover)}
                 title="Status Server WhatsApp: Terputus. Klik untuk membuka panel status"
-                className="hidden md:flex rounded-full bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/40 text-rose-600 dark:text-[#f87171] hover:bg-rose-100 dark:hover:bg-rose-900/50 transition items-center gap-1.5 px-3 py-1.5 text-xs font-semibold h-8 min-h-[34px] cursor-pointer touch-manipulation active:scale-95"
+                className="hidden md:flex rounded-full bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/40 text-rose-600 dark:text-danger hover:bg-rose-100 dark:hover:bg-rose-900/50 transition items-center gap-1.5 px-3 py-1.5 text-xs font-semibold h-8 min-h-[34px] cursor-pointer touch-manipulation active:scale-95"
               >
                 <WifiOff size={14} />
                 <span className="text-[11px] font-bold">Terputus</span>
@@ -814,7 +814,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               <button
                 onClick={() => setShowStatusPopover(!showStatusPopover)}
                 title="Status Server WhatsApp: Sedang memeriksa koneksi server... Klik untuk membuka panel status"
-                className="hidden md:flex rounded-full bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100 transition items-center gap-1.5 px-3 py-1.5 text-xs font-semibold h-8 min-h-[34px] cursor-pointer touch-manipulation active:scale-95"
+                className="hidden md:flex rounded-full bg-surface-2 border border-divider text-ink-2 hover:bg-fill-2 transition items-center gap-1.5 px-3 py-1.5 text-xs font-semibold h-8 min-h-[34px] cursor-pointer touch-manipulation active:scale-95"
               >
                 <Loader size={14} className="animate-spin" />
                 <span className="text-[11px] font-bold">WA: Memeriksa...</span>
@@ -846,8 +846,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 title={soundActive ? 'Suara & Push Notifikasi: Aktif (Klik untuk Mute)' : 'Suara & Push Notifikasi: Mati (Klik untuk Aktifkan)'}
                 className={`hidden md:flex w-9 h-9 sm:w-8 sm:h-8 min-w-[36px] min-h-[36px] rounded-full border transition items-center justify-center cursor-pointer shadow-2xs aspect-square active:scale-95 touch-manipulation ${
                   soundActive
-                    ? 'bg-emerald-50 border-emerald-200 text-[#008069] hover:bg-emerald-100'
-                    : 'bg-gray-100 border-gray-200 text-gray-400 hover:bg-gray-200'
+                    ? 'bg-success-soft border-success-line text-accent hover:bg-success-line'
+                    : 'bg-fill-1 border-divider text-ink-3 hover:bg-fill-2'
                 }`}
               >
                 {soundActive ? <Volume2 size={15} /> : <VolumeX size={15} />}
@@ -870,8 +870,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 aria-pressed={copilotOpen}
                 className={`w-9 h-9 sm:w-8 sm:h-8 min-w-[36px] min-h-[36px] rounded-full border transition flex items-center justify-center cursor-pointer shadow-2xs aspect-square active:scale-95 touch-manipulation ${
                   copilotOpen
-                    ? 'bg-[#d9fdd3] dark:bg-[#00a884]/20 border-[#00a884]/40 text-[#008069] dark:text-[#00a884] ring-2 ring-[#00a884]/30'
-                    : 'bg-[#f0f2f5] dark:bg-[#2a3942] border-[#e9edef] dark:border-[#374248] text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef]'
+                    ? 'bg-bubble-out dark:bg-accent/20 border-accent/40 text-accent ring-2 ring-accent/30'
+                    : 'bg-fill-1 dark:bg-fill-2 border-divider dark:border-strong text-ink-3 hover:text-ink'
                 }`}
               >
                 <Bot size={16} />
@@ -883,7 +883,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               onClick={openMobileMenu} 
               aria-label="Buka Menu"
               title="Buka Menu Navigasi"
-              className="md:hidden w-10 h-10 min-w-[40px] min-h-[40px] sm:w-9 sm:h-9 rounded-xl bg-[#f0f2f5] dark:bg-[#2a3942] text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-[#e9edef] dark:hover:bg-[#374248] transition active:scale-95 touch-manipulation cursor-pointer shadow-2xs ml-0.5 flex items-center justify-center aspect-square"
+              className="md:hidden w-10 h-10 min-w-[40px] min-h-[40px] sm:w-9 sm:h-9 rounded-xl bg-fill-1 dark:bg-fill-2 text-ink-2 hover:text-ink hover:bg-fill-2 dark:hover:bg-strong transition active:scale-95 touch-manipulation cursor-pointer shadow-2xs ml-0.5 flex items-center justify-center aspect-square"
             >
               <Menu size={20} />
             </button>
@@ -900,32 +900,32 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                   className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity duration-200"
                   onClick={() => setShowStatusPopover(false)}
                 />
-                <div className="relative w-full max-w-sm bg-white dark:bg-[#202c33] rounded-2xl shadow-2xl border border-[#e9edef] dark:border-[#2a3942] p-4 text-xs z-10 space-y-3 animate-in fade-in zoom-in-95 duration-150">
-                  <div className="flex items-center justify-between border-b border-[#e9edef] dark:border-[#2a3942] pb-2">
-                    <span className="font-bold text-[#111b21] dark:text-[#e9edef] text-sm flex items-center gap-1.5">
-                      <Activity size={15} className="text-[#008069] dark:text-[#00a884]" />
+                <div className="relative w-full max-w-sm bg-surface rounded-2xl shadow-2xl border border-divider p-4 text-xs z-10 space-y-3 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="flex items-center justify-between border-b border-divider pb-2">
+                    <span className="font-bold text-ink text-sm flex items-center gap-1.5">
+                      <Activity size={15} className="text-accent" />
                       Status Sistem
                     </span>
                     <button
                       onClick={() => setShowStatusPopover(false)}
-                      className="text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] p-1 rounded-lg hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942]"
+                      className="text-ink-3 hover:text-ink p-1 rounded-lg hover:bg-fill-1"
                     >
                       <X size={14} />
                     </button>
                   </div>
 
                   <div className="space-y-2.5">
-                    <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-[#f8fafc] dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942]">
+                    <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-surface-2 border border-divider">
                       {wahaStatus === 'WORKING' ? (
-                        <CheckCircle size={16} className="text-emerald-600 mt-0.5 flex-shrink-0" />
+                        <CheckCircle size={16} className="text-success mt-0.5 flex-shrink-0" />
                       ) : wahaStatus === 'SCAN_QR_CODE' ? (
-                        <Activity size={16} className="text-amber-600 mt-0.5 flex-shrink-0" />
+                        <Activity size={16} className="text-warning mt-0.5 flex-shrink-0" />
                       ) : (
-                        <AlertCircle size={16} className="text-rose-600 mt-0.5 flex-shrink-0" />
+                        <AlertCircle size={16} className="text-danger mt-0.5 flex-shrink-0" />
                       )}
                       <div>
-                        <p className="font-bold text-[#111b21] dark:text-[#e9edef]">WhatsApp (WAHA)</p>
-                        <p className="text-[#667781] dark:text-[#8696a0] text-[11px] mt-0.5">
+                        <p className="font-bold text-ink">WhatsApp (WAHA)</p>
+                        <p className="text-ink-2 text-[11px] mt-0.5">
                           {wahaStatus === 'WORKING'
                             ? 'Sesi WAHA terhubung dan siap kirim/terima pesan pelanggan.'
                             : wahaStatus === 'SCAN_QR_CODE'
@@ -936,21 +936,21 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                     </div>
 
                     {redisQueueFallback ? (
-                      <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-amber-50 border border-amber-200">
-                        <AlertCircle size={16} className="text-amber-600 mt-0.5 flex-shrink-0" />
+                      <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-warning-soft border border-warning-line">
+                        <AlertCircle size={16} className="text-warning mt-0.5 flex-shrink-0" />
                         <div>
-                          <p className="font-bold text-amber-900">Redis Fallback Mode</p>
-                          <p className="text-amber-800 text-[11px] mt-0.5">
+                          <p className="font-bold text-warning">Redis Fallback Mode</p>
+                          <p className="text-warning text-[11px] mt-0.5">
                             Antrean pesan sementara disimpan di in-memory buffer bot karena Redis tidak terhubung.
                           </p>
                         </div>
                       </div>
                     ) : (
-                      <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-emerald-50 border border-emerald-200">
-                        <CheckCircle size={16} className="text-emerald-600 mt-0.5 flex-shrink-0" />
+                      <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-success-soft border border-success-line">
+                        <CheckCircle size={16} className="text-success mt-0.5 flex-shrink-0" />
                         <div>
-                          <p className="font-bold text-emerald-900">Redis & Antrean Aktif</p>
-                          <p className="text-emerald-800 text-[11px] mt-0.5">
+                          <p className="font-bold text-success">Redis & Antrean Aktif</p>
+                          <p className="text-success text-[11px] mt-0.5">
                             Antrean pesan terdistribusi berjalan normal.
                           </p>
                         </div>
@@ -976,7 +976,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                           toast(`⚠️ Error: ${err.message}`, 'error');
                         }
                       }}
-                      className="w-full text-center py-2 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold text-xs transition border border-emerald-200 flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                      className="w-full text-center py-2 px-3 rounded-xl bg-success-soft hover:bg-success-line text-success font-semibold text-xs transition border border-success-line flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
                     >
                       <Volume2 size={13} />
                       Kirim Notifikasi Uji Coba (Test Push)
@@ -985,7 +985,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                       to="/admin/settings"
                       replace={true}
                       onClick={() => setShowStatusPopover(false)}
-                      className="block text-center py-2 px-3 rounded-xl bg-[#f0f2f5] dark:bg-[#2a3942] hover:bg-[#e9edef] dark:hover:bg-[#374248] text-[#111b21] dark:text-[#e9edef] font-semibold text-xs transition"
+                      className="block text-center py-2 px-3 rounded-xl bg-fill-1 dark:bg-fill-2 hover:bg-fill-2 dark:hover:bg-strong text-ink font-semibold text-xs transition"
                     >
                       Buka Operational Settings →
                     </Link>
@@ -1000,7 +1000,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             isLiveChat
               ? 'p-0 overflow-hidden flex flex-col min-h-0'
               : '[--page-pad:1rem] sm:[--page-pad:1.25rem] md:[--page-pad:1.75rem] p-[var(--page-pad)] space-y-6'
-          } bg-[#f0f2f5] dark:bg-black`}
+          } bg-app`}
         >
           <AppErrorBoundary scopeLabel="page">{children}</AppErrorBoundary>
         </main>

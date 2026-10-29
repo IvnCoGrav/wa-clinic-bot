@@ -4,6 +4,140 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-29 - Refactor: Konsolidasi Komponen Input Kanonis, Adopsi StatusChip, dan Ekstraksi Komponen Bersama VoiceNotePlayer (Penutupan Utang #290 & #288)
+
+- **Latar Belakang & Akar Masalah**:
+  - Setelah migrasi Design System v2, tersisa utang desain di Issue #290: (1) kelas styling input form diulang manual puluhan kali tanpa Single Source of Truth; (2) komponen primitif `StatusChip` belum memiliki konsumen aktif di antarmuka tabel reservasi/kunjungan; (3) komponen audio player `VoiceNotePlayer` (155 baris) terduplikasi identik antara dua file raksasa `LiveChatMonitor.tsx` dan `StaffToday.tsx`.
+- **Perubahan Fondasional & Arsitektur**:
+  - **Konsolidasi Komponen Input**: `src/components/ui/Fields.tsx` kini mengekspor kelas kanonis `FIELD_INPUT_BASE`, `FIELD_INPUT_SURFACE`, `FIELD_TEXTAREA_BASE`, `FIELD_SELECT_BASE`, serta menambahkan prop `variant: 'surface' | 'surface-2'` pada `<Input>`, `<Select>`, `<Textarea>`. Modul form (seperti `CustomerEditForm`) mengadopsi konstanta kanonis ini sebagai Single Source of Truth.
+  - **Adopsi Kanonis `StatusChip`**: `StatusChip` kini resmi dikonsumsi aktif oleh `Reservations.tsx` (pada fungsi `getStatusBadge` terhubung dengan `reservationStatusToTone`) dan `TodayTreatments.tsx` (pada status task selesai, otw, dan akan datang).
+  - **Ekstraksi Komponen Bersama `VoiceNotePlayer`**: Menghapus duplikasi kode (155 baris) dari `LiveChatMonitor.tsx` dan `StaffToday.tsx` menjadi satu komponen terpusat di `src/components/common/VoiceNotePlayer.tsx`.
+- **Hasil Terukur & Verifikasi**:
+  - `npm run check:design` exit 0 (hex 287/287, paritas dark: bgWhite=1, palette=0).
+  - `npm run build` (packages/admin-dashboard) exit 0 (12,48 detik).
+  - Bundle size `LiveChatMonitor` menyusut dari 296,56 kB ke 293,56 kB; `StaffToday` menyusut dari 175,62 kB ke 172,83 kB; `Reservations` menyusut dari 70,54 kB ke 69,62 kB.
+  - `tests/unit/status-tone.test.ts`, `tests/unit/staff-colors.test.ts`, `tests/unit/customer-map-utils.test.ts`, `tests/unit/typing.test.ts` 100% lulus.
+  - Issue #290 resmi ditutup (**CLOSED**).
+
+#### 2026-10-29 - Fix: Kontras WCAG AA Dipenuhi, Warna Status Jadi Satu Sumber, dan CSS Legacy Dibersihkan (Fase 3)
+
+- **Latar Belakang & Akar Masalah**:
+  - Tiga utang visual tersisa setelah Fase 1 & 2. Pertama, **kontras mode terang gagal WCAG AA**: `--c-ink-3` hanya **3,05:1** di atas `surface` (2,72:1 di atas `app`) dan `--c-accent` hanya **4,37:1** di atas `--c-accent-soft` — ambang teks normal 4,5:1. Teks sekunder (1.156 pemakaian `text-ink-3`) praktis tidak terbaca bagi pengguna low-vision.
+  - Kedua, **warna status punya dua sumber kebenaran**: `src/utils/statusTone.ts` memetakan status → tone, tetapi `ReservationStatusIcon` punya peta kelas warnanya sendiri (`pillClass`) yang ditulis ulang dari nol. Satu status bisa tampil beda warna antar komponen.
+  - Ketiga, **layer CSS `.wa-*` (44 baris, 11 kelas)** masih menyimpan nilai hex arbitrer; 9 di antaranya sudah tidak dipakai sama sekali.
+- **Arsitektur & Perubahan Fondasional**:
+  - **Token kontras (light saja — dark sudah lulus 4,68–15,79)**:
+    - `--c-ink-3`: `134 150 160` → `95 111 121` → **3,05 → 5,20:1** (surface), 4,97:1 (surface-2), 4,64:1 (app).
+    - `--c-ink-2`: `84 101 111` → `71 85 94` → 7,70:1. Digelapkan agar hierarki tiga tingkat `ink` / `ink-2` / `ink-3` tetap terpisah jelas setelah `ink-3` digelapkan (tanpa ini keduanya nyaris menyatu).
+    - `--c-accent-soft`: `232 245 242` → `238 249 246` → `accent` di atasnya **4,37 → 4,55:1**. Dipilih mencerahkan latar chip, bukan mengubah warna brand `--c-accent`, agar tombol utama tidak berubah.
+  - **Satu sumber warna status**: berkas baru `src/lib/statusTones.ts` memuat tipe `StatusTone`, peta `TONE_STYLES` (bg/text/line/ring/dot per nada), serta `toneChipClass()` dan `toneRingClass()`. `StatusChip` dan `ReservationStatusIcon` kini hanya **menerima** tone — tidak lagi mendefinisikan warna. Tipe `StatusTone` dipindah ke sini untuk menghapus impor melingkar.
+  - **`ReservationStatusIcon` memakai `reservationStatusToTone`**: warna seluruh pill status kalender (harian & mingguan) kini berasal dari seam kanonis. Sekaligus memperbaiki 3 perilaku yang dulu salah: `en_route`/`otw` dulu tampil sebagai ikon peringatan dengan label mentah `"en_route"` (kini ikon navigasi + "Menuju lokasi pasien"), status kapitalisasi campur dulu jatuh ke `default` (kini dinormalisasi), dan `rejected` dulu tampil kuning (kini `danger`).
+  - **Semantik `paid` dibuat tri-state**: `true` = lunas, `false` = sistem yakin belum lunas, `undefined` = tidak diketahui. `DayScheduleGrid`/`WeekScheduleGrid` sekarang mengirim `undefined` saat `purchase_occurred_at` kosong — karena **kolom kosong bukan bukti "belum lunas"**; mengirim `false` akan memunculkan tuduhan "Belum lunas" pada data lama.
+  - **CSS legacy dihapus**: layer `.wa-input`, `.wa-select`, `.wa-textarea`, `.wa-modal-*`, `.wa-badge-*` dibuang. Dua pemakaian terakhir (`CustomerLabels.tsx`) dimigrasikan ke pola kelas input kanonis bertoken yang sudah dominan di kode.
+  - **Keputusan D-5 (opsi c)**: `StitchShowcase.tsx` dikecualikan **permanen dengan nama** (`EXCLUDED_FILES` di `check-dark-parity.mjs`) + alasan tertulis, bukan dengan menaikkan angka baseline. Gerbang juga memverifikasi pengecualian tidak basi (gagal bila file sudah tidak ada).
+- **Hasil Terukur**:
+  - Kelas palet tanpa `dark:`: **98 → 0** (baseline paritas kini 0 di semua file).
+  - Hex hardcode dashboard: **340 → 287** (baseline token diperbarui).
+  - Kontras light: `ink-3` 3,05 → **5,20:1**; `ink-2` 7,70:1; `accent`/`accent-soft` 4,37 → **4,55:1** — semua lulus AA.
+  - `npm run build` exit 0 · `npm run check:design` exit 0 (hex 287/287, paritas bgWhite=1 palette=0) · `tests/unit/status-tone.test.ts` lulus (10 kasus, termasuk invarian `TONE_STYLES` anti-hex/palet).
+  - Dokumen rusak akibat find-replace `order` → `border` (2 baris) diperbaiki; klaim usang #288 item 3–4 diverifikasi ulang (kini 0 temuan).
+
+#### 2026-10-29 - Test: Kontrak Test Design System Diperbarui ke Token + `paid` di `statusTone` Diaktifkan (Fase 2)
+
+- **Latar Belakang & Akar Masalah**:
+  - Setelah migrasi semantik 1.971 kelas palet (Fase 1), dua file test masih mengunci **nilai hex lama** dan satu utilitas menyimpan parameter yang tidak pernah dibaca. Akibatnya suite tidak pernah bisa hijau meski kode sudah benar: `tests/unit/staff-colors.test.ts` menuntut setiap tema punya `dark:bg-`, `tests/unit/customer-map-utils.test.ts` menuntut `#008069`/`#ffffff`/`#94a3b8`/`#2563eb` — total **7 assertion** gagal.
+  - Ini bukan regresi baru, melainkan **kontrak test yang basi**: test menguji *implementasi* (nilai warna), bukan *invarian* (warna wajib bertoken dan aman di dua mode).
+- **Perubahan**:
+  - **`tests/unit/customer-map-utils.test.ts`**: ekspektasi hex diganti konstanta token (`rgb(var(--c-ink-3))`, `rgb(var(--c-accent))`, `rgb(var(--c-info))`, `rgb(var(--c-surface))`). Dua invarian baru: (a) `markerColor` tidak boleh mengembalikan hex dan wajib salah satu dari tiga token status; (b) semua `borderColor` dari `locationVisual` wajib berformat `rgb(var(--c-*))`. Assertion `borderColor` untuk `estimated_area` (`rgb(var(--c-ink-2))`) ditambahkan — sebelumnya tidak diuji.
+  - **`tests/unit/staff-colors.test.ts`**: klaim "wajib ada `dark:bg-`" diganti invarian sebenarnya — (a) tanpa hex, (b) setiap kelas latar wajib punya `bg-*`, (c) **jika** memakai hue palet mentah **maka** wajib berpasangan `dark:bg-`. Token semantik (`bg-fill-1`, `bg-strong`) lolos tanpa perlu `dark:`.
+  - **`src/utils/statusTone.ts`**: parameter `paid` yang sebelumnya diabaikan kini berfungsi — `completed` + lunas → `success`, `completed` + belum lunas → `caution` (perlu penagihan), `completed` tanpa info pembayaran → `neutral`. Status non-`completed` tidak terpengaruh.
+  - **`tests/unit/status-tone.test.ts` (baru)**: 7 kasus — status kanonik, variasi penulisan/alias legacy (`OTW`, `on_the_way`, `  CONFIRMED `), status kosong/tak dikenal, tiga semantik `paid`, dan pembuktian `paid` tidak boleh mengubah status lain.
+- **Temuan Audit yang Ditutup dengan Bukti Empiris**:
+  - Kekhawatiran "`var()` tidak resolve di atribut presentasi SVG" (Leaflet `L.circleMarker`, Recharts) **terbukti tidak benar**. Diuji di Chromium: `<circle fill="rgb(var(--c-accent))">` → `getComputedStyle().fill === "rgb(0, 168, 132)"`, identik dengan jalur inline `style`. Tidak diperlukan jalur resolusi token → hex saat runtime.
+  - `reservationStatusToTone` ternyata **belum punya konsumen** (`git grep` = 0). Seam-nya kini benar & teruji, tetapi belum tersambung ke UI — dicatat di KNOWN_ISSUES #289 sebagai pekerjaan Fase 3.
+- **Hasil Verifikasi**:
+  - `npx vitest run tests/unit/staff-colors.test.ts tests/unit/customer-map-utils.test.ts tests/unit/status-tone.test.ts` → **3 file lulus, 0 gagal**.
+  - `npm run build` (dashboard) exit 0 · `npm run build` (root, `tsc`) exit 0.
+  - `npm run check:design` exit 0 — hex 340/340, paritas bgWhite=1 palette=98 (tidak berubah).
+
+#### 2026-10-29 - Fix: Paritas Mode Gelap Dipulihkan — Migrasi Semantik 1.971 Kelas Palet & 362 `bg-white`
+
+- **Latar Belakang & Akar Masalah**:
+  - Audit pasca-eksekusi design system v2 menemukan regresi kritis: 201 aturan `.dark` di `index.css` sudah dihapus, tetapi migrasi kelasnya belum selesai. Terukur **390 baris** `bg-white` tanpa `dark:` dan **1.005 baris** kelas palet mentah (`emerald/amber/rose/sky/slate/...`) tanpa pasangan mode gelap di 65 file.
+  - Dampak terukur (WCAG): `text-emerald-800` di atas permukaan gelap `#111b21` = **2,27:1**, `text-amber-800` = 2,46:1, `text-slate-600` = 2,30:1 — jauh di bawah ambang 4,5:1. Tema gelap praktis tidak terbaca di modul yang belum termigrasi.
+  - Penambalan `dark:` per baris ditolak karena hanya menduplikasi kosakata warna. Dipilih solusi fondasional: **menghapus kosakata palet paralel** dengan memetakannya ke token semantik.
+- **Temuan Kunci yang Memungkinkan Solusi Fondasional**:
+  - Token status di `index.css` ternyata **identik** dengan palet Tailwind pada mode terang: `--c-success-soft` = `emerald-50`, `--c-success-line` = `emerald-200`, `--c-warning-soft/line` = `amber-50/200`, `--c-info-*` = `blue-50/200`, `--c-danger-*` = `rose-50/200`, `--c-caution-*` = `orange-50/200`. Karena itu pemetaan tidak mengubah tampilan mode terang sama sekali, sekaligus benar di mode gelap.
+- **Arsitektur & Perubahan**:
+  - **Token baru — State Interaksi Semantik**: `--c-{success,info,warning,caution,danger,violet}-hover` (light + dark). Tanpa ini, pemetaan `bg-amber-600 hover:bg-amber-700` akan kolaps menjadi satu warna dan menghapus umpan balik hover pada 214 varian state.
+  - **Token baru — `violet`**: `--c-violet{,-soft,-line,-hover}` menutup 98 kemunculan `purple/violet` yang sebelumnya tidak punya token (hue gap).
+  - **Token baru — `on-solid`**: `--c-on-solid` = putih di light, `#0b141a` di dark. Dipakai untuk konten di atas permukaan warna solid, karena token solid di mode gelap justru terang dan `text-white` di atasnya hanya mencapai ~2,5:1. Menggantikan `text-white` di 61 baris (25 file).
+  - **Migrasi 1A (`bg-white` → `bg-surface`)**: 362 penggantian. Light mode tidak berubah (surface = `#ffffff`), dark mode kini ikut tema. Sisa 1 kemunculan disengaja: thumb `ToggleSwitch.tsx` memang harus putih di kedua mode.
+  - **Migrasi 1B (palet → token)**: 1.971 penggantian di 66 file (125 file tersentuh total). Aturan pemetaan tunggal: `bg-{hue}-50/100` → `-soft`, `bg-{hue}-200` → `-line`, `bg-{hue}-500+` → DEFAULT; `border-{hue}-<=300` → `-line`; `text-{hue}` → DEFAULT; varian `hover/active/focus` shade ≥600 → `-hover`. Hue netral (`slate/gray/zinc/stone`) dipetakan ke `surface-2`/`fill-1`/`fill-2`/`divider`/`strong`/`ink-2`/`ink-3`.
+  - **Koreksi salah-petakan yang terdeteksi sebelum commit**: 3 tombol abu-gelap (`bg-slate-700`/`bg-gray-700` + `text-white`) sempat kolaps ke `bg-fill-2` (terang) sehingga teks putih tak terbaca. Diperbaiki menjadi `bg-ink-2` + `text-on-solid` yang berinversi benar di dua mode. Umpan balik hover yang melemah (`bg-warning hover:bg-warning/90`) juga dibetulkan ke `-hover`.
+- **Gerbang Regresi Baru**:
+  - `scripts/check-dark-parity.mjs` (`npm run check:dark-parity`): menghitung per file `bg-white` tanpa `dark:` dan kelas palet tanpa `dark:`, membandingkan ke `scripts/dark-parity-baseline.json` yang **hanya boleh turun** (ratchet). Sudah diuji negatif: file probe dengan pelanggaran → exit 1; file probe bersih → exit 0.
+  - `check-design-tokens.mjs` diperluas memindai `src/index.css` (komentar di-strip) — sebelumnya 71 nilai hex di CSS sama sekali tidak terjaga.
+  - `npm run check:design` menjalankan kedua gerbang sekaligus.
+- **Hasil Terukur**:
+  - `bg-white` tanpa `dark:`: **390 → 1** (sengaja).
+  - Kelas palet tanpa `dark:`: **1.005 baris → 98 kemunculan di 1 file** (`StitchShowcase.tsx`, menunggu keputusan D-5 — lihat KNOWN_ISSUES #289).
+  - `npm run build` exit 0 tanpa warning CSS; `npm run check:tokens` exit 0; `npm run check:dark-parity` exit 0.
+  - Catatan angka token: baseline hex naik dari 269 → 340 **bukan karena warna baru ditambahkan**, melainkan karena `src/index.css` (71 hex non-komentar, mayoritas layer `.wa-*` legacy) kini ikut dipindai.
+
+#### 2026-10-29 - Feat: Tuntas Migrasi Seluruh UI ke Design System Kanonis v2 (Batch B1 s.d. B9 & Pembersihan CSS Legacy)
+
+- **Latar Belakang & Akar Masalah**:
+  - UI frontend sebelumnya memiliki 13.579 kemunculan warna hex hardcoded di 105 file, 201 aturan override .dark rapuh di index.css, serta inkonsistensi kontras (hitam pekat #000 di beberapa view dark mode).
+  - Tanpa sistematisasi, perubahan warna atau tema memicu regresi visual dan bug tampilan tidak seragam antar modul.
+- **Arsitektur & Perubahan Fondasional**:
+  - **Batch B1 (Single Source of Truth Recharts & Common)**: Menghadirkan src/lib/chartTheme.ts untuk unifikasi palette Recharts (--c-d1..--c-d8, axis, grid, tooltip).
+  - **Batch B2 (Kalender & Staff Colors)**: Migrasi src/utils/staffColors.ts dan 10 modal/grid kalender (CreateReservationModal, DailyScheduleModal, DayScheduleGrid, WeekScheduleGrid, MonthScheduleGrid, QuickHoldModal, StaffColorLegend, dll.) ke semantic tokens.
+  - **Batch B3 (Modals)**: Migrasi seluruh modal transaksi (InvoiceGeneratorModal, CustomerEditForm, ReservationDetailModal, ChatHistoryModal, ExternalIntegrationModal) ke bg-surface, bg-content, bg-bubble-*.
+  - **Batch B4 (Settings Panels)**: Migrasi 12 panel pengaturan di src/components/settings/ (AiModelSettingsPanel, AiRouterPanel, AppearancePanel, DailyReportPanel, GoogleIntegrationPanel, InstallAppPanel, MetaCapiPanel, MqlSettingsPanel, PaymentInfoPanel, PricelistImagePanel, PricelistPromoPanel, WhatsAppProviderPanel).
+  - **Batch B5 (Halaman Tenant)**: Migrasi 20 halaman operasional klinik (AiPersona, ClinicServices, KnowledgeBase, StaffManagement, Debug, AiSandbox, FollowUpQueue, MetaCapiQueue, MetaClickCatcher, ChatExport, ChatMigration, CustomerService, DeliveryTiers, FollowUpTemplates, LandingPage, QuickReplies, Settings, TelegramIntegration, CustomerLabels).
+  - **Batch B6 (Data & Transaksi Utama)**: Migrasi CustomerDatabase, Reservations, TodayTreatments, FinancialAnalytics, serta subkomponen CustomerFollowUpSection, AddressBookDrawer, dan CustomerMapTab.
+  - **Batch B7 (Suite LiveChat)**: Migrasi LiveChatMonitor, LiveChatComposer, LiveChatDispatchWidget, DispatchMapModal, MessagePinBanner, HiddenMessageStrip, dan AiOffStrip.
+  - **Batch B8 (Portal Staf Bidan)**: Migrasi StaffToday, StaffLogin, OtwConfirmModal, NavigationPreflightModal, dan StaffProtectedRoute.
+  - **Batch B9 (Shell, Auth, Copilot, Maps & Meta-Performance)**: Migrasi Layout.tsx, Login.tsx, AdminCopilotPanel, FleetMapModal, App.tsx, 7 komponen common/*, serta 11 komponen analitik di meta-performance/*.
+  - **Fase 5 (Pembersihan Override Legacy & Optimasi Bundle)**: Menghapus 318 baris aturan .dark .bg-[#...] manual dari src/index.css. Ukuran CSS berkurang 18 kB (dari 188 kB ke 170 kB) dan JS berkurang.
+  - **Kepatuhan Kontrak Nol Hex**: Seluruh modul operasional di .tsx kini bebas hex hardcode; sisa 269 hex hanya berada di kanvas referensi StitchShowcase.tsx, palet dinamis DB CustomerLabels.tsx, canvas watermark JPEG imageWatermark.ts, dan meta theme color di ThemeContext.tsx.
+- **Gerbang Regresi**:
+  - npm run check:tokens --prefix packages/admin-dashboard lulus exit 0 (baseline turun dari 13.579 ke 269 hex di 5 file terkontrol).
+  - npm run build --prefix packages/admin-dashboard lulus bersih (tsc && vite build dalam 12,70s).
+  - npm run build root lulus bersih (tsc && copy-landing-assets.js exit 0).
+  - npx vitest run tests/unit/typing.test.ts 12/12 lulus hijau.
+
+#### 2026-10-29 - Feat: Eksekusi Fase 0 s.d. 3 Design System Kanonis v2 (Kanal RGB, Primitif UI, Shell & Tema)
+
+- **Latar Belakang & Akar Masalah**:
+  - Ditemukan 13.579 kemunculan kode warna hex hardcoded di 105 file frontend.
+  - Dark mode sebelumnya masih mendefinisikan hitam pekat (`#000000`) di konfigurasi canvas dan `dark:bg-black` di Layout, melanggar prinsip anti-kontras ekstrem.
+  - Modifier opasitas Tailwind (seperti `bg-surface/50`) tidak dapat dikompilasi bila menggunakan `var(--hex)` mentah.
+  - Ditemukan bug CSS minifier warning `Expected identifier but found "-"` akibat scanner Tailwind salah mendeteksi karakter regex `[-:.,\s]`.
+- **Arsitektur & Perubahan**:
+  - **Fase 0 (Kontrak, Gerbang & Baseline)**:
+    - Menulis spesifikasi arsitektur kanonis di `docs/QUEUE_DESIGN_SYSTEM_V2.md`.
+    - Menghadirkan gerbang regresi zero-dependency `packages/admin-dashboard/scripts/check-design-tokens.mjs` (`check:tokens`) dengan file baseline `design-token-baseline.json`.
+    - Mencatat teknikal debt terisolasi di `docs/KNOWN_ISSUES.md` (Issue 288).
+  - **Fase 1 (Token CSS Kanal RGB & Tailwind)**:
+    - Menginjeksi token CSS kanonis berbasis kanal RGB (`--c-app`, `--c-surface`, `--c-ink`, `--c-accent`, status semantik) di `src/index.css`.
+    - Mengonfigurasi `tailwind.config.js` dengan helper `rgb(var(--c-[name]) / <alpha-value>)` dan font stack native Apple.
+    - Menghilangkan CSS syntax warning dan memperbaiki bug tooltip di `JourneyHistogram.tsx:27`.
+  - **Fase 2 (Koleksi Komponen Primitif Lapis 3 & Pilot Adoption)**:
+    - Menghadirkan komponen primitif: `Button.tsx`, `Fields.tsx` (`Input`, `Textarea`, `Select`), `StatusChip.tsx`, `Tag.tsx`, `Card.tsx`, `KpiCard.tsx`, `Table.tsx`, `Modal.tsx`.
+    - Seam pemetaan status reservasi: `src/utils/statusTone.ts`.
+    - Pilot adoption berhasil: `Pagination.tsx`, `ToggleSwitch.tsx`, dan `Overview.tsx` dimigrasikan ke token dan komponen primitif, memangkas hardcode hex sebesar 170 poin.
+  - **Fase 3 (Shell & Tema)**:
+    - `index.html`: Membersihkan link Google Fonts eksternal (menggunakan font stack native), merampingkan `<meta name="theme-color">`, dan anti-flicker script.
+    - `ThemeContext.tsx`: Mengonversi nilai triplet RGB token secara dinamis ke hex untuk sinkronisasi `meta[name="theme-color"]`.
+    - `Layout.tsx`: Migrasi sidebar, toast notifikasi, quick controls, footer, dan eliminasi `#000` di container utama menjadi `bg-app`.
+- **Gerbang Regresi**:
+  - `npm run check:tokens --prefix packages/admin-dashboard` lulus exit 0 (baseline turun dari 13.579 ke 13.307 hex).
+  - `npm run build --prefix packages/admin-dashboard` lulus (tsc && vite build exit 0) bebas dari CSS syntax warning.
+  - `npm run build` root lulus (tsc exit 0).
+  - `npx vitest run tests/unit/typing.test.ts` 12/12 lulus hijau.
+
 #### 2026-10-29 - Fix: Seam Pemilih Mode Kalender & Eliminasi Reset Status Duplikat (F-46, F-47)
 
 - **Latar Belakang & Akar Masalah**:

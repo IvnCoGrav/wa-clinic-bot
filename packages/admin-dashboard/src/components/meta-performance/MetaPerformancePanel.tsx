@@ -163,14 +163,14 @@ export const MetaPerformancePanel: React.FC<Props> = ({ startDate, endDate }) =>
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-[#667781] dark:text-[#8696a0]">
-          Rentang: <span className="font-semibold text-[#111b21] dark:text-[#e9edef]">{startDate}</span> s/d{' '}
-          <span className="font-semibold text-[#111b21] dark:text-[#e9edef]">{endDate}</span>
+        <p className="text-xs text-ink-3">
+          Rentang: <span className="font-semibold text-ink">{startDate}</span> s/d{' '}
+          <span className="font-semibold text-ink">{endDate}</span>
         </p>
         <button
           onClick={() => load(totalSpendNum > 0 ? totalSpendNum : undefined)}
           disabled={loading}
-          className="px-3.5 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs disabled:opacity-50"
+          className="px-3.5 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs disabled:opacity-50"
         >
           <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
           <span>Segarkan</span>
@@ -178,14 +178,14 @@ export const MetaPerformancePanel: React.FC<Props> = ({ startDate, endDate }) =>
       </div>
 
       {report?.meta?.dbNote && (
-        <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-[#f59e0b] bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 rounded-xl px-3 py-2">
-          <AlertTriangle size={14} className="text-amber-600 mt-0.5 shrink-0" />
+        <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-warning bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 rounded-xl px-3 py-2">
+          <AlertTriangle size={14} className="text-warning mt-0.5 shrink-0" />
           <span>{report.meta.dbNote}</span>
         </div>
       )}
       {report?.meta?.revenueBasis?.truncated && (
-        <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-[#f59e0b] bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 rounded-xl px-3 py-2">
-          <AlertTriangle size={14} className="text-amber-600 mt-0.5 shrink-0" />
+        <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-warning bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 rounded-xl px-3 py-2">
+          <AlertTriangle size={14} className="text-warning mt-0.5 shrink-0" />
           <span>Data melebihi batas 5.000 baris per kategori — angka ditampilkan sebagian (truncated).</span>
         </div>
       )}
@@ -202,48 +202,48 @@ export const MetaPerformancePanel: React.FC<Props> = ({ startDate, endDate }) =>
       />
 
       {/* Konfigurasi Analitik Tenant (Collapsible) */}
-      <div className="bg-white border border-[#e9edef] rounded-2xl shadow-xs overflow-hidden">
+      <div className="bg-surface border border-divider rounded-2xl shadow-xs overflow-hidden">
         <button
           type="button"
           onClick={() => setIsConfigOpen(!isConfigOpen)}
-          className="w-full px-4 py-3 flex items-center justify-between text-xs font-bold text-[#111b21] hover:bg-[#f8fafc] transition"
+          className="w-full px-4 py-3 flex items-center justify-between text-xs font-bold text-ink hover:bg-surface-2 transition"
         >
           <div className="flex items-center gap-2">
-            <Settings size={15} className="text-[#008069]" />
+            <Settings size={15} className="text-accent" />
             <span>Konfigurasi Analitik Tenant (Periode Kohort &amp; Kapasitas Terapis)</span>
           </div>
           {isConfigOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </button>
 
         {isConfigOpen && (
-          <div className="px-4 pb-4 pt-2 border-t border-[#f0f2f5] space-y-3 bg-[#fafbfc]">
+          <div className="px-4 pb-4 pt-2 border-t border-divider space-y-3 bg-surface-2">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1">
-                <label className="text-[10.5px] uppercase font-bold text-[#667781]">Mulai Bulan Kohort</label>
+                <label className="text-[10.5px] uppercase font-bold text-ink-2">Mulai Bulan Kohort</label>
                 <input
                   type="month"
                   value={cohortStartMonth}
                   onChange={(e) => setCohortStartMonth(e.target.value)}
                   placeholder="YYYY-MM"
-                  className="w-full bg-white border border-[#d1d7db] rounded-xl px-2.5 py-1.5 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+                  className="w-full bg-surface border border-divider rounded-xl px-2.5 py-1.5 text-xs text-ink focus:outline-none focus:border-accent shadow-xs"
                 />
-                <p className="text-[9.5px] text-[#8696a0]">Kosong = tanpa batas awal</p>
+                <p className="text-[9.5px] text-ink-3">Kosong = tanpa batas awal</p>
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10.5px] uppercase font-bold text-[#667781]">Bulan Dikecualikan</label>
+                <label className="text-[10.5px] uppercase font-bold text-ink-2">Bulan Dikecualikan</label>
                 <input
                   type="text"
                   value={excludedCohortMonths}
                   onChange={(e) => setExcludedCohortMonths(e.target.value)}
                   placeholder="mis. 2025-08"
-                  className="w-full bg-white border border-[#d1d7db] rounded-xl px-2.5 py-1.5 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs font-mono"
+                  className="w-full bg-surface border border-divider rounded-xl px-2.5 py-1.5 text-xs text-ink focus:outline-none focus:border-accent shadow-xs font-mono"
                 />
-                <p className="text-[9.5px] text-[#8696a0]">Pisahkan dengan koma (YYYY-MM)</p>
+                <p className="text-[9.5px] text-ink-3">Pisahkan dengan koma (YYYY-MM)</p>
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10.5px] uppercase font-bold text-[#667781]">Slot / Terapis / Hari</label>
+                <label className="text-[10.5px] uppercase font-bold text-ink-2">Slot / Terapis / Hari</label>
                 <input
                   type="number"
                   min={1}
@@ -251,9 +251,9 @@ export const MetaPerformancePanel: React.FC<Props> = ({ startDate, endDate }) =>
                   value={dailySlots}
                   onChange={(e) => setDailySlots(e.target.value)}
                   placeholder="mis. 4"
-                  className="w-full bg-white border border-[#d1d7db] rounded-xl px-2.5 py-1.5 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs font-mono"
+                  className="w-full bg-surface border border-divider rounded-xl px-2.5 py-1.5 text-xs text-ink focus:outline-none focus:border-accent shadow-xs font-mono"
                 />
-                <p className="text-[9.5px] text-[#8696a0]">Kapasitas harian per bidan</p>
+                <p className="text-[9.5px] text-ink-3">Kapasitas harian per bidan</p>
               </div>
             </div>
 
@@ -262,7 +262,7 @@ export const MetaPerformancePanel: React.FC<Props> = ({ startDate, endDate }) =>
                 type="button"
                 onClick={handleSaveConfig}
                 disabled={isSavingConfig}
-                className="px-4 py-1.5 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs disabled:opacity-50"
+                className="px-4 py-1.5 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs disabled:opacity-50"
               >
                 <span>{isSavingConfig ? 'Menyimpan...' : 'Simpan Konfigurasi'}</span>
               </button>
@@ -272,8 +272,8 @@ export const MetaPerformancePanel: React.FC<Props> = ({ startDate, endDate }) =>
       </div>
 
       {loading && !report ? (
-        <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#202c33] rounded-2xl p-12 flex flex-col items-center gap-2 text-[#667781] dark:text-[#8696a0]">
-          <Loader size={20} className="animate-spin text-[#008069]" />
+        <div className="bg-surface border border-divider rounded-2xl p-12 flex flex-col items-center gap-2 text-ink-3">
+          <Loader size={20} className="animate-spin text-accent" />
           <span className="text-xs">Menghitung performa iklan &amp; kohort...</span>
         </div>
       ) : report ? (
@@ -284,8 +284,8 @@ export const MetaPerformancePanel: React.FC<Props> = ({ startDate, endDate }) =>
           <ChannelTable report={report} />
           <Suspense
             fallback={
-              <div className="bg-white border border-[#e9edef] rounded-2xl p-8 flex items-center justify-center text-[#8696a0]">
-                <Loader size={16} className="animate-spin text-[#008069] mr-2" /> Memuat grafik...
+              <div className="bg-surface border border-divider rounded-2xl p-8 flex items-center justify-center text-ink-3">
+                <Loader size={16} className="animate-spin text-accent mr-2" /> Memuat grafik...
               </div>
             }
           >
@@ -296,13 +296,13 @@ export const MetaPerformancePanel: React.FC<Props> = ({ startDate, endDate }) =>
           <LeakageGrid report={report} />
         </>
       ) : (
-        <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#202c33] rounded-2xl p-12 text-center shadow-xs space-y-3">
-          <div className="w-12 h-12 rounded-2xl bg-[#e8f5f2] dark:bg-[#00a884]/20 text-[#008069] dark:text-[#00a884] flex items-center justify-center mx-auto">
+        <div className="bg-surface border border-divider rounded-2xl p-12 text-center shadow-xs space-y-3">
+          <div className="w-12 h-12 rounded-2xl bg-accent-soft text-accent flex items-center justify-center mx-auto">
             <Activity size={24} />
           </div>
           <div className="space-y-1 max-w-md mx-auto">
-            <h4 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef]">Belum Ada Data Event Meta Pixel</h4>
-            <p className="text-xs text-[#667781] leading-relaxed">
+            <h4 className="text-sm font-bold text-ink">Belum Ada Data Event Meta Pixel</h4>
+            <p className="text-xs text-ink-2 leading-relaxed">
               Sistem belum menerima kiriman event pelacakan iklan pada rentang tanggal ini. Pastikan kampanye iklan Meta aktif dan Meta Pixel ID telah dipasang pada halaman landing page klinik.
             </p>
           </div>
@@ -310,7 +310,7 @@ export const MetaPerformancePanel: React.FC<Props> = ({ startDate, endDate }) =>
             <button
               type="button"
               onClick={() => load(totalSpendNum > 0 ? totalSpendNum : undefined)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold shadow-xs transition"
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-semibold shadow-xs transition"
             >
               <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
               <span>Cek Ulang Data</span>

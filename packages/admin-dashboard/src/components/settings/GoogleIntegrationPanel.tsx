@@ -574,7 +574,7 @@ export const GoogleIntegrationPanel: React.FC = () => {
     .replace('{{kota}}', 'Surabaya');
 
   return (
-    <div className="bg-white dark:bg-[#111b21] rounded-2xl shadow-xs border border-[#e9edef] dark:border-[#2a3942] overflow-hidden">
+    <div className="bg-surface rounded-2xl shadow-xs border border-divider overflow-hidden">
       <input
         type="file"
         ref={fileInputRef}
@@ -583,27 +583,27 @@ export const GoogleIntegrationPanel: React.FC = () => {
         className="hidden"
       />
       {/* Header Utama Card */}
-      <div className="p-5 sm:p-6 border-b border-[#e9edef] dark:border-[#2a3942] flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#f8fafc] dark:bg-[#111b21]">
+      <div className="p-5 sm:p-6 border-b border-divider flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-surface-2">
         <div className="flex items-center gap-3.5">
-          <div className="p-3 bg-emerald-50 dark:bg-[#00a884]/15 text-[#008069] dark:text-[#00a884] rounded-xl border border-emerald-200/80 dark:border-[#00a884]/30 shadow-xs">
+          <div className="p-3 bg-emerald-50 dark:bg-accent-soft text-accent rounded-xl border border-emerald-200/80 dark:border-accent/30 shadow-xs">
             <Cloud className="w-6 h-6" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-base sm:text-lg font-bold text-[#111b21] dark:text-[#e9edef]">Integrasi Akun Google &amp; Backup Database</h2>
+              <h2 className="text-base sm:text-lg font-bold text-ink">Integrasi Akun Google &amp; Backup Database</h2>
               {status?.isConnected ? (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-success-soft text-success border border-success-line">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-success" />
                   Terhubung ({status.connectedEmail})
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
-                  <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-warning-soft text-warning border border-warning-line">
+                  <AlertCircle className="w-3.5 h-3.5 text-warning" />
                   Google Belum Terhubung
                 </span>
               )}
             </div>
-            <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
+            <p className="text-xs text-ink-3 mt-0.5">
               1 Akun Google untuk <strong>Google Contacts</strong> &amp; <strong>Google Drive</strong>, atau kelola <strong>Backup &amp; Restore Database</strong> secara mandiri.
             </p>
           </div>
@@ -614,7 +614,7 @@ export const GoogleIntegrationPanel: React.FC = () => {
             <button
               onClick={handleConnectGoogle}
               disabled={fetchingAuthUrl}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold shadow-xs transition-all disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-semibold shadow-xs transition-all disabled:opacity-50"
             >
               {fetchingAuthUrl ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Calendar className="w-3.5 h-3.5" />}
               <span>Hubungkan Akun Google</span>
@@ -623,7 +623,7 @@ export const GoogleIntegrationPanel: React.FC = () => {
             <button
               onClick={handleDisconnect}
               disabled={disconnecting}
-              className="inline-flex items-center gap-1.5 px-3 py-2 border border-rose-200 text-rose-700 hover:bg-rose-50 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 shadow-xs"
+              className="inline-flex items-center gap-1.5 px-3 py-2 border border-danger-line text-danger hover:bg-danger-soft rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 shadow-xs"
             >
               {disconnecting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Unlink className="w-3.5 h-3.5" />}
               <span>Putuskan Akun</span>
@@ -632,7 +632,7 @@ export const GoogleIntegrationPanel: React.FC = () => {
           <button
             onClick={loadAllData}
             disabled={loading}
-            className="p-2 text-[#54656f] hover:text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] rounded-xl transition-colors border border-[#d1d7db] shadow-xs"
+            className="p-2 text-ink-2 hover:text-ink hover:bg-fill-1 rounded-xl transition-colors border border-divider shadow-xs"
             title="Refresh Data"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -643,18 +643,18 @@ export const GoogleIntegrationPanel: React.FC = () => {
       {/* Body Card */}
       <div className="p-5 sm:p-6">
         {/* Tab Navigasi Sub-Layanan */}
-        <div className="flex border-b border-[#e9edef] gap-4 sm:gap-6 text-xs sm:text-sm font-semibold mb-6 overflow-x-auto">
+        <div className="flex border-b border-divider gap-4 sm:gap-6 text-xs sm:text-sm font-semibold mb-6 overflow-x-auto">
           <button
             onClick={() => setActiveTab('contacts')}
             className={`pb-3 flex items-center gap-2 transition-colors relative whitespace-nowrap ${
               activeTab === 'contacts'
-                ? 'text-[#008069] font-bold border-b-2 border-[#008069]'
-                : 'text-[#54656f] hover:text-[#111b21] dark:text-[#e9edef]'
+                ? 'text-accent font-bold border-b-2 border-accent'
+                : 'text-ink-2 hover:text-ink'
             }`}
           >
             <Contact className="w-4 h-4" />
             <span>1. Google Contacts (Buku Telepon HP)</span>
-            <span className="px-2 py-0.5 bg-[#f0f2f5] text-[#54656f] text-[11px] rounded-full">
+            <span className="px-2 py-0.5 bg-fill-1 text-ink-2 text-[11px] rounded-full">
               {status?.totalSyncedCustomers || 0} Pasien
             </span>
           </button>
@@ -663,18 +663,18 @@ export const GoogleIntegrationPanel: React.FC = () => {
             onClick={() => setActiveTab('sheets')}
             className={`pb-3 flex items-center gap-2 transition-colors relative whitespace-nowrap ${
               activeTab === 'sheets'
-                ? 'text-[#008069] font-bold border-b-2 border-[#008069]'
-                : 'text-[#54656f] hover:text-[#111b21] dark:text-[#e9edef]'
+                ? 'text-accent font-bold border-b-2 border-accent'
+                : 'text-ink-2 hover:text-ink'
             }`}
           >
             <FileCheck className="w-4 h-4" />
             <span>2. Rekapan Pasien (Google Sheets)</span>
             {sheetsConfig?.is_enabled ? (
-              <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 text-[11px] rounded-full font-semibold border border-emerald-200">
+              <span className="px-2 py-0.5 bg-success-soft text-success text-[11px] rounded-full font-semibold border border-success-line">
                 Aktif
               </span>
             ) : (
-              <span className="px-2 py-0.5 bg-[#f0f2f5] text-[#54656f] text-[11px] rounded-full font-medium">
+              <span className="px-2 py-0.5 bg-fill-1 text-ink-2 text-[11px] rounded-full font-medium">
                 Nonaktif
               </span>
             )}
@@ -684,18 +684,18 @@ export const GoogleIntegrationPanel: React.FC = () => {
             onClick={() => setActiveTab('backup')}
             className={`pb-3 flex items-center gap-2 transition-colors relative whitespace-nowrap ${
               activeTab === 'backup'
-                ? 'text-[#008069] font-bold border-b-2 border-[#008069]'
-                : 'text-[#54656f] hover:text-[#111b21] dark:text-[#e9edef]'
+                ? 'text-accent font-bold border-b-2 border-accent'
+                : 'text-ink-2 hover:text-ink'
             }`}
           >
             <Database className="w-4 h-4" />
             <span>3. Backup Database &amp; Restore</span>
             {status?.isConnected ? (
-              <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 text-[11px] rounded-full font-semibold border border-emerald-200">
+              <span className="px-2 py-0.5 bg-success-soft text-success text-[11px] rounded-full font-semibold border border-success-line">
                 Drive Aktif
               </span>
             ) : (
-              <span className="px-2 py-0.5 bg-[#f0f2f5] text-[#54656f] text-[11px] rounded-full font-medium">
+              <span className="px-2 py-0.5 bg-fill-1 text-ink-2 text-[11px] rounded-full font-medium">
                 Lokal / Mandiri
               </span>
             )}
@@ -706,15 +706,15 @@ export const GoogleIntegrationPanel: React.FC = () => {
         {activeTab === 'contacts' && (
           <div>
             {!status?.isConnected ? (
-              <div className="bg-[#f8fafc] border border-[#e9edef] rounded-2xl p-8 text-center space-y-4 shadow-xs">
-                <div className="w-14 h-14 bg-white rounded-2xl shadow-xs border border-[#e9edef] flex items-center justify-center mx-auto text-[#008069]">
+              <div className="bg-surface-2 border border-divider rounded-2xl p-8 text-center space-y-4 shadow-xs">
+                <div className="w-14 h-14 bg-surface rounded-2xl shadow-xs border border-divider flex items-center justify-center mx-auto text-accent">
                   <Contact className="w-7 h-7" />
                 </div>
                 <div className="max-w-md mx-auto space-y-1.5">
-                  <h3 className="text-base font-bold text-[#111b21] dark:text-[#e9edef]">
+                  <h3 className="text-base font-bold text-ink">
                     Hubungkan Akun Google untuk Sinkronisasi Kontak
                   </h3>
-                  <p className="text-xs text-[#667781] dark:text-[#8696a0] leading-relaxed">
+                  <p className="text-xs text-ink-3 leading-relaxed">
                     Auto-save nama pasien, tag wilayah, dan nama anak ke buku telepon HP Anda secara otomatis saat customer chat atau reservasi.
                   </p>
                 </div>
@@ -723,7 +723,7 @@ export const GoogleIntegrationPanel: React.FC = () => {
                   <button
                     onClick={handleConnectGoogle}
                     disabled={fetchingAuthUrl}
-                    className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#008069] hover:bg-[#00a884] text-white text-xs sm:text-sm font-semibold rounded-xl shadow-xs transition-all disabled:opacity-50"
+                    className="inline-flex items-center gap-2 px-6 py-2.5 bg-accent hover:bg-accent-hover text-accent-ink text-xs sm:text-sm font-semibold rounded-xl shadow-xs transition-all disabled:opacity-50"
                   >
                     {fetchingAuthUrl ? (
                       <RefreshCw className="w-4 h-4 animate-spin" />
@@ -737,10 +737,10 @@ export const GoogleIntegrationPanel: React.FC = () => {
             ) : (
               <div className="space-y-6">
                 {/* Tombol Aksi Impor / Ekspor Kontak */}
-                <div className="bg-[#f8fafc] border border-[#e9edef] rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xs">
+                <div className="bg-surface-2 border border-divider rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xs">
                   <div className="space-y-0.5 text-center sm:text-left">
-                    <h4 className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Sinkronisasi Data Kontak Dua Arah</h4>
-                    <p className="text-[11px] text-[#667781] dark:text-[#8696a0]">
+                    <h4 className="text-xs font-bold text-ink">Sinkronisasi Data Kontak Dua Arah</h4>
+                    <p className="text-[11px] text-ink-3">
                       Tarik kontak lama dari HP ke bot, atau kirim seluruh pasien database ke HP Anda.
                     </p>
                   </div>
@@ -748,15 +748,15 @@ export const GoogleIntegrationPanel: React.FC = () => {
                     <button
                       onClick={handleImportContacts}
                       disabled={importingContacts}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-[#f0f2f5] text-[#111b21] dark:text-[#e9edef] border border-[#d1d7db] text-xs font-semibold rounded-xl shadow-xs transition-colors disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 px-3 py-2 bg-surface hover:bg-fill-1 text-ink border border-divider text-xs font-semibold rounded-xl shadow-xs transition-colors disabled:opacity-50"
                     >
-                      {importingContacts ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5 text-[#008069]" />}
+                      {importingContacts ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5 text-accent" />}
                       <span>Tarik Kontak dari Google</span>
                     </button>
                     <button
                       onClick={handleSyncAllCustomers}
                       disabled={syncingAll}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold rounded-xl shadow-xs transition-colors disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 px-3 py-2 bg-accent hover:bg-accent-hover text-accent-ink text-xs font-semibold rounded-xl shadow-xs transition-colors disabled:opacity-50"
                     >
                       {syncingAll ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
                       <span>Kirim Semua Pasien ke Google</span>
@@ -768,7 +768,7 @@ export const GoogleIntegrationPanel: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] mb-1.5">
+                      <label className="block text-[11px] font-bold text-ink mb-1.5">
                         Format Penamaan Kontak Google:
                       </label>
                       <input
@@ -776,15 +776,15 @@ export const GoogleIntegrationPanel: React.FC = () => {
                         value={namingTemplate}
                         onChange={(e) => setNamingTemplate(e.target.value)}
                         placeholder="{{name}} - {{child_name}} ({{kelurahan}}, {{kecamatan}})"
-                        className="w-full text-xs font-mono px-3.5 py-2 bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+                        className="w-full text-xs font-mono px-3.5 py-2 bg-surface border border-divider rounded-xl text-ink focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs"
                       />
-                      <p className="text-[11px] text-[#667781] dark:text-[#8696a0] mt-1.5 leading-relaxed">
-                        Tag tersedia: <code className="text-[#008069] bg-emerald-50 px-1 py-0.5 rounded font-mono font-bold">{"{{name}}"}</code>, <code className="text-[#008069] bg-emerald-50 px-1 py-0.5 rounded font-mono font-bold">{"{{child_name}}"}</code>, <code className="text-[#008069] bg-emerald-50 px-1 py-0.5 rounded font-mono font-bold">{"{{kelurahan}}"}</code>, <code className="text-[#008069] bg-emerald-50 px-1 py-0.5 rounded font-mono font-bold">{"{{kecamatan}}"}</code>, <code className="text-[#008069] bg-emerald-50 px-1 py-0.5 rounded font-mono font-bold">{"{{kota}}"}</code>, <code className="text-[#008069] bg-emerald-50 px-1 py-0.5 rounded font-mono font-bold">{"{{phone}}"}</code>.
+                      <p className="text-[11px] text-ink-3 mt-1.5 leading-relaxed">
+                        Tag tersedia: <code className="text-accent bg-success-soft px-1 py-0.5 rounded font-mono font-bold">{"{{name}}"}</code>, <code className="text-accent bg-success-soft px-1 py-0.5 rounded font-mono font-bold">{"{{child_name}}"}</code>, <code className="text-accent bg-success-soft px-1 py-0.5 rounded font-mono font-bold">{"{{kelurahan}}"}</code>, <code className="text-accent bg-success-soft px-1 py-0.5 rounded font-mono font-bold">{"{{kecamatan}}"}</code>, <code className="text-accent bg-success-soft px-1 py-0.5 rounded font-mono font-bold">{"{{kota}}"}</code>, <code className="text-accent bg-success-soft px-1 py-0.5 rounded font-mono font-bold">{"{{phone}}"}</code>.
                       </p>
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] mb-1.5">
+                      <label className="block text-[11px] font-bold text-ink mb-1.5">
                         Label Grup Kontak di Google Contacts:
                       </label>
                       <input
@@ -792,16 +792,16 @@ export const GoogleIntegrationPanel: React.FC = () => {
                         value={contactLabel}
                         onChange={(e) => setContactLabel(e.target.value)}
                         placeholder="Pasien Klinik"
-                        className="w-full text-xs px-3.5 py-2 bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+                        className="w-full text-xs px-3.5 py-2 bg-surface border border-divider rounded-xl text-ink focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs"
                       />
                     </div>
 
                     {/* Auto-sync Switches */}
-                    <div className="space-y-2.5 pt-2 border-t border-[#e9edef]">
-                      <div className="flex items-center justify-between p-3 rounded-xl bg-[#f8fafc] border border-[#e9edef]">
+                    <div className="space-y-2.5 pt-2 border-t border-divider">
+                      <div className="flex items-center justify-between p-3 rounded-xl bg-surface-2 border border-divider">
                         <div>
-                          <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] block">Auto-Sync Saat Chat Pertama (MQL)</span>
-                          <span className="text-[11px] text-[#667781] dark:text-[#8696a0]">Simpan kontak otomatis saat chat masuk</span>
+                          <span className="text-xs font-bold text-ink block">Auto-Sync Saat Chat Pertama (MQL)</span>
+                          <span className="text-[11px] text-ink-3">Simpan kontak otomatis saat chat masuk</span>
                         </div>
                         <ToggleSwitch
                           checked={autoSyncOnChat}
@@ -812,10 +812,10 @@ export const GoogleIntegrationPanel: React.FC = () => {
                         />
                       </div>
 
-                      <div className="flex items-center justify-between p-3 rounded-xl bg-[#f8fafc] border border-[#e9edef]">
+                      <div className="flex items-center justify-between p-3 rounded-xl bg-surface-2 border border-divider">
                         <div>
-                          <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] block">Auto-Sync Saat Booking Reservasi</span>
-                          <span className="text-[11px] text-[#667781] dark:text-[#8696a0]">Perbarui kontak saat reservasi dibuat</span>
+                          <span className="text-xs font-bold text-ink block">Auto-Sync Saat Booking Reservasi</span>
+                          <span className="text-[11px] text-ink-3">Perbarui kontak saat reservasi dibuat</span>
                         </div>
                         <ToggleSwitch
                           checked={autoSyncOnReserve}
@@ -830,27 +830,27 @@ export const GoogleIntegrationPanel: React.FC = () => {
 
                   {/* Live Preview Box */}
                   <div className="space-y-3">
-                    <label className="block text-[11px] font-bold text-[#111b21] dark:text-[#e9edef]">
+                    <label className="block text-[11px] font-bold text-ink">
                       Live Preview Nama Kontak di HP:
                     </label>
-                    <div className="p-4 bg-[#f8fafc] border border-[#e9edef] rounded-2xl space-y-2.5 shadow-xs">
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-[#008069]">
+                    <div className="p-4 bg-surface-2 border border-divider rounded-2xl space-y-2.5 shadow-xs">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-accent">
                         <Contact className="w-4 h-4" />
                         <span>Buku Kontak Telepon HP</span>
                       </div>
-                      <div className="p-3 bg-white rounded-xl border border-[#d1d7db] shadow-2xs space-y-1">
-                        <div className="text-xs text-[#8696a0]">Nama Tampilan Kontak:</div>
-                        <div className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] font-mono">
+                      <div className="p-3 bg-surface rounded-xl border border-divider shadow-2xs space-y-1">
+                        <div className="text-xs text-ink-3">Nama Tampilan Kontak:</div>
+                        <div className="text-sm font-bold text-ink font-mono">
                           {previewName || '(Nama Kosong)'}
                         </div>
                       </div>
-                      <div className="text-[11px] text-[#54656f] flex items-center justify-between px-1">
+                      <div className="text-[11px] text-ink-2 flex items-center justify-between px-1">
                         <span>Nomor Telepon:</span>
-                        <span className="font-semibold text-[#111b21] dark:text-[#e9edef]">+62 812-3456-7890</span>
+                        <span className="font-semibold text-ink">+62 812-3456-7890</span>
                       </div>
-                      <div className="text-[11px] text-[#54656f] flex items-center justify-between px-1">
+                      <div className="text-[11px] text-ink-2 flex items-center justify-between px-1">
                         <span>Grup Label Google:</span>
-                        <span className="font-semibold text-[#111b21] dark:text-[#e9edef]">{contactLabel || 'Tidak ada label'}</span>
+                        <span className="font-semibold text-ink">{contactLabel || 'Tidak ada label'}</span>
                       </div>
                     </div>
 
@@ -858,7 +858,7 @@ export const GoogleIntegrationPanel: React.FC = () => {
                       <button
                         onClick={handleSaveSettings}
                         disabled={savingSettings}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold rounded-xl shadow-xs transition-colors disabled:opacity-50"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover text-accent-ink text-xs font-semibold rounded-xl shadow-xs transition-colors disabled:opacity-50"
                       >
                         {savingSettings ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                         <span>Simpan Pengaturan Format</span>
@@ -875,9 +875,9 @@ export const GoogleIntegrationPanel: React.FC = () => {
         {activeTab === 'sheets' && (
           <div className="space-y-6">
             {!status?.isConnected ? (
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
-                <div className="text-xs text-amber-800 space-y-1">
+              <div className="bg-warning-soft border border-warning-line rounded-2xl p-4 flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-warning mt-0.5 shrink-0" />
+                <div className="text-xs text-warning space-y-1">
                   <p className="font-bold">Akun Google belum terhubung</p>
                   <p>
                     Rekapan otomatis membutuhkan izin <strong>Google Sheets</strong>. Hubungkan akun
@@ -889,11 +889,11 @@ export const GoogleIntegrationPanel: React.FC = () => {
             ) : null}
 
             {/* Toggle Aktif */}
-            <div className="bg-[#f8fafc] border border-[#e9edef] rounded-2xl p-4 shadow-xs space-y-4">
+            <div className="bg-surface-2 border border-divider rounded-2xl p-4 shadow-xs space-y-4">
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <h4 className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Rekapan Otomatis ke Google Sheets</h4>
-                  <p className="text-[11px] text-[#667781] dark:text-[#8696a0] mt-0.5">
+                  <h4 className="text-xs font-bold text-ink">Rekapan Otomatis ke Google Sheets</h4>
+                  <p className="text-[11px] text-ink-3 mt-0.5">
                     Setiap reservasi baru dicatat otomatis (16 kolom, tab bulanan). Admin bebas mengoreksi
                     angka harga manual di spreadsheet; sistem tidak akan menimpanya.
                   </p>
@@ -908,7 +908,7 @@ export const GoogleIntegrationPanel: React.FC = () => {
               </div>
 
               <div className="space-y-1">
-                <label className="block text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] mb-1.5">
+                <label className="block text-[11px] font-bold text-ink mb-1.5">
                   Link / ID Spreadsheet Rekapan:
                 </label>
                 <input
@@ -916,9 +916,9 @@ export const GoogleIntegrationPanel: React.FC = () => {
                   value={sheetsMasterId}
                   onChange={(e) => setSheetsMasterId(e.target.value)}
                   placeholder="https://docs.google.com/spreadsheets/d/xxxxx/edit  atau  xxxxx"
-                  className="w-full text-xs font-mono px-3.5 py-2 bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+                  className="w-full text-xs font-mono px-3.5 py-2 bg-surface border border-divider rounded-xl text-ink focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs"
                 />
-                <p className="text-[11px] text-[#667781] dark:text-[#8696a0] mt-1.5 leading-relaxed">
+                <p className="text-[11px] text-ink-3 mt-1.5 leading-relaxed">
                   Tempel link lengkap dari browser atau cukup ID-nya. Pastikan spreadsheet milik akun
                   Google yang terhubung di atas.
                 </p>
@@ -926,29 +926,29 @@ export const GoogleIntegrationPanel: React.FC = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] mb-1.5">Nama Dasar File:</label>
+                  <label className="block text-[11px] font-bold text-ink mb-1.5">Nama Dasar File:</label>
                   <input
                     type="text"
                     value={sheetsFileBaseName}
                     onChange={(e) => setSheetsFileBaseName(e.target.value)}
                     placeholder="Rekapan Pasien"
-                    className="w-full text-xs px-3.5 py-2 bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+                    className="w-full text-xs px-3.5 py-2 bg-surface border border-divider rounded-xl text-ink focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] mb-1.5">Nama Tab Template:</label>
+                  <label className="block text-[11px] font-bold text-ink mb-1.5">Nama Tab Template:</label>
                   <input
                     type="text"
                     value={sheetsTemplateName}
                     onChange={(e) => setSheetsTemplateName(e.target.value)}
                     placeholder="_TEMPLATE"
-                    className="w-full text-xs font-mono px-3.5 py-2 bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+                    className="w-full text-xs font-mono px-3.5 py-2 bg-surface border border-divider rounded-xl text-ink focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs"
                   />
                 </div>
               </div>
 
               {sheetsConfig?.month_tab_names && (
-                <div className="text-[11px] text-[#667781] dark:text-[#8696a0]">
+                <div className="text-[11px] text-ink-3">
                   <span className="font-bold">Tab bulanan terdeteksi: </span>
                   <span className="font-mono">{sheetsConfig.month_tab_names.join(' · ')}</span>
                 </div>
@@ -958,15 +958,15 @@ export const GoogleIntegrationPanel: React.FC = () => {
                 <button
                   onClick={handleTestSheets}
                   disabled={testingSheets}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-[#f0f2f5] text-[#111b21] dark:text-[#e9edef] border border-[#d1d7db] text-xs font-semibold rounded-xl shadow-xs transition-colors disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-surface hover:bg-fill-1 text-ink border border-divider text-xs font-semibold rounded-xl shadow-xs transition-colors disabled:opacity-50"
                 >
-                  {testingSheets ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <FileCheck className="w-3.5 h-3.5 text-[#008069]" />}
+                  {testingSheets ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <FileCheck className="w-3.5 h-3.5 text-accent" />}
                   <span>Uji Koneksi &amp; Siapkan Tab</span>
                 </button>
                 <button
                   onClick={handleSaveSheetsConfig}
                   disabled={savingSheets}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold rounded-xl shadow-xs transition-colors disabled:opacity-50"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover text-accent-ink text-xs font-semibold rounded-xl shadow-xs transition-colors disabled:opacity-50"
                 >
                   {savingSheets ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                   <span>Simpan Konfigurasi Rekapan</span>
@@ -975,9 +975,9 @@ export const GoogleIntegrationPanel: React.FC = () => {
             </div>
 
             {/* Panduan singkat */}
-            <div className="bg-[#f8fafc] border border-[#e9edef] rounded-2xl p-4 text-[11px] text-[#667781] dark:text-[#8696a0] leading-relaxed space-y-1.5">
-              <p className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-1.5">
-                <Info className="w-3.5 h-3.5 text-[#008069]" />
+            <div className="bg-surface-2 border border-divider rounded-2xl p-4 text-[11px] text-ink-3 leading-relaxed space-y-1.5">
+              <p className="text-xs font-bold text-ink flex items-center gap-1.5">
+                <Info className="w-3.5 h-3.5 text-accent" />
                 Cara kerja singkat
               </p>
               <p>1. Booking baru → antrean sistem → otomatis masuk tab bulan berjalan (mis. <code>okt</code>).</p>
@@ -992,16 +992,16 @@ export const GoogleIntegrationPanel: React.FC = () => {
         {activeTab === 'backup' && (
           <div className="space-y-6">
             {/* Action Bar Pembuatan & Upload Backup */}
-            <div className="bg-[#f8fafc] border border-[#e9edef] rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
+            <div className="bg-surface-2 border border-divider rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
               <div className="flex items-start gap-3">
-                <div className="p-2 rounded-xl bg-emerald-50 text-[#008069] border border-emerald-200 mt-0.5 shrink-0">
+                <div className="p-2 rounded-xl bg-success-soft text-accent border border-success-line mt-0.5 shrink-0">
                   <Calendar className="w-4 h-4" />
                 </div>
                 <div>
-                  <h4 className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">
+                  <h4 className="text-xs font-bold text-ink">
                     {status?.isConnected ? 'Auto-Backup Google Drive & Backup Lokal' : 'Manajemen Backup Database (Lokal & Mandiri)'}
                   </h4>
-                  <p className="text-[11px] text-[#667781] dark:text-[#8696a0] mt-0.5 leading-relaxed">
+                  <p className="text-[11px] text-ink-3 mt-0.5 leading-relaxed">
                     {status?.isConnected ? (
                       <>Database otomatis di-backup ke Google Drive setiap <strong>Senin pukul 02:00 WIB</strong> ke folder <code>📁 Kala Clinic Bot Backups</code>.</>
                     ) : (
@@ -1014,7 +1014,7 @@ export const GoogleIntegrationPanel: React.FC = () => {
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploadingBackupFile || restoring}
-                  className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors disabled:opacity-50"
+                  className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-success hover:bg-success-hover text-on-solid text-xs font-semibold rounded-xl shadow-xs transition-colors disabled:opacity-50"
                   title="Upload file .sql.gz / .sql dan langsung pulihkan database"
                 >
                   {uploadingBackupFile || restoring ? (
@@ -1028,7 +1028,7 @@ export const GoogleIntegrationPanel: React.FC = () => {
                   <button
                     onClick={handleBackupToDrive}
                     disabled={uploadingToDrive}
-                    className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold rounded-xl shadow-xs transition-colors disabled:opacity-50"
+                    className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-accent hover:bg-accent-hover text-accent-ink text-xs font-semibold rounded-xl shadow-xs transition-colors disabled:opacity-50"
                   >
                     {uploadingToDrive ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Cloud className="w-3.5 h-3.5" />}
                     <span>Backup ke Drive</span>
@@ -1037,18 +1037,18 @@ export const GoogleIntegrationPanel: React.FC = () => {
                   <button
                     onClick={handleConnectGoogle}
                     disabled={fetchingAuthUrl}
-                    className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-semibold rounded-xl shadow-2xs transition-colors disabled:opacity-50"
+                    className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-success-soft hover:bg-success-line text-success border border-success-line text-xs font-semibold rounded-xl shadow-2xs transition-colors disabled:opacity-50"
                   >
-                    {fetchingAuthUrl ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <HardDrive className="w-3.5 h-3.5 text-[#008069]" />}
+                    {fetchingAuthUrl ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <HardDrive className="w-3.5 h-3.5 text-accent" />}
                     <span>Hubungkan Drive</span>
                   </button>
                 )}
                 <button
                   onClick={handleCreateAndDownload}
                   disabled={creatingBackup}
-                  className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-white hover:bg-[#f0f2f5] text-[#111b21] dark:text-[#e9edef] border border-[#d1d7db] text-xs font-semibold rounded-xl shadow-xs transition-colors disabled:opacity-50"
+                  className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-surface hover:bg-fill-1 text-ink border border-divider text-xs font-semibold rounded-xl shadow-xs transition-colors disabled:opacity-50"
                 >
-                  {creatingBackup ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5 text-[#008069]" />}
+                  {creatingBackup ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5 text-accent" />}
                   <span>Unduh .sql.gz</span>
                 </button>
               </div>
@@ -1057,13 +1057,13 @@ export const GoogleIntegrationPanel: React.FC = () => {
             {/* Tabel Riwayat File Backup */}
             <div>
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
-                  <HardDrive className="w-4 h-4 text-[#008069]" />
+                <h3 className="text-xs font-bold text-ink flex items-center gap-2">
+                  <HardDrive className="w-4 h-4 text-accent" />
                   <span>Daftar File Backup Tersedia ({backups.length} file)</span>
                 </h3>
                 <button
                   onClick={fetchBackups}
-                  className="text-[11px] text-[#008069] hover:underline font-semibold flex items-center gap-1"
+                  className="text-[11px] text-accent hover:underline font-semibold flex items-center gap-1"
                 >
                   <RefreshCw className="w-3 h-3" />
                   <span>Refresh List</span>
@@ -1071,17 +1071,17 @@ export const GoogleIntegrationPanel: React.FC = () => {
               </div>
 
               {backups.length === 0 ? (
-                <div className="p-8 text-center text-[#54656f] bg-[#f8fafc] dark:bg-[#202c33] rounded-2xl border border-[#e9edef] dark:border-[#2a3942]">
-                  <FileCheck className="w-8 h-8 mx-auto mb-2 text-[#8696a0]" />
-                  <p className="text-xs font-semibold text-[#111b21] dark:text-[#e9edef]">Belum ada file backup di server</p>
-                  <p className="text-[11px] text-[#667781] dark:text-[#8696a0] mt-0.5">
+                <div className="p-8 text-center text-ink-2 bg-surface-2 rounded-2xl border border-divider">
+                  <FileCheck className="w-8 h-8 mx-auto mb-2 text-ink-3" />
+                  <p className="text-xs font-semibold text-ink">Belum ada file backup di server</p>
+                  <p className="text-[11px] text-ink-3 mt-0.5">
                     Klik tombol "Upload &amp; Restore File" untuk memulihkan dari file komputer Anda, atau "Unduh .sql.gz" untuk membuat backup baru.
                   </p>
                 </div>
               ) : (
-                <div className="overflow-x-auto border border-[#e9edef] rounded-2xl shadow-xs">
+                <div className="overflow-x-auto border border-divider rounded-2xl shadow-xs">
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-[#f8fafc] text-[#54656f] font-bold border-b border-[#e9edef]">
+                    <thead className="bg-surface-2 text-ink-2 font-bold border-b border-divider">
                       <tr>
                         <th className="py-3 px-4">Nama File Backup</th>
                         <th className="py-3 px-4">Tanggal Pembuatan</th>
@@ -1090,26 +1090,26 @@ export const GoogleIntegrationPanel: React.FC = () => {
                         <th className="py-3 px-4 text-right">Aksi</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#e9edef] text-[#111b21] dark:text-[#e9edef] bg-white">
+                    <tbody className="divide-y divide-divider text-ink bg-surface">
                       {backups.map((item) => (
-                        <tr key={item.id} className="hover:bg-[#f8fafc] transition-colors">
-                          <td className="py-3 px-4 font-mono font-medium text-[#111b21] dark:text-[#e9edef]">
+                        <tr key={item.id} className="hover:bg-surface-2 transition-colors">
+                          <td className="py-3 px-4 font-mono font-medium text-ink">
                             {item.name}
                           </td>
-                          <td className="py-3 px-4 text-[#54656f]">
+                          <td className="py-3 px-4 text-ink-2">
                             {formatDate(item.createdAt)}
                           </td>
-                          <td className="py-3 px-4 font-semibold text-[#111b21] dark:text-[#e9edef]">
+                          <td className="py-3 px-4 font-semibold text-ink">
                             {formatFileSize(item.sizeBytes)}
                           </td>
                           <td className="py-3 px-4">
                             {item.source === 'google_drive' ? (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                                <Cloud className="w-3.5 h-3.5 text-emerald-600" />
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-success-soft text-success border border-success-line">
+                                <Cloud className="w-3.5 h-3.5 text-success" />
                                 Google Drive
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#f0f2f5] text-[#54656f] border border-[#d1d7db]">
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-fill-1 text-ink-2 border border-divider">
                                 <HardDrive className="w-3.5 h-3.5" />
                                 Server Lokal
                               </span>
@@ -1121,9 +1121,9 @@ export const GoogleIntegrationPanel: React.FC = () => {
                                 href={`/api/admin/backup/download/${item.name}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 px-2.5 py-1 text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] bg-white rounded-lg border border-[#d1d7db] text-[11px] font-semibold transition-colors shadow-2xs"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-ink hover:bg-fill-1 bg-surface rounded-lg border border-divider text-[11px] font-semibold transition-colors shadow-2xs"
                               >
-                                <Download className="w-3 h-3 text-[#008069]" />
+                                <Download className="w-3 h-3 text-accent" />
                                 <span>Unduh</span>
                               </a>
                             )}
@@ -1132,7 +1132,7 @@ export const GoogleIntegrationPanel: React.FC = () => {
                                 href={item.webViewLink}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 px-2.5 py-1 text-[#008069] hover:bg-emerald-50 bg-emerald-50/50 rounded-lg border border-emerald-200 text-[11px] font-semibold transition-colors shadow-2xs"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-accent hover:bg-success-soft bg-success-soft/50 rounded-lg border border-success-line text-[11px] font-semibold transition-colors shadow-2xs"
                               >
                                 <ExternalLink className="w-3 h-3" />
                                 <span>Buka Drive</span>
@@ -1142,7 +1142,7 @@ export const GoogleIntegrationPanel: React.FC = () => {
                               <button
                                 onClick={() => handleRestore(item.name)}
                                 disabled={restoring}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 text-rose-700 hover:bg-rose-100 bg-rose-50 rounded-lg border border-rose-200 text-[11px] font-semibold transition-colors disabled:opacity-50 shadow-2xs"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-danger hover:bg-danger-line bg-danger-soft rounded-lg border border-danger-line text-[11px] font-semibold transition-colors disabled:opacity-50 shadow-2xs"
                               >
                                 <Upload className="w-3 h-3" />
                                 <span>Restore Database</span>

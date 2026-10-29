@@ -1,4 +1,6 @@
 /** @type {import('tailwindcss').Config} */
+const c = (name) => `rgb(var(--c-${name}) / <alpha-value>)`;
+
 export default {
   darkMode: 'class',
   content: [
@@ -8,58 +10,47 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Token tema dual-mode WhatsApp Clinic (light = default, dark via .dark / dark: variant)
-        wa: {
-          canvas: { light: '#f0f2f5', dark: '#000000' },
-          surface: { light: '#ffffff', dark: '#202c33' },
-          surface2: { light: '#f8fafc', dark: '#111b21' },
-          border: { light: '#e9edef', dark: '#2a3942' },
-          borderstrong: { light: '#d1d7db', dark: '#374248' },
-          text1: { light: '#111b21', dark: '#e9edef' },
-          text2: { light: '#54656f', dark: '#8696a0' },
-          brand: { light: '#008069', dark: '#00a884' },
-          inbubble: { light: '#ffffff', dark: '#202c33' },
-          outbubble: { light: '#d9fdd3', dark: '#005c4b' },
-          chatwall: { light: '#efeae2', dark: '#0b141a' },
-        },
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
-        primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
-        },
-        secondary: {
-          DEFAULT: "hsl(var(--secondary))",
-          foreground: "hsl(var(--secondary-foreground))",
-        },
-        destructive: {
-          DEFAULT: "hsl(var(--destructive))",
-          foreground: "hsl(var(--destructive-foreground))",
-        },
-        muted: {
-          DEFAULT: "hsl(var(--muted))",
-          foreground: "hsl(var(--muted-foreground))",
-        },
+        app: c('app'),
+        content: c('content'),
+        surface: c('surface'),
+        'surface-2': c('surface-2'),
+        sidebar: c('sidebar'),
+        'fill-1': c('fill-1'),
+        'fill-2': c('fill-2'),
+        divider: c('divider'),
+        strong: c('strong'),
+        ink: c('ink'),
+        'ink-2': c('ink-2'),
+        'ink-3': c('ink-3'),
         accent: {
-          DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))",
+          DEFAULT: c('accent'),
+          hover: c('accent-hover'),
+          pressed: c('accent-pressed'),
+          soft: c('accent-soft'),
+          ink: c('accent-ink'),
         },
-        popover: {
-          DEFAULT: "hsl(var(--popover))",
-          foreground: "hsl(var(--popover-foreground))",
-        },
-        card: {
-          DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
-        },
+        success: { DEFAULT: c('success'), soft: c('success-soft'), line: c('success-line'), hover: c('success-hover') },
+        info:    { DEFAULT: c('info'),    soft: c('info-soft'),    line: c('info-line'),    hover: c('info-hover') },
+        warning: { DEFAULT: c('warning'), soft: c('warning-soft'), line: c('warning-line'), hover: c('warning-hover') },
+        caution: { DEFAULT: c('caution'), soft: c('caution-soft'), line: c('caution-line'), hover: c('caution-hover') },
+        danger:  { DEFAULT: c('danger'),  soft: c('danger-soft'),  line: c('danger-line'),  hover: c('danger-hover') },
+        neutral: { DEFAULT: c('neutral'), soft: c('neutral-soft') },
+        violet:  { DEFAULT: c('violet'),  soft: c('violet-soft'),  line: c('violet-line'),  hover: c('violet-hover') },
+        'on-solid': c('on-solid'),
+        'bubble-in': c('bubble-in'),
+        'bubble-out': c('bubble-out'),
+      },
+      fontFamily: {
+        sans: ['-apple-system', 'BlinkMacSystemFont', 'SF Pro Text', 'Inter', 'Segoe UI', 'Roboto', 'sans-serif'],
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      boxShadow: {
+        '2xs': '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+        'xs': '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
       },
       transitionTimingFunction: {
         'out-expo': 'cubic-bezier(0.16, 1, 0.3, 1)',

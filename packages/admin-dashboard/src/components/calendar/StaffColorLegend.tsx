@@ -36,7 +36,7 @@ export const StaffColorLegend: React.FC<StaffColorLegendProps> = ({ staffList, c
   return (
     <div
       data-no-swipe-back="true"
-      className={`bg-[#fafafa] dark:bg-[#111b21] border-b border-[#e9edef] dark:border-[#2a3942] ${className}`}
+      className={`bg-surface-2 border-b border-divider ${className}`}
     >
       <button
         type="button"
@@ -45,7 +45,7 @@ export const StaffColorLegend: React.FC<StaffColorLegendProps> = ({ staffList, c
         aria-controls={panelId}
         className="w-full h-7 px-2 flex items-center gap-1.5 text-left"
       >
-        <span className="text-[10px] font-bold uppercase tracking-wide text-[#8696a0] shrink-0">
+        <span className="text-[10px] font-bold uppercase tracking-wide text-ink-3 shrink-0">
           Warna Bidan
         </span>
 
@@ -58,15 +58,15 @@ export const StaffColorLegend: React.FC<StaffColorLegendProps> = ({ staffList, c
             />
           ))}
           {staff.length > preview.length && (
-            <span className="text-[9px] font-bold text-[#8696a0]">+{staff.length - preview.length}</span>
+            <span className="text-[9px] font-bold text-ink-3">+{staff.length - preview.length}</span>
           )}
         </span>
 
         <span className="flex-1" />
         {open ? (
-          <ChevronUp size={12} className="text-[#8696a0] shrink-0" aria-hidden="true" />
+          <ChevronUp size={12} className="text-ink-3 shrink-0" aria-hidden="true" />
         ) : (
-          <ChevronDown size={12} className="text-[#8696a0] shrink-0" aria-hidden="true" />
+          <ChevronDown size={12} className="text-ink-3 shrink-0" aria-hidden="true" />
         )}
       </button>
 
@@ -79,7 +79,7 @@ export const StaffColorLegend: React.FC<StaffColorLegendProps> = ({ staffList, c
           {staff.map((s) => (
             <span
               key={s.id}
-              className="inline-flex items-center gap-1 shrink-0 text-[10px] font-semibold text-[#54656f] dark:text-[#aebac1]"
+              className="inline-flex items-center gap-1 shrink-0 text-[10px] font-semibold text-ink-2"
               title={s.name}
             >
               <span

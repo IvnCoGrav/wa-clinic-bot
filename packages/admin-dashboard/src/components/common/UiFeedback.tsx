@@ -93,24 +93,24 @@ export const UiFeedbackProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const toastBorder = (type: ToastType) => {
     switch (type) {
       case 'success':
-        return 'border-l-4 border-l-[#008069]';
+        return 'border-l-4 border-l-accent';
       case 'error':
         return 'border-l-4 border-l-rose-500';
       case 'info':
       default:
-        return 'border-l-4 border-l-[#0284c7]';
+        return 'border-l-4 border-l-info';
     }
   };
 
   const toastIcon = (type: ToastType) => {
     switch (type) {
       case 'success':
-        return <CheckCircle className="text-[#008069] flex-shrink-0" size={18} />;
+        return <CheckCircle className="text-accent flex-shrink-0" size={18} />;
       case 'error':
-        return <AlertCircle className="text-rose-500 flex-shrink-0" size={18} />;
+        return <AlertCircle className="text-danger flex-shrink-0" size={18} />;
       case 'info':
       default:
-        return <AlertCircle className="text-[#0284c7] flex-shrink-0" size={18} />;
+        return <AlertCircle className="text-info flex-shrink-0" size={18} />;
     }
   };
 
@@ -123,11 +123,11 @@ export const UiFeedbackProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         createPortal(
           <div
             style={{ zIndex: 99999 }}
-            className={`fixed top-[max(1rem,calc(env(safe-area-inset-top)+0.5rem))] left-4 right-4 sm:left-auto sm:right-6 sm:top-6 px-4 py-3 rounded-xl bg-white dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] text-xs font-semibold shadow-2xl flex items-center space-x-2.5 animate-fadeIn text-[#111b21] dark:text-[#e9edef] sm:max-w-sm ${toastBorder(toastState.type)}`}
+            className={`fixed top-[max(1rem,calc(env(safe-area-inset-top)+0.5rem))] left-4 right-4 sm:left-auto sm:right-6 sm:top-6 px-4 py-3 rounded-xl bg-surface border border-divider text-xs font-semibold shadow-2xl flex items-center space-x-2.5 animate-fadeIn text-ink sm:max-w-sm ${toastBorder(toastState.type)}`}
           >
             {toastIcon(toastState.type)}
             <span className="flex-1 leading-snug">{toastState.text}</span>
-            <button onClick={() => setToastState(null)} className="ml-1 text-[#667781] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] p-0.5 rounded-full hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942]">
+            <button onClick={() => setToastState(null)} className="ml-1 text-ink-3 hover:text-ink p-0.5 rounded-full hover:bg-fill-1">
               <XCircle size={15} />
             </button>
           </div>,
@@ -143,22 +143,22 @@ export const UiFeedbackProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             onClick={() => handleConfirmAnswer(false)}
           >
             <div
-              className="bg-white dark:bg-[#202c33] rounded-t-3xl sm:rounded-3xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] dark:border-[#2a3942] space-y-4 text-left relative max-h-[88dvh] overflow-y-auto safe-bottom-padding animate-slideUp sm:animate-modalScaleUp"
+              className="bg-surface rounded-t-3xl sm:rounded-3xl p-6 w-full max-w-md shadow-2xl border border-divider space-y-4 text-left relative max-h-[88dvh] overflow-y-auto safe-bottom-padding animate-slideUp sm:animate-modalScaleUp"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Mobile Drag Handle */}
-              <div className="w-10 h-1 bg-[#d1d7db] dark:bg-[#374248] rounded-full mx-auto -mt-2 mb-2 sm:hidden" />
+              <div className="w-10 h-1 bg-strong rounded-full mx-auto -mt-2 mb-2 sm:hidden" />
 
-              <h3 className="text-base font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
+              <h3 className="text-base font-bold text-ink flex items-center space-x-2">
                 {confirmState.danger ? (
-                  <AlertTriangle className="text-rose-500 flex-shrink-0" size={20} />
+                  <AlertTriangle className="text-danger flex-shrink-0" size={20} />
                 ) : (
-                  <CheckCircle2 className="text-[#008069] flex-shrink-0" size={20} />
+                  <CheckCircle2 className="text-accent flex-shrink-0" size={20} />
                 )}
                 <span>{confirmState.title}</span>
               </h3>
 
-              <p className="text-xs sm:text-sm text-[#54656f] dark:text-[#aebac1] leading-relaxed whitespace-pre-wrap bg-[#f0f2f5] dark:bg-[#111b21] p-3.5 rounded-xl border border-[#e9edef] dark:border-[#2a3942]">
+              <p className="text-xs sm:text-sm text-ink-2 leading-relaxed whitespace-pre-wrap bg-app p-3.5 rounded-xl border border-divider">
                 {confirmState.message}
               </p>
 
@@ -166,7 +166,7 @@ export const UiFeedbackProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 <button
                   type="button"
                   onClick={() => handleConfirmAnswer(false)}
-                  className="px-4 py-2.5 bg-[#f0f2f5] dark:bg-[#2a3942] hover:bg-[#e9edef] dark:hover:bg-[#374248] text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef] rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer"
+                  className="px-4 py-2.5 bg-fill-1 hover:bg-fill-2 text-ink-2 hover:text-ink rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer"
                 >
                   {confirmState.cancelText}
                 </button>
@@ -175,8 +175,8 @@ export const UiFeedbackProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                   onClick={() => handleConfirmAnswer(true)}
                   className={`px-4 py-2.5 text-white rounded-xl text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer ${
                     confirmState.danger
-                      ? 'bg-rose-600 hover:bg-rose-700'
-                      : 'bg-[#008069] hover:bg-[#00a884]'
+                      ? 'bg-danger hover:bg-danger-hover'
+                      : 'bg-accent hover:bg-accent-hover'
                   }`}
                 >
                   {confirmState.confirmText}

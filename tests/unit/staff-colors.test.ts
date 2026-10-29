@@ -101,13 +101,25 @@ describe('getStaffColor', () => {
   });
 
   it('setiap tema membawa kelas kartu, badge, dan titik legenda', () => {
+    // Palet staf sengaja memakai 10 hue berbeda agar tiap bidan mudah dibedakan.
+    // Invariannya bukan "wajib ada dark:bg-" (token semantik tidak butuh itu),
+    // melainkan: (a) tanpa warna hex hardcode, dan (b) kelas palet mentah WAJIB
+    // punya pasangan dark:, supaya tidak menyilaukan di tema gelap.
+    const RAW_BG = /\bbg-(emerald|sky|purple|amber|teal|rose|indigo|lime|cyan|fuchsia|violet|slate|gray|zinc|neutral|stone|red|blue|green|orange|yellow|pink)-\d{2,3}\b/;
+    const HEX_RE = /#[0-9a-fA-F]{3,8}/;
+
     for (const theme of [...STAFF_COLOR_PALETTE, UNASSIGNED_STAFF_COLOR]) {
       expect(theme.card.length).toBeGreaterThan(0);
       expect(theme.badge.length).toBeGreaterThan(0);
       expect(theme.dot.length).toBeGreaterThan(0);
-      // Kelas dark mode wajib ada agar tidak menyilaukan di tema gelap.
-      expect(theme.card).toContain('dark:bg-');
-      expect(theme.dot).toContain('dark:bg-');
+
+      for (const cls of [theme.card, theme.badge, theme.dot]) {
+        expect(cls).not.toMatch(HEX_RE);
+        // Setiap kelas latar wajib punya latar, dan bila memakai hue mentah
+        // harus berpasangan dengan latar dark:.
+        expect(cls).toMatch(/\bbg-[a-z0-9-]+/);
+        if (RAW_BG.test(cls)) expect(cls).toContain('dark:bg-');
+      }
     }
   });
 

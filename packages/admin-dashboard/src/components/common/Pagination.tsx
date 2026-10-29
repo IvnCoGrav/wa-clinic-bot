@@ -1,5 +1,6 @@
 import React from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { Button } from '../ui/Button';
 
 interface PaginationProps {
   page: number;
@@ -26,38 +27,46 @@ export const Pagination: React.FC<PaginationProps> = ({
   if (totalPages <= 1) return null;
 
   return (
-    <div className="p-3.5 border-t border-[#e9edef] dark:border-[#2a3942] flex items-center justify-between text-xs text-[#667781] dark:text-[#8696a0] bg-[#f8fafc] dark:bg-[#111b21]">
+    <div className="p-3.5 border-t border-divider flex items-center justify-between text-xs text-ink-3 bg-surface-2">
       <span>
-        {label || `Halaman ${page} / ${totalPages}`}
+        {label || (
+          <span>
+            Halaman <span className="num font-semibold text-ink">{page}</span> / <span className="num font-semibold text-ink">{totalPages}</span>
+          </span>
+        )}
         {typeof totalItems === 'number' && typeof loadedItems === 'number' && (
-          <span className="text-[#8696a0]">
+          <span className="text-ink-3">
             {' · Menampilkan '}
-            <span className="text-[#111b21] dark:text-[#e9edef] font-bold">{loadedItems}</span> dari{' '}
-            <span className="text-[#111b21] dark:text-[#e9edef] font-bold">{totalItems}</span>
+            <span className="text-ink font-bold num">{loadedItems}</span> dari{' '}
+            <span className="text-ink font-bold num">{totalItems}</span>
           </span>
         )}
       </span>
 
       <div className="flex items-center space-x-2">
-        <button
+        <Button
+          variant="neutral"
+          size="sm"
           onClick={() => onPageChange(Math.max(1, page - 1))}
           disabled={page <= 1 || loading || disabled}
-          className="p-1.5 rounded-lg bg-white dark:bg-[#2a3942] border border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#374248] disabled:opacity-30 disabled:cursor-not-allowed transition shadow-xs"
           aria-label="Halaman sebelumnya"
+          className="p-1.5 min-h-[30px]"
         >
           <ChevronLeft size={15} />
-        </button>
-        <span className="font-bold text-[#111b21] dark:text-[#e9edef]">
+        </Button>
+        <span className="font-bold text-ink num px-1">
           {page} / {totalPages}
         </span>
-        <button
+        <Button
+          variant="neutral"
+          size="sm"
           onClick={() => onPageChange(Math.min(totalPages, page + 1))}
           disabled={page >= totalPages || loading || disabled}
-          className="p-1.5 rounded-lg bg-white dark:bg-[#2a3942] border border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#374248] disabled:opacity-30 disabled:cursor-not-allowed transition shadow-xs"
           aria-label="Halaman berikutnya"
+          className="p-1.5 min-h-[30px]"
         >
           <ChevronRight size={15} />
-        </button>
+        </Button>
       </div>
     </div>
   );

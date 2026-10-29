@@ -23,12 +23,12 @@ export const AppearancePanel: React.FC = () => {
   const { preference, setPreference } = useTheme();
 
   return (
-    <div className="bg-white dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-4 shadow-xs">
-      <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
-        <Palette className="text-[#008069] dark:text-[#00a884]" size={16} />
+    <div className="bg-surface border border-divider rounded-2xl p-5 space-y-4 shadow-xs">
+      <h3 className="text-sm font-bold text-ink flex items-center space-x-2">
+        <Palette className="text-accent" size={16} />
         <span>Tampilan &amp; Tema</span>
       </h3>
-      <p className="text-xs text-[#667781] dark:text-[#8696a0]">
+      <p className="text-xs text-ink-3">
         Pilih tema warna dashboard. Berlaku instan di perangkat ini tanpa perlu login ulang.
       </p>
 
@@ -43,29 +43,29 @@ export const AppearancePanel: React.FC = () => {
               role="radio"
               aria-checked={active}
               onClick={() => setPreference(opt.value)}
-              className={`relative flex flex-col items-center gap-1.5 p-3.5 rounded-2xl border-2 transition-all duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#008069]/40 cursor-pointer min-h-[104px] justify-center ${
+              className={`relative flex flex-col items-center gap-1.5 p-3.5 rounded-2xl border-2 transition-all duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 cursor-pointer min-h-[104px] justify-center ${
                 active
-                  ? 'border-[#008069] dark:border-[#00a884] bg-[#e8f5f2] dark:bg-[#00a884]/15 shadow-xs'
-                  : 'border-[#e9edef] dark:border-[#2a3942] bg-white dark:bg-[#111b21] hover:border-[#c2e7e0] dark:hover:border-[#00a884]/40 hover:bg-[#f8fafc] dark:hover:bg-[#2a3942]'
+                  ? 'border-accent dark:border-accent bg-accent-soft shadow-xs'
+                  : 'border-divider bg-surface hover:border-divider dark:hover:border-accent/40 hover:bg-surface-2 dark:hover:bg-fill-2'
               }`}
             >
               {active && (
-                <span className="absolute top-2 right-2 h-5 w-5 rounded-full bg-[#008069] dark:bg-[#00a884] text-white flex items-center justify-center">
+                <span className="absolute top-2 right-2 h-5 w-5 rounded-full bg-accent text-white flex items-center justify-center">
                   <Check size={12} strokeWidth={3} />
                 </span>
               )}
               <Icon
                 size={22}
-                className={active ? 'text-[#008069] dark:text-[#00a884]' : 'text-[#8696a0]'}
+                className={active ? 'text-accent' : 'text-ink-3'}
               />
               <span
                 className={`text-xs font-bold ${
-                  active ? 'text-[#008069] dark:text-[#00a884]' : 'text-[#111b21] dark:text-[#e9edef]'
+                  active ? 'text-accent' : 'text-ink'
                 }`}
               >
                 {opt.title}
               </span>
-              <span className="text-[10px] text-[#667781] dark:text-[#8696a0] leading-tight text-center">
+              <span className="text-[10px] text-ink-3 leading-tight text-center">
                 {opt.desc}
               </span>
             </button>

@@ -79,13 +79,13 @@ export const DispatchMapModal: React.FC<DispatchMapModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-[#111b21] rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden border border-[#e9edef] dark:border-[#2a3942]"
+        className="bg-surface rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden border border-divider"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-[#2a3942]">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-divider">
           <div className="min-w-0">
-            <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef]">Peta Perjalanan Bidan</h3>
-            <p className="text-[11px] text-[#667781] dark:text-[#8696a0] truncate">
+            <h3 className="text-sm font-bold text-ink">Peta Perjalanan Bidan</h3>
+            <p className="text-[11px] text-ink-2 truncate">
               {staffName ? `${staffName} · ` : ''}
               {areaName || 'Lokasi terkini'}
             </p>
@@ -93,29 +93,29 @@ export const DispatchMapModal: React.FC<DispatchMapModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-[#202c33] text-[#54656f] dark:text-[#8696a0]"
+            className="p-1.5 rounded-lg hover:bg-fill-1 text-ink-2"
             aria-label="Tutup"
           >
             <X size={18} />
           </button>
         </div>
 
-        <div className="flex items-center gap-3 px-4 py-2 text-[11px] text-[#54656f] dark:text-[#8696a0] border-b border-gray-100 dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#111b21]">
+        <div className="flex items-center gap-3 px-4 py-2 text-[11px] text-ink-2 border-b border-divider bg-surface-2">
           <span className="flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" /> Motor Bidan{therapistLive ? ' (live)' : ''}
+            <span className="w-2.5 h-2.5 rounded-full bg-success inline-block" /> Motor Bidan{therapistLive ? ' (live)' : ''}
           </span>
           <span className="flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block" /> Rumah Pasien
+            <span className="w-2.5 h-2.5 rounded-full bg-danger inline-block" /> Rumah Pasien
           </span>
           <span className="flex items-center gap-1">
-            <span className="inline-block w-4 border-t-2 border-dashed border-emerald-600" /> Garis lurus ke pasien (bukan rute jalan)
+            <span className="inline-block w-4 border-t-2 border-dashed border-success" /> Garis lurus ke pasien (bukan rute jalan)
           </span>
-          <span className="ml-auto inline-flex items-center gap-1 text-[10px] text-[#8696a0]">
+          <span className="ml-auto inline-flex items-center gap-1 text-[10px] text-ink-3">
             <RefreshCw size={10} /> zoom {view.zoom}
           </span>
         </div>
 
-        <div ref={containerRef} className="relative flex-1 min-h-[360px] bg-[#f0f2f5] dark:bg-[#0b141a] overflow-hidden">
+        <div ref={containerRef} className="relative flex-1 min-h-[360px] bg-app overflow-hidden">
           {hasAny ? (
             <>
               {view.tiles.map((t) => (
@@ -141,7 +141,7 @@ export const DispatchMapModal: React.FC<DispatchMapModalProps> = ({
                     y1={view.route.y1}
                     x2={view.route.x2}
                     y2={view.route.y2}
-                    stroke="#059669"
+                    stroke="rgb(var(--c-accent))"
                     strokeWidth={2.5}
                     strokeDasharray="7 6"
                     strokeLinecap="round"
@@ -158,35 +158,35 @@ export const DispatchMapModal: React.FC<DispatchMapModalProps> = ({
                 >
                   <span
                     className={`relative block w-3.5 h-3.5 rounded-full border-2 border-white shadow-md ${
-                      m.kind === 'therapist' ? 'bg-emerald-500' : 'bg-rose-500'
+                      m.kind === 'therapist' ? 'bg-success' : 'bg-danger'
                     }`}
                   >
                     {m.kind === 'therapist' && therapistLive && (
-                      <span className="absolute -inset-1 rounded-full bg-emerald-400/50 animate-ping" aria-hidden="true" />
+                      <span className="absolute -inset-1 rounded-full bg-success/50 animate-ping" aria-hidden="true" />
                     )}
                   </span>
                 </div>
               ))}
-              <div className="absolute bottom-0 right-0 px-1 text-[9px] text-[#54656f] bg-white/70">
+              <div className="absolute bottom-0 right-0 px-1 text-[9px] text-ink-2 bg-surface/70">
                 © OpenStreetMap
               </div>
             </>
           ) : (
-            <div className="h-full min-h-[360px] flex items-center justify-center text-xs text-[#667781]">
+            <div className="h-full min-h-[360px] flex items-center justify-center text-xs text-ink-2">
               Koordinat belum tersedia.
             </div>
           )}
         </div>
 
-        <div className="px-4 py-3 border-t border-gray-100 dark:border-[#2a3942] bg-white dark:bg-[#111b21] flex items-center justify-end">
+        <div className="px-4 py-3 border-t border-divider bg-surface flex items-center justify-end">
           <a
             href={routeUrl}
             target="_blank"
             rel="noopener noreferrer"
             className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border ${
               hasAny
-                ? 'text-[#008069] bg-[#d9fdd3] border-[#00a884]/30 hover:bg-[#cbf7c3]'
-                : 'text-gray-400 bg-gray-100 border-gray-200 pointer-events-none'
+                ? 'text-accent bg-bubble-out border-accent/30 hover:bg-accent-soft'
+                : 'text-ink-3 bg-fill-1 border-divider pointer-events-none'
             }`}
           >
             <Navigation size={13} />

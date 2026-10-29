@@ -121,51 +121,51 @@ export const DeliveryTiers: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
-            <Truck className="text-[#008069]" size={22} />
+          <h2 className="text-xl font-bold tracking-tight text-ink flex items-center space-x-2">
+            <Truck className="text-accent" size={22} />
             <span>Delivery Fee Tiering</span>
           </h2>
-          <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">Kelola tarif ongkir homecare berdasarkan jarak dari klinik ke lokasi customer</p>
+          <p className="text-xs text-ink-3 mt-0.5">Kelola tarif ongkir homecare berdasarkan jarak dari klinik ke lokasi customer</p>
         </div>
         <button
           onClick={() => loadTiers({ forceFresh: true })}
-          className="px-3.5 py-2 rounded-xl bg-white dark:bg-[#202c33] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] transition flex items-center space-x-1.5 shadow-xs"
+          className="px-3.5 py-2 rounded-xl bg-surface hover:bg-fill-1 border border-divider text-ink transition flex items-center space-x-1.5 shadow-xs"
           title="Reload dari server"
         >
-          <RefreshCw size={13} className={loading ? 'animate-spin text-[#008069]' : 'text-[#667781] dark:text-[#8696a0]'} />
+          <RefreshCw size={13} className={loading ? 'animate-spin text-accent' : 'text-ink-3'} />
           <span className="text-xs font-semibold">Reload</span>
         </button>
       </div>
 
       {error && (
-        <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center space-x-2 text-xs">
+        <div className="p-3 rounded-xl bg-danger-soft border border-danger-line text-danger flex items-center space-x-2 text-xs">
           <AlertTriangle size={14} />
           <span>{error}</span>
-          <button onClick={() => setError('')} className="ml-auto p-1 rounded hover:bg-rose-100"><X size={12} /></button>
+          <button onClick={() => setError('')} className="ml-auto p-1 rounded hover:bg-danger-line"><X size={12} /></button>
         </div>
       )}
       {success && (
-        <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center space-x-2 text-xs">
+        <div className="p-3 rounded-xl bg-success-soft border border-success-line text-success flex items-center space-x-2 text-xs">
           <Check size={14} />
           <span>{success}</span>
-          <button onClick={() => setSuccess('')} className="ml-auto p-1 rounded hover:bg-emerald-100"><X size={12} /></button>
+          <button onClick={() => setSuccess('')} className="ml-auto p-1 rounded hover:bg-success-line"><X size={12} /></button>
         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* === LEFT: Tier table editor === */}
-        <div className="lg:col-span-2 bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-4 shadow-xs">
+        <div className="lg:col-span-2 bg-surface border border-divider rounded-2xl p-5 space-y-4 shadow-xs">
           <div className="flex justify-between items-center">
-            <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
-              <Ruler className="text-[#008069]" size={16} />
+            <h3 className="text-sm font-bold text-ink flex items-center space-x-2">
+              <Ruler className="text-accent" size={16} />
               <span>Daftar Tier Jarak</span>
             </h3>
-            <span className="px-2.5 py-0.5 rounded-full bg-[#e8f5f2] border border-[#c2e7e0] text-[#008069] text-[10px] font-bold">
+            <span className="px-2.5 py-0.5 rounded-full bg-accent-soft border border-divider text-accent text-[10px] font-bold">
               {tiers.length} tier aktif
             </span>
           </div>
 
-          <div className="hidden md:grid grid-cols-12 gap-2 text-[10px] uppercase font-bold text-[#667781] dark:text-[#8696a0] px-2">
+          <div className="hidden md:grid grid-cols-12 gap-2 text-[10px] uppercase font-bold text-ink-3 px-2">
             <div className="col-span-2">Max Dist (km)</div>
             <div className="col-span-3">Ongkir Normal (Rp)</div>
             <div className="col-span-3">Potongan Promo (Rp)</div>
@@ -178,9 +178,9 @@ export const DeliveryTiers: React.FC = () => {
               const net = Math.max(0, (Number(tier.fee) || 0) - (Number(tier.promoDiscount) || 0));
               const prevMax = idx > 0 ? (Number(sortedTiers[idx - 1].maxDist) || 0) : 0;
               return (
-                <div key={tier.id} className="grid grid-cols-2 md:grid-cols-12 gap-2 items-center p-2.5 rounded-xl bg-[#f8fafc] border border-[#e9edef]">
+                <div key={tier.id} className="grid grid-cols-2 md:grid-cols-12 gap-2 items-center p-2.5 rounded-xl bg-surface-2 border border-divider">
                   <div className="col-span-1 md:col-span-2">
-                    <label className="md:hidden text-[9px] text-[#667781] dark:text-[#8696a0] block uppercase font-bold mb-1">Max Dist (km)</label>
+                    <label className="md:hidden text-[9px] text-ink-3 block uppercase font-bold mb-1">Max Dist (km)</label>
                     <input
                       type="number"
                       step="0.5"
@@ -188,11 +188,11 @@ export const DeliveryTiers: React.FC = () => {
                       value={tier.maxDist}
                       onChange={(e) => updateTier(idx, 'maxDist', e.target.value === '' ? '' : parseFloat(e.target.value))}
                       placeholder="0"
-                      className="w-full p-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-lg text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
+                      className="w-full p-2 bg-surface border border-divider rounded-lg text-xs text-ink focus:outline-none focus:border-accent shadow-xs"
                     />
                   </div>
                   <div className="col-span-1 md:col-span-3">
-                    <label className="md:hidden text-[9px] text-[#667781] dark:text-[#8696a0] block uppercase font-bold mb-1">Normal (Rp)</label>
+                    <label className="md:hidden text-[9px] text-ink-3 block uppercase font-bold mb-1">Normal (Rp)</label>
                     <input
                       type="number"
                       step="1000"
@@ -200,11 +200,11 @@ export const DeliveryTiers: React.FC = () => {
                       value={tier.fee}
                       onChange={(e) => updateTier(idx, 'fee', e.target.value === '' ? '' : parseInt(e.target.value))}
                       placeholder="0"
-                      className="w-full p-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-lg text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
+                      className="w-full p-2 bg-surface border border-divider rounded-lg text-xs text-ink focus:outline-none focus:border-accent shadow-xs"
                     />
                   </div>
                   <div className="col-span-1 md:col-span-3">
-                    <label className="md:hidden text-[9px] text-[#667781] dark:text-[#8696a0] block uppercase font-bold mb-1">Promo (Rp)</label>
+                    <label className="md:hidden text-[9px] text-ink-3 block uppercase font-bold mb-1">Promo (Rp)</label>
                     <input
                       type="number"
                       step="1000"
@@ -212,26 +212,26 @@ export const DeliveryTiers: React.FC = () => {
                       value={tier.promoDiscount}
                       onChange={(e) => updateTier(idx, 'promoDiscount', e.target.value === '' ? '' : parseInt(e.target.value))}
                       placeholder="0"
-                      className="w-full p-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-lg text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
+                      className="w-full p-2 bg-surface border border-divider rounded-lg text-xs text-ink focus:outline-none focus:border-accent shadow-xs"
                     />
                   </div>
                   <div className="col-span-1 md:col-span-3">
-                    <label className="md:hidden text-[9px] text-[#667781] dark:text-[#8696a0] block uppercase font-bold mb-1">Net</label>
-                    <div className={`p-2 rounded-lg text-xs font-bold ${net === 0 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0]'}`}>
+                    <label className="md:hidden text-[9px] text-ink-3 block uppercase font-bold mb-1">Net</label>
+                    <div className={`p-2 rounded-lg text-xs font-bold ${net === 0 ? 'bg-success-soft text-success border border-success-line' : 'bg-accent-soft text-accent border border-divider'}`}>
                       {net === 0 ? 'GRATIS' : formatRp(net)}
                     </div>
                   </div>
                   <div className="col-span-2 md:col-span-1 flex md:justify-end">
                     <button
                       onClick={() => removeTier(idx)}
-                      className="p-1.5 rounded-lg bg-white hover:bg-rose-50 border border-[#d1d7db] text-rose-600 hover:text-rose-700 transition shadow-xs"
+                      className="p-1.5 rounded-lg bg-surface hover:bg-danger-soft border border-divider text-danger hover:text-danger transition shadow-xs"
                       title="Hapus tier"
                     >
                       <Trash2 size={13} />
                     </button>
                   </div>
                   {idx === 0 && (
-                    <div className="col-span-2 md:col-span-12 text-[10px] text-emerald-700">
+                    <div className="col-span-2 md:col-span-12 text-[10px] text-success">
                       Jarak 0 – {prevMax} km: gratis ({prevMax === 0 ? 'belum ada tier minimum, jarak 0 langsung masuk tier ini' : ''})
                     </div>
                   )}
@@ -241,7 +241,7 @@ export const DeliveryTiers: React.FC = () => {
           </div>
 
           {validationIssues.length > 0 && (
-            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 flex items-start space-x-2 text-xs">
+            <div className="p-3 rounded-xl bg-warning-soft border border-warning-line text-warning flex items-start space-x-2 text-xs">
               <AlertTriangle className="flex-shrink-0 mt-0.5" size={14} />
               <div>
                 <p className="font-bold">Terdapat masalah validasi:</p>
@@ -252,10 +252,10 @@ export const DeliveryTiers: React.FC = () => {
             </div>
           )}
 
-          <div className="pt-2 flex justify-between items-center border-t border-[#e9edef]">
+          <div className="pt-2 flex justify-between items-center border-t border-divider">
             <button
               onClick={addTier}
-              className="px-3 py-2 bg-white dark:bg-[#202c33] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs font-semibold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-1 transition shadow-xs"
+              className="px-3 py-2 bg-surface hover:bg-fill-1 border border-divider rounded-xl text-xs font-semibold text-ink flex items-center space-x-1 transition shadow-xs"
             >
               <Plus size={13} />
               <span>Tambah Tier</span>
@@ -263,7 +263,7 @@ export const DeliveryTiers: React.FC = () => {
             <button
               onClick={handleSave}
               disabled={saving || validationIssues.length > 0}
-              className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs"
+              className="px-4 py-2 bg-accent hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs"
             >
               {saving ? <RefreshCw size={13} className="animate-spin" /> : <Save size={13} />}
               <span>{saving ? 'Menyimpan...' : 'Simpan Tier'}</span>
@@ -274,17 +274,17 @@ export const DeliveryTiers: React.FC = () => {
         {/* === RIGHT: Live preview & simulasi === */}
         <div className="space-y-6">
           {/* Simulator Ongkir */}
-          <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-4 shadow-xs">
-            <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
-              <Coins className="text-[#008069]" size={16} />
+          <div className="bg-surface border border-divider rounded-2xl p-5 space-y-4 shadow-xs">
+            <h3 className="text-sm font-bold text-ink flex items-center space-x-2">
+              <Coins className="text-accent" size={16} />
               <span>Simulasi Ongkir</span>
             </h3>
-            <p className="text-xs text-[#667781] dark:text-[#8696a0]">
+            <p className="text-xs text-ink-3">
               Masukkan jarak customer untuk melihat tier & ongkir yang berlaku.
             </p>
 
             <div className="space-y-1.5">
-              <label className="text-xs text-[#667781] dark:text-[#8696a0] font-semibold">Jarak dari klinik (km)</label>
+              <label className="text-xs text-ink-3 font-semibold">Jarak dari klinik (km)</label>
               <div className="flex space-x-2">
                 <input
                   type="number"
@@ -292,14 +292,14 @@ export const DeliveryTiers: React.FC = () => {
                   min="0"
                   value={previewKm}
                   onChange={(e) => setPreviewKm(parseFloat(e.target.value) || 0)}
-                  className="w-full p-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
+                  className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs"
                 />
                 <div className="flex space-x-1">
                   {[3, 5, 8, 12, 18, 25].map(km => (
                     <button
                       key={km}
                       onClick={() => setPreviewKm(km)}
-                      className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition ${previewKm === km ? 'bg-[#e8f5f2] border-[#008069] text-[#008069]' : 'bg-white border-[#d1d7db] text-[#54656f] hover:bg-[#f0f2f5]'}`}
+                      className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition ${previewKm === km ? 'bg-accent-soft border-accent text-accent' : 'bg-surface border-divider text-ink-2 hover:bg-fill-1'}`}
                     >
                       {km}
                     </button>
@@ -309,28 +309,28 @@ export const DeliveryTiers: React.FC = () => {
             </div>
 
             {previewTier ? (
-              <div className="space-y-2 p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef]">
+              <div className="space-y-2 p-3.5 rounded-xl bg-surface-2 border border-divider">
                 <div className="flex justify-between text-xs">
-                  <span className="text-[#667781] dark:text-[#8696a0]">Tier berlaku</span>
-                  <span className="text-[#111b21] dark:text-[#e9edef] font-bold">≤ {previewTier.maxDist} km</span>
+                  <span className="text-ink-3">Tier berlaku</span>
+                  <span className="text-ink font-bold">≤ {previewTier.maxDist} km</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-[#667781] dark:text-[#8696a0]">Ongkir normal</span>
-                  <span className="text-[#111b21] dark:text-[#e9edef] font-bold">{previewFee === 0 ? 'GRATIS' : formatRp(previewFee || 0)}</span>
+                  <span className="text-ink-3">Ongkir normal</span>
+                  <span className="text-ink font-bold">{previewFee === 0 ? 'GRATIS' : formatRp(previewFee || 0)}</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-[#667781] dark:text-[#8696a0]">Potongan promo</span>
-                  <span className="text-emerald-700 font-bold">- {formatRp(previewPromo || 0)}</span>
+                  <span className="text-ink-3">Potongan promo</span>
+                  <span className="text-success font-bold">- {formatRp(previewPromo || 0)}</span>
                 </div>
-                <div className="border-t border-[#e9edef] pt-2 mt-2 flex justify-between text-xs font-bold">
-                  <span className="text-[#111b21] dark:text-[#e9edef]">Yang dibayar customer</span>
-                  <span className={previewNet === 0 ? 'text-emerald-700 font-extrabold' : 'text-[#008069] font-extrabold text-sm'}>
+                <div className="border-t border-divider pt-2 mt-2 flex justify-between text-xs font-bold">
+                  <span className="text-ink">Yang dibayar customer</span>
+                  <span className={previewNet === 0 ? 'text-success font-extrabold' : 'text-accent font-extrabold text-sm'}>
                     {previewNet === 0 ? 'GRATIS' : formatRp(previewNet || 0)}
                   </span>
                 </div>
               </div>
             ) : (
-              <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 flex items-center space-x-2 text-xs">
+              <div className="p-3.5 rounded-xl bg-warning-soft border border-warning-line text-warning flex items-center space-x-2 text-xs">
                 <AlertTriangle size={14} />
                 <span>Di luar jangkauan ({previewKm} km melebihi tier maksimum {lastTier ? lastTier.maxDist : '-'} km)</span>
               </div>
@@ -338,27 +338,27 @@ export const DeliveryTiers: React.FC = () => {
           </div>
 
           {/* Info & peringatan */}
-          <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-3 shadow-xs">
-            <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
-              <Info className="text-[#008069]" size={16} />
+          <div className="bg-surface border border-divider rounded-2xl p-5 space-y-3 shadow-xs">
+            <h3 className="text-sm font-bold text-ink flex items-center space-x-2">
+              <Info className="text-accent" size={16} />
               <span>Informasi</span>
             </h3>
-            <ul className="space-y-2 text-xs text-[#54656f] leading-relaxed">
+            <ul className="space-y-2 text-xs text-ink-2 leading-relaxed">
               <li className="flex space-x-2">
-                <span className="text-[#008069] font-bold">•</span>
-                <span>Jarak dihitung dari koordinat klinik <code className="bg-[#f0f2f5] px-1 py-0.5 rounded text-[#111b21] dark:text-[#e9edef] font-mono text-[11px]">-7.34886, 112.751677</code></span>
+                <span className="text-accent font-bold">•</span>
+                <span>Jarak dihitung dari koordinat klinik <code className="bg-fill-1 px-1 py-0.5 rounded text-ink font-mono text-[11px]">-7.34886, 112.751677</code></span>
               </li>
               <li className="flex space-x-2">
-                <span className="text-[#008069] font-bold">•</span>
+                <span className="text-accent font-bold">•</span>
                 <span>Menggunakan OpenRouteService (ORS), fallback ke Haversine jika ORS gagal</span>
               </li>
               <li className="flex space-x-2">
-                <span className="text-[#008069] font-bold">•</span>
+                <span className="text-accent font-bold">•</span>
                 <span>Perubahan tersimpan langsung di database dan aktif tanpa restart</span>
               </li>
               {hasOutOfCoverage && (
                 <li className="flex space-x-2">
-                  <span className="text-[#008069] font-bold">•</span>
+                  <span className="text-accent font-bold">•</span>
                   <span>Jarak &gt; {lastTier.maxDist} km = di luar jangkauan (tidak dilayani)</span>
                 </li>
               )}

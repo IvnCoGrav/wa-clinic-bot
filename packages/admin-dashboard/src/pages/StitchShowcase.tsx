@@ -42,7 +42,7 @@ export const StitchShowcase: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#f0f2f5] font-sans text-[#111b21]">
       {/* Top Export Header for Google Stitch */}
-      <header className="sticky top-0 z-50 border-b border-[#d1d7db] bg-white px-6 py-4 shadow-xs">
+      <header className="sticky top-0 z-50 border-b border-[#d1d7db] bg-surface px-6 py-4 shadow-xs">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#008069] text-white shadow-xs">
@@ -70,7 +70,7 @@ export const StitchShowcase: React.FC = () => {
                 onClick={() => setActiveTierFilter('all')}
                 className={`rounded-lg px-3 py-1.5 transition-all ${
                   activeTierFilter === 'all'
-                    ? 'bg-white text-[#008069] shadow-xs font-semibold'
+                    ? 'bg-surface text-[#008069] shadow-xs font-semibold'
                     : 'text-[#54656f] hover:text-[#111b21]'
                 }`}
               >
@@ -80,7 +80,7 @@ export const StitchShowcase: React.FC = () => {
                 onClick={() => setActiveTierFilter('tier1')}
                 className={`rounded-lg px-3 py-1.5 transition-all ${
                   activeTierFilter === 'tier1'
-                    ? 'bg-white text-[#008069] shadow-xs font-semibold'
+                    ? 'bg-surface text-[#008069] shadow-xs font-semibold'
                     : 'text-[#54656f] hover:text-[#111b21]'
                 }`}
               >
@@ -90,7 +90,7 @@ export const StitchShowcase: React.FC = () => {
                 onClick={() => setActiveTierFilter('tier2')}
                 className={`rounded-lg px-3 py-1.5 transition-all ${
                   activeTierFilter === 'tier2'
-                    ? 'bg-white text-[#008069] shadow-xs font-semibold'
+                    ? 'bg-surface text-[#008069] shadow-xs font-semibold'
                     : 'text-[#54656f] hover:text-[#111b21]'
                 }`}
               >
@@ -100,7 +100,7 @@ export const StitchShowcase: React.FC = () => {
                 onClick={() => setActiveTierFilter('tier3')}
                 className={`rounded-lg px-3 py-1.5 transition-all ${
                   activeTierFilter === 'tier3'
-                    ? 'bg-white text-[#008069] shadow-xs font-semibold'
+                    ? 'bg-surface text-[#008069] shadow-xs font-semibold'
                     : 'text-[#54656f] hover:text-[#111b21]'
                 }`}
               >
@@ -110,7 +110,7 @@ export const StitchShowcase: React.FC = () => {
                 onClick={() => setActiveTierFilter('tier4')}
                 className={`rounded-lg px-3 py-1.5 transition-all ${
                   activeTierFilter === 'tier4'
-                    ? 'bg-white text-[#008069] shadow-xs font-semibold'
+                    ? 'bg-surface text-[#008069] shadow-xs font-semibold'
                     : 'text-[#54656f] hover:text-[#111b21]'
                 }`}
               >
@@ -120,7 +120,7 @@ export const StitchShowcase: React.FC = () => {
                 onClick={() => setActiveTierFilter('tier5')}
                 className={`rounded-lg px-3 py-1.5 transition-all ${
                   activeTierFilter === 'tier5'
-                    ? 'bg-white text-[#008069] shadow-xs font-semibold'
+                    ? 'bg-surface text-[#008069] shadow-xs font-semibold'
                     : 'text-[#54656f] hover:text-[#111b21]'
                 }`}
               >
@@ -131,7 +131,7 @@ export const StitchShowcase: React.FC = () => {
             <div className="hidden sm:flex items-center border-l border-[#d1d7db] pl-3">
               <button
                 onClick={() => setDevicePreview(devicePreview === 'desktop' ? 'mobile' : 'desktop')}
-                className="flex items-center gap-1.5 rounded-xl border border-[#d1d7db] bg-white px-3 py-1.5 text-xs font-medium text-[#54656f] hover:bg-slate-50"
+                className="flex items-center gap-1.5 rounded-xl border border-[#d1d7db] bg-surface px-3 py-1.5 text-xs font-medium text-[#54656f] hover:bg-slate-50"
               >
                 {devicePreview === 'desktop' ? (
                   <>
@@ -172,7 +172,7 @@ export const StitchShowcase: React.FC = () => {
 
             <div className="grid grid-cols-1 gap-8">
               {/* 1. LIVE CHAT WHATSAPP */}
-              <div className="overflow-hidden rounded-2xl border border-[#e9edef] bg-white shadow-sm">
+              <div className="overflow-hidden rounded-2xl border border-[#e9edef] bg-surface shadow-sm">
                 <div className="flex items-center justify-between border-b border-[#e9edef] bg-[#f8fafc] px-5 py-3">
                   <div className="flex items-center gap-2.5">
                     <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#008069] text-white">
@@ -191,7 +191,7 @@ export const StitchShowcase: React.FC = () => {
                 {/* Simulated Live Chat Interface */}
                 <div className="grid grid-cols-1 md:grid-cols-12 min-h-[420px]">
                   {/* Left Chat List */}
-                  <div className="border-r border-[#e9edef] md:col-span-4 bg-white">
+                  <div className="border-r border-[#e9edef] md:col-span-4 bg-surface">
                     <div className="p-3 border-b border-[#e9edef]">
                       <div className="relative">
                         <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-[#8696a0]" />
@@ -247,7 +247,7 @@ export const StitchShowcase: React.FC = () => {
 
                   {/* Right Chat Conversation */}
                   <div className="flex flex-col md:col-span-8 bg-[#efeae2]/40">
-                    <div className="flex items-center justify-between border-b border-[#e9edef] bg-white px-4 py-2.5">
+                    <div className="flex items-center justify-between border-b border-[#e9edef] bg-surface px-4 py-2.5">
                       <div className="flex items-center gap-3">
                         <div className="h-8 w-8 rounded-full bg-[#008069] text-white flex items-center justify-center text-xs font-bold">
                           AN
@@ -258,7 +258,7 @@ export const StitchShowcase: React.FC = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <button className="rounded-lg border border-[#d1d7db] bg-white px-2.5 py-1 text-xs font-semibold text-[#008069] shadow-2xs hover:bg-emerald-50">
+                        <button className="rounded-lg border border-[#d1d7db] bg-surface px-2.5 py-1 text-xs font-semibold text-[#008069] shadow-2xs hover:bg-emerald-50">
                           Ambil Alih Manual
                         </button>
                       </div>
@@ -267,7 +267,7 @@ export const StitchShowcase: React.FC = () => {
                     <div className="flex-1 space-y-3 p-4">
                       {/* Customer Incoming Bubble */}
                       <div className="flex justify-start">
-                        <div className="max-w-[75%] rounded-2xl rounded-tl-xs bg-white p-3 shadow-xs border border-[#e9edef]">
+                        <div className="max-w-[75%] rounded-2xl rounded-tl-xs bg-surface p-3 shadow-xs border border-[#e9edef]">
                           <p className="text-xs text-[#111b21]">
                             Halo Bidan, baby Ken (8 bulan) lagi bapil dan agak rewel. Apakah sore ini ada slot kosong buat pijat batuk pilek di rumah?
                           </p>
@@ -292,7 +292,7 @@ export const StitchShowcase: React.FC = () => {
                     </div>
 
                     {/* Chat Input Bar */}
-                    <div className="border-t border-[#e9edef] bg-white p-3">
+                    <div className="border-t border-[#e9edef] bg-surface p-3">
                       <div className="flex items-center gap-2">
                         <input
                           type="text"
@@ -310,7 +310,7 @@ export const StitchShowcase: React.FC = () => {
               </div>
 
               {/* 2. KALENDER & RESERVASI */}
-              <div className="overflow-hidden rounded-2xl border border-[#e9edef] bg-white shadow-sm">
+              <div className="overflow-hidden rounded-2xl border border-[#e9edef] bg-surface shadow-sm">
                 <div className="flex items-center justify-between border-b border-[#e9edef] bg-[#f8fafc] px-5 py-3">
                   <div className="flex items-center gap-2.5">
                     <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#008069] text-white">
@@ -335,9 +335,9 @@ export const StitchShowcase: React.FC = () => {
                       </span>
                     </div>
                     <div className="flex items-center gap-2 text-xs">
-                      <button className="rounded-md border border-[#d1d7db] bg-white px-2.5 py-1 font-semibold text-[#111b21]">Hari</button>
+                      <button className="rounded-md border border-[#d1d7db] bg-surface px-2.5 py-1 font-semibold text-[#111b21]">Hari</button>
                       <button className="rounded-md bg-[#008069] px-2.5 py-1 font-semibold text-white">Minggu</button>
-                      <button className="rounded-md border border-[#d1d7db] bg-white px-2.5 py-1 font-semibold text-[#111b21]">Bulan</button>
+                      <button className="rounded-md border border-[#d1d7db] bg-surface px-2.5 py-1 font-semibold text-[#111b21]">Bulan</button>
                     </div>
                   </div>
 
@@ -389,7 +389,7 @@ export const StitchShowcase: React.FC = () => {
               {/* 3. TREATMENT HARI INI & 4. DASHBOARD OVERVIEW */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* 3. TREATMENT HARI INI */}
-                <div className="rounded-2xl border border-[#e9edef] bg-white p-5 shadow-sm">
+                <div className="rounded-2xl border border-[#e9edef] bg-surface p-5 shadow-sm">
                   <div className="flex items-center justify-between border-b border-[#e9edef] pb-3 mb-4">
                     <div className="flex items-center gap-2">
                       <Clock className="h-5 w-5 text-[#008069]" />
@@ -436,7 +436,7 @@ export const StitchShowcase: React.FC = () => {
                 </div>
 
                 {/* 4. DASHBOARD OVERVIEW */}
-                <div className="rounded-2xl border border-[#e9edef] bg-white p-5 shadow-sm">
+                <div className="rounded-2xl border border-[#e9edef] bg-surface p-5 shadow-sm">
                   <div className="flex items-center justify-between border-b border-[#e9edef] pb-3 mb-4">
                     <div className="flex items-center gap-2">
                       <TrendingUp className="h-5 w-5 text-[#008069]" />
@@ -496,7 +496,7 @@ export const StitchShowcase: React.FC = () => {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* 5. CUSTOMER DATABASE */}
-              <div className="lg:col-span-2 rounded-2xl border border-[#e9edef] bg-white p-5 shadow-sm">
+              <div className="lg:col-span-2 rounded-2xl border border-[#e9edef] bg-surface p-5 shadow-sm">
                 <div className="flex items-center justify-between border-b border-[#e9edef] pb-3 mb-4">
                   <div className="flex items-center gap-2">
                     <Users className="h-5 w-5 text-[#008069]" />
@@ -550,7 +550,7 @@ export const StitchShowcase: React.FC = () => {
               {/* 6. FOLLOW-UP QUEUE & 7. QUICK REPLIES */}
               <div className="space-y-6">
                 {/* 6. FOLLOW-UP QUEUE */}
-                <div className="rounded-2xl border border-[#e9edef] bg-white p-5 shadow-sm">
+                <div className="rounded-2xl border border-[#e9edef] bg-surface p-5 shadow-sm">
                   <div className="flex items-center gap-2 border-b border-[#e9edef] pb-3 mb-3">
                     <Activity className="h-5 w-5 text-[#008069]" />
                     <h3 className="text-sm font-bold text-[#111b21]">6. Antrean Follow-Up Otomatis</h3>
@@ -574,7 +574,7 @@ export const StitchShowcase: React.FC = () => {
                 </div>
 
                 {/* 7. QUICK REPLIES */}
-                <div className="rounded-2xl border border-[#e9edef] bg-white p-5 shadow-sm">
+                <div className="rounded-2xl border border-[#e9edef] bg-surface p-5 shadow-sm">
                   <div className="flex items-center gap-2 border-b border-[#e9edef] pb-3 mb-3">
                     <FileText className="h-5 w-5 text-[#008069]" />
                     <h3 className="text-sm font-bold text-[#111b21]">7. Balasan Cepat (Quick Replies)</h3>
@@ -620,7 +620,7 @@ export const StitchShowcase: React.FC = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {/* 8. KATALOG LAYANAN */}
-              <div className="rounded-2xl border border-[#e9edef] bg-white p-5 shadow-sm">
+              <div className="rounded-2xl border border-[#e9edef] bg-surface p-5 shadow-sm">
                 <div className="flex items-center gap-2 border-b border-[#e9edef] pb-3 mb-3">
                   <Award className="h-5 w-5 text-[#008069]" />
                   <h3 className="text-sm font-bold text-[#111b21]">8. Katalog Layanan</h3>
@@ -642,7 +642,7 @@ export const StitchShowcase: React.FC = () => {
               </div>
 
               {/* 9. TARIF JARAK & ONGKIR */}
-              <div className="rounded-2xl border border-[#e9edef] bg-white p-5 shadow-sm">
+              <div className="rounded-2xl border border-[#e9edef] bg-surface p-5 shadow-sm">
                 <div className="flex items-center gap-2 border-b border-[#e9edef] pb-3 mb-3">
                   <Truck className="h-5 w-5 text-[#008069]" />
                   <h3 className="text-sm font-bold text-[#111b21]">9. Tarif Jarak & Ongkir</h3>
@@ -664,7 +664,7 @@ export const StitchShowcase: React.FC = () => {
               </div>
 
               {/* 10. STAFF MANAGEMENT */}
-              <div className="rounded-2xl border border-[#e9edef] bg-white p-5 shadow-sm">
+              <div className="rounded-2xl border border-[#e9edef] bg-surface p-5 shadow-sm">
                 <div className="flex items-center gap-2 border-b border-[#e9edef] pb-3 mb-3">
                   <UserCheck className="h-5 w-5 text-[#008069]" />
                   <h3 className="text-sm font-bold text-[#111b21]">10. Akun Bidan & Staff</h3>
@@ -682,7 +682,7 @@ export const StitchShowcase: React.FC = () => {
               </div>
 
               {/* 11. KNOWLEDGE BASE */}
-              <div className="rounded-2xl border border-[#e9edef] bg-white p-5 shadow-sm">
+              <div className="rounded-2xl border border-[#e9edef] bg-surface p-5 shadow-sm">
                 <div className="flex items-center gap-2 border-b border-[#e9edef] pb-3 mb-3">
                   <BookOpen className="h-5 w-5 text-[#008069]" />
                   <h3 className="text-sm font-bold text-[#111b21]">11. Knowledge FAQ AI</h3>
@@ -723,7 +723,7 @@ export const StitchShowcase: React.FC = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {/* 12 & 13. AI SANDBOX & PERSONA */}
-              <div className="rounded-2xl border border-[#e9edef] bg-white p-5 shadow-sm">
+              <div className="rounded-2xl border border-[#e9edef] bg-surface p-5 shadow-sm">
                 <div className="flex items-center gap-2 border-b border-[#e9edef] pb-3 mb-3">
                   <Sparkles className="h-5 w-5 text-[#008069]" />
                   <h3 className="text-sm font-bold text-[#111b21]">12 & 13. AI Sandbox & Persona</h3>
@@ -745,7 +745,7 @@ export const StitchShowcase: React.FC = () => {
               </div>
 
               {/* 14. LANDING PAGE BUILDER */}
-              <div className="rounded-2xl border border-[#e9edef] bg-white p-5 shadow-sm">
+              <div className="rounded-2xl border border-[#e9edef] bg-surface p-5 shadow-sm">
                 <div className="flex items-center gap-2 border-b border-[#e9edef] pb-3 mb-3">
                   <Globe className="h-5 w-5 text-[#008069]" />
                   <h3 className="text-sm font-bold text-[#111b21]">14. Landing Page Promo</h3>
@@ -762,7 +762,7 @@ export const StitchShowcase: React.FC = () => {
               </div>
 
               {/* 15 & 16. META ADS & EVALUASI AI */}
-              <div className="rounded-2xl border border-[#e9edef] bg-white p-5 shadow-sm">
+              <div className="rounded-2xl border border-[#e9edef] bg-surface p-5 shadow-sm">
                 <div className="flex items-center gap-2 border-b border-[#e9edef] pb-3 mb-3">
                   <Radio className="h-5 w-5 text-[#008069]" />
                   <h3 className="text-sm font-bold text-[#111b21]">15 & 16. Meta CAPI & Evaluasi AI</h3>
@@ -802,28 +802,28 @@ export const StitchShowcase: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              <div className="rounded-2xl border border-[#e9edef] bg-white p-4 shadow-sm text-xs">
+              <div className="rounded-2xl border border-[#e9edef] bg-surface p-4 shadow-sm text-xs">
                 <div className="flex items-center gap-2 font-bold text-[#111b21] mb-2">
                   <Settings className="h-4 w-4 text-[#008069]" /> 17. Pengaturan Jam Klinik
                 </div>
                 <p className="text-[11px] text-[#54656f]">Buka: 08:00 - 17:00 WIB • Kuota: 12 Kunjungan/Hari</p>
               </div>
 
-              <div className="rounded-2xl border border-[#e9edef] bg-white p-4 shadow-sm text-xs">
+              <div className="rounded-2xl border border-[#e9edef] bg-surface p-4 shadow-sm text-xs">
                 <div className="flex items-center gap-2 font-bold text-[#111b21] mb-2">
                   <Send className="h-4 w-4 text-[#008069]" /> 18. Bot Telegram Staff
                 </div>
                 <p className="text-[11px] text-[#54656f]">Notifikasi harian jadwal bidan via Telegram Group</p>
               </div>
 
-              <div className="rounded-2xl border border-[#e9edef] bg-white p-4 shadow-sm text-xs">
+              <div className="rounded-2xl border border-[#e9edef] bg-surface p-4 shadow-sm text-xs">
                 <div className="flex items-center gap-2 font-bold text-[#111b21] mb-2">
                   <FileText className="h-4 w-4 text-[#008069]" /> 19. Migrasi Chat WhatsApp
                 </div>
                 <p className="text-[11px] text-[#54656f]">Alat ekstraksi pesan teks lama ke basis data</p>
               </div>
 
-              <div className="rounded-2xl border border-[#e9edef] bg-white p-4 shadow-sm text-xs">
+              <div className="rounded-2xl border border-[#e9edef] bg-surface p-4 shadow-sm text-xs">
                 <div className="flex items-center gap-2 font-bold text-[#111b21] mb-2">
                   <ShieldCheck className="h-4 w-4 text-[#008069]" /> 20. System Diagnostic
                 </div>

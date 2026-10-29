@@ -9,7 +9,7 @@
  * - BOTH (DB) == BUNDLE (Frontend) == mencakup MOMS + BABY + KIDS
  * - Klaster Anak: BABY dan KIDS beririsan satu sama lain
  *
- * CATATAN UNIFIKASI (#257-PR): file ini cermin (frontend tidak bisa import `src/`).
+ * CATATAN UNIFIKASI (Issue-257-PR): file ini cermin (frontend tidak bisa import `src/`).
  * Dua konsep SENGAJA dibedakan:
  *  - isActiveReservationStatus = cermin `src/domain/reservation-status.ts`
  *    ("menempati slot"; completed/in_progress = false).

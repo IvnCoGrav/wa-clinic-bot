@@ -6,8 +6,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/admin/favicon.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/admin/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f0f2f5" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111b21" />
+    <meta name="theme-color" content="#f0f2f5" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -18,17 +17,13 @@
     <script>
       try {
         var stored = localStorage.getItem('wa_clinic_theme');
-        var dark = stored === 'dark' || (stored !== 'light' && stored !== 'system' && false) ||
-          ((stored === null || stored === 'system') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        var dark = stored === 'dark' || (((stored === null) || (stored === 'system')) &&
+          window.matchMedia('(prefers-color-scheme: dark)').matches);
         if (dark) document.documentElement.classList.add('dark');
       } catch (e) {}
     </script>
-    <!-- Google Fonts for sleek aesthetics -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   </head>
-  <body class="bg-[#f0f2f5] dark:bg-[#0b141a] text-[#111b21] dark:text-[#e9edef] font-sans antialiased transition-colors duration-150">
+  <body class="bg-app text-ink font-sans antialiased transition-colors duration-150">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

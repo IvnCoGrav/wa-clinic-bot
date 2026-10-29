@@ -118,8 +118,6 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
     timeZone: 'Asia/Jakarta',
   });
 
-  // Tema kartu kini mengikuti bidan penanggung jawab (getStaffColor), bukan kategori treatment.
-
   // Auto-scroll ke jam jadwal paling awal hari ini atau jam 8 pagi
   useEffect(() => {
     const el = containerRef.current;
@@ -229,15 +227,15 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
   processCluster(currentCluster);
 
   return (
-    <div className={`${hideHeader ? 'flex-1 min-h-0' : 'bg-white dark:bg-[#111b21] rounded-none border-y border-x-0 border-[#e9edef] dark:border-[#2a3942] shadow-xs sm:rounded-2xl sm:border-x'} overflow-hidden flex flex-col relative group/calendar`}>
+    <div className={`${hideHeader ? 'flex-1 min-h-0' : 'bg-surface rounded-none border-y border-x-0 border-divider shadow-xs sm:rounded-2xl sm:border-x'} overflow-hidden flex flex-col relative group/calendar`}>
       {/* Day Header Banner with Integrated Zoom Controls */}
       {!hideHeader && (
-        <div className="p-2.5 sm:p-4 border-b border-[#e9edef] dark:border-[#2a3942] bg-[#fafafa] dark:bg-[#182229] flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-2.5 shrink-0">
+        <div className="p-2.5 sm:p-4 border-b border-divider bg-surface-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-2.5 shrink-0">
           <div>
-            <h3 className="font-extrabold text-sm sm:text-lg text-[#111b21] dark:text-[#e9edef]">
+            <h3 className="font-extrabold text-sm sm:text-lg text-ink">
               {dayDateFormatted}
             </h3>
-            <p className="hidden sm:block text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
+            <p className="hidden sm:block text-xs text-ink-3 mt-0.5">
               Agenda jadwal kunjungan &amp; perawatan harian
             </p>
           </div>
@@ -250,7 +248,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
               onClick={() => onQuickAdd({ date: selectedDate, hour: 9 })}
               aria-label="Tambah jadwal di tanggal ini"
               title="Tambah jadwal di tanggal ini"
-              className="px-2.5 py-1 min-h-9 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-[11px] font-semibold flex items-center space-x-1.5 shadow-xs transition-all cursor-pointer"
+              className="px-2.5 py-1 min-h-9 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink text-[11px] font-semibold flex items-center space-x-1.5 shadow-xs transition-all cursor-pointer"
             >
               <Plus size={14} />
               <span className="hidden sm:inline">+ Tambah di Tanggal Ini</span>
@@ -275,18 +273,18 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
         style={{ touchAction: 'pan-y', overscrollBehaviorY: 'auto' }}
       >
         <div
-          className="grid grid-cols-[28px_1fr] sm:grid-cols-[44px_1fr] divide-x divide-[#e9edef] dark:divide-[#2a3942] relative"
+          className="grid grid-cols-[28px_1fr] sm:grid-cols-[44px_1fr] divide-x divide-divider relative"
           style={{ height: `${HOURS.length * hourHeight}px`, minHeight: `${HOURS.length * hourHeight}px` }}
         >
           {/* Hour Label Column (Sticky left) */}
-          <div className="sticky left-0 z-20 divide-y divide-[#e9edef] dark:divide-[#2a3942] border-r border-[#e9edef] dark:border-[#2a3942] shadow-[2px_0_5px_rgba(0,0,0,0.06)] dark:shadow-[2px_0_5px_rgba(0,0,0,0.3)]">
+          <div className="sticky left-0 z-20 divide-y divide-divider border-r border-divider shadow-[2px_0_5px_rgba(0,0,0,0.06)] dark:shadow-[2px_0_5px_rgba(0,0,0,0.3)]">
             {HOURS.map((hour) => {
               const isOp = hour >= 8 && hour <= 17 && hour !== 12;
               return (
                 <div
                   key={hour}
                   style={{ height: `${hourHeight}px` }}
-                  className={`py-1 sm:py-2 text-right pl-0 pr-0.5 text-[10px] sm:text-xs font-semibold font-mono tabular-nums select-none flex items-start justify-end ${isOp ? 'bg-[#fafafa] dark:bg-[#182229] text-[#8696a0]' : 'bg-[#f0f0f0] dark:bg-[#111b21] text-[#a0a0a0] dark:text-[#54656f] italic'}`}
+                  className={`py-1 sm:py-2 text-right pl-0 pr-0.5 text-[10px] sm:text-xs font-semibold font-mono tabular-nums select-none flex items-start justify-end ${isOp ? 'bg-surface-2 text-ink-3' : 'bg-app text-ink-3 italic'}`}
                 >
                   <span title={formatHourLabelLong(hour)}>{formatHourLabel(hour)}</span>
                 </div>
@@ -295,7 +293,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
           </div>
 
           {/* Continuous Day Column */}
-          <div className="relative divide-y divide-[#e9edef] dark:divide-[#2a3942]">
+          <div className="relative divide-y divide-divider">
             {/* Background Hourly Slot Grids & Hover Add Buttons */}
             {HOURS.map((hour) => {
               const isOp = hour >= 8 && hour <= 17 && hour !== 12;
@@ -305,16 +303,16 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                   style={{ height: `${hourHeight}px` }}
                   className={`relative group/slot transition-colors ${
                     isOp
-                      ? 'hover:bg-[#e8f5f2]/30 dark:hover:bg-[#202c33]/40 bg-white dark:bg-[#111b21]'
-                      : 'bg-[#f5f5f5] dark:bg-[#141e24] bg-[repeating-linear-gradient(45deg,#f5f5f5,#f5f5f5_8px,#ebebeb_8px,#ebebeb_9px)] dark:bg-[repeating-linear-gradient(45deg,#141e24,#141e24_8px,#1c2830_8px,#1c2830_9px)]'
+                      ? 'hover:bg-accent-soft/30 bg-surface'
+                      : 'bg-app'
                   }`}
                 >
                   <button
                     onClick={() => onQuickAdd({ date: selectedDate, hour })}
                     className={`w-full h-full absolute inset-0 z-0 border border-transparent text-xs font-semibold flex items-center justify-center space-x-1.5 transition-all opacity-0 group-hover/slot:opacity-100 cursor-pointer ${
                       isOp
-                        ? 'hover:border-dashed hover:border-[#008069] dark:hover:border-[#00a884] hover:bg-[#e8f5f2]/40 dark:hover:bg-[#00a884]/15 hover:text-[#008069] dark:hover:text-[#00a884]'
-                        : 'hover:border-dashed hover:border-[#a0a0a0] dark:hover:border-[#374248] hover:bg-[#e0e0e0]/50 dark:hover:bg-[#202c33]/50 hover:text-[#666] dark:hover:text-[#8696a0] text-[#a0a0a0] dark:text-[#54656f]'
+                        ? 'hover:border-dashed hover:border-accent hover:bg-accent-soft/40 hover:text-accent'
+                        : 'hover:border-dashed hover:border-divider hover:bg-fill-1 hover:text-ink-2 text-ink-3'
                     }`}
                     title={isOp ? `Tambah Jadwal pada jam ${formatHourLabelLong(hour)}` : `Jam non-operasional ${formatHourLabelLong(hour)}`}
                   >
@@ -333,8 +331,8 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                 style={{ top: `${nowTopPx}px` }}
                 aria-hidden="true"
               >
-                <div className="w-2 h-2 rounded-full bg-red-500 -ml-1 shrink-0" />
-                <div className="flex-1 border-t-2 border-red-500" />
+                <div className="w-2 h-2 rounded-full bg-danger -ml-1 shrink-0" />
+                <div className="flex-1 border-t-2 border-danger" />
               </div>
             )}
 
@@ -347,19 +345,15 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
               const startTimeStr = bDate
                 .toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })
                 .replace('.', ':');
-              // F-33: rentang jam & durasi dibuang — gutter jam di sebelah kiri sudah
-              // menunjukkan waktunya, dan tinggi kartu sudah mewakili durasi.
               const categoryMeta = getTreatmentCategoryMeta(res.treatment_category);
               const CategoryIcon = categoryMeta?.Icon;
-              const isPaid = Boolean((res as any).purchase_occurred_at);
-              // F-32: elemen dibuang dari prioritas terendah (detail → area) agar
-              // baris bidan di bawah TIDAK terpotong. Baris bidan tidak pernah dibatasi LOD.
+              // `undefined` (bukan `false`) saat kolom kosong: absennya `purchase_occurred_at`
+  // berarti "tidak tercatat", bukan bukti "belum lunas".
+  const isPaid: boolean | undefined = (res as any).purchase_occurred_at ? true : undefined;
               const { showDetail: canShowDetail, showArea: canShowArea } = computeDayCardLod(pos.heightPx);
 
-              // Nama pasien: gelar sapaan dibuang lewat seam tunggal (patientName.ts).
               const displayName = stripHonorific(res.customer?.name) || 'Pasien';
               const cleanDetail = cleanTreatmentDetailForDisplay(res.treatment_detail, res.treatment_category);
-              // Daerah kunjungan — kelurahan saja (F-33); cadangan kecamatan.
               const areaLabel = formatReservationKelurahan(res);
               const distanceKm =
                 typeof res.customer?.distance_km === 'number' && Number.isFinite(res.customer.distance_km)
@@ -377,7 +371,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
 
               const isHold = res.status === 'hold';
               const effectiveCardStyle = isHold
-                ? 'bg-amber-50/95 dark:bg-[#33230a] border-2 border-dashed border-amber-500 dark:border-amber-800/40 text-amber-950 dark:text-amber-100 hover:bg-amber-100/90 dark:hover:bg-[#422e0c]'
+                ? 'bg-warning-soft border-2 border-dashed border-warning-line text-warning hover:bg-warning-soft/90'
                 : staffColor.card;
 
               return (
@@ -400,7 +394,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                     /* COMPACT DAY LOD (<65px) */
                     <div className="flex items-center justify-between gap-2 h-full">
                       <div className="flex items-center space-x-1.5 min-w-0">
-                        <span className={`font-bold text-xs truncate ${isHold ? 'text-amber-950 dark:text-amber-100' : 'text-[#111b21] dark:text-[#e9edef]'}`}>
+                        <span className={`font-bold text-xs truncate ${isHold ? 'text-warning' : 'text-ink'}`}>
                           {isHold ? `[HOLD] ${displayName}` : displayName}
                         </span>
                         <span className="text-[10px] font-mono font-bold opacity-80 shrink-0">
@@ -418,20 +412,16 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                             <CategoryIcon size={11} aria-hidden="true" />
                           </span>
                         )}
-                        <span className="text-[10px] font-semibold text-[#54656f] dark:text-[#aebac1]">
+                        <span className="text-[10px] font-semibold text-ink-2">
                           {staffShortName(resolveStaffName(res, staffList)) || 'Unassigned'}
                         </span>
                       </div>
                     </div>
                   ) : (
                     /* STANDARD & DETAILED DAY LOD */
-                    /* F-32: tinggi kartu lebih kecil dari tinggi isi → dulu `justify-between`
-                     * + `overflow-hidden` memotong elemen TERAKHIR (nama bidan). Kini isi
-                     * disusun vertikal dan elemen dibuang berurutan dari prioritas terendah:
-                     * nama → jam mulai → bidan → area → detail treatment. Bidan dibuang paling akhir. */
                     <div className="flex flex-col h-full min-h-0 gap-0.5">
                       <div className="flex items-center gap-1.5 min-w-0 shrink-0 overflow-hidden">
-                        <span className={`font-bold text-sm truncate min-w-0 ${isHold ? 'text-amber-950 dark:text-amber-100' : 'text-[#111b21] dark:text-[#e9edef]'}`}>
+                        <span className={`font-bold text-sm truncate min-w-0 ${isHold ? 'text-warning' : 'text-ink'}`}>
                           {displayName}
                         </span>
                         <span className="text-[10px] font-mono font-bold opacity-80 shrink-0">
@@ -448,7 +438,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                           </span>
                         )}
                         {res.session_number != null && res.total_sessions != null && (
-                          <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-blue-600/10 dark:bg-[#202c33]/20 text-blue-800 dark:text-[#aebac1] shrink-0">
+                          <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-info-soft text-info shrink-0">
                             Sesi {res.session_number}/{res.total_sessions}
                           </span>
                         )}
@@ -471,9 +461,9 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                         </div>
                       )}
 
-                      {/* Baris paling bawah = bidan penanggung jawab (permintaan user). */}
+                      {/* Baris paling bawah = bidan penanggung jawab */}
                       <div className="mt-auto flex items-center gap-1 min-w-0 shrink-0 text-[11px] font-bold">
-                        <User size={11} className="shrink-0 text-[#008069] dark:text-[#00a884]" />
+                        <User size={11} className="shrink-0 text-accent" />
                         <span className="truncate" title={resolveStaffName(res, staffList) || undefined}>
                           {staffDisplayName(resolveStaffName(res, staffList)) || 'Belum ada terapis'}
                         </span>

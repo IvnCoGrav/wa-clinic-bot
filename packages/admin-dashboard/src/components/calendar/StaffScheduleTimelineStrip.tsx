@@ -154,40 +154,40 @@ export const StaffScheduleTimelineStrip: React.FC<StaffScheduleTimelineStripProp
   if (!bookingDate) return null;
 
   return (
-    <div className="p-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2.5 text-xs animate-fadeIn">
+    <div className="p-3 bg-surface-2 border border-divider rounded-xl space-y-2.5 text-xs animate-fadeIn">
       {/* Header Info */}
       <div className="flex items-center justify-between flex-wrap gap-1">
-        <div className="flex items-center space-x-1.5 font-bold text-slate-800 dark:text-slate-100">
-          <Clock size={13} className="text-[#008069]" />
+        <div className="flex items-center space-x-1.5 font-bold text-ink">
+          <Clock size={13} className="text-accent" />
           <span>
             Pita Jadwal {selectedStaff ? `Bidan ${selectedStaff.name}` : 'Semua Terapis'}
           </span>
-          <span className="text-[10px] font-normal text-slate-500">
+          <span className="text-[10px] font-normal text-ink-3">
             ({staffBookings.length} jadwal terisi)
           </span>
         </div>
 
         {/* Status Indicator */}
         {collisionState?.hasCollision ? (
-          <div className="flex items-center space-x-1 px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-[#f87171] text-[10px] font-bold border border-rose-300">
+          <div className="flex items-center space-x-1 px-2 py-0.5 rounded-full bg-danger-soft text-danger text-[10px] font-bold border border-danger-line">
             <AlertCircle size={11} />
             <span>Bentrok ({collisionState.collidedWith?.timeFormatted} Ny. {collisionState.collidedWith?.customerName})</span>
           </div>
         ) : currentSelectedTime ? (
-          <div className="flex items-center space-x-1 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-200 text-[10px] font-bold border border-emerald-300">
+          <div className="flex items-center space-x-1 px-2 py-0.5 rounded-full bg-success-soft text-success text-[10px] font-bold border border-success-line">
             <CheckCircle2 size={11} />
             <span>Jam {currentSelectedTime} Tersedia</span>
           </div>
         ) : (
-          <span className="text-[10px] text-slate-500">Klik slot hijau di bawah untuk memilih jam</span>
+          <span className="text-[10px] text-ink-3">Klik slot hijau di bawah untuk memilih jam</span>
         )}
       </div>
 
       {/* Quick Staff Selection Pills if no staff is selected */}
       {!selectedStaff && allStaff && allStaff.length > 0 && (
         <div className="flex items-center gap-1.5 flex-wrap pt-0.5 pb-0.5">
-          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
-            <UserCheck size={11} className="text-[#008069]" />
+          <span className="text-[11px] font-semibold text-ink-2 flex items-center gap-1">
+            <UserCheck size={11} className="text-accent" />
             <span>Pilih Bidan:</span>
           </span>
           {allStaff
@@ -197,7 +197,7 @@ export const StaffScheduleTimelineStrip: React.FC<StaffScheduleTimelineStripProp
                 key={s.id}
                 type="button"
                 onClick={() => onSelectStaff?.(s.id)}
-                className="px-2 py-0.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-[11px] font-bold text-slate-700 dark:text-slate-200 hover:border-[#008069] hover:text-[#008069] hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-all cursor-pointer active:scale-95"
+                className="px-2 py-0.5 rounded-lg bg-surface border border-divider text-[11px] font-bold text-ink hover:border-accent hover:text-accent hover:bg-accent-soft transition-all cursor-pointer active:scale-95"
               >
                 {s.name}
               </button>
@@ -207,7 +207,7 @@ export const StaffScheduleTimelineStrip: React.FC<StaffScheduleTimelineStripProp
 
       {/* Visual Timeline Bar */}
       <div className="space-y-1">
-        <div className="relative w-full h-9 bg-white dark:bg-slate-800 rounded-lg border border-slate-300 dark:border-slate-700 overflow-hidden shadow-inner select-none">
+        <div className="relative w-full h-9 bg-surface rounded-lg border border-divider overflow-hidden shadow-inner select-none">
           {/* Jam Grid Lines */}
           <div className="absolute inset-0 flex justify-between pointer-events-none">
             {hourMarkers.map((h, idx) => {
@@ -216,7 +216,7 @@ export const StaffScheduleTimelineStrip: React.FC<StaffScheduleTimelineStripProp
               return (
                 <div
                   key={h}
-                  className="absolute top-0 bottom-0 border-r border-slate-200 dark:border-slate-700/60"
+                  className="absolute top-0 bottom-0 border-r border-divider/60"
                   style={{ left: `${leftPercent}%` }}
                 />
               );
@@ -235,10 +235,10 @@ export const StaffScheduleTimelineStrip: React.FC<StaffScheduleTimelineStripProp
                 key={b.id}
                 className={`absolute top-1 bottom-1 rounded-md px-1.5 flex items-center justify-between text-[10px] font-semibold border shadow-2xs truncate transition-transform hover:scale-[1.02] cursor-default ${
                   isEditingThis
-                    ? 'bg-cyan-100 dark:bg-cyan-950/70 border-cyan-300 text-cyan-900 dark:text-cyan-200 ring-1 ring-cyan-300'
+                    ? 'bg-info-soft border-info-line text-info ring-1 ring-info-line'
                     : isHold
-                    ? 'bg-amber-100 dark:bg-amber-950/70 border-amber-300 text-amber-900 dark:text-amber-200'
-                    : 'bg-rose-100 dark:bg-rose-950/70 border-rose-300 text-rose-900 dark:text-rose-200'
+                    ? 'bg-warning-soft border-warning-line text-warning'
+                    : 'bg-danger-soft border-danger-line text-danger'
                 }`}
                 style={{
                   left: `${leftPercent}%`,
@@ -258,15 +258,15 @@ export const StaffScheduleTimelineStrip: React.FC<StaffScheduleTimelineStripProp
             <div
               className={`absolute top-0.5 bottom-0.5 rounded-md border-2 shadow-md transition-all duration-200 pointer-events-none flex items-center justify-center text-[10px] font-extrabold ${
                 collisionState?.hasCollision
-                  ? 'bg-rose-500/25 border-rose-600 text-rose-800 dark:text-rose-200'
-                  : 'bg-emerald-500/30 border-emerald-600 text-emerald-950 dark:text-emerald-100'
+                  ? 'bg-danger-soft/50 border-danger text-danger'
+                  : 'bg-success-soft/50 border-success text-success'
               }`}
               style={{
                 left: `${Math.max(0, (selectedTimeMinutes / TOTAL_MINUTES) * 100)}%`,
                 width: `${Math.min(100, (treatmentDurationMinutes / TOTAL_MINUTES) * 100)}%`,
               }}
             >
-              <span className="truncate px-1 bg-white/80 dark:bg-slate-900/80 rounded">
+              <span className="truncate px-1 bg-surface/80 rounded">
                 {currentSelectedTime} ({treatmentDurationMinutes}m)
               </span>
             </div>
@@ -274,7 +274,7 @@ export const StaffScheduleTimelineStrip: React.FC<StaffScheduleTimelineStripProp
         </div>
 
         {/* Time Scale Labels */}
-        <div className="flex justify-between text-[9px] font-mono text-slate-400 select-none px-0.5">
+        <div className="flex justify-between text-[9px] font-mono text-ink-3 select-none px-0.5">
           <span>08:00</span>
           <span>10:00</span>
           <span>12:00</span>
@@ -287,8 +287,8 @@ export const StaffScheduleTimelineStrip: React.FC<StaffScheduleTimelineStripProp
       {/* Quick Available Slots Chips */}
       {availableQuickSlots.length > 0 ? (
         <div className="space-y-1.5 pt-1">
-          <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 flex items-center space-x-1">
-            <Clock size={11} className="text-emerald-600" />
+          <span className="text-[11px] font-bold text-ink-2 flex items-center space-x-1">
+            <Clock size={11} className="text-success" />
             <span>Slot Jam Kosong yang Muat ({treatmentDurationMinutes} mnt):</span>
           </span>
           <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
@@ -301,8 +301,8 @@ export const StaffScheduleTimelineStrip: React.FC<StaffScheduleTimelineStripProp
                   onClick={() => onSelectTimeSlot(time)}
                   className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all duration-150 active:scale-95 cursor-pointer border ${
                     isSelected
-                      ? 'bg-[#008069] text-white border-[#008069] shadow-sm ring-2 ring-[#008069]/40 font-extrabold scale-105'
-                      : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-[#008069] hover:text-[#008069] hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
+                      ? 'bg-accent text-accent-ink border-accent shadow-sm ring-2 ring-accent/40 font-extrabold scale-105'
+                      : 'bg-surface text-ink border-divider hover:border-accent hover:text-accent hover:bg-accent-soft'
                   }`}
                   title={`Pilih jam ${time} WIB`}
                 >
@@ -313,7 +313,7 @@ export const StaffScheduleTimelineStrip: React.FC<StaffScheduleTimelineStripProp
           </div>
         </div>
       ) : (
-        <p className="text-[11px] text-amber-700 dark:text-[#f59e0b] italic pt-1">
+        <p className="text-[11px] text-warning italic pt-1">
           Tidak ada slot kosong yang muat durasi {treatmentDurationMinutes} menit di tanggal ini. Silakan ganti tanggal atau force override.
         </p>
       )}

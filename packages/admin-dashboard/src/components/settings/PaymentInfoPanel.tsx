@@ -241,23 +241,23 @@ export const PaymentInfoPanel: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-6 shadow-xs flex items-center justify-center space-x-2 text-[#667781] dark:text-[#8696a0]">
-        <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#008069] border-t-transparent" />
+      <div className="bg-surface border border-divider rounded-2xl p-6 shadow-xs flex items-center justify-center space-x-2 text-ink-3">
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
         <span className="text-xs">Memuat pengaturan pembayaran klinik...</span>
       </div>
     );
   }
 
   return (
-    <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 sm:p-6 space-y-6 shadow-xs text-left">
+    <div className="bg-surface border border-divider rounded-2xl p-5 sm:p-6 space-y-6 shadow-xs text-left">
       {/* Header */}
-      <div className="flex items-start justify-between border-b border-[#e9edef] dark:border-[#2a3942] pb-4">
+      <div className="flex items-start justify-between border-b border-divider pb-4">
         <div className="space-y-1">
-          <h3 className="text-sm sm:text-base font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
-            <CreditCard className="text-[#008069]" size={18} />
+          <h3 className="text-sm sm:text-base font-bold text-ink flex items-center space-x-2">
+            <CreditCard className="text-accent" size={18} />
             <span>Pengaturan Pembayaran &amp; QRIS Klinik</span>
           </h3>
-          <p className="text-xs text-[#667781] dark:text-[#8696a0] leading-relaxed max-w-2xl">
+          <p className="text-xs text-ink-3 leading-relaxed max-w-2xl">
             Konfigurasi barcode QRIS resmi dan nomor rekening klinik. Data ini tampil secara otomatis di aplikasi Bidan Terapis Lapangan saat mencatat pembayaran pasien di tempat.
           </p>
         </div>
@@ -266,12 +266,12 @@ export const PaymentInfoPanel: React.FC = () => {
       {/* SECTION 1: QRIS Image Barcode */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-1.5">
-            <QrCode size={15} className="text-[#008069]" />
+          <label className="text-xs font-bold text-ink flex items-center gap-1.5">
+            <QrCode size={15} className="text-accent" />
             <span>Barcode QRIS Resmi Klinik</span>
           </label>
           {activeQrisDisplay && (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#d9fdd3] text-[#008069] border border-[#00a884]/30">
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-bubble-out text-accent border border-accent/30">
               {selectedImage ? 'Preview Gambar Baru' : 'QRIS Aktif'}
             </span>
           )}
@@ -286,10 +286,10 @@ export const PaymentInfoPanel: React.FC = () => {
         />
 
         {activeQrisDisplay ? (
-          <div className="flex flex-col sm:flex-row items-center gap-4 p-4 bg-[#f8fafc] dark:bg-[#202c33] dark:bg-[#202c33] rounded-2xl border border-[#e9edef] dark:border-[#2a3942]">
+          <div className="flex flex-col sm:flex-row items-center gap-4 p-4 bg-surface-2 dark:bg-fill-1 rounded-2xl border border-divider">
             <div
               onClick={() => setLightboxOpen(true)}
-              className="relative w-36 h-36 bg-white p-2 rounded-xl border border-[#d1d7db] shadow-xs cursor-pointer group flex-shrink-0 flex items-center justify-center hover:border-[#008069] transition"
+              className="relative w-36 h-36 bg-surface p-2 rounded-xl border border-divider shadow-xs cursor-pointer group flex-shrink-0 flex items-center justify-center hover:border-accent transition"
               title="Ketuk untuk memperbesar barcode"
             >
               <img
@@ -304,17 +304,17 @@ export const PaymentInfoPanel: React.FC = () => {
             </div>
 
             <div className="space-y-2 flex-1 text-center sm:text-left min-w-0">
-              <p className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">
+              <p className="text-xs font-bold text-ink">
                 {selectedImage ? selectedImage.file.name : 'QRIS Klinik Terdaftar'}
               </p>
-              <p className="text-[11px] text-[#667781] dark:text-[#8696a0] leading-relaxed">
+              <p className="text-[11px] text-ink-3 leading-relaxed">
                 Barcode ini dapat diperbesar ke layar penuh oleh bidan di lokasi agar pasien dapat memindai langsung menggunakan e-wallet (GoPay, OVO, Dana, ShopeePay) maupun m-banking.
               </p>
               <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="px-3 py-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] dark:bg-[#202c33] border border-[#d1d7db] text-xs font-semibold text-[#111b21] dark:text-[#e9edef] flex items-center gap-1.5 shadow-xs active:scale-95 transition"
+                  className="px-3 py-1.5 rounded-xl bg-surface hover:bg-fill-1 border border-divider text-xs font-semibold text-ink flex items-center gap-1.5 shadow-xs active:scale-95 transition"
                 >
                   <Upload size={13} />
                   <span>Ganti Gambar</span>
@@ -322,7 +322,7 @@ export const PaymentInfoPanel: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleRemoveQris}
-                  className="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-xs font-semibold text-rose-700 flex items-center gap-1.5 shadow-xs active:scale-95 transition"
+                  className="px-3 py-1.5 rounded-xl bg-danger-soft hover:bg-danger-line border border-danger-line text-xs font-semibold text-danger flex items-center gap-1.5 shadow-xs active:scale-95 transition"
                 >
                   <Trash2 size={13} />
                   <span>Hapus QRIS</span>
@@ -333,16 +333,16 @@ export const PaymentInfoPanel: React.FC = () => {
         ) : (
           <div
             onClick={() => fileInputRef.current?.click()}
-            className="p-6 border-2 border-dashed border-[#d1d7db] hover:border-[#008069] bg-[#f8fafc] dark:bg-[#202c33] rounded-2xl flex flex-col items-center justify-center cursor-pointer transition group text-center space-y-2"
+            className="p-6 border-2 border-dashed border-divider hover:border-accent bg-surface-2 rounded-2xl flex flex-col items-center justify-center cursor-pointer transition group text-center space-y-2"
           >
-            <div className="h-12 w-12 rounded-2xl bg-white text-[#008069] flex items-center justify-center border border-[#e9edef] shadow-xs group-hover:scale-105 transition-transform">
+            <div className="h-12 w-12 rounded-2xl bg-surface text-accent flex items-center justify-center border border-divider shadow-xs group-hover:scale-105 transition-transform">
               <Upload size={22} />
             </div>
             <div>
-              <p className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] group-hover:text-[#008069] transition">
+              <p className="text-xs font-bold text-ink group-hover:text-accent transition">
                 Pilih atau Tarik Foto Barcode QRIS ke Sini
               </p>
-              <p className="text-[11px] text-[#667781] dark:text-[#8696a0] mt-0.5">
+              <p className="text-[11px] text-ink-3 mt-0.5">
                 Mendukung format PNG, JPG, atau WEBP (Maksimal 8 MB)
               </p>
             </div>
@@ -354,18 +354,18 @@ export const PaymentInfoPanel: React.FC = () => {
       <div className="space-y-3 pt-2">
         <div className="flex items-center justify-between">
           <div>
-            <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-1.5">
-              <Building2 size={15} className="text-[#008069]" />
+            <label className="text-xs font-bold text-ink flex items-center gap-1.5">
+              <Building2 size={15} className="text-accent" />
               <span>Rekening Bank Resmi Klinik</span>
             </label>
-            <p className="text-[11px] text-[#667781] dark:text-[#8696a0] mt-0.5">
+            <p className="text-[11px] text-ink-3 mt-0.5">
               Daftar rekening bank untuk pembayaran transfer oleh pasien.
             </p>
           </div>
           <button
             type="button"
             onClick={handleAddBankAccount}
-            className="px-3 py-1.5 rounded-xl bg-[#e8f5f2] hover:bg-[#d0ece7] text-[#008069] border border-[#c2e7e0] text-xs font-bold flex items-center gap-1.5 shadow-2xs active:scale-95 transition"
+            className="px-3 py-1.5 rounded-xl bg-accent-soft hover:bg-accent-soft text-accent border border-divider text-xs font-bold flex items-center gap-1.5 shadow-2xs active:scale-95 transition"
           >
             <Plus size={13} />
             <span>Tambah Rekening</span>
@@ -373,8 +373,8 @@ export const PaymentInfoPanel: React.FC = () => {
         </div>
 
         {bankAccounts.length === 0 ? (
-          <div className="py-6 px-4 text-center bg-[#f8fafc] dark:bg-[#202c33] rounded-2xl border border-[#e9edef] text-xs text-[#667781] dark:text-[#8696a0] space-y-1">
-            <p className="font-semibold text-[#111b21] dark:text-[#e9edef]">Belum ada rekening bank yang ditambahkan</p>
+          <div className="py-6 px-4 text-center bg-surface-2 rounded-2xl border border-divider text-xs text-ink-3 space-y-1">
+            <p className="font-semibold text-ink">Belum ada rekening bank yang ditambahkan</p>
             <p className="text-[11px]">Klik "Tambah Rekening" di atas untuk mendaftarkan nomor rekening klinik.</p>
           </div>
         ) : (
@@ -382,38 +382,38 @@ export const PaymentInfoPanel: React.FC = () => {
             {bankAccounts.map((acc, idx) => (
               <div
                 key={idx}
-                className="grid grid-cols-1 sm:grid-cols-12 gap-2 p-3 bg-[#f8fafc] dark:bg-[#202c33] rounded-2xl border border-[#e9edef] items-end"
+                className="grid grid-cols-1 sm:grid-cols-12 gap-2 p-3 bg-surface-2 rounded-2xl border border-divider items-end"
               >
                 <div className="sm:col-span-3 space-y-1">
-                  <label className="text-[10px] uppercase font-bold text-[#667781] dark:text-[#8696a0]">Nama Bank</label>
+                  <label className="text-[10px] uppercase font-bold text-ink-3">Nama Bank</label>
                   <input
                     type="text"
                     placeholder="Contoh: BCA / Mandiri / BRI"
                     value={acc.bank}
                     onChange={(e) => handleUpdateBankAccount(idx, 'bank', e.target.value)}
-                    className="w-full p-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+                    className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs"
                   />
                 </div>
 
                 <div className="sm:col-span-4 space-y-1">
-                  <label className="text-[10px] uppercase font-bold text-[#667781] dark:text-[#8696a0]">Nomor Rekening</label>
+                  <label className="text-[10px] uppercase font-bold text-ink-3">Nomor Rekening</label>
                   <input
                     type="text"
                     placeholder="Contoh: 1234567890"
                     value={acc.accountNumber}
                     onChange={(e) => handleUpdateBankAccount(idx, 'accountNumber', e.target.value)}
-                    className="w-full p-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs font-mono font-semibold text-[#008069] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+                    className="w-full p-2 bg-surface border border-divider rounded-xl text-xs font-mono font-semibold text-accent focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs"
                   />
                 </div>
 
                 <div className="sm:col-span-4 space-y-1">
-                  <label className="text-[10px] uppercase font-bold text-[#667781] dark:text-[#8696a0]">Atas Nama (Pemilik)</label>
+                  <label className="text-[10px] uppercase font-bold text-ink-3">Atas Nama (Pemilik)</label>
                   <input
                     type="text"
                     placeholder="Contoh: PT Klinik Kala Sejahtera"
                     value={acc.accountName}
                     onChange={(e) => handleUpdateBankAccount(idx, 'accountName', e.target.value)}
-                    className="w-full p-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+                    className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs"
                   />
                 </div>
 
@@ -421,7 +421,7 @@ export const PaymentInfoPanel: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleRemoveBankAccount(idx)}
-                    className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 transition flex items-center justify-center shadow-xs"
+                    className="p-2 rounded-xl bg-danger-soft hover:bg-danger-line border border-danger-line text-danger transition flex items-center justify-center shadow-xs"
                     title="Hapus Rekening"
                   >
                     <Trash2 size={13} />
@@ -435,8 +435,8 @@ export const PaymentInfoPanel: React.FC = () => {
 
       {/* SECTION 3: Instructions & Notes */}
       <div className="space-y-1.5 pt-2">
-        <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-1.5">
-          <HelpCircle size={14} className="text-[#008069]" />
+        <label className="text-xs font-bold text-ink flex items-center gap-1.5">
+          <HelpCircle size={14} className="text-accent" />
           <span>Petunjuk / Catatan Pembayaran Pasien (Opsional)</span>
         </label>
         <textarea
@@ -444,18 +444,18 @@ export const PaymentInfoPanel: React.FC = () => {
           value={instructions}
           onChange={(e) => setInstructions(e.target.value)}
           placeholder="Contoh: Harap mencantumkan nama pasien pada berita transfer. Bukti transfer wajib diunggah oleh terapis."
-          className="w-full p-3 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] resize-none shadow-xs"
+          className="w-full p-3 bg-surface border border-divider rounded-xl text-xs text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent resize-none shadow-xs"
         />
       </div>
 
       {/* SECTION 4: Template Pesan WhatsApp Kustom (data-driven) */}
-      <div className="space-y-3 pt-2 border-t border-[#e9edef] dark:border-[#2a3942]">
+      <div className="space-y-3 pt-2 border-t border-divider">
         <div className="space-y-1">
-          <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-1.5">
-            <span className="text-[#008069]">📝</span>
+          <label className="text-xs font-bold text-ink flex items-center gap-1.5">
+            <span className="text-accent">📝</span>
             <span>Template Pesan WhatsApp (Kustomisasi Copywriting)</span>
           </label>
-          <p className="text-[11px] text-[#667781] dark:text-[#8696a0] leading-relaxed">
+          <p className="text-[11px] text-ink-3 leading-relaxed">
             Kosongkan untuk memakai template standar sistem. Gunakan placeholder di bawah — akan diganti otomatis saat kirim ke pasien. Klik chip untuk sisipkan di posisi kursor.
           </p>
         </div>
@@ -465,7 +465,7 @@ export const PaymentInfoPanel: React.FC = () => {
               key={v.tag}
               type="button"
               onClick={() => insertTemplateVar(v.tag)}
-              className="px-2.5 py-1 rounded-full bg-[#e8f5f2] hover:bg-[#d0ece7] border border-[#c2e7e0] text-[11px] font-semibold text-[#008069] transition active:scale-95"
+              className="px-2.5 py-1 rounded-full bg-accent-soft hover:bg-accent-soft border border-divider text-[11px] font-semibold text-accent transition active:scale-95"
               title={`Sisipkan ${v.tag}`}
             >
               {v.tag}
@@ -478,27 +478,27 @@ export const PaymentInfoPanel: React.FC = () => {
           value={customTemplate}
           onChange={(e) => setCustomTemplate(e.target.value)}
           placeholder={STANDARD_PAYMENT_TEMPLATE}
-          className="w-full p-3 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#b0bec5] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] resize-y shadow-xs font-mono leading-relaxed min-h-[180px]"
+          className="w-full p-3 bg-surface border border-divider rounded-xl text-xs text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent resize-y shadow-xs font-mono leading-relaxed min-h-[180px]"
         />
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() => setCustomTemplate(STANDARD_PAYMENT_TEMPLATE)}
-            className="px-3 py-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] dark:bg-[#202c33] border border-[#d1d7db] text-xs font-semibold text-[#111b21] dark:text-[#e9edef] shadow-xs active:scale-95 transition"
+            className="px-3 py-1.5 rounded-xl bg-surface hover:bg-fill-1 border border-divider text-xs font-semibold text-ink shadow-xs active:scale-95 transition"
           >
             Muat Template Standar
           </button>
           <button
             type="button"
             onClick={() => setCustomTemplate('')}
-            className="px-3 py-1.5 rounded-xl bg-[#f8fafc] dark:bg-[#202c33] hover:bg-[#f0f2f5] dark:bg-[#202c33] border border-[#e9edef] text-xs font-semibold text-[#667781] dark:text-[#8696a0] shadow-xs active:scale-95 transition"
+            className="px-3 py-1.5 rounded-xl bg-surface-2 hover:bg-fill-1 border border-divider text-xs font-semibold text-ink-3 shadow-xs active:scale-95 transition"
           >
             Gunakan Default Sistem
           </button>
         </div>
         <div className="space-y-1.5">
-          <p className="text-[11px] font-bold text-[#111b21] dark:text-[#e9edef]">Live Preview (simulasi pesan WhatsApp):</p>
-          <pre className="w-full p-3 bg-[#f8fafc] dark:bg-[#202c33] border border-[#e9edef] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] whitespace-pre-wrap break-words leading-relaxed font-sans max-h-[320px] overflow-auto">
+          <p className="text-[11px] font-bold text-ink">Live Preview (simulasi pesan WhatsApp):</p>
+          <pre className="w-full p-3 bg-surface-2 border border-divider rounded-xl text-xs text-ink whitespace-pre-wrap break-words leading-relaxed font-sans max-h-[320px] overflow-auto">
             {buildPreview(customTemplate)}
           </pre>
         </div>
@@ -510,7 +510,7 @@ export const PaymentInfoPanel: React.FC = () => {
           type="button"
           disabled={saving}
           onClick={handleSave}
-          className="px-5 py-2.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50 active:scale-95"
+          className="px-5 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50 active:scale-95"
         >
           {saving ? (
             <>
@@ -533,18 +533,18 @@ export const PaymentInfoPanel: React.FC = () => {
           onClick={() => setLightboxOpen(false)}
         >
           <div
-            className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl flex flex-col items-center space-y-4 animate-modalScaleUp text-center relative"
+            className="bg-surface rounded-3xl p-6 max-w-sm w-full shadow-2xl flex flex-col items-center space-y-4 animate-modalScaleUp text-center relative"
             onClick={(e) => e.stopPropagation()}
           >
             <button
               type="button"
               onClick={() => setLightboxOpen(false)}
-              className="absolute top-3 right-3 p-2 rounded-full bg-[#f0f2f5] dark:bg-[#202c33] hover:bg-[#e9edef] text-[#54656f] transition"
+              className="absolute top-3 right-3 p-2 rounded-full bg-fill-1 hover:bg-fill-2 text-ink-2 transition"
             >
               <X size={18} />
             </button>
-            <h4 className="font-bold text-base text-[#111b21] dark:text-[#e9edef]">Preview Barcode QRIS</h4>
-            <div className="p-3 bg-white rounded-2xl border border-[#e9edef] shadow-inner">
+            <h4 className="font-bold text-base text-ink">Preview Barcode QRIS</h4>
+            <div className="p-3 bg-surface rounded-2xl border border-divider shadow-inner">
               <img
                 src={activeQrisDisplay}
                 alt="QRIS Preview"
@@ -554,7 +554,7 @@ export const PaymentInfoPanel: React.FC = () => {
             <button
               type="button"
               onClick={() => setLightboxOpen(false)}
-              className="w-full py-2.5 rounded-xl bg-[#008069] text-white text-xs font-bold hover:bg-[#00a884] transition"
+              className="w-full py-2.5 rounded-xl bg-accent text-accent-ink text-xs font-bold hover:bg-accent transition"
             >
               Tutup Preview
             </button>

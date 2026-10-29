@@ -66,7 +66,7 @@ const RichMessage: React.FC<{ content: string; onNavigate: (url: string) => void
             key={`link-${m.index}`}
             type="button"
             onClick={() => onNavigate(url)}
-            className="inline-flex items-center gap-1 align-middle mx-0.5 px-1.5 py-0.5 rounded-md bg-[#008069] hover:bg-[#00a884] text-white text-[10px] font-semibold active:scale-[0.97] transition-colors"
+            className="inline-flex items-center gap-1 align-middle mx-0.5 px-1.5 py-0.5 rounded-md bg-accent hover:bg-accent-hover text-white text-[10px] font-semibold active:scale-[0.97] transition-colors"
           >
             <MessageCircle size={10} /> {label}
           </button>
@@ -268,8 +268,8 @@ export const AdminCopilotPanel: React.FC<{ conversationId?: string | null; custo
   return (
     <>
       {open && (
-        <div id="copilot-panel" className="fixed bottom-24 right-4 z-40 w-[min(92vw,380px)] h-[min(70vh,520px)] bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl shadow-lg flex flex-col overflow-hidden">
-          <div className="px-3.5 py-2.5 bg-[#008069] text-white flex items-center justify-between shrink-0">
+        <div id="copilot-panel" className="fixed bottom-24 right-4 z-40 w-[min(92vw,380px)] h-[min(70vh,520px)] bg-surface border border-divider rounded-2xl shadow-lg flex flex-col overflow-hidden">
+          <div className="px-3.5 py-2.5 bg-accent text-white flex items-center justify-between shrink-0">
             <span className="text-xs font-bold flex items-center gap-1.5">
               <Bot size={14} /> AI Clinic Copilot
             </span>
@@ -286,7 +286,7 @@ export const AdminCopilotPanel: React.FC<{ conversationId?: string | null; custo
           <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3">
             {messages.length === 0 && (
               <div className="space-y-2">
-                <p className="text-[11px] text-[#667781] dark:text-[#8696a0]">
+                <p className="text-[11px] text-ink-2">
                   Tanyakan data operasional klinik. Jawaban diambil langsung dari database.
                 </p>
                 <div className="flex flex-wrap gap-1.5">
@@ -295,7 +295,7 @@ export const AdminCopilotPanel: React.FC<{ conversationId?: string | null; custo
                       key={q}
                       type="button"
                       onClick={() => send(q)}
-                      className="px-2.5 py-1.5 rounded-lg bg-[#e8f5f2] dark:bg-[#00a884]/15 hover:bg-[#d9f0ea] dark:hover:bg-[#00a884]/25 text-[#00695c] dark:text-[#00a884] text-[11px] font-semibold border border-[#c2e7e0] dark:border-[#00a884]/30 active:scale-[0.98] transition"
+                      className="px-2.5 py-1.5 rounded-lg bg-accent-soft hover:bg-accent-soft/80 text-accent text-[11px] font-semibold border border-accent/30 active:scale-[0.98] transition"
                     >
                       {q}
                     </button>
@@ -309,14 +309,14 @@ export const AdminCopilotPanel: React.FC<{ conversationId?: string | null; custo
                 <div
                   className={`max-w-[85%] rounded-xl px-3 py-2 text-[12px] leading-relaxed whitespace-pre-wrap ${
                     m.role === 'user'
-                      ? 'bg-[#008069] text-white rounded-tr-none'
-                      : 'bg-[#f8fafc] dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] border border-[#e9edef] dark:border-[#2a3942] rounded-tl-none'
+                      ? 'bg-accent text-white rounded-tr-none'
+                      : 'bg-surface-2 text-ink border border-divider rounded-tl-none'
                   }`}
                 >
                   {m.role === 'assistant' ? <RichMessage content={m.content} onNavigate={openLiveChat} /> : m.content}
                   {m.role === 'assistant' && m.toolsUsed && m.toolsUsed.length > 0 && (
-                    <div className="mt-1.5 pt-1.5 border-t border-[#e9edef] dark:border-[#2a3942] flex items-center gap-1 text-[9px] text-[#667781] dark:text-[#8696a0]">
-                      <ShieldCheck size={10} className={m.grounded ? 'text-emerald-600' : 'text-amber-600'} />
+                    <div className="mt-1.5 pt-1.5 border-t border-divider flex items-center gap-1 text-[9px] text-ink-2">
+                      <ShieldCheck size={10} className={m.grounded ? 'text-success' : 'text-warning'} />
                       <span>{m.grounded ? 'Terverifikasi dari data' : 'Perlu verifikasi manual'}</span>
                     </div>
                   )}
@@ -329,33 +329,33 @@ export const AdminCopilotPanel: React.FC<{ conversationId?: string | null; custo
               const StageIcon = STAGE_ICON[status.stage];
               return (
                 <div className="flex justify-start" aria-live="polite" aria-busy="true">
-                  <div className="bg-[#f8fafc] dark:bg-[#202c33] rounded-xl px-3 py-2 text-[12px] text-[#667781] dark:text-[#8696a0] flex items-center gap-2 tabular-nums">
+                  <div className="bg-surface-2 rounded-xl px-3 py-2 text-[12px] text-ink-2 flex items-center gap-2 tabular-nums">
                     <span className="relative flex items-center justify-center">
-                      <Loader size={12} className="animate-spin text-[#008069]" />
-                      <StageIcon size={12} className="absolute text-[#008069] dark:text-[#00a884]" />
+                      <Loader size={12} className="animate-spin text-accent" />
+                      <StageIcon size={12} className="absolute text-accent" />
                     </span>
                     <span key={streamStage || status.stage} className="animate-[fadeIn_200ms_ease-out]">{streamStage || status.label}</span>
-                    <span className="ml-auto text-[10px] text-[#8696a0] dark:text-[#667781]">{formatElapsedSeconds(elapsedMs)}</span>
+                    <span className="ml-auto text-[10px] text-ink-3">{formatElapsedSeconds(elapsedMs)}</span>
                   </div>
                 </div>
               );
             })()}
           </div>
 
-          <div className="p-2.5 border-t border-[#e9edef] dark:border-[#2a3942] flex items-center gap-2 shrink-0">
+          <div className="p-2.5 border-t border-divider flex items-center gap-2 shrink-0">
             <input
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); send(input); } }}
               placeholder="Tanya data klinik..."
-              className="flex-1 bg-[#f8fafc] dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-2 text-[12px] text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069]/30"
+              className="flex-1 bg-surface-2 border border-divider rounded-xl px-3 py-2 text-[12px] text-ink focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30"
             />
             <button
               type="button"
               onClick={() => send(input)}
               disabled={loading || !input.trim()}
-              className="w-9 h-9 rounded-xl bg-[#008069] hover:bg-[#00a884] disabled:opacity-40 text-white flex items-center justify-center shrink-0 active:scale-95 transition"
+              className="w-9 h-9 rounded-xl bg-accent hover:bg-accent-hover disabled:opacity-40 text-white flex items-center justify-center shrink-0 active:scale-95 transition"
               aria-label="Kirim pertanyaan"
             >
               <Send size={14} />

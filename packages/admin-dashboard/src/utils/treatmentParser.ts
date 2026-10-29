@@ -13,7 +13,7 @@ export interface SelectedTreatmentItem {
 }
 
 /**
- * #128-FaseA (A2) — Fallback katalog DASHBOARD (offline-safe).
+ * Issue-128-FaseA (A2) — Fallback katalog DASHBOARD (offline-safe).
  *
  * Sumber: `src/data/clinicServicesFallback.json`, di-generate dari SATU sumber
  * kebenaran backend (`DEFAULT_CLINIC_SERVICES` via `npm run catalog:seed`).

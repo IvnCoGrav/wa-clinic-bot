@@ -83,19 +83,19 @@ const statusBadge = (s: string | null | undefined) => {
   switch (s) {
     case 'approved':
       return (
-        <span className="px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 text-emerald-800 dark:text-[#00a884] text-xs font-bold whitespace-nowrap" title="Event terkirim ke Meta CAPI">
+        <span className="px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 text-emerald-800 dark:text-accent text-xs font-bold whitespace-nowrap" title="Event terkirim ke Meta CAPI">
           🟢 Terkirim
         </span>
       );
     case 'ignored_outlier':
       return (
-        <span className="px-2.5 py-1 rounded-full bg-rose-100 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/40 text-rose-800 dark:text-[#f87171] text-xs font-bold whitespace-nowrap" title="Event diabaikan sebagai outlier, tidak dikirim ke Meta">
+        <span className="px-2.5 py-1 rounded-full bg-rose-100 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/40 text-rose-800 dark:text-danger text-xs font-bold whitespace-nowrap" title="Event diabaikan sebagai outlier, tidak dikirim ke Meta">
           🔴 Outlier
         </span>
       );
     default:
       return (
-        <span className="px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 text-amber-800 dark:text-[#f59e0b] text-xs font-bold whitespace-nowrap" title="Menunggu keputusan admin">
+        <span className="px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 text-amber-800 dark:text-warning text-xs font-bold whitespace-nowrap" title="Menunggu keputusan admin">
           🟡 Pending Review
         </span>
       );
@@ -114,24 +114,24 @@ export const isCtwaFuzzyAttribution = (
 const attributionBadge = (attribution: QueueItem['attribution'], utm?: QueueItem['utm']) => {
   if (attribution.ctwa_clid) {
     return (
-      <span className="px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800/40 text-purple-800 dark:text-[#aebac1] text-[10px] font-bold whitespace-nowrap" title="Iklan Direct WhatsApp (ctwa_clid terpasang)">
+      <span className="px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800/40 text-purple-800 dark:text-ink-2 text-[10px] font-bold whitespace-nowrap" title="Iklan Direct WhatsApp (ctwa_clid terpasang)">
         CTWA Direct
       </span>
     );
   }
   if (isCtwaFuzzyAttribution(attribution, utm)) {
     return (
-      <span className="px-2 py-0.5 rounded bg-teal-100 dark:bg-teal-900/30 border border-teal-200 dark:border-teal-800/40 text-teal-800 dark:text-[#2dd4bf] text-[10px] font-bold whitespace-nowrap" title="Iklan Click-to-WhatsApp (Tertangkap via Greeting Catcher)">
+      <span className="px-2 py-0.5 rounded bg-teal-100 dark:bg-teal-900/30 border border-teal-200 dark:border-teal-800/40 text-teal-800 dark:text-accent text-[10px] font-bold whitespace-nowrap" title="Iklan Click-to-WhatsApp (Tertangkap via Greeting Catcher)">
         CTWA Fuzzy
       </span>
     );
   }
   return attribution.isPaid ? (
-    <span className="px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800/40 text-blue-800 dark:text-[#38bdf8] text-[10px] font-bold whitespace-nowrap" title="Iklan Landing Page Web (fbclid/trackingCode terpasang)">
+    <span className="px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800/40 text-blue-800 dark:text-info text-[10px] font-bold whitespace-nowrap" title="Iklan Landing Page Web (fbclid/trackingCode terpasang)">
       Web LP
     </span>
   ) : (
-    <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-[#2a3942] border border-slate-200 dark:border-[#374248] text-slate-700 dark:text-[#aebac1] text-[10px] font-bold whitespace-nowrap" title="Tidak ada jejak iklan (organik / direct)">
+    <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-divider border border-slate-200 dark:border-divider text-slate-700 dark:text-ink-2 text-[10px] font-bold whitespace-nowrap" title="Tidak ada jejak iklan (organik / direct)">
       ORGANIC
     </span>
   );
@@ -156,8 +156,8 @@ const customerTypeBadge = (item: QueueItem) => {
         isRepeat
           ? isSuppressed
             ? 'px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800/40 text-amber-900 dark:text-amber-200 text-[10px] font-bold whitespace-nowrap'
-            : 'px-2 py-0.5 rounded bg-indigo-100 dark:bg-[#202c33] border border-indigo-200 dark:border-[#2a3942] text-indigo-800 dark:text-[#aebac1] text-[10px] font-bold whitespace-nowrap'
-          : 'px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 text-emerald-800 dark:text-[#00a884] text-[10px] font-bold whitespace-nowrap'
+            : 'px-2 py-0.5 rounded bg-indigo-100 dark:bg-fill-1 border border-indigo-200 dark:border-divider text-indigo-800 dark:text-ink-2 text-[10px] font-bold whitespace-nowrap'
+          : 'px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 text-emerald-800 dark:text-accent text-[10px] font-bold whitespace-nowrap'
       }
       title={
         isRepeat
@@ -707,58 +707,58 @@ export const MetaCapiQueue: React.FC = () => {
   return (
     <div className="p-4 sm:p-6 space-y-5 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-[#111b21] p-5 rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface p-5 rounded-2xl border border-divider shadow-xs">
         <div>
-          <h2 className="text-xl font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
-            <Target className="text-[#008069]" size={24} />
+          <h2 className="text-xl font-bold text-ink flex items-center gap-2">
+            <Target className="text-accent" size={24} />
             <span>Meta CAPI Queue</span>
           </h2>
-          <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
+          <p className="text-xs text-ink-3 mt-0.5">
             Review &amp; kirim event Purchase dan Lead ke Meta CAPI sebelum kedaluwarsa (7 hari).
           </p>
         </div>
         <button
           onClick={loadQueue}
-          className="flex items-center gap-1.5 px-3.5 py-2 bg-white dark:bg-transparent hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs font-semibold text-[#111b21] dark:text-[#e9edef] transition shadow-xs self-start sm:self-auto"
+          className="flex items-center gap-1.5 px-3.5 py-2 bg-white dark:bg-transparent hover:bg-fill-1 border border-divider rounded-xl text-xs font-semibold text-ink transition shadow-xs self-start sm:self-auto"
         >
-          <RefreshCw size={13} className={loading ? 'animate-spin text-[#008069]' : ''} />
+          <RefreshCw size={13} className={loading ? 'animate-spin text-accent' : ''} />
           <span>Reload</span>
         </button>
       </div>
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <div className="bg-white dark:bg-[#111b21] p-4 rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs">
-          <div className="text-[11px] text-[#667781] dark:text-[#8696a0] font-bold uppercase tracking-wider">Total Event</div>
-          <div className="text-2xl font-extrabold text-[#111b21] dark:text-[#e9edef] mt-1">{counts.total}</div>
+        <div className="bg-surface p-4 rounded-2xl border border-divider shadow-xs">
+          <div className="text-[11px] text-ink-3 font-bold uppercase tracking-wider">Total Event</div>
+          <div className="text-2xl font-extrabold text-ink mt-1">{counts.total}</div>
         </div>
         <div className="bg-amber-50/60 dark:bg-amber-950/30 p-4 rounded-2xl border border-amber-200 dark:border-amber-800/40 shadow-xs">
           <div className="text-[11px] text-amber-800 dark:text-amber-200 font-bold uppercase tracking-wider">Pending Review</div>
-          <div className="text-2xl font-extrabold text-amber-700 dark:text-[#e9edef] mt-1">{counts.pending}</div>
+          <div className="text-2xl font-extrabold text-amber-700 dark:text-ink mt-1">{counts.pending}</div>
         </div>
         <div className="bg-emerald-50/60 dark:bg-emerald-950/30 p-4 rounded-2xl border border-emerald-200 dark:border-emerald-800/40 shadow-xs">
           <div className="text-[11px] text-emerald-800 dark:text-emerald-200 font-bold uppercase tracking-wider">Terkirim</div>
-          <div className="text-2xl font-extrabold text-[#008069] dark:text-[#00a884] mt-1">{counts.approved}</div>
+          <div className="text-2xl font-extrabold text-accent mt-1">{counts.approved}</div>
         </div>
         <div className="bg-rose-50/60 dark:bg-rose-950/30 p-4 rounded-2xl border border-rose-200 dark:border-rose-800/40 shadow-xs">
           <div className="text-[11px] text-rose-800 dark:text-rose-200 font-bold uppercase tracking-wider">Outlier</div>
-          <div className="text-2xl font-extrabold text-rose-600 dark:text-[#e9edef] mt-1">{counts.outlier}</div>
+          <div className="text-2xl font-extrabold text-rose-600 dark:text-ink mt-1">{counts.outlier}</div>
         </div>
-        <div className="bg-purple-50/60 dark:bg-[#202c33] p-4 rounded-2xl border border-purple-200 dark:border-[#2a3942] shadow-xs">
-          <div className="text-[11px] text-purple-800 dark:text-[#aebac1] font-bold uppercase tracking-wider">Risiko Drop</div>
-          <div className="text-2xl font-extrabold text-purple-700 dark:text-[#e9edef] mt-1">{counts.risk}</div>
+        <div className="bg-purple-50/60 dark:bg-fill-1 p-4 rounded-2xl border border-purple-200 dark:border-divider shadow-xs">
+          <div className="text-[11px] text-purple-800 dark:text-ink-2 font-bold uppercase tracking-wider">Risiko Drop</div>
+          <div className="text-2xl font-extrabold text-purple-700 dark:text-ink mt-1">{counts.risk}</div>
         </div>
       </div>
 
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
-        <div className="flex space-x-1.5 p-1 bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl w-fit shadow-xs">
+        <div className="flex space-x-1.5 p-1 bg-surface border border-divider rounded-xl w-fit shadow-xs">
           <button
             onClick={() => setMode('pending')}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition shadow-xs ${
               mode === 'pending'
-                ? 'bg-amber-500 text-white'
-                : 'text-[#667781] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef]'
+                ? 'bg-warning text-on-solid'
+                : 'text-ink-3 dark:text-ink-2 hover:text-ink dark:hover:text-ink'
             }`}
           >
             Pending Review ({counts.pending})
@@ -767,8 +767,8 @@ export const MetaCapiQueue: React.FC = () => {
             onClick={() => setMode('all')}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition shadow-xs ${
               mode === 'all'
-                ? 'bg-[#008069] text-white'
-                : 'text-[#667781] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef]'
+                ? 'bg-accent text-accent-ink'
+                : 'text-ink-3 dark:text-ink-2 hover:text-ink dark:hover:text-ink'
             }`}
           >
             Semua Event
@@ -777,7 +777,7 @@ export const MetaCapiQueue: React.FC = () => {
 
         <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center">
           <div className="relative w-full sm:w-64">
-            <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-[#8696a0]">
+            <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-ink-3">
               <Search size={14} />
             </span>
             <input
@@ -785,13 +785,13 @@ export const MetaCapiQueue: React.FC = () => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Cari nama, phone, treatment, UTM..."
-              className="w-full bg-white dark:bg-[#2a3942] border border-[#d1d7db] dark:border-[#374248] rounded-xl pl-9 pr-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+              className="w-full bg-white dark:bg-divider border border-divider rounded-xl pl-9 pr-3 py-2 text-xs text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent shadow-xs"
             />
           </div>
           <select
             value={filterEventType}
             onChange={(e) => setFilterEventType(e.target.value as 'all' | 'purchase' | 'lead')}
-            className="bg-white dark:bg-[#2a3942] border border-[#d1d7db] dark:border-[#374248] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
+            className="bg-white dark:bg-divider border border-divider rounded-xl px-3 py-2 text-xs text-ink focus:outline-none focus:border-accent shadow-xs"
           >
             <option value="all">Semua Tipe Event</option>
             <option value="purchase">🛒 Purchase (Transaksi)</option>
@@ -800,7 +800,7 @@ export const MetaCapiQueue: React.FC = () => {
           <select
             value={filterCustomerType}
             onChange={(e) => setFilterCustomerType(e.target.value as 'all' | 'new' | 'repeat')}
-            className="bg-white dark:bg-[#2a3942] border border-[#d1d7db] dark:border-[#374248] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
+            className="bg-white dark:bg-divider border border-divider rounded-xl px-3 py-2 text-xs text-ink focus:outline-none focus:border-accent shadow-xs"
           >
             <option value="all">Semua Tipe Order</option>
             <option value="new">✨ Pasien Baru</option>
@@ -809,7 +809,7 @@ export const MetaCapiQueue: React.FC = () => {
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="bg-white dark:bg-[#2a3942] border border-[#d1d7db] dark:border-[#374248] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
+            className="bg-white dark:bg-divider border border-divider rounded-xl px-3 py-2 text-xs text-ink focus:outline-none focus:border-accent shadow-xs"
           >
             <option value="all">Semua Status</option>
             <option value="pending">Pending Review</option>
@@ -820,16 +820,16 @@ export const MetaCapiQueue: React.FC = () => {
       </div>
 
       {/* Table */}
-      <div className="bg-white dark:bg-[#111b21] rounded-2xl border border-[#e9edef] dark:border-[#2a3942] overflow-hidden shadow-xs">
+      <div className="bg-surface rounded-2xl border border-divider overflow-hidden shadow-xs">
         {loading && items.length === 0 ? (
-          <div className="flex items-center justify-center py-16 text-[#667781] text-xs">
-            <RefreshCw size={18} className="animate-spin mr-2 text-[#008069]" />
+          <div className="flex items-center justify-center py-16 text-ink-3 text-xs">
+            <RefreshCw size={18} className="animate-spin mr-2 text-accent" />
             Memuat queue...
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-[#8696a0] text-xs space-y-2">
-            <Target size={28} className="text-[#8696a0]" />
-            <span className="font-semibold text-[#111b21]">Tidak ada event yang cocok.</span>
+          <div className="flex flex-col items-center justify-center py-16 text-ink-3 text-xs space-y-2">
+            <Target size={28} className="text-ink-3" />
+            <span className="font-semibold text-ink">Tidak ada event yang cocok.</span>
             <span>
               Event CAPI yang ditahan untuk review akan muncul di sini.
             </span>
@@ -840,7 +840,7 @@ export const MetaCapiQueue: React.FC = () => {
             <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="border-b border-[#e9edef] dark:border-[#2a3942] text-[11px] uppercase font-bold text-[#667781] dark:text-[#8696a0] bg-[#f8fafc] dark:bg-[#1c272e]">
+                <tr className="border-b border-divider text-[11px] uppercase font-bold text-ink-3 bg-surface-2 dark:bg-surface-2">
                   <th className="py-3 px-4">Pelanggan</th>
                   <th className="py-3 px-4">Treatment</th>
                   <th className="py-3 px-4">Event &amp; Nilai</th>
@@ -857,28 +857,28 @@ export const MetaCapiQueue: React.FC = () => {
                   const isPurchase = (item.eventType || 'Purchase') === 'Purchase';
 
                   return (
-                    <tr key={item.id} className="border-b border-[#e9edef] dark:border-[#2a3942] hover:bg-[#f8fafc] dark:hover:bg-[#202c33] transition-colors">
+                    <tr key={item.id} className="border-b border-divider hover:bg-surface-2 dark:hover:bg-fill-1 transition-colors">
                       {/* 1. Pelanggan & Jarak */}
                       <td className="py-3.5 px-4 align-top">
                         <div className="flex items-center space-x-2">
                           <div className="min-w-0">
-                            <div className="font-bold text-[#111b21] dark:text-[#e9edef] text-xs truncate max-w-[170px]">
+                            <div className="font-bold text-ink text-xs truncate max-w-[170px]">
                               {item.customer.name}
                             </div>
-                            <div className="text-xs text-[#667781] dark:text-[#aebac1] font-mono">{item.customer.phone}</div>
+                            <div className="text-xs text-ink-3 dark:text-ink-2 font-mono">{item.customer.phone}</div>
                           </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                           {attributionBadge(item.attribution, item.utm)}
                           {customerTypeBadge(item)}
                           {item.attribution.trackingCode && (
-                            <span className="px-1.5 py-0.5 rounded bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] text-[10px] font-mono font-bold">
+                            <span className="px-1.5 py-0.5 rounded bg-accent-soft text-accent border border-divider text-[10px] font-mono font-bold">
                               {item.attribution.trackingCode}
                             </span>
                           )}
                           {item.distanceKm && (
-                            <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-semibold flex items-center gap-0.5 whitespace-nowrap">
-                              <MapPin size={9} className="text-blue-500" />
+                            <span className="px-1.5 py-0.5 rounded bg-info-soft text-info border border-info-line text-[10px] font-semibold flex items-center gap-0.5 whitespace-nowrap">
+                              <MapPin size={9} className="text-info" />
                               <span>{item.distanceKm}</span>
                             </span>
                           )}
@@ -889,8 +889,8 @@ export const MetaCapiQueue: React.FC = () => {
                       <td className="py-3.5 px-4 align-top">
                         <div className="space-y-1">
                           {cleanTreatments.map((t, idx) => (
-                            <div key={idx} className="text-xs font-semibold text-[#111b21] dark:text-[#e9edef] flex items-start space-x-1.5">
-                              <span className="text-[#008069] font-bold shrink-0">{idx + 1}.</span>
+                            <div key={idx} className="text-xs font-semibold text-ink flex items-start space-x-1.5">
+                              <span className="text-accent font-bold shrink-0">{idx + 1}.</span>
                               <span className="leading-snug">{t}</span>
                             </div>
                           ))}
@@ -902,15 +902,15 @@ export const MetaCapiQueue: React.FC = () => {
                         <div
                           className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-extrabold border ${
                             isPurchase
-                              ? 'bg-blue-50 dark:bg-[#202c33] border-blue-200 dark:border-[#2a3942] text-blue-800 dark:text-[#38bdf8]'
-                              : 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/40 text-emerald-800 dark:text-[#00a884]'
+                              ? 'bg-blue-50 dark:bg-fill-1 border-blue-200 dark:border-divider text-blue-800 dark:text-info'
+                              : 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/40 text-emerald-800 dark:text-accent'
                           }`}
                         >
-                          <Activity size={11} className={isPurchase ? 'text-blue-600' : 'text-emerald-600'} />
+                          <Activity size={11} className={isPurchase ? 'text-info' : 'text-success'} />
                           <span>{item.eventType || 'Purchase'}</span>
                         </div>
                         {item.value && item.value > 0 ? (
-                          <div className="text-xs font-extrabold text-[#008069] mt-1.5 font-mono">
+                          <div className="text-xs font-extrabold text-accent mt-1.5 font-mono">
                             {formatRupiah(item.value)}
                           </div>
                         ) : null}
@@ -918,9 +918,9 @@ export const MetaCapiQueue: React.FC = () => {
 
                       {/* 4. UTM */}
                       <td className="py-3.5 px-4 align-top">
-                        <div className="text-xs text-[#111b21] dark:text-[#e9edef] max-w-[150px] truncate">{utmText(item.utm)}</div>
+                        <div className="text-xs text-ink max-w-[150px] truncate">{utmText(item.utm)}</div>
                         {item.attribution.isPaid && !utmText(item.utm).includes('—') && (
-                          <div className="text-[10px] text-[#8696a0] mt-0.5 truncate max-w-[150px]">
+                          <div className="text-[10px] text-ink-3 mt-0.5 truncate max-w-[150px]">
                             {item.attribution.landingUrl || '—'}
                           </div>
                         )}
@@ -928,8 +928,8 @@ export const MetaCapiQueue: React.FC = () => {
 
                       {/* 5. Waktu Transaksi */}
                       <td className="py-3.5 px-4 align-top">
-                        <div className="text-xs text-[#111b21] dark:text-[#e9edef] font-medium">{formatDateTime(item.purchase_occurred_at)}</div>
-                        <div className="text-[10px] text-[#8696a0] mt-0.5">
+                        <div className="text-xs text-ink font-medium">{formatDateTime(item.purchase_occurred_at)}</div>
+                        <div className="text-[10px] text-ink-3 mt-0.5">
                           {item.ageHours < 1 ? 'baru saja' : item.ageHours < 24 ? `${item.ageHours} jam lalu` : `${item.daysOld} hari lalu`}
                         </div>
                       </td>
@@ -939,7 +939,7 @@ export const MetaCapiQueue: React.FC = () => {
                         {statusBadge(item.purchase_review_status)}
                         {item.metaDropRisk && item.purchase_review_status === 'pending' && (
                           <div className="mt-1">
-                            <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-purple-100 text-purple-800 text-[10px] font-bold">
+                            <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-violet-soft text-violet text-[10px] font-bold">
                               <AlertTriangle size={10} />
                               <span>Drop Risk (&gt;7d)</span>
                             </span>
@@ -953,12 +953,12 @@ export const MetaCapiQueue: React.FC = () => {
                           onClick={() => openJsonModal(item)}
                           className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition shadow-xs cursor-pointer ${
                             customPayloads[item.id]
-                              ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-[#f59e0b] border border-amber-300 dark:border-amber-800/40 hover:bg-amber-100 dark:hover:bg-amber-950/50'
-                              : 'bg-[#f0f2f5] dark:bg-[#2a3942] hover:bg-[#e9edef] dark:hover:bg-[#374248] text-[#111b21] dark:text-[#e9edef]'
+                              ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-warning border border-amber-300 dark:border-amber-800/40 hover:bg-amber-100 dark:hover:bg-amber-950/50'
+                              : 'bg-fill-1 dark:bg-divider hover:bg-fill-2 dark:hover:bg-fill-2 text-ink'
                           }`}
                           title={customPayloads[item.id] ? 'Lihat/Edit Payload JSON (Telah Disesuaikan)' : 'Lihat Payload JSON Meta CAPI'}
                         >
-                          <Code2 size={13} className={customPayloads[item.id] ? 'text-amber-600' : 'text-[#008069]'} />
+                          <Code2 size={13} className={customPayloads[item.id] ? 'text-warning' : 'text-accent'} />
                           <span>JSON{customPayloads[item.id] ? ' *' : ''}</span>
                         </button>
                       </td>
@@ -969,7 +969,7 @@ export const MetaCapiQueue: React.FC = () => {
                           <div className="flex flex-col gap-1.5 items-end">
                             <button
                               onClick={() => handleApprove(item)}
-                              className="flex items-center justify-center space-x-1 px-3 py-1.5 rounded-lg bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition shadow-xs whitespace-nowrap cursor-pointer"
+                              className="flex items-center justify-center space-x-1 px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-accent-ink text-xs font-bold transition shadow-xs whitespace-nowrap cursor-pointer"
                               title="Kirim event ke Meta CAPI dengan event_time saat transaksi/interaksi"
                             >
                               <Check size={13} />
@@ -977,7 +977,7 @@ export const MetaCapiQueue: React.FC = () => {
                             </button>
                             <button
                               onClick={() => handleReject(item)}
-                              className="flex items-center justify-center space-x-1 px-3 py-1 rounded-lg bg-white dark:bg-transparent hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-[#d1d7db] dark:border-[#374248] hover:border-rose-200 dark:hover:border-rose-800/40 text-[#54656f] dark:text-[#aebac1] hover:text-rose-600 dark:hover:text-rose-300 text-xs font-semibold transition shadow-xs whitespace-nowrap cursor-pointer"
+                              className="flex items-center justify-center space-x-1 px-3 py-1 rounded-lg bg-white dark:bg-transparent hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-divider hover:border-rose-200 dark:hover:border-rose-800/40 text-ink-2 hover:text-rose-600 dark:hover:text-rose-300 text-xs font-semibold transition shadow-xs whitespace-nowrap cursor-pointer"
                               title="Tandai sebagai outlier — event TIDAK dikirim ke Meta"
                             >
                               <X size={12} />
@@ -986,13 +986,13 @@ export const MetaCapiQueue: React.FC = () => {
                           </div>
                         ) : item.purchase_review_status === 'approved' ? (
                           <div className="flex flex-col gap-1.5 items-end">
-                            <span className="text-xs text-[#8696a0] inline-flex items-center space-x-1">
-                              <Zap size={12} className="text-[#008069]" />
+                            <span className="text-xs text-ink-3 inline-flex items-center space-x-1">
+                              <Zap size={12} className="text-accent" />
                               <span>Selesai</span>
                             </span>
                             <button
                               onClick={() => handleApprove(item, undefined)}
-                              className="flex items-center justify-center space-x-1 px-2 py-1 rounded-lg bg-white dark:bg-transparent hover:bg-blue-50 dark:hover:bg-blue-950/40 border border-[#d1d7db] dark:border-[#374248] hover:border-blue-200 dark:hover:border-blue-800/40 text-[#54656f] dark:text-[#aebac1] hover:text-blue-600 dark:hover:text-blue-300 text-[10px] font-medium transition shadow-xs whitespace-nowrap cursor-pointer"
+                              className="flex items-center justify-center space-x-1 px-2 py-1 rounded-lg bg-white dark:bg-transparent hover:bg-blue-50 dark:hover:bg-blue-950/40 border border-divider hover:border-blue-200 dark:hover:border-blue-800/40 text-ink-2 hover:text-blue-600 dark:hover:text-blue-300 text-[10px] font-medium transition shadow-xs whitespace-nowrap cursor-pointer"
                               title="Kirim ulang event ke Meta CAPI (berguna jika event sebelumnya sempat gagal)"
                             >
                               <RefreshCw size={10} />
@@ -1001,13 +1001,13 @@ export const MetaCapiQueue: React.FC = () => {
                           </div>
                         ) : item.purchase_review_status === 'ignored_outlier' ? (
                           <div className="flex flex-col gap-1.5 items-end">
-                            <span className="text-xs text-[#8696a0] inline-flex items-center space-x-1">
-                              <Zap size={12} className="text-rose-500" />
+                            <span className="text-xs text-ink-3 inline-flex items-center space-x-1">
+                              <Zap size={12} className="text-danger" />
                               <span>Diabaikan</span>
                             </span>
                             <button
                               onClick={() => handleUnreject(item)}
-                              className="flex items-center justify-center space-x-1 px-2 py-1 rounded-lg bg-white dark:bg-transparent hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border border-[#d1d7db] dark:border-[#374248] hover:border-emerald-200 dark:hover:border-emerald-800/40 text-[#54656f] dark:text-[#aebac1] hover:text-[#008069] dark:hover:text-[#00a884] text-[10px] font-medium transition shadow-xs whitespace-nowrap cursor-pointer"
+                              className="flex items-center justify-center space-x-1 px-2 py-1 rounded-lg bg-white dark:bg-transparent hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border border-divider hover:border-emerald-200 dark:hover:border-emerald-800/40 text-ink-2 hover:text-accent text-[10px] font-medium transition shadow-xs whitespace-nowrap cursor-pointer"
                               title="Kembalikan event ke antrean Review (Pending)"
                             >
                               <RotateCcw size={10} />
@@ -1015,8 +1015,8 @@ export const MetaCapiQueue: React.FC = () => {
                             </button>
                           </div>
                         ) : (
-                          <span className="text-xs text-[#8696a0] inline-flex items-center space-x-1">
-                            <Zap size={12} className="text-rose-500" />
+                          <span className="text-xs text-ink-3 inline-flex items-center space-x-1">
+                            <Zap size={12} className="text-danger" />
                             <span>Ditolak</span>
                           </span>
                         )}
@@ -1029,24 +1029,24 @@ export const MetaCapiQueue: React.FC = () => {
           </div>
 
           {/* Mobile Card Stack View */}
-          <div className="md:hidden divide-y divide-[#e9edef] dark:divide-[#2a3942]">
+          <div className="md:hidden divide-y divide-divider">
             {filtered.map((item) => {
               const cleanTreatments = cleanTreatmentList(item.treatment_detail);
               const isPurchase = (item.eventType || 'Purchase') === 'Purchase';
 
               return (
-                <div key={item.id} className="p-4 space-y-3 bg-white dark:bg-[#111b21] hover:bg-[#f8fafc] dark:hover:bg-[#182229] transition-colors">
+                <div key={item.id} className="p-4 space-y-3 bg-surface hover:bg-surface-2 dark:hover:bg-fill-1 transition-colors">
                   {/* Header: Customer Name, Phone & Status Badge */}
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="font-bold text-[#111b21] dark:text-[#e9edef] text-sm truncate">
+                      <div className="font-bold text-ink text-sm truncate">
                         {item.customer.name}
                       </div>
                       <a
                         href={`https://wa.me/${item.customer.phone?.replace(/[^0-9]/g, '')}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-xs text-[#008069] dark:text-[#00a884] font-mono hover:underline block"
+                        className="text-xs text-accent font-mono hover:underline block"
                       >
                         {item.customer.phone}
                       </a>
@@ -1054,7 +1054,7 @@ export const MetaCapiQueue: React.FC = () => {
                     <div className="shrink-0 flex flex-col items-end gap-1">
                       {statusBadge(item.purchase_review_status)}
                       {item.metaDropRisk && item.purchase_review_status === 'pending' && (
-                        <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950/50 text-purple-800 dark:text-[#aebac1] text-[10px] font-bold">
+                        <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950/50 text-purple-800 dark:text-ink-2 text-[10px] font-bold">
                           <AlertTriangle size={10} />
                           <span>Drop Risk (&gt;7d)</span>
                         </span>
@@ -1067,26 +1067,26 @@ export const MetaCapiQueue: React.FC = () => {
                     {attributionBadge(item.attribution, item.utm)}
                     {customerTypeBadge(item)}
                     {item.attribution.trackingCode && (
-                      <span className="px-1.5 py-0.5 rounded bg-[#e8f5f2] dark:bg-[#00a884]/20 text-[#008069] dark:text-[#00a884] border border-[#c2e7e0] dark:border-[#00a884]/30 font-mono font-bold">
+                      <span className="px-1.5 py-0.5 rounded bg-accent-soft text-accent border border-divider dark:border-accent/30 font-mono font-bold">
                         {item.attribution.trackingCode}
                       </span>
                     )}
                     {item.distanceKm && (
-                      <span className="px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-[#38bdf8] border border-blue-200 dark:border-blue-800/40 font-semibold flex items-center gap-0.5">
-                        <MapPin size={10} className="text-blue-500" />
+                      <span className="px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-info border border-blue-200 dark:border-blue-800/40 font-semibold flex items-center gap-0.5">
+                        <MapPin size={10} className="text-info" />
                         <span>{item.distanceKm}</span>
                       </span>
                     )}
                   </div>
 
                   {/* Treatments List */}
-                  <div className="bg-[#f8fafc] dark:bg-[#182229] p-2.5 rounded-xl border border-[#e9edef] dark:border-[#2a3942] space-y-1">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-[#667781] dark:text-[#8696a0]">
+                  <div className="bg-surface-2 p-2.5 rounded-xl border border-divider space-y-1">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-ink-3">
                       Layanan / Treatment
                     </div>
                     {cleanTreatments.map((t, idx) => (
-                      <div key={idx} className="text-xs font-semibold text-[#111b21] dark:text-[#e9edef] flex items-start space-x-1.5">
-                        <span className="text-[#008069] font-bold shrink-0">{idx + 1}.</span>
+                      <div key={idx} className="text-xs font-semibold text-ink flex items-start space-x-1.5">
+                        <span className="text-accent font-bold shrink-0">{idx + 1}.</span>
                         <span className="leading-snug">{t}</span>
                       </div>
                     ))}
@@ -1098,36 +1098,36 @@ export const MetaCapiQueue: React.FC = () => {
                       <span
                         className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg text-xs font-bold border ${
                           isPurchase
-                            ? 'bg-blue-50 dark:bg-[#202c33] border-blue-200 dark:border-[#2a3942] text-blue-800 dark:text-[#38bdf8]'
-                            : 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/40 text-emerald-800 dark:text-[#00a884]'
+                            ? 'bg-blue-50 dark:bg-fill-1 border-blue-200 dark:border-divider text-blue-800 dark:text-info'
+                            : 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/40 text-emerald-800 dark:text-accent'
                         }`}
                       >
                         <Activity size={11} />
                         <span>{item.eventType || 'Purchase'}</span>
                       </span>
                       {item.value && item.value > 0 ? (
-                        <span className="font-extrabold text-[#008069] dark:text-[#00a884] font-mono">
+                        <span className="font-extrabold text-accent font-mono">
                           {formatRupiah(item.value)}
                         </span>
                       ) : null}
                     </div>
 
-                    <div className="text-right text-[11px] text-[#667781] dark:text-[#8696a0]">
+                    <div className="text-right text-[11px] text-ink-3">
                       {formatDateTime(item.purchase_occurred_at)}
                     </div>
                   </div>
 
                   {/* Actions & JSON Button */}
-                  <div className="flex items-center justify-between pt-2 border-t border-[#f0f2f5] dark:border-[#202c33]">
+                  <div className="flex items-center justify-between pt-2 border-t border-divider dark:border-divider">
                     <button
                       onClick={() => openJsonModal(item)}
                       className={`inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold transition shadow-xs cursor-pointer ${
                         customPayloads[item.id]
-                          ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-[#f59e0b] border border-amber-300 dark:border-amber-800/40'
-                          : 'bg-[#f0f2f5] dark:bg-[#2a3942] hover:bg-[#e9edef] dark:hover:bg-[#374248] text-[#111b21] dark:text-[#e9edef]'
+                          ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-warning border border-amber-300 dark:border-amber-800/40'
+                          : 'bg-fill-1 dark:bg-divider hover:bg-fill-2 dark:hover:bg-fill-2 text-ink'
                       }`}
                     >
-                      <Code2 size={13} className={customPayloads[item.id] ? 'text-amber-600' : 'text-[#008069]'} />
+                      <Code2 size={13} className={customPayloads[item.id] ? 'text-warning' : 'text-accent'} />
                       <span>JSON{customPayloads[item.id] ? ' *' : ''}</span>
                     </button>
 
@@ -1136,13 +1136,13 @@ export const MetaCapiQueue: React.FC = () => {
                         <>
                           <button
                             onClick={() => handleReject(item)}
-                            className="px-3 py-1.5 rounded-lg border border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:text-rose-600 dark:hover:text-rose-300 text-xs font-semibold transition cursor-pointer"
+                            className="px-3 py-1.5 rounded-lg border border-divider text-ink-2 hover:text-rose-600 dark:hover:text-rose-300 text-xs font-semibold transition cursor-pointer"
                           >
                             Abaikan
                           </button>
                           <button
                             onClick={() => handleApprove(item)}
-                            className="px-3.5 py-1.5 rounded-lg bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition shadow-xs flex items-center space-x-1 cursor-pointer"
+                            className="px-3.5 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-accent-ink text-xs font-bold transition shadow-xs flex items-center space-x-1 cursor-pointer"
                           >
                             <Check size={13} />
                             <span>Approve</span>
@@ -1151,7 +1151,7 @@ export const MetaCapiQueue: React.FC = () => {
                       ) : item.purchase_review_status === 'approved' ? (
                         <button
                           onClick={() => handleApprove(item, undefined)}
-                          className="px-2.5 py-1.5 rounded-lg border border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:text-blue-600 dark:hover:text-blue-300 text-xs font-medium transition flex items-center space-x-1 cursor-pointer"
+                          className="px-2.5 py-1.5 rounded-lg border border-divider text-ink-2 hover:text-blue-600 dark:hover:text-blue-300 text-xs font-medium transition flex items-center space-x-1 cursor-pointer"
                         >
                           <RefreshCw size={11} />
                           <span>Kirim Ulang</span>
@@ -1159,7 +1159,7 @@ export const MetaCapiQueue: React.FC = () => {
                       ) : item.purchase_review_status === 'ignored_outlier' ? (
                         <button
                           onClick={() => handleUnreject(item)}
-                          className="px-2.5 py-1.5 rounded-lg border border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:text-[#008069] dark:hover:text-[#00a884] text-xs font-medium transition flex items-center space-x-1 cursor-pointer"
+                          className="px-2.5 py-1.5 rounded-lg border border-divider text-ink-2 hover:text-accent text-xs font-medium transition flex items-center space-x-1 cursor-pointer"
                           title="Kembalikan event ke antrean Review (Pending)"
                         >
                           <RotateCcw size={11} />
@@ -1184,34 +1184,34 @@ export const MetaCapiQueue: React.FC = () => {
 
         return (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-            <div className="bg-white dark:bg-[#111b21] w-full max-w-3xl rounded-t-3xl sm:rounded-2xl shadow-2xl border border-[#e9edef] dark:border-[#2a3942] overflow-hidden flex flex-col max-h-[90dvh] sm:max-h-[90vh] animate-slideUp sm:animate-modalScaleUp">
+            <div className="bg-surface w-full max-w-3xl rounded-t-3xl sm:rounded-2xl shadow-2xl border border-divider overflow-hidden flex flex-col max-h-[90dvh] sm:max-h-[90vh] animate-slideUp sm:animate-modalScaleUp">
               {/* Mobile Drag Handle */}
-              <div className="pt-2 pb-1 bg-[#f8fafc] dark:bg-[#1c272e] sm:hidden flex justify-center shrink-0">
-                <div className="w-10 h-1 bg-[#d1d7db] dark:bg-[#374248] rounded-full" />
+              <div className="pt-2 pb-1 bg-surface-2 dark:bg-surface-2 sm:hidden flex justify-center shrink-0">
+                <div className="w-10 h-1 bg-divider dark:bg-divider rounded-full" />
               </div>
 
               {/* Modal Header */}
-              <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#1c272e]">
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-divider bg-surface-2 dark:bg-surface-2">
                 <div className="flex items-center space-x-2.5">
-                  <div className={`p-2 rounded-xl border ${isEditingJson ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-[#e8f5f2] text-[#008069] border-[#c2e7e0]'}`}>
+                  <div className={`p-2 rounded-xl border ${isEditingJson ? 'bg-warning-soft text-warning border-warning-line' : 'bg-accent-soft text-accent border-divider'}`}>
                     {isEditingJson ? <Pencil size={18} /> : <Code2 size={18} />}
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef]">
+                      <h3 className="text-sm font-bold text-ink">
                         {isEditingJson ? 'Edit Meta CAPI Payload' : 'Meta Graph API CAPI Payload'}
                       </h3>
                       {isCustom && !isEditingJson && (
-                        <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200 text-[10px] font-bold flex items-center gap-1">
+                        <span className="px-2 py-0.5 rounded-md bg-warning-soft text-warning border border-warning-line text-[10px] font-bold flex items-center gap-1">
                           <Pencil size={10} /> Custom Payload
                         </span>
                       )}
                     </div>
-                    <p className="text-[11px] text-[#667781] dark:text-[#aebac1]">
-                      Event: <span className="font-bold text-[#008069] dark:text-[#00a884]">{selectedJsonItem.eventType || 'Purchase'}</span> • Pasien: <span className="font-bold text-[#111b21] dark:text-[#e9edef]">{selectedJsonItem.customer.name}</span>
+                    <p className="text-[11px] text-ink-3 dark:text-ink-2">
+                      Event: <span className="font-bold text-accent">{selectedJsonItem.eventType || 'Purchase'}</span> • Pasien: <span className="font-bold text-ink">{selectedJsonItem.customer.name}</span>
                     </p>
                     {Boolean(selectedJsonItem.attribution.ctwa_clid) && !wabaConfigured && (
-                      <p className="mt-1 text-[10px] font-semibold text-amber-700 dark:text-[#f59e0b] flex items-center gap-1">
+                      <p className="mt-1 text-[10px] font-semibold text-amber-700 dark:text-warning flex items-center gap-1">
                         <AlertTriangle size={11} />
                         WABA Business Account ID belum dikonfigurasi — event dikirim sebagai action_source 'chat' (envelope business_messaging tidak lengkap).
                       </p>
@@ -1224,7 +1224,7 @@ export const MetaCapiQueue: React.FC = () => {
                   {!isEditingJson ? (
                     <button
                       onClick={handleStartEditJson}
-                      className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-950/50 text-amber-800 dark:text-[#f59e0b] border border-amber-300 dark:border-amber-800/40 text-xs font-bold transition shadow-xs cursor-pointer"
+                      className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-950/50 text-amber-800 dark:text-warning border border-amber-300 dark:border-amber-800/40 text-xs font-bold transition shadow-xs cursor-pointer"
                       title="Edit payload JSON secara manual"
                     >
                       <Pencil size={13} />
@@ -1234,18 +1234,18 @@ export const MetaCapiQueue: React.FC = () => {
                     <>
                       <button
                         onClick={handleFormatJson}
-                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-white dark:bg-transparent hover:bg-slate-100 dark:hover:bg-[#2a3942] border border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] text-xs font-semibold transition cursor-pointer"
+                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-white dark:bg-transparent hover:bg-slate-100 dark:hover:bg-fill-2 border border-divider text-ink-2 text-xs font-semibold transition cursor-pointer"
                         title="Format & rapikan JSON"
                       >
-                        <Code2 size={12} className="text-blue-500" />
+                        <Code2 size={12} className="text-info" />
                         <span>Format</span>
                       </button>
                       <button
                         onClick={handleResetJson}
-                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-white dark:bg-transparent hover:bg-slate-100 dark:hover:bg-[#2a3942] border border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] text-xs font-semibold transition cursor-pointer"
+                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-white dark:bg-transparent hover:bg-slate-100 dark:hover:bg-fill-2 border border-divider text-ink-2 text-xs font-semibold transition cursor-pointer"
                         title="Reset ke nilai default otomatis"
                       >
-                        <RotateCcw size={12} className="text-rose-500" />
+                        <RotateCcw size={12} className="text-danger" />
                         <span>Reset</span>
                       </button>
                       <button
@@ -1254,14 +1254,14 @@ export const MetaCapiQueue: React.FC = () => {
                           setJsonParseError(null);
                           setJsonDraft(JSON.stringify(currentPayload, null, 2));
                         }}
-                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-white dark:bg-transparent hover:bg-slate-100 dark:hover:bg-[#2a3942] border border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] text-xs font-semibold transition cursor-pointer"
+                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-white dark:bg-transparent hover:bg-slate-100 dark:hover:bg-fill-2 border border-divider text-ink-2 text-xs font-semibold transition cursor-pointer"
                       >
                         <span>Batal</span>
                       </button>
                       <button
                         onClick={handleSaveEditedJson}
                         disabled={!!jsonParseError}
-                        className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-[#008069] hover:bg-[#00a884] disabled:opacity-50 text-white text-xs font-bold transition shadow-xs cursor-pointer"
+                        className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-accent hover:bg-accent disabled:opacity-50 text-white text-xs font-bold transition shadow-xs cursor-pointer"
                       >
                         <Save size={13} />
                         <span>Simpan</span>
@@ -1274,7 +1274,7 @@ export const MetaCapiQueue: React.FC = () => {
                       setIsEditingJson(false);
                     }}
                     aria-label="Tutup modal"
-                    className="text-[#8696a0] hover:text-[#111b21] p-1.5 rounded-xl hover:bg-[#e9edef] transition cursor-pointer ml-1"
+                    className="text-ink-3 hover:text-ink p-1.5 rounded-xl hover:bg-fill-2 transition cursor-pointer ml-1"
                   >
                     <X size={18} />
                   </button>
@@ -1282,30 +1282,30 @@ export const MetaCapiQueue: React.FC = () => {
               </div>
 
               {/* Modal Body: JSON Viewer / Editor */}
-              <div className="p-4 flex-1 overflow-y-auto bg-[#0f172a] text-slate-100 font-mono text-xs flex flex-col min-h-[350px]">
+              <div className="p-4 flex-1 overflow-y-auto bg-app text-ink-3 font-mono text-xs flex flex-col min-h-[350px]">
                 {isEditingJson ? (
                   <div className="flex flex-col flex-1">
                     <textarea
                       value={jsonDraft}
                       onChange={handleJsonChange}
                       spellCheck={false}
-                      className="w-full flex-1 min-h-[300px] p-3.5 bg-[#1e293b] text-emerald-300 font-mono text-xs rounded-xl border border-slate-700 focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] resize-y leading-relaxed"
+                      className="w-full flex-1 min-h-[300px] p-3.5 bg-surface-2 text-success font-mono text-xs rounded-xl border border-strong focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent resize-y leading-relaxed"
                       placeholder="Masukkan payload JSON Meta CAPI..."
                     />
                     {/* Live Validation Bar */}
                     <div className="mt-2.5 flex items-center justify-between text-[11px]">
                       {jsonParseError ? (
-                        <div className="flex items-center space-x-1.5 text-rose-400 font-medium">
+                        <div className="flex items-center space-x-1.5 text-danger font-medium">
                           <AlertTriangle size={13} className="shrink-0" />
                           <span className="truncate">Syntax Error: {jsonParseError}</span>
                         </div>
                       ) : (
-                        <div className="flex items-center space-x-1.5 text-emerald-400 font-medium">
+                        <div className="flex items-center space-x-1.5 text-success font-medium">
                           <CheckCircle2 size={13} className="shrink-0" />
                           <span>JSON Valid ({jsonDraft.split('\n').length} baris, {new Blob([jsonDraft]).size} bytes)</span>
                         </div>
                       )}
-                      <span className="text-slate-400 text-[10px]">
+                      <span className="text-ink-3 text-[10px]">
                         Gunakan tombol Format untuk merapikan indentasi.
                       </span>
                     </div>
@@ -1318,8 +1318,8 @@ export const MetaCapiQueue: React.FC = () => {
               </div>
 
               {/* Modal Footer */}
-              <div className="flex items-center justify-between px-5 py-3.5 border-t border-[#e9edef] dark:border-[#2a3942] bg-white dark:bg-[#111b21]">
-                <span className="text-[11px] text-[#667781] dark:text-[#aebac1] max-w-sm">
+              <div className="flex items-center justify-between px-5 py-3.5 border-t border-divider bg-surface">
+                <span className="text-[11px] text-ink-3 dark:text-ink-2 max-w-sm">
                   {isEditingJson
                     ? 'Simpan perubahan atau langsung klik Approve untuk mengirim payload custom ini ke Meta.'
                     : isCustom
@@ -1329,16 +1329,16 @@ export const MetaCapiQueue: React.FC = () => {
                 <div className="flex items-center space-x-2">
                   <button
                     onClick={() => handleCopyJson(isEditingJson ? jsonDraft : currentPayload)}
-                    className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-[#f0f2f5] dark:bg-[#2a3942] hover:bg-[#e9edef] dark:hover:bg-[#374248] text-[#111b21] dark:text-[#e9edef] text-xs font-bold transition shadow-xs cursor-pointer"
+                    className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-fill-1 dark:bg-divider hover:bg-fill-2 dark:hover:bg-fill-2 text-ink text-xs font-bold transition shadow-xs cursor-pointer"
                   >
-                    {copiedJson ? <Check size={14} className="text-[#008069]" /> : <Copy size={14} />}
+                    {copiedJson ? <Check size={14} className="text-accent" /> : <Copy size={14} />}
                     <span>{copiedJson ? 'Tersalin!' : 'Copy JSON'}</span>
                   </button>
 
                   {isPending && (
                     <button
                       onClick={handleApproveFromModal}
-                      className="flex items-center space-x-1.5 px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold rounded-xl transition shadow-xs cursor-pointer"
+                      className="flex items-center space-x-1.5 px-4 py-2 bg-accent hover:bg-accent-hover text-accent-ink text-xs font-bold rounded-xl transition shadow-xs cursor-pointer"
                       title="Setujui dan kirim payload ini ke Meta CAPI"
                     >
                       <Send size={13} />
@@ -1351,7 +1351,7 @@ export const MetaCapiQueue: React.FC = () => {
                       setSelectedJsonItem(null);
                       setIsEditingJson(false);
                     }}
-                    className="px-4 py-2 bg-slate-100 dark:bg-[#2a3942] hover:bg-slate-200 dark:hover:bg-[#374248] text-[#111b21] dark:text-[#e9edef] text-xs font-semibold rounded-xl transition shadow-xs cursor-pointer"
+                    className="px-4 py-2 bg-slate-100 dark:bg-divider hover:bg-slate-200 dark:hover:bg-fill-2 text-ink text-xs font-semibold rounded-xl transition shadow-xs cursor-pointer"
                   >
                     Tutup
                   </button>
@@ -1362,7 +1362,7 @@ export const MetaCapiQueue: React.FC = () => {
         );
       })()}
 
-      <p className="text-xs text-[#8696a0]">
+      <p className="text-xs text-ink-3">
         Catatan: event Purchase &amp; Lead dikirim ke Meta dalam jendela ±7 hari sejak transaksi/interaksi. Event yang
         berusia lebih dari 7 hari akan dijepit event_time-nya ke waktu sekarang agar konversi tetap tercatat di Meta Pixel (ROAS).
         Tanggal transaksi asli tersimpan di custom_data.original_event_time. Keputusan tetap tercatat di database.

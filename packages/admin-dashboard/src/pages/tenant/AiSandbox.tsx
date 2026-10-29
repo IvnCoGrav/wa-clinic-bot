@@ -66,24 +66,24 @@ function parseContextSummary(summary?: string | null): { done: string[]; banned:
 }
 
 const ONGKIR_STATUS_META: Record<string, { label: string; cls: string }> = {
-  QUOTED: { label: 'QUOTED · Sudah Disampaikan - Dilarang Hitung Ulang', cls: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/30 dark:text-[#f59e0b] dark:border-amber-800/40' },
-  CONFIRMED: { label: 'CONFIRMED · Disetujui Customer', cls: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/30 dark:text-[#00a884] dark:border-emerald-800/40' },
-  UNQUOTED: { label: 'UNQUOTED · Belum dihitung', cls: 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-[#2a3942] dark:text-[#aebac1] dark:border-[#374248]' },
+  QUOTED: { label: 'QUOTED · Sudah Disampaikan - Dilarang Hitung Ulang', cls: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/30 dark:text-warning dark:border-amber-800/40' },
+  CONFIRMED: { label: 'CONFIRMED · Disetujui Customer', cls: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/30 dark:text-accent dark:border-emerald-800/40' },
+  UNQUOTED: { label: 'UNQUOTED · Belum dihitung', cls: 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-divider dark:text-ink-2 dark:border-divider' },
 };
 
 const CONV_STATE_CLS: Record<string, string> = {
-  INITIAL: 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-[#2a3942] dark:text-[#aebac1] dark:border-[#374248]',
-  LOCATION_CONFIRMED: 'bg-sky-100 text-sky-800 border-sky-300 dark:bg-sky-950/30 dark:text-[#38bdf8] dark:border-sky-800/40',
-  AWAITING_INTEREST: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/30 dark:text-[#f59e0b] dark:border-amber-800/40',
-  RESERVATION_SENT: 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-[#202c33] dark:text-[#aebac1] dark:border-[#2a3942]',
-  HUMAN_HANDLING: 'bg-rose-100 text-rose-700 border-rose-300 dark:bg-rose-950/30 dark:text-[#f87171] dark:border-rose-800/40',
-  COMPLETED: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/30 dark:text-[#00a884] dark:border-emerald-800/40',
+  INITIAL: 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-divider dark:text-ink-2 dark:border-divider',
+  LOCATION_CONFIRMED: 'bg-sky-100 text-sky-800 border-sky-300 dark:bg-sky-950/30 dark:text-info dark:border-sky-800/40',
+  AWAITING_INTEREST: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/30 dark:text-warning dark:border-amber-800/40',
+  RESERVATION_SENT: 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-fill-1 dark:text-ink-2 dark:border-divider',
+  HUMAN_HANDLING: 'bg-rose-100 text-rose-700 border-rose-300 dark:bg-rose-950/30 dark:text-danger dark:border-rose-800/40',
+  COMPLETED: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/30 dark:text-accent dark:border-emerald-800/40',
 };
 
 const CART_TYPE_META: Record<string, { label: string; cls: string }> = {
-  PRIMARY: { label: 'Utama', cls: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/30 dark:text-[#00a884] dark:border-emerald-800/40' },
-  ADDON: { label: 'Add-on', cls: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/30 dark:text-[#f59e0b] dark:border-amber-800/40' },
-  SERVICE: { label: 'Layanan', cls: 'bg-sky-100 text-sky-800 border-sky-300 dark:bg-sky-950/30 dark:text-[#38bdf8] dark:border-sky-800/40' },
+  PRIMARY: { label: 'Utama', cls: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/30 dark:text-accent dark:border-emerald-800/40' },
+  ADDON: { label: 'Add-on', cls: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/30 dark:text-warning dark:border-amber-800/40' },
+  SERVICE: { label: 'Layanan', cls: 'bg-sky-100 text-sky-800 border-sky-300 dark:bg-sky-950/30 dark:text-info dark:border-sky-800/40' },
 };
 
 export const AiSandbox: React.FC = () => {
@@ -460,7 +460,7 @@ export const AiSandbox: React.FC = () => {
     const targetEnd = Date.now() + BURST_WINDOW_MS;
     setBurstTimeLeft(BURST_WINDOW_MS);
 
-    // #160: interval 100ms memicu 10x re-render/detik. Cukup 250ms (4x/detik) —
+    // Issue 160: interval 100ms memicu 10x re-render/detik. Cukup 250ms (4x/detik) —
     // tampilan hanya menampilkan 1 desimal detik, jadi tidak ada beda visual.
     burstIntervalRef.current = setInterval(() => {
       const remaining = Math.max(0, targetEnd - Date.now());
@@ -480,17 +480,17 @@ export const AiSandbox: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-[#111b21] flex items-center space-x-2">
-            <Terminal className="text-[#008069]" size={22} />
+          <h2 className="text-xl font-bold tracking-tight text-ink flex items-center space-x-2">
+            <Terminal className="text-accent" size={22} />
             <span>AI Sandbox Simulator</span>
           </h2>
-          <p className="text-xs text-[#667781] mt-0.5">Test respons AI WhatsApp, inspeksi hasil vector retrieval FAQ, dan simulasi kondisi error</p>
+          <p className="text-xs text-ink-3 mt-0.5">Test respons AI WhatsApp, inspeksi hasil vector retrieval FAQ, dan simulasi kondisi error</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={handleNewCleanSession}
-            className="px-3.5 py-2 bg-white hover:bg-[#f0f2f5] text-[#008069] border border-[#c2e7e0] rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
+            className="px-3.5 py-2 bg-surface hover:bg-fill-1 text-accent border border-divider rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
             title="Mulai sesi simulator customer baru yang bersih"
           >
             <RotateCcw size={13} />
@@ -498,13 +498,13 @@ export const AiSandbox: React.FC = () => {
           </button>
 
           {/* SumoPod Outage Toggle */}
-          <div className="flex items-center space-x-2.5 bg-white border border-[#e9edef] px-3.5 py-1.5 rounded-xl shadow-xs">
-            <span className="text-xs font-semibold text-[#54656f]">Simulasi Outage LLM</span>
+          <div className="flex items-center space-x-2.5 bg-surface border border-divider px-3.5 py-1.5 rounded-xl shadow-xs">
+            <span className="text-xs font-semibold text-ink-2">Simulasi Outage LLM</span>
             <button
               onClick={() => setSumoPodOutage(!sumoPodOutage)}
-              className={`w-9 h-5 rounded-full transition-all relative ${sumoPodOutage ? 'bg-rose-500' : 'bg-[#d1d7db]'}`}
+              className={`w-9 h-5 rounded-full transition-all relative ${sumoPodOutage ? 'bg-danger' : 'bg-divider'}`}
             >
-              <div className={`absolute top-0.5 left-0.5 bg-white h-4 w-4 rounded-full transition-all ${sumoPodOutage ? 'translate-x-4' : ''}`}></div>
+              <div className={`absolute top-0.5 left-0.5 bg-surface h-4 w-4 rounded-full transition-all ${sumoPodOutage ? 'translate-x-4' : ''}`}></div>
             </button>
           </div>
         </div>
@@ -513,15 +513,15 @@ export const AiSandbox: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         {/* Chat Simulator panel */}
-        <div className="bg-white border border-[#e9edef] rounded-2xl p-5 flex flex-col h-[560px] justify-between shadow-xs">
-          <div className="flex items-center justify-between pb-3 border-b border-[#e9edef] mb-3">
+        <div className="bg-surface border border-divider rounded-2xl p-5 flex flex-col h-[560px] justify-between shadow-xs">
+          <div className="flex items-center justify-between pb-3 border-b border-divider mb-3">
             <div className="flex items-center space-x-2">
-              <span className="text-xs font-bold text-[#111b21] uppercase flex items-center space-x-1.5">
-                <MessageSquare size={14} className="text-[#008069]" />
+              <span className="text-xs font-bold text-ink uppercase flex items-center space-x-1.5">
+                <MessageSquare size={14} className="text-accent" />
                 <span>Simulated WhatsApp Chat</span>
               </span>
               {inspectorData.modelUsed && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-[#aebac1] border border-purple-200 dark:border-purple-800 shadow-2xs" title="Model AI yang membalas giliran chat ini">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-ink-2 border border-purple-200 dark:border-purple-800 shadow-2xs" title="Model AI yang membalas giliran chat ini">
                   <Cpu size={10} className="mr-1" />
                   {inspectorData.provider ? `${inspectorData.provider}: ` : ''}{inspectorData.modelUsed}
                 </span>
@@ -544,22 +544,22 @@ export const AiSandbox: React.FC = () => {
                 }}
                 className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center space-x-1 border transition active:scale-95 ${
                   burstMode
-                    ? 'bg-amber-50 border-amber-300 text-amber-800 shadow-2xs'
-                    : 'bg-[#f0f2f5] border-[#d1d7db] text-[#54656f] hover:bg-white'
+                    ? 'bg-warning-soft border-warning-line text-warning shadow-2xs'
+                    : 'bg-fill-1 border-divider text-ink-2 hover:bg-surface'
                 }`}
                 title="Mode Burst WhatsApp: Mengumpulkan pesan beruntun dalam window 2.5 detik sebelum bot membalas satu kali (seperti perilaku customer asli)."
               >
-                <Zap size={11} className={burstMode ? 'text-amber-600 fill-amber-500' : 'text-[#8696a0]'} />
+                <Zap size={11} className={burstMode ? 'text-warning fill-warning' : 'text-ink-3'} />
                 <span>Burst (2.5s): {burstMode ? 'ON' : 'OFF'}</span>
               </button>
 
               {sumoPodOutage ? (
-                <span className="px-2 py-0.5 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-[10px] font-bold animate-pulse flex items-center space-x-1">
+                <span className="px-2 py-0.5 rounded-full bg-danger-soft border border-danger-line text-danger text-[10px] font-bold animate-pulse flex items-center space-x-1">
                   <AlertOctagon size={10} />
                   <span>LLM API OUTAGE</span>
                 </span>
               ) : (
-                <span className="px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-bold">
+                <span className="px-2 py-0.5 rounded-full bg-success-soft border border-success-line text-success text-[10px] font-bold">
                   AI Agent Active
                 </span>
               )}
@@ -569,8 +569,8 @@ export const AiSandbox: React.FC = () => {
           {/* Messages list with WhatsApp light wallpaper */}
           <div
             ref={chatContainerRef}
-            className="flex-1 overflow-y-auto space-y-3 p-3 mb-3 bg-[#efeae2] rounded-xl border border-[#e9edef] shadow-inner"
-            style={{ backgroundImage: 'radial-gradient(#d1d7db 0.75px, transparent 0.75px)', backgroundSize: '16px 16px' }}
+            className="flex-1 overflow-y-auto space-y-3 p-3 mb-3 bg-content rounded-xl border border-divider shadow-inner"
+            style={{ backgroundImage: 'radial-gradient(rgb(var(--c-strong)) 0.75px, transparent 0.75px)', backgroundSize: '16px 16px' }}
           >
             {messages.map((msg, idx) => (
               <div
@@ -582,15 +582,15 @@ export const AiSandbox: React.FC = () => {
                   title={msg.sender === 'bot' && msg.trace ? 'Klik untuk melihat RAG Chunks, Tool Calls & Exemplar turn ini di inspector' : undefined}
                   className={`max-w-[85%] rounded-xl p-3 text-xs leading-relaxed shadow-xs ${
                     msg.sender === 'user'
-                      ? 'bg-[#d9fdd3] text-[#111b21] rounded-tr-none border border-[#00a884]/20'
+                      ? 'bg-bubble-out text-ink rounded-tr-none border border-accent/20'
                       : msg.isError
-                        ? 'bg-rose-50 border border-rose-200 text-rose-800 rounded-tl-none font-medium'
-                        : 'bg-white text-[#111b21] rounded-tl-none border border-black/5'
-                  } ${msg.sender === 'bot' && msg.trace ? 'cursor-pointer hover:border-[#008069]/40 transition' : ''} ${
-                    selectedBubbleIdx === idx ? 'ring-2 ring-[#008069]/50 border-[#008069]/50' : ''
+                        ? 'bg-danger-soft border border-danger-line text-danger rounded-tl-none font-medium'
+                        : 'bg-surface text-ink rounded-tl-none border border-black/5'
+                  } ${msg.sender === 'bot' && msg.trace ? 'cursor-pointer hover:border-accent/40 transition' : ''} ${
+                    selectedBubbleIdx === idx ? 'ring-2 ring-accent/50 border-accent/50' : ''
                   }`}>
                   <div className="whitespace-pre-wrap break-words font-sans">{msg.content}</div>
-                  <span className="block text-[9px] text-[#667781] mt-1 text-right">
+                  <span className="block text-[9px] text-ink-3 mt-1 text-right">
                     {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
@@ -598,10 +598,10 @@ export const AiSandbox: React.FC = () => {
             ))}
             {loading && (
               <div className="flex justify-start">
-                <div className="bg-white border border-black/5 rounded-xl rounded-tl-none p-3 text-xs flex items-center space-x-1.5 text-[#667781] shadow-xs">
-                  <div className="h-1.5 w-1.5 bg-[#008069] rounded-full animate-bounce"></div>
-                  <div className="h-1.5 w-1.5 bg-[#008069] rounded-full animate-bounce [animation-delay:0.2s]"></div>
-                  <div className="h-1.5 w-1.5 bg-[#008069] rounded-full animate-bounce [animation-delay:0.4s]"></div>
+                <div className="bg-surface border border-black/5 rounded-xl rounded-tl-none p-3 text-xs flex items-center space-x-1.5 text-ink-3 shadow-xs">
+                  <div className="h-1.5 w-1.5 bg-accent rounded-full animate-bounce"></div>
+                  <div className="h-1.5 w-1.5 bg-accent rounded-full animate-bounce [animation-delay:0.2s]"></div>
+                  <div className="h-1.5 w-1.5 bg-accent rounded-full animate-bounce [animation-delay:0.4s]"></div>
                 </div>
               </div>
             )}
@@ -609,22 +609,22 @@ export const AiSandbox: React.FC = () => {
           </div>
 
           {/* Form input — WhatsApp-like style */}
-          <form onSubmit={handleSend} className="bg-[#f0f2f5] border border-[#e9edef] rounded-xl p-2.5 space-y-2 shadow-xs">
+          <form onSubmit={handleSend} className="bg-fill-1 border border-divider rounded-xl p-2.5 space-y-2 shadow-xs">
             {/* Active Burst Queue Status Banner */}
             {pendingBurst.length > 0 && (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 flex items-center justify-between text-xs animate-fadeIn">
-                <div className="flex items-center space-x-1.5 text-amber-900 font-semibold text-[11px] truncate">
-                  <Zap size={13} className="text-amber-600 fill-amber-500 animate-pulse shrink-0" />
+              <div className="bg-warning-soft border border-warning-line rounded-lg px-2.5 py-1.5 flex items-center justify-between text-xs animate-fadeIn">
+                <div className="flex items-center space-x-1.5 text-warning font-semibold text-[11px] truncate">
+                  <Zap size={13} className="text-warning fill-warning animate-pulse shrink-0" />
                   <span className="truncate">
                     <span className="font-bold">{pendingBurst.length} pesan burst</span> terkumpul • Kirim dlm{' '}
-                    <span className="font-mono font-bold text-amber-700">{(burstTimeLeft / 1000).toFixed(1)}s</span>
+                    <span className="font-mono font-bold text-warning">{(burstTimeLeft / 1000).toFixed(1)}s</span>
                   </span>
                 </div>
                 <button
                   type="button"
                   onClick={() => flushBurst()}
                   disabled={loading}
-                  className="px-2.5 py-0.5 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-[10px] font-bold transition shadow-xs shrink-0 ml-2 cursor-pointer"
+                  className="px-2.5 py-0.5 bg-warning hover:bg-warning-hover text-on-solid rounded-md text-[10px] font-bold transition shadow-xs shrink-0 ml-2 cursor-pointer"
                 >
                   Kirim Sekarang
                 </button>
@@ -642,10 +642,10 @@ export const AiSandbox: React.FC = () => {
               }}
               placeholder={burstMode ? "Ketik pesan simulasi... (Tekan Enter beruntun untuk pesan burst)" : "Ketik pesan simulasi... (Enter untuk kirim)"}
               rows={2}
-              className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-lg text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] resize-none shadow-xs"
+              className="w-full p-2.5 bg-surface border border-divider rounded-lg text-xs text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent resize-none shadow-xs"
             />
             <div className="flex items-center justify-between">
-              <span className="text-[10px] text-[#667781] truncate">
+              <span className="text-[10px] text-ink-3 truncate">
                 {inputText.length > 0
                   ? `${inputText.length} karakter`
                   : burstMode
@@ -655,7 +655,7 @@ export const AiSandbox: React.FC = () => {
               <button
                 type="submit"
                 disabled={!inputText.trim()}
-                className="px-3.5 py-1.5 bg-[#008069] hover:bg-[#00a884] disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-lg text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs shrink-0 cursor-pointer"
+                className="px-3.5 py-1.5 bg-accent hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-lg text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs shrink-0 cursor-pointer"
               >
                 {loading ? <RefreshCw size={12} className="animate-spin" /> : <Send size={12} />}
                 <span>{pendingBurst.length > 0 ? 'Tambah Burst' : 'Kirim'}</span>
@@ -665,23 +665,23 @@ export const AiSandbox: React.FC = () => {
         </div>
 
         {/* RAG Inspector Panel */}
-        <div className="bg-white border border-[#e9edef] rounded-2xl p-5 h-[560px] overflow-y-auto space-y-5 shadow-xs">
-          <div className="flex items-center space-x-2 pb-3 border-b border-[#e9edef]">
-            <Eye className="text-[#008069]" size={16} />
-            <h3 className="text-xs font-bold text-[#111b21] uppercase">RAG Chunks & Prompt Inspector</h3>
+        <div className="bg-surface border border-divider rounded-2xl p-5 h-[560px] overflow-y-auto space-y-5 shadow-xs">
+          <div className="flex items-center space-x-2 pb-3 border-b border-divider">
+            <Eye className="text-accent" size={16} />
+            <h3 className="text-xs font-bold text-ink uppercase">RAG Chunks & Prompt Inspector</h3>
           </div>
 
           {inspectorData.query ? (
             <div className="space-y-4">
               
               {/* Query & Latency metrics */}
-              <div className="flex justify-between items-center text-xs p-2.5 bg-[#f8fafc] border border-[#e9edef] rounded-xl">
+              <div className="flex justify-between items-center text-xs p-2.5 bg-surface-2 border border-divider rounded-xl">
                 <div className="flex items-center space-x-1.5 truncate">
-                  <Search size={13} className="text-[#667781]" />
-                  <span className="text-[#667781]">Query:</span>
-                  <span className="font-semibold text-[#111b21] truncate">"{inspectorData.query}"</span>
+                  <Search size={13} className="text-ink-3" />
+                  <span className="text-ink-3">Query:</span>
+                  <span className="font-semibold text-ink truncate">"{inspectorData.query}"</span>
                 </div>
-                <div className="flex items-center space-x-1 text-[#667781] flex-shrink-0 ml-2 font-mono text-[11px]">
+                <div className="flex items-center space-x-1 text-ink-3 flex-shrink-0 ml-2 font-mono text-[11px]">
                   <Activity size={13} />
                   <span>{inspectorData.latencyMs} ms</span>
                 </div>
@@ -689,7 +689,7 @@ export const AiSandbox: React.FC = () => {
 
               {/* Error log if outage */}
               {inspectorData.error && (
-                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-mono">
+                <div className="p-3 rounded-xl bg-danger-soft border border-danger-line text-danger text-xs font-mono">
                   <span className="font-bold">Error:</span> {inspectorData.error}
                 </div>
               )}
@@ -709,8 +709,8 @@ export const AiSandbox: React.FC = () => {
                     onClick={() => setInspectorTab(t.id)}
                     className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition border ${
                       inspectorTab === t.id
-                        ? 'bg-[#008069] text-white border-[#008069]'
-                        : 'bg-white text-[#54656f] border-[#d1d7db] hover:bg-[#f0f2f5]'
+                        ? 'bg-accent text-accent-ink border-accent'
+                        : 'bg-surface text-ink-2 border-divider hover:bg-fill-1'
                     }`}
                   >
                     {t.label}
@@ -733,9 +733,9 @@ export const AiSandbox: React.FC = () => {
                   return (
                     <>
                       {/* Header Card */}
-                      <div className="p-3.5 rounded-xl bg-[#f8fafc] dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] space-y-2">
+                      <div className="p-3.5 rounded-xl bg-surface-2 border border-divider space-y-2">
                         <div className="flex items-center justify-between gap-2 flex-wrap">
-                          <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">
+                          <span className="text-xs font-bold text-ink">
                             {gs.genderGreeting || 'Bunda'}{gs.customerName ? ` (${gs.customerName})` : ''}
                           </span>
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${CONV_STATE_CLS[state] || CONV_STATE_CLS.INITIAL}`}>
@@ -748,23 +748,23 @@ export const AiSandbox: React.FC = () => {
                       </div>
 
                       {/* Card 1: Lokasi & Ongkir */}
-                      <div className="p-3.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] space-y-1.5">
-                        <span className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] block uppercase">📍 Lokasi & Status Ongkir</span>
-                        <div className="text-xs text-[#111b21] dark:text-[#e9edef] font-semibold">
+                      <div className="p-3.5 rounded-xl bg-surface border border-divider space-y-1.5">
+                        <span className="text-[11px] font-bold text-ink-3 block uppercase">📍 Lokasi & Status Ongkir</span>
+                        <div className="text-xs text-ink font-semibold">
                           {[loc.kelurahan, loc.kecamatan, loc.kota].filter(Boolean).join(', ') || 'Belum diketahui'}
                         </div>
-                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[#54656f] dark:text-[#aebac1]">
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink-2">
                           <span>Jarak: <b className="font-mono">{loc.distanceKm != null ? `~${loc.distanceKm} km` : '-'}</b></span>
                           <span>Normal: <b className="font-mono">{loc.ongkirNormal != null ? fmtRpId(loc.ongkirNormal) : '-'}</b></span>
-                          <span>Promo: <b className="font-mono text-[#008069] dark:text-[#00a884]">{loc.ongkirPromo != null ? fmtRpId(loc.ongkirPromo) : '-'}</b></span>
+                          <span>Promo: <b className="font-mono text-accent">{loc.ongkirPromo != null ? fmtRpId(loc.ongkirPromo) : '-'}</b></span>
                         </div>
                       </div>
 
                       {/* Card 2: Keranjang */}
-                      <div className="p-3.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] space-y-2">
-                        <span className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] block uppercase">🛒 Keranjang Layanan ({cart.length})</span>
+                      <div className="p-3.5 rounded-xl bg-surface border border-divider space-y-2">
+                        <span className="text-[11px] font-bold text-ink-3 block uppercase">🛒 Keranjang Layanan ({cart.length})</span>
                         {cart.length === 0 ? (
-                          <div className="text-[11px] text-[#8696a0] italic">Keranjang masih kosong.</div>
+                          <div className="text-[11px] text-ink-3 italic">Keranjang masih kosong.</div>
                         ) : (
                           <>
                             <div className="space-y-1.5">
@@ -774,25 +774,25 @@ export const AiSandbox: React.FC = () => {
                                   || (it.recipientScope === 'MOMS' ? 'Bunda' : it.recipientScope === 'CHILD_2' ? 'Kakak' : it.recipientScope === 'CHILD_1' ? 'Si Kecil' : null);
                                 return (
                                   <div key={i} className="flex items-center justify-between gap-2 text-xs">
-                                    <span className="text-[#111b21] dark:text-[#e9edef] font-semibold truncate">
-                                      {recipient && <span className="mr-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200 dark:bg-[#202c33] dark:text-[#aebac1] dark:border-[#2a3942]">[{recipient}]</span>}
+                                    <span className="text-ink font-semibold truncate">
+                                      {recipient && <span className="mr-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200 dark:bg-fill-1 dark:text-ink-2 dark:border-divider">[{recipient}]</span>}
                                       {it.name}
                                     </span>
                                     <span className="flex items-center gap-1.5 shrink-0">
                                       <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold border ${tm.cls}`}>{tm.label}</span>
-                                      <span className="font-mono font-bold text-[#008069] dark:text-[#00a884]">{fmtRpId(it.promoPrice ?? it.price)}</span>
+                                      <span className="font-mono font-bold text-accent">{fmtRpId(it.promoPrice ?? it.price)}</span>
                                     </span>
                                   </div>
                                 );
                               })}
                             </div>
-                            <div className="pt-2 border-t border-[#e9edef] dark:border-[#2a3942] space-y-1 text-[11px] text-[#54656f] dark:text-[#aebac1]">
+                            <div className="pt-2 border-t border-divider space-y-1 text-[11px] text-ink-2">
                               <div className="flex justify-between"><span>Subtotal Layanan</span><span className="font-mono font-bold">{fmtRpId(subtotal)}</span></div>
                               <div className="flex justify-between"><span>Ongkir Promo</span><span className="font-mono font-bold">{fmtRpId(ongkir)}</span></div>
                             </div>
-                            <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40/30 px-3 py-2 flex items-center justify-between">
-                              <span className="text-[11px] font-bold text-emerald-800 dark:text-[#00a884]">Total Akumulasi</span>
-                              <span className="text-base font-black font-mono text-emerald-800 dark:text-[#00a884]">{fmtRpId(subtotal + ongkir)}</span>
+                            <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 px-3 py-2 flex items-center justify-between">
+                              <span className="text-[11px] font-bold text-emerald-800 dark:text-accent">Total Akumulasi</span>
+                              <span className="text-base font-black font-mono text-emerald-800 dark:text-accent">{fmtRpId(subtotal + ongkir)}</span>
                             </div>
                           </>
                         )}
@@ -800,31 +800,31 @@ export const AiSandbox: React.FC = () => {
 
                       {/* Card 3: Pasien adaptif multi-audience (Bunda / Si Kecil / Keduanya) & Jadwal */}
                       {((gs.momProfile?.gestationalWeeks != null || gs.momProfile?.stage || (gs.momProfile?.complaints || []).length > 0 || gs.targetAudience === 'MOMS' || gs.targetAudience === 'BOTH') && (
-                      <div className="p-3.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] space-y-1.5">
-                        <span className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] block uppercase">🤰 Data Kehamilan & Jadwal</span>
-                        <div className="text-xs text-[#111b21] dark:text-[#e9edef]">
+                      <div className="p-3.5 rounded-xl bg-surface border border-divider space-y-1.5">
+                        <span className="text-[11px] font-bold text-ink-3 block uppercase">🤰 Data Kehamilan & Jadwal</span>
+                        <div className="text-xs text-ink">
                           Usia Kehamilan: <b>{gs.momProfile?.gestationalWeeks != null ? `${gs.momProfile.gestationalWeeks} minggu` : '-'}</b>
                         </div>
-                        <div className="text-xs text-[#111b21] dark:text-[#e9edef]">
+                        <div className="text-xs text-ink">
                           Kondisi: <b>{gs.momProfile?.stage === 'PREGNANT' ? 'Ibu Hamil' : gs.momProfile?.stage === 'POSTPARTUM' ? `Paska Salin/Nifas${gs.momProfile?.postpartumPeriod ? ` (${gs.momProfile.postpartumPeriod})` : ''}` : gs.momProfile?.stage === 'GENERAL' ? 'Relaksasi Umum' : (gs.targetAudience === 'MOMS' ? 'Ibu' : '-')}</b>
                         </div>
-                        <div className="text-xs text-[#111b21] dark:text-[#e9edef]">
+                        <div className="text-xs text-ink">
                           Keluhan Bunda: <b>{(gs.momProfile?.complaints || []).length > 0 ? gs.momProfile.complaints.join(', ') : '-'}</b>
                         </div>
                         {gs.targetAudience && (
-                          <div className="text-xs text-[#54656f] dark:text-[#aebac1]">
-                            Subjek: <b className="text-[#111b21] dark:text-[#e9edef]">{gs.targetAudience === 'BOTH' ? 'Bunda & Si Kecil' : gs.targetAudience === 'MOMS' ? 'Bunda (Ibu)' : gs.targetAudience}</b>
+                          <div className="text-xs text-ink-2">
+                            Subjek: <b className="text-ink">{gs.targetAudience === 'BOTH' ? 'Bunda & Si Kecil' : gs.targetAudience === 'MOMS' ? 'Bunda (Ibu)' : gs.targetAudience}</b>
                           </div>
                         )}
                       </div>
                       ))}
                       {((gs.children && gs.children.length > 0) || gs.childProfile || gs.targetAudience === 'BABY' || gs.targetAudience === 'KIDS' || gs.targetAudience === 'BOTH') && (
-                      <div className="p-3.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] space-y-1.5">
-                        <span className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] block uppercase">👶 Data Si Kecil & Jadwal</span>
+                      <div className="p-3.5 rounded-xl bg-surface border border-divider space-y-1.5">
+                        <span className="text-[11px] font-bold text-ink-3 block uppercase">👶 Data Si Kecil & Jadwal</span>
                         {(gs.children && gs.children.length > 1) ? (
                           <div className="space-y-1">
                             {gs.children.map((k: any, ki: number) => (
-                              <div key={ki} className="text-xs text-[#111b21] dark:text-[#e9edef]">
+                              <div key={ki} className="text-xs text-ink">
                                 <b>{k.roleLabel || `Anak ${ki + 1}`}</b>
                                 {k.ageMonths != null ? ` • ${k.ageMonths} bln` : ' • usia -'}
                                 {(k.symptoms || []).length > 0 ? ` • ${k.symptoms.join(', ')}` : ''}
@@ -833,65 +833,65 @@ export const AiSandbox: React.FC = () => {
                           </div>
                         ) : (
                           <>
-                            <div className="text-xs text-[#111b21] dark:text-[#e9edef]">
+                            <div className="text-xs text-ink">
                               Usia: <b>{(gs.children?.[0]?.ageMonths ?? gs.childProfile?.ageMonths) != null ? `${gs.children?.[0]?.ageMonths ?? gs.childProfile.ageMonths} bulan` : '-'}</b>
                             </div>
-                            <div className="text-xs text-[#111b21] dark:text-[#e9edef]">
+                            <div className="text-xs text-ink">
                               Keluhan: <b>{((gs.children?.[0]?.symptoms || gs.childProfile?.symptoms || []) as string[]).length > 0 ? (gs.children?.[0]?.symptoms || gs.childProfile.symptoms).join(', ') : '-'}</b>
                             </div>
                           </>
                         )}
-                        <div className="text-xs text-[#111b21] dark:text-[#e9edef]">
+                        <div className="text-xs text-ink">
                           Jadwal: <b>{gs.booking?.preferredDate ? `${gs.booking.preferredDate}${gs.booking.preferredTime ? ` • ${gs.booking.preferredTime}` : ''}` : '-'}</b>
                         </div>
                         {gs.selectedTreatment && (
-                          <div className="text-xs text-[#54656f] dark:text-[#aebac1]">
-                            Treatment: <b className="text-[#111b21] dark:text-[#e9edef]">{gs.selectedTreatment}</b>
+                          <div className="text-xs text-ink-2">
+                            Treatment: <b className="text-ink">{gs.selectedTreatment}</b>
                           </div>
                         )}
                       </div>
                       )}
                       {(!gs.momProfile && !gs.childProfile && (!gs.children || gs.children.length === 0) && !gs.targetAudience && (
-                      <div className="p-3.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] space-y-1.5">
-                        <span className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] block uppercase">👶 Data Si Kecil & Jadwal</span>
-                        <div className="text-xs text-[#111b21] dark:text-[#e9edef]">
+                      <div className="p-3.5 rounded-xl bg-surface border border-divider space-y-1.5">
+                        <span className="text-[11px] font-bold text-ink-3 block uppercase">👶 Data Si Kecil & Jadwal</span>
+                        <div className="text-xs text-ink">
                           Jadwal: <b>{gs.booking?.preferredDate ? `${gs.booking.preferredDate}${gs.booking.preferredTime ? ` • ${gs.booking.preferredTime}` : ''}` : '-'}</b>
                         </div>
                         {gs.selectedTreatment && (
-                          <div className="text-xs text-[#54656f] dark:text-[#aebac1]">
-                            Treatment: <b className="text-[#111b21] dark:text-[#e9edef]">{gs.selectedTreatment}</b>
+                          <div className="text-xs text-ink-2">
+                            Treatment: <b className="text-ink">{gs.selectedTreatment}</b>
                           </div>
                         )}
                       </div>
                       ))}
 
                       {/* Card 4: Memori Anti-Amnesia */}
-                      <div className="p-3.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] space-y-2">
-                        <span className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] block uppercase">🧠 Memori Konteks (Anti-Amnesia)</span>
+                      <div className="p-3.5 rounded-xl bg-surface border border-divider space-y-2">
+                        <span className="text-[11px] font-bold text-ink-3 block uppercase">🧠 Memori Konteks (Anti-Amnesia)</span>
                         {(!inspectorData.contextSummary) ? (
-                          <div className="text-[11px] text-[#8696a0] italic">Belum ada ringkasan konteks untuk turn ini.</div>
+                          <div className="text-[11px] text-ink-3 italic">Belum ada ringkasan konteks untuk turn ini.</div>
                         ) : (
                           <>
                             {summary.done.length > 0 && (
                               <div>
-                                <div className="text-[10px] font-bold text-emerald-700 dark:text-[#00a884] uppercase mb-1">✅ Sudah Dibahas & Tuntas</div>
-                                <ul className="space-y-0.5 text-[11px] text-[#111b21] dark:text-[#e9edef]">
+                                <div className="text-[10px] font-bold text-emerald-700 dark:text-accent uppercase mb-1">✅ Sudah Dibahas & Tuntas</div>
+                                <ul className="space-y-0.5 text-[11px] text-ink">
                                   {summary.done.map((s, i) => <li key={i}>• {s}</li>)}
                                 </ul>
                               </div>
                             )}
                             {summary.banned.length > 0 && (
                               <div>
-                                <div className="text-[10px] font-bold text-rose-600 dark:text-[#f87171] uppercase mb-1">🚫 Dilarang Diulang</div>
-                                <ul className="space-y-0.5 text-[11px] text-[#111b21] dark:text-[#e9edef]">
+                                <div className="text-[10px] font-bold text-rose-600 dark:text-danger uppercase mb-1">🚫 Dilarang Diulang</div>
+                                <ul className="space-y-0.5 text-[11px] text-ink">
                                   {summary.banned.map((s, i) => <li key={i}>• {s}</li>)}
                                 </ul>
                               </div>
                             )}
                             {summary.focus.length > 0 && (
                               <div>
-                                <div className="text-[10px] font-bold text-sky-700 dark:text-[#38bdf8] uppercase mb-1">🎯 Topik Fokus Saat Ini</div>
-                                <ul className="space-y-0.5 text-[11px] text-[#111b21] dark:text-[#e9edef]">
+                                <div className="text-[10px] font-bold text-sky-700 dark:text-info uppercase mb-1">🎯 Topik Fokus Saat Ini</div>
+                                <ul className="space-y-0.5 text-[11px] text-ink">
                                   {summary.focus.map((s, i) => <li key={i}>• {s}</li>)}
                                 </ul>
                               </div>
@@ -908,39 +908,39 @@ export const AiSandbox: React.FC = () => {
               {/* Reference Chunks section */}
               {inspectorTab === 'chunks' && (
               <div className="space-y-2">
-                <span className="text-[11px] font-bold text-[#667781] block uppercase">Vector Chunks Retrieved ({inspectorData.chunks?.length || 0}) — SOP/FAQ + Katalog</span>
-                <span className="text-[10px] text-[#8696a0] block">Ground truth terpadu: artikel SOP/FAQ medis (pre-retrieval deterministik + tool) dan spesifikasi katalog layanan resmi yang dipakai LLM turn ini.</span>
+                <span className="text-[11px] font-bold text-ink-3 block uppercase">Vector Chunks Retrieved ({inspectorData.chunks?.length || 0}) — SOP/FAQ + Katalog</span>
+                <span className="text-[10px] text-ink-3 block">Ground truth terpadu: artikel SOP/FAQ medis (pre-retrieval deterministik + tool) dan spesifikasi katalog layanan resmi yang dipakai LLM turn ini.</span>
                 <div className="space-y-2.5">
                   {inspectorData.chunks?.map((chunk: any, i: number) => {
                     const chunkId = chunk.id || chunk.title;
                     const isEditing = editingChunkId === chunkId;
                     return (
-                      <div key={i} className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-2">
+                      <div key={i} className="p-3.5 rounded-xl bg-surface-2 border border-divider space-y-2">
                         {isEditing ? (
                           <div className="space-y-2">
                             <div className="space-y-1">
-                              <label className="text-[10px] text-[#667781] font-semibold">Judul Chunk</label>
+                              <label className="text-[10px] text-ink-3 font-semibold">Judul Chunk</label>
                               <input
                                 type="text"
                                 value={editingTitle}
                                 onChange={(e) => setEditingTitle(e.target.value)}
-                                className="w-full p-2 rounded-lg bg-white border border-[#d1d7db] text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+                                className="w-full p-2 rounded-lg bg-surface border border-divider text-xs text-ink focus:outline-none focus:border-accent shadow-xs"
                               />
                             </div>
                             <div className="space-y-1">
-                              <label className="text-[10px] text-[#667781] font-semibold">Konten Chunk</label>
+                              <label className="text-[10px] text-ink-3 font-semibold">Konten Chunk</label>
                               <textarea
                                 rows={4}
                                 value={editingContent}
                                 onChange={(e) => setEditingContent(e.target.value)}
-                                className="w-full p-2 rounded-lg bg-white border border-[#d1d7db] text-xs text-[#111b21] focus:outline-none focus:border-[#008069] leading-relaxed resize-none shadow-xs"
+                                className="w-full p-2 rounded-lg bg-surface border border-divider text-xs text-ink focus:outline-none focus:border-accent leading-relaxed resize-none shadow-xs"
                               />
                             </div>
                             <div className="flex space-x-2 justify-end pt-1">
                               <button
                                 type="button"
                                 onClick={handleCancelEdit}
-                                className="px-2.5 py-1 rounded-lg bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] text-xs font-semibold"
+                                className="px-2.5 py-1 rounded-lg bg-surface hover:bg-fill-1 border border-divider text-ink-2 text-xs font-semibold"
                               >
                                 Batal
                               </button>
@@ -948,7 +948,7 @@ export const AiSandbox: React.FC = () => {
                                 type="button"
                                 onClick={() => handleSaveEdit(chunkId)}
                                 disabled={editLoading}
-                                className="px-3 py-1 rounded-lg bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center space-x-1 disabled:opacity-50 shadow-xs"
+                                className="px-3 py-1 rounded-lg bg-accent hover:bg-accent-hover text-accent-ink text-xs font-bold transition flex items-center space-x-1 disabled:opacity-50 shadow-xs"
                               >
                                 <Save size={12} />
                                 <span>{editLoading ? 'Menyimpan...' : 'Simpan'}</span>
@@ -958,22 +958,22 @@ export const AiSandbox: React.FC = () => {
                         ) : (
                           <div className="space-y-1.5">
                             <div className="flex justify-between items-center">
-                              <span className="text-xs font-bold text-[#008069]">
+                              <span className="text-xs font-bold text-accent">
                                 {String(chunk.title || '').startsWith('[Katalog Layanan]') && (
-                                  <span className="mr-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-sky-100 text-sky-800 border border-sky-200">KATALOG</span>
+                                  <span className="mr-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-info-soft text-info border border-info-line">KATALOG</span>
                                 )}
                                 {String(chunk.title || '').startsWith('[Katalog Layanan]') ? String(chunk.title).replace('[Katalog Layanan] ', '') : chunk.title}
                                 {!String(chunk.title || '').startsWith('[Katalog Layanan]') && (
-                                  <span className="ml-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">SOP/FAQ</span>
+                                  <span className="ml-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-success-soft text-success border border-success-line">SOP/FAQ</span>
                                 )}
                               </span>
                               <div className="flex items-center space-x-2">
-                                <span className="text-[10px] text-[#8696a0] font-mono">Similarity: {(chunk.similarity ?? chunk.score ?? 0).toFixed(2)}</span>
+                                <span className="text-[10px] text-ink-3 font-mono">Similarity: {(chunk.similarity ?? chunk.score ?? 0).toFixed(2)}</span>
                                 {!String(chunk.title || '').startsWith('[Katalog Layanan]') && (
                                 <button
                                   type="button"
                                   onClick={() => handleStartEdit(chunk)}
-                                  className="p-1 rounded-md bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] hover:text-[#111b21] transition shadow-xs"
+                                  className="p-1 rounded-md bg-surface hover:bg-fill-1 border border-divider text-ink-2 hover:text-ink transition shadow-xs"
                                   title="Edit Chunk"
                                 >
                                   <Edit3 size={11} />
@@ -981,7 +981,7 @@ export const AiSandbox: React.FC = () => {
                                 )}
                               </div>
                             </div>
-                            <p className="text-xs text-[#54656f] leading-relaxed">
+                            <p className="text-xs text-ink-2 leading-relaxed">
                               {chunk.content}
                             </p>
                           </div>
@@ -990,7 +990,7 @@ export const AiSandbox: React.FC = () => {
                     );
                   })}
                   {(!inspectorData.chunks || inspectorData.chunks.length === 0) && (
-                    <div className="text-xs text-[#8696a0] py-2 italic">
+                    <div className="text-xs text-ink-3 py-2 italic">
                       {inspectorData.executedTools?.some((t: any) => t.name === 'search_knowledge_faq')
                         ? 'Tool FAQ dipanggil tetapi tidak ada artikel yang cocok.'
                         : 'Belum ada grounding deterministik untuk turn ini (sapaan murni / tanya harga / lokasi). Pertanyaan konsultatif (keluhan, perbedaan treatment, syarat usia, SOP) otomatis memicu pre-retrieval knowledge base.'}
@@ -1003,29 +1003,29 @@ export const AiSandbox: React.FC = () => {
               {/* Chat Bank (few-shot exemplars) section */}
               {inspectorTab === 'bank' && (
               <div className="space-y-2">
-                <span className="text-[11px] font-bold text-[#667781] block uppercase">Dialog Master Bidan Yusi ({inspectorData.exemplars?.length || 0})</span>
-                <span className="text-[10px] text-[#8696a0] block">Contoh Percakapan Ideal (Few-Shot Prompt) yang disuntikkan sebagai panduan nada bicara LLM, bukan artikel SOP/Knowledge Base.</span>
+                <span className="text-[11px] font-bold text-ink-3 block uppercase">Dialog Master Bidan Yusi ({inspectorData.exemplars?.length || 0})</span>
+                <span className="text-[10px] text-ink-3 block">Contoh Percakapan Ideal (Few-Shot Prompt) yang disuntikkan sebagai panduan nada bicara LLM, bukan artikel SOP/Knowledge Base.</span>
                 <div className="space-y-2.5">
                   {(inspectorData.exemplars || []).map((ex: any, i: number) => (
-                    <div key={ex.id || i} className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-2">
-                      <div className="text-[11px] font-bold text-[#008069]">{ex.scenario || `Contoh ${i + 1}`}</div>
-                      <div className="rounded-lg bg-white border border-[#e9edef] p-2.5 text-xs text-[#111b21]">
-                        <span className="font-bold text-[#667781]">Pasien: </span>{ex.customerMessage}
+                    <div key={ex.id || i} className="p-3.5 rounded-xl bg-surface-2 border border-divider space-y-2">
+                      <div className="text-[11px] font-bold text-accent">{ex.scenario || `Contoh ${i + 1}`}</div>
+                      <div className="rounded-lg bg-surface border border-divider p-2.5 text-xs text-ink">
+                        <span className="font-bold text-ink-3">Pasien: </span>{ex.customerMessage}
                       </div>
-                      <div className="rounded-lg bg-[#d9fdd3] border border-[#00a884]/20 p-2.5 text-xs text-[#111b21]">
-                        <span className="font-bold text-[#008069]">Bidan Yusi: </span>{ex.idealResponse}
+                      <div className="rounded-lg bg-bubble-out border border-accent/20 p-2.5 text-xs text-ink">
+                        <span className="font-bold text-accent">Bidan Yusi: </span>{ex.idealResponse}
                       </div>
                       {Array.isArray(ex.tags) && ex.tags.length > 0 && (
                         <div className="flex flex-wrap gap-1">
                           {ex.tags.map((t: string) => (
-                            <span key={t} className="px-1.5 py-0.5 rounded-md bg-white border border-[#d1d7db] text-[10px] font-mono text-[#54656f]">{t}</span>
+                            <span key={t} className="px-1.5 py-0.5 rounded-md bg-surface border border-divider text-[10px] font-mono text-ink-2">{t}</span>
                           ))}
                         </div>
                       )}
                     </div>
                   ))}
                   {(!inspectorData.exemplars || inspectorData.exemplars.length === 0) && (
-                    <div className="text-xs text-[#8696a0] py-2 italic">
+                    <div className="text-xs text-ink-3 py-2 italic">
                       Tidak ada exemplar dinamis spesifik yang disuntikkan — AI menggunakan persona dasar dan contoh percakapan SOP standar.
                     </div>
                   )}
@@ -1036,24 +1036,24 @@ export const AiSandbox: React.FC = () => {
               {/* Tool Calls section */}
               {inspectorTab === 'tools' && (
               <div className="space-y-2">
-                <span className="text-[11px] font-bold text-[#667781] block uppercase">Urutan Tools Dipanggil ({inspectorData.executedTools?.length || 0})</span>
+                <span className="text-[11px] font-bold text-ink-3 block uppercase">Urutan Tools Dipanggil ({inspectorData.executedTools?.length || 0})</span>
                 <div className="space-y-2.5">
                   {(inspectorData.executedTools || []).map((t: any, i: number) => (
-                    <div key={i} className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-1.5">
+                    <div key={i} className="p-3.5 rounded-xl bg-surface-2 border border-divider space-y-1.5">
                       <div className="flex items-center space-x-1.5">
-                        <span className="px-1.5 py-0.5 rounded-md bg-[#008069] text-white text-[10px] font-bold font-mono">{i + 1}</span>
-                        <span className="text-xs font-bold text-[#111b21] font-mono">{t.name}</span>
+                        <span className="px-1.5 py-0.5 rounded-md bg-accent text-accent-ink text-[10px] font-bold font-mono">{i + 1}</span>
+                        <span className="text-xs font-bold text-ink font-mono">{t.name}</span>
                       </div>
                       <details className="text-[11px]">
-                        <summary className="cursor-pointer text-[#008069] font-semibold">Parameter & hasil</summary>
-                        <pre className="mt-1 p-2 rounded-lg bg-white border border-[#e9edef] text-[10px] font-mono text-[#54656f] whitespace-pre-wrap overflow-x-auto max-h-48">
+                        <summary className="cursor-pointer text-accent font-semibold">Parameter & hasil</summary>
+                        <pre className="mt-1 p-2 rounded-lg bg-surface border border-divider text-[10px] font-mono text-ink-2 whitespace-pre-wrap overflow-x-auto max-h-48">
                           {JSON.stringify({ args: t.args, result: t.result }, null, 2)}
                         </pre>
                       </details>
                     </div>
                   ))}
                   {(!inspectorData.executedTools || inspectorData.executedTools.length === 0) && (
-                    <div className="text-xs text-[#8696a0] py-2 italic">
+                    <div className="text-xs text-ink-3 py-2 italic">
                       Tidak ada tool yang dipanggil — jawaban langsung dari LLM (mis. sapaan statis Turn-0).
                     </div>
                   )}
@@ -1065,7 +1065,7 @@ export const AiSandbox: React.FC = () => {
               {inspectorTab === 'prompt' && (
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
-                  <span className="text-[11px] font-bold text-[#667781] block uppercase flex items-center space-x-1">
+                  <span className="text-[11px] font-bold text-ink-3 block uppercase flex items-center space-x-1">
                     <Cpu size={12} />
                     <span>Active System Persona Prompt</span>
                   </span>
@@ -1073,7 +1073,7 @@ export const AiSandbox: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setEditingPersona(true)}
-                      className="px-2 py-0.5 rounded-lg bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] hover:text-[#111b21] text-[10px] font-bold transition flex items-center space-x-1 shadow-xs"
+                      className="px-2 py-0.5 rounded-lg bg-surface hover:bg-fill-1 border border-divider text-ink-2 hover:text-ink text-[10px] font-bold transition flex items-center space-x-1 shadow-xs"
                     >
                       <Edit3 size={10} />
                       <span>Edit Persona</span>
@@ -1086,7 +1086,7 @@ export const AiSandbox: React.FC = () => {
                           setEditingPersona(false);
                           setPersonaText(inspectorData.systemPrompt || '');
                         }}
-                        className="px-2 py-0.5 rounded-lg bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] text-[10px] font-semibold"
+                        className="px-2 py-0.5 rounded-lg bg-surface hover:bg-fill-1 border border-divider text-ink-2 text-[10px] font-semibold"
                       >
                         Batal
                       </button>
@@ -1094,7 +1094,7 @@ export const AiSandbox: React.FC = () => {
                         type="button"
                         onClick={handleSavePersona}
                         disabled={personaLoading}
-                        className="px-2.5 py-0.5 rounded-lg bg-[#008069] hover:bg-[#00a884] text-white text-[10px] font-bold transition flex items-center space-x-1 disabled:opacity-50 shadow-xs"
+                        className="px-2.5 py-0.5 rounded-lg bg-accent hover:bg-accent-hover text-accent-ink text-[10px] font-bold transition flex items-center space-x-1 disabled:opacity-50 shadow-xs"
                       >
                         <Save size={10} />
                         <span>{personaLoading ? 'Menyimpan...' : 'Simpan'}</span>
@@ -1108,23 +1108,23 @@ export const AiSandbox: React.FC = () => {
                     rows={10}
                     value={personaText}
                     onChange={(e) => setPersonaText(e.target.value)}
-                    className="w-full p-2.5 rounded-xl bg-white border border-[#d1d7db] text-xs text-[#111b21] focus:outline-none focus:border-[#008069] leading-relaxed font-mono resize-none shadow-xs"
+                    className="w-full p-2.5 rounded-xl bg-surface border border-divider text-xs text-ink focus:outline-none focus:border-accent leading-relaxed font-mono resize-none shadow-xs"
                   />
                 ) : (
-                  <pre className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-xl text-[10px] text-[#54656f] font-mono overflow-auto max-h-40 whitespace-pre-wrap leading-relaxed">
+                  <pre className="p-3 bg-surface-2 border border-divider rounded-xl text-[10px] text-ink-2 font-mono overflow-auto max-h-40 whitespace-pre-wrap leading-relaxed">
                     {inspectorData.systemPrompt}
                   </pre>
                 )}
 
                 {/* Model reasoning */}
                 <div className="space-y-1">
-                  <span className="text-[11px] font-bold text-[#667781] block uppercase">🧠 Reasoning Model</span>
+                  <span className="text-[11px] font-bold text-ink-3 block uppercase">🧠 Reasoning Model</span>
                   {inspectorData.reasoning ? (
-                    <pre className="p-3 bg-purple-50/80 border border-purple-200 rounded-xl text-[10px] text-purple-950 font-mono overflow-auto max-h-40 whitespace-pre-wrap leading-relaxed">
+                    <pre className="p-3 bg-violet-soft/80 border border-violet-line rounded-xl text-[10px] text-violet font-mono overflow-auto max-h-40 whitespace-pre-wrap leading-relaxed">
                       {inspectorData.reasoning}
                     </pre>
                   ) : (
-                    <div className="text-xs text-[#8696a0] py-1 italic">Provider tidak mengembalikan reasoning terpisah.</div>
+                    <div className="text-xs text-ink-3 py-1 italic">Provider tidak mengembalikan reasoning terpisah.</div>
                   )}
                 </div>
 
@@ -1132,19 +1132,19 @@ export const AiSandbox: React.FC = () => {
                 {(inspectorData.tokens || inspectorData.costIdr || inspectorData.modelUsed) && (
                   <div className="flex flex-wrap gap-1.5 text-[10px] font-mono">
                     {inspectorData.modelUsed && (
-                      <span className="px-2 py-1 rounded-lg bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-[#aebac1] font-semibold flex items-center gap-1">
+                      <span className="px-2 py-1 rounded-lg bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-ink-2 font-semibold flex items-center gap-1">
                         <Cpu size={11} />
                         <span>{inspectorData.provider ? `${inspectorData.provider} · ` : ''}{inspectorData.modelUsed}</span>
                       </span>
                     )}
                     {typeof inspectorData.tokens?.prompt === 'number' && (
-                      <span className="px-2 py-1 rounded-lg bg-white border border-[#d1d7db] text-[#54656f]">in: {inspectorData.tokens.prompt}</span>
+                      <span className="px-2 py-1 rounded-lg bg-surface border border-divider text-ink-2">in: {inspectorData.tokens.prompt}</span>
                     )}
                     {typeof inspectorData.tokens?.completion === 'number' && (
-                      <span className="px-2 py-1 rounded-lg bg-white border border-[#d1d7db] text-[#54656f]">out: {inspectorData.tokens.completion}</span>
+                      <span className="px-2 py-1 rounded-lg bg-surface border border-divider text-ink-2">out: {inspectorData.tokens.completion}</span>
                     )}
                     {typeof inspectorData.costIdr === 'number' && inspectorData.costIdr > 0 && (
-                      <span className="px-2 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800">≈ Rp {inspectorData.costIdr.toLocaleString('id-ID')}</span>
+                      <span className="px-2 py-1 rounded-lg bg-success-soft border border-success-line text-success">≈ Rp {inspectorData.costIdr.toLocaleString('id-ID')}</span>
                     )}
                   </div>
                 )}
@@ -1153,8 +1153,8 @@ export const AiSandbox: React.FC = () => {
 
             </div>
           ) : (
-            <div className="h-full flex flex-col justify-center items-center text-center text-[#8696a0] text-xs py-20">
-              <Eye size={32} className="mb-2 text-[#8696a0]" />
+            <div className="h-full flex flex-col justify-center items-center text-center text-ink-3 text-xs py-20">
+              <Eye size={32} className="mb-2 text-ink-3" />
               <p>Ketik dan kirim pesan di simulator chat untuk menginspeksi variabel RAG secara real-time.</p>
             </div>
           )}

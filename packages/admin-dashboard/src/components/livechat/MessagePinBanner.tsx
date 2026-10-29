@@ -57,22 +57,22 @@ export const MessagePinBanner: React.FC<MessagePinBannerProps> = ({
           title="Klik untuk melompat ke pesan yang disematkan ini"
         >
           {/* Badge Icon Pin */}
-          <span className="w-6 h-6 rounded-full bg-emerald-600/10 dark:bg-[#00a884]/15 text-[#008069] dark:text-[#00a884] flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+          <span className="w-6 h-6 rounded-full bg-emerald-600/10 dark:bg-accent/15 text-accent flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
             <Pin size={13} className="fill-current -rotate-45" />
           </span>
 
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 text-[10px] leading-tight">
-              <span className="font-bold text-[#008069] dark:text-[#00a884] truncate">
+              <span className="font-bold text-accent truncate">
                 Pesan Disematkan • {senderTitle}
               </span>
               {pinnedMessage.pinned_by && (
-                <span className="text-[9px] text-[#667781] dark:text-slate-400 hidden sm:inline">
+                <span className="text-[9px] text-ink-3 dark:text-slate-400 hidden sm:inline">
                   (oleh {pinnedMessage.pinned_by})
                 </span>
               )}
             </div>
-            <p className="text-[11px] font-medium text-[#111b21] dark:text-slate-200 truncate group-hover:text-[#008069] dark:group-hover:text-emerald-400 transition-colors">
+            <p className="text-[11px] font-medium text-ink truncate group-hover:text-accent transition-colors">
               {cleanSnippet}
             </p>
           </div>
@@ -86,11 +86,11 @@ export const MessagePinBanner: React.FC<MessagePinBannerProps> = ({
             e.stopPropagation();
             onUnpin(pinnedMessage.id);
           }}
-          className="p-1.5 rounded-full text-[#667781] hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition active:scale-95 disabled:opacity-50 cursor-pointer shrink-0"
+          className="p-1.5 rounded-full text-ink-2 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition active:scale-95 disabled:opacity-50 cursor-pointer shrink-0"
           title="Lepas sematan pesan ini"
         >
           {isUnpinning ? (
-            <Loader2 size={14} className="animate-spin text-[#008069]" />
+            <Loader2 size={14} className="animate-spin text-accent" />
           ) : (
             <X size={14} />
           )}

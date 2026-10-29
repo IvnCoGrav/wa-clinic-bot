@@ -54,8 +54,8 @@ const IndexRedirect: React.FC = () => {
   }, [loading, user]);
   if (loading) {
     return (
-      <div className="flex h-[100dvh] min-h-[100dvh] items-center justify-center bg-[#f0f2f5]">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#008069] border-t-transparent"></div>
+      <div className="flex h-[100dvh] min-h-[100dvh] items-center justify-center bg-app">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-accent border-t-transparent"></div>
       </div>
     );
   }
@@ -104,8 +104,8 @@ export const App: React.FC = () => {
         <BootProgress />
         <AppErrorBoundary scopeLabel="global">
         <Suspense fallback={
-          <div className="flex h-[100dvh] min-h-[100dvh] items-center justify-center bg-[#f0f2f5]">
-            <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#008069] border-t-transparent"></div>
+          <div className="flex h-[100dvh] min-h-[100dvh] items-center justify-center bg-app">
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-accent border-t-transparent"></div>
           </div>
         }>
           <Routes>
@@ -299,15 +299,15 @@ export const App: React.FC = () => {
 
             {/* Unauthorized view */}
             <Route path="/admin/unauthorized" element={
-              <div className="flex h-[100dvh] min-h-[100dvh] flex-col items-center justify-center bg-[#f0f2f5] text-[#111b21] text-center p-6 space-y-4">
-                <div className="bg-white border border-[#e9edef] rounded-2xl p-8 shadow-xs max-w-sm flex flex-col items-center space-y-3">
-                  <h3 className="text-lg font-bold text-rose-600">Access Unauthorized</h3>
-                  <p className="text-xs text-[#667781]">
+              <div className="flex h-[100dvh] min-h-[100dvh] flex-col items-center justify-center bg-app text-ink text-center p-6 space-y-4">
+                <div className="bg-surface border border-divider rounded-2xl p-8 shadow-xs max-w-sm flex flex-col items-center space-y-3">
+                  <h3 className="text-lg font-bold text-danger">Access Unauthorized</h3>
+                  <p className="text-xs text-ink-2">
                     Anda tidak memiliki hak akses untuk membuka halaman ini.
                   </p>
                   <button
                     onClick={() => window.location.href = '/admin/login'}
-                    className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] rounded-xl text-xs font-semibold text-white transition shadow-xs"
+                    className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-xl text-xs font-semibold text-white transition shadow-xs"
                   >
                     Kembali ke Halaman Login
                   </button>

@@ -19,6 +19,8 @@ import {
  * "Kabupaten Sidoarjo", "Gresik Regency" harus dianggap satu kota kanonik) dan
  * ketahanan filter/warna terhadap data kotor.
  */
+/** Warna apa pun yang dikirim ke Leaflet/SVG wajib token, bukan hex (tema terang/gelap). */
+const HEX_RE = /#[0-9a-fA-F]{3,8}/;
 describe('customerMapUtils — peta sebaran (adversarial)', () => {
   describe('normalizeCity', () => {
     it('memetakan variasi penulisan ke nama kanonik', () => {
@@ -100,25 +102,46 @@ describe('customerMapUtils — peta sebaran (adversarial)', () => {
   });
 
   describe('markerColor', () => {
+    // Warna marker wajib berupa token semantik (bukan hex), supaya peta ikut
+    // berganti tema terang/gelap tanpa perlu memetakan ulang nilai warna.
+    const OUT_OF_COVERAGE = 'rgb(var(--c-ink-3))';
+    const RESERVED = 'rgb(var(--c-accent))';
+    const MQL = 'rgb(var(--c-info))';
+
     it('prioritas: out-of-coverage > sudah-reservasi > mql', () => {
-      expect(markerColor({ lat: 0, lng: 0, is_out_of_coverage: true, is_mql: true, has_reservation: true })).toBe('#94a3b8');
-      expect(markerColor({ lat: 0, lng: 0, is_mql: true, status: 'blocked' })).toBe('#2563eb');
-      expect(markerColor({ lat: 0, lng: 0, status: 'blocked' })).toBe('#2563eb');
-      expect(markerColor({ lat: 0, lng: 0, status: 'active' })).toBe('#2563eb');
-      expect(markerColor({ lat: 0, lng: 0 })).toBe('#2563eb');
+      expect(markerColor({ lat: 0, lng: 0, is_out_of_coverage: true, is_mql: true, has_reservation: true })).toBe(OUT_OF_COVERAGE);
+      expect(markerColor({ lat: 0, lng: 0, is_mql: true, status: 'blocked' })).toBe(MQL);
+      expect(markerColor({ lat: 0, lng: 0, status: 'blocked' })).toBe(MQL);
+      expect(markerColor({ lat: 0, lng: 0, status: 'active' })).toBe(MQL);
+      expect(markerColor({ lat: 0, lng: 0 })).toBe(MQL);
     });
 
     it('pelanggan MQL yang SUDAH reservasi tampil hijau (bukan biru)', () => {
-      expect(markerColor({ lat: 0, lng: 0, is_mql: true, has_reservation: true })).toBe('#008069');
-      expect(markerColor({ lat: 0, lng: 0, is_mql: true, has_reservation: true, status: 'active' })).toBe('#008069');
+      expect(markerColor({ lat: 0, lng: 0, is_mql: true, has_reservation: true })).toBe(RESERVED);
+      expect(markerColor({ lat: 0, lng: 0, is_mql: true, has_reservation: true, status: 'active' })).toBe(RESERVED);
     });
 
     it('pelanggan sudah reservasi namun status non-aktif tetap hijau (reservasi menang atas status)', () => {
-      expect(markerColor({ lat: 0, lng: 0, has_reservation: true, status: 'blocked' })).toBe('#008069');
+      expect(markerColor({ lat: 0, lng: 0, has_reservation: true, status: 'blocked' })).toBe(RESERVED);
     });
 
     it('out-of-coverage tetap menang atas reservasi (perlu perhatian operasional)', () => {
-      expect(markerColor({ lat: 0, lng: 0, has_reservation: true, is_out_of_coverage: true })).toBe('#94a3b8');
+      expect(markerColor({ lat: 0, lng: 0, has_reservation: true, is_out_of_coverage: true })).toBe(OUT_OF_COVERAGE);
+    });
+
+    it('tidak pernah mengembalikan warna hex hardcode (anti-regresi tema)', () => {
+      const allowed = new Set([OUT_OF_COVERAGE, RESERVED, MQL]);
+      const samples = [
+        { lat: 0, lng: 0 },
+        { lat: 0, lng: 0, is_mql: true },
+        { lat: 0, lng: 0, has_reservation: true },
+        { lat: 0, lng: 0, is_out_of_coverage: true },
+      ];
+      for (const p of samples) {
+        const color = markerColor(p);
+        expect(color).not.toMatch(HEX_RE);
+        expect(allowed.has(color)).toBe(true);
+      }
     });
   });
 
@@ -167,10 +190,10 @@ describe('customerMapUtils — peta sebaran (adversarial)', () => {
   });
 
   describe('locationVisual (pembeda sumber lokasi)', () => {
-    it('gps_pin → marker padat, outline putih', () => {
+    it('gps_pin → marker padat, outline permukaan', () => {
       const v = locationVisual({ lat: 0, lng: 0, location_source: 'gps_pin' });
       expect(v.source).toBe('gps_pin');
-      expect(v.borderColor).toBe('#ffffff');
+      expect(v.borderColor).toBe('rgb(var(--c-surface))');
       expect(v.dashArray).toBeUndefined();
       expect(v.fillOpacity).toBeGreaterThan(0.8);
     });
@@ -178,18 +201,27 @@ describe('customerMapUtils — peta sebaran (adversarial)', () => {
     it('estimated_area → outline putus-putus & fill transparan', () => {
       const v = locationVisual({ lat: 0, lng: 0, location_source: 'estimated_area' });
       expect(v.source).toBe('estimated_area');
+      expect(v.borderColor).toBe('rgb(var(--c-ink-2))');
       expect(v.dashArray).toBeTruthy();
       expect(v.fillOpacity).toBeLessThan(0.8);
     });
 
-    it('manual_staff → ungu solid (uniform radius 7, border putih)', () => {
+    it('manual_staff → solid (uniform radius 7, outline permukaan)', () => {
       const v = locationVisual({ lat: 0, lng: 0, location_source: 'manual_staff' });
       expect(v.source).toBe('manual_staff');
-      expect(v.borderColor).toBe('#ffffff');
+      expect(v.borderColor).toBe('rgb(var(--c-surface))');
       expect(v.radius).toBe(7);
       expect(v.radius).toBe(locationVisual({ lat: 0, lng: 0, location_source: 'gps_pin' }).radius);
       expect(v.fillOpacity).toBe(1);
       expect(v.label).not.toBe(locationVisual({ lat: 0, lng: 0, location_source: 'gps_pin' }).label);
+    });
+
+    it('semua warna visual marker bertoken, bukan hex hardcode', () => {
+      for (const source of ['gps_pin', 'estimated_area', 'manual_staff'] as const) {
+        const v = locationVisual({ lat: 0, lng: 0, location_source: source });
+        expect(v.borderColor).not.toMatch(HEX_RE);
+        expect(v.borderColor).toMatch(/^rgb\(var\(--c-[a-z0-9-]+\)\)$/);
+      }
     });
 
     it('kompatibilitas data lama: location_source null → turunkan dari is_estimated_centroid', () => {

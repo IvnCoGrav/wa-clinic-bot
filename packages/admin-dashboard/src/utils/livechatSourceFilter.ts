@@ -1,5 +1,5 @@
 /**
- * livechatSourceFilter.ts — gerbang deterministik mode sumber LiveChat (#160).
+ * livechatSourceFilter.ts — gerbang deterministik mode sumber LiveChat (Issue 160).
  *
  * Masalah: saat admin berada di filter Sandbox, event SSE dari pasien WA asli
  * (mode real) tetap memicu `loadChats(true)` berulang → UI berkedip (thrashing).

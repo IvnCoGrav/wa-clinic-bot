@@ -112,7 +112,7 @@ export function getSharelocCardStatus(chat: any, now: Date = new Date()): Sharel
     urgent: false,
     label: '📍 Butuh Shareloc',
     badgeClass:
-      'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-[#f59e0b] dark:border-amber-800',
+      'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-warning dark:border-amber-800',
     borderClass: 'border-l-4 border-l-amber-500',
     reason: 'advance_due',
   };
