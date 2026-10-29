@@ -125,33 +125,50 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
   const { hourHeight, zoomLevel, containerRef } = zoomState;
 
   const topScrollbarRef = useRef<HTMLDivElement>(null);
-  const isSyncingScrollRef = useRef(false);
   const hasAutoScrolledRef = useRef(false);
 
-  const handleTopScrollbar = () => {
-    if (isSyncingScrollRef.current) return;
-    if (!topScrollbarRef.current || !containerRef.current) return;
-    isSyncingScrollRef.current = true;
-    containerRef.current.scrollLeft = topScrollbarRef.current.scrollLeft;
-    requestAnimationFrame(() => {
-      isSyncingScrollRef.current = false;
-    });
+  // === Sinkronisasi scroll 1 arah + penjaga gema (anti-getar) ===
+  // Grid → penggaris atas: aman, karena penggaris tidak sedang dipegang jari.
+  // Penggaris atas → grid: HANYA saat penggaris benar-benar disentuh user, dan
+  // event gema akibat tulisan programatik kita sendiri diabaikan.
+  //
+  // Sebelumnya kedua arah aktif tanpa penjaga waktu. Saat jari menggeser grid,
+  // browser menggerakkan grid di lapisan compositor sehingga `scrollLeft` yang
+  // dibaca JS tertinggal beberapa frame. Nilai basi itu ditulis balik ke grid
+  // → grid "ditarik mundur" tiap frame → getar kiri-kanan.
+  const topTouchingRef = useRef(false);
+  const lastTopWriteRef = useRef(0);
+  const TOP_SYNC_ECHO_MS = 300;
+
+  const handleMainScroll = () => {
+    const container = containerRef.current;
+    const top = topScrollbarRef.current;
+    if (!container || !top) return;
+    // Jangan pernah menulis posisi ke elemen yang sedang dipegang jari.
+    if (topTouchingRef.current) return;
+    const currentScrollLeft = container.scrollLeft;
+    if (Math.abs(currentScrollLeft - top.scrollLeft) < 1) return;
+    lastTopWriteRef.current = performance.now();
+    top.scrollLeft = currentScrollLeft;
   };
 
-  const lastSyncedScrollLeftRef = useRef(-1);
-  const handleMainScroll = () => {
-    if (isSyncingScrollRef.current) return;
-    if (!topScrollbarRef.current || !containerRef.current) return;
-    const currentScrollLeft = containerRef.current.scrollLeft;
-    // Guard: hanya sync jika posisi horizontal berubah lebih dari 0.5px
-    // Ini mencegah layout reflow yang tidak perlu saat pengguna sedang scroll vertikal (jam ke bawah)
-    if (Math.abs(currentScrollLeft - lastSyncedScrollLeftRef.current) < 0.5) return;
-    lastSyncedScrollLeftRef.current = currentScrollLeft;
-    isSyncingScrollRef.current = true;
-    topScrollbarRef.current.scrollLeft = currentScrollLeft;
-    requestAnimationFrame(() => {
-      isSyncingScrollRef.current = false;
-    });
+  const handleTopScrollbar = () => {
+    const container = containerRef.current;
+    const top = topScrollbarRef.current;
+    if (!container || !top) return;
+    // Abaikan event gema dari tulisan kita sendiri (baris di atas).
+    if (performance.now() - lastTopWriteRef.current < TOP_SYNC_ECHO_MS) return;
+    container.scrollLeft = top.scrollLeft;
+  };
+
+  const handleTopPointerDown = () => {
+    topTouchingRef.current = true;
+    // Buka penjaga gema segera agar tarikan user langsung terasa.
+    lastTopWriteRef.current = 0;
+  };
+
+  const handleTopPointerUp = () => {
+    topTouchingRef.current = false;
   };
 
   const isDraggingRef = useRef(false);
@@ -429,9 +446,11 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
         data-horizontal-scroll="true"
         data-no-swipe-back="true"
         onScroll={handleTopScrollbar}
+        onPointerDown={handleTopPointerDown}
+        onPointerUp={handleTopPointerUp}
+        onPointerCancel={handleTopPointerUp}
         className="overflow-x-auto overflow-y-hidden h-5 sm:h-3.5 bg-[#f0f2f5] dark:bg-[#111b21] border-b border-[#e9edef] dark:border-[#2a3942] select-none cursor-pointer touch-pan-x"
         style={{
-          WebkitOverflowScrolling: 'touch',
           touchAction: 'pan-x pan-y',
         }}
         title="Geser kalender secara horizontal"
@@ -454,9 +473,6 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchEnd}
         className="cal-2d overflow-x-auto overflow-y-auto max-h-[720px] select-none cursor-grab active:cursor-grabbing"
-        style={{
-          WebkitOverflowScrolling: 'touch',
-        }}
       >
         <div className="min-w-[1050px] w-full divide-y divide-[#e9edef] dark:divide-[#2a3942]">
           {/* Sticky Header: Day Names & Dates */}

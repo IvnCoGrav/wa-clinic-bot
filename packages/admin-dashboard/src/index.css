@@ -197,13 +197,16 @@ aside nav {
 }
 
 /* Container 2 sumbu (kalender mingguan): izinkan pan horizontal + vertikal.
-   overscroll dibiarkan `auto` agar halaman tetap bisa di-scroll saat ujung
-   tercapai (menghindari jebakan scroll). Pinch browser dimatikan karena
-   kalender punya pinch-zoom sendiri (useCalendarZoom). */
+   `overscroll-behavior-x: contain` mencegah chaining/pantulan horizontal ke
+   halaman saat grid mentok kiri-kanan; sumbu Y dibiarkan `auto` agar halaman
+   tetap bisa di-scroll setelah grid mentok bawah (menghindari jebakan scroll).
+   `-webkit-overflow-scrolling` sengaja TIDAK dipakai: properti itu deprecated
+   (iOS 13+ sudah native) dan pada sebagian perangkat memaksa scroll di main
+   thread sehingga memperparah lag/getar. */
 .cal-2d {
   touch-action: pan-x pan-y !important;
-  overscroll-behavior: auto !important;
-  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain !important;
+  overscroll-behavior-y: auto !important;
 }
 
 /* iOS Safe Area Helper Utilities */
