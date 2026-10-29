@@ -45,3 +45,26 @@ export function toTitleCase(s: string): string {
     .map((w) => (w ? w[0].toUpperCase() + w.slice(1).toLowerCase() : w))
     .join(' ');
 }
+
+/**
+ * Format nama orang dengan mempertahankan sapaan Bunda / Ayah di awal:
+ * "bunda anggi zulfika" -> "Bunda Anggi Zulfika"
+ * "ayah rudi" -> "Ayah Rudi"
+ * "anggi zulfika" -> "Anggi Zulfika"
+ */
+export function toTitleCasePreservingPrefix(name: string): string {
+  const m = /^(bunda|ayah)\s+(.*)$/i.exec((name || '').trim());
+  if (!m) return toTitleCase(name);
+  return `${m[1][0].toUpperCase()}${m[1].slice(1).toLowerCase()} ${toTitleCase(m[2])}`;
+}
+
+/**
+ * Pastikan prefix sapaan Bunda / Ayah di awal berhuruf kapital, tanpa
+ * merusak kapitalisasi asli nama (mis. gelar S.Kep atau casing khusus).
+ */
+export function normalizeHonorificPrefix(name: string): string {
+  const m = /^(bunda|ayah)\s+(.*)$/i.exec((name || '').trim());
+  if (!m) return (name || '').trim();
+  const prefix = m[1].toLowerCase() === 'ayah' ? 'Ayah' : 'Bunda';
+  return `${prefix} ${m[2].trim()}`;
+}

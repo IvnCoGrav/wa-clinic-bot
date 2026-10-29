@@ -766,7 +766,7 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
         const cust = await customerService.getOrCreateCustomer(targetPhone, customerName, tenantId);
         customerId = cust.id;
       } else if (customerId && customerName) {
-        await customerService.updateCustomerName(customerId, customerName, tenantId, { force }).catch(() => {});
+        await customerService.updateCustomerName(customerId, customerName, tenantId, { force, source: 'admin' }).catch(() => {});
       }
  
       if (!customerId) {

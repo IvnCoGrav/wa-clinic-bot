@@ -408,24 +408,6 @@ export class ConversationStateMachine {
           console.error(`[MACHINE FORM] Gagal simpan reservasi customer ${customer.phone} (${parsed.name}):`, dbErr.message);
         }
 
-        // Simpan nama kontak customer: "Bunda {nama}".
-        // Integritas penamaan (fondasional): kecamatan HIDUP di kolom `kecamatan`
-        // (dipakai formatter Google Contacts dari DB) — DILARANG ditempel ke
-        // Customer.name. Sebelumnya `Bunda ${name} ${kecamatan}` memproduksi
-        // duplikasi wilayah ("Bunda Ella Kecamatan Waru Kecamatan Waru").
-        const customerName = parsed.name?.trim();
-        if (customerName && customerName.length > 0 && !isGenericCustomerName(customerName)) {
-          const isMale = /^(?:ayah|pak|bapak|mas)\s+/i.test(customerName);
-          const cleanName = customerName.replace(/^(?:ayah|pak|bapak|bunda|ibu|mama|mom|mbak|mas|kak|kakak|ny|ny\.)\s+/i, '').trim();
-          const contactName = isMale ? `Ayah ${cleanName}`.trim() : `Bunda ${cleanName || customerName}`.trim();
-          try {
-            const { customerService } = await import('../services/customer.service');
-            await customerService.updateCustomerName(customer.id, contactName, tenantId);
-          } catch (nameErr: any) {
-            console.warn('[MACHINE CONTACT SAVE] Failed to update customer name:', nameErr.message);
-          }
-        }
-
         // Eskalasi ke Human Handling. 152c: bila hari tertulis bertentangan
         // dengan tanggal (mis. "jumat 28 Juli" padahal Selasa), sertakan CATATAN
         // PERINGATAN ke staf agar dikonfirmasi — tanpa memblokir penyimpanan.

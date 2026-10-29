@@ -7,6 +7,7 @@ import { responseCacheService } from './response-cache.service';
 import { pickGpsTier, GpsCandidate } from './location-ingest.service';
 import { sanitizeKelurahanInput } from '../utils/kelurahan-guard';
 import { sanitizeCustomerNameForStorage, isValidChildName, isGenericCustomerName } from '../utils/name-sanitizer';
+import { toTitleCasePreservingPrefix, normalizeHonorificPrefix } from '../utils/customer-name-healing';
 import {
   SavedCustomerAddress,
   UpsertSavedAddressInput,
@@ -32,6 +33,16 @@ const memoryCustomers = new Map<string, any>();
 function isTestRuntime(): boolean {
   return Boolean(process.env.VITEST) || process.env.NODE_ENV === 'test';
 }
+
+export type CustomerNameSource = 'pushname' | 'sync' | 'reservation' | 'admin';
+
+const NAME_SOURCE_RANK: Record<string, number> = {
+  unknown: 0,
+  pushname: 1,
+  sync: 1,
+  reservation: 2,
+  admin: 3,
+};
 
 export class CustomerService {
   public getMemoryCustomers(): Map<string, any> {
@@ -214,11 +225,18 @@ export class CustomerService {
     if (!customer) {
       // Skema: @@unique([tenant_id, phone]) — nomor boleh ada di tenant berbeda.
       // Create atomic; bila race (P2002) → re-read dalam tenant (bukan global).
+      const rawPushName = typeof name === 'string' && name.trim() ? name.trim() : null;
+      const isPushnameGeneric = !safeName || isGenericCustomerName(safeName, { strictPushnameGate: true });
+      const initialName = isPushnameGeneric ? null : safeName;
+      const initialSource = initialName ? 'pushname' : null;
+
       try {
         customer = await repo.create({
           tenant_id: tenantId,
           phone,
-          name: safeName || null,
+          name: initialName,
+          name_source: initialSource,
+          whatsapp_push_name: rawPushName,
           is_sandbox_test: isSandbox,
         });
         isNewlyCreated = true;
@@ -964,29 +982,49 @@ export class CustomerService {
     customerId: string,
     name: string,
     tenantId: string,
-    options?: { force?: boolean }
+    options?: { force?: boolean; source?: CustomerNameSource }
   ): Promise<any> {
-    // Gerbang SEAM TULIS (fondasional): noise toponimi ("Kecamatan X", "Kec. Y")
-    // DILARANG masuk kolom `name`. Bila hasil bersih kosong/placeholder, JANGAN
-    // menimpa nama lama (anti data-loss) — cukup lewati penulisan nama.
+    const source: CustomerNameSource = options?.force ? 'admin' : (options?.source ?? 'sync');
+    const current = await this.getCustomerById(customerId, tenantId);
+
+    // 1) Otoritas lebih dulu: sumber resmi hanya divalidasi placeholder murni.
+    const isAuthoritative = source === 'reservation' || source === 'admin';
     const safeName = sanitizeCustomerNameForStorage(name);
-    if (!safeName) {
-      const current = await this.getCustomerById(customerId, tenantId);
+    const candidate = (safeName || '').trim();
+    if (!candidate) return current; // anti data-loss
+    if (!isAuthoritative && isGenericCustomerName(candidate, { strictPushnameGate: true })) {
       return current;
     }
 
-    // Gerbang Proteksi Identitas Master
-    if (!options?.force) {
-      const current = await this.getCustomerById(customerId, tenantId);
-      if (current?.name && !isGenericCustomerName(current.name)) {
-        console.log(`[CUSTOMER NAME SHIELD] Pertahankan nama definitif '${current.name}' untuk customer ${customerId} (abaikan kandidat non-force '${safeName}')`);
-        return current;
-      }
+    // 2) Provenance gate.
+    const stored = (current?.name || '').trim();
+    const storedRank = NAME_SOURCE_RANK[(current as any)?.name_source ?? 'unknown'] ?? 0;
+    const incomingRank = NAME_SOURCE_RANK[source] ?? 0;
+    const sameIdentity = stored.toLowerCase() === candidate.toLowerCase();
+    const storedIsPlaceholder = !stored || isGenericCustomerName(stored);
+
+    const allowed =
+      source === 'admin' ||
+      storedIsPlaceholder ||
+      incomingRank > storedRank ||
+      (incomingRank === storedRank && sameIdentity);
+
+    if (!allowed) {
+      console.log(
+        `[CUSTOMER NAME SHIELD] tolak '${candidate}' (src=${source}) atas '${stored}' (src=${(current as any)?.name_source ?? 'unknown'}) customer=${customerId}`
+      );
+      return current;
     }
+
+    const finalName = normalizeHonorificPrefix(candidate);
+
     try {
       const updated = await prisma.customer.update({
         where: { id: customerId },
-        data: { name: safeName },
+        data: {
+          name: finalName,
+          name_source: source,
+        },
       });
 
       // Google Contacts auto-sync (best-effort, non-blocking)
@@ -1001,7 +1039,8 @@ export class CustomerService {
       // Memory fallback update
       for (const [phone, cust] of memoryCustomers.entries()) {
         if (cust.id === customerId && cust.tenant_id === tenantId) {
-          cust.name = safeName;
+          cust.name = finalName;
+          cust.name_source = source;
           return cust;
         }
       }
@@ -1071,11 +1110,6 @@ export class CustomerService {
         CustomerService.toNumberOrNull(data.lng) !== priorLng);
 
     const updateData: any = {};
-    if (data.name !== undefined) {
-      // Gerbang SEAM TULIS: admin edit pun DILARANG menyelipkan noise toponimi.
-      const safeName = sanitizeCustomerNameForStorage(data.name);
-      if (safeName) updateData.name = safeName;
-    }
     // Fase 165b: simpan nilai kelurahan yang tercemar untuk DIALIHKAN ke
     // preferences.address (agar info jalan/perumahan tidak hilang), bukan ditulis
     // ke kolom kelurahan.
@@ -1201,6 +1235,9 @@ export class CustomerService {
         })
         .catch(() => {});
 
+      if (data.name !== undefined) {
+        await this.updateCustomerName(customerId, data.name, tenantId, { source: 'admin', force: true }).catch(() => {});
+      }
       const finalCustomer = await this.getCustomerById(customerId, tenantId);
 
       // Auto-recalculate distance_km & ongkir if lat/lng or address components changed.
@@ -1352,6 +1389,9 @@ export class CustomerService {
               created_at: new Date(),
               updated_at: new Date(),
             }));
+          }
+          if (data.name !== undefined) {
+            await this.updateCustomerName(customerId, data.name, tenantId, { source: 'admin', force: true }).catch(() => {});
           }
           const touchedLocationMem =
             data.kelurahan !== undefined || data.kecamatan !== undefined ||

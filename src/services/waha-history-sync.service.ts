@@ -245,9 +245,12 @@ export class WahaHistorySyncService {
             const isCurrentGeneric = !customer.name || isGenericCustomerName(customer.name);
             if (customerName && isCurrentGeneric && !isGenericCustomerName(customerName)) {
               try {
-                await customerService.updateCustomerName(customer.id, customerName, tenantId);
+                await customerService.updateCustomerName(customer.id, customerName, tenantId, { source: 'sync' });
                 customer.name = customerName;
               } catch (e) {}
+            }
+            if (customerName && !(customer as any).whatsapp_push_name) {
+              (customer as any).whatsapp_push_name = customerName;
             }
 
             const conversation = await conversationService.getOrCreateConversation(customer.id, tenantId);
@@ -479,11 +482,14 @@ export class WahaHistorySyncService {
         const isCurrentGeneric = !customer.name || isGenericCustomerName(customer.name);
         if (customerName && isCurrentGeneric && !isGenericCustomerName(customerName)) {
           try {
-            await customerService.updateCustomerName(customer.id, customerName, tenantId);
+            await customerService.updateCustomerName(customer.id, customerName, tenantId, { source: 'sync' });
             customer.name = customerName;
           } catch (e) {
             // abaikan — nama tidak wajib
           }
+        }
+        if (customerName && !(customer as any).whatsapp_push_name) {
+          (customer as any).whatsapp_push_name = customerName;
         }
         const conversation = await conversationService.getOrCreateConversation(customer.id, tenantId);
 

@@ -24,6 +24,8 @@ export interface CustomerCreateData {
   tenant_id: string;
   phone: string;
   name?: string | null;
+  name_source?: string | null;
+  whatsapp_push_name?: string | null;
   is_sandbox_test?: boolean;
   is_internal_staff?: boolean;
 }
@@ -60,6 +62,8 @@ export class PostgresCustomerRepository implements CustomerRepository {
         tenant_id: data.tenant_id,
         phone: data.phone,
         name: data.name ?? null,
+        name_source: data.name_source ?? null,
+        whatsapp_push_name: data.whatsapp_push_name ?? null,
         labels_synced_at: new Date(),
         is_sandbox_test: data.is_sandbox_test ?? false,
       },
@@ -102,6 +106,8 @@ export class InMemoryCustomerRepository implements CustomerRepository {
       tenant_id: data.tenant_id,
       phone: data.phone,
       name: data.name ?? null,
+      name_source: data.name_source ?? null,
+      whatsapp_push_name: data.whatsapp_push_name ?? null,
       kelurahan: null, kecamatan: null, kota: null,
       lat: null, lng: null, distance_km: null, ongkir: null,
       is_out_of_coverage: false,

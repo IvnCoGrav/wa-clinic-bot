@@ -59,9 +59,13 @@ const GENERIC_NAME_PLACEHOLDERS = new Set([
  * Nama generik diizinkan diperbarui saat customer memberikan nama asli di reservasi pertama.
  * Nama yang SUDAH DEFINITIF (nama orang asli yang sah) DILARANG ditimpa otomatis oleh transaksi berikutnya.
  */
-export function isGenericCustomerName(name: string | null | undefined): boolean {
+export function isGenericCustomerName(
+  name: string | null | undefined,
+  opts?: { strictPushnameGate?: boolean }
+): boolean {
   if (!name) return true;
-  const trimmed = name.trim();
+  let trimmed = name.trim();
+  trimmed = trimmed.normalize('NFKD').replace(/[\u0300-\u036F]/g, '');
   if (trimmed.length < 2) return true;
   const lower = trimmed.toLowerCase();
 
@@ -88,6 +92,12 @@ export function isGenericCustomerName(name: string | null | undefined): boolean 
   // 6. Harus tersisa minimal 2 huruf alfabet asli (anti pure emoji/simbol: "😊", "⭐️", "~", ".")
   const lettersOnly = stripped.replace(/[^\p{L}]/gu, '');
   if (lettersOnly.length < 2) return true;
+
+  if (opts?.strictPushnameGate) {
+    // Hukum fonetik: tanpa vokal (a,i,u,e,o) & tanpa y -> inisial/handle/ketikan acak.
+    const hasVowel = /[aeiou]/i.test(stripped);
+    if (!hasVowel) return true;
+  }
 
   return false;
 }
@@ -350,8 +360,15 @@ export function sanitizeCustomerNameForStorage(rawName?: string | null): string 
   if (!rawName) return '';
   let name = rawName.trim();
 
-  // 1. Buang emoji
-  name = name.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E0}-\u{1F1FF}]/gu, '').trim();
+  // NFKD: karakter estetis (ℍ𝕖𝕟𝕪) & superscript (²) → ASCII; buang combining mark.
+  name = name.normalize('NFKD').replace(/[\u0300-\u036F]/g, '');
+
+  // 1. Buang emoji (pictographic + flag + skin-tone + ZWJ/VS16/keycap residue)
+  name = name
+    .replace(/\p{Extended_Pictographic}/gu, '')
+    .replace(/[\u{1F1E6}-\u{1F1FF}]/gu, '')
+    .replace(/[\u200D\uFE0F\u20E3\u{1F3FB}-\u{1F3FF}]/gu, '')
+    .trim();
 
   // 2. Ekstrak nama dalam kurung jika ada (misal: "0812345 (Bunda Rina)" -> "Bunda Rina")
   if (name.includes('(') && name.includes(')')) {

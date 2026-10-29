@@ -119,12 +119,13 @@ async function main() {
 
     // Update nama kontak jika ada nama baru di form
     const cname = p.name?.trim();
-    if (cname && cname.toLowerCase() !== 'bunda' && cname.length>1) {
-      const kec = customer.kecamatan || '';
-      const contact = `Bunda ${cname}${kec?` ${kec}`:''}`.trim();
+    if (cname && cname.toLowerCase() !== 'bunda' && cname.length > 1) {
+      const isMale = /^(?:ayah|pak|bapak|mas)\s+/i.test(cname);
+      const cleanName = cname.replace(/^(?:ayah|pak|bapak|bunda|ibu|mama|mom|mbak|mas|kak|kakak|ny|ny\.)\s+/i, '').trim();
+      const contact = isMale ? `Ayah ${cleanName}`.trim() : `Bunda ${cleanName || cname}`.trim();
       try {
         const { customerService } = await import('../services/customer.service');
-        await customerService.updateCustomerName(customer.id, contact, DEFAULT_TENANT_ID);
+        await customerService.updateCustomerName(customer.id, contact, DEFAULT_TENANT_ID, { source: 'reservation' });
         console.log(`  -> updateCustomerName: ${contact}`);
       } catch {}
     }

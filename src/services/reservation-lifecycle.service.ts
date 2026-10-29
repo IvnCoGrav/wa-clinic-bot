@@ -55,7 +55,7 @@ export class ReservationLifecycleService {
           // Integritas penamaan: kecamatan hidup di kolom kecamatan (dipakai
           // formatter Google Contacts dari DB), DILARANG ditempel ke Customer.name.
           const contactFormattedName = isMale ? `Ayah ${cleanName}`.trim() : `Bunda ${cleanName}`.trim();
-          await customerService.updateCustomerName(customerId, contactFormattedName, tenantId).catch(() => {});
+          await customerService.updateCustomerName(customerId, contactFormattedName, tenantId, { source: 'reservation' }).catch(() => {});
         }
       }
 

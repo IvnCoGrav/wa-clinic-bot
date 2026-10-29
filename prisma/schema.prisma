@@ -64,6 +64,10 @@ model Customer {
   tenant_id               String         @default("default-tenant")
   phone                   String
   name                    String?
+  /// Provenance nama: pushname|sync|reservation|admin (NULL = data lama/unknown).
+  name_source             String?
+  /// PushName mentah WhatsApp (audit & fallback tampilan; TIDAK dipakai untuk identitas).
+  whatsapp_push_name      String?
   kelurahan               String?
   kecamatan               String?
   kota                    String?

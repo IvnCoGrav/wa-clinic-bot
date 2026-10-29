@@ -1261,8 +1261,13 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
         // Sync customer details if provided
         // Fondasional: Customer TIDAK punya kolom `address`; alamat lengkap disimpan di preferences.address (+ kelurahan bila kosong)
         if (existing.customer_id && (customerName || customerPhone || address || kecamatan || kota || kelurahan || landmark)) {
+          if (customerName) {
+            try {
+              const { customerService } = await import('../../services/customer.service');
+              await customerService.updateCustomerName(existing.customer_id, customerName, tenantId, { source: 'admin', force: true });
+            } catch (_) {}
+          }
           const custUpdate: any = {};
-          if (customerName) custUpdate.name = customerName;
           if (customerPhone) custUpdate.phone = customerPhone.replace(/\D/g, '');
           if (kecamatan) custUpdate.kecamatan = kecamatan;
           if (kota) custUpdate.kota = kota;
@@ -1278,12 +1283,13 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
             // Kolom kelurahan hanya diisi entitas desa/kelurahan resmi dari
             // geocoding/gazetteer; alamat jalan hidup di preferences.address.
           }
-          // assigned_staff_id: string kosong ΓåÆ null agar tidak menabrak FK
-          // (ditangani di updateData.assigned_staff_id di atas; blok ini hanya customer)
-          await prisma.customer.update({
-            where: { id: existing.customer_id, tenant_id: tenantId },
-            data: custUpdate,
-          });
+          // assigned_staff_id: string kosong -> null agar tidak menabrak FK
+          if (Object.keys(custUpdate).length > 0) {
+            await prisma.customer.update({
+              where: { id: existing.customer_id, tenant_id: tenantId },
+              data: custUpdate,
+            });
+          }
         }
 
         // Sync babies if provided
@@ -2223,7 +2229,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
               if (cleanName && !['bunda', 'ibu', 'mama', 'mom', 'mbak', 'mas', 'kak', 'kakak', 'pasien', 'customer', '-'].includes(cleanName.toLowerCase())) {
                 const formattedName = isMale ? `Ayah ${cleanName}`.trim() : `Bunda ${cleanName}`.trim();
                 const { customerService } = await import('../../services/customer.service');
-                await customerService.updateCustomerName(existing.customer.id, formattedName, tenantId).catch(() => {});
+                await customerService.updateCustomerName(existing.customer.id, formattedName, tenantId, { source: 'reservation' }).catch(() => {});
                 existing.customer.name = formattedName;
               }
             }
