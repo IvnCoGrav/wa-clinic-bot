@@ -39,6 +39,11 @@ import { memoryReservations, filterMemoryByTenant } from './stores';
 import { shouldExcludeFromCapiQueue } from '../../utils/dummy-filter';
 import { wibDayRangeToUtc } from '../../utils/time-wib';
 import { responseCacheService } from '../../services/response-cache.service';
+import { resolveReservationPaymentEvaluation } from '../../services/reservation-core.service';
+function withPaymentEvaluation(r: any) {
+  if (!r) return r;
+  return { ...r, paymentEvaluation: resolveReservationPaymentEvaluation(r) };
+}
 
 /**
 // Fase 2.1: getCatalogFallbackPrice dihapus — dilarang menebak harga layanan Baby secara sembarangan
@@ -438,12 +443,12 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           }
           return reply.status(200).send({
             success: true,
-            data: {
+            data: withPaymentEvaluation({
               ...mem,
               assigned_staff: memStaff,
               notes: (mem as any).notes || extractNotesFromRawText(mem.raw_text),
               baby_details: extractBabyDetails(mem.raw_text),
-            },
+            }),
           });
         }
         const { computeCurrentAge, resolveMomGestationalInfo } = await import('../../utils/age-calculator');
@@ -462,7 +467,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
         }));
         return reply.status(200).send({
           success: true,
-          data: {
+          data: withPaymentEvaluation({
             ...reservation,
             notes: (reservation as any).notes || extractNotesFromRawText(reservation.raw_text),
             baby_details: extractBabyDetails(reservation.raw_text),
@@ -474,18 +479,18 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
             customer: (reservation as any).customer
               ? { ...(reservation as any).customer, children: enrichedChildren }
               : undefined,
-          },
+          }),
         });
       } catch (err: any) {
         const mem = memoryReservations.get(id);
         if (mem && mem.tenant_id === tenantId) {
           return reply.status(200).send({
             success: true,
-            data: {
+            data: withPaymentEvaluation({
               ...mem,
               notes: (mem as any).notes || extractNotesFromRawText(mem.raw_text),
               baby_details: extractBabyDetails(mem.raw_text),
-            },
+            }),
           });
         }
         return reply.status(500).send({ success: false, error: err.message });
