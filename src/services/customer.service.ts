@@ -20,6 +20,7 @@ import {
   pruneAddressTombstones,
   matchesTombstone,
   removeMatchingTombstones,
+  buildAddressKey,
 } from '../domain/customer-address';
 import { ACTIVE_RESERVATION_STATUSES, isActiveReservation } from '../domain/reservation-status';
 import { STAFF_VERIFIED_LOCATION_LABEL, resolveLocationSource } from './staff-reservation.service';
@@ -2755,7 +2756,8 @@ export class CustomerService {
   /**
    * KB-6: ambil referensi ongkir terakhir customer agar admin tidak perlu
    * memasukkan ulang di next treatment. Prioritas: delivery_fee snapshot
-   * reservasi terakhir (bukan cancelled) → fallback Customer.ongkir.
+   * reservasi terakhir (bukan cancelled) → estimasi chat (valid & same address)
+   * → kartu alamat aktif → fallback Customer.ongkir resmi.
    * DB offline → null (pemanggil memakai default masing-masing).
    */
   public async getLastDeliveryFee(customerId: string, tenantId?: string): Promise<number | null> {
@@ -2776,22 +2778,46 @@ export class CustomerService {
     try {
       const cust = await prisma.customer.findFirst({
         where: { id: customerId, ...(tenantId ? { tenant_id: tenantId } : {}) },
-        select: { ongkir: true, preferences: true },
+        select: {
+          ongkir: true,
+          preferences: true,
+          lat: true,
+          lng: true,
+          kelurahan: true,
+          kecamatan: true,
+          kota: true,
+        },
       });
       if (cust) {
         const prefs = (cust.preferences as any) || {};
 
-        // 2. Prioritas Kedua: Hasil estimasi kesepakatan chat WhatsApp (promo)
-        const estOngkir = prefs.distance_estimate?.ongkir;
-        if (typeof estOngkir === 'number' && !isNaN(estOngkir) && estOngkir >= 0) {
-          return estOngkir;
+        // 2. Estimasi chat: HANYA bila belum kedaluwarsa DAN alamatnya sama dengan alamat aktif.
+        const estimate = prefs.distance_estimate;
+        if (estimate && typeof estimate === 'object') {
+          const expiresAtMs = estimate.expires_at ? Date.parse(String(estimate.expires_at)) : NaN;
+          const notExpired = Number.isFinite(expiresAtMs) && expiresAtMs > Date.now();
+          const active = resolveActiveAddressFromList(parseSavedAddresses(prefs));
+          const activeKey = active
+            ? buildAddressKey(active)
+            : buildAddressKey({
+                lat: (cust as any).lat,
+                lng: (cust as any).lng,
+                address: prefs.address ?? prefs.full_address,
+                kelurahan: (cust as any).kelurahan,
+                kecamatan: (cust as any).kecamatan,
+                kota: (cust as any).kota,
+              });
+          const sameAddress = Boolean(estimate.address_key) && estimate.address_key === activeKey;
+          const estOngkir = estimate.ongkir;
+          if (notExpired && sameAddress && typeof estOngkir === 'number' && !isNaN(estOngkir) && estOngkir >= 0) {
+            return estOngkir;
+          }
         }
 
-        // 3. Prioritas Ketiga: Kartu buku alamat tersimpan utama
-        const addrs = Array.isArray(prefs.saved_addresses) ? prefs.saved_addresses : [];
-        const primaryAddr = addrs.find((a: any) => a.isPrimary) || addrs[0];
-        if (typeof primaryAddr?.ongkir === 'number' && !isNaN(primaryAddr.ongkir) && primaryAddr.ongkir >= 0) {
-          return primaryAddr.ongkir;
+        // 3. Kartu buku alamat aktif (primary menang; fallback lastUsedAt terbaru).
+        const active = resolveActiveAddressFromList(parseSavedAddresses(prefs));
+        if (typeof active?.ongkir === 'number' && !isNaN(active.ongkir) && active.ongkir >= 0) {
+          return active.ongkir;
         }
 
         // 4. Fallback legacy: Customer.ongkir resmi

@@ -271,6 +271,27 @@ export function resolveActiveAddress(list: SavedCustomerAddress[]): SavedCustome
   return [...list].sort((x, y) => (x.lastUsedAt < y.lastUsedAt ? 1 : -1))[0] || null;
 }
 
+/** Kunci identitas alamat: koordinat presisi bila ada, selain itu teks ternormalisasi. */
+export function buildAddressKey(input: {
+  lat?: number | null;
+  lng?: number | null;
+  address?: string | null;
+  kelurahan?: string | null;
+  kecamatan?: string | null;
+  kota?: string | null;
+}): string | null {
+  const lat = input.lat != null ? Number(input.lat) : NaN;
+  const lng = input.lng != null ? Number(input.lng) : NaN;
+  if (Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0)) {
+    return `geo:${lat.toFixed(5)},${lng.toFixed(5)}`;
+  }
+  const parts = [input.address, input.kelurahan, input.kecamatan, input.kota]
+    .map((v) => (v ? norm(String(v)) : ''))
+    .filter(Boolean);
+  return parts.length > 0 ? `txt:${parts.join('|')}` : null;
+}
+
+
 /**
  * Penghapusan kartu dari buku alamat (murni). Invarian tetap dijaga:
  * bila daftar tersisa tidak kosong, tepat 1 kartu menangkap gelar primary
