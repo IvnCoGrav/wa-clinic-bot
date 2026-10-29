@@ -178,7 +178,7 @@ export const MonthScheduleGrid: React.FC<MonthScheduleGridProps> = ({
                       title={`${nameDisplay} (${startTimeStr} - ${endTimeStr}) - ${res.treatment_detail || res.treatment_category}`}
                     >
                       <span className="truncate block font-medium">
-                        {startTimeStr}-{endTimeStr} {nameDisplay}
+                        {nameDisplay}
                       </span>
                     </div>
                   );

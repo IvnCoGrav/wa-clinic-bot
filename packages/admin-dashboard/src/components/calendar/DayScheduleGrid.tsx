@@ -16,6 +16,7 @@ interface DayScheduleGridProps {
 
 import { cleanTreatmentDetailForDisplay, resolveReservationDuration } from '../../utils/durationCalculator';
 import { resolveStaffName } from '../../utils/resolveStaffName';
+import { formatReservationArea } from '../../utils/reservationAddress';
 
 const HOURS = Array.from({ length: 16 }, (_, i) => i + 6); // 6am - 9pm
 
@@ -342,6 +343,12 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                 .trim();
               const displayName = cleanName || rawName;
               const cleanDetail = cleanTreatmentDetailForDisplay(res.treatment_detail, res.treatment_category);
+              // Daerah kunjungan — seam yang sama dengan view Bulanan & Mingguan.
+              const areaLabel = formatReservationArea(res);
+              const distanceKm =
+                typeof res.customer?.distance_km === 'number' && Number.isFinite(res.customer.distance_km)
+                  ? res.customer.distance_km
+                  : null;
 
               const evWidth =
                 pos.totalCols > 1
@@ -453,11 +460,12 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                           {cleanDetail}
                         </p>
 
-                        {res.customer?.kelurahan && (
-                          <div className="flex items-center space-x-1 text-[11px] opacity-80">
-                            <MapPin size={12} />
-                            <span>
-                              {res.customer.kelurahan}, {res.customer.kecamatan} ({res.customer.distance_km?.toFixed(1) || '0'} km)
+                        {areaLabel && (
+                          <div className="flex items-center space-x-1 text-[11px] opacity-80 min-w-0">
+                            <MapPin size={12} className="shrink-0" />
+                            <span className="truncate" title={areaLabel}>
+                              {areaLabel}
+                              {distanceKm !== null ? ` (${distanceKm.toFixed(1)} km)` : ''}
                             </span>
                           </div>
                         )}

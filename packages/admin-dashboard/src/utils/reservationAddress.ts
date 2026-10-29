@@ -11,6 +11,49 @@ export function extractAddressFromRawText(raw: string | null | undefined): strin
   return null;
 }
 
+export interface ReservationAreaSource {
+  customer?: {
+    kelurahan?: string | null;
+    kecamatan?: string | null;
+    kota?: string | null;
+  } | null;
+}
+
+const cleanPart = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
+
+const isSamePart = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
+
+/**
+ * formatReservationArea — label "daerah" ringkas untuk kartu kalender.
+ *
+ * Seam tunggal agar view Bulanan, Mingguan, dan Harian menampilkan daerah yang
+ * sama untuk reservasi yang sama. Membaca field terstruktur (`customer.kelurahan`,
+ * `kecamatan`, `kota`) — bukan regex terhadap kalimat bebas.
+ *
+ * Prioritas: kelurahan+kecamatan → kecamatan → kelurahan → kota (opsional).
+ * Duplikasi dilebur ("Mulyorejo, Mulyorejo" → "Mulyorejo").
+ *
+ * @param options.includeKota Sertakan `kota` sebagai cadangan terakhir. Default
+ *   `false` karena pada klinik dengan satu kota, label kota hanya jadi derau.
+ */
+export function formatReservationArea(
+  reservation: ReservationAreaSource | null | undefined,
+  options: { includeKota?: boolean } = {}
+): string {
+  const customer = reservation?.customer;
+  const kelurahan = cleanPart(customer?.kelurahan);
+  const kecamatan = cleanPart(customer?.kecamatan);
+  const kota = cleanPart(customer?.kota);
+
+  if (kelurahan && kecamatan) {
+    return isSamePart(kelurahan, kecamatan) ? kecamatan : `${kelurahan}, ${kecamatan}`;
+  }
+  if (kecamatan) return kecamatan;
+  if (kelurahan) return kelurahan;
+  if (options.includeKota && kota) return kota;
+  return '';
+}
+
 export function resolveStreetAddress(
   reservation: { raw_text?: string | null; customer?: { preferences?: any } | null } | null | undefined,
   customer?: { preferences?: any } | null

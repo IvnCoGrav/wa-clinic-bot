@@ -4,6 +4,19 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-29 - Fix: UI/UX Kalender Reservasi Mobile (Fase 1–3: Gestur, Reveal Hari, Konten Kartu)
+
+- **Latar Belakang & Akar Masalah**:
+  - Audit 20 temuan (`docs/KNOWN_ISSUES.md` entri #286) menunjukkan view Mingguan tidak bisa digeser horizontal di HP: selector global `.overflow-y-auto { touch-action: pan-y !important }` memblokir pan horizontal pada container kalender yang punya dua sumbu scroll.
+  - Setelah pan native dibuka, muncul gejala getar karena `handleTopScrollbar` menulis `container.scrollLeft` (elemen yang sedang dipegang jari) memakai nilai penggaris atas yang tertinggal beberapa frame dari compositor — grid ditarik mundur tiap frame.
+  - Navigasi hari tidak pernah me-reveal kolom tujuan: chevron header tidak memanggil scroll sama sekali, lebar kolom di-hardcode 140px padahal grid memakai `minmax(140px,1fr)`.
+- **Arsitektur & Perubahan**:
+  - **Fase 1 (gestur)**: `index.css` — selector global `.overflow-y-auto` dicabut dari aturan `touch-action`, diganti kelas opt-in `.touch-scroll-y`; kelas `.cal-2d` baru (`touch-action: pan-x pan-y`) dipasang di container grid. Pull-to-refresh global di `Layout.tsx` dihapus total karena tidak ada area yang membutuhkannya.
+  - **Fase 1b (anti-getar)**: Sinkronisasi scroll dijadikan satu arah + penjaga gema 300ms (`lastTopWriteRef`) dan penjaga sentuh (`topTouchingRef`). `-webkit-overflow-scrolling` dihapus (deprecated, memaksa scroll di main thread). `overscroll-behavior-x: contain`, `overscroll-behavior-y: auto`.
+  - **Fase 2 (reveal hari)**: `revealDayColumn()` mengukur posisi kolom via `getBoundingClientRect` relatif container, bukan konstanta. Effect `[selectedDateKey]` me-reveal kolom hari terpilih setiap tanggal berubah (termasuk lompat seminggu dari chevron header) dan memusatkan pill hari aktif.
+  - **Fase 3 (konten kartu)**: Seam baru `formatReservationArea()` di `utils/reservationAddress.ts` (reuse file eksisting) yang membaca field terstruktur `customer.kelurahan/kecamatan/kota` dengan peleburan duplikasi. View Bulanan kini menampilkan **nama saja** (jam tetap tersedia di `title`); view Mingguan menampilkan **daerah** + ikon `MapPin` menggantikan detail treatment; view Harian memakai seam yang sama sekaligus memperbaiki bug "(0 km)" saat `distance_km` null.
+- **Gerbang Regresi**: `npm --prefix packages/admin-dashboard run build` (tsc + vite) hijau; `tests/unit/reservation-area-format.test.ts` 13 kasus adversarial lulus. Deploy live per fase tanpa menyentuh WAHA.
+
 #### 2026-10-29 - Fix & Feat: Remediasi Fondasional Pasca-Audit Menyeluruh (Phase 1–8)
 
 - **Latar Belakang & Akar Masalah (Audit 2026-10-29)**:

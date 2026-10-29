@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Reservation } from '../../types';
-import { Plus, User, Clock, CheckCircle2, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, User, Clock, CheckCircle2, AlertCircle, ChevronLeft, ChevronRight, MapPin } from 'lucide-react';
 import { QuickSlotTarget } from './types';
 import { useCalendarZoom } from '../../hooks/useCalendarZoom';
 import { CalendarZoomControls } from './CalendarZoomControls';
@@ -22,8 +22,9 @@ const TIME_GUTTER = 70; // kolom label jam
 const HEADER_HEIGHT = 50;
 
 export { extractDurationMinutes } from '../../utils/durationCalculator';
-import { cleanTreatmentDetailForDisplay, resolveReservationDuration } from '../../utils/durationCalculator';
+import { resolveReservationDuration } from '../../utils/durationCalculator';
 import { resolveStaffName } from '../../utils/resolveStaffName';
+import { formatReservationArea } from '../../utils/reservationAddress';
 
 interface PositionedEvent {
   res: Reservation;
@@ -626,7 +627,8 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                       .trim();
                     const firstName = cleanName.split(/\s+/)[0] || cleanName;
 
-                    const cleanDetail = isHold ? '⏳ Ditawarkan (HOLD)' : cleanTreatmentDetailForDisplay(res.treatment_detail, res.treatment_category);
+                    // Daerah kunjungan (bukan nama treatment) — lihat formatReservationArea.
+                    const areaLabel = formatReservationArea(res);
 
                     const evWidth =
                       pos.totalCols > 1
@@ -706,9 +708,13 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                               >
                                 {zoomLevel === 'detailed' ? cleanName : firstName}
                               </h5>
-                              {pos.heightPx >= 58 && cleanDetail && (
-                                <p className="text-[10px] opacity-90 line-clamp-1 font-medium leading-tight">
-                                  {cleanDetail}
+                              {pos.heightPx >= 58 && areaLabel && (
+                                <p
+                                  className="text-[10px] opacity-90 font-medium leading-tight flex items-center gap-0.5 min-w-0"
+                                  title={areaLabel}
+                                >
+                                  <MapPin size={9} className="shrink-0 opacity-75" />
+                                  <span className="truncate">{areaLabel}</span>
                                 </p>
                               )}
                             </div>
