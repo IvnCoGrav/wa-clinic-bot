@@ -11,6 +11,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Akar masalah yang sudah terkonfirmasi (1 dari 22):** `tests/unit/staff-otw-chat-poison.test.ts:54` menulis `created_at: '2026-10-10T02:00:00Z'` lalu `:101` mengharapkan label `'Hari ini'`. Assertion itu hanya benar bila hari ini 10 Oktober 2026 → **date rot** (pelanggaran mandat anti-hardcode & adversarial testing: fixture memakai tanggal mati untuk menguji label relatif).
 - **Rencana perbaikan (belum dieksekusi):** ganti fixture tanggal mati dengan tanggal dinamis berbasis `Date.now()` (mis. `new Date().toISOString()`) pada semua test label relatif, lalu audit 21 kegagalan lain satu per satu (dugaan: mock Prisma/`Database offline` drift dan fixture tanggal sejenis).
 - **Dampak:** suite tidak bisa dipakai sebagai gerbang mutlak — kegagalan nyata bisa tersembunyi di antara 22 kegagalan yang sudah ada.
+- **Bukti FLAKY (2026-10-29, commit `c789d80d`):** dua kali `npm test` pada commit yang SAMA menghasilkan angka berbeda — run 1: **23 test / 12 file** gagal, run 2: **22 test / 10 file** gagal (identik dengan baseline, diverifikasi lewat `--reporter=json` + skrip pembanding daftar file). Artinya selisih 1–2 kegagalan **tidak boleh** langsung dianggap regresi; wajib dibuktikan dengan daftar nama file/test, bukan hanya angka total.
 
 ## 286. [Kalender/Reservasi Mobile] Audit UI/UX View Mingguan di Android & iPhone — 20 Temuan (2026-10-29, OPEN - HIGH)
 
