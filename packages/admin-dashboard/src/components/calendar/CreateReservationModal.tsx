@@ -1448,7 +1448,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         address: address.trim() || undefined,
         landmark: landmark.trim() || undefined,
         babies: babies.filter((b) => b.name.trim().length > 0),
-        purchaseValue: Math.max(0, subtotalTreatments - (Number(discount) || 0)),
+        purchaseValue: subtotalTreatments,
+        discountAmount: Number(discount) || 0,
         ongkir: Number(ongkir) || 0,
         ...(force ? { force: true } : {}),
       },
@@ -1471,7 +1472,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       address: address.trim() || undefined,
       landmark: landmark.trim() || undefined,
       babies: babies.filter((b) => b.name.trim().length > 0),
-      purchaseValue: Math.max(0, subtotalTreatments - (Number(discount) || 0)),
+      purchaseValue: subtotalTreatments,
+      discountAmount: Number(discount) || 0,
       ongkir: Number(ongkir) || 0,
       ...(force ? { force: true } : {}),
     };
@@ -1498,6 +1500,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       babies: formBabies,
       customer_address_id: (savedRes?.customer_address_id ?? customerAddressId) || null,
       customer: savedRes?.customer || selectedCustomerInfo || undefined,
+      discount_amount: Number(discount) || 0,
       ongkir: Number(ongkir) || 0,
       _withInvoice: Boolean(withInvoice),
       // CATATAN: discount TIDAK disertakan — purchaseValue sudah net (subtotal - discount).

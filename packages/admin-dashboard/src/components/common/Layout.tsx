@@ -34,7 +34,6 @@ import {
   Database,
   QrCode,
   Loader,
-  RefreshCw,
   CalendarDays,
   Bot,
   ChevronLeft,
@@ -347,76 +346,6 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     };
   }, [mobileMenuOpen]);
 
-  // 🔄 Mobile Pull-to-Refresh (Swipe Down to Reload)
-  const [pullDistance, setPullDistance] = useState(0);
-  const [isPullRefreshing, setIsPullRefreshing] = useState(false);
-  const pullStartRef = useRef<{ y: number; x: number } | null>(null);
-
-  useEffect(() => {
-    if (window.innerWidth >= 768) return;
-
-    const handleTouchStart = (e: TouchEvent) => {
-      if (e.touches.length !== 1) return;
-      const target = e.target as HTMLElement | null;
-      if (
-        target?.closest('input') ||
-        target?.closest('textarea') ||
-        target?.closest('select') ||
-        target?.closest('[data-no-ptr]')
-      ) {
-        return;
-      }
-
-      const scrollable = target?.closest('.overflow-y-auto') as HTMLElement | null;
-      const isTop = scrollable ? scrollable.scrollTop <= 0 : window.scrollY <= 0;
-      if (isTop) {
-        pullStartRef.current = { y: e.touches[0].clientY, x: e.touches[0].clientX };
-      }
-    };
-
-    const handleTouchMove = (e: TouchEvent) => {
-      if (!pullStartRef.current || isPullRefreshing) return;
-      const touch = e.touches[0];
-      const deltaY = touch.clientY - pullStartRef.current.y;
-      const deltaX = touch.clientX - pullStartRef.current.x;
-
-      if (deltaY > 8 && deltaY > Math.abs(deltaX) * 1.2) {
-        if (e.cancelable) {
-          e.preventDefault();
-        }
-        const distance = Math.min(deltaY * 0.35, 60);
-        setPullDistance(distance);
-      } else if (deltaY < 0) {
-        setPullDistance(0);
-      }
-    };
-
-    const handleTouchEnd = () => {
-      if (pullDistance >= 45 && !isPullRefreshing) {
-        setIsPullRefreshing(true);
-        setPullDistance(45);
-        setTimeout(() => {
-          window.location.reload();
-        }, 350);
-      } else {
-        setPullDistance(0);
-      }
-      pullStartRef.current = null;
-    };
-
-    window.addEventListener('touchstart', handleTouchStart, { passive: true });
-    window.addEventListener('touchmove', handleTouchMove, { passive: false });
-    window.addEventListener('touchend', handleTouchEnd, { passive: true });
-    window.addEventListener('touchcancel', handleTouchEnd, { passive: true });
-
-    return () => {
-      window.removeEventListener('touchstart', handleTouchStart);
-      window.removeEventListener('touchmove', handleTouchMove);
-      window.removeEventListener('touchend', handleTouchEnd);
-      window.removeEventListener('touchcancel', handleTouchEnd);
-    };
-  }, [pullDistance, isPullRefreshing]);
-
   // ⬅️ Mobile Edge Swipe-Back Gesture Navigation (Left to Right from Edge)
   const [swipeBackDistance, setSwipeBackDistance] = useState(0);
   const swipeBackStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -527,27 +456,6 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       style={{ height: isLiveChat ? 'var(--vvh, 100dvh)' : undefined, maxHeight: isLiveChat ? 'var(--vvh, 100dvh)' : undefined }}
       className={`${isLiveChat ? 'h-[100dvh] max-h-[100dvh] overflow-hidden touch-pan-y' : 'min-h-screen'} bg-[#f0f2f5] dark:bg-black text-[#111b21] dark:text-[#e9edef] flex flex-col md:flex-row relative overscroll-y-contain`}
     >
-      {/* 🔄 Mobile Pull-to-Refresh Floating Indicator */}
-      {(pullDistance > 0 || isPullRefreshing) && (
-        <div
-          className="fixed top-3 left-1/2 -translate-x-1/2 z-[99999] pointer-events-none transition-all duration-100 ease-out flex items-center justify-center pt-[env(safe-area-inset-top,0px)]"
-          style={{
-            transform: `translate(-50%, ${pullDistance}px) scale(${Math.min(0.7 + pullDistance / 100, 1)})`,
-            opacity: Math.min(pullDistance / 20, 1),
-          }}
-        >
-          <div className="bg-white border border-[#008069]/30 rounded-full p-2.5 shadow-2xl text-[#008069] flex items-center justify-center backdrop-blur-md">
-            <RefreshCw
-              size={20}
-              className={`${isPullRefreshing ? 'animate-spin' : ''}`}
-              style={{
-                transform: isPullRefreshing ? undefined : `rotate(${pullDistance * 5}deg)`,
-              }}
-            />
-          </div>
-        </div>
-      )}
-
       {/* ⬅️ Mobile Edge Swipe-Back Floating Indicator (Max 100px with resistance physics) */}
       {swipeBackDistance > 0 && (
         <div

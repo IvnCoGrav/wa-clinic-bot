@@ -885,6 +885,8 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
           notes?: string;
           babies?: Array<{ name: string; ageText?: string }>;
           purchaseValue?: number;
+          discountAmount?: number;
+          discount_amount?: number;
           ongkir?: number;
           durationMinutes?: number;
           address?: string;
@@ -898,6 +900,8 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
       const tenantId = tenantOf(request);
       const { customerId, treatmentCategory, treatmentDetail, bookingDate, assignedStaffId, status, notes, babies, purchaseValue } = request.body || {};
       const customerAddressId = (request.body as any)?.customerAddressId || null;
+      const rawDiscount = (request.body as any)?.discountAmount ?? (request.body as any)?.discount_amount;
+      const parsedDiscount = rawDiscount !== undefined && rawDiscount !== null && String(rawDiscount).trim() !== '' && !isNaN(Number(rawDiscount)) && Number(rawDiscount) >= 0 ? Math.round(Number(rawDiscount)) : null;
       const durationMinutes = sanitizeDurationMinutes((request.body as any)?.durationMinutes);
       const force = (request.body as any)?.force === true;
       const address = (request.body as any)?.address as string | undefined;
@@ -975,6 +979,7 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
             durationMinutes,
             assignedStaffId: assignedStaffId || null,
             purchaseValue: finalPurchaseValue,
+            discountAmount: parsedDiscount,
             // KB-6: snapshot ongkir per-reservasi.
             deliveryFee: parsedOngkir,
             rawText: `[Admin Manual] ${treatmentCategory}: ${treatmentDetail}${address?.trim() ? `\nAlamat: ${address.trim()}` : ''}${rawNotes}`,

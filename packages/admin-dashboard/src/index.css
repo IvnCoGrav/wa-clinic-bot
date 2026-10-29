@@ -137,13 +137,26 @@ html[data-keyboard-open="true"] .chat-composer-container {
   overscroll-behavior: contain !important;
 }
 
-/* Memastikan konten modal & sidebar tetap dapat di-scroll lancar */
+/* Memastikan konten modal & sidebar tetap dapat di-scroll lancar.
+   PENTING: JANGAN menyasar utilitas `.overflow-y-auto` secara global di sini.
+   Aturan itu ikut mengenai container 2 sumbu (grid kalender mingguan) sehingga
+   `touch-action: pan-y` mematikan pan horizontal di HP. Pakai kelas opt-in. */
 .modal-scrollable,
-.overflow-y-auto,
+.touch-scroll-y,
 aside nav {
   touch-action: pan-y !important;
   overscroll-behavior: contain !important;
   -webkit-overflow-scrolling: touch !important;
+}
+
+/* Container 2 sumbu (kalender mingguan): izinkan pan horizontal + vertikal.
+   overscroll dibiarkan `auto` agar halaman tetap bisa di-scroll saat ujung
+   tercapai (menghindari jebakan scroll). Pinch browser dimatikan karena
+   kalender punya pinch-zoom sendiri (useCalendarZoom). */
+.cal-2d {
+  touch-action: pan-x pan-y !important;
+  overscroll-behavior: auto !important;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* iOS Safe Area Helper Utilities */

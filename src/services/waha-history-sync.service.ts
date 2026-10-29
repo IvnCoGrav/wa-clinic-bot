@@ -251,6 +251,12 @@ export class WahaHistorySyncService {
             }
             if (customerName && !(customer as any).whatsapp_push_name) {
               (customer as any).whatsapp_push_name = customerName;
+              try {
+                await prisma.customer.update({
+                  where: { id: customer.id },
+                  data: { whatsapp_push_name: customerName },
+                });
+              } catch (_) {}
             }
 
             const conversation = await conversationService.getOrCreateConversation(customer.id, tenantId);
@@ -490,6 +496,12 @@ export class WahaHistorySyncService {
         }
         if (customerName && !(customer as any).whatsapp_push_name) {
           (customer as any).whatsapp_push_name = customerName;
+          try {
+            await prisma.customer.update({
+              where: { id: customer.id },
+              data: { whatsapp_push_name: customerName },
+            });
+          } catch (_) {}
         }
         const conversation = await conversationService.getOrCreateConversation(customer.id, tenantId);
 

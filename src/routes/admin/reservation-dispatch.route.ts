@@ -1290,10 +1290,14 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           }
           // assigned_staff_id: string kosong -> null agar tidak menabrak FK
           if (Object.keys(custUpdate).length > 0) {
-            await prisma.customer.update({
-              where: { id: existing.customer_id, tenant_id: tenantId },
-              data: custUpdate,
-            });
+            try {
+              await prisma.customer.update({
+                where: { id: existing.customer_id, tenant_id: tenantId },
+                data: custUpdate,
+              });
+            } catch (err: any) {
+              console.warn('[Admin API] Failed to update customer extra details on reservation patch:', err?.message || err);
+            }
           }
         }
 

@@ -375,8 +375,8 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
         <div
           data-horizontal-scroll="true"
           data-no-swipe-back="true"
-          className="flex-1 flex items-center justify-center gap-1 overflow-x-auto no-scrollbar mx-1 px-1 py-0.5"
-          style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', touchAction: 'pan-x' }}
+          className="flex-1 flex items-center justify-start gap-1 overflow-x-auto no-scrollbar mx-1 px-1 py-0.5"
+          style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', touchAction: 'pan-x pan-y' }}
         >
           {weekDays.map((d, i) => {
             const isSel = isSameDay(d, selectedDate);
@@ -432,7 +432,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
         className="overflow-x-auto overflow-y-hidden h-5 sm:h-3.5 bg-[#f0f2f5] dark:bg-[#111b21] border-b border-[#e9edef] dark:border-[#2a3942] select-none cursor-pointer touch-pan-x"
         style={{
           WebkitOverflowScrolling: 'touch',
-          touchAction: 'pan-x',
+          touchAction: 'pan-x pan-y',
         }}
         title="Geser kalender secara horizontal"
       >
@@ -453,10 +453,9 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchEnd}
-        className="overflow-x-auto overflow-y-auto max-h-[720px] select-none cursor-grab active:cursor-grabbing overscroll-contain"
+        className="cal-2d overflow-x-auto overflow-y-auto max-h-[720px] select-none cursor-grab active:cursor-grabbing"
         style={{
           WebkitOverflowScrolling: 'touch',
-          overscrollBehavior: 'contain',
         }}
       >
         <div className="min-w-[1050px] w-full divide-y divide-[#e9edef] dark:divide-[#2a3942]">

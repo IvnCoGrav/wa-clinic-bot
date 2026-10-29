@@ -3,6 +3,73 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 286. [Kalender/Reservasi Mobile] Audit UI/UX View Mingguan di Android & iPhone — 20 Temuan (2026-10-29, OPEN - HIGH)
+
+- **Status:** OPEN — audit *read-only* selesai, **belum ada perubahan kode**. Menunggu persetujuan eksekusi Fase 1–4.
+- **Cakupan bukti:** pembacaan kode + hitungan layout (`file:baris`). **Belum diuji di perangkat fisik**; temuan bertanda 📱 wajib dikonfirmasi di HP sebelum dinyatakan beres.
+- **Gejala yang dilaporkan user:** "sangat kesusahan di view mingguan" pada dashboard admin (halaman Reservasi → mode Minggu), terutama di Android & iPhone.
+
+### Akar Masalah (multi-layer)
+
+1. **Lapis gestur global:** handler pull-to-refresh di `Layout.tsx` mencegat setiap `touchmove` di dalam elemen `.overflow-y-auto`, termasuk container kalender, lalu memanggil `window.location.reload()`. Kalender tidak memasang `data-no-ptr`, sehingga scroll biasa di dalam grid berubah menjadi reload halaman.
+2. **Lapis kontrak data:** API `/api/admin/reservations` sudah mendukung `status` (`reservation-crud.route.ts:236`), tetapi FE **tidak mengirimkannya** pada mode kalender (`Reservations.tsx:285-303`) dan tidak memfilter di klien (`Reservations.tsx:700`). Perhitungan rentang minggu juga diduplikasi di dua tempat (`Reservations.tsx:242-260` dan `WeekScheduleGrid.tsx:263-275`).
+3. **Lapis model layout:** satu grid desktop 7 hari × 16 jam (`min-w-[1050px]`, kolom `minmax(140px,1fr)`, gutter 70px) dipakai untuk semua lebar layar, dengan tinggi tetap `max-h-[720px]` dan `overscroll-contain`. Kontrol zoom mobile diletakkan **setelah** scroller 720px sehingga tidak terjangkau.
+4. **Lapis ergonomi & tipografi:** affordance hanya-hover (`opacity-0 group-hover/slot:opacity-100`), hover tidak digate media query (Tailwind v3 tanpa `future.hoverOnlyWhenSupported`), target sentuh 26–28px, dan teks 8,5–10,5px lolos dari override mobile di `index.css`.
+
+### Daftar Temuan
+
+| ID | Tingkat | Temuan | Bukti (file:baris) | Dampak |
+| --- | --- | --- | --- | --- |
+| F-01 | **KRITIS** | Geser ke bawah di kalender memicu reload halaman; view Minggu hilang dan kembali ke List (`viewMode` tidak dipersist) | `Layout.tsx:355-418`; `WeekScheduleGrid.tsx:443-456` (tanpa `data-no-ptr`); `Reservations.tsx:126` | Kehilangan konteks kerja di tengah penjadwalan 📱 |
+| F-02 | **KRITIS** | Filter status tidak berfungsi di mode Hari/Minggu/Bulan (kontrol mati) | `Reservations.tsx:285-303`, `:700`; API mendukung `reservation-crud.route.ts:236` | Admin mengira sedang melihat "Hold" padahal semua status tampil; keputusan jadwal salah |
+| F-03 | **KRITIS** | Tombol zoom mobile berada di bawah area 720px + jebakan scroll (`overscroll-contain` pada nested scroller) | `WeekScheduleGrid.tsx:443-459`, `:693-696` | Zoom tidak terjangkau tanpa scroll halaman; halaman terasa "tidak bisa digeser" |
+| F-04 | **KRITIS** | Pill hari (Sen–Min) terpotong di sisi kiri dan **tidak bisa di-scroll balik** | `WeekScheduleGrid.tsx:375-380` (`justify-center` + `overflow-x-auto`) | Hari Senin/Selasa tak terlihat & tak bisa ditekan di layar 390px 📱 |
+| F-05 | **KRITIS** | Ruang pandang hanya ±2 hari × ±3,5 jam (≈10% minggu) | `WeekScheduleGrid.tsx:18`, `:21-23`, `:456`, `:462` | Inti keluhan: untuk melihat 1 minggu perlu puluhan geser 2 arah |
+| F-06 | TINGGI | Target sentuh < 44px (chevron 28px, zoom 26px, pill ±26px) | `:364`, `:419`, `:395`; `CalendarZoomControls.tsx:32,63,90,120` | Salah tekan, terasa tidak responsif |
+| F-07 | TINGGI | Tombol "+" tambah jadwal tak terlihat di layar sentuh (hover-only) | `WeekScheduleGrid.tsx:553` | Fitur quick-add praktis tak ditemukan; tap buta |
+| F-08 | TINGGI | Sticky hover: hover tidak digate `(hover:hover) and (pointer:fine)` | `tailwind.config.js` (tanpa `future.hoverOnlyWhenSupported`); `index.css:604-737`, `:851-858` | Kartu/pill tetap menyala setelah disentuh 📱 |
+| F-09 | TINGGI | Teks 8,5px & 10,5px lolos override tipografi mobile | `index.css:238-242`; `WeekScheduleGrid.tsx:621`, `:628-646` | Badge status & sesi nyaris tak terbaca |
+| F-10 | TINGGI | Dua set panah navigasi dengan langkah berbeda (±7 hari vs ±1 hari) + strip hari menduplikasi header grid | `Reservations.tsx:1030-1051`; `WeekScheduleGrid.tsx:355-423`, `:381`, `:471` | Bingung arah navigasi; ±90px ruang terbuang |
+| F-11 | TINGGI | Tidak ada label rentang minggu ("20–26 Okt") | `Reservations.tsx:1011-1015` | Menyesatkan saat minggu melintasi dua bulan |
+| F-12 | TINGGI | Setiap tap pill hari menarik ulang 500 baris tanpa indikator loading | `:288`, `:329-339`, `:1318` | Jeda + kedip di jaringan seluler meski minggu sama sudah dimuat |
+| F-13 | SEDANG | Pinch-zoom tanpa `touch-action` pada container; `setState` per frame + rAF scroll | `useCalendarZoom.ts:89-176`; `WeekScheduleGrid.tsx:457-460` | Risiko men-zoom seluruh halaman di iPhone; jank di Android kelas menengah 📱 |
+| F-14 | SEDANG | "Scrollbar atas" palsu: tinggi 20px, isi 1px, lebar hardcode 1050px | `:427-440` | Membuang ruang vertikal; geser tidak sinkron saat grid melebar |
+| F-15 | SEDANG | Label jam kartu bisa beda dengan posisinya (posisi WIB, label zona perangkat); auto-scroll pakai jam perangkat | `:48` vs `:565-567`; `:330` | Jam terbaca ≠ posisi blok bagi perangkat non-WIB |
+| F-16 | SEDANG | Kartu 30 menit (tinggi minimum 50px) menutupi 5px slot berikutnya | `:339`, `:85`, `:605` | Tap nyasar membuka reservasi lain |
+| F-17 | SEDANG | `touch-action: pan-x` pada strip hari & scrollbar atas | `:379`, `:436` | Area tersebut menjadi zona mati untuk scroll vertikal 📱 |
+| F-18 | SEDANG | Reservasi di luar jam 06:00–21:00 digambar menumpuk di baris 06:00 atau hilang | `:18`, `:50`, `:84` (`Math.max(0, ...)`) | Jadwal pagi/sore hilang dari pandangan (edge case) |
+| F-19 | SEDANG | View Bulan: 7 kolom di 390px (±48px/kotak), teks 9px, event tidak bisa di-tap | `MonthScheduleGrid.tsx:124`, `:158-184` | Bulan tidak terbaca di HP |
+| F-20 | SEDANG | A11y: kartu event `<div onClick>` tanpa `role`/`tabIndex`; tombol ikon tanpa `aria-label` | `WeekScheduleGrid.tsx:591-605`, `:355-423` | Tidak bisa dioperasikan keyboard/pembaca layar |
+
+### Temuan Tambahan — Laporan User Langsung (2026-10-29, sesi lanjutan)
+
+| ID | Tingkat | Temuan | Bukti (file:baris) | Dampak |
+| --- | --- | --- | --- | --- |
+| F-21 | **KRITIS** | **Pan horizontal di grid mingguan diblokir CSS global**: `.overflow-y-auto { touch-action: pan-y !important }` mengenai container kalender (yang punya `overflow-x-auto` + `overflow-y-auto`), sehingga browser tidak boleh menggeser horizontal. Satu-satunya jalan geser kiri/kanan adalah "scrollbar atas" palsu 20px. | `index.css:141-147`; `WeekScheduleGrid.tsx:456` | Inilah akar "kaku" saat drag 2 arah & tidak bisa mencapai kolom Sabtu/Minggu 📱 |
+| F-22 | **KRITIS** | **Pull-to-refresh global berlaku di 87 container** `.overflow-y-auto` (termasuk modal, chat, drawer, kalender), lalu memanggil `window.location.reload()`. Mekanisme opt-out `data-no-ptr` sudah dibaca di kode tetapi **tidak dipakai satu kali pun** di seluruh aplikasi. | `Layout.tsx:355-418`, `:531-546`; `data-no-ptr` hanya muncul di `Layout.tsx:365` | Scroll ke bawah di dalam modal/kalender → halaman reload, state & filter hilang 📱 |
+| F-23 | **KRITIS** | **Navigasi hari tidak pernah me-reveal kolom hari terpilih.** (a) Chevron header (minggu ±7) tidak memanggil scroll sama sekali; (b) chevron dalam grid hanya scroll bila `idx !== -1`, gagal saat lintas minggu (Minggu→Senin); (c) lebar kolom di-hardcode 140px padahal grid `minmax(140px,1fr)`; (d) auto-scroll hanya sekali seumur komponen. | `WeekScheduleGrid.tsx:361-362`, `:416-417`, `:283-290`, `:21-23`, `:314-337`; `Reservations.tsx:371-393` | Tekan panah kanan ke Sabtu → tampilan tetap di kolom lama; hari tujuan tak terlihat 📱 |
+| F-24 | SEDANG | View Bulanan menampilkan **jam + nama** pada pill hari (padat, tak terbaca di 390px). Permintaan: nama saja. | `MonthScheduleGrid.tsx:180-182` | Kepadatan teks; jam terpotong |
+| F-25 | SEDANG | View Mingguan menampilkan **detail treatment**, bukan **daerah** pasien. Data area sudah tersedia dan sudah dipakai di view Harian. Permintaan: ganti ke daerah. | `WeekScheduleGrid.tsx:579`, `:659-663`; data: `customer.kelurahan/kecamatan/kota` (`types/index.ts:40-42`), contoh pemakaian `DayScheduleGrid.tsx:456-463` | Admin home-service butuh tahu wilayah kunjungan, bukan nama paket |
+| F-26 | SEDANG | **Warna kartu = kategori treatment**, bukan bidan penanggung jawab. Tidak ada util warna staff; pola `assigned_staff_id \|\| assigned_staff?.id` diduplikasi di 5 tempat. Permintaan: warna per bidan. | `WeekScheduleGrid.tsx:298-312`; `DayScheduleGrid.tsx:94-123`; `MonthScheduleGrid.tsx:82-96`; duplikasi: `StaffScheduleTimelineStrip.tsx:45`, `DailyScheduleModal.tsx:100`, `CreateReservationModal.tsx:862,1275`, `LiveChatMonitor.tsx:4251` | Sulit melihat beban kerja & pembagian bidan sekilas |
+
+**Sudah baik — jangan diregresikan:** perhitungan posisi berbasis WIB (`getWibHoursAndMinutes`), `data-no-swipe-back`/`data-horizontal-scroll` agar swipe-back tidak bentrok, kategori warna konsisten, zoom tersimpan di localStorage, dan modal detail yang sudah bottom-sheet di HP (`ReservationDetailModal.tsx:417-421`).
+
+### Rencana Tindak Lanjut (bertahap, belum dieksekusi)
+
+- **Fase 1 — Fondasi data & gestur (blast radius kecil).**
+  (a) Pull-to-refresh `Layout.tsx:355-418` wajib melewati `[data-horizontal-scroll]`, `[data-no-ptr]`, dan container yang punya scroll sendiri; `data-no-ptr` dipasang di `WeekScheduleGrid.tsx:443`.
+  (b) Kirim `status` pada mode kalender di `Reservations.tsx:285-303` dan hapus alias `filteredReservations = reservations` (`:700`).
+  (c) Satu util kanonis `getWeekRange(date)` dipakai header, API range, dan grid.
+  *Acceptance:* pilih "Hold" → grid hanya menampilkan hold; tarik ke bawah di kalender → tidak reload; `npm run build` (`packages/admin-dashboard`) + suite `npm test` hijau.
+- **Fase 2 — Model layout mobile.** Komponen `WeekAgendaMobile` (pakai ulang `DayScheduleGrid` via `hideHeader`, **tanpa page baru**) aktif < 1024px; grid 7 kolom hanya ≥ 1024px; tinggi mengikuti `100dvh` (bukan `max-h-[720px]`); hapus nested scroll di HP; pill strip `justify-start` + auto-scroll pill aktif; zoom dipindah ke sticky bar atas.
+  *Acceptance:* 1 minggu terbaca tanpa geser horizontal di 390×844; zoom terjangkau tanpa scroll halaman.
+- **Fase 3 — Ergonomi & tipografi.** Semua kontrol `min-h-11 min-w-11` + `aria-label`; `future.hoverOnlyWhenSupported: true`; bungkus override hover `index.css` dalam `@media (hover:hover) and (pointer:fine)`; selector override font mobile menangkap `text-[8.5px]`/`[10.5px]`; `touch-action: pan-x pan-y` pada container dan `pan-y` pada strip hari.
+  *Acceptance:* tidak ada teks < 11px maupun target < 44px di view Minggu.
+- **Fase 4 — Performa & aksesibilitas.** Cache per rentang minggu (tap hari dalam minggu sama = tanpa refetch) + skeleton loading; label jam konsisten WIB; perbaiki kartu di luar 06:00–21:00; `role="button"` + dukungan keyboard pada kartu event.
+  *Acceptance:* tap hari < 100ms tanpa request baru; `npm run build` + full suite hijau.
+
+**Larangan pendekatan:** dilarang menambal per-kasus (menyembunyikan tombol tertentu, menambah media query ad-hoc per lebar layar, atau memaksa `maximum-scale`). Perbaikan harus di lapis **model layout + kontrak data + gestur**, bukan kosmetik.
+
 ## 285. [Child] Dedup Nama Anak Rentan Balapan Race Condition Webhook (2026-10-29, RESOLVED)
 
 - **Status:** RESOLVED di Phase 7 (`d5e83a6a`).

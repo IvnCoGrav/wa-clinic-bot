@@ -29,6 +29,8 @@ export interface ReservationMutationParams {
   durationMinutes?: number | null;
   assignedStaffId?: string | null;
   purchaseValue?: number | null;
+  /** Diskon promosi / potongan harga reservasi (A-002, A-014). */
+  discountAmount?: number | null;
   /** KB-6: snapshot ongkir saat booking (riwayat abadi). Null = tidak diubah. */
   deliveryFee?: number | null;
   rawText?: string;
@@ -718,6 +720,7 @@ export class ReservationCoreService {
       durationMinutes,
       assignedStaffId,
       purchaseValue,
+      discountAmount,
       rawText,
       babies = [],
       customerName,
@@ -950,6 +953,7 @@ export class ReservationCoreService {
                 assigned_staff_id: assignedStaffId !== undefined ? assignedStaffId || null : primary.assigned_staff_id,
                 raw_text: effectiveRawText,
                 purchase_value: purchaseValue !== undefined && purchaseValue !== null ? purchaseValue : primary.purchase_value,
+                ...(discountAmount !== undefined && discountAmount !== null ? { discount_amount: Math.round(discountAmount) } : {}),
                 is_repeat_order: isRepeatOrder,
                 // KB-6: snapshot ongkir bila diberikan eksplisit.
                 ...(deliveryFee !== undefined && deliveryFee !== null ? { delivery_fee: deliveryFee } : {}),
@@ -1027,6 +1031,7 @@ export class ReservationCoreService {
       raw_text: effectiveRawText,
       status: bookingStatus,
       purchase_value: purchaseValue ?? null,
+      discount_amount: typeof discountAmount === 'number' && Number.isFinite(discountAmount) && discountAmount >= 0 ? Math.round(discountAmount) : null,
       // Queue-First: confirmed masuk antrean CAPI. Non-purchase (hold/intake) memakai
       // sentinel eksplisit agar kolom NOT NULL tidak pernah menerima null.
       purchase_review_status: bookingStatus === 'confirmed'

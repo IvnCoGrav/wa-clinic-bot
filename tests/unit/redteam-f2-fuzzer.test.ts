@@ -133,13 +133,15 @@ describe('Red-Team Verification: F2 - Equivalent Fuzzer Comparison', () => {
       },
     };
 
-    const evidenceDir = path.resolve(process.cwd(), 'audit/evidence/P1');
-    if (!fs.existsSync(evidenceDir)) fs.mkdirSync(evidenceDir, { recursive: true });
-    fs.writeFileSync(
-      path.resolve(evidenceDir, 'evidence_f2_equivalent_fuzzer.json'),
-      JSON.stringify({ summary, realBugsSample: realBugs.slice(0, 10), intentionalDiffsSample: intentionalDiffs.slice(0, 5) }, null, 2),
-      'utf-8'
-    );
+    if (process.env.GENERATE_FUZZER_EVIDENCE === 'true') {
+      const evidenceDir = path.resolve(process.cwd(), 'audit/evidence/P1');
+      if (!fs.existsSync(evidenceDir)) fs.mkdirSync(evidenceDir, { recursive: true });
+      fs.writeFileSync(
+        path.resolve(evidenceDir, 'evidence_f2_equivalent_fuzzer.json'),
+        JSON.stringify({ summary, realBugsSample: realBugs.slice(0, 10), intentionalDiffsSample: intentionalDiffs.slice(0, 5) }, null, 2),
+        'utf-8'
+      );
+    }
 
     console.log('SUMMARY F2 EQUIVALENT FUZZER AUDIT:');
     console.log(JSON.stringify(summary, null, 2));

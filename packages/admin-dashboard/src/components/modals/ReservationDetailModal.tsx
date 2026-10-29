@@ -763,6 +763,13 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                     </span>
                   </div>
 
+                  {displayReservation.discount_amount && displayReservation.discount_amount > 0 ? (
+                    <div className="flex items-center justify-between text-[11px] text-rose-600 font-semibold px-1">
+                      <span>Diskon Promo:</span>
+                      <span>- Rp {displayReservation.discount_amount.toLocaleString('id-ID')}</span>
+                    </div>
+                  ) : null}
+
                   <div className="p-2.5 rounded-xl bg-white border border-[#e9edef] space-y-1">
                     <span className="text-[10px] font-bold text-[#008069] uppercase tracking-wider block">
                       {displayReservation.treatment_category}
