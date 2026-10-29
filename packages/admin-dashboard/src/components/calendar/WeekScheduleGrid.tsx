@@ -33,6 +33,7 @@ import { formatReservationArea } from '../../utils/reservationAddress';
 import { stripHonorific } from '../../utils/patientName';
 import { getStaffColor } from '../../utils/staffColors';
 import { GRID_MIN_WIDTH, GRID_TEMPLATE_COLUMNS, TIME_GUTTER } from '../../utils/calendarLayout';
+import { getWeekRange } from '../../utils/calendarWeekRange';
 import {
   formatHourLabel as formatHourLabelUtil,
   formatHourLabelLong,
@@ -292,19 +293,9 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
     }
   };
 
-  // Compute the 7 days of the current week (Senin s.d. Minggu)
-  const curr = new Date(selectedDate);
-  const dayOfWeek = curr.getDay(); // 0 is Sunday, 1 is Monday...
-  const distanceFromMonday = (dayOfWeek + 6) % 7;
-  const monday = new Date(curr);
-  monday.setDate(curr.getDate() - distanceFromMonday);
-
-  const weekDays: Date[] = [];
-  for (let i = 0; i < 7; i++) {
-    const day = new Date(monday);
-    day.setDate(monday.getDate() + i);
-    weekDays.push(day);
-  }
+  // F-43: 7 kolom hari berasal dari seam yang SAMA dengan parameter API
+  // (getWeekDateRange) agar grid & data tidak pernah menyimpang.
+  const weekDays: Date[] = getWeekRange(selectedDate).days;
 
   const isSameDay = (d1: Date, d2: Date) => {
     return getWibDateKey(d1) === getWibDateKey(d2);

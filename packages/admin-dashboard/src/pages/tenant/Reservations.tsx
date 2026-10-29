@@ -7,6 +7,7 @@ import { evaluatePaymentProof } from '../../utils/paymentProof';
 import { extractBabiesFromRawText } from '../../utils/reservationBabies';
 import { getWibDateKey, getTodayWibDate } from '../../utils/dateWib';
 import { buildReservationsQuery } from '../../utils/reservationQuery';
+import { getWeekDateRange } from '../../utils/calendarWeekRange';
 import { resolveChildAgeRows, momGestationalBadge } from '../../utils/clinicalAge';
 import { extractDurationMinutes } from '../../utils/durationCalculator';
 import { Pagination } from '../../components/common/Pagination';
@@ -248,13 +249,8 @@ export const Reservations: React.FC = () => {
       const key = getWibDateKey(date);
       return { startDate: key, endDate: key };
     } else if (mode === 'week') {
-      const d = new Date(date);
-      const day = d.getDay();
-      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-      const start = new Date(d.setDate(diff));
-      const end = new Date(start);
-      end.setDate(start.getDate() + 6);
-      return { startDate: getWibDateKey(start), endDate: getWibDateKey(end) };
+      // F-43: rentang minggu WAJIB dari seam yang sama dengan kolom grid.
+      return getWeekDateRange(date);
     } else if (mode === 'month') {
       const start = new Date(date.getFullYear(), date.getMonth(), 1);
       const end = new Date(date.getFullYear(), date.getMonth() + 1, 0);
