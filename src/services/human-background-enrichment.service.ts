@@ -3,7 +3,7 @@ import { StateHandlerContext } from '../state-machine/types';
 import { extractGoogleMapsUrls, resolveGoogleMapsUrl } from '../utils/google-maps-url-resolver';
 import { parseAdminChatDistanceAndOngkir, parseAdminChatLocation } from '../utils/admin-chat-distance-parser';
 import { resolveZipcode } from '../utils/gazetteer-zipcode-resolver';
-import { buildAddressKey } from '../domain/customer-address';
+import { buildAddressKey, resolveActiveAddress, parseSavedAddresses } from '../domain/customer-address';
 
 const FILLER_RE = /^(oke\s+makasih|makasih|terima\s+kasih|matur\s+nuwun|thanks|thank\s+you|sip|ok|oke|siap|baik|iya|ya|boleh|nanti\s+ya|sebentar\s+cek\s+dulu|tanya\s+suami|wait|tunggu\s+sebentar)[.!]?$/i;
 
@@ -229,20 +229,25 @@ export class HumanBackgroundEnrichmentService {
         // Chat admin bukan sumber fakta coverage → pertahankan flag yang sudah tercatat
         isOutOfCoverage = customer.is_out_of_coverage ?? false;
         const ttlDays = await resolveEstimateTtlDays(tenantId);
-        const addrPref = (customer as any)?.preferences?.address || (customer as any)?.preferences?.full_address || '';
+        const prefs = (customer.preferences as any) || {};
+        const activeAddr = resolveActiveAddress(parseSavedAddresses(prefs));
+        const addrPref = prefs.address || prefs.full_address || '';
+        const addressKey = activeAddr
+          ? buildAddressKey(activeAddr)
+          : buildAddressKey({
+              lat: customer.lat,
+              lng: customer.lng,
+              address: addrPref,
+              kelurahan: customer.kelurahan,
+              kecamatan: customer.kecamatan,
+              kota: customer.kota,
+            });
         const estimate = {
           km: parsed.distanceKm,
           ongkir: effectiveOngkir,
           by: 'admin_chat',
           at: new Date().toISOString(),
-          address_key: buildAddressKey({
-            lat: customer.lat,
-            lng: customer.lng,
-            address: addrPref,
-            kelurahan: customer.kelurahan,
-            kecamatan: customer.kecamatan,
-            kota: customer.kota,
-          }),
+          address_key: addressKey,
           expires_at: new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000).toISOString(),
         };
         try {

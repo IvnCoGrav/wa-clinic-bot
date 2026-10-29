@@ -47,7 +47,7 @@ import { StaffScheduleTimelineStrip } from './StaffScheduleTimelineStrip';
 import { matchCatalogService } from '../../utils/treatmentStringParser';
 import { getWibDateKey, getTodayWibDateKey, getTodayWibDate, getWibHoursAndMinutes, buildWibIso } from '../../utils/dateWib';
 import { resolveStreetAddress } from '../../utils/reservationAddress';
-import { addressesMatch as addressesMatchMirror } from '../../utils/addressMatch';
+import { addressesMatch as addressesMatchMirror, parseSavedAddresses, resolveActiveAddress, buildAddressKey } from '../../utils/addressMatch';
 import { resolveStaffName } from '../../utils/resolveStaffName';
 import { AddressBookDrawer } from '../customer/AddressBookDrawer';
 import { recommendSlots } from '../../utils/slotRecommendations';
@@ -90,17 +90,35 @@ function resolveCustomerDefaultOngkir(
 ): number | '' {
   if (!cust) return 0;
 
-  // 1. Prioritas Tertinggi: Ongkir Promo dari Kesepakatan Chat WhatsApp
-  const estOngkir = cust.preferences?.distance_estimate?.ongkir;
-  if (typeof estOngkir === 'number' && !isNaN(estOngkir) && estOngkir >= 0) {
-    return estOngkir;
+  const prefs = cust.preferences || {};
+  const savedAddrs = parseSavedAddresses(prefs);
+  const activeAddr = resolveActiveAddress(savedAddrs);
+
+  // 1. Prioritas Tertinggi: Ongkir Promo dari Kesepakatan Chat WhatsApp (HANYA bila belum expired dan address_key cocok)
+  const estimate = prefs.distance_estimate;
+  if (estimate && typeof estimate === 'object') {
+    const expiresAtMs = estimate.expires_at ? Date.parse(String(estimate.expires_at)) : NaN;
+    const notExpired = Number.isFinite(expiresAtMs) && expiresAtMs > Date.now();
+    const activeKey = activeAddr
+      ? buildAddressKey(activeAddr)
+      : buildAddressKey({
+          lat: cust.lat,
+          lng: cust.lng,
+          address: prefs.address ?? prefs.full_address ?? cust.address,
+          kelurahan: cust.kelurahan,
+          kecamatan: cust.kecamatan,
+          kota: cust.kota,
+        });
+    const sameAddress = Boolean(estimate.address_key) && estimate.address_key === activeKey;
+    const estOngkir = estimate.ongkir;
+    if (notExpired && sameAddress && typeof estOngkir === 'number' && !isNaN(estOngkir) && estOngkir >= 0) {
+      return estOngkir;
+    }
   }
 
-  // 2. Prioritas Kedua: Kartu Alamat Tersimpan (Buku Alamat)
-  const addrs = Array.isArray(cust.preferences?.saved_addresses) ? cust.preferences.saved_addresses : [];
-  const primaryAddr = addrs.find((a: any) => a.isPrimary) || addrs[0];
-  if (typeof primaryAddr?.ongkir === 'number' && !isNaN(primaryAddr.ongkir) && primaryAddr.ongkir >= 0) {
-    return primaryAddr.ongkir;
+  // 2. Prioritas Kedua: Kartu Alamat Aktif (Buku Alamat) — Primary menang, fallback lastUsedAt terbaru (anti addrs[0])
+  if (typeof activeAddr?.ongkir === 'number' && !isNaN(activeAddr.ongkir) && activeAddr.ongkir >= 0) {
+    return activeAddr.ongkir;
   }
 
   // 3. Prioritas Ketiga: Hitung Otomatis dari Jarak km menggunakan Tier (Net Ongkir = Promo)

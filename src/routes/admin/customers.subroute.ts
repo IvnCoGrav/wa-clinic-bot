@@ -629,6 +629,24 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * GET /api/admin/customers/:id/default-ongkir
+   * Mengambil ongkir resmi/tervalidasi via customerService.getLastDeliveryFee
+   */
+  fastify.get(
+    '/api/admin/customers/:id/default-ongkir',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const { id } = request.params;
+      const tenantId = tenantOf(request);
+      try {
+        const ongkir = await customerService.getLastDeliveryFee(id, tenantId);
+        return reply.status(200).send({ success: true, ongkir });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
    * GET /api/admin/customers/:id/addresses
    * Mengambil daftar alamat tersimpan (multi-rumah) milik customer
    */

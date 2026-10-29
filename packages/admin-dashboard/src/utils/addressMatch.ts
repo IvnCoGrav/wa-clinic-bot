@@ -155,3 +155,78 @@ export function addressesMatch(
   }
   return false;
 }
+
+export interface SavedCustomerAddress {
+  id: string;
+  label: string;
+  address: string;
+  kelurahan?: string | null;
+  kecamatan?: string | null;
+  kota?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  distanceKm?: number | null;
+  ongkir?: number | null;
+  landmark?: string | null;
+  locationSource?: 'gps_pin' | 'estimated_area' | 'manual_staff' | null;
+  isPrimary?: boolean;
+  createdAt: string;
+  lastUsedAt: string;
+}
+
+/** Baca daftar dari preferences JSON (tahan data kotor — entri invalid dibuang). */
+export function parseSavedAddresses(preferences: unknown): SavedCustomerAddress[] {
+  const raw = (preferences as any)?.saved_addresses;
+  if (!Array.isArray(raw)) return [];
+  const out: SavedCustomerAddress[] = [];
+  for (const item of raw) {
+    if (item && typeof item === 'object' && typeof item.id === 'string' && typeof item.label === 'string') {
+      out.push({
+        id: item.id,
+        label: item.label,
+        address: String(item.address ?? ''),
+        kelurahan: item.kelurahan ?? null,
+        kecamatan: item.kecamatan ?? null,
+        kota: item.kota ?? null,
+        lat: typeof item.lat === 'number' ? item.lat : null,
+        lng: typeof item.lng === 'number' ? item.lng : null,
+        distanceKm: typeof item.distanceKm === 'number' ? item.distanceKm : null,
+        ongkir: typeof item.ongkir === 'number' ? item.ongkir : null,
+        landmark: item.landmark ?? null,
+        locationSource: item.locationSource ?? null,
+        isPrimary: Boolean(item.isPrimary),
+        createdAt: item.createdAt || '',
+        lastUsedAt: item.lastUsedAt || '',
+      });
+    }
+  }
+  return out;
+}
+
+/** Alamat aktif: primary menang; fallback `lastUsedAt` terbaru. */
+export function resolveActiveAddress(list: SavedCustomerAddress[]): SavedCustomerAddress | null {
+  if (list.length === 0) return null;
+  const primary = list.find((a) => a.isPrimary);
+  if (primary) return primary;
+  return [...list].sort((x, y) => (x.lastUsedAt < y.lastUsedAt ? 1 : -1))[0] || null;
+}
+
+/** Kunci identitas alamat: koordinat presisi bila ada, selain itu teks ternormalisasi. */
+export function buildAddressKey(input: {
+  lat?: number | null;
+  lng?: number | null;
+  address?: string | null;
+  kelurahan?: string | null;
+  kecamatan?: string | null;
+  kota?: string | null;
+}): string | null {
+  const lat = input.lat != null ? Number(input.lat) : NaN;
+  const lng = input.lng != null ? Number(input.lng) : NaN;
+  if (Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0)) {
+    return `geo:${lat.toFixed(5)},${lng.toFixed(5)}`;
+  }
+  const parts = [input.address, input.kelurahan, input.kecamatan, input.kota]
+    .map((v) => (v ? norm(String(v)) : ''))
+    .filter(Boolean);
+  return parts.length > 0 ? `txt:${parts.join('|')}` : null;
+}
