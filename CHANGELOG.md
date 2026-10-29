@@ -4,6 +4,23 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-29 - Fix: Kartu Kalender Bebas Teks Berlebih + Nama Bidan Kanonis (Fase 5–9 / F-31…F-34)
+
+- **Latar Belakang & Akar Masalah**:
+  - **F-31 (nama bidan hilang)**: legenda warna & baris bawah kartu memakai `name.split(' ')[0]`. Seluruh nama staff produksi diawali gelar — `Bidan Hanifah`, `Bidan Testing Yusi`, `Staff Bidan`, `Bidan Yusi F`, `Bidan Thabita`, `Admin` — sehingga yang tampil hanya kata **"Bidan"**. Legenda menjadi "Bidan · Bidan · Bidan" dan warna per bidan (Fase 4) tidak berguna karena tidak bisa dibedakan.
+  - **F-32 (baris bidan terpotong)**: tinggi kartu Harian dihitung dari durasi × `hourHeight` (slot 60 menit = 86px pada zoom normal), sedangkan isinya (nama + 5 chip + detail + area + chip bidan ≈ 100–120px) lebih tinggi. Kombinasi `justify-between` + `overflow-hidden` memotong dari bawah — tepat di elemen terakhir, yaitu nama bidan. Padding bukan akar masalahnya.
+  - **F-33 (kartu penuh teks)**: kategori ditulis `BABY`/`MOMS`/`BOTH`/`KIDS`, status ditulis `Terjadwal`/`Pending`, dan rentang jam `12:30 - 13:30` + `60m` ditulis penuh padahal gutter jam sudah menunjukkan waktu. Markup status diduplikasi persis di view Harian & Mingguan.
+  - **F-34 (legenda memakan layar)**: legenda selalu terbuka (6 bidan = 2 baris) dan hanya ada di 2 dari 3 view.
+- **Arsitektur & Perubahan**:
+  - `utils/resolveStaffName.ts`: seam baru **`staffDisplayName()`** (buang gelar/jabatan di depan nama, aman untuk staff yang memang bernama "Admin" dan untuk nama yang seluruhnya gelar seperti "Staff Bidan") + **`staffShortName()`**. `staffColors.shortStaffLabel()` kini mendelegasikan ke seam ini (tidak ada logika ganda). Dipakai legenda, baris bawah kartu Harian, dan kartu Mingguan.
+  - `components/calendar/StaffColorLegend.tsx`: diubah menjadi **dropdown default tertutup** (pola `useState` + `ChevronDown/Up` yang sudah dipakai dashboard). Baris tertutup ≤28px berisi pratinjau 4 titik warna + `+N`; panel terbuka memakai `flex-wrap` (bukan `overflow-x-auto`) agar tidak bentrok dengan gestur geser kalender.
+  - `utils/treatmentCategoryIcon.ts` (baru): pemetaan enum DB `TreatmentCategory` → ikon (`Baby`/`Smile`/`Heart`/`Users`) + label aksesibilitas. Memakai `hasOwnProperty`, bukan `in`, agar `constructor`/`toString` tidak lolos.
+  - `components/calendar/ReservationStatusIcon.tsx` (baru): satu sumber tampilan status untuk kedua grid. `confirmed` → centang, `confirmed` + lunas → centang ganda, `pending` → peringatan, **`hold` tetap teks "HOLD"**. Semua bentuk ikon membawa `title` + `aria-label` berisi teks aslinya.
+  - `utils/calendarCardLod.ts` (baru): fungsi murni `computeDayCardLod(heightPx)` yang menentukan kapan baris detail/area dibuang. **Baris bidan sengaja tidak punya flag LOD** — wajib selalu tampil (dijaga test).
+  - `DayScheduleGrid.tsx`: isi kartu disusun vertikal (bukan `justify-between` dua kolom), prioritas bertahan = nama → jam mulai → **bidan** → area → detail; rentang jam & durasi dibuang; area memakai `formatReservationKelurahan` (kelurahan saja); padding `p-1.5 sm:p-2.5`.
+  - `reservationAddress.ts`: tambah `formatReservationKelurahan()` dengan cadangan kecamatan (produksi: hanya 337/1001 customer punya kelurahan). `formatReservationArea()` tidak diubah agar view Bulanan/Mingguan tetap menampilkan gabungan.
+- **Gerbang Regresi**: `tsc && vite build` hijau; 4 file test baru (36 kasus adversarial: nama produksi nyata, nama yang seluruhnya gelar, prototype pollution, tinggi kartu tidak wajar) + 2 test lama disesuaikan. Test `shortStaffLabel('Bidan Ani Suryani')` yang dulu mengunci hasil `'Bidan'` diperbaiki menjadi `'Ani'`.
+
 #### 2026-10-29 - Feat: Warna Kartu Kalender per Bidan (Fase 4)
 
 - **Latar Belakang & Akar Masalah**:

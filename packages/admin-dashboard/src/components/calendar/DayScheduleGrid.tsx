@@ -1,10 +1,11 @@
 import React, { useRef, useEffect } from 'react';
 import { Reservation } from '../../types';
-import { Plus, User, Clock, MapPin, MessageCircle, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Plus, User, MapPin } from 'lucide-react';
 import { QuickSlotTarget, StaffOption } from './types';
 import { useCalendarZoom } from '../../hooks/useCalendarZoom';
 import { CalendarZoomControls } from './CalendarZoomControls';
 import { StaffColorLegend } from './StaffColorLegend';
+import { ReservationStatusIcon } from './ReservationStatusIcon';
 import { getWibDateKey, getWibHoursAndMinutes } from '../../utils/dateWib';
 
 interface DayScheduleGridProps {
@@ -18,9 +19,11 @@ interface DayScheduleGridProps {
 }
 
 import { cleanTreatmentDetailForDisplay, resolveReservationDuration } from '../../utils/durationCalculator';
-import { resolveStaffId, resolveStaffName } from '../../utils/resolveStaffName';
-import { formatReservationArea } from '../../utils/reservationAddress';
+import { resolveStaffId, resolveStaffName, staffDisplayName, staffShortName } from '../../utils/resolveStaffName';
+import { formatReservationKelurahan } from '../../utils/reservationAddress';
 import { getStaffColor } from '../../utils/staffColors';
+import { getTreatmentCategoryMeta } from '../../utils/treatmentCategoryIcon';
+import { computeDayCardLod } from '../../utils/calendarCardLod';
 
 const HOURS = Array.from({ length: 16 }, (_, i) => i + 6); // 6am - 9pm
 
@@ -308,14 +311,17 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
               // Warna kartu = bidan penanggung jawab (bukan kategori treatment).
               const staffColor = getStaffColor(resolveStaffId(res), staffList);
               const bDate = new Date(res.booking_date!);
-              const endDate = new Date(bDate.getTime() + pos.duration * 60000);
               const startTimeStr = bDate
                 .toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })
                 .replace('.', ':');
-              const endTimeStr = endDate
-                .toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })
-                .replace('.', ':');
-              const timeRangeStr = `${startTimeStr} - ${endTimeStr}`;
+              // F-33: rentang jam & durasi dibuang — gutter jam di sebelah kiri sudah
+              // menunjukkan waktunya, dan tinggi kartu sudah mewakili durasi.
+              const categoryMeta = getTreatmentCategoryMeta(res.treatment_category);
+              const CategoryIcon = categoryMeta?.Icon;
+              const isPaid = Boolean((res as any).purchase_occurred_at);
+              // F-32: elemen dibuang dari prioritas terendah (detail → area) agar
+              // baris bidan di bawah TIDAK terpotong. Baris bidan tidak pernah digating.
+              const { showDetail: canShowDetail, showArea: canShowArea } = computeDayCardLod(pos.heightPx);
 
               const rawName = res.customer?.name || 'Pasien';
               const cleanName = rawName
@@ -323,8 +329,8 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                 .trim();
               const displayName = cleanName || rawName;
               const cleanDetail = cleanTreatmentDetailForDisplay(res.treatment_detail, res.treatment_category);
-              // Daerah kunjungan — seam yang sama dengan view Bulanan & Mingguan.
-              const areaLabel = formatReservationArea(res);
+              // Daerah kunjungan — kelurahan saja (F-33); cadangan kecamatan.
+              const areaLabel = formatReservationKelurahan(res);
               const distanceKm =
                 typeof res.customer?.distance_km === 'number' && Number.isFinite(res.customer.distance_km)
                   ? res.customer.distance_km
@@ -358,104 +364,89 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                     left: evLeft,
                     width: evWidth,
                   }}
-                  className={`absolute z-10 p-2 sm:p-3 rounded-xl transition-all cursor-pointer shadow-md hover:shadow-lg hover:z-20 ring-1 ring-black/5 dark:ring-white/10 flex flex-col justify-between overflow-hidden ${effectiveCardStyle}`}
+                  className={`absolute z-10 p-1.5 sm:p-2.5 rounded-xl transition-all cursor-pointer shadow-md hover:shadow-lg hover:z-20 ring-1 ring-black/5 dark:ring-white/10 flex flex-col overflow-hidden ${effectiveCardStyle}`}
                 >
                   {zoomLevel === 'compact' ? (
                     /* COMPACT DAY LOD (<65px) */
                     <div className="flex items-center justify-between gap-2 h-full">
-                      <div className="flex items-center space-x-2 truncate">
+                      <div className="flex items-center space-x-1.5 min-w-0">
                         <span className={`font-bold text-xs truncate ${isHold ? 'text-amber-950 dark:text-amber-100' : 'text-[#111b21] dark:text-[#e9edef]'}`}>
                           {isHold ? `[HOLD] ${displayName}` : displayName}
                         </span>
                         <span className="text-[10px] font-mono font-bold opacity-80 shrink-0">
-                          {startTimeStr} ({pos.duration}m)
+                          {startTimeStr}
                         </span>
                       </div>
                       <div className="flex items-center space-x-1 shrink-0">
-                        {isHold ? (
-                          <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-amber-500 text-slate-950 ring-1 ring-amber-300 dark:ring-amber-300/60 shadow-2xs">
-                            HOLD
-                          </span>
-                        ) : (
-                          <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-bold uppercase ${staffColor.badge}`}>
-                            {res.treatment_category}
+                        {CategoryIcon && categoryMeta && (
+                          <span
+                            role="img"
+                            aria-label={categoryMeta.label}
+                            title={categoryMeta.label}
+                            className={`inline-flex items-center justify-center p-0.5 rounded-full ${staffColor.badge}`}
+                          >
+                            <CategoryIcon size={11} aria-hidden="true" />
                           </span>
                         )}
-                        <span className="text-[10px] font-semibold text-[#54656f] dark:text-[#aebac1] hidden sm:inline">
-                          {(() => {
-                            const n = resolveStaffName(res, staffList);
-                            return n ? n.split(' ')[0] : 'Unassigned';
-                          })()}
+                        <span className="text-[10px] font-semibold text-[#54656f] dark:text-[#aebac1]">
+                          {staffShortName(resolveStaffName(res, staffList)) || 'Unassigned'}
                         </span>
                       </div>
                     </div>
                   ) : (
                     /* STANDARD & DETAILED DAY LOD */
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
-                      <div className="space-y-1 min-w-0">
-                        <div className="flex items-center space-x-2 flex-wrap gap-y-1">
-                          <span className={`font-bold text-sm truncate ${isHold ? 'text-amber-950 dark:text-amber-100' : 'text-[#111b21] dark:text-[#e9edef]'}`}>
-                            {displayName}
+                    /* F-32: tinggi kartu lebih kecil dari tinggi isi → dulu `justify-between`
+                     * + `overflow-hidden` memotong elemen TERAKHIR (nama bidan). Kini isi
+                     * disusun vertikal dan elemen dibuang berurutan dari prioritas terendah:
+                     * nama → jam mulai → bidan → area → detail treatment. Bidan dibuang paling akhir. */
+                    <div className="flex flex-col h-full min-h-0 gap-0.5">
+                      <div className="flex items-center gap-1.5 min-w-0 shrink-0 overflow-hidden">
+                        <span className={`font-bold text-sm truncate min-w-0 ${isHold ? 'text-amber-950 dark:text-amber-100' : 'text-[#111b21] dark:text-[#e9edef]'}`}>
+                          {displayName}
+                        </span>
+                        <span className="text-[10px] font-mono font-bold opacity-80 shrink-0">
+                          {startTimeStr}
+                        </span>
+                        {CategoryIcon && categoryMeta && (
+                          <span
+                            role="img"
+                            aria-label={categoryMeta.label}
+                            title={categoryMeta.label}
+                            className={`inline-flex items-center justify-center p-0.5 rounded-full shrink-0 ${staffColor.badge}`}
+                          >
+                            <CategoryIcon size={12} aria-hidden="true" />
                           </span>
-                          {isHold ? (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-slate-950 ring-1 ring-amber-300 dark:ring-amber-300/60 shadow-2xs">
-                              HOLD
-                            </span>
-                          ) : (
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${staffColor.badge}`}>
-                              {res.treatment_category}
-                            </span>
-                          )}
-                          {res.session_number != null && res.total_sessions != null && (
-                            <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-blue-600/10 dark:bg-[#202c33]/20 text-blue-800 dark:text-[#aebac1]">
-                              Sesi {res.session_number}/{res.total_sessions}
-                            </span>
-                          )}
-                          <span className="text-xs font-bold flex items-center space-x-1 font-mono opacity-85">
-                            <Clock size={12} />
-                            <span>{timeRangeStr}</span>
-                          </span>
-                          <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-black/5 dark:bg-white/10 font-mono">
-                            {pos.duration}m
-                          </span>
-                          {res.status === 'hold' ? (
-                            <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-extrabold bg-amber-500 text-white shadow-2xs">
-                              <Clock size={10} className="mr-0.5" />
-                              HOLD
-                            </span>
-                          ) : res.status === 'confirmed' ? (
-                            <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-600/10 dark:bg-emerald-950/30 text-emerald-800 dark:text-[#00a884] ring-1 ring-emerald-500/30">
-                              <CheckCircle2 size={10} className="mr-0.5 text-emerald-600 dark:text-[#00a884]" />
-                              {(res as any).purchase_occurred_at ? 'Terjadwal • Lunas' : 'Terjadwal'}
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-600/10 dark:bg-amber-950/30 text-amber-800 dark:text-[#f59e0b] ring-1 ring-amber-500/30">
-                              <AlertCircle size={10} className="mr-0.5 text-amber-600 dark:text-[#f59e0b]" />
-                              Pending
-                            </span>
-                          )}
-                        </div>
-
-                        <p className="text-xs font-semibold opacity-95 line-clamp-1">
-                          {cleanDetail}
-                        </p>
-
-                        {areaLabel && (
-                          <div className="flex items-center space-x-1 text-[11px] opacity-80 min-w-0">
-                            <MapPin size={12} className="shrink-0" />
-                            <span className="truncate" title={areaLabel}>
-                              {areaLabel}
-                              {distanceKm !== null ? ` (${distanceKm.toFixed(1)} km)` : ''}
-                            </span>
-                          </div>
                         )}
+                        {res.session_number != null && res.total_sessions != null && (
+                          <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-blue-600/10 dark:bg-[#202c33]/20 text-blue-800 dark:text-[#aebac1] shrink-0">
+                            Sesi {res.session_number}/{res.total_sessions}
+                          </span>
+                        )}
+                        <ReservationStatusIcon status={res.status} paid={isPaid} />
                       </div>
 
-                      <div className="flex items-center space-x-3 self-end md:self-auto shrink-0">
-                        <div className="flex items-center space-x-1 text-xs font-bold bg-white/80 dark:bg-[#111b21]/80 px-2.5 py-1 rounded-lg border border-black/10 dark:border-white/15 text-[#111b21] dark:text-[#e9edef]">
-                          <User size={12} className="text-[#008069] dark:text-[#00a884]" />
-                          <span>{resolveStaffName(res, staffList) || 'Belum ada terapis'}</span>
+                      {canShowDetail && (
+                        <p className="text-xs font-semibold opacity-95 truncate shrink-0">
+                          {cleanDetail}
+                        </p>
+                      )}
+
+                      {canShowArea && areaLabel && (
+                        <div className="flex items-center space-x-1 text-[11px] opacity-80 min-w-0 shrink-0">
+                          <MapPin size={11} className="shrink-0" />
+                          <span className="truncate" title={areaLabel}>
+                            {areaLabel}
+                            {distanceKm !== null ? ` (${distanceKm.toFixed(1)} km)` : ''}
+                          </span>
                         </div>
+                      )}
+
+                      {/* Baris paling bawah = bidan penanggung jawab (permintaan user). */}
+                      <div className="mt-auto flex items-center gap-1 min-w-0 shrink-0 text-[11px] font-bold">
+                        <User size={11} className="shrink-0 text-[#008069] dark:text-[#00a884]" />
+                        <span className="truncate" title={resolveStaffName(res, staffList) || undefined}>
+                          {staffDisplayName(resolveStaffName(res, staffList)) || 'Belum ada terapis'}
+                        </span>
                       </div>
                     </div>
                   )}

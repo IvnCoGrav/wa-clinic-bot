@@ -1,10 +1,11 @@
 import React, { useEffect, useRef } from 'react';
 import { Reservation } from '../../types';
-import { Plus, User, Clock, CheckCircle2, AlertCircle, ChevronLeft, ChevronRight, MapPin } from 'lucide-react';
+import { Plus, User, Clock, ChevronLeft, ChevronRight, MapPin } from 'lucide-react';
 import { QuickSlotTarget, StaffOption } from './types';
 import { useCalendarZoom } from '../../hooks/useCalendarZoom';
 import { CalendarZoomControls } from './CalendarZoomControls';
 import { StaffColorLegend } from './StaffColorLegend';
+import { ReservationStatusIcon } from './ReservationStatusIcon';
 import { getWibHoursAndMinutes, getWibDateKey, getTodayWibDateKey } from '../../utils/dateWib';
 
 interface WeekScheduleGridProps {
@@ -26,7 +27,7 @@ const HEADER_HEIGHT = 50;
 
 export { extractDurationMinutes } from '../../utils/durationCalculator';
 import { resolveReservationDuration } from '../../utils/durationCalculator';
-import { resolveStaffId, resolveStaffName } from '../../utils/resolveStaffName';
+import { resolveStaffId, resolveStaffName, staffShortName } from '../../utils/resolveStaffName';
 import { formatReservationArea } from '../../utils/reservationAddress';
 import { getStaffColor } from '../../utils/staffColors';
 
@@ -657,7 +658,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                               {isHold ? `[HOLD] ${firstName}` : firstName}
                             </span>
                             <span className="font-mono text-[9px] font-bold text-[#54656f] dark:text-[#aebac1] shrink-0">
-                              {startTimeStr} ({pos.duration}m)
+                              {startTimeStr}
                             </span>
                           </div>
                         ) : (
@@ -680,16 +681,11 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                                     <Clock size={9} className="mr-0.5" />
                                     HOLD
                                   </span>
-                                ) : res.status === 'confirmed' ? (
-                                  <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[8px] sm:text-[8.5px] font-bold bg-emerald-600/10 dark:bg-emerald-950/30 text-emerald-800 dark:text-[#00a884] ring-1 ring-emerald-500/30">
-                                    <CheckCircle2 size={9} className="mr-0.5 text-emerald-600 dark:text-[#00a884]" />
-                                    {(res as any).purchase_occurred_at ? 'Terjadwal • Lunas' : 'Terjadwal'}
-                                  </span>
                                 ) : (
-                                  <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[8px] sm:text-[8.5px] font-bold bg-amber-600/10 dark:bg-amber-950/30 text-amber-800 dark:text-[#f59e0b] ring-1 ring-amber-500/30">
-                                    <AlertCircle size={9} className="mr-0.5 text-amber-600 dark:text-[#f59e0b]" />
-                                    Pending
-                                  </span>
+                                  <ReservationStatusIcon
+                                    status={res.status}
+                                    paid={Boolean((res as any).purchase_occurred_at)}
+                                  />
                                 )}
                               </div>
                             </div>
@@ -718,10 +714,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                               <div className="flex items-center space-x-1 truncate font-semibold text-[#54656f] dark:text-[#aebac1]">
                                 <User size={9} className="shrink-0 text-[#008069] dark:text-[#00a884]" />
                                 <span className="truncate">
-                                  {(() => {
-                                    const n = resolveStaffName(res, staffList);
-                                    return n ? n.split(/\s+/)[0] : 'Unassigned';
-                                  })()}
+                                  {staffShortName(resolveStaffName(res, staffList)) || 'Unassigned'}
                                 </span>
                               </div>
                               <span className="font-mono font-bold text-[8.5px] px-1 py-0.2 rounded bg-black/5 dark:bg-white/10 shrink-0 ml-1">

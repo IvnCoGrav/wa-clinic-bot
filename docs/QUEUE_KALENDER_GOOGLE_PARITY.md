@@ -231,3 +231,146 @@
 4. **Fase 4** — gate penuh + deploy.
 
 **Setiap fase:** commit terpisah → push → deploy live (`docker compose build app worker` + `up -d --no-deps app worker`, **tanpa** menyentuh WAHA) → verifikasi bundle → minta konfirmasi hasil di HP sebelum fase berikutnya.
+
+---
+
+## §4. ANTREAN SUSULAN — hasil uji HP Fase 4 (2026-10-29)
+
+> **Status: ✅ DIEKSEKUSI 2026-10-29 (Fase 5–9) — menunggu verifikasi di HP.**
+> Enam laporan user setelah melihat build Fase 4 di HP.
+> **Temuan kunci: 6 laporan ≠ 6 masalah.** Semuanya bermuara pada **2 akar masalah** (F-31 & F-32)
+> plus 2 permintaan penyederhanaan (F-33 & F-34).
+
+### §4.0 Pemetaan laporan user → akar masalah
+
+| # | Laporan user | Akar masalah | Bukti |
+|---|---|---|---|
+| 1 | "legend cuma nulis **Bidan**, tidak ada nama bidannya" | **F-31** `split(' ')[0]` pada nama yang semuanya diawali "Bidan"/"Staff" | `staffColors.ts:133-137`; data `staff` produksi |
+| 2 | "mending dropdown, defaultnya off" | **F-34** legenda selalu terbuka, memakan tinggi | `StaffColorLegend.tsx:16-46` |
+| 3 | "di Harian tidak perlu jam di kapsul… tulis jam mulai kecil… **kelurahan saja**, tidak perlu alamat lengkap" | **F-33** rentang jam + durasi ditulis penuh; `formatReservationArea` menggabung kelurahan+kecamatan | `DayScheduleGrid.tsx:414-420`; `reservationAddress.ts:48-50` |
+| 4 | "di paling bawah itu harusnya **nama bidan yang handle**" | **F-32** isi kartu > tinggi kartu → elemen terakhir (chip bidan) terpotong `overflow-hidden` | `DayScheduleGrid.tsx:126,181,361,454-459` |
+| 5 | "tulisan baby/moms/both diganti ikon" | **F-33** kategori ditulis teks | `DayScheduleGrid.tsx:380-382,405-407` |
+| 6 | "terjadwal dan pending ikon saja" | **F-33** status ditulis teks + markup duplikat 2 file | `DayScheduleGrid.tsx:426-436`; `WeekScheduleGrid.tsx:683-693` |
+
+### §4.1 FASE 5 — Nama bidan kanonis (F-31) ← **wajib lebih dulu**
+
+- **File:** `packages/admin-dashboard/src/utils/resolveStaffName.ts`
+- **Tambah seam:**
+  ```ts
+  /** Gelar/jabatan yang menempel di depan nama bidan. Hanya dipotong bila
+   *  diikuti minimal satu kata lain ("Bidan Hanifah" → "Hanifah"), supaya
+   *  staff yang benar-benar bernama "Admin" tidak jadi kosong. */
+  const STAFF_ROLE_PREFIX = /^(?:bidan|suster|perawat|terapis|therapist|staff|karyawan|kak|kakak|ibu|bunda|mrs\.?|ny\.?|nn\.?|sdri\.?)\s+/i;
+  const STAFF_ROLE_ONLY = /^(?:bidan|suster|perawat|terapis|therapist|staff|karyawan|admin|kak|kakak|ibu|bunda)$/i;
+
+  export function staffDisplayName(name: string | null | undefined): string {
+    const raw = (name || '').trim();
+    if (!raw) return '';
+    const stripped = raw.replace(STAFF_ROLE_PREFIX, '').trim();
+    // Nama yang seluruhnya gelar ("Staff Bidan") → kembalikan apa adanya,
+    // jangan mengarang nama.
+    return !stripped || STAFF_ROLE_ONLY.test(stripped) ? raw : stripped;
+  }
+
+  /** Nama pendek untuk ruang sempit: kata pertama dari nama yang sudah bersih. */
+  export function staffShortName(name: string | null | undefined): string {
+    const clean = staffDisplayName(name);
+    return clean ? clean.split(/\s+/)[0] : '';
+  }
+  ```
+- **File:** `staffColors.ts:133-137` → `shortStaffLabel` didelegasikan ke `staffShortName` (hapus implementasi lokal; jangan biarkan dua sumber).
+- **Acceptance (data produksi nyata):** `staffShortName('Bidan Hanifah') === 'Hanifah'`; `('Bidan Testing Yusi') === 'Testing'`; `('Bidan Yusi F') === 'Yusi'`; `('Admin') === 'Admin'`; `('Staff Bidan') === 'Staff Bidan'`; `('') === ''`.
+- **Pemakai wajib diganti dalam fase yang sama** (kalau tidak, bug tetap ada di sebagian tempat):
+  - `WeekScheduleGrid.tsx:721-725` (baris bawah kartu) → `staffShortName(resolveStaffName(res, staffList))`
+  - `DayScheduleGrid.tsx:385-389` (LOD compact) → idem
+  - `StaffColorLegend.tsx:40` → `staffDisplayName(s.name)` (dropdown punya ruang, tampilkan nama penuh tanpa gelar)
+
+### §4.2 FASE 6 — Legenda jadi dropdown, default tertutup (F-34)
+
+- **File:** `StaffColorLegend.tsx` (bongkar isi, **bukan** buat komponen baru)
+- **Pola yang diikuti:** pola toggle yang sudah dipakai repo (`useState(false)` + `ChevronDown`/`ChevronUp`) — lihat `CustomerFollowUpSection.tsx:237`, `AiModelSettingsPanel.tsx:748`. Tidak ada dependency baru.
+- **Bentuk tertutup (default):** satu baris tipis `h-7`, isi: label "Warna Bidan" + **4 titik warna pertama** (pratinjau) + `ChevronDown`, seluruh baris jadi `<button aria-expanded>`.
+- **Bentuk terbuka:** daftar `flex-wrap` (bukan `overflow-x-auto` — biar tidak bentrok dengan gestur geser kalender) berisi `dot + nama bersih`, tiap baris `title` = nama asli.
+- **Acceptance:** saat halaman dibuka, legenda hanya 1 baris ≤ 28px; setelah diklik muncul nama bidan; klik lagi menutup; `aria-expanded` berubah; tidak ada `overflow-x-auto` di dalam area kalender.
+
+### §4.3 FASE 7 — Declutter kartu Harian & Mingguan (F-33)
+
+- **File baru (presentasi, murni, bisa diuji):** `packages/admin-dashboard/src/utils/treatmentCategoryIcon.ts`
+  ```ts
+  // Pemetaan enum DB TreatmentCategory → ikon. BUKAN data bisnis:
+  // enum-nya sudah ada di prisma/schema.prisma:35-40.
+  export const TREATMENT_CATEGORY_META = {
+    BABY:  { label: 'Bayi',        Icon: Baby },
+    KIDS:  { label: 'Anak',        Icon: Smile },
+    MOMS:  { label: 'Ibu',         Icon: Heart },
+    BOTH:  { label: 'Ibu & Anak',  Icon: Users },
+  } as const;
+  export function getTreatmentCategoryMeta(category?: string | null) { /* fallback null */ }
+  ```
+- **File baru:** `packages/admin-dashboard/src/components/calendar/ReservationStatusIcon.tsx`
+  - Satu komponen untuk **semua** status, menggantikan markup duplikat di 2 grid.
+  - `hold` → **tetap teks "HOLD"** (status paling kritis, tidak boleh jadi ikon ambigu).
+  - `confirmed` → `CheckCircle2`; `confirmed` + `purchase_occurred_at` → `CheckCheck` (makna "lunas" tetap ada, dibedakan ikon ganda).
+  - lainnya (pending) → `AlertCircle`.
+  - Wajib `title` + `aria-label` berisi teks aslinya ("Terjadwal", "Terjadwal • Lunas", "Pending").
+- **Perubahan `DayScheduleGrid.tsx` (LOD normal/detailed, `:414-436`):**
+  - **Buang** chip rentang jam `{timeRangeStr}` + ikon `Clock` dan chip `{pos.duration}m`.
+  - **Ganti** dengan satu teks kecil `text-[10px] font-mono opacity-80` berisi **jam mulai saja** (`startTimeStr`), ditempel di samping nama pasien.
+  - **Ganti** chip kategori teks → `<Icon size={12} title/aria-label>`.
+  - **Ganti** chip status teks → `ReservationStatusIcon`.
+  - LOD compact (`:363-390`): hapus `({pos.duration}m)`; kategori → ikon; bidan `hidden sm:inline` → **selalu tampil** (nama sudah pendek berkat Fase 5).
+- **Perubahan `WeekScheduleGrid.tsx` (`:659-693`):**
+  - LOD compact: hapus `({pos.duration}m)`.
+  - LOD normal/detailed: status teks → `ReservationStatusIcon`; baris bawah `split(/\s+/)[0]` → `staffShortName(...)`; chip `{pos.duration}m` tetap (satu-satunya penanda durasi di view Mingguan yang tidak punya tinggi kartu lebar).
+- **Acceptance:** tidak ada lagi teks `BABY`/`MOMS`/`BOTH`/`KIDS`/`Terjadwal`/`Pending` di kartu; semua ikon punya `title`/`aria-label`; `npm run build` hijau.
+
+### §4.4 FASE 8 — Area kelurahan saja (F-33 lanjutan)
+
+- **File:** `reservationAddress.ts` — **tambah** (jangan ubah `formatReservationArea`, view Mingguan masih butuh gabungan):
+  ```ts
+  /** Label area paling ringkas untuk kartu Harian: kelurahan saja.
+   *  Fallback kecamatan karena 66% customer belum punya kelurahan
+   *  (produksi: 337/1001 kelurahan, 413/1001 kecamatan). */
+  export function formatReservationKelurahan(reservation): string {
+    const c = reservation?.customer;
+    return cleanPart(c?.kelurahan) || cleanPart(c?.kecamatan) || '';
+  }
+  ```
+- **File:** `DayScheduleGrid.tsx:327` → `formatReservationKelurahan(res)`.
+- **Jangan** ikut ubah `formatReservationArea` (dipakai Bulanan/Mingguan).
+- **Acceptance:** kartu Harian menampilkan satu kata wilayah (mis. "Mulyorejo"), tanpa koma; kartu tanpa kelurahan tetap menampilkan kecamatan (tidak kosong).
+
+### §4.5 FASE 9 — Anti-kliping: nama bidan selalu terlihat (F-32) ← inti
+
+> Ini **bukan** penambalan padding. Akar masalahnya: tinggi kartu lebih kecil dari tinggi isi,
+> lalu `overflow-hidden` memotong dari bawah — tepat di elemen terakhir (chip bidan).
+
+- **File:** `DayScheduleGrid.tsx`
+- **Model LOD berbasis tinggi kartu** (bukan `zoomLevel` saja), dievaluasi per kartu:
+  ```tsx
+  // Anggaran tinggi isi (px) — dipakai untuk memutuskan apa yang dibuang.
+  const canShowDetail = pos.heightPx >= 84;   // baris detail treatment
+  const canShowArea   = pos.heightPx >= 68;   // baris kelurahan
+  const canShowStaff  = pos.heightPx >= 52;   // baris bidan (PRIORITAS TERTINGGI)
+  ```
+- **Urutan prioritas yang dipertahankan saat kartu memendek:** nama pasien → jam mulai → bidan → area → detail treatment. Artinya **bidan dibuang paling akhir**, bukan paling awal.
+- **Wajib:** baris bidan diberi `shrink-0` dan dipindah **keluar** dari blok yang boleh dibuang; blok atas diberi `min-h-0 overflow-hidden`.
+- **Wajib:** `justify-between` diganti `flex-col` + `gap-0.5` agar tidak ada ruang yang dipaksa kosong saat isi sedikit.
+- **Acceptance:** pada slot **30, 45, dan 60 menit** di ketiga level zoom, nama bidan **selalu** terlihat; tidak ada teks yang menempel ke border bawah; `document.querySelectorAll('[data-event-card]')` tidak ada yang `scrollHeight > clientHeight + 2`.
+
+### §4.6 Gerbang & urutan
+
+| Fase | Isi | Kenapa urutannya di sini |
+|---|---|---|
+| 5 | Nama bidan kanonis | Fondasi; dipakai legenda + 2 grid |
+| 6 | Legenda dropdown | Butuh nama dari Fase 5 |
+| 7 | Declutter kartu (ikon) | Mengurangi lebar isi → memberi ruang untuk Fase 9 |
+| 8 | Kelurahan saja | Satu baris, dampak kecil |
+| 9 | Anti-kliping LOD | Terakhir karena mengukur ulang tinggi setelah Fase 7–8 |
+
+**Gerbang tiap fase:** `npm --prefix packages/admin-dashboard run build` hijau + test unit baru hijau + gate regresi **tanpa kegagalan baru** (baseline 22 gagal / 10 file, `KNOWN_ISSUES` #287).
+
+**Test unit wajib (adversarial, bukan happy-path):**
+- `tests/unit/staff-display-name.test.ts` — 6 nama produksi nyata + `null` + `''` + nama yang seluruhnya gelar + nama tanpa gelar + gelar huruf kecil (`bidan hanifah`).
+- `tests/unit/treatment-category-icon.test.ts` — 4 nilai enum + nilai tak dikenal + `null`.
+- `tests/unit/reservation-area-kelurahan.test.ts` — kelurahan saja, kelurahan kosong → kecamatan, keduanya kosong → `''`, kelurahan = kecamatan.

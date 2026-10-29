@@ -54,6 +54,26 @@ export function formatReservationArea(
   return '';
 }
 
+/**
+ * formatReservationKelurahan — label wilayah paling ringkas untuk kartu Harian.
+ *
+ * F-33: kartu Harian cukup menampilkan kelurahan; gabungan "kelurahan, kecamatan"
+ * memakan lebar dan mendorong elemen lain (nama bidan) keluar kartu.
+ *
+ * Cadangan ke `kecamatan` WAJIB: data produksi hanya 337/1001 customer punya
+ * `kelurahan` (413/1001 punya `kecamatan`). Tanpa cadangan, mayoritas kartu
+ * kehilangan label wilayah.
+ *
+ * Tidak menggantikan `formatReservationArea` — view Bulanan & Mingguan tetap
+ * memakai gabungan tersebut.
+ */
+export function formatReservationKelurahan(
+  reservation: ReservationAreaSource | null | undefined
+): string {
+  const customer = reservation?.customer;
+  return cleanPart(customer?.kelurahan) || cleanPart(customer?.kecamatan) || '';
+}
+
 export function resolveStreetAddress(
   reservation: { raw_text?: string | null; customer?: { preferences?: any } | null } | null | undefined,
   customer?: { preferences?: any } | null
