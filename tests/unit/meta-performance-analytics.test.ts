@@ -353,7 +353,7 @@ describe('meta-performance-analytics: retensi & kapasitas', () => {
     expect(sep.returned90).toBeNull();
   });
 
-  it('menghitung utilisasi terapis dari jumlah Staff aktif (DB-driven, bukan konstanta)', async () => {
+  it('menghitung utilisasi terapis dari jumlah Staff aktif dengan slot terkonfigurasi tenant', async () => {
     const c = cust('a', T);
     install({
       rangeClicks: [],
@@ -362,6 +362,11 @@ describe('meta-performance-analytics: retensi & kapasitas', () => {
       historyReservations: [mkRes('r1', 'a', '2026-08-02T03:00:00.000Z', null, c)],
       customers: [c],
       staffCount: 3,
+      tenantSettings: {
+        metaPerformanceSettings: {
+          dailySlotsPerTherapist: 4,
+        },
+      },
     });
     const r = await getMetaPerformanceReport({ tenantId: T, startDate: '2026-08-01', endDate: '2026-08-10' });
     expect(r.therapistCapacity).not.toBeNull();
@@ -371,6 +376,30 @@ describe('meta-performance-analytics: retensi & kapasitas', () => {
     expect(r.therapistCapacity!.bookingCount).toBe(1);
     expect(r.therapistCapacity!.utilizationPct).toBe(0.83); // 1 / 120 slot
     expect(r.therapistCapacity!.band).toBe('AMAN');
+  });
+
+  it('therapistCapacity memiliki dailySlotsPerTherapist null dan band UNKNOWN saat belum dikonfigurasi tenant', async () => {
+    const c = cust('a', T);
+    install({
+      rangeClicks: [],
+      matchedAds: [],
+      rangeReservations: [mkRes('r1', 'a', '2026-08-02T03:00:00.000Z', '2026-08-05T03:00:00.000Z', c)],
+      historyReservations: [mkRes('r1', 'a', '2026-08-02T03:00:00.000Z', null, c)],
+      customers: [c],
+      staffCount: 3,
+      tenantSettings: {
+        metaPerformanceSettings: {
+          // tanpa dailySlotsPerTherapist
+        },
+      },
+    });
+    const r = await getMetaPerformanceReport({ tenantId: T, startDate: '2026-08-01', endDate: '2026-08-10' });
+    expect(r.therapistCapacity).not.toBeNull();
+    expect(r.therapistCapacity!.activeTherapists).toBe(3);
+    expect(r.therapistCapacity!.dailySlotsPerTherapist).toBeNull();
+    expect(r.therapistCapacity!.totalSlotsCapacity).toBeNull();
+    expect(r.therapistCapacity!.utilizationPct).toBeNull();
+    expect(r.therapistCapacity!.band).toBe('UNKNOWN');
   });
 
   it('therapistCapacity null saat DB offline (enrichment opsional, tanpa throw)', async () => {
@@ -925,7 +954,7 @@ describe('meta-performance-analytics: Mesin Kohort Bulanan & Omzet Treatment Mur
     expect(junRow.avgDaysToSecondVisit).toBe(25);
   });
 
-  it('mengecualikan outlier masa lalu 2025-08 dari kohort bulanan', async () => {
+  it('mengecualikan bulan sesuai excludedCohortMonths konfigurasi tenant', async () => {
     const cOld = cust('c_old', T);
     const rOld = {
       id: 'r_old', tenant_id: T, customer_id: 'c_old', created_at: '2025-08-10T03:00:00.000Z',
@@ -940,9 +969,35 @@ describe('meta-performance-analytics: Mesin Kohort Bulanan & Omzet Treatment Mur
       matchedAds: [],
       now: new Date('2026-10-26T09:00:00.000Z'),
       treatmentFeeOf: async (r) => r.purchase_value,
+      cohortStartMonth: '2026-01',
+      excludedCohortMonths: ['2025-08'],
     });
 
     const oldRow = result.monthlyCohorts.find((r) => r.cohortMonth === '2025-08');
     expect(oldRow).toBeUndefined();
+  });
+
+  it('menyertakan bulan lampau jika tidak dikecualikan oleh konfigurasi tenant (anti-hardcode)', async () => {
+    const cOld = cust('c_old', T);
+    const rOld = {
+      id: 'r_old', tenant_id: T, customer_id: 'c_old', created_at: '2025-08-10T03:00:00.000Z',
+      booking_date: '2025-08-10T03:00:00.000Z', status: 'completed', purchase_value: 100000,
+      treatment_detail: 'Pijat Bayi', delivery_fee: 0, customer: cOld,
+    };
+
+    const result = await buildMonthlyCohorts({
+      tenantId: T,
+      historyReservations: [rOld],
+      rangeReservations: [],
+      matchedAds: [],
+      now: new Date('2026-10-26T09:00:00.000Z'),
+      treatmentFeeOf: async (r) => r.purchase_value,
+      cohortStartMonth: null,
+      excludedCohortMonths: [],
+    });
+
+    const oldRow = result.monthlyCohorts.find((r) => r.cohortMonth === '2025-08');
+    expect(oldRow).toBeDefined();
+    expect(oldRow?.cohortSize).toBe(1);
   });
 });

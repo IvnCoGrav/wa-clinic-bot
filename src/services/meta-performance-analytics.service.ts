@@ -239,8 +239,8 @@ export interface MetaPerformanceReport {
   /** Kapasitas & utilisasi terapis (DB-driven: jumlah Staff aktif per hari). */
   therapistCapacity: {
     activeTherapists: number;
-    dailySlotsPerTherapist?: number;
-    totalSlotsCapacity?: number;
+    dailySlotsPerTherapist: number | null;
+    totalSlotsCapacity: number | null;
     bookingCount: number;
     utilizationPct: number | null;
     band: 'AMAN' | 'OPTIMAL' | 'PENUH' | 'UNKNOWN';
@@ -462,6 +462,8 @@ export interface BuildMonthlyCohortsParams {
   minSampleThreshold?: number;
   now?: Date;
   treatmentFeeOf: (r: any) => Promise<number>;
+  cohortStartMonth?: string | null;
+  excludedCohortMonths?: string[];
 }
 
 export async function buildMonthlyCohorts(params: BuildMonthlyCohortsParams): Promise<{
@@ -479,6 +481,8 @@ export async function buildMonthlyCohorts(params: BuildMonthlyCohortsParams): Pr
     minSampleThreshold = 20,
     now = new Date(),
     treatmentFeeOf,
+    cohortStartMonth = null,
+    excludedCohortMonths = [],
   } = params;
 
   const nowMs = now.getTime();
@@ -562,10 +566,12 @@ export async function buildMonthlyCohorts(params: BuildMonthlyCohortsParams): Pr
     });
   }
 
+  const excludedMonths = new Set(excludedCohortMonths);
   let allMonths = Array.from(new Set(patientInfos.map((p) => p.cohortMonth)))
-    .filter((m) => m !== '2025-08' && m >= '2026-01')
+    .filter((m) => !excludedMonths.has(m))
+    .filter((m) => !cohortStartMonth || m >= cohortStartMonth)
     .sort((a, b) => (a < b ? 1 : -1));
-  if (!allMonths.includes(currentWibMonth) && currentWibMonth >= '2026-01') {
+  if (!allMonths.includes(currentWibMonth) && (!cohortStartMonth || currentWibMonth >= cohortStartMonth)) {
     allMonths.unshift(currentWibMonth);
   }
 
@@ -1354,6 +1360,10 @@ export async function getMetaPerformanceReport(
     minSampleThreshold,
     now: new Date(),
     treatmentFeeOf,
+    cohortStartMonth: typeof tenantSettings?.cohortStartMonth === 'string' ? tenantSettings.cohortStartMonth : null,
+    excludedCohortMonths: Array.isArray(tenantSettings?.excludedCohortMonths)
+      ? tenantSettings.excludedCohortMonths.filter((m: unknown) => typeof m === 'string')
+      : [],
   });
 
   // ── Kapasitas & utilisasi terapis (DB-driven: jumlah Staff aktif/hari) ─────
@@ -1377,15 +1387,18 @@ export async function getMetaPerformanceReport(
     (r) => isQualifying(r) && r.booking_date && rangeDayKeys.has(wibDateKey(new Date(r.booking_date))),
   ).length;
   if (activeTherapists !== null) {
-    const dailySlotsPerTherapist =
+    const configuredSlots =
       typeof tenantSettings?.dailySlotsPerTherapist === 'number' && tenantSettings.dailySlotsPerTherapist > 0
-        ? tenantSettings.dailySlotsPerTherapist
-        : 4;
-    const totalSlotsCapacity = activeTherapists * dailySlotsPerTherapist * rangeDayKeys.size;
-    const utilizationPct = totalSlotsCapacity > 0 ? round2((bookingCount / totalSlotsCapacity) * 100) : null;
+        ? Math.round(tenantSettings.dailySlotsPerTherapist)
+        : null;
+
+    const totalSlotsCapacity =
+      configuredSlots === null ? null : activeTherapists * configuredSlots * rangeDayKeys.size;
+    const utilizationPct =
+      totalSlotsCapacity && totalSlotsCapacity > 0 ? round2((bookingCount / totalSlotsCapacity) * 100) : null;
     therapistCapacity = {
       activeTherapists,
-      dailySlotsPerTherapist,
+      dailySlotsPerTherapist: configuredSlots,
       totalSlotsCapacity,
       bookingCount,
       utilizationPct,

@@ -31,9 +31,9 @@ export const TherapistUtilizationCard: React.FC<{ report: MetaPerformanceReport 
         <div className="rounded-xl border border-[#e9edef] bg-[#f8fafc] px-3 py-2">
           <p className="text-[10px] uppercase font-bold text-[#8696a0]">Kapasitas Slot</p>
           <p className="text-sm font-extrabold text-[#111b21]">
-            {fmtNum(cap.totalSlotsCapacity)} <span className="text-[10px] font-normal text-[#64748b]">slot</span>
+            {cap.totalSlotsCapacity === null || cap.totalSlotsCapacity === undefined ? '—' : fmtNum(cap.totalSlotsCapacity)} <span className="text-[10px] font-normal text-[#64748b]">slot</span>
           </p>
-          <p className="text-[9px] text-[#8696a0]">@{cap.dailySlotsPerTherapist || 4} slot/terapis/hari</p>
+          <p className="text-[9px] text-[#8696a0]">{cap.dailySlotsPerTherapist !== null && cap.dailySlotsPerTherapist !== undefined ? `@${cap.dailySlotsPerTherapist} slot/terapis/hari` : 'Kapasitas belum dikonfigurasi admin'}</p>
         </div>
         <div className="rounded-xl border border-[#e9edef] bg-[#f8fafc] px-3 py-2">
           <p className="text-[10px] uppercase font-bold text-[#8696a0]">Booking Periode</p>
@@ -51,7 +51,7 @@ export const TherapistUtilizationCard: React.FC<{ report: MetaPerformanceReport 
       </span>
       <p className="text-[11px] text-[#8696a0] flex items-start gap-1">
         <Info size={12} className="mt-0.5 shrink-0" />
-        Kapasitas dihitung berbasis slot riil: {cap.activeTherapists} terapis aktif &times; {cap.dailySlotsPerTherapist || 4} slot per hari &times; jumlah hari periode.
+        Kapasitas dihitung berbasis slot riil: {cap.activeTherapists} terapis aktif &times; {cap.dailySlotsPerTherapist !== null && cap.dailySlotsPerTherapist !== undefined ? `${cap.dailySlotsPerTherapist} slot per hari` : '(slot belum dikonfigurasi)'} &times; jumlah hari periode.
       </p>
     </section>
   );

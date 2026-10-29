@@ -34,6 +34,13 @@ export const MetaPerformancePanel: React.FC<Props> = ({ startDate, endDate }) =>
   const [isSavingSpend, setIsSavingSpend] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  // Konfigurasi analitik per-tenant
+  const [cohortStartMonth, setCohortStartMonth] = useState('');
+  const [excludedCohortMonths, setExcludedCohortMonths] = useState('');
+  const [dailySlots, setDailySlots] = useState('');
+  const [isConfigOpen, setIsConfigOpen] = useState(false);
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
+
   const activeMonth = startDate.slice(0, 7);
 
   // Ambil pengaturan biaya iklan dari database saat bulan berubah
@@ -51,6 +58,13 @@ export const MetaPerformancePanel: React.FC<Props> = ({ startDate, endDate }) =>
           } else {
             setLpwaSpend('');
             setCtwaSpend('');
+          }
+        }
+        if (res?.success && res.data) {
+          if (res.data.cohortStartMonth !== undefined) setCohortStartMonth(res.data.cohortStartMonth || '');
+          if (Array.isArray(res.data.excludedCohortMonths)) setExcludedCohortMonths(res.data.excludedCohortMonths.join(', '));
+          if (res.data.dailySlotsPerTherapist !== undefined && res.data.dailySlotsPerTherapist !== null) {
+            setDailySlots(String(res.data.dailySlotsPerTherapist));
           }
         }
       } catch {
@@ -87,6 +101,31 @@ export const MetaPerformancePanel: React.FC<Props> = ({ startDate, endDate }) =>
     },
     [startDate, endDate, toast],
   );
+
+  // Simpan konfigurasi analitik per-tenant ke DB
+  const handleSaveConfig = async () => {
+    setIsSavingConfig(true);
+    try {
+      const cleanStart = cohortStartMonth.trim() || null;
+      const cleanExcluded = excludedCohortMonths
+        .split(',')
+        .map((m) => m.trim())
+        .filter((m) => /^\d{4}-(0[1-9]|1[0-2])$/.test(m));
+      const cleanSlots = dailySlots.trim() ? Number(dailySlots) : null;
+
+      await updateMetaPerformanceSettings({
+        cohortStartMonth: cleanStart,
+        excludedCohortMonths: cleanExcluded,
+        dailySlotsPerTherapist: cleanSlots && cleanSlots > 0 ? cleanSlots : null,
+      });
+      toast('Konfigurasi analitik tenant berhasil disimpan', 'success');
+      load(totalSpendNum > 0 ? totalSpendNum : undefined);
+    } catch (err: any) {
+      toast(`Gagal menyimpan konfigurasi analitik: ${err.message}`, 'error');
+    } finally {
+      setIsSavingConfig(false);
+    }
+  };
 
   // Simpan biaya iklan ke DB
   const handleSaveSpends = async () => {
@@ -161,6 +200,76 @@ export const MetaPerformancePanel: React.FC<Props> = ({ startDate, endDate }) =>
         saveSuccess={saveSuccess}
         report={report}
       />
+
+      {/* Konfigurasi Analitik Tenant (Collapsible) */}
+      <div className="bg-white border border-[#e9edef] rounded-2xl shadow-xs overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setIsConfigOpen(!isConfigOpen)}
+          className="w-full px-4 py-3 flex items-center justify-between text-xs font-bold text-[#111b21] hover:bg-[#f8fafc] transition"
+        >
+          <div className="flex items-center gap-2">
+            <Settings size={15} className="text-[#008069]" />
+            <span>Konfigurasi Analitik Tenant (Periode Kohort &amp; Kapasitas Terapis)</span>
+          </div>
+          {isConfigOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </button>
+
+        {isConfigOpen && (
+          <div className="px-4 pb-4 pt-2 border-t border-[#f0f2f5] space-y-3 bg-[#fafbfc]">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <label className="text-[10.5px] uppercase font-bold text-[#667781]">Mulai Bulan Kohort</label>
+                <input
+                  type="month"
+                  value={cohortStartMonth}
+                  onChange={(e) => setCohortStartMonth(e.target.value)}
+                  placeholder="YYYY-MM"
+                  className="w-full bg-white border border-[#d1d7db] rounded-xl px-2.5 py-1.5 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+                />
+                <p className="text-[9.5px] text-[#8696a0]">Kosong = tanpa batas awal</p>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10.5px] uppercase font-bold text-[#667781]">Bulan Dikecualikan</label>
+                <input
+                  type="text"
+                  value={excludedCohortMonths}
+                  onChange={(e) => setExcludedCohortMonths(e.target.value)}
+                  placeholder="mis. 2025-08"
+                  className="w-full bg-white border border-[#d1d7db] rounded-xl px-2.5 py-1.5 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs font-mono"
+                />
+                <p className="text-[9.5px] text-[#8696a0]">Pisahkan dengan koma (YYYY-MM)</p>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10.5px] uppercase font-bold text-[#667781]">Slot / Terapis / Hari</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={dailySlots}
+                  onChange={(e) => setDailySlots(e.target.value)}
+                  placeholder="mis. 4"
+                  className="w-full bg-white border border-[#d1d7db] rounded-xl px-2.5 py-1.5 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs font-mono"
+                />
+                <p className="text-[9.5px] text-[#8696a0]">Kapasitas harian per bidan</p>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={handleSaveConfig}
+                disabled={isSavingConfig}
+                className="px-4 py-1.5 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs disabled:opacity-50"
+              >
+                <span>{isSavingConfig ? 'Menyimpan...' : 'Simpan Konfigurasi'}</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {loading && !report ? (
         <div className="bg-white border border-[#e9edef] rounded-2xl p-12 flex flex-col items-center gap-2 text-[#667781]">

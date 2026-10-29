@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../../db/client';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
+import { tenantOf } from './route-helpers';
 import { auditService } from '../../services/audit.service';
 import { capiService, capiBreaker } from '../../services/capi.service';
 import { memoryAdClicks } from '../tracking.route';
@@ -506,7 +507,7 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
   fastify.get(
     '/api/admin/meta-performance/settings',
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const tenantId = (request as any).staffTenantId || DEFAULT_TENANT_ID;
+      const tenantId = tenantOf(request);
       try {
         const tenant = await (prisma.tenant as any).findUnique({
           where: { id: tenantId },
@@ -516,12 +517,15 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
           monthlySpends: {},
           grossMarginPct: 40,
           minSampleThreshold: 20,
+          cohortStartMonth: null,
+          excludedCohortMonths: [],
+          dailySlotsPerTherapist: null,
         };
         return reply.status(200).send({ success: true, data: perfSettings });
       } catch (err: any) {
         return reply.status(200).send({
           success: true,
-          data: { monthlySpends: {}, grossMarginPct: 40, minSampleThreshold: 20 },
+          data: { monthlySpends: {}, grossMarginPct: 40, minSampleThreshold: 20, cohortStartMonth: null, excludedCohortMonths: [], dailySlotsPerTherapist: null },
           dbNote: `DB offline: ${err?.message?.slice(0, 160)}`,
         });
       }
@@ -540,12 +544,16 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
           monthlySpends?: Record<string, { lpwa?: number; ctwa?: number }>;
           grossMarginPct?: number;
           minSampleThreshold?: number;
+          cohortStartMonth?: string | null;
+          excludedCohortMonths?: string[];
+          dailySlotsPerTherapist?: number | null;
         };
       }>,
       reply: FastifyReply
     ) => {
-      const tenantId = (request as any).staffTenantId || DEFAULT_TENANT_ID;
+      const tenantId = tenantOf(request);
       const body = request.body || {};
+      const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
       try {
         const tenant = await (prisma.tenant as any).findUnique({
           where: { id: tenantId },
@@ -555,6 +563,7 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
         const currentPerf = (currentSettings.metaPerformanceSettings as Record<string, any>) || {};
 
         const updatedPerf = {
+          ...currentPerf,
           monthlySpends: {
             ...(currentPerf.monthlySpends || {}),
             ...(body.monthlySpends || {}),
@@ -567,6 +576,18 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
             typeof body.minSampleThreshold === 'number' && body.minSampleThreshold > 0
               ? body.minSampleThreshold
               : (currentPerf.minSampleThreshold ?? 20),
+          cohortStartMonth:
+            body.cohortStartMonth === null ? null
+            : typeof body.cohortStartMonth === 'string' && MONTH_RE.test(body.cohortStartMonth) ? body.cohortStartMonth
+            : (currentPerf.cohortStartMonth ?? null),
+          excludedCohortMonths: Array.isArray(body.excludedCohortMonths)
+            ? Array.from(new Set(body.excludedCohortMonths.filter((m: unknown) => typeof m === 'string' && MONTH_RE.test(m as string))))
+            : (currentPerf.excludedCohortMonths ?? []),
+          dailySlotsPerTherapist:
+            body.dailySlotsPerTherapist === null ? null
+            : typeof body.dailySlotsPerTherapist === 'number' && body.dailySlotsPerTherapist > 0 && body.dailySlotsPerTherapist <= 50
+            ? Math.round(body.dailySlotsPerTherapist)
+            : (currentPerf.dailySlotsPerTherapist ?? null),
         };
 
         await (prisma.tenant as any).update({

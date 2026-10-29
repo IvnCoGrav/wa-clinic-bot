@@ -105,6 +105,9 @@ export function updateMetaPerformanceSettings<T = any>(data: {
   monthlySpends?: Record<string, { lpwa?: number; ctwa?: number }>;
   grossMarginPct?: number;
   minSampleThreshold?: number;
+  cohortStartMonth?: string | null;
+  excludedCohortMonths?: string[];
+  dailySlotsPerTherapist?: number | null;
 }): Promise<T> {
   return apiRequest('/api/admin/meta-performance/settings', {
     method: 'PUT',

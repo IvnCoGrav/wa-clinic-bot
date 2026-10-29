@@ -145,8 +145,8 @@ export interface MetaPerformanceReport {
   cohortPlanning: CohortPlanningMetrics;
   therapistCapacity: {
     activeTherapists: number;
-    dailySlotsPerTherapist?: number;
-    totalSlotsCapacity?: number;
+    dailySlotsPerTherapist: number | null;
+    totalSlotsCapacity: number | null;
     bookingCount: number;
     utilizationPct: number | null;
     band: 'AMAN' | 'OPTIMAL' | 'PENUH' | 'UNKNOWN';
