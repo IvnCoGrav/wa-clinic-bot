@@ -115,7 +115,7 @@ const UPDATED_SERVICES: ServiceUpdate[] = [
     durationMinutes: 120,
     originalPrice: 700000,
     promoPrice: 600000,
-    description: 'Paket pendampingan intensif ibu & newborn pasca lahir selama 14 sesi (perawatan tali pusat, memandikan, jemur, pijat).',
+    description: 'Paket pendampingan intensif ibu & newborn pasca lahir selama 14 sesi (perawatan tali pusat, memandikan, jemur).',
   },
 
   // KIDS (7)
