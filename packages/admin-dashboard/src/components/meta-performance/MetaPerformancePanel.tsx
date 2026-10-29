@@ -1,5 +1,5 @@
 import React, { Suspense, useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, Loader, RefreshCw, Activity } from 'lucide-react';
+import { AlertTriangle, Loader, RefreshCw, Activity, Settings, ChevronUp, ChevronDown } from 'lucide-react';
 import {
   fetchMetaPerformance,
   fetchMetaPerformanceSettings,
