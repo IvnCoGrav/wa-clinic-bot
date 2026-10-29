@@ -5,8 +5,17 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 612
+Total entri terindeks: 621
 
+- 2026-10-29 | Fix: Seam Pemilih Mode Kalender & Eliminasi Reset Status Duplikat (F-46, F-47)
+- 2026-10-29 | Feat: Kalender Full-Bleed di HP + Gutter Jam Ramping 28px (Fase A & B queue / F-39, F-44)
+- 2026-10-29 | Fix: Seam Rentang Minggu (F-43) + Invoice Tanpa Regex Wilayah (F-29, F-45)
+- 2026-10-29 | Fix: Filter Status Kalender Mati (F-42) + Seam Tunggal Parameter Reservasi
+- 2026-10-29 | Feat: Kalender Hemat Ruang — Jam Dua Digit, Gutter 40px, Now-Indicator, Header HP Ramping
+- 2026-10-29 | Fix: Legenda Hanya Bidan Aktif + Nama Pasien Kanonis & Sel Bulanan Padat (Fase 1 queue / F
+- 2026-10-29 | Fix: Kartu Kalender Bebas Teks Berlebih + Nama Bidan Kanonis (Fase 5–9 / F-31…F-34)
+- 2026-10-29 | Feat: Warna Kartu Kalender per Bidan (Fase 4)
+- 2026-10-29 | Fix: UI/UX Kalender Reservasi Mobile (Fase 1–3: Gestur, Reveal Hari, Konten Kartu)
 - 2026-10-29 | Fix & Feat: Remediasi Fondasional Pasca-Audit Menyeluruh (Phase 1–8)
 - 2026-10-28 | Refactor: Eliminasi 420 Warna Neon di Dark Mode & Harmonisasi Anti-Neon WhatsApp Design Sy
 - 2026-10-28 | Refactor & Feature: Remediasi Menyeluruh UI/UX, Eliminasi Flashbang & Standardisasi Dark M

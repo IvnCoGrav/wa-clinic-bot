@@ -40,11 +40,11 @@ export const VIEW_MODE_OPTIONS: ViewModeOption[] = [
  * - Status spesifik yang dipilih admin (`hold`, `confirmed`, …) **tidak
  *   diubah**: itu keputusan sadar, bukan efek samping pindah mode.
  */
-export function nextStatusForView(mode: CalendarViewMode, currentStatus: string): string {
+export function nextStatusForView<S extends string>(mode: CalendarViewMode, currentStatus: S): S {
   if (mode === 'table') {
-    return currentStatus === 'all' ? 'upcoming' : currentStatus;
+    return (currentStatus === 'all' ? 'upcoming' : currentStatus) as S;
   }
-  return currentStatus === 'upcoming' ? 'all' : currentStatus;
+  return (currentStatus === 'upcoming' ? 'all' : currentStatus) as S;
 }
 
 /** True untuk mode yang menggambar grid kalender (bukan tabel). */

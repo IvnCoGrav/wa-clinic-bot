@@ -8,6 +8,7 @@ import { extractBabiesFromRawText } from '../../utils/reservationBabies';
 import { getWibDateKey, getTodayWibDate } from '../../utils/dateWib';
 import { buildReservationsQuery } from '../../utils/reservationQuery';
 import { getWeekDateRange } from '../../utils/calendarWeekRange';
+import { VIEW_MODE_OPTIONS, nextStatusForView } from '../../utils/calendarViewMode';
 import { resolveChildAgeRows, momGestationalBadge } from '../../utils/clinicalAge';
 import { extractDurationMinutes } from '../../utils/durationCalculator';
 import { Pagination } from '../../components/common/Pagination';
@@ -93,6 +94,13 @@ function readInitialDateFromQuery(): Date | null {
   }
 }
 
+const VIEW_MODE_ICONS: Record<CalendarViewMode, React.ReactNode> = {
+  table: <ListFilter size={13} />,
+  day: <LayoutGrid size={13} />,
+  week: <Columns size={13} />,
+  month: <CalendarDays size={13} />,
+};
+
 export const Reservations: React.FC = () => {
   const { user } = useAuth();
   const { toast, confirm } = useUiFeedback();
@@ -135,6 +143,14 @@ export const Reservations: React.FC = () => {
     // `booking_date >= now-3j`), sehingga grid tampak kosong padahal ada data.
     status: deepLinkDate ? 'all' : 'upcoming',
   });
+
+  const handleViewModeChange = useCallback((newMode: CalendarViewMode) => {
+    setViewMode(newMode);
+    setFilterState((prev) => {
+      const nextStatus = nextStatusForView(newMode, prev.status);
+      return nextStatus === prev.status ? prev : { ...prev, status: nextStatus };
+    });
+  }, []);
 
   const [sortField, setSortField] = useState<'booking_date' | 'customer' | 'category' | 'status' | 'created_at'>('booking_date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -1058,84 +1074,37 @@ export const Reservations: React.FC = () => {
           <div className="block sm:hidden flex-1 min-w-[110px]">
             <select
               value={viewMode}
-              onChange={(e) => {
-                const newMode = e.target.value as CalendarViewMode;
-                setViewMode(newMode);
-                setFilterState((prev) => {
-                  if (newMode === 'table') {
-                    return prev.status === 'all' ? { ...prev, status: 'upcoming' } : prev;
-                  } else {
-                    return prev.status === 'upcoming' ? { ...prev, status: 'all' } : prev;
-                  }
-                });
-              }}
+              onChange={(e) => handleViewModeChange(e.target.value as CalendarViewMode)}
               className="w-full px-3 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs font-bold text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
             >
-              <option value="table">List</option>
-              <option value="day">Hari</option>
-              <option value="week">Minggu</option>
-              <option value="month">Bulan</option>
+              {VIEW_MODE_OPTIONS.map((opt) => (
+                <option key={opt.mode} value={opt.mode}>
+                  {opt.label}
+                </option>
+              ))}
             </select>
           </div>
 
           {/* Desktop View Switcher Tabs */}
           <div className="hidden sm:flex space-x-1 p-1 bg-[#f0f2f5] dark:bg-[#1c272e] rounded-xl shadow-inner text-xs border border-transparent dark:border-[#2a3942]">
-            <button
-              onClick={() => {
-                setViewMode('table');
-                setFilterState((prev) => (prev.status === 'all' ? { ...prev, status: 'upcoming' } : prev));
-              }}
-              className={`flex items-center space-x-1 py-1.5 px-3 rounded-lg font-bold transition-all cursor-pointer ${
-                viewMode === 'table'
-                  ? 'bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] shadow-xs'
-                  : 'text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef]'
-              }`}
-            >
-              <ListFilter size={13} />
-              <span>Tabel</span>
-            </button>
-            <button
-              onClick={() => {
-                setViewMode('day');
-                setFilterState((prev) => (prev.status === 'upcoming' ? { ...prev, status: 'all' } : prev));
-              }}
-              className={`flex items-center space-x-1 py-1.5 px-3 rounded-lg font-bold transition-all cursor-pointer ${
-                viewMode === 'day'
-                  ? 'bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] shadow-xs'
-                  : 'text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef]'
-              }`}
-            >
-              <LayoutGrid size={13} />
-              <span>Hari</span>
-            </button>
-            <button
-              onClick={() => {
-                setViewMode('week');
-                setFilterState((prev) => (prev.status === 'upcoming' ? { ...prev, status: 'all' } : prev));
-              }}
-              className={`hidden sm:flex items-center space-x-1 py-1.5 px-3 rounded-lg font-bold transition-all cursor-pointer ${
-                viewMode === 'week'
-                  ? 'bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] shadow-xs'
-                  : 'text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef]'
-              }`}
-            >
-              <Columns size={13} />
-              <span>Minggu</span>
-            </button>
-            <button
-              onClick={() => {
-                setViewMode('month');
-                setFilterState((prev) => (prev.status === 'upcoming' ? { ...prev, status: 'all' } : prev));
-              }}
-              className={`hidden md:flex items-center space-x-1 py-1.5 px-3 rounded-lg font-bold transition-all cursor-pointer ${
-                viewMode === 'month'
-                  ? 'bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] shadow-xs'
-                  : 'text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef]'
-              }`}
-            >
-              <CalendarDays size={13} />
-              <span>Bulan</span>
-            </button>
+            {VIEW_MODE_OPTIONS.map((opt) => {
+              const active = viewMode === opt.mode;
+              return (
+                <button
+                  key={opt.mode}
+                  type="button"
+                  onClick={() => handleViewModeChange(opt.mode)}
+                  className={`flex items-center space-x-1 py-1.5 px-3 rounded-lg font-bold transition-all cursor-pointer ${
+                    active
+                      ? 'bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] shadow-xs'
+                      : 'text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef]'
+                  }`}
+                >
+                  {VIEW_MODE_ICONS[opt.mode]}
+                  <span>{opt.label}</span>
+                </button>
+              );
+            })}
           </div>
 
           {/* Action buttons */}
@@ -1317,7 +1286,7 @@ export const Reservations: React.FC = () => {
               selectedDate={selectedDate}
               onSelectDate={(d) => {
                 setSelectedDate(d);
-                setViewMode('day');
+                handleViewModeChange('day');
               }}
               reservations={filteredReservations}
               onSelectReservation={(r) => setSelectedRes(r)}

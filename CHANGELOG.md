@@ -4,6 +4,24 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-29 - Fix: Seam Pemilih Mode Kalender & Eliminasi Reset Status Duplikat (F-46, F-47)
+
+- **Latar Belakang & Akar Masalah**:
+  - **F-46 (View Bulan hilang di tablet)**: Tombol `Bulan` di `Reservations.tsx` dibatasi kelas `hidden md:flex`, sedangkan container induknya `hidden sm:flex` dan dropdown mobile `sm:hidden`. Pada rentang layar 640–767px (tablet/iPad mini portrait), tidak ada akses menuju view Bulan sama sekali.
+  - **F-47 (Duplikasi aturan reset status filter)**: Logika transisi filter status ditulis berulang 5 kali di inline handler (`all -> upcoming` saat ke tabel, `upcoming -> all` saat ke kalender). Inkonsistensi juga tampak pada label pertama di mobile ("List") vs desktop ("Tabel").
+- **Arsitektur & Perubahan**:
+  - `packages/admin-dashboard/src/utils/calendarViewMode.ts`: Menambahkan tipe generic pada `nextStatusForView<S extends string>(mode, currentStatus): S` agar tipe union status filter (`CalendarFilterState['status']`) tetap presisi tanpa type narrowing error.
+  - `packages/admin-dashboard/src/pages/tenant/Reservations.tsx`:
+    - Mengintegrasikan `VIEW_MODE_OPTIONS` dan `nextStatusForView` dari seam kanonis `calendarViewMode.ts`.
+    - Mengganti seluruh 5 duplikasi inline click/change handler dengan `handleViewModeChange(mode)`.
+    - Menghilangkan pembatas `hidden md:flex` pada tombol Bulan sehingga mode Bulan tersedia penuh di tablet (`>= sm`).
+    - Menyelaraskan opsi mobile dropdown dengan `VIEW_MODE_OPTIONS` (label "Tabel").
+  - `docs/KNOWN_ISSUES.md`: Menandai entri F-46 dan F-47 sebagai RESOLVED.
+- **Gerbang Regresi**:
+  - `npm --prefix packages/admin-dashboard run build` lulus (tsc && vite build exit 0).
+  - `npm run build` lulus (tsc exit 0).
+  - `npx vitest run tests/unit/calendar-view-mode.test.ts` 9/9 lulus hijau.
+
 #### 2026-10-29 - Feat: Kalender Full-Bleed di HP + Gutter Jam Ramping 28px (Fase A & B queue / F-39, F-44)
 
 - **Latar Belakang & Akar Masalah**:
