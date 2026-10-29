@@ -811,6 +811,8 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           bookingDate?: string | null;
           assignedStaffId?: string | null;
           purchaseValue?: number;
+          discountAmount?: number | null;
+          discount_amount?: number | null;
           status?: 'pending' | 'hold' | 'confirmed' | 'completed' | 'cancelled';
           ongkir?: number | null;
           notes?: string;
@@ -841,6 +843,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
         booking_date: 'bookingDate',
         assigned_staff_id: 'assignedStaffId',
         purchase_value: 'purchaseValue',
+        discount_amount: 'discountAmount',
         duration_minutes: 'durationMinutes',
         payment_method: 'paymentMethod',
         customer_name: 'customerName',
@@ -856,6 +859,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
         bookingDate,
         assignedStaffId,
         purchaseValue,
+        discountAmount,
         status,
         notes,
         rawText,
@@ -913,6 +917,14 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           if (normalizedCat !== undefined) mock.treatment_category = normalizedCat;
           if (treatmentDetail !== undefined) mock.treatment_detail = treatmentDetail;
           if (purchaseValue !== undefined) mock.purchase_value = purchaseValue;
+          if (discountAmount !== undefined) {
+            const d = discountAmount === null ? null : Math.round(Number(discountAmount));
+            if (d !== null && (!Number.isFinite(d) || d < 0)) {
+              return reply.status(400).send({ success: false, error: 'discountAmount tidak valid.' });
+            }
+            const gross = purchaseValue !== undefined ? Number(purchaseValue) : Number(mock.purchase_value || 0);
+            mock.discount_amount = d === null ? null : Math.min(d, Math.max(0, gross));
+          }
           if (body.customerAddressId !== undefined || body.customer_address_id !== undefined) {
             const caId = body.customerAddressId !== undefined ? body.customerAddressId : body.customer_address_id;
             mock.customer_address_id = caId || null;
@@ -982,6 +994,14 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
         if (normalizedCat !== undefined) updateData.treatment_category = normalizedCat;
         if (treatmentDetail !== undefined) updateData.treatment_detail = treatmentDetail;
         if (purchaseValue !== undefined) updateData.purchase_value = purchaseValue;
+        if (discountAmount !== undefined) {
+          const d = discountAmount === null ? null : Math.round(Number(discountAmount));
+          if (d !== null && (!Number.isFinite(d) || d < 0)) {
+            return reply.status(400).send({ success: false, error: 'discountAmount tidak valid.' });
+          }
+          const gross = purchaseValue !== undefined ? Number(purchaseValue) : Number(existing.purchase_value || 0);
+          updateData.discount_amount = d === null ? null : Math.min(d, Math.max(0, gross));
+        }
         if (status !== undefined) updateData.status = status;
         if (isBecomingConfirmed) {
           updateData.purchase_review_status = resolvePurchaseReviewOnConfirm(existing as any);

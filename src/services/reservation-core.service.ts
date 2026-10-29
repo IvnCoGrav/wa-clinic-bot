@@ -1,3 +1,4 @@
+import { resolveExpectedPayment } from '../domain/payment-expected';
 import { prisma } from '../db/client';
 import { TreatmentCategory } from '@prisma/client';
 import type { Prisma } from '@prisma/client';
@@ -431,6 +432,22 @@ export function resolveDeliveryFeeSnapshot(reservation: any): number {
   const legacy = (reservation as any)?.customer?.ongkir ?? (reservation as any)?.ongkir;
   if (typeof legacy === 'number' && legacy >= 0) return legacy;
   return 0;
+}
+
+/** Evaluasi tagihan kanonis untuk payload API (dipakai list, detail, livechat). */
+export function resolveReservationPaymentEvaluation(
+  reservation: any,
+  tolerance = 0
+) {
+  return resolveExpectedPayment(
+    {
+      purchaseValue: reservation?.purchase_value,
+      discountAmount: reservation?.discount_amount,
+      deliveryFee: resolveDeliveryFeeSnapshot(reservation),
+      receiptAmount: reservation?.receipt_amount,
+    },
+    { tolerance }
+  );
 }
 
 /**

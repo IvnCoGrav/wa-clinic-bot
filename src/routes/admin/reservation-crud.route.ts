@@ -9,7 +9,7 @@ import { extractNotesFromRawText, extractBabyDetails } from '../../utils/reserva
 import { computeCurrentAge, resolveMomGestationalInfo } from '../../utils/age-calculator';
 import { parseReservationText } from '../../utils/reservation-text-parser';
 import { tenantOf, sanitizeDurationMinutes } from './route-helpers';
-import { reservationCoreService, ReservationConflictError } from '../../services/reservation-core.service';
+import { reservationCoreService, ReservationConflictError, resolveReservationPaymentEvaluation } from '../../services/reservation-core.service';
 import { auditService } from '../../services/audit.service';
 import { customerService } from '../../services/customer.service';
 import { staffNotificationService } from '../../services/staff-notification.service';
@@ -19,6 +19,10 @@ import { staffNotificationService } from '../../services/staff-notification.serv
  * Dipisah dari reservations.subroute.ts (God Controller) secara bertahap (Fase 2.3 audit arsitektur).
  * Routes: count, daily-slots, list, parse, quick-hold, create, detail, status, set-date, proof, assign-staff, delete, capi-queue
  */
+function withPaymentEvaluation(r: any) {
+  return { ...r, paymentEvaluation: resolveReservationPaymentEvaluation(r) };
+}
+
 export async function reservationCrudRoutes(fastify: FastifyInstance) {
   /**
    * GET /api/admin/reservations/count
@@ -413,37 +417,39 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
         }
 
         const { computeCurrentAge, resolveMomGestationalInfo } = await import('../../utils/age-calculator');
-        const data = rows.map((r) => ({
-          ...r,
-          notes: (r as any).notes || extractNotesFromRawText(r.raw_text),
-          baby_details: extractBabyDetails(r.raw_text),
-          mom_gestational_info: resolveMomGestationalInfo({
-            text: `${r.raw_text || ''} ${r.treatment_detail || ''}`,
-            treatmentCategory: (r as any).treatment_category,
-            registeredAt: (r as any).created_at,
-          }),
-          customer: r.customer
-            ? {
-                ...r.customer,
-                totalTreatments: ((r.customer as any).reservations?.length ?? 0) > 0 ? (r.customer as any).reservations.length : 1,
-                ltv: ((r.customer as any).reservations || []).reduce((acc: number, curr: any) => acc + (curr.purchase_value || 0), 0) || (r.purchase_value || 0),
-                children:
-                  (r.customer as any).children?.map((c: any) => ({
-                    id: c.id,
-                    name: c.name,
-                    birth_date: c.birth_date,
-                    raw_age_text: c.raw_age_text,
-                    age_months_at_registration: c.age_months_at_registration,
-                    current_age: computeCurrentAge({
-                      birthDate: c.birth_date,
-                      ageMonthsAtRegistration: c.age_months_at_registration,
-                      registeredAt: c.created_at,
-                      rawAgeText: c.raw_age_text,
-                    }),
-                  })) || [],
-              }
-            : undefined,
-        }));
+        const data = rows.map((r) =>
+          withPaymentEvaluation({
+            ...r,
+            notes: (r as any).notes || extractNotesFromRawText(r.raw_text),
+            baby_details: extractBabyDetails(r.raw_text),
+            mom_gestational_info: resolveMomGestationalInfo({
+              text: `${r.raw_text || ''} ${r.treatment_detail || ''}`,
+              treatmentCategory: (r as any).treatment_category,
+              registeredAt: (r as any).created_at,
+            }),
+            customer: r.customer
+              ? {
+                  ...r.customer,
+                  totalTreatments: ((r.customer as any).reservations?.length ?? 0) > 0 ? (r.customer as any).reservations.length : 1,
+                  ltv: ((r.customer as any).reservations || []).reduce((acc: number, curr: any) => acc + (curr.purchase_value || 0), 0) || (r.purchase_value || 0),
+                  children:
+                    (r.customer as any).children?.map((c: any) => ({
+                      id: c.id,
+                      name: c.name,
+                      birth_date: c.birth_date,
+                      raw_age_text: c.raw_age_text,
+                      age_months_at_registration: c.age_months_at_registration,
+                      current_age: computeCurrentAge({
+                        birthDate: c.birth_date,
+                        ageMonthsAtRegistration: c.age_months_at_registration,
+                        registeredAt: c.created_at,
+                        rawAgeText: c.raw_age_text,
+                      }),
+                    })) || [],
+                }
+              : undefined,
+          })
+        );
         return reply
           .header('Cache-Control', 'private, max-age=5, stale-while-revalidate=30')
           .status(200)
@@ -467,12 +473,14 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
             take: pageSize,
           });
           const total = await prisma.reservation.count({ where });
-          const data = rows.map((r) => ({
-            ...r,
-            notes: (r as any).notes || extractNotesFromRawText(r.raw_text),
-            baby_details: extractBabyDetails(r.raw_text),
-            customer: r.customer ? { ...r.customer, children: [] } : undefined,
-          }));
+          const data = rows.map((r) =>
+            withPaymentEvaluation({
+              ...r,
+              notes: (r as any).notes || extractNotesFromRawText(r.raw_text),
+              baby_details: extractBabyDetails(r.raw_text),
+              customer: r.customer ? { ...r.customer, children: [] } : undefined,
+            })
+          );
           return reply
             .status(200)
             .send({
@@ -496,12 +504,14 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
             });
             memStaffMap = new Map(staffRows.map((s: any) => [s.id, s]));
           } catch { /* DB offline */ }
-          let data = filterMemoryByTenant(memoryReservations.values(), tenantId).map((r) => ({
-            ...r,
-            assigned_staff: (r as any).assigned_staff || (r.assigned_staff_id ? (memStaffMap.get(r.assigned_staff_id) || null) : null),
-            notes: (r as any).notes || extractNotesFromRawText(r.raw_text),
-            baby_details: extractBabyDetails(r.raw_text),
-          }));
+          let data = filterMemoryByTenant(memoryReservations.values(), tenantId).map((r) =>
+            withPaymentEvaluation({
+              ...r,
+              assigned_staff: (r as any).assigned_staff || (r.assigned_staff_id ? (memStaffMap.get(r.assigned_staff_id) || null) : null),
+              notes: (r as any).notes || extractNotesFromRawText(r.raw_text),
+              baby_details: extractBabyDetails(r.raw_text),
+            })
+          );
 
           // Memory filtering
           if (statusParam && statusParam !== 'all') {

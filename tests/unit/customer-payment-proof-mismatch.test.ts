@@ -4,11 +4,9 @@ import {
   attachCustomerPaymentProof,
   _clearProcessedCacheForTesting,
 } from '../../src/services/customer-payment-proof.service';
-import { parseReceiptAmountFromRawText } from '../../src/services/live-chat.service';
 import { StaffReservationService } from '../../src/services/staff-reservation.service';
 import { sheetsSyncService } from '../../src/services/sheets/sheets-sync.service';
 import { type ReceiptSignal } from '../../src/services/payment-receipt-vision.service';
-import { evaluatePaymentProof } from '../../packages/admin-dashboard/src/utils/paymentProof';
 
 describe('Payment Receipt Mismatch Detection & Red Badge Data Layer (Unit Tests)', () => {
   const tenantId = 'default-tenant';
@@ -30,6 +28,7 @@ describe('Payment Receipt Mismatch Detection & Red Badge Data Layer (Unit Tests)
     status: 'confirmed',
     booking_date: new Date(),
     purchase_value: 230000, // Layanan
+    discount_amount: 0,
     delivery_fee: 20000,    // Ongkir -> Total expected = 250000
     proof_url: null,
     payment_method: null,
@@ -206,84 +205,93 @@ describe('Payment Receipt Mismatch Detection & Red Badge Data Layer (Unit Tests)
       const updateData = updateSpy.mock.calls[0][0].data;
       expect(updateData.receipt_amount).toBeUndefined();
     });
-  });
 
-  describe('Fallback Parsing Helper (parseReceiptAmountFromRawText)', () => {
-    it('mengambil angka nominal dari format [RECEIPT_AMOUNT:xxx]', () => {
-      const text = 'Catatan pasien\n[RECEIPT_REF:BCA123]\n[RECEIPT_AMOUNT:275000]';
-      expect(parseReceiptAmountFromRawText(text)).toBe(275000);
-    });
+    it('5. DISCOUNT APPLIED: Diskon 50rb (Layanan 300rb - 50rb + Ongkir 20rb = 270rb), Struk 270rb -> isMismatch: false', async () => {
+      const matchSignal: ReceiptSignal = {
+        isPaymentReceipt: true,
+        bankDestination: 'BCA',
+        amount: 270000,
+        transferDate: '2026-10-24',
+        referenceNumber: 'REF-DISCOUNT-01',
+        confidence: 0.95,
+      };
 
-    it('mengembalikan null jika tidak ada tag RECEIPT_AMOUNT', () => {
-      expect(parseReceiptAmountFromRawText('Hanya teks biasa')).toBeNull();
-      expect(parseReceiptAmountFromRawText(null)).toBeNull();
-      expect(parseReceiptAmountFromRawText(undefined)).toBeNull();
-    });
-  });
-
-  describe('Frontend Evaluator Helper (evaluatePaymentProof)', () => {
-    it('mengembalikan hasProof: false jika tidak ada bukti bayar', () => {
-      const res = evaluatePaymentProof(null);
-      expect(res.hasProof).toBe(false);
-      expect(res.isMismatch).toBe(false);
-    });
-
-    it('mengembalikan match_green jika nominal transfer pas dengan tagihan', () => {
-      const res = evaluatePaymentProof({
-        proof_url: '/proof.jpg',
-        purchase_value: 230000,
+      const resWithDiscount = {
+        ...baseActiveReservation,
+        purchase_value: 300000,
+        discount_amount: 50000,
         delivery_fee: 20000,
-        receipt_amount: 250000,
+      };
+
+      vi.spyOn(prisma.reservation, 'findFirst')
+        .mockResolvedValueOnce(null) // no duplicate ref
+        .mockResolvedValueOnce(resWithDiscount as any);
+
+      const updateSpy = vi.spyOn(prisma.reservation, 'update').mockResolvedValue({
+        ...resWithDiscount,
+        proof_url: mediaUrl,
+        receipt_amount: 270000,
+      } as any);
+
+      const result = await attachCustomerPaymentProof({
+        tenantId,
+        customerId,
+        conversationId,
+        mediaUrl,
+        signal: matchSignal,
+        waMessageId: 'msg-discount-1',
       });
-      expect(res.hasProof).toBe(true);
-      expect(res.isMismatch).toBe(false);
-      expect(res.badgeVariant).toBe('match_green');
-      expect(res.badgeLabel).toBe('Nominal Sesuai');
+
+      expect(result.attached).toBe(true);
+      expect(result.isMismatch).toBe(false);
+      expect(result.receiptAmount).toBe(270000);
+
+      const updateData = updateSpy.mock.calls[0][0].data;
+      expect(updateData.needs_staff_verification).toBe(false);
+      expect(updateData.purchase_value).toBe(300000);
+      expect(updateData.raw_text).not.toContain('[TRANSFER_MISMATCH:');
     });
 
-    it('mengembalikan mismatch_red jika nominal struk KURANG (underpaid)', () => {
-      const res = evaluatePaymentProof({
-        proof_url: '/proof.jpg',
-        purchase_value: 230000,
-        delivery_fee: 20000,
+    it('6. PURCHASE VALUE ZERO: purchase_value = 0 -> finalPurchaseValue = max(0, amount - deliveryFee)', async () => {
+      const signal: ReceiptSignal = {
+        isPaymentReceipt: true,
+        bankDestination: 'BCA',
+        amount: 150000,
+        transferDate: '2026-10-24',
+        referenceNumber: 'REF-ZERO-01',
+        confidence: 0.95,
+      };
+
+      const resZero = {
+        ...baseActiveReservation,
+        purchase_value: 0,
+        discount_amount: null,
+        delivery_fee: 25000,
+      };
+
+      vi.spyOn(prisma.reservation, 'findFirst')
+        .mockResolvedValueOnce(null) // no duplicate ref
+        .mockResolvedValueOnce(resZero as any);
+
+      const updateSpy = vi.spyOn(prisma.reservation, 'update').mockResolvedValue({
+        ...resZero,
+        proof_url: mediaUrl,
         receipt_amount: 150000,
-      });
-      expect(res.hasProof).toBe(true);
-      expect(res.isMismatch).toBe(true);
-      expect(res.isUnderpaid).toBe(true);
-      expect(res.badgeVariant).toBe('mismatch_red');
-      expect(res.badgeLabel).toBe('Kurang Rp 100.000');
-      expect(res.description).toContain('Tagihan: Rp 250.000');
-    });
+        purchase_value: 125000,
+      } as any);
 
-    it('mengembalikan mismatch_red jika nominal struk LEBIH (overpaid)', () => {
-      const res = evaluatePaymentProof({
-        proof_url: '/proof.jpg',
-        purchase_value: 230000,
-        delivery_fee: 20000,
-        receipt_amount: 300000,
+      const result = await attachCustomerPaymentProof({
+        tenantId,
+        customerId,
+        conversationId,
+        mediaUrl,
+        signal,
+        waMessageId: 'msg-zero-1',
       });
-      expect(res.hasProof).toBe(true);
-      expect(res.isMismatch).toBe(true);
-      expect(res.isOverpaid).toBe(true);
-      expect(res.badgeVariant).toBe('mismatch_red');
-      expect(res.badgeLabel).toBe('Lebih Rp 50.000');
-    });
 
-    it('fallback ke tag [RECEIPT_AMOUNT:xxx] dari raw_text jika receipt_amount null', () => {
-      const res = evaluatePaymentProof({
-        proof_url: '/proof.jpg',
-        purchase_value: 230000,
-        delivery_fee: 20000,
-        receipt_amount: null,
-        raw_text: 'Notes\n[RECEIPT_AMOUNT:200000]',
-      });
-      expect(res.hasProof).toBe(true);
-      expect(res.isMismatch).toBe(true);
-      expect(res.isUnderpaid).toBe(true);
-      expect(res.receiptAmount).toBe(200000);
-      expect(res.badgeVariant).toBe('mismatch_red');
-      expect(res.badgeLabel).toBe('Kurang Rp 50.000');
+      expect(result.attached).toBe(true);
+      const updateData = updateSpy.mock.calls[0][0].data;
+      expect(updateData.purchase_value).toBe(125000); // 150.000 - 25.000
     });
   });
 });

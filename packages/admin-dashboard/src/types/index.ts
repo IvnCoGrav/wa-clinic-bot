@@ -59,6 +59,21 @@ export interface Reservation {
   purchase_occurred_at?: string | null;
   purchase_review_status?: 'pending' | 'approved' | 'ignored_outlier' | string;
   purchase_value?: number | null;
+  discount_amount?: number | null;
+  paymentEvaluation?: {
+    gross: number;
+    discount: number;
+    net: number;
+    deliveryFee: number;
+    expected: number;
+    receiptAmount: number | null;
+    difference: number;
+    tolerance: number;
+    status: 'UNVERIFIED' | 'EXACT' | 'UNDERPAID' | 'OVERPAID';
+    isMismatch: boolean;
+    isUnderpaid: boolean;
+    isOverpaid: boolean;
+  } | null;
   payment_method?: 'CASH' | 'TRANSFER' | 'QRIS' | string | null;
   proof_url?: string | null;
   receipt_amount?: number | null;

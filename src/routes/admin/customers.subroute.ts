@@ -9,6 +9,7 @@ import { responseCacheService } from '../../services/response-cache.service';
 import { getClinicLocationAsync } from '../../config/clinic-location';
 import { tenantOf } from './route-helpers';
 import { resolveLocationSource } from '../../services/staff-reservation.service';
+import { resolveReservationPaymentEvaluation } from '../../services/reservation-core.service';
 import { MAX_ADDRESS_LABEL_LENGTH } from '../../domain/customer-address';
 import { normalizePhoneID } from '../../utils/phone-normalizer';
 
@@ -1027,6 +1028,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
             assigned_staff_id: true,
             is_repeat_order: true,
             purchase_value: true,
+            discount_amount: true,
             payment_method: true,
             proof_url: true,
             receipt_amount: true,
@@ -1039,10 +1041,15 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           },
         });
 
+        const data = reservations.map((r) => ({
+          ...r,
+          paymentEvaluation: resolveReservationPaymentEvaluation(r),
+        }));
+
         return reply
           .header('Cache-Control', 'no-store, no-cache, must-revalidate')
           .status(200)
-          .send({ success: true, count: reservations.length, data: reservations });
+          .send({ success: true, count: data.length, data });
       } catch (err: any) {
         return reply.status(500).send({ success: false, error: err.message });
       }

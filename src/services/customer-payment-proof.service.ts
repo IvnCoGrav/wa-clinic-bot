@@ -1,3 +1,4 @@
+import { resolveExpectedPayment } from '../domain/payment-expected';
 import { prisma } from '../db/client';
 import { StaffReservationService } from './staff-reservation.service';
 import { sheetsSyncService } from './sheets/sheets-sync.service';
@@ -179,23 +180,23 @@ export async function attachCustomerPaymentProof(params: {
     // 5. Downside Protection Guard: proteksi purchase_value resmi dari timpaan nominal kecil
     const deliveryFee = resolveDeliveryFeeSnapshot(reservation as any);
     const existingPurchaseValue = Number((reservation as any).purchase_value) || 0;
-    const totalExpected = existingPurchaseValue + deliveryFee;
+    const payment = resolveExpectedPayment({
+      purchaseValue: existingPurchaseValue,
+      discountAmount: (reservation as any).discount_amount,
+      deliveryFee,
+      receiptAmount: signal.amount,
+    });
+    const totalExpected = payment.expected;
+    const isMismatch = payment.isMismatch;
+    const isUnderpaid = payment.isUnderpaid;
 
     let finalPurchaseValue = existingPurchaseValue;
-    let isUnderpaid = false;
-    let isMismatch = false;
 
     if (signal.amount != null && signal.amount > 0) {
-      if (existingPurchaseValue > 0) {
-        if (signal.amount !== totalExpected) {
-          isMismatch = true;
-        }
-        if (signal.amount < totalExpected) {
-          isUnderpaid = true;
-          console.warn(
-            `[PAYMENT PROOF DOWNSIDE GUARD] Transfer Rp ${signal.amount} < total tagihan Rp ${totalExpected} (layanan: ${existingPurchaseValue} + ongkir: ${deliveryFee}) pada reservasi ${reservation.id}. Mempertahankan purchase_value resmi.`
-          );
-        }
+      if (existingPurchaseValue > 0 && isUnderpaid) {
+        console.warn(
+          `[PAYMENT PROOF DOWNSIDE GUARD] Transfer Rp ${signal.amount} < total tagihan Rp ${totalExpected} (layanan: ${existingPurchaseValue} + ongkir: ${deliveryFee}) pada reservasi ${reservation.id}. Mempertahankan purchase_value resmi.`
+        );
       } else if (existingPurchaseValue === 0) {
         finalPurchaseValue = Math.max(0, signal.amount - deliveryFee);
       }
@@ -227,7 +228,7 @@ export async function attachCustomerPaymentProof(params: {
         rawTags.push(amountTag);
       }
       if (isMismatch) {
-        const mismatchTag = `[TRANSFER_MISMATCH:TRANSFER=${signal.amount};EXPECTED=${totalExpected};DIFF=${signal.amount - totalExpected}]`;
+        const mismatchTag = `[TRANSFER_MISMATCH:TRANSFER=${signal.amount};EXPECTED=${totalExpected};DIFF=${payment.difference}]`;
         if (!currentRaw.includes('[TRANSFER_MISMATCH:')) {
           rawTags.push(mismatchTag);
         }
@@ -269,6 +270,10 @@ export async function attachCustomerPaymentProof(params: {
           amount: signal.amount,
           receiptAmount: signal.amount,
           totalExpected,
+          gross: payment.gross,
+          discount: payment.discount,
+          net: payment.net,
+          paymentStatus: payment.status,
           isMismatch,
           reference: signal.referenceNumber,
           mediaUrl,
@@ -295,6 +300,8 @@ export async function attachCustomerPaymentProof(params: {
             paymentMethod: methodInfo.label,
             receiptAmount: signal.amount ?? null,
             totalExpected,
+            discount: payment.discount,
+            paymentStatus: payment.status,
             isMismatch,
           },
         })
