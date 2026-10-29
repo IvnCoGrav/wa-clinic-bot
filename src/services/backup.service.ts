@@ -349,20 +349,29 @@ export class BackupService {
         if (Array.isArray(tables.children) && tables.children.length > 0) {
           for (const ch of tables.children) {
             try {
+              const nameNorm = ch.name_norm || (ch.name ? ch.name.trim().toLowerCase() : '');
               await prisma.child.upsert({
                 where: { id: ch.id },
                 update: {
                   name: ch.name,
+                  name_norm: nameNorm,
                   birth_date: ch.birth_date ? new Date(ch.birth_date) : undefined,
                   age_months_at_registration: ch.age_months_at_registration,
                   raw_age_text: ch.raw_age_text,
+                  first_reservation_id: ch.first_reservation_id ?? undefined,
+                  last_reservation_id: ch.last_reservation_id ?? undefined,
                 },
                 create: {
                   ...ch,
+                  name_norm: nameNorm,
                   birth_date: ch.birth_date ? new Date(ch.birth_date) : undefined,
+                  first_reservation_id: ch.first_reservation_id || ch.reservation_id || null,
+                  last_reservation_id: ch.last_reservation_id || ch.reservation_id || null,
                 },
               });
-            } catch {}
+            } catch (err: any) {
+              console.warn(`[BackupRestore] Gagal memulihkan child ${ch.id}:`, err?.message || err);
+            }
           }
           restoredSummary.push(`${tables.children.length} data anak`);
           tablesRestored++;
