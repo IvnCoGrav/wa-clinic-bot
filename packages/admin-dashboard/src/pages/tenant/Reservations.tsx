@@ -6,6 +6,7 @@ import { Reservation } from '../../types';
 import { evaluatePaymentProof } from '../../utils/paymentProof';
 import { extractBabiesFromRawText } from '../../utils/reservationBabies';
 import { getWibDateKey, getTodayWibDate } from '../../utils/dateWib';
+import { buildReservationsQuery } from '../../utils/reservationQuery';
 import { resolveChildAgeRows, momGestationalBadge } from '../../utils/clinicalAge';
 import { extractDurationMinutes } from '../../utils/durationCalculator';
 import { Pagination } from '../../components/common/Pagination';
@@ -128,7 +129,10 @@ export const Reservations: React.FC = () => {
     searchQuery: '',
     category: 'all',
     staffId: 'all',
-    status: 'upcoming',
+    // Deep link `?date=...` langsung membuka view kalender. Status default
+    // 'upcoming' akan menyembunyikan reservasi tanggal lampau (API memotong
+    // `booking_date >= now-3j`), sehingga grid tampak kosong padahal ada data.
+    status: deepLinkDate ? 'all' : 'upcoming',
   });
 
   const [sortField, setSortField] = useState<'booking_date' | 'customer' | 'category' | 'status' | 'created_at'>('booking_date');
@@ -263,44 +267,15 @@ export const Reservations: React.FC = () => {
     async (targetPage = 1) => {
       try {
         setLoading(true);
-        const params = new URLSearchParams();
-
-        if (viewMode === 'table') {
-          params.set('page', String(targetPage));
-          params.set('pageSize', String(PAGE_SIZE));
-          if (filterState.status && filterState.status !== 'all') {
-            params.set('status', filterState.status);
-          }
-          if (filterState.staffId && filterState.staffId !== 'all') {
-            params.set('staffId', filterState.staffId);
-          }
-          if (filterState.category && filterState.category !== 'all') {
-            params.set('category', filterState.category);
-          }
-          if (filterState.searchQuery.trim()) {
-            params.set('search', filterState.searchQuery.trim());
-          }
-          params.set('sortBy', sortField);
-          params.set('sortOrder', sortOrder);
-        } else {
-          // Calendar Mode: pull full window for visible date range
-          params.set('page', '1');
-          params.set('pageSize', '500');
-          if (filterState.staffId && filterState.staffId !== 'all') {
-            params.set('staffId', filterState.staffId);
-          }
-          if (filterState.category && filterState.category !== 'all') {
-            params.set('category', filterState.category);
-          }
-          if (filterState.searchQuery.trim()) {
-            params.set('search', filterState.searchQuery.trim());
-          }
-          const range = getCalendarDateRange(viewMode, selectedDate);
-          if (range) {
-            params.set('startDate', range.startDate);
-            params.set('endDate', range.endDate);
-          }
-        }
+        const params = buildReservationsQuery({
+          viewMode,
+          filters: filterState,
+          page: targetPage,
+          pageSize: PAGE_SIZE,
+          sortField,
+          sortOrder,
+          range: viewMode === 'table' ? null : getCalendarDateRange(viewMode, selectedDate),
+        });
 
         const res = await apiRequest(`/api/admin/reservations?${params.toString()}`);
         const data = Array.isArray(res) ? res : res?.data || [];

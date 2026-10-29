@@ -4,6 +4,18 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-29 - Fix: Filter Status Kalender Mati (F-42) + Seam Tunggal Parameter Reservasi
+
+- **Latar Belakang & Akar Masalah**:
+  - Chip **Terjadwal / Pending / Hold / Selesai** di atas kalender (Bulanan, Mingguan, Harian) **tidak menyaring apa pun**. Bukti: `loadReservations()` menyusun parameter di **dua blok `if` terpisah** — cabang `viewMode === 'table'` mengirim `status`, cabang kalender hanya mengirim `staffId`, `category`, `search`, `startDate`, `endDate`. API sendiri sudah mendukung `status` bersama rentang tanggal, jadi ini murni kelalaian kontrak di sisi klien.
+  - Risikonya bukan kosmetik: admin bisa mengira sedang melihat "hanya Hold" padahal semua status tampil, lalu menjadwalkan pasien di slot yang sebenarnya ditahan.
+  - **Temuan tambahan (deep link)**: membuka `?date=...` langsung memakai view Harian dengan status default `upcoming`. API memotong `booking_date >= now-3j`, sehingga tanggal lampau tampil **kosong palsu** walau datanya ada.
+- **Arsitektur & Perubahan**:
+  - `utils/reservationQuery.ts` (baru): seam murni **`buildReservationsQuery()`** menjadi **satu-satunya** penyusun parameter `GET /api/admin/reservations` untuk kedua mode. Perbedaan antar mode kini eksplisit dan bisa diuji; celah "satu cabang lupa mengirim parameter" tidak bisa terulang tanpa membuat test gagal. Tanpa React, tanpa `fetch`.
+  - `status` berlaku di **kedua mode**; `staffId: 'unassigned'` tetap dipertahankan sebagai filter sah; `search` dipangkas dan yang hanya spasi dibuang; mode kalender tetap `pageSize=500` (`CALENDAR_FETCH_LIMIT`); mode tabel tetap mengirim `sortBy`/`sortOrder`.
+  - `Reservations.tsx`: blok `if` ganda diganti satu pemanggilan seam; status awal `all` bila halaman dibuka lewat deep link `?date=`.
+- **Gerbang Regresi**: `tsc && vite build` hijau; `tests/unit/reservation-query.test.ts` **14 kasus adversarial** (semua status chip, `all`/kosong/spasi, `unassigned`, encoding `&`/`+`, jendela 500 vs pageSize tabel, rentang tanggal separuh, mode tabel tidak diregresikan).
+
 #### 2026-10-29 - Feat: Kalender Hemat Ruang — Jam Dua Digit, Gutter 40px, Now-Indicator, Header HP Ramping (Fase 2-3 queue / F-27, F-38…F-41)
 
 - **Latar Belakang & Akar Masalah**:

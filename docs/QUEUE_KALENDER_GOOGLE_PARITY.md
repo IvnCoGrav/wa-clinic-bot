@@ -211,7 +211,7 @@
 
 ## §1b. ANTREAN BARU — hasil uji HP (2026-10-29, setelah Fase 1-3)
 
-> **Status: ANTREAN — belum dieksekusi, menunggu konfirmasi user.**
+> **Status: 1b.3 (F-42) ✅ DIEKSEKUSI 2026-10-29. 1b.1, 1b.2, 1b.4 masih ANTREAN (menunggu konfirmasi user).**
 > Dua permintaan tata letak + dua temuan bug yang terbukti dari kode.
 
 ### 1b.1 Gutter jam: padding kiri/kanan 0 + gutter lebih ramping
@@ -233,9 +233,10 @@
 - **Yang TIDAK boleh ikut full-bleed:** kartu filter di atas kalender (tetap inset agar tombol tidak menempel tepi layar).
 - **Acceptance:** di 360px tidak ada garis putih kiri/kanan pada blok kalender; kartu filter tetap punya jarak ≥16px; tidak ada scroll horizontal pada halaman (hanya di dalam kalender).
 
-### 1b.3 (BUG) Filter status diabaikan di mode kalender — F-42
+### 1b.3 (BUG) Filter status diabaikan di mode kalender — F-42 — ✅ DIEKSEKUSI
 - Bukti: `Reservations.tsx:285-303` tidak mengirim `status`; API mendukung (`reservation-crud.route.ts:236`).
 - Perbaikan: kirim `status` bila `filterState.status !== 'all'`; tambah test regresi parameter.
+- **Hasil:** bukan tambalan satu baris, melainkan seam tunggal `packages/admin-dashboard/src/utils/reservationQuery.ts` (`buildReservationsQuery`) yang dipakai kedua mode. Test: `tests/unit/reservation-query.test.ts` (14 kasus). Bonus: deep link `?date=` tidak lagi kosong palsu (status awal `all`).
 
 ### 1b.4 (RISIKO) Rentang minggu dihitung 3 tempat — F-43
 - Perbaikan: seam `getWeekRange(date)` (WIB) dipakai header, parameter API, dan kolom grid.
