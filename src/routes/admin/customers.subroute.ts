@@ -1,6 +1,5 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../../db/client';
-import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { customerService } from '../../services/customer.service';
 import { auditService } from '../../services/audit.service';
 import { conversationService } from '../../services/conversation.service';
@@ -214,6 +213,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
+        const tenantId = tenantOf(request);
         const kota = request.query?.kota?.trim();
         const showAll = request.query?.scope === 'all';
         const includeCentroids = request.query?.includeCentroids !== 'false';
@@ -226,7 +226,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
         };
         const coordsRows = await prisma.customer.findMany({
           where: {
-            tenant_id: DEFAULT_TENANT_ID,
+            tenant_id: tenantId,
             is_sandbox_test: false,
             lat: { not: null },
             lng: { not: null },
@@ -257,7 +257,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           take: 5000,
         });
 
-        const clinic = await getClinicLocationAsync(DEFAULT_TENANT_ID);
+        const clinic = await getClinicLocationAsync(tenantId);
         const { haversineKm } = await import('../../utils/gazetteer');
         let points: any[] = coordsRows
           .filter(
@@ -309,7 +309,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           try {
             const nullRows = await prisma.customer.findMany({
               where: {
-                tenant_id: DEFAULT_TENANT_ID,
+                tenant_id: tenantId,
                 is_sandbox_test: false,
                 lat: null,
                 ...qualifiedFilter,
@@ -336,7 +336,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
               take: 5000,
             });
 
-            const clinic = await getClinicLocationAsync(DEFAULT_TENANT_ID);
+            const clinic = await getClinicLocationAsync(tenantId);
             const { getGazetteerCoordinates, haversineKm } = await import('../../utils/gazetteer');
             const { isValidAreaName } = await import('../../utils/wilayah-normalizer');
 
@@ -432,8 +432,9 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
+        const tenantId = tenantOf(request);
         const { search, page, pageSize, mqlOnly, segment, sortBy, sortOrder } = request.query || {};
-        const result = await customerService.listCustomersWithLtvAndAdClick(DEFAULT_TENANT_ID, {
+        const result = await customerService.listCustomersWithLtvAndAdClick(tenantId, {
           search,
           page: parseInt(page || '1', 10) || 1,
           pageSize: parseInt(pageSize || '20', 10) || 20,
@@ -491,7 +492,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
         }
 
         if (!customer) {
-          customer = await customerService.getCustomerById(id);
+          customer = await customerService.getCustomerById(id, tenantId);
         }
 
         if (!customer) {
@@ -603,7 +604,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
         }
 
         const customerAddress = (customer as any).address || (customer as any).preferences?.address || (customer as any).preferences?.full_address || null;
-        const savedAddresses = await customerService.getSavedAddresses(customer.id, DEFAULT_TENANT_ID).catch(() => []);
+        const savedAddresses = await customerService.getSavedAddresses(customer.id, tenantId).catch(() => []);
 
         return reply.status(200).send({
           success: true,
@@ -955,10 +956,11 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       const { id } = request.params;
+      const tenantId = tenantOf(request);
       const limit = Math.min(1000, Math.max(1, parseInt(request.query?.limit || '200', 10) || 200));
       try {
         const conversations = await prisma.conversation.findMany({
-          where: { customer_id: id, tenant_id: DEFAULT_TENANT_ID },
+          where: { customer_id: id, tenant_id: tenantId },
           orderBy: { updated_at: 'desc' },
         });
 
@@ -970,7 +972,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
         // Ambil N pesan TERBARU (desc) lalu kembalikan kronologis (asc) agar
         // customer berriwayat panjang tidak kehilangan pesan terbarunya di modal.
         const rawMessages = await prisma.message.findMany({
-          where: { conversation_id: { in: conversationIds }, tenant_id: DEFAULT_TENANT_ID },
+          where: { conversation_id: { in: conversationIds }, tenant_id: tenantId },
           orderBy: { created_at: 'desc' },
           take: limit,
         });
@@ -998,6 +1000,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/customers/:id/active-reservations',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const { id } = request.params;
+      const tenantId = tenantOf(request);
       try {
         const WIB_OFFSET_MS = 7 * 3600000;
         const nowUtc = Date.now();
@@ -1009,7 +1012,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
         const reservations = await prisma.reservation.findMany({
           where: {
             customer_id: id,
-            tenant_id: DEFAULT_TENANT_ID,
+            tenant_id: tenantId,
             status: { in: ['confirmed', 'en_route', 'hold'] },
             booking_date: { gte: startOfTodayWib },
           },
@@ -1060,6 +1063,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       const { id } = request.params;
+      const tenantId = tenantOf(request);
       const { eventName, value, currency = 'IDR', eventTime } = request.body || {};
 
       if (!eventName) {
@@ -1068,7 +1072,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
 
       try {
         const customer = await prisma.customer.findFirst({
-          where: { id, tenant_id: DEFAULT_TENANT_ID },
+          where: { id, tenant_id: tenantId },
           include: { adClick: true },
         });
 
@@ -1089,7 +1093,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           // Anti-Stempel-Janji: anchor waktu konversi EKSPLISIT — id event tidak lagi
           // mengikat ke Date.now() pengiriman (idempoten saat retry manual).
           ...(typeof eventTime === 'number' ? { eventTime } : {}),
-          tenantId: DEFAULT_TENANT_ID,
+          tenantId,
           customData: {
             manual_trigger: true,
             triggered_by_admin: (request as any).adminIdentity || 'Admin',
@@ -1103,6 +1107,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           targetId: id,
           payload: { eventName, value, currency, success: capiResult.success },
           ipAddress: request.ip,
+          tenantId,
         });
 
         return reply.status(200).send({
@@ -1127,13 +1132,14 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/customer/:id/block',
     async (request: FastifyRequest<{ Params: { id: string }; Body: { reason: string } }>, reply: FastifyReply) => {
       const { id } = request.params;
+      const tenantId = tenantOf(request);
       const { reason } = request.body || {};
       if (!reason) {
         return reply.status(400).send({ error: 'reason is required' });
       }
 
       try {
-        const customer = await customerService.blockCustomer(id, reason, DEFAULT_TENANT_ID);
+        const customer = await customerService.blockCustomer(id, reason, tenantId);
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
@@ -1141,6 +1147,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           targetId: id,
           payload: { reason },
           ipAddress: request.ip,
+          tenantId,
         });
         return reply.status(200).send({ success: true, data: customer });
       } catch (error: any) {
@@ -1157,15 +1164,17 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/customer/:id/unblock',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const { id } = request.params;
+      const tenantId = tenantOf(request);
 
       try {
-        const customer = await customerService.unblockCustomer(id, DEFAULT_TENANT_ID);
+        const customer = await customerService.unblockCustomer(id, tenantId);
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
           action: 'UNBLOCK_CUSTOMER',
           targetId: id,
           ipAddress: request.ip,
+          tenantId,
         });
         return reply.status(200).send({ success: true, data: customer });
       } catch (error: any) {
@@ -1200,17 +1209,22 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ success: false, error: 'enabled wajib boolean.' });
       }
 
+      const tenantId = tenantOf(request);
       try {
-        const customer = await customerService.getCustomerById(id, DEFAULT_TENANT_ID);
+        const customer = await customerService.getCustomerById(id, tenantId);
         if (!customer) {
           return reply.status(404).send({ success: false, error: 'Customer tidak ditemukan.' });
         }
 
         // 1. Kolom DB adalah sumber kebenaran
-        await customerService.setLabelFlags(customer.phone, {
-          isAdminLabeled: normalizedLabel === 'admin' ? enabled : undefined,
-          isHoldLabeled: normalizedLabel === 'hold' ? enabled : undefined,
-        });
+        await customerService.setLabelFlags(
+          customer.phone,
+          {
+            isAdminLabeled: normalizedLabel === 'admin' ? enabled : undefined,
+            isHoldLabeled: normalizedLabel === 'hold' ? enabled : undefined,
+          },
+          tenantId
+        );
 
         // 2. Mandat Anti-Label WAHA: label toggle hanya via DB internal (customer.labels)
         // Zero WAHA label mutation — is_admin_labeled / is_hold_labeled sudah di-sync oleh reconciliation service
@@ -1223,6 +1237,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           targetId: id,
           payload: { label, enabled, dbOnly: true },
           ipAddress: request.ip,
+          tenantId,
         });
 
         return reply.status(200).send({
@@ -1242,8 +1257,9 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
    */
   fastify.get('/api/admin/customers/flagged', async (request, reply) => {
     try {
+      const tenantId = tenantOf(request);
       const flaggedConversations = await prisma.conversation.findMany({
-        where: { review_flagged: true, tenant_id: DEFAULT_TENANT_ID },
+        where: { review_flagged: true, tenant_id: tenantId },
         include: { customer: true },
       });
       return reply.status(200).send({ success: true, count: flaggedConversations.length, data: flaggedConversations });
@@ -1269,19 +1285,20 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       const { id } = request.params;
+      const tenantId = tenantOf(request);
       const { aiOverride } = request.body || {};
       if (aiOverride !== 'FORCE_ON' && aiOverride !== 'FORCE_OFF' && aiOverride !== null) {
         return reply.status(400).send({ error: 'aiOverride harus FORCE_ON, FORCE_OFF, atau null.' });
       }
 
       try {
-        const updated = await customerService.setAiOverride(id, DEFAULT_TENANT_ID, aiOverride);
+        const updated = await customerService.setAiOverride(id, tenantId, aiOverride);
 
         if (aiOverride === 'FORCE_ON') {
           const silenced = await prisma.conversation.findFirst({
             where: {
               customer_id: id,
-              tenant_id: DEFAULT_TENANT_ID,
+              tenant_id: tenantId,
               is_human_handling: true,
               escalation_reason: AI_ELIGIBILITY_ESCALATION_REASON,
             },
@@ -1296,7 +1313,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
                 humanHandlingSince: null,
                 escalationReason: null,
               },
-              DEFAULT_TENANT_ID
+              tenantId
             );
             // Mandat Anti-Label WAHA: hold release via DB internal (is_human_handling), zero WAHA label
             console.log(
@@ -1312,6 +1329,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           targetId: id,
           payload: { aiOverride },
           ipAddress: request.ip,
+          tenantId,
         });
 
         return reply.status(200).send({
@@ -1445,8 +1463,9 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ success: false, error: 'Minimal satu field harus diisi untuk update.' });
     }
 
+    const tenantId = tenantOf(request);
     try {
-      const customer = await customerService.getCustomerById(id, DEFAULT_TENANT_ID);
+      const customer = await customerService.getCustomerById(id, tenantId);
 
       if (!customer) {
         return reply.status(404).send({ success: false, error: 'Customer tidak ditemukan.' });
@@ -1455,7 +1474,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
       const updatedCustomer = await customerService.updateCustomer(
         id,
         { name, phone, address, kelurahan, kecamatan, kota, zipcode, landmark, lat, lng, children },
-        DEFAULT_TENANT_ID
+        tenantId
       );
 
       await auditService.logAdminAction({
@@ -1465,6 +1484,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
         targetId: id,
         payload: { name, phone, address, kelurahan, kecamatan, kota, zipcode, landmark, lat, lng, childrenCount: children?.length },
         ipAddress: request.ip,
+        tenantId,
       });
 
       return reply.status(200).send({
@@ -1492,9 +1512,10 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       const { id } = request.params;
+      const tenantId = tenantOf(request);
       try {
         const performedBy = (request as any).adminIdentity || (request as any).adminSession?.adminIdentity || 'Admin';
-        const result = await customerService.refreshCustomerLocationAndOngkir(id, DEFAULT_TENANT_ID, performedBy);
+        const result = await customerService.refreshCustomerLocationAndOngkir(id, tenantId, performedBy);
         if (!result.success) {
           return reply.status(400).send({ success: false, error: result.error });
         }
@@ -1505,6 +1526,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           targetId: id,
           payload: result.data,
           ipAddress: request.ip,
+          tenantId,
         });
         const ongkirStr = new Intl.NumberFormat('id-ID').format(result.data!.ongkir);
         return reply.status(200).send({
@@ -1539,10 +1561,11 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       const { id } = request.params;
+      const tenantId = tenantOf(request);
       const { housePhotoB64, landmark, lat, lng, removePhoto } = request.body || {};
 
       try {
-        const customer = await customerService.getCustomerById(id, DEFAULT_TENANT_ID);
+        const customer = await customerService.getCustomerById(id, tenantId);
 
         if (!customer) {
           return reply.status(404).send({ success: false, error: 'Customer tidak ditemukan.' });
@@ -1576,7 +1599,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           const deliveryResult = await deliveryService.calculateDelivery(
             { lat: targetLat, lng: targetLng },
             clinicCoords,
-            DEFAULT_TENANT_ID
+            tenantId
           );
           distanceKm = deliveryResult.distanceKm;
           newOngkir = deliveryResult.promoPrice;
@@ -1642,7 +1665,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           const resized = await mediaService.resizeImageToMax(Buffer.from(rawB64, 'base64'), 800);
           const adminName = (request as any).adminSession?.adminIdentity || 'Admin Klinik';
           const { getBrandIdentityAsync } = await import('../../config/brand');
-          const brandTenantId = (customer as any).tenant_id || DEFAULT_TENANT_ID;
+          const brandTenantId = (customer as any).tenant_id || tenantId;
           const brand = await getBrandIdentityAsync(brandTenantId);
           const watermarked = await mediaService.overlayGpsBadge(resized, {
             lat: targetLat,
@@ -1657,7 +1680,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
             brandName: brand.businessName,
           });
           const saved = await mediaService.saveOutboundMedia({
-            tenantId: DEFAULT_TENANT_ID,
+            tenantId,
             imageB64: watermarked.toString('base64'),
             mimeType: 'image/jpeg',
             fileName: `house-${customer.id}.jpg`,
@@ -1712,7 +1735,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
                 locationSource: LocationSource.manual_staff,
                 forceUpdateGps: true,
               },
-              DEFAULT_TENANT_ID
+              tenantId
             );
             if (!updatedCustomer) updatedCustomer = customer;
           } catch (seamErr: any) {
@@ -1773,6 +1796,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
             landmark,
           },
           ipAddress: request.ip,
+          tenantId,
         });
 
         return reply.status(200).send({
