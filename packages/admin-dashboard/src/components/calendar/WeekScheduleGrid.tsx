@@ -22,9 +22,8 @@ interface WeekScheduleGridProps {
 const HOURS = Array.from({ length: 16 }, (_, i) => i + 6);
 
 // Ukuran layout dasar untuk kalkulasi auto-scroll
-// Fase 2 queue: gutter 70 -> 40 (label jam kini 2 angka). Anggaran lebar wajib
-// konsisten: 40 + 7x140 = 1020 pada TIME_GUTTER, spacer, dan min-w grid.
-const TIME_GUTTER = 40; // kolom label jam
+// Gutter, spacer, dan min-w DITURUNKAN dari satu konstanta (utils/calendarLayout).
+// JANGAN menulis angka 1008/1020 manual di file ini — itu jebakan F-39.
 const HEADER_HEIGHT = 50;
 
 export { extractDurationMinutes } from '../../utils/durationCalculator';
@@ -33,6 +32,7 @@ import { resolveStaffId, resolveStaffName, staffShortName } from '../../utils/re
 import { formatReservationArea } from '../../utils/reservationAddress';
 import { stripHonorific } from '../../utils/patientName';
 import { getStaffColor } from '../../utils/staffColors';
+import { GRID_MIN_WIDTH, GRID_TEMPLATE_COLUMNS, TIME_GUTTER } from '../../utils/calendarLayout';
 import {
   formatHourLabel as formatHourLabelUtil,
   formatHourLabelLong,
@@ -468,7 +468,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
       {/* Legenda warna per bidan (hanya tampil bila daftar bidan tersedia) */}
       <StaffColorLegend staffList={staffList} />
 
-      {/* Dedicated Top Horizontal Scrollbar Track (1:1 Synchronized with 1020px Calendar Grid) */}
+      {/* Dedicated Top Horizontal Scrollbar Track (1:1 Synchronized with 1008px Calendar Grid) */}
       <div
         ref={topScrollbarRef}
         data-horizontal-scroll="true"
@@ -483,7 +483,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
         }}
         title="Geser kalender secara horizontal"
       >
-        <div style={{ width: '1020px', height: '1px' }} />
+        <div style={{ width: `${GRID_MIN_WIDTH}px`, height: '1px' }} />
       </div>
 
       {/* Main 2D Scrollable Timeline View */}
@@ -502,9 +502,12 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
         onTouchCancel={handleTouchEnd}
         className="cal-2d overflow-x-auto overflow-y-auto max-h-[720px] select-none cursor-grab active:cursor-grabbing"
       >
-        <div className="min-w-[1020px] w-full divide-y divide-[#e9edef] dark:divide-[#2a3942]">
+        <div className="w-full divide-y divide-[#e9edef] dark:divide-[#2a3942]" style={{ minWidth: `${GRID_MIN_WIDTH}px` }}>
           {/* Sticky Header: Day Names & Dates */}
-          <div className="sticky top-0 z-30 grid grid-cols-[40px_repeat(7,minmax(140px,1fr))] divide-x divide-[#e9edef] dark:divide-[#2a3942] border-b border-[#e9edef] dark:border-[#2a3942] bg-[#fafafa] dark:bg-[#182229] shadow-xs">
+          <div
+            className="sticky top-0 z-30 grid divide-x divide-[#e9edef] dark:divide-[#2a3942] border-b border-[#e9edef] dark:border-[#2a3942] bg-[#fafafa] dark:bg-[#182229] shadow-xs"
+            style={{ gridTemplateColumns: GRID_TEMPLATE_COLUMNS }}
+          >
             {/* Top-left corner box — ikon jam menggantikan teks "GMT+7" */}
             <div
               className="sticky left-0 z-40 bg-[#fafafa] dark:bg-[#182229] border-r border-[#e9edef] dark:border-[#2a3942] flex items-center justify-center p-1 text-[10px] font-bold text-[#8696a0] shadow-[2px_0_5px_rgba(0,0,0,0.06)] dark:shadow-[2px_0_5px_rgba(0,0,0,0.3)]"
@@ -554,8 +557,8 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
 
           {/* Continuous Multi-Hour Timeline Canvas */}
           <div
-            className="grid grid-cols-[40px_repeat(7,minmax(140px,1fr))] divide-x divide-[#e9edef] dark:divide-[#2a3942] relative"
-            style={{ height: `${HOURS.length * hourHeight}px`, minHeight: `${HOURS.length * hourHeight}px` }}
+            className="grid divide-x divide-[#e9edef] dark:divide-[#2a3942] relative"
+            style={{ gridTemplateColumns: GRID_TEMPLATE_COLUMNS, height: `${HOURS.length * hourHeight}px`, minHeight: `${HOURS.length * hourHeight}px` }}
           >
             {/* Time label column (frozen horizontally on scroll) */}
             <div className="sticky left-0 z-20 bg-[#fafafa] dark:bg-[#182229] divide-y divide-[#e9edef] dark:divide-[#2a3942] border-r border-[#e9edef] dark:border-[#2a3942] shadow-[2px_0_5px_rgba(0,0,0,0.06)] dark:shadow-[2px_0_5px_rgba(0,0,0,0.3)]">
@@ -563,7 +566,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                 <div
                   key={hour}
                   style={{ height: `${hourHeight}px` }}
-                  className="p-1 pr-1.5 text-right text-[10px] sm:text-xs font-semibold font-mono tabular-nums text-[#8696a0] select-none flex items-start justify-end pt-1.5"
+                  className="py-1 pl-0 pr-0.5 text-right text-[10px] sm:text-xs font-semibold font-mono tabular-nums text-[#8696a0] select-none flex items-start justify-end pt-1.5"
                 >
                   <span title={formatHourLabelLong(hour)}>{formatHourLabel(hour)}</span>
                 </div>

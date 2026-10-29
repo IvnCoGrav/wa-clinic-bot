@@ -275,7 +275,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
         style={{ touchAction: 'pan-y', overscrollBehaviorY: 'auto' }}
       >
         <div
-          className="grid grid-cols-[40px_1fr] sm:grid-cols-[60px_1fr] divide-x divide-[#e9edef] dark:divide-[#2a3942] relative"
+          className="grid grid-cols-[28px_1fr] sm:grid-cols-[44px_1fr] divide-x divide-[#e9edef] dark:divide-[#2a3942] relative"
           style={{ height: `${HOURS.length * hourHeight}px`, minHeight: `${HOURS.length * hourHeight}px` }}
         >
           {/* Hour Label Column (Sticky left) */}
@@ -286,7 +286,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                 <div
                   key={hour}
                   style={{ height: `${hourHeight}px` }}
-                  className={`p-1 sm:p-2 text-right pr-1.5 sm:pr-2 text-[10px] sm:text-xs font-semibold font-mono tabular-nums select-none flex items-start justify-end ${isOp ? 'bg-[#fafafa] dark:bg-[#182229] text-[#8696a0]' : 'bg-[#f0f0f0] dark:bg-[#111b21] text-[#a0a0a0] dark:text-[#54656f] italic'}`}
+                  className={`py-1 sm:py-2 text-right pl-0 pr-0.5 text-[10px] sm:text-xs font-semibold font-mono tabular-nums select-none flex items-start justify-end ${isOp ? 'bg-[#fafafa] dark:bg-[#182229] text-[#8696a0]' : 'bg-[#f0f0f0] dark:bg-[#111b21] text-[#a0a0a0] dark:text-[#54656f] italic'}`}
                 >
                   <span title={formatHourLabelLong(hour)}>{formatHourLabel(hour)}</span>
                 </div>
