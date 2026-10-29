@@ -1,6 +1,6 @@
 # Queue: Optimasi Tampilan Kalender ala Google Calendar (Mobile-First)
 
-> **Status: FASE 1 ✅ DIEKSEKUSI (2026-10-29). FASE 2-4 masih ANTREAN.**
+> **Status: FASE 1-3 ✅ DIEKSEKUSI (2026-10-29). FASE 4 = gerbang regresi, sedang dijalankan.**
 > Dilarang mengeksekusi fase mana pun tanpa konfirmasi eksplisit pengguna per fase
 > (Strict Human-in-the-Loop Confirmation Gate, `AGENTS.md`).
 > Setiap fase wajib: TDD dulu (test merah) → `npm --prefix packages/admin-dashboard run build` → gate regresi → baru boleh lanjut.
@@ -104,7 +104,7 @@
 
 ---
 
-### FASE 2 — Jam 24 jam dua digit, gutter ramping, buang GMT+7
+### FASE 2 — Jam 24 jam dua digit, gutter ramping, buang GMT+7 — ✅ DIEKSEKUSI 2026-10-29
 
 #### 2.1 Label jam (dua angka)
 - **File:** `DayScheduleGrid.tsx:86-90`, `WeekScheduleGrid.tsx:330-334`
@@ -146,7 +146,7 @@
 
 ---
 
-### FASE 3 — UX mobile & now-indicator
+### FASE 3 — UX mobile & now-indicator — ✅ DIEKSEKUSI 2026-10-29
 
 #### 3.1 Garis waktu sekarang (revisi A12/A13/A14)
 - **File baru (pure, bisa diuji):** `packages/admin-dashboard/src/utils/calendarTimePosition.ts`

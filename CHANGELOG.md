@@ -4,6 +4,22 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-29 - Feat: Kalender Hemat Ruang — Jam Dua Digit, Gutter 40px, Now-Indicator, Header HP Ramping (Fase 2-3 queue / F-27, F-38…F-41)
+
+- **Latar Belakang & Akar Masalah**:
+  - **F-38 (label jam am/pm)**: `6 am` / `12 pm` / `1 pm` memakan 4–5 karakter untuk informasi yang cukup 2 angka. Gutter 70px di layar 360px = **~19% lebar layar** hanya untuk label.
+  - **F-39 (spacer tidak sinkron)**: anggaran lebar nyata `70 + 7×140 = 1050`. Bila gutter dikecilkan tanpa mengubah spacer & `min-w`, muncul **ruang geser hantu** (kalender bisa digeser melewati kolom Minggu).
+  - **F-40 (tidak ada penanda waktu)**: view Harian tidak menunjukkan "sekarang" — admin harus menebak posisi waktu saat melihat jadwal hari ini.
+  - **F-41 (header boros)**: subtitle selalu tampil + tombol teks panjang + padding `p-3.5` → header memakan ~35% layar HP.
+  - **F-27 (properti scroll usang)**: view Harian masih memakai `WebkitOverflowScrolling` (deprecated, memaksa scroll di main thread) + `overscroll-contain`, sementara view Mingguan sudah bersih.
+- **Arsitektur & Perubahan**:
+  - `utils/calendarHourLabel.ts` (baru): **`formatHourLabel()`** (dua digit 24 jam, `padStart`) untuk gutter + **`formatHourLabelLong()`** (`13:00`) untuk `title`/`aria-label`. Fungsi murni, tahan `NaN`/string/angka di luar 0–23. Dipakai kedua grid (satu seam, bukan dua salinan).
+  - `WeekScheduleGrid.tsx`: `TIME_GUTTER 70→40`, spacer `1050px→1020px`, `min-w-[1050px]→min-w-[1020px]`, grid `[70px_repeat(7,minmax(140px,1fr))]→[40px_...]` (2 tempat), label jam `p-1 pr-1.5 text-[10px] sm:text-xs font-mono tabular-nums` + `title` panjang, teks `GMT+7` → ikon `Clock` dengan `title`/`aria-label` "Waktu Indonesia Barat (WIB)".
+  - `DayScheduleGrid.tsx`: gutter `70/90px→40/60px`, label jam sama polanya, **`WebkitOverflowScrolling` dihapus** + `overscrollBehaviorY: 'auto'` (F-27), **now-indicator** memakai `computeNowTopPx()` (posisi terikat `hourHeight`, ticker 1 menit dengan `clearInterval`, jam WIB, digambar di dalam kolom hari `z-30 pointer-events-none`, hanya untuk hari ini), header `p-2.5 sm:p-4` + subtitle `hidden sm:block` + tombol `px-2.5 py-1 min-h-9 text-[11px]` dengan `aria-label`.
+  - `utils/calendarTimePosition.ts` (baru): `GRID_START_HOUR`/`GRID_END_HOUR` + `computeNowTopPx(hours, minutes, hourHeight)` — `null` di luar 06:00–22:00 dan untuk input rusak, sehingga pemanggil tidak perlu guard tambahan.
+  - **`minmax(140px,1fr)` sengaja TIDAK diubah ke 130px** — kartu mingguan justru menyempit.
+- **Gerbang Regresi**: `tsc && vite build` hijau; 2 file test baru (15 kasus: label dua digit untuk 0–23 jam, input rusak, posisi now-indicator di 3 level zoom, batas 06:00/22:00).
+
 #### 2026-10-29 - Fix: Legenda Hanya Bidan Aktif + Nama Pasien Kanonis & Sel Bulanan Padat (Fase 1 queue / F-35…F-37)
 
 - **Latar Belakang & Akar Masalah**:

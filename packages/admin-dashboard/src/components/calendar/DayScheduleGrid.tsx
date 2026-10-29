@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { Reservation } from '../../types';
 import { Plus, User, MapPin } from 'lucide-react';
 import { QuickSlotTarget, StaffOption } from './types';
@@ -6,7 +6,7 @@ import { useCalendarZoom } from '../../hooks/useCalendarZoom';
 import { CalendarZoomControls } from './CalendarZoomControls';
 import { StaffColorLegend } from './StaffColorLegend';
 import { ReservationStatusIcon } from './ReservationStatusIcon';
-import { getWibDateKey, getWibHoursAndMinutes } from '../../utils/dateWib';
+import { getWibDateKey, getWibHoursAndMinutes, getTodayWibDateKey } from '../../utils/dateWib';
 
 interface DayScheduleGridProps {
   selectedDate: Date;
@@ -25,6 +25,11 @@ import { getStaffColor } from '../../utils/staffColors';
 import { getTreatmentCategoryMeta } from '../../utils/treatmentCategoryIcon';
 import { computeDayCardLod } from '../../utils/calendarCardLod';
 import { stripHonorific } from '../../utils/patientName';
+import { computeNowTopPx } from '../../utils/calendarTimePosition';
+import {
+  formatHourLabel as formatHourLabelUtil,
+  formatHourLabelLong,
+} from '../../utils/calendarHourLabel';
 
 const HOURS = Array.from({ length: 16 }, (_, i) => i + 6); // 6am - 9pm
 
@@ -41,6 +46,22 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
 
   const isDraggingRef = useRef(false);
   const dragStartRef = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
+
+  /**
+   * Fase 3 queue: penanda waktu sekarang. Diperbarui tiap menit dan SELALU
+   * dibersihkan saat unmount (risiko kebocoran `setInterval`).
+   * Jam diambil dari WIB, bukan jam perangkat, agar konsisten dengan posisi
+   * jadwal yang juga dihitung dari WIB.
+   */
+  const [nowTick, setNowTick] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNowTick(new Date()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const nowWib = getWibHoursAndMinutes(nowTick);
+  const isToday = getWibDateKey(selectedDate) === getTodayWibDateKey();
+  const nowTopPx = isToday ? computeNowTopPx(nowWib.hours, nowWib.minutes, hourHeight) : null;
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
@@ -87,11 +108,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
     return getWibDateKey(d1) === getWibDateKey(d2);
   };
 
-  const formatHourLabel = (hour: number) => {
-    if (hour === 12) return '12 pm';
-    if (hour > 12) return `${hour - 12} pm`;
-    return `${hour} am`;
-  };
+  const formatHourLabel = formatHourLabelUtil;
 
   const dayDateFormatted = selectedDate.toLocaleDateString('id-ID', {
     weekday: 'long',
@@ -215,12 +232,12 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
     <div className={`${hideHeader ? 'flex-1 min-h-0' : 'bg-white dark:bg-[#111b21] rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs'} overflow-hidden flex flex-col relative group/calendar`}>
       {/* Day Header Banner with Integrated Zoom Controls */}
       {!hideHeader && (
-        <div className="p-3.5 sm:p-4 border-b border-[#e9edef] dark:border-[#2a3942] bg-[#fafafa] dark:bg-[#182229] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shrink-0">
+        <div className="p-2.5 sm:p-4 border-b border-[#e9edef] dark:border-[#2a3942] bg-[#fafafa] dark:bg-[#182229] flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-2.5 shrink-0">
           <div>
-            <h3 className="font-extrabold text-base sm:text-lg text-[#111b21] dark:text-[#e9edef]">
+            <h3 className="font-extrabold text-sm sm:text-lg text-[#111b21] dark:text-[#e9edef]">
               {dayDateFormatted}
             </h3>
-            <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
+            <p className="hidden sm:block text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
               Agenda jadwal kunjungan &amp; perawatan harian
             </p>
           </div>
@@ -231,10 +248,12 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
 
             <button
               onClick={() => onQuickAdd({ date: selectedDate, hour: 9 })}
-              className="px-3.5 py-1.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-all cursor-pointer"
+              aria-label="Tambah jadwal di tanggal ini"
+              title="Tambah jadwal di tanggal ini"
+              className="px-2.5 py-1 min-h-9 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-[11px] font-semibold flex items-center space-x-1.5 shadow-xs transition-all cursor-pointer"
             >
               <Plus size={14} />
-              <span>+ Tambah di Tanggal Ini</span>
+              <span className="hidden sm:inline">+ Tambah di Tanggal Ini</span>
             </button>
           </div>
         </div>
@@ -252,11 +271,11 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        className={`${hideHeader ? 'flex-1 min-h-0' : 'max-h-[720px]'} overflow-y-auto select-none cursor-grab active:cursor-grabbing overscroll-contain`}
-        style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', overscrollBehavior: 'contain' }}
+        className={`${hideHeader ? 'flex-1 min-h-0' : 'max-h-[720px]'} overflow-y-auto select-none cursor-grab active:cursor-grabbing`}
+        style={{ touchAction: 'pan-y', overscrollBehaviorY: 'auto' }}
       >
         <div
-          className="grid grid-cols-[70px_1fr] sm:grid-cols-[90px_1fr] divide-x divide-[#e9edef] dark:divide-[#2a3942] relative"
+          className="grid grid-cols-[40px_1fr] sm:grid-cols-[60px_1fr] divide-x divide-[#e9edef] dark:divide-[#2a3942] relative"
           style={{ height: `${HOURS.length * hourHeight}px`, minHeight: `${HOURS.length * hourHeight}px` }}
         >
           {/* Hour Label Column (Sticky left) */}
@@ -267,9 +286,9 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                 <div
                   key={hour}
                   style={{ height: `${hourHeight}px` }}
-                  className={`p-2 sm:p-3 text-right pr-3 sm:pr-4 text-xs font-semibold select-none flex items-start justify-end ${isOp ? 'bg-[#fafafa] dark:bg-[#182229] text-[#8696a0]' : 'bg-[#f0f0f0] dark:bg-[#111b21] text-[#a0a0a0] dark:text-[#54656f] italic'}`}
+                  className={`p-1 sm:p-2 text-right pr-1.5 sm:pr-2 text-[10px] sm:text-xs font-semibold font-mono tabular-nums select-none flex items-start justify-end ${isOp ? 'bg-[#fafafa] dark:bg-[#182229] text-[#8696a0]' : 'bg-[#f0f0f0] dark:bg-[#111b21] text-[#a0a0a0] dark:text-[#54656f] italic'}`}
                 >
-                  <span>{formatHourLabel(hour)}</span>
+                  <span title={formatHourLabelLong(hour)}>{formatHourLabel(hour)}</span>
                 </div>
               );
             })}
@@ -297,7 +316,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                         ? 'hover:border-dashed hover:border-[#008069] dark:hover:border-[#00a884] hover:bg-[#e8f5f2]/40 dark:hover:bg-[#00a884]/15 hover:text-[#008069] dark:hover:text-[#00a884]'
                         : 'hover:border-dashed hover:border-[#a0a0a0] dark:hover:border-[#374248] hover:bg-[#e0e0e0]/50 dark:hover:bg-[#202c33]/50 hover:text-[#666] dark:hover:text-[#8696a0] text-[#a0a0a0] dark:text-[#54656f]'
                     }`}
-                    title={isOp ? `Tambah Jadwal pada jam ${formatHourLabel(hour)}` : `Jam non-operasional ${formatHourLabel(hour)}`}
+                    title={isOp ? `Tambah Jadwal pada jam ${formatHourLabelLong(hour)}` : `Jam non-operasional ${formatHourLabelLong(hour)}`}
                   >
                     <Plus size={14} className="transform scale-90 group-hover/slot:scale-110 transition-transform" />
                     <span>{isOp ? '+ Tambah Jadwal' : 'Non-ops'}</span>
@@ -305,6 +324,19 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                 </div>
               );
             })}
+
+            {/* Penanda waktu sekarang (Fase 3 queue) — digambar DI DALAM kolom hari
+             * agar tidak menimpa gutter jam, dan `top` terikat `hourHeight` (zoom). */}
+            {nowTopPx !== null && (
+              <div
+                className="absolute left-0 right-0 z-30 pointer-events-none flex items-center"
+                style={{ top: `${nowTopPx}px` }}
+                aria-hidden="true"
+              >
+                <div className="w-2 h-2 rounded-full bg-red-500 -ml-1 shrink-0" />
+                <div className="flex-1 border-t-2 border-red-500" />
+              </div>
+            )}
 
             {/* Absolute Continuous Event Blocks Spanning Multi-Hours */}
             {positionedEvents.map((pos) => {

@@ -22,7 +22,9 @@ interface WeekScheduleGridProps {
 const HOURS = Array.from({ length: 16 }, (_, i) => i + 6);
 
 // Ukuran layout dasar untuk kalkulasi auto-scroll
-const TIME_GUTTER = 70; // kolom label jam
+// Fase 2 queue: gutter 70 -> 40 (label jam kini 2 angka). Anggaran lebar wajib
+// konsisten: 40 + 7x140 = 1020 pada TIME_GUTTER, spacer, dan min-w grid.
+const TIME_GUTTER = 40; // kolom label jam
 const HEADER_HEIGHT = 50;
 
 export { extractDurationMinutes } from '../../utils/durationCalculator';
@@ -31,6 +33,10 @@ import { resolveStaffId, resolveStaffName, staffShortName } from '../../utils/re
 import { formatReservationArea } from '../../utils/reservationAddress';
 import { stripHonorific } from '../../utils/patientName';
 import { getStaffColor } from '../../utils/staffColors';
+import {
+  formatHourLabel as formatHourLabelUtil,
+  formatHourLabelLong,
+} from '../../utils/calendarHourLabel';
 
 interface PositionedEvent {
   res: Reservation;
@@ -329,11 +335,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
     el.scrollTo({ left: Math.max(0, Math.min(targetLeft, maxLeft)), behavior });
   };
 
-  const formatHourLabel = (hour: number) => {
-    if (hour === 12) return '12 pm';
-    if (hour > 12) return `${hour - 12} pm`;
-    return `${hour} am`;
-  };
+  const formatHourLabel = formatHourLabelUtil;
 
   const selectedDateKey = getWibDateKey(selectedDate);
 
@@ -466,7 +468,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
       {/* Legenda warna per bidan (hanya tampil bila daftar bidan tersedia) */}
       <StaffColorLegend staffList={staffList} />
 
-      {/* Dedicated Top Horizontal Scrollbar Track (1:1 Synchronized with 1050px Calendar Grid) */}
+      {/* Dedicated Top Horizontal Scrollbar Track (1:1 Synchronized with 1020px Calendar Grid) */}
       <div
         ref={topScrollbarRef}
         data-horizontal-scroll="true"
@@ -481,7 +483,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
         }}
         title="Geser kalender secara horizontal"
       >
-        <div style={{ width: '1050px', height: '1px' }} />
+        <div style={{ width: '1020px', height: '1px' }} />
       </div>
 
       {/* Main 2D Scrollable Timeline View */}
@@ -500,12 +502,16 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
         onTouchCancel={handleTouchEnd}
         className="cal-2d overflow-x-auto overflow-y-auto max-h-[720px] select-none cursor-grab active:cursor-grabbing"
       >
-        <div className="min-w-[1050px] w-full divide-y divide-[#e9edef] dark:divide-[#2a3942]">
+        <div className="min-w-[1020px] w-full divide-y divide-[#e9edef] dark:divide-[#2a3942]">
           {/* Sticky Header: Day Names & Dates */}
-          <div className="sticky top-0 z-30 grid grid-cols-[70px_repeat(7,minmax(140px,1fr))] divide-x divide-[#e9edef] dark:divide-[#2a3942] border-b border-[#e9edef] dark:border-[#2a3942] bg-[#fafafa] dark:bg-[#182229] shadow-xs">
-            {/* Top-left corner box */}
-            <div className="sticky left-0 z-40 bg-[#fafafa] dark:bg-[#182229] border-r border-[#e9edef] dark:border-[#2a3942] flex items-center justify-center p-2 text-xs font-bold text-[#8696a0] shadow-[2px_0_5px_rgba(0,0,0,0.06)] dark:shadow-[2px_0_5px_rgba(0,0,0,0.3)]">
-              GMT+7
+          <div className="sticky top-0 z-30 grid grid-cols-[40px_repeat(7,minmax(140px,1fr))] divide-x divide-[#e9edef] dark:divide-[#2a3942] border-b border-[#e9edef] dark:border-[#2a3942] bg-[#fafafa] dark:bg-[#182229] shadow-xs">
+            {/* Top-left corner box — ikon jam menggantikan teks "GMT+7" */}
+            <div
+              className="sticky left-0 z-40 bg-[#fafafa] dark:bg-[#182229] border-r border-[#e9edef] dark:border-[#2a3942] flex items-center justify-center p-1 text-[10px] font-bold text-[#8696a0] shadow-[2px_0_5px_rgba(0,0,0,0.06)] dark:shadow-[2px_0_5px_rgba(0,0,0,0.3)]"
+              title="Waktu Indonesia Barat (WIB)"
+              aria-label="Waktu Indonesia Barat (WIB)"
+            >
+              <Clock size={12} className="opacity-60" aria-hidden="true" />
             </div>
 
             {/* 7 Days Header Columns */}
@@ -548,7 +554,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
 
           {/* Continuous Multi-Hour Timeline Canvas */}
           <div
-            className="grid grid-cols-[70px_repeat(7,minmax(140px,1fr))] divide-x divide-[#e9edef] dark:divide-[#2a3942] relative"
+            className="grid grid-cols-[40px_repeat(7,minmax(140px,1fr))] divide-x divide-[#e9edef] dark:divide-[#2a3942] relative"
             style={{ height: `${HOURS.length * hourHeight}px`, minHeight: `${HOURS.length * hourHeight}px` }}
           >
             {/* Time label column (frozen horizontally on scroll) */}
@@ -557,9 +563,9 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                 <div
                   key={hour}
                   style={{ height: `${hourHeight}px` }}
-                  className="p-2 text-right pr-3 text-xs font-semibold text-[#8696a0] select-none flex items-start justify-end pt-2"
+                  className="p-1 pr-1.5 text-right text-[10px] sm:text-xs font-semibold font-mono tabular-nums text-[#8696a0] select-none flex items-start justify-end pt-1.5"
                 >
-                  <span>{formatHourLabel(hour)}</span>
+                  <span title={formatHourLabelLong(hour)}>{formatHourLabel(hour)}</span>
                 </div>
               ))}
             </div>
@@ -596,7 +602,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                           onQuickAdd({ date: day, hour });
                         }}
                         className="w-full h-full absolute inset-0 z-0 border border-transparent hover:border-dashed hover:border-[#008069] dark:hover:border-[#00a884] hover:bg-[#e8f5f2]/40 dark:hover:bg-[#00a884]/15 text-transparent hover:text-[#008069] dark:hover:text-[#00a884] flex items-center justify-center transition-all opacity-0 group-hover/slot:opacity-100 cursor-pointer"
-                        title={`Tambah Jadwal pada ${day.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' })} jam ${formatHourLabel(hour)}`}
+                        title={`Tambah Jadwal pada ${day.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' })} jam ${formatHourLabelLong(hour)}`}
                       >
                         <Plus size={14} className="transform scale-90 group-hover/slot:scale-110 transition-transform" />
                       </button>
