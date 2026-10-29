@@ -105,7 +105,7 @@ async function main() {
       await prisma.child.upsert({
         where: { customer_id_name: { customer_id: c.customer_id, name: c.name } },
         update: { ...c, tenant_id: tenantId },
-        create: { ...c, tenant_id: tenantId },
+        create: { ...c, name_norm: c.name_norm || (c.name ? c.name.trim().toLowerCase() : ''), tenant_id: tenantId },
       })
     }
   }

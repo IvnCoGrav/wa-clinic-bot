@@ -164,12 +164,19 @@ model Child {
   reservation_id             String?
   reservation                Reservation? @relation(fields: [reservation_id], references: [id], onDelete: SetNull)
   name                       String
+  /// Nama ternormalisasi (lower + trim) untuk dedup case-insensitive lintas DB.
+  name_norm                  String
+  /// Reservasi pertama yang mendaftarkan anak (riwayat abadi).
+  first_reservation_id       String?
+  /// Reservasi terakhir yang menyebut anak (audit).
+  last_reservation_id        String?
   birth_date                 DateTime?
   age_months_at_registration Int?
   raw_age_text               String?
   created_at                 DateTime     @default(now())
   updated_at                 DateTime     @updatedAt
 
+  @@unique([customer_id, name_norm])
   @@unique([customer_id, name])
   @@index([tenant_id])
   @@map("children")

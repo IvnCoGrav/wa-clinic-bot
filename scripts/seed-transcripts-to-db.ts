@@ -122,6 +122,7 @@ async function main() {
                 tenant_id: DEFAULT_TENANT_ID,
                 customer_id: customer.id,
                 name: tx.babyName,
+                name_norm: tx.babyName.trim().toLowerCase(),
                 raw_age_text: tx.babyAge && tx.babyAge !== '-' ? tx.babyAge : undefined,
               },
             });

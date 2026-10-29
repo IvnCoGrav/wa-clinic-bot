@@ -165,6 +165,7 @@ async function main() {
         customer_id_name: {
           customer_id: customer.id,
           name: item.childName,
+        name_norm: item.childName.trim().toLowerCase(),
         },
       },
       update: {

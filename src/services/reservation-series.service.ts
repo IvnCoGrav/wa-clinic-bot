@@ -184,6 +184,8 @@ class ReservationSeriesService {
     // Sync babies if provided (same upsert logic as single reservation edit)
     if (params.babies && params.babies.length > 0) {
       const { parseAgeTextToBirthDate, monthsBetween } = await import('../utils/age-calculator');
+      const firstResId = result.reservations[0]?.id || null;
+      const lastResId = result.reservations[result.reservations.length - 1]?.id || firstResId;
       for (const b of params.babies) {
         if (!b.name) continue;
         const nm = String(b.name || '').trim();
@@ -197,7 +199,7 @@ class ReservationSeriesService {
             where: { customer_id: customerId, name: { equals: nm, mode: 'insensitive' } },
           });
           if (existingChild) {
-            const updateData: any = { raw_age_text: b.ageText || existingChild.raw_age_text };
+            const updateData: any = { raw_age_text: b.ageText || existingChild.raw_age_text, last_reservation_id: lastResId };
             if (newBirthDate) {
               updateData.birth_date = newBirthDate;
               updateData.age_months_at_registration = monthsBetween(newBirthDate, new Date());
@@ -209,6 +211,9 @@ class ReservationSeriesService {
                 tenant_id: tenantId,
                 customer_id: customerId,
                 name: nm,
+                name_norm: nm.trim().toLowerCase(),
+                first_reservation_id: firstResId,
+                last_reservation_id: lastResId,
                 raw_age_text: b.ageText || '',
                 birth_date: newBirthDate,
                 age_months_at_registration: newBirthDate ? monthsBetween(newBirthDate, new Date()) : null,

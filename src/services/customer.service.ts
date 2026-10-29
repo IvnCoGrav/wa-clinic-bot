@@ -1189,12 +1189,13 @@ export class CustomerService {
 
         for (const childItem of incomingValidChildren) {
           const childName = childItem.name.trim();
+          const nameNorm = childName.toLowerCase();
           const ageText = childItem.raw_age_text || childItem.ageText || null;
           const birthDate = childItem.birthDate ? new Date(childItem.birthDate) : null;
 
           const matchedExisting = childItem.id
             ? existingChildren.find((ec) => ec.id === childItem.id)
-            : existingChildren.find((ec) => ec.name.toLowerCase() === childName.toLowerCase());
+            : existingChildren.find((ec) => (ec.name_norm || ec.name.toLowerCase()) === nameNorm);
 
           if (matchedExisting) {
             processedChildIds.add(matchedExisting.id);
@@ -1202,6 +1203,7 @@ export class CustomerService {
               where: { id: matchedExisting.id },
               data: {
                 name: childName,
+                name_norm: nameNorm,
                 raw_age_text: ageText,
                 birth_date: birthDate,
               },
@@ -1212,6 +1214,7 @@ export class CustomerService {
                 tenant_id: tenantId,
                 customer_id: customerId,
                 name: childName,
+                name_norm: nameNorm,
                 raw_age_text: ageText,
                 birth_date: birthDate,
               },

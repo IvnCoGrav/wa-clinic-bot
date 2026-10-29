@@ -1306,7 +1306,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
             const newBirthDate = b.ageText ? parseAgeTextToBirthDate(b.ageText, new Date()) : null;
             const existingChild = existing.customer?.children?.find((c: any) => c.name.toLowerCase() === nm.toLowerCase());
             if (existingChild) {
-              const updateData: any = { raw_age_text: b.ageText || existingChild.raw_age_text };
+              const updateData: any = { raw_age_text: b.ageText || existingChild.raw_age_text, last_reservation_id: id };
               if (newBirthDate) {
                 updateData.birth_date = newBirthDate;
                 updateData.age_months_at_registration = monthsBetween(newBirthDate, new Date());
@@ -1318,6 +1318,9 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
                   tenant_id: tenantId,
                   customer_id: existing.customer_id,
                   name: nm,
+                  name_norm: nm.trim().toLowerCase(),
+                  first_reservation_id: id,
+                  last_reservation_id: id,
                   raw_age_text: b.ageText || '',
                   birth_date: newBirthDate,
                   age_months_at_registration: newBirthDate ? monthsBetween(newBirthDate, new Date()) : null,

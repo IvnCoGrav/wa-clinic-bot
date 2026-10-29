@@ -1,3 +1,4 @@
+import { prisma } from '../db/client';
 import { parseAgeTextToBirthDate, monthsBetween, computeCurrentAge } from '../utils/age-calculator';
 import { BabyDetail, classifyPatientEntity } from '../utils/reservation-text-parser';
 import { isValidChildName } from '../utils/name-sanitizer';
@@ -34,59 +35,40 @@ export class ChildService {
     if (cleaned.length === 0) return;
 
     try {
-      const { prisma } = await import('../db/client');
       const now = new Date();
 
       for (const baby of cleaned) {
         const birthDate = parseAgeTextToBirthDate(baby.age, now);
         const ageMonthsAtReg = birthDate ? monthsBetween(birthDate, now) : null;
+        const nameNorm = baby.name.trim().toLowerCase();
 
-        // Cari dulu secara case-insensitive untuk mencegah duplikasi (Zayn vs zayn)
-        let existingChild: any = null;
-        if (typeof prisma.child.findFirst === 'function') {
-          existingChild = await prisma.child.findFirst({
-            where: {
+        await prisma.child.upsert({
+          where: {
+            customer_id_name_norm: {
               customer_id: customerId,
-              name: { equals: baby.name, mode: 'insensitive' },
+              name_norm: nameNorm,
             },
-          });
-        }
-
-        if (existingChild) {
-          await prisma.child.update({
-            where: { id: existingChild.id },
-            data: {
-              reservation_id: reservationId ?? existingChild.reservation_id,
-              birth_date: birthDate ?? existingChild.birth_date,
-              age_months_at_registration: ageMonthsAtReg ?? existingChild.age_months_at_registration,
-              raw_age_text: baby.age || existingChild.raw_age_text,
-            },
-          });
-        } else {
-          await prisma.child.upsert({
-            where: {
-              customer_id_name: {
-                customer_id: customerId,
-                name: baby.name,
-              },
-            },
-            create: {
-              tenant_id: tenantId,
-              customer_id: customerId,
-              reservation_id: reservationId ?? null,
-              name: baby.name,
-              birth_date: birthDate,
-              age_months_at_registration: ageMonthsAtReg,
-              raw_age_text: baby.age || null,
-            },
-            update: {
-              reservation_id: reservationId ?? null,
-              birth_date: birthDate ?? undefined,
-              age_months_at_registration: ageMonthsAtReg ?? undefined,
-              raw_age_text: baby.age || null,
-            },
-          });
-        }
+          },
+          create: {
+            tenant_id: tenantId,
+            customer_id: customerId,
+            reservation_id: reservationId ?? null,
+            first_reservation_id: reservationId ?? null,
+            last_reservation_id: reservationId ?? null,
+            name: baby.name,
+            name_norm: nameNorm,
+            birth_date: birthDate,
+            age_months_at_registration: ageMonthsAtReg,
+            raw_age_text: baby.age || null,
+          },
+          update: {
+            last_reservation_id: reservationId ?? undefined,
+            birth_date: birthDate ?? undefined,
+            age_months_at_registration: ageMonthsAtReg ?? undefined,
+            raw_age_text: baby.age || undefined,
+            // name_norm & first_reservation_id & reservation_id awal TIDAK diubah -> riwayat pertama aman abadi
+          },
+        });
       }
     } catch (err: any) {
       console.warn('[CHILD SERVICE] Failed to persist children (DB offline?):', err.message);
@@ -103,7 +85,6 @@ export class ChildService {
   ): Promise<Array<{ id: string; name: string; birth_date: Date | null; raw_age_text: string | null; age_months_at_registration: number | null; current_age: string }>> {
     if (!customerId) return [];
     try {
-      const { prisma } = await import('../db/client');
       const children = await prisma.child.findMany({
         where: { customer_id: customerId },
         orderBy: { created_at: 'asc' },

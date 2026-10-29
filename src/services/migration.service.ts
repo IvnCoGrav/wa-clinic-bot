@@ -404,6 +404,7 @@ export class MigrationService {
                         tenant_id: tenantId,
                         customer_id: customer.id,
                         name: b.name,
+                        name_norm: b.name.trim().toLowerCase(),
                         raw_age_text: b.age || undefined,
                       },
                     });

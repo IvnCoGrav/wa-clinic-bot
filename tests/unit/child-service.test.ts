@@ -1,32 +1,28 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const upsertMock = vi.fn();
-const findManyMock = vi.fn();
-const findFirstMock = vi.fn();
-const updateMock = vi.fn();
+const { upsertMock, findManyMock } = vi.hoisted(() => ({
+  upsertMock: vi.fn(),
+  findManyMock: vi.fn(),
+}));
 
 vi.mock('../../src/db/client', () => ({
   prisma: {
     child: {
       upsert: upsertMock,
       findMany: findManyMock,
-      findFirst: findFirstMock,
-      update: updateMock,
     },
   },
 }));
 
 import { childService } from '../../src/services/child.service';
 
-describe('ChildService — persistensi anak per customer', () => {
+describe('ChildService — persistensi anak per customer (atomik name_norm)', () => {
   beforeEach(() => {
     upsertMock.mockReset();
     findManyMock.mockReset();
-    findFirstMock.mockReset();
-    updateMock.mockReset();
   });
 
-  it('upsert 2 anak dari daftar bayi (Rara, Riri)', async () => {
+  it('upsert 2 anak dari daftar bayi (Rara, Riri) menggunakan customer_id_name_norm', async () => {
     upsertMock.mockResolvedValue({ id: 'c1' });
 
     await childService.upsertChildrenFromBabies({
@@ -42,13 +38,78 @@ describe('ChildService — persistensi anak per customer', () => {
     expect(upsertMock).toHaveBeenCalledTimes(2);
 
     const raraCall = upsertMock.mock.calls[0][0];
-    expect(raraCall.where).toEqual({ customer_id_name: { customer_id: 'cust-1', name: 'Rara' } });
+    expect(raraCall.where).toEqual({
+      customer_id_name_norm: { customer_id: 'cust-1', name_norm: 'rara' },
+    });
     expect(raraCall.create.name).toBe('Rara');
+    expect(raraCall.create.name_norm).toBe('rara');
     expect(raraCall.create.customer_id).toBe('cust-1');
     expect(raraCall.create.reservation_id).toBe('res-1');
+    expect(raraCall.create.first_reservation_id).toBe('res-1');
+    expect(raraCall.create.last_reservation_id).toBe('res-1');
     expect(raraCall.create.birth_date).toBeInstanceOf(Date);
     expect(raraCall.create.raw_age_text).toBe('6 bulan');
     expect(raraCall.create.age_months_at_registration).toBe(5);
+
+    // Pastikan update hanya menyentuh last_reservation_id dan tidak merusak first_reservation_id
+    expect(raraCall.update.last_reservation_id).toBe('res-1');
+    expect(raraCall.update.first_reservation_id).toBeUndefined();
+    expect(raraCall.update.name_norm).toBeUndefined();
+  });
+
+  it('dedup atomik case-insensitive (Zayn vs zayn): where key identik', async () => {
+    upsertMock.mockResolvedValue({ id: 'c1' });
+
+    // Simulasi 2 panggilan paralel berurutan / konkuren
+    await Promise.all([
+      childService.upsertChildrenFromBabies({
+        customerId: 'cust-1',
+        reservationId: 'res-1',
+        tenantId: 'default-tenant',
+        babies: [{ name: 'Zayn', age: '14 bulan' }],
+      }),
+      childService.upsertChildrenFromBabies({
+        customerId: 'cust-1',
+        reservationId: 'res-2',
+        tenantId: 'default-tenant',
+        babies: [{ name: 'zayn', age: '15 bulan' }],
+      }),
+    ]);
+
+    expect(upsertMock).toHaveBeenCalledTimes(2);
+
+    const call1 = upsertMock.mock.calls[0][0];
+    const call2 = upsertMock.mock.calls[1][0];
+
+    expect(call1.where.customer_id_name_norm).toEqual({
+      customer_id: 'cust-1',
+      name_norm: 'zayn',
+    });
+    expect(call2.where.customer_id_name_norm).toEqual({
+      customer_id: 'cust-1',
+      name_norm: 'zayn',
+    });
+
+    // Panggilan kedua mengupdate last_reservation_id ke res-2 tanpa menyentuh first_reservation_id
+    expect(call2.update.last_reservation_id).toBe('res-2');
+    expect(call2.update.first_reservation_id).toBeUndefined();
+  });
+
+  it('nama dengan spasi berlebih dinormalisasi ke name_norm yang bersih', async () => {
+    upsertMock.mockResolvedValue({ id: 'c1' });
+
+    await childService.upsertChildrenFromBabies({
+      customerId: 'cust-1',
+      reservationId: 'res-1',
+      tenantId: 'default-tenant',
+      babies: [{ name: '   Kenzo   ', age: '1 tahun' }],
+    });
+
+    expect(upsertMock).toHaveBeenCalledTimes(1);
+    const call = upsertMock.mock.calls[0][0];
+    expect(call.where.customer_id_name_norm.name_norm).toBe('kenzo');
+    expect(call.create.name).toBe('Kenzo');
+    expect(call.create.name_norm).toBe('kenzo');
   });
 
   it('anak tanpa nama / nama "-" dilewati', async () => {
@@ -96,42 +157,6 @@ describe('ChildService — persistensi anak per customer', () => {
     expect(children).toEqual([]);
   });
 
-  it('anak duplikat beda kapitalisasi (Zayn vs zayn) diarahkan ke update child eksisting tanpa baris baru', async () => {
-    findFirstMock.mockResolvedValue({
-      id: 'existing-zayn-id',
-      name: 'Zayn',
-      reservation_id: 'res-old',
-      birth_date: new Date('2025-07-03'),
-      age_months_at_registration: 14,
-      raw_age_text: '14 bulan',
-    });
-    updateMock.mockResolvedValue({ id: 'existing-zayn-id' });
-
-    await childService.upsertChildrenFromBabies({
-      customerId: 'cust-1',
-      reservationId: 'res-new',
-      tenantId: 'default-tenant',
-      babies: [{ name: 'zayn', age: '15 bulan' }],
-    });
-
-    expect(findFirstMock).toHaveBeenCalledWith({
-      where: {
-        customer_id: 'cust-1',
-        name: { equals: 'zayn', mode: 'insensitive' },
-      },
-    });
-    expect(updateMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 'existing-zayn-id' },
-        data: expect.objectContaining({
-          reservation_id: 'res-new',
-          raw_age_text: '15 bulan',
-        }),
-      })
-    );
-    expect(upsertMock).not.toHaveBeenCalled();
-  });
-
   it('placeholder form formulir (Bayi 1, Bayi 2, Bayi 3, Anak 1) ditolak dari tabel children', async () => {
     await childService.upsertChildrenFromBabies({
       customerId: 'cust-1',
@@ -145,7 +170,6 @@ describe('ChildService — persistensi anak per customer', () => {
       ],
     });
 
-    expect(findFirstMock).not.toHaveBeenCalled();
     expect(upsertMock).not.toHaveBeenCalled();
   });
 
@@ -161,7 +185,6 @@ describe('ChildService — persistensi anak per customer', () => {
       ],
     });
 
-    expect(findFirstMock).not.toHaveBeenCalled();
     expect(upsertMock).not.toHaveBeenCalled();
   });
 });

@@ -151,6 +151,7 @@ vi.mock('../src/db/client', () => {
         update: vi.fn().mockRejectedValue(new Error('Database offline')),
         updateMany: vi.fn().mockRejectedValue(new Error('Database offline')),
         delete: vi.fn().mockRejectedValue(new Error('Database offline')),
+        upsert: vi.fn().mockRejectedValue(new Error('Database offline')),
         deleteMany: vi.fn().mockRejectedValue(new Error('Database offline')),
         count: vi.fn().mockRejectedValue(new Error('Database offline')),
       },

@@ -78,6 +78,7 @@ async function main() {
             tenant_id: ch.tenant_id || 'default-tenant',
             customer_id: customerRecord.id,
             name: ch.name,
+            name_norm: ch.name_norm || (ch.name ? ch.name.trim().toLowerCase() : ''),
             birth_date: ch.birth_date ? new Date(ch.birth_date) : null,
             age_months_at_registration: ch.age_months_at_registration,
             raw_age_text: ch.raw_age_text,
