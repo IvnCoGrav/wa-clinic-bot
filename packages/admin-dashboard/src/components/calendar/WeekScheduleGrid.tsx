@@ -19,7 +19,6 @@ const HOURS = Array.from({ length: 16 }, (_, i) => i + 6);
 
 // Ukuran layout dasar untuk kalkulasi auto-scroll
 const TIME_GUTTER = 70; // kolom label jam
-const DAY_COL_WIDTH = 140; // minmax(140px,1fr) pada kolom hari
 const HEADER_HEIGHT = 50;
 
 export { extractDurationMinutes } from '../../utils/durationCalculator';
@@ -125,6 +124,8 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
   const { hourHeight, zoomLevel, containerRef } = zoomState;
 
   const topScrollbarRef = useRef<HTMLDivElement>(null);
+  const pillStripRef = useRef<HTMLDivElement>(null);
+  const dayColumnRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const hasAutoScrolledRef = useRef(false);
 
   // === Sinkronisasi scroll 1 arah + penjaga gema (anti-getar) ===
@@ -297,13 +298,27 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
 
   const isToday = (d: Date) => getWibDateKey(d) === getTodayWibDateKey();
 
-  const scrollToDayIndex = (idx: number) => {
+  /**
+   * Reveal kolom hari terpilih dengan MENGUKUR DOM, bukan konstanta lebar kolom.
+   * Konstanta `DAY_COL_WIDTH` (140px) tidak sama dengan lebar riil saat grid
+   * memakai `minmax(140px, 1fr)` di layar lebar, sehingga posisi geser lama
+   * meleset dan hari tujuan tetap tak terlihat.
+   */
+  const revealDayColumn = (idx: number, behavior: ScrollBehavior = 'smooth') => {
     const el = containerRef.current;
-    if (!el) return;
-    const dayStart = TIME_GUTTER + idx * DAY_COL_WIDTH;
-    const viewportW = el.clientWidth;
-    const targetLeft = Math.max(0, dayStart - (viewportW - DAY_COL_WIDTH) / 2);
-    el.scrollTo({ left: targetLeft, behavior: 'smooth' });
+    const col = dayColumnRefs.current[idx];
+    if (!el || !col) return;
+
+    const elRect = el.getBoundingClientRect();
+    const colRect = col.getBoundingClientRect();
+
+    // Sudah terlihat penuh di area yang tidak tertutup kolom jam sticky?
+    const visibleLeft = elRect.left + TIME_GUTTER;
+    if (colRect.left >= visibleLeft - 1 && colRect.right <= elRect.right + 1) return;
+
+    const targetLeft = el.scrollLeft + (colRect.left - elRect.left) - TIME_GUTTER;
+    const maxLeft = el.scrollWidth - el.clientWidth;
+    el.scrollTo({ left: Math.max(0, Math.min(targetLeft, maxLeft)), behavior });
   };
 
   const formatHourLabel = (hour: number) => {
@@ -328,22 +343,16 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
     }
   };
 
-  // Auto-scroll sekali saat kalender pertama kali dimuat
+  const selectedDateKey = getWibDateKey(selectedDate);
+
+  // Auto-scroll VERTIKAL sekali saat kalender pertama dimuat (posisi jam sekarang).
+  // Sumbu horizontal ditangani effect "reveal" di bawah.
   useEffect(() => {
     if (hasAutoScrolledRef.current) return;
     const el = containerRef.current;
     if (!el) return;
 
     const now = new Date();
-    const tIdx = weekDays.findIndex((d) => isSameDay(d, selectedDate) || isSameDay(d, now));
-    const activeIdx = tIdx !== -1 ? tIdx : 0;
-
-    const dayStart = TIME_GUTTER + activeIdx * DAY_COL_WIDTH;
-    const viewportW = el.clientWidth || 360;
-    const targetLeft = Math.max(0, dayStart - (viewportW - DAY_COL_WIDTH) / 2);
-    const maxLeft = el.scrollWidth - viewportW;
-    el.scrollLeft = Math.min(targetLeft, Math.max(0, maxLeft));
-
     const currentHour = now.getHours();
     const targetHour = Math.max(6, Math.min(currentHour, 20));
     const targetTop = Math.max(0, (targetHour - 6) * hourHeight - HEADER_HEIGHT / 2);
@@ -352,6 +361,27 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
 
     hasAutoScrolledRef.current = true;
   }, []);
+
+  // Reveal kolom hari terpilih SETIAP kali tanggal berubah — termasuk saat
+  // chevron header halaman melompat seminggu (dulu tidak pernah menggeser view).
+  // Sekaligus memusatkan pill hari aktif agar Senin/Sabtu selalu terjangkau.
+  useEffect(() => {
+    const idx = weekDays.findIndex((d) => isSameDay(d, selectedDate));
+    if (idx === -1) return;
+    revealDayColumn(idx);
+
+    const strip = pillStripRef.current;
+    const pill = strip?.querySelector<HTMLElement>('[data-day-pill][data-active="true"]');
+    if (!strip || !pill) return;
+
+    const stripRect = strip.getBoundingClientRect();
+    const pillRect = pill.getBoundingClientRect();
+    const delta = pillRect.left - stripRect.left;
+    const target = strip.scrollLeft + delta - (strip.clientWidth - pillRect.width) / 2;
+    const max = strip.scrollWidth - strip.clientWidth;
+    strip.scrollTo({ left: Math.max(0, Math.min(target, max)), behavior: 'smooth' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDateKey]);
 
   const minCardHeight = zoomLevel === 'compact' ? 32 : 50;
 
@@ -374,9 +404,8 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
             onClick={() => {
               const prev = new Date(selectedDate);
               prev.setDate(prev.getDate() - 1);
+              // Reveal ditangani effect [selectedDateKey] — aman lintas minggu.
               onSelectDate(prev);
-              const idx = weekDays.findIndex((d) => isSameDay(d, prev));
-              if (idx !== -1) scrollToDayIndex(idx);
             }}
             className="p-1.5 rounded-lg hover:bg-white dark:hover:bg-[#202c33] border border-transparent hover:border-[#d1d7db] dark:hover:border-[#374248] text-[#54656f] dark:text-[#aebac1] transition-all cursor-pointer"
             title="Hari Sebelumnya"
@@ -390,10 +419,11 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
 
         {/* Clickable Day Pills */}
         <div
+          ref={pillStripRef}
           data-horizontal-scroll="true"
           data-no-swipe-back="true"
           className="flex-1 flex items-center justify-start gap-1 overflow-x-auto no-scrollbar mx-1 px-1 py-0.5"
-          style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', touchAction: 'pan-x pan-y' }}
+          style={{ scrollbarWidth: 'none', touchAction: 'pan-x pan-y' }}
         >
           {weekDays.map((d, i) => {
             const isSel = isSameDay(d, selectedDate);
@@ -405,9 +435,11 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
               <button
                 key={i}
                 type="button"
+                data-day-pill="true"
+                data-active={isSel ? 'true' : 'false'}
                 onClick={() => {
+                  // Reveal kolom + pusatkan pill ditangani effect [selectedDateKey].
                   onSelectDate(d);
-                  scrollToDayIndex(i);
                 }}
                 className={`px-2.5 py-1 rounded-xl text-xs font-semibold flex items-center space-x-1 transition-all cursor-pointer shrink-0 ${
                   isSel
@@ -429,9 +461,8 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
           onClick={() => {
             const next = new Date(selectedDate);
             next.setDate(next.getDate() + 1);
+            // Reveal ditangani effect [selectedDateKey] — aman lintas minggu.
             onSelectDate(next);
-            const idx = weekDays.findIndex((d) => isSameDay(d, next));
-            if (idx !== -1) scrollToDayIndex(idx);
           }}
           className="p-1.5 rounded-lg hover:bg-white dark:hover:bg-[#202c33] border border-transparent hover:border-[#d1d7db] dark:hover:border-[#374248] text-[#54656f] dark:text-[#aebac1] transition-all cursor-pointer"
           title="Hari Berikutnya"
@@ -492,10 +523,14 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
               return (
                 <button
                   key={i}
+                  ref={(node) => {
+                    dayColumnRefs.current[i] = node;
+                  }}
+                  data-day-column={i}
                   onClick={() => {
                     if (dragMovedRef.current) return;
+                    // Reveal kolom ditangani effect [selectedDateKey].
                     onSelectDate(day);
-                    scrollToDayIndex(i);
                   }}
                   className={`p-2 sm:p-2.5 text-center flex flex-col items-center justify-center transition-all cursor-pointer ${
                     isSelected
