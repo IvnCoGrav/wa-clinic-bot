@@ -209,6 +209,38 @@
 
 ---
 
+## §1b. ANTREAN BARU — hasil uji HP (2026-10-29, setelah Fase 1-3)
+
+> **Status: ANTREAN — belum dieksekusi, menunggu konfirmasi user.**
+> Dua permintaan tata letak + dua temuan bug yang terbukti dari kode.
+
+### 1b.1 Gutter jam: padding kiri/kanan 0 + gutter lebih ramping
+- **Pertanyaan user:** boleh padding kiri-kanan label jam = 0?
+- **Jawaban:** BOLEH, dengan satu pengecualian teknis: **padding kanan jangan 0** — label rata kanan (`justify-end`), jadi angka akan menempel garis border kolom. Cukup `2px`.
+- **Kondisi sekarang:** label `p-1 sm:p-2 pr-1.5 sm:pr-2` (kiri 4px, kanan 6px) di `DayScheduleGrid`; `p-1 pr-1.5` di `WeekScheduleGrid`; gutter **40px** (HP) / **60px** (desktop) di Harian, `TIME_GUTTER = 40` di Mingguan.
+- **Usulan angka:** `pl-0 pr-0.5` (2px) + gutter Harian `40→28px` / `60→44px`; Mingguan `TIME_GUTTER 40→28`, spacer `1020→1008px`, `min-w-[1020px]→min-w-[1008px]`, grid `[40px_…]→[28px_…]` (2 tempat).
+- **Kenapa aman:** label 2 digit font mono 10px ≈ 12px lebar → 28px − 2px = 26px tersedia (sisa >2×). Diukur dari `tabular-nums`, bukan perkiraan.
+- **Efek:** kolom kartu Harian dapat **+12px**, kolom Mingguan **+12px** per hari.
+- **JEBAKAN (F-39):** `TIME_GUTTER`, spacer, dan `min-w` WAJIB diubah dalam satu commit. `revealDayColumn()` membaca `TIME_GUTTER` sehingga otomatis ikut.
+- **Acceptance:** tidak ada angka yang terpotong di 360px; geser kanan Mingguan mentok tepat di kolom Minggu; `1050px`/`1020px` tidak tersisa.
+
+### 1b.2 Full width (edge-to-edge) untuk kalender
+- **Pertanyaan user:** kalender ini di dalam container — bisa full width?
+- **Jawaban:** BISA. Sumber insetnya **bukan** container kalender, melainkan padding halaman di `Layout.tsx:998-1003`: `p-4 sm:p-5 md:p-7` = **16px (HP) / 20px / 28px** tiap sisi. Kalender sendiri sudah `w-full`.
+- **Usulan (satu sumber kebenaran, tanpa angka ganda):** `<main>` memakai variabel `--page-pad` (`[--page-pad:1rem] sm:[--page-pad:1.25rem] md:[--page-pad:1.75rem]` + `p-[var(--page-pad)]`), lalu blok kalender memakai `-mx-[var(--page-pad)]`. Tidak ada `-mx-4` yang bisa basi bila padding halaman berubah.
+- **Bentuk tepi:** di HP `rounded-none border-x-0`; di ≥640px kembali kartu `rounded-2xl border` (agar tetap enak dilihat di desktop).
+- **Efek terukur di 360px:** lebar kalender **328 → 360px (+32px, +9,8%)**; tiap kolom minggu +4,5px.
+- **Yang TIDAK boleh ikut full-bleed:** kartu filter di atas kalender (tetap inset agar tombol tidak menempel tepi layar).
+- **Acceptance:** di 360px tidak ada garis putih kiri/kanan pada blok kalender; kartu filter tetap punya jarak ≥16px; tidak ada scroll horizontal pada halaman (hanya di dalam kalender).
+
+### 1b.3 (BUG) Filter status diabaikan di mode kalender — F-42
+- Bukti: `Reservations.tsx:285-303` tidak mengirim `status`; API mendukung (`reservation-crud.route.ts:236`).
+- Perbaikan: kirim `status` bila `filterState.status !== 'all'`; tambah test regresi parameter.
+
+### 1b.4 (RISIKO) Rentang minggu dihitung 3 tempat — F-43
+- Perbaikan: seam `getWeekRange(date)` (WIB) dipakai header, parameter API, dan kolom grid.
+
+---
 ## §2. Matriks Risiko & Mitigasi (revisi)
 
 | Komponen | Risiko | Mitigasi |
