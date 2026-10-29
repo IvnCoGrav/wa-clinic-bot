@@ -49,22 +49,73 @@ function formatThousand(num: number | null | undefined): string {
   return new Intl.NumberFormat('id-ID').format(Math.round(num));
 }
 
+/**
+ * Buang akhiran nama wilayah (kecamatan/kota) dari nama pasien.
+ *
+ * F-29: versi lama menyisipkan nama wilayah langsung ke `new RegExp(...)`.
+ * Nama wilayah yang mengandung karakter regex — mis. `Wonokromo (Baru)`,
+ * `Surabaya+Barat` — bisa melempar `SyntaxError` dan menggagalkan invoice.
+ *
+ * Perbaikan fondasional: tidak memakai regex sama sekali. Pencocokan akhiran
+ * memakai API string standar (`toLowerCase` + `endsWith` + `slice`), sehingga
+ * tidak ada karakter input yang bisa merusak pola. Syarat batas kata tetap
+ * dijaga: hanya dipotong bila didahului spasi (mirror perilaku `\s+X$`).
+ */
+function stripTrailingRegion(name: string, region?: string | null): string {
+  const full = name.trim();
+  const suffix = (region || '').trim();
+  if (!full || !suffix) return full;
+  // `\s+X$` mustahil cocok bila tidak ada sisa nama sebelum akhiran.
+  if (full.length <= suffix.length) return full;
+  if (!full.toLowerCase().endsWith(suffix.toLowerCase())) return full;
+
+  const cut = full.slice(0, full.length - suffix.length);
+  if (!/\s$/.test(cut)) return full; // jangan potong di tengah kata
+  return stripDanglingRegionLabel(cut.trim());
+}
+
+/**
+ * Label wilayah yang biasa ikut terketik di dalam nama
+ * ("Sari Kec. Wonokromo"). Setelah nama wilayah dibuang, labelnya bisa
+ * tertinggal menjadi "Sari Kec." — bukan nama orang.
+ *
+ * Daftar ini adalah **label administratif tetap**, bukan data bisnis, jadi
+ * aman diletakkan di kode. Tidak memakai regex pada input pengguna.
+ */
+const REGION_LABELS = ['kecamatan', 'kelurahan', 'kabupaten', 'kec', 'kel', 'kab', 'kota'];
+
+function stripDanglingRegionLabel(name: string): string {
+  let result = name;
+  let changed = true;
+  while (changed && result) {
+    changed = false;
+    const lower = result.toLowerCase();
+    for (const label of REGION_LABELS) {
+      // Cocokkan label utuh di ekor, boleh diikuti titik ("Kec.").
+      const withDot = `${label}.`;
+      const hit = lower.endsWith(` ${withDot}`) ? withDot : lower.endsWith(` ${label}`) ? label : null;
+      if (!hit) continue;
+      const rest = result.slice(0, result.length - hit.length).trim();
+      // Jangan pernah mengosongkan nama hanya karena label.
+      if (!rest) continue;
+      result = rest;
+      changed = true;
+      break;
+    }
+  }
+  return result;
+}
+
 export function cleanBundaName(name?: string | null, kecamatan?: string | null, kota?: string | null): string {
   if (!name) return '';
   let clean = name.replace(/^(?:bunda|ibu|mama|moms?|ny\.?|mrs\.?|kak|kakak)\s+/i, '').trim();
   if (kecamatan) {
     const kecClean = kecamatan.trim().replace(/^(?:kec\.?|kecamatan)\s+/i, '').trim();
-    if (kecClean) {
-      const kecRegex = new RegExp(`\\s+${kecClean}$`, 'i');
-      clean = clean.replace(kecRegex, '').trim();
-    }
+    if (kecClean) clean = stripTrailingRegion(clean, kecClean);
   }
   if (kota) {
     const kotaClean = kota.trim().replace(/^(?:kab\.?|kabupaten|kota)\s+/i, '').trim();
-    if (kotaClean) {
-      const kotaRegex = new RegExp(`\\s+${kotaClean}$`, 'i');
-      clean = clean.replace(kotaRegex, '').trim();
-    }
+    if (kotaClean) clean = stripTrailingRegion(clean, kotaClean);
   }
   return clean;
 }
