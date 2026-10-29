@@ -4,6 +4,29 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-29 - Feat: Kalender Full-Bleed di HP + Gutter Jam Ramping 28px (Fase A & B queue / F-39, F-44)
+
+- **Latar Belakang & Akar Masalah**:
+  - **Gutter boros**: label jam masih memakai padding kiri 4px + kanan 6px, dan gutter 40px (HP) / 60px (desktop) — padahal isinya hanya dua digit (`08`, `13`, `21`). Di layar 360px itu ruang yang sangat mahal.
+  - **Jebakan F-39 (ruang geser hantu)**: lebar kanvas mingguan adalah `TIME_GUTTER + 7 × lebar kolom`, dan angka itu ditulis **tiga kali terpisah** (konstanta, spacer scroll atas, `min-w`). Bila gutter diubah tanpa mengubah spacer, kalender bisa digeser melewati kolom Minggu.
+  - **Kalender terkurung container**: sumber insetnya bukan komponen kalender (sudah `w-full`), melainkan padding halaman di `Layout.tsx` — `p-4 sm:p-5 md:p-7` = 16/20/28px tiap sisi.
+- **Arsitektur & Perubahan**:
+  - `utils/calendarLayout.ts` (baru): **`GRID_MIN_WIDTH`** dan **`GRID_TEMPLATE_COLUMNS`** diturunkan dari `TIME_GUTTER + 7 × DAY_COL_MIN_WIDTH` (28 + 980 = **1008**). Spacer, `minWidth`, dan `gridTemplateColumns` kini memakai nilai turunan itu — ketidakcocokan mustahil, bukan dijaga ingatan. `TIME_GUTTER` pindah ke seam yang sama sehingga `revealDayColumn()` otomatis ikut.
+  - Label jam: `py-1 sm:py-2 pl-0 pr-0.5` (kiri 0, kanan 2px) di kedua grid. Gutter Harian `[28px_1fr] sm:[44px_1fr]`; Mingguan `28px`. Efek: kolom kartu **+12px** di HP.
+  - **Full-bleed**: `<main>` memakai `[--page-pad:1rem] sm:[--page-pad:1.25rem] md:[--page-pad:1.75rem] p-[var(--page-pad)]`; blok kalender `-mx-[var(--page-pad)] sm:mx-0`; tepi `rounded-none border-y border-x-0 sm:rounded-2xl sm:border-x`. Tidak ada `-mx-4` yang bisa basi. Nilai padding identik dengan sebelumnya, jadi halaman lain tidak berubah. Kartu filter sengaja **tidak** ikut full-bleed.
+- **Gerbang Regresi**: `tsc && vite build` hijau; `tests/unit/calendar-layout.test.ts` **6 kasus** (aritmetika 1008, template kolom, angka lama 1020/1050 mustahil muncul, label 2 digit tetap muat, gutter HP < desktop).
+
+#### 2026-10-29 - Fix: Seam Rentang Minggu (F-43) + Invoice Tanpa Regex Wilayah (F-29, F-45)
+
+- **Latar Belakang & Akar Masalah**:
+  - **F-43**: rentang minggu dihitung di **tiga tempat** dengan cara berbeda — parameter API (`getCalendarDateRange`), kolom grid (`weekDays`), dan label header. Ketiganya bisa menyimpang (awal minggu, batas tengah malam, zona waktu perangkat), sehingga API bisa diminta rentang yang tidak sama dengan yang digambar. Gejalanya halus: **jadwal hari Minggu hilang** atau kolom kosong di ujung minggu.
+  - **F-29**: `paymentInvoiceFormatter.cleanBundaName()` menyisipkan nama kecamatan/kota langsung ke `new RegExp(...)`. Wilayah bermuatan karakter regex (`(`, `+`, `*`, `[`, `?`, `\`) bisa melempar `SyntaxError` dan menggagalkan nama invoice.
+  - **F-45 (ditemukan saat menulis test F-29)**: label wilayah tertinggal di nama — `Bunda Sari Kec. Wonokromo` menjadi `Sari Kec.`, karena hanya *nama* wilayah yang dibuang, bukan labelnya.
+- **Arsitektur & Perubahan**:
+  - `utils/calendarWeekRange.ts` (baru): **`getWeekRange(date)`** (Senin–Minggu, tanggal acuan dibaca sebagai **tanggal WIB**, 7 hari dibangun pukul 12:00 lokal — pola sama dengan `getTodayWibDate()`) + **`getWeekDateRange(date)`**. Dipakai parameter API **dan** `weekDays` di `WeekScheduleGrid`.
+  - `paymentInvoiceFormatter.ts`: **regex dihapus sama sekali** untuk pencocokan akhiran wilayah. Diganti `stripTrailingRegion()` berbasis `trim`/`toLowerCase`/`endsWith`/`slice` + penjaga batas kata, ditambah `stripDanglingRegionLabel()` untuk membuang label administratif tetap (`kec`, `kel`, `kab`, `kota`, …) dengan pengaman tidak pernah mengosongkan nama.
+- **Gerbang Regresi**: `tsc && vite build` hijau; `tests/unit/calendar-week-range.test.ts` **11 kasus** (Minggu, Senin, lintas bulan/tahun, 29 Feb, input rusak, idempoten, rentang API = kolom grid) + `tests/unit/invoice-clean-bunda-name.test.ts` **14 kasus adversarial** (wilayah `(Baru)`, `Surabaya+Barat`, `Sidoarjo*Utara`, `[X]`, `A\B`, `Daerah?`, batas kata, nama = wilayah, label tertinggal).
+
 #### 2026-10-29 - Fix: Filter Status Kalender Mati (F-42) + Seam Tunggal Parameter Reservasi
 
 - **Latar Belakang & Akar Masalah**:

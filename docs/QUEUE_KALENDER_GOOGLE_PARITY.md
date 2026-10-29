@@ -211,10 +211,11 @@
 
 ## §1b. ANTREAN BARU — hasil uji HP (2026-10-29, setelah Fase 1-3)
 
-> **Status: 1b.3 (F-42) ✅ DIEKSEKUSI 2026-10-29. 1b.1, 1b.2, 1b.4 masih ANTREAN (menunggu konfirmasi user).**
+> **Status: ✅ SELURUHNYA DIEKSEKUSI 2026-10-29 (1b.1 gutter, 1b.2 full-bleed, 1b.3 F-42, 1b.4 F-43).**
 > Dua permintaan tata letak + dua temuan bug yang terbukti dari kode.
 
-### 1b.1 Gutter jam: padding kiri/kanan 0 + gutter lebih ramping
+### 1b.1 Gutter jam: padding kiri/kanan 0 + gutter lebih ramping — ✅ DIEKSEKUSI
+- **Hasil:** label `py-1 sm:py-2 pl-0 pr-0.5`; gutter Harian `[28px_1fr] sm:[44px_1fr]`; Mingguan `TIME_GUTTER = 28`. Angka spacer/`min-w` **tidak lagi ditulis manual** — diturunkan dari `utils/calendarLayout.ts` (`GRID_MIN_WIDTH = 28 + 7×140 = 1008`), jadi jebakan F-39 tertutup permanen. Test: `tests/unit/calendar-layout.test.ts` (6 kasus).
 - **Pertanyaan user:** boleh padding kiri-kanan label jam = 0?
 - **Jawaban:** BOLEH, dengan satu pengecualian teknis: **padding kanan jangan 0** — label rata kanan (`justify-end`), jadi angka akan menempel garis border kolom. Cukup `2px`.
 - **Kondisi sekarang:** label `p-1 sm:p-2 pr-1.5 sm:pr-2` (kiri 4px, kanan 6px) di `DayScheduleGrid`; `p-1 pr-1.5` di `WeekScheduleGrid`; gutter **40px** (HP) / **60px** (desktop) di Harian, `TIME_GUTTER = 40` di Mingguan.
@@ -224,7 +225,8 @@
 - **JEBAKAN (F-39):** `TIME_GUTTER`, spacer, dan `min-w` WAJIB diubah dalam satu commit. `revealDayColumn()` membaca `TIME_GUTTER` sehingga otomatis ikut.
 - **Acceptance:** tidak ada angka yang terpotong di 360px; geser kanan Mingguan mentok tepat di kolom Minggu; `1050px`/`1020px` tidak tersisa.
 
-### 1b.2 Full width (edge-to-edge) untuk kalender
+### 1b.2 Full width (edge-to-edge) untuk kalender — ✅ DIEKSEKUSI
+- **Hasil:** `<main>` memakai `[--page-pad:1rem] sm:[--page-pad:1.25rem] md:[--page-pad:1.75rem] p-[var(--page-pad)]`; blok kalender `-mx-[var(--page-pad)] sm:mx-0`; tepi `rounded-none border-y border-x-0 sm:rounded-2xl sm:border-x`. Kartu filter tetap inset. Nilai padding identik dengan sebelumnya (16/20/28px), jadi halaman lain tidak berubah.
 - **Pertanyaan user:** kalender ini di dalam container — bisa full width?
 - **Jawaban:** BISA. Sumber insetnya **bukan** container kalender, melainkan padding halaman di `Layout.tsx:998-1003`: `p-4 sm:p-5 md:p-7` = **16px (HP) / 20px / 28px** tiap sisi. Kalender sendiri sudah `w-full`.
 - **Usulan (satu sumber kebenaran, tanpa angka ganda):** `<main>` memakai variabel `--page-pad` (`[--page-pad:1rem] sm:[--page-pad:1.25rem] md:[--page-pad:1.75rem]` + `p-[var(--page-pad)]`), lalu blok kalender memakai `-mx-[var(--page-pad)]`. Tidak ada `-mx-4` yang bisa basi bila padding halaman berubah.
@@ -238,7 +240,8 @@
 - Perbaikan: kirim `status` bila `filterState.status !== 'all'`; tambah test regresi parameter.
 - **Hasil:** bukan tambalan satu baris, melainkan seam tunggal `packages/admin-dashboard/src/utils/reservationQuery.ts` (`buildReservationsQuery`) yang dipakai kedua mode. Test: `tests/unit/reservation-query.test.ts` (14 kasus). Bonus: deep link `?date=` tidak lagi kosong palsu (status awal `all`).
 
-### 1b.4 (RISIKO) Rentang minggu dihitung 3 tempat — F-43
+### 1b.4 (RISIKO) Rentang minggu dihitung 3 tempat — F-43 — ✅ DIEKSEKUSI
+- **Hasil:** seam `utils/calendarWeekRange.ts` (`getWeekRange` / `getWeekDateRange`) dipakai parameter API **dan** kolom grid. Test 11 kasus batas (Minggu, Senin, lintas bulan/tahun, 29 Feb, input rusak, idempoten).
 - Perbaikan: seam `getWeekRange(date)` (WIB) dipakai header, parameter API, dan kolom grid.
 
 ---
