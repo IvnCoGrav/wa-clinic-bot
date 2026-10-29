@@ -1795,14 +1795,14 @@ export const TodayTreatments: React.FC = () => {
               className="bg-white dark:bg-[#111b21] dark:text-[#e9edef] rounded-2xl sm:rounded-3xl w-full max-w-md max-h-[85dvh] sm:max-h-[80dvh] flex flex-col shadow-2xl border border-[#e9edef] dark:border-[#2a3942] overflow-hidden animate-modalScaleUp relative"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="px-5 py-4 border-b border-[#e9edef] bg-[#f8fafc] flex items-start justify-between shrink-0">
+              <div className="px-5 py-4 border-b border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#1c272e] flex items-start justify-between shrink-0">
                 <div className="flex items-center space-x-2.5">
-                  <div className="h-10 w-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center border border-amber-200 shadow-xs">
+                  <div className="h-10 w-10 rounded-2xl bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-[#f59e0b] flex items-center justify-center border border-amber-200 dark:border-amber-800/40 shadow-xs">
                     <CreditCard size={20} />
                   </div>
                   <div>
                     <h3 className="font-bold text-base text-[#111b21] dark:text-[#e9edef]">Catat Pembayaran Lunas</h3>
-                    <p className="text-xs text-[#54656f] truncate max-w-[220px]">
+                    <p className="text-xs text-[#54656f] dark:text-[#aebac1] truncate max-w-[220px]">
                       {paymentTask.customerName || 'Pasien'}
                     </p>
                   </div>
@@ -2050,7 +2050,7 @@ export const TodayTreatments: React.FC = () => {
                   )}
 
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-[#111b21]">Patokan Rumah (Landmark):</label>
+                    <label className="block text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Patokan Rumah (Landmark):</label>
                     <input
                       type="text"
                       value={locLandmark}
@@ -2061,9 +2061,9 @@ export const TodayTreatments: React.FC = () => {
                   </div>
 
                   {/* Smart GPS & Maps Link Section */}
-                  <div className="space-y-3 bg-[#f8fafc] -mx-5 p-5 rounded-2xl border border-[#e9edef]">
+                  <div className="space-y-3 bg-[#f8fafc] dark:bg-[#1c272e] -mx-5 p-5 rounded-2xl border border-[#e9edef] dark:border-[#2a3942]">
                     <div className="flex items-center justify-between">
-                      <label className="block text-xs font-bold text-[#111b21] flex items-center space-x-1.5">
+                      <label className="block text-xs font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-1.5">
                         <Crosshair size={13} className="text-[#008069]" />
                         <span>Kunci Titik GPS Pasien:</span>
                       </label>
@@ -2358,7 +2358,7 @@ export const TodayTreatments: React.FC = () => {
               </div>
 
               {/* Quick Replies Templates Bar */}
-              <div className="p-2 border-b border-[#e9edef] dark:border-[#2a3942] bg-[#f0f2f5] dark:bg-black flex items-center gap-1.5 overflow-x-auto shrink-0">
+              <div className="p-2 border-b border-[#e9edef] dark:border-[#2a3942] bg-[#f0f2f5] dark:bg-[#111b21] flex items-center gap-1.5 overflow-x-auto shrink-0">
                 <button
                   type="button"
                   onClick={() => setReplyText(`Halo Bunda ${chatModalTask.customerName || ''}, saya dari Kala Moms & Baby Spa. Mau konfirmasi jadwal treatment ya Bun 🙏`)}

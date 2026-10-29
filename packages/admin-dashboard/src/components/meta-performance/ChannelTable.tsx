@@ -27,13 +27,13 @@ export const ChannelTable: React.FC<{ report: MetaPerformanceReport }> = ({ repo
         LP/PageView tidak dapat diatribusikan ke customer (tidak menyimpan nomor WA), sehingga komparasi ini murni pada kanal yang memiliki jejak AdClick.
       </p>
       {ctwaNative && ctwaNative.leads === 0 && !hasFuzzyLeads && (
-        <p className="flex items-start gap-1.5 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+        <p className="flex items-start gap-1.5 text-[11px] text-amber-800 dark:text-[#f59e0b] bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/40 rounded-lg px-2.5 py-1.5">
           <AlertCircle size={13} className="text-amber-600 mt-0.5 shrink-0" />
           CTWA Native bernilai 0 karena seluruh traffic dikirim ke Landing Page (Promo CTA). Iklan Click-to-WhatsApp Native belum diaktifkan.
         </p>
       )}
       {ctwaNative && ctwaNative.leads === 0 && hasFuzzyLeads && (
-        <p className="flex items-start gap-1.5 text-[11px] text-teal-800 bg-teal-50 border border-teal-200 rounded-lg px-2.5 py-1.5">
+        <p className="flex items-start gap-1.5 text-[11px] text-teal-800 dark:text-[#2dd4bf] bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800/40 rounded-lg px-2.5 py-1.5">
           <Info size={13} className="text-teal-600 mt-0.5 shrink-0" />
           Iklan CTWA berjalan dan tertangkap melalui Greeting Catcher (Fuzzy Attribution). Native bernilai 0 karena traffic lewat sapaan.
         </p>

@@ -125,7 +125,7 @@ export const FleetMapModal: React.FC<FleetMapModalProps> = ({ open, onClose, tas
           <span className="ml-auto text-[10px] text-[#8696a0]">Pin bukan rute jalan · zoom {view.zoom}</span>
         </div>
 
-        <div ref={containerRef} className="relative flex-1 min-h-[400px] bg-[#f0f2f5] dark:bg-[#0b141a] overflow-hidden">
+        <div ref={containerRef} className="relative flex-1 min-h-[400px] bg-[#f0f2f5] dark:bg-[#0b141a] overflow-hidden fleet-map-tiles">
           {validTasks.length > 0 ? (
             <>
               {view.tiles.map((t) => (
@@ -135,7 +135,7 @@ export const FleetMapModal: React.FC<FleetMapModalProps> = ({ open, onClose, tas
                   alt=""
                   draggable={false}
                   loading="lazy"
-                  className="absolute select-none"
+                  className="absolute select-none dark:invert dark:hue-rotate-180 dark:brightness-[0.82] dark:contrast-[0.92]"
                   style={{ left: t.left, top: t.top, width: 256, height: 256 }}
                 />
               ))}

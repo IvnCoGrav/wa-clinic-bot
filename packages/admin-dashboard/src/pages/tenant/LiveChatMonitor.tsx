@@ -6254,10 +6254,10 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                     ? 'bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-tl-none'
                                     : 'bg-slate-200/90 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-200 rounded-tr-none'
                                   : isCustomer
-                                    ? 'bg-white text-[#111b21] rounded-tl-none border border-black/5'
+                                    ? 'bg-white text-[#111b21] rounded-tl-none border border-black/5 dark:bg-[#202c33] dark:text-[#e9edef] dark:border-[#2a3942]'
                                     : isAdmin
-                                      ? 'bg-[#d9fdd3] text-[#111b21] rounded-tr-none border border-[#00a884]/20'
-                                      : 'bg-white text-[#111b21] rounded-tr-none border-l-4 border-[#008069]'
+                                      ? 'bg-[#d9fdd3] text-[#111b21] rounded-tr-none border border-[#00a884]/20 dark:bg-[#005c4b] dark:text-[#e9edef] dark:border-[#00a884]/30'
+                                      : 'bg-white text-[#111b21] rounded-tr-none border-l-4 border-[#008069] dark:bg-[#005c4b]/80 dark:text-[#e9edef] dark:border-l-4 dark:border-[#00a884]'
                               }`}
                             >
                               {isMessagePinned && !isRevoked && (

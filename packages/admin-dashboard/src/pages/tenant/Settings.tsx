@@ -887,7 +887,7 @@ export const Settings: React.FC = () => {
           />
 
           {/* Global Bot ON/OFF Toggle */}
-          <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-3 shadow-xs">
+          <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-3 shadow-xs">
             <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
               <ShieldCheck className="text-[#008069]" size={16} />
               <span>Global Chatbot Toggle</span>
@@ -895,10 +895,10 @@ export const Settings: React.FC = () => {
             <p className="text-xs text-[#667781] leading-relaxed">
               Aktifkan atau nonaktifkan bot AI secara global. Saat dinonaktifkan, semua pesan WhatsApp masuk akan otomatis dialihkan ke antrian manusia (Staff / Bidan).
             </p>
-            <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] mt-2">
+            <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#f8fafc] dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] mt-2">
               <div>
-                <span className="text-xs font-bold text-[#111b21] block">AI Auto-Responder Bot</span>
-                <span className="text-[11px] text-[#667781]">Respon otomatis pesan baru oleh bot</span>
+                <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] block">AI Auto-Responder Bot</span>
+                <span className="text-[11px] text-[#667781] dark:text-[#8696a0]">Respon otomatis pesan baru oleh bot</span>
               </div>
               <ToggleSwitch
                 checked={globalBotActive}
@@ -1007,7 +1007,7 @@ export const Settings: React.FC = () => {
             <InstallAppPanel />
 
             {/* Coordinate picker & Branch Map */}
-            <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-3 shadow-xs">
+            <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-3 shadow-xs">
               <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
                 <MapPin className="text-[#008069]" size={16} />
                 <span>Branch Coordinate Picker (Map)</span>
@@ -1086,7 +1086,7 @@ export const Settings: React.FC = () => {
           {/* Right column: Tiering Ongkir & Broadcast Engine */}
           <div className="space-y-6">
             {/* Delivery fee tiering */}
-            <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-3 shadow-xs">
+            <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-3 shadow-xs">
               <div className="flex justify-between items-center">
                 <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
                   <Truck className="text-[#008069]" size={16} />

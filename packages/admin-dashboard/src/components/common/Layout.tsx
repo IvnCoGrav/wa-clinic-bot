@@ -454,7 +454,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   return (
     <div
       style={{ height: isLiveChat ? 'var(--vvh, 100dvh)' : undefined, maxHeight: isLiveChat ? 'var(--vvh, 100dvh)' : undefined }}
-      className={`${isLiveChat ? 'h-[100dvh] max-h-[100dvh] overflow-hidden touch-pan-y' : 'min-h-screen'} bg-[#f0f2f5] dark:bg-black text-[#111b21] dark:text-[#e9edef] flex flex-col md:flex-row relative overscroll-y-contain`}
+      className={`${isLiveChat ? 'h-[100dvh] max-h-[100dvh] overflow-hidden touch-pan-y' : 'min-h-screen'} bg-[#f0f2f5] dark:bg-[#111b21] text-[#111b21] dark:text-[#e9edef] flex flex-col md:flex-row relative overscroll-y-contain`}
     >
       {/* ⬅️ Mobile Edge Swipe-Back Floating Indicator (Max 100px with resistance physics) */}
       {swipeBackDistance > 0 && (

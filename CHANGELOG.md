@@ -144,6 +144,42 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
   - **Phase 7 (Identitas Anak Atomik)**: Menambahkan kolom `name_norm`, `first_reservation_id`, `last_reservation_id` serta unique compound index `[customer_id, name_norm]` pada tabel `children`. Dedup anak menggunakan `prisma.child.upsert` atomik tanpa balapan race condition (A-006).
   - **Phase 8 (Dokumentasi & Standar Metrik)**: Pembuatan `docs/METRIC_DEFINITIONS.md`, pembaruan retroaktif changelog, serta standarisasi ID di `docs/KNOWN_ISSUES.md`.
 
+#### 2026-10-28 - Refactor & Polish: Eliminasi AI Slop Dark Mode & Harmonisasi WhatsApp Authentic Elevation System
+
+- **Latar Belakang & Akar Masalah**:
+  - Setelah perombakan dark mode awal, antarmuka mode gelap terasa seperti "AI Slop" (datar, kaku, tanpa kedalaman visual alami).
+  - Akar masalah ditemukan pada 6 pola:
+    1. Kanvas dasar dipaksa menjadi hitam legam pekat (`#000000`), menyebabkan bayangan hilang dan memicu efek halation (teks putih berpendar silau di latar hitam).
+    2. Efek lempengan abu-abu mati (*Flat Muddy Blob*) akibat penimpaan CSS global `.dark .bg-white { background-color: #202c33; }`, sehingga kartu induk, kartu anak, dan kolom formulir menyatu tanpa hirarki visual.
+    3. Pengebiri warna aksen (*Color Castration*), di mana warna ungu dan biru diubah secara sepihak menjadi abu-abu semen (`#aebac1`), membuat ikon kalender dan kategori layanan tampak seperti tombol mati/rusak.
+    4. Knob tombol geser (*ToggleSwitch*) ikut tertimpa menjadi abu-abu gelap, menghilangkan kontras tactile status aktif/mati.
+    5. Silau mendadak (*Flashbang*) pada peta raster OpenStreetMap dan badge pastel yang belum terpetakan (seperti badge kehamilan ibu `bg-pink-50` dan saluran `bg-teal-50`).
+    6. Gelembung pesan bot AI di LiveChat disamakan warnanya dengan pesan masuk customer (`#202c33`), merusak ritme percakapan keluar WhatsApp.
+- **Arsitektur & Perubahan (Solusi High-Craft WhatsApp Design System)**:
+  - `packages/admin-dashboard/src/index.css`:
+    - Mengubah kanvas dasar global dari `#000000` menjadi `#111b21` (otentik WhatsApp Web).
+    - Menyesuaikan header kartu/modal default ke `#1c272e` untuk menjaga fisika elevasi cahaya alami.
+    - Mengembalikan warna aksen semantik teduh: ungu lavender `#c084fc`, biru sejuk `#38bdf8`, hijau WhatsApp `#00a884`, merah mawar `#f87171`.
+    - Menambahkan dukungan dark mode untuk pastel `bg-pink-50`, `bg-teal-50`, `bg-cyan-50`, dan `text-[#00695c]`.
+    - Mengunci knob putih bulat `ToggleSwitch` di dark mode (`.dark button[role="switch"] span.bg-white { background-color: #ffffff !important; }`).
+    - Menambahkan filter malam raster otomatis pada peta OpenStreetMap/Leaflet (`dark:invert dark:hue-rotate-180 dark:brightness-[0.82] dark:contrast-[0.92]`).
+  - `Layout.tsx`, `index.html`, `ThemeContext.tsx`:
+    - Menyelaraskan latar belakang dan `theme-color` meta tag menjadi `#111b21`.
+  - `ToggleSwitch.tsx`:
+    - Memperbaiki bug kelas Tailwind `dark:bg-rose-950/40/20` dan `dark:border-rose-800/40/40` menjadi `/40`, serta mengkalibrasi teks hijau aktif ke `#00a884`.
+  - `LiveChatMonitor.tsx`:
+    - Mengubah gaya gelembung pesan bot AI di kanan menjadi warna hijau botol outbound WhatsApp (`dark:bg-[#005c4b]/80` dengan aksen border kiri `#00a884`), selaras dengan pesan staf dan membedakannya dari pesan customer di kiri (`#202c33`).
+  - `AdminCopilotPanel.tsx`:
+    - Menghilangkan duplikasi kelas border dan mengkalibrasi teks Quick Prompts ke `#00a884`.
+  - `CustomerMapTab.tsx` & `FleetMapModal.tsx`:
+    - Mengaktifkan filter peta malam pada kontainer Leaflet dan ubin raster OpenStreetMap.
+  - `ReservationDetailModal.tsx`, `CreateReservationModal.tsx`, `TodayTreatments.tsx`, `Settings.tsx`:
+    - Menambahkan kelas dark mode eksplisit pada badge kehamilan, badge status, header modal pembayaran, dan kontainer landmark.
+- **Verifikasi**:
+  - `npm run build` di packages/admin-dashboard dan root lulus 100% tanpa error.
+  - Uji unit `tests/unit/typing.test.ts` 100% hijau (12 tests passed).
+
+
 #### 2026-10-28 - Refactor: Eliminasi 420 Warna Neon di Dark Mode & Harmonisasi Anti-Neon WhatsApp Design System
 
 - **Latar Belakang & Akar Masalah**:

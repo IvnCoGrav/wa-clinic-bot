@@ -635,9 +635,9 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     }
     return {
       icon: <User size={18} className="text-teal-600" />,
-      bg: 'bg-teal-100 border-teal-200 text-teal-700',
-      badge: 'bg-teal-50 text-teal-700 border-teal-200',
-      borderAccent: 'border-l-teal-500 bg-teal-50/20',
+      bg: 'bg-teal-100 dark:bg-teal-950/40 border-teal-200 dark:border-teal-800/40 text-teal-700 dark:text-[#2dd4bf]',
+      badge: 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-[#2dd4bf] border-teal-200 dark:border-teal-800/40',
+      borderAccent: 'border-l-teal-500 bg-teal-50/20 dark:bg-teal-950/20',
       label: 'Treatment',
     };
   };

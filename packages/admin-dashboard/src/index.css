@@ -614,27 +614,27 @@ textarea,
 
 .dark html,
 html.dark {
-  background-color: #000000;
+  background-color: #111b21;
   color: #e9edef;
 }
 
 .dark body {
-  background-color: #000000;
+  background-color: #111b21;
   color: #e9edef;
 }
 
 .dark #root {
-  background-color: #000000;
+  background-color: #111b21;
   color: #e9edef;
 }
 
 /* --- Kanvas & permukaan netral --- */
-.dark .bg-\[\#f0f2f5\] { background-color: #000000; }
+.dark .bg-\[\#f0f2f5\] { background-color: #111b21; }
 .dark .bg-\[\#edf2f7\], .dark .bg-\[\#f8f9fa\], .dark .bg-\[\#fcfdfd\], .dark .bg-\[\#fdfefe\], .dark .bg-\[\#f0f0f0\], .dark .bg-\[\#e0e0e0\], .dark .bg-\[\#e2e8f0\] { background-color: #111b21; }
 .dark .bg-\[\#f0f9f6\], .dark .bg-\[\#d5ebe6\], .dark .bg-\[\#d9f0ea\], .dark .bg-\[\#e7f8e8\], .dark .bg-\[\#f0fdf4\], .dark .bg-\[\#f0f7f5\], .dark .bg-\[\#f8faf9\] { background-color: rgba(0, 168, 132, 0.14); }
 .dark .bg-\[\#eff6ff\] { background-color: rgba(59, 130, 246, 0.12); }
 .dark .bg-\[\#fffbeb\] { background-color: rgba(245, 158, 11, 0.12); }
-.dark .bg-\[\#f8fafc\] { background-color: #111b21; }
+.dark .bg-\[\#f8fafc\] { background-color: #1c272e; }
 .dark .bg-white { background-color: #202c33; }
 .dark .bg-slate-50 { background-color: #111b21; }
 .dark .bg-gray-50 { background-color: #111b21; }
@@ -679,19 +679,19 @@ html.dark {
 /* --- Badge semantik pastel → versi gelap kontras tinggi --- */
 .dark .bg-emerald-50 { background-color: rgba(0, 168, 132, 0.14); }
 .dark .bg-emerald-100 { background-color: rgba(0, 168, 132, 0.22); }
-.dark .text-emerald-800, .dark .text-emerald-900 { color: #00a884; }
+.dark .text-emerald-600, .dark .text-emerald-700, .dark .text-emerald-800, .dark .text-emerald-900, .dark .text-\[\#00695c\] { color: #00a884; }
 .dark .border-emerald-200 { border-color: rgba(0, 168, 132, 0.35); }
 .dark .bg-amber-50 { background-color: rgba(245, 158, 11, 0.12); }
 .dark .bg-amber-100 { background-color: rgba(245, 158, 11, 0.2); }
-.dark .text-amber-700, .dark .text-amber-800, .dark .text-amber-900 { color: #f59e0b; }
+.dark .text-amber-600, .dark .text-amber-700, .dark .text-amber-800, .dark .text-amber-900 { color: #f59e0b; }
 .dark .border-amber-200 { border-color: rgba(245, 158, 11, 0.35); }
 .dark .bg-rose-50 { background-color: rgba(244, 63, 94, 0.12); }
 .dark .bg-rose-100 { background-color: rgba(244, 63, 94, 0.2); }
-.dark .text-rose-700, .dark .text-rose-800 { color: #f87171; }
+.dark .text-rose-600, .dark .text-rose-700, .dark .text-rose-800 { color: #f87171; }
 .dark .border-rose-200 { border-color: rgba(244, 63, 94, 0.35); }
 .dark .bg-sky-50 { background-color: rgba(14, 165, 233, 0.12); }
 .dark .bg-sky-100 { background-color: rgba(14, 165, 233, 0.2); }
-.dark .text-sky-700, .dark .text-sky-800 { color: #38bdf8; }
+.dark .text-sky-600, .dark .text-sky-700, .dark .text-sky-800 { color: #38bdf8; }
 .dark .border-sky-200 { border-color: rgba(14, 165, 233, 0.35); }
 .dark .bg-indigo-50 { background-color: rgba(99, 102, 241, 0.14); }
 .dark .text-indigo-700, .dark .text-indigo-800 { color: #a5b4fc; }
@@ -761,7 +761,7 @@ html.dark {
 .dark .bg-blue-100 { background-color: rgba(59, 130, 246, 0.2); }
 .dark .border-blue-100 { border-color: rgba(59, 130, 246, 0.35); }
 .dark .border-blue-200 { border-color: rgba(59, 130, 246, 0.45); }
-.dark .text-blue-600, .dark .text-blue-700, .dark .text-blue-800 { color: #aebac1; }
+.dark .text-blue-600, .dark .text-blue-700, .dark .text-blue-800 { color: #38bdf8; }
 
 /* --- Palet semantik tambahan: purple (badge FAQ, LiveChat, Overview) --- */
 .dark .bg-purple-50 { background-color: rgba(168, 85, 247, 0.12); }
@@ -769,7 +769,7 @@ html.dark {
 .dark .border-purple-100 { border-color: rgba(168, 85, 247, 0.35); }
 .dark .border-purple-200 { border-color: rgba(168, 85, 247, 0.35); }
 .dark .border-purple-300 { border-color: rgba(168, 85, 247, 0.45); }
-.dark .text-purple-600, .dark .text-purple-700, .dark .text-purple-800, .dark .text-purple-900, .dark .text-purple-950 { color: #aebac1; }
+.dark .text-purple-600, .dark .text-purple-700, .dark .text-purple-800, .dark .text-purple-900, .dark .text-purple-950 { color: #c084fc; }
 
 /* --- Palet semantik tambahan: red --- */
 .dark .bg-red-50 { background-color: rgba(239, 68, 68, 0.12); }
@@ -778,6 +778,36 @@ html.dark {
 .dark .border-red-200 { border-color: rgba(239, 68, 68, 0.45); }
 .dark .text-red-600, .dark .text-red-700, .dark .text-red-800 { color: #f87171; }
 
+/* --- Palet semantik tambahan: pink (moms/gestasi), teal (saluran/channel), cyan --- */
+.dark .bg-pink-50 { background-color: rgba(244, 114, 182, 0.14); }
+.dark .bg-pink-100 { background-color: rgba(244, 114, 182, 0.22); }
+.dark .text-pink-600, .dark .text-pink-700, .dark .text-pink-800 { color: #f472b6; }
+.dark .border-pink-200 { border-color: rgba(244, 114, 182, 0.35); }
+
+.dark .bg-teal-50 { background-color: rgba(45, 212, 191, 0.14); }
+.dark .bg-teal-100 { background-color: rgba(45, 212, 191, 0.22); }
+.dark .text-teal-600, .dark .text-teal-700, .dark .text-teal-800 { color: #2dd4bf; }
+.dark .border-teal-200 { border-color: rgba(45, 212, 191, 0.35); }
+
+.dark .bg-cyan-50 { background-color: rgba(56, 189, 248, 0.14); }
+.dark .bg-cyan-100 { background-color: rgba(56, 189, 248, 0.22); }
+.dark .text-cyan-600, .dark .text-cyan-700, .dark .text-cyan-800 { color: #38bdf8; }
+.dark .border-cyan-200, .dark .border-cyan-300 { border-color: rgba(56, 189, 248, 0.35); }
+
+/* --- Knob Toggle Switch: Pertahankan Putih Bersih di Dark Mode --- */
+.dark button[role="switch"] span.bg-white {
+  background-color: #ffffff !important;
+}
+
+/* --- Peta Raster Dark Mode (OpenStreetMap, Carto, Leaflet) --- */
+.dark .dispatch-map-raster,
+.dark [data-map-raster="true"],
+.dark .customer-map-osm-gray,
+.dark .leaflet-tile-pane,
+.dark .fleet-map-tiles img {
+  filter: invert(1) hue-rotate(180deg) brightness(0.82) contrast(0.92) !important;
+}
+
 /* --- Kartu jadwal kalender pastel daylight → dark solid kontras (DayScheduleGrid & WeekScheduleGrid) --- */
 .dark .bg-\[\#e0f2fe\] { background-color: #0c2438; }
 .dark .bg-\[\#f3e8ff\] { background-color: #251438; }
@@ -785,7 +815,7 @@ html.dark {
 .dark .bg-\[\#dcfce7\] { background-color: #0d2e1e; }
 .dark .bg-\[\#ccfbf1\] { background-color: #0b2b28; }
 .dark .text-\[\#0c4a6e\] { color: #38bdf8; }
-.dark .text-\[\#581c87\] { color: #aebac1; }
+.dark .text-\[\#581c87\] { color: #c084fc; }
 .dark .text-\[\#78350f\] { color: #f59e0b; }
 .dark .text-\[\#14532d\] { color: #00a884; }
 .dark .text-\[\#166534\] { color: #00a884; }

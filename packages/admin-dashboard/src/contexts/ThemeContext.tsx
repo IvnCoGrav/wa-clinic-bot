@@ -56,7 +56,7 @@ function applyResolvedTheme(resolved: ResolvedTheme) {
   // Sinkronkan theme-color untuk mobile browser chrome / PWA.
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) {
-    meta.setAttribute('content', resolved === 'dark' ? '#000000' : '#ffffff');
+    meta.setAttribute('content', resolved === 'dark' ? '#111b21' : '#ffffff');
   }
 }
 

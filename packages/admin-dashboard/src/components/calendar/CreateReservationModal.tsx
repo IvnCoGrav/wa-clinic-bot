@@ -3232,9 +3232,9 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                           </span>
                           <div className="flex items-center gap-1.5">
                             {isEditingThis && (
-                              <span className="px-2 py-0.5 rounded-lg text-xs font-bold bg-cyan-50 text-cyan-700 border border-cyan-300">Sedang Diedit</span>
+                              <span className="px-2 py-0.5 rounded-lg text-xs font-bold bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-[#38bdf8] border border-cyan-300 dark:border-cyan-800/40">Sedang Diedit</span>
                             )}
-                            <span className="text-xs font-bold text-[#008069] bg-[#e8f5f2] px-2 py-0.5 rounded-full">
+                            <span className="text-xs font-bold text-[#008069] dark:text-[#00a884] bg-[#e8f5f2] dark:bg-[#00a884]/15 px-2 py-0.5 rounded-full">
                               {resolveStaffName(res, effectiveStaffList) || 'Terapis Belum Ditugaskan'}
                             </span>
                           </div>

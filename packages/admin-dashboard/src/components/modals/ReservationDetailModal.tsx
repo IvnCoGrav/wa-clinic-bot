@@ -495,7 +495,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                   {/* Info Moms (kehamilan / nifas) — badge dinamis, bukan teks mentah */}
                   {momGestationalBadge((reservation as any).mom_gestational_info) && (
                     <div className="mt-2 pt-2 border-t border-[#e9edef] dark:border-[#202c33]">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-pink-50 text-pink-800 border border-pink-200 text-[11px] font-bold">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-pink-50 dark:bg-pink-950/40 text-pink-800 dark:text-[#f472b6] border border-pink-200 dark:border-pink-800/40 text-[11px] font-bold">
                         {momGestationalBadge((reservation as any).mom_gestational_info)}
                       </span>
                     </div>

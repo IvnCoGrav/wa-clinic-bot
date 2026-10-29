@@ -843,6 +843,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
         <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl overflow-hidden shadow-xs relative">
           <div
             ref={mapContainerRef}
+            className="customer-map-osm-gray"
             style={{
               height: '580px',
               width: '100%',
@@ -860,7 +861,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
                   if (!m || !clinic) return;
                   try { m.flyTo([clinic.lat, clinic.lng], 13, { duration: 0.6 }); } catch {}
                 }}
-                className="px-2.5 py-1.5 text-[11px] font-semibold text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] border-b border-[#e9edef] flex items-center gap-1.5"
+                className="px-2.5 py-1.5 text-[11px] font-semibold text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#202c33] border-b border-[#e9edef] dark:border-[#2a3942] flex items-center gap-1.5"
                 title="Fokus ke Basecamp Klinik"
               >
                 <span>🎯</span> Fokus Basecamp
@@ -875,7 +876,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
                     if (b && b.isValid && b.isValid()) m.fitBounds(b, { padding: [40, 40], maxZoom: 14 });
                   } catch {}
                 }}
-                className="px-2.5 py-1.5 text-[11px] font-semibold text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] flex items-center gap-1.5"
+                className="px-2.5 py-1.5 text-[11px] font-semibold text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#202c33] flex items-center gap-1.5"
                 title="Pas-kan semua titik terlihat"
               >
                 <span>🗺️</span> Pas-kan Semua
@@ -885,7 +886,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
               <button
                 type="button"
                 onClick={() => { try { mapRef.current?.zoomIn(); } catch {} }}
-                className="px-3 py-1.5 text-sm font-bold text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] border-r border-[#e9edef]"
+                className="px-3 py-1.5 text-sm font-bold text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#202c33] border-r border-[#e9edef] dark:border-[#2a3942]"
                 title="Zoom in"
               >
                 +
@@ -893,24 +894,24 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
               <button
                 type="button"
                 onClick={() => { try { mapRef.current?.zoomOut(); } catch {} }}
-                className="px-3 py-1.5 text-sm font-bold text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5]"
+                className="px-3 py-1.5 text-sm font-bold text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] dark:hover:bg-[#202c33]"
                 title="Zoom out"
               >
                 −
               </button>
             </div>
-            <div className="px-2 py-1 bg-white/90 backdrop-blur rounded-full text-[10px] font-semibold text-[#54656f] dark:text-[#8696a0] border border-[#e9edef] shadow-sm">
+            <div className="px-2 py-1 bg-white/90 dark:bg-[#111b21]/90 backdrop-blur rounded-full text-[10px] font-semibold text-[#54656f] dark:text-[#8696a0] border border-[#e9edef] dark:border-[#2a3942] shadow-sm">
               Zoom {currentZoom}x
             </div>
           </div>
           {loading && (
-            <div className="absolute inset-0 bg-white/60 flex items-center justify-center z-[1001]">
+            <div className="absolute inset-0 bg-white/60 dark:bg-black/60 flex items-center justify-center z-[1001]">
               <RefreshCw className="animate-spin text-[#008069]" size={24} />
             </div>
           )}
           {!loading && mapMode === 'area' && geoLoading && (
-            <div className="absolute inset-0 bg-white/40 flex items-center justify-center z-10 pointer-events-none">
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white shadow-sm border border-[#e9edef]">
+            <div className="absolute inset-0 bg-white/40 dark:bg-black/40 flex items-center justify-center z-10 pointer-events-none">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white dark:bg-[#111b21] shadow-sm border border-[#e9edef] dark:border-[#2a3942]">
                 <RefreshCw className="animate-spin text-[#008069]" size={14} />
                 <span className="text-xs font-semibold text-[#54656f] dark:text-[#8696a0]">Memuat batas wilayah…</span>
               </div>
