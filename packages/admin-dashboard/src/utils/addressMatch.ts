@@ -139,11 +139,12 @@ export function addressesMatch(
       const toponimiCross = isWilayahSimilar(a.kecamatan, b.kelurahan) || isWilayahSimilar(a.kelurahan, b.kecamatan);
       if (toponimiKec || toponimiCross) return true;
 
-      // 3. Alamat jalan identik & spesifik (panjang >= 15 karakter atau ada nomor/blok/cluster/rt/rw):
-      // Jika jalan sama persis di kota sama dalam radius sentroid <= 3km, ini adalah rumah yang sama
-      // meskipun kecamatan administratif berbeda karena pergeseran batas reverse-geocoding peta.
-      const isSpecificStreet = norm(a.address).length >= 15 || /\b(?:no|nomor|blok|gang|gg|cluster|perum|perumahan|rt|rw)\b/i.test(a.address || '');
-      if (isSpecificStreet) return true;
+      // 3. Alamat jalan identik & spesifik (memuat nomor/blok/RT-RW eksplisit):
+      // Hanya alamat yang MEMUAT nomor/blok/RT-RW eksplisit yang boleh merge lintas
+      // kecamatan. Nama perumahan tanpa nomor TIDAK cukup (anti-over-merge rumah-2).
+      const streetText = `${a.address || ''} ${b.address || ''}`;
+      const hasHouseNumber = /\b(?:no|nomor|blok|gang|gg|rt|rw|cluster|perum|perumahan)\b.*?\d+/i.test(streetText);
+      if (hasHouseNumber && norm(a.address).length >= 8) return true;
     }
   }
 

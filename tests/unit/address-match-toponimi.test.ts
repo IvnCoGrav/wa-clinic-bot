@@ -123,4 +123,84 @@ describe('Mikro 1.1 — addressesMatch toponimi & anti-over-merge', () => {
     expect(addressesMatch(titikUtara, titikSelatan)).toBe(false);
     expect(addressesMatch(titikSelatan, titikUtara)).toBe(false);
   });
+
+  it('Kasus 6 (A-005): Nama perumahan tanpa nomor di kecamatan berbeda, jarak < 3 km -> TIDAK MATCH', () => {
+    const rumahA = {
+      address: 'Perumahan Mutiara Indah',
+      kecamatan: 'Waru',
+      kota: 'Sidoarjo',
+      lat: -7.350000,
+      lng: 112.720000,
+    };
+    const rumahB = {
+      address: 'Perumahan Mutiara Indah',
+      kecamatan: 'Gedangan',
+      kota: 'Sidoarjo',
+      lat: -7.355000, // jarak ~600 m
+      lng: 112.720000,
+    };
+
+    expect(addressesMatch(rumahA, rumahB)).toBe(false);
+    expect(addressesMatch(rumahB, rumahA)).toBe(false);
+  });
+
+  it('Kasus 7 (A-005): Jalan dengan nomor eksplisit (No. 12) di kecamatan berbeda, jarak < 3 km -> MATCH', () => {
+    const rumahA = {
+      address: 'Jl. Mutiara Indah No. 12',
+      kecamatan: 'Waru',
+      kota: 'Sidoarjo',
+      lat: -7.350000,
+      lng: 112.720000,
+    };
+    const rumahB = {
+      address: 'Jl. Mutiara Indah No. 12',
+      kecamatan: 'Gedangan',
+      kota: 'Sidoarjo',
+      lat: -7.355000, // jarak ~600 m (pergeseran reverse geocoding batas kec)
+      lng: 112.720000,
+    };
+
+    expect(addressesMatch(rumahA, rumahB)).toBe(true);
+    expect(addressesMatch(rumahB, rumahA)).toBe(true);
+  });
+
+  it('Kasus 8 (A-005): Jalan dengan blok/nomor (Blok C7) di kecamatan berbeda, jarak < 3 km -> MATCH', () => {
+    const rumahA = {
+      address: 'Jl. Mutiara Indah Blok C7',
+      kecamatan: 'Waru',
+      kota: 'Sidoarjo',
+      lat: -7.350000,
+      lng: 112.720000,
+    };
+    const rumahB = {
+      address: 'Jl. Mutiara Indah Blok C7',
+      kecamatan: 'Gedangan',
+      kota: 'Sidoarjo',
+      lat: -7.355000,
+      lng: 112.720000,
+    };
+
+    expect(addressesMatch(rumahA, rumahB)).toBe(true);
+    expect(addressesMatch(rumahB, rumahA)).toBe(true);
+  });
+
+  it('Kasus 9 (A-005): Dua rumah nomor berbeda (No. 12 vs No. 14) di jalan sama, kecamatan beda -> TIDAK MATCH', () => {
+    const rumahA = {
+      address: 'Jl. Mutiara Indah No. 12',
+      kecamatan: 'Waru',
+      kota: 'Sidoarjo',
+      lat: -7.350000,
+      lng: 112.720000,
+    };
+    const rumahB = {
+      address: 'Jl. Mutiara Indah No. 14',
+      kecamatan: 'Gedangan',
+      kota: 'Sidoarjo',
+      lat: -7.355000, // jarak ~550m (>150m agar menguji dedup teks, bukan GPS pin point)
+      lng: 112.720000,
+    };
+
+    expect(addressesMatch(rumahA, rumahB)).toBe(false);
+    expect(addressesMatch(rumahB, rumahA)).toBe(false);
+  });
 });
