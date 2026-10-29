@@ -455,48 +455,48 @@ export const KnowledgeBase: React.FC = () => {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-xl font-bold tracking-tight text-[#111b21] flex items-center space-x-2">
+        <h2 className="text-xl font-bold tracking-tight text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
           <BookOpen className="text-[#008069]" size={22} />
           <span>Knowledge Base Manager</span>
         </h2>
-        <p className="text-xs text-[#667781] mt-0.5">Kelola data FAQ, SOP klinik, dan AI RAG references untuk respons otomatis WhatsApp</p>
+        <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">Kelola data FAQ, SOP klinik, dan AI RAG references untuk respons otomatis WhatsApp</p>
       </div>
 
       {/* Tabs Menu */}
-      <div className="flex flex-wrap gap-1 p-1 bg-white border border-[#e9edef] rounded-xl max-w-4xl shadow-xs">
+      <div className="flex flex-wrap gap-1 p-1 bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl max-w-4xl shadow-xs">
         <button 
           onClick={() => setActiveTab('chunks')}
-          className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${activeTab === 'chunks' ? 'bg-[#008069] text-white shadow-xs' : 'text-[#54656f] hover:text-[#111b21]'}`}
+          className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${activeTab === 'chunks' ? 'bg-[#008069] text-white shadow-xs' : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef]'}`}
         >
           Reference Chunks ({chunks.length})
         </button>
         <button 
           onClick={() => setActiveTab('upload')}
-          className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${activeTab === 'upload' ? 'bg-[#008069] text-white shadow-xs' : 'text-[#54656f] hover:text-[#111b21]'}`}
+          className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${activeTab === 'upload' ? 'bg-[#008069] text-white shadow-xs' : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef]'}`}
         >
           Add FAQ & Documents
         </button>
         <button 
           onClick={() => setActiveTab('harvesting')}
-          className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${activeTab === 'harvesting' ? 'bg-[#008069] text-white shadow-xs' : 'text-[#54656f] hover:text-[#111b21]'}`}
+          className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${activeTab === 'harvesting' ? 'bg-[#008069] text-white shadow-xs' : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef]'}`}
         >
           AI Chat Scraper
         </button>
         <button 
           onClick={() => setActiveTab('staging')}
-          className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${activeTab === 'staging' ? 'bg-[#008069] text-white shadow-xs' : 'text-[#54656f] hover:text-[#111b21]'}`}
+          className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${activeTab === 'staging' ? 'bg-[#008069] text-white shadow-xs' : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef]'}`}
         >
           Staging Reviewer ({medicalStaging.length + generalStaging.length})
         </button>
         <button 
           onClick={() => setActiveTab('existing_use_case')}
-          className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${activeTab === 'existing_use_case' ? 'bg-[#008069] text-white shadow-xs' : 'text-[#54656f] hover:text-[#111b21]'}`}
+          className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${activeTab === 'existing_use_case' ? 'bg-[#008069] text-white shadow-xs' : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef]'}`}
         >
           Sudah Ada Use Case ({existingMatches.length})
         </button>
         <button 
           onClick={() => setActiveTab('unanswered')}
-          className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${activeTab === 'unanswered' ? 'bg-[#008069] text-white shadow-xs' : 'text-[#54656f] hover:text-[#111b21]'}`}
+          className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${activeTab === 'unanswered' ? 'bg-[#008069] text-white shadow-xs' : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef]'}`}
         >
           Unanswered Log ({unansweredList.length})
         </button>
@@ -510,7 +510,7 @@ export const KnowledgeBase: React.FC = () => {
               <Loader className="animate-spin text-[#008069]" size={32} />
             </div>
           ) : chunks.length === 0 ? (
-            <div className="bg-white border border-[#e9edef] rounded-2xl p-12 text-center text-[#667781] text-xs shadow-xs">
+            <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-12 text-center text-[#667781] dark:text-[#8696a0] text-xs shadow-xs">
               <BookOpen className="mx-auto text-[#8696a0] mb-3" size={36} />
               <p>Belum ada data knowledge base reference chunks yang tersimpan.</p>
               <button 
@@ -533,38 +533,38 @@ export const KnowledgeBase: React.FC = () => {
                           <span className="text-[10px] text-[#8696a0] font-mono">ID: {chunk.id.substring(0, 8)}</span>
                         </div>
                         <div className="space-y-1">
-                          <label className="text-[11px] font-bold text-[#111b21]">Judul / Pertanyaan FAQ</label>
+                          <label className="text-[11px] font-bold text-[#111b21] dark:text-[#e9edef]">Judul / Pertanyaan FAQ</label>
                           <input
                             type="text"
                             value={editingChunkTitle}
                             onChange={(e) => setEditingChunkTitle(e.target.value)}
-                            className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+                            className="w-full p-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
                           />
                         </div>
                         <div className="space-y-1">
-                          <label className="text-[11px] font-bold text-[#111b21]">Konten Jawaban Lengkap</label>
+                          <label className="text-[11px] font-bold text-[#111b21] dark:text-[#e9edef]">Konten Jawaban Lengkap</label>
                           <textarea
                             rows={5}
                             value={editingChunkContent}
                             onChange={(e) => setEditingChunkContent(e.target.value)}
-                            className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] leading-relaxed resize-none shadow-xs"
+                            className="w-full p-2.5 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] leading-relaxed resize-none shadow-xs"
                           />
                         </div>
                         <div className="space-y-1">
-                          <label className="text-[11px] font-bold text-[#111b21]">Tag Intent / Kata Kunci Sinonim (dipisahkan koma)</label>
+                          <label className="text-[11px] font-bold text-[#111b21] dark:text-[#e9edef]">Tag Intent / Kata Kunci Sinonim (dipisahkan koma)</label>
                           <input
                             type="text"
                             value={editingChunkKeywords}
                             onChange={(e) => setEditingChunkKeywords(e.target.value)}
                             placeholder="Contoh: lampu merah, infrared, terapi hangat, batuk pilek"
-                            className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+                            className="w-full p-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
                           />
                         </div>
                         <div className="flex justify-end space-x-2 pt-2 border-t border-[#e9edef]">
                           <button
                             type="button"
                             onClick={() => setEditingChunkId(null)}
-                            className="px-3 py-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] text-xs font-semibold transition"
+                            className="px-3 py-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] dark:text-[#8696a0] text-xs font-semibold transition"
                           >
                             Batal
                           </button>
@@ -599,7 +599,7 @@ export const KnowledgeBase: React.FC = () => {
                                 setEditingChunkContent(chunk.content);
                                 setEditingChunkKeywords(chunk.keywords || '');
                               }}
-                              className="px-2 py-1 rounded-lg bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] hover:text-[#111b21] text-[10px] font-bold transition flex items-center space-x-1 shadow-xs"
+                              className="px-2 py-1 rounded-lg bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef] text-[10px] font-bold transition flex items-center space-x-1 shadow-xs"
                               title="Edit FAQ Ini"
                             >
                               <Edit3 size={11} />
@@ -615,7 +615,7 @@ export const KnowledgeBase: React.FC = () => {
                             </button>
                           </div>
                         </div>
-                        <h4 className="font-bold text-[#111b21] text-xs leading-snug">{chunk.title}</h4>
+                        <h4 className="font-bold text-[#111b21] dark:text-[#e9edef] text-xs leading-snug">{chunk.title}</h4>
                         {chunk.keywords && chunk.keywords.trim() && (
                           <div className="flex flex-wrap gap-1">
                             {chunk.keywords.split(',').map((kw) => kw.trim()).filter(Boolean).map((kw, ki) => (
@@ -625,7 +625,7 @@ export const KnowledgeBase: React.FC = () => {
                             ))}
                           </div>
                         )}
-                        <p className="text-xs text-[#54656f] leading-relaxed whitespace-pre-wrap">
+                        <p className="text-xs text-[#54656f] dark:text-[#8696a0] leading-relaxed whitespace-pre-wrap">
                           {chunk.content}
                         </p>
                       </div>
@@ -640,45 +640,45 @@ export const KnowledgeBase: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           
           {/* FAQ Uploader */}
-          <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-4 shadow-xs">
-            <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
+          <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-4 shadow-xs">
+            <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
               <HelpCircle className="text-[#008069]" size={16} />
               <span>Tambah FAQ Q&A Item</span>
             </h3>
 
             <form onSubmit={handleAddFaq} className="space-y-3">
               <div className="space-y-1">
-                <label className="text-[11px] font-bold text-[#111b21]">Pertanyaan</label>
+                <label className="text-[11px] font-bold text-[#111b21] dark:text-[#e9edef]">Pertanyaan</label>
                 <input
                   type="text"
                   required
                   value={question}
                   onChange={(e) => setQuestion(e.target.value)}
                   placeholder="Contoh: Apakah bisa pijat bayi saat demam?"
-                  className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+                  className="w-full p-2.5 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-[11px] font-bold text-[#111b21]">Jawaban / Respons Lengkap</label>
+                <label className="text-[11px] font-bold text-[#111b21] dark:text-[#e9edef]">Jawaban / Respons Lengkap</label>
                 <textarea
                   required
                   rows={4}
                   value={answer}
                   onChange={(e) => setAnswer(e.target.value)}
                   placeholder="Halo Bunda, untuk pijat bayi sebaiknya dihindari saat bayi demam tinggi ya bund..."
-                  className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] resize-none leading-relaxed shadow-xs"
+                  className="w-full p-2.5 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] resize-none leading-relaxed shadow-xs"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-[11px] font-bold text-[#111b21]">Tag Intent / Kata Kunci Sinonim (dipisahkan koma)</label>
+                <label className="text-[11px] font-bold text-[#111b21] dark:text-[#e9edef]">Tag Intent / Kata Kunci Sinonim (dipisahkan koma)</label>
                 <input
                   type="text"
                   value={faqKeywords}
                   onChange={(e) => setFaqKeywords(e.target.value)}
                   placeholder="Contoh: lampu merah, infrared, terapi hangat, batuk pilek"
-                  className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+                  className="w-full p-2.5 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
                 />
               </div>
 
@@ -694,34 +694,34 @@ export const KnowledgeBase: React.FC = () => {
           </div>
 
           {/* SOP Document Chunk Parser */}
-          <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-4 shadow-xs">
-            <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
+          <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-4 shadow-xs">
+            <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
               <FileText className="text-[#008069]" size={16} />
               <span>Upload Dokumen SOP / Panduan</span>
             </h3>
 
             <form onSubmit={handleUploadDoc} className="space-y-3">
               <div className="space-y-1">
-                <label className="text-[11px] font-bold text-[#111b21]">Nama Dokumen</label>
+                <label className="text-[11px] font-bold text-[#111b21] dark:text-[#e9edef]">Nama Dokumen</label>
                 <input
                   type="text"
                   required
                   value={docName}
                   onChange={(e) => setDocName(e.target.value)}
                   placeholder="SOP_Pijat_Bayi.txt"
-                  className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+                  className="w-full p-2.5 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-[11px] font-bold text-[#111b21]">Isi Dokumen (Raw Text)</label>
+                <label className="text-[11px] font-bold text-[#111b21] dark:text-[#e9edef]">Isi Dokumen (Raw Text)</label>
                 <textarea
                   required
                   rows={4}
                   value={docContent}
                   onChange={(e) => setDocContent(e.target.value)}
                   placeholder="Tempel teks panduan / SOP klinik di sini. Sistem akan otomatis membagi dokumen menjadi potongan chunks terstruktur..."
-                  className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] resize-none leading-relaxed shadow-xs"
+                  className="w-full p-2.5 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] resize-none leading-relaxed shadow-xs"
                 />
               </div>
 
@@ -769,14 +769,14 @@ export const KnowledgeBase: React.FC = () => {
             </div>
           )}
 
-          <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-5 shadow-xs">
+          <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-5 shadow-xs">
             <div className="flex justify-between items-start md:items-center pb-4 border-b border-[#e9edef] flex-col md:flex-row gap-3">
               <div className="space-y-1">
-                <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
+                <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
                   <Download className="text-[#008069]" size={16} />
                   <span>AI Chat Scraper & Staging Harvester (Lokal)</span>
                 </h3>
-                <p className="text-xs text-[#667781] max-w-xl">
+                <p className="text-xs text-[#667781] dark:text-[#8696a0] max-w-xl">
                   Ekstrak dialog tanya-jawab dari database lokal ({localStats.conversationCount} chat), bersihkan PII nomor HP secara otomatis, dan staging sebagai kandidat FAQ baru dengan DeepSeek AI.
                 </p>
               </div>
@@ -784,7 +784,7 @@ export const KnowledgeBase: React.FC = () => {
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={handleDownloadRawChatDump}
-                  className="px-3 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
+                  className="px-3 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] dark:text-[#e9edef] rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
                   title="Unduh berkas JSON transkrip percakapan mentah (raw dump)"
                 >
                   <FileText size={13} className="text-[#008069]" />
@@ -831,7 +831,7 @@ export const KnowledgeBase: React.FC = () => {
                 
                 {/* Progress bar */}
                 <div className="space-y-1.5">
-                  <div className="flex justify-between text-xs font-bold text-[#111b21]">
+                  <div className="flex justify-between text-xs font-bold text-[#111b21] dark:text-[#e9edef]">
                     <span>Status Scraping: {harvestJob.status}</span>
                     <span className="text-[#008069]">{harvestJob.progressPercent}%</span>
                   </div>
@@ -845,24 +845,24 @@ export const KnowledgeBase: React.FC = () => {
 
                 {/* Stats cards grid */}
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                  <div className="p-3 rounded-xl bg-[#f8fafc] border border-[#e9edef] text-center">
-                    <span className="text-[10px] text-[#667781] font-bold block uppercase mb-0.5">Chats Scanned</span>
-                    <span className="text-base font-bold text-[#111b21]">{harvestJob.totalChatsScanned}</span>
+                  <div className="p-3 rounded-xl bg-[#f8fafc] dark:bg-[#202c33] border border-[#e9edef] text-center">
+                    <span className="text-[10px] text-[#667781] dark:text-[#8696a0] font-bold block uppercase mb-0.5">Chats Scanned</span>
+                    <span className="text-base font-bold text-[#111b21] dark:text-[#e9edef]">{harvestJob.totalChatsScanned}</span>
                   </div>
-                  <div className="p-3 rounded-xl bg-[#f8fafc] border border-[#e9edef] text-center">
-                    <span className="text-[10px] text-[#667781] font-bold block uppercase mb-0.5">Msgs Scanned</span>
-                    <span className="text-base font-bold text-[#111b21]">{harvestJob.totalMessagesScanned}</span>
+                  <div className="p-3 rounded-xl bg-[#f8fafc] dark:bg-[#202c33] border border-[#e9edef] text-center">
+                    <span className="text-[10px] text-[#667781] dark:text-[#8696a0] font-bold block uppercase mb-0.5">Msgs Scanned</span>
+                    <span className="text-base font-bold text-[#111b21] dark:text-[#e9edef]">{harvestJob.totalMessagesScanned}</span>
                   </div>
-                  <div className="p-3 rounded-xl bg-[#f8fafc] border border-[#e9edef] text-center">
-                    <span className="text-[10px] text-[#667781] font-bold block uppercase mb-0.5">General Staged</span>
+                  <div className="p-3 rounded-xl bg-[#f8fafc] dark:bg-[#202c33] border border-[#e9edef] text-center">
+                    <span className="text-[10px] text-[#667781] dark:text-[#8696a0] font-bold block uppercase mb-0.5">General Staged</span>
                     <span className="text-base font-bold text-[#008069]">{harvestJob.generalStagedCount}</span>
                   </div>
-                  <div className="p-3 rounded-xl bg-[#f8fafc] border border-[#e9edef] text-center">
-                    <span className="text-[10px] text-[#667781] font-bold block uppercase mb-0.5">Medical Staged</span>
+                  <div className="p-3 rounded-xl bg-[#f8fafc] dark:bg-[#202c33] border border-[#e9edef] text-center">
+                    <span className="text-[10px] text-[#667781] dark:text-[#8696a0] font-bold block uppercase mb-0.5">Medical Staged</span>
                     <span className="text-base font-bold text-purple-700">{harvestJob.medicalStagedCount}</span>
                   </div>
-                  <div className="p-3 rounded-xl bg-[#f8fafc] border border-[#e9edef] text-center">
-                    <span className="text-[10px] text-[#667781] font-bold block uppercase mb-0.5">Leads Extracted</span>
+                  <div className="p-3 rounded-xl bg-[#f8fafc] dark:bg-[#202c33] border border-[#e9edef] text-center">
+                    <span className="text-[10px] text-[#667781] dark:text-[#8696a0] font-bold block uppercase mb-0.5">Leads Extracted</span>
                     <span className="text-base font-bold text-sky-700">{harvestJob.legacyLeadsExtractedCount}</span>
                   </div>
                 </div>
@@ -897,14 +897,14 @@ export const KnowledgeBase: React.FC = () => {
             <div className="flex space-x-4">
               <button
                 onClick={() => setStagingTab('medical')}
-                className={`pb-2 text-xs font-bold transition-all relative ${stagingTab === 'medical' ? 'text-[#008069] font-extrabold' : 'text-[#54656f] hover:text-[#111b21]'}`}
+                className={`pb-2 text-xs font-bold transition-all relative ${stagingTab === 'medical' ? 'text-[#008069] font-extrabold' : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef]'}`}
               >
                 Medical Staging ({medicalStaging.length})
                 {stagingTab === 'medical' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#008069] rounded-full"></div>}
               </button>
               <button
                 onClick={() => setStagingTab('general')}
-                className={`pb-2 text-xs font-bold transition-all relative ${stagingTab === 'general' ? 'text-[#008069] font-extrabold' : 'text-[#54656f] hover:text-[#111b21]'}`}
+                className={`pb-2 text-xs font-bold transition-all relative ${stagingTab === 'general' ? 'text-[#008069] font-extrabold' : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef]'}`}
               >
                 General Staging ({generalStaging.length})
                 {stagingTab === 'general' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#008069] rounded-full"></div>}
@@ -924,7 +924,7 @@ export const KnowledgeBase: React.FC = () => {
                 </button>
                 <button
                   onClick={handleExportMarkdown}
-                  className="px-2.5 py-1.5 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] rounded-xl text-xs font-semibold transition flex items-center space-x-1 shadow-xs"
+                  className="px-2.5 py-1.5 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] dark:text-[#e9edef] rounded-xl text-xs font-semibold transition flex items-center space-x-1 shadow-xs"
                   title="Unduh seluruh kandidat staging dalam format Markdown (.md)"
                 >
                   <Download size={12} />
@@ -947,15 +947,15 @@ export const KnowledgeBase: React.FC = () => {
               <Loader className="animate-spin text-[#008069]" size={32} />
             </div>
           ) : (stagingTab === 'medical' ? medicalStaging : generalStaging).length === 0 ? (
-            <div className="bg-white border border-[#e9edef] rounded-2xl p-12 text-center text-[#667781] text-xs shadow-xs">
+            <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-12 text-center text-[#667781] dark:text-[#8696a0] text-xs shadow-xs">
               Tidak ada draf kandidat pada antrian staging ini.
             </div>
           ) : (
             <div className="space-y-4">
               {(stagingTab === 'medical' ? medicalStaging : generalStaging).map((item) => (
-                <div key={item.id} className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-3 shadow-xs">
+                <div key={item.id} className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-3 shadow-xs">
                   <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-[#e9edef] pb-2.5 gap-2">
-                    <div className="flex items-center space-x-2 text-[10px] font-bold text-[#667781]">
+                    <div className="flex items-center space-x-2 text-[10px] font-bold text-[#667781] dark:text-[#8696a0]">
                       <span className="text-[#008069]">PHONE: {item.customer_phone || item.phone || 'N/A'}</span>
                       <span>•</span>
                       <span>STAGED: {new Date(item.created_at).toLocaleString()}</span>
@@ -980,35 +980,35 @@ export const KnowledgeBase: React.FC = () => {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Raw Message Log */}
-                    <div className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-2">
+                    <div className="p-3.5 rounded-xl bg-[#f8fafc] dark:bg-[#202c33] border border-[#e9edef] space-y-2">
                       <div>
                         <span className="text-[10px] text-[#008069] font-bold block uppercase mb-0.5">Pertanyaan Mentah</span>
-                        <p className="text-xs text-[#111b21] italic">"{item.raw_question}"</p>
+                        <p className="text-xs text-[#111b21] dark:text-[#e9edef] italic">"{item.raw_question}"</p>
                       </div>
                       <div>
                         <span className="text-[10px] text-purple-700 font-bold block uppercase mb-0.5">Jawaban Mentah</span>
-                        <p className="text-xs text-[#54656f] italic">"{item.bidan_raw_reply || item.raw_answer || 'Tidak ada respons mentah'}"</p>
+                        <p className="text-xs text-[#54656f] dark:text-[#8696a0] italic">"{item.bidan_raw_reply || item.raw_answer || 'Tidak ada respons mentah'}"</p>
                       </div>
                     </div>
 
                     {/* General/Clean Editor */}
                     <div className="space-y-2.5">
                       <div className="space-y-1">
-                        <label className="text-[10px] text-[#667781] font-bold uppercase">Judul Pertanyaan FAQ</label>
+                        <label className="text-[10px] text-[#667781] dark:text-[#8696a0] font-bold uppercase">Judul Pertanyaan FAQ</label>
                         <input
                           type="text"
                           value={editedQuestions[item.id] || ''}
                           onChange={(e) => setEditedQuestions(prev => ({ ...prev, [item.id]: e.target.value }))}
-                          className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] transition shadow-xs"
+                          className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] transition shadow-xs"
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] text-[#667781] font-bold uppercase">Konten Jawaban FAQ</label>
+                        <label className="text-[10px] text-[#667781] dark:text-[#8696a0] font-bold uppercase">Konten Jawaban FAQ</label>
                         <textarea
                           rows={3}
                           value={editedAnswers[item.id] || ''}
                           onChange={(e) => setEditedAnswers(prev => ({ ...prev, [item.id]: e.target.value }))}
-                          className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] transition leading-relaxed resize-none shadow-xs"
+                          className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] transition leading-relaxed resize-none shadow-xs"
                         />
                       </div>
                     </div>
@@ -1025,18 +1025,18 @@ export const KnowledgeBase: React.FC = () => {
             <CheckCircle className="flex-shrink-0 mt-0.5 text-[#008069]" size={16} />
             <div>
               <p className="font-bold">Pertanyaan Customer yang Sudah Memiliki FAQ Serupa (Match score ≥ 70%)</p>
-              <p className="mt-0.5 text-xs text-[#111b21]">
+              <p className="mt-0.5 text-xs text-[#111b21] dark:text-[#e9edef]">
                 Sistem deduplikasi otomatis mendeteksi bahwa pertanyaan ini sudah tercakup oleh FAQ yang ada. Anda dapat langsung mengedit jawaban FAQ existing di bawah ini jika penjelasannya perlu diperbarui.
               </p>
             </div>
           </div>
 
-          <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-4 shadow-xs">
+          <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-4 shadow-xs">
             <div className="flex justify-between items-center pb-3 border-b border-[#e9edef]">
-              <span className="text-xs font-bold text-[#111b21] uppercase">Daftar Pertanyaan Duplicate & Use Case Existing</span>
+              <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] uppercase">Daftar Pertanyaan Duplicate & Use Case Existing</span>
               <button 
                 onClick={loadExistingMatches}
-                className="p-1.5 text-[#667781] hover:text-[#111b21] rounded-lg hover:bg-[#f0f2f5]"
+                className="p-1.5 text-[#667781] dark:text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef] rounded-lg hover:bg-[#f0f2f5]"
                 title="Refresh Queue"
               >
                 <RefreshCw size={13} className={stagingLoading ? 'animate-spin text-[#008069]' : ''} />
@@ -1054,9 +1054,9 @@ export const KnowledgeBase: React.FC = () => {
             ) : (
               <div className="space-y-4">
                 {existingMatches.map((item) => (
-                  <div key={item.id} className="p-4 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-3">
+                  <div key={item.id} className="p-4 rounded-xl bg-[#f8fafc] dark:bg-[#202c33] border border-[#e9edef] space-y-3">
                     <div className="flex justify-between items-center border-b border-[#e9edef] pb-2">
-                      <div className="flex items-center space-x-2 text-[10px] font-bold text-[#667781]">
+                      <div className="flex items-center space-x-2 text-[10px] font-bold text-[#667781] dark:text-[#8696a0]">
                         <span className="text-[#008069]">CUSTOMER: {item.customer_phone || item.phone || 'N/A'}</span>
                         <span>•</span>
                         <span>DETERMINED: {new Date(item.created_at).toLocaleString()}</span>
@@ -1068,13 +1068,13 @@ export const KnowledgeBase: React.FC = () => {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {/* Customer Original Question */}
-                      <div className="p-3.5 rounded-xl bg-white border border-[#e9edef] space-y-1.5">
+                      <div className="p-3.5 rounded-xl bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] space-y-1.5">
                         <span className="text-[10px] text-[#008069] font-bold block uppercase">Pertanyaan Customer Asli</span>
-                        <p className="text-xs text-[#111b21] italic">"{item.raw_question}"</p>
+                        <p className="text-xs text-[#111b21] dark:text-[#e9edef] italic">"{item.raw_question}"</p>
                       </div>
 
                       {/* Matched FAQ Chunk with Direct Edit */}
-                      <div className="p-3.5 rounded-xl bg-white border border-[#e9edef] space-y-2.5">
+                      <div className="p-3.5 rounded-xl bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] space-y-2.5">
                         <div className="flex justify-between items-center">
                           <span className="text-[10px] text-emerald-800 font-bold uppercase">FAQ Existing yang Match</span>
                           {item.matchedChunk && editingChunkId !== item.matchedChunk.id && (
@@ -1085,7 +1085,7 @@ export const KnowledgeBase: React.FC = () => {
                                 setEditingChunkContent(item.matchedChunk.content);
                                 setEditingChunkKeywords(item.matchedChunk.keywords || '');
                               }}
-                              className="px-2.5 py-1 rounded-lg bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] text-[10px] font-bold transition flex items-center space-x-1 shadow-xs"
+                              className="px-2.5 py-1 rounded-lg bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] dark:text-[#e9edef] text-[10px] font-bold transition flex items-center space-x-1 shadow-xs"
                             >
                               <Edit3 size={11} />
                               <span>Edit FAQ Existing</span>
@@ -1100,25 +1100,25 @@ export const KnowledgeBase: React.FC = () => {
                                 type="text"
                                 value={editingChunkTitle}
                                 onChange={(e) => setEditingChunkTitle(e.target.value)}
-                                className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-1.5 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+                                className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-1.5 text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
                               />
                               <textarea
                                 rows={3}
                                 value={editingChunkContent}
                                 onChange={(e) => setEditingChunkContent(e.target.value)}
-                                className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] resize-none shadow-xs"
+                                className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] resize-none shadow-xs"
                               />
                               <input
                                 type="text"
                                 value={editingChunkKeywords}
                                 onChange={(e) => setEditingChunkKeywords(e.target.value)}
                                 placeholder="Tag intent / sinonim, dipisahkan koma"
-                                className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+                                className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
                               />
                               <div className="flex space-x-2 justify-end">
                                 <button
                                   onClick={() => setEditingChunkId(null)}
-                                  className="px-2.5 py-1 rounded-lg bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] text-xs font-semibold"
+                                  className="px-2.5 py-1 rounded-lg bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] dark:text-[#8696a0] text-xs font-semibold"
                                 >
                                   Batal
                                 </button>
@@ -1133,8 +1133,8 @@ export const KnowledgeBase: React.FC = () => {
                             </div>
                           ) : (
                             <div>
-                              <p className="text-xs font-bold text-[#111b21] mb-1">{item.matchedChunk.title}</p>
-                              <p className="text-xs text-[#54656f] whitespace-pre-wrap">{item.matchedChunk.content}</p>
+                              <p className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] mb-1">{item.matchedChunk.title}</p>
+                              <p className="text-xs text-[#54656f] dark:text-[#8696a0] whitespace-pre-wrap">{item.matchedChunk.content}</p>
                             </div>
                           )
                         ) : (
@@ -1163,12 +1163,12 @@ export const KnowledgeBase: React.FC = () => {
             </div>
           </div>
 
-          <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-4 shadow-xs">
+          <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-4 shadow-xs">
             <div className="flex justify-between items-center pb-3 border-b border-[#e9edef]">
-              <span className="text-xs font-bold text-[#111b21] uppercase">Log Pertanyaan Tertunda (Real-time Queue)</span>
+              <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] uppercase">Log Pertanyaan Tertunda (Real-time Queue)</span>
               <button 
                 onClick={loadUnansweredData}
-                className="p-1.5 text-[#667781] hover:text-[#111b21] rounded-lg hover:bg-[#f0f2f5]"
+                className="p-1.5 text-[#667781] dark:text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef] rounded-lg hover:bg-[#f0f2f5]"
                 title="Refresh Queue"
               >
                 <RefreshCw size={13} className={unansweredLoading ? 'animate-spin text-[#008069]' : ''} />
@@ -1186,7 +1186,7 @@ export const KnowledgeBase: React.FC = () => {
             ) : (
               <div className="space-y-3">
                 {unansweredList.map((item) => (
-                  <div key={item.id} className="p-4 rounded-xl bg-[#f8fafc] border border-[#e9edef] flex flex-col space-y-2.5">
+                  <div key={item.id} className="p-4 rounded-xl bg-[#f8fafc] dark:bg-[#202c33] border border-[#e9edef] flex flex-col space-y-2.5">
                     <div className="flex justify-between items-start md:items-center flex-col md:flex-row gap-2 border-b border-[#e9edef] pb-2">
                       <div>
                         <span className="text-xs text-[#008069] font-bold block mb-0.5">Bunda {item.name} ({item.phone})</span>
@@ -1207,25 +1207,25 @@ export const KnowledgeBase: React.FC = () => {
                     </div>
 
                     <div className="bg-white p-3 rounded-xl border border-[#e9edef]">
-                      <p className="text-xs text-[#111b21]">"{item.question}"</p>
+                      <p className="text-xs text-[#111b21] dark:text-[#e9edef]">"{item.question}"</p>
                     </div>
 
                     {activeUnansweredId === item.id && (
                       <div className="space-y-2.5 pt-2">
                         <div className="space-y-1">
-                          <label className="text-[10px] text-[#667781] font-bold uppercase">Jawaban Bidan/Admin</label>
+                          <label className="text-[10px] text-[#667781] dark:text-[#8696a0] font-bold uppercase">Jawaban Bidan/Admin</label>
                           <textarea
                             rows={3}
                             placeholder="Tulis jawaban di sini... (Akan langsung terkirim ke customer dan disimpan ke FAQ)"
                             value={unansweredAnswer}
                             onChange={(e) => setUnansweredAnswer(e.target.value)}
-                            className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] transition resize-none shadow-xs"
+                            className="w-full bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] transition resize-none shadow-xs"
                           />
                         </div>
                         <div className="flex space-x-2 justify-end">
                           <button
                             onClick={() => setActiveUnansweredId(null)}
-                            className="px-3 py-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] text-xs font-semibold transition"
+                            className="px-3 py-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] dark:text-[#8696a0] text-xs font-semibold transition"
                           >
                             Batal
                           </button>
@@ -1257,7 +1257,7 @@ export const KnowledgeBase: React.FC = () => {
                 ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
                 : t.type === 'error' 
                   ? 'bg-rose-50 text-rose-800 border-rose-200' 
-                  : 'bg-white text-[#111b21] border-[#e9edef]'
+                  : 'bg-white text-[#111b21] dark:text-[#e9edef] border-[#e9edef]'
             }`}
           >
             {t.message}

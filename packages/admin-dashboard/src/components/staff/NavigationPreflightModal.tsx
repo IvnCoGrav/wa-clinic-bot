@@ -54,45 +54,45 @@ export const NavigationPreflightModal: React.FC<NavigationPreflightModalProps> =
       aria-label="Peringatan titik lokasi estimasi"
     >
       <div
-        className="bg-white rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 w-full max-w-md shadow-2xl border border-[#e9edef] space-y-4 text-left animate-modalScaleUp max-h-[90dvh] overflow-y-auto"
+        className="bg-white dark:bg-[#111b21] rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 w-full max-w-md shadow-2xl border border-[#e9edef] dark:border-[#2a3942] space-y-4 text-left animate-modalScaleUp max-h-[90dvh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-12 h-1.5 bg-[#d1d7db] rounded-full mx-auto -mt-2 mb-1 sm:hidden" />
+        <div className="w-12 h-1.5 bg-[#d1d7db] dark:bg-[#374248] rounded-full mx-auto -mt-2 mb-1 sm:hidden" />
 
         <div className="flex items-start justify-between">
-          <h3 className="text-base font-bold text-[#111b21] flex items-center space-x-2">
+          <h3 className="text-base font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
             <AlertTriangle className="text-amber-500 flex-shrink-0" size={20} />
             <span>Titik Lokasi Estimasi</span>
           </h3>
           <button
             type="button"
             onClick={onClose}
-            className="text-[#667781] hover:text-[#111b21] p-1 rounded-full hover:bg-[#f0f2f5]"
+            className="text-[#667781] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] p-1 rounded-full hover:bg-[#f0f2f5] dark:hover:bg-[#202c33]"
             aria-label="Tutup"
           >
             <X size={18} />
           </button>
         </div>
 
-        <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800 leading-relaxed">
+        <div className="rounded-xl border border-amber-300 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/40 p-3 text-xs text-amber-800 dark:text-amber-200 leading-relaxed">
           Titik ini merupakan <b>estimasi wilayah / tebakan staf</b>, BUKAN titik GPS presisi
           dari pasien. Google Maps hanya akan memandu ke area umum perumahan — <b>bidan bisa
           tersasar ke blok yang salah</b>.
         </div>
 
-        <div className="rounded-xl border border-[#e9edef] bg-[#f8fafc] p-3 space-y-2">
+        <div className="rounded-xl border border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#202c33] p-3 space-y-2">
           <div className="flex items-start space-x-2">
             <MapPin size={14} className="text-[#008069] mt-0.5 flex-shrink-0" />
-            <div className="text-xs text-[#111b21]">
+            <div className="text-xs text-[#111b21] dark:text-[#e9edef]">
               <p className="font-semibold">{patientName}</p>
-              <p className="text-[#54656f] leading-relaxed">{fullText || 'Alamat belum lengkap'}</p>
+              <p className="text-[#54656f] dark:text-[#8696a0] leading-relaxed">{fullText || 'Alamat belum lengkap'}</p>
               {landmark && (
-                <p className="text-[#54656f] mt-1">
+                <p className="text-[#54656f] dark:text-[#8696a0] mt-1">
                   <span className="font-semibold">Patokan:</span> {landmark}
                 </p>
               )}
               {addressDetail && (
-                <p className="text-[#54656f] mt-1">
+                <p className="text-[#54656f] dark:text-[#8696a0] mt-1">
                   <span className="font-semibold">Detail:</span> {addressDetail}
                 </p>
               )}
@@ -100,7 +100,7 @@ export const NavigationPreflightModal: React.FC<NavigationPreflightModalProps> =
           </div>
         </div>
 
-        <p className="text-[11px] text-[#667781]">
+        <p className="text-[11px] text-[#667781] dark:text-[#8696a0]">
           Sebaiknya minta shareloc WhatsApp & patokan rumah terlebih dahulu sebelum berangkat.
         </p>
 
@@ -125,7 +125,7 @@ export const NavigationPreflightModal: React.FC<NavigationPreflightModalProps> =
           <button
             type="button"
             onClick={onClose}
-            className="w-full min-h-[44px] py-2.5 px-4 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] rounded-2xl text-xs font-bold transition active:scale-[0.98]"
+            className="w-full min-h-[44px] py-2.5 px-4 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] dark:text-[#8696a0] rounded-2xl text-xs font-bold transition active:scale-[0.98]"
           >
             Batal
           </button>

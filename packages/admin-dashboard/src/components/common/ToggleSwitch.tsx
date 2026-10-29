@@ -62,8 +62,8 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
 
   const activeBadge = {
     emerald: 'bg-emerald-100 dark:bg-[#00a884]/20 text-emerald-800 dark:text-[#4ae3b5] border-emerald-300 dark:border-[#00a884]/40',
-    indigo: 'bg-indigo-100 dark:bg-indigo-500/20 text-indigo-800 dark:text-indigo-300 border-indigo-300 dark:border-indigo-500/40',
-    rose: 'bg-rose-100 dark:bg-rose-500/20 text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-500/40',
+    indigo: 'bg-indigo-100 dark:bg-[#202c33]/20 text-indigo-800 dark:text-[#aebac1] border-indigo-300 dark:border-[#2a3942]',
+    rose: 'bg-rose-100 dark:bg-rose-950/40/20 text-rose-800 dark:text-[#f87171] border-rose-300 dark:border-rose-800/40/40',
   }[variant];
 
   // Size styling maps

@@ -15,14 +15,14 @@ export const CampaignTable: React.FC<{ report: MetaPerformanceReport }> = ({ rep
   if (rows.length === 0) return null;
 
   return (
-    <section className="bg-white border border-[#e9edef] rounded-2xl p-5 shadow-xs space-y-3">
-      <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
+    <section className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#202c33] rounded-2xl p-5 shadow-xs space-y-3">
+      <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
         <Megaphone size={16} className="text-[#008069]" /> Kinerja per Kampanye
       </h3>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
-            <tr className="text-left uppercase font-bold text-[#667781] border-b border-[#e9edef] bg-[#f8fafc]">
+            <tr className="text-left uppercase font-bold text-[#667781] dark:text-[#8696a0] border-b border-[#e9edef] dark:border-[#202c33] bg-[#f8fafc] dark:bg-[#182229]">
               <th className="py-2.5 px-3">Kampanye / UTM</th>
               <th className="py-2.5 px-3">Sumber</th>
               <th className="py-2.5 px-3 text-right">Klik</th>
@@ -35,7 +35,7 @@ export const CampaignTable: React.FC<{ report: MetaPerformanceReport }> = ({ rep
           </thead>
           <tbody>
             {paged.map((r) => (
-              <tr key={r.utmCampaign} className="border-b border-[#e9edef] last:border-0 hover:bg-[#f8fafc]">
+              <tr key={r.utmCampaign} className="border-b border-[#e9edef] dark:border-[#202c33] last:border-0 hover:bg-[#f8fafc] dark:hover:bg-[#202c33]">
                 <td className="py-2.5 px-3 font-semibold text-[#008069] max-w-[220px] truncate" title={r.utmCampaign}>
                   {r.utmCampaign}
                 </td>

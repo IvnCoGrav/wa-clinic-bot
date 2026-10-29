@@ -16,8 +16,8 @@ export const ChannelTable: React.FC<{ report: MetaPerformanceReport }> = ({ repo
   const ctwaFuzzy = rows.find((r) => r.channel === 'CTWA_FUZZY');
   const hasFuzzyLeads = (ctwaFuzzy?.leads ?? 0) > 0;
   return (
-    <section className="bg-white border border-[#e9edef] rounded-2xl p-5 shadow-xs space-y-3">
-      <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
+    <section className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#202c33] rounded-2xl p-5 shadow-xs space-y-3">
+      <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
         <GitCompareArrows size={16} className="text-[#008069]" /> Komparasi Kanal (Bawah Funnel)
         <span title="Berbasis customer: menghitung total kontak/customer unik yang diatribusikan ke iklan." className="text-[#8696a0] cursor-help">
           <Info size={13} />
@@ -41,7 +41,7 @@ export const ChannelTable: React.FC<{ report: MetaPerformanceReport }> = ({ repo
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
-            <tr className="text-left uppercase font-bold text-[#667781] border-b border-[#e9edef] bg-[#f8fafc]">
+            <tr className="text-left uppercase font-bold text-[#667781] dark:text-[#8696a0] border-b border-[#e9edef] dark:border-[#202c33] bg-[#f8fafc] dark:bg-[#182229]">
               <th className="py-2.5 px-3">Kanal</th>
               <th className="py-2.5 px-3 text-right">Leads</th>
               <th className="py-2.5 px-3 text-right">MQL</th>
@@ -53,8 +53,8 @@ export const ChannelTable: React.FC<{ report: MetaPerformanceReport }> = ({ repo
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.channel} className="border-b border-[#e9edef] last:border-0 hover:bg-[#f8fafc]">
-                <td className="py-2.5 px-3 font-semibold text-[#111b21]">{CHANNEL_LABEL[r.channel] || r.channel}</td>
+              <tr key={r.channel} className="border-b border-[#e9edef] dark:border-[#202c33] last:border-0 hover:bg-[#f8fafc] dark:hover:bg-[#202c33]">
+                <td className="py-2.5 px-3 font-semibold text-[#111b21] dark:text-[#e9edef]">{CHANNEL_LABEL[r.channel] || r.channel}</td>
                 <td className="py-2.5 px-3 text-right font-mono">{fmtNum(r.leads)}</td>
                 <td className="py-2.5 px-3 text-right font-mono">{fmtNum(r.mql)}</td>
                 <td className="py-2.5 px-3 text-right font-mono font-bold text-[#008069]">

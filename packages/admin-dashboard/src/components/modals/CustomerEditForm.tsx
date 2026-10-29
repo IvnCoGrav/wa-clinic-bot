@@ -327,29 +327,29 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
   return (
     <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fadeIn" onClick={handleCancel}>
       <div
-        className="bg-white rounded-t-3xl sm:rounded-3xl border border-[#e9edef] overflow-hidden w-full max-w-xl max-h-[90dvh] sm:max-h-[92vh] flex flex-col shadow-2xl animate-slideUp sm:animate-modalScaleUp"
+        className="bg-white dark:bg-[#111b21] rounded-t-3xl sm:rounded-3xl border border-[#e9edef] dark:border-[#202c33] overflow-hidden w-full max-w-xl max-h-[90dvh] sm:max-h-[92vh] flex flex-col shadow-2xl animate-slideUp sm:animate-modalScaleUp"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Mobile Drag Handle */}
-        <div className="pt-2 pb-1 bg-[#f8fafc] sm:hidden flex justify-center shrink-0">
+        <div className="pt-2 pb-1 bg-[#f8fafc] dark:bg-[#182229] sm:hidden flex justify-center shrink-0">
           <div className="w-10 h-1 bg-[#d1d7db] rounded-full" />
         </div>
 
         {/* Header */}
-        <div className="p-4 border-b border-[#e9edef] bg-[#f8fafc] flex items-center justify-between shrink-0">
+        <div className="p-4 border-b border-[#e9edef] dark:border-[#202c33] bg-[#f8fafc] dark:bg-[#182229] flex items-center justify-between shrink-0">
           <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 rounded-xl bg-[#e8f5f2] border border-[#c2e7e0] flex items-center justify-center text-[#008069]">
+            <div className="w-8 h-8 rounded-xl bg-[#e8f5f2] dark:bg-[#00a884]/20 border border-[#c2e7e0] dark:border-[#00a884]/40 flex items-center justify-center text-[#008069] dark:text-[#00a884]">
               <User size={18} />
             </div>
             <div>
-              <h3 className="font-bold text-[#111b21] text-sm">Edit Data Customer & Anak</h3>
-              <p className="text-[11px] text-[#667781]">Perbarui profil bunda, kontak, alamat, dan data anak/pasien</p>
+              <h3 className="font-bold text-[#111b21] dark:text-[#e9edef] text-sm">Edit Data Customer & Anak</h3>
+              <p className="text-[11px] text-[#667781] dark:text-[#8696a0]">Perbarui profil bunda, kontak, alamat, dan data anak/pasien</p>
             </div>
           </div>
           <button
             onClick={handleCancel}
             disabled={saving || loading}
-            className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#e9edef] transition disabled:opacity-50"
+            className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-[#e9edef] dark:hover:bg-[#202c33] transition disabled:opacity-50"
           >
             <X size={18} />
           </button>
@@ -358,26 +358,26 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-5 overflow-y-auto flex-1 text-xs">
           {/* Section 1: Profil Bunda & Kontak */}
-          <div className="p-3.5 bg-[#f8fafc] border border-[#e9edef] rounded-2xl space-y-3">
-            <h4 className="font-bold text-[#111b21] text-xs flex items-center space-x-1.5 uppercase tracking-wider">
+          <div className="p-3.5 bg-[#f8fafc] dark:bg-[#182229] border border-[#e9edef] dark:border-[#202c33] rounded-2xl space-y-3">
+            <h4 className="font-bold text-[#111b21] dark:text-[#e9edef] text-xs flex items-center space-x-1.5 uppercase tracking-wider">
               <User size={13} className="text-[#008069]" />
               <span>Data Bunda & Kontak</span>
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="block text-[11px] font-bold text-[#111b21]">Nama Lengkap Bunda</label>
+                <label className="block text-[11px] font-bold text-[#111b21] dark:text-[#e9edef]">Nama Lengkap Bunda</label>
                 <input
                   type="text"
                   value={formData.name}
                   onChange={(e) => handleChange('name', e.target.value)}
                   placeholder="Contoh: Bunda Sari Waru"
-                  className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-2xs transition"
+                  className="w-full px-3 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-2xs transition"
                   disabled={saving || loading}
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="block text-[11px] font-bold text-[#111b21] flex items-center space-x-1">
+                <label className="block text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-1">
                   <Phone size={11} className="text-[#008069]" />
                   <span>No. WhatsApp</span>
                 </label>
@@ -386,7 +386,7 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
                   value={formData.phone}
                   onChange={(e) => handleChange('phone', e.target.value)}
                   placeholder="Contoh: 08123456789 atau 628123456789"
-                  className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] font-mono placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-2xs transition"
+                  className="w-full px-3 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] font-mono placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-2xs transition"
                   disabled={saving || loading}
                 />
               </div>
@@ -394,16 +394,16 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
           </div>
 
           {/* Section 2: Data Bayi / Anak (Dynamic List) */}
-          <div className="p-3.5 bg-[#f0fdf4] border border-[#bbf7d0] rounded-2xl space-y-3">
+          <div className="p-3.5 bg-[#f0fdf4] dark:bg-[#0f291e] border border-[#bbf7d0] dark:border-[#1e4635] rounded-2xl space-y-3">
             <div className="flex items-center justify-between">
-              <h4 className="font-bold text-[#166534] text-xs flex items-center space-x-1.5 uppercase tracking-wider">
+              <h4 className="font-bold text-[#166534] dark:text-[#4ade80] text-xs flex items-center space-x-1.5 uppercase tracking-wider">
                 <Baby size={14} className="text-[#16a34a]" />
                 <span>Data Pasien (Bayi / Anak)</span>
               </h4>
               <button
                 type="button"
                 onClick={handleAddChild}
-                className="px-2.5 py-1 bg-white hover:bg-[#dcfce7] border border-[#86efac] text-[#166534] rounded-lg text-[11px] font-bold transition flex items-center space-x-1 shadow-2xs cursor-pointer"
+                className="px-2.5 py-1 bg-white dark:bg-[#182229] hover:bg-[#dcfce7] dark:hover:bg-[#202c33] border border-[#86efac] dark:border-[#2a3942] text-[#166534] dark:text-[#4ade80] rounded-lg text-[11px] font-bold transition flex items-center space-x-1 shadow-2xs cursor-pointer"
               >
                 <Plus size={12} />
                 <span>Tambah Anak</span>
@@ -411,7 +411,7 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
             </div>
 
             {children.length === 0 ? (
-              <div className="p-4 bg-white/80 border border-dashed border-[#86efac] rounded-xl text-center">
+              <div className="p-4 bg-white/80 dark:bg-[#182229]/80 border border-dashed border-[#86efac] dark:border-[#2a3942] rounded-xl text-center">
                 <p className="text-[11px] text-[#4b5563]">Belum ada data anak terdaftar.</p>
                 <button
                   type="button"
@@ -425,7 +425,7 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
             ) : (
               <div className="space-y-2.5">
                 {children.map((child, idx) => (
-                  <div key={child.id || `child-row-${idx}`} className="p-3 bg-white border border-[#bbf7d0] rounded-xl space-y-2 relative shadow-2xs">
+                  <div key={child.id || `child-row-${idx}`} className="p-3 bg-white dark:bg-[#182229] border border-[#bbf7d0] dark:border-[#2a3942] rounded-xl space-y-2 relative shadow-2xs">
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-bold text-[#15803d] uppercase tracking-wider">
                         Anak #{idx + 1}
@@ -442,23 +442,23 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <div className="space-y-1">
-                        <label className="block text-[10px] font-semibold text-[#374151]">Nama Bayi / Anak</label>
+                        <label className="block text-[10px] font-semibold text-[#374151] dark:text-[#8696a0]">Nama Bayi / Anak</label>
                         <input
                           type="text"
                           value={child.name}
                           onChange={(e) => handleChildChange(idx, 'name', e.target.value)}
                           placeholder="Contoh: Adek Kenzo"
-                          className="w-full px-2.5 py-1.5 bg-[#fcfdfd] border border-[#d1d7db] rounded-lg text-xs text-[#111b21] focus:outline-none focus:border-[#16a34a]"
+                          className="w-full px-2.5 py-1.5 bg-[#fcfdfd] dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-lg text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#16a34a]"
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="block text-[10px] font-semibold text-[#374151]">Usia / Umur</label>
+                        <label className="block text-[10px] font-semibold text-[#374151] dark:text-[#8696a0]">Usia / Umur</label>
                         <input
                           type="text"
                           value={child.ageText}
                           onChange={(e) => handleChildChange(idx, 'ageText', e.target.value)}
                           placeholder="Contoh: 6 bulan / 2 tahun"
-                          className="w-full px-2.5 py-1.5 bg-[#fcfdfd] border border-[#d1d7db] rounded-lg text-xs text-[#111b21] focus:outline-none focus:border-[#16a34a]"
+                          className="w-full px-2.5 py-1.5 bg-[#fcfdfd] dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-lg text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#16a34a]"
                         />
                       </div>
                     </div>
@@ -469,21 +469,21 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
           </div>
 
           {/* Section 3: Alamat Lengkap & Area */}
-          <div className="p-3.5 bg-[#f8fafc] border border-[#e9edef] rounded-2xl space-y-3">
-            <h4 className="font-bold text-[#111b21] text-xs flex items-center space-x-1.5 uppercase tracking-wider">
+          <div className="p-3.5 bg-[#f8fafc] dark:bg-[#182229] border border-[#e9edef] dark:border-[#202c33] rounded-2xl space-y-3">
+            <h4 className="font-bold text-[#111b21] dark:text-[#e9edef] text-xs flex items-center space-x-1.5 uppercase tracking-wider">
               <Home size={13} className="text-[#008069]" />
               <span>Alamat Lengkap & Wilayah</span>
             </h4>
 
             {/* Alamat Lengkap */}
             <div className="space-y-1">
-              <label className="block text-[11px] font-bold text-[#111b21]">Alamat Lengkap (Jalan, RT/RW, No. Rumah)</label>
+              <label className="block text-[11px] font-bold text-[#111b21] dark:text-[#e9edef]">Alamat Lengkap (Jalan, RT/RW, No. Rumah)</label>
               <textarea
                 rows={2}
                 value={formData.address}
                 onChange={(e) => handleChange('address', e.target.value)}
                 placeholder="Contoh: Jl. Gayungsari Timur No. 12 RT 03 RW 01"
-                className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-2xs transition"
+                className="w-full px-3 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-2xs transition"
                 disabled={saving || loading}
               />
             </div>
@@ -491,25 +491,25 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
             {/* Kelurahan & Kecamatan */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="block text-[11px] font-bold text-[#111b21]">Kelurahan / Desa</label>
+                <label className="block text-[11px] font-bold text-[#111b21] dark:text-[#e9edef]">Kelurahan / Desa</label>
                 <input
                   type="text"
                   value={formData.kelurahan}
                   onChange={(e) => handleChange('kelurahan', e.target.value)}
                   placeholder="Contoh: Waru"
-                  className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-2xs transition"
+                  className="w-full px-3 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-2xs transition"
                   disabled={saving || loading}
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="block text-[11px] font-bold text-[#111b21]">Kecamatan</label>
+                <label className="block text-[11px] font-bold text-[#111b21] dark:text-[#e9edef]">Kecamatan</label>
                 <input
                   type="text"
                   value={formData.kecamatan}
                   onChange={(e) => handleChange('kecamatan', e.target.value)}
                   placeholder="Contoh: Waru"
-                  className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-2xs transition"
+                  className="w-full px-3 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-2xs transition"
                   disabled={saving || loading}
                 />
               </div>
@@ -518,25 +518,25 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
             {/* Kota & Patokan */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="block text-[11px] font-bold text-[#111b21]">Kota / Kabupaten</label>
+                <label className="block text-[11px] font-bold text-[#111b21] dark:text-[#e9edef]">Kota / Kabupaten</label>
                 <input
                   type="text"
                   value={formData.kota}
                   onChange={(e) => handleChange('kota', e.target.value)}
                   placeholder="Contoh: Sidoarjo atau Surabaya"
-                  className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-2xs transition"
+                  className="w-full px-3 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-2xs transition"
                   disabled={saving || loading}
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="block text-[11px] font-bold text-[#111b21]">Patokan Rumah (Ciri Bangunan / Pagar)</label>
+                <label className="block text-[11px] font-bold text-[#111b21] dark:text-[#e9edef]">Patokan Rumah (Ciri Bangunan / Pagar)</label>
                 <input
                   type="text"
                   value={formData.landmark}
                   onChange={(e) => handleChange('landmark', e.target.value)}
                   placeholder="Contoh: Pagar hitam samping masjid"
-                  className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-2xs transition"
+                  className="w-full px-3 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-2xs transition"
                   disabled={saving || loading}
                 />
               </div>
@@ -544,9 +544,9 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
           </div>
 
           {/* Section 4: Asisten Titik Koordinat GPS & Google Maps */}
-          <div className="p-3.5 bg-[#f8fafc] border border-[#e9edef] rounded-2xl space-y-3">
+          <div className="p-3.5 bg-[#f8fafc] dark:bg-[#182229] border border-[#e9edef] dark:border-[#202c33] rounded-2xl space-y-3">
             <div className="flex items-center justify-between">
-              <h4 className="font-bold text-[#111b21] text-xs flex items-center space-x-1.5 uppercase tracking-wider">
+              <h4 className="font-bold text-[#111b21] dark:text-[#e9edef] text-xs flex items-center space-x-1.5 uppercase tracking-wider">
                 <Crosshair size={13} className="text-[#008069]" />
                 <span>Titik Koordinat GPS (Untuk Rute & Ongkir)</span>
               </h4>
@@ -557,7 +557,7 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
 
             {/* Smart Paste Maps URL */}
             <div className="space-y-1">
-              <label className="block text-[10px] font-semibold text-[#54656f] flex items-center gap-1">
+              <label className="block text-[10px] font-semibold text-[#54656f] dark:text-[#8696a0] flex items-center gap-1">
                 <Link2 size={11} className="text-[#008069]" />
                 <span>Tempel Link Google Maps (Shareloc WA / Maps)</span>
               </label>
@@ -567,13 +567,13 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
                   value={mapsUrlInput}
                   onChange={(e) => handlePasteMapsUrl(e.target.value)}
                   placeholder="https://maps.google.com/?q=-7.3488,112.7516"
-                  className="flex-1 px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-2xs transition"
+                  className="flex-1 px-3 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-2xs transition"
                 />
                 <button
                   type="button"
                   onClick={() => handlePasteMapsUrl(mapsUrlInput)}
                   disabled={mapsUrlResolving || !mapsUrlInput.trim()}
-                  className="px-3 py-2 bg-white hover:bg-[#e8f5f2] border border-[#c2e7e0] text-[#008069] rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-2xs disabled:opacity-50 cursor-pointer"
+                  className="px-3 py-2 bg-white dark:bg-[#202c33] hover:bg-[#e8f5f2] dark:hover:bg-[#2a3942] border border-[#c2e7e0] dark:border-[#2a3942] text-[#008069] dark:text-[#00a884] rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-2xs disabled:opacity-50 cursor-pointer"
                   title="Cari koordinat dari tautan"
                 >
                   {mapsUrlResolving ? <Loader size={12} className="animate-spin" /> : <Search size={12} />}
@@ -594,7 +594,7 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
                 type="button"
                 onClick={handleLockGps}
                 disabled={gettingGps}
-                className="py-2 px-3 bg-white hover:bg-[#e8f5f2] border border-[#c2e7e0] text-[#008069] rounded-xl text-[11px] font-bold transition flex items-center justify-center space-x-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
+                className="py-2 px-3 bg-white dark:bg-[#202c33] hover:bg-[#e8f5f2] dark:hover:bg-[#2a3942] border border-[#c2e7e0] dark:border-[#2a3942] text-[#008069] dark:text-[#00a884] rounded-xl text-[11px] font-bold transition flex items-center justify-center space-x-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
               >
                 {gettingGps ? <Loader size={12} className="animate-spin" /> : <Crosshair size={12} />}
                 <span>{gettingGps ? 'Mengunci GPS...' : 'Kunci GPS Perangkat'}</span>
@@ -604,7 +604,7 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
                 type="button"
                 onClick={handleGeocodeFromAddress}
                 disabled={geocoding}
-                className="py-2 px-3 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] rounded-xl text-[11px] font-bold transition flex items-center justify-center space-x-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
+                className="py-2 px-3 bg-white dark:bg-[#202c33] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] border border-[#d1d7db] dark:border-[#2a3942] text-[#54656f] dark:text-[#8696a0] rounded-xl text-[11px] font-bold transition flex items-center justify-center space-x-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
               >
                 {geocoding ? <Loader size={12} className="animate-spin" /> : <Search size={12} />}
                 <span>{geocoding ? 'Mencari...' : 'Cari Titik Alamat'}</span>
@@ -614,7 +614,7 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
               type="button"
               onClick={handleRefreshFromChat}
               disabled={refreshingChatLoc}
-              className="w-full py-2 px-3 bg-[#e8f5f2] hover:bg-[#c2e7e0] border border-[#00a884]/30 text-[#008069] rounded-xl text-[11px] font-bold transition flex items-center justify-center space-x-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
+              className="w-full py-2 px-3 bg-[#e8f5f2] dark:bg-[#00a884]/20 hover:bg-[#c2e7e0] dark:hover:bg-[#00a884]/30 border border-[#00a884]/30 dark:border-[#00a884]/50 text-[#008069] dark:text-[#00a884] rounded-xl text-[11px] font-bold transition flex items-center justify-center space-x-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
               title="Ambil koordinat paling valid dari riwayat chat (Bidan → Customer → DB → Geocoding) dan isi otomatis"
             >
               {refreshingChatLoc ? <Loader size={12} className="animate-spin" /> : <RefreshCw size={12} />}
@@ -623,7 +623,7 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
 
             {/* Current Coordinate Badge */}
             {formData.lat && formData.lng ? (
-              <div className="p-2.5 bg-[#d9fdd3]/70 border border-[#00a884]/40 rounded-xl flex items-center justify-between text-xs text-[#008069]">
+              <div className="p-2.5 bg-[#d9fdd3]/70 dark:bg-[#00a884]/20 border border-[#00a884]/40 dark:border-[#00a884]/50 rounded-xl flex items-center justify-between text-xs text-[#008069] dark:text-[#00a884]">
                 <div className="flex items-center space-x-1.5 font-mono font-bold">
                   <CheckCircle2 size={14} className="text-[#008069] shrink-0" />
                   <span>Titik: {parseFloat(formData.lat).toFixed(6)}, {parseFloat(formData.lng).toFixed(6)}</span>
@@ -648,32 +648,32 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
               <button
                 type="button"
                 onClick={() => setShowManualCoords(!showManualCoords)}
-                className="text-[11px] text-[#54656f] hover:text-[#111b21] font-semibold flex items-center gap-1 transition cursor-pointer"
+                className="text-[11px] text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] font-semibold flex items-center gap-1 transition cursor-pointer"
               >
                 <span>{showManualCoords ? 'Sembunyikan Input Manual' : 'Input Koordinat Manual (Angka)'}</span>
                 {showManualCoords ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
               </button>
 
               {showManualCoords && (
-                <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-[#e9edef]">
+                <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-[#e9edef] dark:border-[#202c33]">
                   <div className="space-y-1">
-                    <label className="block text-[10px] text-[#667781]">Latitude</label>
+                    <label className="block text-[10px] text-[#667781] dark:text-[#8696a0]">Latitude</label>
                     <input
                       type="text"
                       value={formData.lat}
                       onChange={(e) => handleChange('lat', e.target.value)}
                       placeholder="-7.3488"
-                      className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-2xs transition"
+                      className="w-full px-3 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-2xs transition"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="block text-[10px] text-[#667781]">Longitude</label>
+                    <label className="block text-[10px] text-[#667781] dark:text-[#8696a0]">Longitude</label>
                     <input
                       type="text"
                       value={formData.lng}
                       onChange={(e) => handleChange('lng', e.target.value)}
                       placeholder="112.7516"
-                      className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-2xs transition"
+                      className="w-full px-3 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-2xs transition"
                     />
                   </div>
                 </div>
@@ -682,12 +682,12 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
           </div>
 
           {/* Actions */}
-          <div className="flex space-x-2 pt-2 border-t border-[#e9edef] bg-[#f8fafc] -mx-4 sm:-mx-5 -mb-4 sm:-mb-5 p-4 mt-2 sticky bottom-0 safe-bottom-padding z-10">
+          <div className="flex space-x-2 pt-2 border-t border-[#e9edef] dark:border-[#202c33] bg-[#f8fafc] dark:bg-[#182229] -mx-4 sm:-mx-5 -mb-4 sm:-mb-5 p-4 mt-2 sticky bottom-0 safe-bottom-padding z-10">
             <button
               type="button"
               onClick={handleCancel}
               disabled={saving || loading}
-              className="flex-1 py-2.5 px-4 rounded-xl border border-[#d1d7db] text-[#54656f] font-semibold text-xs hover:bg-[#f0f2f5] transition disabled:opacity-50 bg-white shadow-2xs cursor-pointer"
+              className="flex-1 py-2.5 px-4 rounded-xl border border-[#d1d7db] dark:border-[#2a3942] text-[#54656f] dark:text-[#8696a0] font-semibold text-xs hover:bg-[#f0f2f5] dark:hover:bg-[#202c33] transition disabled:opacity-50 bg-white dark:bg-[#202c33] shadow-2xs cursor-pointer"
             >
               Batal
             </button>

@@ -33,9 +33,9 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-[#f0f2f5] dark:bg-black flex flex-col justify-center items-center p-4 relative">
+    <div className="min-h-[100dvh] bg-[#f0f2f5] dark:bg-[#0b141a] flex flex-col justify-center items-center p-4 relative">
       {/* Main card */}
-      <div className="w-full max-w-md bg-white dark:bg-[#202c33] rounded-2xl p-8 border border-[#e9edef] dark:border-[#2a3942] relative z-10 shadow-sm">
+      <div className="w-full max-w-md bg-white dark:bg-[#111b21] rounded-2xl p-8 border border-[#e9edef] dark:border-[#2a3942] relative z-10 shadow-sm">
         {/* Brand Header */}
         <div className="text-center mb-8">
           <div className="inline-flex h-14 w-14 rounded-2xl bg-[#008069] items-center justify-center font-black text-2xl text-white shadow-xs mb-3.5">
@@ -74,7 +74,7 @@ export const Login: React.FC = () => {
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 placeholder="admin@email.com atau 08123456789"
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-[#d1d7db] text-[#111b21] placeholder-[#8696a0] text-sm focus:outline-none focus:border-[#008069] focus:ring-2 focus:ring-[#008069]/15 transition-all"
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] text-sm focus:outline-none focus:border-[#008069] focus:ring-2 focus:ring-[#008069]/15 transition-all"
               />
             </div>
           </div>
@@ -92,7 +92,7 @@ export const Login: React.FC = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-[#d1d7db] text-[#111b21] placeholder-[#8696a0] text-sm focus:outline-none focus:border-[#008069] focus:ring-2 focus:ring-[#008069]/15 transition-all"
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] text-sm focus:outline-none focus:border-[#008069] focus:ring-2 focus:ring-[#008069]/15 transition-all"
               />
             </div>
           </div>

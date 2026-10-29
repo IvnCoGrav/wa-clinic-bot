@@ -296,11 +296,11 @@ export const LandingPage: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#e9edef]">
         <div>
-          <h2 className="text-xl font-bold text-[#111b21] flex items-center gap-2">
+          <h2 className="text-xl font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
             <Globe className="text-[#008069]" size={22} />
             <span>Landing Page</span>
           </h2>
-          <p className="text-xs text-[#667781] mt-0.5">
+          <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
             Kelola banyak landing page per tenant. Upload file HTML mentah atau gunakan template sistem bawaan.
           </p>
         </div>
@@ -308,7 +308,7 @@ export const LandingPage: React.FC = () => {
           <button
             onClick={load}
             disabled={loading}
-            className="p-2 rounded-xl bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] hover:text-[#111b21] transition shadow-xs disabled:opacity-50"
+            className="p-2 rounded-xl bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] hover:text-[#111b21] dark:text-[#e9edef] transition shadow-xs disabled:opacity-50"
             title="Refresh"
           >
             <RefreshCw size={14} className={loading ? 'animate-spin text-[#008069]' : ''} />
@@ -324,20 +324,20 @@ export const LandingPage: React.FC = () => {
       </div>
 
       {/* Card integrasi LP eksternal */}
-      <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-3 shadow-xs">
+      <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-3 shadow-xs">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="space-y-1">
-            <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
+            <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
               <Link2 className="text-[#008069]" size={16} />
               <span>Integrasi Landing Page Eksternal</span>
             </h3>
-            <p className="text-xs text-[#667781]">
+            <p className="text-xs text-[#667781] dark:text-[#8696a0]">
               Hubungkan Landing Page luar (WordPress / Elementor / HTML) ke atribusi iklan &amp; WhatsApp. Script disajikan langsung oleh bot.
             </p>
           </div>
           <button
             onClick={() => setIsExternalModalOpen(true)}
-            className="px-3 py-1.5 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs"
+            className="px-3 py-1.5 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] dark:text-[#e9edef] rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs"
           >
             <BookOpen size={13} className="text-[#008069]" />
             <span>Lihat Panduan Integrasi</span>
@@ -345,7 +345,7 @@ export const LandingPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap pt-1">
-          <div className="flex-1 min-w-[260px] flex items-center gap-2 bg-[#f8fafc] border border-[#d1d7db] rounded-xl px-3 py-2">
+          <div className="flex-1 min-w-[260px] flex items-center gap-2 bg-[#f8fafc] dark:bg-[#202c33] border border-[#d1d7db] rounded-xl px-3 py-2">
             <Code size={14} className="text-[#008069] flex-shrink-0" />
             <input
               readOnly
@@ -359,7 +359,7 @@ export const LandingPage: React.FC = () => {
             className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs border ${
               copiedScript
                 ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                : 'bg-white text-[#111b21] border-[#d1d7db] hover:bg-[#f0f2f5]'
+                : 'bg-white text-[#111b21] dark:text-[#e9edef] border-[#d1d7db] hover:bg-[#f0f2f5]'
             }`}
           >
             {copiedScript ? <Check size={14} /> : <Copy size={14} />}
@@ -373,21 +373,21 @@ export const LandingPage: React.FC = () => {
           <RefreshCw className="animate-spin text-[#008069]" size={32} />
         </div>
       ) : landings.length === 0 ? (
-        <div className="bg-white border border-[#e9edef] rounded-2xl py-16 text-center text-xs text-[#8696a0] shadow-xs">
+        <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl py-16 text-center text-xs text-[#8696a0] shadow-xs">
           Belum ada landing page. Klik "Tambah Landing Page" untuk mulai.
         </div>
       ) : (
-        <div className="bg-white border border-[#e9edef] rounded-2xl overflow-hidden shadow-xs">
+        <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl overflow-hidden shadow-xs">
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="border-b border-[#e9edef] bg-[#f8fafc]">
-                  <th className="px-4 py-3 text-[11px] uppercase font-bold text-[#667781]">Landing</th>
-                  <th className="px-4 py-3 text-[11px] uppercase font-bold text-[#667781]">Tipe</th>
-                  <th className="px-4 py-3 text-[11px] uppercase font-bold text-[#667781]">Events Pixel</th>
-                  <th className="px-4 py-3 text-[11px] uppercase font-bold text-[#667781]">Pixel</th>
-                  <th className="px-4 py-3 text-[11px] uppercase font-bold text-[#667781]">Status</th>
-                  <th className="px-4 py-3 text-[11px] uppercase font-bold text-[#667781] text-right">Aksi</th>
+                <tr className="border-b border-[#e9edef] bg-[#f8fafc] dark:bg-[#202c33]">
+                  <th className="px-4 py-3 text-[11px] uppercase font-bold text-[#667781] dark:text-[#8696a0]">Landing</th>
+                  <th className="px-4 py-3 text-[11px] uppercase font-bold text-[#667781] dark:text-[#8696a0]">Tipe</th>
+                  <th className="px-4 py-3 text-[11px] uppercase font-bold text-[#667781] dark:text-[#8696a0]">Events Pixel</th>
+                  <th className="px-4 py-3 text-[11px] uppercase font-bold text-[#667781] dark:text-[#8696a0]">Pixel</th>
+                  <th className="px-4 py-3 text-[11px] uppercase font-bold text-[#667781] dark:text-[#8696a0]">Status</th>
+                  <th className="px-4 py-3 text-[11px] uppercase font-bold text-[#667781] dark:text-[#8696a0] text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody>
@@ -396,14 +396,14 @@ export const LandingPage: React.FC = () => {
                   return (
                     <tr
                       key={item.id}
-                      className={`border-b border-[#e9edef] hover:bg-[#f8fafc] transition-colors ${!item.isActive ? 'opacity-50' : ''}`}
+                      className={`border-b border-[#e9edef] hover:bg-[#f8fafc] dark:bg-[#202c33] transition-colors ${!item.isActive ? 'opacity-50' : ''}`}
                     >
                       <td className="px-4 py-3">
-                        <div className="font-bold text-[#111b21] text-xs flex items-center gap-2">
+                        <div className="font-bold text-[#111b21] dark:text-[#e9edef] text-xs flex items-center gap-2">
                           {isStructured && <LayoutTemplate size={13} className="text-sky-600" />}
                           <span>{item.title || '(tanpa judul)'}</span>
                         </div>
-                        <div className="text-xs text-[#667781] font-mono mt-0.5">
+                        <div className="text-xs text-[#667781] dark:text-[#8696a0] font-mono mt-0.5">
                           /{item.slug}
                           {item.sizeBytes > 0 && <span className="text-[#8696a0]"> · {(item.sizeBytes / 1024).toFixed(1)} KB</span>}
                         </div>
@@ -497,14 +497,14 @@ export const LandingPage: React.FC = () => {
           onClick={() => setIsModalOpen(false)}
         >
           <div
-            className="bg-white border border-[#e9edef] rounded-2xl w-full max-w-2xl overflow-hidden flex flex-col shadow-2xl"
+            className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl w-full max-w-2xl overflow-hidden flex flex-col shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-6 py-4 border-b border-[#e9edef] flex justify-between items-center bg-[#f8fafc]">
-              <h3 className="font-bold text-[#111b21] text-sm">
+            <div className="px-6 py-4 border-b border-[#e9edef] flex justify-between items-center bg-[#f8fafc] dark:bg-[#202c33]">
+              <h3 className="font-bold text-[#111b21] dark:text-[#e9edef] text-sm">
                 {editing ? `Edit Landing: ${editing.title}` : 'Tambah Landing Page Baru'}
               </h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-[#8696a0] hover:text-[#111b21]">
+              <button onClick={() => setIsModalOpen(false)} className="text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef]">
                 <X size={18} />
               </button>
             </div>
@@ -519,28 +519,28 @@ export const LandingPage: React.FC = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[11px] text-[#111b21] uppercase font-bold block">Judul Landing Page</label>
+                  <label className="text-[11px] text-[#111b21] dark:text-[#e9edef] uppercase font-bold block">Judul Landing Page</label>
                   <input
                     type="text"
                     required
                     value={formTitle}
                     onChange={(e) => setFormTitle(e.target.value)}
                     placeholder="Contoh: Promo Baby Massage"
-                    className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full p-2.5 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[11px] text-[#111b21] uppercase font-bold block">Slug (URL)</label>
+                  <label className="text-[11px] text-[#111b21] dark:text-[#e9edef] uppercase font-bold block">Slug (URL)</label>
                   <input
                     type="text"
                     required
                     value={formSlug}
                     onChange={(e) => setFormSlug(normalizeSlug(e.target.value))}
                     placeholder="promo-baby"
-                    className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] font-mono focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full p-2.5 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] font-mono focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                   {formSlug && (
-                    <p className="text-[10px] text-[#667781] font-mono truncate">
+                    <p className="text-[10px] text-[#667781] dark:text-[#8696a0] font-mono truncate">
                       {previewBaseUrl}/
                       <span className="text-[#008069] font-bold">{formSlug}</span>
                     </p>
@@ -549,23 +549,23 @@ export const LandingPage: React.FC = () => {
               </div>
 
               <div className="space-y-2">
-                <label className="text-[11px] text-[#111b21] uppercase font-bold block">Konten</label>
+                <label className="text-[11px] text-[#111b21] dark:text-[#e9edef] uppercase font-bold block">Konten</label>
                 <button
                   type="button"
                   onClick={() => setFormUseCustomHtml(!formUseCustomHtml)}
                   className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border text-left transition shadow-xs ${
                     formUseCustomHtml
                       ? 'border-[#008069] bg-[#e8f5f2]'
-                      : 'border-[#d1d7db] bg-white hover:bg-[#f8fafc]'
+                      : 'border-[#d1d7db] bg-white hover:bg-[#f8fafc] dark:bg-[#202c33]'
                   }`}
                 >
                   <div className="flex items-center gap-3">
                     {formUseCustomHtml ? <FileCode2 size={18} className="text-[#008069]" /> : <LayoutTemplate size={18} className="text-sky-600" />}
                     <div>
-                      <div className="text-xs font-bold text-[#111b21]">
+                      <div className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">
                         {formUseCustomHtml ? 'HTML Kustom (RAW_HTML)' : 'Template Sistem (STRUCTURED_JSON)'}
                       </div>
-                      <div className="text-[10px] text-[#667781] mt-0.5">
+                      <div className="text-[10px] text-[#667781] dark:text-[#8696a0] mt-0.5">
                         {formUseCustomHtml
                           ? 'File HTML disanitasi 17-layer & disajikan apa adanya.'
                           : 'Template bawaan (teks terstruktur), tanpa upload file.'}
@@ -592,7 +592,7 @@ export const LandingPage: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="px-3 py-1.5 bg-white border border-[#d1d7db] hover:bg-[#f0f2f5] rounded-lg text-xs font-semibold text-[#111b21] flex items-center gap-1.5 transition shadow-xs"
+                        className="px-3 py-1.5 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] hover:bg-[#f0f2f5] rounded-lg text-xs font-semibold text-[#111b21] dark:text-[#e9edef] flex items-center gap-1.5 transition shadow-xs"
                       >
                         <Upload size={12} className="text-[#008069]" />
                         <span>Upload File .html</span>
@@ -613,7 +613,7 @@ export const LandingPage: React.FC = () => {
                       onChange={(e) => setFormHtml(e.target.value)}
                       spellCheck={false}
                       placeholder="Tempel atau tulis HTML di sini. Wajib ada elemen <a id='wa-cta'> untuk tombol chat WhatsApp."
-                      className="w-full h-[180px] p-3 bg-white border border-[#d1d7db] rounded-xl text-xs font-mono text-[#111b21] focus:outline-none focus:border-[#008069] resize-y shadow-xs"
+                      className="w-full h-[180px] p-3 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs font-mono text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] resize-y shadow-xs"
                     />
                   </div>
                 )}
@@ -621,7 +621,7 @@ export const LandingPage: React.FC = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[11px] text-[#111b21] uppercase font-bold block">
+                  <label className="text-[11px] text-[#111b21] dark:text-[#e9edef] uppercase font-bold block">
                     Override Meta Pixel ID <span className="text-[#8696a0] normal-case">(kosongkan = pakai sistem)</span>
                   </label>
                   <input
@@ -629,11 +629,11 @@ export const LandingPage: React.FC = () => {
                     value={formMetaPixelId}
                     onChange={(e) => setFormMetaPixelId(e.target.value)}
                     placeholder="Contoh: 123456789012345"
-                    className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] font-mono focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full p-2.5 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] font-mono focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[11px] text-[#111b21] uppercase font-bold block">
+                  <label className="text-[11px] text-[#111b21] dark:text-[#e9edef] uppercase font-bold block">
                     Override No. WhatsApp <span className="text-[#8696a0] normal-case">(kosongkan = pakai sistem)</span>
                   </label>
                   <input
@@ -641,13 +641,13 @@ export const LandingPage: React.FC = () => {
                     value={formWhatsappNumber}
                     onChange={(e) => setFormWhatsappNumber(e.target.value)}
                     placeholder="Contoh: 628123456789"
-                    className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] font-mono focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full p-2.5 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] font-mono focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <label className="text-[11px] text-[#111b21] uppercase font-bold block">
+                <label className="text-[11px] text-[#111b21] dark:text-[#e9edef] uppercase font-bold block">
                   Events Pixel Browser <span className="text-[#8696a0] normal-case">(PageView selalu di-fire)</span>
                 </label>
                 <div className="flex flex-wrap gap-1.5">
@@ -663,7 +663,7 @@ export const LandingPage: React.FC = () => {
                         className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition disabled:cursor-not-allowed shadow-xs ${
                           active
                             ? 'bg-purple-100 text-purple-800 border-purple-300'
-                            : 'bg-white text-[#667781] border-[#d1d7db] hover:bg-[#f8fafc]'
+                            : 'bg-white text-[#667781] dark:text-[#8696a0] border-[#d1d7db] hover:bg-[#f8fafc] dark:bg-[#202c33]'
                         }`}
                       >
                         {active && !locked && <Check size={10} className="inline mr-1 text-purple-700" />}
@@ -678,10 +678,10 @@ export const LandingPage: React.FC = () => {
               </div>
 
               <div className="pt-2">
-                <div className="flex items-center justify-between p-3 rounded-xl bg-[#f8fafc] border border-[#e9edef]">
+                <div className="flex items-center justify-between p-3 rounded-xl bg-[#f8fafc] dark:bg-[#202c33] border border-[#e9edef]">
                   <div>
-                    <span className="text-xs font-bold text-[#111b21] block">Status Landing Page</span>
-                    <span className="text-[11px] text-[#667781]">Landing page aktif dapat diakses publik via slug URL</span>
+                    <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] block">Status Landing Page</span>
+                    <span className="text-[11px] text-[#667781] dark:text-[#8696a0]">Landing page aktif dapat diakses publik via slug URL</span>
                   </div>
                   <ToggleSwitch
                     checked={formIsActive}
@@ -697,7 +697,7 @@ export const LandingPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] rounded-xl text-xs font-semibold transition flex items-center space-x-1 shadow-xs"
+                  className="px-4 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] dark:text-[#e9edef] rounded-xl text-xs font-semibold transition flex items-center space-x-1 shadow-xs"
                 >
                   <X size={14} />
                   <span>Batal</span>
@@ -717,15 +717,15 @@ export const LandingPage: React.FC = () => {
       )}
 
       {/* Aturan upload */}
-      <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-3 shadow-xs">
-        <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
+      <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-3 shadow-xs">
+        <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
           <ShieldCheck className="text-[#008069]" size={16} />
           <span>Aturan Upload</span>
         </h3>
-        <ul className="space-y-2 text-xs text-[#667781] list-none">
+        <ul className="space-y-2 text-xs text-[#667781] dark:text-[#8696a0] list-none">
           <li className="flex items-start gap-2">
             <Info size={13} className="flex-shrink-0 mt-0.5 text-[#008069]" />
-            <span>Maksimal <strong className="text-[#111b21]">500 KB</strong> per file HTML.</span>
+            <span>Maksimal <strong className="text-[#111b21] dark:text-[#e9edef]">500 KB</strong> per file HTML.</span>
           </li>
           <li className="flex items-start gap-2">
             <MousePointerClick size={13} className="flex-shrink-0 mt-0.5 text-[#008069]" />
@@ -733,7 +733,7 @@ export const LandingPage: React.FC = () => {
           </li>
           <li className="flex items-start gap-2">
             <ShieldCheck size={13} className="flex-shrink-0 mt-0.5 text-[#008069]" />
-            <span>Dilarang: <strong className="text-[#111b21]">script, iframe, object, embed, form, input</strong>. HTML disanitasi 17-layer.</span>
+            <span>Dilarang: <strong className="text-[#111b21] dark:text-[#e9edef]">script, iframe, object, embed, form, input</strong>. HTML disanitasi 17-layer.</span>
           </li>
           <li className="flex items-start gap-2">
             <Info size={13} className="flex-shrink-0 mt-0.5 text-[#008069]" />

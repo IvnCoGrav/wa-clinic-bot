@@ -179,7 +179,7 @@ export const CustomerLabels: React.FC = () => {
             <Tag className="text-[#008069]" size={22} />
             <span>Customer Labels</span>
           </h1>
-          <p className="text-xs text-[#667781] mt-0.5">
+          <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
             Kelola master label dan kategori khusus untuk menandai customer di Live Chat & Database.
           </p>
         </div>
@@ -217,9 +217,9 @@ export const CustomerLabels: React.FC = () => {
           <Loader className="animate-spin text-[#008069]" size={32} />
         </div>
       ) : labels.length === 0 ? (
-        <div className="bg-white border border-[#e9edef] rounded-2xl p-12 text-center text-[#667781] text-xs shadow-xs">
+        <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-12 text-center text-[#667781] dark:text-[#8696a0] text-xs shadow-xs">
           <Tag className="mx-auto text-[#8696a0] mb-3" size={40} />
-          <p className="font-bold text-[#111b21] text-sm">Belum Ada Label</p>
+          <p className="font-bold text-[#111b21] dark:text-[#e9edef] text-sm">Belum Ada Label</p>
           <p className="text-[#667781] max-w-sm mx-auto mt-1">
             Klik tombol di bawah untuk memuat label bawaan (Hold, Admin CS, Skip, Pending Payment, Repeat Order, Medis, dll) atau buat label kustom baru.
           </p>
@@ -245,7 +245,7 @@ export const CustomerLabels: React.FC = () => {
           {labels.map((label) => (
             <div
               key={label.id}
-              className="bg-white border border-[#e9edef] hover:border-[#c2e7e0] rounded-2xl p-4 transition shadow-xs flex flex-col justify-between space-y-3"
+              className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] hover:border-[#c2e7e0] dark:hover:border-[#008069] rounded-2xl p-4 transition shadow-xs flex flex-col justify-between space-y-3"
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-center space-x-2.5 min-w-0">
@@ -255,7 +255,7 @@ export const CustomerLabels: React.FC = () => {
                   />
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <h3 className="text-sm font-bold text-[#111b21] truncate">{label.name}</h3>
+                      <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] truncate">{label.name}</h3>
                       {label.is_system && (
                         <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-[#f0f2f5] text-[#54656f] border border-[#d1d7db]" title="Label bawaan sistem yang dilindungi">
                           Bawaan Sistem
@@ -317,9 +317,9 @@ export const CustomerLabels: React.FC = () => {
       {/* Create / Edit Modal */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white border border-[#e9edef] rounded-2xl w-full max-w-md p-6 shadow-xl space-y-4">
-            <div className="flex justify-between items-center pb-2 border-b border-[#e9edef]">
-              <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
+          <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] rounded-2xl w-full max-w-md p-6 shadow-xl space-y-4">
+            <div className="flex justify-between items-center pb-2 border-b border-[#e9edef] dark:border-[#2a3942]">
+              <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
                 <Tag size={16} className="text-[#008069]" />
                 <span>{editingLabel ? 'Edit Label Customer' : 'Tambah Label Baru'}</span>
               </h3>
@@ -333,7 +333,7 @@ export const CustomerLabels: React.FC = () => {
 
             <form onSubmit={handleSave} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-[#111b21] mb-1">
+                <label className="block text-xs font-bold text-[#111b21] dark:text-[#e9edef] mb-1">
                   Nama Label <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -341,7 +341,7 @@ export const CustomerLabels: React.FC = () => {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Contoh: VIP Mom, Follow Up Medis, dll."
-                  className="w-full px-3 py-2 border border-[#d1d7db] rounded-xl text-xs focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069]"
+                  className="wa-input w-full px-3 py-2"
                   autoFocus
                   required
                 />
@@ -356,7 +356,7 @@ export const CustomerLabels: React.FC = () => {
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Keterangan singkat fungsi / arti label..."
                   rows={2}
-                  className="w-full px-3 py-2 border border-[#d1d7db] rounded-xl text-xs focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] resize-none"
+                  className="wa-textarea w-full px-3 py-2"
                 />
               </div>
 

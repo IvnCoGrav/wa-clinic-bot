@@ -9,11 +9,11 @@ const Card: React.FC<{
   icon: React.ReactNode;
   tone?: 'ok' | 'warn' | 'default';
 }> = ({ label, value, sub, icon, tone = 'default' }) => {
-  const toneCls = tone === 'ok' ? 'text-[#008069]' : tone === 'warn' ? 'text-amber-700' : 'text-[#111b21]';
+  const toneCls = tone === 'ok' ? 'text-[#008069] dark:text-[#00a884]' : tone === 'warn' ? 'text-amber-700 dark:text-[#f59e0b]' : 'text-[#111b21] dark:text-[#e9edef]';
   return (
-    <div className="bg-white border border-[#e9edef] rounded-2xl p-4 flex flex-col gap-1 shadow-xs">
+    <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#202c33] rounded-2xl p-4 flex flex-col gap-1 shadow-xs">
       <div className="flex items-center justify-between">
-        <p className="text-[11px] uppercase font-bold text-[#667781] tracking-wider">{label}</p>
+        <p className="text-[11px] uppercase font-bold text-[#667781] dark:text-[#8696a0] tracking-wider">{label}</p>
         <span className="text-[#8696a0]">{icon}</span>
       </div>
       <p className={`text-2xl font-extrabold ${toneCls}`}>{value}</p>

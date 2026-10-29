@@ -75,6 +75,53 @@
   }
 }
 
+@layer components {
+  /* ========================================================================= */
+  /* FORM CONTROLS KANONIS DUAL-MODE (WhatsApp Clinic Design System)           */
+  /* ========================================================================= */
+  .wa-input {
+    @apply bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] text-[#111b21] dark:text-[#e9edef] placeholder:text-[#8696a0] rounded-xl text-xs focus:outline-none focus:border-[#008069] dark:focus:border-[#00a884] focus:ring-1 focus:ring-[#008069] dark:focus:ring-[#00a884] shadow-xs transition duration-150;
+  }
+  .wa-select {
+    @apply bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] text-[#111b21] dark:text-[#e9edef] rounded-xl text-xs focus:outline-none focus:border-[#008069] dark:focus:border-[#00a884] focus:ring-1 focus:ring-[#008069] dark:focus:ring-[#00a884] shadow-xs transition duration-150;
+  }
+  .wa-textarea {
+    @apply bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] text-[#111b21] dark:text-[#e9edef] placeholder:text-[#8696a0] rounded-xl text-xs focus:outline-none focus:border-[#008069] dark:focus:border-[#00a884] focus:ring-1 focus:ring-[#008069] dark:focus:ring-[#00a884] shadow-xs transition duration-150 resize-none;
+  }
+
+  /* ========================================================================= */
+  /* PERMUKAAN ELEVASI MODAL & DRAWER KANONIS                                  */
+  /* ========================================================================= */
+  .wa-modal-surface {
+    @apply bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] shadow-2xl;
+  }
+  .wa-modal-header {
+    @apply px-5 py-4 border-b border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#1c272e] flex justify-between items-center;
+  }
+  .wa-modal-footer {
+    @apply px-5 py-4 border-t border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#1c272e] flex justify-end gap-2;
+  }
+
+  /* ========================================================================= */
+  /* BADGE STATUS DUAL-MODE KONTRAS TINGGI                                     */
+  /* ========================================================================= */
+  .wa-badge-emerald {
+    @apply bg-emerald-50 dark:bg-[#00a884]/15 text-emerald-800 dark:text-[#00a884] border border-emerald-200 dark:border-[#00a884]/30;
+  }
+  .wa-badge-amber {
+    @apply bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-[#f59e0b] border border-amber-200 dark:border-amber-800/40;
+  }
+  .wa-badge-rose {
+    @apply bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-[#f87171] border border-rose-200 dark:border-rose-800/40;
+  }
+  .wa-badge-purple {
+    @apply bg-purple-50 dark:bg-[#202c33] text-purple-800 dark:text-[#aebac1] border border-purple-200 dark:border-[#2a3942];
+  }
+  .wa-badge-blue {
+    @apply bg-blue-50 dark:bg-[#202c33] text-blue-800 dark:text-[#aebac1] border border-blue-200 dark:border-[#2a3942];
+  }
+}
+
 html {
   background-color: #ffffff;
   color: #111b21;
@@ -580,6 +627,10 @@ html.dark {
 
 /* --- Kanvas & permukaan netral --- */
 .dark .bg-\[\#f0f2f5\] { background-color: #000000; }
+.dark .bg-\[\#edf2f7\], .dark .bg-\[\#f8f9fa\], .dark .bg-\[\#fcfdfd\], .dark .bg-\[\#fdfefe\], .dark .bg-\[\#f0f0f0\], .dark .bg-\[\#e0e0e0\], .dark .bg-\[\#e2e8f0\] { background-color: #111b21; }
+.dark .bg-\[\#f0f9f6\], .dark .bg-\[\#d5ebe6\], .dark .bg-\[\#d9f0ea\], .dark .bg-\[\#e7f8e8\], .dark .bg-\[\#f0fdf4\], .dark .bg-\[\#f0f7f5\], .dark .bg-\[\#f8faf9\] { background-color: rgba(0, 168, 132, 0.14); }
+.dark .bg-\[\#eff6ff\] { background-color: rgba(59, 130, 246, 0.12); }
+.dark .bg-\[\#fffbeb\] { background-color: rgba(245, 158, 11, 0.12); }
 .dark .bg-\[\#f8fafc\] { background-color: #111b21; }
 .dark .bg-white { background-color: #202c33; }
 .dark .bg-slate-50 { background-color: #111b21; }
@@ -625,19 +676,19 @@ html.dark {
 /* --- Badge semantik pastel → versi gelap kontras tinggi --- */
 .dark .bg-emerald-50 { background-color: rgba(0, 168, 132, 0.14); }
 .dark .bg-emerald-100 { background-color: rgba(0, 168, 132, 0.22); }
-.dark .text-emerald-800, .dark .text-emerald-900 { color: #4ae3b5; }
+.dark .text-emerald-800, .dark .text-emerald-900 { color: #00a884; }
 .dark .border-emerald-200 { border-color: rgba(0, 168, 132, 0.35); }
 .dark .bg-amber-50 { background-color: rgba(245, 158, 11, 0.12); }
 .dark .bg-amber-100 { background-color: rgba(245, 158, 11, 0.2); }
-.dark .text-amber-700, .dark .text-amber-800, .dark .text-amber-900 { color: #fcd34d; }
+.dark .text-amber-700, .dark .text-amber-800, .dark .text-amber-900 { color: #f59e0b; }
 .dark .border-amber-200 { border-color: rgba(245, 158, 11, 0.35); }
 .dark .bg-rose-50 { background-color: rgba(244, 63, 94, 0.12); }
 .dark .bg-rose-100 { background-color: rgba(244, 63, 94, 0.2); }
-.dark .text-rose-700, .dark .text-rose-800 { color: #fda4af; }
+.dark .text-rose-700, .dark .text-rose-800 { color: #f87171; }
 .dark .border-rose-200 { border-color: rgba(244, 63, 94, 0.35); }
 .dark .bg-sky-50 { background-color: rgba(14, 165, 233, 0.12); }
 .dark .bg-sky-100 { background-color: rgba(14, 165, 233, 0.2); }
-.dark .text-sky-700, .dark .text-sky-800 { color: #7dd3fc; }
+.dark .text-sky-700, .dark .text-sky-800 { color: #38bdf8; }
 .dark .border-sky-200 { border-color: rgba(14, 165, 233, 0.35); }
 .dark .bg-indigo-50 { background-color: rgba(99, 102, 241, 0.14); }
 .dark .text-indigo-700, .dark .text-indigo-800 { color: #a5b4fc; }
@@ -664,7 +715,7 @@ html.dark {
 .dark .text-\[\#64748b\] { color: #8696a0; }
 .dark .text-\[\#666\] { color: #8696a0; }
 .dark .text-amber-950 { color: #fef3c7; }
-.dark .text-amber-900 { color: #fcd34d; }
+.dark .text-amber-900 { color: #f59e0b; }
 .dark .text-sky-900 { color: #bae6fd; }
 .dark .text-emerald-900 { color: #a7f3d0; }
 .dark .bg-\[\#f8fafc\]\/60 { background-color: rgba(0, 0, 0, 0.25); }
@@ -675,8 +726,8 @@ html.dark {
 .dark .bg-amber-50\/75 { background-color: rgba(245, 158, 11, 0.14); }
 .dark .bg-sky-50\/70 { background-color: rgba(14, 165, 233, 0.14); }
 .dark .bg-emerald-50\/65 { background-color: rgba(16, 185, 129, 0.14); }
-.dark .border-amber-400 { border-color: rgba(245, 158, 11, 0.5); }
-.dark .border-amber-500 { border-color: rgba(245, 158, 11, 0.65); }
+.dark .border-amber-400 { border-color: rgba(245, 158, 11, 0.3); }
+.dark .border-amber-500 { border-color: rgba(245, 158, 11, 0.35); }
 
 /* --- Badge WhatsApp bg-[#d9fdd3] text-[#008069] → teks putih di atas hijau botol tua --- */
 .dark .bg-\[\#d9fdd3\].text-\[\#008069\],
@@ -707,7 +758,7 @@ html.dark {
 .dark .bg-blue-100 { background-color: rgba(59, 130, 246, 0.2); }
 .dark .border-blue-100 { border-color: rgba(59, 130, 246, 0.35); }
 .dark .border-blue-200 { border-color: rgba(59, 130, 246, 0.45); }
-.dark .text-blue-600, .dark .text-blue-700, .dark .text-blue-800 { color: #93c5fd; }
+.dark .text-blue-600, .dark .text-blue-700, .dark .text-blue-800 { color: #aebac1; }
 
 /* --- Palet semantik tambahan: purple (badge FAQ, LiveChat, Overview) --- */
 .dark .bg-purple-50 { background-color: rgba(168, 85, 247, 0.12); }
@@ -715,14 +766,14 @@ html.dark {
 .dark .border-purple-100 { border-color: rgba(168, 85, 247, 0.35); }
 .dark .border-purple-200 { border-color: rgba(168, 85, 247, 0.35); }
 .dark .border-purple-300 { border-color: rgba(168, 85, 247, 0.45); }
-.dark .text-purple-600, .dark .text-purple-700, .dark .text-purple-800, .dark .text-purple-900, .dark .text-purple-950 { color: #c4b5fd; }
+.dark .text-purple-600, .dark .text-purple-700, .dark .text-purple-800, .dark .text-purple-900, .dark .text-purple-950 { color: #aebac1; }
 
 /* --- Palet semantik tambahan: red --- */
 .dark .bg-red-50 { background-color: rgba(239, 68, 68, 0.12); }
 .dark .bg-red-100 { background-color: rgba(239, 68, 68, 0.2); }
 .dark .border-red-100 { border-color: rgba(239, 68, 68, 0.35); }
 .dark .border-red-200 { border-color: rgba(239, 68, 68, 0.45); }
-.dark .text-red-600, .dark .text-red-700, .dark .text-red-800 { color: #fca5a5; }
+.dark .text-red-600, .dark .text-red-700, .dark .text-red-800 { color: #f87171; }
 
 /* --- Kartu jadwal kalender pastel daylight → dark solid kontras (DayScheduleGrid & WeekScheduleGrid) --- */
 .dark .bg-\[\#e0f2fe\] { background-color: #0c2438; }
@@ -730,17 +781,17 @@ html.dark {
 .dark .bg-\[\#fef3c7\] { background-color: #2e2009; }
 .dark .bg-\[\#dcfce7\] { background-color: #0d2e1e; }
 .dark .bg-\[\#ccfbf1\] { background-color: #0b2b28; }
-.dark .text-\[\#0c4a6e\] { color: #7dd3fc; }
-.dark .text-\[\#581c87\] { color: #c4b5fd; }
-.dark .text-\[\#78350f\] { color: #fcd34d; }
-.dark .text-\[\#14532d\] { color: #4ae3b5; }
-.dark .text-\[\#166534\] { color: #4ae3b5; }
-.dark .text-\[\#115e59\] { color: #5eead4; }
-.dark .border-\[\#9333ea\] { border-color: rgba(168, 85, 247, 0.7); }
-.dark .border-\[\#16a34a\] { border-color: rgba(0, 168, 132, 0.7); }
-.dark .border-\[\#d97706\] { border-color: rgba(245, 158, 11, 0.7); }
-.dark .border-\[\#0284c7\] { border-color: rgba(14, 165, 233, 0.7); }
-.dark .border-\[\#0d9488\] { border-color: rgba(20, 184, 166, 0.7); }
+.dark .text-\[\#0c4a6e\] { color: #38bdf8; }
+.dark .text-\[\#581c87\] { color: #aebac1; }
+.dark .text-\[\#78350f\] { color: #f59e0b; }
+.dark .text-\[\#14532d\] { color: #00a884; }
+.dark .text-\[\#166534\] { color: #00a884; }
+.dark .text-\[\#115e59\] { color: #2dd4bf; }
+.dark .border-\[\#9333ea\] { border-color: rgba(168, 85, 247, 0.35); }
+.dark .border-\[\#16a34a\] { border-color: rgba(0, 168, 132, 0.35); }
+.dark .border-\[\#d97706\] { border-color: rgba(245, 158, 11, 0.35); }
+.dark .border-\[\#0284c7\] { border-color: rgba(14, 165, 233, 0.35); }
+.dark .border-\[\#0d9488\] { border-color: rgba(20, 184, 166, 0.35); }
 .dark .border-\[\#86efac\] { border-color: rgba(0, 168, 132, 0.45); }
 .dark .hover\:bg-\[\#ebd5ff\]:hover { background-color: #351d4f; }
 .dark .hover\:bg-\[\#bbf7d0\]:hover { background-color: #123d29; }

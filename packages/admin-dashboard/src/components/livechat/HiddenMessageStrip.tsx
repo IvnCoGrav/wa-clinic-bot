@@ -24,7 +24,7 @@ export const HiddenMessageStrip: React.FC<HiddenMessageStripProps> = ({
   if (isRevealedLocally) {
     // Tampilan ketika bubble sedang dibuka sementara di browser staf ini
     return (
-      <div className="flex items-center justify-between gap-2 px-2.5 py-1 mb-1 bg-amber-500/10 dark:bg-amber-400/10 border border-amber-500/20 rounded-md text-[10px] text-amber-700 dark:text-amber-300 select-none">
+      <div className="flex items-center justify-between gap-2 px-2.5 py-1 mb-1 bg-amber-500/10 dark:bg-amber-950/40/10 border border-amber-500/20 rounded-md text-[10px] text-amber-700 dark:text-[#f59e0b] select-none">
         <span className="flex items-center gap-1 font-semibold truncate">
           <Eye size={12} className="shrink-0 text-amber-600" />
           <span>Tampilan Sementara (Pesan Disembunyikan{hiddenBy ? ` oleh ${hiddenBy}` : ''})</span>

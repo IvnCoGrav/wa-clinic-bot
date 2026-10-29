@@ -505,8 +505,8 @@ export const StaffManagement: React.FC = () => {
               <Users size={22} />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-[#111b21]">Manajemen Staff & Akun Pengguna</h1>
-              <p className="text-xs text-[#667781] mt-0.5">
+              <h1 className="text-lg font-bold text-[#111b21] dark:text-[#e9edef]">Manajemen Staff & Akun Pengguna</h1>
+              <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
                 Kelola akun staf klinik, terapis, dan konfigurasi izin hak akses modul (Role-Based Access Control).
               </p>
             </div>
@@ -546,7 +546,7 @@ export const StaffManagement: React.FC = () => {
           className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
             activeTab === 'STAFF'
               ? 'bg-[#008069] text-white shadow-xs'
-              : 'bg-white text-[#54656f] border border-[#e9edef] hover:bg-[#f0f2f5]'
+              : 'bg-white text-[#54656f] dark:text-[#8696a0] border border-[#e9edef] hover:bg-[#f0f2f5]'
           }`}
         >
           <Users size={15} />
@@ -565,7 +565,7 @@ export const StaffManagement: React.FC = () => {
           className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
             activeTab === 'ROLES'
               ? 'bg-[#008069] text-white shadow-xs'
-              : 'bg-white text-[#54656f] border border-[#e9edef] hover:bg-[#f0f2f5]'
+              : 'bg-white text-[#54656f] dark:text-[#8696a0] border border-[#e9edef] hover:bg-[#f0f2f5]'
           }`}
         >
           <ShieldCheck size={15} />
@@ -596,16 +596,16 @@ export const StaffManagement: React.FC = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Cari nama atau nomor WhatsApp..."
-                className="w-full pl-9 pr-3.5 py-1.5 rounded-xl bg-[#f0f2f5] border-0 text-[#111b21] text-xs focus:outline-none focus:ring-2 focus:ring-[#008069]"
+                className="w-full pl-9 pr-3.5 py-1.5 rounded-xl bg-[#f0f2f5] border-0 text-[#111b21] dark:text-[#e9edef] text-xs focus:outline-none focus:ring-2 focus:ring-[#008069]"
               />
             </div>
 
             <div className="flex items-center space-x-2 w-full sm:w-auto">
-              <label className="text-xs text-[#667781] font-medium whitespace-nowrap">Filter Role:</label>
+              <label className="text-xs text-[#667781] dark:text-[#8696a0] font-medium whitespace-nowrap">Filter Role:</label>
               <select
                 value={roleFilter}
                 onChange={(e) => setRoleFilter(e.target.value)}
-                className="px-3 py-1.5 rounded-xl bg-[#f0f2f5] border-0 text-[#111b21] text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#008069]"
+                className="px-3 py-1.5 rounded-xl bg-[#f0f2f5] border-0 text-[#111b21] dark:text-[#e9edef] text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#008069]"
               >
                 <option value="ALL">Semua Peran ({staffList.length})</option>
                 {roleEntries.map((r) => (
@@ -619,9 +619,9 @@ export const StaffManagement: React.FC = () => {
 
           {/* Staff Table Card */}
           <div className="bg-white rounded-2xl border border-[#e9edef] overflow-hidden shadow-xs">
-            <div className="p-4 border-b border-[#e9edef] flex items-center justify-between bg-[#f8fafc]">
+            <div className="p-4 border-b border-[#e9edef] flex items-center justify-between bg-[#f8fafc] dark:bg-[#202c33]">
               <div className="flex items-center space-x-2">
-                <span className="text-xs font-bold text-[#667781] uppercase tracking-wider">
+                <span className="text-xs font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider">
                   Daftar Pengguna Terdaftar
                 </span>
                 <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0]">
@@ -632,8 +632,8 @@ export const StaffManagement: React.FC = () => {
 
             {/* Desktop Table View */}
             <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-left text-xs text-[#111b21]">
-                <thead className="bg-[#f8fafc] text-xs font-bold uppercase text-[#667781] border-b border-[#e9edef]">
+              <table className="w-full text-left text-xs text-[#111b21] dark:text-[#e9edef]">
+                <thead className="bg-[#f8fafc] dark:bg-[#202c33] text-xs font-bold uppercase text-[#667781] dark:text-[#8696a0] border-b border-[#e9edef]">
                   <tr>
                     <th className="px-5 py-3.5">Nama Staff</th>
                     <th className="px-5 py-3.5">Nomor WhatsApp</th>
@@ -646,24 +646,24 @@ export const StaffManagement: React.FC = () => {
                 <tbody className="divide-y divide-[#e9edef]">
                   {loading ? (
                     <tr>
-                      <td colSpan={6} className="px-5 py-12 text-center text-[#667781]">
+                      <td colSpan={6} className="px-5 py-12 text-center text-[#667781] dark:text-[#8696a0]">
                         <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-[#008069] border-t-transparent mb-2"></div>
                         <p className="text-xs">Memuat data staff...</p>
                       </td>
                     </tr>
                   ) : filteredStaffList.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-5 py-12 text-center text-[#667781]">
+                      <td colSpan={6} className="px-5 py-12 text-center text-[#667781] dark:text-[#8696a0]">
                         <Users size={36} className="mx-auto text-[#8696a0] mb-2" />
-                        <p className="font-bold text-[#111b21]">Tidak ada akun staff yang cocok</p>
+                        <p className="font-bold text-[#111b21] dark:text-[#e9edef]">Tidak ada akun staff yang cocok</p>
                         <p className="text-xs mt-1">Coba sesuaikan kata kunci pencarian atau filter peran.</p>
                       </td>
                     </tr>
                   ) : (
                     filteredStaffList.map((staff) => (
-                      <tr key={staff.id} className="hover:bg-[#f8fafc] transition-colors">
+                      <tr key={staff.id} className="hover:bg-[#f8fafc] dark:bg-[#202c33] transition-colors">
                         {/* Name */}
-                        <td className="px-5 py-3.5 font-bold text-[#111b21]">
+                        <td className="px-5 py-3.5 font-bold text-[#111b21] dark:text-[#e9edef]">
                           <div className="flex items-center space-x-2.5">
                             <span
                               className={`h-2 w-2 rounded-full shrink-0 ${
@@ -676,7 +676,7 @@ export const StaffManagement: React.FC = () => {
                         </td>
 
                         {/* Phone */}
-                        <td className="px-5 py-3.5 font-mono text-xs text-[#54656f]">
+                        <td className="px-5 py-3.5 font-mono text-xs text-[#54656f] dark:text-[#8696a0]">
                           {staff.phone}
                         </td>
 
@@ -729,7 +729,7 @@ export const StaffManagement: React.FC = () => {
                             {/* Edit Button */}
                             <button
                               onClick={() => handleOpenEdit(staff)}
-                              className="p-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] text-[#54656f] hover:text-[#111b21] transition-colors border border-[#d1d7db] shadow-xs cursor-pointer"
+                              className="p-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef] transition-colors border border-[#d1d7db] shadow-xs cursor-pointer"
                               title="Edit Data Staff"
                             >
                               <Pencil size={13} />
@@ -755,20 +755,20 @@ export const StaffManagement: React.FC = () => {
             {/* Mobile Card Stack View */}
             <div className="md:hidden">
               {loading ? (
-                <div className="py-12 text-center text-[#667781]">
+                <div className="py-12 text-center text-[#667781] dark:text-[#8696a0]">
                   <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-[#008069] border-t-transparent mb-2"></div>
                   <p className="text-xs">Memuat data staff...</p>
                 </div>
               ) : filteredStaffList.length === 0 ? (
-                <div className="py-12 text-center text-[#667781] px-4">
+                <div className="py-12 text-center text-[#667781] dark:text-[#8696a0] px-4">
                   <Users size={36} className="mx-auto text-[#8696a0] mb-2" />
-                  <p className="font-bold text-[#111b21]">Tidak ada akun staff yang cocok</p>
+                  <p className="font-bold text-[#111b21] dark:text-[#e9edef]">Tidak ada akun staff yang cocok</p>
                   <p className="text-xs mt-1">Coba sesuaikan kata kunci pencarian atau filter peran.</p>
                 </div>
               ) : (
                 <div className="divide-y divide-[#e9edef]">
                   {filteredStaffList.map((staff) => (
-                    <div key={staff.id} className="p-4 space-y-3 bg-white hover:bg-[#f8fafc] transition-colors">
+                    <div key={staff.id} className="p-4 space-y-3 bg-white hover:bg-[#f8fafc] dark:bg-[#202c33] transition-colors">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2.5 min-w-0">
                           <span
@@ -778,7 +778,7 @@ export const StaffManagement: React.FC = () => {
                             title={staff.active ? 'Akun aktif' : 'Akun nonaktif'}
                           />
                           <div className="min-w-0">
-                            <p className="font-bold text-[#111b21] text-sm truncate">{staff.name}</p>
+                            <p className="font-bold text-[#111b21] dark:text-[#e9edef] text-sm truncate">{staff.name}</p>
                             <a
                               href={`https://wa.me/${staff.phone?.replace(/[^0-9]/g, '')}`}
                               target="_blank"
@@ -827,7 +827,7 @@ export const StaffManagement: React.FC = () => {
                           </button>
                           <button
                             onClick={() => handleOpenEdit(staff)}
-                            className="px-2.5 py-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] text-[#54656f] hover:text-[#111b21] transition-colors border border-[#d1d7db] shadow-xs text-xs font-semibold flex items-center space-x-1 cursor-pointer"
+                            className="px-2.5 py-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef] transition-colors border border-[#d1d7db] shadow-xs text-xs font-semibold flex items-center space-x-1 cursor-pointer"
                             title="Edit Data Staff"
                           >
                             <Pencil size={12} />
@@ -859,9 +859,9 @@ export const StaffManagement: React.FC = () => {
           {/* Banner Info */}
           <div className="bg-[#e8f5f2] border border-[#c2e7e0] p-4 rounded-2xl flex items-start gap-3">
             <Info size={18} className="text-[#008069] mt-0.5 flex-shrink-0" />
-            <div className="text-xs text-[#111b21] space-y-1">
+            <div className="text-xs text-[#111b21] dark:text-[#e9edef] space-y-1">
               <p className="font-bold">Konfigurasi Hak Akses Peran (Role-Based Access Control)</p>
-              <p className="text-[#54656f] leading-relaxed">
+              <p className="text-[#54656f] dark:text-[#8696a0] leading-relaxed">
                 Tentukan modul mana saja yang dapat dibuka dan dioperasikan oleh setiap peran pengguna. Perubahan hak akses akan langsung berlaku saat pengguna memuat halaman dashboard.
               </p>
             </div>
@@ -883,7 +883,7 @@ export const StaffManagement: React.FC = () => {
                     <div className="flex items-start justify-between">
                       <div className="space-y-1">
                         <div className="flex items-center space-x-2">
-                          <h3 className="font-bold text-sm text-[#111b21]">{cfg.label}</h3>
+                          <h3 className="font-bold text-sm text-[#111b21] dark:text-[#e9edef]">{cfg.label}</h3>
                           {cfg.isSystem ? (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
                               Sistem
@@ -897,18 +897,18 @@ export const StaffManagement: React.FC = () => {
                         <p className="text-[11px] font-mono text-[#8696a0]">key: {cfg.key}</p>
                       </div>
 
-                      <span className="px-2.5 py-1 rounded-xl text-xs font-bold bg-[#f0f2f5] text-[#111b21] border border-[#e9edef]">
+                      <span className="px-2.5 py-1 rounded-xl text-xs font-bold bg-[#f0f2f5] text-[#111b21] dark:text-[#e9edef] border border-[#e9edef]">
                         {activeMembers} Staf
                       </span>
                     </div>
 
-                    <p className="text-xs text-[#54656f] line-clamp-2 min-h-[32px]">
+                    <p className="text-xs text-[#54656f] dark:text-[#8696a0] line-clamp-2 min-h-[32px]">
                       {cfg.description || 'Tidak ada deskripsi tambahan.'}
                     </p>
 
                     {/* Module count pill */}
                     <div className="pt-2 border-t border-[#f0f2f5] flex items-center justify-between text-xs">
-                      <span className="text-[#667781]">Izin Modul:</span>
+                      <span className="text-[#667781] dark:text-[#8696a0]">Izin Modul:</span>
                       <span className="font-bold text-[#008069]">
                         {cfg.key === 'super_admin' || cfg.key === 'tenant_admin'
                           ? 'Akses Penuh (19/19)'
@@ -944,7 +944,7 @@ export const StaffManagement: React.FC = () => {
             {/* Card Add Role Shortcut */}
             <button
               onClick={handleOpenCreateRole}
-              className="rounded-2xl border-2 border-dashed border-[#d1d7db] hover:border-[#008069] p-5 text-center flex flex-col items-center justify-center space-y-2 text-[#667781] hover:text-[#008069] transition-all bg-[#f8fafc] hover:bg-[#e8f5f2]/40 group"
+              className="rounded-2xl border-2 border-dashed border-[#d1d7db] hover:border-[#008069] p-5 text-center flex flex-col items-center justify-center space-y-2 text-[#667781] dark:text-[#8696a0] hover:text-[#008069] transition-all bg-[#f8fafc] dark:bg-[#202c33] hover:bg-[#e8f5f2]/40 group"
             >
               <div className="p-3 rounded-full bg-white shadow-xs group-hover:scale-110 transition-transform">
                 <Plus size={20} className="text-[#008069]" />
@@ -958,13 +958,13 @@ export const StaffManagement: React.FC = () => {
           {/* INTERACTIVE PERMISSION MATRIX TABLE */}
           {/* ========================================================================= */}
           <div className="bg-white rounded-2xl border border-[#e9edef] overflow-hidden shadow-xs">
-            <div className="p-4 border-b border-[#e9edef] bg-[#f8fafc] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="p-4 border-b border-[#e9edef] bg-[#f8fafc] dark:bg-[#202c33] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
-                <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
+                <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
                   <ShieldCheck className="text-[#008069]" size={17} />
                   <span>Matriks Hak Akses Modul Dashboard</span>
                 </h3>
-                <p className="text-xs text-[#667781] mt-0.5">
+                <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
                   Centang atau hapus centang untuk mengatur izin akses modul per peran secara real-time.
                 </p>
               </div>
@@ -972,9 +972,9 @@ export const StaffManagement: React.FC = () => {
 
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-[#f0f2f5] border-b border-[#e9edef] text-[#111b21]">
+                <thead className="bg-[#f0f2f5] border-b border-[#e9edef] text-[#111b21] dark:text-[#e9edef]">
                   <tr>
-                    <th className="px-5 py-3.5 font-bold uppercase text-[11px] text-[#54656f] w-1/3">
+                    <th className="px-5 py-3.5 font-bold uppercase text-[11px] text-[#54656f] dark:text-[#8696a0] w-1/3">
                       Modul Dashboard / Fitur
                     </th>
                     {roleEntries.map((r) => (
@@ -984,7 +984,7 @@ export const StaffManagement: React.FC = () => {
                       >
                         <div className="flex flex-col items-center">
                           <span>{r.label}</span>
-                          <span className="text-[10px] font-normal text-[#667781] font-mono">
+                          <span className="text-[10px] font-normal text-[#667781] dark:text-[#8696a0] font-mono">
                             {r.isSystem ? '(System)' : '(Custom)'}
                           </span>
                         </div>
@@ -1000,7 +1000,7 @@ export const StaffManagement: React.FC = () => {
                     return (
                       <React.Fragment key={group.category}>
                         {/* Category Header Row */}
-                        <tr className="bg-[#f8fafc] font-bold text-xs text-[#008069] border-t border-b border-[#e9edef]">
+                        <tr className="bg-[#f8fafc] dark:bg-[#202c33] font-bold text-xs text-[#008069] border-t border-b border-[#e9edef]">
                           <td className="px-5 py-2.5 uppercase tracking-wider flex items-center space-x-1.5">
                             <ChevronRight size={13} />
                             <span>{group.category}</span>
@@ -1017,7 +1017,7 @@ export const StaffManagement: React.FC = () => {
                                     onClick={() =>
                                       handleToggleCategoryForRole(r.key, categoryPaths, !allChecked)
                                     }
-                                    className="text-[10px] text-[#667781] hover:text-[#008069] underline font-semibold transition"
+                                    className="text-[10px] text-[#667781] dark:text-[#8696a0] hover:text-[#008069] underline font-semibold transition"
                                     title={allChecked ? 'Hapus Centang Semua' : 'Pilih Semua'}
                                   >
                                     {allChecked ? 'Batal Semua' : 'Pilih Semua'}
@@ -1030,11 +1030,11 @@ export const StaffManagement: React.FC = () => {
 
                         {/* Module Rows */}
                         {group.modules.map((mod) => (
-                          <tr key={mod.id} className="hover:bg-[#f8fafc] transition-colors">
+                          <tr key={mod.id} className="hover:bg-[#f8fafc] dark:bg-[#202c33] transition-colors">
                             <td className="px-5 py-3">
                               <div>
-                                <p className="font-bold text-[#111b21]">{mod.name}</p>
-                                <p className="text-[11px] text-[#667781] leading-snug">{mod.description}</p>
+                                <p className="font-bold text-[#111b21] dark:text-[#e9edef]">{mod.name}</p>
+                                <p className="text-[11px] text-[#667781] dark:text-[#8696a0] leading-snug">{mod.description}</p>
                                 <p className="text-[10px] font-mono text-[#8696a0] mt-0.5">{mod.path}</p>
                               </div>
                             </td>
@@ -1094,11 +1094,11 @@ export const StaffManagement: React.FC = () => {
           onClick={() => setShowRoleModal(false)}
         >
           <div
-            className="w-full max-w-2xl bg-white border border-[#e9edef] rounded-2xl p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col"
+            className="w-full max-w-2xl bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-[#e9edef] pb-3 flex-shrink-0">
-              <h3 className="text-base font-bold text-[#111b21] flex items-center space-x-2">
+              <h3 className="text-base font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
                 <ShieldCheck className="text-[#008069]" size={19} />
                 <span>
                   {roleModalMode === 'CREATE'
@@ -1108,7 +1108,7 @@ export const StaffManagement: React.FC = () => {
               </h3>
               <button
                 onClick={() => setShowRoleModal(false)}
-                className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5]"
+                className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5]"
               >
                 ✕
               </button>
@@ -1117,7 +1117,7 @@ export const StaffManagement: React.FC = () => {
             <form onSubmit={handleSaveRole} className="space-y-4 overflow-y-auto flex-1 pr-1">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-[#111b21]">Nama Role</label>
+                  <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Nama Role</label>
                   <input
                     type="text"
                     required
@@ -1129,12 +1129,12 @@ export const StaffManagement: React.FC = () => {
                       }
                     }}
                     placeholder="Contoh: Supervisor Cabang / Finance"
-                    className="w-full px-3.5 py-2 rounded-xl bg-white border border-[#d1d7db] text-[#111b21] text-xs focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] text-xs focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-[#111b21]">
+                  <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">
                     Key Identifier (Slug Sistem)
                   </label>
                   <input
@@ -1144,26 +1144,26 @@ export const StaffManagement: React.FC = () => {
                     value={roleKey}
                     onChange={(e) => setRoleKey(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))}
                     placeholder="supervisor_cabang"
-                    className="w-full px-3.5 py-2 rounded-xl bg-[#f0f2f5] border border-[#d1d7db] font-mono text-[#111b21] text-xs focus:outline-none focus:border-[#008069] disabled:opacity-70 shadow-xs"
+                    className="w-full px-3.5 py-2 rounded-xl bg-[#f0f2f5] border border-[#d1d7db] font-mono text-[#111b21] dark:text-[#e9edef] text-xs focus:outline-none focus:border-[#008069] disabled:opacity-70 shadow-xs"
                   />
                 </div>
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-bold text-[#111b21]">Deskripsi Singkat Tanggung Jawab</label>
+                <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Deskripsi Singkat Tanggung Jawab</label>
                 <input
                   type="text"
                   value={roleDescription}
                   onChange={(e) => setRoleDescription(e.target.value)}
                   placeholder="Contoh: Mengawasi operasional harian, reservasi kalender, dan laporan CS"
-                  className="w-full px-3.5 py-2 rounded-xl bg-white border border-[#d1d7db] text-[#111b21] text-xs focus:outline-none focus:border-[#008069] shadow-xs"
+                  className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] text-xs focus:outline-none focus:border-[#008069] shadow-xs"
                 />
               </div>
 
               {/* Module Checkbox Selector */}
               <div className="space-y-2 pt-2 border-t border-[#e9edef]">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-[#111b21] flex items-center space-x-1.5">
+                  <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-1.5">
                     <CheckSquare size={14} className="text-[#008069]" />
                     <span>Pilih Izin Modul & Menu Dashboard ({roleAllowedPaths.length} Terpilih)</span>
                   </label>
@@ -1187,7 +1187,7 @@ export const StaffManagement: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="space-y-3 max-h-72 overflow-y-auto p-3 bg-[#f8fafc] rounded-xl border border-[#e9edef]">
+                <div className="space-y-3 max-h-72 overflow-y-auto p-3 bg-[#f8fafc] dark:bg-[#202c33] rounded-xl border border-[#e9edef]">
                   {moduleCategories.map((group) => (
                     <div key={group.category} className="space-y-1.5">
                       <div className="text-[11px] font-bold text-[#008069] uppercase tracking-wider border-b border-[#e9edef] pb-1 flex items-center justify-between">
@@ -1204,7 +1204,7 @@ export const StaffManagement: React.FC = () => {
                               setRoleAllowedPaths(Array.from(set));
                             }
                           }}
-                          className="text-[10px] text-[#667781] hover:text-[#008069] normal-case"
+                          className="text-[10px] text-[#667781] dark:text-[#8696a0] hover:text-[#008069] normal-case"
                         >
                           Toggle Kategori
                         </button>
@@ -1218,8 +1218,8 @@ export const StaffManagement: React.FC = () => {
                               key={mod.id}
                               className={`flex items-start space-x-2.5 p-2 rounded-xl border cursor-pointer transition-all ${
                                 isChecked
-                                  ? 'bg-[#e8f5f2] border-[#008069]/30 text-[#111b21]'
-                                  : 'bg-white border-[#e9edef] text-[#54656f] hover:bg-[#f0f2f5]'
+                                  ? 'bg-[#e8f5f2] border-[#008069]/30 text-[#111b21] dark:text-[#e9edef]'
+                                  : 'bg-white border-[#e9edef] text-[#54656f] dark:text-[#8696a0] hover:bg-[#f0f2f5]'
                               }`}
                             >
                               <input
@@ -1238,7 +1238,7 @@ export const StaffManagement: React.FC = () => {
                               />
                               <div className="flex-1 min-w-0">
                                 <p className="text-xs font-bold leading-tight">{mod.name}</p>
-                                <p className="text-[10px] text-[#667781] truncate">{mod.description}</p>
+                                <p className="text-[10px] text-[#667781] dark:text-[#8696a0] truncate">{mod.description}</p>
                               </div>
                             </label>
                           );
@@ -1251,17 +1251,17 @@ export const StaffManagement: React.FC = () => {
 
               {/* Landing Page Selector */}
               <div className="space-y-1.5 pt-2 border-t border-[#e9edef]">
-                <label className="text-xs font-bold text-[#111b21] flex items-center space-x-1.5">
+                <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-1.5">
                   <Compass size={14} className="text-[#008069]" />
                   <span>Halaman Awal Masuk Setelah Login (Landing Page)</span>
                 </label>
-                <p className="text-[11px] text-[#667781]">
+                <p className="text-[11px] text-[#667781] dark:text-[#8696a0]">
                   Pilih menu utama yang langsung dibuka otomatis ketika staf dengan peran ini masuk ke dashboard.
                 </p>
                 <select
                   value={roleDefaultRedirect}
                   onChange={(e) => setRoleDefaultRedirect(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#d1d7db] text-[#111b21] text-xs focus:outline-none focus:border-[#008069] shadow-xs font-medium"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] text-xs focus:outline-none focus:border-[#008069] shadow-xs font-medium"
                 >
                   {roleAllowedPaths.map((p) => {
                     const mod = ALL_MODULES.find((m) => m.path === p);
@@ -1283,7 +1283,7 @@ export const StaffManagement: React.FC = () => {
               {roleAllowedPaths.length > 0 && (
                 <div className="space-y-2 pt-2 border-t border-[#e9edef]">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-[#111b21] flex items-center space-x-1.5">
+                    <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-1.5">
                       <ListOrdered size={14} className="text-[#008069]" />
                       <span>Urutan Menu di Sidebar ({roleAllowedPaths.length} Menu)</span>
                     </label>
@@ -1292,7 +1292,7 @@ export const StaffManagement: React.FC = () => {
                     </span>
                   </div>
 
-                  <div className="space-y-1 max-h-48 overflow-y-auto p-2 bg-[#f8fafc] rounded-xl border border-[#e9edef]">
+                  <div className="space-y-1 max-h-48 overflow-y-auto p-2 bg-[#f8fafc] dark:bg-[#202c33] rounded-xl border border-[#e9edef]">
                     {roleAllowedPaths.map((p, idx) => {
                       const mod = ALL_MODULES.find((m) => m.path === p);
                       const isLanding = roleDefaultRedirect === p;
@@ -1322,12 +1322,12 @@ export const StaffManagement: React.FC = () => {
                           key={p}
                           className={`flex items-center justify-between px-3 py-1.5 rounded-lg border transition-colors ${
                             isLanding
-                              ? 'bg-[#e8f5f2] border-[#008069]/40 text-[#111b21]'
-                              : 'bg-white border-[#e9edef] text-[#54656f]'
+                              ? 'bg-[#e8f5f2] border-[#008069]/40 text-[#111b21] dark:text-[#e9edef]'
+                              : 'bg-white border-[#e9edef] text-[#54656f] dark:text-[#8696a0]'
                           }`}
                         >
                           <div className="flex items-center space-x-2 min-w-0">
-                            <span className="h-5 w-5 rounded-md bg-[#e9edef] text-[#111b21] flex items-center justify-center text-[10px] font-bold">
+                            <span className="h-5 w-5 rounded-md bg-[#e9edef] text-[#111b21] dark:text-[#e9edef] flex items-center justify-center text-[10px] font-bold">
                               #{idx + 1}
                             </span>
                             <span className="text-xs font-semibold truncate">
@@ -1346,7 +1346,7 @@ export const StaffManagement: React.FC = () => {
                               disabled={idx === 0}
                               onClick={moveUp}
                               title="Pindah ke Atas"
-                              className="p-1 rounded-md text-[#54656f] hover:bg-[#e9edef] hover:text-[#111b21] disabled:opacity-30"
+                              className="p-1 rounded-md text-[#54656f] dark:text-[#8696a0] hover:bg-[#e9edef] hover:text-[#111b21] dark:text-[#e9edef] disabled:opacity-30"
                             >
                               <ArrowUp size={13} />
                             </button>
@@ -1355,7 +1355,7 @@ export const StaffManagement: React.FC = () => {
                               disabled={idx === roleAllowedPaths.length - 1}
                               onClick={moveDown}
                               title="Pindah ke Bawah"
-                              className="p-1 rounded-md text-[#54656f] hover:bg-[#e9edef] hover:text-[#111b21] disabled:opacity-30"
+                              className="p-1 rounded-md text-[#54656f] dark:text-[#8696a0] hover:bg-[#e9edef] hover:text-[#111b21] dark:text-[#e9edef] disabled:opacity-30"
                             >
                               <ArrowDown size={13} />
                             </button>
@@ -1371,7 +1371,7 @@ export const StaffManagement: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowRoleModal(false)}
-                  className="px-4 py-2 rounded-xl text-[#54656f] hover:bg-[#f0f2f5] text-xs font-semibold transition-colors"
+                  className="px-4 py-2 rounded-xl text-[#54656f] dark:text-[#8696a0] hover:bg-[#f0f2f5] text-xs font-semibold transition-colors"
                 >
                   Batal
                 </button>
@@ -1396,17 +1396,17 @@ export const StaffManagement: React.FC = () => {
           onClick={() => setShowCreateModal(false)}
         >
           <div
-            className="w-full max-w-md bg-white border border-[#e9edef] rounded-2xl p-6 shadow-xl space-y-4"
+            className="w-full max-w-md bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-6 shadow-xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-[#e9edef] pb-3">
-              <h3 className="text-base font-bold text-[#111b21] flex items-center space-x-2">
+              <h3 className="text-base font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
                 <UserPlus className="text-[#008069]" size={18} />
                 <span>Tambah Staff / Pengguna Baru</span>
               </h3>
               <button
                 onClick={() => setShowCreateModal(false)}
-                className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5]"
+                className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5]"
               >
                 ✕
               </button>
@@ -1414,19 +1414,19 @@ export const StaffManagement: React.FC = () => {
 
             <form onSubmit={handleCreateStaff} className="space-y-3.5">
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#111b21]">Nama Lengkap Staff</label>
+                <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Nama Lengkap Staff</label>
                 <input
                   type="text"
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Contoh: Bidan Yusi / Dewi"
-                  className="w-full px-3.5 py-2 rounded-xl bg-white border border-[#d1d7db] text-[#111b21] text-xs focus:outline-none focus:border-[#008069] shadow-xs"
+                  className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] text-xs focus:outline-none focus:border-[#008069] shadow-xs"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#111b21]">Nomor WhatsApp / HP (Username Login)</label>
+                <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Nomor WhatsApp / HP (Username Login)</label>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-[#8696a0]">
                     <Phone size={14} />
@@ -1437,14 +1437,14 @@ export const StaffManagement: React.FC = () => {
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="08123456789"
-                    className="w-full pl-9 pr-3.5 py-2 rounded-xl bg-white border border-[#d1d7db] text-[#111b21] text-xs focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full pl-9 pr-3.5 py-2 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] text-xs focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                 </div>
               </div>
 
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-[#111b21]">Peran / Hak Akses (Role)</label>
+                  <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Peran / Hak Akses (Role)</label>
                   <button
                     type="button"
                     onClick={() => {
@@ -1460,7 +1460,7 @@ export const StaffManagement: React.FC = () => {
                 <select
                   value={role}
                   onChange={(e) => setRole(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl bg-white border border-[#d1d7db] text-[#111b21] text-xs focus:outline-none focus:border-[#008069] shadow-xs font-medium"
+                  className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] text-xs focus:outline-none focus:border-[#008069] shadow-xs font-medium"
                 >
                   {roleEntries.map((r) => (
                     <option key={r.key} value={r.key.toUpperCase()}>
@@ -1471,7 +1471,7 @@ export const StaffManagement: React.FC = () => {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#111b21]">Password Awal</label>
+                <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Password Awal</label>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-[#8696a0]">
                     <Lock size={14} />
@@ -1482,7 +1482,7 @@ export const StaffManagement: React.FC = () => {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Minimal 6 karakter"
-                    className="w-full pl-9 pr-3.5 py-2 rounded-xl bg-white border border-[#d1d7db] text-[#111b21] text-xs focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full pl-9 pr-3.5 py-2 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] text-xs focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                 </div>
               </div>
@@ -1491,7 +1491,7 @@ export const StaffManagement: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 rounded-xl text-[#54656f] hover:bg-[#f0f2f5] text-xs font-semibold transition-colors"
+                  className="px-4 py-2 rounded-xl text-[#54656f] dark:text-[#8696a0] hover:bg-[#f0f2f5] text-xs font-semibold transition-colors"
                 >
                   Batal
                 </button>
@@ -1517,17 +1517,17 @@ export const StaffManagement: React.FC = () => {
           onClick={() => setSelectedStaffForEdit(null)}
         >
           <div
-            className="w-full max-w-md bg-white border border-[#e9edef] rounded-2xl p-6 shadow-xl space-y-4"
+            className="w-full max-w-md bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-6 shadow-xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-[#e9edef] pb-3">
-              <h3 className="text-base font-bold text-[#111b21] flex items-center space-x-2">
+              <h3 className="text-base font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
                 <Pencil className="text-[#008069]" size={16} />
                 <span>Edit Akun Staff</span>
               </h3>
               <button
                 onClick={() => setSelectedStaffForEdit(null)}
-                className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5]"
+                className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5]"
               >
                 ✕
               </button>
@@ -1535,18 +1535,18 @@ export const StaffManagement: React.FC = () => {
 
             <form onSubmit={handleSaveEditStaff} className="space-y-3.5">
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#111b21]">Nama Lengkap</label>
+                <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Nama Lengkap</label>
                 <input
                   type="text"
                   required
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl bg-white border border-[#d1d7db] text-[#111b21] text-xs focus:outline-none focus:border-[#008069] shadow-xs"
+                  className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] text-xs focus:outline-none focus:border-[#008069] shadow-xs"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#111b21]">Nomor WhatsApp</label>
+                <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Nomor WhatsApp</label>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-[#8696a0]">
                     <Phone size={14} />
@@ -1556,17 +1556,17 @@ export const StaffManagement: React.FC = () => {
                     required
                     value={editPhone}
                     onChange={(e) => setEditPhone(e.target.value)}
-                    className="w-full pl-9 pr-3.5 py-2 rounded-xl bg-white border border-[#d1d7db] text-[#111b21] text-xs focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full pl-9 pr-3.5 py-2 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] text-xs focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#111b21]">Peran / Hak Akses (Role)</label>
+                <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">Peran / Hak Akses (Role)</label>
                 <select
                   value={editRole}
                   onChange={(e) => setEditRole(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl bg-white border border-[#d1d7db] text-[#111b21] text-xs focus:outline-none focus:border-[#008069] shadow-xs font-medium"
+                  className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] text-xs focus:outline-none focus:border-[#008069] shadow-xs font-medium"
                 >
                   {roleEntries.map((r) => (
                     <option key={r.key} value={r.key.toUpperCase()}>
@@ -1577,7 +1577,7 @@ export const StaffManagement: React.FC = () => {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#111b21]">
+                <label className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">
                   Password Baru <span className="text-[#8696a0] font-normal">(Kosongkan jika tidak diubah)</span>
                 </label>
                 <div className="relative">
@@ -1589,15 +1589,15 @@ export const StaffManagement: React.FC = () => {
                     value={editPassword}
                     onChange={(e) => setEditPassword(e.target.value)}
                     placeholder="Masukkan password baru"
-                    className="w-full pl-9 pr-3.5 py-2 rounded-xl bg-white border border-[#d1d7db] text-[#111b21] text-xs focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full pl-9 pr-3.5 py-2 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] text-xs focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                 </div>
               </div>
 
-              <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef]">
+              <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#f8fafc] dark:bg-[#202c33] border border-[#e9edef]">
                 <div>
-                  <span className="text-xs font-bold text-[#111b21] block">Status Akun Staf</span>
-                  <span className="text-[11px] text-[#667781]">
+                  <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] block">Status Akun Staf</span>
+                  <span className="text-[11px] text-[#667781] dark:text-[#8696a0]">
                     {editActive ? 'Akun aktif dan dapat login ke dashboard' : 'Akun dinonaktifkan (login diblokir & sesi dicabut)'}
                   </span>
                 </div>
@@ -1614,7 +1614,7 @@ export const StaffManagement: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setSelectedStaffForEdit(null)}
-                  className="px-4 py-2 rounded-xl text-[#54656f] hover:bg-[#f0f2f5] text-xs font-semibold transition-colors"
+                  className="px-4 py-2 rounded-xl text-[#54656f] dark:text-[#8696a0] hover:bg-[#f0f2f5] text-xs font-semibold transition-colors"
                 >
                   Batal
                 </button>

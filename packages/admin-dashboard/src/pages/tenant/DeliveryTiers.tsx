@@ -121,18 +121,18 @@ export const DeliveryTiers: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-[#111b21] flex items-center space-x-2">
+          <h2 className="text-xl font-bold tracking-tight text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
             <Truck className="text-[#008069]" size={22} />
             <span>Delivery Fee Tiering</span>
           </h2>
-          <p className="text-xs text-[#667781] mt-0.5">Kelola tarif ongkir homecare berdasarkan jarak dari klinik ke lokasi customer</p>
+          <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">Kelola tarif ongkir homecare berdasarkan jarak dari klinik ke lokasi customer</p>
         </div>
         <button
           onClick={() => loadTiers({ forceFresh: true })}
-          className="px-3.5 py-2 rounded-xl bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] transition flex items-center space-x-1.5 shadow-xs"
+          className="px-3.5 py-2 rounded-xl bg-white dark:bg-[#202c33] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] transition flex items-center space-x-1.5 shadow-xs"
           title="Reload dari server"
         >
-          <RefreshCw size={13} className={loading ? 'animate-spin text-[#008069]' : 'text-[#667781]'} />
+          <RefreshCw size={13} className={loading ? 'animate-spin text-[#008069]' : 'text-[#667781] dark:text-[#8696a0]'} />
           <span className="text-xs font-semibold">Reload</span>
         </button>
       </div>
@@ -154,9 +154,9 @@ export const DeliveryTiers: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* === LEFT: Tier table editor === */}
-        <div className="lg:col-span-2 bg-white border border-[#e9edef] rounded-2xl p-5 space-y-4 shadow-xs">
+        <div className="lg:col-span-2 bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-4 shadow-xs">
           <div className="flex justify-between items-center">
-            <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
+            <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
               <Ruler className="text-[#008069]" size={16} />
               <span>Daftar Tier Jarak</span>
             </h3>
@@ -165,7 +165,7 @@ export const DeliveryTiers: React.FC = () => {
             </span>
           </div>
 
-          <div className="hidden md:grid grid-cols-12 gap-2 text-[10px] uppercase font-bold text-[#667781] px-2">
+          <div className="hidden md:grid grid-cols-12 gap-2 text-[10px] uppercase font-bold text-[#667781] dark:text-[#8696a0] px-2">
             <div className="col-span-2">Max Dist (km)</div>
             <div className="col-span-3">Ongkir Normal (Rp)</div>
             <div className="col-span-3">Potongan Promo (Rp)</div>
@@ -180,7 +180,7 @@ export const DeliveryTiers: React.FC = () => {
               return (
                 <div key={tier.id} className="grid grid-cols-2 md:grid-cols-12 gap-2 items-center p-2.5 rounded-xl bg-[#f8fafc] border border-[#e9edef]">
                   <div className="col-span-1 md:col-span-2">
-                    <label className="md:hidden text-[9px] text-[#667781] block uppercase font-bold mb-1">Max Dist (km)</label>
+                    <label className="md:hidden text-[9px] text-[#667781] dark:text-[#8696a0] block uppercase font-bold mb-1">Max Dist (km)</label>
                     <input
                       type="number"
                       step="0.5"
@@ -188,11 +188,11 @@ export const DeliveryTiers: React.FC = () => {
                       value={tier.maxDist}
                       onChange={(e) => updateTier(idx, 'maxDist', e.target.value === '' ? '' : parseFloat(e.target.value))}
                       placeholder="0"
-                      className="w-full p-2 bg-white border border-[#d1d7db] rounded-lg text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+                      className="w-full p-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-lg text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
                     />
                   </div>
                   <div className="col-span-1 md:col-span-3">
-                    <label className="md:hidden text-[9px] text-[#667781] block uppercase font-bold mb-1">Normal (Rp)</label>
+                    <label className="md:hidden text-[9px] text-[#667781] dark:text-[#8696a0] block uppercase font-bold mb-1">Normal (Rp)</label>
                     <input
                       type="number"
                       step="1000"
@@ -200,11 +200,11 @@ export const DeliveryTiers: React.FC = () => {
                       value={tier.fee}
                       onChange={(e) => updateTier(idx, 'fee', e.target.value === '' ? '' : parseInt(e.target.value))}
                       placeholder="0"
-                      className="w-full p-2 bg-white border border-[#d1d7db] rounded-lg text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+                      className="w-full p-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-lg text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
                     />
                   </div>
                   <div className="col-span-1 md:col-span-3">
-                    <label className="md:hidden text-[9px] text-[#667781] block uppercase font-bold mb-1">Promo (Rp)</label>
+                    <label className="md:hidden text-[9px] text-[#667781] dark:text-[#8696a0] block uppercase font-bold mb-1">Promo (Rp)</label>
                     <input
                       type="number"
                       step="1000"
@@ -212,11 +212,11 @@ export const DeliveryTiers: React.FC = () => {
                       value={tier.promoDiscount}
                       onChange={(e) => updateTier(idx, 'promoDiscount', e.target.value === '' ? '' : parseInt(e.target.value))}
                       placeholder="0"
-                      className="w-full p-2 bg-white border border-[#d1d7db] rounded-lg text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+                      className="w-full p-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-lg text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
                     />
                   </div>
                   <div className="col-span-1 md:col-span-3">
-                    <label className="md:hidden text-[9px] text-[#667781] block uppercase font-bold mb-1">Net</label>
+                    <label className="md:hidden text-[9px] text-[#667781] dark:text-[#8696a0] block uppercase font-bold mb-1">Net</label>
                     <div className={`p-2 rounded-lg text-xs font-bold ${net === 0 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0]'}`}>
                       {net === 0 ? 'GRATIS' : formatRp(net)}
                     </div>
@@ -255,7 +255,7 @@ export const DeliveryTiers: React.FC = () => {
           <div className="pt-2 flex justify-between items-center border-t border-[#e9edef]">
             <button
               onClick={addTier}
-              className="px-3 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] rounded-xl text-xs font-semibold text-[#111b21] flex items-center space-x-1 transition shadow-xs"
+              className="px-3 py-2 bg-white dark:bg-[#202c33] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs font-semibold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-1 transition shadow-xs"
             >
               <Plus size={13} />
               <span>Tambah Tier</span>
@@ -274,17 +274,17 @@ export const DeliveryTiers: React.FC = () => {
         {/* === RIGHT: Live preview & simulasi === */}
         <div className="space-y-6">
           {/* Simulator Ongkir */}
-          <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-4 shadow-xs">
-            <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
+          <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-4 shadow-xs">
+            <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
               <Coins className="text-[#008069]" size={16} />
               <span>Simulasi Ongkir</span>
             </h3>
-            <p className="text-xs text-[#667781]">
+            <p className="text-xs text-[#667781] dark:text-[#8696a0]">
               Masukkan jarak customer untuk melihat tier & ongkir yang berlaku.
             </p>
 
             <div className="space-y-1.5">
-              <label className="text-xs text-[#667781] font-semibold">Jarak dari klinik (km)</label>
+              <label className="text-xs text-[#667781] dark:text-[#8696a0] font-semibold">Jarak dari klinik (km)</label>
               <div className="flex space-x-2">
                 <input
                   type="number"
@@ -292,7 +292,7 @@ export const DeliveryTiers: React.FC = () => {
                   min="0"
                   value={previewKm}
                   onChange={(e) => setPreviewKm(parseFloat(e.target.value) || 0)}
-                  className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+                  className="w-full p-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
                 />
                 <div className="flex space-x-1">
                   {[3, 5, 8, 12, 18, 25].map(km => (
@@ -311,19 +311,19 @@ export const DeliveryTiers: React.FC = () => {
             {previewTier ? (
               <div className="space-y-2 p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef]">
                 <div className="flex justify-between text-xs">
-                  <span className="text-[#667781]">Tier berlaku</span>
-                  <span className="text-[#111b21] font-bold">≤ {previewTier.maxDist} km</span>
+                  <span className="text-[#667781] dark:text-[#8696a0]">Tier berlaku</span>
+                  <span className="text-[#111b21] dark:text-[#e9edef] font-bold">≤ {previewTier.maxDist} km</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-[#667781]">Ongkir normal</span>
-                  <span className="text-[#111b21] font-bold">{previewFee === 0 ? 'GRATIS' : formatRp(previewFee || 0)}</span>
+                  <span className="text-[#667781] dark:text-[#8696a0]">Ongkir normal</span>
+                  <span className="text-[#111b21] dark:text-[#e9edef] font-bold">{previewFee === 0 ? 'GRATIS' : formatRp(previewFee || 0)}</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-[#667781]">Potongan promo</span>
+                  <span className="text-[#667781] dark:text-[#8696a0]">Potongan promo</span>
                   <span className="text-emerald-700 font-bold">- {formatRp(previewPromo || 0)}</span>
                 </div>
                 <div className="border-t border-[#e9edef] pt-2 mt-2 flex justify-between text-xs font-bold">
-                  <span className="text-[#111b21]">Yang dibayar customer</span>
+                  <span className="text-[#111b21] dark:text-[#e9edef]">Yang dibayar customer</span>
                   <span className={previewNet === 0 ? 'text-emerald-700 font-extrabold' : 'text-[#008069] font-extrabold text-sm'}>
                     {previewNet === 0 ? 'GRATIS' : formatRp(previewNet || 0)}
                   </span>
@@ -338,15 +338,15 @@ export const DeliveryTiers: React.FC = () => {
           </div>
 
           {/* Info & peringatan */}
-          <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-3 shadow-xs">
-            <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
+          <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-3 shadow-xs">
+            <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
               <Info className="text-[#008069]" size={16} />
               <span>Informasi</span>
             </h3>
             <ul className="space-y-2 text-xs text-[#54656f] leading-relaxed">
               <li className="flex space-x-2">
                 <span className="text-[#008069] font-bold">•</span>
-                <span>Jarak dihitung dari koordinat klinik <code className="bg-[#f0f2f5] px-1 py-0.5 rounded text-[#111b21] font-mono text-[11px]">-7.34886, 112.751677</code></span>
+                <span>Jarak dihitung dari koordinat klinik <code className="bg-[#f0f2f5] px-1 py-0.5 rounded text-[#111b21] dark:text-[#e9edef] font-mono text-[11px]">-7.34886, 112.751677</code></span>
               </li>
               <li className="flex space-x-2">
                 <span className="text-[#008069] font-bold">•</span>

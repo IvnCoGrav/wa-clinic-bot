@@ -5,9 +5,11 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 609
+Total entri terindeks: 612
 
 - 2026-10-29 | Fix & Feat: Remediasi Fondasional Pasca-Audit Menyeluruh (Phase 1–8)
+- 2026-10-28 | Refactor: Eliminasi 420 Warna Neon di Dark Mode & Harmonisasi Anti-Neon WhatsApp Design Sy
+- 2026-10-28 | Refactor & Feature: Remediasi Menyeluruh UI/UX, Eliminasi Flashbang & Standardisasi Dark M
 - 2026-10-28 | Feat: Perbaikan Saringan Kohort Semua Pasien & Perhitungan Repeat Order M+5 (8c1dd757)
 - 2026-10-27 | Refactor: UI Dashboard Cleanup & Catatan Perubahan Kontrak Backend (c9cbf1e1)
 - 2026-10-27 | Feat: Overhaul Retensi Repeat Order Kohort Bulanan & LTV Matang (ffece481)
@@ -15,6 +17,7 @@ Total entri terindeks: 609
 - 2026-10-25 | Feat: Validasi Nominal Bukti Transfer & Deteksi Mismatch Pembayaran (e2ae2b86)
 - 2026-10-24 | Fix: SSOT Auto-Fill Ongkir Promo di Admin Modal & Sinkronisasi Kanonis Sheets (d3b9c816)
 - 2026-10-28 | Fix: Penyempurnaan Integritas Penamaan Master Customer (Anti-Locking Pushname Non-Manusia
+- 2026-10-27 | Refactor & Audit: Pembersihan Menyeluruh AI Slop UI/UX, Backend Contracts & Comment Hygien
 - 2026-10-25 | Fix: Proteksi Fondasional Integritas Penamaan Master Customer (Anti-Mutasi Liar & Anti-Pem
 - 2026-10-22 | Feat: Tabel Tarif Ongkir Homecare Terklasifikasi Dinamis pada Halaman Pricelist Publik (/p
 - 2026-10-22 | Fix: Tahap B Post-Audit CAPI — Hardening Export, event_id Purchase Deterministik, action_s

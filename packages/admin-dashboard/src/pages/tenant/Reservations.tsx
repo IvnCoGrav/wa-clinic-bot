@@ -1261,7 +1261,7 @@ export const Reservations: React.FC = () => {
                           ? 'bg-amber-200 dark:bg-amber-900/80 text-amber-900 dark:text-amber-100 font-bold'
                           : 'bg-[#e8f5f2] dark:bg-[#00a884]/20 text-[#008069] dark:text-[#00a884]'
                         : tab.isAlert && tab.count > 0
-                        ? 'bg-amber-200 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 font-bold animate-pulse'
+                        ? 'bg-amber-200 dark:bg-amber-900/60 text-amber-800 dark:text-[#f59e0b] font-bold animate-pulse'
                         : 'bg-[#e9edef] dark:bg-[#2a3942] text-[#667781] dark:text-[#8696a0]'
                     }`}
                   >

@@ -30,8 +30,8 @@ export const FunnelBars: React.FC<{ report: MetaPerformanceReport }> = ({ report
   });
 
   return (
-    <section className="bg-white border border-[#e9edef] rounded-2xl p-5 shadow-xs space-y-4">
-      <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
+    <section className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#202c33] rounded-2xl p-5 shadow-xs space-y-4">
+      <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] dark:text-[#e9edef] flex items-center gap-2">
         <Target size={16} className="text-[#008069]" /> Corong Konversi Iklan
         <span title="Berbasis event: menghitung interaksi klik & chat masuk pada rentang ini." className="text-[#8696a0] cursor-help">
           <Info size={13} />
@@ -41,15 +41,15 @@ export const FunnelBars: React.FC<{ report: MetaPerformanceReport }> = ({ report
         {stages.map((s) => (
           <div key={s.label} className="space-y-1">
             <div className="flex items-center justify-between text-xs">
-              <span className="flex items-center gap-1.5 font-semibold text-[#111b21]">
+              <span className="flex items-center gap-1.5 font-semibold text-[#111b21] dark:text-[#e9edef]">
                 <span className="text-[#008069]">{s.icon}</span> {s.label}
               </span>
-              <span className="font-mono font-bold text-[#111b21]">
+              <span className="font-mono font-bold text-[#111b21] dark:text-[#e9edef]">
                 {fmtNum(s.value)}
                 {s.dropPct !== null && <span className="ml-2 text-rose-500 font-sans text-[10px]">-{s.dropPct}%</span>}
               </span>
             </div>
-            <div className="h-2.5 bg-[#f0f2f5] rounded-full overflow-hidden">
+            <div className="h-2.5 bg-[#f0f2f5] dark:bg-[#202c33] rounded-full overflow-hidden">
               <div className="h-full bg-[#008069] rounded-full transition-all" style={{ width: `${s.widthPct}%` }} />
             </div>
           </div>
@@ -62,7 +62,7 @@ export const FunnelBars: React.FC<{ report: MetaPerformanceReport }> = ({ report
           ['Chat → MQL', f.conversionRates.chatToMql],
           ['MQL → Beli', f.conversionRates.mqlToBuyer],
         ].map(([label, val]) => (
-          <div key={label as string} className="rounded-xl border border-[#e9edef] bg-[#f8fafc] px-3 py-2">
+          <div key={label as string} className="rounded-xl border border-[#e9edef] dark:border-[#202c33] bg-[#f8fafc] dark:bg-[#182229] px-3 py-2">
             <p className="text-[10px] uppercase font-bold text-[#8696a0]">{label}</p>
             <p className="text-sm font-extrabold text-[#008069]">{fmtPct(val as number, 1)}</p>
           </div>

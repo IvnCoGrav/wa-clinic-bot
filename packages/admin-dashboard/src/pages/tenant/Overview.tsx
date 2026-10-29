@@ -177,7 +177,7 @@ export const Overview: React.FC = () => {
 
       {/* Error Banner */}
       {error && (
-        <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-xs text-rose-800 dark:text-rose-300">
+        <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-xs text-rose-800 dark:text-[#f87171]">
           <span className="flex items-center gap-2"><AlertTriangle size={14} /> {error}</span>
           <button onClick={() => { setLoading(true); fetchStatus(); }} className="font-bold underline">Coba lagi</button>
         </div>

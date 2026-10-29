@@ -640,22 +640,22 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h1 className="text-xl font-bold text-[#111b21] tracking-tight flex items-center space-x-2">
+          <h1 className="text-xl font-bold text-[#111b21] dark:text-[#e9edef] tracking-tight flex items-center space-x-2">
             <MapPin className="text-[#008069]" size={22} />
             <span>Sebaran Pelanggan</span>
           </h1>
-          <p className="text-xs text-[#667781] mt-0.5">
+          <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
             Peta sebaran pelanggan interaktif dengan pilihan Peta Jalan dan Area Vektor (Surabaya & Sidoarjo). Klik titik lalu tekan "Lihat Detail Pelanggan".
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           {/* Switcher Mode Peta */}
-          <div className="inline-flex rounded-xl bg-white border border-[#d1d7db] p-0.5 shadow-xs text-xs font-semibold">
+          <div className="inline-flex rounded-xl bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#2a3942] p-0.5 shadow-xs text-xs font-semibold">
             <button
               type="button"
               onClick={() => setMapMode('streets')}
               className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${
-                mapMode === 'streets' ? 'bg-[#008069] text-white shadow-xs' : 'text-[#54656f] hover:text-[#111b21]'
+                mapMode === 'streets' ? 'bg-[#008069] text-white shadow-xs' : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef]'
               }`}
               title="Tampilkan peta jalan CartoDB"
             >
@@ -665,7 +665,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
               type="button"
               onClick={() => setMapMode('area')}
               className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${
-                mapMode === 'area' ? 'bg-[#008069] text-white shadow-xs' : 'text-[#54656f] hover:text-[#111b21]'
+                mapMode === 'area' ? 'bg-[#008069] text-white shadow-xs' : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef]'
               }`}
               title="Tampilkan siluet area batas wilayah Surabaya & Sidoarjo tanpa jalan"
             >
@@ -673,7 +673,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
             </button>
           </div>
 
-          <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-[#d1d7db] text-[#54656f] text-xs font-semibold shadow-xs cursor-pointer select-none">
+          <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#54656f] dark:text-[#8696a0] text-xs font-semibold shadow-xs cursor-pointer select-none">
             <input
               type="checkbox"
               checked={showRadius}
@@ -682,7 +682,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
             />
             <span>Tampilkan Radius</span>
           </label>
-          <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-[#d1d7db] text-[#54656f] text-xs font-semibold shadow-xs cursor-pointer select-none">
+          <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#54656f] dark:text-[#8696a0] text-xs font-semibold shadow-xs cursor-pointer select-none">
             <input
               type="checkbox"
               checked={showAllCities}
@@ -700,7 +700,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
               hasInitialFittedRef.current = false;
               setKotaFilter(e.target.value);
             }}
-            className="px-3 py-1.5 rounded-xl bg-white border border-[#d1d7db] text-[#111b21] text-xs font-semibold shadow-xs focus:outline-none focus:border-[#008069]"
+            className="px-3 py-1.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] text-xs font-semibold shadow-xs focus:outline-none focus:border-[#008069]"
           >
             <option value="">Semua Kota</option>
             {kotaOptions.map((k) => (
@@ -715,7 +715,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
               loadPoints(showAllCities, true);
             }}
             disabled={loading}
-            className="px-3 py-1.5 rounded-xl bg-white border border-[#d1d7db] text-[#54656f] hover:bg-[#f0f2f5] hover:text-[#111b21] transition shadow-xs disabled:opacity-50 flex items-center space-x-1.5 text-xs font-semibold cursor-pointer"
+            className="px-3 py-1.5 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#54656f] dark:text-[#8696a0] hover:bg-[#f0f2f5] hover:text-[#111b21] dark:text-[#e9edef] transition shadow-xs disabled:opacity-50 flex items-center space-x-1.5 text-xs font-semibold cursor-pointer"
             title="Refresh titik peta"
           >
             <RefreshCw size={13} className={loading ? 'animate-spin text-[#008069]' : ''} />
@@ -726,36 +726,36 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
 
       {/* Ringkasan KPI Spasial */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="bg-white p-3.5 rounded-xl border border-[#e9edef] shadow-xs">
-          <span className="text-[11px] font-bold text-[#667781] uppercase tracking-wider">Total Terpetakan</span>
-          <p className="text-lg font-bold text-[#111b21] mt-1">{metrics.totalPoints} titik</p>
-          <span className="text-[10px] text-[#667781]">{metrics.preciseCount} presisi · {metrics.estimatedCount} estimasi</span>
+        <div className="bg-white dark:bg-[#111b21] p-3.5 rounded-xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs">
+          <span className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider">Total Terpetakan</span>
+          <p className="text-lg font-bold text-[#111b21] dark:text-[#e9edef] mt-1">{metrics.totalPoints} titik</p>
+          <span className="text-[10px] text-[#667781] dark:text-[#8696a0]">{metrics.preciseCount} presisi · {metrics.estimatedCount} estimasi</span>
         </div>
-        <div className="bg-white p-3.5 rounded-xl border border-[#e9edef] shadow-xs">
-          <span className="text-[11px] font-bold text-[#667781] uppercase tracking-wider">Keterjangkauan</span>
+        <div className="bg-white dark:bg-[#111b21] p-3.5 rounded-xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs">
+          <span className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider">Keterjangkauan</span>
           <p className="text-lg font-bold text-[#008069] mt-1">{metrics.inCoveragePercent}%</p>
-          <span className="text-[10px] text-[#667781]">{metrics.inCoverageCount} dalam · {metrics.outOfCoverageCount} luar</span>
+          <span className="text-[10px] text-[#667781] dark:text-[#8696a0]">{metrics.inCoverageCount} dalam · {metrics.outOfCoverageCount} luar</span>
         </div>
-        <div className="bg-white p-3.5 rounded-xl border border-[#e9edef] shadow-xs">
-          <span className="text-[11px] font-bold text-[#667781] uppercase tracking-wider">Rata-rata Jarak</span>
-          <p className="text-lg font-bold text-[#111b21] mt-1">
+        <div className="bg-white dark:bg-[#111b21] p-3.5 rounded-xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs">
+          <span className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider">Rata-rata Jarak</span>
+          <p className="text-lg font-bold text-[#111b21] dark:text-[#e9edef] mt-1">
             {metrics.averageDistanceKm != null ? `${metrics.averageDistanceKm} km` : '-'}
           </p>
-          <span className="text-[10px] text-[#667781]">dari basecamp</span>
+          <span className="text-[10px] text-[#667781] dark:text-[#8696a0]">dari basecamp</span>
         </div>
-        <div className="bg-white p-3.5 rounded-xl border border-[#e9edef] shadow-xs">
-          <span className="text-[11px] font-bold text-[#667781] uppercase tracking-wider">Top Wilayah</span>
+        <div className="bg-white dark:bg-[#111b21] p-3.5 rounded-xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs">
+          <span className="text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider">Top Wilayah</span>
           {metrics.topKecamatan.length > 0 ? (
-            <p className="text-[11px] font-semibold text-[#111b21] mt-1 leading-snug">
+            <p className="text-[11px] font-semibold text-[#111b21] dark:text-[#e9edef] mt-1 leading-snug">
               {metrics.topKecamatan.map((k, i) => `${i + 1}. ${k.name} (${k.count})`).join(' · ')}
             </p>
           ) : (
-            <p className="text-lg font-bold text-[#111b21] mt-1">-</p>
+            <p className="text-lg font-bold text-[#111b21] dark:text-[#e9edef] mt-1">-</p>
           )}
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#667781]">
+      <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#667781] dark:text-[#8696a0]">
         {([
           { key: 'reserved' as SpatialStatus, label: 'Sudah Reservasi', color: '#008069' },
           { key: 'mql' as SpatialStatus, label: 'MQL (Tertarik)', color: '#2563eb' },
@@ -795,7 +795,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
           type="button"
           onClick={() => setOnlyStaffFilter((prev) => !prev)}
           className={`inline-chip no-touch-min flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition cursor-pointer font-semibold ${
-            onlyStaffFilter ? 'bg-[#7c3aed] text-white border-[#7c3aed]' : 'bg-white border-[#d1d7db] text-[#54656f]'
+            onlyStaffFilter ? 'bg-[#7c3aed] text-white border-[#7c3aed]' : 'bg-white border-[#d1d7db] text-[#54656f] dark:text-[#8696a0]'
           }`}
           title={onlyStaffFilter ? 'Tampilkan semua titik' : 'Hanya titik diedit staf'}
         >
@@ -813,7 +813,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
         )}
         {mapMode === 'area' && (
           <div className="flex items-center gap-2.5 px-2.5 py-1 bg-[#f8fafc] border border-[#e2e8f0] rounded-full text-[11px] font-medium text-[#475569]">
-            <span className="font-bold text-[#111b21]">Batas:</span>
+            <span className="font-bold text-[#111b21] dark:text-[#e9edef]">Batas:</span>
             <span className="flex items-center gap-1">
               <span className="w-3 h-1 rounded-xs bg-[#008069] inline-block" />
               Kota (Hijau)
@@ -832,15 +832,15 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
       </div>
 
       {leafletFailed ? (
-        <div className="bg-white border border-[#e9edef] rounded-2xl p-8 text-center">
+        <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-8 text-center">
           <AlertTriangle className="mx-auto text-amber-500 mb-2" size={28} />
-          <p className="text-sm font-semibold text-[#111b21]">Peta gagal dimuat</p>
-          <p className="text-xs text-[#667781] mt-1">
+          <p className="text-sm font-semibold text-[#111b21] dark:text-[#e9edef]">Peta gagal dimuat</p>
+          <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-1">
             Pustaka peta (CDN) tidak dapat diakses. Periksa koneksi internet lalu coba lagi.
           </p>
         </div>
       ) : (
-        <div className="bg-white border border-[#e9edef] rounded-2xl overflow-hidden shadow-xs relative">
+        <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl overflow-hidden shadow-xs relative">
           <div
             ref={mapContainerRef}
             style={{
@@ -852,7 +852,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
           />
           {/* Floating Quick Controls */}
           <div className="absolute bottom-3 right-3 z-[400] flex flex-col items-end gap-1.5">
-            <div className="flex flex-col bg-white rounded-xl shadow-md border border-[#e9edef] overflow-hidden">
+            <div className="flex flex-col bg-white dark:bg-[#111b21] rounded-xl shadow-md border border-[#e9edef] dark:border-[#2a3942] overflow-hidden">
               <button
                 type="button"
                 onClick={() => {
@@ -860,7 +860,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
                   if (!m || !clinic) return;
                   try { m.flyTo([clinic.lat, clinic.lng], 13, { duration: 0.6 }); } catch {}
                 }}
-                className="px-2.5 py-1.5 text-[11px] font-semibold text-[#111b21] hover:bg-[#f0f2f5] border-b border-[#e9edef] flex items-center gap-1.5"
+                className="px-2.5 py-1.5 text-[11px] font-semibold text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] border-b border-[#e9edef] flex items-center gap-1.5"
                 title="Fokus ke Basecamp Klinik"
               >
                 <span>🎯</span> Fokus Basecamp
@@ -875,17 +875,17 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
                     if (b && b.isValid && b.isValid()) m.fitBounds(b, { padding: [40, 40], maxZoom: 14 });
                   } catch {}
                 }}
-                className="px-2.5 py-1.5 text-[11px] font-semibold text-[#111b21] hover:bg-[#f0f2f5] flex items-center gap-1.5"
+                className="px-2.5 py-1.5 text-[11px] font-semibold text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] flex items-center gap-1.5"
                 title="Pas-kan semua titik terlihat"
               >
                 <span>🗺️</span> Pas-kan Semua
               </button>
             </div>
-            <div className="flex bg-white rounded-xl shadow-md border border-[#e9edef] overflow-hidden">
+            <div className="flex bg-white dark:bg-[#111b21] rounded-xl shadow-md border border-[#e9edef] dark:border-[#2a3942] overflow-hidden">
               <button
                 type="button"
                 onClick={() => { try { mapRef.current?.zoomIn(); } catch {} }}
-                className="px-3 py-1.5 text-sm font-bold text-[#111b21] hover:bg-[#f0f2f5] border-r border-[#e9edef]"
+                className="px-3 py-1.5 text-sm font-bold text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5] border-r border-[#e9edef]"
                 title="Zoom in"
               >
                 +
@@ -893,13 +893,13 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
               <button
                 type="button"
                 onClick={() => { try { mapRef.current?.zoomOut(); } catch {} }}
-                className="px-3 py-1.5 text-sm font-bold text-[#111b21] hover:bg-[#f0f2f5]"
+                className="px-3 py-1.5 text-sm font-bold text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5]"
                 title="Zoom out"
               >
                 −
               </button>
             </div>
-            <div className="px-2 py-1 bg-white/90 backdrop-blur rounded-full text-[10px] font-semibold text-[#54656f] border border-[#e9edef] shadow-sm">
+            <div className="px-2 py-1 bg-white/90 backdrop-blur rounded-full text-[10px] font-semibold text-[#54656f] dark:text-[#8696a0] border border-[#e9edef] shadow-sm">
               Zoom {currentZoom}x
             </div>
           </div>
@@ -912,15 +912,15 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
             <div className="absolute inset-0 bg-white/40 flex items-center justify-center z-10 pointer-events-none">
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white shadow-sm border border-[#e9edef]">
                 <RefreshCw className="animate-spin text-[#008069]" size={14} />
-                <span className="text-xs font-semibold text-[#54656f]">Memuat batas wilayah…</span>
+                <span className="text-xs font-semibold text-[#54656f] dark:text-[#8696a0]">Memuat batas wilayah…</span>
               </div>
             </div>
           )}
           {!loading && visiblePoints.length === 0 && !error && (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none z-10">
               <MapPin className="text-[#94a3b8] mb-2" size={28} />
-              <p className="text-sm font-semibold text-[#111b21]">Tidak ada titik untuk ditampilkan</p>
-              <p className="text-xs text-[#667781] mt-1">
+              <p className="text-sm font-semibold text-[#111b21] dark:text-[#e9edef]">Tidak ada titik untuk ditampilkan</p>
+              <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-1">
                 {kotaFilter
                   ? 'Coba pilih kota lain atau reset filter.'
                   : 'Titik muncul setelah pelanggan membagikan lokasi atau admin mengisi koordinat.'}
@@ -930,7 +930,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
           {error && !loading && (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center z-10">
               <AlertTriangle className="text-red-500 mb-2" size={28} />
-              <p className="text-sm font-semibold text-[#111b21]">{error}</p>
+              <p className="text-sm font-semibold text-[#111b21] dark:text-[#e9edef]">{error}</p>
               <button
                 onClick={() => loadPoints(showAllCities, true)}
                 className="mt-3 px-3 py-1.5 rounded-xl bg-[#008069] text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"

@@ -70,7 +70,7 @@ export class AppErrorBoundary extends React.Component<Props, State> {
     return (
       <div className="min-h-[60vh] flex items-center justify-center bg-[#f0f2f5] dark:bg-[#111b21] p-6">
         <div className="bg-white dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-6 sm:p-8 shadow-xs max-w-lg w-full flex flex-col items-center text-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-amber-50 dark:bg-amber-500/15 border border-amber-200 dark:border-amber-500/30 flex items-center justify-center text-amber-600 dark:text-amber-300 text-xl">
+          <div className="w-12 h-12 rounded-full bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 flex items-center justify-center text-amber-600 dark:text-[#f59e0b] text-xl">
             ⚠️
           </div>
           <h2 className="text-base font-extrabold text-[#111b21] dark:text-[#e9edef]">Terjadi Kendala Memuat Halaman</h2>
@@ -102,7 +102,7 @@ export class AppErrorBoundary extends React.Component<Props, State> {
           </div>
           <details className="w-full text-left bg-[#f8fafc] dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl p-3">
             <summary className="text-xs font-bold text-[#54656f] dark:text-[#aebac1] cursor-pointer">Detail teknis (untuk staf IT)</summary>
-            <pre className="mt-2 text-[11px] font-mono text-rose-700 dark:text-rose-300 whitespace-pre-wrap break-all max-h-48 overflow-auto">
+            <pre className="mt-2 text-[11px] font-mono text-rose-700 dark:text-[#f87171] whitespace-pre-wrap break-all max-h-48 overflow-auto">
               {this.state.error.message}
               {this.state.error.stack ? `\n\n${this.state.error.stack}` : ''}
               {this.state.errorInfo?.componentStack ? `\n\nComponent stack:${this.state.errorInfo.componentStack}` : ''}

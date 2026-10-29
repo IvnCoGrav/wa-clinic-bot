@@ -314,7 +314,7 @@ export const FollowUpTemplates: React.FC = () => {
           <button
             onClick={() => loadTemplates(false)}
             disabled={refreshing || loading}
-            className="h-10 px-4 rounded-xl bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] transition-all duration-150 active:scale-[0.98] flex items-center space-x-2 text-xs font-semibold shadow-xs disabled:opacity-60"
+            className="h-10 px-4 rounded-xl bg-white dark:bg-[#202c33] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] border border-[#d1d7db] dark:border-[#2a3942] text-[#111b21] dark:text-[#e9edef] transition-all duration-150 active:scale-[0.98] flex items-center space-x-2 text-xs font-semibold shadow-xs disabled:opacity-60"
             title="Muat ulang template dari database"
           >
             <RefreshCw
@@ -378,7 +378,7 @@ export const FollowUpTemplates: React.FC = () => {
                 className={`h-9 px-3.5 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all duration-150 whitespace-nowrap active:scale-[0.98] ${
                   isActive
                     ? 'bg-[#008069] text-white shadow-sm font-bold'
-                    : 'bg-white border border-[#d1d7db] text-[#54656f] hover:bg-[#f0f2f5] hover:text-[#111b21]'
+                    : 'bg-white dark:bg-[#111b21] border border-[#d1d7db] dark:border-[#202c33] text-[#54656f] dark:text-[#8696a0] hover:bg-[#f0f2f5] dark:hover:bg-[#202c33] hover:text-[#111b21] dark:hover:text-[#e9edef]'
                 }`}
               >
                 <Icon size={14} className={isActive ? 'text-white' : 'text-[#8696a0]'} />
@@ -403,7 +403,7 @@ export const FollowUpTemplates: React.FC = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Cari skenario / keyword..."
-            className="w-full h-9 pl-9 pr-8 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs transition"
+            className="w-full h-9 pl-9 pr-8 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs transition"
           />
           {searchQuery && (
             <button
@@ -425,7 +425,7 @@ export const FollowUpTemplates: React.FC = () => {
       ) : filteredTypes.length === 0 ? (
         <div className="text-center py-16 bg-white border border-[#e9edef] rounded-2xl p-6">
           <MessageSquareText size={36} className="text-[#8696a0] mx-auto mb-2 opacity-50" />
-          <h3 className="text-sm font-bold text-[#111b21]">Tidak ada template ditemukan</h3>
+          <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef]">Tidak ada template ditemukan</h3>
           <p className="text-xs text-[#54656f] mt-1 max-w-sm mx-auto">
             {searchQuery
               ? `Tidak ada hasil yang cocok dengan kata kunci "${searchQuery}". Coba gunakan istilah lain.`
@@ -453,7 +453,7 @@ export const FollowUpTemplates: React.FC = () => {
             return (
               <div
                 key={type}
-                className="bg-white border border-[#e9edef] rounded-2xl p-5 md:p-6 shadow-xs hover:border-[#d1d7db] transition-colors"
+                className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#202c33] rounded-2xl p-5 md:p-6 shadow-xs hover:border-[#d1d7db] dark:hover:border-[#2a3942] transition-colors"
               >
                 {/* Skenario Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3.5 border-b border-[#e9edef]">
@@ -462,7 +462,7 @@ export const FollowUpTemplates: React.FC = () => {
                       <div className="w-6 h-6 rounded-lg bg-[#e8f5f2] text-[#008069] flex items-center justify-center">
                         <Tag size={13} />
                       </div>
-                      <h3 className="text-sm font-bold text-[#111b21]">{config.label}</h3>
+                      <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef]">{config.label}</h3>
                       <span className="px-2 py-0.5 rounded-full bg-[#f0f2f5] text-[#54656f] text-[10px] font-bold">
                         {items.length} Varian Rotasi
                       </span>
@@ -486,15 +486,15 @@ export const FollowUpTemplates: React.FC = () => {
                         key={key}
                         className={`flex flex-col justify-between p-4 rounded-xl border transition-all ${
                           isDirty
-                            ? 'bg-[#fcfdfd] border-[#008069]/40 ring-1 ring-[#008069]/20 shadow-xs'
-                            : 'bg-[#fcfcfc] border-[#e9edef] hover:border-[#d1d7db]'
+                            ? 'bg-[#fcfdfd] dark:bg-[#182229] border-[#008069]/40 ring-1 ring-[#008069]/20 shadow-xs'
+                            : 'bg-[#fcfcfc] dark:bg-[#182229] border-[#e9edef] dark:border-[#202c33] hover:border-[#d1d7db] dark:hover:border-[#2a3942]'
                         }`}
                       >
                         {/* Variant Top Bar */}
                         <div>
-                          <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#f0f2f5]">
+                          <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#f0f2f5] dark:border-[#202c33]">
                             <div className="flex items-center space-x-2">
-                              <span className="text-xs font-bold text-[#111b21] bg-white px-2 py-0.5 rounded-md border border-[#e9edef] shadow-2xs">
+                              <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] bg-white dark:bg-[#202c33] px-2 py-0.5 rounded-md border border-[#e9edef] dark:border-[#2a3942] shadow-2xs">
                                 Varian #{item.variant}
                               </span>
                               {!item.isDefault ? (
@@ -551,13 +551,13 @@ export const FollowUpTemplates: React.FC = () => {
                               value={item.text}
                               onChange={(e) => updateText(item.type, item.variant, e.target.value)}
                               placeholder="Tulis draf pesan follow-up di sini..."
-                              className="w-full p-3 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] leading-relaxed resize-none focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-2xs transition"
+                              className="w-full p-3 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] leading-relaxed resize-none focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-2xs transition"
                             />
                           </div>
                         </div>
 
                         {/* Card Bottom Bar (Char Count & Action Button) */}
-                        <div className="flex items-center justify-between pt-3 mt-2 border-t border-[#f0f2f5]">
+                        <div className="flex items-center justify-between pt-3 mt-2 border-t border-[#f0f2f5] dark:border-[#202c33]">
                           <div className="flex items-center space-x-1.5">
                             <span className="text-[11px] text-[#8696a0] font-mono">{charCount} kar</span>
                             {isDirty && (

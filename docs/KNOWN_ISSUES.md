@@ -3,9 +3,18 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 287. [Test Suite] 22 Test Gagal Pre-Existing — Date Rot & Mock Drift (2026-10-29, OPEN - MEDIUM)
+
+- **Status:** OPEN — **bukan regresi**. Dibuktikan dengan *revert-and-rerun*: 10 file yang sama dijalankan pada commit `76972ce5` (sebelum merge `origin/master`) dan menghasilkan **22 test gagal yang identik**.
+- **Gejala:** `npm test` → `Test Files 10 failed | 715 passed`, `Tests 22 failed | 5949 passed`.
+- **File terdampak:** `tests/integration/v3-conversation-matrix.test.ts`, `tests/unit/adversarial-reservation-resilience.test.ts`, `tests/unit/catalog-seed-drift.test.ts`, `tests/unit/chat-schedule-extractor.test.ts`, `tests/unit/conversation-filter.test.ts`, `tests/unit/hybrid-reservation-parser.test.ts`, `tests/unit/reservation-idempotency-request-id.test.ts`, `tests/unit/reservation-security-and-integrity.test.ts`, `tests/unit/staff-otw-chat-poison.test.ts`, `tests/v3/agent-runner.test.ts`.
+- **Akar masalah yang sudah terkonfirmasi (1 dari 22):** `tests/unit/staff-otw-chat-poison.test.ts:54` menulis `created_at: '2026-10-10T02:00:00Z'` lalu `:101` mengharapkan label `'Hari ini'`. Assertion itu hanya benar bila hari ini 10 Oktober 2026 → **date rot** (pelanggaran mandat anti-hardcode & adversarial testing: fixture memakai tanggal mati untuk menguji label relatif).
+- **Rencana perbaikan (belum dieksekusi):** ganti fixture tanggal mati dengan tanggal dinamis berbasis `Date.now()` (mis. `new Date().toISOString()`) pada semua test label relatif, lalu audit 21 kegagalan lain satu per satu (dugaan: mock Prisma/`Database offline` drift dan fixture tanggal sejenis).
+- **Dampak:** suite tidak bisa dipakai sebagai gerbang mutlak — kegagalan nyata bisa tersembunyi di antara 22 kegagalan yang sudah ada.
+
 ## 286. [Kalender/Reservasi Mobile] Audit UI/UX View Mingguan di Android & iPhone — 20 Temuan (2026-10-29, OPEN - HIGH)
 
-- **Status:** OPEN — audit *read-only* selesai, **belum ada perubahan kode**. Menunggu persetujuan eksekusi Fase 1–4.
+- **Status:** OPEN — audit *read-only* selesai; **Fase 1 (gestur & scroll) sudah dieksekusi**. F-21 & F-22 RESOLVED, F-23…F-26 menunggu Fase 2–4.
 - **Cakupan bukti:** pembacaan kode + hitungan layout (`file:baris`). **Belum diuji di perangkat fisik**; temuan bertanda 📱 wajib dikonfirmasi di HP sebelum dinyatakan beres.
 - **Gejala yang dilaporkan user:** "sangat kesusahan di view mingguan" pada dashboard admin (halaman Reservasi → mode Minggu), terutama di Android & iPhone.
 
@@ -51,6 +60,19 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 | F-24 | SEDANG | View Bulanan menampilkan **jam + nama** pada pill hari (padat, tak terbaca di 390px). Permintaan: nama saja. | `MonthScheduleGrid.tsx:180-182` | Kepadatan teks; jam terpotong |
 | F-25 | SEDANG | View Mingguan menampilkan **detail treatment**, bukan **daerah** pasien. Data area sudah tersedia dan sudah dipakai di view Harian. Permintaan: ganti ke daerah. | `WeekScheduleGrid.tsx:579`, `:659-663`; data: `customer.kelurahan/kecamatan/kota` (`types/index.ts:40-42`), contoh pemakaian `DayScheduleGrid.tsx:456-463` | Admin home-service butuh tahu wilayah kunjungan, bukan nama paket |
 | F-26 | SEDANG | **Warna kartu = kategori treatment**, bukan bidan penanggung jawab. Tidak ada util warna staff; pola `assigned_staff_id \|\| assigned_staff?.id` diduplikasi di 5 tempat. Permintaan: warna per bidan. | `WeekScheduleGrid.tsx:298-312`; `DayScheduleGrid.tsx:94-123`; `MonthScheduleGrid.tsx:82-96`; duplikasi: `StaffScheduleTimelineStrip.tsx:45`, `DailyScheduleModal.tsx:100`, `CreateReservationModal.tsx:862,1275`, `LiveChatMonitor.tsx:4251` | Sulit melihat beban kerja & pembagian bidan sekilas |
+
+### Status Eksekusi (Plan Fase 0–5, 2026-10-29)
+
+| ID | Status | Perbaikan |
+| --- | --- | --- |
+| F-21 | ✅ **RESOLVED — Fase 1** | Selector global `.overflow-y-auto` dicabut dari aturan `touch-action: pan-y !important` di `index.css` (diganti kelas opt-in `.touch-scroll-y`). Ditambah `.cal-2d { touch-action: pan-x pan-y; overscroll-behavior: auto }` dan dipasang di container grid (`WeekScheduleGrid.tsx:456`). `overscroll-contain` + inline `overscrollBehavior: 'contain'` dihapus. |
+| F-22 | ✅ **RESOLVED — Fase 1** | Blok pull-to-refresh di `Layout.tsx` (effect + state + indikator melayang + import `RefreshCw`) **dihapus total** — 0 area terbukti membutuhkannya karena setiap halaman punya tombol muat ulang sendiri. `window.location.reload()` tidak lagi dipanggil dari gestur. |
+| F-23 | ⏳ Terbuka | Fase 2 (reveal kolom hari berbasis ukur DOM). |
+| F-24 | ⏳ Terbuka | Fase 3 (pill Bulanan: nama saja). |
+| F-25 | ⏳ Terbuka | Fase 3 (Mingguan: daerah, bukan treatment). |
+| F-26 | ⏳ Terbuka | Fase 4 (warna per bidan + legend). |
+
+**Catatan teknis penting (jangan salah "perbaiki"):** `body { touch-action: pan-y }` di `index.css:146` **bukan** penyebab F-21 dan **tidak boleh** diubah. Menurut spesifikasi (MDN `touch-action`), nilai dihitung sebagai irisan antara elemen yang disentuh dan leluhurnya **sampai scroll container pertama yang menangani gestur**. Karena grid kalender sendiri adalah scroll container, rantai berhenti di `.cal-2d`, sehingga `pan-y` pada `body` tidak membatasi pan horizontal di dalam grid. Hal yang sama menjelaskan mengapa `body.body-scroll-locked { touch-action: none }` tetap tidak memblokir scroll di dalam modal (modal punya scroll container sendiri).
 
 **Sudah baik — jangan diregresikan:** perhitungan posisi berbasis WIB (`getWibHoursAndMinutes`), `data-no-swipe-back`/`data-horizontal-scroll` agar swipe-back tidak bentrok, kategori warna konsisten, zoom tersimpan di localStorage, dan modal detail yang sudah bottom-sheet di HP (`ReservationDetailModal.tsx:417-421`).
 

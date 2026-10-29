@@ -49,9 +49,9 @@ function SnippetBlock({ title, code }: { title: string; code: string }) {
   };
 
   return (
-    <div className="bg-white border border-[#e9edef] rounded-xl overflow-hidden shadow-xs">
-      <div className="flex items-center justify-between px-3.5 py-2 border-b border-[#e9edef] bg-[#f8fafc]">
-        <span className="text-[11px] uppercase font-bold text-[#111b21] flex items-center gap-1.5">
+    <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl overflow-hidden shadow-xs">
+      <div className="flex items-center justify-between px-3.5 py-2 border-b border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#202c33]">
+        <span className="text-[11px] uppercase font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-1.5">
           <Braces size={12} className="text-[#008069]" />
           {title}
         </span>
@@ -60,14 +60,14 @@ function SnippetBlock({ title, code }: { title: string; code: string }) {
           className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg border transition shadow-xs ${
             copied
               ? 'text-emerald-800 border-emerald-300 bg-emerald-100'
-              : 'text-[#111b21] border-[#d1d7db] bg-white hover:bg-[#f0f2f5]'
+              : 'text-[#111b21] dark:text-[#e9edef] border-[#d1d7db] bg-white hover:bg-[#f0f2f5]'
           }`}
         >
           {copied ? <Check size={11} /> : <Copy size={11} />}
           {copied ? 'Tersalin!' : 'Salin'}
         </button>
       </div>
-      <pre className="p-3.5 text-xs leading-relaxed font-mono text-[#008069] bg-[#f8fafc] overflow-x-auto whitespace-pre-wrap break-all">
+      <pre className="p-3.5 text-xs leading-relaxed font-mono text-[#008069] dark:text-[#00a884] bg-[#f8fafc] dark:bg-[#0b141a] overflow-x-auto whitespace-pre-wrap break-all">
         {code}
       </pre>
     </div>
@@ -111,20 +111,20 @@ export const ExternalIntegrationModal: React.FC<ExternalIntegrationModalProps> =
       onClick={onClose}
     >
       <div
-        className="bg-white border border-[#e9edef] rounded-2xl w-full max-w-3xl overflow-hidden flex flex-col shadow-2xl"
+        className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl w-full max-w-3xl overflow-hidden flex flex-col shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-6 py-4 border-b border-[#e9edef] flex justify-between items-center bg-[#f8fafc]">
+        <div className="px-6 py-4 border-b border-[#e9edef] dark:border-[#2a3942] flex justify-between items-center bg-[#f8fafc] dark:bg-[#111b21]">
           <div>
-            <h3 className="font-bold text-[#111b21] text-sm flex items-center gap-2">
+            <h3 className="font-bold text-[#111b21] dark:text-[#e9edef] text-sm flex items-center gap-2">
               <Link2 className="text-[#008069]" size={16} />
               <span>Integrasi Landing Page Eksternal</span>
             </h3>
-            <p className="text-xs text-[#667781] mt-0.5">
+            <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
               Skema 2 (URL Redirect) — hubungkan Landing Page luar ke atribusi &amp; WhatsApp bot.
             </p>
           </div>
-          <button onClick={onClose} className="text-[#8696a0] hover:text-[#111b21] transition" aria-label="Tutup">
+          <button onClick={onClose} className="text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef] transition" aria-label="Tutup">
             <X size={18} />
           </button>
         </div>
@@ -132,7 +132,7 @@ export const ExternalIntegrationModal: React.FC<ExternalIntegrationModalProps> =
         <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto">
           {/* Alur singkat */}
           <div className="space-y-2">
-            <p className="text-[11px] uppercase font-bold text-[#111b21] tracking-wider">Cara kerja</p>
+            <p className="text-[11px] uppercase font-bold text-[#111b21] dark:text-[#e9edef] tracking-wider">Cara kerja</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
               {[
                 { icon: <Link2 size={14} />, txt: 'Ganti tombol CTA ke /cta?slug=...' },
@@ -144,7 +144,7 @@ export const ExternalIntegrationModal: React.FC<ExternalIntegrationModalProps> =
                   <span className="text-[#008069] flex-shrink-0 mt-0.5">{s.icon}</span>
                   <div>
                     <div className="text-[9px] text-[#8696a0] font-bold">LANGKAH {i + 1}</div>
-                    <div className="text-xs text-[#111b21] font-medium leading-snug">{s.txt}</div>
+                    <div className="text-xs text-[#111b21] dark:text-[#e9edef] font-medium leading-snug">{s.txt}</div>
                   </div>
                   {i < 3 && <ArrowRight size={12} className="text-[#8696a0] hidden lg:block ml-auto mt-1" />}
                 </div>
@@ -154,10 +154,10 @@ export const ExternalIntegrationModal: React.FC<ExternalIntegrationModalProps> =
 
           {/* Snippet utama */}
           <div className="space-y-2">
-            <p className="text-[11px] uppercase font-bold text-[#111b21] tracking-wider">Script embed (satu baris)</p>
-            <div className="bg-white border border-[#e9edef] rounded-xl overflow-hidden shadow-xs">
-              <div className="flex items-center justify-between px-3.5 py-2 border-b border-[#e9edef] bg-[#f8fafc]">
-                <span className="text-[11px] uppercase font-bold text-[#111b21] flex items-center gap-1.5">
+            <p className="text-[11px] uppercase font-bold text-[#111b21] dark:text-[#e9edef] tracking-wider">Script embed (satu baris)</p>
+            <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl overflow-hidden shadow-xs">
+              <div className="flex items-center justify-between px-3.5 py-2 border-b border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#202c33]">
+                <span className="text-[11px] uppercase font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-1.5">
                   <Code size={13} className="text-[#008069]" />
                   <span>Pasang di <b>&lt;/body&gt;</b> Landing Page Eksternal</span>
                 </span>
@@ -166,18 +166,18 @@ export const ExternalIntegrationModal: React.FC<ExternalIntegrationModalProps> =
                   className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg border transition shadow-xs ${
                     copiedMain
                       ? 'text-emerald-800 border-emerald-300 bg-emerald-100'
-                      : 'text-[#111b21] border-[#d1d7db] bg-white hover:bg-[#f0f2f5]'
+                      : 'text-[#111b21] dark:text-[#e9edef] border-[#d1d7db] bg-white hover:bg-[#f0f2f5]'
                   }`}
                 >
                   {copiedMain ? <Check size={11} /> : <Copy size={11} />}
                   {copiedMain ? 'Tersalin!' : 'Salin'}
                 </button>
               </div>
-              <pre className="p-3.5 text-xs leading-relaxed font-mono text-[#008069] bg-[#f8fafc] overflow-x-auto whitespace-pre-wrap break-all">
+              <pre className="p-3.5 text-xs leading-relaxed font-mono text-[#008069] dark:text-[#00a884] bg-[#f8fafc] dark:bg-[#0b141a] overflow-x-auto whitespace-pre-wrap break-all">
                 {scriptSnippet}
               </pre>
             </div>
-            <p className="text-xs text-[#667781] flex items-start gap-1.5">
+            <p className="text-xs text-[#667781] dark:text-[#8696a0] flex items-start gap-1.5">
               <Info size={12} className="text-[#008069] flex-shrink-0 mt-0.5" />
               <span>
                 Domain diambil otomatis dari dashboard ini. Tombol CTA Anda harus dimulai dengan{' '}
@@ -188,7 +188,7 @@ export const ExternalIntegrationModal: React.FC<ExternalIntegrationModalProps> =
 
           {/* Contoh link CTA */}
           <div className="space-y-2">
-            <p className="text-[11px] uppercase font-bold text-[#111b21] tracking-wider">Contoh link tombol CTA</p>
+            <p className="text-[11px] uppercase font-bold text-[#111b21] dark:text-[#e9edef] tracking-wider">Contoh link tombol CTA</p>
             <SnippetBlock
               title="HTML link CTA + script embed"
               code={`<a href="${ctaSnippet}" class="btn-cta">Chat WhatsApp Sekarang</a>\n\n<script src="${origin}/assets/external-tracker.js" defer></script>`}
@@ -197,7 +197,7 @@ export const ExternalIntegrationModal: React.FC<ExternalIntegrationModalProps> =
 
           {/* Per platform */}
           <div className="space-y-2">
-            <p className="text-[11px] uppercase font-bold text-[#111b21] tracking-wider">Petunjuk per platform</p>
+            <p className="text-[11px] uppercase font-bold text-[#111b21] dark:text-[#e9edef] tracking-wider">Petunjuk per platform</p>
             <div className="space-y-2.5">
               <SnippetBlock
                 title="Landing statis / HTML polos"
@@ -216,21 +216,21 @@ export const ExternalIntegrationModal: React.FC<ExternalIntegrationModalProps> =
 
           {/* Tabel whitelist */}
           <div className="space-y-2.5">
-            <p className="text-[11px] uppercase font-bold text-[#111b21] tracking-wider">
+            <p className="text-[11px] uppercase font-bold text-[#111b21] dark:text-[#e9edef] tracking-wider">
               Parameter atribusi yang disalin otomatis
             </p>
-            <div className="bg-white border border-[#e9edef] rounded-xl overflow-hidden shadow-xs">
+            <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl overflow-hidden shadow-xs">
               <table className="w-full text-left">
                 <thead>
                   <tr className="border-b border-[#e9edef] bg-[#f8fafc]">
-                    <th className="px-4 py-2.5 text-[11px] uppercase font-bold text-[#667781]">Kategori</th>
-                    <th className="px-4 py-2.5 text-[11px] uppercase font-bold text-[#667781]">Param</th>
+                    <th className="px-4 py-2.5 text-[11px] uppercase font-bold text-[#667781] dark:text-[#8696a0]">Kategori</th>
+                    <th className="px-4 py-2.5 text-[11px] uppercase font-bold text-[#667781] dark:text-[#8696a0]">Param</th>
                   </tr>
                 </thead>
                 <tbody>
                   {PARAM_GROUPS.map((row, i) => (
                     <tr key={i} className="border-b border-[#e9edef] last:border-0">
-                      <td className="px-4 py-2 text-xs font-semibold text-[#111b21]">{row.group}</td>
+                      <td className="px-4 py-2 text-xs font-semibold text-[#111b21] dark:text-[#e9edef]">{row.group}</td>
                       <td className="px-4 py-2">
                         <div className="flex flex-wrap gap-1">
                           {row.params.map((p) => (
@@ -248,19 +248,19 @@ export const ExternalIntegrationModal: React.FC<ExternalIntegrationModalProps> =
                 </tbody>
               </table>
             </div>
-            <p className="text-xs text-[#667781] flex items-start gap-1.5">
+            <p className="text-xs text-[#667781] dark:text-[#8696a0] flex items-start gap-1.5">
               <AlertTriangle size={12} className="text-amber-600 flex-shrink-0 mt-0.5" />
               <span>
                 Param sistem bot (<b>slug</b>, p, phone, msg, greetings) sengaja TIDAK ikut disalin dan tidak pernah ditimpa.
-                Cookie <code className="text-[#111b21] font-mono">_fbp/_fbc</code> bersifat per-domain — jika ingin dedup penuh, sertakan
-                <code className="text-[#111b21] font-mono"> ?fbp=&amp;fbc=</code> di URL LP.
+                Cookie <code className="text-[#111b21] dark:text-[#e9edef] font-mono">_fbp/_fbc</code> bersifat per-domain — jika ingin dedup penuh, sertakan
+                <code className="text-[#111b21] dark:text-[#e9edef] font-mono"> ?fbp=&amp;fbc=</code> di URL LP.
               </span>
             </p>
           </div>
 
           {/* Keamanan */}
           <div className="space-y-2">
-            <p className="text-[11px] uppercase font-bold text-[#111b21] tracking-wider">Keamanan</p>
+            <p className="text-[11px] uppercase font-bold text-[#111b21] dark:text-[#e9edef] tracking-wider">Keamanan</p>
             <div className="border border-amber-200 bg-amber-50 rounded-xl px-4 py-3 space-y-2 shadow-xs">
               <div className="flex items-center gap-2 text-xs font-bold text-amber-900">
                 <ShieldCheck size={14} className="text-amber-700" />
@@ -287,7 +287,7 @@ export const ExternalIntegrationModal: React.FC<ExternalIntegrationModalProps> =
         <div className="px-6 py-4 border-t border-[#e9edef] flex justify-end bg-[#f8fafc]">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs"
+            className="px-4 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] dark:text-[#e9edef] rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs"
           >
             <X size={14} />
             <span>Tutup</span>

@@ -83,19 +83,19 @@ const statusBadge = (s: string | null | undefined) => {
   switch (s) {
     case 'approved':
       return (
-        <span className="px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 text-emerald-800 dark:text-emerald-300 text-xs font-bold whitespace-nowrap" title="Event terkirim ke Meta CAPI">
+        <span className="px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 text-emerald-800 dark:text-[#00a884] text-xs font-bold whitespace-nowrap" title="Event terkirim ke Meta CAPI">
           🟢 Terkirim
         </span>
       );
     case 'ignored_outlier':
       return (
-        <span className="px-2.5 py-1 rounded-full bg-rose-100 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/40 text-rose-800 dark:text-rose-300 text-xs font-bold whitespace-nowrap" title="Event diabaikan sebagai outlier, tidak dikirim ke Meta">
+        <span className="px-2.5 py-1 rounded-full bg-rose-100 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/40 text-rose-800 dark:text-[#f87171] text-xs font-bold whitespace-nowrap" title="Event diabaikan sebagai outlier, tidak dikirim ke Meta">
           🔴 Outlier
         </span>
       );
     default:
       return (
-        <span className="px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 text-amber-800 dark:text-amber-300 text-xs font-bold whitespace-nowrap" title="Menunggu keputusan admin">
+        <span className="px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 text-amber-800 dark:text-[#f59e0b] text-xs font-bold whitespace-nowrap" title="Menunggu keputusan admin">
           🟡 Pending Review
         </span>
       );
@@ -114,20 +114,20 @@ export const isCtwaFuzzyAttribution = (
 const attributionBadge = (attribution: QueueItem['attribution'], utm?: QueueItem['utm']) => {
   if (attribution.ctwa_clid) {
     return (
-      <span className="px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800/40 text-purple-800 dark:text-purple-300 text-[10px] font-bold whitespace-nowrap" title="Iklan Direct WhatsApp (ctwa_clid terpasang)">
+      <span className="px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800/40 text-purple-800 dark:text-[#aebac1] text-[10px] font-bold whitespace-nowrap" title="Iklan Direct WhatsApp (ctwa_clid terpasang)">
         CTWA Direct
       </span>
     );
   }
   if (isCtwaFuzzyAttribution(attribution, utm)) {
     return (
-      <span className="px-2 py-0.5 rounded bg-teal-100 dark:bg-teal-900/30 border border-teal-200 dark:border-teal-800/40 text-teal-800 dark:text-teal-300 text-[10px] font-bold whitespace-nowrap" title="Iklan Click-to-WhatsApp (Tertangkap via Greeting Catcher)">
+      <span className="px-2 py-0.5 rounded bg-teal-100 dark:bg-teal-900/30 border border-teal-200 dark:border-teal-800/40 text-teal-800 dark:text-[#2dd4bf] text-[10px] font-bold whitespace-nowrap" title="Iklan Click-to-WhatsApp (Tertangkap via Greeting Catcher)">
         CTWA Fuzzy
       </span>
     );
   }
   return attribution.isPaid ? (
-    <span className="px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800/40 text-blue-800 dark:text-blue-300 text-[10px] font-bold whitespace-nowrap" title="Iklan Landing Page Web (fbclid/trackingCode terpasang)">
+    <span className="px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800/40 text-blue-800 dark:text-[#38bdf8] text-[10px] font-bold whitespace-nowrap" title="Iklan Landing Page Web (fbclid/trackingCode terpasang)">
       Web LP
     </span>
   ) : (
@@ -155,9 +155,9 @@ const customerTypeBadge = (item: QueueItem) => {
       className={
         isRepeat
           ? isSuppressed
-            ? 'px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-500/15 border border-amber-300 dark:border-amber-500/40 text-amber-900 dark:text-amber-200 text-[10px] font-bold whitespace-nowrap'
-            : 'px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-500/15 border border-indigo-200 dark:border-indigo-500/40 text-indigo-800 dark:text-indigo-300 text-[10px] font-bold whitespace-nowrap'
-          : 'px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-500/15 border border-emerald-200 dark:border-emerald-500/40 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold whitespace-nowrap'
+            ? 'px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800/40 text-amber-900 dark:text-amber-200 text-[10px] font-bold whitespace-nowrap'
+            : 'px-2 py-0.5 rounded bg-indigo-100 dark:bg-[#202c33] border border-indigo-200 dark:border-[#2a3942] text-indigo-800 dark:text-[#aebac1] text-[10px] font-bold whitespace-nowrap'
+          : 'px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 text-emerald-800 dark:text-[#00a884] text-[10px] font-bold whitespace-nowrap'
       }
       title={
         isRepeat
@@ -734,7 +734,7 @@ export const MetaCapiQueue: React.FC = () => {
         </div>
         <div className="bg-amber-50/60 dark:bg-amber-950/30 p-4 rounded-2xl border border-amber-200 dark:border-amber-800/40 shadow-xs">
           <div className="text-[11px] text-amber-800 dark:text-amber-200 font-bold uppercase tracking-wider">Pending Review</div>
-          <div className="text-2xl font-extrabold text-amber-700 dark:text-amber-300 mt-1">{counts.pending}</div>
+          <div className="text-2xl font-extrabold text-amber-700 dark:text-[#e9edef] mt-1">{counts.pending}</div>
         </div>
         <div className="bg-emerald-50/60 dark:bg-emerald-950/30 p-4 rounded-2xl border border-emerald-200 dark:border-emerald-800/40 shadow-xs">
           <div className="text-[11px] text-emerald-800 dark:text-emerald-200 font-bold uppercase tracking-wider">Terkirim</div>
@@ -742,11 +742,11 @@ export const MetaCapiQueue: React.FC = () => {
         </div>
         <div className="bg-rose-50/60 dark:bg-rose-950/30 p-4 rounded-2xl border border-rose-200 dark:border-rose-800/40 shadow-xs">
           <div className="text-[11px] text-rose-800 dark:text-rose-200 font-bold uppercase tracking-wider">Outlier</div>
-          <div className="text-2xl font-extrabold text-rose-600 dark:text-rose-300 mt-1">{counts.outlier}</div>
+          <div className="text-2xl font-extrabold text-rose-600 dark:text-[#e9edef] mt-1">{counts.outlier}</div>
         </div>
-        <div className="bg-purple-50/60 dark:bg-purple-500/10 p-4 rounded-2xl border border-purple-200 dark:border-purple-500/30 shadow-xs">
-          <div className="text-[11px] text-purple-800 dark:text-purple-300 font-bold uppercase tracking-wider">Risiko Drop</div>
-          <div className="text-2xl font-extrabold text-purple-700 dark:text-purple-300 mt-1">{counts.risk}</div>
+        <div className="bg-purple-50/60 dark:bg-[#202c33] p-4 rounded-2xl border border-purple-200 dark:border-[#2a3942] shadow-xs">
+          <div className="text-[11px] text-purple-800 dark:text-[#aebac1] font-bold uppercase tracking-wider">Risiko Drop</div>
+          <div className="text-2xl font-extrabold text-purple-700 dark:text-[#e9edef] mt-1">{counts.risk}</div>
         </div>
       </div>
 
@@ -902,8 +902,8 @@ export const MetaCapiQueue: React.FC = () => {
                         <div
                           className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-extrabold border ${
                             isPurchase
-                              ? 'bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/30 text-blue-800 dark:text-blue-300'
-                              : 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/40 text-emerald-800 dark:text-emerald-300'
+                              ? 'bg-blue-50 dark:bg-[#202c33] border-blue-200 dark:border-[#2a3942] text-blue-800 dark:text-[#38bdf8]'
+                              : 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/40 text-emerald-800 dark:text-[#00a884]'
                           }`}
                         >
                           <Activity size={11} className={isPurchase ? 'text-blue-600' : 'text-emerald-600'} />
@@ -953,7 +953,7 @@ export const MetaCapiQueue: React.FC = () => {
                           onClick={() => openJsonModal(item)}
                           className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition shadow-xs cursor-pointer ${
                             customPayloads[item.id]
-                              ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800/40 hover:bg-amber-100 dark:hover:bg-amber-950/50'
+                              ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-[#f59e0b] border border-amber-300 dark:border-amber-800/40 hover:bg-amber-100 dark:hover:bg-amber-950/50'
                               : 'bg-[#f0f2f5] dark:bg-[#2a3942] hover:bg-[#e9edef] dark:hover:bg-[#374248] text-[#111b21] dark:text-[#e9edef]'
                           }`}
                           title={customPayloads[item.id] ? 'Lihat/Edit Payload JSON (Telah Disesuaikan)' : 'Lihat Payload JSON Meta CAPI'}
@@ -1054,7 +1054,7 @@ export const MetaCapiQueue: React.FC = () => {
                     <div className="shrink-0 flex flex-col items-end gap-1">
                       {statusBadge(item.purchase_review_status)}
                       {item.metaDropRisk && item.purchase_review_status === 'pending' && (
-                        <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950/50 text-purple-800 dark:text-purple-300 text-[10px] font-bold">
+                        <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950/50 text-purple-800 dark:text-[#aebac1] text-[10px] font-bold">
                           <AlertTriangle size={10} />
                           <span>Drop Risk (&gt;7d)</span>
                         </span>
@@ -1072,7 +1072,7 @@ export const MetaCapiQueue: React.FC = () => {
                       </span>
                     )}
                     {item.distanceKm && (
-                      <span className="px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40 font-semibold flex items-center gap-0.5">
+                      <span className="px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-[#38bdf8] border border-blue-200 dark:border-blue-800/40 font-semibold flex items-center gap-0.5">
                         <MapPin size={10} className="text-blue-500" />
                         <span>{item.distanceKm}</span>
                       </span>
@@ -1098,8 +1098,8 @@ export const MetaCapiQueue: React.FC = () => {
                       <span
                         className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg text-xs font-bold border ${
                           isPurchase
-                            ? 'bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/30 text-blue-800 dark:text-blue-300'
-                            : 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/40 text-emerald-800 dark:text-emerald-300'
+                            ? 'bg-blue-50 dark:bg-[#202c33] border-blue-200 dark:border-[#2a3942] text-blue-800 dark:text-[#38bdf8]'
+                            : 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/40 text-emerald-800 dark:text-[#00a884]'
                         }`}
                       >
                         <Activity size={11} />
@@ -1123,7 +1123,7 @@ export const MetaCapiQueue: React.FC = () => {
                       onClick={() => openJsonModal(item)}
                       className={`inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold transition shadow-xs cursor-pointer ${
                         customPayloads[item.id]
-                          ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800/40'
+                          ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-[#f59e0b] border border-amber-300 dark:border-amber-800/40'
                           : 'bg-[#f0f2f5] dark:bg-[#2a3942] hover:bg-[#e9edef] dark:hover:bg-[#374248] text-[#111b21] dark:text-[#e9edef]'
                       }`}
                     >
@@ -1211,7 +1211,7 @@ export const MetaCapiQueue: React.FC = () => {
                       Event: <span className="font-bold text-[#008069] dark:text-[#00a884]">{selectedJsonItem.eventType || 'Purchase'}</span> • Pasien: <span className="font-bold text-[#111b21] dark:text-[#e9edef]">{selectedJsonItem.customer.name}</span>
                     </p>
                     {Boolean(selectedJsonItem.attribution.ctwa_clid) && !wabaConfigured && (
-                      <p className="mt-1 text-[10px] font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                      <p className="mt-1 text-[10px] font-semibold text-amber-700 dark:text-[#f59e0b] flex items-center gap-1">
                         <AlertTriangle size={11} />
                         WABA Business Account ID belum dikonfigurasi — event dikirim sebagai action_source 'chat' (envelope business_messaging tidak lengkap).
                       </p>
@@ -1224,7 +1224,7 @@ export const MetaCapiQueue: React.FC = () => {
                   {!isEditingJson ? (
                     <button
                       onClick={handleStartEditJson}
-                      className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-950/50 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800/40 text-xs font-bold transition shadow-xs cursor-pointer"
+                      className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-950/50 text-amber-800 dark:text-[#f59e0b] border border-amber-300 dark:border-amber-800/40 text-xs font-bold transition shadow-xs cursor-pointer"
                       title="Edit payload JSON secara manual"
                     >
                       <Pencil size={13} />

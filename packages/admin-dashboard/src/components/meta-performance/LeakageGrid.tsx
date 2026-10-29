@@ -8,8 +8,8 @@ export const LeakageGrid: React.FC<{ report: MetaPerformanceReport }> = ({ repor
   const prefs = report.treatmentPreferences;
   return (
     <section className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-      <div className="bg-white border border-[#e9edef] rounded-2xl p-5 shadow-xs space-y-3">
-        <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
+      <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#202c33] rounded-2xl p-5 shadow-xs space-y-3">
+        <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
           <HeartHandshake size={16} className="text-[#008069]" /> Preferensi Layanan Pasien Iklan
         </h3>
         {prefs.length === 0 ? (
@@ -17,10 +17,10 @@ export const LeakageGrid: React.FC<{ report: MetaPerformanceReport }> = ({ repor
         ) : (
           <div className="space-y-2">
             {prefs.map((t, i) => (
-              <div key={`${t.category}-${t.name}`} className="flex items-center justify-between gap-2 text-xs border-b border-[#f0f2f5] last:border-0 pb-1.5 last:pb-0">
+              <div key={`${t.category}-${t.name}`} className="flex items-center justify-between gap-2 text-xs border-b border-[#f0f2f5] dark:border-[#202c33] last:border-0 pb-1.5 last:pb-0">
                 <span className="flex items-center gap-2 min-w-0">
-                  <span className="w-5 h-5 shrink-0 rounded-lg bg-[#e8f5f2] text-[#008069] text-[10px] font-bold flex items-center justify-center">{i + 1}</span>
-                  <span className="truncate font-semibold text-[#111b21]" title={t.name}>{t.name}</span>
+                  <span className="w-5 h-5 shrink-0 rounded-lg bg-[#e8f5f2] dark:bg-[#00a884]/20 text-[#008069] dark:text-[#00a884] text-[10px] font-bold flex items-center justify-center">{i + 1}</span>
+                  <span className="truncate font-semibold text-[#111b21] dark:text-[#e9edef]" title={t.name}>{t.name}</span>
                 </span>
                 <span className="shrink-0 font-mono text-[#667781]">{fmtNum(t.orders)}x · {fmtRupiah(t.revenue)}</span>
               </div>
@@ -29,9 +29,9 @@ export const LeakageGrid: React.FC<{ report: MetaPerformanceReport }> = ({ repor
         )}
       </div>
 
-      <div className="bg-white border border-[#e9edef] rounded-2xl p-5 shadow-xs space-y-4">
+      <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#202c33] rounded-2xl p-5 shadow-xs space-y-4">
         <div className="space-y-2">
-          <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
+          <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
             <MessageSquareWarning size={16} className="text-[#008069]" /> Titik Henti Percakapan
           </h3>
           {d.topDropOffStates.length === 0 ? (
@@ -48,8 +48,8 @@ export const LeakageGrid: React.FC<{ report: MetaPerformanceReport }> = ({ repor
           )}
         </div>
 
-        <div className="border-t border-[#f0f2f5] pt-3 space-y-2">
-          <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
+        <div className="border-t border-[#f0f2f5] dark:border-[#202c33] pt-3 space-y-2">
+          <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
             <MapPin size={16} className="text-[#008069]" /> Sebaran Wilayah Peminat
           </h3>
           {d.topRegions.length === 0 ? (
@@ -57,21 +57,21 @@ export const LeakageGrid: React.FC<{ report: MetaPerformanceReport }> = ({ repor
           ) : (
             <div className="flex flex-wrap gap-1.5">
               {d.topRegions.map((r) => (
-                <span key={r.region} className="inline-flex items-center gap-1 rounded-lg bg-[#f0f2f5] px-2 py-1 text-[11px] text-[#111b21]">
+                <span key={r.region} className="inline-flex items-center gap-1 rounded-lg bg-[#f0f2f5] dark:bg-[#202c33] px-2 py-1 text-[11px] text-[#111b21] dark:text-[#e9edef]">
                   {r.region} <span className="font-mono font-bold text-[#008069]">{fmtNum(r.count)}</span>
                 </span>
               ))}
             </div>
           )}
           {d.outOfCoverageCount > 0 && (
-            <p className="inline-flex items-center gap-1.5 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1">
+            <p className="inline-flex items-center gap-1.5 text-[11px] text-amber-800 dark:text-[#f59e0b] bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 rounded-lg px-2 py-1">
               <AlertTriangle size={12} className="text-amber-600" /> {fmtNum(d.outOfCoverageCount)} prospek iklan di luar jangkauan (out-of-coverage).
             </p>
           )}
         </div>
 
-        <div className="border-t border-[#f0f2f5] pt-3 space-y-1">
-          <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
+        <div className="border-t border-[#f0f2f5] dark:border-[#202c33] pt-3 space-y-1">
+          <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
             <HeartHandshake size={16} className="text-[#008069]" /> Pemulihan Follow-Up
           </h3>
           <p className="text-xs text-[#5b6b73]">
@@ -85,8 +85,8 @@ export const LeakageGrid: React.FC<{ report: MetaPerformanceReport }> = ({ repor
         </div>
 
         {d.mqlDropOff && d.mqlDropOff.mqlTotal > 0 && (
-          <div className="border-t border-[#f0f2f5] pt-3 space-y-2">
-            <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
+          <div className="border-t border-[#f0f2f5] dark:border-[#202c33] pt-3 space-y-2">
+            <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
               <MessageSquareWarning size={16} className="text-[#008069]" /> Alasan Gagal Closing (MQL)
             </h3>
             <p className="text-[11px] text-[#8696a0]">

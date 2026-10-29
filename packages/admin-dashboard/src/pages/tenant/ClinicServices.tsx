@@ -601,8 +601,8 @@ export const ClinicServices: React.FC = () => {
 
                   {/* Bundle Components */}
                   {isBundle && bundleComponents.length > 0 && (
-                    <div className="p-2.5 bg-indigo-50/70 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/30 rounded-xl space-y-1.5">
-                      <div className="text-[10px] font-bold text-indigo-900 dark:text-indigo-300 flex items-center space-x-1">
+                    <div className="p-2.5 bg-indigo-50/70 dark:bg-[#202c33] border border-indigo-100 dark:border-[#2a3942] rounded-xl space-y-1.5">
+                      <div className="text-[10px] font-bold text-indigo-900 dark:text-[#aebac1] flex items-center space-x-1">
                         <Package size={11} className="text-indigo-600" />
                         <span>Termasuk {bundleComponents.length} Layanan:</span>
                       </div>
@@ -610,7 +610,7 @@ export const ClinicServices: React.FC = () => {
                         {bundleComponents.map((c) => (
                           <span
                             key={c.id}
-                            className="inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-medium bg-white dark:bg-transparent text-indigo-800 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30"
+                            className="inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-medium bg-white dark:bg-transparent text-indigo-800 dark:text-[#aebac1] border border-indigo-200 dark:border-[#2a3942]"
                           >
                             {c.name}
                           </span>
@@ -726,8 +726,8 @@ export const ClinicServices: React.FC = () => {
 
                         {/* Bundle Component Pills */}
                         {isBundle && bundleComponents.length > 0 && (
-                          <div className="mt-2 p-2 bg-indigo-50/70 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/30 rounded-xl space-y-1">
-                            <div className="text-[10px] font-bold text-indigo-900 dark:text-indigo-300 flex items-center space-x-1">
+                          <div className="mt-2 p-2 bg-indigo-50/70 dark:bg-[#202c33] border border-indigo-100 dark:border-[#2a3942] rounded-xl space-y-1">
+                            <div className="text-[10px] font-bold text-indigo-900 dark:text-[#aebac1] flex items-center space-x-1">
                               <Package size={11} className="text-indigo-600" />
                               <span>Termasuk {bundleComponents.length} Layanan Eksisting:</span>
                             </div>
@@ -735,7 +735,7 @@ export const ClinicServices: React.FC = () => {
                               {bundleComponents.map((c) => (
                                 <span
                                   key={c.id}
-                                  className="inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-medium bg-white dark:bg-transparent text-indigo-800 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30"
+                                  className="inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-medium bg-white dark:bg-transparent text-indigo-800 dark:text-[#aebac1] border border-indigo-200 dark:border-[#2a3942]"
                                 >
                                   {c.name} (Rp {Number(c.originalPrice || 0).toLocaleString('id-ID')})
                                 </span>
@@ -902,7 +902,7 @@ export const ClinicServices: React.FC = () => {
                     onClick={() => handleChangeServiceType('BUNDLE')}
                     className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition ${
                       formServiceType === 'BUNDLE'
-                        ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-500/15 text-indigo-800 dark:text-indigo-300 font-bold shadow-xs'
+                        ? 'border-indigo-600 bg-indigo-50 dark:bg-[#202c33] text-indigo-800 dark:text-[#aebac1] font-bold shadow-xs'
                         : 'border-[#d1d7db] dark:border-[#374248] bg-white dark:bg-transparent text-[#54656f] dark:text-[#aebac1] hover:bg-[#f8fafc] dark:hover:bg-[#202c33]'
                     }`}
                   >
@@ -921,7 +921,7 @@ export const ClinicServices: React.FC = () => {
                     onClick={() => handleChangeServiceType('ADD_ON')}
                     className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition ${
                       formServiceType === 'ADD_ON'
-                        ? 'border-rose-600 bg-rose-50 dark:bg-rose-500/15 text-rose-800 dark:text-rose-300 font-bold shadow-xs'
+                        ? 'border-rose-600 bg-rose-50 dark:bg-rose-950/30 text-rose-800 dark:text-[#f87171] font-bold shadow-xs'
                         : 'border-[#d1d7db] dark:border-[#374248] bg-white dark:bg-transparent text-[#54656f] dark:text-[#aebac1] hover:bg-[#f8fafc] dark:hover:bg-[#202c33]'
                     }`}
                   >
@@ -939,7 +939,7 @@ export const ClinicServices: React.FC = () => {
 
               {/* BUNDLE COMPONENT PICKER */}
               {formServiceType === 'BUNDLE' && (
-                <div className="p-3.5 bg-indigo-50/70 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/30 rounded-2xl space-y-3">
+                <div className="p-3.5 bg-indigo-50/70 dark:bg-[#202c33] border border-indigo-200 dark:border-[#2a3942] rounded-2xl space-y-3">
                   <div className="flex items-start justify-between">
                     <div>
                       <div className="text-xs font-bold text-indigo-950 dark:text-indigo-200 flex items-center space-x-1.5">
@@ -955,7 +955,7 @@ export const ClinicServices: React.FC = () => {
                     </span>
                   </div>
 
-                  <div className="max-h-40 overflow-y-auto space-y-1.5 bg-white dark:bg-[#111b21] p-2.5 rounded-xl border border-indigo-200 dark:border-indigo-500/30">
+                  <div className="max-h-40 overflow-y-auto space-y-1.5 bg-white dark:bg-[#111b21] p-2.5 rounded-xl border border-indigo-200 dark:border-[#2a3942]">
                     {candidateBundleServices.map((cand) => {
                       const isSelected = formBundleItemIds.includes(cand.id);
                       return (
@@ -986,7 +986,7 @@ export const ClinicServices: React.FC = () => {
                   </div>
 
                   {/* Realtime Bundle Calculations */}
-                    <div className="p-2.5 bg-white dark:bg-[#111b21] rounded-xl border border-indigo-100 dark:border-indigo-500/30 space-y-1.5">
+                    <div className="p-2.5 bg-white dark:bg-[#111b21] rounded-xl border border-indigo-100 dark:border-[#2a3942] space-y-1.5">
                     <div className="flex justify-between text-xs text-[#54656f] dark:text-[#aebac1]">
                       <span>Total Durasi Penyusun:</span>
                       <span className="font-bold text-[#111b21] dark:text-[#e9edef]">{bundleComponentDetails.totalDuration} Menit</span>

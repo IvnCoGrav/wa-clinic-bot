@@ -87,19 +87,19 @@ export const PricelistImagePanel: React.FC<Props> = ({ initialImageUrl, onSaved 
   };
 
   return (
-    <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-4 shadow-xs">
-      <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
+    <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-5 space-y-4 shadow-xs">
+      <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
         <ImageIcon className="text-[#008069]" size={16} />
         <span>Gambar Pricelist WhatsApp</span>
       </h3>
-      <p className="text-xs text-[#667781] leading-relaxed">
+      <p className="text-xs text-[#667781] dark:text-[#8696a0] leading-relaxed">
         Gambar pricelist yang otomatis dikirim ke customer saat meminta daftar harga layanan. File HD asli disimpan &amp; dikirim tanpa kompresi.
       </p>
 
       {initialImageUrl && (
         <button
           onClick={() => setViewOpen(true)}
-          className="w-full px-4 py-2.5 bg-[#f8fafc] hover:bg-[#e8f5f2]/60 border border-[#e9edef] rounded-xl text-xs font-semibold text-[#111b21] transition flex items-center justify-center space-x-1.5 shadow-xs"
+          className="w-full px-4 py-2.5 bg-[#f8fafc] dark:bg-[#202c33] hover:bg-[#e8f5f2]/60 dark:hover:bg-[#2a3942] border border-[#e9edef] dark:border-[#2a3942] rounded-xl text-xs font-semibold text-[#111b21] dark:text-[#e9edef] transition flex items-center justify-center space-x-1.5 shadow-xs"
         >
           <Eye size={14} className="text-[#008069]" />
           <span>Lihat Gambar Pricelist HD</span>
@@ -107,7 +107,7 @@ export const PricelistImagePanel: React.FC<Props> = ({ initialImageUrl, onSaved 
       )}
 
       <div
-        className="border-2 border-dashed border-[#d1d7db] hover:border-[#008069] rounded-xl p-6 text-center cursor-pointer hover:bg-[#e8f5f2]/20 transition bg-[#fafafa]"
+        className="border-2 border-dashed border-[#d1d7db] dark:border-[#2a3942] hover:border-[#008069] rounded-xl p-6 text-center cursor-pointer hover:bg-[#e8f5f2]/20 dark:hover:bg-[#202c33]/50 transition bg-[#fafafa] dark:bg-[#111b21]"
         onClick={() => fileInputRef.current?.click()}
       >
         <input
@@ -118,7 +118,7 @@ export const PricelistImagePanel: React.FC<Props> = ({ initialImageUrl, onSaved 
           onChange={handlePickImage}
         />
         <Upload className="mx-auto text-[#008069] mb-2" size={22} />
-        <p className="text-xs text-[#111b21] font-semibold">
+        <p className="text-xs text-[#111b21] dark:text-[#e9edef] font-semibold">
           {selectedImage ? selectedImage.file.name : 'Klik untuk pilih gambar pricelist (maks 8 MB)'}
         </p>
         <p className="text-[10px] text-[#8696a0] mt-0.5">Format JPG, PNG, atau WEBP</p>
@@ -128,7 +128,7 @@ export const PricelistImagePanel: React.FC<Props> = ({ initialImageUrl, onSaved 
         <button
           onClick={handleRemove}
           disabled={saving}
-          className="px-3.5 py-2 bg-white hover:bg-rose-50 border border-[#d1d7db] hover:border-rose-200 text-[#54656f] hover:text-rose-700 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 disabled:opacity-50 shadow-xs"
+          className="px-3.5 py-2 bg-white dark:bg-[#202c33] hover:bg-rose-50 dark:hover:bg-rose-950/30 border border-[#d1d7db] dark:border-[#2a3942] hover:border-rose-200 dark:hover:border-rose-900/50 text-[#54656f] dark:text-[#8696a0] hover:text-rose-700 dark:hover:text-rose-400 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 disabled:opacity-50 shadow-xs"
         >
           <Trash2 size={12} />
           <span>Reset Default</span>
@@ -149,26 +149,26 @@ export const PricelistImagePanel: React.FC<Props> = ({ initialImageUrl, onSaved 
           onClick={() => setViewOpen(false)}
         >
           <div
-            className="bg-white rounded-2xl sm:rounded-3xl border border-[#e9edef] shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden animate-fadeIn"
+            className="bg-white dark:bg-[#111b21] rounded-2xl sm:rounded-3xl border border-[#e9edef] dark:border-[#2a3942] shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden animate-fadeIn"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-4 border-b border-[#e9edef] flex items-center justify-between bg-[#f8fafc]">
+            <div className="p-4 border-b border-[#e9edef] dark:border-[#2a3942] flex items-center justify-between bg-[#f8fafc] dark:bg-[#111b21]">
               <div>
-                <h4 className="text-sm font-bold text-[#111b21]">Gambar Pricelist (HD)</h4>
-                <p className="text-[11px] text-[#667781]">Tampilan resolusi penuh yang diterima pelanggan di WhatsApp</p>
+                <h4 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef]">Gambar Pricelist (HD)</h4>
+                <p className="text-[11px] text-[#667781] dark:text-[#8696a0]">Tampilan resolusi penuh yang diterima pelanggan di WhatsApp</p>
               </div>
               <button
                 onClick={() => setViewOpen(false)}
-                className="text-[#54656f] hover:text-[#111b21] p-1.5 rounded-lg hover:bg-[#f0f2f5] transition"
+                className="text-[#54656f] hover:text-[#111b21] dark:text-[#e9edef] p-1.5 rounded-lg hover:bg-[#f0f2f5] transition"
                 title="Tutup Modal"
               >
                 <X size={18} />
               </button>
             </div>
-            <div className="overflow-auto flex-1 p-4 flex items-center justify-center bg-[#f0f2f5]">
+            <div className="overflow-auto flex-1 p-4 flex items-center justify-center bg-[#f0f2f5] dark:bg-[#0b141a]">
               <img src={initialImageUrl} alt="Gambar pricelist" className="max-h-[65vh] object-contain rounded-xl shadow-xs border border-[#e9edef]" />
             </div>
-            <div className="p-3 border-t border-[#e9edef] flex justify-end bg-white">
+            <div className="p-3 border-t border-[#e9edef] dark:border-[#2a3942] flex justify-end bg-white dark:bg-[#111b21]">
               <button
                 onClick={() => setViewOpen(false)}
                 className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold transition shadow-xs"

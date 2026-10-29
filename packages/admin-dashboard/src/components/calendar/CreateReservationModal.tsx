@@ -1971,13 +1971,13 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                     </button>
                   </div>
                   {savedAddresses.length >= 10 && (
-                    <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded px-1.5 py-0.5">
+                    <span className="text-[11px] font-semibold text-amber-700 dark:text-[#f59e0b] bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded px-1.5 py-0.5">
                       Kapasitas Penuh (10/10)
                     </span>
                   )}
                 </div>
                 {savedAddresses.length >= 10 && (
-                  <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                  <p className="text-[11px] text-amber-700 dark:text-[#f59e0b]">
                     Kapasitas kartu tersimpan penuh (maks 10). Alamat baru akan menggantikan alamat sekunder terlama.
                   </p>
                 )}
@@ -2048,7 +2048,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                   {(mismatchComputed || savedAsNewHouse || correctingCardId) && (
                     <div className="mt-1 flex flex-wrap items-center gap-2">
                       {mismatchActive && (
-                        <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded px-2 py-1">
+                        <span className="text-[11px] font-semibold text-amber-700 dark:text-[#f59e0b] bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded px-2 py-1">
                           ⚠️ Teks alamat berbeda dengan kartu terpilih
                         </span>
                       )}
@@ -2115,7 +2115,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
             {mode !== 'edit' && activeReservations.length > 0 && (
               <div className="mt-2 p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded-xl text-amber-950 dark:text-amber-200">
                 <div className="flex items-center gap-2 font-bold text-sm">
-                  <AlertTriangle className="text-amber-600 dark:text-amber-400 shrink-0" size={18} />
+                  <AlertTriangle className="text-amber-600 dark:text-[#f59e0b] shrink-0" size={18} />
                   <span>Peringatan: Customer ini memiliki jadwal treatment yang masih aktif!</span>
                 </div>
                 <ul className="mt-1.5 space-y-1">
@@ -2132,7 +2132,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                       });
                     } catch {}
                     return (
-                      <li key={item.id} className="text-xs text-amber-800 dark:text-amber-300">
+                      <li key={item.id} className="text-xs text-amber-800 dark:text-[#f59e0b]">
                         Jadwal: <b>{item.treatment_detail || 'Treatment'}</b> pada <b>{label}</b>{' '}
                         (Status: {item.status})
                       </li>
@@ -2149,7 +2149,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                       ✏️ Edit Reservasi Eksisting
                     </button>
                   )}
-                  <span className="text-xs text-amber-700 dark:text-amber-400">
+                  <span className="text-xs text-amber-700 dark:text-[#f59e0b]">
                     atau lanjutkan jika customer memesan sesi/anak tambahan.
                   </span>
                 </div>
@@ -2389,7 +2389,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                                 const ageLabel = srv.ageTier?.label || (srv as any).age_label;
                                 if (!ageLabel) return null;
                                 return (
-                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-bold shrink-0 bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800">
+                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-bold shrink-0 bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/40 dark:text-[#00a884] dark:border-emerald-800">
                                     🎯 {ageLabel}
                                   </span>
                                 );
@@ -2732,7 +2732,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
             {/* Real-time Overlap & Travel Time Warning Banner */}
             {realtimeCollisions.staffCollisions.length > 0 && (
               <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded-xl text-xs text-amber-900 dark:text-amber-200 space-y-1.5 animate-fadeIn">
-                <p className="font-bold flex items-center gap-1.5 text-amber-800 dark:text-amber-300">
+                <p className="font-bold flex items-center gap-1.5 text-amber-800 dark:text-[#f59e0b]">
                   <span>⚠️ Jadwal Bentrok dengan Bidan Terpilih ({realtimeCollisions.staffCollisions[0].staffName})</span>
                 </p>
                 <ul className="space-y-1 text-[11px]">
@@ -2750,7 +2750,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                     </li>
                   ))}
                 </ul>
-                <p className="text-[10px] text-amber-700 dark:text-amber-400">
+                <p className="text-[10px] text-amber-700 dark:text-[#f59e0b]">
                   Jam ini beririsan dengan jadwal bidan tersebut (+ buffer 20m) atau waktu tempuh tidak mencukupi. Disarankan pilih jam lain atau klik <strong>Rekomendasikan Jam</strong>.
                 </p>
               </div>
@@ -2841,7 +2841,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
             {/* Multi-Session Schedule Builder */}
             {isMultiSession && multiSessionSchedule.length > 0 && (
-              <div className="p-3 bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/30 rounded-xl space-y-2.5">
+              <div className="p-3 bg-blue-50 dark:bg-[#202c33]/10 border border-blue-200 dark:border-[#2a3942]/30 rounded-xl space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-blue-700 flex items-center space-x-1.5">
                     <CalendarDays size={14} />
@@ -2944,7 +2944,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
               {/* Diskon / Promo */}
               <div>
-                <label className="block text-[11px] font-semibold text-rose-600 dark:text-rose-300 mb-1 flex items-center gap-1">
+                <label className="block text-[11px] font-semibold text-rose-600 dark:text-[#f87171] mb-1 flex items-center gap-1">
                   <Percent size={11} />
                   <span>Diskon Layanan (Rp)</span>
                   <span className="text-[10px] text-gray-500 dark:text-gray-400 font-normal ml-1">(*Khusus potongan harga layanan, bukan ongkir)</span>
@@ -2956,7 +2956,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                   step={5000}
                   min={0}
                   placeholder="0"
-                  className="w-full px-3 py-1.5 bg-white border border-rose-200 dark:border-rose-800/40 rounded-lg text-xs font-bold text-rose-600 dark:text-rose-300 placeholder-[#8696a0] focus:border-rose-500 focus:outline-none transition font-mono"
+                  className="w-full px-3 py-1.5 bg-white border border-rose-200 dark:border-rose-800/40 rounded-lg text-xs font-bold text-rose-600 dark:text-[#f87171] placeholder-[#8696a0] focus:border-rose-500 focus:outline-none transition font-mono"
                 />
               </div>
             </div>
@@ -2969,7 +2969,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                   type="button"
                   onClick={() => setOngkir(0)}
                   className={`px-2 py-0.5 rounded-md font-bold border transition cursor-pointer ${
-                    Number(ongkir) === 0 ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white dark:bg-transparent text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/40 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
+                    Number(ongkir) === 0 ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white dark:bg-transparent text-emerald-800 dark:text-[#00a884] border-emerald-200 dark:border-emerald-800/40 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
                   }`}
                 >
                   Free (0)
@@ -2993,7 +2993,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
               </div>
 
               <div className="flex items-center gap-1.5">
-                <span className="text-rose-600 dark:text-rose-300 font-semibold">Promo:</span>
+                <span className="text-rose-600 dark:text-[#f87171] font-semibold">Promo:</span>
                 <button
                   type="button"
                   onClick={() => setDiscount(0)}
@@ -3007,7 +3007,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                   type="button"
                   onClick={() => setDiscount(5000)}
                   className={`px-2 py-0.5 rounded-md font-bold border transition cursor-pointer ${
-                    Number(discount) === 5000 ? 'bg-rose-600 text-white border-rose-600' : 'bg-white dark:bg-transparent text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800/40 hover:bg-rose-50 dark:hover:bg-rose-950/40'
+                    Number(discount) === 5000 ? 'bg-rose-600 text-white border-rose-600' : 'bg-white dark:bg-transparent text-rose-700 dark:text-[#f87171] border-rose-200 dark:border-rose-800/40 hover:bg-rose-50 dark:hover:bg-rose-950/40'
                   }`}
                 >
                   -5.000
@@ -3016,7 +3016,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                   type="button"
                   onClick={() => setDiscount(10000)}
                   className={`px-2 py-0.5 rounded-md font-bold border transition cursor-pointer ${
-                    Number(discount) === 10000 ? 'bg-rose-600 text-white border-rose-600' : 'bg-white dark:bg-transparent text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800/40 hover:bg-rose-50 dark:hover:bg-rose-950/40'
+                    Number(discount) === 10000 ? 'bg-rose-600 text-white border-rose-600' : 'bg-white dark:bg-transparent text-rose-700 dark:text-[#f87171] border-rose-200 dark:border-rose-800/40 hover:bg-rose-50 dark:hover:bg-rose-950/40'
                   }`}
                 >
                   -10.000

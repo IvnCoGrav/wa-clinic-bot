@@ -315,11 +315,11 @@ export const ChatMigration: React.FC = () => {
       {/* Header & Description */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h1 className="text-xl font-bold text-[#111b21] tracking-tight flex items-center space-x-2">
+          <h1 className="text-xl font-bold text-[#111b21] dark:text-[#e9edef] tracking-tight flex items-center space-x-2">
             <Database className="text-[#008069]" size={22} />
             <span>Migrasi & Seeding Riwayat Chat</span>
           </h1>
-          <p className="text-xs text-[#667781] mt-0.5">
+          <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
             Ekstrak data kontak, form reservasi, dan LTV dari database lokal ke antrean staging CRM.
           </p>
         </div>
@@ -328,7 +328,7 @@ export const ChatMigration: React.FC = () => {
           <button
             onClick={loadStagingData}
             disabled={loading}
-            className="p-2 rounded-xl bg-white border border-[#d1d7db] text-[#54656f] hover:bg-[#f0f2f5] hover:text-[#111b21] transition shadow-xs disabled:opacity-50"
+            className="p-2 rounded-xl bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#54656f] hover:bg-[#f0f2f5] hover:text-[#111b21] dark:text-[#e9edef] transition shadow-xs disabled:opacity-50"
             title="Refresh antrean staging"
           >
             <RefreshCw size={14} className={loading ? 'animate-spin text-[#008069]' : ''} />
@@ -367,15 +367,15 @@ export const ChatMigration: React.FC = () => {
       )}
 
       {/* Control Banner Card */}
-      <div className="bg-white border border-[#e9edef] rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
+      <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
           {/* Left info */}
           <div className="space-y-1">
             <div className="flex items-center space-x-2">
               <FileText size={16} className="text-[#008069]" />
-              <h3 className="font-bold text-sm text-[#111b21]">Ekstraksi & Parsing Form Reservasi (Lokal)</h3>
+              <h3 className="font-bold text-sm text-[#111b21] dark:text-[#e9edef]">Ekstraksi & Parsing Form Reservasi (Lokal)</h3>
             </div>
-            <p className="text-xs text-[#667781] max-w-xl leading-relaxed">
+            <p className="text-xs text-[#667781] dark:text-[#8696a0] max-w-xl leading-relaxed">
               Ekstraktor memindai seluruh riwayat pesan di database lokal ({localStats.conversationCount} percakapan, {localStats.messageCount} pesan), mendeteksi form pemesanan layanan, nama anak/bayi, dan menghitung estimasi LTV pelanggan tanpa membebani WhatsApp.
             </p>
           </div>
@@ -428,8 +428,8 @@ export const ChatMigration: React.FC = () => {
               }}
               className={`px-3 py-1.5 rounded-xl font-bold transition flex items-center space-x-1.5 ${
                 statusFilter === tab.key
-                  ? 'bg-white text-[#111b21] shadow-xs'
-                  : 'text-[#54656f] hover:text-[#111b21]'
+                  ? 'bg-white text-[#111b21] dark:text-[#e9edef] shadow-xs'
+                  : 'text-[#54656f] hover:text-[#111b21] dark:text-[#e9edef]'
               }`}
             >
               <span>{tab.label}</span>
@@ -464,7 +464,7 @@ export const ChatMigration: React.FC = () => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
         {/* Sub-Filter: Semua vs Pembeli vs Prospek */}
         <div className="flex items-center space-x-2 text-xs">
-          <span className="text-[11px] font-semibold text-[#667781]">Filter:</span>
+          <span className="text-[11px] font-semibold text-[#667781] dark:text-[#8696a0]">Filter:</span>
           <div className="flex items-center space-x-1 bg-[#f0f2f5] p-0.5 rounded-xl">
             {[
               { key: 'ALL', label: 'Semua Kontak' },
@@ -479,8 +479,8 @@ export const ChatMigration: React.FC = () => {
                 }}
                 className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
                   purchaseFilter === sub.key
-                    ? 'bg-white text-[#111b21] shadow-2xs font-bold'
-                    : 'text-[#54656f] hover:text-[#111b21]'
+                    ? 'bg-white text-[#111b21] dark:text-[#e9edef] shadow-2xs font-bold'
+                    : 'text-[#54656f] hover:text-[#111b21] dark:text-[#e9edef]'
                 }`}
               >
                 {sub.label}
@@ -513,7 +513,7 @@ export const ChatMigration: React.FC = () => {
                 setSortOrder(o as any);
                 setPage(1);
               }}
-              className="px-2.5 py-1.5 bg-[#f0f2f5] border border-transparent focus:border-[#008069] rounded-xl text-xs font-medium text-[#111b21] outline-none cursor-pointer"
+              className="px-2.5 py-1.5 bg-[#f0f2f5] border border-transparent focus:border-[#008069] rounded-xl text-xs font-medium text-[#111b21] dark:text-[#e9edef] outline-none cursor-pointer"
             >
               <option value="leadCreatedAt-desc">🕒 Chat Pertama: Terkini</option>
               <option value="leadCreatedAt-asc">🕒 Chat Pertama: Terlama</option>
@@ -530,15 +530,15 @@ export const ChatMigration: React.FC = () => {
       </div>
 
       {/* Table & Staging Content */}
-      <div className="bg-white border border-[#e9edef] rounded-2xl overflow-hidden shadow-xs">
+      <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl overflow-hidden shadow-xs">
         {loading ? (
           <div className="flex justify-center items-center py-20">
             <Loader className="animate-spin text-[#008069]" size={32} />
           </div>
         ) : items.length === 0 ? (
-          <div className="text-center py-16 text-[#667781] text-xs">
+          <div className="text-center py-16 text-[#667781] dark:text-[#8696a0] text-xs">
             <Database className="mx-auto text-[#8696a0] mb-2" size={32} />
-            <p className="font-bold text-[#111b21]">Tidak ada data staging dengan status {statusFilter}</p>
+            <p className="font-bold text-[#111b21] dark:text-[#e9edef]">Tidak ada data staging dengan status {statusFilter}</p>
             <p className="text-[11px] text-[#8696a0] mt-1">
               Klik tombol "Mulai Ekstraksi Chat" di atas untuk memindai room chat WhatsApp.
             </p>
@@ -547,7 +547,7 @@ export const ChatMigration: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="border-b border-[#e9edef] bg-[#f8fafc] text-[#667781] font-bold uppercase text-[10px] tracking-wider select-none">
+                <tr className="border-b border-[#e9edef] bg-[#f8fafc] dark:bg-[#202c33] text-[#667781] dark:text-[#8696a0] font-bold uppercase text-[10px] tracking-wider select-none">
                   {/* Sortable Header: Kontak */}
                   <th
                     onClick={() => handleSort('name')}
@@ -637,11 +637,11 @@ export const ChatMigration: React.FC = () => {
                   const res = item.extractedReservationJson;
                   const ltvValue = item.ltv ?? res?.payment?.totalPrice ?? (item.firstPurchaseAt ? 70000 : 0);
                   return (
-                    <tr key={item.id} className="hover:bg-[#f8fafc] transition">
+                    <tr key={item.id} className="hover:bg-[#f8fafc] dark:bg-[#202c33] transition">
                       {/* Kontak */}
                       <td className="py-3.5 px-4 font-medium">
-                        <p className="font-bold text-[#111b21]">{item.name || 'Bunda Customer'}</p>
-                        <p className="text-xs text-[#667781] font-mono mt-0.5">{item.phoneNumber}</p>
+                        <p className="font-bold text-[#111b21] dark:text-[#e9edef]">{item.name || 'Bunda Customer'}</p>
+                        <p className="text-xs text-[#667781] dark:text-[#8696a0] font-mono mt-0.5">{item.phoneNumber}</p>
                         <span className="text-[10px] text-[#8696a0]">
                           {item.rawMessagesCount} pesan tercatat
                         </span>
@@ -667,7 +667,7 @@ export const ChatMigration: React.FC = () => {
 
                       {/* Chat Pertama */}
                       <td className="py-3.5 px-4 whitespace-nowrap text-[#54656f]">
-                        <p className="font-semibold text-[#111b21]">
+                        <p className="font-semibold text-[#111b21] dark:text-[#e9edef]">
                           {item.leadCreatedAt
                             ? new Date(item.leadCreatedAt).toLocaleDateString('id-ID', {
                                 day: '2-digit',
@@ -694,12 +694,12 @@ export const ChatMigration: React.FC = () => {
                               <span className="px-1.5 py-0.5 rounded bg-[#e8f5f2] border border-[#c2e7e0] text-[#008069] text-[10px] font-bold">
                                 {res.treatmentCategory || 'BABY'}
                               </span>
-                              <span className="font-semibold text-[#111b21] truncate max-w-[160px]" title={res.treatmentDetail}>
+                              <span className="font-semibold text-[#111b21] dark:text-[#e9edef] truncate max-w-[160px]" title={res.treatmentDetail}>
                                 {res.treatmentDetail || 'Layanan Spa'}
                               </span>
                             </div>
                             {res.bookingDate && (
-                              <p className="text-[10px] text-[#667781] flex items-center space-x-1">
+                              <p className="text-[10px] text-[#667781] dark:text-[#8696a0] flex items-center space-x-1">
                                 <Calendar size={10} />
                                 <span>Jadwal: {new Date(res.bookingDate).toLocaleDateString('id-ID')}</span>
                               </p>
@@ -768,7 +768,7 @@ export const ChatMigration: React.FC = () => {
                           {item.status === 'APPROVED' && (
                             <button
                               onClick={() => handleUpdateStatus(item.id, 'PENDING')}
-                              className="px-2 py-1 rounded-lg bg-white border border-[#d1d7db] text-[#54656f] text-xs font-semibold hover:bg-[#f0f2f5] transition"
+                              className="px-2 py-1 rounded-lg bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#2a3942] text-[#54656f] text-xs font-semibold hover:bg-[#f0f2f5] transition"
                               title="Kembalikan ke status Pending"
                             >
                               Reset
@@ -802,25 +802,25 @@ export const ChatMigration: React.FC = () => {
           onClick={() => setSelectedRawItem(null)}
         >
           <div
-            className="bg-white border border-[#e9edef] rounded-2xl w-full max-w-xl max-h-[85vh] flex flex-col shadow-xl overflow-hidden"
+            className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl w-full max-w-xl max-h-[85vh] flex flex-col shadow-xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-4 border-b border-[#e9edef] bg-[#f8fafc] flex justify-between items-center">
+            <div className="p-4 border-b border-[#e9edef] bg-[#f8fafc] dark:bg-[#202c33] flex justify-between items-center">
               <div>
-                <h3 className="font-bold text-sm text-[#111b21]">
+                <h3 className="font-bold text-sm text-[#111b21] dark:text-[#e9edef]">
                   Riwayat Pesan: {selectedRawItem.name || selectedRawItem.phoneNumber}
                 </h3>
-                <p className="text-[11px] text-[#667781]">{selectedRawItem.phoneNumber}</p>
+                <p className="text-[11px] text-[#667781] dark:text-[#8696a0]">{selectedRawItem.phoneNumber}</p>
               </div>
               <button
                 onClick={() => setSelectedRawItem(null)}
-                className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#e9edef] transition"
+                className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef] hover:bg-[#e9edef] transition"
               >
                 <X size={16} />
               </button>
             </div>
 
-            <div className="p-4 overflow-y-auto space-y-2.5 bg-[#f8fafc] flex-1">
+            <div className="p-4 overflow-y-auto space-y-2.5 bg-[#f8fafc] dark:bg-[#202c33] flex-1">
               {!selectedRawItem.rawMessagesJson || selectedRawItem.rawMessagesJson.length === 0 ? (
                 <p className="text-center py-8 text-xs text-[#8696a0]">Tidak ada pesan teks tersimpan.</p>
               ) : (
@@ -829,11 +829,11 @@ export const ChatMigration: React.FC = () => {
                     key={idx}
                     className={`p-3 rounded-xl text-xs space-y-1 ${
                       msg.fromMe
-                        ? 'bg-[#d9fdd3] text-[#111b21] ml-6 border border-[#00a884]/20'
-                        : 'bg-white text-[#111b21] mr-6 border border-[#e9edef] shadow-2xs'
+                        ? 'bg-[#d9fdd3] text-[#111b21] dark:text-[#e9edef] ml-6 border border-[#00a884]/20'
+                        : 'bg-white text-[#111b21] dark:text-[#e9edef] mr-6 border border-[#e9edef] shadow-2xs'
                     }`}
                   >
-                    <div className="flex justify-between items-center text-[10px] text-[#667781]">
+                    <div className="flex justify-between items-center text-[10px] text-[#667781] dark:text-[#8696a0]">
                       <span className="font-bold">{msg.fromMe ? 'Bot / Admin' : 'Customer'}</span>
                       {msg.timestamp && (
                         <span>{formatSafeTimestamp(msg.timestamp)}</span>
@@ -845,10 +845,10 @@ export const ChatMigration: React.FC = () => {
               )}
             </div>
 
-            <div className="p-3 border-t border-[#e9edef] bg-[#f8fafc] flex justify-end">
+            <div className="p-3 border-t border-[#e9edef] bg-[#f8fafc] dark:bg-[#202c33] flex justify-end">
               <button
                 onClick={() => setSelectedRawItem(null)}
-                className="px-4 py-2 bg-white hover:bg-[#e9edef] border border-[#d1d7db] text-[#111b21] rounded-xl text-xs font-semibold transition shadow-xs"
+                className="px-4 py-2 bg-white hover:bg-[#e9edef] border border-[#d1d7db] text-[#111b21] dark:text-[#e9edef] rounded-xl text-xs font-semibold transition shadow-xs"
               >
                 Tutup
               </button>
