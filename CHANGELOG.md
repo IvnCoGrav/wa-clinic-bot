@@ -4,6 +4,19 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-29 - Feat: Warna Kartu Kalender per Bidan (Fase 4)
+
+- **Latar Belakang & Akar Masalah**:
+  - Warna kartu kalender mengikuti `treatment_category` (MOMS/KIDS/BABY/BOTH/BUNDLE), sehingga dua bidan berbeda di jam yang sama tampak sewarna bila kategorinya sama — admin tidak bisa membaca pembagian beban kerja sekilas.
+  - Tidak ada seam pembacaan ID terapis: pola `assigned_staff_id || assignedStaffId || staffId` diduplikasi di 5 tempat, dan `staffList` yang sudah dimuat `Reservations.tsx` tidak diteruskan ke grid mana pun (lookup nama FK pun tidak pernah aktif).
+- **Arsitektur & Perubahan**:
+  - `utils/resolveStaffName.ts`: tambah `resolveStaffId()` sebagai seam tunggal (prioritas relasi join → FK), sejajar dengan `resolveStaffName()`.
+  - `utils/staffColors.ts` (baru): palet 10 warna aman dark mode. Warna diturunkan dari **indeks urutan daftar staff tenant**, bukan hash — dijamin berbeda antar bidan sampai 10 orang. Reservasi tanpa bidan memakai warna netral. Tanpa migrasi DB, tanpa dependency baru.
+  - `components/calendar/StaffColorLegend.tsx` (baru): legenda "Bidan → warna" ringkas (satu baris, bisa digeser) di view Mingguan & Harian.
+  - Ketiga grid (`Week`/`Day`/`Month`) memakai `getStaffColor(resolveStaffId(res), staffList)`; fungsi tema kategori lama dihapus. `staffList` diteruskan dari `Reservations.tsx`, sekaligus mengaktifkan `resolveStaffName(res, staffList)`.
+  - Perbaikan kecil: kelas Tailwind tidak valid `dark:border-amber-800/40/60` (garis miring ganda) pada pill HOLD view Bulanan.
+- **Gerbang Regresi**: `tsc && vite build` hijau (2508 modul); `tests/unit/staff-colors.test.ts` 16 kasus adversarial lulus; hex palet terverifikasi ada di CSS hasil build (Tailwind memindai `staffColors.ts`).
+
 #### 2026-10-29 - Fix: UI/UX Kalender Reservasi Mobile (Fase 1–3: Gestur, Reveal Hari, Konten Kartu)
 
 - **Latar Belakang & Akar Masalah**:

@@ -1,8 +1,10 @@
 import React from 'react';
 import { Reservation } from '../../types';
-import { QuickSlotTarget } from './types';
+import { QuickSlotTarget, StaffOption } from './types';
 import { resolveReservationDuration } from '../../utils/durationCalculator';
 import { getWibDateKey, getTodayWibDateKey } from '../../utils/dateWib';
+import { resolveStaffId } from '../../utils/resolveStaffName';
+import { getStaffColor } from '../../utils/staffColors';
 
 interface MonthScheduleGridProps {
   selectedDate: Date;
@@ -10,12 +12,15 @@ interface MonthScheduleGridProps {
   reservations: Reservation[];
   onSelectReservation?: (res: Reservation) => void;
   onQuickAdd?: (target: QuickSlotTarget) => void;
+  /** Daftar bidan tenant — sumber warna pill. */
+  staffList?: StaffOption[];
 }
 
 export const MonthScheduleGrid: React.FC<MonthScheduleGridProps> = ({
   selectedDate,
   onSelectDate,
   reservations,
+  staffList = [],
 }) => {
   const year = selectedDate.getFullYear();
   const month = selectedDate.getMonth();
@@ -79,21 +84,7 @@ export const MonthScheduleGrid: React.FC<MonthScheduleGridProps> = ({
 
   const dayLabels = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
 
-  const getCategoryColor = (cat: string) => {
-    switch (cat) {
-      case 'MOMS':
-        return 'bg-purple-100 dark:bg-[#251438] text-purple-800 dark:text-purple-200 border-purple-200 dark:border-purple-800/60';
-      case 'BOTH':
-        return 'bg-emerald-100 dark:bg-[#0d2e1e] text-emerald-800 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800/60';
-      case 'KIDS':
-        return 'bg-teal-100 dark:bg-[#0b2b28] text-teal-800 dark:text-teal-200 border-teal-200 dark:border-teal-800/60';
-      case 'BUNDLE':
-        return 'bg-amber-100 dark:bg-[#2e2009] text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-800/60';
-      case 'BABY':
-      default:
-        return 'bg-sky-100 dark:bg-[#0c2438] text-sky-800 dark:text-sky-200 border-sky-200 dark:border-sky-800/60';
-    }
-  };
+  // Warna pill mengikuti bidan penanggung jawab (getStaffColor), bukan kategori treatment.
 
   return (
     <div className="bg-white dark:bg-[#111b21] rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs overflow-hidden">
@@ -166,15 +157,16 @@ export const MonthScheduleGrid: React.FC<MonthScheduleGridProps> = ({
                     .toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })
                     .replace('.', ':');
                   const isHold = res.status === 'hold';
-                  const catColor = isHold
-                    ? 'bg-amber-100 dark:bg-[#2e2009] text-amber-900 dark:text-amber-200 border-dashed border-amber-400 dark:border-amber-800/40/60 font-bold'
-                    : getCategoryColor(res.treatment_category);
+                  // Warna pill = bidan penanggung jawab.
+                  const staffPillColor = isHold
+                    ? 'bg-amber-100 dark:bg-[#2e2009] text-amber-900 dark:text-amber-200 border-dashed border-amber-400 dark:border-amber-800/60 font-bold'
+                    : getStaffColor(resolveStaffId(res), staffList).card;
                   const nameDisplay = isHold ? `[HOLD] ${res.customer?.name || 'Pasien'}` : (res.customer?.name || 'Bunda');
 
                   return (
                     <div
                       key={res.id}
-                      className={`w-full px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-semibold truncate border block leading-tight ${catColor}`}
+                      className={`w-full px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-semibold truncate border block leading-tight ${staffPillColor}`}
                       title={`${nameDisplay} (${startTimeStr} - ${endTimeStr}) - ${res.treatment_detail || res.treatment_category}`}
                     >
                       <span className="truncate block font-medium">

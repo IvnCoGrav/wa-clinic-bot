@@ -35,3 +35,25 @@ export function resolveStaffName(
 
   return null;
 }
+
+/**
+ * resolveStaffId — seam tunggal pembacaan ID terapis dari objek apa pun
+ * (reservasi, item live chat, kartu kalender).
+ *
+ * Sebelumnya pola `assigned_staff_id || assignedStaffId || staffId` diduplikasi
+ * di 5 tempat, sehingga warna/tag per bidan mustahil dibuat konsisten.
+ *
+ * Prioritas sama dengan `resolveStaffName`: relasi hasil join backend lebih
+ * dipercaya daripada FK lepas.
+ */
+export function resolveStaffId(source: any): string | null {
+  if (!source) return null;
+
+  const relId = source.assigned_staff?.id || source.assignedStaff?.id;
+  if (relId) return relId;
+
+  const fk = source.assigned_staff_id || source.assignedStaffId || source.staffId;
+  if (fk) return fk;
+
+  return null;
+}

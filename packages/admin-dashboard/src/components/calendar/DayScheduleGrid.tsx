@@ -1,9 +1,10 @@
 import React, { useRef, useEffect } from 'react';
 import { Reservation } from '../../types';
 import { Plus, User, Clock, MapPin, MessageCircle, CheckCircle2, AlertCircle } from 'lucide-react';
-import { QuickSlotTarget } from './types';
+import { QuickSlotTarget, StaffOption } from './types';
 import { useCalendarZoom } from '../../hooks/useCalendarZoom';
 import { CalendarZoomControls } from './CalendarZoomControls';
+import { StaffColorLegend } from './StaffColorLegend';
 import { getWibDateKey, getWibHoursAndMinutes } from '../../utils/dateWib';
 
 interface DayScheduleGridProps {
@@ -12,11 +13,14 @@ interface DayScheduleGridProps {
   onSelectReservation: (res: Reservation) => void;
   onQuickAdd: (target: QuickSlotTarget) => void;
   hideHeader?: boolean;
+  /** Daftar bidan tenant — sumber warna kartu & lookup nama terapis. */
+  staffList?: StaffOption[];
 }
 
 import { cleanTreatmentDetailForDisplay, resolveReservationDuration } from '../../utils/durationCalculator';
-import { resolveStaffName } from '../../utils/resolveStaffName';
+import { resolveStaffId, resolveStaffName } from '../../utils/resolveStaffName';
 import { formatReservationArea } from '../../utils/reservationAddress';
+import { getStaffColor } from '../../utils/staffColors';
 
 const HOURS = Array.from({ length: 16 }, (_, i) => i + 6); // 6am - 9pm
 
@@ -26,6 +30,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
   onSelectReservation,
   onQuickAdd,
   hideHeader = false,
+  staffList = [],
 }) => {
   const zoomState = useCalendarZoom();
   const { hourHeight, zoomLevel, containerRef } = zoomState;
@@ -92,36 +97,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
     timeZone: 'Asia/Jakarta',
   });
 
-  const getCategoryTheme = (cat: string) => {
-    switch (cat) {
-      case 'MOMS':
-        return {
-          card: 'bg-[#f3e8ff] dark:bg-[#251438] border-l-4 border-[#9333ea] dark:border-l-[#c084fc] text-[#581c87] dark:text-[#f3e8ff] border border-transparent dark:border-[#c084fc]/30',
-          badge: 'bg-[#9333ea]/10 dark:bg-[#9333ea]/25 text-[#9333ea] dark:text-[#c084fc]',
-        };
-      case 'BOTH':
-        return {
-          card: 'bg-[#dcfce7] dark:bg-[#0d2e1e] border-l-4 border-[#16a34a] dark:border-l-[#4ade80] text-[#14532d] dark:text-[#dcfce7] border border-transparent dark:border-[#4ade80]/30',
-          badge: 'bg-[#16a34a]/10 dark:bg-[#16a34a]/25 text-[#16a34a] dark:text-[#4ade80]',
-        };
-      case 'KIDS':
-        return {
-          card: 'bg-[#ccfbf1] dark:bg-[#0b2b28] border-l-4 border-[#0d9488] dark:border-l-[#2dd4bf] text-[#115e59] dark:text-[#ccfbf1] border border-transparent dark:border-[#2dd4bf]/30',
-          badge: 'bg-[#0d9488]/10 dark:bg-[#0d9488]/25 text-[#0d9488] dark:text-[#2dd4bf]',
-        };
-      case 'BUNDLE':
-        return {
-          card: 'bg-[#fef3c7] dark:bg-[#2e2009] border-l-4 border-[#d97706] dark:border-l-[#fbbf24] text-[#78350f] dark:text-[#fef3c7] border border-transparent dark:border-[#fbbf24]/30',
-          badge: 'bg-[#d97706]/10 dark:bg-[#d97706]/25 text-[#d97706] dark:text-[#fbbf24]',
-        };
-      case 'BABY':
-      default:
-        return {
-          card: 'bg-[#e0f2fe] dark:bg-[#0c2438] border-l-4 border-[#0284c7] dark:border-l-[#38bdf8] text-[#0c4a6e] dark:text-[#e0f2fe] border border-transparent dark:border-[#38bdf8]/30',
-          badge: 'bg-[#0284c7]/10 dark:bg-[#0284c7]/25 text-[#0284c7] dark:text-[#38bdf8]',
-        };
-    }
-  };
+  // Tema kartu kini mengikuti bidan penanggung jawab (getStaffColor), bukan kategori treatment.
 
   // Auto-scroll ke jam jadwal paling awal hari ini atau jam 8 pagi
   useEffect(() => {
@@ -260,6 +236,9 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
         </div>
       )}
 
+      {/* Legenda warna per bidan (hanya tampil bila daftar bidan tersedia) */}
+      {!hideHeader && <StaffColorLegend staffList={staffList} />}
+
       {/* Hourly Timeline with Continuous Multi-Hour Column Canvas */}
       <div
         ref={containerRef}
@@ -326,7 +305,8 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
             {/* Absolute Continuous Event Blocks Spanning Multi-Hours */}
             {positionedEvents.map((pos) => {
               const res = pos.res;
-              const theme = getCategoryTheme(res.treatment_category);
+              // Warna kartu = bidan penanggung jawab (bukan kategori treatment).
+              const staffColor = getStaffColor(resolveStaffId(res), staffList);
               const bDate = new Date(res.booking_date!);
               const endDate = new Date(bDate.getTime() + pos.duration * 60000);
               const startTimeStr = bDate
@@ -362,7 +342,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
               const isHold = res.status === 'hold';
               const effectiveCardStyle = isHold
                 ? 'bg-amber-50/95 dark:bg-[#33230a] border-2 border-dashed border-amber-500 dark:border-amber-800/40 text-amber-950 dark:text-amber-100 hover:bg-amber-100/90 dark:hover:bg-[#422e0c]'
-                : theme.card;
+                : staffColor.card;
 
               return (
                 <div
@@ -397,13 +377,13 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                             HOLD
                           </span>
                         ) : (
-                          <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-bold uppercase ${theme.badge}`}>
+                          <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-bold uppercase ${staffColor.badge}`}>
                             {res.treatment_category}
                           </span>
                         )}
                         <span className="text-[10px] font-semibold text-[#54656f] dark:text-[#aebac1] hidden sm:inline">
                           {(() => {
-                            const n = resolveStaffName(res);
+                            const n = resolveStaffName(res, staffList);
                             return n ? n.split(' ')[0] : 'Unassigned';
                           })()}
                         </span>
@@ -422,7 +402,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                               HOLD
                             </span>
                           ) : (
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${theme.badge}`}>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${staffColor.badge}`}>
                               {res.treatment_category}
                             </span>
                           )}
@@ -474,7 +454,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                       <div className="flex items-center space-x-3 self-end md:self-auto shrink-0">
                         <div className="flex items-center space-x-1 text-xs font-bold bg-white/80 dark:bg-[#111b21]/80 px-2.5 py-1 rounded-lg border border-black/10 dark:border-white/15 text-[#111b21] dark:text-[#e9edef]">
                           <User size={12} className="text-[#008069] dark:text-[#00a884]" />
-                          <span>{resolveStaffName(res) || 'Belum ada terapis'}</span>
+                          <span>{resolveStaffName(res, staffList) || 'Belum ada terapis'}</span>
                         </div>
                       </div>
                     </div>

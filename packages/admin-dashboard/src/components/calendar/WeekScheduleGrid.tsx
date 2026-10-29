@@ -1,9 +1,10 @@
 import React, { useEffect, useRef } from 'react';
 import { Reservation } from '../../types';
 import { Plus, User, Clock, CheckCircle2, AlertCircle, ChevronLeft, ChevronRight, MapPin } from 'lucide-react';
-import { QuickSlotTarget } from './types';
+import { QuickSlotTarget, StaffOption } from './types';
 import { useCalendarZoom } from '../../hooks/useCalendarZoom';
 import { CalendarZoomControls } from './CalendarZoomControls';
+import { StaffColorLegend } from './StaffColorLegend';
 import { getWibHoursAndMinutes, getWibDateKey, getTodayWibDateKey } from '../../utils/dateWib';
 
 interface WeekScheduleGridProps {
@@ -12,6 +13,8 @@ interface WeekScheduleGridProps {
   reservations: Reservation[];
   onSelectReservation: (res: Reservation) => void;
   onQuickAdd: (target: QuickSlotTarget) => void;
+  /** Daftar bidan tenant — sumber warna kartu & lookup nama terapis. */
+  staffList?: StaffOption[];
 }
 
 // Hours to display (6 am to 9 pm / 06:00 to 21:00)
@@ -23,8 +26,9 @@ const HEADER_HEIGHT = 50;
 
 export { extractDurationMinutes } from '../../utils/durationCalculator';
 import { resolveReservationDuration } from '../../utils/durationCalculator';
-import { resolveStaffName } from '../../utils/resolveStaffName';
+import { resolveStaffId, resolveStaffName } from '../../utils/resolveStaffName';
 import { formatReservationArea } from '../../utils/reservationAddress';
+import { getStaffColor } from '../../utils/staffColors';
 
 interface PositionedEvent {
   res: Reservation;
@@ -120,6 +124,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
   reservations,
   onSelectReservation,
   onQuickAdd,
+  staffList = [],
 }) => {
   const zoomState = useCalendarZoom();
   const { hourHeight, zoomLevel, containerRef } = zoomState;
@@ -328,22 +333,6 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
     return `${hour} am`;
   };
 
-  const getCategoryStyles = (category: string) => {
-    switch (category) {
-      case 'MOMS':
-        return 'bg-[#f3e8ff] dark:bg-[#251438] border-l-4 border-[#9333ea] dark:border-l-[#c084fc] text-[#581c87] dark:text-[#f3e8ff] hover:bg-[#ebd5ff] dark:hover:bg-[#321c4a] border border-transparent dark:border-[#c084fc]/30';
-      case 'BOTH':
-        return 'bg-[#dcfce7] dark:bg-[#0d2e1e] border-l-4 border-[#16a34a] dark:border-l-[#4ade80] text-[#14532d] dark:text-[#dcfce7] hover:bg-[#bbf7d0] dark:hover:bg-[#14422c] border border-transparent dark:border-[#4ade80]/30';
-      case 'KIDS':
-        return 'bg-[#ccfbf1] dark:bg-[#0b2b28] border-l-4 border-[#0d9488] dark:border-l-[#2dd4bf] text-[#115e59] dark:text-[#ccfbf1] hover:bg-[#99f6e4] dark:hover:bg-[#123e3a] border border-transparent dark:border-[#2dd4bf]/30';
-      case 'BUNDLE':
-        return 'bg-[#fef3c7] dark:bg-[#2e2009] border-l-4 border-[#d97706] dark:border-l-[#fbbf24] text-[#78350f] dark:text-[#fef3c7] hover:bg-[#fde68a] dark:hover:bg-[#402d0d] border border-transparent dark:border-[#fbbf24]/30';
-      case 'BABY':
-      default:
-        return 'bg-[#e0f2fe] dark:bg-[#0c2438] border-l-4 border-[#0284c7] dark:border-l-[#38bdf8] text-[#0c4a6e] dark:text-[#e0f2fe] hover:bg-[#bae6fd] dark:hover:bg-[#12334e] border border-transparent dark:border-[#38bdf8]/30';
-    }
-  };
-
   const selectedDateKey = getWibDateKey(selectedDate);
 
   // Auto-scroll VERTIKAL sekali saat kalender pertama dimuat (posisi jam sekarang).
@@ -471,6 +460,9 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
           <ChevronRight size={16} />
         </button>
       </div>
+
+      {/* Legenda warna per bidan (hanya tampil bila daftar bidan tersedia) */}
+      <StaffColorLegend staffList={staffList} />
 
       {/* Dedicated Top Horizontal Scrollbar Track (1:1 Synchronized with 1050px Calendar Grid) */}
       <div
@@ -617,9 +609,11 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                       .toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })
                       .replace('.', ':');
                     const isHold = res.status === 'hold';
+                    // Warna kartu = bidan penanggung jawab (bukan kategori treatment).
+                    const staffColor = getStaffColor(resolveStaffId(res), staffList);
                     const categoryStyles = isHold
                       ? 'bg-amber-50/95 dark:bg-[#33230a] border-2 border-dashed border-amber-500 dark:border-amber-800/40 text-amber-950 dark:text-amber-100 hover:bg-amber-100/90 dark:hover:bg-[#422e0c]'
-                      : getCategoryStyles(res.treatment_category);
+                      : staffColor.card;
 
                     const rawName = res.customer?.name || 'Pasien';
                     const cleanName = rawName
@@ -725,7 +719,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                                 <User size={9} className="shrink-0 text-[#008069] dark:text-[#00a884]" />
                                 <span className="truncate">
                                   {(() => {
-                                    const n = resolveStaffName(res);
+                                    const n = resolveStaffName(res, staffList);
                                     return n ? n.split(/\s+/)[0] : 'Unassigned';
                                   })()}
                                 </span>

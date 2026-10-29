@@ -1322,6 +1322,7 @@ export const Reservations: React.FC = () => {
               reservations={filteredReservations}
               onSelectReservation={(r) => setSelectedRes(r)}
               onQuickAdd={handleQuickAdd}
+              staffList={staffList}
             />
           )}
 
@@ -1331,6 +1332,7 @@ export const Reservations: React.FC = () => {
               reservations={filteredReservations}
               onSelectReservation={(r) => setSelectedRes(r)}
               onQuickAdd={handleQuickAdd}
+              staffList={staffList}
             />
           )}
 
@@ -1344,6 +1346,7 @@ export const Reservations: React.FC = () => {
               reservations={filteredReservations}
               onSelectReservation={(r) => setSelectedRes(r)}
               onQuickAdd={handleQuickAdd}
+              staffList={staffList}
             />
           )}
 
