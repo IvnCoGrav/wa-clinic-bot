@@ -1289,6 +1289,11 @@ export const Reservations: React.FC = () => {
           )}
         </div>
 
+        {/* Blok kalender: full-bleed HANYA di HP (edge-to-edge), desktop tetap kartu.
+            Sumber inset = --page-pad dari <main> (Layout.tsx), bukan angka -mx-4
+            yang bisa basi bila padding halaman berubah. Kartu filter di atas TIDAK
+            ikut full-bleed agar tombol tidak menempel tepi layar. */}
+        <div className="-mx-[var(--page-pad)] sm:mx-0">
           {/* View rendering */}
           {viewMode === 'week' && (
             <WeekScheduleGrid
@@ -1324,6 +1329,8 @@ export const Reservations: React.FC = () => {
               staffList={staffList}
             />
           )}
+
+        </div>
 
           {viewMode === 'table' && (
             <div className="space-y-4">

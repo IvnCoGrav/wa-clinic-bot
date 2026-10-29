@@ -229,7 +229,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
   processCluster(currentCluster);
 
   return (
-    <div className={`${hideHeader ? 'flex-1 min-h-0' : 'bg-white dark:bg-[#111b21] rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs'} overflow-hidden flex flex-col relative group/calendar`}>
+    <div className={`${hideHeader ? 'flex-1 min-h-0' : 'bg-white dark:bg-[#111b21] rounded-none border-y border-x-0 border-[#e9edef] dark:border-[#2a3942] shadow-xs sm:rounded-2xl sm:border-x'} overflow-hidden flex flex-col relative group/calendar`}>
       {/* Day Header Banner with Integrated Zoom Controls */}
       {!hideHeader && (
         <div className="p-2.5 sm:p-4 border-b border-[#e9edef] dark:border-[#2a3942] bg-[#fafafa] dark:bg-[#182229] flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-2.5 shrink-0">

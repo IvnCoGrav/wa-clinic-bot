@@ -88,7 +88,7 @@ export const MonthScheduleGrid: React.FC<MonthScheduleGridProps> = ({
   // Warna pill mengikuti bidan penanggung jawab (getStaffColor), bukan kategori treatment.
 
   return (
-    <div className="bg-white dark:bg-[#111b21] rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs overflow-hidden">
+    <div className="bg-white dark:bg-[#111b21] rounded-none border-y border-x-0 border-[#e9edef] dark:border-[#2a3942] shadow-xs sm:rounded-2xl sm:border-x overflow-hidden">
       {/* Weekday Header */}
       <div className="grid grid-cols-7 border-b border-[#e9edef] dark:border-[#2a3942] bg-[#fafafa] dark:bg-[#111b21]">
         {dayLabels.map((day, idx) => (

@@ -380,7 +380,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
   const minCardHeight = zoomLevel === 'compact' ? 32 : 50;
 
   return (
-    <div className="bg-white dark:bg-[#111b21] rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs overflow-hidden flex flex-col relative group/calendar">
+    <div className="bg-white dark:bg-[#111b21] rounded-none border-y border-x-0 border-[#e9edef] dark:border-[#2a3942] shadow-xs sm:rounded-2xl sm:border-x overflow-hidden flex flex-col relative group/calendar">
       {/* Floating Zoom Controls Bar (Desktop & Tablet) */}
       <div className="absolute top-3 right-3 z-40 hidden sm:block">
         <CalendarZoomControls zoomState={zoomState} variant="floating" />

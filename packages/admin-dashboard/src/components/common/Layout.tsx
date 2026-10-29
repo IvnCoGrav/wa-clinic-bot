@@ -999,7 +999,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           className={`flex-1 ${
             isLiveChat
               ? 'p-0 overflow-hidden flex flex-col min-h-0'
-              : 'p-4 sm:p-5 md:p-7 space-y-6'
+              : '[--page-pad:1rem] sm:[--page-pad:1.25rem] md:[--page-pad:1.75rem] p-[var(--page-pad)] space-y-6'
           } bg-[#f0f2f5] dark:bg-black`}
         >
           <AppErrorBoundary scopeLabel="page">{children}</AppErrorBoundary>
