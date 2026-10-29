@@ -19,6 +19,8 @@
  *    terdeteksi pemindai Tailwind (`content: ./src/**\/*.{js,ts,jsx,tsx}`).
  */
 
+import { staffDisplayName } from './resolveStaffName';
+
 export interface StaffColorTheme {
   /** Kelas penuh untuk kartu event (latar + aksen kiri + teks + hover). */
   card: string;
@@ -129,9 +131,8 @@ export function getStaffColor(
   return STAFF_COLOR_PALETTE[hashToIndex(staffId) % STAFF_COLOR_PALETTE.length];
 }
 
-/** Nama pendek bidan untuk legenda (kata pertama, cukup di layar sempit). */
+/** Nama pendek bidan untuk legenda (kata pertama dari nama yang sudah bersih). */
 export function shortStaffLabel(name: string | null | undefined): string {
-  const clean = (name || '').trim();
-  if (!clean) return 'Tanpa nama';
-  return clean.split(/\s+/)[0];
+  const clean = staffDisplayName(name);
+  return clean ? clean.split(' ')[0] : 'Tanpa nama';
 }

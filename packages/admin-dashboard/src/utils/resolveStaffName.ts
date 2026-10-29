@@ -46,6 +46,50 @@ export function resolveStaffName(
  * Prioritas sama dengan `resolveStaffName`: relasi hasil join backend lebih
  * dipercaya daripada FK lepas.
  */
+/**
+ * Gelar/jabatan yang menempel di DEPAN nama bidan pada tabel `staff`.
+ *
+ * Data produksi nyata: "Bidan Hanifah", "Bidan Testing Yusi", "Staff Bidan".
+ * Pola wajib diikuti minimal satu kata lain (`\s+`), sehingga staff yang
+ * memang bernama satu kata (mis. "Admin") tidak ikut terkupas.
+ */
+const STAFF_ROLE_PREFIX =
+  /^(?:bidan|suster|perawat|terapis|therapist|staff|karyawan|kak|kakak|ibu|bunda|mrs\.?|ny\.?|nn\.?|sdri\.?)\s+/i;
+
+/** Nama yang SELURUHNYA berupa gelar/jabatan — tidak informatif sebagai nama. */
+const STAFF_ROLE_ONLY =
+  /^(?:bidan|suster|perawat|terapis|therapist|staff|karyawan|admin|kak|kakak|ibu|bunda)$/i;
+
+/**
+ * Nama bidan siap tampil: gelar di depan dibuang.
+ *
+ * F-31: sebelumnya tiap layar memakai `name.split(' ')[0]`, sehingga seluruh
+ * bidan tampil sebagai "Bidan" (kata pertama nama mereka). Fungsi ini menjadi
+ * seam tunggal agar legenda, kartu Harian, dan kartu Mingguan konsisten.
+ *
+ * Bila setelah pengupasan tidak tersisa nama diri ("Staff Bidan"), nama asli
+ * dikembalikan apa adanya — lebih baik jujur daripada mengarang nama.
+ */
+export function staffDisplayName(name: string | null | undefined): string {
+  if (typeof name !== 'string') return '';
+  const raw = name.replace(/\s+/g, ' ').trim();
+  if (!raw) return '';
+
+  const stripped = raw.replace(STAFF_ROLE_PREFIX, '').trim();
+  if (!stripped) return raw;
+  return STAFF_ROLE_ONLY.test(stripped) ? raw : stripped;
+}
+
+/**
+ * Nama bidan versi pendek (satu kata) untuk ruang sempit: legenda, kartu
+ * kalender. Mengembalikan string kosong bila tidak ada nama, sehingga pemanggil
+ * bisa memberi fallback sendiri (mis. "Unassigned").
+ */
+export function staffShortName(name: string | null | undefined): string {
+  const clean = staffDisplayName(name);
+  return clean ? clean.split(' ')[0] : '';
+}
+
 export function resolveStaffId(source: any): string | null {
   if (!source) return null;
 

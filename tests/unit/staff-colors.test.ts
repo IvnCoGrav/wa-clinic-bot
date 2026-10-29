@@ -120,8 +120,8 @@ describe('getStaffColor', () => {
 });
 
 describe('shortStaffLabel', () => {
-  it('mengambil kata pertama', () => {
-    expect(shortStaffLabel('Bidan Ani Suryani')).toBe('Bidan');
+  it('membuang gelar di depan nama (F-31: dulu selalu "Bidan")', () => {
+    expect(shortStaffLabel('Bidan Ani Suryani')).toBe('Ani');
   });
 
   it('memberi label cadangan untuk nama kosong', () => {

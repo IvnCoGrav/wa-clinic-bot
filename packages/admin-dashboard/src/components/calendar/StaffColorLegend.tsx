@@ -1,5 +1,7 @@
-import React from 'react';
-import { getStaffColor, shortStaffLabel } from '../../utils/staffColors';
+import React, { useState } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
+import { getStaffColor } from '../../utils/staffColors';
+import { staffDisplayName } from '../../utils/resolveStaffName';
 
 interface StaffColorLegendProps {
   staffList?: Array<{ id: string; name: string }> | null;
@@ -9,38 +11,83 @@ interface StaffColorLegendProps {
 /**
  * Legenda "bidan → warna" untuk view kalender.
  *
- * Tanpa legenda, warna per bidan hanya berarti bagi orang yang sudah hafal
- * urutannya. Komponen ini sengaja ringkas (satu baris, bisa digeser) agar
- * tidak memakan tinggi layar HP.
+ * F-34: sebelumnya legenda selalu terbuka dan memakan tinggi layar HP secara
+ * permanen (6 bidan = 2 baris). Kini berbentuk dropdown yang **default tertutup**:
+ * baris tertutup hanya menampilkan 4 titik warna sebagai pratinjau.
+ *
+ * F-31: label memakai `staffDisplayName()` sehingga yang tampil "Hanifah",
+ * bukan "Bidan" (dulu `split(' ')[0]` memotong gelar, bukan nama).
+ *
+ * Sengaja memakai pola toggle yang sudah dipakai dashboard (`useState(false)` +
+ * `ChevronDown`/`ChevronUp`) — tidak ada dependency atau komponen baru.
  */
 export const StaffColorLegend: React.FC<StaffColorLegendProps> = ({ staffList, className = '' }) => {
+  const [open, setOpen] = useState(false);
+
   const staff = (staffList || []).filter((s) => s && s.id && s.name);
   if (staff.length === 0) return null;
 
+  const preview = staff.slice(0, 4);
+  const panelId = 'staff-color-legend-panel';
+
   return (
     <div
-      data-horizontal-scroll="true"
       data-no-swipe-back="true"
-      className={`flex items-center gap-2.5 overflow-x-auto no-scrollbar px-2 py-1 bg-[#fafafa] dark:bg-[#111b21] border-b border-[#e9edef] dark:border-[#2a3942] ${className}`}
-      style={{ scrollbarWidth: 'none' }}
-      aria-label="Legenda warna bidan"
+      className={`bg-[#fafafa] dark:bg-[#111b21] border-b border-[#e9edef] dark:border-[#2a3942] ${className}`}
     >
-      <span className="text-[10px] font-bold uppercase tracking-wide text-[#8696a0] dark:text-[#8696a0] shrink-0">
-        Bidan
-      </span>
-      {staff.map((s) => {
-        const color = getStaffColor(s.id, staffList);
-        return (
-          <span
-            key={s.id}
-            className="inline-flex items-center gap-1 shrink-0 text-[10px] font-semibold text-[#54656f] dark:text-[#aebac1]"
-            title={s.name}
-          >
-            <span className={`w-2 h-2 rounded-full shrink-0 ${color.dot}`} aria-hidden="true" />
-            <span className="truncate max-w-[72px]">{shortStaffLabel(s.name)}</span>
-          </span>
-        );
-      })}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls={panelId}
+        className="w-full h-7 px-2 flex items-center gap-1.5 text-left"
+      >
+        <span className="text-[10px] font-bold uppercase tracking-wide text-[#8696a0] shrink-0">
+          Warna Bidan
+        </span>
+
+        {/* Pratinjau warna saat tertutup — cukup 4 titik, hemat ruang. */}
+        <span className="flex items-center gap-1 shrink-0" aria-hidden="true">
+          {preview.map((s) => (
+            <span
+              key={s.id}
+              className={`w-2 h-2 rounded-full shrink-0 ${getStaffColor(s.id, staffList).dot}`}
+            />
+          ))}
+          {staff.length > preview.length && (
+            <span className="text-[9px] font-bold text-[#8696a0]">+{staff.length - preview.length}</span>
+          )}
+        </span>
+
+        <span className="flex-1" />
+        {open ? (
+          <ChevronUp size={12} className="text-[#8696a0] shrink-0" aria-hidden="true" />
+        ) : (
+          <ChevronDown size={12} className="text-[#8696a0] shrink-0" aria-hidden="true" />
+        )}
+      </button>
+
+      {open && (
+        <div
+          id={panelId}
+          aria-label="Legenda warna bidan"
+          className="px-2 pb-1.5 pt-0.5 flex flex-wrap gap-x-3 gap-y-1"
+        >
+          {staff.map((s) => (
+            <span
+              key={s.id}
+              className="inline-flex items-center gap-1 shrink-0 text-[10px] font-semibold text-[#54656f] dark:text-[#aebac1]"
+              title={s.name}
+            >
+              <span
+                className={`w-2 h-2 rounded-full shrink-0 ${getStaffColor(s.id, staffList).dot}`}
+                aria-hidden="true"
+              />
+              <span className="truncate max-w-[110px]">{staffDisplayName(s.name)}</span>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
