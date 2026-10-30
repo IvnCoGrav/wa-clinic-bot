@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { Reservation } from '../../types';
-import { Plus, User, MapPin } from 'lucide-react';
+import { Plus, User, MapPin, ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
 import { QuickSlotTarget, StaffOption } from './types';
 import { useCalendarZoom } from '../../hooks/useCalendarZoom';
 import { CalendarZoomControls } from './CalendarZoomControls';
@@ -16,6 +16,10 @@ interface DayScheduleGridProps {
   hideHeader?: boolean;
   /** Daftar bidan tenant — sumber warna kartu & lookup nama terapis. */
   staffList?: StaffOption[];
+  onPrevDate?: () => void;
+  onNextDate?: () => void;
+  onToday?: () => void;
+  onSelectDate?: (date: Date) => void;
 }
 
 import { cleanTreatmentDetailForDisplay, resolveReservationDuration } from '../../utils/durationCalculator';
@@ -40,6 +44,10 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
   onQuickAdd,
   hideHeader = false,
   staffList = [],
+  onPrevDate,
+  onNextDate,
+  onToday,
+  onSelectDate,
 }) => {
   const zoomState = useCalendarZoom();
   const { hourHeight, zoomLevel, containerRef } = zoomState;
@@ -227,20 +235,87 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
   processCluster(currentCluster);
 
   return (
-    <div className={`${hideHeader ? 'flex-1 min-h-0' : 'bg-surface rounded-none border-y border-x-0 border-divider shadow-xs sm:rounded-2xl sm:border-x'} overflow-hidden flex flex-col relative group/calendar`}>
-      {/* Day Header Banner with Integrated Zoom Controls */}
+    <div className={`${hideHeader ? 'flex-1 min-h-0' : 'bg-surface rounded-none border-y border-x-0 border-divider shadow-xs sm:rounded-2xl sm:border-x'} overflow-visible sm:overflow-hidden flex flex-col relative group/calendar`}>
+      {/* Day Header Banner with Integrated Zoom Controls & Sticky Date Navigation */}
       {!hideHeader && (
-        <div className="p-2.5 sm:p-4 border-b border-divider bg-surface-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-2.5 shrink-0">
-          <div>
-            <h3 className="font-extrabold text-sm sm:text-lg text-ink">
-              {dayDateFormatted}
-            </h3>
-            <p className="hidden sm:block text-xs text-ink-3 mt-0.5">
-              Agenda jadwal kunjungan &amp; perawatan harian
-            </p>
+        <div className="sticky top-[calc(3rem+env(safe-area-inset-top,0px))] md:top-[calc(3.25rem+env(safe-area-inset-top,0px))] z-30 p-2.5 sm:p-4 border-b border-divider bg-surface/95 dark:bg-surface/95 backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-2.5 shrink-0 shadow-xs">
+          <div className="flex items-center justify-between gap-2 w-full sm:w-auto">
+            <div>
+              <h3 className="font-extrabold text-xs sm:text-lg text-ink capitalize tracking-tight truncate">
+                <span className="sm:hidden">
+                  {selectedDate.toLocaleDateString('id-ID', {
+                    weekday: 'short',
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric',
+                    timeZone: 'Asia/Jakarta',
+                  })}
+                </span>
+                <span className="hidden sm:inline">
+                  {dayDateFormatted}
+                </span>
+              </h3>
+              <p className="hidden sm:block text-xs text-ink-3 mt-0.5">
+                Agenda jadwal kunjungan &amp; perawatan harian
+              </p>
+            </div>
+
+            {/* Sticky Navigation Controls: < Hari Ini > [icon tanggal] */}
+            {onPrevDate && onNextDate && onToday && onSelectDate && (
+              <div className="flex items-center space-x-1 bg-fill-1 dark:bg-fill-2 p-0.5 rounded-lg border border-divider shrink-0">
+                <button
+                  type="button"
+                  onClick={onPrevDate}
+                  className="p-1 rounded-md bg-surface text-ink hover:bg-fill-2 dark:hover:bg-fill-1 shadow-2xs transition-colors cursor-pointer touch-manipulation"
+                  title="Hari Sebelumnya"
+                  aria-label="Hari Sebelumnya"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                <button
+                  type="button"
+                  onClick={onToday}
+                  className="px-2 py-0.5 rounded-md bg-surface text-[11px] font-bold text-ink shadow-2xs transition-colors cursor-pointer whitespace-nowrap touch-manipulation"
+                >
+                  Hari Ini
+                </button>
+                <button
+                  type="button"
+                  onClick={onNextDate}
+                  className="p-1 rounded-md bg-surface text-ink hover:bg-fill-2 dark:hover:bg-fill-1 shadow-2xs transition-colors cursor-pointer touch-manipulation"
+                  title="Hari Berikutnya"
+                  aria-label="Hari Berikutnya"
+                >
+                  <ChevronRight size={14} />
+                </button>
+                <div className="relative flex items-center">
+                  <input
+                    type="date"
+                    value={getWibDateKey(selectedDate)}
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        const [y, m, d] = e.target.value.split('-').map(Number);
+                        onSelectDate(new Date(y, m - 1, d));
+                      }
+                    }}
+                    className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
+                    title="Pilih Tanggal Spesifik"
+                    aria-label="Pilih Tanggal Spesifik"
+                  />
+                  <button
+                    type="button"
+                    className="p-1 rounded-md bg-surface hover:bg-accent-soft text-ink-2 hover:text-accent shadow-2xs transition-colors cursor-pointer touch-manipulation"
+                    title="Pilih Tanggal Spesifik"
+                    aria-label="Pilih Tanggal Spesifik"
+                  >
+                    <CalendarIcon size={13} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+          <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto">
             {/* Zoom Controls Bar */}
             <CalendarZoomControls zoomState={zoomState} variant="inline" />
 
@@ -248,7 +323,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
               onClick={() => onQuickAdd({ date: selectedDate, hour: 9 })}
               aria-label="Tambah jadwal di tanggal ini"
               title="Tambah jadwal di tanggal ini"
-              className="px-2.5 py-1 min-h-9 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink text-[11px] font-semibold flex items-center space-x-1.5 shadow-xs transition-all cursor-pointer"
+              className="px-2.5 py-1 min-h-9 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink text-[11px] font-semibold flex items-center space-x-1.5 shadow-xs transition-all cursor-pointer touch-manipulation"
             >
               <Plus size={14} />
               <span className="hidden sm:inline">+ Tambah di Tanggal Ini</span>

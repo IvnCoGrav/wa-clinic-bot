@@ -1014,7 +1014,7 @@ export const Reservations: React.FC = () => {
 
               {/* Date Navigation group placed right next to Month text */}
               {viewMode !== 'table' && (
-                <div className="flex items-center space-x-1 bg-fill-1 p-0.5 rounded-lg border border-divider">
+                <div className={`flex items-center space-x-1 bg-fill-1 p-0.5 rounded-lg border border-divider ${viewMode === 'day' ? 'hidden sm:flex' : ''}`}>
                   <button
                     onClick={handlePrevDate}
                     className="p-1 rounded-md bg-surface hover:bg-gray-100 dark:hover:bg-fill-2 text-ink shadow-2xs transition-colors cursor-pointer"
@@ -1277,6 +1277,10 @@ export const Reservations: React.FC = () => {
               onSelectReservation={(r) => setSelectedRes(r)}
               onQuickAdd={handleQuickAdd}
               staffList={staffList}
+              onPrevDate={handlePrevDate}
+              onNextDate={handleNextDate}
+              onToday={handleToday}
+              onSelectDate={(newDate) => setSelectedDate(newDate)}
             />
           )}
 

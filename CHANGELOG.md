@@ -4,6 +4,24 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-30 - Feat: Sticky Floating Day & Date Navigation pada Tampilan Hari Kalender Reservasi (Mobile)
+
+- **Latar Belakang & Akar Masalah**:
+  - Pada tampilan hari (*Day View*) di halaman Reservations & Calendar (/admin/reservations), tombol navigasi tanggal (< Hari Ini > [📅]) berada di kartu header paling atas dan hanya menampilkan bulan/tahun, sedangkan tulisan hari dan tanggal lengkap berada di dalam kanvas kalender harian DayScheduleGrid.tsx.
+  - Pada layar mobile, saat pengguna men-scroll ke bawah untuk memeriksa jadwal jam (misal 10:00, 13:00, 16:00), seluruh header terdorong hilang ke atas layar sehingga pengguna kehilangan konteks tanggal dan kesulitan berpindah hari tanpa harus men-scroll balik ke puncak halaman.
+  - Selain itu, wrapper DayScheduleGrid.tsx memiliki kelas overflow-hidden yang memblokir position: sticky anak untuk mengambang terhadap scrolling container halaman di browser mobile.
+- **Perubahan Fondasional & Arsitektur**:
+  - **Sticky Floating Navigation Bar**: DayScheduleGrid.tsx kini memiliki header sticky (sticky top-[calc(3rem+env(safe-area-inset-top,0px))] md:top-[calc(3.25rem+env(safe-area-inset-top,0px))] z-30) dengan latar g-surface/95 dark:bg-surface/95 backdrop-blur-md border-b border-divider shadow-xs.
+  - **Satu Kesatuan Informasi & Kontrol**: Sisi kiri menampilkan tulisan hari & tanggal yang proporsional dan responsif (	ext-xs sm:text-lg text-ink font-extrabold capitalize, disingkat otomatis di HP sempit), sedangkan sisi kanan menyematkan kontrol navigasi < (kemarin), Hari Ini, > (besok), dan [📅] (datepicker lompat tanggal instan).
+  - **Eliminasi Redundansi**: Di Reservations.tsx, kontrol navigasi tanggal di kartu header paling atas kini otomatis disembunyikan di mobile saat iewMode === 'day' (hidden sm:flex), sehingga tidak muncul dobel sebelum layar di-scroll.
+  - **Koreksi CSS Boundary**: Mengubah overflow-hidden pada wrapper DayScheduleGrid menjadi overflow-visible sm:overflow-hidden sehingga sticky floating berfungsi 100% mulus di Safari iOS dan Chrome Android.
+- **Hasil Terukur & Verifikasi**:
+  - 
+pm --prefix packages/admin-dashboard run check:design exit 0 (hex 287/287, paritas dark: bgWhite=1, palette=0).
+  - 
+pm --prefix packages/admin-dashboard run build exit 0 (12,49 detik).
+  - Unit tests 	ests/unit/calendar-*.test.ts (27 tests) 100% passed.
+
 #### 2026-10-29 - Refactor: Konsolidasi Komponen Input Kanonis, Adopsi StatusChip, dan Ekstraksi Komponen Bersama VoiceNotePlayer (Penutupan Utang #290 & #288)
 
 - **Latar Belakang & Akar Masalah**:
