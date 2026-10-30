@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { Reservation } from '../../types';
-import { Plus, Minus, User, MapPin, ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
+import { Plus, User, MapPin, ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
 import { QuickSlotTarget, StaffOption } from './types';
 import { useCalendarZoom } from '../../hooks/useCalendarZoom';
 import { StaffColorLegend } from './StaffColorLegend';
@@ -533,37 +533,6 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
             })}
           </div>
         </div>
-      </div>
-
-      {/* Floating Zoom Widget di Pojok Kanan Bawah (Compact & Minimalis) */}
-      <div className="fixed bottom-5 right-4 z-40 flex flex-col items-center bg-surface/95 dark:bg-surface/95 backdrop-blur-md rounded-2xl border border-divider shadow-md p-1 gap-1 select-none text-ink">
-        <button
-          type="button"
-          onClick={zoomState.zoomIn}
-          aria-label="Perbesar skala jam"
-          title="Perbesar skala jam (Zoom In)"
-          className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center bg-fill-1 hover:bg-fill-2 text-ink active:scale-95 transition-all cursor-pointer touch-manipulation shadow-2xs"
-        >
-          <Plus size={14} />
-        </button>
-        <button
-          type="button"
-          onClick={zoomState.resetZoom}
-          aria-label="Reset zoom"
-          title={`Reset Zoom (${zoomState.zoomPercent}%)`}
-          className="text-[9px] sm:text-[10px] font-bold text-ink-3 hover:text-accent transition cursor-pointer px-1 py-0.5 leading-none"
-        >
-          {zoomState.zoomPercent}%
-        </button>
-        <button
-          type="button"
-          onClick={zoomState.zoomOut}
-          aria-label="Perkecil skala jam"
-          title="Perkecil skala jam (Zoom Out)"
-          className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center bg-fill-1 hover:bg-fill-2 text-ink active:scale-95 transition-all cursor-pointer touch-manipulation shadow-2xs"
-        >
-          <Minus size={14} />
-        </button>
       </div>
     </div>
   );

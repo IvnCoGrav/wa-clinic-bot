@@ -7,7 +7,7 @@
 
 Total entri terindeks: 630
 
-- 2026-10-30 | Refactor & Polish: Header Sticky 1 Baris Bersih & Floating Mini Zoom Pojok Kanan Bawah pad
+- 2026-10-30 | Refactor & Polish: Header Sticky 1 Baris Bersih & Eliminasi Kontrol Zoom pada Kalender Har
 - 2026-10-30 | Feat: Sticky Floating Day & Date Navigation pada Tampilan Hari Kalender Reservasi (Mobile)
 - 2026-10-29 | Refactor: Konsolidasi Komponen Input Kanonis, Adopsi StatusChip, dan Ekstraksi Komponen Be
 - 2026-10-29 | Fix: Kontras WCAG AA Dipenuhi, Warna Status Jadi Satu Sumber, dan CSS Legacy Dibersihkan (

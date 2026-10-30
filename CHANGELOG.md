@@ -4,19 +4,18 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-#### 2026-10-30 - Refactor & Polish: Header Sticky 1 Baris Bersih & Floating Mini Zoom Pojok Kanan Bawah pada Kalender Hari
+#### 2026-10-30 - Refactor & Polish: Header Sticky 1 Baris Bersih & Eliminasi Kontrol Zoom pada Kalender Hari
 
 - **Latar Belakang & Akar Masalah**:
-  - Pada iterasi awal, header kalender harian di DayScheduleGrid.tsx masih memuat baris kedua berisi tombol zoom dengan ikon kaca pembesar serta tombol redundan + Tambah di Tanggal Ini. Hal ini memakan ruang 1 baris penuh di layar mobile.
+  - Pada iterasi awal, header kalender harian di DayScheduleGrid.tsx memuat baris kedua berisi tombol zoom dan tombol redundan + Tambah di Tanggal Ini. Pengguna meminta baris kedua dihilangkan, tombol + dihapus, serta seluruh kontrol zoom in / zoom out dihilangkan agar kanvas kalender murni dan bersih tanpa widget yang menghalangi.
 - **Perubahan Fondasional & Arsitektur**:
-  - **Header Sticky 1 Baris Ramping**: Header sticky disederhanakan menjadi 1 baris bersih (~38px - 40px) tanpa baris kedua. Sisi kiri menampilkan tulisan tanggal (Jum, 30 Okt 2026 di mobile, Jumat, 30 Oktober 2026 di desktop), dan sisi kanan menampilkan kontrol view hari itu (< Hari Ini > [📅]).
-  - **Hapus Tombol Redundan**: Menghapus tombol + Tambah di Tanggal Ini dari header karena sudah tersedia tombol utama + Buat Jadwal di header atas serta interaksi klik langsung pada slot jam kalender.
-  - **Floating Mini Zoom Widget**: Kontrol perbesaran/pengecilan jam dipindahkan menjadi widget floating mini di pojok kanan bawah (ixed bottom-5 right-4 z-40) menggunakan simbol minimalis + dan - (tanpa ikon kaca pembesar) serta indikator persentase zoom.
+  - **Header Sticky 1 Baris Murni**: Header sticky disederhanakan menjadi 1 baris bersih (~38px - 40px) tanpa baris kedua. Sisi kiri menampilkan tulisan tanggal (Jum, 30 Okt 2026 di mobile, Jumat, 30 Oktober 2026 di desktop), dan sisi kanan menampilkan kontrol view hari itu (< Hari Ini > [📅]).
+  - **Hapus Tombol & Kontrol Redundan**: Menghapus tombol + Tambah di Tanggal Ini serta mengeliminasi seluruh kontrol zoom in/out (baik dari header maupun floating widget) sehingga tampilan kalender harian menjadi minimalis, bersih, dan bebas distraksi.
 - **Hasil Terukur & Verifikasi**:
   - 
 pm --prefix packages/admin-dashboard run check:design exit 0 (hex 287/287, paritas dark: bgWhite=1, palette=0).
   - 
-pm --prefix packages/admin-dashboard run build exit 0 (12,22 detik). Bundle size DayScheduleGrid menyusut dari 25,58 kB ke 23,11 kB.
+pm --prefix packages/admin-dashboard run build exit 0 (13,22 detik). Bundle size DayScheduleGrid menyusut signifikan ke 21,93 kB.
   - Unit tests 	ests/unit/calendar-*.test.ts (27 tests) 100% passed.
 
 #### 2026-10-30 - Feat: Sticky Floating Day & Date Navigation pada Tampilan Hari Kalender Reservasi (Mobile)
