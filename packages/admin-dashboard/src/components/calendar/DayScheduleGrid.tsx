@@ -1,9 +1,8 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { Reservation } from '../../types';
-import { Plus, User, MapPin, ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
+import { Plus, Minus, User, MapPin, ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
 import { QuickSlotTarget, StaffOption } from './types';
 import { useCalendarZoom } from '../../hooks/useCalendarZoom';
-import { CalendarZoomControls } from './CalendarZoomControls';
 import { StaffColorLegend } from './StaffColorLegend';
 import { ReservationStatusIcon } from './ReservationStatusIcon';
 import { getWibDateKey, getWibHoursAndMinutes, getTodayWibDateKey } from '../../utils/dateWib';
@@ -236,99 +235,83 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
 
   return (
     <div className={`${hideHeader ? 'flex-1 min-h-0' : 'bg-surface rounded-none border-y border-x-0 border-divider shadow-xs sm:rounded-2xl sm:border-x'} overflow-visible sm:overflow-hidden flex flex-col relative group/calendar`}>
-      {/* Day Header Banner with Integrated Zoom Controls & Sticky Date Navigation */}
+      {/* Sticky Day Header Banner: Tanggal (Kiri) & View Hari Itu (Kanan) */}
       {!hideHeader && (
-        <div className="sticky top-[calc(3rem+env(safe-area-inset-top,0px))] md:top-[calc(3.25rem+env(safe-area-inset-top,0px))] z-30 p-2.5 sm:p-4 border-b border-divider bg-surface/95 dark:bg-surface/95 backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-2.5 shrink-0 shadow-xs">
-          <div className="flex items-center justify-between gap-2 w-full sm:w-auto">
-            <div>
-              <h3 className="font-extrabold text-xs sm:text-lg text-ink capitalize tracking-tight truncate">
-                <span className="sm:hidden">
-                  {selectedDate.toLocaleDateString('id-ID', {
-                    weekday: 'short',
-                    day: 'numeric',
-                    month: 'short',
-                    year: 'numeric',
-                    timeZone: 'Asia/Jakarta',
-                  })}
-                </span>
-                <span className="hidden sm:inline">
-                  {dayDateFormatted}
-                </span>
-              </h3>
-              <p className="hidden sm:block text-xs text-ink-3 mt-0.5">
-                Agenda jadwal kunjungan &amp; perawatan harian
-              </p>
-            </div>
+        <div className="sticky top-[calc(3rem+env(safe-area-inset-top,0px))] md:top-[calc(3.25rem+env(safe-area-inset-top,0px))] z-30 px-3 py-2 sm:px-4 sm:py-2.5 border-b border-divider bg-surface/95 dark:bg-surface/95 backdrop-blur-md flex items-center justify-between gap-2 shrink-0 shadow-xs">
+          {/* Sisi Kiri: Tanggal */}
+          <div className="min-w-0 pr-1">
+            <h3 className="font-extrabold text-xs sm:text-base text-ink capitalize tracking-tight truncate">
+              <span className="sm:hidden">
+                {selectedDate.toLocaleDateString('id-ID', {
+                  weekday: 'short',
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                  timeZone: 'Asia/Jakarta',
+                })}
+              </span>
+              <span className="hidden sm:inline">
+                {dayDateFormatted}
+              </span>
+            </h3>
+            <p className="hidden sm:block text-[11px] text-ink-3">
+              Agenda jadwal kunjungan &amp; perawatan harian
+            </p>
+          </div>
 
-            {/* Sticky Navigation Controls: < Hari Ini > [icon tanggal] */}
-            {onPrevDate && onNextDate && onToday && onSelectDate && (
-              <div className="flex items-center space-x-1 bg-fill-1 dark:bg-fill-2 p-0.5 rounded-lg border border-divider shrink-0">
+          {/* Sisi Kanan: View Hari Itu (< Hari Ini > [📅]) */}
+          {onPrevDate && onNextDate && onToday && onSelectDate && (
+            <div className="flex items-center space-x-1 bg-fill-1 dark:bg-fill-2 p-0.5 rounded-lg border border-divider shrink-0">
+              <button
+                type="button"
+                onClick={onPrevDate}
+                className="p-1 rounded-md bg-surface text-ink hover:bg-fill-2 dark:hover:bg-fill-1 shadow-2xs transition-colors cursor-pointer touch-manipulation"
+                title="Hari Sebelumnya"
+                aria-label="Hari Sebelumnya"
+              >
+                <ChevronLeft size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={onToday}
+                className="px-2 py-0.5 rounded-md bg-surface text-[11px] font-bold text-ink shadow-2xs transition-colors cursor-pointer whitespace-nowrap touch-manipulation"
+              >
+                Hari Ini
+              </button>
+              <button
+                type="button"
+                onClick={onNextDate}
+                className="p-1 rounded-md bg-surface text-ink hover:bg-fill-2 dark:hover:bg-fill-1 shadow-2xs transition-colors cursor-pointer touch-manipulation"
+                title="Hari Berikutnya"
+                aria-label="Hari Berikutnya"
+              >
+                <ChevronRight size={14} />
+              </button>
+              <div className="relative flex items-center">
+                <input
+                  type="date"
+                  value={getWibDateKey(selectedDate)}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      const [y, m, d] = e.target.value.split('-').map(Number);
+                      onSelectDate(new Date(y, m - 1, d));
+                    }
+                  }}
+                  className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
+                  title="Pilih Tanggal Spesifik"
+                  aria-label="Pilih Tanggal Spesifik"
+                />
                 <button
                   type="button"
-                  onClick={onPrevDate}
-                  className="p-1 rounded-md bg-surface text-ink hover:bg-fill-2 dark:hover:bg-fill-1 shadow-2xs transition-colors cursor-pointer touch-manipulation"
-                  title="Hari Sebelumnya"
-                  aria-label="Hari Sebelumnya"
+                  className="p-1 rounded-md bg-surface hover:bg-accent-soft text-ink-2 hover:text-accent shadow-2xs transition-colors cursor-pointer touch-manipulation"
+                  title="Pilih Tanggal Spesifik"
+                  aria-label="Pilih Tanggal Spesifik"
                 >
-                  <ChevronLeft size={14} />
+                  <CalendarIcon size={13} />
                 </button>
-                <button
-                  type="button"
-                  onClick={onToday}
-                  className="px-2 py-0.5 rounded-md bg-surface text-[11px] font-bold text-ink shadow-2xs transition-colors cursor-pointer whitespace-nowrap touch-manipulation"
-                >
-                  Hari Ini
-                </button>
-                <button
-                  type="button"
-                  onClick={onNextDate}
-                  className="p-1 rounded-md bg-surface text-ink hover:bg-fill-2 dark:hover:bg-fill-1 shadow-2xs transition-colors cursor-pointer touch-manipulation"
-                  title="Hari Berikutnya"
-                  aria-label="Hari Berikutnya"
-                >
-                  <ChevronRight size={14} />
-                </button>
-                <div className="relative flex items-center">
-                  <input
-                    type="date"
-                    value={getWibDateKey(selectedDate)}
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        const [y, m, d] = e.target.value.split('-').map(Number);
-                        onSelectDate(new Date(y, m - 1, d));
-                      }
-                    }}
-                    className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
-                    title="Pilih Tanggal Spesifik"
-                    aria-label="Pilih Tanggal Spesifik"
-                  />
-                  <button
-                    type="button"
-                    className="p-1 rounded-md bg-surface hover:bg-accent-soft text-ink-2 hover:text-accent shadow-2xs transition-colors cursor-pointer touch-manipulation"
-                    title="Pilih Tanggal Spesifik"
-                    aria-label="Pilih Tanggal Spesifik"
-                  >
-                    <CalendarIcon size={13} />
-                  </button>
-                </div>
               </div>
-            )}
-          </div>
-
-          <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto">
-            {/* Zoom Controls Bar */}
-            <CalendarZoomControls zoomState={zoomState} variant="inline" />
-
-            <button
-              onClick={() => onQuickAdd({ date: selectedDate, hour: 9 })}
-              aria-label="Tambah jadwal di tanggal ini"
-              title="Tambah jadwal di tanggal ini"
-              className="px-2.5 py-1 min-h-9 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink text-[11px] font-semibold flex items-center space-x-1.5 shadow-xs transition-all cursor-pointer touch-manipulation"
-            >
-              <Plus size={14} />
-              <span className="hidden sm:inline">+ Tambah di Tanggal Ini</span>
-            </button>
-          </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -550,6 +533,37 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
             })}
           </div>
         </div>
+      </div>
+
+      {/* Floating Zoom Widget di Pojok Kanan Bawah (Compact & Minimalis) */}
+      <div className="fixed bottom-5 right-4 z-40 flex flex-col items-center bg-surface/95 dark:bg-surface/95 backdrop-blur-md rounded-2xl border border-divider shadow-md p-1 gap-1 select-none text-ink">
+        <button
+          type="button"
+          onClick={zoomState.zoomIn}
+          aria-label="Perbesar skala jam"
+          title="Perbesar skala jam (Zoom In)"
+          className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center bg-fill-1 hover:bg-fill-2 text-ink active:scale-95 transition-all cursor-pointer touch-manipulation shadow-2xs"
+        >
+          <Plus size={14} />
+        </button>
+        <button
+          type="button"
+          onClick={zoomState.resetZoom}
+          aria-label="Reset zoom"
+          title={`Reset Zoom (${zoomState.zoomPercent}%)`}
+          className="text-[9px] sm:text-[10px] font-bold text-ink-3 hover:text-accent transition cursor-pointer px-1 py-0.5 leading-none"
+        >
+          {zoomState.zoomPercent}%
+        </button>
+        <button
+          type="button"
+          onClick={zoomState.zoomOut}
+          aria-label="Perkecil skala jam"
+          title="Perkecil skala jam (Zoom Out)"
+          className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center bg-fill-1 hover:bg-fill-2 text-ink active:scale-95 transition-all cursor-pointer touch-manipulation shadow-2xs"
+        >
+          <Minus size={14} />
+        </button>
       </div>
     </div>
   );
