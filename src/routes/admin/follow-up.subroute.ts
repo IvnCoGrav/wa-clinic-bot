@@ -3,6 +3,7 @@ import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { followUpService } from '../../services/follow-up.service';
 import { auditService } from '../../services/audit.service';
 import { parsePositiveInt } from '../../utils/env-numeric';
+import { findForbiddenPlaceholders } from '../../utils/followup-placeholder';
 
 export async function followUpAdminRoutes(fastify: FastifyInstance) {
   /**
@@ -396,6 +397,14 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
     const { type, variant, text } = request.body || {};
     if (!type || !variant || !text) {
       return reply.status(400).send({ error: 'type, variant, and text are required' });
+    }
+    // Fase 3: tolak simpan template MOMS yang memuat variabel bayi (400, bukan 500).
+    const forbidden = findForbiddenPlaceholders(type, text);
+    if (forbidden.length > 0) {
+      return reply.status(400).send({
+        error: `Template ${type} tidak boleh memuat variabel ${forbidden.join(', ')} (kategori MOMS: narasi bayi dilarang).`,
+        forbiddenPlaceholders: forbidden,
+      });
     }
     try {
       await followUpService.saveTemplate(type, variant, text, DEFAULT_TENANT_ID);

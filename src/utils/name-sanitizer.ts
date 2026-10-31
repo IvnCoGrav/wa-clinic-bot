@@ -405,11 +405,46 @@ export function sanitizeCustomerNameForStorage(rawName?: string | null): string 
  * - "" (kosong/placeholder) -> "Bunda"
  */
 export function formatGreetingBunda(cleanName: string): string {
+  return formatGreeting(cleanName, 'Bunda');
+}
+
+/**
+ * Format sapaan gender-aware dari STATE (`genderGreeting`), bukan tebakan nama.
+ * - ("Ismail", "Bapak") -> "Bapak Ismail"
+ * - ("Pak Ismail", "Bapak") -> "Bapak Ismail" (tidak digandakan)
+ * - ("", "Bapak") -> "Bapak"
+ * - ("Rina") -> "Bunda Rina" (default produk)
+ */
+export function formatGreeting(cleanName: string, honorific?: string | null): string {
+  const h = String(honorific || '').trim().toLowerCase() === 'bapak' ? 'Bapak' : 'Bunda';
   const trimmed = cleanName ? cleanName.trim() : '';
-  if (!trimmed || trimmed.toLowerCase() === 'bunda') {
-    return 'Bunda';
+  if (!trimmed) return h;
+
+  const lower = trimmed.toLowerCase();
+  if (lower === h.toLowerCase()) return h;
+
+  const aliases = h === 'Bapak' ? ['bapak', 'pak'] : ['bunda', 'bund', 'bu'];
+  const parts = trimmed.split(/\s+/);
+  if (aliases.includes((parts[0] || '').toLowerCase())) {
+    const rest = parts.slice(1).join(' ');
+    return rest ? `${h} ${rest}` : h;
   }
-  return `Bunda ${trimmed}`;
+  return `${h} ${trimmed}`;
+}
+
+/**
+ * Normalizer DETERMINISTIK sapaan pembuka: hanya segmen sapaan di AWAL pesan yang
+ * diselaraskan dengan honorific sesi. Rujukan "Bunda" di tengah kalimat (merujuk
+ * ibu/pasien) TIDAK disentuh — anti-mutilasi semantik.
+ */
+export function applyHonorificGreeting(text: string, honorific?: string | null): string {
+  const src = String(text || '');
+  if (!src) return src;
+  if (String(honorific || '').trim().toLowerCase() !== 'bapak') return src;
+  return src.replace(
+    /^(\s*(?:Selamat\s+pagi|Selamat\s+siang|Selamat\s+malam|Pagi|Siang|Malam|Halo|Salam\s+hangat|Salam)[\s,]+)Bunda\b/i,
+    (_m, prefix: string) => `${prefix}Bapak`
+  );
 }
 
 /**

@@ -595,6 +595,11 @@ model FollowUp {
   reservation    Reservation?   @relation(fields: [reservation_id], references: [id], onDelete: SetNull)
   type           FollowUpType
   stage          Int // 1 | 2 | 3
+  // Fase 1 (state-gated follow-up): kategori treatment yang menjadi dasar
+  // pemilihan keluarga template (MOMS vs ANAK). Disimpan saat pembuatan baris
+  // agar pemilihan template tidak lagi menebak dari relasi reservasi yang bisa
+  // kosong (reservation_id nullable / sudah di-SetNull). NULL = data lama.
+  treatment_category TreatmentCategory?
   custom_text    String?
   scheduled_at   DateTime
   sent_at        DateTime?

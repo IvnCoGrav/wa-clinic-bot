@@ -51,11 +51,21 @@ export interface UpdateCellsParams {
   cells: Array<{ col: number; value: string | number }>;
 }
 
+export interface ReconcileRowParams {
+  tenantId: string;
+  spreadsheetId: string;
+  tabName: string;
+  expectedRowIndex: number;
+  customerName: string;
+  bookingDate?: Date | null;
+}
+
 /** Seam uji: implementasi default menembak Google; test memakai fake. */
 export interface SheetsGateway {
   ensureMonthlyTab(params: EnsureMonthlyTabParams): Promise<EnsureMonthlyTabResult>;
   appendRow(params: AppendRowParams): Promise<AppendRowResult>;
   updateCells(params: UpdateCellsParams): Promise<void>;
+  reconcileRowIndex?(params: ReconcileRowParams): Promise<number>;
 }
 
 export const SHEETS_NOT_CONNECTED = 'SHEETS_NOT_CONNECTED';
@@ -195,6 +205,71 @@ export class GoogleSheetsGateway implements SheetsGateway {
       }
     }
     await flush();
+  }
+
+  /**
+   * Rekonsiliasi nomor baris dinamis sebelum menulis sel.
+   * Melindungi dari pergeseran baris akibat admin menyisipkan/menghapus baris secara manual di Google Sheets.
+   * Membaca jendela baris (±15 baris) di sekitar expectedRowIndex dan mencocokkan nama customer di kolom C.
+   */
+  public async reconcileRowIndex(params: ReconcileRowParams): Promise<number> {
+    const { tenantId, spreadsheetId, tabName, expectedRowIndex, customerName } = params;
+    if (!expectedRowIndex || expectedRowIndex < 2 || !customerName) {
+      return expectedRowIndex;
+    }
+
+    try {
+      const sheets = await this.getSheets(tenantId);
+      const startRow = Math.max(2, expectedRowIndex - 15);
+      const endRow = expectedRowIndex + 15;
+      const range = `${tabName}!A${startRow}:C${endRow}`;
+
+      const res = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range,
+        valueRenderOption: 'FORMATTED_VALUE',
+      });
+
+      const rows: any[][] = res?.data?.values || [];
+      if (rows.length === 0) return expectedRowIndex;
+
+      const { isCustomerMatch } = await import('./row-formatter');
+
+      // 1. Cek dulu apakah baris expected masih cocok
+      const expectedOffset = expectedRowIndex - startRow;
+      if (expectedOffset >= 0 && expectedOffset < rows.length) {
+        const expectedCustomerInSheet = rows[expectedOffset]?.[2];
+        if (isCustomerMatch(expectedCustomerInSheet, customerName)) {
+          return expectedRowIndex;
+        }
+      }
+
+      // 2. Jika tidak cocok, scan jendela untuk mencari baris customer yang cocok
+      let matchedIndex: number | null = null;
+      let minDistance = Infinity;
+
+      for (let i = 0; i < rows.length; i++) {
+        const rowCustName = rows[i]?.[2];
+        if (isCustomerMatch(rowCustName, customerName)) {
+          const actualRow = startRow + i;
+          const dist = Math.abs(actualRow - expectedRowIndex);
+          if (dist < minDistance) {
+            minDistance = dist;
+            matchedIndex = actualRow;
+          }
+        }
+      }
+
+      if (matchedIndex != null) {
+        console.info(`[SHEETS] Dynamic Row Reconciliation: baris customer "${customerName}" bergeser dari ${expectedRowIndex} -> ${matchedIndex}`);
+        return matchedIndex;
+      }
+
+      return expectedRowIndex;
+    } catch (err: any) {
+      console.warn('[SHEETS] reconcileRowIndex gagal (fallback ke expectedRowIndex):', err?.message);
+      return expectedRowIndex;
+    }
   }
 }
 

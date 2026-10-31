@@ -58,6 +58,8 @@ interface FollowUpItem {
   variant?: number; // 1..3 — dihitung backend via getRollingVariant (WIB)
   type: string; // NO_PURCHASE | NEXT_TREATMENT | REMINDER_H1 | REVIEW_H1_BABY | REVIEW_H1_MOMS
   stage: number;
+  // Fase 2: kategori treatment yang menentukan keluarga template (MOMS vs ANAK).
+  treatment_category?: string | null;
   custom_text?: string | null;
   scheduled_at: string;
   sent_at: string | null;
@@ -340,21 +342,47 @@ export const FollowUpQueue: React.FC = () => {
     return v >= 1 && v <= 3 ? v : fallbackRollingVariant(fu);
   };
 
+  // Kategori treatment efektif baris follow-up (state baris -> relasi reservasi).
+  const resolveCategory = (fu?: FollowUpItem | null): string | null =>
+    (fu?.treatment_category ?? fu?.reservation?.treatment_category ?? null) || null;
+
   // Helper template finder — DB-driven (tenant-aware). Fallback hanya generik.
-  const getTemplateTextForTypeAndVariant = (type: string, stage: number, variant: number = 1) => {
+  // Fase 2: keluarga template mengikuti kategori treatment (MOMS vs ANAK),
+  // paritas dengan backend `resolveNextTreatmentTemplateType`.
+  const getTemplateTextForTypeAndVariant = (
+    type: string,
+    stage: number,
+    variant: number = 1,
+    category?: string | null
+  ) => {
+    const stageKey = Math.min(3, Math.max(1, stage));
     let templateType = type;
-    if (type === 'NO_PURCHASE') templateType = `NO_PURCHASE_${Math.min(3, Math.max(1, stage))}`;
-    else if (type === 'NEXT_TREATMENT') templateType = `NEXT_TREATMENT_${Math.min(3, Math.max(1, stage))}`;
+    if (type === 'NO_PURCHASE') templateType = `NO_PURCHASE_${stageKey}`;
+    else if (type === 'NEXT_TREATMENT') {
+      const isMoms = String(category || '').toUpperCase() === 'MOMS';
+      templateType = isMoms ? `NEXT_TREATMENT_MOMS_${stageKey}` : `NEXT_TREATMENT_${stageKey}`;
+    }
     const v = Math.min(3, Math.max(1, variant));
     const found = availableTemplates.find((t) => t.type === templateType && t.variant === v);
     if (found && found.text) return found.text;
     return 'Halo Bunda {name}! Bagaimana kabarnya hari ini? Kami siap melayani bunda dan si kecil.';
   };
 
+  // Preview jujur (Fase 5): TIDAK memakai nama dummy hardcoded. Nilai kosong
+  // ditampilkan sebagai penanda eksplisit agar admin tidak mengira itu data nyata.
+  const editCategory = resolveCategory(editModal.item);
+  const editCustomer = (editModal.item?.customer as any) || null;
+  const editHonorific =
+    String(editCustomer?.preferences?.genderGreeting || '').toLowerCase() === 'bapak' ? 'Bapak' : 'Bunda';
+  const editFirstName = editCustomer?.name?.split(' ')[0] || '[nama customer]';
+  const editBabyLabel = editCustomer?.children?.[0]?.name
+    ? `dek ${editCustomer.children[0].name}`
+    : '[nama anak belum ada]';
+
   // Open Edit Modal — default varian = varian efektif baris tersebut
   const handleOpenEdit = (item: FollowUpItem) => {
     const ev = effectiveVariant(item);
-    const defaultText = getTemplateTextForTypeAndVariant(item.type, item.stage, ev);
+    const defaultText = getTemplateTextForTypeAndVariant(item.type, item.stage, ev, resolveCategory(item));
     setEditModal({
       open: true,
       item,
@@ -368,7 +396,7 @@ export const FollowUpQueue: React.FC = () => {
   // Switch Variant in Edit Modal - hanya ganti gaya bahasa, TIDAK ubah stage/jadwal
   const handleVariantSelect = (newVariant: number) => {
     if (!editModal.item) return;
-    const templateText = getTemplateTextForTypeAndVariant(editModal.item.type, editModal.stage, newVariant);
+    const templateText = getTemplateTextForTypeAndVariant(editModal.item.type, editModal.stage, newVariant, resolveCategory(editModal.item));
     setEditModal((prev) => ({
       ...prev,
       variant: newVariant,
@@ -798,7 +826,7 @@ export const FollowUpQueue: React.FC = () => {
                       )}
                     </div>
                     <p className="text-xs text-ink-2 line-clamp-2 leading-relaxed">
-                      {fu.custom_text || getTemplateTextForTypeAndVariant(fu.type, fu.stage, effectiveVariant(fu))}
+                      {fu.custom_text || getTemplateTextForTypeAndVariant(fu.type, fu.stage, effectiveVariant(fu), resolveCategory(fu))}
                     </p>
                   </div>
 
@@ -1028,7 +1056,7 @@ export const FollowUpQueue: React.FC = () => {
                               </span>
                             )}
                           </div>
-                          <span className="text-[11px] text-ink-3 truncate max-w-[220px]" title={fu.custom_text || getTemplateTextForTypeAndVariant(fu.type, fu.stage, effectiveVariant(fu))}>{(fu.custom_text || getTemplateTextForTypeAndVariant(fu.type, fu.stage, effectiveVariant(fu))).slice(0, 48)}...</span>
+                          <span className="text-[11px] text-ink-3 truncate max-w-[220px]" title={fu.custom_text || getTemplateTextForTypeAndVariant(fu.type, fu.stage, effectiveVariant(fu), resolveCategory(fu))}>{(fu.custom_text || getTemplateTextForTypeAndVariant(fu.type, fu.stage, effectiveVariant(fu), resolveCategory(fu))).slice(0, 48)}...</span>
                         </div>
                       </td>
 
@@ -1189,7 +1217,7 @@ export const FollowUpQueue: React.FC = () => {
                     value={editModal.stage}
                     onChange={(e) => {
                       const newStage = parseInt(e.target.value, 10);
-                      const templateText = getTemplateTextForTypeAndVariant(editModal.item!.type, newStage, editModal.variant);
+                      const templateText = getTemplateTextForTypeAndVariant(editModal.item!.type, newStage, editModal.variant, resolveCategory(editModal.item));
                       setEditModal((prev) => ({ ...prev, stage: newStage, customText: templateText }));
                     }}
                     className="w-full p-2.5 bg-surface border border-divider hover:border-accent focus:border-accent rounded-xl text-xs text-ink focus:outline-none shadow-xs font-medium"
@@ -1260,7 +1288,7 @@ export const FollowUpQueue: React.FC = () => {
                       type="button"
                       onClick={() => {
                         if (editModal.item) {
-                          const defaultText = getTemplateTextForTypeAndVariant(editModal.item.type, editModal.stage, editModal.variant);
+                          const defaultText = getTemplateTextForTypeAndVariant(editModal.item.type, editModal.stage, editModal.variant, resolveCategory(editModal.item));
                           setEditModal((prev) => ({ ...prev, customText: defaultText }));
                         }
                       }}
@@ -1284,7 +1312,7 @@ export const FollowUpQueue: React.FC = () => {
                     <span className="text-[10px] text-ink-3 flex items-center gap-1">
                       <Tag size={10} /> Sisipkan Variabel:
                     </span>
-                    {['{name}', '{babyName}', '{time}'].map((tag) => (
+                    {['{name}', ...(editCategory === 'MOMS' ? [] : ['{babyName}']), '{time}'].map((tag) => (
                       <button
                         key={tag}
                         type="button"
@@ -1301,16 +1329,16 @@ export const FollowUpQueue: React.FC = () => {
                     ))}
                   </div>
                   <p className="text-[10px] text-ink-3 leading-tight">
-                    * Variabel <code>{'{name}'}</code> akan otomatis disanitasi menjadi sapaan bersih (misal: "Bunda Rina").
+                    * Variabel <code>{'{name}'}</code> akan otomatis disanitasi menjadi sapaan bersih (misal: "Bunda [nama]").{editCategory === 'MOMS' ? ' Variabel {babyName} tidak tersedia untuk kategori MOMS.' : ''}
                   </p>
                   {/* Live Preview */}
                   <div className="bg-success-soft border border-success-line rounded-xl p-3 space-y-1">
-                    <p className="text-[10px] font-bold text-success flex items-center gap-1"><Eye size={10} /> Preview WhatsApp (Bunda {(editModal.item?.customer as any)?.name?.split(' ')[0] || 'Rina'}, {(editModal.item?.customer as any)?.children?.[0]?.name || 'Kenzo'}):</p>
+                    <p className="text-[10px] font-bold text-success flex items-center gap-1"><Eye size={10} /> Preview WhatsApp ({editHonorific} {editFirstName}{editCategory === 'MOMS' ? '' : `, ${editBabyLabel}`}):</p>
                     <p className="text-xs text-ink leading-relaxed whitespace-pre-wrap bg-surface p-2 rounded-lg border border-success-line">
                       {editModal.customText
-                        .replace(/Bunda\s*\{name\}/gi, `Bunda ${(editModal.item?.customer as any)?.name?.split(' ')[0] || 'Rina'}`)
-                        .replace(/\{name\}/g, (editModal.item?.customer as any)?.name?.split(' ')[0] || 'Rina')
-                        .replace(/\{babyName\}/g, (editModal.item?.customer as any)?.children?.[0]?.name ? `dek ${(editModal.item?.customer as any).children[0].name}` : 'dek Kenzo')
+                        .replace(/Bunda\s*\{name\}/gi, `${editHonorific} ${editFirstName}`)
+                        .replace(/\{name\}/g, editFirstName)
+                        .replace(/\{babyName\}/g, editCategory === 'MOMS' ? '[variabel bayi tidak berlaku]' : editBabyLabel)
                         .replace(/\{time\}/g, '10:00 WIB') || '—'}
                     </p>
                   </div>

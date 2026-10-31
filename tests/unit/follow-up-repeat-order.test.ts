@@ -200,7 +200,9 @@ describe('Follow-Up Repeat Order & Reconciler Unit Tests (TDD Adversarial)', () 
 
     const resA = await followUpService.reconcileOrphanedCompletedFollowUps(tenantA);
     expect(resA.reconciledCount).toBe(1);
-    expect(createSpy).toHaveBeenCalledWith('cust-tenant-a', expect.any(Date), tenantA);
+    // Fase 1: reconciler kini meneruskan reservationId (undefined utk anchor tanpa
+    // baris reservasi) + kategori treatment (null bila fixture tidak menyediakannya).
+    expect(createSpy).toHaveBeenCalledWith('cust-tenant-a', expect.any(Date), tenantA, undefined, null);
 
     // Sekarang jalankan reconciler untuk tenantB: harus kosong
     createSpy.mockClear();
@@ -268,7 +270,7 @@ describe('Follow-Up Repeat Order & Reconciler Unit Tests (TDD Adversarial)', () 
 
     expect(res2.reconciledCount).toBe(1);
     expect(res2.customerIds).toContain('cust-cancel-1');
-    expect(createSpy).toHaveBeenCalledWith('cust-cancel-1', expect.any(Date), DEFAULT_TENANT_ID);
+    expect(createSpy).toHaveBeenCalledWith('cust-cancel-1', expect.any(Date), DEFAULT_TENANT_ID, undefined, null);
     const anchorArg = createSpy.mock.calls[0][1] as Date;
     expect(Math.abs(anchorArg.getTime() - oldCompleted.getTime())).toBeLessThan(1000);
   });

@@ -39,3 +39,34 @@ export function isTreatmentCategoryOverlap(
 
   return false;
 }
+
+export type CanonicalTreatmentCategory = 'BABY' | 'KIDS' | 'MOMS' | 'BOTH';
+
+/**
+ * Normalisasi kategori dari lapisan mana pun (frontend `BUNDLE`, string bebas,
+ * enum Prisma) ke nilai enum DB kanonis. Nilai tak dikenal -> null (JANGAN
+ * ditebak) agar data lama tetap NULL, bukan salah kategori.
+ */
+export function normalizeTreatmentCategory(
+  value: string | null | undefined
+): CanonicalTreatmentCategory | null {
+  const v = String(value || '').toUpperCase().trim();
+  if (!v) return null;
+  if (v === 'BUNDLE') return 'BOTH';
+  if (v === 'BABY' || v === 'KIDS' || v === 'MOMS' || v === 'BOTH') return v;
+  return null;
+}
+
+/**
+ * Klaster ANAK: narasi follow-up boleh menyinggung bayi/anak.
+ * BOTH = paket ibu & anak sekaligus -> tetap memuat narasi anak.
+ */
+export function isChildCategory(value: string | null | undefined): boolean {
+  const v = normalizeTreatmentCategory(value);
+  return v === 'BABY' || v === 'KIDS' || v === 'BOTH';
+}
+
+/** Klaster MOMS murni: narasi bayi DILARANG. Kategori kosong -> bukan MOMS. */
+export function isMomsCategory(value: string | null | undefined): boolean {
+  return normalizeTreatmentCategory(value) === 'MOMS';
+}

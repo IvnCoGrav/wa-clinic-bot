@@ -89,6 +89,21 @@ const TYPE_CONFIG: Record<string, { label: string; category: string; description
     category: 'NEXT_TREATMENT',
     description: 'Reminder treatment berkala bulan ke-3 untuk evaluasi kebugaran berkala.',
   },
+  NEXT_TREATMENT_MOMS_1: {
+    label: 'Treatment Lanjutan Ibu (MOMS) — Bulan ke-1',
+    category: 'NEXT_TREATMENT',
+    description: 'Reminder treatment rutin bulan ke-1 khusus kategori MOMS (perawatan ibu). Tanpa variabel nama bayi.',
+  },
+  NEXT_TREATMENT_MOMS_2: {
+    label: 'Treatment Lanjutan Ibu (MOMS) — Bulan ke-2',
+    category: 'NEXT_TREATMENT',
+    description: 'Reminder treatment berkala bulan ke-2 khusus kategori MOMS. Tanpa variabel nama bayi.',
+  },
+  NEXT_TREATMENT_MOMS_3: {
+    label: 'Treatment Lanjutan Ibu (MOMS) — Bulan ke-3',
+    category: 'NEXT_TREATMENT',
+    description: 'Reminder treatment berkala bulan ke-3 khusus kategori MOMS. Tanpa variabel nama bayi.',
+  },
   MILESTONE_3M: {
     label: 'Milestone 3 Bulan — Tummy Time',
     category: 'MILESTONE',
@@ -127,9 +142,9 @@ const CATEGORIES = [
 ];
 
 const AVAILABLE_PLACEHOLDERS = [
-  { tag: '{name}', label: 'Nama Pelanggan', desc: 'Contoh: Bunda Rina' },
+  { tag: '{name}', label: 'Nama Pelanggan', desc: 'Contoh: Bunda [nama]' },
   { tag: '{time}', label: 'Jam Treatment', desc: 'Contoh: 10:00 WIB' },
-  { tag: '{babyName}', label: 'Nama Bayi / Anak', desc: 'Contoh: Adek Kenzo' },
+  { tag: '{babyName}', label: 'Nama Bayi / Anak', desc: 'Contoh: dek [nama anak] — tidak berlaku untuk template MOMS' },
 ];
 
 export const FollowUpTemplates: React.FC = () => {

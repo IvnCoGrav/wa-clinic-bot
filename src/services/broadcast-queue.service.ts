@@ -2,8 +2,6 @@ import { Queue, Worker, Job } from 'bullmq';
 import Redis from 'ioredis';
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
-import { TEMPLATES } from '../config/persona';
-import { typingService } from './typing.service';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -226,75 +224,16 @@ export class BroadcastQueueService {
         console.warn('[Broadcast Queue] Proactive gate warning:', gateErr?.message || gateErr);
       }
 
-      // 3. Cari template pesan acak dari array
-      let replyText = '';
-      const name = customer.name || 'Bunda';
-
-      if (followUp.type === 'NO_PURCHASE') {
-        let variants: any[] = [];
-        if (followUp.stage === 1) {
-          variants = TEMPLATES.followUpNoPurchaseDay3;
-        } else if (followUp.stage === 2) {
-          variants = TEMPLATES.followUpNoPurchaseDay7;
-        } else {
-          variants = TEMPLATES.followUpNoPurchaseDay14;
-        }
-        
-        const randomIndex = Math.floor(Math.random() * variants.length);
-        replyText = variants[randomIndex]({ name });
-      } else if (followUp.type === 'NEXT_TREATMENT') {
-        const variants = TEMPLATES.nextTreatmentFollowUp;
-        const randomIndex = Math.floor(Math.random() * variants.length);
-        replyText = variants[randomIndex]({ name, childrenSummary: 'si Kecil' });
+      // 3-5. SATU SEAM PENGIRIM (Fase 6). Seluruh penyusunan teks (template DB tenant,
+      // custom_text admin, gerbang kategori MOMS/ANAK, sapaan gender-aware, gerbang
+      // placeholder), logging LiveChat, dan update status adalah milik
+      // `followUpService.executeFollowUp`. Worker ini HANYA mengurus antrean/jadwal.
+      // DILARANG menghidupkan kembali template hardcoded kedua di sini.
+      const { followUpService } = await import('./follow-up.service');
+      const sent = await followUpService.executeFollowUp(followUp as any, targetTenantId);
+      if (!sent) {
+        throw new Error(`Canonical follow-up executor declined to send ${followUpId}`);
       }
-
-      if (!replyText) {
-        throw new Error(`Failed to resolve template for follow-up: ${followUpId}`);
-      }
-
-      // Pre-log pesan follow-up ke tabel messages untuk Live Chat
-      const targetTenantId = followUp.tenant_id || DEFAULT_TENANT_ID;
-      try {
-        const { conversationService } = await import('./conversation.service');
-        const { messageService } = await import('./message.service');
-        const conv = await conversationService.getOrCreateConversation(customer.id, targetTenantId);
-        if (conv) {
-          await messageService.logMessage({
-            tenantId: targetTenantId,
-            conversationId: conv.id,
-            direction: 'OUTBOUND',
-            content: replyText,
-            senderType: 'BOT',
-            senderName: 'Bot (Follow-Up)',
-          });
-        }
-      } catch (logErr: any) {
-        console.warn('[Broadcast Queue] Failed to log follow-up message to DB:', logErr.message);
-      }
-
-      // 4. Kirim pesan dengan simulasi human typing
-      console.log(`[Broadcast Queue] Sending throttled follow-up (Stage ${followUp.stage}) to ${customer.phone}`);
-      const res = await typingService.simulateHumanReply({
-        chatId: customer.phone,
-        replyText,
-        tenantId: targetTenantId,
-        singleBubble: true,
-      });
-
-      if (!res.success) {
-        throw new Error(`Typing simulation failed: ${res.error}`);
-      }
-
-      // 5. Update Status Follow-Up ke SENT
-      await prisma.followUp.update({
-        where: { id: followUpId },
-        data: {
-          status: 'SENT',
-          sent_at: new Date(),
-        },
-      });
-
-
 
       // 7. Jeda Acak (Random Jitter) Throttling 20 - 45 detik (0s in test mode unless overridden)
       const isTestEnv = process.env.NODE_ENV === 'test' && process.env.ENABLE_BROADCAST_THROTTLING_TEST !== 'true';
@@ -306,11 +245,20 @@ export class BroadcastQueueService {
 
     } catch (err: any) {
       console.error(`[Broadcast Queue] Error processing job ${followUpId}:`, err.message);
-      // Kembalikan ke PENDING agar dicoba lagi
-      await prisma.followUp.update({
-        where: { id: followUpId },
-        data: { status: 'PENDING' },
-      }).catch(() => {});
+      // Fase 6: jangan menimpa status TERMINAL (FAILED/SKIPPED/SENT) yang sudah
+      // ditetapkan seam kanonis. Kembalikan ke PENDING hanya bila masih aktif.
+      try {
+        const fresh = await prisma.followUp.findUnique({
+          where: { id: followUpId },
+          select: { status: true },
+        });
+        if (!fresh || ['PENDING', 'QUEUED'].includes(String((fresh as any).status))) {
+          await prisma.followUp.update({
+            where: { id: followUpId },
+            data: { status: 'PENDING' },
+          });
+        }
+      } catch (_) {}
     }
   }
 

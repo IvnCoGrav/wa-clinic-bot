@@ -71,11 +71,11 @@ async function main() {
     // 1. Kandidat completed 90 hari (konsisten reconciler)
     const now = new Date();
     const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-    let completed: Array<{ customer_id: string; booking_date: Date | null; customer?: any }> = [];
+    let completed: Array<{ customer_id: string; booking_date: Date | null; treatment_category?: string | null; customer?: any }> = [];
     try {
       completed = (await prisma.reservation.findMany({
         where: { tenant_id: tenantId, status: 'completed', booking_date: { gte: ninetyDaysAgo, lte: now } },
-        select: { customer_id: true, booking_date: true },
+        select: { customer_id: true, booking_date: true, treatment_category: true },
         orderBy: { booking_date: 'desc' },
         take: 5000,
       })) as any;
@@ -85,12 +85,16 @@ async function main() {
     }
 
     const maxByCustomer = new Map<string, Date>();
+    const categoryByCustomer = new Map<string, string>();
     for (const r of completed) {
       if (!r.customer_id || !r.booking_date) continue;
       const d = new Date(r.booking_date);
       if (isNaN(d.getTime())) continue;
       const cur = maxByCustomer.get(r.customer_id);
-      if (!cur || d.getTime() > cur.getTime()) maxByCustomer.set(r.customer_id, d);
+      if (!cur || d.getTime() > cur.getTime()) {
+        maxByCustomer.set(r.customer_id, d);
+        if (r.treatment_category) categoryByCustomer.set(r.customer_id, String(r.treatment_category));
+      }
     }
 
     let cids = Array.from(maxByCustomer.keys());
@@ -240,7 +244,7 @@ async function main() {
       if (!isDryRun) {
         const { followUpService } = await import('../services/follow-up.service');
         try {
-          await followUpService.createNextTreatmentFollowUps(cid, bDate, tenantId);
+          await followUpService.createNextTreatmentFollowUps(cid, bDate, tenantId, undefined, categoryByCustomer.get(cid) ?? null);
           totalCreated += toCreate.length;
         } catch (e: any) {
           console.warn(`[BACKFILL] create failed ${cid}: ${e.message}`);

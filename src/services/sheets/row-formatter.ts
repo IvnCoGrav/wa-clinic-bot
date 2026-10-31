@@ -19,6 +19,8 @@ export const EMPTY_CELL = '-';
 export const SHEET_COLUMN_COUNT = 16;
 
 export interface SheetRowReservation {
+  id?: string | null;
+  proof_url?: string | null;
   booking_date: Date | null;
   treatment_detail?: string | null;
   treatment_category?: string | null;
@@ -66,6 +68,8 @@ export interface SheetRowInput {
   assignedStaffName?: string | null;
   /** Nama 12 tab bulan dari DB (TenantSheetsConfig.month_tab_names). */
   monthTabNames?: readonly string[] | null;
+  /** Domain publik untuk URL bukti bayar (misal https://app.kalababyspa.online). */
+  publicBaseUrl?: string | null;
 }
 
 const KNOWN_TAGS = [
@@ -168,6 +172,51 @@ function resolveOngkir(
   return 0;
 }
 
+/**
+ * Pencocokan nama customer defensif: toleran terhadap prefix "Bunda", tanda baca, spasi, case.
+ * Contoh: "Bunda Riska Elia" vs "Riska Elia" -> MATCH.
+ */
+export function isCustomerMatch(sheetName: string | null | undefined, dbName: string | null | undefined): boolean {
+  if (!sheetName || !dbName) return false;
+  const clean = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/^bunda\s+/i, '')
+      .replace(/[^a-z0-9]/gi, '')
+      .trim();
+  const cSheet = clean(sheetName);
+  const cDb = clean(dbName);
+  if (!cSheet || !cDb) return false;
+  if (cSheet === cDb) return true;
+  if (cSheet.includes(cDb) || cDb.includes(cSheet)) return true;
+  return false;
+}
+
+/**
+ * Metode Bayar:
+ * Bila reservasi memiliki foto bukti bayar (`proof_url` ada) dan `id` reservasi ada,
+ * bungkus sebagai formula Google Sheets `=HYPERLINK("https://.../proof/{id}"; "{label}")`.
+ * Jika tidak ada bukti, tampilkan label metode pembayaran polos (misal "Transfer BCA" atau "-").
+ */
+export function resolvePaymentMethodCell(
+  reservation: SheetRowReservation,
+  baseUrl?: string | null
+): string {
+  const method = (reservation.payment_method || '').trim();
+  const hasProof = Boolean(reservation.proof_url && reservation.proof_url.trim());
+  const label = method || (hasProof ? 'Bukti Bayar' : EMPTY_CELL);
+
+  if (hasProof && reservation.id) {
+    const domain = (baseUrl || process.env.PUBLIC_BASE_URL || 'https://app.kalababyspa.online').replace(/\/$/, '');
+    const proofUrl = `${domain}/proof/${reservation.id}`;
+    const escapedLabel = label.replace(/"/g, '""');
+    // Catatan: Spreadsheet klinik ber-locale Indonesia (in_ID) memakai pemisah parameter titik-koma (;)
+    return `=HYPERLINK("${proofUrl}"; "${escapedLabel}")`;
+  }
+
+  return toCell(label);
+}
+
 function resolveDiscount(reservation: SheetRowReservation): number | string {
   const d = reservation.discount_amount;
   if (typeof d === 'number' && Number.isFinite(d) && d > 0) {
@@ -210,7 +259,7 @@ export function formatReservationToRow(input: SheetRowInput): (string | number)[
     total,                                                      // I Total
     discount,                                                   // J Diskon (nominal bila >0, else '')
     '',                                                         // K Harga akhir (selalu kosong, dihitung rumus spreadsheet klinik)
-    toCell(reservation.payment_method),                         // L Metode Bayar
+    resolvePaymentMethodCell(reservation, input.publicBaseUrl), // L Metode Bayar (Hyperlink bukti bayar jika ada)
     sanitizeStaffName(assignedStaffName),                       // M Bidan (nama saja tanpa kata "Bidan")
     '',                                                         // N Tip (kosong / tulisan manual admin di sheet)
     '',                                                         // O Follow up (selalu kosong, tulisan manual admin di sheet)

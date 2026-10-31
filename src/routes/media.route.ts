@@ -381,4 +381,54 @@ export async function mediaRoutes(fastify: FastifyInstance) {
       return reply.redirect(fallbackUrl);
     }
   });
+
+  /**
+   * GET /proof/:reservationId
+   * Endpoint publik aman untuk menyajikan foto bukti pembayaran reservasi (misal tautan dari Google Sheets).
+   * Hanya menyajikan file yang terdaftar sebagai Reservation.proof_url resmi di DB.
+   */
+  fastify.get('/proof/:reservationId', async (request: FastifyRequest<{
+    Params: { reservationId: string };
+  }>, reply: FastifyReply) => {
+    const { reservationId } = request.params;
+    if (!reservationId || reservationId.trim().length < 10) {
+      return reply.status(400).send({ error: 'ID Reservasi tidak valid' });
+    }
+
+    const { prisma } = await import('../db/client');
+    const reservation = await prisma.reservation.findUnique({
+      where: { id: reservationId },
+      select: { proof_url: true, tenant_id: true },
+    }).catch(() => null);
+
+    if (!reservation || !reservation.proof_url) {
+      return reply.status(404).type('text/html').send('<h3>Bukti pembayaran belum tersedia untuk reservasi ini.</h3>');
+    }
+
+    let abs = mediaService.filePathFromRelativeUrl(reservation.proof_url);
+    if (!abs || !fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
+      const fallbackAbs = mediaService.resolveThumbFallback(reservation.proof_url);
+      if (fallbackAbs) {
+        abs = fallbackAbs;
+      } else {
+        return reply.status(404).send({ error: 'File bukti pembayaran tidak ditemukan di server' });
+      }
+    }
+
+    const stat = fs.statSync(abs);
+    const ext = (path.extname(abs) || '').replace(/^\./, '').toLowerCase();
+    const contentType = MIME_MAP[ext] || 'image/jpeg';
+
+    reply.header('Access-Control-Allow-Origin', '*');
+    reply.header('Cache-Control', 'public, max-age=86400');
+    reply.header('Content-Length', stat.size);
+    reply.type(contentType);
+
+    if (request.method === 'HEAD') {
+      return reply.send();
+    }
+
+    const stream = fs.createReadStream(abs);
+    return reply.send(stream);
+  });
 }

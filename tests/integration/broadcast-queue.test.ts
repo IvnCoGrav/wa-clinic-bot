@@ -2,7 +2,6 @@ import { vi, describe, it, expect, beforeEach, afterEach, beforeAll } from 'vite
 import { broadcastQueueService } from '../../src/services/broadcast-queue.service';
 import { prisma } from '../../src/db/client';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
-import { TEMPLATES } from '../../src/config/persona';
 
 describe('Broadcast Throttling & Queue Constraint Tests', () => {
   beforeAll(() => {
@@ -61,7 +60,7 @@ describe('Broadcast Throttling & Queue Constraint Tests', () => {
     expect(scheduledDate.getHours()).toBe(9);
   });
 
-  it('Job processed inside business hours -> triggers human typing simulation and delay throttling', async () => {
+  it('Job processed inside business hours -> delegates to the single canonical sender + delay throttling', async () => {
     // Mock jam 10:00 pagi (dalam jam kerja)
     vi.setSystemTime(new Date(2026, 6, 24, 10, 0, 0));
 
@@ -81,9 +80,11 @@ describe('Broadcast Throttling & Queue Constraint Tests', () => {
     };
 
     vi.mocked(prisma.followUp.findUnique).mockResolvedValue(mockFollowUp as any);
-    const followUpUpdateSpy = vi.mocked(prisma.followUp.update).mockResolvedValue({} as any);
-    
-    // Mock typing simulation
+    vi.mocked(prisma.followUp.update).mockResolvedValue({} as any);
+
+    // Fase 6: satu seam pengirim — worker WAJIB mendelegasikan ke followUpService.
+    const { followUpService } = await import('../../src/services/follow-up.service');
+    const executeSpy = vi.spyOn(followUpService, 'executeFollowUp').mockResolvedValue(true as any);
     const { typingService } = await import('../../src/services/typing.service');
     const simulateSpy = vi.spyOn(typingService, 'simulateHumanReply').mockResolvedValue({ success: true, bubblesSent: 1 });
 
@@ -93,19 +94,9 @@ describe('Broadcast Throttling & Queue Constraint Tests', () => {
       tenantId: DEFAULT_TENANT_ID
     });
 
-    // Pastikan mengetik & kirim pesan terpanggil
-    expect(simulateSpy).toHaveBeenCalledTimes(1);
-    
-    // Pastikan status diset SENT
-    expect(followUpUpdateSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 'f-day' },
-        data: expect.objectContaining({
-          status: 'SENT',
-          sent_at: expect.any(Date)
-        })
-      })
-    );
+    expect(executeSpy).toHaveBeenCalledTimes(1);
+    // Worker tidak boleh memanggil gateway langsung (anti mesin ganda).
+    expect(simulateSpy).not.toHaveBeenCalled();
 
     // Pastikan throttling setTimeout dipanggil dengan jeda antara 20s - 45s
     expect(setTimeoutSpy).toHaveBeenCalled();
@@ -116,7 +107,7 @@ describe('Broadcast Throttling & Queue Constraint Tests', () => {
     expect(delayArg).toBeLessThanOrEqual(45000);
   });
 
-  it('Template selection -> chooses a random variant from array', async () => {
+  it('Template selection -> seluruh teks berasal dari seam kanonis (bukan TEMPLATES hardcoded)', async () => {
     // Mock jam 10:00 pagi (dalam jam kerja)
     vi.setSystemTime(new Date(2026, 6, 24, 10, 0, 0));
 
@@ -137,9 +128,9 @@ describe('Broadcast Throttling & Queue Constraint Tests', () => {
 
     vi.mocked(prisma.followUp.findUnique).mockResolvedValue(mockFollowUp as any);
     vi.mocked(prisma.followUp.update).mockResolvedValue({} as any);
-    
-    const { typingService } = await import('../../src/services/typing.service');
-    const simulateSpy = vi.spyOn(typingService, 'simulateHumanReply').mockResolvedValue({ success: true, bubblesSent: 1 });
+
+    const { followUpService } = await import('../../src/services/follow-up.service');
+    const executeSpy = vi.spyOn(followUpService, 'executeFollowUp').mockResolvedValue(true as any);
 
     await broadcastQueueService.processBroadcastJob({
       followUpId: 'f-variant',
@@ -147,12 +138,10 @@ describe('Broadcast Throttling & Queue Constraint Tests', () => {
       tenantId: DEFAULT_TENANT_ID
     });
 
-    // Ambil teks pesan terkirim
-    const sentText = simulateSpy.mock.calls[0][0].replyText;
-    
-    // Harus merupakan salah satu dari varian template Day 3
-    const possibleTemplates = TEMPLATES.followUpNoPurchaseDay3.map(fn => fn({ name: 'Bunda Ceria' }));
-    expect(possibleTemplates).toContain(sentText);
+    // Baris lengkap diteruskan apa adanya; seam kanonis yang memilih template
+    // (DB tenant / custom_text), bukan array hardcoded di worker.
+    expect(executeSpy).toHaveBeenCalledTimes(1);
+    expect(executeSpy.mock.calls[0][0]).toMatchObject({ id: 'f-variant', type: 'NO_PURCHASE' });
   });
 
   it('Anti-Double-Enqueue constraint -> cron selects pending only, sets queued state immediately', async () => {

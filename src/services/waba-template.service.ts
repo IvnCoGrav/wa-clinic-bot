@@ -35,6 +35,10 @@ const DEFAULT_TEMPLATE_NAMES: Record<string, WabaTemplateMeta> = {
   NEXT_TREATMENT_1: { templateName: 'followup_next_treatment_1', category: 'MARKETING' },
   NEXT_TREATMENT_2: { templateName: 'followup_next_treatment_2', category: 'MARKETING' },
   NEXT_TREATMENT_3: { templateName: 'followup_next_treatment_3', category: 'MARKETING' },
+  // Fase 2: keluarga MOMS (perawatan ibu) — tanpa variabel nama bayi.
+  NEXT_TREATMENT_MOMS_1: { templateName: 'followup_next_treatment_moms_1', category: 'MARKETING' },
+  NEXT_TREATMENT_MOMS_2: { templateName: 'followup_next_treatment_moms_2', category: 'MARKETING' },
+  NEXT_TREATMENT_MOMS_3: { templateName: 'followup_next_treatment_moms_3', category: 'MARKETING' },
   MILESTONE_3M: { templateName: 'milestone_3m', category: 'MARKETING' },
   MILESTONE_6M: { templateName: 'milestone_6m', category: 'MARKETING' },
   MILESTONE_9M: { templateName: 'milestone_9m', category: 'MARKETING' },

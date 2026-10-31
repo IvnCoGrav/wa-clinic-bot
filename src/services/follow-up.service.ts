@@ -10,9 +10,16 @@ import { isDummyOrTestContact } from '../utils/dummy-filter';
 import { hasBypassLabel, checkCustomerBypass, buildNonBypassCustomerWhere, BYPASS_LABEL_PRISMA_IN } from '../utils/customer-bypass';
 import {
   sanitizeCustomerNameForGreeting,
-  formatGreetingBunda,
+  formatGreeting,
+  applyHonorificGreeting,
   formatBabyNamesForGreeting,
 } from '../utils/name-sanitizer';
+import {
+  normalizeTreatmentCategory,
+  isChildCategory,
+  isMomsCategory,
+} from '../utils/treatment-category';
+import { findForbiddenPlaceholders, findUnresolvedPlaceholders } from '../utils/followup-placeholder';
 
 // Parameter batch/throttle follow-up â€” env-drivable (Fase 4.3 docs/HARDCODED_FIX_PLAN.md)
 const FOLLOWUP_BATCH_LIMIT = parsePositiveInt(process.env.FOLLOWUP_BATCH_LIMIT, 20);
@@ -57,6 +64,8 @@ export const CANCEL_REASON = {
   WABA_NO_MARKETING_CONSENT: 'Customer belum opt-in marketing',
   EXPIRED_PENDING: 'Antrean PENDING kadaluarsa (tidak disetujui sebelum akhir hari jadwal)',
   NON_SERIOUS_STAGE3: 'Pengingat hari ke-14 hanya untuk kontak serius (MQL/legacy)',
+  // Fase 3: gerbang placeholder mentah — pesan DIBATALKAN bila masih ada `{var}`.
+  UNRESOLVED_PLACEHOLDER: 'Placeholder pesan belum tersubstitusi (dibatalkan gerbang pengiriman)',
 } as const;
 
 // Prioritas Tipe Follow-Up: NEXT_TREATMENT (Prioritas 1) lebih diutamakan daripada NO_PURCHASE (Prioritas 2)
@@ -135,6 +144,15 @@ export class FollowUpService {
     text: string,
     tenantId: string = DEFAULT_TENANT_ID
   ): Promise<void> {
+    // Fase 3 — gerbang variabel terlarang. Template keluarga MOMS tidak boleh
+    // memuat variabel bayi. DITOLAK (bukan auto-hapus) agar kalimat admin utuh
+    // dan admin tahu harus memperbaiki teksnya sendiri.
+    const forbidden = findForbiddenPlaceholders(type, text);
+    if (forbidden.length > 0) {
+      throw new Error(
+        `Template ${type} tidak boleh memuat variabel ${forbidden.join(', ')} (kategori MOMS: narasi bayi dilarang).`
+      );
+    }
     try {
       await prisma.followUpTemplate.upsert({
         where: {
@@ -280,6 +298,7 @@ export class FollowUpService {
             customer_id: true,
             type: true,
             stage: true,
+            treatment_category: true,
             custom_text: true,
             scheduled_at: true,
             sent_at: true,
@@ -691,7 +710,11 @@ export class FollowUpService {
       // 3. Hitung waktu Review H+1 Pagi pukul 08:00 WIB (= 01:00 UTC pada hari H+1)
       const reviewDate = new Date(Date.UTC(year, month, day + 1, 1, 0, 0, 0));
 
-      const isBaby = treatmentCategory === 'BABY' || treatmentCategory === 'BOTH';
+      // Klaster ANAK = BABY, KIDS, BOTH (bundle ibu & anak). Kategori kosong /
+      // tak dikenal diperlakukan sebagai klaster anak (perilaku lama: default review bayi).
+      const isBaby = treatmentCategory == null || treatmentCategory === ''
+        ? true
+        : isChildCategory(treatmentCategory);
       const reviewType = isBaby ? 'REVIEW_H1_BABY' : 'REVIEW_H1_MOMS';
 
       // 4. Jadwalkan Reminder H-1 Malam jika masih berlaku
@@ -754,6 +777,9 @@ export class FollowUpService {
                 reservation_id: reservationId,
                 type: reviewType as any,
                 stage: 1,
+                ...(normalizeTreatmentCategory(treatmentCategory)
+                  ? { treatment_category: normalizeTreatmentCategory(treatmentCategory) }
+                  : {}),
                 scheduled_at: reviewDate,
                 status: 'PENDING',
               },
@@ -872,7 +898,13 @@ export class FollowUpService {
    * Status QUEUED (langsung masuk antrean kirim), konsisten dgn NO_PURCHASE — keputusan
    * pemilik: repeat-order pasien selesai auto-kirim tanpa perlu approval admin per-baris.
    */
-  public async createNextTreatmentFollowUps(customerId: string, bookingDate: Date, tenantId: string = DEFAULT_TENANT_ID, reservationId?: string): Promise<void> {
+  public async createNextTreatmentFollowUps(
+    customerId: string,
+    bookingDate: Date,
+    tenantId: string = DEFAULT_TENANT_ID,
+    reservationId?: string,
+    treatmentCategory?: string | null
+  ): Promise<void> {
     try {
     // 1. Skip kontak sandbox/dummy/bypass (best-effort, offline-safe).
     //    Keberadaan customer TIDAK menjadi gerbang: integritas FK ditegakkan DB dan
@@ -901,6 +933,9 @@ export class FollowUpService {
       const bDate = new Date(bookingDate);
       if (isNaN(bDate.getTime())) return;
       const now = new Date();
+      // Fase 1: kategori treatment jadi STATE baris (bukan disimpulkan saat kirim).
+      // Nilai tak dikenal -> null (jangan ditebak).
+      const normalizedCategory = normalizeTreatmentCategory(treatmentCategory);
 
       let created = 0;
       let skippedPast = 0;
@@ -947,6 +982,8 @@ export class FollowUpService {
             if (needsReAnchor) {
               const baseData: any = { scheduled_at: scheduledAt };
               if (reservationId) baseData.reservation_id = reservationId;
+              // Kategori ikut di-anchor ulang: kunjungan baru = sumber kebenaran terbaru.
+              if (normalizedCategory) baseData.treatment_category = normalizedCategory;
               try {
                 await prisma.followUp?.update?.({
                   where: { id: exists.id },
@@ -1011,6 +1048,7 @@ export class FollowUpService {
               tenant_id: tenantId,
               customer_id: customerId,
               ...(reservationId ? { reservation_id: reservationId } : {}),
+              ...(normalizedCategory ? { treatment_category: normalizedCategory } : {}),
               type: 'NEXT_TREATMENT',
               stage,
               scheduled_at: scheduledAt,
@@ -1050,7 +1088,7 @@ export class FollowUpService {
       const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
 
       // 1. Ambil reservasi completed 90 hari terakhir (tenant-scoped)
-      let completed: Array<{ customer_id: string; booking_date: Date | null }> = [];
+      let completed: Array<{ customer_id: string; booking_date: Date | null; treatment_category?: string | null }> = [];
       try {
         completed = (await prisma.reservation.findMany({
           where: {
@@ -1058,7 +1096,7 @@ export class FollowUpService {
             status: 'completed',
             booking_date: { gte: ninetyDaysAgo, lte: now },
           },
-          select: { customer_id: true, booking_date: true },
+          select: { customer_id: true, booking_date: true, treatment_category: true },
           orderBy: { booking_date: 'desc' },
         })) as any;
       } catch {
@@ -1066,14 +1104,18 @@ export class FollowUpService {
       }
       if (!completed || completed.length === 0) return empty;
 
-      // Kelompokkan max booking_date per customer
+      // Kelompokkan max booking_date per customer (+ kategori treatment kunjungan terakhir)
       const maxByCustomer = new Map<string, Date>();
+      const categoryByCustomer = new Map<string, string>();
       for (const r of completed) {
         if (!r.customer_id || !r.booking_date) continue;
         const d = new Date(r.booking_date);
         if (isNaN(d.getTime())) continue;
         const cur = maxByCustomer.get(r.customer_id);
-        if (!cur || d.getTime() > cur.getTime()) maxByCustomer.set(r.customer_id, d);
+        if (!cur || d.getTime() > cur.getTime()) {
+          maxByCustomer.set(r.customer_id, d);
+          if (r.treatment_category) categoryByCustomer.set(r.customer_id, String(r.treatment_category));
+        }
       }
       if (maxByCustomer.size === 0) return empty;
 
@@ -1182,7 +1224,7 @@ export class FollowUpService {
           const before = await prisma.followUp.count({
             where: { tenant_id: tenantId, customer_id: cid, type: 'NEXT_TREATMENT', status: { in: ['PENDING', 'QUEUED'] as any } },
           }).catch(() => 0);
-          await this.createNextTreatmentFollowUps(cid, maxDate, tenantId);
+          await this.createNextTreatmentFollowUps(cid, maxDate, tenantId, undefined, categoryByCustomer.get(cid) ?? null);
           const after = await prisma.followUp.count({
             where: { tenant_id: tenantId, customer_id: cid, type: 'NEXT_TREATMENT', status: { in: ['PENDING', 'QUEUED'] as any } },
           }).catch(() => 0);
@@ -1798,6 +1840,36 @@ export class FollowUpService {
    * 3) Kategori BABY dari reservasi terakhir customer.
    * 4) Umur bayi â‰ˆ milestone (3/6/9/12) dlm rentang Â±1 bulan (env MILESTONE_WINDOW_DAYS).
    */
+  /**
+   * Fase 4 — honorific kanonis dari state: `customer.preferences.genderGreeting`
+   * (mirror durable yang ditulis pipeline V3 saat customer menyatakan sapaan).
+   * Tidak menebak dari nama (mis. "Dwi" unisex). Default produk: "Bunda".
+   */
+  private resolveCustomerHonorific(fu: any): 'Bunda' | 'Bapak' {
+    const raw = fu?.customer?.preferences?.genderGreeting;
+    return String(raw || '').trim().toLowerCase() === 'bapak' ? 'Bapak' : 'Bunda';
+  }
+
+  /**
+   * Fase 2 — Gerbang template deterministik berbasis STATE kategori treatment.
+   *
+   * Sumber kategori (berurutan, tanpa query tambahan):
+   *   1. `follow_ups.treatment_category` (state baris — ditulis sejak Fase 1)
+   *   2. `reservation.treatment_category` (baris lama / data legacy)
+   *   3. default: keluarga ANAK (perilaku historis, anti-regresi)
+   *
+   * MOMS murni -> keluarga `NEXT_TREATMENT_MOMS_*` (tanpa narasi bayi).
+   * BABY / KIDS / BOTH -> keluarga `NEXT_TREATMENT_*` (narasi anak tetap sah).
+   * Kategori kosong/tak dikenal TIDAK ditebak sebagai MOMS.
+   */
+  private resolveNextTreatmentTemplateType(fu: any): FollowUpTemplateType {
+    const stage = Math.min(3, Math.max(1, Number(fu?.stage) || 1));
+    const category = fu?.treatment_category ?? fu?.reservation?.treatment_category ?? null;
+    return (isMomsCategory(category)
+      ? `NEXT_TREATMENT_MOMS_${stage}`
+      : `NEXT_TREATMENT_${stage}`) as FollowUpTemplateType;
+  }
+
   public async resolveMilestoneType(
     fu: any,
     tenantId: string
@@ -1972,7 +2044,7 @@ export class FollowUpService {
         // (fondasional, state-based) — tidak pernah membatalkan deret.
         const postponed = await this.suppressPrematureNextTreatment(fu, tenantId);
         if (postponed) return false;
-        templateType = `NEXT_TREATMENT_${Math.min(3, Math.max(1, fu.stage))}` as any;
+        templateType = this.resolveNextTreatmentTemplateType(fu);
       } else if (fu.type === 'NO_PURCHASE') {
         // Auto-cancel jika customer ternyata sudah memiliki reservasi (pending/confirmed/completed)
         try {
@@ -2005,7 +2077,9 @@ export class FollowUpService {
       }
 
       const cleanName = sanitizeCustomerNameForGreeting(fu.customer?.name);
-      const greetingName = formatGreetingBunda(cleanName);
+      // Fase 4: sapaan gender-aware dari STATE durable (mirror pipeline V3), bukan tebakan.
+      const honorific = this.resolveCustomerHonorific(fu);
+      const greetingName = formatGreeting(cleanName, honorific);
       const babyName = formatBabyNamesForGreeting(fu.customer?.children, null, { prefixDek: true });
 
       let timeStr = 'sesuai kesepakatan';
@@ -2088,6 +2162,30 @@ export class FollowUpService {
           });
           messageText = normalizeFollowUpGreeting(text);
         }
+      }
+
+      // Fase 4 — selaraskan sapaan pembuka dengan honorific sesi (Bapak/Bunda).
+      messageText = applyHonorificGreeting(messageText, honorific);
+
+      // Fase 3 — GERBANG PLACEHOLDER MENTAH. Bila setelah substitusi masih ada
+      // `{apapun}`, JANGAN kirim (jangan pernah bocor placeholder ke customer).
+      // Status FAILED + alasan kanonis agar admin melihat & memperbaiki template.
+      const unresolved = findUnresolvedPlaceholders(messageText);
+      if (unresolved.length > 0) {
+        console.error(
+          `[FollowUp Worker] ABORT #${fu.id}: placeholder mentah tersisa (${unresolved.join(', ')}) pada template ${templateType}.`
+        );
+        try {
+          await prisma.followUp.update({
+            where: { id: fu.id },
+            data: {
+              status: 'FAILED',
+              cancel_reason: CANCEL_REASON.UNRESOLVED_PLACEHOLDER,
+              processing_claimed_at: null,
+            },
+          });
+        } catch (_) {}
+        return false;
       }
 
       console.log(`[FollowUp Worker] Sending ${fu.type} Stage ${fu.stage} to ${fu.customer.phone} (${greetingName}, Baby: ${babyName})`);
@@ -2188,7 +2286,10 @@ export class FollowUpService {
       if (fu.type === 'REVIEW_H1_BABY' || fu.type === 'REVIEW_H1_MOMS') {
         try {
           const bookingDate = fu.reservation?.booking_date || new Date();
-          await this.createNextTreatmentFollowUps(fu.customer_id, bookingDate, tenantId);
+          // Fase 1: bawa kategori dari state baris / relasi reservasi agar rantai
+          // NEXT_TREATMENT berikutnya tidak kehilangan kategori treatment.
+          const category = fu.treatment_category ?? fu.reservation?.treatment_category ?? null;
+          await this.createNextTreatmentFollowUps(fu.customer_id, bookingDate, tenantId, fu.reservation?.id, category);
         } catch (_) {}
       }
 

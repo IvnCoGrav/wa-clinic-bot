@@ -41,6 +41,7 @@ export interface SheetsConfigRow {
 export interface ReservationForSheets {
   id: string;
   tenant_id: string;
+  proof_url?: string | null;
   booking_date: Date | null;
   treatment_detail: string | null;
   treatment_category: string | null;
@@ -253,6 +254,7 @@ export class SheetsSyncService {
       child,
       assignedStaffName: reservation.assigned_staff?.name ?? null,
       monthTabNames: config.month_tab_names,
+      publicBaseUrl: process.env.PUBLIC_BASE_URL || null,
     });
 
     const existingRow = reservation.sheets_row_index;
@@ -262,6 +264,20 @@ export class SheetsSyncService {
       reservation.sheets_spreadsheet_id === spreadsheetId;
 
     if (samePlace && existingRow != null && existingRow >= 2) {
+      // Dynamic Row Reconciliation Guard:
+      // Sebelum menulis ke existingRow, verifikasi apakah baris bergeser (misal admin menyisipkan/menghapus baris manual di Google Sheets).
+      let targetRowIndex = existingRow;
+      if (typeof this.gateway.reconcileRowIndex === 'function' && reservation.customer?.name) {
+        targetRowIndex = await this.gateway.reconcileRowIndex({
+          tenantId,
+          spreadsheetId,
+          tabName: tab.tabName,
+          expectedRowIndex: existingRow,
+          customerName: reservation.customer.name,
+          bookingDate: reservation.booking_date,
+        });
+      }
+
       // Update: TULIS ULANG semua kolom KECUALI H/I/J/K (ongkir/harga write-once)
       // dan N/O/P (Tip/Follow up/Catatan manual admin klinik) agar tidak tertimpa.
       const PROTECTED = new Set([10, 13, 14, 15]); // 0-based: K(10) + N..P(13..15) — H/I dibuka agar promo ter-update
@@ -272,13 +288,13 @@ export class SheetsSyncService {
         tenantId,
         spreadsheetId,
         tabName: tab.tabName,
-        rowIndex: existingRow,
+        rowIndex: targetRowIndex,
         cells,
       });
       await this.store.saveRowRef(reservationId, tenantId, {
         spreadsheetId,
         tabName: tab.tabName,
-        rowIndex: existingRow,
+        rowIndex: targetRowIndex,
       });
       return;
     }
