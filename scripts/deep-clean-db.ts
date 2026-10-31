@@ -1,7 +1,9 @@
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { assertSafeDestructiveRun } from './lib/destructive-guard';
 
 async function main() {
+  const guard = assertSafeDestructiveRun('scripts/deep-clean-db.ts');
   console.log('🧹 [DEEP CLEANUP] Memeriksa seluruh tabel database dari data dummy & data generate...\n');
 
   // 1. Periksa tabel Customer
@@ -51,6 +53,12 @@ async function main() {
   console.log(`🔍 Customer Dummy/Generate ditemukan: ${dummyCustomers.length} record`);
   const dummyIds = dummyCustomers.map((c) => c.id);
   const dummyPhones = dummyCustomers.map((c) => c.phone);
+
+  if (guard.isDryRun) {
+    console.log(`\n🛑 [DRY-RUN] Ditemukan ${dummyIds.length} customer dummy & relasi yang akan dibersihkan.`);
+    console.log(`   Gunakan flag --confirm untuk mengeksekusi penghapusan riil.\n`);
+    return;
+  }
 
   if (dummyIds.length > 0) {
     const delCust = await prisma.customer.deleteMany({
@@ -173,7 +181,7 @@ async function main() {
   ]);
 
   console.log('\n======================================================');
-  console.log('✨ [BERSIH 100%] DATABASE HANYA BERISI DATA ORANG ASLI:');
+  console.log('✅ [BERSIH 100%] DATABASE HANYA BERISI DATA ORANG ASLI:');
   console.log(`   - Customer Riil Asli : ${realCustomersCount} customer`);
   console.log(`   - Percakapan Asli    : ${realConvsCount} percakapan`);
   console.log(`   - Pesan Riwayat Asli : ${realMsgsCount} pesan`);

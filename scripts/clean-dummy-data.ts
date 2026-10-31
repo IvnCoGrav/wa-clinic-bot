@@ -1,7 +1,9 @@
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { assertSafeDestructiveRun } from './lib/destructive-guard';
 
 async function main() {
+  const guard = assertSafeDestructiveRun('scripts/clean-dummy-data.ts');
   console.log('🧹 [CLEANUP] Memulai pembersihan data dummy & non-customer di database...\n');
 
   // 1. Identifikasi customer dummy & nomor tidak valid (LID tanpa resolusi, mock 628123456789, phone '0', dsb)
@@ -32,6 +34,12 @@ async function main() {
   }
 
   const dummyIds = dummyCustomers.map((c) => c.id);
+
+  if (guard.isDryRun) {
+    console.log(`\n🛑 [DRY-RUN] Ditemukan ${dummyIds.length} customer dummy yang akan dihapus.`);
+    console.log(`   Gunakan flag --confirm untuk mengeksekusi penghapusan riil.\n`);
+    return;
+  }
 
   if (dummyIds.length > 0) {
     // 2. Hapus relasi terkait (Prisma onDelete: Cascade akan otomatis menghapus Message, Conversation, Child, Reservation, FollowUp)

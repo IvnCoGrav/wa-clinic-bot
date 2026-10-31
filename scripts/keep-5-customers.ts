@@ -1,6 +1,8 @@
 import { prisma } from '../src/db/client';
+import { assertSafeDestructiveRun } from './lib/destructive-guard';
 
 async function keep5Customers() {
+  const guard = assertSafeDestructiveRun('scripts/keep-5-customers.ts');
   console.log('[CUSTOMER CLEANUP] Fetching existing customers...');
   const customers = await prisma.customer.findMany({
     orderBy: { created_at: 'desc' },
@@ -24,6 +26,12 @@ async function keep5Customers() {
   console.log(`\nDeleting ${deleteList.length} excess customers...`);
 
   const deleteIds = deleteList.map((c) => c.id);
+
+  if (guard.isDryRun) {
+    console.log(`\n🛑 [DRY-RUN] Ditemukan ${deleteIds.length} customer yang akan dihapus.`);
+    console.log(`   Gunakan flag --confirm untuk mengeksekusi penghapusan.`);
+    return;
+  }
 
   // Clean up related records first to prevent foreign key constraint errors
   await prisma.child.deleteMany({

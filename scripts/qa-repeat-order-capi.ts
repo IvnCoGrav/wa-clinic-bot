@@ -34,6 +34,7 @@
 
 import { PrismaClient } from '@prisma/client';
 import { capiService } from '../src/services/capi.service';
+import { assertSafeDestructiveRun } from './lib/destructive-guard';
 
 const prisma = new PrismaClient();
 const QA_PHONE = '628810000001';
@@ -43,6 +44,11 @@ const TENANT = 'default-tenant';
 const has = (name: string) => process.argv.some((a) => a === name || a.startsWith(`${name}=`));
 
 async function cleanup() {
+  const guard = assertSafeDestructiveRun('scripts/qa-repeat-order-capi.ts --cleanup');
+  if (guard.isDryRun) {
+    console.log('[QA] [DRY-RUN] Melewatkan pembersihan data QA. Gunakan --confirm untuk menghapus.');
+    return;
+  }
   const cust = await prisma.customer.findFirst({ where: { phone: QA_PHONE, name: QA_NAME } });
   if (cust) {
     await prisma.reservation.deleteMany({ where: { customer_id: cust.id } });

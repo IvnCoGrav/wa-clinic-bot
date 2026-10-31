@@ -1,8 +1,14 @@
 import { prisma } from '../db/client';
 import { hashPassword } from '../utils/bcrypt';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { assertSafeDestructiveRun } from './lib/destructive-guard';
 
 async function main() {
+  const guard = assertSafeDestructiveRun('scripts/seed-staff-dummy-data.ts');
+  if (guard.isDryRun) {
+    console.log('[DRY-RUN] Seeding dummy data dilewati. Gunakan flag --confirm untuk mengeksekusi.');
+    return;
+  }
   console.log('🚀 Seeding Dummy Data untuk Staff, Live Chat & Jadwal Mendatang...');
 
   // 1. Pastikan Tenant default ada

@@ -11,21 +11,10 @@
  */
 
 import { prisma } from '../src/db/client';
+import { assertSafeDestructiveRun } from './lib/destructive-guard';
 
 async function main() {
-  // Strict Safety Guard: Hanya izinkan eksekusi di lingkungan LOKAL
-  const isProduction =
-    process.env.NODE_ENV === 'production' ||
-    process.env.IS_PRODUCTION === 'true' ||
-    process.env.SERVER_MODE === 'production' ||
-    (process.env.DATABASE_URL &&
-      !process.env.DATABASE_URL.includes('localhost') &&
-      !process.env.DATABASE_URL.includes('127.0.0.1'));
-
-  if (isProduction) {
-    console.error('\n❌ [SECURITY BLOCKED]: Script clean-qa-tests DILARANG dijalankan di Live Server / Database Produksi!');
-    process.exit(1);
-  }
+  const guard = assertSafeDestructiveRun('scripts/clean-qa-tests.ts');
 
   console.log('\n🧹 [QA CLEANUP] Mencari data simulasi pengujian / QA tester di database lokal...');
 
@@ -62,6 +51,12 @@ async function main() {
         },
       },
     });
+
+    if (guard.isDryRun) {
+      console.log(`\n🛑 [DRY-RUN] Ditemukan ${customerIds.length} customer QA tester yang akan dihapus.`);
+      console.log(`   Gunakan flag --confirm untuk mengeksekusi pembersihan.`);
+      return;
+    }
 
     // Hapus customer (cascade Prisma menghapus conversation, messages, dll)
     const deleteResult = await prisma.customer.deleteMany({
