@@ -2285,42 +2285,22 @@ export class CustomerService {
    * Called after reservation create/update/cancel to keep ltv_cache in sync.
    * Konsisten dengan listCustomers: jika purchase_value NULL/0, resolve via katalog treatment.
    */
+  /**
+   * Rumus LTV Kanonis Tunggal:
+   * Menghitung ground truth LTV pelanggan dari tabel reservations.
+   * Hold = Rp 0 (sampai berstatus confirmed). Cancelled & rejected = Rp 0.
+   */
+  public async computeCustomerLtv(customerId: string, tenantId?: string): Promise<number> {
+    return computeCustomerLtv(customerId, tenantId);
+  }
+
+  /**
+   * Phase 4: Recalculate and persist ltv_cache for a single customer.
+   * Single-Writer resmi untuk kolom ltv_cache.
+   */
   public async recalculateCustomerLtv(customerId: string, tenantId?: string): Promise<number> {
     try {
-      const where: any = { customer_id: customerId, status: { notIn: ['cancelled', 'rejected'] } };
-      if (tenantId) where.tenant_id = tenantId;
-      const reservations = await prisma.reservation.findMany({
-        where,
-        select: { status: true, purchase_value: true, treatment_detail: true, raw_text: true },
-      });
-      let ltv = 0;
-      let needsResolve = false;
-      if (Array.isArray(reservations)) {
-        for (const r of reservations) {
-          if (r.purchase_value !== null && r.purchase_value !== undefined && r.purchase_value !== 0) {
-            ltv += r.purchase_value;
-          } else {
-            if (r.status !== 'hold' && (!r.treatment_detail || !r.treatment_detail.startsWith('[HOLD]'))) {
-              needsResolve = true;
-            }
-          }
-        }
-      }
-      if (needsResolve && Array.isArray(reservations)) {
-        const { resolveTreatmentValue } = await import('./capi.service');
-        for (const r of reservations) {
-          if (r.purchase_value === null || r.purchase_value === undefined || r.purchase_value === 0) {
-            if (r.status === 'hold' || (r.treatment_detail && r.treatment_detail.startsWith('[HOLD]'))) {
-              continue;
-            }
-            const text = r.treatment_detail || r.raw_text;
-            if (text) {
-              const resolved = (await resolveTreatmentValue(text, tenantId)) ?? 0;
-              ltv += resolved;
-            }
-          }
-        }
-      }
+      const ltv = await computeCustomerLtv(customerId, tenantId);
       await prisma.customer.update({ where: { id: customerId }, data: { ltv_cache: ltv } });
       return ltv;
     } catch (err: any) {
@@ -2890,6 +2870,56 @@ export interface CustomerGroundTruth {
   activeServices: string[];
   historicalServices: string[];
   preferences?: Record<string, any>;
+}
+
+
+/**
+ * Rumus LTV Kanonis Tunggal:
+ * - Menghitung nilai transaksi ground truth dari basis data reservasi pelanggan.
+ * - Aturan Keras:
+ *   1. Status 'cancelled', 'rejected', dan 'hold' = Rp 0 (slot hold belum disepakati / belum confirmed).
+ *   2. Reservasi dengan purchase_value > 0 dihitung langsung.
+ *   3. Reservasi confirmed/completed dengan purchase_value NULL/0 di-resolve via treatment catalog (resolveTreatmentValue).
+ */
+export async function computeCustomerLtv(customerId: string, tenantId?: string): Promise<number> {
+  const where: any = {
+    customer_id: customerId,
+    status: { notIn: ['cancelled', 'rejected', 'hold'] },
+  };
+  if (tenantId) where.tenant_id = tenantId;
+
+  const reservations = await prisma.reservation.findMany({
+    where,
+    select: { status: true, purchase_value: true, treatment_detail: true, raw_text: true },
+  });
+
+  let ltv = 0;
+  let needsResolve = false;
+
+  if (Array.isArray(reservations)) {
+    for (const r of reservations) {
+      if (r.purchase_value !== null && r.purchase_value !== undefined && r.purchase_value !== 0) {
+        ltv += r.purchase_value;
+      } else {
+        needsResolve = true;
+      }
+    }
+  }
+
+  if (needsResolve && Array.isArray(reservations)) {
+    const { resolveTreatmentValue } = await import('./capi.service');
+    for (const r of reservations) {
+      if (r.purchase_value === null || r.purchase_value === undefined || r.purchase_value === 0) {
+        const text = r.treatment_detail || r.raw_text;
+        if (text) {
+          const resolved = (await resolveTreatmentValue(text, tenantId)) ?? 0;
+          ltv += resolved;
+        }
+      }
+    }
+  }
+
+  return ltv;
 }
 
 export const customerService = new CustomerService();

@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { customerService } from '../../src/services/customer.service';
+import { customerService, computeCustomerLtv } from '../../src/services/customer.service';
 import { checkDailyInvariants, autoRepairLtvDrift } from '../../src/services/daily-invariant-monitor.service';
+import { alertService } from '../../src/services/alert.service';
 import { prisma } from '../../src/db/client';
 
 describe('LTV Cache Integrity & Single-Writer Guard', () => {
@@ -69,13 +70,13 @@ describe('LTV Cache Integrity & Single-Writer Guard', () => {
   });
 
   describe('2. Recalculation Accuracy & Status Filtering', () => {
-    it('accurately calculates LTV excluding cancelled, rejected, and unpriced holds', async () => {
+    it('accurately calculates LTV excluding cancelled, rejected, and holds via canonical computeCustomerLtv', async () => {
       const mockReservations = [
         { id: 'r1', status: 'completed', purchase_value: 120000, treatment_detail: 'Pijat Bayi', raw_text: null },
         { id: 'r2', status: 'confirmed', purchase_value: 80000, treatment_detail: 'Baby Bath', raw_text: null },
         { id: 'r3', status: 'cancelled', purchase_value: 150000, treatment_detail: 'Batal', raw_text: null },
         { id: 'r4', status: 'rejected', purchase_value: 200000, treatment_detail: 'Tolak', raw_text: null },
-        { id: 'r5', status: 'hold', purchase_value: null, treatment_detail: '[HOLD] Slot Ditawarkan (BABY)', raw_text: null },
+        { id: 'r5', status: 'hold', purchase_value: 100000, treatment_detail: '[HOLD] Slot Ditawarkan (BABY)', raw_text: null },
       ];
 
       vi.spyOn(prisma.reservation, 'findMany').mockImplementation(async (args: any) => {
@@ -84,15 +85,18 @@ describe('LTV Cache Integrity & Single-Writer Guard', () => {
       });
       const updateSpy = vi.spyOn(prisma.customer, 'update').mockResolvedValue({ id: 'c1', ltv_cache: 200000 } as any);
 
+      const computed = await computeCustomerLtv('c1', 'default-tenant');
+      expect(computed).toBe(200000);
+
       const calculatedLtv = await customerService.recalculateCustomerLtv('c1', 'default-tenant');
 
-      // 120.000 + 80.000 = 200.000 (cancelled, rejected disaring oleh query; unpriced hold diabaikan nilainya)
+      // 120.000 + 80.000 = 200.000 (cancelled, rejected, hold disaring oleh query)
       expect(calculatedLtv).toBe(200000);
       expect(prisma.reservation.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
             customer_id: 'c1',
-            status: { notIn: ['cancelled', 'rejected'] },
+            status: { notIn: ['cancelled', 'rejected', 'hold'] },
           }),
         })
       );
@@ -119,17 +123,17 @@ describe('LTV Cache Integrity & Single-Writer Guard', () => {
     });
   });
 
-  describe('3. Daily Invariant & Auto-Repair', () => {
-    it('detects LTV drift and auto-repairs customer ltv_cache', async () => {
+  describe('3. Daily Invariant & Asymmetric Auto-Repair', () => {
+    it('detects LTV drift and auto-repairs customer ltv_cache when cache < sum (deficit)', async () => {
       const driftedRows = [
-        { id: 'c-drift-1', ltv_cache: 0, sum_val: 140000 },
+        { id: 'c-drift-1', phone: '6281111111', name: 'Bunda Defisit', ltv_cache: 0, sum_val: 140000 },
       ];
 
       vi.spyOn(prisma, '$queryRawUnsafe').mockImplementation(async (sql: any) => {
         if (typeof sql === 'string' && sql.includes('SELECT count(*)::int AS cnt FROM (')) {
           return [{ cnt: BigInt(1) }] as any;
         }
-        if (typeof sql === 'string' && sql.includes('SELECT c.id, c.ltv_cache, COALESCE(SUM(r.purchase_value), 0)::int AS sum_val')) {
+        if (typeof sql === 'string' && sql.includes('FROM customers c')) {
           return driftedRows as any;
         }
         return [{ cnt: BigInt(0) }] as any;
@@ -145,8 +149,9 @@ describe('LTV Cache Integrity & Single-Writer Guard', () => {
       expect(ltvViolation).toBeDefined();
       expect(ltvViolation?.count).toBe(1);
 
-      const repairedCount = await autoRepairLtvDrift('default-tenant');
-      expect(repairedCount).toBe(1);
+      const repairResult = await autoRepairLtvDrift('default-tenant');
+      expect(repairResult.repaired).toBe(1);
+      expect(repairResult.flaggedForReview).toBe(0);
       expect(customerService.recalculateCustomerLtv).toHaveBeenCalledWith('c-drift-1', 'default-tenant');
       expect(auditSpy).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -154,6 +159,48 @@ describe('LTV Cache Integrity & Single-Writer Guard', () => {
             action: 'AUTO_REPAIR_LTV_DRIFT',
             target_id: 'c-drift-1',
           }),
+        })
+      );
+    });
+
+    it('SAFEGUARD: strictly PREVENTS auto-repair when cache > sum (surplus / data loss evidence), flags manual review and dispatches critical alert', async () => {
+      const driftedExcessRows = [
+        { id: 'c-excess-1', phone: '6282222222', name: 'Bunda Riskaamana', ltv_cache: 215000, sum_val: 70000 },
+      ];
+
+      vi.spyOn(prisma, '$queryRawUnsafe').mockImplementation(async (sql: any) => {
+        if (typeof sql === 'string' && sql.includes('FROM customers c')) {
+          return driftedExcessRows as any;
+        }
+        return [{ cnt: BigInt(0) }] as any;
+      });
+
+      const recalcSpy = vi.spyOn(customerService, 'recalculateCustomerLtv').mockResolvedValue(70000);
+      const auditSpy = vi.spyOn(prisma.auditLog, 'create').mockResolvedValue({ id: 'aud-2' } as any);
+      const alertSpy = vi.spyOn(alertService, 'notifyAlert').mockResolvedValue(true as any);
+
+      const repairResult = await autoRepairLtvDrift('default-tenant');
+
+      // TIDAK BOLEH auto-repair ditimpa jika cache > sum!
+      expect(repairResult.repaired).toBe(0);
+      expect(repairResult.flaggedForReview).toBe(1);
+      expect(recalcSpy).not.toHaveBeenCalled();
+
+      // Wajib catat FLAG_LTV_CACHE_EXCESS_MANUAL_REVIEW
+      expect(auditSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            action: 'FLAG_LTV_CACHE_EXCESS_MANUAL_REVIEW',
+            target_id: 'c-excess-1',
+          }),
+        })
+      );
+
+      // Wajib kirim alert kritis dengan info customer
+      expect(alertSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          severity: 'CRITICAL',
+          message: expect.stringContaining('Bunda Riskaamana'),
         })
       );
     });

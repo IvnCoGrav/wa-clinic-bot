@@ -11,6 +11,7 @@ import {
 } from '../../src/utils/backup-file';
 import { backupService } from '../../src/services/backup.service';
 import { GoogleDriveBackupClient } from '../../src/integrations/google-drive/client';
+import { prisma } from '../../src/db/client';
 
 describe('Database Backup & Restore Suite', () => {
   const testFileName = 'test_backup_sample.sql.gz';
@@ -96,10 +97,14 @@ describe('Database Backup & Restore Suite', () => {
     });
 
     it('restores database successfully from a valid programmatic dump', async () => {
+      const warnSpy = vi.spyOn(console, 'warn');
+      const childUpsertSpy = vi.spyOn(prisma.child, 'upsert').mockResolvedValue({ id: 'child_backup_test' } as any);
+
       const dumpPayload = {
         meta: { exportedAt: new Date().toISOString() },
         tables: {
           customers: [{ id: 'cust_backup_test', name: 'Bunda Test Backup', phone: '62811111222' }],
+          children: [{ id: 'child_backup_test', customer_id: 'cust_backup_test', name: 'Bayi Test', birth_date: new Date().toISOString() }],
           services: [{ id: 'srv_backup_test', name: 'Baby Massage Test', price: 100000, duration_minutes: 45 }],
         },
       };
@@ -109,11 +114,19 @@ describe('Database Backup & Restore Suite', () => {
 
       const restoreResult = await backupService.restoreDatabaseFromDump(testFilePath, 'test-tenant');
       expect(restoreResult.success).toBe(true);
-      expect(restoreResult.tablesRestored).toBeGreaterThanOrEqual(1);
+      expect(restoreResult.tablesRestored).toBeGreaterThanOrEqual(2);
+      expect(childUpsertSpy).toHaveBeenCalled();
+
+      const failedWarnings = warnSpy.mock.calls
+        .map((args) => args.join(' '))
+        .filter((msg) => msg.includes('[BackupRestore] Gagal'));
+      expect(failedWarnings).toHaveLength(0);
     });
 
-
     it('restores reservationArchives table from programmatic dump', async () => {
+      const warnSpy = vi.spyOn(console, 'warn');
+      const archiveUpsertSpy = vi.spyOn(prisma.reservationArchive, 'upsert').mockResolvedValue({ id: 'arch_backup_1' } as any);
+
       const archiveDump = {
         meta: { exportedAt: new Date().toISOString() },
         tables: {
@@ -140,12 +153,22 @@ describe('Database Backup & Restore Suite', () => {
         const restoreResult = await backupService.restoreDatabaseFromDump(archiveDumpPath, 'test-tenant');
         expect(restoreResult.success).toBe(true);
         expect(restoreResult.tablesRestored).toBeGreaterThanOrEqual(1);
+        expect(archiveUpsertSpy).toHaveBeenCalled();
+
+        const failedWarnings = warnSpy.mock.calls
+          .map((args) => args.join(' '))
+          .filter((msg) => msg.includes('[BackupRestore] Gagal'));
+        expect(failedWarnings).toHaveLength(0);
       } finally {
         if (fs.existsSync(archiveDumpPath)) fs.unlinkSync(archiveDumpPath);
       }
     });
 
     it('Fase 6.3: menolak restore backup jika baris turun >20% dibanding backup sebelumnya (INCOMPLETE guard)', async () => {
+      const warnSpy = vi.spyOn(console, 'warn');
+      vi.spyOn(prisma.child, 'upsert').mockResolvedValue({} as any);
+      vi.spyOn(prisma.reservationArchive, 'upsert').mockResolvedValue({} as any);
+
       // Backup 30 Agu (290 reservasi) vs backup 28 Agu (458 reservasi)
       const aug30Path = path.join(BACKUP_STORAGE_DIR, 'wa_clinic_backup_20260830_191007.sql.gz');
       if (fs.existsSync(aug30Path)) {
@@ -156,6 +179,11 @@ describe('Database Backup & Restore Suite', () => {
         // Dengan opsi force=true, restore diizinkan
         const forceResult = await backupService.restoreDatabaseFromDump(aug30Path, 'test-tenant', { force: true });
         expect(forceResult.success).toBe(true);
+
+        const failedWarnings = warnSpy.mock.calls
+          .map((args) => args.join(' '))
+          .filter((msg) => msg.includes('[BackupRestore] Gagal'));
+        expect(failedWarnings).toHaveLength(0);
       }
     });
 

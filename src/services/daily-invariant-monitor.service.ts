@@ -61,7 +61,7 @@ export async function checkDailyInvariants(tenantId: string = DEFAULT_TENANT_ID)
         `SELECT count(*)::int AS cnt FROM (
            SELECT c.id, c.ltv_cache, COALESCE(SUM(r.purchase_value), 0)::int AS sum_val
            FROM customers c
-           LEFT JOIN reservations r ON r.customer_id = c.id AND r.status NOT IN ('cancelled', 'rejected')
+           LEFT JOIN reservations r ON r.customer_id = c.id AND r.status NOT IN ('cancelled', 'rejected', 'hold')
            WHERE c.tenant_id = $1 AND c.is_sandbox_test = false
            GROUP BY c.id, c.ltv_cache
            HAVING c.ltv_cache != COALESCE(SUM(r.purchase_value), 0)
@@ -97,52 +97,107 @@ export async function checkDailyInvariants(tenantId: string = DEFAULT_TENANT_ID)
  * Cron runner: cek seluruh tenant lalu kirim SATU alert ringkas bila ada
  * pelanggaran. Idempoten-aman; tidak menulis ke DB.
  */
+export interface AutoRepairLtvResult {
+  repaired: number;
+  flaggedForReview: number;
+  excessCustomers: Array<{ id: string; name: string; phone: string; ltv_cache: number; sum_val: number }>;
+}
+
 /**
- * Auto-repair selisih ltv_cache vs SUM(reservasi) untuk seluruh customer non-sandbox
+ * Auto-repair selisih ltv_cache vs SUM(reservasi) untuk customer non-sandbox.
+ * Aturan Ketat:
+ * - cache < sum (defisit): SAFE to auto-repair. Recalculate dan update ltv_cache.
+ * - cache > sum (surplus): POTENSI DATA LOSS. DILARANG auto-repair! Catat audit & kirim alert berisi daftar nama.
  */
-export async function autoRepairLtvDrift(tenantId: string = DEFAULT_TENANT_ID): Promise<number> {
-  const drifted = await prisma.$queryRawUnsafe<Array<{ id: string; ltv_cache: number; sum_val: number }>>(
-    `SELECT c.id, c.ltv_cache, COALESCE(SUM(r.purchase_value), 0)::int AS sum_val
+export async function autoRepairLtvDrift(tenantId: string = DEFAULT_TENANT_ID): Promise<AutoRepairLtvResult> {
+  const drifted = await prisma.$queryRawUnsafe<Array<{ id: string; phone: string; name: string; ltv_cache: number; sum_val: number }>>(
+    `SELECT c.id, c.phone, COALESCE(c.name, 'Tanpa Nama') AS name, c.ltv_cache, COALESCE(SUM(r.purchase_value), 0)::int AS sum_val
      FROM customers c
-     LEFT JOIN reservations r ON r.customer_id = c.id AND r.status NOT IN ('cancelled', 'rejected')
+     LEFT JOIN reservations r ON r.customer_id = c.id AND r.status NOT IN ('cancelled', 'rejected', 'hold')
      WHERE c.tenant_id = $1 AND c.is_sandbox_test = false
-     GROUP BY c.id, c.ltv_cache
+     GROUP BY c.id, c.phone, c.name, c.ltv_cache
      HAVING c.ltv_cache != COALESCE(SUM(r.purchase_value), 0)`,
     tenantId
   );
 
-  if (!drifted || drifted.length === 0) return 0;
+  if (!drifted || drifted.length === 0) {
+    return { repaired: 0, flaggedForReview: 0, excessCustomers: [] };
+  }
 
   const { customerService } = await import('./customer.service');
-  let repairedCount = 0;
+  let repaired = 0;
+  const excessCustomers: Array<{ id: string; name: string; phone: string; ltv_cache: number; sum_val: number }> = [];
 
   for (const item of drifted) {
-    try {
-      const newLtv = await customerService.recalculateCustomerLtv(item.id, tenantId);
-      repairedCount++;
+    if (item.ltv_cache < item.sum_val) {
+      try {
+        const newLtv = await customerService.recalculateCustomerLtv(item.id, tenantId);
+        repaired++;
+        try {
+          await prisma.auditLog.create({
+            data: {
+              tenant_id: tenantId,
+              admin_key: 'SYSTEM',
+              admin_identity: 'SYSTEM_CRON',
+              action: 'AUTO_REPAIR_LTV_DRIFT',
+              target_id: item.id,
+              payload: JSON.stringify({
+                customerId: item.id,
+                oldLtv: item.ltv_cache,
+                newLtv,
+                sumVal: item.sum_val,
+              }),
+            },
+          });
+        } catch {}
+      } catch (err: any) {
+        console.warn(`[INVARIANT MONITOR] Auto-repair LTV failed for customer ${item.id}:`, err?.message);
+      }
+    } else {
+      excessCustomers.push(item);
       try {
         await prisma.auditLog.create({
           data: {
             tenant_id: tenantId,
             admin_key: 'SYSTEM',
             admin_identity: 'SYSTEM_CRON',
-            action: 'AUTO_REPAIR_LTV_DRIFT',
+            action: 'FLAG_LTV_CACHE_EXCESS_MANUAL_REVIEW',
             target_id: item.id,
             payload: JSON.stringify({
               customerId: item.id,
-              oldLtv: item.ltv_cache,
-              newLtv,
-              sumVal: item.sum_val,
+              phone: item.phone,
+              name: item.name,
+              cachedLtv: item.ltv_cache,
+              groundTruthSum: item.sum_val,
+              difference: item.ltv_cache - item.sum_val,
+              warning: 'Potensi data reservasi hilang / terhapus. Nilai cache ditahan sebagai bukti forensik.',
             }),
           },
         });
       } catch {}
-    } catch (err: any) {
-      console.warn(`[INVARIANT MONITOR] Auto-repair LTV failed for customer ${item.id}:`, err?.message);
     }
   }
 
-  return repairedCount;
+  if (excessCustomers.length > 0) {
+    const listText = excessCustomers
+      .map((c) => `- ${c.name || 'Tanpa Nama'} (${c.phone || '-'}): cache=Rp ${(c.ltv_cache ?? 0).toLocaleString('id-ID')} vs ground truth SUM=Rp ${(c.sum_val ?? 0).toLocaleString('id-ID')}`)
+      .join('\n');
+    console.warn(`[INVARIANT MONITOR] ${excessCustomers.length} customer memiliki ltv_cache > ground truth SUM:\n${listText}`);
+    try {
+      await alertService.notifyAlert({
+        type: AlertType.DAILY_OPS_REPORT,
+        severity: AlertSeverity.CRITICAL,
+        tenantId,
+        message: `⚠️ PERINGATAN INTEGRITAS: Ditemukan ${excessCustomers.length} customer dengan ltv_cache > ground truth SUM. Auto-repair DITAHAN untuk mencegah penghapusan bukti kehilangan data. Silakan investigasi manual:\n${listText}`,
+      });
+    } catch {}
+  }
+
+  return {
+    repaired,
+    flaggedForReview: excessCustomers.length,
+    excessCustomers,
+  };
 }
 
 export async function runDailyInvariantMonitor(): Promise<void> {
@@ -164,8 +219,8 @@ export async function runDailyInvariantMonitor(): Promise<void> {
     const ltvViolation = report.violations.find((v) => v.key === 'LTV_CACHE_DRIFT');
     if (ltvViolation && ltvViolation.count > 0) {
       try {
-        const repaired = await autoRepairLtvDrift(tenantId);
-        console.log(`[INVARIANT MONITOR] Auto-repaired ${repaired} customer LTV drift(s) for tenant ${tenantId}.`);
+        const result = await autoRepairLtvDrift(tenantId);
+        console.log(`[INVARIANT MONITOR] Auto-repaired ${result.repaired} customer LTV drift(s), flagged ${result.flaggedForReview} for manual review for tenant ${tenantId}.`);
       } catch (repErr: any) {
         console.warn('[INVARIANT MONITOR] Error during autoRepairLtvDrift:', repErr?.message);
       }
