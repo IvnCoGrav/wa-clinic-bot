@@ -100,6 +100,7 @@ export class BackupService {
         customers,
         children,
         reservations,
+        reservationArchives,
         services,
         deliveryTiers,
         staff,
@@ -112,6 +113,7 @@ export class BackupService {
         prisma.customer.findMany().catch(() => []),
         prisma.child.findMany().catch(() => []),
         prisma.reservation.findMany().catch(() => []),
+        prisma.reservationArchive.findMany().catch(() => []),
         prisma.clinicService.findMany().catch(() => []),
         prisma.deliveryTier.findMany().catch(() => []),
         prisma.staff.findMany().catch(() => []),
@@ -126,6 +128,7 @@ export class BackupService {
         customers,
         children,
         reservations,
+        reservationArchives,
         services,
         deliveryTiers,
         staff,
@@ -248,9 +251,39 @@ export class BackupService {
   /**
    * Restore database dari file dump .sql.gz / .sql / .json.gz
    */
+
+  /**
+   * Ekstrak ringkasan jumlah baris tabel dari file backup untuk validasi kelengkapan
+   */
+  public getBackupFileCounts(filePath: string): Record<string, number> | null {
+    try {
+      if (!fs.existsSync(filePath)) return null;
+      let decompressed: string;
+      if (isValidGzipHeader(filePath)) {
+        decompressed = zlib.gunzipSync(fs.readFileSync(filePath)).toString('utf-8');
+      } else {
+        decompressed = fs.readFileSync(filePath, 'utf-8');
+      }
+      if (!decompressed.trim().startsWith('{')) return null;
+      const parsed = JSON.parse(decompressed);
+      if (parsed.meta?.tableCounts) return parsed.meta.tableCounts;
+      if (parsed.tables) {
+        const counts: Record<string, number> = {};
+        for (const [table, rows] of Object.entries(parsed.tables)) {
+          counts[table] = Array.isArray(rows) ? rows.length : 0;
+        }
+        return counts;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
   public async restoreDatabaseFromDump(
     filePath: string,
-    tenantId: string = DEFAULT_TENANT_ID
+    tenantId: string = DEFAULT_TENANT_ID,
+    options?: { force?: boolean }
   ): Promise<{ success: boolean; message: string; tablesRestored: number }> {
     if (!fs.existsSync(filePath)) {
       throw new Error(`File backup tidak ditemukan pada lokasi: ${filePath}`);
@@ -283,11 +316,104 @@ export class BackupService {
       );
     }
 
+    let parsed: any;
+    try {
+      parsed = JSON.parse(decompressed);
+    } catch (err: any) {
+      throw new Error(`Format JSON tidak valid dalam file backup: ${err?.message}`);
+    }
+    const tables = parsed.tables || {};
+
+    // 6.3 Validasi kelengkapan data (Completeness Guard)
+    // Cek apakah jumlah baris pada backup turun > 20% dibanding data aktif di DB atau backup sebelumnya
+    if (!options?.force) {
+      const incomingResCount = Array.isArray(tables.reservations) ? tables.reservations.length : 0;
+      const incomingCustCount = Array.isArray(tables.customers) ? tables.customers.length : 0;
+
+      // 1. Cek terhadap data aktif DB saat ini
+      const [currentResCount, currentCustCount] = await Promise.all([
+        prisma.reservation.count({ where: { tenant_id: tenantId } }).catch(() => 0),
+        prisma.customer.count({ where: { tenant_id: tenantId } }).catch(() => 0),
+      ]);
+
+      // 2. Cek terhadap backup sebelumnya jika ada
+      let prevBackupResCount = 0;
+      let prevBackupCustCount = 0;
+
+      const baseName = path.basename(filePath);
+      const tsMatch = baseName.match(/wa_clinic_backup_(\d{8}_\d{6})/);
+
+      if (tsMatch) {
+        try {
+          const files = fs.readdirSync(BACKUP_STORAGE_DIR);
+          const olderBackups = files
+            .map((f) => {
+              const m = f.match(/wa_clinic_backup_(\d{8}_\d{6})/);
+              return { file: f, timestamp: m ? m[1] : null };
+            })
+            .filter((item) => {
+              if (!item.timestamp) return false;
+              if (path.join(BACKUP_STORAGE_DIR, item.file) === filePath) return false;
+              return item.timestamp < tsMatch[1];
+            })
+            .sort((a, b) => b.timestamp!.localeCompare(a.timestamp!));
+
+          if (olderBackups.length > 0) {
+            const predecessorPath = path.join(BACKUP_STORAGE_DIR, olderBackups[0].file);
+            const predCounts = this.getBackupFileCounts(predecessorPath);
+            if (predCounts) {
+              prevBackupResCount = predCounts.reservations || 0;
+              prevBackupCustCount = predCounts.customers || 0;
+            }
+          }
+        } catch {}
+      }
+
+      const baselineRes = Math.max(currentResCount, prevBackupResCount);
+      const baselineCust = Math.max(currentCustCount, prevBackupCustCount);
+
+      const drops: string[] = [];
+
+      if (baselineRes > 0 && incomingResCount < baselineRes) {
+        const dropPercent = ((baselineRes - incomingResCount) / baselineRes) * 100;
+        if (dropPercent > 20) {
+          drops.push(`reservasi turun ${Math.round(dropPercent)}% (${incomingResCount} vs ${baselineRes})`);
+        }
+      }
+
+      if (baselineCust > 0 && incomingCustCount < baselineCust) {
+        const dropPercent = ((baselineCust - incomingCustCount) / baselineCust) * 100;
+        if (dropPercent > 20) {
+          drops.push(`pasien turun ${Math.round(dropPercent)}% (${incomingCustCount} vs ${baselineCust})`);
+        }
+      }
+
+      if (drops.length > 0) {
+        const errorMsg = `Validasi kelengkapan backup gagal (INCOMPLETE): ${drops.join(', ')}. Pemulihan dibatalkan untuk mencegah kehilangan data massal. Gunakan opsi force=true jika memang ingin memulihkan backup ini.`;
+        try {
+          await prisma.auditLog.create({
+            data: {
+              tenant_id: tenantId,
+              admin_key: 'ADMIN',
+              admin_identity: 'ADMIN_MANUAL',
+              action: 'RESTORE_DATABASE_REJECTED_INCOMPLETE',
+              payload: JSON.stringify({
+                fileName: path.basename(filePath),
+                incomingResCount,
+                baselineRes,
+                incomingCustCount,
+                baselineCust,
+                drops,
+              }),
+            },
+          });
+        } catch {}
+        throw new Error(errorMsg);
+      }
+    }
+
     {
       try {
-        const parsed = JSON.parse(decompressed);
-        const tables = parsed.tables || {};
-
         // 1. Pulihkan Staff
         if (Array.isArray(tables.staff) && tables.staff.length > 0) {
           for (const st of tables.staff) {
@@ -458,6 +584,46 @@ export class BackupService {
             } catch {}
           }
           restoredSummary.push(`${tables.reservations.length} reservasi`);
+          tablesRestored++;
+        }
+
+        // 6b. Pulihkan Arsip Reservasi (Reservation Archives)
+        if (Array.isArray(tables.reservationArchives) && tables.reservationArchives.length > 0) {
+          for (const a of tables.reservationArchives) {
+            try {
+              await prisma.reservationArchive.upsert({
+                where: { id: a.id },
+                update: {
+                  tenant_id: a.tenant_id || tenantId,
+                  reservation_id: a.reservation_id,
+                  customer_id: a.customer_id,
+                  customer_phone: a.customer_phone,
+                  customer_name: a.customer_name,
+                  booking_date: a.booking_date ? new Date(a.booking_date) : undefined,
+                  status: a.status,
+                  treatment_detail: a.treatment_detail,
+                  purchase_value: a.purchase_value,
+                  reason: a.reason,
+                  archived_by: a.archived_by,
+                  archived_at: a.archived_at ? new Date(a.archived_at) : new Date(),
+                  restore_until: a.restore_until ? new Date(a.restore_until) : new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
+                  payload: a.payload,
+                  restored_at: a.restored_at ? new Date(a.restored_at) : undefined,
+                },
+                create: {
+                  ...a,
+                  tenant_id: a.tenant_id || tenantId,
+                  booking_date: a.booking_date ? new Date(a.booking_date) : undefined,
+                  archived_at: a.archived_at ? new Date(a.archived_at) : new Date(),
+                  restore_until: a.restore_until ? new Date(a.restore_until) : new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
+                  restored_at: a.restored_at ? new Date(a.restored_at) : undefined,
+                },
+              });
+            } catch (err: any) {
+              console.warn(`[BackupRestore] Gagal memulihkan archive ${a.id}:`, err?.message || err);
+            }
+          }
+          restoredSummary.push(`${tables.reservationArchives.length} arsip reservasi`);
           tablesRestored++;
         }
 

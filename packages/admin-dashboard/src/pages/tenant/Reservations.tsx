@@ -53,6 +53,7 @@ import {
   CheckCircle2,
   MessageSquare,
   Loader,
+  RotateCcw,
 } from 'lucide-react';
 import { CalendarViewMode, CalendarFilterState, QuickSlotTarget, StaffOption } from '../../components/calendar/types';
 import { WeekScheduleGrid } from '../../components/calendar/WeekScheduleGrid';
@@ -162,6 +163,8 @@ export const Reservations: React.FC = () => {
   const [staffList, setStaffList] = useState<StaffOption[]>([]);
   const [assigningStaff, setAssigningStaff] = useState(false);
 
+  const [archiveCount, setArchiveCount] = useState<number>(0);
+
   // Global stats state
   const [stats, setStats] = useState<{
     total: number;
@@ -251,6 +254,12 @@ export const Reservations: React.FC = () => {
   }, [housePhotoModal, proofModal, editLocationModal, activeHistoryCustomer, showCreateModal]);
 
   useEffect(() => {
+    apiRequest('/api/admin/reservation/archive?limit=1')
+      .then((r) => { if (typeof r?.total === 'number') setArchiveCount(r.total); })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
     async function loadStaff() {
       try {
         const res = await apiRequest('/api/admin/staff');
@@ -281,6 +290,35 @@ export const Reservations: React.FC = () => {
     async (targetPage = 1) => {
       try {
         setLoading(true);
+        if (filterState.status === 'archive') {
+          const searchParam = filterState.searchQuery ? `&search=${encodeURIComponent(filterState.searchQuery)}` : '';
+          const res = await apiRequest(`/api/admin/reservation/archive?limit=${PAGE_SIZE}&offset=${(targetPage - 1) * PAGE_SIZE}${searchParam}`);
+          const items = Array.isArray(res?.items) ? res.items : [];
+          const mapped = items.map((arch: any) => ({
+            id: arch.reservation_id || arch.id,
+            archive_id: arch.id,
+            customer_id: arch.customer_id,
+            booking_date: arch.booking_date,
+            status: 'archive' as any,
+            original_status: arch.status,
+            treatment_detail: arch.treatment_detail,
+            purchase_value: arch.purchase_value,
+            archived_at: arch.archived_at,
+            restore_until: arch.restore_until,
+            reason: arch.reason,
+            customer: {
+              id: arch.customer_id,
+              name: arch.customer_name || 'Pelanggan',
+              phone: arch.customer_phone || '-',
+            },
+          }));
+          setReservations(mapped as any);
+          setTotalReservations(res?.total || 0);
+          setArchiveCount(res?.total || 0);
+          setTotalPages(Math.ceil((res?.total || 1) / PAGE_SIZE) || 1);
+          setPage(targetPage);
+          return;
+        }
         const params = buildReservationsQuery({
           viewMode,
           filters: filterState,
@@ -689,6 +727,9 @@ export const Reservations: React.FC = () => {
   const filteredReservations = reservations;
 
   const getStatusBadge = (status: string, rawText?: string | null) => {
+    if (status === 'archive') {
+      return <StatusChip tone="neutral" label="🗄️ Diarsipkan" dot={false} />;
+    }
     if (status === 'pending' && rawText && /\[SAME_DAY_REQUEST\]/i.test(rawText)) {
       return (
         <span className="px-2.5 py-0.5 rounded-full bg-danger text-on-solid text-xs font-bold shadow-2xs">
@@ -1180,6 +1221,7 @@ export const Reservations: React.FC = () => {
                                 { key: 'confirmed', label: '📅 Terjadwal', count: stats.confirmed },
                 { key: 'completed', label: 'Completed (Selesai)', count: stats.completed },
                 { key: 'cancelled', label: 'Cancelled (Batal)', count: stats.cancelled },
+                { key: 'archive', label: '🗄️ Arsip (60 Hari)', count: archiveCount },
               ].map((tab) => (
                 <button
                   key={tab.key}

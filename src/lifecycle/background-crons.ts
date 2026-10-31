@@ -89,6 +89,16 @@ export function startBackgroundCrons(): void {
     }).catch(e => console.error('[EXPIRED HOLD SWEEP START ERROR]', e));
   }
 
+  // Fase 4: Pembersihan harian arsip reservasi kedaluwarsa (>60 hari retensi). Default aktif.
+  if (process.env.ENABLE_RESERVATION_ARCHIVE_PURGE !== 'false') {
+    const intervalHours = parseInt(process.env.RESERVATION_ARCHIVE_PURGE_INTERVAL_HOURS || '24', 10);
+    import('../services/cron.service').then(({ CronService }) => {
+      const cron = new CronService();
+      trackInterval(async () => { await cron.runReservationArchivePurge(); }, intervalHours * 60 * 60 * 1000);
+      console.log(`🗄️ Reservation archive purge cron started (every ${intervalHours}h)`);
+    }).catch(e => console.error('[RESERVATION ARCHIVE PURGE START ERROR]', e));
+  }
+
   // R0.1 — Daily Invariant Monitor (READ-ONLY). Default aktif; env 'false' menonaktifkan.
   if (process.env.ENABLE_INVARIANT_MONITOR !== 'false') {
     const intervalHours = parseInt(process.env.INVARIANT_MONITOR_INTERVAL_HOURS || '24', 10);

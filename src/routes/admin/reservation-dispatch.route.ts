@@ -40,6 +40,7 @@ import { shouldExcludeFromCapiQueue } from '../../utils/dummy-filter';
 import { wibDayRangeToUtc } from '../../utils/time-wib';
 import { responseCacheService } from '../../services/response-cache.service';
 import { resolveReservationPaymentEvaluation } from '../../services/reservation-core.service';
+import { reservationArchiveService } from '../../services/reservation-archive.service';
 function withPaymentEvaluation(r: any) {
   if (!r) return r;
   return { ...r, paymentEvaluation: resolveReservationPaymentEvaluation(r) };
@@ -390,6 +391,69 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           return reply.status(200).send({ success: true, data: mem2, deleted: true });
         }
         return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
+   * GET /api/admin/reservation/:id
+   * GET /api/admin/reservation/archive
+   * Mengambil daftar arsip reservasi
+   */
+  fastify.get(
+    '/api/admin/reservation/archive',
+    async (
+      request: FastifyRequest<{
+        Querystring: {
+          limit?: string;
+          offset?: string;
+          search?: string;
+          includeRestored?: string;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const tenantId = tenantOf(request);
+      try {
+        const result = await reservationArchiveService.listArchives({
+          tenantId,
+          limit: request.query.limit ? parseInt(request.query.limit, 10) : 20,
+          offset: request.query.offset ? parseInt(request.query.offset, 10) : 0,
+          search: request.query.search,
+          includeRestored: request.query.includeRestored === 'true',
+        });
+        return reply.status(200).send({ success: true, ...result });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, message: err?.message });
+      }
+    }
+  );
+
+  /**
+   * POST /api/admin/reservation/archive/:id/restore
+   * Memulihkan reservasi dari arsip ke daftar aktif
+   */
+  fastify.post(
+    '/api/admin/reservation/archive/:id/restore',
+    async (
+      request: FastifyRequest<{
+        Params: { id: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const tenantId = tenantOf(request);
+      const { id } = request.params;
+      try {
+        const result = await reservationArchiveService.restoreReservation({
+          archiveId: id,
+          tenantId,
+          actor: (request as any).adminIdentity,
+          apiKey: (request as any).adminKeyUsed,
+          ipAddress: request.ip,
+        });
+        return reply.status(200).send({ success: true, message: result.message, reservationId: result.reservationId });
+      } catch (err: any) {
+        return reply.status(400).send({ success: false, message: err?.message });
       }
     }
   );
@@ -1263,6 +1327,16 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           }
         }
 
+        // Phase 4: Sync ltv_cache on reservation edit
+        if (existing.customer_id) {
+          try {
+            const { customerService } = await import('../../services/customer.service');
+            await customerService.recalculateCustomerLtv(existing.customer_id, existing.tenant_id || tenantId);
+          } catch (ltvErr: any) {
+            console.warn('[Admin API] Failed to recalculate LTV on edit:', ltvErr.message);
+          }
+        }
+
         // Sync customer details if provided
         // Fondasional: Customer TIDAK punya kolom `address`; alamat lengkap disimpan di preferences.address (+ kelurahan bila kosong)
         if (existing.customer_id && (customerName || customerPhone || address || kecamatan || kota || kelurahan || landmark)) {
@@ -1572,14 +1646,12 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           ipAddress: request.ip,
         });
 
-        // Phase 4: Sync ltv_cache when status changes to/from cancelled
-        if (status === 'cancelled' || existing.status === 'cancelled') {
-          try {
-            const { customerService } = await import('../../services/customer.service');
-            await customerService.recalculateCustomerLtv(existing.customer_id, existing.tenant_id || tenantId);
-          } catch (ltvErr: any) {
-            console.warn('[Admin API] Failed to recalculate ltv_cache on status change:', ltvErr.message);
-          }
+        // Phase 4: Sync ltv_cache on reservation status change
+        try {
+          const { customerService } = await import('../../services/customer.service');
+          await customerService.recalculateCustomerLtv(existing.customer_id, existing.tenant_id || tenantId);
+        } catch (ltvErr: any) {
+          console.warn('[Admin API] Failed to recalculate ltv_cache on status change:', ltvErr.message);
         }
 
         return reply.status(200).send({ success: true, data: reservation });
@@ -1911,53 +1983,22 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           }
         }
 
-        if (isHardDelete) {
-          // Audit P1-14: batalkan follow-up pengingat/review terkait SEBELUM
-          // reservasi dihapus (relasi onDelete:SetNull akan men-null-kan
-          // reservation_id sehingga tidak bisa lagi dicocokkan setelah delete).
-          try {
-            const { followUpService } = await import('../../services/follow-up.service');
-            await followUpService.onReservationCancelled(id, existing.tenant_id || tenantId);
-          } catch (_) {}
-
-          // Unlink child relation jika ada
-          await prisma.child.updateMany({
-            where: { reservation_id: id },
-            data: { reservation_id: null },
-          }).catch(() => {});
-
-          // FIX 173i-d: notifikasi staf WAJIB dikirim SEBELUM reservasi dihapus,
-          // karena service memuat reservasi dari DB (setelah delete ΓåÆ "not found"
-          // ΓåÆ notifikasi hilang senyap). Await agar urutan deterministik.
-          if (existing.assigned_staff_id) {
-            try {
-              const { staffNotificationService } = await import('../../services/staff-notification.service');
-              await staffNotificationService.sendReservationCancelledNotification(
-                id,
-                existing.assigned_staff_id,
-                (request.query as any)?.reason || undefined
-              );
-            } catch (e: any) {
-              console.warn('[Admin API] Failed to send cancelled notification (hard delete):', e.message);
-            }
-          }
-
-          await prisma.reservation.delete({
-            where: { id },
-          });
-
-          await customerService.recalculateCustomerLtv(existing.customer_id, existing.tenant_id || tenantId).catch(() => {});
-
-          await auditService.logAdminAction({
+        if (isHardDelete || (request.query as any)?.archive === 'true' || !(request.query as any)?.soft) {
+          const archiveResult = await reservationArchiveService.archiveReservation({
+            id,
+            tenantId: existing.tenant_id || tenantId,
+            actor: (request as any).adminIdentity,
             apiKey: (request as any).adminKeyUsed,
-            adminIdentity: (request as any).adminIdentity,
-            action: 'DELETE_RESERVATION_PERMANENT',
-            targetId: id,
-            payload: { hard: true },
+            reason: (request.query as any)?.reason,
             ipAddress: request.ip,
           });
 
-          return reply.status(200).send({ success: true, message: 'Reservasi berhasil dihapus permanen.' });
+          return reply.status(200).send({
+            success: true,
+            message: 'Reservasi berhasil diarsipkan (disimpan 60 hari dan dapat dipulihkan).',
+            archiveId: archiveResult.archiveId,
+            restoreUntil: archiveResult.restoreUntil,
+          });
         }
 
         const reservation = await prisma.reservation.update({
@@ -2040,7 +2081,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
       } catch (error) {
         const mock = memoryReservations.get(id);
         if (mock && mock.tenant_id === tenantId) {
-          if (isHardDelete) {
+          if (isHardDelete || (request.query as any)?.archive === 'true' || !(request.query as any)?.soft) {
             memoryReservations.delete(id);
             await customerService.recalculateCustomerLtv(mock.customer_id, tenantId).catch(() => {});
             return reply.status(200).send({ success: true, message: 'Reservasi berhasil dihapus permanen (memory).' });

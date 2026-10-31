@@ -112,6 +112,53 @@ describe('Database Backup & Restore Suite', () => {
       expect(restoreResult.tablesRestored).toBeGreaterThanOrEqual(1);
     });
 
+
+    it('restores reservationArchives table from programmatic dump', async () => {
+      const archiveDump = {
+        meta: { exportedAt: new Date().toISOString() },
+        tables: {
+          reservationArchives: [
+            {
+              id: 'arch_backup_1',
+              reservation_id: 'res_arch_1',
+              customer_id: 'cust_arch_1',
+              status: 'CANCELLED',
+              treatment_detail: 'Pijat Bayi',
+              purchase_value: 120000,
+              restore_until: new Date(Date.now() + 60 * 86400000).toISOString(),
+              payload: { reason: 'Test backup' },
+            },
+          ],
+        },
+      };
+
+      const compressed = zlib.gzipSync(Buffer.from(JSON.stringify(archiveDump)));
+      const archiveDumpPath = path.join(BACKUP_STORAGE_DIR, 'archive_dump_sample.sql.gz');
+      fs.writeFileSync(archiveDumpPath, compressed);
+
+      try {
+        const restoreResult = await backupService.restoreDatabaseFromDump(archiveDumpPath, 'test-tenant');
+        expect(restoreResult.success).toBe(true);
+        expect(restoreResult.tablesRestored).toBeGreaterThanOrEqual(1);
+      } finally {
+        if (fs.existsSync(archiveDumpPath)) fs.unlinkSync(archiveDumpPath);
+      }
+    });
+
+    it('Fase 6.3: menolak restore backup jika baris turun >20% dibanding backup sebelumnya (INCOMPLETE guard)', async () => {
+      // Backup 30 Agu (290 reservasi) vs backup 28 Agu (458 reservasi)
+      const aug30Path = path.join(BACKUP_STORAGE_DIR, 'wa_clinic_backup_20260830_191007.sql.gz');
+      if (fs.existsSync(aug30Path)) {
+        await expect(backupService.restoreDatabaseFromDump(aug30Path, 'test-tenant')).rejects.toThrow(
+          /Validasi kelengkapan backup gagal \(INCOMPLETE\)/i
+        );
+
+        // Dengan opsi force=true, restore diizinkan
+        const forceResult = await backupService.restoreDatabaseFromDump(aug30Path, 'test-tenant', { force: true });
+        expect(forceResult.success).toBe(true);
+      }
+    });
+
     it('SEC-AUDIT-06: menolak restore dump SQL mentah (anti arbitrary SQL)', async () => {
       const sqlPath = path.join(BACKUP_STORAGE_DIR, 'raw_dump.sql.gz');
       fs.writeFileSync(sqlPath, zlib.gzipSync(Buffer.from('DROP TABLE customers;')));

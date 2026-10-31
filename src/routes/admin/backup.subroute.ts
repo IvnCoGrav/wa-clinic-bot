@@ -217,12 +217,13 @@ export async function backupAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/backup/restore',
     async (
       request: FastifyRequest<{
-        Body: { fileName: string; tenantId?: string };
+        Body: { fileName: string; tenantId?: string; force?: boolean };
       }>,
       reply: FastifyReply
     ) => {
       try {
         const tenantId = request.body?.tenantId || DEFAULT_TENANT_ID;
+        const force = Boolean(request.body?.force);
         const fileName = sanitizeBackupFileName(request.body?.fileName || '');
         const filePath = path.join(BACKUP_STORAGE_DIR, fileName);
 
@@ -233,7 +234,7 @@ export async function backupAdminRoutes(fastify: FastifyInstance) {
           });
         }
 
-        const result = await backupService.restoreDatabaseFromDump(filePath, tenantId);
+        const result = await backupService.restoreDatabaseFromDump(filePath, tenantId, { force });
 
         return reply.status(200).send({
           success: true,

@@ -537,6 +537,24 @@ export class CronService {
    * PERINGATAN DINI ke admin (bukan blokir keras). Tenant-scoped,
    * best-effort: DB offline → silent. Mirrors runExpiredHoldSweep.
    */
+  /**
+   * Pembersihan harian arsip reservasi yang telah melewati masa retensi (default 60 hari).
+   * Menghapus permanen baris arsip yang restore_until < now() dan belum pernah dipulihkan.
+   */
+  public async runReservationArchivePurge(): Promise<number> {
+    try {
+      const { reservationArchiveService } = await import('./reservation-archive.service');
+      const purged = await reservationArchiveService.purgeExpired();
+      if (purged > 0) {
+        console.log(`[Cron Service] Berhasil membersihkan ${purged} arsip reservasi kedaluwarsa.`);
+      }
+      return purged;
+    } catch (err: any) {
+      console.error('[Cron Service] Error running reservation archive purge:', err?.message);
+      return 0;
+    }
+  }
+
   public async runSlotOverlapSweep(): Promise<void> {
     try {
       const { getAllTenantIds } = await import('./media.service');

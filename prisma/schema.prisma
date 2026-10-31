@@ -365,6 +365,33 @@ model Reservation {
   @@map("reservations")
 }
 
+model ReservationArchive {
+  id               String    @id @default(uuid())
+  tenant_id        String    @default("default-tenant")
+  reservation_id   String
+  customer_id      String
+  customer_phone   String?
+  customer_name    String?
+  booking_date     DateTime?
+  status           String
+  treatment_detail String?
+  purchase_value   Int?
+  reason           String?
+  archived_by      String?
+  archived_at      DateTime  @default(now())
+  /// Batas akhir pemulihan; lewat tanggal ini cron purge menghapus permanen.
+  restore_until    DateTime
+  /// Snapshot lengkap (reservation + items + follow_ups + children + identitas customer).
+  payload          Json
+  restored_at      DateTime?
+
+  @@index([tenant_id, archived_at])
+  @@index([tenant_id, restore_until])
+  @@index([reservation_id])
+  @@index([customer_id])
+  @@map("reservation_archives")
+}
+
 model ReservationSeries {
   id                String         @id @default(uuid())
   tenant_id         String         @default("default-tenant")

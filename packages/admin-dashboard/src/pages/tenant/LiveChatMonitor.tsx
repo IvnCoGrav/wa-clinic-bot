@@ -7044,7 +7044,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           onAssignStaff={async (id, sid) => { await apiRequest(`/api/admin/reservation/${id}/assign-staff`, { method: 'PATCH', body: JSON.stringify({ assigned_staff_id: sid }) }); await handleReservationUpdate(); }}
           onDelete={async (id) => { await apiRequest(`/api/admin/reservation/${id}`, { method: 'DELETE' }); setSelectedReservation(null); await handleReservationUpdate(id); }}
           onCancel={async (id) => { await apiRequest(`/api/admin/reservation/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'cancelled' }) }); setSelectedReservation(null); await handleReservationUpdate(); }}
-          onDeletePermanent={async (id) => { await apiRequest(`/api/admin/reservation/${id}?hard=true`, { method: 'DELETE' }); setSelectedReservation(null); await handleReservationUpdate(id); }}
+          onDeletePermanent={async (id) => { await apiRequest(`/api/admin/reservation/${id}`, { method: 'DELETE' }); setSelectedReservation(null); await handleReservationUpdate(id); }}
           onProofUpload={async (file) => {
             const toB64 = (f: File) => new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = () => rej(new Error('read fail')); r.readAsDataURL(f); });
             const b64 = await toB64(file);

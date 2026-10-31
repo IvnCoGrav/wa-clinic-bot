@@ -306,17 +306,17 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
       return;
     }
     const ok = await confirm({
-      title: 'Hapus Reservasi Permanen?',
-      message: 'Apakah Anda yakin ingin menghapus data reservasi ini secara permanen dari database? Tindakan ini tidak dapat dibatalkan.',
-      confirmText: 'Ya, Hapus Permanen',
+      title: 'Arsipkan Reservasi?',
+      message: 'Apakah Anda yakin ingin memindahkan reservasi ini ke arsip? Data disimpan selama 60 hari dan dapat dipulihkan kapan saja.',
+      confirmText: 'Ya, Arsipkan',
       danger: true,
     });
     if (!ok) return;
     try {
-      await apiRequest(`/api/admin/reservation/${displayReservation.id}?hard=true`, {
+      await apiRequest(`/api/admin/reservation/${displayReservation.id}`, {
         method: 'DELETE',
       });
-      toast('Reservasi berhasil dihapus permanen.', 'success');
+      toast('Reservasi diarsipkan (disimpan 60 hari).', 'success');
       onClose();
       onUpdate();
     } catch (err: any) {
@@ -904,10 +904,10 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                 <button
                   onClick={handleDeletePermanentClick}
                   className="flex-1 sm:flex-initial justify-center px-3.5 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 text-rose-700 dark:text-danger hover:bg-rose-100 dark:hover:bg-rose-950/50 transition text-xs font-semibold flex items-center space-x-1.5 shadow-xs cursor-pointer"
-                  title="Hapus data reservasi secara permanen dari database"
+                  title="Pindahkan ke arsip (disimpan 60 hari dan dapat dipulihkan)"
                 >
                   <Trash2 size={14} />
-                  <span>Hapus Reservasi</span>
+                  <span>Arsipkan</span>
                 </button>
               </div>
 
