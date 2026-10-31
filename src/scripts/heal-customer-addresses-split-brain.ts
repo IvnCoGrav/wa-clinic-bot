@@ -195,6 +195,38 @@ async function main(): Promise<void> {
         }
       }
 
+      // --- Pass 4: Kartu tanpa identitas (address kosong + kelurahan null + koordinat null) ---
+      // Bila masih ada kartu hantu tanpa identitas yang belum masuk klaster, gabungkan ke
+      // kartu saudara ber-identitas di kota yang sama (anti kartu yatim/kosong).
+      const unvisitedGhosts = siblings.filter(
+        (r) => !visited.has(r.id) && !hasText(r.address) && !hasText(r.kelurahan) && !hasCoords(r)
+      );
+      if (unvisitedGhosts.length > 0) {
+        const identifiedCandidates = siblings.filter(
+          (r) => hasText(r.address) || hasCoords(r)
+        );
+        if (identifiedCandidates.length > 0) {
+          identifiedCandidates.sort(
+            (x, y) => scoreAddressWinner(y) - scoreAddressWinner(x) || (String(y.last_used_at || '') > String(x.last_used_at || '') ? 1 : -1)
+          );
+          const bestIdentified = identifiedCandidates[0];
+          const existingCluster = clusters.find((c) => c.some((r) => r.id === bestIdentified.id));
+          for (const g of unvisitedGhosts) {
+            const gKota = String(g.kota || '').toLowerCase().replace(/^(kota|kabupaten|kab)\s+/i, '').trim();
+            const bKota = String(bestIdentified.kota || '').toLowerCase().replace(/^(kota|kabupaten|kab)\s+/i, '').trim();
+            const kotaOk = !gKota || !bKota || gKota === bKota;
+            if (kotaOk) {
+              visited.add(g.id);
+              if (existingCluster) {
+                existingCluster.push(g);
+              } else {
+                clusters.push([bestIdentified, g]);
+              }
+            }
+          }
+        }
+      }
+
       for (const cluster of clusters) {
         // Cari pemenang dalam klaster
         cluster.sort((x, y) => scoreAddressWinner(y) - scoreAddressWinner(x) || (String(y.last_used_at || '') > String(x.last_used_at || '') ? 1 : -1));

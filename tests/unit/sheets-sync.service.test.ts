@@ -17,6 +17,7 @@ import {
   AppendRowParams,
   AppendRowResult,
   UpdateCellsParams,
+  SetCellNoteParams,
 } from '../../src/services/sheets/sheets-client';
 
 /** Fake gateway: merekam panggilan, tanpa jaringan. */
@@ -24,6 +25,7 @@ class FakeGateway implements SheetsGateway {
   public tabs: EnsureMonthlyTabParams[] = [];
   public appended: AppendRowParams[] = [];
   public updated: UpdateCellsParams[] = [];
+  public notes: SetCellNoteParams[] = [];
   private existingTabs = new Set<string>();
   private nextRow = 2;
 
@@ -40,6 +42,9 @@ class FakeGateway implements SheetsGateway {
   }
   async updateCells(p: UpdateCellsParams): Promise<void> {
     this.updated.push(p);
+  }
+  async setCellNote(p: SetCellNoteParams): Promise<void> {
+    this.notes.push(p);
   }
 }
 

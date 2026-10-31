@@ -4,6 +4,39 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-30 - Feat: Catatan Sel (Cell Note) Otomatis di Kolom Total Rekapan Spreadsheet saat Nominal Transfer Mismatch
+
+- **Latar Belakang & Akar Masalah**:
+  - Pengguna membutuhkan indikator catatan ketika nominal transfer yang dikirim customer berbeda dengan total tagihan resmi (layanan + ongkir - diskon).
+  - Namun, penulisan teks langsung di dalam sel Kolom I (Total) akan merusak tipe data angka menjadi teks dan mematahkan rumus kalkulasi klinik seperti `=SUM(I2:I)` atau formula rekap keuangan lainnya.
+- **Perubahan Fondasional & Arsitektur**:
+  - **Cell Note Google Sheets API (`setCellNote`)**: Menambahkan method `setCellNote` pada `SheetsGateway` dan implementasi `GoogleSheetsGateway` menggunakan `spreadsheets.batchUpdate` dengan perintah `updateCells` yang dibatasi hanya pada `fields: "note"`. Nilai data sel (`userEnteredValue`) tetap berupa angka numerik murni (`numberValue`) tanpa tersentuh sedikit pun, sehingga rumus `=SUM()` aman 100%.
+  - **Format Keterangan Selisih (`resolveTotalCellNote`)**:
+    - Kurang bayar: `⚠️ Nominal transfer: Rp X (Kurang Rp Y)`
+    - Lebih bayar: `Nominal transfer: Rp X (Lebih Rp Y)`
+    - Tepat / tanpa nominal transfer: string kosong (catatan dikosongkan/dibersihkan).
+  - **Integrasi Otomatis Outbox Sync (`sheets-sync.service.ts`)**: Sinkronisasi reservasi (baik saat insert maupun update) kini otomatis memeriksa `receipt_amount` vs total kalkulasi dan menempelkan/membersihkan note pada Kolom I.
+  - **Backfill Tab `okt`**: 9 baris reservasi di tab `okt` yang memiliki perbedaan transfer vs total berhasil diberi catatan sel secara otomatis (Row 110, 111, 112, 114, 116, 126, 129, 142, 143).
+- **Hasil Terukur & Verifikasi**:
+  - `npm run build` exit 0 (TypeScript kompilasi 100% bersih).
+  - Vitest `tests/unit/sheets-rekapan-formatter.test.ts` (40 tests) & `tests/unit/sheets-sync.service.test.ts` (19 tests) = 59 tests passed 100% green.
+  - Verifikasi langsung via Google Sheets API pada sel `okt!I110`, `I111`, `I142`, `I143`: `userEnteredValue: { numberValue: 90000 }`, `formattedValue: Rp90.000`, `note: ⚠️ Nominal transfer: Rp ...`. Nilai numerik 100% terjaga utuh.
+  - Container `wa-clinic-bot-app-1` dan `wa-clinic-bot-worker-1` di-restart dengan sukses dan berjalan normal di live server.
+
+#### 2026-10-30 - Feat: Hyperlink Bukti Pembayaran Otomatis di Kolom Metode Bayar Google Spreadsheet
+
+- **Latar Belakang & Akar Masalah**:
+  - Pengguna membutuhkan akses cepat untuk memeriksa foto bukti bayar/transfer langsung dari rekapan Google Spreadsheet tanpa harus mencari manual di riwayat chat atau database.
+  - Foto bukti pembayaran dari WhatsApp tersimpan di folder privat `/media/inbound/` yang menuntut cookie sesi login admin (`401 Unauthorized` jika dibuka langsung tanpa login dari tautan luar).
+- **Perubahan Fondasional & Arsitektur**:
+  - **Endpoint Publik Bukti Bayar (`GET /proof/:reservationId`)**: Dibuatkan route aman publik di `src/routes/media.route.ts` yang melayani stream foto bukti transfer hanya untuk file yang sah tercatat di `Reservation.proof_url`. Akses gambar langsung terbuka di tab baru tanpa login, menjaga privasi file WhatsApp lainnya tetap terlindungi.
+  - **Formula Hyperlink Otomatis Kolom L (`row-formatter.ts`)**: Kolom L (Metode Bayar) kini otomatis diformat dengan `=HYPERLINK("https://app.kalababyspa.online/proof/{id}"; "{label}")` jika reservasi memiliki bukti bayar. Menghormati format locale Indonesia (`in_ID`) dengan pemisah titik-koma (`;`), serta meng-escape tanda kutip ganda. Jika tidak ada bukti, tetap teks polos tanpa formula.
+  - **Backfill Tab `okt`**: 54 baris reservasi di tab `okt` yang memiliki bukti bayar di database berhasil diperbarui menjadi tautan aktif melalui batchUpdate Google Sheets API.
+- **Hasil Terukur & Verifikasi**:
+  - `npm run build` exit 0 (TypeScript kompilasi 100% bersih).
+  - Vitest `tests/unit/sheets-rekapan-formatter.test.ts` & `tests/unit/sheets-sync.service.test.ts`: 53 tests passed (100% green).
+  - Uji curl live endpoint `https://app.kalababyspa.online/proof/:id` mengembalikan HTTP/2 200 `content-type: image/jpeg` dengan cache HTTP.
+
 #### 2026-10-30 - Refactor & Polish: Header Sticky 1 Baris Bersih & Eliminasi Kontrol Zoom pada Kalender Hari
 
 - **Latar Belakang & Akar Masalah**:

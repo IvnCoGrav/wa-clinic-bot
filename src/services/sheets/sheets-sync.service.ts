@@ -1,5 +1,5 @@
 import { prisma } from '../../db/client';
-import { formatReservationToRow } from './row-formatter';
+import { formatReservationToRow, resolveTotalCellNote } from './row-formatter';
 import { resolveSheetTarget } from './month-resolver';
 import {
   SheetsGateway,
@@ -41,7 +41,6 @@ export interface SheetsConfigRow {
 export interface ReservationForSheets {
   id: string;
   tenant_id: string;
-  proof_url?: string | null;
   booking_date: Date | null;
   treatment_detail: string | null;
   treatment_category: string | null;
@@ -49,6 +48,8 @@ export interface ReservationForSheets {
   delivery_fee: number | null;
   discount_amount: number | null;
   payment_method: string | null;
+  proof_url?: string | null;
+  receipt_amount?: number | null;
   is_repeat_order: boolean;
   /** Ordinal riwayat: jumlah reservasi qualifying yang dibuat LEBIH AWAL dari
    *  reservasi ini (kanonis sama dengan Admin Dashboard/CAPI). Dihitung di
@@ -257,6 +258,9 @@ export class SheetsSyncService {
       publicBaseUrl: process.env.PUBLIC_BASE_URL || null,
     });
 
+    const total = typeof row[8] === 'number' ? row[8] : 0;
+    const totalNote = resolveTotalCellNote(reservation, total);
+
     const existingRow = reservation.sheets_row_index;
     const samePlace =
       existingRow != null &&
@@ -296,6 +300,17 @@ export class SheetsSyncService {
         tabName: tab.tabName,
         rowIndex: targetRowIndex,
       });
+      if (typeof this.gateway.setCellNote === 'function') {
+        await this.gateway.setCellNote({
+          tenantId,
+          spreadsheetId,
+          sheetId: tab.sheetId,
+          tabName: tab.tabName,
+          rowIndex: existingRow,
+          colIndex: 9, // Kolom I (Total)
+          note: totalNote,
+        }).catch((err: any) => console.warn('[SHEETS] Gagal update cell note Kolom I:', err?.message));
+      }
       return;
     }
 
@@ -305,6 +320,17 @@ export class SheetsSyncService {
       tabName: tab.tabName,
       rowIndex: appended.rowIndex,
     });
+    if (typeof this.gateway.setCellNote === 'function') {
+      await this.gateway.setCellNote({
+        tenantId,
+        spreadsheetId,
+        sheetId: tab.sheetId,
+        tabName: tab.tabName,
+        rowIndex: appended.rowIndex,
+        colIndex: 9, // Kolom I (Total)
+        note: totalNote,
+      }).catch((err: any) => console.warn('[SHEETS] Gagal update cell note Kolom I:', err?.message));
+    }
   }
 
   /** Resolusi ID file untuk tahun target (peta tahun dari DB, bukan tebakan). */

@@ -3,6 +3,21 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 296. [Alamat & Toponimi] Alamat Ganda (Split-Brain) dari Penyerapan Form Reservasi & Wilayah Komposit (2026-10-31, RESOLVED)
+
+- **Status:** **RESOLVED** (Seam Tulis Bersih, Parser Level-Aware, Token Match Asimetris, dan Healing Pass 4)
+- **Gejala:** Customer 6287788800765 (Bunda Haniyyah) memiliki 2 kartu alamat di database: satu kartu hantu tanpa jalan/koordinat berlabel "Rumah pacar Keling, Tambaksari" dan satu kartu GPS ber-jalan lengkap "jl.gersikan VI no 8, Pacarkembang, Tambaksari".
+- **Akar Masalah:**
+  1. `reservationLifecycleService.createDraftReservation` memanggil `customerService.updateCustomerLocation` tanpa menyertakan field `address`, sehingga kartu pertama tersimpan dengan `address: ''`.
+  2. Input form `Kec : pacar Keling, Tambaksari` ditelan mentah oleh parser teks reservasi tanpa memisahkan kelurahan dan kecamatan, sehingga tersimpan string komposit `pacar Keling, Tambaksari`.
+  3. Saat customer mengirimkan pin GPS 4 menit kemudian, geocoding Google Maps menghasilkan `Pacarkembang, Tambaksari`. Fungsi `addressesMatch` gagal menggabungkan (merge) kedua kartu karena pencocokan asimetris menuntut kesamaan string kecamatan (`sameKec`), padahal kecamatan kartu pertama tercemar oleh nama kelurahan.
+- **Solusi Fondasional (Fase 1-4):**
+  1. **Seam Tulis Kanonis Tunggal (`reservation-lifecycle.service.ts` & `customer.service.ts`):** Menyertakan `address` pada pemanggilan `updateCustomerLocation` dan mengeliminasi tulisan ganda di preferensi pelanggan. Menambahkan sanitasi `splitWilayahComposite` pada kolom `kecamatan` di level service customer untuk memproteksi seluruh call-site yang masuk.
+  2. **Parser Wilayah Level-Aware (`wilayah-normalizer.ts` & `reservation-text-parser.ts`):** Fungsi murni `splitWilayahComposite` membedah teks komposit berdasarkan dataset resmi Gazetteer secara hierarkis (prioritas Kota > Kecamatan > Kelurahan), mencegah salah tafsir nama kota/kecamatan luas ("Tambaksari, Surabaya" atau "Waru, Sidoarjo").
+  3. **Pencocokan Asimetris Berbasis Token (`customer-address.ts` & `addressMatch.ts` FE):** Mengganti perbandingan kaku `sameKec` dengan `sameKec || wilayahTokenMatch(a.kecamatan, b.kecamatan)` yang memecah token pada delimiter `[,/;]`. Mencegah false positive substring ("sukomanunggal" != "manunggal") dan menjaga kelulusan uji adversarial toponimi (termasuk kasus E6 di mana nama kelurahan = kecamatan).
+  4. **Healing Pass 4 (`heal-customer-addresses-split-brain.ts`):** Menambahkan Pass 4 untuk menggabungkan kartu hantu tanpa identitas (`address` kosong + `kelurahan` null + koordinat null) ke kartu saudara beridentitas lengkap dalam kota yang sama secara transaksional tanpa meninggalkan tombstone.
+- **Bukti:** `tests/unit/wilayah-composite-split.test.ts` (8/8 lulus), `tests/unit/dashboard-address-match-parity.test.ts` (17/17 lulus), `tests/unit/customer-saved-addresses-enrichment.test.ts` (7/7 lulus, termasuk kasus E6), dan `npm run build` bersih.
+
 ## 295. [Customer & LTV] Drift ltv_cache vs Ground Truth dan Penegakan Single-Writer (2026-10-31, RESOLVED)
 
 - **Status:** **RESOLVED** (Single-Writer, Hook Mutasi, Invariant Auto-Repair, dan Backfill 100% Selesai)

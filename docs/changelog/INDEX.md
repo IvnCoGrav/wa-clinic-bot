@@ -5,8 +5,10 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 630
+Total entri terindeks: 632
 
+- 2026-10-30 | Feat: Catatan Sel (Cell Note) Otomatis di Kolom Total Rekapan Spreadsheet saat Nominal Tra
+- 2026-10-30 | Feat: Hyperlink Bukti Pembayaran Otomatis di Kolom Metode Bayar Google Spreadsheet
 - 2026-10-30 | Refactor & Polish: Header Sticky 1 Baris Bersih & Eliminasi Kontrol Zoom pada Kalender Har
 - 2026-10-30 | Feat: Sticky Floating Day & Date Navigation pada Tampilan Hari Kalender Reservasi (Mobile)
 - 2026-10-29 | Refactor: Konsolidasi Komponen Input Kanonis, Adopsi StatusChip, dan Ekstraksi Komponen Be

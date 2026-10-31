@@ -80,6 +80,14 @@ function normCity(value?: string | null): string {
 }
 
 /** Evaluasi kemiripan toponimi: identik, child ⊂ parent, atau typo Levenshtein <= 2. */
+export function wilayahTokenMatch(a?: string | null, b?: string | null): boolean {
+  if (!hasText(a) || !hasText(b)) return false;
+  const tokensA = String(a).split(/[\,\/\;]+/).map((t) => norm(t)).filter((t) => t.length > 2);
+  const tokensB = String(b).split(/[\,\/\;]+/).map((t) => norm(t)).filter((t) => t.length > 2);
+  if (tokensA.length === 0 || tokensB.length === 0) return false;
+  return tokensA.some((ta) => tokensB.some((tb) => ta === tb));
+}
+
 function isWilayahSimilar(a?: string | null, b?: string | null): boolean {
   if (!hasText(a) || !hasText(b)) return false;
   const na = norm(a);
@@ -152,9 +160,9 @@ export function addressesMatch(
   }
 
   if (!aAddr && !bAddr && sameKec && kelKompatibel && kotaKompatibel) return true;
-  if (aAddr !== bAddr && sameKec) {
+  if (aAddr !== bAddr && (sameKec || wilayahTokenMatch(a.kecamatan, b.kecamatan))) {
     const kelOk = sameKel || !hasText(a.kelurahan) || !hasText(b.kelurahan);
-    if (kelOk) return true;
+    if (kelOk && kotaKompatibel) return true;
   }
   return false;
 }

@@ -309,9 +309,27 @@ export class CustomerService {
     // alamat jalan/perumahan/URL (jalur form reservasi mengirim field "Alamat").
     // Dihitung di luar try agar jalur fallback memori juga memakai nilai bersih.
     const safeKelurahanRaw = data.kelurahan;
-    const safeKelurahan = safeKelurahanRaw !== undefined
+    let safeKelurahan = safeKelurahanRaw !== undefined
       ? sanitizeKelurahanInput(safeKelurahanRaw)
       : undefined;
+    let safeKecamatan = data.kecamatan?.trim() || undefined;
+
+    // Normalisasi wilayah koma/composite (misal "pacar Keling, Tambaksari")
+    if (safeKecamatan && /[,\/;]/.test(safeKecamatan)) {
+      try {
+        const { splitWilayahComposite } = require('../utils/wilayah-normalizer');
+        const split = splitWilayahComposite(safeKecamatan);
+        if (split.kecamatan) {
+          safeKecamatan = split.kecamatan;
+          if (!safeKelurahan && split.kelurahan) {
+            safeKelurahan = split.kelurahan;
+          }
+          if (!data.kota && split.kota) {
+            data.kota = split.kota;
+          }
+        }
+      } catch {}
+    }
     try {
       const existing = await prisma.customer.findFirst({
         where: { id: customerId, tenant_id: tenantId },
@@ -387,7 +405,7 @@ export class CustomerService {
         where: { id: customerId },
         data: {
           kelurahan: safeKelurahan ?? existing.kelurahan,
-          kecamatan: data.kecamatan ?? existing.kecamatan,
+          kecamatan: safeKecamatan ?? existing.kecamatan,
           kota: data.kota ?? existing.kota,
           lat: effectiveLat,
           lng: effectiveLng,
@@ -405,7 +423,7 @@ export class CustomerService {
         const hist: any[] = Array.isArray(prevPrefs.location_history) ? prevPrefs.location_history : [];
         const entry = {
           kelurahan: data.kelurahan ?? existing.kelurahan,
-          kecamatan: data.kecamatan ?? existing.kecamatan,
+          kecamatan: safeKecamatan ?? existing.kecamatan,
           kota: data.kota ?? existing.kota,
           lat: effectiveLat,
           lng: effectiveLng,
@@ -433,13 +451,13 @@ export class CustomerService {
           adminIdentity: 'SYSTEM_LOCATION_SEAM',
           action: 'CUSTOMER_LOCATION_UPDATE',
           targetId: customerId,
-          payload: { kelurahan: data.kelurahan, kecamatan: data.kecamatan, lat: effectiveLat, lng: effectiveLng },
+          payload: { kelurahan: safeKelurahan, kecamatan: safeKecamatan, lat: effectiveLat, lng: effectiveLng },
           tenantId,
         } as any).catch(() => {});
       } catch {}
 
       // Auto-sync Google Contacts jika kelurahan / kecamatan diperbarui
-      if (data.kelurahan || data.kecamatan) {
+      if (safeKelurahan || safeKecamatan) {
         import('./google-contacts.service')
           .then(({ googleContactsService }) => {
             googleContactsService.syncCustomer(tenantId, customerId, { trigger: 'chat' }).catch(() => {});
@@ -456,7 +474,7 @@ export class CustomerService {
           ? {
               address: prevAddress,
               kelurahan: data.kelurahan ?? existing.kelurahan,
-              kecamatan: data.kecamatan ?? existing.kecamatan,
+              kecamatan: safeKecamatan ?? existing.kecamatan,
               kota: data.kota ?? existing.kota,
               lat: effectiveLat,
               lng: effectiveLng,
@@ -468,7 +486,7 @@ export class CustomerService {
           : preserveExactGps
             ? {
                 kelurahan: data.kelurahan ?? existing.kelurahan,
-                kecamatan: data.kecamatan ?? existing.kecamatan,
+                kecamatan: safeKecamatan ?? existing.kecamatan,
                 kota: data.kota ?? existing.kota,
                 lat: data.lat ?? null,
                 lng: data.lng ?? null,
@@ -479,7 +497,7 @@ export class CustomerService {
             : {
                 address: prevAddress,
                 kelurahan: data.kelurahan ?? existing.kelurahan,
-                kecamatan: data.kecamatan ?? existing.kecamatan,
+                kecamatan: safeKecamatan ?? existing.kecamatan,
                 kota: data.kota ?? existing.kota,
                 lat: effectiveLat,
                 lng: effectiveLng,
@@ -489,7 +507,7 @@ export class CustomerService {
                 isPrimary: true,
               };
         const hasLoc = Boolean(
-          data.kelurahan || data.kecamatan || data.kota || data.lat !== undefined || data.lng !== undefined || savedEntry
+          safeKelurahan || safeKecamatan || data.kota || data.lat !== undefined || data.lng !== undefined || savedEntry
         );
         if (hasLoc) await this.syncSavedAddressFromLocation(existing, tenantId, writeLoc as any);
       } catch (syncErr) {

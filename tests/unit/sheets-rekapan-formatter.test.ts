@@ -7,6 +7,8 @@ import {
 import {
   formatReservationToRow,
   resolveCustomerType,
+  resolvePaymentMethodCell,
+  resolveTotalCellNote,
   EMPTY_CELL,
   SHEET_COLUMN_COUNT,
 } from '../../src/services/sheets/row-formatter';
@@ -366,6 +368,155 @@ describe('row-formatter — otoritas ordinal atas flag DB terkontaminasi', () =>
         },
       });
       expect(row[7]).toBe(25000);
+    });
+  });
+
+  describe('Kolom L: Hyperlink Bukti Bayar (=HYPERLINK)', () => {
+    it('ada proof_url & payment_method → format formula =HYPERLINK dengan domain publik', () => {
+      const row = formatReservationToRow({
+        ...base,
+        reservation: {
+          ...base.reservation,
+          id: 'res-uuid-12345',
+          payment_method: 'Transfer BCA',
+          proof_url: '/media/outbound/default-tenant/bukti123.jpg',
+        },
+      });
+
+      // Kolom L adalah index 11 (A=0, B=1, ... L=11)
+      expect(row[11]).toBe('=HYPERLINK("https://app.kalababyspa.online/proof/res-uuid-12345"; "Transfer BCA")');
+      expect(row.length).toBe(SHEET_COLUMN_COUNT);
+    });
+
+    it('ada proof_url tetapi payment_method kosong → fallback label "Bukti Bayar"', () => {
+      const row = formatReservationToRow({
+        ...base,
+        reservation: {
+          ...base.reservation,
+          id: 'res-uuid-67890',
+          payment_method: null,
+          proof_url: '/media/inbound/default-tenant/receipt.jpg',
+        },
+      });
+
+      expect(row[11]).toBe('=HYPERLINK("https://app.kalababyspa.online/proof/res-uuid-67890"; "Bukti Bayar")');
+    });
+
+    it('tidak ada proof_url → teks biasa tanpa formula', () => {
+      const row = formatReservationToRow({
+        ...base,
+        reservation: {
+          ...base.reservation,
+          id: 'res-uuid-no-proof',
+          payment_method: 'QRIS',
+          proof_url: null,
+        },
+      });
+
+      expect(row[11]).toBe('QRIS');
+    });
+
+    it('tidak ada proof_url dan payment_method kosong → EMPTY_CELL ("-")', () => {
+      const row = formatReservationToRow({
+        ...base,
+        reservation: {
+          ...base.reservation,
+          id: 'res-uuid-no-proof-no-method',
+          payment_method: null,
+          proof_url: null,
+        },
+      });
+
+      expect(row[11]).toBe(EMPTY_CELL);
+    });
+
+    it('sanitasi tanda kutip ganda pada label payment_method agar formula Sheets tidak korup', () => {
+      const row = formatReservationToRow({
+        ...base,
+        reservation: {
+          ...base.reservation,
+          id: 'res-uuid-quote',
+          payment_method: 'Transfer "BCA"',
+          proof_url: '/media/outbound/default-tenant/quote.jpg',
+        },
+      });
+
+      expect(row[11]).toBe('=HYPERLINK("https://app.kalababyspa.online/proof/res-uuid-quote"; "Transfer ""BCA""")');
+    });
+
+    it('menghormati custom publicBaseUrl jika disuntikkan', () => {
+      const val = resolvePaymentMethodCell(
+        {
+          id: 'res-custom-base',
+          payment_method: 'QRIS',
+          proof_url: '/media/inbound/default-tenant/qris.jpg',
+          booking_date: new Date(),
+        },
+        'https://custom.kalababyspa.online'
+      );
+
+      expect(val).toBe('=HYPERLINK("https://custom.kalababyspa.online/proof/res-custom-base"; "QRIS")');
+    });
+  });
+
+  describe('Kolom I: Cell Note Mismatch Total vs Nominal Transfer', () => {
+    it('transfer kurang dari total yang diharapkan → menghasilkan note peringatan kurang', () => {
+      const note = resolveTotalCellNote(
+        {
+          booking_date: new Date(),
+          receipt_amount: 65000,
+        },
+        85000
+      );
+      expect(note).toBe('⚠️ Nominal transfer: Rp 65.000 (Kurang Rp 20.000)');
+    });
+
+    it('transfer lebih dari total yang diharapkan → menghasilkan note peringatan lebih', () => {
+      const note = resolveTotalCellNote(
+        {
+          booking_date: new Date(),
+          receipt_amount: 90000,
+        },
+        85000
+      );
+      expect(note).toBe('Nominal transfer: Rp 90.000 (Lebih Rp 5.000)');
+    });
+
+    it('transfer tepat sama dengan total yang diharapkan → string kosong (tidak perlu note)', () => {
+      const note = resolveTotalCellNote(
+        {
+          booking_date: new Date(),
+          receipt_amount: 85000,
+        },
+        85000
+      );
+      expect(note).toBe('');
+    });
+
+    it('tidak ada receipt_amount atau 0 / negatif → string kosong', () => {
+      expect(resolveTotalCellNote({ booking_date: new Date() }, 85000)).toBe('');
+      expect(resolveTotalCellNote({ booking_date: new Date(), receipt_amount: null }, 85000)).toBe('');
+      expect(resolveTotalCellNote({ booking_date: new Date(), receipt_amount: 0 }, 85000)).toBe('');
+      expect(resolveTotalCellNote({ booking_date: new Date(), receipt_amount: -10000 }, 85000)).toBe('');
+    });
+
+    it('expectedTotal <= 0 → string kosong', () => {
+      expect(resolveTotalCellNote({ booking_date: new Date(), receipt_amount: 50000 }, 0)).toBe('');
+      expect(resolveTotalCellNote({ booking_date: new Date(), receipt_amount: 50000 }, -1000)).toBe('');
+    });
+
+    it('nilai sel Kolom I tetap angka numerik utuh (tidak dirusak oleh note)', () => {
+      const row = formatReservationToRow({
+        reservation: {
+          booking_date: new Date('2026-10-01T03:00:00Z'),
+          purchase_value: 75000,
+          delivery_fee: 10000,
+          receipt_amount: 65000, // mismatch
+        },
+      });
+      // Kolom I adalah index 8
+      expect(row[8]).toBe(85000);
+      expect(typeof row[8]).toBe('number');
     });
   });
 });

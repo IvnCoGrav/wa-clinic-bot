@@ -128,6 +128,19 @@ function normCity(value?: string | null): string {
   return s;
 }
 
+/**
+ * Pencocokan wilayah berbasis token: memecah string pada delimitasi `, / ;`.
+ * Mencegah false positive substring (misal "sukomanunggal" !== "manunggal"),
+ * tetapi mengenali entitas gabungan (misal "pacar keling, tambaksari" memuat token "tambaksari").
+ */
+export function wilayahTokenMatch(a?: string | null, b?: string | null): boolean {
+  if (!hasText(a) || !hasText(b)) return false;
+  const tokensA = String(a).split(/[\,\/\;]+/).map((t) => norm(t)).filter((t) => t.length > 2);
+  const tokensB = String(b).split(/[\,\/\;]+/).map((t) => norm(t)).filter((t) => t.length > 2);
+  if (tokensA.length === 0 || tokensB.length === 0) return false;
+  return tokensA.some((ta) => tokensB.some((tb) => ta === tb));
+}
+
 /** Evaluasi kemiripan toponimi: identik, child ⊂ parent, atau typo Levenshtein <= 2. */
 function isWilayahSimilar(a?: string | null, b?: string | null): boolean {
   if (!hasText(a) || !hasText(b)) return false;
@@ -208,12 +221,12 @@ export function addressesMatch(
   // dilengkapi, bukan rumah baru. Syarat kecamatan sama; kelurahan sama bila
   // keduanya terisi (sisi yang belum punya kelurahan boleh mengikuti).
   // Dua sisi ber-teleks beda jalan → tetap TIDAK match (rumah-2 aman).
-  if (aAddr !== bAddr && sameKec) {
+  if (aAddr !== bAddr && (sameKec || wilayahTokenMatch(a.kecamatan, b.kecamatan))) {
     const kelOk =
       sameKel ||
       !hasText(a.kelurahan) ||
       !hasText(b.kelurahan);
-    if (kelOk) return true;
+    if (kelOk && kotaKompatibel) return true;
   }
   return false;
 }

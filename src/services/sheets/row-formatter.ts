@@ -20,7 +20,6 @@ export const SHEET_COLUMN_COUNT = 16;
 
 export interface SheetRowReservation {
   id?: string | null;
-  proof_url?: string | null;
   booking_date: Date | null;
   treatment_detail?: string | null;
   treatment_category?: string | null;
@@ -28,6 +27,8 @@ export interface SheetRowReservation {
   delivery_fee?: number | null;
   discount_amount?: number | null;
   payment_method?: string | null;
+  proof_url?: string | null;
+  receipt_amount?: number | null;
   is_repeat_order?: boolean | null;
   /** Ordinal riwayat transaksi nyata (jumlah reservasi qualifying lebih awal).
    *  Bila angka → otoritas new-vs-repeat; flag `is_repeat_order` DB diabaikan
@@ -68,7 +69,7 @@ export interface SheetRowInput {
   assignedStaffName?: string | null;
   /** Nama 12 tab bulan dari DB (TenantSheetsConfig.month_tab_names). */
   monthTabNames?: readonly string[] | null;
-  /** Domain publik untuk URL bukti bayar (misal https://app.kalababyspa.online). */
+  /** Domain publik bot (mis. "https://app.kalababyspa.online") untuk formula hyperlink bukti bayar. */
   publicBaseUrl?: string | null;
 }
 
@@ -223,6 +224,32 @@ function resolveDiscount(reservation: SheetRowReservation): number | string {
     return d;
   }
   return '';
+}
+
+
+
+/**
+ * Catatan Sel Kolom Total:
+ * Bila reservasi memiliki nominal transfer (`receipt_amount` > 0) dan berbeda dengan
+ * total yang diharapkan (layanan + ongkir - diskon), kembalikan teks keterangan selisih.
+ * Bila nominal transfer pas atau belum ada bukti nominal, kembalikan string kosong.
+ */
+export function resolveTotalCellNote(
+  reservation: SheetRowReservation,
+  expectedTotal: number
+): string {
+  const receipt = reservation.receipt_amount;
+  if (typeof receipt !== 'number' || !Number.isFinite(receipt) || receipt <= 0) {
+    return '';
+  }
+  if (expectedTotal <= 0) return '';
+  const diff = receipt - expectedTotal;
+  if (diff === 0) return '';
+  const formatRp = (n: number) => `Rp ${Math.abs(n).toLocaleString('id-ID')}`;
+  if (diff < 0) {
+    return `⚠️ Nominal transfer: ${formatRp(receipt)} (Kurang ${formatRp(diff)})`;
+  }
+  return `Nominal transfer: ${formatRp(receipt)} (Lebih ${formatRp(diff)})`;
 }
 
 /**

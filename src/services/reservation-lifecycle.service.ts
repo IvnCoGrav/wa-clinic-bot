@@ -105,26 +105,17 @@ export class ReservationLifecycleService {
             console.warn('[RESERVATION LIFECYCLE] upsertSavedAddress failed:', e?.message);
           }
         } else {
-          // Root hanya ditulis bila customer belum punya alamat sama sekali
+          // Root hanya ditulis bila customer belum punya alamat sama sekali.
+          // Seam tunggal: sertakan address langsung ke updateCustomerLocation agar
+          // dual-write ke customer_addresses menyimpan teks jalan lengkap sejak kartu pertama.
           await customerService.updateCustomerLocation(customerId, {
+            address: address?.trim() || undefined,
             kecamatan: kecamatan?.trim() || undefined,
             kota: kota?.trim() || undefined,
             kelurahan: kelurahan?.trim() || undefined,
           }, tenantId).catch((e: any) => {
             console.warn('[RESERVATION LIFECYCLE] updateCustomerLocation failed (wilayah):', e?.message);
           });
-
-          // Integritas spasial: alamat lengkap (nama perumahan + blok + patokan)
-          // WAJIB tersimpan di preferences.address/full_address — bukan di kolom
-          // `kelurahan` (kolom itu khusus entitas desa resmi). Tanpa ini, kartu
-          // tugas terapis kehilangan nama perumahan/blok (insiden Terapis Tersasar).
-          if (address && address.trim()) {
-            await customerService
-              .updateCustomer(customerId, { address: address.trim() }, tenantId)
-              .catch((e: any) => {
-                console.warn('[RESERVATION LIFECYCLE] updateCustomer(address) failed — alamat jalan tidak tersimpan:', e?.message);
-              });
-          }
         }
         }
 
@@ -207,6 +198,7 @@ export class ReservationLifecycleService {
                 const { deliveryService } = await import('./delivery.service');
                 const delivery = await deliveryService.calculateDelivery({ lat: resolvedLat, lng: resolvedLng }, undefined, tenantId);
                 await customerService.updateCustomerLocation(customerId, {
+                  address: address?.trim() || undefined,
                   kelurahan: resolvedKel,
                   kecamatan: resolvedKec,
                   kota: resolvedKota,

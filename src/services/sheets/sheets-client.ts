@@ -27,6 +27,8 @@ export interface EnsureMonthlyTabResult {
   /** Nama tab sebenarnya di file (case dari file, bukan dari config). */
   tabName: string;
   created: boolean;
+  /** ID numerik sheet di Google Sheets (untuk batchUpdate / cell note). */
+  sheetId?: number;
 }
 
 export interface AppendRowParams {
@@ -60,12 +62,26 @@ export interface ReconcileRowParams {
   bookingDate?: Date | null;
 }
 
+export interface SetCellNoteParams {
+  tenantId: string;
+  spreadsheetId: string;
+  sheetId?: number;
+  tabName: string;
+  /** Baris 1-based di sheet (header = 1). */
+  rowIndex: number;
+  /** Nomor kolom 1-based (A=1...I=9). */
+  colIndex: number;
+  /** Teks catatan. String kosong ("") akan menghapus catatan yang ada. */
+  note: string;
+}
+
 /** Seam uji: implementasi default menembak Google; test memakai fake. */
 export interface SheetsGateway {
   ensureMonthlyTab(params: EnsureMonthlyTabParams): Promise<EnsureMonthlyTabResult>;
   appendRow(params: AppendRowParams): Promise<AppendRowResult>;
   updateCells(params: UpdateCellsParams): Promise<void>;
   reconcileRowIndex?(params: ReconcileRowParams): Promise<number>;
+  setCellNote(params: SetCellNoteParams): Promise<void>;
 }
 
 export const SHEETS_NOT_CONNECTED = 'SHEETS_NOT_CONNECTED';
@@ -117,7 +133,7 @@ export class GoogleSheetsGateway implements SheetsGateway {
 
     let list = await readSheets();
     const found = list.find((s: any) => (s.properties?.title || '').trim().toLowerCase() === wanted);
-    if (found) return { tabName: found.properties.title, created: false };
+    if (found) return { tabName: found.properties.title, created: false, sheetId: found.properties.sheetId };
 
     const template = list.find(
       (s: any) => (s.properties?.title || '').trim().toLowerCase() === templateSheetName.trim().toLowerCase()
@@ -146,7 +162,7 @@ export class GoogleSheetsGateway implements SheetsGateway {
       // Re-fetch; bila sudah ada → anggap sukses (idempoten), bukan gagal.
       list = await readSheets();
       const after = list.find((s: any) => (s.properties?.title || '').trim().toLowerCase() === wanted);
-      if (after) return { tabName: after.properties.title, created: false };
+      if (after) return { tabName: after.properties.title, created: false, sheetId: after.properties.sheetId };
       throw err;
     }
 
@@ -157,7 +173,9 @@ export class GoogleSheetsGateway implements SheetsGateway {
       range: `${tabName}!A2:P1000`,
     });
 
-    return { tabName, created: true };
+    list = await readSheets();
+    const createdSheet = list.find((s: any) => (s.properties?.title || '').trim().toLowerCase() === wanted);
+    return { tabName, created: true, sheetId: createdSheet?.properties?.sheetId };
   }
 
   public async appendRow(params: AppendRowParams): Promise<AppendRowResult> {
@@ -207,7 +225,7 @@ export class GoogleSheetsGateway implements SheetsGateway {
     await flush();
   }
 
-  /**
+/**
    * Rekonsiliasi nomor baris dinamis sebelum menulis sel.
    * Melindungi dari pergeseran baris akibat admin menyisipkan/menghapus baris secara manual di Google Sheets.
    * Membaca jendela baris (±15 baris) di sekitar expectedRowIndex dan mencocokkan nama customer di kolom C.
@@ -270,6 +288,54 @@ export class GoogleSheetsGateway implements SheetsGateway {
       console.warn('[SHEETS] reconcileRowIndex gagal (fallback ke expectedRowIndex):', err?.message);
       return expectedRowIndex;
     }
+  }
+
+  public async setCellNote(params: SetCellNoteParams): Promise<void> {
+    const { tenantId, spreadsheetId, tabName, rowIndex, colIndex, note } = params;
+    const sheets = await this.getSheets(tenantId);
+    let sheetId = params.sheetId;
+    if (sheetId == null) {
+      const meta = await sheets.spreadsheets.get({
+        spreadsheetId,
+        fields: 'sheets(properties(sheetId,title))',
+      });
+      const sheet = (meta.data.sheets || []).find(
+        (s: any) => (s.properties?.title || '').trim().toLowerCase() === tabName.trim().toLowerCase()
+      );
+      if (sheet?.properties?.sheetId != null) {
+        sheetId = sheet.properties.sheetId;
+      }
+    }
+    if (sheetId == null) return;
+
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: {
+        requests: [
+          {
+            updateCells: {
+              range: {
+                sheetId,
+                startRowIndex: rowIndex - 1,
+                endRowIndex: rowIndex,
+                startColumnIndex: colIndex - 1,
+                endColumnIndex: colIndex,
+              },
+              rows: [
+                {
+                  values: [
+                    {
+                      note: note || '',
+                    },
+                  ],
+                },
+              ],
+              fields: 'note',
+            },
+          },
+        ],
+      },
+    });
   }
 }
 
