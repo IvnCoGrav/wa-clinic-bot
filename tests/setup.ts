@@ -103,6 +103,8 @@ vi.mock('../src/db/client', () => {
         update: vi.fn().mockRejectedValue(new Error('Database offline')),
       },
       reservation: {
+        delete: vi.fn().mockRejectedValue(new Error('Database offline')),
+        deleteMany: vi.fn().mockRejectedValue(new Error('Database offline')),
         findUnique: vi.fn().mockRejectedValue(new Error('Database offline')),
         findFirst: vi.fn().mockRejectedValue(new Error('Database offline')),
         findMany: vi.fn().mockRejectedValue(new Error('Database offline')),
@@ -110,6 +112,17 @@ vi.mock('../src/db/client', () => {
         create: vi.fn().mockRejectedValue(new Error('Database offline')),
         update: vi.fn().mockRejectedValue(new Error('Database offline')),
         updateMany: vi.fn().mockRejectedValue(new Error('Database offline')),
+      },
+      reservationArchive: {
+        findUnique: vi.fn().mockRejectedValue(new Error('Database offline')),
+        findFirst: vi.fn().mockRejectedValue(new Error('Database offline')),
+        findMany: vi.fn().mockRejectedValue(new Error('Database offline')),
+        count: vi.fn().mockRejectedValue(new Error('Database offline')),
+        create: vi.fn().mockRejectedValue(new Error('Database offline')),
+        update: vi.fn().mockRejectedValue(new Error('Database offline')),
+        updateMany: vi.fn().mockRejectedValue(new Error('Database offline')),
+        delete: vi.fn().mockRejectedValue(new Error('Database offline')),
+        deleteMany: vi.fn().mockRejectedValue(new Error('Database offline')),
       },
       followUp: {
         findUnique: vi.fn().mockRejectedValue(new Error('Database offline')),
@@ -396,6 +409,7 @@ vi.mock('../src/db/client', () => {
       },
       $transaction: vi.fn().mockRejectedValue(new Error('Database offline')),
       $queryRaw: vi.fn().mockRejectedValue(new Error('Database offline')),
+      $queryRawUnsafe: vi.fn().mockRejectedValue(new Error('Database offline')),
     },
   };
 });

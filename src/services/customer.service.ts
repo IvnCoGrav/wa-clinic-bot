@@ -2122,11 +2122,15 @@ export class CustomerService {
             for (const r of c.reservations) {
               let val = r.purchase_value;
               if (val === null || val === undefined || val === 0) {
-                const text = r.treatment_detail || r.raw_text;
-                if (text) {
-                  val = treatmentMemoMap.get(text) ?? 0;
-                } else {
+                if (r.status === 'hold' || (r.treatment_detail && r.treatment_detail.startsWith('[HOLD]'))) {
                   val = 0;
+                } else {
+                  const text = r.treatment_detail || r.raw_text;
+                  if (text) {
+                    val = treatmentMemoMap.get(text) ?? 0;
+                  } else {
+                    val = 0;
+                  }
                 }
               }
               ltv += val;
@@ -2281,27 +2285,34 @@ export class CustomerService {
    * Called after reservation create/update/cancel to keep ltv_cache in sync.
    * Konsisten dengan listCustomers: jika purchase_value NULL/0, resolve via katalog treatment.
    */
-  public async recalculateCustomerLtv(customerId: string, tenantId?: string): Promise<void> {
+  public async recalculateCustomerLtv(customerId: string, tenantId?: string): Promise<number> {
     try {
       const where: any = { customer_id: customerId, status: { notIn: ['cancelled', 'rejected'] } };
       if (tenantId) where.tenant_id = tenantId;
       const reservations = await prisma.reservation.findMany({
         where,
-        select: { purchase_value: true, treatment_detail: true, raw_text: true },
+        select: { status: true, purchase_value: true, treatment_detail: true, raw_text: true },
       });
       let ltv = 0;
       let needsResolve = false;
-      for (const r of reservations) {
-        if (r.purchase_value !== null && r.purchase_value !== undefined && r.purchase_value !== 0) {
-          ltv += r.purchase_value;
-        } else {
-          needsResolve = true;
+      if (Array.isArray(reservations)) {
+        for (const r of reservations) {
+          if (r.purchase_value !== null && r.purchase_value !== undefined && r.purchase_value !== 0) {
+            ltv += r.purchase_value;
+          } else {
+            if (r.status !== 'hold' && (!r.treatment_detail || !r.treatment_detail.startsWith('[HOLD]'))) {
+              needsResolve = true;
+            }
+          }
         }
       }
-      if (needsResolve) {
+      if (needsResolve && Array.isArray(reservations)) {
         const { resolveTreatmentValue } = await import('./capi.service');
         for (const r of reservations) {
           if (r.purchase_value === null || r.purchase_value === undefined || r.purchase_value === 0) {
+            if (r.status === 'hold' || (r.treatment_detail && r.treatment_detail.startsWith('[HOLD]'))) {
+              continue;
+            }
             const text = r.treatment_detail || r.raw_text;
             if (text) {
               const resolved = (await resolveTreatmentValue(text, tenantId)) ?? 0;
@@ -2311,8 +2322,10 @@ export class CustomerService {
         }
       }
       await prisma.customer.update({ where: { id: customerId }, data: { ltv_cache: ltv } });
+      return ltv;
     } catch (err: any) {
       console.warn('[CUSTOMER] recalculateCustomerLtv failed:', err.message);
+      return 0;
     }
   }
 

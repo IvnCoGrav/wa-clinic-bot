@@ -166,6 +166,10 @@ export async function maybeFirePurchaseEvent(params: {
           data: { purchase_value: value },
         });
         console.log(`[CAPI HELD] Updated purchase value for pending review ${reservation.id} to ${value}`);
+        try {
+          const { customerService } = await import('./customer.service');
+          await customerService.recalculateCustomerLtv(customer.id, customer.tenant_id);
+        } catch {}
       }
       return false;
     }
@@ -218,6 +222,10 @@ export async function maybeFirePurchaseEvent(params: {
         where: { id: reservation.id },
         data: updateData,
       });
+      try {
+        const { customerService } = await import('./customer.service');
+        await customerService.recalculateCustomerLtv(customer.id, customer.tenant_id);
+      } catch {}
     } catch (dbErr) {
       console.warn('[CAPI] Failed to persist purchase review state:', (dbErr as Error).message);
     }

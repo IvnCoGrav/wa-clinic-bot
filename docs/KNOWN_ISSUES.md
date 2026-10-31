@@ -3,6 +3,59 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 295. [Customer & LTV] Drift ltv_cache vs Ground Truth dan Penegakan Single-Writer (2026-10-31, RESOLVED)
+
+- **Status:** **RESOLVED** (Single-Writer, Hook Mutasi, Invariant Auto-Repair, dan Backfill 100% Selesai)
+- **Gejala:** Ditemukan 21 data customer mengalami ketidaksinkronan (*drift*) antara kolom pembacaan cepat `ltv_cache` dengan total riwayat transaksi di tabel reservasi (`SUM(reservations)`). 18 customer memiliki nilai cache lebih rendah akibat impor data skrip dan pembaruan CAPI tanpa trigger hitung ulang, serta 3 customer memiliki nilai cache lebih tinggi akibat pembatalan lama tanpa recalculate.
+- **Akar Masalah:**
+  1. `scripts/sync-export-data.ts:3718` dan rute edit admin di `reservation-dispatch.route.ts` sebelumnya memutasi reservasi tanpa memanggil fungsi kanonis `recalculateCustomerLtv`.
+  2. Fungsi `recalculateCustomerLtv` sebelumnya secara keliru menyerap reservasi berstatus `hold` tanpa harga dan mengatrol nilainya dengan harga default katalog, mendistorsi nilai customer yang baru ditawari slot sementara.
+- **Solusi Fondasional (Fase 7.2):**
+  1. **Single-Writer Mandate:** Menetapkan `customerService.recalculateCustomerLtv` sebagai satu-satunya penulis kolom `ltv_cache`. Dilarang keras melakukan penulisan mandiri kolom `ltv_cache` di file lain (dikunci oleh static code guard di `tests/unit/ltv-cache-integrity.test.ts`).
+  2. **Harmonisasi Status Hold & Ground Truth:** Memperbaiki kalkulasi LTV agar mengabaikan slot sementara (`status === 'hold'` tanpa harga resmi), sehingga nilai LTV di memory/cache 100% identik dengan `COALESCE(SUM(purchase_value), 0)` di database.
+  3. **Hook Mutasi Lengkap:** Menghubungkan `recalculateCustomerLtv` ke seluruh jalur mutasi (create, edit nominal, ganti status confirmed/completed/cancelled, deteksi pembayaran CAPI, dan skrip impor).
+  4. **Daily Invariant & Self-Healing Auto-Repair:** Invariant harian `LTV_CACHE_DRIFT` kini aktif di `daily-invariant-monitor.service.ts` membandingkan cache vs SUM; jika ditemukan selisih, sistem otomatis memperbaikinya (*auto-repair*) dan mencatat aksi `AUTO_REPAIR_LTV_DRIFT` ke `audit_logs`.
+  5. **Backfill 21 Kasus:** Telah dieksekusi pemulihan data untuk ke-21 customer berselisih di database, menghasilkan **0 selisih (100% sinkron)** di seluruh database pelanggan.
+- **Bukti:** `tests/unit/ltv-cache-integrity.test.ts` (4/4 lulus) + verifikasi query audit drift menghasilkan 0 baris.
+
+## 294. [Reservasi] Tabel reservation_items Kosong pada Sebagian Reservasi Historis (2026-10-31, OPEN - LOW)
+
+- **Status:** OPEN (Handled Gracefully)
+- **Gejala:** Pada sebagian reservasi lama (termasuk hasil sinkronisasi import lama), relasi tabel `reservation_items` memiliki 0 baris; rincian paket hanya tersimpan di kolom teks `treatment_detail` dan `raw_text` pada tabel `reservations`.
+- **Dampak:** Tidak ada dampaknya terhadap booking aktif atau kalender, namun query yang mengandalkan join ke `reservation_items` tidak akan menemukan baris layanan pecahan.
+- **Mitigasi:** `reservationArchiveService.buildSnapshot` dan UI dashboard membaca `items: []` secara defensif dengan fallback langsung ke `treatment_detail` dan `raw_text`.
+
+## 293. [Backup & Restore] Risiko Kehilangan Data Akibat File Backup Incomplete (2026-10-31, RESOLVED)
+
+- **Status:** **RESOLVED** (Completeness Guard Terpasang)
+- **Gejala:** File backup historis 30 Agustus 2026 (`wa_clinic_backup_20260830_191007.sql.gz`) hanya memuat 290 reservasi, padahal backup 28 Agustus memuat 458 reservasi (penurunan 36,7%). Jika di-restore tanpa pengaman, reservasi modern berisiko terhapus/hilang massal.
+- **Akar Masalah:** Tidak adanya gerbang validasi integritas/kelengkapan baris sebelum operasi restore database dieksekusi.
+- **Solusi Fondasional (Fase 6):**
+  1. `backupService.restoreDatabaseFromDump` kini menerapkan gerbang **Completeness Guard**: jika jumlah reservasi atau pasien turun > 20% dibandingkan data aktif di database atau backup berstempel waktu sebelumnya, restore otomatis ditolak (`INCOMPLETE`) dan dicatat ke `audit_logs`.
+  2. Restore hanya dapat dilanjutkan jika operator menyertakan flag eksplisit `force: true`.
+  3. Tabel `reservation_archives` telah otomatis disertakan dalam alur ekspor dump programatik dan pemulihan upsert.
+- **Bukti:** `tests/unit/backup.test.ts` menguji penolakan backup 30 Agustus secara otomatis dan verifikasi opsi `force: true`.
+
+## 292. [Reservasi & Audit] 6-7 Hard Delete Historis Tanpa Payload Snapshot & Transisi ke Soft-Archive (2026-10-31, RESOLVED)
+
+- **Status:** **RESOLVED** (Sistem Arsip & Guard Terpasang)
+- **Gejala:** Audit log tanggal 18 September 2026 mencatat 6 penghapusan `DELETE_RESERVATION_PERMANENT` beruntun dalam 27 detik (indikasi pembersihan data dummy/test) dengan payload hanya `{"hard":true}` tanpa mencatat identitas pasien, paket, tanggal, maupun nominal (reservasi Bunda Riskaamana sendiri terbukti 100% utuh di DB dengan 2 reservasi Rp 70.000).
+- **Akar Masalah:** Endpoint admin `DELETE /api/admin/reservation/:id` sebelumnya mengeksekusi `prisma.reservation.delete()` fisik secara permanen tanpa menyimpan snapshot data ke tabel cadangan. Selain itu, skrip pembersihan dev di folder `scripts/` tidak memiliki gerbang proteksi host/environment.
+- **Solusi Fondasional (Fase 1-5):**
+  1. **Destructive Scripts Guard:** Seluruh skrip pembersihan di folder `scripts/` diwajibkan melewati `scripts/lib/destructive-guard.ts` (menolak jalan di environment produksi / non-localhost, mewajibkan flag `--confirm`, default dry-run).
+  2. **Tabel `reservation_archives`:** Model Prisma baru tanpa foreign key cascade, menyimpan snapshot JSONB lengkap (`schemaVersion: 1`, customer, items, follow-ups, anak), dengan retensi 60 hari (`restore_until`).
+  3. **Single-Seam Archive Service:** Seluruh penghapusan dialihkan ke `reservationArchiveService.archiveReservation`. Endpoint `DELETE /api/admin/reservation/:id` kini bersemantik arsip. Tidak ada lagi `prisma.reservation.delete` liar di seluruh codebase `src/`.
+  4. **Restore 1-Klik & UI Feedback:** Tab "🗄️ Arsip (60 Hari)" di `Reservations.tsx` dengan tombol "Pulihkan" per baris dan badge sisa hari. Copy dialog konfirmasi hapus permanen diperbarui menjadi pemberitahuan arsip 60 hari.
+  5. **Purge Cron & Invariant:** Pembersihan otomatis arsip kedaluwarsa berjalan via cron harian di background worker eksisting, diawasi oleh `daily-invariant-monitor.service.ts` (`UNPURGED_EXPIRED_ARCHIVES`).
+- **Bukti:** `tests/integration/reservation-archive.test.ts` (8/8 lulus) & `tests/unit/destructive-guard.test.ts` (7/7 lulus).
+
+## 291. [Database & Schema] Drift Skema Tabel Children (first_reservation_id) (2026-10-31, OPEN - LOW)
+
+- **Status:** OPEN (Workaround in place)
+- **Gejala:** Skema `prisma/schema.prisma` mencatat kolom `first_reservation_id` pada model `Child`, namun kolom fisik tersebut belum ada di tabel PostgreSQL.
+- **Dampak:** Perintah `npx prisma migrate dev` dapat meminta reset skema database.
+- **Mitigasi Wajib:** Sesuai panduan di AGENTS.md, seluruh migrasi di produksi dan lokal WAJIB menggunakan perintah `npx prisma migrate deploy` atau SQL terisolasi, bukan `prisma migrate dev`. Tabel `children` dilarang keras di-drop.
+
 ## 289. [Design System V2] Sisa Setelah Migrasi Semantik Paritas Dark Mode (2026-10-29, CLOSED)
 
 - **Status:** **CLOSED** — seluruh temuan pada entri ini diselesaikan pada Fase 2 & Fase 3 (lihat CHANGELOG 2026-10-29). Utang lanjutan dipindahkan ke #290.
