@@ -654,7 +654,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                       // Integritas spasial: parsed.address = alamat jalan lengkap,
                       // DILARANG disalin ke kolom kelurahan (hanya entitas desa
                       // resmi hasil geocoding). Alamat jalan hidup di preferences.address.
-                      kelurahan: undefined,
+                      kelurahan: parsed.kelurahan || undefined,
                       address: parsed.address || undefined,
                       source: 'ADMIN_OUTBOUND_AUTO_CAPTURE',
                     });

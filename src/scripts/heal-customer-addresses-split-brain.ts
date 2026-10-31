@@ -69,6 +69,61 @@ interface Action {
   apply: () => Promise<void>;
 }
 
+export function clusterAddressesWithPass4(siblings: any[]): any[][] {
+  const clusters: any[][] = [];
+  const visited = new Set<string>();
+
+  for (const r of siblings) {
+    if (visited.has(r.id)) continue;
+    const cluster = [r];
+    visited.add(r.id);
+    for (const other of siblings) {
+      if (visited.has(other.id)) continue;
+      if (addressesMatch(r, other)) {
+        cluster.push(other);
+        visited.add(other.id);
+      }
+    }
+    if (cluster.length > 1) {
+      clusters.push(cluster);
+    }
+  }
+
+  // --- Pass 4: Kartu tanpa identitas (address kosong + kelurahan null + koordinat null) ---
+  // Bila masih ada kartu hantu tanpa identitas yang belum masuk klaster, gabungkan ke
+  // kartu saudara ber-identitas di kota yang sama (anti kartu yatim/kosong).
+  const unvisitedGhosts = siblings.filter(
+    (r) => !visited.has(r.id) && !hasText(r.address) && !hasText(r.kelurahan) && !hasCoords(r)
+  );
+  if (unvisitedGhosts.length > 0) {
+    const identifiedCandidates = siblings.filter(
+      (r) => hasText(r.address) || hasCoords(r)
+    );
+    if (identifiedCandidates.length > 0) {
+      identifiedCandidates.sort(
+        (x, y) => scoreAddressWinner(y) - scoreAddressWinner(x) || (String(y.last_used_at || '') > String(x.last_used_at || '') ? 1 : -1)
+      );
+      const bestIdentified = identifiedCandidates[0];
+      const existingCluster = clusters.find((c) => c.some((r) => r.id === bestIdentified.id));
+      for (const g of unvisitedGhosts) {
+        const gKota = String(g.kota || '').toLowerCase().replace(/^(kota|kabupaten|kab)\s+/i, '').trim();
+        const bKota = String(bestIdentified.kota || '').toLowerCase().replace(/^(kota|kabupaten|kab)\s+/i, '').trim();
+        const kotaOk = !gKota || !bKota || gKota === bKota;
+        if (kotaOk) {
+          visited.add(g.id);
+          if (existingCluster) {
+            existingCluster.push(g);
+          } else {
+            clusters.push([bestIdentified, g]);
+          }
+        }
+      }
+    }
+  }
+
+  return clusters;
+}
+
 async function main(): Promise<void> {
   console.log(`[HEAL SPLIT-BRAIN] mode=${isDryRun ? 'DRY-RUN (read-only)' : 'COMMIT'} tenant=${tenantFilter || '(semua)'} customer=${customerFilter || '(semua)'} limit=${limit}`);
   if (isCommit) {
@@ -425,11 +480,16 @@ async function main(): Promise<void> {
   console.log(`[HEAL SPLIT-BRAIN] Selesai: dipindai=${scanned} aksi=${actions.length} ditulis=${applied} rincian=${JSON.stringify(counts)}${isDryRun ? ' (DRY-RUN: 0 tulis)' : ''}`);
 }
 
-main()
-  .catch((e) => {
-    console.error('[HEAL SPLIT-BRAIN ERROR]', e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+const isMainScript = typeof process !== 'undefined' && process.argv[1] &&
+  (process.argv[1].includes('heal-customer-addresses-split-brain') && !process.argv[1].includes('.test.'));
+
+if (isMainScript) {
+  main()
+    .catch((e) => {
+      console.error('[HEAL SPLIT-BRAIN ERROR]', e);
+      process.exit(1);
+    })
+    .finally(async () => {
+      await prisma.$disconnect().catch(() => {});
+    });
+}

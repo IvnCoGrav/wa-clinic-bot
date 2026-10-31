@@ -371,12 +371,10 @@ export function parseReservationText(rawText: string): ParseResult {
         setOrPending(value, 'date', (v) => (dateStr = v));
       } else if (label === 'jam' || label === 'pukul' || label === 'waktu' || label.includes('jam ') || label.includes('waktu ')) {
         setOrPending(value, 'time', (v) => (timeStr = v));
-      } else if (label.includes('kel') || label.includes('desa') || label.includes('kelurahan')) {
-        setOrPending(value, 'kelurahan', (v) => (kelurahan = v));
-      } else if (label === 'kec' || label.includes('kecamatan')) {
+      } else if ((label.includes('kec') && label.includes('kel')) || label === 'kec' || label.includes('kecamatan')) {
         setOrPending(value, 'kec', (v) => {
-          if (v && /[,\/;]/.test(v)) {
-                        const split = splitWilayahComposite(v);
+          if (v && /[,/;]/.test(v)) {
+            const split = splitWilayahComposite(v);
             if (split.kecamatan) kec = split.kecamatan;
             if (!kelurahan && split.kelurahan) kelurahan = split.kelurahan;
             if (!kota && split.kota) kota = split.kota;
@@ -384,6 +382,8 @@ export function parseReservationText(rawText: string): ParseResult {
             kec = v;
           }
         });
+      } else if (label.includes('kel') || label.includes('desa') || label.includes('kelurahan')) {
+        setOrPending(value, 'kelurahan', (v) => (kelurahan = v));
       } else if (label === 'kota' || label.includes('kabupaten') || label.includes('kab')) {
         setOrPending(value, 'kota', (v) => (kota = v));
       } else if (label.includes('kec') && label.includes('kota')) {

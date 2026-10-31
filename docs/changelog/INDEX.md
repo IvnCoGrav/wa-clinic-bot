@@ -5,8 +5,9 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 632
+Total entri terindeks: 633
 
+- 2026-10-31 | Fix: Penuntasan Fondasional Split-Brain Alamat Customer, Dual-Write Kelurahan/Kecamatan, d
 - 2026-10-30 | Feat: Catatan Sel (Cell Note) Otomatis di Kolom Total Rekapan Spreadsheet saat Nominal Tra
 - 2026-10-30 | Feat: Hyperlink Bukti Pembayaran Otomatis di Kolom Metode Bayar Google Spreadsheet
 - 2026-10-30 | Refactor & Polish: Header Sticky 1 Baris Bersih & Eliminasi Kontrol Zoom pada Kalender Har

@@ -382,7 +382,7 @@ export class ConversationStateMachine {
             // Integritas spasial: parsed.address = alamat jalan/perumahan lengkap
             // (bukan entitas desa resmi). Kelurahan hanya diisi hasil geocoding/
             // gazetteer; alamat jalan hidup di preferences.address.
-            kelurahan: undefined,
+            kelurahan: parsed.kelurahan || undefined,
             address: parsed.address || undefined,
             source: 'BOT',
             status: intake.status,

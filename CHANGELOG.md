@@ -4,6 +4,35 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-10-31 - Fix: Penuntasan Fondasional Split-Brain Alamat Customer, Dual-Write Kelurahan/Kecamatan, dan Cluster Healing Pass 4
+
+- **Latar Belakang & Akar Masalah**:
+  - Pada kasus reservasi customer Bunda Haniyyah (`6287788800765`), terjadi duplikasi kartu alamat (split-brain) di buku alamat customer (`customer_addresses`). Satu kartu kosong tanpa jalan terbuat saat parsing form teks awal (`Kec : pacar Keling, Tambaksari`), dan kartu kedua terbuat saat customer mengirimkan shareloc GPS.
+  - Investigasi akar masalah menemukan 4 kelemahan sistemik:
+    1. Input teks kecamatan majemuk (`pacar Keling, Tambaksari`) ditelan mentah tanpa dekomposisi hierarki kelurahan/kecamatan.
+    2. Celah dual-write pada seam update lokasi (`CustomerService.updateCustomerLocation`): kolom `customers.kelurahan` diperbarui menggunakan hasil pemisahan komposit, namun penulisan entri buku alamat (`customer_addresses`) dan memori fallback masih menggunakan nilai mentah `data.kelurahan` (menghasilkan inkonsistensi data).
+    3. Parser reservasi WhatsApp membuang nilai `kelurahan` hasil ekstraksi form teks karena pemanggil di `machine.ts` dan `webhook.route.ts` masih mengoper `kelurahan: undefined`.
+    4. Pencocokan alamat lama (`addressesMatch`) mensyaratkan token kecamatan yang kaku, sehingga kartu kosong historis dengan kecamatan majemuk gagal di-merge saat pin GPS masuk.
+- **Perubahan Fondasional & Arsitektur**:
+  - **Dekomposisi Wilayah Komposit & Token Matching (`splitWilayahComposite` & `wilayahTokenMatch`)**: Menambahkan fungsi pemecah wilayah komposit cerdas yang memilah kelurahan dan kecamatan resmi, serta pencocokan token simetris berbasis delimiter koma/garis-miring pada domain `customer-address.ts` dan cermin frontend `addressMatch.ts`.
+  - **Integritas Dual-Write Seam Lokasi (`CustomerService`)**:
+    - Mengeliminasi dynamic `require` rapuh dalam try-catch, digantikan top-level import `splitWilayahComposite`.
+    - Menjamin nilai bersih `safeKelurahan`, `safeKecamatan`, dan `safeKota` tertulis konsisten baik ke tabel `Customer`, `CustomerAddress` (`writeLoc`), `location_history`, maupun fallback in-memory test runner.
+    - Menjaga sinkronisasi field legacy `preferences.full_address` berdampingan dengan `preferences.address`.
+  - **Penerusan Parameter Parser (`reservation-text-parser.ts`, `machine.ts`, `webhook.route.ts`)**:
+    - Memperbaiki urutan pemeriksaan label komposit (label `kec` diproses sebelum pencocokan longgar `kel`).
+    - Meneruskan `parsed.kelurahan || undefined` pada state-machine dan webhook intake form WhatsApp.
+  - **Healing Alamat Pass 4 (`heal-customer-addresses-split-brain.ts`)**:
+    - Menambahkan Pass 4 untuk mendeteksi dan menggabungkan kartu hantu (kartu tanpa jalan/GPS namun cocok secara wilayah) ke kartu GPS valid.
+    - Mengekstrak fungsi klaster murni `clusterAddressesWithPass4` dengan pengujian unit komprehensif.
+  - **Sinkronisasi Landing Route & Docker Worker**:
+    - Menyelaraskan perbaikan sanitasi tracking prefix di `src/routes/landing.route.ts` ke git master.
+    - Menghapus stale `stash@{0}` dan memastikan keselarasan kontainer worker dengan image terbaru.
+- **Hasil Terukur & Verifikasi**:
+  - `npm run build` exit 0 (TypeScript kompilasi 100% bersih).
+  - 38/38 unit tests hijau di 4 suite pengujian alamat: `wilayah-composite-split.test.ts` (10 tests), `heal-address-pass4.test.ts` (4 tests), `customer-saved-addresses-enrichment.test.ts` (7 tests), `dashboard-address-match-parity.test.ts` (17 tests).
+  - Data Bunda Haniyyah di database produksi diverifikasi rapi dan tepat memiliki 1 kartu alamat primer terintegrasi.
+
 #### 2026-10-30 - Feat: Catatan Sel (Cell Note) Otomatis di Kolom Total Rekapan Spreadsheet saat Nominal Transfer Mismatch
 
 - **Latar Belakang & Akar Masalah**:

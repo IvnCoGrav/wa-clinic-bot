@@ -153,4 +153,58 @@ Treatment : baby pijat pulih ceria`;
     expect(list).toHaveLength(2);
     expect(list.find((a) => a.id === 'house-1')?.isPrimary).toBe(true);
   });
+
+  it('9. parseReservationText menangani label gabungan "Kel / Kec" atau "Kec/Kel" secara aman', () => {
+    const raw = `Berikut reservasi:
+Nama Bunda: Siti
+Alamat: Jl. Melati 10
+Kel / Kec: Pacar Keling, Tambaksari
+Kota: Surabaya
+Treatment: baby massage`;
+
+    const res = parseReservationText(raw);
+    expect(res.success).toBe(true);
+    expect(res.reservation?.kec).toBe('Tambaksari');
+    expect(res.reservation?.kelurahan).toBe('Pacar Keling');
+  });
+
+  it('10. customerService.updateCustomerLocation dual-write: safeKelurahan masuk ke customers DAN syncSavedAddressFromLocation, serta preferences.full_address terisi', async () => {
+    const { customerService } = await import('../../src/services/customer.service');
+    const tenantId = 'default-tenant';
+
+    // Seed mock customer in memory
+    const existing = await customerService.getOrCreateCustomer('628111222333', 'Bunda Test', tenantId);
+    const custId = existing.id;
+
+    let savedLocCapture: any = null;
+    const spySync = (customerService as any).syncSavedAddressFromLocation;
+    (customerService as any).syncSavedAddressFromLocation = async (cust: any, tId: string, writeLoc: any) => {
+      savedLocCapture = writeLoc;
+      return spySync.call(customerService, cust, tId, writeLoc);
+    };
+
+    try {
+      const updated = await customerService.updateCustomerLocation(custId, {
+        address: 'Jl. Test No. 123',
+        kecamatan: 'pacar Keling, Tambaksari',
+      }, tenantId);
+
+      // 1. customers.kelurahan harus berisi hasil split
+      expect(updated.kelurahan).toBe('pacar Keling');
+      expect(updated.kecamatan).toBe('Tambaksari');
+
+      // 2. preferences.address & full_address keduanya harus terisi
+      const prefs = (updated.preferences as any) || {};
+      expect(prefs.address).toBe('Jl. Test No. 123');
+      expect(prefs.full_address).toBe('Jl. Test No. 123');
+
+      // 3. writeLoc (buku alamat) harus memakai safeKelurahan, BUKAN undefined/null
+      expect(savedLocCapture).not.toBeNull();
+      expect(savedLocCapture.kelurahan).toBe('pacar Keling');
+      expect(savedLocCapture.kecamatan).toBe('Tambaksari');
+      expect(savedLocCapture.address).toBe('Jl. Test No. 123');
+    } finally {
+      (customerService as any).syncSavedAddressFromLocation = spySync;
+    }
+  });
 });

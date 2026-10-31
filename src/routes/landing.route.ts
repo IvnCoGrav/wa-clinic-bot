@@ -419,6 +419,7 @@ export async function landingRoutes(fastify: FastifyInstance) {
       } else if (finalMsg.includes('%ID%')) {
         finalMsg = finalMsg.replace(/%ID%/g, `[${trackingCode}]`);
       } else if (!finalMsg.includes(`[${trackingCode}]`)) {
+        finalMsg = finalMsg.replace(/^(?:Promo\s*)?\[\s*[\w\s-]{2,32}?\s*\]\s*/i, '').trim();
         finalMsg = `Promo[${trackingCode}]\n\n${finalMsg}`.trim();
       }
     }

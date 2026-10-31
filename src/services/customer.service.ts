@@ -6,6 +6,7 @@ import { hasBypassLabel } from '../utils/customer-bypass';
 import { responseCacheService } from './response-cache.service';
 import { pickGpsTier, GpsCandidate } from './location-ingest.service';
 import { sanitizeKelurahanInput } from '../utils/kelurahan-guard';
+import { splitWilayahComposite } from '../utils/wilayah-normalizer';
 import { sanitizeCustomerNameForStorage, isValidChildName, isGenericCustomerName } from '../utils/name-sanitizer';
 import { toTitleCasePreservingPrefix, normalizeHonorificPrefix } from '../utils/customer-name-healing';
 import {
@@ -314,21 +315,18 @@ export class CustomerService {
       : undefined;
     let safeKecamatan = data.kecamatan?.trim() || undefined;
 
-    // Normalisasi wilayah koma/composite (misal "pacar Keling, Tambaksari")
-    if (safeKecamatan && /[,\/;]/.test(safeKecamatan)) {
-      try {
-        const { splitWilayahComposite } = require('../utils/wilayah-normalizer');
-        const split = splitWilayahComposite(safeKecamatan);
-        if (split.kecamatan) {
-          safeKecamatan = split.kecamatan;
-          if (!safeKelurahan && split.kelurahan) {
-            safeKelurahan = split.kelurahan;
-          }
-          if (!data.kota && split.kota) {
-            data.kota = split.kota;
-          }
+        // Normalisasi wilayah koma/composite (misal "pacar Keling, Tambaksari")
+    if (safeKecamatan && /[,/;]/.test(safeKecamatan)) {
+      const split = splitWilayahComposite(safeKecamatan);
+      if (split.kecamatan) {
+        safeKecamatan = split.kecamatan;
+        if (!safeKelurahan && split.kelurahan) {
+          safeKelurahan = split.kelurahan;
         }
-      } catch {}
+        if (!data.kota && split.kota) {
+          data.kota = split.kota;
+        }
+      }
     }
     try {
       const existing = await prisma.customer.findFirst({
@@ -421,10 +419,11 @@ export class CustomerService {
       try {
         const prevPrefs = (existing.preferences as any) || {};
         const hist: any[] = Array.isArray(prevPrefs.location_history) ? prevPrefs.location_history : [];
+        const safeKota = data.kota ?? existing.kota;
         const entry = {
-          kelurahan: data.kelurahan ?? existing.kelurahan,
+          kelurahan: safeKelurahan ?? existing.kelurahan,
           kecamatan: safeKecamatan ?? existing.kecamatan,
-          kota: data.kota ?? existing.kota,
+          kota: safeKota,
           lat: effectiveLat,
           lng: effectiveLng,
           distance_km: effectiveDistance,
@@ -432,12 +431,13 @@ export class CustomerService {
           source: effectiveSource || existing.location_source || null,
           timestamp: new Date().toISOString(),
         };
+        const rawAddr = (data as any)?.address?.trim();
         await prisma.customer.update({
           where: { id: customerId },
           data: {
             preferences: {
               ...prevPrefs,
-              ...((data as any)?.address ? { address: (data as any).address } : {}),
+              ...(rawAddr ? { address: rawAddr, full_address: rawAddr } : {}),
               location_history: [...hist.slice(-9), entry],
               location_updated_at: new Date().toISOString(),
             } as any,
@@ -469,13 +469,14 @@ export class CustomerService {
       // preserve pin (teks area rumah-2), catat area BARU sebagai estimated_area
       // tanpa menyentuh pin root (anti data hibrida).
       try {
-        const prevAddress = (data as any)?.address || (existing.preferences as any)?.address || '';
+        const safeKota = data.kota ?? existing.kota;
+        const prevAddress = (data as any)?.address?.trim() || (existing.preferences as any)?.address || '';
         const writeLoc = savedEntry
           ? {
               address: prevAddress,
-              kelurahan: data.kelurahan ?? existing.kelurahan,
+              kelurahan: safeKelurahan ?? existing.kelurahan,
               kecamatan: safeKecamatan ?? existing.kecamatan,
-              kota: data.kota ?? existing.kota,
+              kota: safeKota,
               lat: effectiveLat,
               lng: effectiveLng,
               distanceKm: effectiveDistance,
@@ -485,9 +486,9 @@ export class CustomerService {
             }
           : preserveExactGps
             ? {
-                kelurahan: data.kelurahan ?? existing.kelurahan,
+                kelurahan: safeKelurahan ?? existing.kelurahan,
                 kecamatan: safeKecamatan ?? existing.kecamatan,
-                kota: data.kota ?? existing.kota,
+                kota: safeKota,
                 lat: data.lat ?? null,
                 lng: data.lng ?? null,
                 distanceKm: data.distanceKm ?? null,
@@ -496,9 +497,9 @@ export class CustomerService {
               }
             : {
                 address: prevAddress,
-                kelurahan: data.kelurahan ?? existing.kelurahan,
+                kelurahan: safeKelurahan ?? existing.kelurahan,
                 kecamatan: safeKecamatan ?? existing.kecamatan,
-                kota: data.kota ?? existing.kota,
+                kota: safeKota,
                 lat: effectiveLat,
                 lng: effectiveLng,
                 distanceKm: effectiveDistance,
@@ -507,7 +508,7 @@ export class CustomerService {
                 isPrimary: true,
               };
         const hasLoc = Boolean(
-          safeKelurahan || safeKecamatan || data.kota || data.lat !== undefined || data.lng !== undefined || savedEntry
+          safeKelurahan || safeKecamatan || safeKota || data.lat !== undefined || data.lng !== undefined || savedEntry
         );
         if (hasLoc) await this.syncSavedAddressFromLocation(existing, tenantId, writeLoc as any);
       } catch (syncErr) {
@@ -560,11 +561,15 @@ export class CustomerService {
           const currentPrefs = (cust.preferences as any) || {};
           if ((d as any)?.address) {
             currentPrefs.address = (d as any).address;
+            currentPrefs.full_address = (d as any).address;
           }
+          const memSafeKel = savedEntry?.kelurahan ?? safeKelurahan ?? cust.kelurahan;
+          const memSafeKec = savedEntry?.kecamatan ?? safeKecamatan ?? cust.kecamatan;
+          const memSafeKota = savedEntry?.kota ?? d.kota ?? cust.kota;
           Object.assign(cust, {
-            kelurahan: safeKelurahan ?? cust.kelurahan,
-            kecamatan: d.kecamatan ?? cust.kecamatan,
-            kota: d.kota ?? cust.kota,
+            kelurahan: memSafeKel,
+            kecamatan: memSafeKec,
+            kota: memSafeKota,
             lat: effLat,
             lng: effLng,
             distance_km: effDist,
@@ -582,9 +587,9 @@ export class CustomerService {
             const writeLoc = savedEntry
               ? {
                   address: prevAddress,
-                  kelurahan: d.kelurahan ?? cust.kelurahan,
-                  kecamatan: d.kecamatan ?? cust.kecamatan,
-                  kota: d.kota ?? cust.kota,
+                  kelurahan: memSafeKel,
+                  kecamatan: memSafeKec,
+                  kota: memSafeKota,
                   lat: effLat,
                   lng: effLng,
                   distanceKm: effDist,
@@ -594,9 +599,9 @@ export class CustomerService {
                 }
               : preserveGps
                 ? {
-                    kelurahan: d.kelurahan ?? cust.kelurahan,
-                    kecamatan: d.kecamatan ?? cust.kecamatan,
-                    kota: d.kota ?? cust.kota,
+                    kelurahan: memSafeKel,
+                    kecamatan: memSafeKec,
+                    kota: memSafeKota,
                     lat: d.lat ?? null,
                     lng: d.lng ?? null,
                     distanceKm: d.distanceKm ?? null,
@@ -605,9 +610,9 @@ export class CustomerService {
                   }
                 : {
                     address: prevAddress,
-                    kelurahan: d.kelurahan ?? cust.kelurahan,
-                    kecamatan: d.kecamatan ?? cust.kecamatan,
-                    kota: d.kota ?? cust.kota,
+                    kelurahan: memSafeKel,
+                    kecamatan: memSafeKec,
+                    kota: memSafeKota,
                     lat: effLat,
                     lng: effLng,
                     distanceKm: effDist,
@@ -616,7 +621,7 @@ export class CustomerService {
                     isPrimary: true,
                   };
             const hasLoc = Boolean(
-              d.kelurahan || d.kecamatan || d.kota || d.lat !== undefined || d.lng !== undefined || savedEntry
+              memSafeKel || memSafeKec || memSafeKota || d.lat !== undefined || d.lng !== undefined || savedEntry
             );
             if (hasLoc) await this.syncSavedAddressFromLocation(cust, tenantId, writeLoc as any);
           } catch (syncErr) {
