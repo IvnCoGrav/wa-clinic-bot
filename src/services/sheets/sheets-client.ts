@@ -181,15 +181,37 @@ export class GoogleSheetsGateway implements SheetsGateway {
   public async appendRow(params: AppendRowParams): Promise<AppendRowResult> {
     const { tenantId, spreadsheetId, tabName, row } = params;
     const sheets = await this.getSheets(tenantId);
-    const res = await sheets.spreadsheets.values.append({
+
+    // 1. Pindai kolom A (Tanggal) untuk menemukan baris kosong pertama nyata (mulai baris 2).
+    // Ini kebal terhadap sisa metadata formatting/border pada sheet hasil duplikasi template
+    // yang sering menipu algoritma bawaan spreadsheets.values.append sehingga melompat ke baris 97+.
+    const colRes = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `${tabName}!A1`,
+      range: `${tabName}!A:A`,
+      valueRenderOption: 'FORMATTED_VALUE',
+    });
+    const colA: any[][] = colRes?.data?.values || [];
+
+    let targetRow = 2;
+    while (targetRow <= colA.length) {
+      const cellVal = colA[targetRow - 1]?.[0];
+      if (cellVal == null || String(cellVal).trim() === '') {
+        break;
+      }
+      targetRow++;
+    }
+
+    // 2. Tulis data langsung ke baris target menggunakan values.update
+    const endCol = columnLetter(row.length);
+    const range = `${tabName}!A${targetRow}:${endCol}${targetRow}`;
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range,
       valueInputOption: 'USER_ENTERED',
-      insertDataOption: 'INSERT_ROWS',
       requestBody: { values: [row] },
     });
-    const updatedRange: string | undefined = res?.data?.updates?.updatedRange;
-    return { rowIndex: parseRowIndexFromRange(updatedRange) };
+
+    return { rowIndex: targetRow };
   }
 
   public async updateCells(params: UpdateCellsParams): Promise<void> {

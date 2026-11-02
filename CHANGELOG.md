@@ -4,6 +4,21 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-01 - Fix: Koreksi Baris Awal Tab Bulan Baru Google Sheets dan Eliminasi Gap Baris Kosong
+
+- **Latar Belakang & Akar Masalah**:
+  - Pada pembukaan bulan November 2026 di Google Spreadsheet tab `Nov`, data pasien pertama (Hidayatus Sholikhah) dan kedua (Bunda Ananda) terinput melompat ke baris 97 dan 98, meninggalkan baris 2 s/d 96 kosong melompong (gap 95 baris kosong di bawah header).
+  - Investigasi akar masalah menemukan bahwa metode `appendRow` sebelumnya mengandalkan API bawaan Google Sheets `spreadsheets.values.append` dengan `insertDataOption: 'INSERT_ROWS'`. Karena tab `Nov` diduplikasi dari tab `okt` yang memiliki riwayat 96 baris terformat, API Google Sheets mendeteksi baris 1 s/d 96 sebagai bounding box "tabel yang sudah ada" (karena adanya sisa formatting/border sel), sehingga menempelkan baris baru setelah baris 96 yaitu di baris 97.
+- **Perubahan Fondasional & Arsitektur**:
+  - **Relokasi Data Tab `Nov`**: Data baris 97 (Hidayatus Sholikhah) dipindahkan ke baris 2, dan data baris 98 (Bunda Ananda) dipindahkan ke baris 3 lengkap dengan rumus hyperlink bukti bayar dan nilai numeriknya. Baris 97–98 dibersihkan.
+  - **Sinkronisasi Database**: Mengupdate penunjuk baris di PostgreSQL (`Reservation.sheets_row_index`) untuk kedua reservasi menjadi 2 dan 3, menjaga konsistensi sinkronisasi masa depan.
+  - **Algoritma Penambahan Baris Deterministik (`sheets-client.ts`)**: Mengganti pemanggilan `values.append` dengan pemindaian Kolom A (Tanggal) untuk menemukan baris kosong pertama nyata (mulai dari baris 2). Penulisan data dilakukan langsung ke baris target menggunakan `values.update` (`A${targetRow}:P${targetRow}`). Sistem kini kebal terhadap sisa metadata formatting/border pada sheet hasil duplikasi template, menjamin data pasien selalu mengisi rapat mulai dari baris 2, 3, 4, dst.
+- **Hasil Terukur & Verifikasi**:
+  - `npm run build` exit 0 (TypeScript kompilasi 100% bersih).
+  - Vitest `sheets-rekapan-formatter.test.ts` & `sheets-sync.service.test.ts`: 59 tests passed 100% green.
+  - Verifikasi langsung pada Google Sheets API mengonfirmasi tab `Nov` baris 2 & 3 terisi sempurna, dan baris 95–100 kosong.
+  - File kompilasi terdeploy dan aktif di container live `wa-clinic-bot-app-1` dan `wa-clinic-bot-worker-1`.
+
 #### 2026-10-31 - Fix: Penuntasan Fondasional Split-Brain Alamat Customer, Dual-Write Kelurahan/Kecamatan, dan Cluster Healing Pass 4
 
 - **Latar Belakang & Akar Masalah**:
