@@ -5,9 +5,11 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 642
+Total entri terindeks: 644
 
-- 2026-11-03 | Feat: AI Copilot GLM-5.3-Flash, Budget 5 Menit, SSE Heartbeat & 3 Tool Analitik
+- 2026-11-03 | Fix: Disambiguasi Wilayah Perbatasan Gazetteer & Write Seam Label Guard (Kasus Grand Pakuw
+- 2026-11-03 | Fix: Shareloc Pertama Memperkaya Kartu Tunggal (Anti-Alamat Kedua)
+- 2026-11-03 | Fix: Korektnes AI Copilot (Statistik Terpotong, Enum Follow-up, Pembatalan Nyata)
 - 2026-11-03 | Fix: Fase A — Calendar Rot & Mock Gap (11 Test Residual #301, Tanpa Regresi)
 - 2026-11-03 | Fix: Portabilitas Test RBAC & Gate Audit yang Benar-Benar Bisa Gagal
 - 2026-11-03 | Database: Eksekusi Migrasi Live #298 (reservation_archives) di Server Produksi

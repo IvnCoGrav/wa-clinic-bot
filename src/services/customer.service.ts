@@ -23,6 +23,7 @@ import {
   matchesTombstone,
   removeMatchingTombstones,
   buildAddressKey,
+  selectEnrichmentTarget,
 } from '../domain/customer-address';
 import { ACTIVE_RESERVATION_STATUSES, isActiveReservation } from '../domain/reservation-status';
 import { STAFF_VERIFIED_LOCATION_LABEL, resolveLocationSource } from './staff-reservation.service';
@@ -291,6 +292,8 @@ export class CustomerService {
       zipcode?: string;
       isNativePin?: boolean;
       locationSource?: LocationSource;
+      isEstimatedCentroid?: boolean;
+      labelSource?: 'boundary' | 'centroid' | 'user_stated' | 'manual_staff';
       /**
        * Override eksplisit (tombol "Perbarui Titik Lokasi") untuk customer yang
        * benar-benar pindah rumah. DILARANG di-set true oleh jalur otomatis.
@@ -399,11 +402,39 @@ export class CustomerService {
               ? LocationSource.estimated_area
               : undefined;
 
+      // LABEL OVERWRITE GUARD:
+      // Label hasil estimasi centroid (isEstimatedCentroid: true / labelSource: 'centroid')
+      // DILARANG menimpa kelurahan/kecamatan yang sudah ada bila:
+      // 1. Profil customer sudah memiliki kecamatan yang valid, DAN
+      // 2. Kecamatan yang baru berbeda dengan kecamatan profil lama, DAN
+      // 3. Bukan perpindahan eksplisit (explicitMove === false).
+      let finalKelurahan = safeKelurahan ?? existing.kelurahan;
+      let finalKecamatan = safeKecamatan ?? existing.kecamatan;
+      let labelConflict: any = null;
+
+      const isCentroidEstimate = (data as any)?.isEstimatedCentroid === true || (data as any)?.labelSource === 'centroid';
+      const hasExistingKec = Boolean(existing.kecamatan && existing.kecamatan.trim());
+
+      if (isCentroidEstimate && hasExistingKec && !explicitMove && safeKecamatan) {
+        const normKec = (s?: string | null) => String(s ?? '').trim().toLowerCase();
+        if (normKec(safeKecamatan) !== normKec(existing.kecamatan)) {
+          console.warn(`[LABEL GUARD] Centroid estimate (${safeKecamatan}) rejected against existing customer region (${existing.kecamatan}) for customer ${customerId}`);
+          finalKecamatan = existing.kecamatan;
+          finalKelurahan = existing.kelurahan ?? safeKelurahan ?? null;
+          labelConflict = {
+            existingKecamatan: existing.kecamatan,
+            rejectedCentroidKecamatan: safeKecamatan,
+            rejectedCentroidKelurahan: safeKelurahan,
+            detectedAt: new Date().toISOString(),
+          };
+        }
+      }
+
       const updated = await prisma.customer.update({
         where: { id: customerId },
         data: {
-          kelurahan: safeKelurahan ?? existing.kelurahan,
-          kecamatan: safeKecamatan ?? existing.kecamatan,
+          kelurahan: finalKelurahan,
+          kecamatan: finalKecamatan,
           kota: data.kota ?? existing.kota,
           lat: effectiveLat,
           lng: effectiveLng,
@@ -438,6 +469,7 @@ export class CustomerService {
             preferences: {
               ...prevPrefs,
               ...(rawAddr ? { address: rawAddr, full_address: rawAddr } : {}),
+              ...(labelConflict ? { address_label_conflict: labelConflict } : {}),
               location_history: [...hist.slice(-9), entry],
               location_updated_at: new Date().toISOString(),
             } as any,
@@ -470,7 +502,12 @@ export class CustomerService {
       // tanpa menyentuh pin root (anti data hibrida).
       try {
         const safeKota = data.kota ?? existing.kota;
-        const prevAddress = (data as any)?.address?.trim() || (existing.preferences as any)?.address || '';
+        const existingCards = parseSavedAddresses(existing.preferences);
+        const singleCard = existingCards.length === 1 ? existingCards[0] : null;
+        const prevAddress = (data as any)?.address?.trim()
+          || singleCard?.address
+          || (existing.preferences as any)?.address
+          || '';
         const writeLoc = savedEntry
           ? {
               address: prevAddress,
@@ -563,9 +600,25 @@ export class CustomerService {
             currentPrefs.address = (d as any).address;
             currentPrefs.full_address = (d as any).address;
           }
-          const memSafeKel = savedEntry?.kelurahan ?? safeKelurahan ?? cust.kelurahan;
-          const memSafeKec = savedEntry?.kecamatan ?? safeKecamatan ?? cust.kecamatan;
+          let memSafeKel = savedEntry?.kelurahan ?? safeKelurahan ?? cust.kelurahan;
+          let memSafeKec = savedEntry?.kecamatan ?? safeKecamatan ?? cust.kecamatan;
           const memSafeKota = savedEntry?.kota ?? d.kota ?? cust.kota;
+
+          const isMemCentroidEstimate = (d as any)?.isEstimatedCentroid === true || (d as any)?.labelSource === 'centroid';
+          const hasMemExistingKec = Boolean(cust.kecamatan && cust.kecamatan.trim());
+          if (isMemCentroidEstimate && hasMemExistingKec && !explicitMove && safeKecamatan) {
+            const normKec = (s?: string | null) => String(s ?? '').trim().toLowerCase();
+            if (normKec(safeKecamatan) !== normKec(cust.kecamatan)) {
+              memSafeKec = cust.kecamatan;
+              memSafeKel = cust.kelurahan || safeKelurahan;
+              currentPrefs.address_label_conflict = {
+                existingKecamatan: cust.kecamatan,
+                rejectedCentroidKecamatan: safeKecamatan,
+                rejectedCentroidKelurahan: safeKelurahan,
+                detectedAt: new Date().toISOString(),
+              };
+            }
+          }
           Object.assign(cust, {
             kelurahan: memSafeKel,
             kecamatan: memSafeKec,
@@ -583,7 +636,9 @@ export class CustomerService {
           if (d.isNativePin) cust.share_location_sent = true;
           // Sinkronkan ke buku alamat (best-effort — jangan gagalkan update lokasi).
           try {
-            const prevAddress = (d as any)?.address || (cust.preferences as any)?.address || '';
+            const existingCards = parseSavedAddresses(cust.preferences);
+            const singleCard = existingCards.length === 1 ? existingCards[0] : null;
+            const prevAddress = (d as any)?.address || singleCard?.address || (cust.preferences as any)?.address || '';
             const writeLoc = savedEntry
               ? {
                   address: prevAddress,
@@ -1754,7 +1809,13 @@ export class CustomerService {
     }
     const list = parseSavedAddresses(customer?.preferences);
     const nowIso = new Date().toISOString();
-    const { list: nextList } = upsertAddressIntoList(list, loc, nowIso);
+    // GERBANG: pin GPS memperkaya kartu lama yang belum ber-GPS presisi, bukan membuat kartu baru.
+    const target = selectEnrichmentTarget(list, loc);
+    const { list: nextList } = upsertAddressIntoList(
+      list,
+      target ? { ...loc, id: target.id } : loc,
+      nowIso
+    );
     await this.persistSavedAddresses(customer, tenantId, nextList, nowIso);
   }
 
@@ -2602,7 +2663,12 @@ export class CustomerService {
       } else {
         try {
           const { geocodingService } = await import('../integrations/google-maps/geocoding');
-          resolvedAdmin = await geocodingService.reverseGeocode(chosen.lat, chosen.lng);
+          const hint = {
+            preferredKelurahan: customer.kelurahan,
+            preferredKecamatan: customer.kecamatan,
+            addressTextHint: (customer.preferences as any)?.address || (customer.preferences as any)?.full_address || '',
+          };
+          resolvedAdmin = await geocodingService.reverseGeocode(chosen.lat, chosen.lng, hint);
         } catch {}
       }
 
@@ -2646,8 +2712,12 @@ export class CustomerService {
                   : chosen.source === 'geocoding' || chosen.source === 'url_text_geocoded'
                     ? LocationSource.estimated_area
                     : (customer.location_source as LocationSource | null) ?? LocationSource.estimated_area,
-            kelurahan: resolvedAdmin.kelurahan || customer.kelurahan,
-            kecamatan: resolvedAdmin.kecamatan || customer.kecamatan,
+            kelurahan: (resolvedAdmin.isEstimatedCentroid && customer.kecamatan && resolvedAdmin.kecamatan && String(resolvedAdmin.kecamatan).trim().toLowerCase() !== String(customer.kecamatan).trim().toLowerCase())
+              ? (customer.kelurahan || resolvedAdmin.kelurahan)
+              : (resolvedAdmin.kelurahan || customer.kelurahan),
+            kecamatan: (resolvedAdmin.isEstimatedCentroid && customer.kecamatan && resolvedAdmin.kecamatan && String(resolvedAdmin.kecamatan).trim().toLowerCase() !== String(customer.kecamatan).trim().toLowerCase())
+              ? customer.kecamatan
+              : (resolvedAdmin.kecamatan || customer.kecamatan),
             kota: resolvedAdmin.kota || customer.kota,
             zipcode: resolvedAdmin.zipcode || customer.zipcode,
             preferences: {

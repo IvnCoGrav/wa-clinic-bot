@@ -482,16 +482,37 @@ export async function resolveCustomerAddressId(params: {
     parseAddressTombstones,
     pruneAddressTombstones,
     matchesTombstone,
+    selectEnrichmentTarget,
   } = await import('../domain/customer-address');
 
   try {
     let list: any[] = await customerService.getSavedAddresses(customerId, tenantId);
     if (!list.length && params.db && typeof params.db.customerAddress?.findMany === 'function') {
       try {
-        list = await params.db.customerAddress.findMany({
+        const rows = await params.db.customerAddress.findMany({
           where: { tenant_id: tenantId, customer_id: customerId },
           orderBy: [{ is_primary: 'desc' }, { last_used_at: 'desc' }],
         });
+        // Normalisasi baris tabel (snake_case) ke kontrak domain (camelCase)
+        // agar isPreciseGps/isPrimary/lastUsedAt terbaca benar. Tanpa ini,
+        // kartu gps_pin dianggap "belum presisi" dan bisa ditimpa.
+        list = (rows || []).map((r: any) => ({
+          id: r.id,
+          label: r.label ?? 'Rumah',
+          address: r.address ?? '',
+          kelurahan: r.kelurahan ?? null,
+          kecamatan: r.kecamatan ?? null,
+          kota: r.kota ?? null,
+          lat: r.lat ?? null,
+          lng: r.lng ?? null,
+          distanceKm: r.distance_km ?? null,
+          ongkir: r.ongkir ?? null,
+          landmark: r.landmark ?? null,
+          locationSource: r.location_source ?? null,
+          isPrimary: Boolean(r.is_primary),
+          createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
+          lastUsedAt: r.last_used_at ? new Date(r.last_used_at).toISOString() : new Date().toISOString(),
+        }));
       } catch {}
     }
     if (!list.length) return null;
@@ -565,6 +586,33 @@ export async function resolveCustomerAddressId(params: {
       const tombstones = pruneAddressTombstones(parseAddressTombstones(customer?.preferences));
       const isTombstoned = tombstones.some((t) => matchesTombstone(t, candidate as any));
       if (!isTombstoned) {
+        // GERBANG: pin/koordinat yang melengkapi kartu lama TIDAK boleh melahirkan rumah baru.
+        const enrichTarget = selectEnrichmentTarget(list as any, candidate as any);
+        if (enrichTarget) {
+          const target: any = enrichTarget;
+          // Pertahankan identitas kartu (label + teks jalan lama). Teks kartu
+          // menang atas kandidat agar shareloc tanpa teks tidak mengosongkan alamat.
+          const enriched = await customerService.upsertSavedAddress(
+            customerId,
+            {
+              id: target.id,
+              label: target.label,
+              address: target.address || (candidate as any).address || '',
+              kelurahan: (candidate as any).kelurahan ?? target.kelurahan ?? null,
+              kecamatan: (candidate as any).kecamatan ?? target.kecamatan ?? null,
+              kota: (candidate as any).kota ?? target.kota ?? null,
+              lat: candidate.lat ?? target.lat ?? null,
+              lng: candidate.lng ?? target.lng ?? null,
+              distanceKm: candidate.distanceKm ?? target.distanceKm ?? null,
+              ongkir: candidate.ongkir ?? target.ongkir ?? null,
+              landmark: target.landmark ?? null,
+              locationSource: candidate.locationSource ?? target.locationSource ?? null,
+            },
+            tenantId
+          );
+          if (enriched) return enriched.id;
+        }
+
         // tidak cocok + bukan tombstone + ada kandidat alamat baru → BUAT Rumah 2 via customerService
         // 4. Teruskan koordinat, jarak, ongkir, dan locationSource
         const upserted = await customerService.upsertSavedAddress(

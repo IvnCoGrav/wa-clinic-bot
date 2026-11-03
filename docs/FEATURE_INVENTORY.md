@@ -32,6 +32,8 @@ Lapisan gateway bertugas mengabstraksi komunikasi dua arah ke WhatsApp melalui d
 | **Driver WAHA (WhatsApp HTTP API)** | `src/integrations/whatsapp/waha.driver.ts` | Menangani integrasi ke container WAHA (`devlikeapro/waha:noweb-2026.7.2`), polling status session, dan pengambilan QR code. |
 | **Driver WABA (Meta Cloud API)** | `src/integrations/whatsapp/waba.driver.ts` | Menangani komunikasi resmi Meta Cloud API Graph v21.0, pengiriman template pre-approved, dan tombol interaktif. |
 | **Webhook Ingestion WAHA** | `POST /webhook` (`src/routes/webhook.route.ts`) | Menerima pesan teks, lokasi (GPS pin), gambar, audio/voice note, dokumen, dan status pengiriman (ack/read). |
+| **Ingest Lokasi & Pengayaan Pin GPS** | `src/services/location-ingest.service.ts`, `src/domain/customer-address.ts` | Ingest pesan shareloc native WhatsApp; menerapkan gerbang pengayaan deterministik (`selectEnrichmentTarget`) agar pin GPS pertama memperkaya kartu alamat intake lama se-wilayah dan tidak melahirkan kartu kedua duplikat. |
+| **Disambiguasi Wilayah Perbatasan & Write Seam Guard** | `src/utils/gazetteer.ts`, `src/integrations/google-maps/geocoding.ts`, `src/services/customer.service.ts` | Semantic anchoring dan border-margin tolerance (`GAZETTEER_BORDER_MARGIN_KM = 0.5`) pada reverse geocoding centroid gazetteer, serta gerbang proteksi di `updateCustomerLocation` yang menolak penimpaan kecamatan terverifikasi oleh estimasi centroid tetangga perbatasan. |
 | **Webhook Ingestion WABA** | `GET|POST /api/webhook/waba` (`src/routes/waba-webhook.route.ts`) | Verifikasi token webhook (GET challenge) dan penerimaan payload pesan dengan verifikasi kriptografi HMAC `X-Hub-Signature-256`. |
 | **Anti-Burst Coalescing** | `src/services/burst-coalesce.service.ts` | Menggabungkan beberapa gelembung chat yang dikirim customer secara bertubi-tubi dalam jeda 2-3 detik menjadi satu konteks utuh sebelum diproses AI. |
 | **Idempotensi & Deduplikasi Turn** | `src/services/turn-recovery.service.ts`, tabel `InboundTurn`, `OutboundAttempt` | Mencegah pemrosesan ganda atas pengiriman ulang webhook WhatsApp melalui pencatatan turn ID dan hash payload. |
@@ -258,6 +260,7 @@ Pusat administrasi sistem di Admin Dashboard (`packages/admin-dashboard`) untuk 
 
 | Tanggal | Modul / Komponen | Perubahan / Penambahan Fitur Mikro | Referensi PR/Commit |
 | :--- | :--- | :--- | :--- |
+| **2026-11-03** | Geocoding & Alamat (Wilayah Perbatasan) | Disambiguasi centroid gazetteer di perbatasan (`GAZETTEER_BORDER_MARGIN_KM = 0.5`), write seam label overwrite guard di `updateCustomerLocation`, dan pemulihan data split-card Bunda Pamela (Grand Pakuwon Tandes). | Border Centroid Disambiguation |
 | **2026-11-03** | AI Copilot (Analitik & Streaming) | Upgrade model GLM-5.3-Flash (SumoPod), timeout attempt cap 90s, budget turn 300s, heartbeat SSE 15s, visual progress UI, 3 tool dinamis baru (`query_chat_stats`, `query_revenue`, `query_followups`), dan audit biaya LLM. | Copilot Latency Plan |
 | **2026-11-02** | Semua Modul (Fase 12) | Pembaruan kuantitatif hasil regenerasi kode (343 rute, 47 model Prisma, 21 workers), koreksi 20 path file, dan sinkronisasi laporan audit sistemik Fase 0–12. | Audit Fitur Sistem v2 |
 | **2026-11-02** | Semua Modul | Inisiasi kompilasi inventarisasi awal sebelum audit menyeluruh. | Inisiasi dokumen |

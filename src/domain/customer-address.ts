@@ -231,6 +231,97 @@ export function addressesMatch(
   return false;
 }
 
+function hasCoords(v: { lat?: number | null; lng?: number | null }): boolean {
+  return typeof v.lat === 'number' && Number.isFinite(v.lat)
+      && typeof v.lng === 'number' && Number.isFinite(v.lng);
+}
+
+function isPreciseGps(v: { lat?: number | null; lng?: number | null; locationSource?: string | null }): boolean {
+  return hasCoords(v) && v.locationSource === 'gps_pin';
+}
+
+/**
+ * Kompatibilitas wilayah untuk pengayaan pin GPS (data-driven, bukan daftar hafalan):
+ * - Cross kelurahan <-> kecamatan (misal tertukar pada intake awal), ATAU
+ * - Kecamatan sama / token-match / typo Levenshtein <= 2, ATAU
+ * - Salah satu sisi kosong kecamatan.
+ *
+ * Catatan penting: kelurahan hasil reverse-geocode GPS sering berbeda dengan
+ * kelurahan intake teks (batas desa, toponimi, atau tebakan geocoder).
+ * Selama kecamatannya sama (atau salah satu kosong), wilayah dianggap kompatibel
+ * untuk memperkaya kartu yang belum ber-GPS presisi.
+ */
+export function isRegionCompatible(
+  a: { kelurahan?: string | null; kecamatan?: string | null },
+  b: { kelurahan?: string | null; kecamatan?: string | null }
+): boolean {
+  const crossMatch =
+    (hasText(a.kecamatan) && hasText(b.kelurahan) && (norm(a.kecamatan) === norm(b.kelurahan) || isWilayahSimilar(a.kecamatan, b.kelurahan))) ||
+    (hasText(a.kelurahan) && hasText(b.kecamatan) && (norm(a.kelurahan) === norm(b.kecamatan) || isWilayahSimilar(a.kelurahan, b.kecamatan)));
+  if (crossMatch) return true;
+
+  const kecOk =
+    !hasText(a.kecamatan) ||
+    !hasText(b.kecamatan) ||
+    norm(a.kecamatan) === norm(b.kecamatan) ||
+    wilayahTokenMatch(a.kecamatan, b.kecamatan) ||
+    isWilayahSimilar(a.kecamatan, b.kecamatan);
+
+  return kecOk;
+}
+
+/**
+ * Gerbang anti "shareloc jadi alamat kedua".
+ * Pin GPS baru HANYA boleh membuat kartu baru bila tidak ada kartu lama
+ * yang (a) belum memiliki GPS presisi dan (b) wilayahnya kompatibel.
+ */
+export function selectEnrichmentTarget(
+  list: SavedCustomerAddress[],
+  input: UpsertSavedAddressInput
+): SavedCustomerAddress | null {
+  if (input.id) return list.find((a) => a.id === input.id) || null; // eksplisit menang
+  if (!hasCoords(input)) return null;
+
+  // Bila input adalah pin GPS native, kartu lama ber-estimated_area / manual_staff / tanpa koordinat
+  // adalah kandidat yang berhak diperkaya (upgrade koordinat ke presisi).
+  // Bila input bukan gps_pin, hanya kartu tanpa koordinat sama sekali yang berhak diperkaya.
+  const isInputGpsPin = input.locationSource === 'gps_pin';
+  const candidates = list.filter((a) =>
+    (isInputGpsPin ? !isPreciseGps(a) : !hasCoords(a)) && isRegionCompatible(a, input)
+  );
+
+  if (candidates.length === 0) return null;
+  if (candidates.length === 1) return candidates[0];
+
+  // >1 kandidat: DILARANG menebak (anti menimpa rumah yang salah).
+  // Hanya pilih bila ada bukti tunggal yang tegas.
+  const kelurahanMatches = candidates.filter(
+    (a) =>
+      hasText(a.kelurahan) &&
+      hasText(input.kelurahan) &&
+      (norm(a.kelurahan) === norm(input.kelurahan) ||
+        wilayahTokenMatch(a.kelurahan, input.kelurahan) ||
+        isWilayahSimilar(a.kelurahan, input.kelurahan))
+  );
+  if (kelurahanMatches.length === 1) return kelurahanMatches[0];
+
+  // Bukti fisik: hanya kandidat berkoordinat yang berjarak <=150 m dari pin.
+  const withCoords = candidates.filter((a) => hasCoords(a));
+  if (withCoords.length > 0) {
+    const near = withCoords
+      .map((a) => ({ card: a, distance: haversineMeters(a as any, input as any) }))
+      .filter((x) => x.distance <= SAME_POINT_MAX_METERS)
+      .sort((x, y) => x.distance - y.distance);
+    if (near.length > 0) {
+      const primary = near.map((x) => x.card).find((a) => a.isPrimary);
+      return primary || near[0].card;
+    }
+  }
+
+  // Ambigu → serahkan ke addressesMatch (perilaku lama), jangan menebak.
+  return null;
+}
+
 /** Baca daftar dari preferences JSON (tahan data kotor — entri invalid dibuang). */
 export function parseSavedAddresses(preferences: unknown): SavedCustomerAddress[] {
   const raw = (preferences as any)?.saved_addresses;

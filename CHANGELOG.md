@@ -4,6 +4,61 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-03 - Fix: Disambiguasi Wilayah Perbatasan Gazetteer & Write Seam Label Guard (Kasus Grand Pakuwon Adelaide Tandes vs Asemrowo)
+
+- **Latar Belakang & Masalah**:
+  - Pelanggan di wilayah perbatasan (misal Bunda Pamela `6281230755794` di Grand Pakuwon Adelaide, Kec. Tandes) secara salah divonis masuk ke Tambak Sarioso, Kec. Asemrowo oleh *reverse geocoding* lokal.
+  - Investigasi ground truth (OSM Nominatim & Google Maps) membuktikan koordinat tersebut berada di Kelurahan Manukan Wetan/Buntaran, Kecamatan Tandes (bukan Asemrowo). Kesalahan terjadi karena fungsi `findNearestSubdistrict` hanya mengukur jarak garis lurus ke titik tengah (*centroid*) gazetteer: centroid Tambak Sarioso (Asemrowo) berada di 1.753 km sementara Manukan Wetan (Tandes) 1.814 km (selisih hanya 61 meter).
+  - Saat tombol "Refresh Lokasi" admin ditekan atau saat ingest shareloc, nama kecamatan yang sudah dinyatakan oleh pelanggan (`Tandes`) ditimpa secara membabi-buta oleh hasil tebakan centroid, dan melahirkan kartu alamat split-brain (`Rumah Asemrowo` vs `Rumah Tandes`).
+- **Perubahan Utama**:
+  1. `src/utils/gazetteer.ts`:
+     - Menetapkan toleransi perbatasan deterministik `GAZETTEER_BORDER_MARGIN_KM = 0.5` (500 meter) dan `GAZETTEER_MAX_BORDER_DIST_KM = 4.0` km.
+     - Memperbarui `findNearestSubdistrict(lat, lng, maxDist, hint)` dengan hirarki ranking: `kelurahan exact > kecamatan exact (centroid terdekat) > nearest centroid murni`. Petunjuk teks customer/profil diprioritaskan di dalam radius toleransi 500 meter.
+  2. `src/integrations/google-maps/geocoding.ts`:
+     - Menambahkan kontrak `labelSource: 'boundary' | 'centroid'` dan `isEstimatedCentroid: boolean` pada `ResolvedLocation`.
+     - Reverse geocode mendukung Tier 1 (Boundary API via Google Maps bila API key aktif) dan Tier 2 (Offline local gazetteer fallback dengan semantic anchoring).
+  3. `src/services/customer.service.ts`:
+     - Gerbang proteksi tulis di `updateCustomerLocation`: Label administratif hasil estimasi centroid (`isEstimatedCentroid: true`) DILARANG menimpa nama kecamatan profil yang sudah valid dan berbeda, kecuali terjadi perpindahan eksplisit (`forceUpdateGps: true`). Perbedaan dicatat ke `preferences.address_label_conflict`.
+     - `refreshCustomerLocationAndOngkir`: meneruskan hint teks/wilayah customer ke `reverseGeocode` dan mencegah penimpaan kecamatan oleh estimasi centroid.
+  4. `src/services/location-ingest.service.ts` & `src/services/location-resolver.service.ts` & `src/v3/tools/calculate-delivery.tool.ts`:
+     - Meneruskan hint petunjuk wilayah pada seluruh pemanggilan `reverseGeocode`.
+  5. `src/scripts/heal-shareloc-split-cards.ts`:
+     - Menggabungkan kartu split historis dengan **pemenang = kartu pemegang teks/identitas** dan **koordinat selalu bersumber dari kartu `gps_pin`** (anti downgrade presisi). Reservasi dialihkan ke pemenang, baris tabel pemenang di-`upsert`, tepat 1 primary, dan seluruh operasi tenant-scoped.
+     - DILARANG membuat tombstone saat merge: identitas alamat tetap hidup di pemenang (teks + koordinat), sehingga tidak ada kartu yang perlu dicegah lahir kembali.
+  6. **Pembersihan Data Produksi**:
+     - Data customer `6281230755794` berhasil diremediasi di server: kartu usang `Rumah Asemrowo` dihapus, tombstone dicatat, reservasi dialihkan ke kartu tunggal `Rumah Tandes` (`kelurahan: Banjar Sugihan`, `kecamatan: Tandes`).
+- **Revisi pasca-audit (2026-11-03)** — menutup cacat yang ditemukan saat verifikasi implementasi:
+  1. **Kritis — pemenang/korban terbalik**: logika lama menjadikan kartu `gps_pin` primary sebagai pemenang, lalu menyalin koordinat korban (estimasi/null) ke pemenang → GPS bisa bergeser ±4 km atau menjadi null. Kini `pickHealingWinner()` (`src/domain/address-healing.ts`) menjamin teks alamat tidak hilang dan koordinat selalu dari kartu GPS.
+  2. **Jalur tabel-saja (snake_case)**: `resolveCustomerAddressId` menormalkan baris `customer_addresses` ke kontrak domain sebelum seleksi; `upsertSavedAddress` mempertahankan label/teks kartu lama.
+  3. **Multi-kartu ambigu**: `selectEnrichmentTarget` tidak lagi menebak primary saat >1 kandidat; hanya memilih bila ada bukti tunggal (kelurahan unik / jarak ≤150 m), selain itu menyerahkan ke `addressesMatch`.
+  4. **Skrip healing**: klausa `singleOldInKec` dihapus (hanya same-address / same-coords / ≤15 menit), semua tulis tenant-scoped, dan baris tabel pemenang di-`upsert`.
+- **Verifikasi**:
+  - Unit test `tests/unit/gazetteer-border-anchoring.test.ts` (7 kasus: no hint, hint Tandes, hint Banjar Sugihan, hint Rungkut jauh, invalid coords, write seam guard) lulus 100%.
+  - `npm run build` lulus tanpa error (exit 0).
+  - Regresi `shareloc-enrichment-single-card.test.ts` & `nearest-neighbor-geocoding.test.ts` lulus 100%.
+  - Test revisi pasca-audit: `tests/unit/address-healing-winner.test.ts` (6 kasus) + S11–S13 di `shareloc-enrichment-single-card.test.ts` (total 13) lulus 100%; 116 test pada 10 suite alamat/gazetteer hijau.
+
+#### 2026-11-03 - Fix: Shareloc Pertama Memperkaya Kartu Tunggal (Anti-Alamat Kedua)
+
+- **Latar Belakang & Masalah**:
+  - Pelanggan yang memasukkan alamat teks pada intake awal kemudian membagikan shareloc WhatsApp native justru mendapatkan kartu alamat baru ("Rumah X 2"), sementara kartu pertama tetap tanpa koordinat GPS asli.
+  - Hal ini terjadi karena reverse-geocode pin GPS native menghasilkan nama kelurahan yang berbeda dari kelurahan hasil geocoding teks (mis. `Darmo` vs `Sonokwijenan` di Sukomanunggal pada Bunda Agnes; `Bringin` vs `Bringinbendo` di Taman pada Bunda Nandawulan). Karena beda kelurahan, fungsi `addressesMatch` menganggapnya rumah yang berbeda.
+- **Perubahan Utama**:
+  1. `src/domain/customer-address.ts`:
+     - Menambahkan fungsi murni `isRegionCompatible()` untuk memverifikasi kompatibilitas wilayah (kecamatan sama / token-match / typo Levenshtein <= 2 / cross kelurahan-kecamatan).
+     - Menambahkan fungsi seleksi `selectEnrichmentTarget()`: pin GPS native masuk memprioritaskan memperkaya kartu lama yang belum memiliki GPS presisi se-wilayah, mempertahankan teks jalan lama dan mencegah split kartu.
+  2. `src/services/customer.service.ts`:
+     - `syncSavedAddressFromLocation`: memanggil `selectEnrichmentTarget()` sebelum memperbarui buku alamat.
+     - `updateCustomerLocation`: mengambil teks jalan dari kartu tunggal jika payload shareloc tidak membawa teks jalan.
+  3. `src/services/reservation-core.service.ts`:
+     - `resolveCustomerAddressId`: memeriksa `selectEnrichmentTarget()` sebelum membuat entri Rumah 2 baru.
+  4. `src/scripts/heal-shareloc-split-cards.ts`:
+     - Skrip migrasi/healing data historis idempoten dengan mode default `--dry-run` dan `--commit` dalam transaksi per-customer.
+- **Verifikasi**:
+  - 10 unit & integration test adversarial di `tests/unit/shareloc-enrichment-single-card.test.ts` (S1–S10) lulus 100%.
+  - `npm run build` lulus (exit 0).
+  - Regresi 7 suite buku alamat & reservasi lulus 100% (67 test).
+
 #### 2026-11-03 - Fix: Korektnes AI Copilot (Statistik Terpotong, Enum Follow-up, Pembatalan Nyata)
 
 - **Latar Belakang & Masalah**:

@@ -142,7 +142,12 @@ export class LocationIngestService {
       const { deliveryService } = await import('./delivery.service');
       const { customerService } = await import('./customer.service');
 
-      const resolved = await geocodingService.reverseGeocode(lat, lng);
+      const hint = {
+        preferredKelurahan: customer?.kelurahan,
+        preferredKecamatan: customer?.kecamatan,
+        addressTextHint: (customer?.preferences as any)?.address || (customer?.preferences as any)?.full_address || '',
+      };
+      const resolved = await geocodingService.reverseGeocode(lat, lng, hint);
       phase = 'calculate_delivery';
       const delivery = await deliveryService.calculateDelivery({ lat, lng }, undefined, tenantId);
       phase = 'update';
@@ -159,6 +164,8 @@ export class LocationIngestService {
           isOutOfCoverage: delivery.isOutOfCoverage,
           zipcode: resolved.zipcode,
           isNativePin: true,
+          isEstimatedCentroid: resolved.isEstimatedCentroid,
+          labelSource: resolved.labelSource,
         },
         tenantId
       );

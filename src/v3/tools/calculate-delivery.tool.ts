@@ -523,7 +523,7 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
       if (resolvedCoords.success && resolvedCoords.lat != null && resolvedCoords.lng != null) {
         const lat = resolvedCoords.lat;
         const lng = resolvedCoords.lng;
-        const reversed = await geocodingService.reverseGeocode(lat, lng).catch(() => null);
+        const reversed = await geocodingService.reverseGeocode(lat, lng, { addressTextHint: compositeQuery }).catch(() => null);
         const deliveryResult = await deliveryService.calculateDelivery({ lat, lng }, undefined, tenantId);
         const distanceKm = deliveryResult.distanceKm;
         const ongkirNormal = deliveryResult.normalPrice;
@@ -615,7 +615,7 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
     if (pinCoords) {
       const { lat, lng } = pinCoords;
       const [reversed, deliveryResult] = await Promise.all([
-        geocodingService.reverseGeocode(lat, lng).catch(() => null),
+        geocodingService.reverseGeocode(lat, lng, { addressTextHint: locationText }).catch(() => null),
         deliveryService.calculateDelivery({ lat, lng }, { lat: clinicConfig.lat, lng: clinicConfig.lng }, tenantId),
       ]);
       const distanceKm = deliveryResult.distanceKm;

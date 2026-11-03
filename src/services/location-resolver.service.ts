@@ -1,5 +1,6 @@
 import { resolveGoogleMapsUrl, extractGoogleMapsUrls, extractAddressQueryFromUrlString } from '../utils/google-maps-url-resolver';
 import { geocodingService } from '../integrations/google-maps/geocoding';
+import type { NearestSubdistrictHint } from '../utils/gazetteer';
 import { deliveryService } from './delivery.service';
 import { customerService } from './customer.service';
 
@@ -32,14 +33,15 @@ export interface ResolveLocationResult {
  */
 export async function resolveLocationFromUrl(
   url: string,
-  tenantId: string = 'default-tenant'
+  tenantId: string = 'default-tenant',
+  hint?: NearestSubdistrictHint
 ): Promise<ResolveLocationResult> {
   try {
     const resolved = await resolveGoogleMapsUrl(url);
 
     // Kasus 1: URL sudah bawa koordinat presisi
     if (resolved.success && resolved.lat != null && resolved.lng != null) {
-      const geo = await geocodingService.reverseGeocode(resolved.lat, resolved.lng);
+      const geo = await geocodingService.reverseGeocode(resolved.lat, resolved.lng, hint);
       const delivery = await deliveryService.calculateDelivery(
         { lat: resolved.lat, lng: resolved.lng },
         undefined,

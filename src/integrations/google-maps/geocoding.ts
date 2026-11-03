@@ -5,7 +5,7 @@ import { isTypoAtMostOne } from '../../utils/typo-match';
 import { measure } from '../../utils/timer';
 import { callChatCompletionsWithFallback, getFallbackModel } from '../llm/model-fallback';
 import { findPopularLandmark } from '../../config/landmarks';
-import { escapeRegex, getGazetteerData, resolvePrefixMatches, findNearestSubdistrict, getGazetteerCanonicalCities } from '../../utils/gazetteer';
+import { escapeRegex, getGazetteerData, resolvePrefixMatches, findNearestSubdistrict, getGazetteerCanonicalCities, NearestSubdistrictHint } from '../../utils/gazetteer';
 import { normalizeToponymAbbreviations, extractCityScope } from '../../utils/toponym-normalizer';
 import { CircuitBreaker } from '../../utils/circuit-breaker';
 dotenv.config();
@@ -81,6 +81,14 @@ export interface ResolvedLocation {
    */
   candidateFrom?: 'google';
   isLandmarkMatch?: boolean;
+  /**
+   * Provenance & derajat kepastian nama wilayah administratif:
+   * - 'boundary': Terverifikasi batas administratif resmi (Google Maps / OpenStreetMap)
+   * - 'centroid': Hasil estimasi titik tengah kelurahan (gazetteer fallback)
+   */
+  labelSource?: 'boundary' | 'centroid' | 'user_stated' | 'manual_staff';
+  /** True bila nama wilayah berasal dari kalkulasi titik tengah, bukan batas poligon riil. */
+  isEstimatedCentroid?: boolean;
 }
 
 interface GoogleGeocodeComponent {
@@ -150,8 +158,12 @@ export class GeocodingService {
    * Reverse Geocode koordinat native WhatsApp share location (Latitude & Longitude).
    * Murni gazetteer — Google Maps client dihapus.
    */
-  public async reverseGeocode(lat: number, lng: number): Promise<ResolvedLocation> {
-    return this.mockReverseGeocode(lat, lng);
+  public async reverseGeocode(
+    lat: number,
+    lng: number,
+    hint?: NearestSubdistrictHint
+  ): Promise<ResolvedLocation> {
+    return this.mockReverseGeocode(lat, lng, hint);
   }
 
   /**
@@ -975,11 +987,60 @@ export class GeocodingService {
     }
   }
 
-  private mockReverseGeocode(lat: number, lng: number): ResolvedLocation {
-    // Local-first: cocokkan ke kelurahan/desa terdekat dari dataset gazetteer.
-    // Tanpa API key tidak ada alasan mengarang "Gubeng, Surabaya" untuk semua koordinat.
+  private async mockReverseGeocode(
+    lat: number,
+    lng: number,
+    hint?: NearestSubdistrictHint
+  ): Promise<ResolvedLocation> {
+    // TIER 1: Boundary API (Google Maps) bila API key aktif dan bukan test environment
+    if (
+      process.env.NODE_ENV !== 'test' &&
+      this.apiKey &&
+      !this.apiKey.startsWith('mock')
+    ) {
+      try {
+        const url =
+          'https://maps.googleapis.com/maps/api/geocode/json' +
+          `?latlng=${lat},${lng}` +
+          '&language=id&region=id&components=country:ID' +
+          `&key=${encodeURIComponent(this.apiKey)}`;
+        const data: any = await this.googleGeocodeBreaker.execute(url);
+        if (data && data.status === 'OK' && Array.isArray(data.results) && data.results.length > 0) {
+          const comps: GoogleGeocodeComponent[] = data.results[0].address_components || [];
+          const pick = (...types: string[]): string | null => {
+            for (const c of comps) {
+              if (types.some((t) => c.types.includes(t))) return c.long_name;
+            }
+            return null;
+          };
+          const rawKec = pick('administrative_area_level_3', 'sublocality_level_1');
+          const cleanKec = rawKec ? rawKec.replace(/^(?:kec\.?|kecamatan)\s+/i, '').trim() : undefined;
+          const kel = pick('administrative_area_level_4', 'sublocality_level_2', 'sublocality', 'neighborhood') || undefined;
+          const kota = pick('administrative_area_level_2', 'locality') || 'Kota Surabaya';
+          const zipcode = pick('postal_code') || undefined;
+          if (cleanKec) {
+            return {
+              isPrecise: true,
+              kelurahan: kel,
+              kecamatan: cleanKec,
+              kota,
+              lat,
+              lng,
+              formattedAddress: data.results[0].formatted_address,
+              zipcode,
+              labelSource: 'boundary',
+              isEstimatedCentroid: false,
+            };
+          }
+        }
+      } catch (_) {
+        // Fallback to local gazetteer
+      }
+    }
+
+    // TIER 2: Local-first gazetteer centroid evaluation dengan semantic anchoring
     try {
-      const match = findNearestSubdistrict(lat, lng);
+      const match = findNearestSubdistrict(lat, lng, 35, hint);
       if (match) {
         return {
           isPrecise: true,
@@ -990,6 +1051,8 @@ export class GeocodingService {
           lng,
           formattedAddress: `${match.kelurahan}, ${match.kecamatan}, ${match.kota}`,
           zipcode: match.zipcode,
+          labelSource: 'centroid',
+          isEstimatedCentroid: true,
         };
       }
     } catch {}
@@ -998,6 +1061,8 @@ export class GeocodingService {
       isPrecise: false,
       lat,
       lng,
+      labelSource: 'centroid',
+      isEstimatedCentroid: true,
     } as any;
   }
 

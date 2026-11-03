@@ -564,7 +564,26 @@ export interface NearestSubdistrictMatch {
   distanceKm: number;
   lat: number;
   lng: number;
+  isHintMatched?: boolean;
 }
+
+/**
+ * Petunjuk wilayah dari profil atau teks customer untuk disambiguasi batas perbatasan.
+ */
+export interface NearestSubdistrictHint {
+  preferredKelurahan?: string | null;
+  preferredKecamatan?: string | null;
+  addressTextHint?: string | null;
+}
+
+/**
+ * Toleransi perbatasan (border margin) untuk evaluasi centroid gazetteer:
+ * Dalam radius perbatasan (selisih <= BORDER_MARGIN_KM dari centroid terdekat),
+ * kandidat yang cocok dengan hint wilayah (teks jalan/kelurahan/kecamatan pelanggan)
+ * diprioritaskan di atas centroid tetangga yang hanya menang beberapa ratus meter garis lurus.
+ */
+export const GAZETTEER_BORDER_MARGIN_KM = 0.5; // 500 meter
+export const GAZETTEER_MAX_BORDER_DIST_KM = 4.0; // Maksimal jarak pin ke centroid kandidat
 
 /** Jarak Haversine antar dua titik koordinat (km). */
 export function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -587,7 +606,8 @@ export function haversineKm(lat1: number, lng1: number, lat2: number, lng2: numb
 export function findNearestSubdistrict(
   lat: number,
   lng: number,
-  maxDistanceKm = 35
+  maxDistanceKm = 35,
+  hint?: NearestSubdistrictHint
 ): NearestSubdistrictMatch | null {
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
   ensureInit();
@@ -596,6 +616,9 @@ export function findNearestSubdistrict(
   let bestLat = 0;
   let bestLng = 0;
   let bestDist = Number.POSITIVE_INFINITY;
+
+  const candidates: Array<{ row: GazetteerRow; lat: number; lng: number; dist: number }> = [];
+
   for (const row of data) {
     const coord = parseKoordinat(row.Koordinat || '');
     if (!coord) continue;
@@ -606,8 +629,81 @@ export function findNearestSubdistrict(
       bestLat = coord.lat;
       bestLng = coord.lng;
     }
+    if (dist <= maxDistanceKm) {
+      candidates.push({ row, lat: coord.lat, lng: coord.lng, dist });
+    }
   }
+
   if (!best || bestDist > maxDistanceKm) return null;
+
+  // Semantic Anchoring (bila ada hint wilayah):
+  // Evaluasi kandidat di perbatasan: selisih jarak ke centroid terdekat <= 0.5 km dan jarak pin <= 4 km.
+  if (hint && (hint.preferredKelurahan || hint.preferredKecamatan || hint.addressTextHint)) {
+    const normText = (s?: string | null) => String(s ?? '').trim().toLowerCase();
+    const prefKel = normText(hint.preferredKelurahan);
+    const prefKec = normText(hint.preferredKecamatan);
+    const textHint = normText(hint.addressTextHint);
+
+    const borderCandidates = candidates.filter(
+      (c) => c.dist <= bestDist + GAZETTEER_BORDER_MARGIN_KM && c.dist <= GAZETTEER_MAX_BORDER_DIST_KM
+    );
+
+    if (borderCandidates.length > 0) {
+      // Prioritas 1: Kelurahan exact match (dari preferredKelurahan atau disebut utuh di addressTextHint)
+      const kelMatch = borderCandidates.find((c) => {
+        const kelName = normText(c.row.Kelurahan_Desa);
+        if (!kelName || kelName.length < 3) return false;
+        if (prefKel && (kelName === prefKel || isTypoAtMostOne(kelName, prefKel))) return true;
+        if (textHint) {
+          const reg = new RegExp(`\\b${escapeRegex(kelName)}\\b`, 'i');
+          if (reg.test(textHint)) return true;
+        }
+        return false;
+      });
+
+      if (kelMatch) {
+        return {
+          kelurahan: (kelMatch.row.Kelurahan_Desa || '').trim(),
+          kecamatan: (kelMatch.row.Kecamatan || '').trim(),
+          kota: (kelMatch.row.Kabupaten_Kota || '').trim(),
+          zipcode: (kelMatch.row.Kode_Pos || '').trim(),
+          distanceKm: kelMatch.dist,
+          lat: kelMatch.lat,
+          lng: kelMatch.lng,
+          isHintMatched: true,
+        };
+      }
+
+      // Prioritas 2: Kecamatan exact match (dari preferredKecamatan atau disebut utuh di addressTextHint)
+      const kecCandidates = borderCandidates.filter((c) => {
+        const kecName = normText(c.row.Kecamatan);
+        if (!kecName || kecName.length < 3) return false;
+        if (prefKec && (kecName === prefKec || isTypoAtMostOne(kecName, prefKec))) return true;
+        if (textHint) {
+          const reg = new RegExp(`\\b${escapeRegex(kecName)}\\b`, 'i');
+          if (reg.test(textHint)) return true;
+        }
+        return false;
+      });
+
+      if (kecCandidates.length > 0) {
+        // Dari kandidat yang cocok kecamatannya, pilih yang centroidnya paling dekat ke pin
+        kecCandidates.sort((a, b) => a.dist - b.dist);
+        const bestKecCandidate = kecCandidates[0];
+        return {
+          kelurahan: (bestKecCandidate.row.Kelurahan_Desa || '').trim(),
+          kecamatan: (bestKecCandidate.row.Kecamatan || '').trim(),
+          kota: (bestKecCandidate.row.Kabupaten_Kota || '').trim(),
+          zipcode: (bestKecCandidate.row.Kode_Pos || '').trim(),
+          distanceKm: bestKecCandidate.dist,
+          lat: bestKecCandidate.lat,
+          lng: bestKecCandidate.lng,
+          isHintMatched: true,
+        };
+      }
+    }
+  }
+
   return {
     kelurahan: (best.Kelurahan_Desa || '').trim(),
     kecamatan: (best.Kecamatan || '').trim(),
@@ -616,6 +712,7 @@ export function findNearestSubdistrict(
     distanceKm: bestDist,
     lat: bestLat,
     lng: bestLng,
+    isHintMatched: false,
   };
 }
 
