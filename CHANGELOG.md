@@ -20,6 +20,8 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
   - `tests/unit/address-reconciliation.test.ts`: 7 kasus adversarial (R1–R7) lulus 100%.
   - `npm run build` exit 0.
   - Dry-run/commit dijalankan di produksi setelah backup `pg_dump`.
+  - **Hasil produksi (2026-11-03):** 25 customer diproses — **adopt 16, hapus 0, upsert 8**. Audit ulang: **drift 0, orphan 0, primary anomaly 0** (166 baris). Backup: `backups/pre-reconcile-*.dump`.
+  - Label kosmetik "Rumah X 2" pada 3 kartu hasil merge dirapikan (tabel `customer_addresses` + JSON `saved_addresses`).
 
 #### 2026-11-03 - Fix: Disambiguasi Wilayah Perbatasan Gazetteer & Write Seam Label Guard (Kasus Grand Pakuwon Adelaide Tandes vs Asemrowo)
 

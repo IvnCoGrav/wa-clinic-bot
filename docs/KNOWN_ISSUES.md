@@ -11,7 +11,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Solusi Fondasional:**
   1. `src/domain/address-reconciliation.ts` — `buildReconciliationPlan()`: baris yatim **ber-reservasi diadopsi** ke JSON, yatim **tanpa reservasi dihapus**, kartu JSON-only di-upsert, primary mengikuti tabel (fallback JSON → `lastUsedAt`), tepat 1 primary.
   2. `src/scripts/reconcile-customer-addresses.ts` — eksekutor idempoten, default **dry-run**, `--commit` transaksional per customer, tenant-scoped, filter `--tenant=`/`--customer=`.
-- **Bukti & Verifikasi:** `tests/unit/address-reconciliation.test.ts` (7 kasus R1–R7) lulus; `npm run build` exit 0; dry-run & commit dijalankan setelah `pg_dump` (backup `/opt/wa-clinic-bot/backups/`).
+- **Bukti & Verifikasi:** `tests/unit/address-reconciliation.test.ts` (7 kasus R1–R7) lulus; `npm run build` exit 0; dry-run & commit dijalankan setelah `pg_dump` (backup `/opt/wa-clinic-bot/backups/`). **Hasil produksi:** 25 customer, adopt 16, hapus 0, upsert 8 → **drift 0, orphan 0, primary anomaly 0** (166 baris).
 - **Sisa risiko:** perubahan primary mengikuti tabel; sinkronisasi kolom root `customers.*` dengan kartu primary tetap isu A-003 (di luar rekonsiliasi ini).
 
 ## 303. [Buku Alamat] Shareloc Pertama Berubah Menjadi "Alamat Kedua" (2026-11-03, RESOLVED - HIGH)
