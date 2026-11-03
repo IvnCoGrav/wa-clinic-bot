@@ -4,7 +4,24 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-#### 2026-11-03 - Feat: AI Copilot GLM-5.3-Flash, Budget 5 Menit, SSE Heartbeat & 3 Tool Analitik
+#### 2026-11-03 - Fix: Korektnes AI Copilot (Statistik Terpotong, Enum Follow-up, Pembatalan Nyata)
+
+- **Latar Belakang & Masalah**:
+  - `query_chat_stats` memakai `take: 2000`. Produksi mencatat ±9.700 pesan/31 hari, sehingga pertanyaan "berapa chat bulan ini" dilaporkan ±20% dari angka sebenarnya tanpa error.
+  - `query_followups` meneruskan `status`/`type` mentah ke Prisma. Satu nilai di luar enum (mis. `"gagal"`) memicu `PrismaClientValidationError` dan mematikan seluruh turn ("Copilot sedang tidak tersedia").
+  - Tombol "Batal" hanya menghentikan UI: request LLM tetap berjalan dan semaphore per-tenant ditahan sampai selesai (hingga 5 menit → 429 `COPILOT_BUSY`).
+  - Tool baru belum memfilter customer sandbox/test, dan bucket statistik memotong data terbaru (bukan terlama).
+- **Perubahan Utama**:
+  1. `src/services/copilot/copilot-tools.ts`: paginasi penuh (cursor, 20 × 5.000) untuk pesan & percakapan; rentang efektif dibatasi ke kapasitas bucket; bucket TERBARU yang dipertahankan; filter `is_sandbox_test=false` pada statistik, omzet, dan follow-up.
+  2. `query_followups`: normalisasi enum + sinonim Indonesia (`gagal→FAILED`, `terkirim→SENT`, dst). Nilai tak dikenal diabaikan, tidak lagi melempar.
+  3. `query_revenue`: menambahkan penanda `basis: 'booking_date'` agar ringkasan tidak menyebutnya "uang diterima".
+  4. `src/integrations/llm/model-fallback.ts` + `src/services/copilot/copilot.service.ts` + `src/routes/admin/copilot.subroute.ts`: `AbortSignal` diteruskan sampai axios; klien menutup SSE → LLM berhenti, semaphore cepat dilepas, audit mencatat `aborted`.
+  5. `packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx`: aksi hapus reservasi disamakan dengan `CustomerDatabase` (`?soft=true`).
+- **Verifikasi**:
+  - `npm run typecheck` exit 0; `npm run build` exit 0; build admin dashboard exit 0.
+  - 123 test (9 file) lulus: config, heartbeat, status, fixing, abort, 3 tool, model-fallback timeout/signal.
+  - Full suite tetap 11 kegagalan pre-existing (identik pada commit induk `816efc2d`; 0 regresi baru).
+
 
 - **Latar Belakang & Masalah**:
   - AI Copilot di Admin Dashboard sering mengalami timeout (cap 25s hardcoded di `model-fallback.ts`) dan status UI mentok di 50 detik.

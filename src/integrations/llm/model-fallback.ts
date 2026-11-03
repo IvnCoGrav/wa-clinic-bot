@@ -90,6 +90,11 @@ export interface ChatCompletionsWithFallbackCall {
   /** Batas keras timeout HTTP per attempt. Default 25000 (perilaku lama). */
   attemptTimeoutCapMs?: number;
   /**
+   * Sinyal pembatalan (mis. admin menekan "Batal" di Copilot).
+   * Diteruskan ke axios agar request benar-benar berhenti — bukan hanya UI.
+   */
+  signal?: AbortSignal;
+  /**
    * Validator opsional untuk memicu fallback saat isi respons dianggap tidak valid
    * (mis. JSON malformed). Jika diberikan dan mengembalikan false untuk respons model
    * utama, helper otomatis mencoba fallbackModel. Default: tidak ada validasi konten.
@@ -167,6 +172,7 @@ export async function callChatCompletionsWithFallback(
       {
         headers: { Authorization: `Bearer ${finalApiKey}`, 'Content-Type': 'application/json' },
         timeout: attemptTimeout,
+        ...(call.signal ? { signal: call.signal } : {}),
       }
     );
     const content = resp.data?.choices?.[0]?.message?.content?.trim() || '';
@@ -208,6 +214,11 @@ export async function callChatCompletionsWithFallback(
   try {
     return { data: (await attemptWithFormatRetry(call.model)).data, model: call.model, usedFallback: false, baseUrl: call.baseUrl };
   } catch (err: any) {
+    // Pembatalan eksplisit (admin menekan Batal): jangan lanjut ke retry/fallback
+    // model lain — itu hanya membuang biaya dan menahan semaphore lebih lama.
+    if (call.signal?.aborted || err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError') {
+      throw err;
+    }
     let chain = getFallbackChain().filter((m) => m !== call.model);
     // Jika chain kosong karena env hanya berisi call.model, isi otomatis dari DEFAULT_FALLBACK_CHAIN
     if (chain.length === 0) {

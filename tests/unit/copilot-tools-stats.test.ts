@@ -58,6 +58,40 @@ describe('query_chat_stats tool (Fase 4 — statistik percakapan & pesan)', () =
     expect(result.rows[1].inboundMessages).toBe(1);
   });
 
+  it('membaca SEMUA halaman — tidak lagi terpotong di 2.000 pesan (bug "berapa chat bulan ini")', async () => {
+    const day = new Date('2026-11-03T02:00:00Z');
+    const firstPage = Array.from({ length: 5000 }, (_, i) => ({
+      id: `m-${i}`,
+      direction: 'INBOUND',
+      created_at: day,
+      conversation_id: 'conv-1',
+    }));
+    const secondPage = [
+      { id: 'm-5000', direction: 'INBOUND', created_at: day, conversation_id: 'conv-1' },
+    ];
+
+    const messageSpy = vi
+      .spyOn(prisma.message, 'findMany')
+      .mockResolvedValueOnce(firstPage as any)
+      .mockResolvedValueOnce(secondPage as any);
+    vi.spyOn(prisma.conversation, 'findMany').mockResolvedValueOnce([]);
+
+    const result = await queryChatStats.run(tenantId, { dateFrom: '2026-11-03' });
+
+    expect(messageSpy).toHaveBeenCalledTimes(2);
+    expect(result.rows[0].inboundMessages).toBe(5001);
+  });
+
+  it('memfilter customer sandbox/test dari statistik', async () => {
+    const spy = vi.spyOn(prisma.message, 'findMany').mockResolvedValueOnce([]);
+    vi.spyOn(prisma.conversation, 'findMany').mockResolvedValueOnce([]);
+
+    await queryChatStats.run(tenantId, { dateFrom: '2026-11-03' });
+
+    const where = (spy.mock.calls[0][0] as any).where;
+    expect(where.conversation.customer.is_sandbox_test).toBe(false);
+  });
+
   it('mengembalikan baris 0 default saat tidak ada aktivitas chat', async () => {
     vi.spyOn(prisma.message, 'findMany').mockResolvedValueOnce([]);
     vi.spyOn(prisma.conversation, 'findMany').mockResolvedValueOnce([]);

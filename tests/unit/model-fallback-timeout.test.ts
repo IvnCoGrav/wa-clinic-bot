@@ -95,4 +95,24 @@ describe('model-fallback timeout cap (Fase 1 — plumbing model & timeout)', () 
     const config = postSpy.mock.calls[0][2];
     expect(config?.timeout).toBe(45_000);
   });
+
+  it('meneruskan AbortSignal ke axios agar pembatalan benar-benar menghentikan request', async () => {
+    const postSpy = vi.spyOn(axios, 'post').mockResolvedValueOnce(okPayload);
+    const ac = new AbortController();
+
+    await callChatCompletionsWithFallback({
+      baseUrl: 'https://ai.sumopod.com/v1',
+      apiKey: 'test-key',
+      model: 'glm-5.3-flash',
+      fallbackModel: 'deepseek-chat',
+      timeoutMs: 90_000,
+      attemptTimeoutCapMs: 90_000,
+      signal: ac.signal,
+      transientRetry: { maxRetries: 0 },
+      payload: { messages: [] },
+    });
+
+    const config = postSpy.mock.calls[0][2];
+    expect((config as any)?.signal).toBe(ac.signal);
+  });
 });

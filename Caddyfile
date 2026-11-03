@@ -16,6 +16,21 @@ app.kalababyspa.online {
         -Server
     }
 
+    # AI Copilot: stream SSE panjang (budget 5 menit). lb_try_duration 0s penting
+    # agar proxy tidak me-retry POST yang sudah berjalan (mencegah biaya LLM ganda).
+    @copilot path /api/admin/copilot/stream
+    handle @copilot {
+        reverse_proxy app:3000 {
+            lb_try_duration 0s
+            flush_interval -1
+            transport http {
+                keepalive 300s
+                keepalive_idle_conns 100
+                response_header_timeout 360s
+            }
+        }
+    }
+
     # Route khusus Server-Sent Events (SSE)
     @sse path /api/admin/live-chat/events
     handle @sse {

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { queryFollowups } from '../../src/services/copilot/copilot-tools';
+import { queryFollowups, normalizeFollowUpStatus, normalizeFollowUpType } from '../../src/services/copilot/copilot-tools';
 import { prisma } from '../../src/db/client';
 
 describe('query_followups tool (Fase 4 — antrean follow-up)', () => {
@@ -67,5 +67,30 @@ describe('query_followups tool (Fase 4 — antrean follow-up)', () => {
       expect(row).not.toHaveProperty('customerId');
       expect(row).not.toHaveProperty('phone');
     }
+  });
+
+  it('nilai status/tipe di luar enum TIDAK diteruskan ke Prisma (anti-crash seluruh turn)', async () => {
+    const spy = vi.spyOn(prisma.followUp, 'findMany').mockResolvedValueOnce([]);
+
+    // Dulu: status "entah" → PrismaClientValidationError → turn gagal total.
+    const result = await queryFollowups.run(tenantId, { status: 'entah', type: 'ngawur' });
+
+    expect(result.count).toBe(0);
+    const where = (spy.mock.calls[0][0] as any).where;
+    expect(where).not.toHaveProperty('status');
+    expect(where).not.toHaveProperty('type');
+    expect(where.customer.is_sandbox_test).toBe(false);
+  });
+
+  it('memetakan sinonim bahasa Indonesia ke enum yang sah', async () => {
+    expect(normalizeFollowUpStatus('gagal')).toBe('FAILED');
+    expect(normalizeFollowUpStatus('terkirim')).toBe('SENT');
+    expect(normalizeFollowUpStatus('dibatalkan')).toBe('CANCELLED');
+    expect(normalizeFollowUpStatus('GAGAL')).toBe('FAILED');
+    expect(normalizeFollowUpStatus('failed')).toBe('FAILED');
+    expect(normalizeFollowUpStatus('tidak-dikenal')).toBeUndefined();
+    expect(normalizeFollowUpType('belum beli')).toBe('NO_PURCHASE');
+    expect(normalizeFollowUpType('next treatment')).toBe('NEXT_TREATMENT');
+    expect(normalizeFollowUpType('ngawur')).toBeUndefined();
   });
 });

@@ -908,11 +908,21 @@ export function buildConversationExplanation(customer: any, conv: any): any {
   };
 }
 
+/**
+ * Batas paginasi statistik. Dulu tool memakai `take: 2000` sehingga rentang
+ * >5 hari terpotong diam-diam (31 hari produksi = ±9.700 pesan → undercount ±80%).
+ * Sekarang semua halaman dibaca sampai habis dengan batas aman 20 × 5.000.
+ */
+const STATS_MESSAGE_PAGE = 5_000;
+const STATS_CONV_PAGE = 2_000;
+const STATS_MAX_PAGES = 20;
+
 export const queryChatStats: CopilotTool = {
   name: 'query_chat_stats',
   description:
     'Mengambil agregasi statistik pesan chat (inbound/outbound) dan percakapan dalam rentang waktu. ' +
-    'Gunakan untuk menjawab: "berapa chat hari ini", "chat per jam", "berapa percakapan baru minggu ini".',
+    'Gunakan untuk menjawab: "berapa chat hari ini", "chat per jam", "berapa percakapan baru minggu ini". ' +
+    'Mengembalikan maksimal 31 bucket harian (atau 24 bucket jam) TERBARU dari rentang yang diminta.',
   parameters: {
     dateFrom: { type: 'string', description: 'Tanggal awal rentang WIB (YYYY-MM-DD). Default hari ini.' },
     dateTo: { type: 'string', description: 'Tanggal akhir rentang WIB (YYYY-MM-DD). Default sama dengan dateFrom.' },
@@ -926,24 +936,50 @@ export const queryChatStats: CopilotTool = {
     const startUtc = wibDayBoundsUtc(0, new Date(`${dFromStr}T12:00:00Z`)).start;
     const endUtc = wibDayBoundsUtc(0, new Date(`${dToStr}T12:00:00Z`)).end;
     const groupBy = args.groupBy === 'hour' ? 'hour' : 'day';
+    // Kapasitas bucket (hari/jam). Rentang efektif dibatasi ke kapasitas ini agar
+    // tidak menarik data jauh melebihi yang bisa ditampilkan (mis. "tahun ini").
+    const maxBuckets = groupBy === 'hour' ? 24 : 31;
+    const maxRangeMs = maxBuckets * 24 * 60 * 60 * 1000;
+    const effectiveStartUtc =
+      endUtc.getTime() - startUtc.getTime() > maxRangeMs
+        ? new Date(endUtc.getTime() - maxRangeMs)
+        : startUtc;
 
-    const [messages, conversations] = await Promise.all([
-      prisma.message.findMany({
+    // Paginasi penuh (bukan `take: 2000`). Tanpa ini, pertanyaan seperti
+    // "berapa chat bulan ini" melaporkan sebagian kecil angka sebenarnya tanpa error.
+    const messages: Array<{ direction: any; created_at: Date; conversation_id: string | null }> = [];
+    let messageCursor: string | undefined;
+    for (let page = 0; page < STATS_MAX_PAGES; page++) {
+      const batch = await prisma.message.findMany({
         where: {
           tenant_id: tenantId,
-          created_at: { gte: startUtc, lte: endUtc },
+          created_at: { gte: effectiveStartUtc, lte: endUtc },
+          // Konsisten dengan tool lain: customer sandbox/test tidak boleh mengotori statistik.
+          conversation: { customer: { is_sandbox_test: false } },
         },
         select: {
+          id: true,
           direction: true,
           created_at: true,
           conversation_id: true,
         },
-        take: 2000,
-      }),
-      prisma.conversation.findMany({
+        orderBy: { id: 'asc' },
+        take: STATS_MESSAGE_PAGE,
+        ...(messageCursor ? { cursor: { id: messageCursor }, skip: 1 } : {}),
+      });
+      messages.push(...batch);
+      if (batch.length < STATS_MESSAGE_PAGE) break;
+      messageCursor = batch[batch.length - 1].id;
+    }
+
+    const conversations: Array<{ id: string; created_at: Date; is_human_handling: boolean; is_frustrated: boolean }> = [];
+    let convCursor: string | undefined;
+    for (let page = 0; page < STATS_MAX_PAGES; page++) {
+      const batch = await prisma.conversation.findMany({
         where: {
           tenant_id: tenantId,
-          created_at: { gte: startUtc, lte: endUtc },
+          created_at: { gte: effectiveStartUtc, lte: endUtc },
+          customer: { is_sandbox_test: false },
         },
         select: {
           id: true,
@@ -951,9 +987,14 @@ export const queryChatStats: CopilotTool = {
           is_human_handling: true,
           is_frustrated: true,
         },
-        take: 1000,
-      }),
-    ]);
+        orderBy: { id: 'asc' },
+        take: STATS_CONV_PAGE,
+        ...(convCursor ? { cursor: { id: convCursor }, skip: 1 } : {}),
+      });
+      conversations.push(...batch);
+      if (batch.length < STATS_CONV_PAGE) break;
+      convCursor = batch[batch.length - 1].id;
+    }
 
     const bucketsMap = new Map<string, {
       bucket: string;
@@ -1009,9 +1050,11 @@ export const queryChatStats: CopilotTool = {
       if (c.is_frustrated) b.frustrated++;
     }
 
-    const maxBuckets = groupBy === 'hour' ? 24 : 31;
     const sortedKeys = Array.from(bucketsMap.keys()).sort();
-    const rows = sortedKeys.slice(0, maxBuckets).map((k) => {
+    // Rentang lebih panjang dari kapasitas bucket → tampilkan bucket TERBARU,
+    // bukan yang paling awal (perilaku lama memotong justru data terbaru).
+    const keptKeys = sortedKeys.length > maxBuckets ? sortedKeys.slice(-maxBuckets) : sortedKeys;
+    const rows = keptKeys.map((k) => {
       const b = bucketsMap.get(k)!;
       return {
         bucket: b.bucket,
@@ -1055,7 +1098,11 @@ export const queryRevenue: CopilotTool = {
     const dFromStr = isValidIsoDate(args.dateFrom) ? String(args.dateFrom).trim() : undefined;
     const dToStr = isValidIsoDate(args.dateTo) ? String(args.dateTo).trim() : dFromStr;
 
-    const where: any = { tenant_id: tenantId };
+    const where: any = {
+      tenant_id: tenantId,
+      // Konsisten dengan tool lain: reservasi customer sandbox/test tidak dihitung.
+      customer: { is_sandbox_test: false },
+    };
 
     if (dFromStr) {
       const startUtc = wibDayBoundsUtc(0, new Date(`${dFromStr}T12:00:00Z`)).start;
@@ -1122,11 +1169,80 @@ export const queryRevenue: CopilotTool = {
       b.receiptAmount += r.receipt_amount || 0;
     }
 
-    const rows = Array.from(bucketsMap.values()).slice(0, 60);
+    // `basis` eksplisit: dihitung dari TANGGAL TREATMENT (booking_date), bukan
+    // tanggal pembayaran — mencegah ringkasan menyebutnya "uang sudah diterima".
+    const rows = Array.from(bucketsMap.values())
+      .slice(-60)
+      .map((r) => ({ ...r, basis: 'booking_date' as const }));
 
     return { tool: 'query_revenue', args, count: rows.length, rows };
   },
 };
+
+/**
+ * Normalisasi status/tipe follow-up dari argumen LLM.
+ *
+ * Latar bug produksi: argumen mentah diteruskan langsung ke Prisma. Satu nilai
+ * di luar enum (mis. "gagal", "terkirim") memicu PrismaClientValidationError →
+ * seluruh turn Copilot gagal dengan "gangguan layanan AI". Sekarang nilai tak
+ * dikenal diabaikan (filter tidak dipasang) dan sinonim umum dipetakan.
+ */
+const FOLLOWUP_STATUS_VALUES = new Set(['PENDING', 'QUEUED', 'SENT', 'CANCELLED', 'FAILED', 'SKIPPED']);
+const FOLLOWUP_STATUS_ALIASES: Record<string, string> = {
+  pending: 'PENDING',
+  menunggu: 'PENDING',
+  queued: 'QUEUED',
+  antre: 'QUEUED',
+  antrian: 'QUEUED',
+  sent: 'SENT',
+  terkirim: 'SENT',
+  cancelled: 'CANCELLED',
+  canceled: 'CANCELLED',
+  batal: 'CANCELLED',
+  dibatalkan: 'CANCELLED',
+  failed: 'FAILED',
+  gagal: 'FAILED',
+  skipped: 'SKIPPED',
+  skip: 'SKIPPED',
+  dilewati: 'SKIPPED',
+};
+const FOLLOWUP_TYPE_VALUES = new Set([
+  'NO_PURCHASE',
+  'NEXT_TREATMENT',
+  'REMINDER_H1',
+  'REVIEW_H1_BABY',
+  'REVIEW_H1_MOMS',
+  'WINBACK_60D',
+]);
+const FOLLOWUP_TYPE_ALIASES: Record<string, string> = {
+  no_purchase: 'NO_PURCHASE',
+  belum_beli: 'NO_PURCHASE',
+  belum_purchase: 'NO_PURCHASE',
+  next_treatment: 'NEXT_TREATMENT',
+  treatment_berikutnya: 'NEXT_TREATMENT',
+  reminder_h1: 'REMINDER_H1',
+  pengingat_h1: 'REMINDER_H1',
+  review_h1_baby: 'REVIEW_H1_BABY',
+  review_h1_moms: 'REVIEW_H1_MOMS',
+  winback_60d: 'WINBACK_60D',
+};
+
+function normalizeEnumArg(raw: unknown, values: Set<string>, aliases: Record<string, string>): string | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  const key = String(raw).trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (!key) return undefined;
+  const upper = key.toUpperCase();
+  if (values.has(upper)) return upper;
+  return aliases[key];
+}
+
+export function normalizeFollowUpStatus(raw: unknown): string | undefined {
+  return normalizeEnumArg(raw, FOLLOWUP_STATUS_VALUES, FOLLOWUP_STATUS_ALIASES);
+}
+
+export function normalizeFollowUpType(raw: unknown): string | undefined {
+  return normalizeEnumArg(raw, FOLLOWUP_TYPE_VALUES, FOLLOWUP_TYPE_ALIASES);
+}
 
 export const queryFollowups: CopilotTool = {
   name: 'query_followups',
@@ -1141,14 +1257,17 @@ export const queryFollowups: CopilotTool = {
   },
   run: async (tenantId, args) => {
     const take = Math.min(Math.max(parseInt(String(args.limit || 20), 10) || 20, 1), 60);
-    const where: any = { tenant_id: tenantId };
+    const where: any = {
+      tenant_id: tenantId,
+      // Konsisten dengan tool lain: customer sandbox/test tidak masuk antrean nyata.
+      customer: { is_sandbox_test: false },
+    };
 
-    if (args.status) {
-      where.status = String(args.status).toUpperCase();
-    }
-    if (args.type) {
-      where.type = String(args.type).toUpperCase();
-    }
+    // Validasi enum: nilai mentah dari LLM TIDAK boleh langsung masuk Prisma.
+    const status = normalizeFollowUpStatus(args.status);
+    if (status) where.status = status;
+    const type = normalizeFollowUpType(args.type);
+    if (type) where.type = type;
     if (isValidIsoDate(args.dueBefore)) {
       const endUtc = wibDayBoundsUtc(0, new Date(`${String(args.dueBefore).trim()}T12:00:00Z`)).end;
       where.scheduled_at = { lte: endUtc };

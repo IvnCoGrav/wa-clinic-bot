@@ -26,6 +26,11 @@ export interface CopilotChatParams {
    */
   activeContext?: { customerId?: string; conversationId?: string };
   /**
+   * Sinyal pembatalan dari route (klien menutup SSE / menekan Batal).
+   * Dipakai agar panggilan LLM benar-benar berhenti dan semaphore cepat dilepas.
+   */
+  signal?: AbortSignal;
+  /**
    * Callback progres deterministik (dipakai endpoint SSE). Dipanggil di titik
    * nyata pipeline (mulai/selesai tool) — bukan simulasi. Tata kelola grounding
    * tetap utuh: event hanya membawa nama tool + jumlah baris, TANPA isi data mentah.
@@ -537,6 +542,19 @@ export class CopilotService {
       };
     }
 
+    // Dibatalkan sebelum mulai (klien sudah menutup koneksi) → jangan panggil LLM.
+    if (params.signal?.aborted) {
+      return {
+        success: false,
+        answer: 'Pertanyaan dibatalkan.',
+        toolsUsed: [],
+        grounded: false,
+        error: 'ABORTED',
+        llmCalls: 0,
+        ...engineTag(),
+      };
+    }
+
     try {
       const { getLlmEndpointConfig } = await import('../../integrations/llm/llm-gateway');
       const { callChatCompletionsWithFallback } = await import('../../integrations/llm/model-fallback');
@@ -578,6 +596,19 @@ export class CopilotService {
       let totalRows = 0;
 
       for (let iteration = 0; iteration < cop.maxIterations; iteration++) {
+        // Klien membatalkan di tengah loop → berhenti sebelum panggilan LLM berikutnya.
+        if (params.signal?.aborted) {
+          return {
+            success: false,
+            answer: 'Pertanyaan dibatalkan.',
+            toolsUsed: collected.map((c) => c.tool),
+            grounded: false,
+            error: 'ABORTED',
+            llmCalls,
+            rowCounts: Object.fromEntries(collected.map((c) => [c.tool, c.rows.length])),
+            ...engineTag(),
+          };
+        }
         // Gerbang anggaran: hentikan loop bila waktu tersisa terlalu tipis untuk
         // satu panggilan LLM lagi (cegah request melewati deadline klien).
         if (remainingMs() < minCallBudget) break;
@@ -649,6 +680,7 @@ export class CopilotService {
                   apiKey: cfg.apiKey,
                   timeoutMs: callTimeout(cfg.timeoutMs),
                   attemptTimeoutCapMs: cop.callTimeoutMs,
+                  signal: params.signal,
                   payload: {
                     messages: [{ role: 'user', content: routerPrompt }],
                     temperature: 0,
@@ -850,6 +882,7 @@ export class CopilotService {
                 apiKey: cfg.apiKey,
                 timeoutMs: callTimeout(cfg.timeoutMs),
                 attemptTimeoutCapMs: cop.callTimeoutMs,
+                signal: params.signal,
                 payload: {
                   messages: [
                     ...history.map((h) => ({ role: h.role, content: h.content })),
@@ -909,6 +942,18 @@ export class CopilotService {
       logTurn({ degraded: false, toolsUsed, rowCounts, llmCalls });
       return { success: true, answer, toolsUsed, grounded, llmCalls, rowCounts, ...engineTag() };
     } catch (err: any) {
+      // Pembatalan bukan gangguan layanan: balas status jujur, jangan "Copilot error".
+      if (params.signal?.aborted || err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError') {
+        return {
+          success: false,
+          answer: 'Pertanyaan dibatalkan.',
+          toolsUsed: [],
+          grounded: false,
+          error: 'ABORTED',
+          llmCalls: 0,
+          ...engineTag(),
+        };
+      }
       return {
         success: false,
         answer: 'Copilot sedang tidak tersedia (gangguan layanan AI). Silakan coba lagi.',

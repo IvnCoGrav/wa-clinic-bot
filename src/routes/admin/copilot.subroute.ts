@@ -201,6 +201,9 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
 
       let closed = false;
       let aborted = false;
+      // Pembatalan nyata: saat klien menutup SSE (tombol Batal / tab ditutup),
+      // request LLM dihentikan sehingga semaphore cepat dilepas (bukan menunggu 5 menit).
+      const abortCtrl = new AbortController();
 
       // Heartbeat SSE tiap 15s (komentar ':' menjaga koneksi tetap hidup melewati Caddy/browser)
       const hb = setInterval(() => {
@@ -218,6 +221,12 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
         }
         closed = true;
         clearInterval(hb);
+        // Hentikan panggilan LLM yang masih berjalan (hemat biaya + lepas semaphore).
+        try {
+          abortCtrl.abort();
+        } catch {
+          /* sudah abort */
+        }
       };
       request.raw.once('close', cleanup);
       reply.raw.once('close', cleanup);
@@ -237,6 +246,7 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
           message: message.trim(),
           history,
           activeContext,
+          signal: abortCtrl.signal,
           onEvent: (e) => {
             if (e.type === 'stage') {
               sendEvent('stage', e);
