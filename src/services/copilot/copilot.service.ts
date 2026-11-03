@@ -67,7 +67,41 @@ export interface CopilotChatResult {
   hermesFallback?: boolean;
 }
 
+/** Budget karakter baris data per tool yang dikirim ke LLM summarize.
+ *  Dulu 2.500 karakter: untuk hasil 31 bucket statistik, hanya ~16 baris yang
+ *  terlihat LLM sehingga total "30 hari" dilaporkan setengahnya. 12.000 cukup
+ *  untuk 60 baris (batas MAX_TOTAL_ROWS) tanpa membengkakkan prompt. */
+const MAX_LABELED_ROWS_CHARS = 12_000;
 const MAX_HISTORY_TURNS = 10;
+
+/**
+ * Bangun blok baris data berlabel sumber untuk prompt summarize.
+ *
+ * `maxCharsPerTool` menjaga prompt tetap wajar, TETAPI nilai lama 2.500 membuat
+ * hasil 31 bucket statistik hanya terlihat ~16 baris → total 30 hari dilaporkan
+ * setengah. Nilai kini cukup untuk seluruh MAX_TOTAL_ROWS (60 baris).
+ * Baris dipotong utuh (bukan di tengah JSON) agar tetap parseable.
+ */
+export function buildLabeledToolRows(
+  collected: Array<{ tool: string; rows: any[] }>,
+  maxCharsPerTool: number = MAX_LABELED_ROWS_CHARS
+): string {
+  return collected
+    .map((c) => {
+      const cleanRows = stripInternalIds(c.rows);
+      const rowStrings: string[] = [];
+      let currentLen = 0;
+      for (const row of cleanRows) {
+        const str = JSON.stringify(row);
+        if (currentLen + str.length > maxCharsPerTool && rowStrings.length > 0) break;
+        rowStrings.push(str);
+        currentLen += str.length;
+      }
+      return `[${c.tool}] [${rowStrings.join(',')}]`;
+    })
+    .join('\n');
+}
+
 /** Budget loop multi-step (gerbang kode, bukan imbauan): cegah biaya/latensi meledak. */
 /**
  * Konfigurasi operasional Copilot (murni, deterministik, membaca env terkini).
@@ -814,20 +848,7 @@ export class CopilotService {
       // Langkah 3: LLM merangkum gabungan hasil tool (berlabel sumber).
       // Baris dibersihkan dari ID internal (UUID) SEBELUM ke LLM — gerbang kode, bukan imbauan prompt.
       // Potong per-row agar JSON selalu utuh (tidak terpotong di tengah string/objek).
-      const labeled = collected
-        .map((c) => {
-          const cleanRows = stripInternalIds(c.rows);
-          const rowStrings: string[] = [];
-          let currentLen = 0;
-          for (const row of cleanRows) {
-            const str = JSON.stringify(row);
-            if (currentLen + str.length > 2500 && rowStrings.length > 0) break;
-            rowStrings.push(str);
-            currentLen += str.length;
-          }
-          return `[${c.tool}] [${rowStrings.join(',')}]`;
-        })
-        .join('\n');
+      const labeled = buildLabeledToolRows(collected);
       params.onEvent?.({
         type: 'stage',
         stage: 'summarize',
