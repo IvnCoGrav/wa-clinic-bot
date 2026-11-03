@@ -4,6 +4,23 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-03 - Fix: Rekonsiliasi Buku Alamat JSON <-> Tabel `customer_addresses` (A-002)
+
+- **Latar Belakang & Masalah**:
+  - Audit double-alamat menemukan **16 baris yatim** di `customer_addresses` (tidak ada di `preferences.saved_addresses`) yang justru dipakai **reservasi**, serta **8 kartu JSON-only** yang tidak ada di tabel. Total **24 pelanggan drift**.
+  - Tanpa rekonsiliasi, admin tidak bisa melihat/mengedit kartu yang dipakai terapis, dan `resolveCustomerAddressId` bisa mengembalikan ID yang tidak ada di tabel (risiko FK).
+- **Perubahan Utama**:
+  1. `src/domain/address-reconciliation.ts` (fungsi murni `buildReconciliationPlan`):
+     - Baris tabel yatim yang **dipakai reservasi** → diadopsi ke JSON (riwayat aman).
+     - Baris tabel yatim **tanpa reservasi** → dihapus.
+     - Kartu JSON-only → di-upsert ke tabel.
+     - Primary mengikuti **tabel** (sumber operasional staf/reservasi), fallback JSON, lalu `lastUsedAt`; invarian tepat 1 primary.
+  2. `src/scripts/reconcile-customer-addresses.ts`: eksekutor idempoten, default **dry-run**, `--commit` dalam `$transaction`, tenant-scoped, mendukung `--tenant=`/`--customer=`.
+- **Verifikasi**:
+  - `tests/unit/address-reconciliation.test.ts`: 7 kasus adversarial (R1–R7) lulus 100%.
+  - `npm run build` exit 0.
+  - Dry-run/commit dijalankan di produksi setelah backup `pg_dump`.
+
 #### 2026-11-03 - Fix: Disambiguasi Wilayah Perbatasan Gazetteer & Write Seam Label Guard (Kasus Grand Pakuwon Adelaide Tandes vs Asemrowo)
 
 - **Latar Belakang & Masalah**:

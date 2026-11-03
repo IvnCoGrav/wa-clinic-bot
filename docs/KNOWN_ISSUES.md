@@ -3,6 +3,17 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 304. [Buku Alamat] Drift JSON `saved_addresses` vs Tabel `customer_addresses` (A-002) (2026-11-03, RESOLVED)
+
+- **Status:** RESOLVED (2026-11-03) — rekonsiliasi deterministik + dry-run/commit di produksi.
+- **Gejala:** 16 baris tabel yatim (dipakai 22 reservasi) + 8 kartu JSON-only + 24 pelanggan drift; admin tidak bisa melihat/mengedit kartu yang dipakai terapis, dan resolver bisa mengembalikan ID yang tidak ada di tabel.
+- **Akar masalah:** dual-write `persistSavedAddresses` bersifat best-effort (error per baris ditelan `.catch(() => {})`), tidak ada rekonsiliasi, dan FIFO 10 kartu membuang entri JSON tanpa menghapus baris tabel.
+- **Solusi Fondasional:**
+  1. `src/domain/address-reconciliation.ts` — `buildReconciliationPlan()`: baris yatim **ber-reservasi diadopsi** ke JSON, yatim **tanpa reservasi dihapus**, kartu JSON-only di-upsert, primary mengikuti tabel (fallback JSON → `lastUsedAt`), tepat 1 primary.
+  2. `src/scripts/reconcile-customer-addresses.ts` — eksekutor idempoten, default **dry-run**, `--commit` transaksional per customer, tenant-scoped, filter `--tenant=`/`--customer=`.
+- **Bukti & Verifikasi:** `tests/unit/address-reconciliation.test.ts` (7 kasus R1–R7) lulus; `npm run build` exit 0; dry-run & commit dijalankan setelah `pg_dump` (backup `/opt/wa-clinic-bot/backups/`).
+- **Sisa risiko:** perubahan primary mengikuti tabel; sinkronisasi kolom root `customers.*` dengan kartu primary tetap isu A-003 (di luar rekonsiliasi ini).
+
 ## 303. [Buku Alamat] Shareloc Pertama Berubah Menjadi "Alamat Kedua" (2026-11-03, RESOLVED - HIGH)
 
 - **Status:** RESOLVED (2026-11-03, direvisi pasca-audit) — gerbang pengayaan deterministik `selectEnrichmentTarget()` + `pickHealingWinner()`, diverifikasi dengan 19 test (13 shareloc + 6 healing).

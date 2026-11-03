@@ -5,8 +5,9 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 644
+Total entri terindeks: 645
 
+- 2026-11-03 | Fix: Rekonsiliasi Buku Alamat JSON <-> Tabel `customer_addresses` (A-002)
 - 2026-11-03 | Fix: Disambiguasi Wilayah Perbatasan Gazetteer & Write Seam Label Guard (Kasus Grand Pakuw
 - 2026-11-03 | Fix: Shareloc Pertama Memperkaya Kartu Tunggal (Anti-Alamat Kedua)
 - 2026-11-03 | Fix: Korektnes AI Copilot (Statistik Terpotong, Enum Follow-up, Pembatalan Nyata)
