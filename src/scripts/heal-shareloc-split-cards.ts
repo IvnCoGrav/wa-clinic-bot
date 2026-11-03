@@ -174,20 +174,10 @@ export async function runHealing(): Promise<void> {
       await prisma.$transaction(async (tx) => {
         const { winnerCard, victimCard, gpsCard, customerId, tenantId } = p;
 
-        // 1. Pindahkan reservasi dari victim ke winner (tenant-scoped)
-        await tx.reservation.updateMany({
-          where: {
-            customer_address_id: victimCard.id,
-            customer_id: customerId,
-            tenant_id: tenantId,
-          },
-          data: { customer_address_id: winnerCard.id },
-        });
-
-        // 2. Update winnerCard di tabel customer_addresses.
+        // 1. Pastikan baris pemenang ADA di customer_addresses LEBIH DULU.
         //    Koordinat WAJIB dari kartu GPS (gpsCard), BUKAN dari victim.
         //    Bila pemenang hanya ada di JSON (belum tercermin di tabel), buat barisnya
-        //    agar JSON dan tabel tidak kembali split-brain.
+        //    agar relink reservasi tidak melanggar FK dan JSON/tabel tidak split-brain.
         const makePrimary = Boolean(winnerCard.is_primary || victimCard.is_primary);
         const winnerRow = {
           label: winnerCard.label ?? 'Rumah',
@@ -226,6 +216,17 @@ export async function runHealing(): Promise<void> {
             data: { is_primary: false },
           });
         }
+
+        // 2. Pindahkan reservasi dari victim ke winner (tenant-scoped).
+        //    Dilakukan SETELAH pemenang ada di tabel → aman dari FK violation.
+        await tx.reservation.updateMany({
+          where: {
+            customer_address_id: victimCard.id,
+            customer_id: customerId,
+            tenant_id: tenantId,
+          },
+          data: { customer_address_id: winnerCard.id },
+        });
 
         // 3. Hapus victimCard dari tabel customer_addresses (tenant-scoped)
         await tx.customerAddress.deleteMany({

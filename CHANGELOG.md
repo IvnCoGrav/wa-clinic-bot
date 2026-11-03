@@ -32,6 +32,7 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
   2. **Jalur tabel-saja (snake_case)**: `resolveCustomerAddressId` menormalkan baris `customer_addresses` ke kontrak domain sebelum seleksi; `upsertSavedAddress` mempertahankan label/teks kartu lama.
   3. **Multi-kartu ambigu**: `selectEnrichmentTarget` tidak lagi menebak primary saat >1 kandidat; hanya memilih bila ada bukti tunggal (kelurahan unik / jarak ≤150 m), selain itu menyerahkan ke `addressesMatch`.
   4. **Skrip healing**: klausa `singleOldInKec` dihapus (hanya same-address / same-coords / ≤15 menit), semua tulis tenant-scoped, dan baris tabel pemenang di-`upsert`.
+  5. **Urutan relink FK-safe**: baris pemenang di-`upsert` SEBELUM `reservations.updateMany`, sehingga pemenang yang hanya ada di JSON tidak memicu `reservations_customer_address_id_fkey`.
 - **Verifikasi**:
   - Unit test `tests/unit/gazetteer-border-anchoring.test.ts` (7 kasus: no hint, hint Tandes, hint Banjar Sugihan, hint Rungkut jauh, invalid coords, write seam guard) lulus 100%.
   - `npm run build` lulus tanpa error (exit 0).
