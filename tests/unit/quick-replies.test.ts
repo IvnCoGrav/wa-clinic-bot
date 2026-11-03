@@ -8,6 +8,7 @@ import {
   renderBankAccounts,
   resolveQuickReplyMedia,
   DEFAULT_QUICK_REPLIES,
+  ONGKIR_QUICK_REPLIES,
   memoryQuickReplies,
 } from '../../src/routes/admin/quick-replies.subroute';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
@@ -254,6 +255,59 @@ describe('Quick Replies - Helpers, In-Memory Store & SSOT Media Resolution', () 
     const resolvedC = await resolveQuickReplyMedia(row, DEFAULT_TENANT_ID);
     expect(resolvedC.image_url).toBeNull();
     expect(resolvedC.mime_type).toBeUndefined();
+  });
+
+  it('ONGKIR_QUICK_REPLIES: defines 25 valid quick replies matching delivery tiers', () => {
+    expect(ONGKIR_QUICK_REPLIES).toHaveLength(25);
+
+    // Semua shortcut harus valid dan berkategori Lokasi
+    for (const qr of ONGKIR_QUICK_REPLIES) {
+      expect(isValidShortcut(qr.shortcut)).toBeNull();
+      expect(qr.category).toBe('Lokasi');
+      expect(qr.media_type).toBe('NONE');
+      expect(qr.content).toContain('Mau pilih treatment apa bund?');
+    }
+
+    // Cek tier batas 1-5 km: Free ongkir
+    const o1 = ONGKIR_QUICK_REPLIES.find((q) => q.shortcut === 'o1');
+    const o5 = ONGKIR_QUICK_REPLIES.find((q) => q.shortcut === 'o5');
+    expect(o1?.content).toContain('GRATIS ongkir (Free Ongkir)');
+    expect(o5?.content).toContain('GRATIS ongkir (Free Ongkir)');
+
+    // Cek tier 6-7 km: Rp 5.000
+    const o6 = ONGKIR_QUICK_REPLIES.find((q) => q.shortcut === 'o6');
+    const o7 = ONGKIR_QUICK_REPLIES.find((q) => q.shortcut === 'o7');
+    expect(o6?.content).toContain('ongkir menjadi 5.000 saja');
+    expect(o7?.content).toContain('ongkir menjadi 5.000 saja');
+
+    // Cek tier 8-10 km: Rp 10.000
+    const o8 = ONGKIR_QUICK_REPLIES.find((q) => q.shortcut === 'o8');
+    const o10 = ONGKIR_QUICK_REPLIES.find((q) => q.shortcut === 'o10');
+    expect(o8?.content).toContain('ongkir menjadi 10.000 saja');
+    expect(o10?.content).toContain('ongkir menjadi 10.000 saja');
+
+    // Cek tier 11-15 km: Rp 15.000
+    const o11 = ONGKIR_QUICK_REPLIES.find((q) => q.shortcut === 'o11');
+    const o15 = ONGKIR_QUICK_REPLIES.find((q) => q.shortcut === 'o15');
+    expect(o11?.content).toContain('ongkir menjadi 15.000 saja');
+    expect(o15?.content).toContain('ongkir menjadi 15.000 saja');
+
+    // Cek tier 16-20 km: Rp 20.000
+    const o16 = ONGKIR_QUICK_REPLIES.find((q) => q.shortcut === 'o16');
+    const o20 = ONGKIR_QUICK_REPLIES.find((q) => q.shortcut === 'o20');
+    expect(o16?.content).toContain('ongkir menjadi 20.000 saja');
+    expect(o20?.content).toContain('ongkir menjadi 20.000 saja');
+
+    // Cek tier 21-25 km: Rp 25.000
+    const o21 = ONGKIR_QUICK_REPLIES.find((q) => q.shortcut === 'o21');
+    const o25 = ONGKIR_QUICK_REPLIES.find((q) => q.shortcut === 'o25');
+    expect(o21?.content).toContain('ongkir menjadi 25.000 saja');
+    expect(o25?.content).toContain('ongkir menjadi 25.000 saja');
+
+    // Verifikasi bahwa DEFAULT_QUICK_REPLIES memuat seluruh ONGKIR_QUICK_REPLIES
+    for (let i = 1; i <= 25; i++) {
+      expect(DEFAULT_QUICK_REPLIES.some((d) => d.shortcut === `o${i}`)).toBe(true);
+    }
   });
 });
 

@@ -18,6 +18,53 @@ export interface MemoryQuickReply {
 
 export const memoryQuickReplies = new Map<string, MemoryQuickReply>();
 
+/**
+ * 25 Template Quick Reply Ongkir Cepat (/o1 s/d /o25)
+ * Disesuaikan persis dengan tier ongkir resmi klinik (delivery_tiers_custom.json).
+ */
+export const ONGKIR_QUICK_REPLIES: Array<{
+  shortcut: string;
+  title: string;
+  content: string;
+  category: string;
+  media_type: string;
+  image_url: null;
+}> = Array.from({ length: 25 }, (_, idx) => {
+  const km = idx + 1;
+  let title = `Ongkir ${km} km`;
+  let content = '';
+
+  if (km <= 5) {
+    title = `Ongkir ${km} km (Gratis)`;
+    content = `Jika kami cek bunda, dilihat dari jaraknya kurang lebih ${km}km. Dari pricelist kami di 0-5 km layanannya GRATIS ongkir (Free Ongkir) tanpa tambahan biaya bunda ☺️ \nMau pilih treatment apa bund? 🤗`;
+  } else if (km <= 7) {
+    title = `Ongkir ${km} km (Promo Rp 5.000)`;
+    content = `Jika kami cek bunda, dilihat dari jaraknya kurang lebih ${km}km. Dari pricelist kami di 5-10 km ada tambahan ongkir 15.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi 5.000 saja bunda ☺️ \nMau pilih treatment apa bund? 🤗`;
+  } else if (km <= 10) {
+    title = `Ongkir ${km} km (Promo Rp 10.000)`;
+    content = `Jika kami cek bunda, dilihat dari jaraknya kurang lebih ${km}km. Dari pricelist kami di 5-10 km ada tambahan ongkir 15.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi 10.000 saja bunda ☺️ \nMau pilih treatment apa bund? 🤗`;
+  } else if (km <= 15) {
+    title = `Ongkir ${km} km (Promo Rp 15.000)`;
+    content = `Jika kami cek bunda, dilihat dari jaraknya kurang lebih ${km}km. Dari pricelist kami di 10-15 km ada tambahan ongkir 25.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi 15.000 saja bunda ☺️ \nMau pilih treatment apa bund? 🤗`;
+  } else if (km <= 20) {
+    title = `Ongkir ${km} km (Promo Rp 20.000)`;
+    content = `Jika kami cek bunda, dilihat dari jaraknya kurang lebih ${km}km. Dari pricelist kami di 15-20 km ada tambahan ongkir 25.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi 20.000 saja bunda ☺️ \nMau pilih treatment apa bund? 🤗`;
+  } else {
+    // 21 - 25 km
+    title = `Ongkir ${km} km (Promo Rp 25.000)`;
+    content = `Jika kami cek bunda, dilihat dari jaraknya kurang lebih ${km}km. Dari pricelist kami di 20-25 km ada tambahan ongkir 35.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi 25.000 saja bunda ☺️ \nMau pilih treatment apa bund? 🤗`;
+  }
+
+  return {
+    shortcut: `o${km}`,
+    title,
+    content,
+    category: 'Lokasi',
+    media_type: 'NONE',
+    image_url: null,
+  };
+});
+
 export const DEFAULT_QUICK_REPLIES: Array<{
   shortcut: string;
   title: string;
@@ -26,6 +73,7 @@ export const DEFAULT_QUICK_REPLIES: Array<{
   media_type?: string | null;
   image_url?: string | null;
 }> = [
+  ...ONGKIR_QUICK_REPLIES,
   {
     shortcut: 'qris',
     title: 'Pembayaran QRIS & Rekening Resmi',
@@ -310,7 +358,7 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
       }
       const present = new Set(rows.map((r: any) => r.shortcut));
       let refetch = false;
-      for (const sc of ['qris', 'pricelist']) {
+      for (const sc of ['qris', 'pricelist', ...ONGKIR_QUICK_REPLIES.map((o) => o.shortcut)]) {
         if (!present.has(sc)) {
           const item = DEFAULT_QUICK_REPLIES.find((d) => d.shortcut === sc);
           if (!item) continue;
