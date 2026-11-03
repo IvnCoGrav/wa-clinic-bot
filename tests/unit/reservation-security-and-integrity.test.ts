@@ -6,6 +6,27 @@ import { reservationLifecycleService } from '../../src/services/reservation-life
 import { findOverlappingStaffReservations } from '../../src/services/reservation-core.service';
 import * as customerServiceModule from '../../src/services/customer.service';
 
+/**
+ * Anti calendar-rot: test ini dulu mengunci literal "Sabtu, 10 Oktober 2026"
+ * sehingga otomatis gagal setelah tanggal itu lewat (tool menolak lebih dulu
+ * dengan "tanggal sudah terlewat" sebelum asersi add-on tercapai).
+ * Sekarang tanggal acuan selalu Sabtu berikutnya dihitung dari `now`.
+ */
+function nextSaturdayText(now: Date = new Date()): string {
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  do {
+    d.setDate(d.getDate() + 1);
+  } while (d.getDay() !== 6); // 6 = Sabtu
+  return new Intl.DateTimeFormat('id-ID', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(d);
+}
+
+const FUTURE_SATURDAY = nextSaturdayText();
+
 describe('Reservation Security & Integrity Tests (Adversarial Suite)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -86,8 +107,8 @@ describe('Reservation Security & Integrity Tests (Adversarial Suite)', () => {
         customerId: 'cust-addon-test',
         chatId: '628123456789@c.us',
         treatmentName: 'Sinar Moksa (Infrared / Moxa)',
-        bookingDate: 'Sabtu, 10 Oktober 2026',
-        dayMentionEvidence: ['Sabtu, 10 Oktober 2026'],
+        bookingDate: FUTURE_SATURDAY,
+        dayMentionEvidence: [FUTURE_SATURDAY],
         address: 'Waru, Sidoarjo',
       });
 
@@ -109,8 +130,8 @@ describe('Reservation Security & Integrity Tests (Adversarial Suite)', () => {
           customerId: `cust-addon-adv-${i}`,
           chatId: '628123456789@c.us',
           treatmentName: name,
-          bookingDate: 'Sabtu, 10 Oktober 2026',
-          dayMentionEvidence: ['Sabtu, 10 Oktober 2026'],
+          bookingDate: FUTURE_SATURDAY,
+          dayMentionEvidence: [FUTURE_SATURDAY],
           address: 'Waru, Sidoarjo',
         });
         expect(result.success, `name="${name}"`).toBe(false);
@@ -134,8 +155,8 @@ describe('Reservation Security & Integrity Tests (Adversarial Suite)', () => {
         chatId: '628123456789@c.us',
         treatmentName: 'Kala Baby – Pijat Pulih Ceria',
         additionalTreatments: ['Sinar Moksa (Infrared / Moxa)'],
-        bookingDate: 'Sabtu, 10 Oktober 2026',
-        dayMentionEvidence: ['Sabtu, 10 Oktober 2026'],
+        bookingDate: FUTURE_SATURDAY,
+        dayMentionEvidence: [FUTURE_SATURDAY],
         address: 'Waru, Sidoarjo',
       });
 
@@ -290,15 +311,18 @@ describe('Reservation Security & Integrity Tests (Adversarial Suite)', () => {
       const json = JSON.parse(response.body);
       expect(json.success).toBe(false);
       expect(json.error).toContain('Reservasi tidak ditemukan');
-      // Non-tautologis: query WAJIB ter-scope tenant (bukan hanya id). Header
-      // `x-tenant-id` TIDAK menetapkan tenant (tenant berasal dari sesi staf),
-      // sehingga tenant efektif = DEFAULT_TENANT_ID — yang penting di sini
-      // adalah `tenant_id` HADIR di klausa `where`.
+      // Non-tautologis: query WAJIB ter-scope tenant (bukan hanya `id`).
+      // Catatan (perbaikan 2026-11-03): di harness ini route didaftarkan TANPA
+      // plugin auth, sehingga `tenantOf()` memakai fallback header `x-tenant-id`
+      // (lihat src/routes/admin/route-helpers.ts:6). Di produksi `request.tenantId`
+      // dari sesi staf selalu menang atas header. Yang dikunci test di sini adalah
+      // klausa `where` SELALU memuat `tenant_id` yang ter-resolusi — bukan nilai
+      // literal `default-tenant` seperti versi lama (ekspektasi itu usang).
       expect(findFirstSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
             id: 'res-tenant-victim',
-            tenant_id: 'default-tenant',
+            tenant_id: 'attacker-tenant',
           }),
         })
       );

@@ -38,6 +38,7 @@ export interface CopilotChatParams {
  * hanya identitas tool + jumlah baris — bukan isi baris (yang bisa memuat data pasien).
  */
 export type CopilotProgressEvent =
+  | { type: 'stage'; stage: 'router' | 'summarize' | 'done'; label: string; step: number; maxSteps: number }
   | { type: 'tool_start'; tool: string }
   | { type: 'tool_result'; tool: string; count: number };
 
@@ -63,8 +64,23 @@ export interface CopilotChatResult {
 
 const MAX_HISTORY_TURNS = 10;
 /** Budget loop multi-step (gerbang kode, bukan imbauan): cegah biaya/latensi meledak. */
-export const MAX_ITERATIONS = 3;
-export const MAX_TOTAL_ROWS = 40;
+/**
+ * Konfigurasi operasional Copilot (murni, deterministik, membaca env terkini).
+ * Single Source of Truth untuk model, budget, timeout per attempt, dan iterasi.
+ */
+export function resolveCopilotConfig() {
+  return {
+    model: (process.env.COPILOT_MODEL || 'glm-5.3-flash').trim(),
+    totalBudgetMs: parsePositiveInt(process.env.COPILOT_TOTAL_BUDGET_MS, 300_000),
+    callTimeoutMs: parsePositiveInt(process.env.COPILOT_CALL_TIMEOUT_MS, 90_000),
+    maxIterations: parsePositiveInt(process.env.COPILOT_MAX_ITERATIONS, 5),
+    maxTotalRows: parsePositiveInt(process.env.COPILOT_MAX_TOTAL_ROWS, 60),
+    heartbeatMs: parsePositiveInt(process.env.COPILOT_HEARTBEAT_MS, 15_000),
+  };
+}
+
+export const MAX_ITERATIONS = 5;
+export const MAX_TOTAL_ROWS = 60;
 /**
  * Budget wall-clock (ms) untuk SATU turn Copilot (semua router + summarize).
  *
@@ -80,7 +96,7 @@ export const MAX_TOTAL_ROWS = 40;
  * Dengan 60 dtk, turn berat sering berakhir sebagai jawaban degradasi. Frontend
  * memakai timeout 125 dtk (margin di atas anggaran ini).
  */
-export const DEFAULT_TOTAL_BUDGET_MS = 120_000;
+export const DEFAULT_TOTAL_BUDGET_MS = 300_000;
 /** Sisa anggaran minimum untuk memulai panggilan LLM berikutnya (hindari call 1 dtk). */
 const MIN_CALL_BUDGET_MS = 1_500;
 
@@ -471,7 +487,9 @@ export class CopilotService {
   public async chat(params: CopilotChatParams): Promise<CopilotChatResult> {
     const { tenantId, message } = params;
     const history = (params.history || []).slice(-MAX_HISTORY_TURNS);
-    const totalBudgetMs = parsePositiveInt(process.env.COPILOT_TOTAL_BUDGET_MS, DEFAULT_TOTAL_BUDGET_MS);
+    const cop = resolveCopilotConfig();
+    const totalBudgetMs = cop.totalBudgetMs;
+    const turnStartedAt = Date.now();
     const deadline = Date.now() + totalBudgetMs;
     const remainingMs = () => deadline - Date.now();
     // Ambang minimal proporsional: pada anggaran normal = MIN_CALL_BUDGET_MS; pada
@@ -479,6 +497,20 @@ export class CopilotService {
     const minCallBudget = Math.min(MIN_CALL_BUDGET_MS, Math.max(1, Math.floor(totalBudgetMs / 3)));
     /** Batasi timeout LLM ke sisa anggaran (agar attempt tak melewati deadline). */
     const callTimeout = (cfgTimeout: number) => Math.max(minCallBudget, Math.min(cfgTimeout, remainingMs()));
+    const logTurn = (res: { degraded: boolean; toolsUsed: string[]; rowCounts: Record<string, number>; llmCalls: number }) => {
+      try {
+        console.log(JSON.stringify({
+          event: 'COPILOT_TURN',
+          tenantId,
+          toolsUsed: res.toolsUsed,
+          rowCounts: res.rowCounts,
+          llmCalls: res.llmCalls,
+          elapsedMs: Date.now() - turnStartedAt,
+          degraded: res.degraded,
+        }));
+      } catch {}
+    };
+
     let timedOut = false;
     // Jejak fallback Hermes → internal (observabilitas uji; lihat interface).
     let hermesFallback = false;
@@ -509,8 +541,14 @@ export class CopilotService {
       const { getLlmEndpointConfig } = await import('../../integrations/llm/llm-gateway');
       const { callChatCompletionsWithFallback } = await import('../../integrations/llm/model-fallback');
       const { extractBalancedJson } = await import('../../utils/json-extract');
+      const { auditLlmCall } = await import('../../utils/llm-audit-buffer');
 
-      const cfg = getLlmEndpointConfig({ modelConfigKey: 'CHAT_REPLY', tenantId });
+      const cfg = getLlmEndpointConfig({
+        modelConfigKey: 'CHAT_REPLY',
+        tenantId,
+        model: cop.model,
+        timeoutMs: cop.callTimeoutMs,
+      });
       // Gaya ringkasan tenant-aware dari DB (settings) — null = default netral.
       const styleConfig = await loadCopilotStyle(tenantId);
       // Fase 4 (tanpa-MCP): Hermes sebagai otak (router + summarize). Default
@@ -539,10 +577,18 @@ export class CopilotService {
       let llmCalls = 0;
       let totalRows = 0;
 
-      for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+      for (let iteration = 0; iteration < cop.maxIterations; iteration++) {
         // Gerbang anggaran: hentikan loop bila waktu tersisa terlalu tipis untuk
         // satu panggilan LLM lagi (cegah request melewati deadline klien).
         if (remainingMs() < minCallBudget) break;
+
+        params.onEvent?.({
+          type: 'stage',
+          stage: 'router',
+          label: iteration === 0 ? 'Mencari data di database…' : 'Menganalisis data lanjutan…',
+          step: iteration + 1,
+          maxSteps: cop.maxIterations,
+        });
 
         const priorSteps: RouterPriorStep[] = collected.map((c) => ({
           tool: c.tool,
@@ -564,6 +610,7 @@ export class CopilotService {
             toolMenuChars: toolMenu.length,
             historyTurns: history.length,
             priorSteps: priorSteps.length,
+            model: cfg.model,
           }));
         } catch {}
 
@@ -591,6 +638,7 @@ export class CopilotService {
           // Jejak uji: engine=hermes tetapi router jatuh ke internal.
           if (useHermes) hermesFallback = true;
           let routerResp: any;
+          const routerCallStart = Date.now();
           try {
             routerResp = await withDeadline(
               () =>
@@ -600,14 +648,25 @@ export class CopilotService {
                   baseUrl: cfg.baseUrl,
                   apiKey: cfg.apiKey,
                   timeoutMs: callTimeout(cfg.timeoutMs),
+                  attemptTimeoutCapMs: cop.callTimeoutMs,
                   payload: {
                     messages: [{ role: 'user', content: routerPrompt }],
                     temperature: 0,
-                    max_tokens: 200,
+                    max_tokens: 300,
                   },
                 }),
               remainingMs()
             );
+            auditLlmCall({
+              customer_phone: 'ADMIN_COPILOT',
+              tenant_id: tenantId,
+              conversation_id: params.activeContext?.conversationId || null,
+              task_type: 'AI_COPILOT_CHAT',
+              model_name: routerResp?.model || cfg.model,
+              baseUrl: routerResp?.baseUrl || cfg.baseUrl,
+              startedAt: routerCallStart,
+              usage: routerResp?.data?.usage,
+            });
           } catch (e: any) {
             if (isCopilotDeadlineError(e)) {
               timedOut = true;
@@ -635,6 +694,7 @@ export class CopilotService {
         if (!tool) {
           // Tool tak dikenal (halusinasi nama tool) → hentikan loop, jangan lempar.
           if (collected.length === 0) {
+            logTurn({ degraded: true, toolsUsed: [], rowCounts: {}, llmCalls });
             return { success: false, answer: 'Tool tidak dikenali.', toolsUsed: [], grounded: false, error: 'UNKNOWN_TOOL', llmCalls, ...engineTag() };
           }
           break;
@@ -651,7 +711,7 @@ export class CopilotService {
         totalRows += (toolResult.rows || []).length;
 
         // Budget baris: hentikan loop bila kuota konteks habis.
-        if (totalRows >= MAX_TOTAL_ROWS) break;
+        if (totalRows >= cop.maxTotalRows) break;
       }
 
       const toolsUsed = collected.map((c) => c.tool);
@@ -689,6 +749,7 @@ export class CopilotService {
 
       // Tak ada data terkumpul → jawab jujur (anti-halusinasi), jangan panggil summarize.
       if (unionRows.length === 0) {
+        logTurn({ degraded: false, toolsUsed, rowCounts, llmCalls });
         return {
           success: true,
           answer:
@@ -706,6 +767,7 @@ export class CopilotService {
       // Gerbang anggaran: bila sisa waktu tak cukup untuk summarize, sajikan data
       // mentah (degradasi jujur) daripada menembak LLM yang melewati deadline.
       if (remainingMs() < minCallBudget) {
+        logTurn({ degraded: true, toolsUsed, rowCounts, llmCalls });
         return {
           success: true,
           answer: buildDegradedAnswer(collected),
@@ -734,6 +796,13 @@ export class CopilotService {
           return `[${c.tool}] [${rowStrings.join(',')}]`;
         })
         .join('\n');
+      params.onEvent?.({
+        type: 'stage',
+        stage: 'summarize',
+        label: 'Menyusun ringkasan jawaban…',
+        step: cop.maxIterations,
+        maxSteps: cop.maxIterations,
+      });
       const summarizePrompt = buildSummarizePrompt(message, labeled, styleConfig?.summarizeTone ?? null);
 
       // Fase 6 (#191e-b): ukur ukuran prompt summarize (data rows + gaya).
@@ -745,6 +814,7 @@ export class CopilotService {
           estTokens: Math.ceil(summarizePrompt.length / 4),
           labeledRowsChars: labeled.length,
           toolsUsed: collected.map((c) => c.tool),
+          model: cfg.model,
         }));
       } catch {}
 
@@ -767,6 +837,8 @@ export class CopilotService {
       } else {
         // Jejak uji: engine=hermes tetapi summarize jatuh ke internal.
         if (useHermes) hermesFallback = true;
+        
+        const summaryCallStart = Date.now();
         let summaryResp: any;
         try {
           summaryResp = await withDeadline(
@@ -777,21 +849,34 @@ export class CopilotService {
                 baseUrl: cfg.baseUrl,
                 apiKey: cfg.apiKey,
                 timeoutMs: callTimeout(cfg.timeoutMs),
+                attemptTimeoutCapMs: cop.callTimeoutMs,
                 payload: {
                   messages: [
                     ...history.map((h) => ({ role: h.role, content: h.content })),
                     { role: 'user', content: summarizePrompt },
                   ],
                   temperature: 0.2,
-                  max_tokens: 400,
+                  max_tokens: 700,
                 },
               }),
+            
             remainingMs()
           );
+          auditLlmCall({
+            customer_phone: 'ADMIN_COPILOT',
+            tenant_id: tenantId,
+            conversation_id: params.activeContext?.conversationId || null,
+            task_type: 'AI_COPILOT_CHAT',
+            model_name: summaryResp?.model || cfg.model,
+            baseUrl: summaryResp?.baseUrl || cfg.baseUrl,
+            startedAt: summaryCallStart,
+            usage: summaryResp?.data?.usage,
+          });
         } catch (e: any) {
           // Batas waktu pada tahap ringkasan → tetap sajikan data mentah (degradasi jujur),
           // bukan pesan "layanan AI gangguan" yang menyesatkan.
           if (isCopilotDeadlineError(e)) {
+            logTurn({ degraded: true, toolsUsed, rowCounts, llmCalls });
             return {
               success: true,
               answer: buildDegradedAnswer(collected),
@@ -814,6 +899,14 @@ export class CopilotService {
       // Validator grounding atas UNION semua hasil tool (halusinasi silang-sumber).
       const grounded = this.validateGrounding(answer, unionRows);
 
+      params.onEvent?.({
+        type: 'stage',
+        stage: 'done',
+        label: 'Jawaban selesai disusun',
+        step: cop.maxIterations,
+        maxSteps: cop.maxIterations,
+      });
+      logTurn({ degraded: false, toolsUsed, rowCounts, llmCalls });
       return { success: true, answer, toolsUsed, grounded, llmCalls, rowCounts, ...engineTag() };
     } catch (err: any) {
       return {

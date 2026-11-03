@@ -247,7 +247,7 @@ describe('Follow-Up Schedule & State Transition Tests', () => {
 
     const res = await app.inject({
       method: 'DELETE',
-      url: '/api/admin/reservation/res-cancelled',
+      url: '/api/admin/reservation/res-cancelled?soft=true',
       headers: {
         'x-api-key': 'my_admin_api_key_secret',
       }

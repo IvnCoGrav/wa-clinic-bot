@@ -162,7 +162,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
   /**
    * GET /api/admin/dispatch/trip/:reservationId
    * Data realtime perjalanan terapis untuk widget CS (posisi, sisa jarak, ETA,
-   * flag geofence anti-lost, dan teks jawaban siap kirim ΓÇö DB-driven).
+   * flag geofence anti-lost, dan teks jawaban siap kirim — DB-driven).
    */
   fastify.get(
     '/api/admin/dispatch/trip/:reservationId',
@@ -236,7 +236,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
         geofenceDistanceM = geo.distanceM;
       }
 
-      // Prediksi keterlambatan (ETA vs jadwal) ΓÇö murni, tanpa I/O.
+      // Prediksi keterlambatan (ETA vs jadwal) — murni, tanpa I/O.
       const delayStatus = calculateDelayStatus(
         (reservation as any).booking_date ?? null,
         etaMinutes
@@ -643,10 +643,10 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
         });
 
         // CAPI Purchase decoupled: event Purchase HANYA via Meta Purchase Queue (POST /api/admin/reservation/:id/approve-purchase)
-        // ΓÇö Tandai Lunas / Confirm tidak lagi auto-trigger CAPI & tidak set purchase_event_sent_at.
+        // — Tandai Lunas / Confirm tidak lagi auto-trigger CAPI & tidak set purchase_event_sent_at.
 
         // Mandat Mutlak Anti-Label WAHA: pelunasan melepas label lifecycle via DB
-        // internal (tabel CustomerLabel) ΓÇö zero mutasi label WAHA.
+        // internal (tabel CustomerLabel) — zero mutasi label WAHA.
         if (process.env.ENABLE_LIFECYCLE_LABELS === 'true') {
           try {
             const pendingLabel = await prisma.label.findFirst({
@@ -671,7 +671,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           mock.updated_at = new Date();
           memoryReservations.set(id, mock);
 
-          // CAPI decoupled ΓÇö mock juga tidak kirim Purchase & tidak set purchase_event_sent_at.
+          // CAPI decoupled — mock juga tidak kirim Purchase & tidak set purchase_event_sent_at.
 
           // Mandat Mutlak Anti-Label WAHA: memory-fallback juga DB-only (zero WAHA label).
           if (process.env.ENABLE_LIFECYCLE_LABELS === 'true') {
@@ -731,7 +731,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           throw new Error('Reservation not found');
         }
 
-        // MT-1.4: seam terpusat completed ΓÇö dekopling REVIEW/NEXT + reset V3 episodik
+        // MT-1.4: seam terpusat completed — dekopling REVIEW/NEXT + reset V3 episodik
         await runCompletionSideEffects(outcome.existing, tenantId);
 
         await auditService.logAdminAction({
@@ -769,7 +769,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
    * Menandai selesai (status: 'completed') sekumpulan reservasi sekaligus.
    *
    * Kontrak:
-   *  - body `{ ids: string[] }` ΓÇö array 1..50 id (duplikat di-dedupe, whitespace di-trim);
+   *  - body `{ ids: string[] }` — array 1..50 id (duplikat di-dedupe, whitespace di-trim);
    *  - tenant-scoped: id milik tenant lain ΓåÆ dilewati sebagai NOT_FOUND;
    *  - HANYA status confirmed/en_route yang boleh diselesaikan (keyat ketat, paritas
    *    `canTransition`); sisanya dilewati sebagai NOT_ELIGIBLE;
@@ -1013,7 +1013,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
             const staffId = (assignedStaffId as string) || null;
             mock.assigned_staff_id = staffId;
             // Paritas relasi DB di mode memory: lookup staff nyata (tanpa hardcode nama).
-            // Bila lookup gagal (DB offline), relasi null ΓÇö UI fallback ke staffList via FK.
+            // Bila lookup gagal (DB offline), relasi null — UI fallback ke staffList via FK.
             let staffObj: { id: string; name: string; phone?: string } | null = null;
             if (staffId) {
               try {
@@ -1262,7 +1262,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
               console.error('[Admin API] Google Calendar Event create on edit failed:', gcErr.message);
             }
           }
-          // CAPI Purchase decoupled: tidak auto-kirim saat edit menjadi confirmed ΓÇö eksklusif via Purchase Queue.
+          // CAPI Purchase decoupled: tidak auto-kirim saat edit menjadi confirmed — eksklusif via Purchase Queue.
         }
         if (isBecomingCompleted) {
           const targetBookingDate = parsedBookingDate || existing.booking_date;
@@ -1308,7 +1308,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
         if (staffChanged && assignedStaffId) {
           try {
             const { staffNotificationService } = await import('../../services/staff-notification.service');
-            // Buffer 5 menit: jadwalkan ulang (menimpa pending lama) ΓÇö terapis baru
+            // Buffer 5 menit: jadwalkan ulang (menimpa pending lama) — terapis baru
             // baru menerima Telegram setelah jendela, agar koreksi admin tidak bocor.
             staffNotificationService.scheduleReservationAssignmentNotification(id, assignedStaffId).catch((err: any) => {
               console.error('[Admin API] Failed to schedule staff notification on edit:', err.message);
@@ -1384,7 +1384,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
             if (!nm || !isValidChildName(nm)) continue;
             if (classifyPatientEntity({ name: nm, ageText: (b as any).ageText }) !== 'CHILD') continue;
             // Koreksi admin umur WAJIB menghitung ulang birth_date (bukan hanya
-            // raw_age_text) ΓÇö jika tidak, anak lama yang sudah punya birth_date
+            // raw_age_text) — jika tidak, anak lama yang sudah punya birth_date
             // tetap menampilkan umur lama (tampilan memprioritaskan birth_date).
             const newBirthDate = b.ageText ? parseAgeTextToBirthDate(b.ageText, new Date()) : null;
             const existingChild = existing.customer?.children?.find((c: any) => c.name.toLowerCase() === nm.toLowerCase());
@@ -1952,29 +1952,64 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
 
   /**
    * DELETE /api/admin/reservation/:id
-   * Mendukung soft-cancel (default) atau hard delete permanen (?hard=true)
+   * Kontrak (lihat KNOWN_ISSUES #300):
+   * - tanpa query   -> ARSIP (snapshot 60 hari, baris aktif dihapus)
+   * - ?archive=true -> ARSIP (alias eksplisit)
+   * - ?hard=true    -> ARSIP (alias historis, BUKAN hard delete fisik)
+   * - ?soft=true    -> SOFT-CANCEL (status = 'cancelled', baris tetap ada)
    */
   fastify.delete(
     '/api/admin/reservation/:id',
     async (
       request: FastifyRequest<{
         Params: { id: string };
-        Querystring: { hard?: string };
+        Querystring: { hard?: string; archive?: string; soft?: string; reason?: string };
       }>,
       reply: FastifyReply
     ) => {
       const tenantId = tenantOf(request);
       const { id } = request.params;
-      const isHardDelete = request.query?.hard === 'true';
+      const isSoftCancel = request.query?.soft === 'true';
+      const reason = request.query?.reason;
+
+      let existing: any = null;
+      let dbUnavailable = false;
       try {
-        const existing = await prisma.reservation.findFirst({
+        existing = await prisma.reservation.findFirst({
           where: { id, tenant_id: tenantId },
           include: { customer: true },
         });
-        if (!existing) {
-          throw new Error('Reservation not found');
-        }
+      } catch (dbErr: any) {
+        dbUnavailable = true;
+        console.warn(`[Admin API] DELETE reservasi ${id}: DB tidak dapat diakses, cek memory store:`, dbErr?.message);
+      }
 
+      if (!existing) {
+        const mem = memoryReservations.get(id);
+        const memUsable = mem && mem.tenant_id === tenantId;
+        if (!memUsable) {
+          if (dbUnavailable) {
+            return reply.status(503).send({
+              success: false,
+              code: 'DB_UNAVAILABLE',
+              error: 'Basis data tidak dapat diakses. Reservasi TIDAK dihapus/diarsipkan. Silakan coba lagi.',
+            });
+          }
+          return reply.status(404).send({ success: false, error: 'Reservation not found' });
+        }
+        if (!isSoftCancel) {
+          memoryReservations.delete(id);
+          await customerService.recalculateCustomerLtv(mem.customer_id, tenantId).catch(() => {});
+          return reply.status(200).send({ success: true, message: 'Reservasi berhasil diarsipkan (memory).' });
+        }
+        mem.status = 'cancelled';
+        mem.updated_at = new Date();
+        memoryReservations.set(id, mem);
+        await customerService.recalculateCustomerLtv(mem.customer_id, tenantId).catch(() => {});
+        return reply.status(200).send({ success: true, data: mem, note: 'Fallback in-memory mode' });
+      }
+
+      try {
         if (existing.google_calendar_event_id) {
           try {
             await googleCalendarService.deleteEvent(existing.google_calendar_event_id);
@@ -1983,13 +2018,13 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           }
         }
 
-        if (isHardDelete || (request.query as any)?.archive === 'true' || !(request.query as any)?.soft) {
+        if (!isSoftCancel) {
           const archiveResult = await reservationArchiveService.archiveReservation({
             id,
             tenantId: existing.tenant_id || tenantId,
             actor: (request as any).adminIdentity,
             apiKey: (request as any).adminKeyUsed,
-            reason: (request.query as any)?.reason,
+            reason,
             ipAddress: request.ip,
           });
 
@@ -2014,7 +2049,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
         } catch (_) {}
 
         if (existing.assigned_staff_id) {
-          const cancelReason = (request.query as any)?.reason || undefined;
+          const cancelReason = reason || undefined;
           import('../../services/staff-notification.service').then(({ staffNotificationService }) => {
             staffNotificationService.sendReservationCancelledNotification(id, existing.assigned_staff_id!, cancelReason).catch((e: any) =>
               console.warn('[Admin API] Failed to send Telegram cancelled (soft delete):', e.message)
@@ -2034,7 +2069,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
             payload: {
               previousStatus: existing.status,
               purchase_event_sent_at: existing.purchase_event_sent_at,
-              reason: (request.query as any)?.reason || 'RESERVATION_CANCELLED_POST_CAPI_APPROVE',
+              reason: reason || 'RESERVATION_CANCELLED_POST_CAPI_APPROVE',
             },
             ipAddress: request.ip,
           }).catch(() => {});
@@ -2078,21 +2113,17 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
         });
 
         return reply.status(200).send({ success: true, data: reservation });
-      } catch (error) {
-        const mock = memoryReservations.get(id);
-        if (mock && mock.tenant_id === tenantId) {
-          if (isHardDelete || (request.query as any)?.archive === 'true' || !(request.query as any)?.soft) {
-            memoryReservations.delete(id);
-            await customerService.recalculateCustomerLtv(mock.customer_id, tenantId).catch(() => {});
-            return reply.status(200).send({ success: true, message: 'Reservasi berhasil dihapus permanen (memory).' });
-          }
-          mock.status = 'cancelled';
-          mock.updated_at = new Date();
-          memoryReservations.set(id, mock);
-          await customerService.recalculateCustomerLtv(mock.customer_id, tenantId).catch(() => {});
-          return reply.status(200).send({ success: true, data: mock, note: 'Fallback in-memory mode' });
-        }
-        return reply.status(404).send({ success: false, error: 'Reservation not found' });
+      } catch (error: any) {
+        const msg = String(error?.message || error);
+        const isDbDown = /Database offline|ECONNREFUSED|ETIMEDOUT|P1001|P1002|P2024|connection|timed out/i.test(msg);
+        console.error(`[Admin API] DELETE reservasi ${id} gagal:`, msg);
+        return reply.status(isDbDown ? 503 : 500).send({
+          success: false,
+          code: isDbDown ? 'DB_UNAVAILABLE' : 'DELETE_FAILED',
+          error: isDbDown
+            ? 'Basis data tidak dapat diakses. Reservasi TIDAK dihapus/diarsipkan. Silakan coba lagi.'
+            : 'Gagal memproses penghapusan reservasi.',
+        });
       }
     }
   );
@@ -2102,13 +2133,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
    * Moderasi outlier: admin menyetujui event Purchase yang ditahan queue
    * (purchase_review_status='pending'). Event dikirim ke Meta CAPI dengan
    * event_time HISTORIS (purchase_occurred_at) agar attribution akurat.
-   * Event >7 hari ditolak ΓÇö Meta akan drop event yang terlalu lama.
-  /**
-   * POST /api/admin/reservation/:id/approve-purchase
-   * Moderasi outlier: admin menyetujui event Purchase yang ditahan queue
-   * (purchase_review_status='pending'). Event dikirim ke Meta CAPI dengan
-   * event_time HISTORIS (purchase_occurred_at) agar attribution akurat.
-   * Event >7 hari ditolak ΓÇö Meta akan drop event yang terlalu lama.
+   * Event >7 hari ditolak — Meta akan drop event yang terlalu lama.
    */
   fastify.post(
     '/api/admin/reservation/:id/approve-purchase',
@@ -2303,7 +2328,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
             })
           : undefined;
 
-        // 5. AWAIT CAPI ΓÇö hanya set approved jika Meta benar-benar menerima event.
+        // 5. AWAIT CAPI — hanya set approved jika Meta benar-benar menerima event.
         const capiResult = await capiService.sendCapiEvent({
           eventName,
           customer: existing.customer,
@@ -2394,7 +2419,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
         });
       } catch (error) {
         console.error('[CAPI APPROVE ERROR]', (error as Error).message);
-        // Fallback in-memory hanya untuk dev/test ΓÇö di production harus fail agar UI tidak tampil success palsu
+        // Fallback in-memory hanya untuk dev/test — di production harus fail agar UI tidak tampil success palsu
         if (process.env.NODE_ENV !== 'production') {
           const mock = memoryReservations.get(id);
           if (mock && mock.tenant_id === tenantId) {
@@ -2458,7 +2483,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
 
         // Moderasi CAPI murni urusan atribusi Meta Ads: HANYA mengubah
         // purchase_review_status. DILARANG menyentuh purchase_occurred_at /
-        // purchase_value / payment_method ΓÇö status keuangan internal TIDAK
+        // purchase_value / payment_method — status keuangan internal TIDAK
         // berubah. Melunasi reservasi tetap lewat jalur bayar resmi.
         const reservation = await prisma.reservation.update({
           where: { id },
@@ -2622,7 +2647,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
       let wabaConfigured = false;
       try {
         // Select eksplisit: kolom tenants.settings belum ada di sebagian DB
-        // (drift baseline, lihat docs/KNOWN_ISSUES.md #30) ΓÇö select-* memicu P2022.
+        // (drift baseline, lihat docs/KNOWN_ISSUES.md #30) — select-* memicu P2022.
         const tenant = await prisma.tenant.findUnique({
           where: { id: tenantId },
           select: { id: true, landing_domain: true, waba_business_account_id: true },
@@ -2643,7 +2668,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
         return v;
       };
 
-      // Order number per customer (new vs repeat) ΓÇö 1 query, bukan N+1.
+      // Order number per customer (new vs repeat) — 1 query, bukan N+1.
       // Basis kanonis: reservasi confirmed/completed (di luar cancelled/hold).
       // Ordinal ditetapkan dari urutan created_at per customer (deterministik).
       const customerIds = Array.from(new Set(visibleRows.map((r) => r.customer_id).filter(Boolean)));
@@ -2826,7 +2851,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
             id: { notIn: processedCustomerIds },
             // Anti-duplikasi Lead vs Purchase: customer yang SUDAH closing
             // (punya reservasi confirmed/en_route/completed) tidak dimoderasi
-            // lagi sebagai Lead ΓÇö sudah terkonversi ke Purchase. Syarat berbasis
+            // lagi sebagai Lead — sudah terkonversi ke Purchase. Syarat berbasis
             // state DB (bukan string match), tahan terhadap paginasi/date-range.
             reservations: {
               none: {

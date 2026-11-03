@@ -58,6 +58,27 @@ describe('Age Calculator — parseAgeTextToBirthDate', () => {
     expect(diff).toBeGreaterThanOrEqual(729);
     expect(diff).toBeLessThanOrEqual(731);
   });
+  it('"1 tahun" → tepat 12 bulan (#299)', () => {
+    const birth = parseAgeTextToBirthDate('1 tahun', REF)!;
+    expect(birth).not.toBeNull();
+    expect(monthsBetween(birth, REF)).toBe(12);
+  });
+
+  it('"10 bulan kurang 6 hari" tetap memakai jalur hari (#299)', () => {
+    const birth = parseAgeTextToBirthDate('10 bulan kurang 6 hari', REF)!;
+    expect(birth).not.toBeNull();
+    // Jalur hari (10 × 30.44 − 6 = 298,4 → 298 hari). Bila salah memakai jalur
+    // kalender addMonths, hasilnya 304 hari — asersi eksak ini membedakannya.
+    expect(daysBetweenDates(REF, birth)).toBe(298);
+    // Dampak klinis: 9 bulan penuh (bukan 10) menurut kalender.
+    expect(monthsBetween(birth, REF)).toBe(9);
+  });
+
+  it('"8,5 bulan" → monthsBetween 8 (#299)', () => {
+    const birth = parseAgeTextToBirthDate('8,5 bulan', REF)!;
+    expect(birth).not.toBeNull();
+    expect(monthsBetween(birth, REF)).toBe(8);
+  });
 
   it('teks tak bisa di-parse → null', () => {
     expect(parseAgeTextToBirthDate('belum tahu', REF)).toBeNull();

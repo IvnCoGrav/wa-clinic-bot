@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { SUMOPOD_PRIMARY_MODEL, KENARI_PRIMARY_MODEL, DEEPSEEK_DIRECT_MODEL } from '../../config/ai-models.config';
+import { parsePositiveInt } from '../../utils/env-numeric';
 
 /**
  * Arsitektur fallback 3-TIER (katalog live 2026-09-21):
@@ -86,6 +87,8 @@ export interface ChatCompletionsWithFallbackCall {
   fallbackModel: string;
   payload: Record<string, unknown>;
   timeoutMs: number;
+  /** Batas keras timeout HTTP per attempt. Default 25000 (perilaku lama). */
+  attemptTimeoutCapMs?: number;
   /**
    * Validator opsional untuk memicu fallback saat isi respons dianggap tidak valid
    * (mis. JSON malformed). Jika diberikan dan mengembalikan false untuk respons model
@@ -136,7 +139,9 @@ export async function callChatCompletionsWithFallback(
   ): Promise<any> => {
     const finalBaseUrl = overrideBaseUrl || call.baseUrl;
     const finalApiKey = overrideApiKey || call.apiKey;
-    const attemptTimeout = Math.min(call.timeoutMs || 25000, 25000);
+    const defaultCap = parsePositiveInt(process.env.LLM_ATTEMPT_TIMEOUT_MS, 25000);
+    const cap = call.attemptTimeoutCapMs ?? defaultCap;
+    const attemptTimeout = Math.min(call.timeoutMs || cap, cap);
     const effectivePayload: any = { ...(payloadOverride ?? call.payload), model };
     if (model.toLowerCase().includes('luna') || model.toLowerCase().includes('o1') || model.toLowerCase().includes('o3')) {
       delete effectivePayload.temperature;

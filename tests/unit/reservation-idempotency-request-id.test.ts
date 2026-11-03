@@ -126,7 +126,10 @@ describe('A2 — booking_date WAJIB (KB-4)', () => {
     const arg = vi.mocked(prisma.reservation.create).mock.calls[0][0] as any;
     expect(arg.data.status).toBe('pending');
     expect(arg.data.booking_date).toBeNull();
-    expect(arg.data.pendingScheduleCheck).toBe(false);
+    // `pendingScheduleCheck` adalah state sesi V3 (src/v3/domain/types.ts), BUKAN
+    // kolom Reservation — jadi tidak pernah (dan tidak boleh) ikut ke payload
+    // `prisma.reservation.create`. Ekspektasi lama `toBe(false)` usang.
+    expect(arg.data.pendingScheduleCheck).toBeUndefined();
   });
 
   it('channel-aware: WEBHOOK (auto-capture) tanpa tanggal → intake pending (bukan ditolak)', async () => {

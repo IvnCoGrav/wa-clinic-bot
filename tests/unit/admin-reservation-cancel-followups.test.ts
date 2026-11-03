@@ -37,7 +37,7 @@ describe('Admin cancel/delete reservasi membatalkan follow-up (P1-14)', () => {
     const app = buildApp();
     const res = await app.inject({
       method: 'DELETE',
-      url: '/api/admin/reservation/res-cancel-1',
+      url: '/api/admin/reservation/res-cancel-1?soft=true',
       headers: { 'x-api-key': ADMIN_KEY },
     });
 

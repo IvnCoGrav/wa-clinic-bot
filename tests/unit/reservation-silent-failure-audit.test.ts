@@ -421,7 +421,7 @@ describe('AUDIT 173i-d — DELETE hard: notifikasi staf SEBELUM reservasi dihapu
     await app.ready();
     const res = await app.inject({
       method: 'DELETE',
-      url: '/api/admin/reservation/res-del?hard=true',
+      url: '/api/admin/reservation/res-del?soft=true',
       headers: { 'x-api-key': ADMIN_API_KEY_TEST },
     });
     await app.close();

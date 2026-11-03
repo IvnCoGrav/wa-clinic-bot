@@ -1,0 +1,1942 @@
+[
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/admin"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/admin*"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "POST"
+    ],
+    "path": "/api/webhook/waba"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "POST"
+    ],
+    "path": "/api/webhook/telegram"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/auth/login"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/auth/logout"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/auth/restore"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/auth/me"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/ai-models"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/ai-models/provider"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/ai-models/test"
+  },
+  {
+    "methods": [
+      "PUT"
+    ],
+    "path": "/api/admin/ai-models/batch"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/ai-models/reset-defaults"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/ai-models/:task"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "PATCH"
+    ],
+    "path": "/api/admin/ai-rollout-scope"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/ai-evaluations"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/ai-audit-summary"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/customers"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/customers/stats"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/customers/audience-export"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/customers/audience-export/meta"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/customers/map-points"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/customers/flagged"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/customers/resolve-location"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "PUT",
+      "PATCH"
+    ],
+    "path": "/api/admin/customers/:id"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/customers/:id/default-ongkir"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "POST"
+    ],
+    "path": "/api/admin/customers/:id/addresses"
+  },
+  {
+    "methods": [
+      "PUT",
+      "DELETE"
+    ],
+    "path": "/api/admin/customers/:id/addresses/:addressId"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/customers/:id/addresses/:addressId/default"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/customers/:id/addresses/:addressId/label"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/customers/:id/active-reservations"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/customers/:id/ai-override"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/customers/:id/messages"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/customers/:id/send-event"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/customers/:id/label"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/customers/:id/labels"
+  },
+  {
+    "methods": [
+      "PUT"
+    ],
+    "path": "/api/admin/customers/:id/location"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/customers/:id/notes"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/customers/:id/refresh-location"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/customer/:id/block"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/customer/:id/unblock"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "POST"
+    ],
+    "path": "/api/admin/customer-service"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/conversations/:id/typing"
+  },
+  {
+    "methods": [
+      "DELETE"
+    ],
+    "path": "/api/admin/conversations/:id/messages/:messageId"
+  },
+  {
+    "methods": [
+      "PUT"
+    ],
+    "path": "/api/admin/conversations/:id/messages/:messageId/edit"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/conversations/:id/messages/:messageId/reaction"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/conversations/:id/messages/:messageId/pin"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/conversations/:id/messages/:messageId/hide"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/conversations/:id/pin"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/conversations/:id/pinned-message"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/conversations/:id/read"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/conversations/:id/unread"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/conversation/:id/release"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/conversation/:id/takeover"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "PATCH"
+    ],
+    "path": "/api/admin/conversation-behavior"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/copilot/chat"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/copilot/stream"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/capi-queue"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "PATCH"
+    ],
+    "path": "/api/admin/capi-config"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "POST"
+    ],
+    "path": "/api/admin/ctwa-catchers"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/ctwa-catchers/test"
+  },
+  {
+    "methods": [
+      "PUT",
+      "DELETE"
+    ],
+    "path": "/api/admin/ctwa-catchers/:id"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/geo/areas"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/general-faq-staging"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/general-faq-staging/:id/review"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/gateway-capability"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/human-handling-conversations"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/health"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/harvest/legacy-chat"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/harvest/reset-staging"
+  },
+  {
+    "methods": [
+      "DELETE"
+    ],
+    "path": "/api/admin/harvest/staging/all"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/harvest/status"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/live-chat/conversations"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/live-chat/conversations/:id"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/live-chat/conversations/:id/messages"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/live-chat/conversations/:id/messages/:messageId/reaction"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/live-chat/conversations/:id/messages/:messageId/pin"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/live-chat/conversations/:id/messages/:messageId/hide"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/live-chat/conversations/:id/reply"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/live-chat/conversations/:id/typing"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/live-chat/conversations/:id/takeover"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/live-chat/conversations/:id/pinned-message"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/live-chat/conversations/:id/suggest-reply"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/live-chat/conversations/:id/dismiss-frustration"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/live-chat/customers/:id/refresh-profile-picture"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/live-chat/unread-count"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/live-chat/sync-history"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/live-chat/sync-health"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/live-chat/sync-full"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/live-chat/sync-status"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/live-chat/sync-cancel"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/live-chat/events"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/live-chat/mark-all-read"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "POST"
+    ],
+    "path": "/api/admin/landings"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "PUT",
+      "DELETE"
+    ],
+    "path": "/api/admin/landings/:id"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "POST"
+    ],
+    "path": "/api/admin/labels"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/labels/seed-defaults"
+  },
+  {
+    "methods": [
+      "PATCH",
+      "DELETE"
+    ],
+    "path": "/api/admin/labels/:id"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/legacy-staging"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/legacy-staging/:id"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/legacy-staging/:id/commit"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/reservation"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/reservations"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/reservations/count"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/reservations/daily-slots"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/reservations/bulk-complete"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/reservation/parse"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/reservation/quick-hold"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/reservation/archive"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/reservation/archive/:id/restore"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "PATCH",
+      "DELETE"
+    ],
+    "path": "/api/admin/reservation/:id"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/reservation/:id/release-hold"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/reservation/:id/reject-purchase"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/reservation/:id/confirm"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/reservation/:id/complete"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/reservation/:id/status"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/reservation/:id/set-date"
+  },
+  {
+    "methods": [
+      "PUT"
+    ],
+    "path": "/api/admin/reservation/:id/proof"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/reservation/:id/assign-staff"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/reservation/:id/approve-purchase"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/reservation/:id/unreject-purchase"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/reservation-series"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/reservation-series/customer/:customerId"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/reservation-series/:id"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/reservation-series/:id/pause"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/reservation-series/:id/resume"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/reservation-series/:id/cancel"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/reservation-series/:id/session/:reservationId"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "POST"
+    ],
+    "path": "/api/admin/roles"
+  },
+  {
+    "methods": [
+      "DELETE"
+    ],
+    "path": "/api/admin/roles/:key"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/dispatch/trip/:reservationId"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "POST"
+    ],
+    "path": "/api/admin/delivery-tiers"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/debug/system"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/debug/logs"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "DELETE"
+    ],
+    "path": "/api/admin/debug/llm-logs"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/debug/llm-grouped-logs"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/debug/messages"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/debug/meta-clicks"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/debug/meta-capi-test"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/debug/meta-summary"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/debug/meta-manual-send"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/debug/meta-manual-history"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/debug/conversations"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/knowledge/chunks"
+  },
+  {
+    "methods": [
+      "PUT",
+      "DELETE"
+    ],
+    "path": "/api/admin/knowledge/chunks/:id"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/knowledge/unanswered"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/knowledge/unanswered/:id/resolve"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/knowledge/faq"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/knowledge/document"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/tenant/:id/landing"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/tenant/:id/landing/reset"
+  },
+  {
+    "methods": [
+      "PUT"
+    ],
+    "path": "/api/admin/tenant/:id/html"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "PATCH"
+    ],
+    "path": "/api/admin/settings"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "PUT"
+    ],
+    "path": "/api/admin/settings/mql"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "PUT"
+    ],
+    "path": "/api/admin/settings/media"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "PUT"
+    ],
+    "path": "/api/admin/settings/meta-purchase-policy"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "PUT"
+    ],
+    "path": "/api/admin/settings/pricelist-image"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "PUT"
+    ],
+    "path": "/api/admin/settings/pricelist-promo"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "PUT"
+    ],
+    "path": "/api/admin/settings/payment-info"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "PUT"
+    ],
+    "path": "/api/admin/settings/daily-report"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/settings/daily-report/test-send"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/settings/telegram/regenerate-token"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "PUT"
+    ],
+    "path": "/api/admin/settings/notifications"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/settings/notifications/test"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/settings/notifications/logs"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/settings/clinic-policies"
+  },
+  {
+    "methods": [
+      "PUT"
+    ],
+    "path": "/api/admin/settings/clinic-policies/:topic"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "POST"
+    ],
+    "path": "/api/admin/services"
+  },
+  {
+    "methods": [
+      "PUT",
+      "DELETE"
+    ],
+    "path": "/api/admin/services/:id"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/sandbox/chat"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/sandbox/cleanup"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "POST"
+    ],
+    "path": "/api/admin/staff"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/staff/trigger-morning-briefing"
+  },
+  {
+    "methods": [
+      "PATCH",
+      "DELETE"
+    ],
+    "path": "/api/admin/staff/:id"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/staff/:id/send-briefing"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/staff/:id/telegram-pairing"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/staff/:id/telegram-pairing/regenerate"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/system/ai-health"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "POST"
+    ],
+    "path": "/api/admin/persona"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "PUT"
+    ],
+    "path": "/api/admin/persona/prompt-config"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "PATCH"
+    ],
+    "path": "/api/admin/purchase-moderation"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/push/public-key"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/push/subscribe"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/push/staff-device-counts"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/push/unsubscribe"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/push/test"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/push/test-staff"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "POST"
+    ],
+    "path": "/api/admin/few-shots"
+  },
+  {
+    "methods": [
+      "PUT"
+    ],
+    "path": "/api/admin/few-shots/reorder"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/few-shots/reset-defaults"
+  },
+  {
+    "methods": [
+      "PUT",
+      "DELETE"
+    ],
+    "path": "/api/admin/few-shots/:id"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/follow-ups"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/follow-ups/bulk-queue"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/follow-ups/bulk-cancel"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/follow-ups/reschedule-overdue"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/follow-ups/:id"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/follow-ups/:id/queue"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/follow-ups/:id/send-now"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/follow-ups/:id/retry"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/follow-ups/:id/reschedule"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/follow-ups/:id/cancel"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "POST",
+      "PUT"
+    ],
+    "path": "/api/admin/follow-up-templates"
+  },
+  {
+    "methods": [
+      "DELETE"
+    ],
+    "path": "/api/admin/follow-up-templates/:type/:variant"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/financial-analytics"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/financial-analytics/export"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "PATCH"
+    ],
+    "path": "/api/admin/whatsapp-provider"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/whatsapp-provider/qr"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/whatsapp-provider/session/start"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/whatsapp-provider/session/reset"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/whatsapp-provider/session/disconnect"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/whatsapp-provider/cutoff"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "POST"
+    ],
+    "path": "/api/admin/waba-templates"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/migration/extract"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/migration/staging"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/migration/staging/bulk-approve-purchases"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/migration/staging/:id"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/migration/commit"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/medical-faq-staging"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/admin/medical-faq-staging/:id/review"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/meta-performance"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "PUT"
+    ],
+    "path": "/api/admin/meta-performance/settings"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/export/daily-chats"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/export/daily-chats/list"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/integrations/google/auth-url"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/integrations/google/callback"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/integrations/google/status"
+  },
+  {
+    "methods": [
+      "PUT"
+    ],
+    "path": "/api/admin/integrations/google/settings"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/integrations/google/sync-all"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "PUT"
+    ],
+    "path": "/api/admin/integrations/google/sheets-config"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/integrations/google/sheets-test"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/integrations/google/import"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/integrations/google/disconnect"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/backup/list"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/backup/create"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/admin/backup/download/:fileName"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/backup/upload-drive"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/backup/upload-file"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/backup/restore"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD",
+      "POST"
+    ],
+    "path": "/api/admin/quick-replies"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/admin/quick-replies/seed-defaults"
+  },
+  {
+    "methods": [
+      "PUT",
+      "DELETE"
+    ],
+    "path": "/api/admin/quick-replies/:id"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/staff/auth/login"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/staff/auth/logout"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/staff/auth/restore"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/staff/auth/me"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/staff/arrival-template"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/staff/me/telegram-pairing"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/staff/me/telegram-pairing/regenerate"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/staff/today-tasks"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/staff/team-members"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/staff/telemetry"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/staff/trip/stop"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/staff/reservations/:id/reassign"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/staff/reservations/:id/otw"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/staff/reservations/:id/arrive"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/staff/reservations/:id/complete"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/staff/reservations/:id/send-payment-info"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/staff/reservations/:id/payment"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/staff/upcoming-schedule"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/staff/update-location"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/staff/completed-tasks"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/staff/conversations/:id/messages"
+  },
+  {
+    "methods": [
+      "DELETE"
+    ],
+    "path": "/api/staff/conversations/:id/messages/:messageId"
+  },
+  {
+    "methods": [
+      "PUT"
+    ],
+    "path": "/api/staff/conversations/:id/messages/:messageId/edit"
+  },
+  {
+    "methods": [
+      "PATCH"
+    ],
+    "path": "/api/staff/conversations/:id/read"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/staff/conversations/:id/reply"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/staff/otw-template"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/staff/payment-info"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/staff/gateway-capability"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/staff/live-chat/events"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/tenant/:slug"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/telegram/webhook"
+  },
+  {
+    "methods": [
+      "OPTIONS",
+      "POST"
+    ],
+    "path": "/api/tracking/click"
+  },
+  {
+    "methods": [
+      "OPTIONS",
+      "POST"
+    ],
+    "path": "/api/tracking/pageview"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/pricelist"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/api/files/:session/:file"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/assets/:filename"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "*"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/go"
+  },
+  {
+    "methods": [
+      "POST"
+    ],
+    "path": "/webhook"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/health"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/ready"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/cta"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/promo/:slug"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/proof/:reservationId"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/pricelist"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/pricelist.html"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/pricelist-baru.html"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/media/asset/:filename"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/media/avatar/:customerId"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/media/:scope/:tenant/:file"
+  },
+  {
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "path": "/:slug"
+  }
+]

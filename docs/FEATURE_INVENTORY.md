@@ -46,10 +46,10 @@ Lapisan gateway bertugas mengabstraksi komunikasi dua arah ke WhatsApp melalui d
 Mesin AI menggunakan arsitektur dua tahap (**Call 1 Router** dan **Call 2 Generator**) dengan Persona Bidan yang empatik, profesional, dan dipandu oleh batasan deterministik ketat (*hard guards*).
 
 ### A. Alur Eksekusi & Routing LLM
-1. **Call 1 Router (`router-tool-routing.layer.ts`)**:
+1. **Call 1 Router (`src/v3/agent/prompt/phases/router-tool-routing.layer.ts`)**:
    - Menetapkan `parallel_tool_calls: false` (hanya boleh memanggil maksimal 1 tool utama per putaran obrolan).
    - Menentukan intent customer: konsultasi layanan, tanya harga, hitung ongkir, booking jadwal, tanya kebijakan klinik, atau eskalasi medis.
-2. **Call 2 Generator (`generation-stage.ts`)**:
+2. **Call 2 Generator (`src/v3/agent/pipeline/generation-stage.ts`)**:
    - Merangkai teks balasan akhir berdasarkan hasil data tool, persona Bidan, data grounding riil, dan contoh percakapan (*few-shot exemplars*).
 
 ### B. Dynamic Physical Tool Masking (`src/v3/tools/tool-masker.ts`)
@@ -71,16 +71,16 @@ Tool yang belum memenuhi syarat status sesi dicabut secara fisik dari JSON schem
 6. **`search_knowledge_faq`**:
    - Pencarian semantik berbasis potongan pengetahuan (*knowledge chunks*) untuk menjawab pertanyaan spesifik non-standar.
 
-### D. Hard Deterministic Guardrails (`src/v3/guardrails/`)
-- **`factual-claim-validator.ts`**: Menolak klaim medis atau klaim harga yang tidak terdapat dalam potongan data grounding resmi.
-- **`numeric-fact-validator.ts`**: Memverifikasi kesesuaian angka nominal harga dan durasi menit layanan antara data database vs teks yang dirangkai LLM.
-- **`pronoun-validator.ts`**: Memastikan chatbot secara konsisten menggunakan kata ganti representatif klinik ("kami" / "Bidan kami") dan bukan kata ganti tunggal ("saya").
-- **`sanitizer.ts`**: Membersihkan kebocoran internal mesin (tag `<think>`, format markdown bintang tunggal, pola nomor telepon mentah).
-- **`sentence-salvage.ts`**: Menyelamatkan kalimat yang terpotong akibat limit token agar pesan WhatsApp tetap berakhir utuh dan rapi.
-- **`booking-commit-gate.ts`**: Memastikan komitmen pemesanan berasal dari pesan aktif customer (`role: 'user'`), bukan dari kata-kata asisten sebelumnya.
-- **`pricelist-gate.ts`**: Mengirim file/gambar pricelist visual otomatis dengan kuota maksimal 1x per sesi (kecuali diminta ulang secara eksplisit).
-- **`delivery-fast-path.ts`**: Bypass instan untuk perhitungan ongkir saat customer mengirimkan shareloc GPS secara langsung tanpa perlu melewati inferensi LLM penuh.
-- **`medical-signal-detector.ts`**: Deteksi kata kunci tanda bahaya medis (demam tinggi >38.5°C, kejang, perdarahan, sesak napas) untuk eskalasi seketika.
+### D. Hard Deterministic Guardrails (`src/v3/guardrails/` & `src/v3/agent/pipeline/`)
+- **`src/v3/guardrails/factual-claim-validator.ts`**: Menolak klaim medis atau klaim harga yang tidak terdapat dalam potongan data grounding resmi.
+- **`src/v3/guardrails/numeric-fact-validator.ts`**: Memverifikasi kesesuaian angka nominal harga dan durasi menit layanan antara data database vs teks yang dirangkai LLM.
+- **`src/v3/guardrails/pronoun-validator.ts`**: Memastikan chatbot secara konsisten menggunakan kata ganti representatif klinik ("kami" / "Bidan kami") dan bukan kata ganti tunggal ("saya").
+- **`src/v3/guardrails/sanitizer.ts`**: Membersihkan kebocoran internal mesin (tag `<think>`, format markdown bintang tunggal, pola nomor telepon mentah).
+- **`src/v3/guardrails/sentence-salvage.ts`**: Menyelamatkan kalimat yang terpotong akibat limit token agar pesan WhatsApp tetap berakhir utuh dan rapi.
+- **`src/v3/agent/pipeline/booking-commit-gate.ts`**: Memastikan komitmen pemesanan berasal dari pesan aktif customer (`role: 'user'`), bukan dari kata-kata asisten sebelumnya.
+- **`src/v3/agent/pipeline/pricelist-gate.ts`**: Mengirim file/gambar pricelist visual otomatis dengan kuota maksimal 1x per sesi (kecuali diminta ulang secara eksplisit).
+- **`src/v3/agent/pipeline/delivery-fast-path.ts`**: Bypass instan untuk perhitungan ongkir saat customer mengirimkan shareloc GPS secara langsung tanpa perlu melewati inferensi LLM penuh.
+- **`src/v3/agent/pipeline/medical-signal-detector.ts`**: Deteksi kata kunci tanda bahaya medis (demam tinggi >38.5°C, kejang, perdarahan, sesak napas) untuk eskalasi seketika.
 
 ### E. Manajemen State Percakapan (`src/v3/state/`)
 - **`CartManager`**: Keranjang transaksi layanan yang menampung paket pilihan customer dengan aturan penguncian ketat.
@@ -110,7 +110,7 @@ Modul ini mengelola seluruh siklus hidup pemesanan layanan homecare, penugasan b
 | **Unggah Bukti Bayar & Moderasi** | `PUT /api/admin/reservation/:id/proof`, `/approve-purchase`, `/reject-purchase` | Upload slip transfer bank, verifikasi nominal oleh admin, dan approval/rejection pembelian. |
 | **Arsip & Pemulihan Reservasi** | `GET /api/admin/reservation/archive`, `/restore` | Soft-delete reservasi ke tabel arsip (`ReservationArchive`) dan kemampuan restore tanpa kehilangan data. |
 | **Purge Arsip 60 Hari** | `CronService.runReservationArchivePurge()` | Cron harian pembersihan permanen data arsip reservasi yang berusia lebih dari 60 hari. |
-| **Deteksi Tumpang Tindih Jadwal** | `CronService.runSlotOverlapSweep()`, `slot-overlap.service.ts` | Peringatan dini otomatis (setiap 15 menit) jika ada jadwal terapis yang saling bertubrukan (*overlapping*). |
+| **Deteksi Tumpang Tindih Jadwal** | `CronService.runSlotOverlapSweep()`, `src/services/slot-overlap.service.ts` | Peringatan dini otomatis (setiap 15 menit) jika ada jadwal terapis yang saling bertubrukan (*overlapping*). |
 | **Paket Berkelanjutan (Series)** | `src/routes/admin/reservation-series.route.ts` | Manajemen reservasi paket terapi berkala (misal paket 4x / 6x kunjungan), dengan fitur pause, resume, cancel, dan reschedule per sesi. |
 
 ---
@@ -148,13 +148,14 @@ Pusat kendali percakapan di Admin Dashboard untuk Customer Service manusia menga
 | **Pengambilalihan Manual (Takeover / Release)** | `POST /api/admin/live-chat/conversations/:id/takeover`, `PATCH /release` | Mematikan bot AI pada sesi tersebut (`is_human_handling = true`) agar CS dapat menangani percakapan secara penuh. |
 | **Enrichment Latar Belakang Senyap** | `src/services/human-background-enrichment.service.ts` | Saat mode takeover aktif, sistem di latar belakang tetap menganalisis data profil customer (nama, alamat, keluhan). |
 | **Pengiriman Pesan Multi-Media** | `POST /api/admin/live-chat/conversations/:id/reply` | Mengirim balasan teks, gambar brosur, dokumen PDF SOP, dan pesan suara (voice note). |
-| **Pemutar Voice Note Audio** | `VoiceNotePlayer.tsx`, `src/routes/media.route.ts` | Streaming dan pemutaran voice note WhatsApp dari customer langsung di antarmuka web. |
+| **Pemutar Voice Note Audio** | `packages/admin-dashboard/src/components/common/VoiceNotePlayer.tsx`, `src/routes/media.route.ts` | Streaming dan pemutaran voice note WhatsApp dari customer langsung di antarmuka web. |
 | **Sematkan & Sembunyikan Pesan** | `PATCH /live-chat/conversations/:id/messages/:messageId/pin`, `/hide` | Menyematkan pesan penting di bagian atas ruang chat atau menyembunyikan pesan sensitif dari tampilan CS. |
 | **Reaksi Emoji WhatsApp** | `POST /live-chat/conversations/:id/messages/:messageId/reaction` | Mengirimkan emoji reaksi langsung ke gelembung chat WhatsApp customer. |
-| **AI Copilot & Saran Balasan Cerdas** | `POST /api/admin/live-chat/conversations/:id/suggest-reply`, `POST /api/admin/copilot/chat` | AI membaca konteks obrolan dan riwayat database untuk memberikan rekomendasi jawaban kilat kepada CS. |
+| **AI Copilot Analitik & Streaming** | `POST /api/admin/copilot/chat`, `POST /api/admin/copilot/stream` | Asisten analitik operasional berbasis model GLM-5.3-Flash dengan streaming SSE, visual timer, 10 tool dinamis (termasuk query_chat_stats, query_revenue, query_followups), heartbeat 15s, budget 5 menit, dan audit biaya LLM. |
+| **Saran Balasan Cerdas (Smart Reply)** | `POST /api/admin/live-chat/conversations/:id/suggest-reply` | AI membaca konteks obrolan dan riwayat database untuk memberikan rekomendasi jawaban kilat kepada CS. |
 | **Quick Reply & Pintasan Ongkir Cepat** | `GET/POST /api/admin/quick-replies`, `LiveChatComposer.tsx`, `seed-ongkir-quick-replies.ts` | Manajemen template balasan cepat dengan pintasan keyboard (`/o1` s/d `/o25` untuk konfirmasi ongkir sesuai tier jarak resmi, `/qris`, `/pricelist`) dan auto-seeding ke PostgreSQL. |
 | **Sinkronisasi Riwayat Chat WAHA** | `POST /live-chat/sync-history`, `/sync-full`, `GET /sync-status`, `POST /sync-cancel` | Mengunduh riwayat percakapan lama dari nomor WhatsApp ke database PostgreSQL secara bertahap atau penuh. |
-| **Deteksi Rasa Frustrasi Pelanggan** | `CronService.runFrustrationSweep()`, `frustration-signal.service.ts` | Deteksi otomatis jika ada chat yang belum direspons melewati batas SLA atau mengandung sinyal ketidakpuasan. |
+| **Deteksi Rasa Frustrasi Pelanggan** | `CronService.runFrustrationSweep()`, `src/services/frustration-signal.service.ts` | Deteksi otomatis jika ada chat yang belum direspons melewati batas SLA atau mengandung sinyal ketidakpuasan. |
 | **Pembaruan Foto Profil Customer** | `POST /api/admin/live-chat/customers/:id/refresh-profile-picture` | Mengunduh foto profil WhatsApp terbaru dari customer untuk ditampilkan di dashboard. |
 
 ---
@@ -167,11 +168,11 @@ Modul pelacakan efektivitas iklan berbayar (Click-to-WhatsApp) hingga ke titik t
 | :--- | :--- | :--- |
 | **Dynamic Landing Pages** | `GET /go`, `/cta`, `/promo/:slug`, `/:slug` | Halaman pendaratan multi-tenant dinamis dengan injeksi Meta Pixel dan Google Analytics otomatis. |
 | **Tracking Event CTA & Pageview** | `POST /api/tracking/click`, `POST /api/tracking/pageview` | Merekam jejak klik tombol WhatsApp dan kunjungan halaman menggunakan Beacon API tanpa hambatan preflight. |
-| **Pricelist Cepat In-App Browser** | `GET /pricelist`, `/pricelist.html` | Halaman katalog harga interaktif yang dirender seketika (0 roundtrip) di dalam in-app browser WhatsApp. |
+| **Pricelist Cepat In-App Browser** | `GET /pricelist`, `src/landing/public/pricelist.html` | Halaman katalog harga interaktif yang dirender seketika (0 roundtrip) di dalam in-app browser WhatsApp. |
 | **Pelacakan Referral CTWA** | `src/integrations/whatsapp/waha-ctwa-referral.ts`, `AdClick` | Menangkap metadata iklan Meta (ad ID, campaign ID, headline iklan, thumbnail) saat customer pertama kali menyapa. |
 | **CTWA Campaign Catchers** | `GET|POST|PUT|DELETE /api/admin/ctwa-catchers`, `/test` | Aturan penangkap pesan awal iklan untuk memetakan teks pembuka tertentu ke kampanye iklan yang sesuai. |
 | **Meta Conversions API (CAPI)** | `src/services/capi.service.ts`, `GET /api/admin/capi-queue` | Pengiriman event konversi sisi server (`Purchase`, `Schedule`, `Lead`) ke Meta Graph API dengan hashing SHA-256 data PII. |
-| **Dasbor Analitik Meta Performance** | `GET /api/admin/meta-performance` (`MetaPerformancePanel.tsx`) | Analisis terpadu: KpiGrid, SpendCalculator, FunnelBars, CohortRetentionTable, JourneyHistogram, dan utilisasi terapis. |
+| **Dasbor Analitik Meta Performance** | `GET /api/admin/meta-performance` (`packages/admin-dashboard/src/components/meta-performance/MetaPerformancePanel.tsx`) | Analisis terpadu: KpiGrid, SpendCalculator, FunnelBars, CohortRetentionTable, JourneyHistogram, dan utilisasi terapis. |
 | **Ekspor Meta Custom Audience** | `GET /api/admin/customers/audience-export/meta` | Ekspor data nomor telepon terenkripsi SHA-256 untuk pembuatan Custom Audience & Lookalike Audience di Meta Ads Manager. |
 
 ---
@@ -213,9 +214,9 @@ Sistem terhubung ke berbagai platform pihak ketiga untuk mendukung alur kerja kl
 | Domain Integrasi | Komponen Teknis | Kemampuan & Fungsi |
 | :--- | :--- | :--- |
 | **Google Contacts Sync** | `src/services/google-contacts.service.ts` | Sinkronisasi otomatis kontak pasien ke Google Contacts dengan format nama standar klinik (Nama - Kelurahan). |
-| **Google Sheets Sync** | `src/services/sheets-sync.service.ts` | Ekspor dua arah transaksi reservasi dan keuangan ke spreadsheet operasional secara real-time. |
+| **Google Sheets Sync** | `src/services/sheets/sheets-sync.service.ts` | Ekspor dua arah transaksi reservasi dan keuangan ke spreadsheet operasional secara real-time. |
 | **Google Drive Backup** | `src/integrations/google-drive/client.ts` | Penyimpanan file cadangan dump database mingguan langsung ke Google Drive klinik secara terenkripsi. |
-| **Google Maps & ORS** | `distance-matrix.client.ts`, `ors/client.ts` | Menghitung jarak jalan raya akurat via OpenRouteService API & Google Distance Matrix dengan fallback rumus Haversine. |
+| **Google Maps & ORS** | `src/integrations/google-maps/distance-matrix.client.ts`, `src/integrations/ors/client.ts` | Menghitung jarak jalan raya akurat via OpenRouteService API & Google Distance Matrix dengan fallback rumus Haversine. |
 | **Telegram Bot Alert** | `src/services/telegram.service.ts` | Mengirimkan laporan harian, alert kesalahan sistem darurat, dan ringkasan tugas ke grup admin atau chat personal bidan. |
 | **Web Push (VAPID)** | `src/services/web-push.service.ts` | Pengiriman notifikasi browser native (Web Push API) ke laptop CS dan smartphone staf saat ada chat/tugas masuk. |
 | **Multi-Provider LLM Gateway** | `src/integrations/llm/llm-gateway.ts` | Gateway fleksibel yang mendukung peralihan model AI secara instan (OpenAI GPT-4o, Google Gemini, DeepSeek, Groq, OpenRouter). |
@@ -237,7 +238,7 @@ Pusat administrasi sistem di Admin Dashboard (`packages/admin-dashboard`) untuk 
 | **Scope Rollout AI** | `GET|PATCH /api/admin/ai-rollout-scope` | Pengaturan cakupan bot AI (`NEW_ONLY` untuk kontak baru saja vs `ALL` untuk seluruh pelanggan) dengan tanggal cutoff. |
 | **Basis Pengetahuan (Knowledge & FAQ)** | `src/routes/admin/knowledge.subroute.ts` | Manajemen dokumen SOP klinik, chunk FAQ, dan penanganan pertanyaan customer yang belum terjawab (*unanswered questions*). |
 | **Konfigurasi Pembayaran & Rekening** | `GET|PUT /api/admin/settings/payment-info` | Pengaturan nomor rekening bank klinik, nama pemilik rekening, dan upload gambar QRIS dinamis. |
-| **Manajemen Staf & Hak Akses (RBAC)** | `src/routes/admin/staff-management.subroute.ts`, `roles.subroute.ts` | Pembuatan akun bidan/admin, role custom, dan penegakan izin akses endpoint data-driven via tabel `role_api_scopes`. |
+| **Manajemen Staf & Hak Akses (RBAC)** | `src/routes/admin/staff-management.subroute.ts`, `src/routes/admin/roles.subroute.ts` | Pembuatan akun bidan/admin, role custom, dan penegakan izin akses endpoint data-driven via tabel `role_api_scopes`. |
 | **Cadangan & Pemulihan Sistem** | `src/routes/admin/backup.subroute.ts` | Pemicu manual cadangan database (`pg_dump`), pengunduhan file backup, dan proses pemulihan (*restore*). |
 | **Audit Log Sistem & Forensik LLM** | `src/routes/admin/evaluations.subroute.ts` | Inspeksi detail log eksekusi LLM, prompt yang dikirim, token usage, estimasi biaya rupiah, dan sandbox uji coba chat. |
 
@@ -245,8 +246,8 @@ Pusat administrasi sistem di Admin Dashboard (`packages/admin-dashboard`) untuk 
 
 ## 11. Ringkasan Kuantitatif Seluruh Sistem
 
-- **Total Endpoint API**: **117 endpoint** (tersebar di rute Admin, Staff, Webhook, Media, Tracking, Landing, dan Health).
-- **Total Model Database (Prisma Entities)**: **43 tabel/model** mencakup domain Customer, Percakapan, Reservasi, Staf, Konfigurasi AI, Log Audit, Integrasi Google/Meta, dan Analitik.
+- **Total Endpoint API**: **292 endpoint unik (343 pasangan method+path)** (tersebar di rute Admin, Staff, Webhook, Media, Tracking, Landing, dan Health).
+- **Total Model Database (Prisma Entities)**: **47 model Prisma** dan **16 enum** mencakup domain Customer, Percakapan, Reservasi, Staf, Konfigurasi AI, Log Audit, Integrasi Google/Meta, dan Analitik.
 - **Total Background Crons & Workers**: **21 pekerja mandiri** dengan interval berkala mulai dari 2 menit hingga 1 minggu.
 - **Penyedia Integrasi WhatsApp**: Dual-mode terintegrasi (**WAHA container** + **Meta Cloud API resmi**).
 - **Dasbor Manajemen**: 1 Single Page Application (React 18 + Vite + Tailwind CSS) yang memuat modul Kalender Jadwal, Live Chat CS, Peta Sebaran Pasien, Analitik Meta Ads, Evaluasi AI, dan Konfigurasi Multi-Tenant.
@@ -257,4 +258,6 @@ Pusat administrasi sistem di Admin Dashboard (`packages/admin-dashboard`) untuk 
 
 | Tanggal | Modul / Komponen | Perubahan / Penambahan Fitur Mikro | Referensi PR/Commit |
 | :--- | :--- | :--- | :--- |
-| **2026-11-02** | Semua Modul | Kompilasi inventarisasi menyeluruh level mikro (117 endpoint, 43 model DB, 21 workers). | Inisiasi dokumen |
+| **2026-11-03** | AI Copilot (Analitik & Streaming) | Upgrade model GLM-5.3-Flash (SumoPod), timeout attempt cap 90s, budget turn 300s, heartbeat SSE 15s, visual progress UI, 3 tool dinamis baru (`query_chat_stats`, `query_revenue`, `query_followups`), dan audit biaya LLM. | Copilot Latency Plan |
+| **2026-11-02** | Semua Modul (Fase 12) | Pembaruan kuantitatif hasil regenerasi kode (343 rute, 47 model Prisma, 21 workers), koreksi 20 path file, dan sinkronisasi laporan audit sistemik Fase 0–12. | Audit Fitur Sistem v2 |
+| **2026-11-02** | Semua Modul | Inisiasi kompilasi inventarisasi awal sebelum audit menyeluruh. | Inisiasi dokumen |

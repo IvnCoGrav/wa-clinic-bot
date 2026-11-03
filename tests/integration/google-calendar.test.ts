@@ -142,7 +142,7 @@ describe('Google Calendar Integration Tests', () => {
 
     const res = await app.inject({
       method: 'DELETE',
-      url: '/api/admin/reservation/res-123',
+      url: '/api/admin/reservation/res-123?soft=true',
       headers: {
         'x-api-key': 'my_admin_api_key_secret',
       },

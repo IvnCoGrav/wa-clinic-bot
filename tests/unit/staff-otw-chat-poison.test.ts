@@ -46,12 +46,16 @@ describe('Staff OTW Chat Poisoning & Message Filtering Tests', () => {
   });
 
   it('renders without throwing when corrupted items enter the chat rendering pipeline', () => {
+    // Anti calendar-rot: label "Hari ini" adalah label RELATIF terhadap jam
+    // sistem, jadi tanggal pesan harus "sekarang", bukan literal 2026-10-10
+    // (yang otomatis berubah jadi "10 Oktober" begitu tanggal itu lewat).
+    const nowIso = new Date().toISOString();
     const messagesWithPoison: any[] = [
       {
         id: 'msg_001',
         direction: 'INBOUND',
         content: 'Halo Bidan',
-        created_at: '2026-10-10T02:00:00Z',
+        created_at: nowIso,
       },
       // Poisoned item from OTW response
       {

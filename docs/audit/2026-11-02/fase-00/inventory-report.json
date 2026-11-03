@@ -1,0 +1,315 @@
+{
+  "timestamp": "2026-11-02T13:16:19.925Z",
+  "gitCommit": "d06c90f1",
+  "summary": {
+    "totalPrismaModels": 47,
+    "totalPrismaEnums": 16,
+    "totalBackgroundWorkers": 21,
+    "workersDefaultDisabled": 6,
+    "totalDistinctRouteEndpoints": 292,
+    "totalRouteMethodPathPairs": 343,
+    "totalReferencedFilesTested": 58,
+    "exactPathMatchCount": 58,
+    "driftedPathCount": 0,
+    "notFoundCount": 0
+  },
+  "prismaModels": [
+    "Customer",
+    "Child",
+    "Conversation",
+    "AiEvaluation",
+    "Message",
+    "KnowledgeChunk",
+    "Reservation",
+    "ReservationArchive",
+    "ReservationSeries",
+    "ReservationItem",
+    "CustomerAddress",
+    "WabaTemplate",
+    "DeliveryTier",
+    "ClinicService",
+    "TenantPersona",
+    "FewShotExemplar",
+    "TenantAiConfig",
+    "TenantGoogleIntegration",
+    "FollowUpTemplate",
+    "FollowUp",
+    "AuditLog",
+    "AdClick",
+    "CtwaCampaignCatcher",
+    "LandingPageView",
+    "LegacyStaging",
+    "LandingPage",
+    "Tenant",
+    "MedicalFaqStaging",
+    "GeneralFaqStaging",
+    "DailyReportLog",
+    "AdminNotificationLog",
+    "LlmAuditLog",
+    "Staff",
+    "StaffSession",
+    "AdminSession",
+    "RoleApiScope",
+    "Label",
+    "CustomerLabel",
+    "PushSubscription",
+    "CustomRole",
+    "QuickReply",
+    "TenantPromptConfig",
+    "ClinicPolicy",
+    "InboundTurn",
+    "OutboundAttempt",
+    "TenantSheetsConfig",
+    "SheetsSyncOutbox"
+  ],
+  "prismaEnums": [
+    "Direction",
+    "ConversationState",
+    "SourceType",
+    "WhatsappProvider",
+    "TreatmentCategory",
+    "AiCustomerScope",
+    "AiOverride",
+    "LocationSource",
+    "FollowUpType",
+    "FollowUpStatus",
+    "StagingStatus",
+    "LandingType",
+    "StagingReviewStatus",
+    "StaffRole",
+    "InboundTurnStatus",
+    "OutboundAttemptStatus"
+  ],
+  "backgroundWorkers": [
+    {
+      "name": "Label Reconciliation",
+      "envFlag": "ENABLE_LABEL_RECONCILIATION_CRON",
+      "defaultState": "DISABLED",
+      "interval": "4h"
+    },
+    {
+      "name": "Google Sheets Outbox Sync",
+      "envFlag": "ENABLE_SHEETS_SYNC_CRON",
+      "defaultState": "ACTIVE",
+      "interval": "3m"
+    },
+    {
+      "name": "Media Retention Cleanup",
+      "envFlag": "ENABLE_MEDIA_CLEANUP_CRON",
+      "defaultState": "ACTIVE",
+      "interval": "24h"
+    },
+    {
+      "name": "Message Retention Cleanup",
+      "envFlag": "ENABLE_MESSAGE_RETENTION_CRON",
+      "defaultState": "DISABLED (active in .env)",
+      "interval": "24h"
+    },
+    {
+      "name": "Staff Session Housekeeping",
+      "envFlag": "NONE (unconditional)",
+      "defaultState": "ACTIVE",
+      "interval": "24h"
+    },
+    {
+      "name": "Pre-Visit Brief Bidan",
+      "envFlag": "ENABLE_PRE_VISIT_BRIEF",
+      "defaultState": "ACTIVE",
+      "interval": "10m"
+    },
+    {
+      "name": "Expired Hold Sweep",
+      "envFlag": "ENABLE_EXPIRED_HOLD_SWEEP",
+      "defaultState": "ACTIVE",
+      "interval": "6h"
+    },
+    {
+      "name": "Reservation Archive Purge",
+      "envFlag": "ENABLE_RESERVATION_ARCHIVE_PURGE",
+      "defaultState": "ACTIVE",
+      "interval": "24h"
+    },
+    {
+      "name": "Daily Invariant Monitor",
+      "envFlag": "ENABLE_INVARIANT_MONITOR",
+      "defaultState": "ACTIVE",
+      "interval": "24h"
+    },
+    {
+      "name": "Slot Overlap Sweep",
+      "envFlag": "ENABLE_SLOT_OVERLAP_SWEEP",
+      "defaultState": "ACTIVE",
+      "interval": "15m"
+    },
+    {
+      "name": "Trip Auto-Close Sweep",
+      "envFlag": "ENABLE_TRIP_AUTOCLOSE_SWEEP",
+      "defaultState": "ACTIVE",
+      "interval": "15m"
+    },
+    {
+      "name": "Assignment Notification Sweep",
+      "envFlag": "ENABLE_ASSIGNMENT_NOTIF_SWEEP",
+      "defaultState": "ACTIVE",
+      "interval": "2m"
+    },
+    {
+      "name": "Frustration SLA Sweep",
+      "envFlag": "ENABLE_FRUSTRATION_SWEEP",
+      "defaultState": "ACTIVE",
+      "interval": "5m"
+    },
+    {
+      "name": "Shareloc Reminder Sweep",
+      "envFlag": "ENABLE_SHARELOC_REMINDER_SWEEP",
+      "defaultState": "DISABLED",
+      "interval": "15m"
+    },
+    {
+      "name": "Nightly Watchdog",
+      "envFlag": "tenant.nightly_report_enabled",
+      "defaultState": "ACTIVE (target 21:00 WIB)",
+      "interval": "15m check"
+    },
+    {
+      "name": "AI LLM Quality Evaluation",
+      "envFlag": "ENABLE_AI_EVAL_CRON",
+      "defaultState": "DISABLED",
+      "interval": "6h"
+    },
+    {
+      "name": "Daily Chat Export",
+      "envFlag": "ENABLE_CHAT_EXPORT_CRON",
+      "defaultState": "DISABLED",
+      "interval": "6h"
+    },
+    {
+      "name": "Daily Ops Report",
+      "envFlag": "tenant.daily_report_enabled || env",
+      "defaultState": "ACTIVE (target 07:00 WIB)",
+      "interval": "30m check"
+    },
+    {
+      "name": "Follow-Up Drip Worker",
+      "envFlag": "ENABLE_FOLLOWUP_WORKER",
+      "defaultState": "DISABLED",
+      "interval": "15m"
+    },
+    {
+      "name": "Morning Jobs & Briefing",
+      "envFlag": "NONE (unconditional)",
+      "defaultState": "ACTIVE (target 06:00 WIB)",
+      "interval": "15m check"
+    },
+    {
+      "name": "Weekly Database Backup",
+      "envFlag": "NONE (unconditional)",
+      "defaultState": "ACTIVE (target Senin 02:00 WIB)",
+      "interval": "15m check"
+    }
+  ],
+  "routesSample": [
+    {
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "path": "/admin"
+    },
+    {
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "path": "/admin*"
+    },
+    {
+      "methods": [
+        "GET",
+        "HEAD",
+        "POST"
+      ],
+      "path": "/api/webhook/waba"
+    },
+    {
+      "methods": [
+        "GET",
+        "HEAD",
+        "POST"
+      ],
+      "path": "/api/webhook/telegram"
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/admin/auth/login"
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/admin/auth/logout"
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/admin/auth/restore"
+    },
+    {
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "path": "/api/admin/auth/me"
+    },
+    {
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "path": "/api/admin/ai-models"
+    },
+    {
+      "methods": [
+        "PATCH"
+      ],
+      "path": "/api/admin/ai-models/provider"
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/admin/ai-models/test"
+    },
+    {
+      "methods": [
+        "PUT"
+      ],
+      "path": "/api/admin/ai-models/batch"
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/admin/ai-models/reset-defaults"
+    },
+    {
+      "methods": [
+        "PATCH"
+      ],
+      "path": "/api/admin/ai-models/:task"
+    },
+    {
+      "methods": [
+        "GET",
+        "HEAD",
+        "PATCH"
+      ],
+      "path": "/api/admin/ai-rollout-scope"
+    }
+  ],
+  "driftedPaths": [],
+  "notFoundPaths": []
+}

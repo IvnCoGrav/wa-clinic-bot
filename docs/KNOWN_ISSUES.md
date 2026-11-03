@@ -3,6 +3,105 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 302. [Dokumentasi Audit] Label Fase Tertukar & Angka Cakupan Salah pada Laporan Verifikasi Ulang (2026-11-03, RESOLVED - LOW)
+
+- **Status:** RESOLVED (2026-11-03) — dokumen `docs/audit/2026-11-02/LAPORAN_VERIFIKASI_ULANG.md` dan `CHANGELOG.md` dikoreksi.
+- **Gejala:**
+  1. Tabel §2 laporan memakai nama domain yang **tidak sesuai** daftar file gate: Fase 04 ditulis "RAG Klinis" padahal isinya tes reservasi; Fase 05 "Reservasi" padahal tes staf; Fase 06 "Admin Dashboard" padahal Live Chat; Fase 07 "Integrasi Eksternal" padahal CTWA/CAPI; Fase 08 "Multi-Tenancy" padahal cron; Fase 09 "Crons" padahal integrasi; Fase 10 "Telemetri" padahal RBAC/settings. Fase 01 dan 03 juga tidak memakai nama Master Plan §E.
+  2. Angka "6.254 test dalam **635 file**" salah — suite berisi **754 file** (`testResults.length` = 754; `tests/**/*.test.ts` = 754).
+  3. Laporan menulis baseline "27 fail (15.000 ms timeout)" sehingga terbaca seolah seluruh kegagalan adalah timeout; faktanya hanya 6 yang timeout, 21 lainnya asersi.
+  4. Bagian "hal yang belum dapat diverifikasi" (wajib menurut plan §4.3) belum ada.
+- **Dampak:** Klaim cakupan per domain (mis. "RAG Klinis sudah PASS") tidak punya bukti gate; pembaca bisa menyimpulkan seluruh suite hijau padahal ada 22 kegagalan nyata.
+- **Perbaikan (2026-11-03):** seluruh label Fase 01–11 disamakan dengan Master Plan §E; angka file dikoreksi ke 754; ditambahkan klarifikasi komposisi 27 kegagalan; ditambahkan §4.1 (sebaran 22 kegagalan residual) dan §8 (batas verifikasi). Gate script juga diperbaiki agar benar-benar bisa gagal.
+- **Bukti:** `docs/audit/2026-11-02/LAPORAN_VERIFIKASI_ULANG.md` §2, §4, §4.1, §8; `scripts/audit-phase-gates.mjs` (`PHASE_FILES` sebagai sumber label); `docs/audit/2026-11-02/after3.json` (`numTotalTestSuites`, `testResults.length`).
+
+## 301. [Testing] Kegagalan Test Pre-existing di Luar Cakupan Gate Fase (2026-11-03, OPEN - MEDIUM)
+
+- **Status:** OPEN — **22 → 11 kegagalan**. Fase A (perbaikan test-only) **SELESAI 2026-11-03** tanpa regresi; sisa 11 butuh keputusan bisnis/medis.
+- **Gejala:** Suite penuh menghasilkan **11 test gagal di 6 file**, dan **tidak satu pun** file tersebut masuk `PHASE_FILES` di `scripts/audit-phase-gates.mjs`, sehingga gate 11 fase tetap hijau (87 file, 822 test, 0 gagal).
+- **Sebaran saat ini (`after7.json`):** `catalog-seed-drift` (3), `v3-conversation-matrix` (2: CM-07 vaksin, CM-08 trauma), `chat-schedule-extractor` (2), `hybrid-reservation-parser` (2), `agent-runner` (1), `adversarial-reservation-resilience` (1).
+- **Dampak:** Gate audit bisa "hijau" sementara modul penting (drift katalog/harga, matriks percakapan AI, eskalasi darurat) sedang gagal. Risiko keputusan bisnis diambil dari laporan yang tampak bersih.
+- **Bukti:** `docs/audit/2026-11-02/baseline-stable.json` (27 gagal, irisan 3 run = 27), `after3`–`after6` (22 gagal, 754 file, 6.254 test), **`after7.json` (11 gagal, 6.215 lulus, 0 regresi)**; `LAPORAN_VERIFIKASI_ULANG.md` §4.1.
+- **Fase A — SELESAI (2026-11-03, test-only, 11 test):**
+  1. `conversation-filter` (5) — **gap mock, bukan bug produksi.** `listConversations()` memanggil `prisma.conversation.count()` sebelum `findMany`; test hanya me-mock `findMany` sehingga `count` menolak → jalur fallback aktif → `where` Prisma tak pernah dibangun. Perbaikan: mock `count` di `beforeEach`.
+  2. `reservation-security-and-integrity` (4) — **calendar rot** (`'Sabtu, 10 Oktober 2026'` sudah lewat) + **ekspektasi tenant usang** (route didaftarkan tanpa plugin auth sehingga `tenantOf()` memakai header `x-tenant-id`, bukan `default-tenant`). Perbaikan: helper `nextSaturdayText()` (Sabtu terdekat) + asersi `tenant_id` mengikuti kontrak `route-helpers.ts`.
+  3. `staff-otw-chat-poison` (1) — label relatif "Hari ini" diuji dengan tanggal literal; kini memakai `new Date().toISOString()`.
+  4. `reservation-idempotency-request-id` (1) — `pendingScheduleCheck` adalah **state sesi V3** (`src/v3/domain/types.ts`), bukan kolom Reservation; asersi diubah menjadi `undefined` + komentar kontrak.
+- **Sisa 11 — butuh keputusan (belum dieksekusi):**
+  - **Drift katalog (4 test: `catalog-seed-drift` 3 + `adversarial-reservation-resilience` 1)** — fallback dashboard 39 item vs backend 38 aktif. `npm run catalog:seed` berhasil tetapi mengubah **harga riil** (`add-on-nebulizer` 45.000/35.000 → 100.000/80.000; `add-on-nebulizer-obat` 60.000/50.000 → 130.000/110.000; `newborn-bapil` 100.000 → 85.000; bundle laktasi 80 menit/140.000 → 60 menit/70.000) dan menghapus `moms-postpartum-massage`. Regenerasi sudah **dibatalkan (revert)**; harga kanonik harus ditetapkan pemilik klinik.
+  - **`chat-schedule-extractor` (2)** — kode produk menolak isi baris form `Treatment : ...` bila >5 kata / >35 karakter, sehingga nama multi-treatment sah ("pijat bayi pulih ceria & sinar moksa") menjadi kosong. Perbaikan fondasional: pecah dulu per pemisah (`+ & dan ,`), lalu validasi tiap bagian — bukan menaikkan batas kata secara asal.
+  - **`hybrid-reservation-parser` (2)** — parser free-form hanya mengambil nama dari pola "nama bunda/ibu/pasien"; nama anak sengaja **tidak** disalin ke `name` (integritas penamaan, `reservation-text-parser.ts:1000`). Test mengharapkan `name = 'Raffa'` (nama anak). Perlu keputusan: ubah ekspektasi test, atau dukung reservasi atas-nama-anak secara eksplisit.
+  - **`v3-conversation-matrix` CM-07/CM-08 (2)** + **`agent-runner` darurat medis (1)** — hasil `[]` dan `escalate_to_human` tidak terpanggil. Menyentuh **keselamatan klinis** → wajib diaudit log mesin (Strict Investigation Gate), bukan ditambal.
+- **Rencana lanjutan:** (a) Fase B — tetapkan harga kanonik → `npm run catalog:seed` → commit; (b) Fase C — audit log CM-07/CM-08 & `agent-runner`; (c) Fase D — perbaiki aturan ekstraksi treatment & kontrak nama parser; (d) setelah hijau, masukkan file-file tersebut ke `PHASE_FILES`; (e) tambahkan gate "seluruh suite" berbasis baseline-diff di CI.
+
+## 299. [Integritas Audit] Laporan Audit 2026-11-02 Mengklaim PASS Padahal Gate Regresi Gagal & Cakupan Per Fase Tidak Sesuai Plan (2026-11-02, RESOLVED - HIGH)
+
+- **Status:** RESOLVED (2026-11-02) — diselesaikan tuntas melalui eksekusi `docs/plans/FIXING_PLAN_AUDIT_INTEGRITY_2026-11-02.md` (Fase 0, 1, 2, 3, 4, 6) dan didokumentasikan di `docs/audit/2026-11-02/LAPORAN_VERIFIKASI_ULANG.md`.
+- **Resolusi (2026-11-02):**
+  1. **Stabilisasi Baseline & Flakiness:** `testTimeout: 15000` ditambahkan ke `vitest.config.ts`. Dijalankan 3× run identik (`baseline-run1..run3.json`) menghasilkan 27 kegagalan stabil pre-existing (0 flaky test) di `docs/audit/2026-11-02/baseline-stable.json`.
+  2. **Gate Kanonis Deterministik:** Dibuat skrip `scripts/audit-phase-gates.mjs` berdasar 78 file test riil Master Plan §E. Seluruh 11 fase dijalankan ulang dengan hasil 822 test lulus (0 gagal).
+  3. **Matriks Otorisasi RBAC:** Dibuat test integrasi dinamis `tests/integration/admin-staff-authz-matrix.test.ts` yang memindai **313 pasangan method+path** (266 path unik) admin & staf, membuktikan 100% rute non-allowlist menolak panggilan tanpa kredensial dengan 401/403. (KOREKSI 2026-11-03: versi sebelumnya menulis \"150+ rute\" — angka itu tidak terverifikasi; kini dipindai langsung dari `app.printRoutes`.)
+  4. **Presisi Usia Kalender:** `src/utils/age-calculator.ts` diperbaiki dengan aritmetika kalender (`addMonths`), menghilangkan roundtrip off-by-one ("8 bulan" jadi 7 bulan) dan menjaga presisi desimal bulan. Diselaraskan di `child-service.test.ts`.
+  5. **Koreksi Dokumen & Inventaris:** `docs/FEATURE_INVENTORY.md` diperbarui ke 292 endpoint unik (343 pasangan method+path), 47 model Prisma, 16 enum. Path `src/v3/tools/tool-masker.ts` dan status `LAPORAN_FASE_12.md` dikoreksi.
+  6. **Hasil Akhir Regresi:** Full test suite (6.254 test, +13 test baru) mencatat kegagalan turun dari 27 menjadi 22 (5 fixed pre-existing) dengan 0 regresi baru (`exit 0`).
+- **Gejala (semua terverifikasi ulang dari artefak, bukan dari narasi laporan):**
+  1. **Klaim PASS vs artefak gate.** `after.json` = 35 test gagal, `baseline.json` = 31 test gagal (total sama 6.241 test). `node scripts/audit-baseline-diff.mjs baseline.json after.json` **exit 1** dengan **6 nama test baru**. Namun `LAPORAN_FASE_12.md`, `RINGKASAN_AKHIR_AUDIT_SISTEM.md`, dan CHANGELOG menyatakan "PASS" dan "0 kegagalan test baru" **tanpa menampilkan output gate**. Keenam test baru semuanya `Test timed out in 5000ms` (beban paralel) dan lulus saat dijalankan ulang (24/24) → indikasi flaky, bukan regresi; tetapi klaim PASS tetap tidak sah karena gate resmi gagal.
+  2. **Cakupan per fase jauh lebih sempit daripada yang diklaim.** Dari 77 path test yang ditulis di `LAPORAN_FASE_00..11.md`, **32 path tidak ada**. Perbandingan klaim vs `fase-XX.json` (`testResults.length`): Fase 3 klaim 16 file → **3** yang benar-benar jalan (13 path fiktif, termasuk `guardrail-pipeline.test.ts`, `tool-schemas.test.ts`, `agent-tools.test.ts`, `v3-persona-rules.test.ts`); Fase 5 klaim 7 → **1** (`staff-colors.test.ts`, 16 test warna UI — autentikasi/sesi/trip/pembayaran/Telegram/PII tidak diuji); Fase 6 klaim 7 → **3**; Fase 8 klaim 7 → **3**; Fase 9 klaim 9 → **5**; Fase 4 klaim 7 → **6**. Ini persis cacat A-001 yang seharusnya sudah ditutup Plan v2 (78 path riil, 0 missing) — eksekutor tidak memakai daftar gate plan.
+  3. **Baseline naik 22 → 31 tanpa investigasi.** `KNOWN_ISSUES` #287 mencatat 22 test / 10 file. Baseline audit 31 test / 19 file. Laporan Fase 0 hanya menjelaskan "date rot & mock drift" secara umum dan tidak mendaftar 9 file tambahan. Diuji ulang terisolasi: **5 test gagal konsisten (bukan flaky)** — 4 test `DELETE /api/admin/reservation/:id` menerima **404** padahal mengharap **200** (`follow-up-schedule`, `google-calendar`, `admin-reservation-cancel-followups`, `reservation-silent-failure-audit`), dan `smart-age-matcher` memetakan "anak 8 bulan" menjadi **7 bulan** (edge awal bulan).
+  4. **Klaim "drift migrasi empty migration" tidak punya bukti yang mungkin.** PostgreSQL lokal (`localhost:5432`) mati dan Docker Desktop tidak berjalan, sehingga `prisma migrate diff --from-url` tidak dapat dieksekusi di mesin audit. Di sisi lain #298 membuktikan tabel `reservation_archives` tidak ada di basis data live → skema live **tidak** sinkron. Klaim "skema basis data sinkron tanpa deviasi liar" bertentangan dengan temuan #298 sendiri.
+  5. **`FEATURE_INVENTORY.md` belum benar-benar diperbarui.** Bagian 11 "Ringkasan Kuantitatif" masih menulis **117 endpoint** dan **43 model**, sementara hanya baris riwayat yang menyebut 343/47. Klaim "diperbarui dengan data kuantitatif presisi" tidak akurat. (Angka 292 path unik / 343 pasangan / 47 model / 16 enum / 21 worker sendiri **terverifikasi benar** lewat `app.printRoutes()` + regex.)
+  6. **"0 endpoint tanpa otorisasi" terlalu kuat.** Yang terbukti hanya adanya `preHandler` global di `src/routes/admin.route.ts` dan `src/routes/staff.route.ts`. Matriks per-endpoint (role vs aktual) untuk 343 pasangan tidak pernah diuji → status seharusnya `PARSIAL`.
+- **Dampak:** Risiko "hijau palsu" tingkat laporan: modul besar (AI guardrails, Web App Staf, Live Chat, Crons) dinyatakan PASS tanpa bukti uji yang memadai. Keputusan pemilik klinik (mis. mengeksekusi migrasi produksi) bisa diambil berdasarkan laporan yang statusnya belum sah.
+- **Bukti:** `docs/audit/2026-11-02/baseline.json` & `after.json` (31 vs 35 gagal); `scripts/audit-baseline-diff.mjs` (exit 1); `fase-03.json` (3 suite), `fase-05.json` (1 suite), `fase-06.json` (3), `fase-08.json` (3), `fase-09.json` (5); `Test-Path` 32 path test fiktif; `docs/KNOWN_ISSUES.md` #287; `tests/unit/{follow-up-schedule,google-calendar,admin-reservation-cancel-followups,reservation-silent-failure-audit,smart-age-matcher}.test.ts`.
+- **Rencana perbaikan (belum dieksekusi, butuh persetujuan):** (a) turunkan status laporan menjadi `PASS DENGAN CATATAN`/`PARSIAL`; (b) jalankan ulang gate plan §E yang benar per fase; (c) tetapkan baseline baru 3× dan naikkan `testTimeout`/serial untuk 6 test timeout; (d) selidiki 5 kegagalan konsisten dan putuskan kontrak `DELETE /api/admin/reservation/:id`; (e) perbaiki angka §11 inventaris dan klaim migrasi; (f) jangan `prisma migrate deploy` sebelum `prisma migrate status` + backup.
+
+## 300. [Reservasi] Error DB pada `DELETE /api/admin/reservation/:id` Menyamar Jadi 404 "Reservation tidak ditemukan" (2026-11-02, RESOLVED - MEDIUM)
+
+- **Status:** RESOLVED (2026-11-02) — diselesaikan via perbaikan handler di `src/routes/admin/reservation-dispatch.route.ts:1953-2098` dan test adversarial `tests/unit/reservation-delete-contract.test.ts`.
+- **Resolusi (2026-11-02):**
+  1. **Kontrak Tegas & Bersih:** Default DELETE = ARSIP (snapshot 60 hari di `reservation_archives` + hapus baris aktif), `?soft=true` = SOFT-CANCEL (status = `cancelled`, baris dipertahankan, picu hook pembatalan follow-up), `?hard=true` = alias kompatibilitas.
+  2. **Pemetaan Error Anti-Silent-Failure:** Database offline/koneksi putus kini mengembalikan `503 Service Unavailable` (`DB_UNAVAILABLE`), bukan menipu klien dengan 404. 404 hanya dikembalikan bila reservasi benar-benar tidak ditemukan di database maupun in-memory fallback store.
+  3. **Penyelarasan:** 4 test integrasi/unit lama dan antarmuka UI `packages/admin-dashboard/src/pages/tenant/CustomerDatabase.tsx` diselaraskan ke `?soft=true`.
+- **Gejala:** Handler `src/routes/admin/reservation-dispatch.route.ts:1960-2103` membungkus seluruh alur dalam satu `try/catch`. `catch` melakukan lookup `memoryReservations` lalu **selalu** membalas `404 { error: 'Reservation not found' }` untuk error apa pun, termasuk `Database offline`/gangguan koneksi.
+- **Akar Masalah (dua lapis):**
+  1. Kontrak default berubah: kondisi `if (isHardDelete || query.archive === 'true' || !query.soft)` membuat DELETE **tanpa** `?soft` masuk jalur **arsip**, sedangkan komentar JSDoc di atasnya masih menyatakan "soft-cancel (default)". 4 test lama masih mengharapkan perilaku soft-cancel default → gagal.
+  2. Pemetaan error salah: kegagalan basis data tidak dibedakan dari "data tidak ada", sehingga admin melihat pesan "tidak ditemukan" saat sebenarnya server/DB bermasalah (melanggar prinsip anti-silent-failure).
+- **Dampak:** Diagnosis operasional menyesatkan; reservasi bisa dianggap hilang padahal hanya gagal baca. Berpotensi memicu tindakan admin yang salah (input ulang / hapus paksa).
+- **Bukti:** `src/routes/admin/reservation-dispatch.route.ts:1960-2103`; `tests/unit/admin-reservation-cancel-followups.test.ts:39`; `tests/integration/follow-up-schedule.test.ts:249`; `tests/integration/google-calendar.test.ts:144`; `tests/unit/reservation-silent-failure-audit.test.ts` (AUDIT 173i-d).
+- **Rencana perbaikan (belum dieksekusi):** pisahkan `catch` per operasi DB → balas `503`/`500` untuk kegagalan DB, `404` hanya bila data benar-benar tidak ada (DB **dan** memory store kosong); selaraskan komentar + kontrak `?soft`/`?archive`; perbarui 4 test sesuai kontrak final.
+
+## 298. [Database & Server Live] Tabel reservation_archives Belum Ada di PostgreSQL Produksi (2026-11-02, RESOLVED - HIGH)
+
+- **Status:** RESOLVED (2026-11-03) — diselesaikan via eksekusi aman migrasi Fase 5 di server produksi `klinik-server-baru` (43.173.11.79:1403).
+- **Resolusi (2026-11-03):**
+  1. **Pratinjau Status:** `npx prisma migrate status` mengonfirmasi 1 pending migration: `20261101000000_add_reservation_archive`.
+  2. **Backup Terverifikasi:** Database dibackup dengan `pg_dump -Fc` menghasilkan file dump 9,3 MB (`/tmp/pre_archive_migration_.dump`).
+  3. **Penerapan Migrasi:** `docker compose exec -T app npx prisma migrate deploy` sukses menerapkan migrasi skema tabel arsip.
+  4. **Verifikasi Skema & Worker:** Query `\d reservation_archives` memastikan tabel fisik dan 4 indeks aktif; `prisma migrate status` mengonfirmasi `Database schema is up to date!` (100 migrations applied); pemindaian log container `wa-clinic-bot-worker-1` mencatat 0 error.
+- **Gejala:** Log container `wa-clinic-bot-worker-1` di server produksi (`43.173.11.79:1403`) mencatat error berulang:
+  `Invalid prisma.reservationArchive.findMany() invocation: The table public.reservation_archives does not exist in the current database.`
+  Menyebabkan background worker `ReservationArchivePurge` (pembersihan arsip >60 hari) dan `DailyInvariantMonitor` (pemeriksaan kesehatan harian) gagal saat mencoba membaca tabel tersebut.
+- **Akar Masalah:**
+  File migrasi `prisma/migrations/20261101000000_add_reservation_archive` telah dibuat di repositori untuk sistem soft-delete arsip 60 hari (#292), namun perintah `npx prisma migrate deploy` belum dieksekusi di server live produksi.
+- **Dampak:** Fitur reservasi aktif normal dan tidak terganggu, namun arsip reservasi belum tersimpan ke tabel fisik di server live, dan background worker mencatat error berulang di log.
+- **Mitigasi / Rencana Tindak Lanjut:**
+  Eksekusi `npx prisma migrate deploy` di server produksi `klinik-server-baru` (43.173.11.79) saat gerbang migrasi resmi dibuka.
+- **Bukti:** Log container `docker logs wa-clinic-bot-worker-1` dan query `docker exec wa-clinic-bot-postgres-1 psql -U postgres -d wa_clinic_db -c '\dt reservation_archives'` menghasilkan `Did not find any relation named "reservation_archives"`.
+
+## 297. [Baseline Audit] Drift Inventaris, 5 Cron Default Mati, dan Konfigurasi Humanizer Menyimpang (2026-11-02, OPEN - MEDIUM)
+
+- **Status:** OPEN — ditemukan saat audit read-only terhadap Master Plan Audit Fitur (tanpa mengubah kode produksi).
+- **Gejala:**
+  1. `docs/FEATURE_INVENTORY.md` menulis **43 model** dan **117 endpoint**, sedangkan `prisma/schema.prisma` memiliki **47 model** dan deklarasi route literal di `src/routes` + `src/app.ts` berjumlah **343**. Empat model baru yang belum tercatat: `InboundTurn`, `OutboundAttempt`, `TenantSheetsConfig`, `SheetsSyncOutbox`.
+  2. Empat path guardrail dan satu path sheets di inventaris salah lokasi: `booking-commit-gate.ts`, `pricelist-gate.ts`, `delivery-fast-path.ts`, `medical-signal-detector.ts` ada di `src/v3/agent/pipeline/` (bukan `src/v3/guardrails/`); `sheets-sync.service.ts` ada di `src/services/sheets/`.
+  3. Lima worker default **MATI** karena mensyaratkan flag `=true` dan flag tersebut tidak ada di `.env` lokal: `ENABLE_LABEL_RECONCILIATION_CRON`, `ENABLE_SHARELOC_REMINDER_SWEEP`, `ENABLE_AI_EVAL_CRON`, `ENABLE_CHAT_EXPORT_CRON`, `ENABLE_FOLLOWUP_WORKER`. `SEPARATE_WORKER` juga tidak diset. `ENABLE_MESSAGE_RETENTION_CRON=true` (aktif).
+  4. Humanizer di `.env` menyimpang dari batas realistis kode: `HUMANIZER_TYPING_AVERAGE_WPM=500` (kode memperingatkan >55), `HUMANIZER_TYPING_REACTION_MS=100`, `HUMANIZER_MAX_TYPING_DELAY_MS=700`, `HUMANIZER_READING_DELAY_MAX_MS=300` — sehingga delay mengetik ter-cap ±0,7 detik.
+  5. `BURST_COALESCE_MS=7500`, tetapi komentar `src/services/burst-coalesce.service.ts:24` menyatakan default nonaktif (`0`) — kontradiksi dokumentasi vs perilaku efektif.
+- **Dampak:** audit fitur bisa memberi status hijau palsu (cron mati dianggap berjalan, perilaku humanisasi dianggap benar), dan angka cakupan audit (117 endpoint/43 model) tidak dapat dipertanggungjawabkan.
+- **Mitigasi sementara:** Master Plan Audit v2 mewajibkan regenerasi inventaris dari kode di Fase 0, kriteria cron 4 kolom (terdaftar/aktif/bukti run/idempotensi), dan pelaporan nilai env efektif.
+- **Rencana perbaikan (belum dieksekusi):** regenerasi `docs/FEATURE_INVENTORY.md`, konfirmasi flag di server live, evaluasi ulang nilai humanizer bersama pemilik klinik, dan penyelarasan komentar burst-coalesce.
+- **Bukti:** `prisma/schema.prisma`; `src/routes/**`; `src/lifecycle/background-crons.ts:22,152,233,243,288`; `src/services/typing.service.ts:101-110`; `src/services/burst-coalesce.service.ts:24,69`; `.env` (nama flag, bukan nilai rahasia).
+
 ## 296. [Alamat & Toponimi] Alamat Ganda (Split-Brain) dari Penyerapan Form Reservasi & Wilayah Komposit (2026-10-31, RESOLVED)
 
 - **Status:** **RESOLVED** (Seam Tulis Bersih, Parser Level-Aware, Token Match Asimetris, dan Healing Pass 4)

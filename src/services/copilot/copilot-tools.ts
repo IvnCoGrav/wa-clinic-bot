@@ -1,6 +1,6 @@
 import { prisma } from '../../db/client';
 import { Direction } from '@prisma/client';
-import { wibDayBoundsUtc, startOfTodayWib, formatWibDateYYYYMMDD, getWibDayName } from '../../utils/wib-time';
+import { wibDayBoundsUtc, startOfTodayWib, formatWibDateYYYYMMDD, getWibDayName, WIB_OFFSET_MS } from '../../utils/wib-time';
 import { isDummyOrTestContact } from '../../utils/dummy-filter';
 import { maskPhoneNumber } from '../../utils/pii-masker';
 import { hasScheduleSignal, extractTimeHint, extractTimeOfDayHint, isScheduleCheckEngagement, isScheduleAvailabilityText } from '../../v3/agent/pipeline/medical-signal-detector';
@@ -908,6 +908,290 @@ export function buildConversationExplanation(customer: any, conv: any): any {
   };
 }
 
+export const queryChatStats: CopilotTool = {
+  name: 'query_chat_stats',
+  description:
+    'Mengambil agregasi statistik pesan chat (inbound/outbound) dan percakapan dalam rentang waktu. ' +
+    'Gunakan untuk menjawab: "berapa chat hari ini", "chat per jam", "berapa percakapan baru minggu ini".',
+  parameters: {
+    dateFrom: { type: 'string', description: 'Tanggal awal rentang WIB (YYYY-MM-DD). Default hari ini.' },
+    dateTo: { type: 'string', description: 'Tanggal akhir rentang WIB (YYYY-MM-DD). Default sama dengan dateFrom.' },
+    groupBy: { type: 'string', description: 'Pengelompokan: "day" (per hari) atau "hour" (per jam). Default "day".' },
+  },
+  run: async (tenantId, args) => {
+    const todayStr = formatWibDateYYYYMMDD();
+    const dFromStr = isValidIsoDate(args.dateFrom) ? String(args.dateFrom).trim() : todayStr;
+    const dToStr = isValidIsoDate(args.dateTo) ? String(args.dateTo).trim() : dFromStr;
+
+    const startUtc = wibDayBoundsUtc(0, new Date(`${dFromStr}T12:00:00Z`)).start;
+    const endUtc = wibDayBoundsUtc(0, new Date(`${dToStr}T12:00:00Z`)).end;
+    const groupBy = args.groupBy === 'hour' ? 'hour' : 'day';
+
+    const [messages, conversations] = await Promise.all([
+      prisma.message.findMany({
+        where: {
+          tenant_id: tenantId,
+          created_at: { gte: startUtc, lte: endUtc },
+        },
+        select: {
+          direction: true,
+          created_at: true,
+          conversation_id: true,
+        },
+        take: 2000,
+      }),
+      prisma.conversation.findMany({
+        where: {
+          tenant_id: tenantId,
+          created_at: { gte: startUtc, lte: endUtc },
+        },
+        select: {
+          id: true,
+          created_at: true,
+          is_human_handling: true,
+          is_frustrated: true,
+        },
+        take: 1000,
+      }),
+    ]);
+
+    const bucketsMap = new Map<string, {
+      bucket: string;
+      inboundMessages: number;
+      outboundMessages: number;
+      newConversations: number;
+      activeConvIds: Set<string>;
+      humanHandling: number;
+      frustrated: number;
+    }>();
+
+    const getBucketKey = (d: Date): string => {
+      if (groupBy === 'hour') {
+        const wib = new Date(d.getTime() + WIB_OFFSET_MS);
+        return `${formatWibDateYYYYMMDD(d)} ${String(wib.getUTCHours()).padStart(2, '0')}:00`;
+      }
+      return formatWibDateYYYYMMDD(d);
+    };
+
+    const getOrCreateBucket = (key: string) => {
+      let b = bucketsMap.get(key);
+      if (!b) {
+        b = {
+          bucket: key,
+          inboundMessages: 0,
+          outboundMessages: 0,
+          newConversations: 0,
+          activeConvIds: new Set<string>(),
+          humanHandling: 0,
+          frustrated: 0,
+        };
+        bucketsMap.set(key, b);
+      }
+      return b;
+    };
+
+    for (const m of messages) {
+      const b = getOrCreateBucket(getBucketKey(new Date(m.created_at)));
+      if ((m.direction as any) === Direction.INBOUND) {
+        b.inboundMessages++;
+      } else {
+        b.outboundMessages++;
+      }
+      if (m.conversation_id) {
+        b.activeConvIds.add(m.conversation_id);
+      }
+    }
+
+    for (const c of conversations) {
+      const b = getOrCreateBucket(getBucketKey(new Date(c.created_at)));
+      b.newConversations++;
+      if (c.is_human_handling) b.humanHandling++;
+      if (c.is_frustrated) b.frustrated++;
+    }
+
+    const maxBuckets = groupBy === 'hour' ? 24 : 31;
+    const sortedKeys = Array.from(bucketsMap.keys()).sort();
+    const rows = sortedKeys.slice(0, maxBuckets).map((k) => {
+      const b = bucketsMap.get(k)!;
+      return {
+        bucket: b.bucket,
+        inboundMessages: b.inboundMessages,
+        outboundMessages: b.outboundMessages,
+        newConversations: b.newConversations,
+        activeConversations: b.activeConvIds.size,
+        humanHandling: b.humanHandling,
+        frustrated: b.frustrated,
+      };
+    });
+
+    if (rows.length === 0) {
+      rows.push({
+        bucket: dFromStr,
+        inboundMessages: 0,
+        outboundMessages: 0,
+        newConversations: 0,
+        activeConversations: 0,
+        humanHandling: 0,
+        frustrated: 0,
+      });
+    }
+
+    return { tool: 'query_chat_stats', args, count: rows.length, rows };
+  },
+};
+
+export const queryRevenue: CopilotTool = {
+  name: 'query_revenue',
+  description:
+    'Mengambil rekap omzet/pendapatan dari reservasi klinik (jasa, ongkir, diskon, kuitansi terpisah). ' +
+    'Gunakan untuk menjawab: "omzet minggu ini", "omzet per treatment", "berapa yang sudah dibayar".',
+  parameters: {
+    dateFrom: { type: 'string', description: 'Tanggal awal rentang WIB (YYYY-MM-DD).' },
+    dateTo: { type: 'string', description: 'Tanggal akhir rentang WIB (YYYY-MM-DD).' },
+    groupBy: { type: 'string', description: 'Pengelompokan: "day" | "treatment" | "staff". Default "day".' },
+    status: { type: 'string', description: 'Status reservasi: "completed" | "confirmed" | "all". Default "completed".' },
+  },
+  run: async (tenantId, args) => {
+    const dFromStr = isValidIsoDate(args.dateFrom) ? String(args.dateFrom).trim() : undefined;
+    const dToStr = isValidIsoDate(args.dateTo) ? String(args.dateTo).trim() : dFromStr;
+
+    const where: any = { tenant_id: tenantId };
+
+    if (dFromStr) {
+      const startUtc = wibDayBoundsUtc(0, new Date(`${dFromStr}T12:00:00Z`)).start;
+      const endUtc = wibDayBoundsUtc(0, new Date(`${dToStr}T12:00:00Z`)).end;
+      where.booking_date = { gte: startUtc, lte: endUtc };
+    }
+
+    const st = String(args.status || 'completed').toLowerCase();
+    if (st === 'confirmed') {
+      where.status = 'confirmed';
+    } else if (st === 'all') {
+      where.status = { in: ['completed', 'confirmed'] };
+    } else {
+      where.status = 'completed';
+    }
+
+    const reservations = await prisma.reservation.findMany({
+      where,
+      include: {
+        assigned_staff: { select: { id: true, name: true } },
+      },
+      orderBy: { booking_date: 'asc' },
+      take: 1000,
+    });
+
+    const groupBy = ['treatment', 'staff'].includes(String(args.groupBy || '')) ? String(args.groupBy) : 'day';
+
+    const bucketsMap = new Map<string, {
+      bucket: string;
+      reservations: number;
+      purchaseValue: number;
+      deliveryFee: number;
+      discount: number;
+      receiptAmount: number;
+    }>();
+
+    for (const r of reservations) {
+      let key = 'Semua';
+      if (groupBy === 'day') {
+        key = r.booking_date ? formatWibDateYYYYMMDD(new Date(r.booking_date)) : 'Tanpa Tanggal';
+      } else if (groupBy === 'treatment') {
+        key = (r.treatment_detail || String(r.treatment_category || 'Lainnya')).trim();
+      } else if (groupBy === 'staff') {
+        key = r.assigned_staff?.name || 'Belum Ditugaskan';
+      }
+
+      let b = bucketsMap.get(key);
+      if (!b) {
+        b = {
+          bucket: key,
+          reservations: 0,
+          purchaseValue: 0,
+          deliveryFee: 0,
+          discount: 0,
+          receiptAmount: 0,
+        };
+        bucketsMap.set(key, b);
+      }
+
+      b.reservations++;
+      b.purchaseValue += r.purchase_value || 0;
+      b.deliveryFee += r.delivery_fee || 0;
+      b.discount += r.discount_amount || 0;
+      b.receiptAmount += r.receipt_amount || 0;
+    }
+
+    const rows = Array.from(bucketsMap.values()).slice(0, 60);
+
+    return { tool: 'query_revenue', args, count: rows.length, rows };
+  },
+};
+
+export const queryFollowups: CopilotTool = {
+  name: 'query_followups',
+  description:
+    'Mengambil antrean follow-up customer berdasarkan status, tipe template, dan jatuh tempo. ' +
+    'Gunakan untuk menjawab: "follow-up yang gagal", "follow-up jatuh tempo hari ini", "siapa yang belum di-follow up".',
+  parameters: {
+    status: { type: 'string', description: 'Status: "QUEUED" | "SENT" | "FAILED" | "CANCELLED" | "SKIPPED".' },
+    type: { type: 'string', description: 'Tipe: "NO_PURCHASE" | "NEXT_TREATMENT" | "REMINDER_H1" | "REVIEW_H1_BABY" | "REVIEW_H1_MOMS" | "WINBACK_60D".' },
+    dueBefore: { type: 'string', description: 'Batas tanggal jadwal WIB (YYYY-MM-DD).' },
+    limit: { type: 'number', description: 'Maksimum baris (default 20, maks 60).' },
+  },
+  run: async (tenantId, args) => {
+    const take = Math.min(Math.max(parseInt(String(args.limit || 20), 10) || 20, 1), 60);
+    const where: any = { tenant_id: tenantId };
+
+    if (args.status) {
+      where.status = String(args.status).toUpperCase();
+    }
+    if (args.type) {
+      where.type = String(args.type).toUpperCase();
+    }
+    if (isValidIsoDate(args.dueBefore)) {
+      const endUtc = wibDayBoundsUtc(0, new Date(`${String(args.dueBefore).trim()}T12:00:00Z`)).end;
+      where.scheduled_at = { lte: endUtc };
+    }
+
+    const followups = await prisma.followUp.findMany({
+      where,
+      include: {
+        customer: {
+          select: {
+            id: true,
+            name: true,
+            phone: true,
+            conversations: {
+              select: { id: true },
+              orderBy: { last_message_at: 'desc' },
+              take: 1,
+            },
+          },
+        },
+      },
+      orderBy: { scheduled_at: 'desc' },
+      take,
+    });
+
+    const rows = followups.map((f: any) => {
+      const nameInfo = formatCustomerDisplayName(f.customer?.name, f.customer?.phone);
+      return {
+        customerName: nameInfo.displayName,
+        rawCustomerName: nameInfo.rawName,
+        conversationId: f.customer?.conversations?.[0]?.id || null,
+        type: f.type,
+        status: f.status,
+        scheduledAt: f.scheduled_at ? formatWibDateYYYYMMDD(new Date(f.scheduled_at)) : null,
+        sentAt: f.sent_at ? formatWibDateYYYYMMDD(new Date(f.sent_at)) : null,
+        treatmentCategory: f.treatment_category || null,
+      };
+    });
+
+    return { tool: 'query_followups', args, count: rows.length, rows };
+  },
+};
+
 export const COPILOT_TOOLS: CopilotTool[] = [
   queryReservationsByFilter,
   queryUnrepliedChats,
@@ -916,6 +1200,9 @@ export const COPILOT_TOOLS: CopilotTool[] = [
   getCustomerHistory,
   lookupCatalogAndPolicy,
   explainConversationState,
+  queryChatStats,
+  queryRevenue,
+  queryFollowups,
 ];
 
 export function getCopilotTool(name: string): CopilotTool | undefined {

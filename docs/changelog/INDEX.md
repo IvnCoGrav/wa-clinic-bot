@@ -5,8 +5,16 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 634
+Total entri terindeks: 642
 
+- 2026-11-03 | Feat: AI Copilot GLM-5.3-Flash, Budget 5 Menit, SSE Heartbeat & 3 Tool Analitik
+- 2026-11-03 | Fix: Fase A — Calendar Rot & Mock Gap (11 Test Residual #301, Tanpa Regresi)
+- 2026-11-03 | Fix: Portabilitas Test RBAC & Gate Audit yang Benar-Benar Bisa Gagal
+- 2026-11-03 | Database: Eksekusi Migrasi Live #298 (reservation_archives) di Server Produksi
+- 2026-11-02 | Fix: Remediasi Integritas Audit Sistem (#299 & #300), Stabilisasi Baseline & Matriks Otori
+- 2026-11-02 | Audit: Verifikasi Ulang Laporan Audit Fase 0-12 — Status PASS Diturunkan, #299 & #300 Dica
+- 2026-11-02 | Audit: Pelaksanaan Tuntas Master Audit Fitur Sistem Fase 0–12, Penemuan #298, dan Rekonsil
+- 2026-11-02 | Docs: Revisi Master Plan Audit Fitur ke v2 (Baseline-Diff, Protokol Keselamatan, Fase Keam
 - 2026-11-01 | Fix: Koreksi Baris Awal Tab Bulan Baru Google Sheets dan Eliminasi Gap Baris Kosong
 - 2026-10-31 | Fix: Penuntasan Fondasional Split-Brain Alamat Customer, Dual-Write Kelurahan/Kecamatan, d
 - 2026-10-30 | Feat: Catatan Sel (Cell Note) Otomatis di Kolom Total Rekapan Spreadsheet saat Nominal Tra

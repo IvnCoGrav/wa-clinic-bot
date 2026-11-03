@@ -2,11 +2,26 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { isCopilotTenantAllowed, COPILOT_DEPRECATED_ERROR } from '../../config/copilot-tenant';
 import { auditService } from '../../services/audit.service';
-import { copilotService } from '../../services/copilot/copilot.service';
+import { copilotService, resolveCopilotConfig } from '../../services/copilot/copilot.service';
 
 /**
- * copilot.subroute.ts (Fase 6r) — endpoint AI Clinic Copilot.
- * Auth admin + tenant-scope + rate-limit (global) + audit.
+ * Semaphore konkurensi Copilot per-tenant (in-memory).
+ * Menjamin maksimal 1 turn Copilot berjalan bersamaan per tenant,
+ * mencegah lonjakan biaya LLM dan kelebihan beban database.
+ */
+const activeTenantTurns = new Map<string, boolean>();
+
+export function isCopilotBusy(tenantId: string): boolean {
+  return activeTenantTurns.get(tenantId) === true;
+}
+
+export function releaseCopilotTurn(tenantId: string): void {
+  activeTenantTurns.delete(tenantId);
+}
+
+/**
+ * copilot.subroute.ts (Fase 6r + GLM-5.3 2026-11-03) — endpoint AI Clinic Copilot.
+ * Auth admin + tenant-scope + rate-limit 6/min + SSE heartbeat 15s + single turn lock + audit.
  */
 export async function copilotAdminRoutes(fastify: FastifyInstance) {
   /**
@@ -16,11 +31,10 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
   fastify.post(
     '/api/admin/copilot/chat',
     {
-      // Gerbang kode (bukan klaim komentar): endpoint ini memanggil LLM multi-step
-      // (mahal). Batasi per-klien agar tidak bisa membanjiri biaya/kuota.
+      // Gerbang kode: batasi 6 per menit agar tidak membanjiri kuota LLM & anggaran.
       config: {
         rateLimit: {
-          max: 30,
+          max: 6,
           timeWindow: '1 minute',
         },
       },
@@ -42,8 +56,8 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
       if (!message || !message.trim()) {
         return reply.status(400).send({ success: false, error: 'message wajib diisi.' });
       }
-      if (message.length > 1000) {
-        return reply.status(400).send({ success: false, error: 'message maksimal 1000 karakter.' });
+      if (message.length > 2000) {
+        return reply.status(400).send({ success: false, error: 'message maksimal 2000 karakter.' });
       }
 
       // ADR-001: gerbang single-tenant lapis-1 — tolak tenant non-owner SEBELUM
@@ -65,46 +79,63 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // Konteks pasien aktif (opsional) — divalidasi ulang tenant-scoped oleh tool.
-      const activeContext =
-        conversationId || customerId
-          ? { conversationId: conversationId?.trim() || undefined, customerId: customerId?.trim() || undefined }
-          : undefined;
+      // Gerbang konkurensi per-tenant: maks 1 turn aktif
+      if (activeTenantTurns.get(tenantId)) {
+        return reply.status(429).send({
+          success: false,
+          error: 'Copilot sedang memproses pertanyaan sebelumnya. Mohon tunggu giliran selesai.',
+          code: 'COPILOT_BUSY',
+        });
+      }
+      const startedAt = Date.now();
+      const cop = resolveCopilotConfig();
+      activeTenantTurns.set(tenantId, true);
 
-      const result = await copilotService.chat({ tenantId, message: message.trim(), history, activeContext });
+      try {
+        // Konteks pasien aktif (opsional) — divalidasi ulang tenant-scoped oleh tool.
+        const activeContext =
+          conversationId || customerId
+            ? { conversationId: conversationId?.trim() || undefined, customerId: customerId?.trim() || undefined }
+            : undefined;
 
-      await auditService.logAdminAction({
-        apiKey: (request as any).adminKeyUsed,
-        adminIdentity: (request as any).adminIdentity,
-        action: 'AI_COPILOT_CHAT',
-        targetId: tenantId,
-        payload: { message: message.slice(0, 200), toolsUsed: result.toolsUsed, grounded: result.grounded, rowCounts: result.rowCounts },
-        ipAddress: request.ip,
-        tenantId,
-      });
+        const result = await copilotService.chat({ tenantId, message: message.trim(), history, activeContext });
 
-      return reply.status(200).send({ success: result.success, data: result });
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'AI_COPILOT_CHAT',
+          targetId: tenantId,
+          payload: {
+            message: message.slice(0, 200),
+            toolsUsed: result.toolsUsed,
+            grounded: result.grounded,
+            rowCounts: result.rowCounts,
+            engine: result.engine,
+            model: cop.model,
+            llmCalls: result.llmCalls,
+            elapsedMs: Date.now() - startedAt,
+            budgetMs: cop.totalBudgetMs,
+          },
+          ipAddress: request.ip,
+          tenantId,
+        });
+
+        return reply.status(200).send({ success: result.success, data: result });
+      } finally {
+        activeTenantTurns.delete(tenantId);
+      }
     }
   );
 
   /**
    * POST /api/admin/copilot/stream
    *
-   * Varian SSE dari `/chat` untuk menghilangkan kesan "freeze". Alasan desain
-   * (fondasional, bukan kosmetik):
-   * - Memakai POST (BUKAN GET ?q=) agar pertanyaan/nama pasien TIDAK bocor ke URL,
-   *   access log, maupun riwayat browser.
-   * - Event `tool_start`/`tool_result` berasal dari pipeline nyata (bukan pancingan):
-   *   UI menampilkan progres begitu router memutuskan tool.
-   * - Grounding TETAP dijaga: jawaban final sudah melewati validator + normalizer
-   *   sebelum dikirim sebagai `chunk`. Token mentah model TIDAK dialirkan agar tidak
-   *   ada teks halusinasi yang sempat terkirim sebelum divalidasi.
-   * - Batas anggaran, tenant-scope, rate-limit, dan audit identik dengan `/chat`.
+   * Varian SSE dari `/chat` untuk visual progress & heartbeat real-time.
    */
   fastify.post(
     '/api/admin/copilot/stream',
     {
-      config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+      config: { rateLimit: { max: 6, timeWindow: '1 minute' } },
     },
     async (
       request: FastifyRequest<{
@@ -123,8 +154,8 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
       if (!message || !message.trim()) {
         return reply.status(400).send({ success: false, error: 'message wajib diisi.' });
       }
-      if (message.length > 1000) {
-        return reply.status(400).send({ success: false, error: 'message maksimal 1000 karakter.' });
+      if (message.length > 2000) {
+        return reply.status(400).send({ success: false, error: 'message maksimal 2000 karakter.' });
       }
       if (!isCopilotTenantAllowed(tenantId)) {
         await auditService.logAdminAction({
@@ -143,6 +174,18 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
         });
       }
 
+      // Gerbang konkurensi per-tenant: jika turn sedang aktif, tolak langsung sebelum hijack SSE
+      if (activeTenantTurns.get(tenantId)) {
+        return reply.status(429).send({
+          success: false,
+          error: 'Copilot sedang memproses pertanyaan sebelumnya. Mohon tunggu giliran selesai.',
+          code: 'COPILOT_BUSY',
+        });
+      }
+      const startedAt = Date.now();
+      const cop = resolveCopilotConfig();
+      activeTenantTurns.set(tenantId, true);
+
       const activeContext =
         conversationId || customerId
           ? { conversationId: conversationId?.trim() || undefined, customerId: customerId?.trim() || undefined }
@@ -157,8 +200,24 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
       });
 
       let closed = false;
+      let aborted = false;
+
+      // Heartbeat SSE tiap 15s (komentar ':' menjaga koneksi tetap hidup melewati Caddy/browser)
+      const hb = setInterval(() => {
+        if (closed) return;
+        try {
+          reply.raw.write(': keepalive\n\n');
+        } catch {
+          cleanup();
+        }
+      }, cop.heartbeatMs);
+
       const cleanup = () => {
+        if (!closed) {
+          aborted = true;
+        }
         closed = true;
+        clearInterval(hb);
       };
       request.raw.once('close', cleanup);
       reply.raw.once('close', cleanup);
@@ -179,8 +238,13 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
           history,
           activeContext,
           onEvent: (e) => {
-            if (e.type === 'tool_start') sendEvent('tool_start', { tool: e.tool });
-            else if (e.type === 'tool_result') sendEvent('tool_result', { tool: e.tool, count: e.count });
+            if (e.type === 'stage') {
+              sendEvent('stage', e);
+            } else if (e.type === 'tool_start') {
+              sendEvent('tool_start', { tool: e.tool });
+            } else if (e.type === 'tool_result') {
+              sendEvent('tool_result', { tool: e.tool, count: e.count });
+            }
           },
         });
 
@@ -189,7 +253,19 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
           adminIdentity: (request as any).adminIdentity,
           action: 'AI_COPILOT_CHAT',
           targetId: tenantId,
-          payload: { message: message.slice(0, 200), toolsUsed: result.toolsUsed, grounded: result.grounded, rowCounts: result.rowCounts, stream: true },
+          payload: {
+            message: message.slice(0, 200),
+            toolsUsed: result.toolsUsed,
+            grounded: result.grounded,
+            rowCounts: result.rowCounts,
+            stream: true,
+            aborted,
+            engine: result.engine,
+            model: cop.model,
+            llmCalls: result.llmCalls,
+            elapsedMs: Date.now() - startedAt,
+            budgetMs: cop.totalBudgetMs,
+          },
           ipAddress: request.ip,
           tenantId,
         });
@@ -201,8 +277,12 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
         sendEvent('error', { message: err?.message || 'Copilot gagal.' });
         sendEvent('done', { success: false, answer: 'Copilot gagal menjawab.' });
       } finally {
+        clearInterval(hb);
+        activeTenantTurns.delete(tenantId);
         try {
-          reply.raw.end();
+          if (!reply.raw.writableEnded) {
+            reply.raw.end();
+          }
         } catch {
           /* koneksi sudah tertutup */
         }

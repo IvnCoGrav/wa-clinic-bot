@@ -49,7 +49,7 @@ describe('ChildService — persistensi anak per customer (atomik name_norm)', ()
     expect(raraCall.create.last_reservation_id).toBe('res-1');
     expect(raraCall.create.birth_date).toBeInstanceOf(Date);
     expect(raraCall.create.raw_age_text).toBe('6 bulan');
-    expect(raraCall.create.age_months_at_registration).toBe(5);
+    expect(raraCall.create.age_months_at_registration).toBe(6);
 
     // Pastikan update hanya menyentuh last_reservation_id dan tidak merusak first_reservation_id
     expect(raraCall.update.last_reservation_id).toBe('res-1');

@@ -179,6 +179,21 @@ export function parseAgeTextEstimate(ageText: string, referenceDate: Date = new 
 
   if (totalDays == null) return empty;
 
+  // Presisi kalender: input bulan/tahun TIDAK boleh dikonversi ke hari (30,44),
+  // karena round-trip (bulan -> hari -> monthsBetween) bisa meleset 1 bulan
+  // (contoh: "anak 8 bulan" pada tanggal 2 -> terbaca 7 bulan). Lihat #299.
+  const hasDayOrWeekUnit = /(\d+(?:[.,]\d+)?)\s*(hari|hr|minggu|mgg|mg)\b/i.test(lower);
+  if (!hasDayOrWeekUnit) {
+    const totalMonths = parseAgeTextToMonths(lower);
+    if (totalMonths != null) {
+      const wholeMonths = Math.floor(totalMonths);
+      const fractionalDays = Math.round((totalMonths - wholeMonths) * MONTH_DAYS);
+      const calendarBirth = addMonths(referenceDate, -wholeMonths);
+      calendarBirth.setDate(calendarBirth.getDate() - fractionalDays);
+      return { birthDate: calendarBirth, totalDays, approximate, unparseable: false, gestational: false, multiSubject: false };
+    }
+  }
+
   const birth = new Date(referenceDate);
   birth.setDate(birth.getDate() - Math.floor(totalDays));
   return { birthDate: birth, totalDays, approximate, unparseable: false, gestational: false, multiSubject: false };
@@ -209,7 +224,7 @@ export function parseAgeTextToMonths(ageText: string): number | null {
   if (monthMatch) months = parseFloat(monthMatch[1].replace(',', '.')) || 0;
 
   if (years !== 0 || months !== 0) {
-    return Math.round(years * 12 + months);
+    return Math.round((years * 12 + months) * 10) / 10;
   }
 
   // Hari -> bulan

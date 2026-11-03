@@ -23,6 +23,11 @@ import {
  */
 describe('conversationService.listConversations — server-side filter', () => {
   beforeEach(() => {
+    // `listConversations` memanggil `count()` untuk total paginasi SEBELUM
+    // `findMany`. Tanpa mock ini, count menolak (DB offline default) sehingga
+    // service jatuh ke jalur fallback in-memory dan `where` Prisma tidak pernah
+    // dibangun — kontrak query yang diuji di bawah jadi tidak terverifikasi.
+    vi.mocked(prisma.conversation.count).mockResolvedValue(0 as any);
     vi.mocked(prisma.conversation.findMany).mockResolvedValue([] as any);
   });
 

@@ -3,11 +3,15 @@ import { parseAgeTextToBirthDate, parseAgeTextToMonths, monthsBetween } from '..
 import { treatmentCatalogService } from '../../src/services/treatment-catalog.service';
 
 describe('Smart Age Matcher Unit Tests', () => {
-  it('should parse "Kalo untuk anak 8 bulan" to 8 months age', () => {
-    const birthDate = parseAgeTextToBirthDate('Kalo untuk anak 8 bulan');
+  it.each([
+    new Date('2026-11-02T10:00:00+07:00'),
+    new Date('2026-11-01T10:00:00+07:00'),
+    new Date('2026-11-30T10:00:00+07:00'),
+    new Date('2026-03-31T10:00:00+07:00'),
+  ])('round-trip "anak 8 bulan" tepat 8 bulan pada referensi %s', (ref) => {
+    const birthDate = parseAgeTextToBirthDate('Kalo untuk anak 8 bulan', ref);
     expect(birthDate).not.toBeNull();
-    const months = monthsBetween(birthDate!, new Date());
-    expect(months).toBe(8);
+    expect(monthsBetween(birthDate!, ref)).toBe(8);
   });
 
   it('should retrieve age-appropriate services for an 8-month old baby', () => {

@@ -8,15 +8,14 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getCopilotStatus, formatElapsedSeconds, type CopilotStage } from '../../utils/copilotStatus';
 
 /**
- * AdminCopilotPanel (Fase 6r, G3=B) — panel AI Copilot KONTEKSTUAL.
+ * AdminCopilotPanel (Fase 6r + GLM-5.3 2026-11-03) — panel AI Copilot KONTEKSTUAL.
  *
- * Ditempatkan di dalam modul LiveChat (bukan drawer global Layout.tsx) sesuai
- * keputusan G3=B: scope sempit, lazy, tanpa beban bundle di semua halaman.
- *
- * State buka/tutup dimiliki CopilotContext: tombol on/off berada di SIDEBAR
- * (Layout.tsx), panel dirender di sini mengikuti `open` dari context.
- *
- * Jawaban grounded pada tool DB; bila kosong → "tidak ditemukan" (anti-halusinasi).
+ * Fitur:
+ * - Budget 300 detik dengan visual ladder responsif
+ * - SSE streaming dengan live heartbeat & stage events
+ * - Counter langkah multi-step (Langkah X/Y) & baris data ditemukan
+ * - Tombol Batal (AbortController) untuk membatalkan proses kapan saja
+ * - Ringkasan akhir turn: durasi, tool terpakai, total baris
  */
 
 interface CopilotMessage {
@@ -24,13 +23,19 @@ interface CopilotMessage {
   content: string;
   toolsUsed?: string[];
   grounded?: boolean;
+  summaryMeta?: {
+    elapsedSec: number;
+    toolsCount: number;
+    rowsTotal: number;
+  };
 }
 
 const QUICK_PROMPTS = [
   'Jadwal besok siapa saja?',
+  'Berapa chat hari ini?',
   'Chat siapa yang belum dibalas?',
-  'Riwayat Bunda Devia sebelumnya apa?',
-  'SOP jeda pijat setelah vaksin?',
+  'Omzet minggu ini berapa?',
+  'Follow-up yang gagal apa saja?',
 ];
 
 /** Ikon per tahap progres (indikasi visual proses berjalan, bukan macet). */
@@ -97,8 +102,12 @@ export const AdminCopilotPanel: React.FC<{ conversationId?: string | null; custo
   const [loading, setLoading] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [streamStage, setStreamStage] = useState<string | null>(null);
+  const [stepInfo, setStepInfo] = useState<{ step: number; maxSteps: number } | null>(null);
+  const [rowsFound, setRowsFound] = useState(0);
+
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const startedAtRef = useRef<number | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Deep-link Live Chat: sinkronkan selectedId (pola sama dengan useLiveChatNotification).
   const openLiveChat = (url: string) => {
@@ -133,24 +142,43 @@ export const AdminCopilotPanel: React.FC<{ conversationId?: string | null; custo
     };
   }, [loading]);
 
+  const cancelTurn = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setLoading(false);
+    setStreamStage(null);
+    setStepInfo(null);
+    setMessages((prev) => {
+      const last = prev[prev.length - 1];
+      if (last && last.role === 'assistant' && !last.content) {
+        return prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: 'Pencarian dibatalkan oleh pengguna.' } : m));
+      }
+      return prev;
+    });
+  };
+
   /**
    * Konsumsi SSE `POST /api/admin/copilot/stream`.
    *
-   * Kontrak backend (lihat copilot.subroute.ts): `tool_start` → `tool_result`
-   * (progres nyata pipeline) → `chunk` (jawaban final SUDAH tervalidasi) → `done`.
-   * Token mentah model tidak dialirkan, jadi tidak ada risiko menampilkan halusinasi.
-   * Dipakai fetch + ReadableStream (bukan apiRequest) karena respons berupa stream,
-   * bukan JSON. Header CSRF disamakan dengan apiRequest agar lolos guard cookie.
+   * Kontrak backend (lihat copilot.subroute.ts): `stage` → `tool_start` → `tool_result`
+   * → `chunk` (jawaban final SUDAH tervalidasi) → `done`.
    */
   const runStreaming = async (
     msg: string,
     history: Array<{ role: 'user' | 'assistant'; content: string }>,
     assistantIndex: number
   ) => {
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+    let accumulatedRows = 0;
+
     const res = await fetch('/api/admin/copilot/stream', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+      signal: abortController.signal,
       body: JSON.stringify({
         message: msg,
         history,
@@ -159,7 +187,7 @@ export const AdminCopilotPanel: React.FC<{ conversationId?: string | null; custo
       }),
     });
     if (!res.ok || !res.body) {
-      const e: any = new Error(res.status === 403 ? 'Fitur Copilot tidak tersedia.' : 'stream tidak tersedia');
+      const e: any = new Error(res.status === 403 ? 'Fitur Copilot tidak tersedia.' : res.status === 429 ? 'Copilot sedang memproses giliran lain.' : 'stream tidak tersedia');
       e.status = res.status;
       throw e;
     }
@@ -190,10 +218,17 @@ export const AdminCopilotPanel: React.FC<{ conversationId?: string | null; custo
         } catch {
           continue;
         }
-        if (ev === 'tool_start') {
+        if (ev === 'stage') {
+          if (payload?.label) setStreamStage(payload.label);
+          if (payload?.step && payload?.maxSteps) setStepInfo({ step: payload.step, maxSteps: payload.maxSteps });
+        } else if (ev === 'tool_start') {
           const toolName = String(payload.tool || '');
           toolsUsed = toolsUsed.includes(toolName) ? toolsUsed : [...toolsUsed, toolName];
           setStreamStage(`Mengecek ${toolName.replace(/_/g, ' ')}...`);
+        } else if (ev === 'tool_result') {
+          const count = Number(payload.count) || 0;
+          accumulatedRows += count;
+          setRowsFound((prev) => prev + count);
         } else if (ev === 'chunk') {
           acc = payload.text || acc;
           setMessages((prev) => prev.map((m, i) => (i === assistantIndex ? { ...m, content: acc } : m)));
@@ -208,7 +243,24 @@ export const AdminCopilotPanel: React.FC<{ conversationId?: string | null; custo
       }
     }
     if (!acc) acc = 'Tidak ada jawaban.';
-    setMessages((prev) => prev.map((m, i) => (i === assistantIndex ? { ...m, content: acc, toolsUsed, grounded } : m)));
+    const finalElapsed = startedAtRef.current ? Math.floor((Date.now() - startedAtRef.current) / 1000) : 0;
+    setMessages((prev) =>
+      prev.map((m, i) =>
+        i === assistantIndex
+          ? {
+              ...m,
+              content: acc,
+              toolsUsed,
+              grounded,
+              summaryMeta: {
+                elapsedSec: finalElapsed,
+                toolsCount: toolsUsed.length,
+                rowsTotal: accumulatedRows,
+              },
+            }
+          : m
+      )
+    );
   };
 
   const send = async (text: string) => {
@@ -221,9 +273,15 @@ export const AdminCopilotPanel: React.FC<{ conversationId?: string | null; custo
     setMessages((prev) => [...prev, { role: 'user', content: msg }, { role: 'assistant', content: '' }]);
     setLoading(true);
     setStreamStage(null);
+    setStepInfo(null);
+    setRowsFound(0);
+
     try {
       await runStreaming(msg, history, assistantIndex);
-    } catch {
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        return; // Dibatalkan sengaja oleh user
+      }
       // Fallback non-streaming (mis. proxy memblokir SSE): perilaku lama tetap utuh.
       try {
         const res = await apiRequest<{ success: boolean; data: { answer: string; toolsUsed: string[]; grounded: boolean } }>(
@@ -236,21 +294,32 @@ export const AdminCopilotPanel: React.FC<{ conversationId?: string | null; custo
               conversationId: conversationId || undefined,
               customerId: customerId || undefined,
             }),
-            // Anggaran backend satu turn = 120 dtk (COPILOT_TOTAL_BUDGET_MS). Beri margin
-            // di atasnya agar backend sempat mengembalikan degradasi jujur SEBELUM klien abort.
-            timeoutMs: 125000,
+            // Anggaran backend satu turn = 300 dtk (COPILOT_TOTAL_BUDGET_MS).
+            // Margin 5 dtk agar backend sempat mengembalikan jawaban degradasi sebelum timeout klien.
+            timeoutMs: 305000,
           }
         );
         const data = res?.data;
+        const finalElapsed = startedAtRef.current ? Math.floor((Date.now() - startedAtRef.current) / 1000) : 0;
         setMessages((prev) =>
           prev.map((m, i) =>
             i === assistantIndex
-              ? { role: 'assistant', content: data?.answer || 'Tidak ada jawaban.', toolsUsed: data?.toolsUsed, grounded: data?.grounded }
+              ? {
+                  role: 'assistant',
+                  content: data?.answer || 'Tidak ada jawaban.',
+                  toolsUsed: data?.toolsUsed,
+                  grounded: data?.grounded,
+                  summaryMeta: {
+                    elapsedSec: finalElapsed,
+                    toolsCount: data?.toolsUsed?.length || 0,
+                    rowsTotal: 0,
+                  },
+                }
               : m
           )
         );
-      } catch (err: any) {
-        toast(err.message || 'Copilot gagal menjawab', 'error');
+      } catch (fallbackErr: any) {
+        toast(fallbackErr.message || 'Copilot gagal menjawab', 'error');
         setMessages((prev) =>
           prev.map((m, i) => (i === assistantIndex ? { role: 'assistant', content: 'Gagal menghubungi Copilot. Coba lagi.' } : m))
         );
@@ -258,6 +327,8 @@ export const AdminCopilotPanel: React.FC<{ conversationId?: string | null; custo
     } finally {
       setLoading(false);
       setStreamStage(null);
+      setStepInfo(null);
+      abortControllerRef.current = null;
     }
   };
 
@@ -314,10 +385,21 @@ export const AdminCopilotPanel: React.FC<{ conversationId?: string | null; custo
                   }`}
                 >
                   {m.role === 'assistant' ? <RichMessage content={m.content} onNavigate={openLiveChat} /> : m.content}
-                  {m.role === 'assistant' && m.toolsUsed && m.toolsUsed.length > 0 && (
-                    <div className="mt-1.5 pt-1.5 border-t border-divider flex items-center gap-1 text-[9px] text-ink-2">
-                      <ShieldCheck size={10} className={m.grounded ? 'text-success' : 'text-warning'} />
-                      <span>{m.grounded ? 'Terverifikasi dari data' : 'Perlu verifikasi manual'}</span>
+                  {m.role === 'assistant' && (
+                    <div className="mt-1.5 pt-1.5 border-t border-divider flex flex-wrap items-center justify-between gap-1 text-[9px] text-ink-2">
+                      <div className="flex items-center gap-1">
+                        {m.toolsUsed && m.toolsUsed.length > 0 && (
+                          <>
+                            <ShieldCheck size={10} className={m.grounded ? 'text-success' : 'text-warning'} />
+                            <span>{m.grounded ? 'Terverifikasi dari data' : 'Perlu verifikasi manual'}</span>
+                          </>
+                        )}
+                      </div>
+                      {m.summaryMeta && (
+                        <span className="text-ink-3">
+                          Selesai dalam {m.summaryMeta.elapsedSec}s · {m.summaryMeta.toolsCount} tool{m.summaryMeta.rowsTotal > 0 ? ` · ${m.summaryMeta.rowsTotal} baris` : ''}
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -328,15 +410,39 @@ export const AdminCopilotPanel: React.FC<{ conversationId?: string | null; custo
               const status = getCopilotStatus(elapsedMs);
               const StageIcon = STAGE_ICON[status.stage];
               return (
-                <div className="flex justify-start" aria-live="polite" aria-busy="true">
-                  <div className="bg-surface-2 rounded-xl px-3 py-2 text-[12px] text-ink-2 flex items-center gap-2 tabular-nums">
-                    <span className="relative flex items-center justify-center">
-                      <Loader size={12} className="animate-spin text-accent" />
-                      <StageIcon size={12} className="absolute text-accent" />
-                    </span>
-                    <span key={streamStage || status.stage} className="animate-[fadeIn_200ms_ease-out]">{streamStage || status.label}</span>
-                    <span className="ml-auto text-[10px] text-ink-3">{formatElapsedSeconds(elapsedMs)}</span>
+                <div className="flex flex-col gap-1.5" aria-live="polite" aria-busy="true">
+                  <div className="bg-surface-2 border border-divider rounded-xl px-3 py-2 text-[12px] text-ink-2 flex items-center justify-between gap-2 tabular-nums">
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <span className="relative flex items-center justify-center shrink-0">
+                        <Loader size={12} className="animate-spin text-accent" />
+                        <StageIcon size={12} className="absolute text-accent opacity-60" />
+                      </span>
+                      <span key={streamStage || status.stage} className="truncate animate-[fadeIn_200ms_ease-out]">
+                        {streamStage || status.label}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[10px] text-ink-3">{formatElapsedSeconds(elapsedMs)}</span>
+                      <button
+                        type="button"
+                        onClick={cancelTurn}
+                        className="text-[10px] font-semibold text-rose-500 hover:text-rose-600 hover:underline px-1 py-0.5 rounded transition"
+                      >
+                        Batal
+                      </button>
+                    </div>
                   </div>
+                  {(stepInfo || rowsFound > 0) && (
+                    <div className="flex items-center gap-1.5 px-2 text-[10px] text-ink-3">
+                      {stepInfo && (
+                        <span>Langkah {stepInfo.step}/{stepInfo.maxSteps}</span>
+                      )}
+                      {stepInfo && rowsFound > 0 && <span>·</span>}
+                      {rowsFound > 0 && (
+                        <span>{rowsFound} baris data ditemukan</span>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })()}

@@ -207,12 +207,15 @@ describe('Copilot fixing — plumbing adversarial (LLM di-mock)', () => {
     expect(call.include.messages.take).toBe(1);
   });
 
-  it('registry tool konsisten (whitelist 7 tool)', () => {
+  it('registry tool konsisten (whitelist 10 tool)', () => {
     expect(COPILOT_TOOLS.map((t) => t.name).sort()).toEqual([
       'explain_conversation_state',
       'get_customer_history',
       'lookup_catalog_and_policy',
+      'query_chat_stats',
+      'query_followups',
       'query_reservations_by_filter',
+      'query_revenue',
       'query_stalled_inquiries',
       'query_unreplied_chats',
       'query_unscheduled_prospects',
@@ -347,6 +350,7 @@ describe('Fase A — multi-step loop & budget guard', () => {
   });
 
   it('budget baris: total > MAX_TOTAL_ROWS menghentikan loop', async () => {
+    process.env.COPILOT_MAX_TOTAL_ROWS = '40';
     const many = Array.from({ length: 25 }, (_, i) => ({
       id: `c${i}`,
       customer: { id: `u${i}`, name: `Bunda ${i}` },
@@ -361,6 +365,7 @@ describe('Fase A — multi-step loop & budget guard', () => {
     const res = await copilotService.chat({ tenantId: 'tenant-a', message: 'cek' });
     // 20 baris pertama sudah >= MAX_TOTAL_ROWS(40)? tidak; 20+20=40 → berhenti setelah iterasi 2.
     expect(res.llmCalls).toBeLessThanOrEqual(3); // 2 router + 1 summarize
+    delete process.env.COPILOT_MAX_TOTAL_ROWS;
   });
 
   it('union grounding: nama yang tidak ada di SEMUA sumber → tidak grounded', () => {
@@ -439,12 +444,15 @@ describe('Fase B1 — query_stalled_inquiries (state-based)', () => {
     expect(h.conversationFindMany.mock.calls[0][0].where.tenant_id).toBe('tenant-a');
   });
 
-  it('registry memuat 7 tool', () => {
+  it('registry memuat 10 tool', () => {
     expect(COPILOT_TOOLS.map((t) => t.name).sort()).toEqual([
       'explain_conversation_state',
       'get_customer_history',
       'lookup_catalog_and_policy',
+      'query_chat_stats',
+      'query_followups',
       'query_reservations_by_filter',
+      'query_revenue',
       'query_stalled_inquiries',
       'query_unreplied_chats',
       'query_unscheduled_prospects',

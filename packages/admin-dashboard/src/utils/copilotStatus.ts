@@ -1,10 +1,10 @@
 /**
  * copilotStatus.ts — label status progres deterministik untuk panel AI Copilot.
  *
- * Latar: satu turn Copilot (otak Hermes) bisa memakan puluhan detik karena
- * beberapa panggilan LLM sekuensial. Indikator statis "Menganalisis data..."
- * membuat admin mengira sistem menggantung/error. Fungsi murni ini memetakan
- * LAMA MENUNGGU (ms) → tahap + label bergilir, supaya proses terasa bekerja.
+ * Latar: satu turn Copilot (GLM-5.3 Flash & budget 5 menit) bisa memakan
+ * puluhan detik hingga beberapa menit untuk analisis mendalam multi-step.
+ * Fungsi murni ini memetakan LAMA MENUNGGU (ms) → tahap + label bergilir,
+ * proporsional hingga 300 detik, supaya proses terasa aktif bekerja.
  *
  * Murni & deterministik (tanpa I/O) — mudah diuji offline. Label generik
  * (bukan data bisnis), aman lintas-tenant.
@@ -25,16 +25,15 @@ interface StatusStep {
 }
 
 /**
- * Tangga status. Ambang disusun dari pola latensi nyata: 1 panggilan Hermes
- * ±5–18 dtk; loop 3 panggilan bisa melewati 60 dtk. Angka dapat disetel tanpa
- * mengubah pemanggil.
+ * Tangga status proporsional 300 detik (5 menit).
+ * Memberi umpan balik visual berjenjang saat server sedang melakukan multi-step tool call.
  */
 export const COPILOT_STATUS_STEPS: readonly StatusStep[] = [
-  { untilMs: 6_000, stage: 'searching', label: 'Mencari data di database…' },
-  { untilMs: 15_000, stage: 'reasoning', label: 'Menganalisis & menghubungkan data…' },
-  { untilMs: 30_000, stage: 'drafting', label: 'Menyusun jawaban…' },
-  { untilMs: 50_000, stage: 'polishing', label: 'Merapikan ringkasan…' },
-  { untilMs: Infinity, stage: 'finalizing', label: 'Hampir selesai, menunggu model…' },
+  { untilMs: 10_000, stage: 'searching', label: 'Mencari data di database…' },
+  { untilMs: 45_000, stage: 'reasoning', label: 'Menganalisis data…' },
+  { untilMs: 120_000, stage: 'drafting', label: 'Menyusun jawaban…' },
+  { untilMs: 240_000, stage: 'polishing', label: 'Merapikan ringkasan…' },
+  { untilMs: Infinity, stage: 'finalizing', label: 'Menunggu model (GLM-5.3)…' },
 ] as const;
 
 /**

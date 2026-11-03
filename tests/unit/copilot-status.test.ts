@@ -6,14 +6,16 @@ import { getCopilotStatus, formatElapsedSeconds, COPILOT_STATUS_STEPS } from '..
  * dan ketahanan input tidak wajar (negatif/NaN).
  */
 describe('getCopilotStatus — label progres deterministik', () => {
-  it('memetakan ambang waktu ke tahap yang benar', () => {
+  it('memetakan ambang waktu ke tahap yang benar (tangga 300 detik)', () => {
     expect(getCopilotStatus(0).stage).toBe('searching');
-    expect(getCopilotStatus(5_999).stage).toBe('searching');
-    expect(getCopilotStatus(6_000).stage).toBe('reasoning');
-    expect(getCopilotStatus(14_999).stage).toBe('reasoning');
-    expect(getCopilotStatus(15_000).stage).toBe('drafting');
-    expect(getCopilotStatus(30_000).stage).toBe('polishing');
-    expect(getCopilotStatus(50_000).stage).toBe('finalizing');
+    expect(getCopilotStatus(9_999).stage).toBe('searching');
+    expect(getCopilotStatus(10_000).stage).toBe('reasoning');
+    expect(getCopilotStatus(44_999).stage).toBe('reasoning');
+    expect(getCopilotStatus(45_000).stage).toBe('drafting');
+    expect(getCopilotStatus(119_999).stage).toBe('drafting');
+    expect(getCopilotStatus(120_000).stage).toBe('polishing');
+    expect(getCopilotStatus(239_999).stage).toBe('polishing');
+    expect(getCopilotStatus(240_000).stage).toBe('finalizing');
     expect(getCopilotStatus(600_000).stage).toBe('finalizing');
   });
 
