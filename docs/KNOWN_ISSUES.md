@@ -13,6 +13,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   2. `src/scripts/reconcile-customer-addresses.ts` — eksekutor idempoten, default **dry-run**, `--commit` transaksional per customer, tenant-scoped, filter `--tenant=`/`--customer=`.
 - **Bukti & Verifikasi:** `tests/unit/address-reconciliation.test.ts` (7 kasus R1–R7) lulus; `npm run build` exit 0; dry-run & commit dijalankan setelah `pg_dump` (backup `/opt/wa-clinic-bot/backups/`). **Hasil produksi:** 25 customer, adopt 16, hapus 0, upsert 8 → **drift 0, orphan 0, primary anomaly 0** (166 baris).
 - **Sisa risiko:** perubahan primary mengikuti tabel; sinkronisasi kolom root `customers.*` dengan kartu primary tetap isu A-003 (di luar rekonsiliasi ini).
+- **Remediasi data tambahan (2026-11-03):** Bunda Gina (`6285194925518`) — `Rumah Driyorejo` (salah) dihapus, `Rumah Gunung Anyar` (5.000, 2 reservasi) jadi primary, root/JSON diselaraskan; kartu sampah `628980707299` (`Rumah Wonocolo 2` berisi teks chat) dihapus. Audit log: `HEAL_DUPLICATE_GPS_GUNUNG_ANYAR`, `HEAL_GARBAGE_ADDRESS_CARD`. **Babyspanisa sengaja dilewati** (menunggu keputusan ongkir).
 
 ## 303. [Buku Alamat] Shareloc Pertama Berubah Menjadi "Alamat Kedua" (2026-11-03, RESOLVED - HIGH)
 

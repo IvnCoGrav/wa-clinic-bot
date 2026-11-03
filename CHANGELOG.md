@@ -22,6 +22,7 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
   - Dry-run/commit dijalankan di produksi setelah backup `pg_dump`.
   - **Hasil produksi (2026-11-03):** 25 customer diproses — **adopt 16, hapus 0, upsert 8**. Audit ulang: **drift 0, orphan 0, primary anomaly 0** (166 baris). Backup: `backups/pre-reconcile-*.dump`.
   - Label kosmetik "Rumah X 2" pada 3 kartu hasil merge dirapikan (tabel `customer_addresses` + JSON `saved_addresses`).
+  - **Remediasi data tambahan (2026-11-03):** Bunda Gina (`6285194925518`) — kartu `Rumah Driyorejo` (salah, 20.000) dihapus, `Rumah Gunung Anyar` (5.000, 2 reservasi) dijadikan primary; profil/JSON diselaraskan. Kartu sampah `628980707299` (`Rumah Wonocolo 2` berisi teks chat) dihapus. Keduanya tercatat di `audit_logs`. **Babyspanisa sengaja dilewati** (menunggu keputusan ongkir).
 
 #### 2026-11-03 - Fix: Disambiguasi Wilayah Perbatasan Gazetteer & Write Seam Label Guard (Kasus Grand Pakuwon Adelaide Tandes vs Asemrowo)
 
