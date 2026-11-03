@@ -72,12 +72,14 @@ describe('query_revenue tool (Fase 4 — rekap pendapatan & omzet)', () => {
 
     const result = await queryRevenue.run(tenantId, { groupBy: 'treatment' });
 
-    expect(result.count).toBe(2);
+    expect(result.count).toBe(3); // 2 treatment + 1 baris TOTAL
     const bapil = result.rows.find((r) => r.bucket.includes('Batuk Pilek'));
     const laktasi = result.rows.find((r) => r.bucket.includes('Laktasi'));
+    const total = result.rows.find((r) => r.bucket === 'TOTAL');
 
     expect(bapil?.purchaseValue).toBe(150_000);
     expect(laktasi?.purchaseValue).toBe(250_000);
+    expect(total?.purchaseValue).toBe(400_000);
   });
 
   it('mengelompokkan per staff saat groupBy === "staff"', async () => {

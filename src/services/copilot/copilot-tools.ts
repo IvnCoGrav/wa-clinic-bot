@@ -922,7 +922,9 @@ export const queryChatStats: CopilotTool = {
   description:
     'Mengambil agregasi statistik pesan chat (inbound/outbound) dan percakapan dalam rentang waktu. ' +
     'Gunakan untuk menjawab: "berapa chat hari ini", "chat per jam", "berapa percakapan baru minggu ini". ' +
-    'Mengembalikan maksimal 31 bucket harian (atau 24 bucket jam) TERBARU dari rentang yang diminta.',
+    'Mengembalikan maksimal 31 bucket harian (atau 24 bucket jam) TERBARU dari rentang yang diminta. ' +
+    'Bila hasil lebih dari satu bucket, baris terakhir bucket="TOTAL" berisi agregat seluruh rentang — ' +
+    'pakai angka TOTAL itu untuk pertanyaan total, JANGAN menjumlahkan bucket sendiri.',
   parameters: {
     dateFrom: { type: 'string', description: 'Tanggal awal rentang WIB (YYYY-MM-DD). Default hari ini.' },
     dateTo: { type: 'string', description: 'Tanggal akhir rentang WIB (YYYY-MM-DD). Default sama dengan dateFrom.' },
@@ -1031,6 +1033,7 @@ export const queryChatStats: CopilotTool = {
       return b;
     };
 
+    const allActiveConvIds = new Set<string>();
     for (const m of messages) {
       const b = getOrCreateBucket(getBucketKey(new Date(m.created_at)));
       if ((m.direction as any) === Direction.INBOUND) {
@@ -1040,6 +1043,7 @@ export const queryChatStats: CopilotTool = {
       }
       if (m.conversation_id) {
         b.activeConvIds.add(m.conversation_id);
+        allActiveConvIds.add(m.conversation_id);
       }
     }
 
@@ -1077,6 +1081,20 @@ export const queryChatStats: CopilotTool = {
         humanHandling: 0,
         frustrated: 0,
       });
+    } else if (rows.length > 1) {
+      // Baris TOTAL deterministik. Tanpa ini, LLM harus menjumlahkan 31 bucket
+      // sendiri dan hasilnya terbukti salah (30 hari dilaporkan ~75% dari aslinya).
+      // activeConversations memakai DISTINCT seluruh rentang, bukan penjumlahan
+      // bucket (supaya percakapan yang muncul di 2 hari tidak dihitung ganda).
+      rows.push({
+        bucket: 'TOTAL',
+        inboundMessages: rows.reduce((s, r) => s + r.inboundMessages, 0),
+        outboundMessages: rows.reduce((s, r) => s + r.outboundMessages, 0),
+        newConversations: rows.reduce((s, r) => s + r.newConversations, 0),
+        activeConversations: allActiveConvIds.size,
+        humanHandling: rows.reduce((s, r) => s + r.humanHandling, 0),
+        frustrated: rows.reduce((s, r) => s + r.frustrated, 0),
+      });
     }
 
     return { tool: 'query_chat_stats', args, count: rows.length, rows };
@@ -1087,7 +1105,9 @@ export const queryRevenue: CopilotTool = {
   name: 'query_revenue',
   description:
     'Mengambil rekap omzet/pendapatan dari reservasi klinik (jasa, ongkir, diskon, kuitansi terpisah). ' +
-    'Gunakan untuk menjawab: "omzet minggu ini", "omzet per treatment", "berapa yang sudah dibayar".',
+    'Gunakan untuk menjawab: "omzet minggu ini", "omzet per treatment", "berapa yang sudah dibayar". ' +
+    'basis = booking_date (tanggal treatment), BUKAN tanggal pembayaran. ' +
+    'Bila hasil lebih dari satu bucket, baris terakhir bucket="TOTAL" berisi agregat — pakai itu untuk total.',
   parameters: {
     dateFrom: { type: 'string', description: 'Tanggal awal rentang WIB (YYYY-MM-DD).' },
     dateTo: { type: 'string', description: 'Tanggal akhir rentang WIB (YYYY-MM-DD).' },
@@ -1171,9 +1191,23 @@ export const queryRevenue: CopilotTool = {
 
     // `basis` eksplisit: dihitung dari TANGGAL TREATMENT (booking_date), bukan
     // tanggal pembayaran — mencegah ringkasan menyebutnya "uang sudah diterima".
-    const rows = Array.from(bucketsMap.values())
+    const allBuckets = Array.from(bucketsMap.values());
+    const rows = allBuckets
       .slice(-60)
       .map((r) => ({ ...r, basis: 'booking_date' as const }));
+
+    if (rows.length > 1) {
+      // Agregat deterministik: LLM tidak perlu (dan tidak boleh) menjumlahkan sendiri.
+      rows.push({
+        bucket: 'TOTAL',
+        reservations: allBuckets.reduce((s, r) => s + r.reservations, 0),
+        purchaseValue: allBuckets.reduce((s, r) => s + r.purchaseValue, 0),
+        deliveryFee: allBuckets.reduce((s, r) => s + r.deliveryFee, 0),
+        discount: allBuckets.reduce((s, r) => s + r.discount, 0),
+        receiptAmount: allBuckets.reduce((s, r) => s + r.receiptAmount, 0),
+        basis: 'booking_date' as const,
+      });
+    }
 
     return { tool: 'query_revenue', args, count: rows.length, rows };
   },

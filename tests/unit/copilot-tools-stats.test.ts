@@ -51,11 +51,31 @@ describe('query_chat_stats tool (Fase 4 — statistik percakapan & pesan)', () =
 
     const result = await queryChatStats.run(tenantId, { dateFrom: '2026-11-03', groupBy: 'hour' });
 
-    expect(result.count).toBe(2);
+    expect(result.count).toBe(3); // 2 bucket jam + 1 baris TOTAL
     expect(result.rows[0].bucket).toBe('2026-11-03 09:00');
     expect(result.rows[0].inboundMessages).toBe(1);
     expect(result.rows[1].bucket).toBe('2026-11-03 10:00');
     expect(result.rows[1].inboundMessages).toBe(1);
+    expect(result.rows[2].bucket).toBe('TOTAL');
+    expect(result.rows[2].inboundMessages).toBe(2);
+  });
+
+  it('baris TOTAL memakai percakapan unik lintas bucket (bukan penjumlahan ganda)', async () => {
+    const d1 = new Date('2026-11-01T02:00:00Z');
+    const d2 = new Date('2026-11-02T02:00:00Z');
+    vi.spyOn(prisma.message, 'findMany').mockResolvedValueOnce([
+      { id: '1', direction: 'INBOUND', created_at: d1, conversation_id: 'conv-x' } as any,
+      { id: '2', direction: 'OUTBOUND', created_at: d2, conversation_id: 'conv-x' } as any,
+      { id: '3', direction: 'INBOUND', created_at: d2, conversation_id: 'conv-y' } as any,
+    ]);
+    vi.spyOn(prisma.conversation, 'findMany').mockResolvedValueOnce([]);
+
+    const result = await queryChatStats.run(tenantId, { dateFrom: '2026-11-01', dateTo: '2026-11-02' });
+
+    const total = result.rows.find((r) => r.bucket === 'TOTAL');
+    expect(total?.inboundMessages).toBe(2);
+    expect(total?.outboundMessages).toBe(1);
+    expect(total?.activeConversations).toBe(2); // conv-x hanya dihitung sekali
   });
 
   it('membaca SEMUA halaman — tidak lagi terpotong di 2.000 pesan (bug "berapa chat bulan ini")', async () => {
