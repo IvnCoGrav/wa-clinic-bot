@@ -5,7 +5,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ## 306. [Admin Copilot] Resolusi Fondasional V1–V12: Urutan Antrean, Peringkat Katalog, Kontrak Waktu WIB, Integritas Tautan & Output Terpotong, Fakta Terhitung Kode, Deteksi Bentrok Interval Durasi & Slot Kosong Data-Driven, SSOT Pembayaran, dan Anti-Duplikasi Tool (2026-11-04, PARTIAL)
 
-- **Status:** **PARTIAL (MENUNGGU DEPLOY SERVER & UJI TERIMA 13 PERTANYAAN DI PRODUKSI)** (Fase 0 s/d Fase 13 Tuntas di working copy, 0 new runtime dependencies, 0 DB migration)
+- **Status:** **PARTIAL — SUDAH DEPLOY & UJI TERIMA (2026-11-04 12.05 WIB).** Sisa 1 keterbatasan: pertanyaan "Terapis A" (nama tanpa argumen `staffName`) masih dijawab "tidak ditemukan data" alih-alih klarifikasi, karena router tidak mengirim `staffName`. (Fase 0 s/d F14 tuntas, 0 runtime dependencies baru, 0 migrasi DB)
 - **Gejala & Hasil Validasi Produksi (V1–V12 & N1–N5):**
   1. **V1 (Antrean Follow-up Terbalik):** Pertanyaan "siapa yang perlu di-follow up" menampilkan antrean Jan–Feb 2027 (ekor antrean), padahal antrean mendesak terdekat adalah 5 Nov 2026 dari total 646 antrean.
   2. **V2 (Katalog Layanan Lahap Hilang):** Pencarian "pijat lahap" dijawab tidak ditemukan, padahal klinik memiliki 2 layanan resmi: `Kala Baby - Pijat Lahap` dan `Kala Kids - Pijat Lahap`.
@@ -56,7 +56,9 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - `tests/unit/copilot-ambiguous-and-facts.test.ts` (7 test lulus)
   - `tests/unit/copilot-staff-ambiguity.test.ts` (4 test lulus — regresi N7: nama valid + 0 baris BUKAN ambigu; nama ganda/tidak dikenal = ambigu)
   - `tests/unit/copilot-duration-and-slots.test.ts` mencakup `fetchTruncated` untuk batas ambil data mentah (`MAX_FETCH_ROWS = 200`).
-  - Seluruh 26 test file suite Copilot: **227/227 test Copilot hijau (100% lulus)**.
+  - Seluruh 26 test file suite Copilot: **228/228 test Copilot hijau (100% lulus)**.
+  - **Uji terima produksi (2026-11-04, 16 pertanyaan via `POST /api/admin/copilot/chat`):** jam WIB benar (Anjani 17.00, bukan 10.00), "pijat lahap" menampilkan 2 varian resmi (Rp75.000/Rp80.000), "belum bayar Bidan Yusi" menjawab 5 reservasi Rp600.000 tanpa klarifikasi palsu, omzet 3 Nov cocok SSOT (795.000 / lunas 315.000 / pending 480.000), tidak ada jawaban terpotong, dan daftar tautan yatim berulang sudah hilang setelah F14b.
+  - **Sisa keterbatasan:** "Terapis A" tetap "tidak ditemukan data" (router tidak mengirim `staffName`); perlu tool direktori staf atau kontrak router baru.
   - `npm run build` exit 0 (0 error TypeScript).
 
 ## 305. [Quick Chat / Balasan Cepat Hardening] Penghapusan Zombie, Overwrite Deploy, dan Ghost Error CRUD (2026-11-04, RESOLVED)

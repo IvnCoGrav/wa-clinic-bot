@@ -4,13 +4,14 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-#### 2026-11-04 - Fix: F14 Admin Copilot (Ambiguitas Nama Terapis + Batas Ambil Data Bernama)
+#### 2026-11-04 - Fix: F14 Admin Copilot (Ambiguitas Nama Terapis, Batas Ambil Data, Tautan Yatim, Deploy & Uji Terima)
 
-- **Masalah:** Ambiguitas nama terapis ditentukan dari `mappedRows.length === 0`, sehingga filter tanggal/status/bayar yang menghasilkan 0 baris pada nama yang sah (mis. semua pasien Bidan Yusi sudah lunas) berubah menjadi pertanyaan klarifikasi palsu. Batas ambil data mentah juga masih berupa angka literal.
+- **Masalah:** Ambiguitas nama terapis ditentukan dari `mappedRows.length === 0`, sehingga filter tanggal/status/bayar yang menghasilkan 0 baris pada nama yang sah (mis. semua pasien Bidan Yusi sudah lunas) berubah menjadi pertanyaan klarifikasi palsu. Batas ambil data mentah juga masih berupa angka literal. Ditemukan pula daftar tautan "Buka Chat" yatim tanpa nama yang berulang ke pasien yang sama.
 - **Perbaikan:**
   - `src/services/copilot/copilot-tools.ts`: ambiguitas dihitung dari resolusi nama staf aktif (cocok tunggal = tidak ambigu; cocok ganda/tidak dikenal = `ambiguous: true` + `candidates`), terlepas dari hasil filter reservasi.
   - `MAX_FETCH_ROWS = 200` sebagai konstanta bernama + metadata `fetchTruncated` pada hasil tool.
-- **Verifikasi:** `tests/unit/copilot-staff-ambiguity.test.ts` (4 test) + suite Copilot 26 file / 227 test hijau; `npm run build` exit 0.
+  - `src/services/copilot/copilot.service.ts`: `stripOrphanChatLinks` membuang baris tautan tanpa nama pasien (anti salah chat).
+- **Verifikasi:** `tests/unit/copilot-staff-ambiguity.test.ts` (4 test) + suite Copilot 26 file / 228 test hijau; `npm run build` exit 0; **deploy produksi 2026-11-04 12.05 WIB** + uji terima 16 pertanyaan (jam WIB, katalog lahap, status bayar, omzet SSOT, tanpa jawaban terpotong).
 
 #### 2026-11-04 - Fix: Hardening Admin Copilot V1–V12 & F13 (Urutan Antrean, Peringkat Katalog, Kontrak Waktu WIB, Integritas Tautan & Jawaban Terpotong, Fakta Terhitung Kode, Deteksi Bentrok Interval & Slot Kosong Data-Driven, SSOT Pembayaran, dan Anti-Duplikasi Presisi)
 
