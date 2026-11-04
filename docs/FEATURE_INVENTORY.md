@@ -1,4 +1,4 @@
-# 📋 Inventarisasi Fitur Sistem (Level Mikro)
+﻿# 📋 Inventarisasi Fitur Sistem (Level Mikro)
 
 > **MANDAT PEMBARUAN (LIVING DOCUMENT)**:
 > File ini adalah peta resmi seluruh kapabilitas sistem WA Clinic Bot Engine dari level makro hingga mikro.
@@ -154,7 +154,7 @@ Pusat kendali percakapan di Admin Dashboard untuk Customer Service manusia menga
 | **Pemutar Voice Note Audio** | `packages/admin-dashboard/src/components/common/VoiceNotePlayer.tsx`, `src/routes/media.route.ts` | Streaming dan pemutaran voice note WhatsApp dari customer langsung di antarmuka web. |
 | **Sematkan & Sembunyikan Pesan** | `PATCH /live-chat/conversations/:id/messages/:messageId/pin`, `/hide` | Menyematkan pesan penting di bagian atas ruang chat atau menyembunyikan pesan sensitif dari tampilan CS. |
 | **Reaksi Emoji WhatsApp** | `POST /live-chat/conversations/:id/messages/:messageId/reaction` | Mengirimkan emoji reaksi langsung ke gelembung chat WhatsApp customer. |
-| **AI Copilot Analitik & Streaming** | `POST /api/admin/copilot/chat`, `POST /api/admin/copilot/stream` | Asisten analitik operasional berbasis model GLM-5.3-Flash dengan streaming SSE, visual timer, 10 tool dinamis (termasuk query_chat_stats, query_revenue, query_followups), heartbeat 15s, budget 5 menit, dan audit biaya LLM. |
+| **AI Copilot Analitik & Streaming** | `POST /api/admin/copilot/chat`, `POST /api/admin/copilot/stream` | Asisten analitik operasional berbasis model GLM-5.3-Flash dengan streaming SSE, visual timer, 10 tool dinamis (termasuk query_chat_stats, query_revenue selaras SSOT analitik finansial resmi, query_followups terurut ASC mendesak, lookup_catalog berperingkat deterministik, kontrak waktu WIB, deteksi staf ambigu, deteksi tabrakan interval durasi murni kode, celah slot kosong freeSlots terhitung kode, status bayar per reservasi paymentStatus/unpaidCustomers, dan gerbang anti-duplikasi tool), heartbeat 15s, budget 5 menit, dan audit biaya LLM. |
 | **Saran Balasan Cerdas (Smart Reply)** | `POST /api/admin/live-chat/conversations/:id/suggest-reply` | AI membaca konteks obrolan dan riwayat database untuk memberikan rekomendasi jawaban kilat kepada CS. |
 | **Quick Reply & Pintasan Ongkir Cepat** | `GET/POST/PUT/DELETE /api/admin/quick-replies`, `LiveChatComposer.tsx`, `QuickReplies.tsx` | Manajemen template balasan cepat dengan pintasan keyboard (`/ongkir1` s/d `/ongkir25` konfirmasi ongkir sesuai tier jarak resmi, `/qris`, `/pricelist`, `/shareloc`), interpolasi dinamis SSOT di Live Chat, proteksi anti-timpa saat deploy, dan tombol seeding pemulihan (`POST /seed-defaults`). |
 | **Sinkronisasi Riwayat Chat WAHA** | `POST /live-chat/sync-history`, `/sync-full`, `GET /sync-status`, `POST /sync-cancel` | Mengunduh riwayat percakapan lama dari nomor WhatsApp ke database PostgreSQL secara bertahap atau penuh. |
@@ -261,6 +261,7 @@ Pusat administrasi sistem di Admin Dashboard (`packages/admin-dashboard`) untuk 
 
 | Tanggal | Modul / Komponen | Perubahan / Penambahan Fitur Mikro | Referensi PR/Commit |
 | :--- | :--- | :--- | :--- |
+| **2026-11-04** | AI Copilot (Hardening V1-V12 & F13-F14) | Hardening fondasional V1–V12 & F13: pengurutan antrean follow-up ASC, perankingan deterministik katalog layanan, kontrak waktu WIB, integritas link live-chat (validConvIds), auto-continuation E2E, deteksi staf ambigu berbasis resolusi nama + candidates, bentrok interval durasi nyata, celah slot kosong (freeSlots) data-driven (getOperationalHours & settings tenant), hitung slot dari data utuh (take 200), status bayar kanonis (paymentStatus/unpaidCustomers), SSOT finansial resmi, dan anti-duplikasi tool presisi. | Copilot Hardening V1-V12 & F13-F14 |
 | **2026-11-03** | Geocoding & Alamat (Wilayah Perbatasan) | Disambiguasi centroid gazetteer di perbatasan (`GAZETTEER_BORDER_MARGIN_KM = 0.5`), write seam label overwrite guard di `updateCustomerLocation`, dan pemulihan data split-card Bunda Pamela (Grand Pakuwon Tandes). | Border Centroid Disambiguation |
 | **2026-11-03** | AI Copilot (Analitik & Streaming) | Upgrade model GLM-5.3-Flash (SumoPod), timeout attempt cap 90s, budget turn 300s, heartbeat SSE 15s, visual progress UI, 3 tool dinamis baru (`query_chat_stats`, `query_revenue`, `query_followups`), dan audit biaya LLM. | Copilot Latency Plan |
 | **2026-11-02** | Semua Modul (Fase 12) | Pembaruan kuantitatif hasil regenerasi kode (343 rute, 47 model Prisma, 21 workers), koreksi 20 path file, dan sinkronisasi laporan audit sistemik Fase 0–12. | Audit Fitur Sistem v2 |

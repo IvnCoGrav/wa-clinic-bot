@@ -83,7 +83,15 @@ const MAX_HISTORY_TURNS = 10;
  * Baris dipotong utuh (bukan di tengah JSON) agar tetap parseable.
  */
 export function buildLabeledToolRows(
-  collected: Array<{ tool: string; rows: any[] }>,
+  collected: Array<{
+    tool: string;
+    rows: any[];
+    summaryFacts?: any;
+    ambiguous?: boolean;
+    candidates?: string[];
+    totalQueued?: number;
+    truncated?: boolean;
+  }>,
   maxCharsPerTool: number = MAX_LABELED_ROWS_CHARS
 ): string {
   return collected
@@ -97,7 +105,16 @@ export function buildLabeledToolRows(
         rowStrings.push(str);
         currentLen += str.length;
       }
-      return `[${c.tool}] [${rowStrings.join(',')}]`;
+
+      const metaParts: string[] = [];
+      if (c.ambiguous) metaParts.push(`"ambiguous":true`);
+      if (c.candidates?.length) metaParts.push(`"candidates":${JSON.stringify(c.candidates)}`);
+      if (c.summaryFacts) metaParts.push(`"summaryFacts":${JSON.stringify(c.summaryFacts)}`);
+      if (c.totalQueued !== undefined) metaParts.push(`"totalQueued":${c.totalQueued}`);
+      if (c.truncated !== undefined) metaParts.push(`"truncated":${c.truncated}`);
+
+      const metaPrefix = metaParts.length ? `{${metaParts.join(',')}} ` : '';
+      return `[${c.tool}] ${metaPrefix}[${rowStrings.join(',')}]`;
     })
     .join('\n');
 }
@@ -157,6 +174,9 @@ export function stripInternalIds(rows: any[]): any[] {
     delete clone.customerId;
     delete clone.id;
     delete clone.rawCustomerName;
+    if (clone.bookingDateWib && clone.bookingDate) {
+      delete clone.bookingDate;
+    }
     return clone;
   });
 }
@@ -174,14 +194,102 @@ export function sanitizeCopilotAnswer(answer: string): string {
     .trim();
 }
 
+export function trimHangingSentence(text: string): string {
+  if (!text || typeof text !== 'string') return text;
+  const trimmed = text.trim();
+  if (!trimmed) return trimmed;
+
+  // Jika sudah berakhiran tanda baca akhir yang sah, bracket penutup, atau delimiter tabel markdown
+  if (/[.!?:\n|`\)\*\~]$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  // Jika teks berformat multi-line (mis. daftar numbered / bullet)
+  const lines = trimmed.split('\n');
+  if (lines.length > 1) {
+    const lastLine = lines[lines.length - 1].trim();
+    // Jika baris terakhir tidak memiliki tanda baca akhir yang sah
+    if (!/[.!?:\)|`\*\~]$/.test(lastLine)) {
+      // Buang baris terakhir yang menggantung
+      const kept = lines.slice(0, -1).join('\n').trim();
+      if (kept.length > 0) {
+        return trimHangingSentence(kept);
+      }
+    }
+  }
+
+  // Untuk teks single-line / paragraf mengalir: cari tanda baca terminal terakhir (. ! ?)
+  const lastTerminal = Math.max(
+    trimmed.lastIndexOf('.'),
+    trimmed.lastIndexOf('!'),
+    trimmed.lastIndexOf('?')
+  );
+
+  if (lastTerminal > 0) {
+    const candidate = trimmed.slice(0, lastTerminal + 1).trim();
+    if (candidate.length >= 10) {
+      return candidate;
+    }
+  }
+
+  return trimmed;
+}
+
+export function stitchCopilotAnswer(first: string, second: string): string {
+  if (!first) return second || '';
+  if (!second) return first;
+
+  const trimmedFirst = first.trimEnd();
+  const trimmedSecond = second.trimStart();
+
+  // Cek jika second mengulang akhiran first (misal hingga 60 karakter)
+  const maxOverlap = Math.min(trimmedFirst.length, trimmedSecond.length, 60);
+  for (let len = maxOverlap; len >= 3; len--) {
+    const endSub = trimmedFirst.slice(-len);
+    const startSub = trimmedSecond.slice(0, len);
+    if (endSub.toLowerCase() === startSub.toLowerCase()) {
+      return trimmedFirst + trimmedSecond.slice(len);
+    }
+  }
+
+  // Jika first berakhir di tengah kata (huruf/angka) dan second berlanjut dengan kata
+  const endsWithWord = /[a-zA-Z0-9]$/.test(trimmedFirst);
+  const startsWithWord = /^[a-zA-Z0-9]/.test(trimmedSecond);
+
+  if (endsWithWord && startsWithWord) {
+    return trimmedFirst + ' ' + trimmedSecond;
+  }
+
+  return trimmedFirst + (trimmedFirst.endsWith('\n') ? '' : ' ') + trimmedSecond;
+}
+
 /**
- * Normalizer deterministik tautan Live Chat (#191e-a & Phase 1 Hardening).
- *
+ * Normalisasi signature tool + args secara deterministik:
+ * 1. Urutkan keys secara alfabetis (mencegah perbedaan urutan objek).
+ * 2. Abaikan nilai kosong (undefined, null, string kosong "").
+ * 3. Hasilkan string unik untuk perbandingan anti-duplikasi.
+ */
+export function normalizeToolSignature(toolName: string, args: Record<string, any>): string {
+  const cleanArgs: Record<string, any> = {};
+  if (args && typeof args === 'object') {
+    const keys = Object.keys(args).sort();
+    for (const k of keys) {
+      const v = args[k];
+      if (v !== undefined && v !== null && v !== '') {
+        cleanArgs[k] = v;
+      }
+    }
+  }
+  return `${toolName}:${JSON.stringify(cleanArgs)}`;
+}
+
+/**
+ * Normalizer deterministik tautan Live Chat (#191e-a & Phase 1 Hardening):
  * 1. Sanitasi format conversationId (/^[A-Za-z0-9_-]+$/).
- * 2. Bangun map token nama (>=3 karakter huruf/angka, dipangkas honorifik) -> conversationId unik.
- * 3. Langkah A: Perbaiki tautan placeholder kosong [Buka Chat](/admin/live-chat?conversationId=).
- * 4. Langkah B: Injeksi tautan deterministik pada baris pasien (format bullet -, *, 1. maupun baris tabel | ... |)
- *    yang belum memiliki link, dengan pencocokan \btoken\b (word boundary, longest-match first).
+ * 2. Hanya izinkan ID yang benar-benar ada di data rows (anti tautan halusinasi / salah orang).
+ * 3. Bersihkan fragmen tautan rusak ([Buka Chat](/ · [Buka Chat](...) atau karakter U+00B7/U+FFFD).
+ * 4. Langkah A: Perbaiki placeholder kosong atau tautan ber-ID asing menggunakan pencocokan token nama.
+ * 5. Langkah B: Injeksi tautan deterministik pada baris pasien yang belum memiliki link.
  */
 export function repairCopilotChatLinks(answer: string, rows: any[]): string {
   if (!answer || typeof answer !== 'string') return answer;
@@ -189,7 +297,15 @@ export function repairCopilotChatLinks(answer: string, rows: any[]): string {
   const validRows = (rows || []).filter(
     (r) => r?.conversationId && /^[A-Za-z0-9_-]+$/.test(String(r.conversationId).trim())
   );
-  if (validRows.length === 0) return answer;
+  if (validRows.length === 0) {
+    // Jika tidak ada data valid dengan conversationId, bersihkan semua tautan live-chat karangan
+    return answer
+      .replace(/\s*(?:·|\u00b7)?\s*\[(?:Buka Chat|Lihat Chat|Chat)\]\(\/admin\/live-chat\?[^)]*\)/gi, '')
+      .trim();
+  }
+
+  const validConvIds = new Set(validRows.map((r) => String(r.conversationId).trim()));
+  const distinctConvIds = Array.from(validConvIds);
 
   // Bangun token -> Set(conversationId) untuk memastikan keunikan (anti-salah tautan)
   const tokenToConvIds = new Map<string, Set<string>>();
@@ -220,11 +336,22 @@ export function repairCopilotChatLinks(answer: string, rows: any[]): string {
   // Urutkan token terpanjang lebih dulu (longest-match first)
   const sortedTokens = Array.from(uniqueTokenMap.keys()).sort((a, b) => b.length - a.length);
 
-  // Langkah A: Perbaiki placeholder [Buka Chat](/admin/live-chat?conversationId=...) yang kosong
+  // Bersihkan pecahan link rusak mendahului link lain atau karakter U+00B7/U+FFFD di dalam URL
+  let sanitizedAnswer = answer
+    .replace(/\[(?:Buka Chat|Lihat Chat|Chat)\]\([^)]*?(?:[·\u00b7\ufffd\s]|\/)+(?=\[(?:Buka Chat|Lihat Chat|Chat)\]\()/gi, '')
+    .replace(/(\(\/admin\/live-chat\?[^)]*?)[·\u00b7\ufffd]+([^)]*\))/g, '$1$2');
+
+  // Langkah A: Perbaiki placeholder [Buka Chat](/admin/live-chat?conversationId=...) atau tautan ID asing
   const linkRe = /\[([^\]]+)\]\(\/admin\/live-chat\?conversationId=([^)]*)\)/g;
-  let processedAnswer = answer.replace(linkRe, (full, label: string, convId: string, offset: number) => {
-    if (convId && convId.trim() && /^[A-Za-z0-9_-]+$/.test(convId.trim())) return full;
-    const before = answer.slice(Math.max(0, offset - 250), offset).toLowerCase();
+  let processedAnswer = sanitizedAnswer.replace(linkRe, (full, label: string, rawConvId: string, offset: number) => {
+    const convId = (rawConvId || '').replace(/[·\u00b7\ufffd\s]/g, '').trim();
+    if (convId && validConvIds.has(convId)) {
+      return `[${label}](/admin/live-chat?conversationId=${convId})`;
+    }
+
+    // Jika convId kosong atau ID karangan yang TIDAK ada di validConvIds:
+    // Coba petakan dari nama pasien sebelum link
+    const before = sanitizedAnswer.slice(Math.max(0, offset - 250), offset).toLowerCase();
     let bestToken: string | null = null;
     let bestPos = -1;
     for (const token of sortedTokens) {
@@ -237,20 +364,30 @@ export function repairCopilotChatLinks(answer: string, rows: any[]): string {
         }
       }
     }
-    if (bestToken) {
+    if (bestToken && uniqueTokenMap.has(bestToken)) {
       return `[${label}](/admin/live-chat?conversationId=${uniqueTokenMap.get(bestToken)})`;
     }
-    const distinctConvIds = Array.from(new Set(validRows.map((r) => String(r.conversationId).trim())));
     if (distinctConvIds.length === 1) {
       return `[${label}](/admin/live-chat?conversationId=${distinctConvIds[0]})`;
     }
-    return full;
+    // Jika tidak dapat di-resolve:
+    // Jika awalnya convId memang kosong, pertahankan placeholder kosong (jangan karang)
+    if (!convId) {
+      return `[${label}](/admin/live-chat?conversationId=)`;
+    }
+    // Jika ID karangan dan tidak cocok dengan pasien mana pun: buang link palsu (anti tautan menyesatkan)
+    return '';
   });
+
+  // Bersihkan sisa ' · ' yang tertinggal akibat pembuangan link karangan
+  processedAnswer = processedAnswer.replace(/[ \t]*·[ \t]*(?=\n|$)/g, '').replace(/[ \t]{2,}/g, ' ');
 
   // Langkah B: Injeksi tautan deterministik pada baris yang belum memiliki link
   const lines = processedAnswer.split('\n');
   const modifiedLines = lines.map((line) => {
-    if (line.includes('/admin/live-chat?conversationId=')) return line;
+    if (line.includes('/admin/live-chat?conversationId=')) {
+      return line.replace(/\[(?:Buka Chat|Lihat Chat|Chat)\]\(\s*\/?\s*\)(?:\s*·\s*)?/gi, '');
+    }
 
     const trimmed = line.trim();
     const isBullet = /^\s*([-*•]|\d+[\.)]|[a-zA-Z][\.)])\s+/.test(line);
@@ -270,16 +407,19 @@ export function repairCopilotChatLinks(answer: string, rows: any[]): string {
 
     if (!matchedConvId) return line;
 
+    // Bersihkan pecahan link rusak yang belum tertutup sebelum menginjeksi
+    const cleanLine = line.replace(/\s*(?:·|\u00b7)?\s*\[(?:Buka Chat|Lihat Chat|Chat)\]\(\s*\/?\s*$/i, '').trimEnd();
+
     const linkMarkdown = `[Buka Chat](/admin/live-chat?conversationId=${matchedConvId})`;
 
     if (isTableRow) {
-      const lastPipeIndex = line.lastIndexOf('|');
-      const beforeLastPipe = line.slice(0, lastPipeIndex).trimEnd();
-      const afterLastPipe = line.slice(lastPipeIndex);
+      const lastPipeIndex = cleanLine.lastIndexOf('|');
+      const beforeLastPipe = cleanLine.slice(0, lastPipeIndex).trimEnd();
+      const afterLastPipe = cleanLine.slice(lastPipeIndex);
       return `${beforeLastPipe} ${linkMarkdown} ${afterLastPipe}`;
     }
 
-    return `${line.trimEnd()} · ${linkMarkdown}`;
+    return `${cleanLine} · ${linkMarkdown}`;
   });
 
   return modifiedLines.join('\n');
@@ -364,7 +504,11 @@ export function buildDegradedAnswer(collected: Array<{ tool: string; rows: any[]
     const shown = c.rows.slice(0, 10).map((r) => {
       const name = r.customerName || r.title || r.name || '—';
       const bits: string[] = [];
-      if (r.bookingDate) bits.push(String(r.bookingDate));
+      if (r.bookingDateWib || r.bookingTimeWib) {
+        bits.push(`${r.bookingDateWib || ''} ${r.bookingTimeWib ? `${r.bookingTimeWib} WIB` : ''}`.trim());
+      } else if (r.bookingDate) {
+        bits.push(String(r.bookingDate));
+      }
       if (r.treatment) bits.push(String(r.treatment));
       if (r.status) bits.push(String(r.status));
       if (r.staff) bits.push(String(r.staff));
@@ -419,6 +563,18 @@ Ketentuan struktur:
 5. Bila ada field "offeredTime", sebutkan "sudah ditawari <offeredTime>".
 6. Jika (dan hanya jika) ada field "conversationId" pada data, sertakan tautan Live Chat dengan format markdown persis: [Buka Chat](/admin/live-chat?conversationId=CONVERSATION_ID).
 7. Untuk pedoman medis/SOP/katalog, kutip HANYA dari baris berlabel sumber dan sebutkan judul sumbernya; JANGAN mengarang angka (harga, durasi, ketersediaan slot) yang tidak ada di data.
+8. PANDUAN WAKTU (WIB): Seluruh waktu di data sudah dikonversi ke Waktu Indonesia Barat (WIB). HANYA sebutkan tanggal dan jam dari field "*Wib" (seperti bookingTimeWib: "17:00" artinya jam 17.00 WIB). DILARANG KERAS membaca atau menghitung dari timestamp UTC mentah.
+9. Jika data tool berstatus terpotong (misal totalQueued > count), sebutkan secara eksplisit bahwa jawaban menampilkan <count> dari total <totalQueued> antrean (beserta rentang tanggal bila ada).
+10. ATURAN KONFLIK & SLOT KOSONG: Jadwal HANYA boleh dinyatakan bentrok bila field "scheduleCollisions" di summaryFacts memuat data bentrok nyata (terapis yang sama dengan rentang waktu tumpang tindih). DILARANG KERAS menyimpulkan tabrakan jika dua jadwal ditangani oleh terapis yang berbeda (misal Yusi dan Thabita pada jam yang sama adalah BUKAN tabrakan). Untuk pertanyaan celah atau slot kosong terapis, WAJIB gunakan daftar "freeSlots" yang sudah dihitung sistem di summaryFacts (DILARANG mengarang jam kosong sendiri).
+11. ATURAN KLARIFIKASI (AMBIGU): Bila data tool memuat "ambiguous: true" dan daftar "candidates", DILARANG menyatakan "data tidak ditemukan". Kamu WAJIB meminta klarifikasi kepada admin dan menyajikan pilihan nama dari daftar "candidates" yang tersedia.
+12. ATURAN HITUNGAN ANGKA & STATISTIK KEUANGAN: Bila data tool memuat "summaryFacts", WAJIB gunakan angka resmi yang sudah dihitung oleh sistem:
+   - totalRevenue: Total omzet kotor resmi (jasa + ongkir) sesuai analitik keuangan.
+   - netRevenue: Omzet bersih setelah potongan diskon (bila ada diskon).
+   - lunasRevenue (atau paidAmount): Uang yang sudah diverifikasi lunas.
+   - pendingRevenue (atau pendingAmount): Uang yang belum diverifikasi lunas / tertagih.
+   - totalUnreplied / waitingOver15Min / totalUnpaidAmount: Gunakan angka persis yang ada di summaryFacts.
+   - DILARANG menghitung selisih atau menghitung manual sendiri di luar summaryFacts.
+13. ATURAN STATUS PEMBAYARAN: Bila admin bertanya siapa yang belum bayar, tagihan menggantung, atau status bayar, rujuk field "paymentStatus" (LUNAS, TAGIH_DI_TEMPAT, SELESAI_BELUM_VERIFIKASI), "unpaidAmount", atau daftar "unpaidCustomers" dan "totalUnpaidAmount" dari summaryFacts.
 Data:
 ${labeledRows}`;
 }
@@ -624,7 +780,16 @@ export class CopilotService {
       // Langkah 1–2 (loop multi-step, budget ketat): router memilih tool → eksekusi →
       // umpan balik hasil ke router berikutnya. Berhenti bila tool:null / iterasi habis /
       // router mengulang tool+args identik. Semua hasil diakumulasi untuk summarize + grounding.
-      const collected: Array<{ tool: string; args: Record<string, any>; rows: any[] }> = [];
+      const collected: Array<{
+        tool: string;
+        args: Record<string, any>;
+        rows: any[];
+        summaryFacts?: any;
+        ambiguous?: boolean;
+        candidates?: string[];
+        totalQueued?: number;
+        truncated?: boolean;
+      }> = [];
       const seenSignatures = new Set<string>();
       let llmCalls = 0;
       let totalRows = 0;
@@ -766,15 +931,25 @@ export class CopilotService {
           break;
         }
 
-        const signature = `${tool.name}:${JSON.stringify(toolArgs)}`;
-        if (seenSignatures.has(signature)) break; // anti-loop: tool+args identik
+        const signature = normalizeToolSignature(tool.name, toolArgs);
+        if (seenSignatures.has(signature)) break; // anti-loop: tool+args ekuivalen sudah dipanggil
         seenSignatures.add(signature);
 
         params.onEvent?.({ type: 'tool_start', tool: tool.name });
         const toolResult: CopilotToolResult = await tool.run(tenantId, toolArgs);
         params.onEvent?.({ type: 'tool_result', tool: tool.name, count: (toolResult.rows || []).length });
-        collected.push({ tool: tool.name, args: toolArgs, rows: toolResult.rows || [] });
-        totalRows += (toolResult.rows || []).length;
+        collected.push({
+          tool: tool.name,
+          args: toolArgs,
+          rows: toolResult.rows || [],
+          summaryFacts: (toolResult as any).summaryFacts,
+          ambiguous: (toolResult as any).ambiguous,
+          candidates: (toolResult as any).candidates,
+          totalQueued: (toolResult as any).totalQueued,
+          truncated: (toolResult as any).truncated,
+        });
+        const returnedRowCount = (toolResult.rows || []).length;
+        totalRows += returnedRowCount;
 
         // Budget baris: hentikan loop bila kuota konteks habis.
         if (totalRows >= cop.maxTotalRows) break;
@@ -910,7 +1085,7 @@ export class CopilotService {
                     { role: 'user', content: summarizePrompt },
                   ],
                   temperature: 0.2,
-                  max_tokens: 700,
+                  max_tokens: 1200,
                 },
               }),
             
@@ -945,6 +1120,61 @@ export class CopilotService {
         }
 
         rawAnswer = summaryResp?.data?.choices?.[0]?.message?.content?.trim() || 'Tidak ada ringkasan.';
+        const finishReason = summaryResp?.data?.choices?.[0]?.finish_reason;
+
+        // Jika respons terpotong karena batas token (finish_reason === 'length'),
+        // minta lanjutan otomatis (maks 1 lanjutan) jika waktu masih mencukupi.
+        if (finishReason === 'length' && remainingMs() > 2000 && !params.signal?.aborted) {
+          try {
+            const continueCallStart = Date.now();
+            const continueResp = await withDeadline(
+              () =>
+                callChatCompletionsWithFallback({
+                  model: cfg.model,
+                  fallbackModel: cfg.fallbackModel,
+                  baseUrl: cfg.baseUrl,
+                  apiKey: cfg.apiKey,
+                  timeoutMs: Math.min(callTimeout(cfg.timeoutMs), remainingMs()),
+                  attemptTimeoutCapMs: cop.callTimeoutMs,
+                  signal: params.signal,
+                  payload: {
+                    messages: [
+                      ...history.map((h) => ({ role: h.role, content: h.content })),
+                      { role: 'user', content: summarizePrompt },
+                      { role: 'assistant', content: rawAnswer },
+                      {
+                        role: 'user',
+                        content: 'Lanjutkan ringkasan di atas mulai dari kata terakhir tanpa mengulang teks yang sudah ditulis.',
+                      },
+                    ],
+                    temperature: 0.2,
+                    max_tokens: 600,
+                  },
+                }),
+              remainingMs()
+            );
+            llmCalls++;
+            const continueAnswer = continueResp?.data?.choices?.[0]?.message?.content?.trim();
+            if (continueAnswer) {
+              rawAnswer = stitchCopilotAnswer(rawAnswer, continueAnswer);
+            }
+            auditLlmCall({
+              customer_phone: 'ADMIN_COPILOT',
+              tenant_id: tenantId,
+              conversation_id: params.activeContext?.conversationId || null,
+              task_type: 'AI_COPILOT_CHAT',
+              model_name: continueResp?.model || cfg.model,
+              baseUrl: continueResp?.baseUrl || cfg.baseUrl,
+              startedAt: continueCallStart,
+              usage: continueResp?.data?.usage,
+            });
+          } catch {
+            // Jika panggilan lanjutan timeout/gagal, rawAnswer tetap dipakai dan dipangkas deterministik di bawah
+          }
+        }
+
+        // Pangkas kalimat gantung yang terpotong di tengah jalan
+        rawAnswer = trimHangingSentence(rawAnswer);
       }
       // Normalizer deterministik: buang sisa UUID yang lolos dari LLM, lalu
       // perbaiki tautan Live Chat kosong dari data tool (anti link menyesatkan).

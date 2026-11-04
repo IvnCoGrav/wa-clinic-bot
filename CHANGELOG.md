@@ -4,6 +4,54 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-04 - Fix: F14 Admin Copilot (Ambiguitas Nama Terapis + Batas Ambil Data Bernama)
+
+- **Masalah:** Ambiguitas nama terapis ditentukan dari `mappedRows.length === 0`, sehingga filter tanggal/status/bayar yang menghasilkan 0 baris pada nama yang sah (mis. semua pasien Bidan Yusi sudah lunas) berubah menjadi pertanyaan klarifikasi palsu. Batas ambil data mentah juga masih berupa angka literal.
+- **Perbaikan:**
+  - `src/services/copilot/copilot-tools.ts`: ambiguitas dihitung dari resolusi nama staf aktif (cocok tunggal = tidak ambigu; cocok ganda/tidak dikenal = `ambiguous: true` + `candidates`), terlepas dari hasil filter reservasi.
+  - `MAX_FETCH_ROWS = 200` sebagai konstanta bernama + metadata `fetchTruncated` pada hasil tool.
+- **Verifikasi:** `tests/unit/copilot-staff-ambiguity.test.ts` (4 test) + suite Copilot 26 file / 227 test hijau; `npm run build` exit 0.
+
+#### 2026-11-04 - Fix: Hardening Admin Copilot V1–V12 & F13 (Urutan Antrean, Peringkat Katalog, Kontrak Waktu WIB, Integritas Tautan & Jawaban Terpotong, Fakta Terhitung Kode, Deteksi Bentrok Interval & Slot Kosong Data-Driven, SSOT Pembayaran, dan Anti-Duplikasi Presisi)
+
+- **Latar Belakang & Masalah**:
+  - Validasi produksi membuktikan 12 anomali operasional pada AI Copilot Admin:
+    1. V1: Antrean follow-up dibaca terbalik dari masa depan terjauh (Jan-Feb 2027) alih-alih yang paling mendesak (5 Nov 2026) akibat `orderBy: { scheduled_at: 'desc' }`.
+    2. V2: Katalog layanan "pijat lahap" dinyatakan tidak ditemukan karena `take: 8` memotong hasil sebelum dilakukan pemeringkatan relevansi di antara 15+ layanan berpola "pijat".
+    3. V3: Jam reservasi ditampilkan salah karena membaca ISO UTC mentah (10:00Z dibaca jam 10 pagi, padahal jam 17:00 WIB).
+    4. V4: Jawaban terpotong di tengah jalan pada 38% kasus karena batasan token 700 tanpa mekanisme auto-continuation atau pembersihan kalimat gantung.
+    5. V5: Tautan live-chat rusak dengan karakter `U+00B7` atau memuat ID karangan model yang tidak ada di baris data.
+    6. V6: Pertanyaan ambigu "Terapis A" dijawab data kosong tanpa klarifikasi.
+    7. V7: Rekap chat aktif tidak konsisten dengan baris data karena model menghitung sendiri.
+    8. V8: Perbedaan definisi keuangan antara Copilot (`receipt_amount` kuitansi) dengan SSOT analitik finansial resmi (`purchase_occurred_at` lunas vs pending).
+    9. V9: Pertanyaan "siapa belum bayar / tagihan menggantung" salah rute ke antrean follow-up karena ketiadaan field status pembayaran per reservasi.
+    10. V10: Tabrakan jadwal alarm palsu (dua jadwal terapis berbeda dinyatakan bertabrakan).
+    11. V11, N1, N2: Model menghitung durasi dan celah slot kosong secara keliru; jam kerja awalnya di-hardcode 08:00–18:00 WIB mengabaikan konfigurasi tenant (N1); serta slot awalnya dihitung dari 20 baris terpotong (N2).
+    12. V12, N3: Tool yang sama dipanggil ganda dengan argumen ekuivalen; gerbang awal sempat memblokir nama tool secara global sehingga argumen berbeda tertolak (N3).
+- **Perubahan Fondasional (Fase 0 s/d Fase 13)**:
+  1. `src/services/copilot/copilot-tools.ts`:
+     - `queryFollowups`: Mengubah pengurutan antrean menjadi `orderBy: { scheduled_at: 'asc' }`, menyertakan `totalQueued`, penanda `truncated`, serta rentang tanggal `rangeEarliest` dan `rangeLatest`.
+     - `queryReservationsByFilter`:
+       - Kontrak Waktu & Durasi: Menghasilkan field kanonis `bookingDateWib`, `bookingTimeWib`, `durationMinutes`, dan `bookingEndTimeWib`.
+       - Jam Operasional & Durasi Slot Data-Driven (N1): Mengimpor `getOperationalHours(tenantId)` (default 08:00–17:00 WIB, mendukung override `Tenant.settings.operationalHours` atau `ClinicPolicy`) dan batas jeda minimum dari `Tenant.settings.copilot.minSlotDurationMinutes`.
+       - Perhitungan Slot dari Data Utuh (N2): Query database mengambil hingga 200 baris untuk reservasi hari/filter terkait sehingga `scheduleCollisions` dan `freeSlots` dihitung dari dataset lengkap hari tersebut; baris yang ditampilkan ke konteks LLM tetap dipotong tepat 20 (`MAX_ROWS`) dengan metadata `totalCount` dan `truncated: true`.
+       - Status Pembayaran (V9): Menambahkan parameter `paymentStatus: 'unpaid' | 'paid' | 'all'`, field kanonis `paymentStatus` (`LUNAS`, `TAGIH_DI_TEMPAT`, `SELESAI_BELUM_VERIFIKASI`), `isPaid`, `totalFee`, `unpaidAmount`, serta fakta agregat `summaryFacts.unpaidCustomers` dan `totalUnpaidAmount`.
+       - Deteksi Bentrok Interval (V10, V11): Menggunakan evaluasi irisan interval durasi nyata (`startA < endB && startB < endA`) pada terapis yang SAMA. Beda terapis diproteksi 100% non-tabrakan.
+       - Celah Slot Kosong (`freeSlots`, V11): Menghitung celah waktu luang per terapis secara deterministik berbasis jam buka-tutup tenant dinamis.
+       - Klarifikasi Ambigu (V6): Mengembalikan `ambiguous: true` + daftar `candidates` staf aktif bila pencarian nama staf menghasilkan 0 baris reservasi.
+     - `lookupCatalogAndPolicy`: Memperbesar pengambilan kandidat (`take: 60`), menerapkan algoritma pemeringkatan deterministik `rankCatalogAndPolicyRows` (frasa persis > jumlah token cocok > posisi judul), dan memberi penanda `matchQuality: exact|partial|none`.
+     - `queryRevenue` (N4): Diselaraskan 100% dengan SSOT `FinancialAnalyticsService` (`isLunas = Boolean(purchase_occurred_at)`, `totalFee = purchase_value + delivery_fee`, `lunasRevenue = sum(isLunas ? totalFee : 0)`, `pendingRevenue = sum(!isLunas ? totalFee : 0)`), dengan label kanonis terpisah antara `totalRevenue` (kotor) dan `netRevenue` (setelah diskon).
+     - `queryUnrepliedChats`: Mengembalikan `summaryFacts` terhitung di kode (`totalUnreplied`, `waitingOver15Min`).
+  2. `src/services/copilot/copilot.service.ts`:
+     - `normalizeToolSignature` & Anti-Duplikasi Presisi (V12, N3): Mengurutkan keys parameter dan membuang nilai kosong/undefined/null untuk memblokir pemanggilan tool ekuivalen berulang (`seenSignatures.has(signature)`). Pemanggilan tool yang sama dengan argumen berbeda (misal tanggal berbeda) diizinkan secara penuh.
+     - Aliran Fakta Deterministik: Meneruskan `summaryFacts`, `ambiguous`, `candidates`, `totalQueued`, dan `truncated` dari hasil eksekusi tool ke `buildLabeledToolRows`.
+     - `repairCopilotChatLinks`: Hanya mengizinkan ID yang ada di `validConvIds`, memetakan token nama pasien, membersihkan fragmen link ganda dan karakter rusak `U+00B7`/`U+FFFD`.
+     - `trimHangingSentence` & `stitchCopilotAnswer`: Menangani respons terpotong (`finish_reason === 'length'`) dengan auto-continuation E2E dan pemangkasan deterministik kalimat menggantung. `max_tokens` dinaikkan menjadi 1200.
+     - `buildSummarizePrompt`: Instruksi tegas panduan waktu WIB, pelaporan antrean terpotong, larangan tabrakan beda terapis, kewajiban menggunakan `freeSlots`, klarifikasi nama ambigu, larangan menghitung angka sendiri di luar `summaryFacts`, dan kepatuhan status pembayaran kanonis.
+- **Verifikasi**:
+  - 9 test suite unit baru & diperbarui: `copilot-duration-and-slots.test.ts` (5 test), `copilot-unpaid-reservations.test.ts` (2 test), `copilot-anti-duplicate-calls.test.ts` (3 test), `copilot-continuation-e2e.test.ts` (1 test), `copilot-output-integrity.test.ts` (4 test), `copilot-wib-contract.test.ts` (4 test), `copilot-followup-order.test.ts` (2 test), `copilot-catalog-rank.test.ts` (1 test), `copilot-ambiguous-and-facts.test.ts` (7 test).
+  - Seluruh 25 test file suite Copilot: **223/223 test Copilot hijau (100% lulus)**. `npm run build` exit 0 (0 error TypeScript).
+
 #### 2026-11-03 - Fix: Rekonsiliasi Buku Alamat JSON <-> Tabel `customer_addresses` (A-002)
 
 - **Latar Belakang & Masalah**:

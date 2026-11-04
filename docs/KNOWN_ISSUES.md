@@ -3,6 +3,62 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 306. [Admin Copilot] Resolusi Fondasional V1–V12: Urutan Antrean, Peringkat Katalog, Kontrak Waktu WIB, Integritas Tautan & Output Terpotong, Fakta Terhitung Kode, Deteksi Bentrok Interval Durasi & Slot Kosong Data-Driven, SSOT Pembayaran, dan Anti-Duplikasi Tool (2026-11-04, PARTIAL)
+
+- **Status:** **PARTIAL (MENUNGGU DEPLOY SERVER & UJI TERIMA 13 PERTANYAAN DI PRODUKSI)** (Fase 0 s/d Fase 13 Tuntas di working copy, 0 new runtime dependencies, 0 DB migration)
+- **Gejala & Hasil Validasi Produksi (V1–V12 & N1–N5):**
+  1. **V1 (Antrean Follow-up Terbalik):** Pertanyaan "siapa yang perlu di-follow up" menampilkan antrean Jan–Feb 2027 (ekor antrean), padahal antrean mendesak terdekat adalah 5 Nov 2026 dari total 646 antrean.
+  2. **V2 (Katalog Layanan Lahap Hilang):** Pencarian "pijat lahap" dijawab tidak ditemukan, padahal klinik memiliki 2 layanan resmi: `Kala Baby - Pijat Lahap` dan `Kala Kids - Pijat Lahap`.
+  3. **V3 (Zona Waktu UTC vs WIB):** Jam booking dibaca dari UTC mentah (mis. `10:00Z` disebut jam 10 pagi, padahal jam 17:00 WIB).
+  4. **V4 (Jawaban Terpotong di Tengah Jalan):** Jawaban terpotong akibat keterbatasan token tanpa kelanjutan otomatis atau pembersihan kalimat gantung.
+  5. **V5 (Tautan Live Chat Rusak / ID Karangan):** Tautan rusak seperti `[Buka Chat](/ · [Buka Chat](...)` atau memuat ID yang tidak ada di baris data nyata.
+  6. **V6 (Terapis Ambigu Tidak Diklarifikasi):** Pertanyaan "Terapis A" dijawab tidak ada data alih-alih meminta klarifikasi nama staf.
+  7. **V7 (Inkonsistensi Hitungan Baris):** Rekap chat aktif berbeda dengan jumlah baris nyata karena model menghitung sendiri.
+  8. **V8 (Selisih Angka Keuangan):** Perbedaan definisi keuangan antara Copilot (`receipt_amount` kuitansi) dengan SSOT analitik finansial resmi (`purchase_occurred_at` lunas vs pending).
+  9. **V9 (Intent Pembayaran vs Follow-up):** Pertanyaan "siapa belum bayar / tagihan menggantung" salah rute ke antrean follow-up karena ketiadaan field status pembayaran per reservasi.
+  10. **V10 (Alarm Palsu Bentrok Jadwal):** Dua jadwal jam 15.00 pada terapis berbeda (Yusi & Thabita) salah dinyatakan bentrok.
+  11. **V11 & N1, N2 (Aritmatika Celah Slot, Hardcode Jam & Limit Baris):** Model menghitung sendiri jam selesai reservasi dan celah slot kosong secara keliru; jam kerja awalnya di-hardcode 08:00–18:00 WIB mengabaikan konfigurasi tenant (N1); serta slot awalnya dihitung dari 20 baris terpotong (N2).
+  12. **V12 & N3 (Orkestrasi Tool & Anti-Duplikasi Terlalu Kasar):** Pemanggilan tool berulang dengan argumen ekuivalen; gerbang awal sempat memblokir nama tool secara global sehingga argumen berbeda tertolak (N3).
+  13. **N4 (Penyatuan Istilah Keuangan):** Dualitas `totalRevenue` (kotor) dan `netRevenue` (bersih setelah diskon) yang membingungkan LLM.
+  14. **N5 (Keterbatasan Bisnis Pembayaran Biner):** SSOT sistem saat ini bersifat biner mengikuti `purchase_occurred_at`. Pembayaran bertahap / DP belum memiliki field terpisah sehingga tercatat sebagai tagihan penuh sampai dinyatakan lunas.
+  15. **N7 (Klarifikasi Palsu):** Ambiguitas nama terapis sempat disimpulkan dari `mappedRows.length === 0`, sehingga filter tanggal/status/bayar yang menghasilkan 0 baris pada nama yang sah (mis. semua pasien Bidan Yusi sudah lunas) memicu pertanyaan klarifikasi palsu.
+- **Akar Masalah & Solusi Fondasional Antar-Lapisan (Fase 0 s/d Fase 13):**
+  1. **Lapisan Kontrak Tool (V1, V3, V6, V9, N1, N2):**
+     - `queryFollowups`: Mengubah `orderBy` menjadi `{ scheduled_at: 'asc' }` (mendesak dulu), menambahkan `totalQueued`, flag `truncated`, `rangeEarliest`, dan `rangeLatest` dari DB.
+     - `queryReservationsByFilter`: Menghasilkan field deterministik `bookingDateWib` (`YYYY-MM-DD`), `bookingTimeWib` (`HH:mm`), dan `bookingEndTimeWib`.
+     - Data-Driven Jam Operasional (N1): Mengimpor `getOperationalHours(tenantId)` (default 08:00–17:00 WIB, mendukung override `Tenant.settings.operationalHours` atau `ClinicPolicy`) dan `minSlotDurationMinutes` dari `Tenant.settings`.
+     - Hitung Slot dari Data Utuh (N2): Query database mengambil hingga 200 baris untuk reservasi hari/filter terkait sehingga `scheduleCollisions` dan `freeSlots` dihitung dari dataset lengkap hari tersebut; baris yang ditampilkan ke konteks LLM tetap dipotong tepat 20 (`MAX_ROWS`) dengan metadata `totalCount` dan `truncated: true`.
+     - Ambigu Terapis (V6, N7): Ditentukan dari RESOLUSI NAMA STAF (cocok tunggal = tidak ambigu; cocok ganda/tidak dikenal = `ambiguous: true` + `candidates`), BUKAN dari hasil reservasi kosong. Filter tanggal/status/bayar yang menghasilkan 0 baris pada nama sah tetap dijawab "tidak ada data".
+     - Status Pembayaran: Menambahkan parameter `paymentStatus: 'unpaid' | 'paid' | 'all'`, field kanonis `paymentStatus` (`LUNAS`, `TAGIH_DI_TEMPAT`, `SELESAI_BELUM_VERIFIKASI`), `isPaid`, `totalFee`, `unpaidAmount`, serta `summaryFacts.unpaidCustomers` dan `totalUnpaidAmount`.
+  2. **Lapisan Retrieval & Ranking (V2):**
+     - `lookupCatalogAndPolicy`: Memperbesar pengambilan kandidat (`take: 60`), menerapkan algoritma pemeringkatan deterministik `rankCatalogAndPolicyRows` (frasa persis di nama > jumlah token cocok unik di nama/deskripsi > bonus all-tokens-matched > posisi di judul), serta menyertakan `matchQuality: exact|partial|none`.
+  3. **Lapisan Output Normalizer & Resiliensi (V4, V5, V11-E2E):**
+     - `repairCopilotChatLinks`: Memvalidasi `validConvIds` dari baris data nyata, membuang ID karangan, memetakan token nama pasien, membersihkan fragmen link ganda `[Buka Chat](/ · [Buka Chat](...)`, dan menyingkirkan karakter rusak `U+00B7`/`U+FFFD`.
+     - `trimHangingSentence` & `stitchCopilotAnswer`: Mendeteksi `finish_reason === 'length'`, meminta 1 kelanjutan otomatis yang dirangkai tanpa tumpang tindih kata, dan memangkas kalimat terakhir yang terpotong di tengah kata. `max_tokens` dinaikkan ke 1200 sebagai pendamping.
+     - Pembersihan encoding file dokumentasi: 21 karakter `U+FFFD` dibersihkan permanen menjadi `—` dan `→`.
+  4. **Lapisan Agregasi & Integritas Angka (V7, V8, V10, V11, N4):**
+     - Deteksi bentrok jadwal berbasis durasi nyata: interval overlap `startA < endB && startB < endA` untuk jadwal pada staf yang **SAMA**. Beda staf diproteksi 100% NON-bentrok.
+     - Perhitungan celah slot kosong (`freeSlots`) deterministik di kode: berbasis jam operasional data-driven tenant dan batas durasi minimum dinamis.
+     - Penyelarasan SSOT finansial dengan `FinancialAnalyticsService`: `totalFee = purchase_value + delivery_fee`, `lunasRevenue = sum(isLunas ? totalFee : 0)` (berbasis `purchase_occurred_at`), `pendingRevenue = sum(!isLunas ? totalFee : 0)`, serta label eksplisit `totalRevenue` (kotor) vs `netRevenue` (setelah diskon).
+  5. **Lapisan Router & Orkestrasi Tool (V12, N3):**
+     - Normalisasi signature pemanggilan tool (`normalizeToolSignature`): mengurutkan keys dan membuang parameter kosong/undefined/null.
+     - Gerbang Anti-Duplikasi Presisi (N3): Hanya memblokir pemanggilan tool dengan argumen identik/ekuivalen (`seenSignatures.has(signature)`). Pemanggilan tool yang sama dengan argumen berbeda (misal tanggal berbeda) diizinkan secara penuh.
+     - Pengiriman lengkap fakta agregat (`summaryFacts`, `ambiguous`, `candidates`, `totalQueued`, `truncated`) ke `buildLabeledToolRows` dalam loop chat.
+- **Bukti & Verifikasi:**
+  - `tests/unit/copilot-duration-and-slots.test.ts` (5 test lulus — menguji bentrok durasi, anti-false-bentrok beda staf, jam default 08–17, override 09–20 & min 30m, serta 25 reservasi tanpa kehilangan slot)
+  - `tests/unit/copilot-unpaid-reservations.test.ts` (2 test lulus)
+  - `tests/unit/copilot-anti-duplicate-calls.test.ts` (3 test lulus — menguji anti-loop identik dan izin eksekusi argumen berbeda N3)
+  - `tests/unit/copilot-continuation-e2e.test.ts` (1 test lulus)
+  - `tests/unit/copilot-output-integrity.test.ts` (4 test lulus)
+  - `tests/unit/copilot-wib-contract.test.ts` (4 test lulus)
+  - `tests/unit/copilot-followup-order.test.ts` (2 test lulus)
+  - `tests/unit/copilot-catalog-rank.test.ts` (1 test lulus)
+  - `tests/unit/copilot-ambiguous-and-facts.test.ts` (7 test lulus)
+  - `tests/unit/copilot-staff-ambiguity.test.ts` (4 test lulus — regresi N7: nama valid + 0 baris BUKAN ambigu; nama ganda/tidak dikenal = ambigu)
+  - `tests/unit/copilot-duration-and-slots.test.ts` mencakup `fetchTruncated` untuk batas ambil data mentah (`MAX_FETCH_ROWS = 200`).
+  - Seluruh 26 test file suite Copilot: **227/227 test Copilot hijau (100% lulus)**.
+  - `npm run build` exit 0 (0 error TypeScript).
+
 ## 305. [Quick Chat / Balasan Cepat Hardening] Penghapusan Zombie, Overwrite Deploy, dan Ghost Error CRUD (2026-11-04, RESOLVED)
 
 - **Status:** **RESOLVED** (Fase 1 s/d 5 + Verifikasi Hardening D-1 s/d D-7 Tuntas, 0 new runtime dependencies, 0 DB migration)
@@ -2114,7 +2170,7 @@ dicatat di CHANGELOG 2026-10-05. Sisa batasan:
   - `ARTERY_CORRIDORS` masih hardcode-TS (utang lama #2374/#2383) — tidak diperluas
     untuk Demak karena tier Google menggantikan kebutuhan daftar koridor manual.
 
-## 205. [Dashboard Meta] Audit dashboard performa marketing �?" semua fase dieksekusi (2026-10-03, EXECUTED)
+## 205. [Dashboard Meta] Audit dashboard performa marketing — semua fase dieksekusi (2026-10-03, EXECUTED)
 
 Audit plan bertahap (Fase 1 bugfix / 2 alignment+spend / 3 UTM hygiene / 4 business engine).
 Fase 0 (investigasi prasyarat) + Fase 1, 2.1, 2.2, 3.1, 3.2, 4.1, 4.2, 4.3 DIEKSEKUSI.
@@ -2122,24 +2178,24 @@ Regression gate: 4589 test passed, `tsc` backend bersih, build dashboard bersih.
 
 - **Fase 1 EXECUTED:** `conversionRates` skala 0-100 (test kunci), label `Omset dari iklan:`,
   satuan `hari`. (KpiGrid, ChannelTable, service.)
-- **Fase 2.1 EXECUTED:** persistensi biaya iklan di `MetaPerformancePanel` �?" kunci tenant-aware
+- **Fase 2.1 EXECUTED:** persistensi biaya iklan di `MetaPerformancePanel` — kunci tenant-aware
   `meta_spend:{tenantId}:{start}_{end}`, tenant dari `report.meta.tenantId` (cache
   `meta_perf_tenant`), restore saat rentang berubah.
 - **Fase 2.2 EXECUTED:** tooltip definisi (event-based Funnel, customer-based Kanal, order-based
   Lead Time) + catatan definisi distribusi siklus.
-- **Fase 3.1 EXECUTED:** `sanitizeUtmCampaign`/`sanitizeUtmSource` �?" makro `{{...}}` �+'
-  `(macro UTM belum dirender)` (1 baris), kosong �+' `(tanpa campaign)`, source hanya trim
-  (TIDAK memetakan alias `ig`/`th` �?" butuh tabel mapping per-tenant, belum ada).
+- **Fase 3.1 EXECUTED:** `sanitizeUtmCampaign`/`sanitizeUtmSource` — makro `{{...}}` →
+  `(macro UTM belum dirender)` (1 baris), kosong → `(tanpa campaign)`, source hanya trim
+  (TIDAK memetakan alias `ig`/`th` — butuh tabel mapping per-tenant, belum ada).
 - **Fase 3.2 EXECUTED:** badge peringatan saat CTWA Native = 0 (traffic via Landing Page).
 - **Fase 4.1 EXECUTED (fondasional):** `TherapistUtilizationCard` + `therapistCapacity` di service.
   Kapasitas = `Staff.count({ active: true })` x jumlah hari (DB-driven, sejalan KB-3
   `reservation-core.service.ts:139,196`), BUKAN asumsi `3 terapis x 4 slot` di plan.
-  OPEN: ambang pita utilisasi 65/85% masih **provisional** (konvensi industri) �?" butuh kalibrasi ADR;
+  OPEN: ambang pita utilisasi 65/85% masih **provisional** (konvensi industri) — butuh kalibrasi ADR;
   utilisasi = booking/hari-terapis (bukan okupansi jam; belum ada tabel slot/jam terstruktur).
 - **Fase 4.2 EXECUTED (state-derived):** `mqlDropOff` diturunkan dari STATE/DB nyata
   (converted/cancelled/outOfCoverage/noReservation), BUKAN parsing teks chat. OPEN: alasan halus
   (mis. `HARGA_ONGKIR`, `JADWAL_PENUH`) TIDAK diturunkan karena schema tidak punya field alasan
-  pembatalan/capacity-exceeded yang dipersist �?" butuh taksonomi DB bila diinginkan (dilarang tebak teks).
+  pembatalan/capacity-exceeded yang dipersist — butuh taksonomi DB bila diinginkan (dilarang tebak teks).
 - **Fase 4.3 EXECUTED:** `CohortRetentionTable` + `retentionCohorts` (repeat 30/60/90 hari sejak
   first-ever, kalender WIB; `null` bila jendela belum matang agar tidak menyesatkan).
   Pembedaan newborn/kids sengaja TIDAK dipaksakan di kohort (butuh join `Child` per customer, di luar
@@ -2235,21 +2291,21 @@ Keputusan user: (1) tahan booking lokasi tak presisi + notifikasi admin saja; (2
   menghapus menu sidebar "Customer Service & CTA" tanpa pengganti. Handler
   `subTab==='cs'` (`Settings.tsx`) menjadi *orphaned* — hanya bisa dibuka via URL
   manual; `lazy(CustomerService)` di `App.tsx` menjadi *dead import*.
-- **197a �?" RESOLVED:** rute `/admin/customer-service` dikembalikan sebagai halaman
+- **197a — RESOLVED:** rute `/admin/customer-service` dikembalikan sebagai halaman
   protektif langsung (`App.tsx`), alias `/admin/cs` → redirect ke sana. Menu
   "CTA & Greetings WA" (ikon `Headphones`) dikembalikan di grup sidebar
   "Marketing & Ads" (`Layout.tsx`). Gateway sekunder ditambah sebagai kartu di blok
   `META_MARKETING` `Settings.tsx` (pemicu `setSearchParams({ tab: 'cs' })`).
-- **197b �?" RESOLVED:** allowlist RBAC advertiser (`rolePermissions.ts`) ditambah
+- **197b — RESOLVED:** allowlist RBAC advertiser (`rolePermissions.ts`) ditambah
   `/admin/customer-service` TANPA membuka `/admin/settings` (mencegah bocornya QR
   WAHA/CAPI/AI scope ke media buyer).
-- **197c �?" OPEN (butuh deploy):** role `advertiser` sudah "managed" di
+- **197c — OPEN (butuh deploy):** role `advertiser` sudah "managed" di
   `role_api_scopes`, sehingga `GET/POST /api/admin/customer-service` default-deny →
   403 `FORBIDDEN_ROLE_SCOPE` sebelum migrasi seed
   `20261002000001_allow_customer_service_for_advertiser` di-apply
   (`npx prisma migrate deploy` setelah backup). Sampai saat itu menu tampil tetapi
   halaman gagal memuat/menyimpan untuk advertiser.
-- **197d �?" OPEN (keputusan produk/keamanan):** seed `197c` memberi advertiser akses
+- **197d — OPEN (keputusan produk/keamanan):** seed `197c` memberi advertiser akses
   TULIS ke endpoint yang juga menulis `cs_name`/`whatsapp_number` tenant. Bila tidak
   diinginkan, pecah endpoint atau batasi advertiser ke GET saja (buka Confirmation Gate).
 
@@ -6688,17 +6744,17 @@ Keputusan user: (1) tahan booking lokasi tak presisi + notifikasi admin saja; (2
 - **Dampak:** full suite tidak pernah 100% hijau; menyulitkan deteksi regresi asli (sinyal bercampur flake).
 - **Rencana:** naikkan `testTimeout` test terkait atau mock seam AI-nya (tanpa menurunkan validasi assertion). Butuh penanganan terpisah.
 
-### 101 � RESOLVED (2026-09-20)
+### 101 — RESOLVED (2026-09-20)
 
 - **Akar:** dua test menembak **network LLM nyata** (bukan lambat biasa). Kredensial provider dari `.env` (`KENARI_API_KEY`) tidak ter-blank oleh `LLM_API_KEY=''` di `tests/setup.ts`, sehingga `[LLM MODEL FALLBACK] Transient error (timeout of 15000ms exceeded)` ? retry ? melewati `testTimeout`.
 - **Perbaikan (isolasi seam, bukan menurunkan validasi):**
-  - `tests/integration/live-chat-reply.test.ts` � mock `callChatCompletionsWithFallback` mengembalikan respons canned.
-  - `tests/integration/robustness.test.ts` � spy `GenerationStage.executeChatCompletion` reject cepat (test hanya menguji invarian reset state).
+  - `tests/integration/live-chat-reply.test.ts` → mock `callChatCompletionsWithFallback` mengembalikan respons canned.
+  - `tests/integration/robustness.test.ts` → spy `GenerationStage.executeChatCompletion` reject cepat (test hanya menguji invarian reset state).
 - **Verifikasi:** kedua test lulus tanpa menaikkan timeout; **full suite 399 files / 2934 passed / 0 failed** (1 skipped).
 
 ---
 
-## 102. [Reservation / Konflik Kontrak] Merge same-day (dedup form) vs CG-06 (multi-treatment) � BUTUH KEPUTUSAN
+## 102. [Reservation / Konflik Kontrak] Merge same-day (dedup form) vs CG-06 (multi-treatment) — BUTUH KEPUTUSAN
 
 - **Status:** open (blocked, menunggu keputusan user; sejak 2026-09-20).
 - **Konteks:** Perbaikan R6 (audit) mencoba mengubah merge same-day agar **hanya** menggabungkan treatment SAMA (idempoten), sehingga treatment BERBEDA dibuat reservasi baru (sesuai CG-06).
@@ -6708,19 +6764,19 @@ Keputusan user: (1) tahan booking lokasi tak presisi + notifikasi admin saja; (2
   2. *CG-06* (keputusan user): beda treatment pada hari sama = boleh menjadi reservasi terpisah.
 - **Keputusan yang dibutuhkan:** bagaimana membedakan "resubmit booking yang sama" vs "booking berbeda yang sah"? Opsi:
   - (a) Berdasarkan **base nama treatment** (strip suffix `[Total Xm]`) ? sama = merge.
-  - (b) Berdasarkan **waktu/slot** (butuh `bookingTime` terstruktur � belum ada).
+  - (b) Berdasarkan **waktu/slot** (butuh `bookingTime` terstruktur — belum ada).
   - (c) Berdasarkan **child/subject identity**.
   - (d) Pertahankan kontrak lama (merge semua same-day); multi-treatment ditangani admin manual.
 - **Dampak bila salah:** merge salah ? booking sah tertimpa; dedup salah ? booking ganda.
 - **Tindakan saat ini:** perubahan R6 **DIBATALKAN** (revert) agar perilaku lama & test tetap utuh. R6 sesungguhnya butuh skema (`request_id`, `bookingTime` terstruktur) untuk resolusi deterministik.
 
-### 102 � RESOLVED (keputusan user: Opsi D, 2026-09-20)
+### 102 — RESOLVED (keputusan user: Opsi D, 2026-09-20)
 
-- **Keputusan:** pertahankan kontrak LAMA � merge same-day untuk customer sama (walau treatment berbeda); multi-treatment via bot ditangani **manual admin**.
+- **Keputusan:** pertahankan kontrak LAMA — merge same-day untuk customer sama (walau treatment berbeda); multi-treatment via bot ditangani **manual admin**.
 - **Konsekuensi:** perubahan R6 "merge hanya treatment sama" **DIBATALKAN** (revert). Tidak ada perubahan kode.
 - **Sisa risiko diterima:** booking same-day berbeda treatment via bot tetap digabung; admin memisahkan manual.
 
-### 101 � UPDATE (2026-09-20)
+### 101 — UPDATE (2026-09-20)
 
 - **Flakiness lebih luas dari 2 test:** selain `live-chat-reply` & `robustness`, `waha-webhook.test.ts` (dan sebelumnya `migration.test.ts`) juga kadang gagal `Test timed out in 5000ms` HANYA saat full-suite (lulus isolasi). Pola: test integrasi yang memuat `buildApp()` / pipeline berat melewati 5s di bawah beban paralel full-suite.
 - **Sifat:** load/environment flake, BUKAN bug logika (lulus isolasi, failure berpindah antar-file tiap run).
@@ -6728,7 +6784,7 @@ Keputusan user: (1) tahan booking lokasi tak presisi + notifikasi admin saja; (2
 
 ---
 
-## 103. [Tenant] CG-01 fail-closed provider resolver � DITUNDA (butuh desain)
+## 103. [Tenant] CG-01 fail-closed provider resolver — DITUNDA (butuh desain)
 
 - **Status:** open / deferred (2026-09-20).
 - **Konteks:** CG-01 = identitas provider tak dikenal harus fail-closed/quarantine, bukan fallback diam-diam ke default tenant.

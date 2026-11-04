@@ -1121,8 +1121,8 @@ describe('repairCopilotChatLinks — normalizer tautan kosong (#191e-a)', () => 
     expect(out).toContain('conversationId=conv-dewi');
   });
 
-  it('link sudah terisi → tidak diubah', () => {
-    const rows = [{ customerName: 'Bunda Ririn', conversationId: 'conv-abc' }];
+  it('link sudah terisi ID valid → tidak diubah', () => {
+    const rows = [{ customerName: 'Bunda Ririn', conversationId: 'conv-xyz' }];
     const out = repairCopilotChatLinks('[Buka Chat](/admin/live-chat?conversationId=conv-xyz)', rows);
     expect(out).toContain('conversationId=conv-xyz');
   });

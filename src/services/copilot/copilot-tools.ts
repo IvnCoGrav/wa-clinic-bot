@@ -1,6 +1,6 @@
 import { prisma } from '../../db/client';
 import { Direction } from '@prisma/client';
-import { wibDayBoundsUtc, startOfTodayWib, formatWibDateYYYYMMDD, getWibDayName, WIB_OFFSET_MS } from '../../utils/wib-time';
+import { wibDayBoundsUtc, startOfTodayWib, formatWibDateYYYYMMDD, getWibDayName, formatWibTime, WIB_OFFSET_MS } from '../../utils/wib-time';
 import { isDummyOrTestContact } from '../../utils/dummy-filter';
 import { maskPhoneNumber } from '../../utils/pii-masker';
 import { hasScheduleSignal, extractTimeHint, extractTimeOfDayHint, isScheduleCheckEngagement, isScheduleAvailabilityText } from '../../v3/agent/pipeline/medical-signal-detector';
@@ -34,9 +34,16 @@ export interface CopilotTool {
 }
 
 const MAX_ROWS = 20;
+/**
+ * Batas ambil data MENTAH untuk perhitungan deterministik (slot kosong, bentrok,
+ * tagihan). Berbeda dari `MAX_ROWS` yang hanya membatasi baris yang dikirim ke LLM.
+ */
+const MAX_FETCH_ROWS = 200;
 
 /** Status reservasi "jadwal aktif" — Single Source of Truth di domain/reservation-status. */
 import { ACTIVE_RESERVATION_STATUSES } from '../../domain/reservation-status';
+import { isReservationPaid, getPaymentDisplayStatus, type PaymentDisplayStatus } from '../../domain/reservation-payment';
+import { getOperationalHours } from '../../config/operational-hours';
 export { ACTIVE_RESERVATION_STATUSES };
 
 /**
@@ -148,24 +155,51 @@ export function stripCommercialSpam(text: string): string {
   return validLines.join('\n').trim();
 }
 
-/** Tool 1: jadwal reservasi berdasarkan filter (tanggal/status/terapis). */
+/** Tool 1: jadwal reservasi berdasarkan filter (tanggal/status/terapis/status pembayaran). */
 export const queryReservationsByFilter: CopilotTool = {
   name: 'query_reservations_by_filter',
   description:
-    'Mengambil daftar reservasi berdasarkan filter tanggal (YYYY-MM-DD, WIB), status, atau nama terapis. ' +
-    'Gunakan untuk pertanyaan "jadwal besok", "siapa terapis X hari ini", dsb.',
+    'Mengambil daftar reservasi berdasarkan filter tanggal (YYYY-MM-DD, WIB), status operasional, nama terapis, ' +
+    'atau status pembayaran ("unpaid" / "paid"). ' +
+    'Termasuk status bayar per reservasi (LUNAS, TAGIH_DI_TEMPAT, SELESAI_BELUM_VERIFIKASI), nominal belum tertagih, ' +
+    'jam selesai treatment, deteksi tabrakan waktu (scheduleCollisions), dan celah slot kosong (freeSlots). ' +
+    'Gunakan untuk: "jadwal besok", "siapa belum bayar", "tagihan menggantung", "slot kosong terapis X", "apakah ada bentrok".',
   parameters: {
     date: { type: 'string', description: 'Tanggal format YYYY-MM-DD (WIB). Kosong = jadwal aktif mendatang.' },
-    status: { type: 'string', description: `${RESERVATION_STATUS_VALUES.join(' | ')}. Kosong = jadwal aktif (confirmed/en_route/pending/hold). Gunakan "rejected" untuk pertanyaan penolakan/pembatalan.` },
+    status: { type: 'string', description: `${RESERVATION_STATUS_VALUES.join(' | ')}. Kosong = jadwal aktif (confirmed/en_route/pending/hold). Gunakan "all" untuk semua status.` },
     staffName: { type: 'string', description: 'Nama terapis (sebagian). Kosong = semua.' },
+    paymentStatus: { type: 'string', description: 'Filter status bayar: "unpaid" (belum bayar / tagihan menggantung) | "paid" (lunas) | "all".' },
   },
   run: async (tenantId, args) => {
+    // 1. Ambil jam operasional klinis data-driven dari settings tenant / ClinicPolicy (bukan hardcode)
+    const opHours = await getOperationalHours(tenantId);
+    const clinicStartHour = opHours.startHourWib; // default 8
+    const clinicEndHour = opHours.endHourWib;     // default 17 atau override DB
+
+    // 2. Ambil batas durasi jeda/slot minimum dari Tenant.settings (default 45 menit)
+    let minSlotMinutes = 45;
+    try {
+      const tenant = await (prisma as any).tenant?.findUnique?.({
+        where: { id: tenantId },
+        select: { settings: true },
+      });
+      const customMin = Number(
+        (tenant?.settings as any)?.copilot?.minSlotDurationMinutes ??
+        (tenant?.settings as any)?.minSlotDurationMinutes
+      );
+      if (Number.isInteger(customMin) && customMin > 0) {
+        minSlotMinutes = customMin;
+      }
+    } catch {}
+
     const where: any = { tenant_id: tenantId };
     // Default (tanpa tanggal valid) = jadwal aktif mendatang, bukan 20 baris tertua.
     where.booking_date = resolveReservationDateFilter(args.date);
-    // Default status = jadwal AKTIF; tanpa ini, reservasi cancelled memcemari rekap mendatang.
-    if (args.status) {
+    const pStatus = args.paymentStatus ? String(args.paymentStatus).toLowerCase() : undefined;
+    if (args.status && args.status !== 'all') {
       where.status = String(args.status);
+    } else if (pStatus === 'unpaid' || pStatus === 'paid' || args.status === 'all') {
+      where.status = { in: [...ACTIVE_RESERVATION_STATUSES, 'completed'] };
     } else {
       where.status = { in: ACTIVE_RESERVATION_STATUSES };
     }
@@ -191,26 +225,226 @@ export const queryReservationsByFilter: CopilotTool = {
         assigned_staff: { select: { name: true } },
       },
       orderBy: { booking_date: 'asc' },
-      take: MAX_ROWS,
+      take: MAX_FETCH_ROWS, // Data utuh untuk perhitungan slot/bentrok; tampilan tetap dipotong MAX_ROWS
     });
+
+    let mappedRows = rows.map((r) => {
+      const nameInfo = formatCustomerDisplayName(r.customer?.name, (r.customer as any)?.phone);
+      const bDate = r.booking_date ? new Date(r.booking_date) : null;
+      const durationMinutes = (r.duration_minutes && r.duration_minutes > 0) ? r.duration_minutes : 60;
+      const endDate = bDate ? new Date(bDate.getTime() + durationMinutes * 60000) : null;
+      const isPaid = isReservationPaid(r);
+      const paymentStatus = getPaymentDisplayStatus(r);
+      const treatmentFee = r.purchase_value || 0;
+      const deliveryFee = r.delivery_fee || 0;
+      const totalFee = treatmentFee + deliveryFee;
+      const unpaidAmount = isPaid ? 0 : totalFee;
+
+      return {
+        id: r.id,
+        customerId: r.customer?.id || null,
+        customerName: nameInfo.displayName,
+        rawCustomerName: nameInfo.rawName,
+        conversationId: r.customer?.conversations?.[0]?.id || null,
+        treatment: r.treatment_detail || r.treatment_category,
+        bookingDateWib: bDate ? formatWibDateYYYYMMDD(bDate) : null,
+        bookingTimeWib: bDate ? formatWibTime(bDate) : null,
+        durationMinutes,
+        bookingEndTimeWib: endDate ? formatWibTime(endDate) : null,
+        status: r.status,
+        staff: r.assigned_staff?.name || null,
+        isPaid,
+        paymentStatus,
+        totalFee,
+        unpaidAmount,
+        _startTimeMs: bDate ? bDate.getTime() : null,
+        _endTimeMs: endDate ? endDate.getTime() : null,
+      };
+    });
+
+    if (pStatus === 'unpaid') {
+      mappedRows = mappedRows.filter((r) => !r.isPaid);
+    } else if (pStatus === 'paid') {
+      mappedRows = mappedRows.filter((r) => r.isPaid);
+    }
+
+    // Ambiguitas NAMA terapis ditentukan dari RESOLUSI NAMA STAF, bukan dari
+    // hasil reservasi kosong. Filter tanggal/status/bayar bisa menghasilkan 0 baris
+    // pada nama yang sah — regresi: "siapa belum bayar untuk Bidan Yusi" saat semua
+    // lunas HARAM berubah menjadi pertanyaan klarifikasi.
+    let ambiguous = false;
+    let candidates: string[] = [];
+    if (args.staffName) {
+      try {
+        const staffList = await prisma.staff.findMany({
+          where: { tenant_id: tenantId, active: true },
+          select: { name: true },
+        });
+        const staffNames = staffList
+          .map((s: any) => String(s.name || '').trim())
+          .filter(Boolean);
+        const cleanStaffName = (name: string) =>
+          name.replace(/^(bidan|terapis|dr|dokter)\s+/i, '').trim().toLowerCase();
+        const q = cleanStaffName(String(args.staffName));
+
+        if (q.length === 0) {
+          if (staffNames.length > 0) {
+            ambiguous = true;
+            candidates = staffNames;
+          }
+        } else {
+          const exact = staffNames.filter((name: string) => cleanStaffName(name) === q);
+          const partial = staffNames.filter((name: string) => cleanStaffName(name).includes(q));
+          if (exact.length === 1 || (exact.length === 0 && partial.length === 1)) {
+            // Nama terapis teridentifikasi tunggal → hasil kosong berarti memang tidak ada data.
+            ambiguous = false;
+          } else if (partial.length > 1) {
+            ambiguous = true;
+            candidates = partial;
+          } else if (staffNames.length > 0) {
+            ambiguous = true;
+            candidates = staffNames;
+          }
+        }
+      } catch {}
+    }
+
+    const fetchTruncated = rows.length >= MAX_FETCH_ROWS;
+
+    // Deteksi tabrakan jadwal (collision) deterministik: irisan interval pada terapis yang SAMA
+    const scheduleCollisions: Array<{
+      staff: string;
+      reservation1Id: string;
+      reservation2Id: string;
+      timeRange1: string;
+      timeRange2: string;
+      conflictMinutes: number;
+    }> = [];
+    const staffReservationsMap = new Map<string, any[]>();
+    for (const r of mappedRows) {
+      if (!r.staff || !r._startTimeMs || !r._endTimeMs) continue;
+      if (['cancelled', 'rejected'].includes(String(r.status).toLowerCase())) continue;
+      if (!staffReservationsMap.has(r.staff)) staffReservationsMap.set(r.staff, []);
+      staffReservationsMap.get(r.staff)!.push(r);
+    }
+    for (const [staff, resList] of staffReservationsMap.entries()) {
+      if (resList.length > 1) {
+        for (let i = 0; i < resList.length; i++) {
+          for (let j = i + 1; j < resList.length; j++) {
+            const a = resList[i];
+            const b = resList[j];
+            if (a._startTimeMs < b._endTimeMs && b._startTimeMs < a._endTimeMs) {
+              const conflictStart = Math.max(a._startTimeMs, b._startTimeMs);
+              const conflictEnd = Math.min(a._endTimeMs, b._endTimeMs);
+              const conflictMinutes = Math.round((conflictEnd - conflictStart) / 60000);
+              scheduleCollisions.push({
+                staff,
+                reservation1Id: a.id,
+                reservation2Id: b.id,
+                timeRange1: `${a.bookingTimeWib}–${a.bookingEndTimeWib}`,
+                timeRange2: `${b.bookingTimeWib}–${b.bookingEndTimeWib}`,
+                conflictMinutes,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // Deteksi celah / slot kosong (freeSlots) deterministik per terapis (jam kerja 08:00 - 18:00 WIB, jeda >= 45 min)
+    const freeSlots: Array<{
+      staff: string;
+      dateWib: string;
+      startTimeWib: string;
+      endTimeWib: string;
+      durationMinutes: number;
+    }> = [];
+    const staffDateMap = new Map<string, any[]>();
+    for (const r of mappedRows) {
+      if (!r.staff || !r.bookingDateWib || !r._startTimeMs || !r._endTimeMs) continue;
+      if (['cancelled', 'rejected'].includes(String(r.status).toLowerCase())) continue;
+      const key = `${r.staff}::${r.bookingDateWib}`;
+      if (!staffDateMap.has(key)) staffDateMap.set(key, []);
+      staffDateMap.get(key)!.push(r);
+    }
+    for (const [key, resList] of staffDateMap.entries()) {
+      const [staff, dateWib] = key.split('::');
+      const [y, m, d] = dateWib.split('-').map(Number);
+      if (!y || !m || !d) continue;
+      const clinicStartUtcMs = Date.UTC(y, m - 1, d, clinicStartHour, 0, 0, 0) - WIB_OFFSET_MS;
+      const clinicEndUtcMs = Date.UTC(y, m - 1, d, clinicEndHour, 0, 0, 0) - WIB_OFFSET_MS;
+      const sorted = [...resList].sort((a, b) => a._startTimeMs - b._startTimeMs);
+
+      let cursorMs = clinicStartUtcMs;
+      for (const res of sorted) {
+        if (res._startTimeMs > cursorMs) {
+          const gapMinutes = Math.round((res._startTimeMs - cursorMs) / 60000);
+          if (gapMinutes >= minSlotMinutes) {
+            freeSlots.push({
+              staff,
+              dateWib,
+              startTimeWib: formatWibTime(new Date(cursorMs)),
+              endTimeWib: formatWibTime(new Date(res._startTimeMs)),
+              durationMinutes: gapMinutes,
+            });
+          }
+        }
+        cursorMs = Math.max(cursorMs, res._endTimeMs);
+      }
+      if (cursorMs < clinicEndUtcMs) {
+        const remainingMinutes = Math.round((clinicEndUtcMs - cursorMs) / 60000);
+        if (remainingMinutes >= minSlotMinutes) {
+          freeSlots.push({
+            staff,
+            dateWib,
+            startTimeWib: formatWibTime(new Date(cursorMs)),
+            endTimeWib: formatWibTime(new Date(clinicEndUtcMs)),
+            durationMinutes: remainingMinutes,
+          });
+        }
+      }
+    }
+
+    const unpaidRows = mappedRows.filter((r) => !r.isPaid);
+    const totalUnpaidAmount = unpaidRows.reduce((sum, r) => sum + r.unpaidAmount, 0);
+    const unpaidCustomers = unpaidRows.map((r) => ({
+      id: r.id,
+      customerName: r.customerName,
+      treatment: r.treatment,
+      bookingDateWib: r.bookingDateWib,
+      bookingTimeWib: r.bookingTimeWib,
+      staff: r.staff,
+      unpaidAmount: r.unpaidAmount,
+      paymentStatus: r.paymentStatus,
+    }));
+
+    const summaryFacts = {
+      totalReservations: mappedRows.length,
+      scheduleCollisions,
+      hasCollision: scheduleCollisions.length > 0,
+      freeSlots,
+      operationalHours: { startHourWib: clinicStartHour, endHourWib: clinicEndHour },
+      minSlotDurationMinutes: minSlotMinutes,
+      totalUnpaidReservations: unpaidRows.length,
+      totalUnpaidAmount,
+      unpaidCustomers: unpaidCustomers.slice(0, 10),
+      fetchTruncated,
+    };
+
+    const cleanRows = mappedRows.map(({ _startTimeMs, _endTimeMs, ...rest }) => rest);
+    const displayRows = cleanRows.slice(0, MAX_ROWS);
+
     return {
       tool: 'query_reservations_by_filter',
       args,
-      count: rows.length,
-      rows: rows.map((r) => {
-        const nameInfo = formatCustomerDisplayName(r.customer?.name, (r.customer as any)?.phone);
-        return {
-          id: r.id,
-          customerId: r.customer?.id || null,
-          customerName: nameInfo.displayName,
-          rawCustomerName: nameInfo.rawName,
-          conversationId: r.customer?.conversations?.[0]?.id || null,
-          treatment: r.treatment_detail || r.treatment_category,
-          bookingDate: r.booking_date,
-          status: r.status,
-          staff: r.assigned_staff?.name || null,
-        };
-      }),
+      count: displayRows.length,
+      totalCount: cleanRows.length,
+      truncated: cleanRows.length > MAX_ROWS,
+      fetchTruncated,
+      ambiguous,
+      candidates,
+      summaryFacts,
+      rows: displayRows,
     };
   },
 };
@@ -260,7 +494,11 @@ export const queryUnrepliedChats: CopilotTool = {
         });
       }
     }
-    return { tool: 'query_unreplied_chats', args, count: rows.length, rows };
+    const summaryFacts = {
+      totalUnreplied: rows.length,
+      waitingOver15Min: rows.filter((r) => (r.waitingMinutes || 0) >= 15).length,
+    };
+    return { tool: 'query_unreplied_chats', args, count: rows.length, summaryFacts, rows };
   },
 };
 
@@ -621,11 +859,15 @@ export const getCustomerHistory: CopilotTool = {
         adminNotes: c.admin_notes ? String(c.admin_notes).slice(0, 500) : null,
         preferences: (c as any).preferences || null,
         pastReservationsCount: reservations.length,
-        lastVisits: reservations.slice(0, 3).map((r: any) => ({
-          date: r.booking_date,
-          treatment: r.treatment_detail || r.treatment_category,
-          status: r.status,
-        })),
+        lastVisits: reservations.slice(0, 3).map((r: any) => {
+          const visitDate = r.booking_date ? new Date(r.booking_date) : null;
+          return {
+            dateWib: visitDate ? formatWibDateYYYYMMDD(visitDate) : null,
+            timeWib: visitDate ? formatWibTime(visitDate) : null,
+            treatment: r.treatment_detail || r.treatment_category,
+            status: r.status,
+          };
+        }),
         conversationId: conv?.id || null,
       });
     }
@@ -676,6 +918,80 @@ export function buildTextSearchOr(fields: string[], query: string): any[] {
   return or;
 }
 
+export type MatchQuality = 'exact' | 'partial' | 'none';
+
+/**
+ * Peringkat deterministik katalog & kebijakan (Fase 4):
+ * 1. Frasa persis di judul/nama (+1000) atau di deskripsi (+500).
+ * 2. Jumlah kata cocok unik (+100 per kata di judul, +25 di deskripsi).
+ * 3. Bonus kecocokan seluruh kata pencarian (+300).
+ * 4. Posisi kata cocok di judul (makin di depan makin tinggi).
+ */
+export function rankCatalogAndPolicyRows(rows: any[], query: string): any[] {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q) {
+    return rows.map((r) => ({ ...r, matchQuality: 'none' as MatchQuality }));
+  }
+
+  const tokens = extractSearchTokens(q).filter((t) => t.length >= 2);
+
+  const scored = rows.map((row) => {
+    const title = String(row.title || '').toLowerCase();
+    const body = String(row.body || '').toLowerCase();
+
+    let score = 0;
+    let matchQuality: MatchQuality = 'none';
+
+    // 1. Frasa persis di judul (skor tertinggi)
+    if (title.includes(q)) {
+      score += 1000;
+      matchQuality = 'exact';
+    } else if (body.includes(q)) {
+      score += 500;
+      matchQuality = 'exact';
+    }
+
+    // 2. Jumlah kata cocok unik
+    let matchingTokensInTitle = 0;
+    let matchingTokensInBody = 0;
+    for (const t of tokens) {
+      if (title.includes(t)) matchingTokensInTitle++;
+      else if (body.includes(t)) matchingTokensInBody++;
+    }
+
+    const totalMatchingTokens = matchingTokensInTitle + matchingTokensInBody;
+    score += matchingTokensInTitle * 100 + matchingTokensInBody * 25;
+
+    // Bonus jika SEMUA kata pencarian cocok
+    if (tokens.length > 1 && totalMatchingTokens >= tokens.length) {
+      score += 300;
+      if (matchQuality === 'none') {
+        matchQuality = matchingTokensInTitle === tokens.length ? 'exact' : 'partial';
+      }
+    } else if (totalMatchingTokens > 0 && matchQuality === 'none') {
+      matchQuality = 'partial';
+    }
+
+    // 3. Posisi kecocokan di judul (makin di depan makin relevan)
+    const titlePos = title.indexOf(q);
+    if (titlePos >= 0) {
+      score += Math.max(0, 50 - titlePos);
+    } else if (tokens.length > 0) {
+      const firstTokenPos = title.indexOf(tokens[0]);
+      if (firstTokenPos >= 0) {
+        score += Math.max(0, 30 - firstTokenPos);
+      }
+    }
+
+    return { row: { ...row, matchQuality }, score };
+  });
+
+  // Urutkan skor tertinggi ke terendah
+  scored.sort((a, b) => b.score - a.score);
+
+  return scored.map((s) => s.row);
+}
+
 /**
  * Tool 6: katalog layanan resmi & SOP/kebijakan klinik (grounding medis).
  * Sumber: `ClinicService` (harga/durasi), `ClinicPolicy` (SOP), `KnowledgeChunk` (FAQ/dokumen).
@@ -707,26 +1023,26 @@ export const lookupCatalogAndPolicy: CopilotTool = {
       wantTreatments
         ? prisma.clinicService.findMany({
             where: { tenant_id: tenantId, is_active: true, ...(q ? { OR: buildTextSearchOr(['name', 'description'], q) } : {}) },
-            take: 8,
-          })
+            take: 60,
+          }).catch(() => [])
         : Promise.resolve([] as any[]),
       wantPolicy
         ? prisma.clinicPolicy.findMany({
             where: { tenant_id: tenantId, is_active: true, ...(q ? { OR: buildTextSearchOr(['topic', 'title', 'factual_summary'], q) } : {}) },
-            take: 8,
-          })
+            take: 30,
+          }).catch(() => [])
         : Promise.resolve([] as any[]),
       wantKnowledge
         ? prisma.knowledgeChunk.findMany({
             where: { tenant_id: tenantId, ...(q ? { OR: buildTextSearchOr(['title', 'content', 'keywords'], q) } : {}) },
-            take: 8,
-          })
+            take: 30,
+          }).catch(() => [])
         : Promise.resolve([] as any[]),
     ]);
 
-    const rows: any[] = [];
-    for (const s of services as any[]) {
-      rows.push({
+    const rawRows: any[] = [];
+    for (const s of (services || []) as any[]) {
+      rawRows.push({
         kind: 'TREATMENT',
         source: `ClinicService:${s.service_id}`,
         title: s.name,
@@ -738,16 +1054,16 @@ export const lookupCatalogAndPolicy: CopilotTool = {
         body: s.description ? String(s.description).slice(0, 800) : null,
       });
     }
-    for (const p of policies as any[]) {
-      rows.push({
+    for (const p of (policies || []) as any[]) {
+      rawRows.push({
         kind: 'POLICY',
         source: `ClinicPolicy:${p.topic}`,
         title: p.title,
         body: String(p.factual_summary || '').slice(0, 800),
       });
     }
-    for (const k of chunks as any[]) {
-      rows.push({
+    for (const k of (chunks || []) as any[]) {
+      rawRows.push({
         kind: 'KNOWLEDGE',
         source: `KnowledgeChunk:${k.title}`,
         title: k.title,
@@ -755,7 +1071,15 @@ export const lookupCatalogAndPolicy: CopilotTool = {
       });
     }
 
-    return { tool: 'lookup_catalog_and_policy', args, count: Math.min(rows.length, MAX_ROWS), rows: rows.slice(0, MAX_ROWS) };
+    // Peringkat deterministik sebelum dipotong ke batas MAX_ROWS
+    const rankedRows = rankCatalogAndPolicyRows(rawRows, q);
+
+    return {
+      tool: 'lookup_catalog_and_policy',
+      args,
+      count: Math.min(rankedRows.length, MAX_ROWS),
+      rows: rankedRows.slice(0, MAX_ROWS),
+    };
   },
 };
 
@@ -1157,6 +1481,9 @@ export const queryRevenue: CopilotTool = {
       deliveryFee: number;
       discount: number;
       receiptAmount: number;
+      lunasRevenue: number;
+      pendingRevenue: number;
+      totalRevenue: number;
     }>();
 
     for (const r of reservations) {
@@ -1178,38 +1505,91 @@ export const queryRevenue: CopilotTool = {
           deliveryFee: 0,
           discount: 0,
           receiptAmount: 0,
+          lunasRevenue: 0,
+          pendingRevenue: 0,
+          totalRevenue: 0,
         };
         bucketsMap.set(key, b);
       }
 
+      const pVal = r.purchase_value || 0;
+      const dFee = r.delivery_fee || 0;
+      const totalFee = pVal + dFee;
+      const isLunas = isReservationPaid(r);
+
       b.reservations++;
-      b.purchaseValue += r.purchase_value || 0;
-      b.deliveryFee += r.delivery_fee || 0;
+      b.purchaseValue += pVal;
+      b.deliveryFee += dFee;
       b.discount += r.discount_amount || 0;
       b.receiptAmount += r.receipt_amount || 0;
+      b.totalRevenue += totalFee;
+      if (isLunas) {
+        b.lunasRevenue += totalFee;
+      } else {
+        b.pendingRevenue += totalFee;
+      }
     }
 
-    // `basis` eksplisit: dihitung dari TANGGAL TREATMENT (booking_date), bukan
-    // tanggal pembayaran — mencegah ringkasan menyebutnya "uang sudah diterima".
-    const allBuckets = Array.from(bucketsMap.values());
-    const rows = allBuckets
-      .slice(-60)
-      .map((r) => ({ ...r, basis: 'booking_date' as const }));
+    // SSOT finansial: selaras dengan FinancialAnalyticsService (lunas vs pending berbasis purchase_occurred_at).
+    const allBuckets = Array.from(bucketsMap.values()).map((b) => {
+      const netRevenue = (b.purchaseValue || 0) + (b.deliveryFee || 0) - (b.discount || 0);
+      const paidAmount = b.lunasRevenue;
+      const pendingAmount = b.pendingRevenue;
+      return {
+        ...b,
+        netRevenue,
+        paidAmount,
+        pendingAmount,
+        basis: 'booking_date' as const,
+      };
+    });
+
+    const rows = allBuckets.slice(-60);
+
+    const totalReservations = allBuckets.reduce((s, r) => s + r.reservations, 0);
+    const totalPurchase = allBuckets.reduce((s, r) => s + r.purchaseValue, 0);
+    const totalDelivery = allBuckets.reduce((s, r) => s + r.deliveryFee, 0);
+    const totalDiscount = allBuckets.reduce((s, r) => s + r.discount, 0);
+    const totalReceipt = allBuckets.reduce((s, r) => s + r.receiptAmount, 0);
+    const totalRevenue = totalPurchase + totalDelivery;
+    const totalNetRevenue = totalRevenue - totalDiscount;
+    const totalLunasRevenue = allBuckets.reduce((s, r) => s + r.lunasRevenue, 0);
+    const totalPendingRevenue = allBuckets.reduce((s, r) => s + r.pendingRevenue, 0);
+
+    const summaryFacts = {
+      totalReservations,
+      totalPurchase,
+      totalDelivery,
+      totalDiscount,
+      totalRevenue,
+      netRevenue: totalNetRevenue,
+      lunasRevenue: totalLunasRevenue,
+      pendingRevenue: totalPendingRevenue,
+      paidAmount: totalLunasRevenue,
+      pendingAmount: totalPendingRevenue,
+      receiptAmount: totalReceipt,
+    };
 
     if (rows.length > 1) {
       // Agregat deterministik: LLM tidak perlu (dan tidak boleh) menjumlahkan sendiri.
       rows.push({
         bucket: 'TOTAL',
-        reservations: allBuckets.reduce((s, r) => s + r.reservations, 0),
-        purchaseValue: allBuckets.reduce((s, r) => s + r.purchaseValue, 0),
-        deliveryFee: allBuckets.reduce((s, r) => s + r.deliveryFee, 0),
-        discount: allBuckets.reduce((s, r) => s + r.discount, 0),
-        receiptAmount: allBuckets.reduce((s, r) => s + r.receiptAmount, 0),
+        reservations: totalReservations,
+        purchaseValue: totalPurchase,
+        deliveryFee: totalDelivery,
+        discount: totalDiscount,
+        receiptAmount: totalReceipt,
+        lunasRevenue: totalLunasRevenue,
+        pendingRevenue: totalPendingRevenue,
+        totalRevenue,
+        netRevenue: totalNetRevenue,
+        paidAmount: totalLunasRevenue,
+        pendingAmount: totalPendingRevenue,
         basis: 'booking_date' as const,
       });
     }
 
-    return { tool: 'query_revenue', args, count: rows.length, rows };
+    return { tool: 'query_revenue', args, count: rows.length, summaryFacts, rows };
   },
 };
 
@@ -1286,11 +1666,11 @@ export const queryFollowups: CopilotTool = {
   parameters: {
     status: { type: 'string', description: 'Status: "QUEUED" | "SENT" | "FAILED" | "CANCELLED" | "SKIPPED".' },
     type: { type: 'string', description: 'Tipe: "NO_PURCHASE" | "NEXT_TREATMENT" | "REMINDER_H1" | "REVIEW_H1_BABY" | "REVIEW_H1_MOMS" | "WINBACK_60D".' },
-    dueBefore: { type: 'string', description: 'Batas tanggal jadwal WIB (YYYY-MM-DD).' },
-    limit: { type: 'number', description: 'Maksimum baris (default 20, maks 60).' },
+    dueBefore: { type: 'string', description: 'Batas tanggal jadwal WIB (YYYY-MM-DD). Kosong = seluruh antrean mendatang mulai yang paling mendesak.' },
+    limit: { type: 'number', description: 'Maksimum baris (default 60, maks 60).' },
   },
   run: async (tenantId, args) => {
-    const take = Math.min(Math.max(parseInt(String(args.limit || 20), 10) || 20, 1), 60);
+    const take = Math.min(Math.max(parseInt(String(args.limit || 60), 10) || 60, 1), 60);
     const where: any = {
       tenant_id: tenantId,
       // Konsisten dengan tool lain: customer sandbox/test tidak masuk antrean nyata.
@@ -1307,41 +1687,92 @@ export const queryFollowups: CopilotTool = {
       where.scheduled_at = { lte: endUtc };
     }
 
-    const followups = await prisma.followUp.findMany({
-      where,
-      include: {
-        customer: {
-          select: {
-            id: true,
-            name: true,
-            phone: true,
-            conversations: {
-              select: { id: true },
-              orderBy: { last_message_at: 'desc' },
-              take: 1,
+    let totalQueued = 0;
+    try {
+      totalQueued = await prisma.followUp.count({ where });
+    } catch {
+      totalQueued = 0;
+    }
+
+    let followups: any[] = [];
+    try {
+      followups = await prisma.followUp.findMany({
+        where,
+        include: {
+          customer: {
+            select: {
+              id: true,
+              name: true,
+              phone: true,
+              conversations: {
+                select: { id: true },
+                orderBy: { last_message_at: 'desc' },
+                take: 1,
+              },
             },
           },
         },
-      },
-      orderBy: { scheduled_at: 'desc' },
-      take,
-    });
+        orderBy: { scheduled_at: 'asc' },
+        take,
+      });
+    } catch {
+      followups = [];
+    }
+
+    if (totalQueued === 0 && followups.length > 0) {
+      totalQueued = followups.length;
+    }
+
+    let rangeEarliest: string | null = null;
+    let rangeLatest: string | null = null;
+    if (followups.length > 0) {
+      const first = followups[0].scheduled_at;
+      rangeEarliest = first ? formatWibDateYYYYMMDD(new Date(first)) : null;
+      const last = followups[followups.length - 1].scheduled_at;
+      rangeLatest = last ? formatWibDateYYYYMMDD(new Date(last)) : null;
+
+      if (totalQueued > followups.length) {
+        try {
+          const latestItem = await prisma.followUp.findFirst({
+            where,
+            orderBy: { scheduled_at: 'desc' },
+            select: { scheduled_at: true },
+          });
+          if (latestItem?.scheduled_at) {
+            rangeLatest = formatWibDateYYYYMMDD(new Date(latestItem.scheduled_at));
+          }
+        } catch {}
+      }
+    }
 
     const rows = followups.map((f: any) => {
       const nameInfo = formatCustomerDisplayName(f.customer?.name, f.customer?.phone);
+      const schedDate = f.scheduled_at ? new Date(f.scheduled_at) : null;
+      const sentDate = f.sent_at ? new Date(f.sent_at) : null;
       return {
         customerName: nameInfo.displayName,
         rawCustomerName: nameInfo.rawName,
         conversationId: f.customer?.conversations?.[0]?.id || null,
         type: f.type,
         status: f.status,
-        scheduledAt: f.scheduled_at ? formatWibDateYYYYMMDD(new Date(f.scheduled_at)) : null,
-        sentAt: f.sent_at ? formatWibDateYYYYMMDD(new Date(f.sent_at)) : null,
+        scheduledDateWib: schedDate ? formatWibDateYYYYMMDD(schedDate) : null,
+        scheduledTimeWib: schedDate ? formatWibTime(schedDate) : null,
+        scheduledAt: schedDate ? formatWibDateYYYYMMDD(schedDate) : null,
+        sentAt: sentDate ? formatWibDateYYYYMMDD(sentDate) : null,
         treatmentCategory: f.treatment_category || null,
       };
     });
 
-    return { tool: 'query_followups', args, count: rows.length, rows };
+    return {
+      tool: 'query_followups',
+      args,
+      count: rows.length,
+      totalQueued,
+      truncated: totalQueued > rows.length,
+      rangeEarliest,
+      rangeLatest,
+      rows,
+    };
   },
 };
 
