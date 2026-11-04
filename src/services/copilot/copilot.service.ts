@@ -425,6 +425,30 @@ export function repairCopilotChatLinks(answer: string, rows: any[]): string {
   return modifiedLines.join('\n');
 }
 
+/**
+ * Buang baris tautan "yatim" — baris yang isinya HANYA tautan Live Chat tanpa nama
+ * pasien (mis. daftar "- [Buka Chat](...)" berulang di akhir jawaban). Tautan tanpa
+ * konteks nama berisiko menunjuk pasien yang salah dan tidak berguna bagi admin.
+ * Baris yang punya nama/teks tetap dipertahankan.
+ */
+export function stripOrphanChatLinks(answer: string): string {
+  if (!answer || typeof answer !== 'string') return answer;
+  return answer
+    .split('\n')
+    .filter((line) => {
+      if (!line.includes('/admin/live-chat?conversationId=')) return true;
+      const withoutLinks = line.replace(/\[([^\]]*)\]\([^)]*\)/g, ' ');
+      const alnumCount = (withoutLinks.match(/[a-zA-Z0-9]/g) || []).length;
+      return alnumCount >= 3;
+    })
+    .filter((line, idx, arr) => {
+      // Rapikan baris kosong beruntun akibat penghapusan
+      if (line.trim() !== '') return true;
+      return idx === 0 || arr[idx - 1].trim() !== '';
+    })
+    .join('\n');
+}
+
 export interface RouterPriorStep {
   tool: string;
   count: number;
@@ -1178,7 +1202,7 @@ export class CopilotService {
       }
       // Normalizer deterministik: buang sisa UUID yang lolos dari LLM, lalu
       // perbaiki tautan Live Chat kosong dari data tool (anti link menyesatkan).
-      const answer = repairCopilotChatLinks(sanitizeCopilotAnswer(rawAnswer), unionRows);
+      const answer = stripOrphanChatLinks(repairCopilotChatLinks(sanitizeCopilotAnswer(rawAnswer), unionRows));
 
       // Validator grounding atas UNION semua hasil tool (halusinasi silang-sumber).
       const grounded = this.validateGrounding(answer, unionRows);

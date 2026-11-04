@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   repairCopilotChatLinks,
+  stripOrphanChatLinks,
   trimHangingSentence,
   stitchCopilotAnswer,
 } from '../../src/services/copilot/copilot.service';
@@ -48,6 +49,19 @@ describe('Copilot output integrity (Fase 1)', () => {
     const cutOffMulti = 'Berikut daftar pasien:\n1. Bunda Ririn jam 10.00 WIB.\n2. Bunda Dewi konfirmasi booking L';
     const trimmed2 = trimHangingSentence(cutOffMulti);
     expect(trimmed2).toBe('Berikut daftar pasien:\n1. Bunda Ririn jam 10.00 WIB.');
+  });
+
+  it('baris tautan yatim (tanpa nama pasien) dibuang, baris bernama tetap', () => {
+    const answer = [
+      '**Prioritas balas:**',
+      '- Bunda Ririn - menunggu 20 menit [Buka Chat](/admin/live-chat?conversationId=conv-ririn)',
+      '- [Buka Chat](/admin/live-chat?conversationId=conv-ririn)',
+      '- [Buka Chat](/admin/live-chat?conversationId=conv-ririn)',
+    ].join('\n');
+
+    const out = stripOrphanChatLinks(answer);
+    expect(out).toContain('Bunda Ririn');
+    expect(out.match(/\[Buka Chat\]/g)?.length).toBe(1);
   });
 
   it('stitchCopilotAnswer merangkai kelanjutan teks tanpa pengulangan kata', () => {
