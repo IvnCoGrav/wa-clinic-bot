@@ -90,7 +90,7 @@ describe('Guard anti-completed prematur (domain + endpoint)', () => {
     booking_date: new Date(Date.now() + 11 * 24 * 3600 * 1000),
     treatment_category: 'BABY',
     duration_minutes: 60,
-    assigned_staff_id: null,
+    assigned_staff_id: 'bidan-1',
   };
 
   it('PATCH /:id/complete menolak jadwal 11 hari lagi (400 PREMATURE_COMPLETION_BLOCKED)', async () => {

@@ -28,6 +28,7 @@ function row(over: Record<string, any> = {}) {
     status: 'confirmed',
     booking_date: PAST,
     treatment_category: 'BABY',
+    assigned_staff_id: 'staff-1',
     ...over,
   } as any;
 }
@@ -178,5 +179,23 @@ describe('Bulk complete reservasi (Fase 1)', () => {
     expect(JSON.parse(res.body).code).toBe('DB_OFFLINE');
     expect(update).not.toHaveBeenCalled();
     expect(lifecycle).not.toHaveBeenCalled();
+  });
+
+  it('Gate 6.1: reservasi tanpa assigned_staff_id dilewati dengan alasan STAFF_REQUIRED', async () => {
+    vi.mocked(prisma.reservation.findMany).mockResolvedValueOnce([{ id: 'res-unassigned' }] as any);
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(row({ id: 'res-unassigned', assigned_staff_id: null }));
+
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: URL,
+      headers: { 'x-api-key': ADMIN_KEY, 'content-type': 'application/json' },
+      payload: { ids: ['res-unassigned'] },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.completed).toEqual([]);
+    expect(body.skipped).toEqual([{ id: 'res-unassigned', reason: 'STAFF_REQUIRED' }]);
   });
 });

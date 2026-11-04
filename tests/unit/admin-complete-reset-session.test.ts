@@ -23,6 +23,7 @@ describe('Admin complete reservasi membersihkan sesi V3 (CG-02)', () => {
       tenant_id: DEFAULT_TENANT_ID,
       customer_id: 'cust-complete-1',
       status: 'confirmed',
+      assigned_staff_id: 'staff-1',
     } as any);
     vi.mocked(prisma.reservation.update).mockResolvedValueOnce({ id: 'res-complete-1', status: 'completed' } as any);
     vi.mocked(prisma.conversation.findFirst).mockResolvedValueOnce({ id: 'conv-complete-1' } as any);

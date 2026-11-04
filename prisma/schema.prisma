@@ -1001,6 +1001,13 @@ model Staff {
   reservations  Reservation[]
   seriesAssignments ReservationSeries[]
   sessions      StaffSession[]
+  // Insentif retensi — bukan role. Owner boleh ADMIN_CS tapi TIDAK ikut skema.
+  incentive_eligible     Boolean  @default(true)
+  /// 'RETENTION' | 'VOLUME' | 'NONE'
+  incentive_scheme       String   @default("RETENTION")
+  /// Tanggal mulai kerja (fallback: created_at bila null)
+  employment_started_at  DateTime?
+  retentionSnapshots     StaffRetentionSnapshot[]
 
   @@index([tenant_id])
   @@map("staff")
@@ -1268,4 +1275,91 @@ model SheetsSyncOutbox {
   @@unique([tenant_id, reservation_id])
   @@index([tenant_id, status, next_retry_at])
   @@map("sheets_sync_outbox")
+}
+
+
+/// Kebijakan insentif retensi per tenant. Versioned via effective_from.
+/// DILARANG hardcode parameter di service — semua dibaca dari sini.
+model RetentionPolicy {
+  id                    String    @id @default(uuid())
+  tenant_id             String    @default("default-tenant")
+  window_days           Int       @default(60)
+  pool_months           Int       @default(6)
+  benchmark_pct         Float     @default(34.6)
+  tier1_max_pct         Float     @default(31.1)
+  tier2_max_pct         Float     @default(38.1)
+  split_tier1           Int       @default(50)
+  split_tier2           Int       @default(55)
+  split_tier3           Int       @default(60)
+  min_sample            Int       @default(40)
+  min_tenure_months     Int       @default(4)
+  downgrade_periods     Int       @default(2)
+  soft_landing_until    DateTime?
+  effective_from        DateTime
+  effective_to          DateTime?
+  formula_version       String    @default("v1")
+  created_at            DateTime  @default(now())
+  updated_at            DateTime  @updatedAt
+
+  @@unique([tenant_id, effective_from])
+  @@index([tenant_id, effective_from])
+  @@map("retention_policies")
+}
+
+/// Angka beku per periode. WAJIB dipakai untuk payroll — jangan hitung ulang
+/// saat gajian, supaya angka tidak berubah karena data diedit belakangan.
+model StaffRetentionSnapshot {
+  id                String    @id @default(uuid())
+  tenant_id         String    @default("default-tenant")
+  staff_id          String
+  /// Snapshot nama saat dihitung — tetap terbaca meski staf dinonaktifkan.
+  staff_name        String
+  /// onDelete Restrict: arsip payroll TIDAK boleh ikut terhapus.
+  /// Staf yang berhenti cukup di-set active=false, bukan dihapus.
+  staff             Staff     @relation(fields: [staff_id], references: [id], onDelete: Restrict)
+  period_year       Int
+  period_month      Int
+  policy_id         String?
+  window_days       Int
+  pool_start        DateTime
+  pool_end          DateTime
+  cohort_n          Int
+  retained_n        Int
+  retention_pct     Float?
+  benchmark_pct     Float
+  retention_index   Float?
+  raw_tier          Int?
+  final_tier        Int?
+  split_pct         Int?
+  downgrade_streak  Int       @default(0)
+  status            String    @default("DRAFT") // DRAFT | PREVIEW | FINAL | SKIPPED
+  skip_reason       String?
+  formula_version   String    @default("v1")
+  computed_at       DateTime  @default(now())
+  computed_by       String?
+  applied_at        DateTime?
+  notes             String?
+
+  @@unique([tenant_id, staff_id, period_year, period_month])
+  @@index([tenant_id, period_year, period_month])
+  @@map("staff_retention_snapshots")
+}
+
+/// Log append-only pergantian bidan. Diperlukan agar metrik kebocoran A→B
+/// bisa membedakan "jadwal penuh" vs "pilihan CS". Tanpa ini, sengketa tidak
+/// bisa dijawab dengan data.
+model ReservationStaffAssignmentLog {
+  id             String   @id @default(uuid())
+  tenant_id      String   @default("default-tenant")
+  reservation_id String
+  from_staff_id  String?
+  to_staff_id    String?
+  /// schedule_full | staff_off | patient_request | owner_delegation | other
+  reason         String?
+  actor          String?
+  created_at     DateTime @default(now())
+
+  @@index([tenant_id, reservation_id])
+  @@index([tenant_id, created_at])
+  @@map("reservation_staff_assignment_logs")
 }

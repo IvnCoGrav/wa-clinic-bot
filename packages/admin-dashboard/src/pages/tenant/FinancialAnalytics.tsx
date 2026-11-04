@@ -46,6 +46,7 @@ import { stripBufferMetadata, cleanTreatmentName } from '../../utils/treatmentSt
 import { resolveStaffName } from '../../utils/resolveStaffName';
 import { useTheme } from '../../contexts/ThemeContext';
 import { chartTheme } from '../../lib/chartTheme';
+import { RetentionTab } from '../../components/analytics/RetentionTab';
 
 interface MonthlyKpiSummary {
   totalRevenue: number;
@@ -188,6 +189,7 @@ export const FinancialAnalytics: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'LUNAS' | 'SELESAI_BELUM_VERIFIKASI' | 'TAGIH_DI_TEMPAT'>('ALL');
   const [selectedTx, setSelectedTx] = useState<TransactionLedgerItem | null>(null);
+  const [activeTab, setActiveTab] = useState<'keuangan' | 'retensi'>('keuangan');
 
   // Fetch monthly analytics data
   const fetchAnalytics = useCallback(async () => {
@@ -387,7 +389,37 @@ export const FinancialAnalytics: React.FC = () => {
         </div>
       </div>
 
-      {/* 4 Top KPI Cards */}
+      {/* Tab Navigation: Keuangan vs Insentif Retensi Bidan */}
+      <div className="flex border-b border-divider gap-1 sm:gap-2">
+        <button
+          onClick={() => setActiveTab('keuangan')}
+          className={`pb-3 px-3 sm:px-4 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+            activeTab === 'keuangan'
+              ? 'border-accent text-accent'
+              : 'border-transparent text-ink-2 hover:text-ink'
+          }`}
+        >
+          <TrendingUp size={16} />
+          <span>Keuangan & Transaksi</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('retensi')}
+          className={`pb-3 px-3 sm:px-4 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+            activeTab === 'retensi'
+              ? 'border-accent text-accent'
+              : 'border-transparent text-ink-2 hover:text-ink'
+          }`}
+        >
+          <UserCheck size={16} />
+          <span>Insentif Retensi Bidan</span>
+        </button>
+      </div>
+
+      {activeTab === 'retensi' ? (
+        <RetentionTab year={selectedYear} month={selectedMonth} />
+      ) : (
+        <>
+          {/* 4 Top KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Card 1: Total Revenue */}
         <div className="bg-surface p-4 sm:p-5 rounded-2xl border border-divider shadow-xs relative overflow-hidden group hover:border-accent transition">
@@ -951,6 +983,8 @@ export const FinancialAnalytics: React.FC = () => {
           </table>
         </div>
       </div>
+      </>
+      )}
 
       {/* Transaction Detail Modal */}
       {selectedTx && (

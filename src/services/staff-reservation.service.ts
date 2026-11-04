@@ -1715,8 +1715,9 @@ export class StaffReservationService {
         return { success: false, error: 'Reservasi tidak ditemukan untuk klinik ini.' };
       }
 
-      if (!isSupervisor && reservation.assigned_staff_id && reservation.assigned_staff_id !== staffId) {
-        return { success: false, error: 'Anda tidak memiliki hak akses untuk reservasi ini.' };
+      // Gate keras 6.1 (Data Hygiene): Pembayaran dan penyelesaian kunjungan wajib memiliki bidan (kecuali supervisor override)
+      if (!isSupervisor && (!reservation.assigned_staff_id || reservation.assigned_staff_id !== staffId)) {
+        return { success: false, error: 'Anda tidak memiliki hak akses untuk reservasi ini atau belum ada bidan yang ditugaskan.' };
       }
 
       // Kontrak: amount = total tunai di tangan terapis (treatment + ongkir) dari frontend pricing.totalFee
@@ -1836,6 +1837,11 @@ export class StaffReservationService {
           deliveryFee,
           proofUrl,
           notes,
+          // Gate 6.1: supervisor mencatat pembayaran reservasi TANPA bidan.
+          // Wajib terrekam agar bisa ditelusuri saat banding payroll / Gate 6.5.
+          ...(isSupervisor && !reservation.assigned_staff_id
+            ? { supervisorOverrideUnassigned: true, overrideBy: staffId }
+            : {}),
         },
         tenantId,
       });
@@ -2101,7 +2107,7 @@ export class StaffReservationService {
         return { success: false, error: 'Reservasi tidak ditemukan untuk klinik ini.' };
       }
 
-      if (!isSupervisor && reservation.assigned_staff_id && reservation.assigned_staff_id !== staffId) {
+      if (!isSupervisor && (!reservation.assigned_staff_id || reservation.assigned_staff_id !== staffId)) {
         return { success: false, error: 'Anda tidak memiliki hak akses untuk reservasi ini.' };
       }
 
@@ -2610,8 +2616,9 @@ export class StaffReservationService {
         return { success: false, error: 'Reservasi tidak ditemukan.' };
       }
 
-      if (!isSupervisor && reservation.assigned_staff_id !== staffId) {
-        return { success: false, error: 'Anda tidak memiliki akses untuk menyelesaikan jadwal terapis lain.' };
+      // Gate keras 6.1 (Data Hygiene): Penyelesaian kunjungan wajib memiliki bidan/terapis (kecuali supervisor override)
+      if (!isSupervisor && (!reservation.assigned_staff_id || reservation.assigned_staff_id !== staffId)) {
+        return { success: false, error: 'Anda tidak memiliki akses untuk menyelesaikan jadwal terapis lain atau reservasi belum memiliki bidan.' };
       }
 
       // FIX 173i-b: guard status — DILARANG menandai completed pada reservasi
@@ -2657,14 +2664,26 @@ export class StaffReservationService {
       }
 
       const { auditService } = await import('./audit.service');
+      const completionAuditPayload: Record<string, unknown> = {};
+      if (!isPaid && forceUnpaid) {
+        completionAuditPayload.forcedUnpaid = true;
+        completionAuditPayload.paymentStatus = 'TAGIH_DI_TEMPAT';
+      }
+      // Gate 6.1: supervisor menyelesaikan kunjungan TANPA bidan.
+      // Wajib terrekam agar bisa ditelusuri saat banding payroll / Gate 6.5.
+      if (isSupervisor && !reservation.assigned_staff_id) {
+        completionAuditPayload.supervisorOverrideUnassigned = true;
+        completionAuditPayload.overrideBy = staffId;
+      }
+
       await auditService.logAdminAction({
         apiKey: 'STAFF_SESSION',
         adminIdentity: staffName,
         action: !isPaid && forceUnpaid ? 'STAFF_COMPLETE_VISIT_UNPAID' : 'STAFF_COMPLETE_VISIT',
         targetId: reservationId,
         tenantId,
-        ...(!isPaid && forceUnpaid
-          ? { payload: { forcedUnpaid: true, paymentStatus: 'TAGIH_DI_TEMPAT' } }
+        ...(Object.keys(completionAuditPayload).length > 0
+          ? { payload: completionAuditPayload }
           : {}),
       });
 

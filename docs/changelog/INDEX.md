@@ -5,8 +5,12 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 645
+Total entri terindeks: 649
 
+- 2026-11-04 | Feature: Skill Rekonsiliasi & Audit Treatment Harian (`reconcile-daily-treatment`)
+- 2026-11-04 | Feature: Skema Insentif Retensi Bidan 60 Hari (Pool 6 Bulan Bergulir & Benchmark 34,6%) +
+- 2026-11-04 | Fix: F14 Admin Copilot (Ambiguitas Nama Terapis, Batas Ambil Data, Tautan Yatim, Deploy &
+- 2026-11-04 | Fix: Hardening Admin Copilot V1–V12 & F13 (Urutan Antrean, Peringkat Katalog, Kontrak Wakt
 - 2026-11-03 | Fix: Rekonsiliasi Buku Alamat JSON <-> Tabel `customer_addresses` (A-002)
 - 2026-11-03 | Fix: Disambiguasi Wilayah Perbatasan Gazetteer & Write Seam Label Guard (Kasus Grand Pakuw
 - 2026-11-03 | Fix: Shareloc Pertama Memperkaya Kartu Tunggal (Anti-Alamat Kedua)

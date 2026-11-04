@@ -52,6 +52,20 @@ $$\text{Repeat Order Rate} = \frac{\text{Jumlah Pelanggan dengan } \ge 2 \text{ 
 
 ---
 
+## 4A. Retensi per Bidan (Staff Retention)
+
+- **Kunjungan**: satu tanggal unik (WIB) per pasien dengan minimal satu reservasi `completed`. Dua reservasi di tanggal sama = 1 kunjungan.
+- **Sesi paket**: kunjungan series selain sesi pertama (`session_number > 1`) TIDAK dihitung sebagai kunjungan retensi.
+- **First-touch attribution**: repeat dihitung ke bidan yang menangani kunjungan pertama seumur hidup pasien.
+- **Jendela (W)**: 60 hari. **Pool**: 6 bulan bergulir, hanya cohort matang (`first_visit <= asOf - W`).
+- **Indeks Retensi (IR)** = retensi bidan / benchmark klinik.
+- **Benchmark**: 34,6% (60 hari), dibekukan dari cohort Apr–Okt 2026, direview kuartalan.
+- **Tingkat**: IR < 0,90 → 50:50; 0,90–1,10 → 55:45; ≥ 1,10 → 60:40.
+- **Sampel minimum** 40 pasien matang; di bawah itu status `INSUFFICIENT_SAMPLE`.
+- Dikecualikan: `is_sandbox_test`, `is_internal_staff`, customer terhapus.
+
+---
+
 ## 5. Utilisasi Kapasitas Terapis (Capacity Utilization)
 
 ### Formula Utilisasi
@@ -70,3 +84,4 @@ $$\text{Utilisasi (\%)} = \frac{\text{Total Sesi Layanan Selesai / Terjadwal}}{\
 | **2026-10-28** | `8c1dd757` | Penyesuaian batas waktu kualifikasi MQL berbasis tanggal percakapan/interaksi. |
 | **2026-10-28** | `4e366631` | Rekonsiliasi data bentrok kapasitas terapis dan penambahan kalkulasi margin laba kotor kohort. |
 | **2026-10-29** | `a496c813` | Eliminasi hardcode periode kohort dan slot terapis; migrasi penuh ke konfigurasi dinamis `Tenant.settings.metaPerformanceSettings` (A-001). |
+| **2026-11-04** | pending | Penambahan kontrak definisi metrik 4A Retensi per Bidan (Staff Retention) jendela 60 hari pool 6 bulan. |

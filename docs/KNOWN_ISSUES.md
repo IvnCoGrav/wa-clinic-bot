@@ -3,6 +3,20 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 307. [Insentif Retensi Bidan] Gap Observabilitas Penyebab Churn, Keluhan, dan Mutasi Staf (2026-11-04, OPEN - MEDIUM)
+
+- **Status:** OPEN (2026-11-04) — diidentifikasi saat perancangan skema insentif retensi bidan.
+- **Gejala:**
+  1. Retensi tidak memiliki data alasan pasien tidak kembali (*churn reason*) → metrik hanya mengukur gejala kuantitatif tanpa konteks kualitatif.
+  2. Belum ada sistem pencatatan keluhan pasien (*patient complaints*) terstruktur → syarat gugur insentif performa tidak dapat dievaluasi secara otomatis oleh sistem.
+  3. Belum ada riwayat log pergantian penugasan bidan (*staff reassignment log*) → metrik kebocoran pasien dari Bidan A ke Bidan B tidak dapat diverifikasi secara kausal apakah karena jadwal penuh, permintaan pasien, atau keputusan operasional.
+- **Akar masalah:** Skema database historis hanya menyimpan `assigned_staff_id` mutakhir tanpa tabel riwayat perubahan, serta ketiadaan pipeline feedback kepuasan/keluhan terstruktur di sistem.
+- **Rencana Tindak Lanjut:**
+  1. [RESOLVED 2026-11-04] Penambahan tabel `reservation_staff_assignment_logs` dan pencatatan log pergantian di Fase 6.3.
+  2. [RESOLVED 2026-11-04] Fitur drilldown pasien kohort di Fase 3 & 5 untuk hak banding transparan staf dengan proteksi data terapis.
+  3. [RESOLVED 2026-11-04] Supervisor override pada PWA staf kini menulis audit payload `supervisorOverrideUnassigned: true` + `overrideBy` di `STAFF_RECORD_PAYMENT` dan `STAFF_COMPLETE_VISIT`, sehingga penyelesaian kunjungan tanpa bidan tetap dapat ditelusuri.
+  4. Integrasi survei kepuasan & auto-disqualification dijadwalkan pada iterasi pasca-gaji #4.
+
 ## 306. [Admin Copilot] Resolusi Fondasional V1–V12: Urutan Antrean, Peringkat Katalog, Kontrak Waktu WIB, Integritas Tautan & Output Terpotong, Fakta Terhitung Kode, Deteksi Bentrok Interval Durasi & Slot Kosong Data-Driven, SSOT Pembayaran, dan Anti-Duplikasi Tool (2026-11-04, PARTIAL)
 
 - **Status:** **PARTIAL — SUDAH DEPLOY & UJI TERIMA (2026-11-04 12.05 WIB).** Sisa 1 keterbatasan: pertanyaan "Terapis A" (nama tanpa argumen `staffName`) masih dijawab "tidak ditemukan data" alih-alih klarifikasi, karena router tidak mengirim `staffName`. (Fase 0 s/d F14 tuntas, 0 runtime dependencies baru, 0 migrasi DB)

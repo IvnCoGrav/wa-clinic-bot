@@ -30,6 +30,7 @@ describe('Characterization — PATCH /api/admin/reservation/:id/complete (satuan
       status: 'confirmed',
       booking_date: new Date(PAST_ISO),
       treatment_category: 'BABY',
+      assigned_staff_id: 'staff-ok-1',
     } as any);
     vi.mocked(prisma.reservation.update).mockResolvedValueOnce({
       id: 'res-ok-1',
@@ -83,5 +84,31 @@ describe('Characterization — PATCH /api/admin/reservation/:id/complete (satuan
     expect(JSON.parse(res.body).code).toBe('PREMATURE_COMPLETION_BLOCKED');
     expect(update).not.toHaveBeenCalled();
     expect(lifecycle).not.toHaveBeenCalled();
+  });
+
+  it('Gate 6.1: reservasi tanpa assigned_staff_id ditolak 400 STAFF_ASSIGNMENT_REQUIRED', async () => {
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({
+      id: 'res-no-staff',
+      tenant_id: DEFAULT_TENANT_ID,
+      customer_id: 'cust-1',
+      status: 'confirmed',
+      booking_date: new Date(PAST_ISO),
+      treatment_category: 'BABY',
+      assigned_staff_id: null,
+    } as any);
+    const update = vi.mocked(prisma.reservation.update);
+
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/admin/reservation/res-no-staff/complete',
+      headers: { 'x-api-key': ADMIN_KEY, 'content-type': 'application/json' },
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(400);
+    const body = JSON.parse(res.body);
+    expect(body.code).toBe('STAFF_ASSIGNMENT_REQUIRED');
+    expect(update).not.toHaveBeenCalled();
   });
 });

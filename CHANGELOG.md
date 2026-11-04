@@ -4,6 +4,78 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-04 - Feature: Skill Rekonsiliasi & Audit Treatment Harian (`reconcile-daily-treatment`)
+
+- **Latar Belakang & Masalah**:
+  - Pelayanan klinik homecare melibatkan koordinasi dinamis antara chat WhatsApp (laporan jadwal & bukti bayar lapangan), database PostgreSQL (`reservations`, `customers`, `children`), dan rekapan Google Sheets klinik (tab bulanan aktif).
+  - Terdapat potensi celah operasional di mana treatment selesai di lapangan namun belum dibuatkan reservasi di database, reservasi berstatus `confirmed` yang belum diselesaikan sehingga gagal tersinkron ke Google Sheets, atau ketidaksesuaian nama bidan penanggung jawab.
+- **Perubahan Utama**:
+  1. Pembuatan Skill `.agents/skills/reconcile-daily-treatment/SKILL.md`:
+     - Menetapkan SOP investigasi 3-arah (*3-Way Reconciliation*): WhatsApp Livechat/WAHA ↔ Database PostgreSQL ↔ Google Sheets tab bulanan aktif.
+     - Penegakan gerbang konfirmasi manusia (*Confirmation Gate*): wajib menampilkan daftar temuan pasien dan nominal biayanya sebelum melakukan mutasi data.
+     - Menyediakan skrip teruji untuk pembuatan reservasi kanonis via `reservationCoreService.saveReservation`, pengaitan data anak (`Child`), penanganan pembayaran, dan pemicu sinkronisasi instan via `sheetsSyncService.syncReservation`.
+  2. Registrasi Mandat Skill di `AGENTS.md` & `docs/FEATURE_INVENTORY.md`:
+     - Menambahkan rute otomatis untuk skill `reconcile-daily-treatment` saat ada kata kunci audit/rekonsiliasi treatment harian.
+     - Mencatat skill dalam inventarisasi fitur sistem operasional & integrasi.
+
+#### 2026-11-04 - Feature: Skema Insentif Retensi Bidan 60 Hari (Pool 6 Bulan Bergulir & Benchmark 34,6%) + Remediasi Audit Keras
+
+- **Latar Belakang & Masalah**:
+  - Model lama bagi hasil bidan klinik bersifat flat 50:50 tanpa mengaitkan performa layanan terhadap retensi pasien.
+  - Pasien homecare membutuhkan kontinuitas perawatan; klinik membutuhkan sistem insentif terstruktur yang transparan, data-driven, dan aman dari sengketa rotasi pasien.
+  - Implementasi mengacu pada dokumen rencana formal `docs/plans/PLAN_INSENTIF_RETENSI_BIDAN_2026-11-04.md` dan `PLAN_REMIDIASI_INSENTIF_RETENSI_2026-11-04.md` mencakup 8 fase remediasi menyeluruh.
+- **Perubahan Utama**:
+  1. `prisma/schema.prisma` & Migrasi (`20261104000000_add_staff_retention`, `20261104010000_add_downgrade_streak_to_snapshots`):
+     - Menambahkan kolom `incentive_eligible`, `incentive_scheme`, dan `employment_started_at` ke `model Staff`.
+     - Menambahkan `model RetentionPolicy` (`retention_policies`) untuk konfigurasi multi-tenant dinamis.
+     - Menambahkan `model StaffRetentionSnapshot` (`staff_retention_snapshots`) beserta kolom `downgrade_streak Int @default(0)` (B1) untuk mencatat streak penurunan tier secara persisten.
+     - Menambahkan `model ReservationStaffAssignmentLog` (`reservation_staff_assignment_logs`) untuk log audit pergantian staf.
+     - Penambahan filter `AND tenant_id = 'default-tenant'` pada statement update seed (L13).
+  2. `src/domain/staff-retention.ts` (Kalkulator Domain Murni):
+     - Fungsi murni tanpa I/O atau dependensi Prisma: `buildVisits`, `selectCohort`, `calculateRetention`, `resolveFinalTier`, dan `applySoftLanding`.
+     - Atribusi first-touch & deduplikasi 1 tanggal unik per customer WIB (+7 jam).
+     - Perbaikan matematika tanggal `subtractMonths` dengan clamping hari kalender target (M11) mencegah overflow tanggal akhir bulan (contoh: 31 Mar - 1 bln menjadi 28 Feb, bukan 3 Mar).
+  3. `src/services/staff-retention.service.ts` (Service I/O):
+     - Evaluasi riwayat `downgradeStreak` dari snapshot periode sebelumnya (B1).
+     - Kueri agregasi SQL kanonis dengan window function `MIN(visit_date) OVER (PARTITION BY customer_id)` (M12) untuk mendeteksi kunjungan pertama seumur hidup tanpa batas buffer 14 bulan.
+     - Evaluasi masa kerja presisi kalender `asOfDate` terhadap `employment_started_at` (M10).
+     - Fail-hard pada pembekuan snapshot `FINAL` (H6): menolak menelan error penyimpanan data payroll dengan `console.warn`.
+     - Propagasi error kueri DB secara eksplisit untuk mencegah laporan kosong palsu 200 (H7).
+     - Masking nomor telepon pasien di server pada endpoint `getDrilldown` (M8).
+  4. `src/services/staff-reservation.service.ts` (Penutupan Gate 6.1 di PWA Staf - B3):
+     - Menutup celah bypass `assigned_staff_id &&` di `recordPayment` dan `completeTask`.
+     - Penyelesaian reservasi atau pencatatan pelunasan di PWA lapangan DILARANG dilakukan tanpa bidan penanggung jawab terdaftar.
+  5. `src/routes/admin/reservation-dispatch.route.ts` (Data Hygiene & Audit Trail - H5, B2):
+     - Gate 6.1: Menolak penyelesaian reservasi tanpa penugasan bidan (`400 STAFF_ASSIGNMENT_REQUIRED`).
+     - Pencatatan audit trail otomatis `RESERVATION_UNASSIGNED_COMPLETION_BYPASS` (H5) jika admin menggunakan bypass `allowUnassignedStaff: true`.
+     - Gate 6.3: Log pergantian staf otomatis ke `ReservationStaffAssignmentLog`.
+  6. `src/routes/admin/staff-retention.subroute.ts`:
+     - Menghilangkan efek samping write dari `GET /api/admin/staff-retention` (H4); pembekuan snapshot HANYA dapat dipicu lewat `POST /snapshot` dengan proteksi RBAC superadmin/admin.
+     - Validasi ketat parameter periode `year` (2020..2050), `month` (1..12), dan konfigurasi policy `PUT /policy` (tier1 < tier2, split bertingkat, min_sample positif) (M9).
+  7. `packages/admin-dashboard`:
+     - `RetentionTab.tsx`: Tab UI analitik retensi dengan banner status periodik, tombol freeze snapshot, dialog konfirmasi `useUiFeedback`, tabel peringkat staf, badge status, drawer rincian kohort pasien, catatan metodologi, dan tombol ekspor CSV. Paritas dark mode 100%.
+  8. Pemulihan Pengujian (B2) & Penguatan Suite:
+     - Memperbarui mock test lama di `reservation-bulk-complete.test.ts` dan `reservation-complete-single.test.ts` agar menyertakan `assigned_staff_id`, serta menambahkan test eksplisit penolakan `STAFF_REQUIRED` dan `400 STAFF_ASSIGNMENT_REQUIRED`.
+     - Menambahkan test T21 pada kalkulator untuk verifikasi clamping tanggal akhir bulan `subtractMonths`.
+  9. Remediasi Regresi Full Suite & Penguatan RBAC (R1–R6):
+     - Anti-500 Log Penugasan Staf: Membungkus pemanggilan `prisma.reservationStaffAssignmentLog.create` dalam try/catch defensif dan `void Promise.resolve(p).catch(...)` di `src/routes/admin/reservation-dispatch.route.ts` (mencegah crash unhandled TypeError saat mock mengembalikan stub undefined).
+     - Supervisor Override di PWA Staf: Memberikan pengecualian di `staff-reservation.service.ts` agar staf dengan peran supervisor (`isSupervisor: true`) tetap dapat menyelesaikan atau mencatat pembayaran reservasi darurat/walk-in tanpa bidan terisi.
+     - Resolusi Tabrakan Prefix RBAC di `admin.route.ts`: Memperbaiki pengecekan prefix `/api/admin/staff` agar menggunakan `urlPath === '/api/admin/staff' || urlPath.startsWith('/api/admin/staff/')` sehingga pemanggilan `/api/admin/staff-retention` oleh `TENANT_ADMIN` tidak tertabrak middleware akun staf.
+     - Proteksi Role Terapis (R1): Menolak akses peran `THERAPIST` pada `GET /api/admin/staff-retention` dengan 403 `FORBIDDEN_STAFF_ROLE`, dan membatasi `GET /api/admin/staff-retention/drilldown` agar terapis hanya bisa mengakses pasien kohort miliknya sendiri (`staffId === currentStaffId`).
+     - Fail-Safe Policy Kosong (R4): Memberikan log peringatan jika tabel `retention_policies` kosong, dan menolak pembekuan snapshot `FINAL` dengan 422 `RETENTION_POLICY_NOT_CONFIGURED` bila tabel kebijakan belum dikonfigurasi.
+     - Pemulihan 5 Test File Regresi: Memperbarui fixture mock `res-complete-1` di `admin-complete-reset-session.test.ts`, `existingApproved` di `capi-queue-first-workflow.test.ts`, dan `futureRes` di `repeat-customer-scope-and-collision.test.ts`.
+  10. Audit Trail Supervisor Override (penutup celah R3):
+      - `recordPayment` dan `completeTask` di `src/services/staff-reservation.service.ts` kini menyisipkan `supervisorOverrideUnassigned: true` + `overrideBy` ke payload audit `STAFF_RECORD_PAYMENT` / `STAFF_COMPLETE_VISIT` ketika supervisor menyelesaikan reservasi tanpa bidan.
+      - Tanpa flag ini, satu-satunya jalur penyelesaian tanpa bidan (supervisor override) tidak meninggalkan jejak, sehingga Gate 6.5 tidak bisa ditelusuri saat banding payroll.
+      - Menambahkan 2 regression test di `tests/unit/sheets-seam-lifecycle.test.ts`: non-supervisor ditolak, dan supervisor diizinkan tetapi wajib terekam di audit.
+  11. Dokumentasi:
+      - `docs/KNOWN_ISSUES.md` #306 mencatat 6 file uji pre-existing yang gagal di baseline HEAD (bukan regresi fitur) agar tidak tertukar dengan regresi baru.
+- **Verifikasi**:
+  - `npm run build` exit code 0.
+  - `npm --prefix packages/admin-dashboard run build` exit code 0.
+  - Regression Gate: Full suite Vitest (768 test files, 6.351 tests) lulus 100% dengan persis 6 file / 11 test pre-existing baseline HEAD. Seluruh 7 test regresi baru pulih sepenuhnya.
+  - Dark mode parity check lulus 100% pada `RetentionTab.tsx`.
+
 #### 2026-11-04 - Fix: F14 Admin Copilot (Ambiguitas Nama Terapis, Batas Ambil Data, Tautan Yatim, Deploy & Uji Terima)
 
 - **Masalah:** Ambiguitas nama terapis ditentukan dari `mappedRows.length === 0`, sehingga filter tanggal/status/bayar yang menghasilkan 0 baris pada nama yang sah (mis. semua pasien Bidan Yusi sudah lunas) berubah menjadi pertanyaan klarifikasi palsu. Batas ambil data mentah juga masih berupa angka literal. Ditemukan pula daftar tautan "Buka Chat" yatim tanpa nama yang berulang ke pasien yang sama.

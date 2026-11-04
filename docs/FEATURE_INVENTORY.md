@@ -115,6 +115,8 @@ Modul ini mengelola seluruh siklus hidup pemesanan layanan homecare, penugasan b
 | **Purge Arsip 60 Hari** | `CronService.runReservationArchivePurge()` | Cron harian pembersihan permanen data arsip reservasi yang berusia lebih dari 60 hari. |
 | **Deteksi Tumpang Tindih Jadwal** | `CronService.runSlotOverlapSweep()`, `src/services/slot-overlap.service.ts` | Peringatan dini otomatis (setiap 15 menit) jika ada jadwal terapis yang saling bertubrukan (*overlapping*). |
 | **Paket Berkelanjutan (Series)** | `src/routes/admin/reservation-series.route.ts` | Manajemen reservasi paket terapi berkala (misal paket 4x / 6x kunjungan), dengan fitur pause, resume, cancel, dan reschedule per sesi. |
+| **Log Mutasi Penugasan Bidan** | `reservation_staff_assignment_logs`, `src/routes/admin/reservation-dispatch.route.ts` | Pencatatan append-only riwayat pergantian penugasan bidan (alasan, aktor, waktu) untuk audit transparansi rotasi pasien. |
+| **Insentif Retensi Bidan (Staff Retention)** | `GET|POST|PUT /api/admin/staff-retention`, `/drilldown`, `/snapshot`, `/policy`, `RetentionTab.tsx` | Perhitungan otomatis retensi 60-hari pool 6-bulan bergulir, hysteresis tier (50/55/60), proteksi soft landing, drilldown audit pasien, dan pembekuan snapshot payroll. |
 
 ---
 
@@ -218,6 +220,7 @@ Sistem terhubung ke berbagai platform pihak ketiga untuk mendukung alur kerja kl
 | :--- | :--- | :--- |
 | **Google Contacts Sync** | `src/services/google-contacts.service.ts` | Sinkronisasi otomatis kontak pasien ke Google Contacts dengan format nama standar klinik (Nama - Kelurahan). |
 | **Google Sheets Sync** | `src/services/sheets/sheets-sync.service.ts` | Ekspor dua arah transaksi reservasi dan keuangan ke spreadsheet operasional secara real-time. |
+| **Skill Rekonsiliasi Treatment Harian** | `.agents/skills/reconcile-daily-treatment/SKILL.md` | Skill investigasi & audit 3 arah (WhatsApp Chat, PostgreSQL Database, Google Sheets) untuk mendeteksi gap jadwal, reservasi menggantung (`confirmed` vs `completed`), dan auto-sinkronisasi data treatment harian. |
 | **Google Drive Backup** | `src/integrations/google-drive/client.ts` | Penyimpanan file cadangan dump database mingguan langsung ke Google Drive klinik secara terenkripsi. |
 | **Google Maps & ORS** | `src/integrations/google-maps/distance-matrix.client.ts`, `src/integrations/ors/client.ts` | Menghitung jarak jalan raya akurat via OpenRouteService API & Google Distance Matrix dengan fallback rumus Haversine. |
 | **Telegram Bot Alert** | `src/services/telegram.service.ts` | Mengirimkan laporan harian, alert kesalahan sistem darurat, dan ringkasan tugas ke grup admin atau chat personal bidan. |
@@ -249,11 +252,11 @@ Pusat administrasi sistem di Admin Dashboard (`packages/admin-dashboard`) untuk 
 
 ## 11. Ringkasan Kuantitatif Seluruh Sistem
 
-- **Total Endpoint API**: **292 endpoint unik (343 pasangan method+path)** (tersebar di rute Admin, Staff, Webhook, Media, Tracking, Landing, dan Health).
-- **Total Model Database (Prisma Entities)**: **47 model Prisma** dan **16 enum** mencakup domain Customer, Percakapan, Reservasi, Staf, Konfigurasi AI, Log Audit, Integrasi Google/Meta, dan Analitik.
+- **Total Endpoint API**: **297 endpoint unik (348 pasangan method+path)** (tersebar di rute Admin, Staff, Webhook, Media, Tracking, Landing, dan Health).
+- **Total Model Database (Prisma Entities)**: **50 model Prisma** dan **16 enum** mencakup domain Customer, Percakapan, Reservasi, Staf, Insentif Retensi, Log Audit, Integrasi Google/Meta, dan Analitik.
 - **Total Background Crons & Workers**: **21 pekerja mandiri** dengan interval berkala mulai dari 2 menit hingga 1 minggu.
 - **Penyedia Integrasi WhatsApp**: Dual-mode terintegrasi (**WAHA container** + **Meta Cloud API resmi**).
-- **Dasbor Manajemen**: 1 Single Page Application (React 18 + Vite + Tailwind CSS) yang memuat modul Kalender Jadwal, Live Chat CS, Peta Sebaran Pasien, Analitik Meta Ads, Evaluasi AI, dan Konfigurasi Multi-Tenant.
+- **Dasbor Manajemen**: 1 Single Page Application (React 18 + Vite + Tailwind CSS) yang memuat modul Kalender Jadwal, Live Chat CS, Peta Sebaran Pasien, Analitik Meta Ads, Evaluasi AI, Insentif Retensi Bidan, dan Konfigurasi Multi-Tenant.
 
 ---
 
@@ -262,6 +265,8 @@ Pusat administrasi sistem di Admin Dashboard (`packages/admin-dashboard`) untuk 
 | Tanggal | Modul / Komponen | Perubahan / Penambahan Fitur Mikro | Referensi PR/Commit |
 | :--- | :--- | :--- | :--- |
 | **2026-11-04** | AI Copilot (Hardening V1-V12 & F13-F14) | Hardening fondasional V1–V12 & F13: pengurutan antrean follow-up ASC, perankingan deterministik katalog layanan, kontrak waktu WIB, integritas link live-chat (validConvIds), auto-continuation E2E, deteksi staf ambigu berbasis resolusi nama + candidates, bentrok interval durasi nyata, celah slot kosong (freeSlots) data-driven (getOperationalHours & settings tenant), hitung slot dari data utuh (take 200), status bayar kanonis (paymentStatus/unpaidCustomers), SSOT finansial resmi, dan anti-duplikasi tool presisi. | Copilot Hardening V1-V12 & F13-F14 |
+| **2026-11-04** | Operasional & Integrasi | Skill Rekonsiliasi Treatment Harian (`reconcile-daily-treatment`): SOP audit 3-arah menyeluruh (Chat WhatsApp WAHA/Livechat, PostgreSQL `reservations`/`children`, dan Google Sheets tab bulanan aktif) serta prosedur eksekusi aman via `reservationCoreService` & `sheetsSyncService`. | Skill Reconcile Treatment |
+| **2026-11-04** | Analitik & Insentif Staf (Modul 4) | Skema Insentif Retensi Bidan 60 Hari berbasis pool 6 bulan bergulir & benchmark 34,6%: kalkulator murni domain, hysteresis tier (50/55/60), soft landing gaji #4, 5 API endpoint (`/api/admin/staff-retention/*`), UI Tab Retensi di `FinancialAnalytics.tsx`, dan gate keras penugasan bidan (Gate 6.1 & 6.5) serta log pergantian staf (`ReservationStaffAssignmentLog`). | Plan Insentif Retensi 2026-11-04 |
 | **2026-11-03** | Geocoding & Alamat (Wilayah Perbatasan) | Disambiguasi centroid gazetteer di perbatasan (`GAZETTEER_BORDER_MARGIN_KM = 0.5`), write seam label overwrite guard di `updateCustomerLocation`, dan pemulihan data split-card Bunda Pamela (Grand Pakuwon Tandes). | Border Centroid Disambiguation |
 | **2026-11-03** | AI Copilot (Analitik & Streaming) | Upgrade model GLM-5.3-Flash (SumoPod), timeout attempt cap 90s, budget turn 300s, heartbeat SSE 15s, visual progress UI, 3 tool dinamis baru (`query_chat_stats`, `query_revenue`, `query_followups`), dan audit biaya LLM. | Copilot Latency Plan |
 | **2026-11-02** | Semua Modul (Fase 12) | Pembaruan kuantitatif hasil regenerasi kode (343 rute, 47 model Prisma, 21 workers), koreksi 20 path file, dan sinkronisasi laporan audit sistemik Fase 0–12. | Audit Fitur Sistem v2 |

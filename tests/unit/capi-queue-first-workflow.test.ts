@@ -244,6 +244,7 @@ describe('Meta CAPI Queue-First & Anti-Duplikat Workflow (Fase 5 Suite)', () => 
       tenant_id: DEFAULT_TENANT_ID,
       customer_id: 'cust-1',
       status: 'confirmed',
+      assigned_staff_id: 'staff-1',
       purchase_review_status: 'approved',
       purchase_event_sent_at: new Date('2026-10-14T08:00:00.000Z'),
       purchase_occurred_at: null,

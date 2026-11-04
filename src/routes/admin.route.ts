@@ -40,6 +40,7 @@ import { followUpAdminRoutes } from './admin/follow-up.subroute';
 import { googleIntegrationAdminRoutes } from './admin/google-integration.subroute';
 import { backupAdminRoutes } from './admin/backup.subroute';
 import { analyticsAdminRoutes } from './admin/analytics.subroute';
+import { staffRetentionAdminRoutes } from './admin/staff-retention.subroute';
 import { quickRepliesAdminRoutes } from './admin/quick-replies.subroute';
 import { aiHealthAdminRoutes } from './admin/ai-health.subroute';
 import type { StaffSessionWithStaff } from '../services/staff-auth.service';
@@ -256,7 +257,8 @@ export async function adminRoutes(fastify: FastifyInstance) {
       }
 
       // Prohibit staff modification (creating, deleting, patching staff accounts or resetting password)
-      if (urlPath.startsWith('/api/admin/staff') && request.method !== 'GET') {
+      // Note: Pastikan tidak memblokir /api/admin/staff-retention
+      if ((urlPath === '/api/admin/staff' || urlPath.startsWith('/api/admin/staff/')) && request.method !== 'GET') {
         const isSelfProfileUpdate = urlPath === '/api/admin/staff/me' || urlPath === '/api/admin/staff/profile';
         if (!isSelfProfileUpdate) {
           console.warn(`[RBAC GUARD] Blocked staff modification attempt by staff role '${staffRole}' on ${request.method} ${urlPath}`);
@@ -315,6 +317,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(googleIntegrationAdminRoutes);
   fastify.register(backupAdminRoutes);
   fastify.register(analyticsAdminRoutes);
+  fastify.register(staffRetentionAdminRoutes);
   fastify.register(quickRepliesAdminRoutes);
   fastify.register(aiHealthAdminRoutes);
 

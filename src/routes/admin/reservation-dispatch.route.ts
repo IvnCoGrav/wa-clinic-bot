@@ -56,7 +56,7 @@ function withPaymentEvaluation(r: any) {
  */
 type CompleteOutcome =
   | { ok: true; reservation: any; existing: any }
-  | { ok: false; reason: 'NOT_FOUND' | 'NOT_ELIGIBLE' | 'PREMATURE' };
+  | { ok: false; reason: 'NOT_FOUND' | 'NOT_ELIGIBLE' | 'PREMATURE' | 'STAFF_REQUIRED' };
 
 /**
  * Seam tunggal tandai-selesai reservasi (dipakai endpoint satuan DAN bulk).
@@ -75,6 +75,10 @@ async function completeReservationById(opts: {
   tenantId: string;
   strict: boolean;
   forceComplete?: boolean;
+  allowUnassignedStaff?: boolean;
+  actor?: string;
+  apiKey?: string;
+  ipAddress?: string;
 }): Promise<CompleteOutcome> {
   const existing = await prisma.reservation.findFirst({
     where: { id: opts.id, tenant_id: opts.tenantId },
@@ -88,6 +92,28 @@ async function completeReservationById(opts: {
 
   if (isPrematureCompletion(existing.booking_date) && !opts.forceComplete) {
     return { ok: false, reason: 'PREMATURE' };
+  }
+
+  // Gate keras Fase 6.1: Wajibkan bidan saat completed
+  if (!existing.assigned_staff_id) {
+    if (!opts.allowUnassignedStaff) {
+      return { ok: false, reason: 'STAFF_REQUIRED' };
+    }
+    // Phase 7 / H5: Audit trail eksplisit jika bypass allowUnassignedStaff digunakan
+    auditService.logAdminAction({
+      apiKey: opts.apiKey || 'internal',
+      adminIdentity: opts.actor || 'admin',
+      tenantId: opts.tenantId,
+      action: 'RESERVATION_UNASSIGNED_COMPLETION_BYPASS',
+      targetId: opts.id,
+      payload: {
+        reservationId: opts.id,
+        tenantId: opts.tenantId,
+        bookingDate: existing.booking_date,
+        reason: 'Penyelesaian kunjungan tanpa bidan diizinkan lewat bypass allowUnassignedStaff',
+      },
+      ipAddress: opts.ipAddress,
+    }).catch((err: any) => console.warn('[AUDIT] Failed to log unassigned bypass:', err.message));
   }
 
   const reservation = await prisma.reservation.update({
@@ -715,6 +741,10 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           tenantId,
           strict: false, // perilaku lama satuan: tanpa cek transisi
           forceComplete: (request.body as any)?.forceComplete,
+          allowUnassignedStaff: (request.body as any)?.allowUnassignedStaff,
+          actor: (request as any).adminIdentity,
+          apiKey: (request as any).adminKeyUsed,
+          ipAddress: request.ip,
         });
 
         if (!outcome.ok) {
@@ -727,7 +757,14 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
               error: 'Reservasi masa depan tidak dapat ditandai sebagai completed sebelum tanggal kunjungan tiba. Gunakan forceComplete: true bila ada persetujuan darurat.',
             });
           }
-          // NOT_FOUND ΓåÆ lempar agar jatuh ke fallback memori / 404 (perilaku lama).
+          if (outcome.reason === 'STAFF_REQUIRED') {
+            return reply.status(400).send({
+              success: false,
+              code: 'STAFF_ASSIGNMENT_REQUIRED',
+              error: 'Reservasi tidak dapat diselesaikan tanpa penugasan bidan (assigned_staff_id). Tugaskan bidan terlebih dahulu atau sertakan allowUnassignedStaff: true dengan catatan audit.',
+            });
+          }
+          // NOT_FOUND → lempar agar jatuh ke fallback memori / 404 (perilaku lama).
           throw new Error('Reservation not found');
         }
 
@@ -838,7 +875,16 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
       for (const id of ids) {
         let outcome: CompleteOutcome;
         try {
-          outcome = await completeReservationById({ id, tenantId, strict: true, forceComplete: false });
+          outcome = await completeReservationById({
+            id,
+            tenantId,
+            strict: true,
+            forceComplete: false,
+            allowUnassignedStaff: (request.body as any)?.allowUnassignedStaff,
+            actor: (request as any).adminIdentity,
+            apiKey: (request as any).adminKeyUsed,
+            ipAddress: request.ip,
+          });
         } catch (err: any) {
           // DB error mid-batch: laporkan sebagai SKIP agar sisa batch tetap diproses
           // (tidak menggantung di 503 setelah sebagian sukses).
@@ -1219,6 +1265,15 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           });
         }
 
+        // Gate keras 6.1: Wajibkan bidan saat completed
+        if (isBecomingCompleted && !targetStaff && !(body as any)?.allowUnassignedStaff) {
+          return reply.status(400).send({
+            success: false,
+            code: 'STAFF_ASSIGNMENT_REQUIRED',
+            error: 'Reservasi tidak dapat diselesaikan tanpa penugasan bidan (assigned_staff_id). Tugaskan bidan terlebih dahulu atau sertakan allowUnassignedStaff: true.',
+          });
+        }
+
         const updated = await prisma.reservation.update({
           where: { id },
           data: updateData,
@@ -1324,6 +1379,25 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
             }
           } catch (err: any) {
             console.warn('[Admin API] staffNotification import failed:', err.message);
+          }
+        }
+
+        // 6.3 Log pergantian penugasan bidan (ReservationStaffAssignmentLog)
+        if (staffChanged) {
+          try {
+            const p = prisma.reservationStaffAssignmentLog?.create({
+              data: {
+                tenant_id: tenantId,
+                reservation_id: id,
+                from_staff_id: existing.assigned_staff_id || null,
+                to_staff_id: assignedStaffId || null,
+                reason: (body as any)?.assignmentReason || (body as any)?.reason || 'admin_edit',
+                actor: (request as any).adminUser?.name || (request as any).staffName || (request as any).adminIdentity || 'admin',
+              },
+            });
+            void Promise.resolve(p).catch((err: any) => console.warn('[STAFF-ASSIGN-LOG] Failed to create log on edit:', err.message));
+          } catch (err: any) {
+            console.warn('[STAFF-ASSIGN-LOG] Exception initiating log on edit:', err.message);
           }
         }
 
@@ -1558,6 +1632,15 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
             success: false,
             code: 'PREMATURE_COMPLETION_BLOCKED',
             error: 'Reservasi masa depan tidak dapat ditandai sebagai completed sebelum tanggal kunjungan tiba. Gunakan forceComplete: true bila ada persetujuan darurat.',
+          });
+        }
+
+        // Gate keras 6.1: Wajibkan bidan saat completed
+        if (status === 'completed' && !existing.assigned_staff_id && !(request.body as any)?.allowUnassignedStaff) {
+          return reply.status(400).send({
+            success: false,
+            code: 'STAFF_ASSIGNMENT_REQUIRED',
+            error: 'Reservasi tidak dapat diselesaikan tanpa penugasan bidan (assigned_staff_id). Tugaskan bidan terlebih dahulu atau sertakan allowUnassignedStaff: true.',
           });
         }
 
@@ -1916,6 +1999,25 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
             },
           },
         });
+
+        // 6.3 Log pergantian penugasan bidan (ReservationStaffAssignmentLog)
+        if (existing?.assigned_staff_id !== (assigned_staff_id || null)) {
+          try {
+            const p = prisma.reservationStaffAssignmentLog?.create({
+              data: {
+                tenant_id: tenantId,
+                reservation_id: id,
+                from_staff_id: existing?.assigned_staff_id || null,
+                to_staff_id: assigned_staff_id || null,
+                reason: (request.body as any)?.assignmentReason || (request.body as any)?.reason || 'cs_dispatch',
+                actor: (request as any).adminUser?.name || (request as any).staffName || (request as any).adminIdentity || 'admin',
+              },
+            });
+            void Promise.resolve(p).catch((err: any) => console.warn('[STAFF-ASSIGN-LOG] Failed to create log on assign:', err.message));
+          } catch (err: any) {
+            console.warn('[STAFF-ASSIGN-LOG] Exception initiating log on assign:', err.message);
+          }
+        }
 
         if (assigned_staff_id) {
           const { staffNotificationService } = await import('../../services/staff-notification.service');
