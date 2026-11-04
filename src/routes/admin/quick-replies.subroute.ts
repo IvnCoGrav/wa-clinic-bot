@@ -17,9 +17,27 @@ export interface MemoryQuickReply {
 }
 
 export const memoryQuickReplies = new Map<string, MemoryQuickReply>();
+export const memoryInitializedTenants = new Set<string>();
+
+export function isDatabaseOfflineError(err: any): boolean {
+  if (!err) return false;
+  const msg = String(err?.message || '').toLowerCase();
+  const code = String(err?.code || '');
+  return (
+    msg.includes('database offline') ||
+    msg.includes('connection refused') ||
+    msg.includes('econnrefused') ||
+    code === 'P1000' ||
+    code === 'P1001' ||
+    code === 'P1002' ||
+    code === 'P1008' ||
+    code === 'P1017' ||
+    code === 'ECONNREFUSED'
+  );
+}
 
 /**
- * 25 Template Quick Reply Ongkir Cepat (/o1 s/d /o25)
+ * 25 Template Quick Reply Ongkir Cepat (/ongkir1 s/d /ongkir25)
  * Disesuaikan persis dengan tier ongkir resmi klinik (delivery_tiers_custom.json).
  */
 export const ONGKIR_QUICK_REPLIES: Array<{
@@ -35,28 +53,28 @@ export const ONGKIR_QUICK_REPLIES: Array<{
   let content = '';
 
   if (km <= 5) {
-    title = `Ongkir ${km} km (Gratis)`;
+    title = `Ongkir ${km} km  Gratis`;
     content = `Jika kami cek bunda, dilihat dari jaraknya kurang lebih ${km}km. Dari pricelist kami di 0-5 km layanannya GRATIS ongkir (Free Ongkir) tanpa tambahan biaya bunda ☺️ \nMau pilih treatment apa bund? 🤗`;
   } else if (km <= 7) {
-    title = `Ongkir ${km} km (Promo Rp 5.000)`;
+    title = `Ongkir ${km} km  Rp 5.000`;
     content = `Jika kami cek bunda, dilihat dari jaraknya kurang lebih ${km}km. Dari pricelist kami di 5-10 km ada tambahan ongkir 15.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi 5.000 saja bunda ☺️ \nMau pilih treatment apa bund? 🤗`;
   } else if (km <= 10) {
-    title = `Ongkir ${km} km (Promo Rp 10.000)`;
+    title = `Ongkir ${km} km  Rp 10.000`;
     content = `Jika kami cek bunda, dilihat dari jaraknya kurang lebih ${km}km. Dari pricelist kami di 5-10 km ada tambahan ongkir 15.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi 10.000 saja bunda ☺️ \nMau pilih treatment apa bund? 🤗`;
   } else if (km <= 15) {
-    title = `Ongkir ${km} km (Promo Rp 15.000)`;
+    title = `Ongkir ${km} km  Rp 15.000`;
     content = `Jika kami cek bunda, dilihat dari jaraknya kurang lebih ${km}km. Dari pricelist kami di 10-15 km ada tambahan ongkir 25.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi 15.000 saja bunda ☺️ \nMau pilih treatment apa bund? 🤗`;
   } else if (km <= 20) {
-    title = `Ongkir ${km} km (Promo Rp 20.000)`;
+    title = `Ongkir ${km} km  Rp 20.000`;
     content = `Jika kami cek bunda, dilihat dari jaraknya kurang lebih ${km}km. Dari pricelist kami di 15-20 km ada tambahan ongkir 25.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi 20.000 saja bunda ☺️ \nMau pilih treatment apa bund? 🤗`;
   } else {
     // 21 - 25 km
-    title = `Ongkir ${km} km (Promo Rp 25.000)`;
+    title = `Ongkir ${km} km  Rp 25.000`;
     content = `Jika kami cek bunda, dilihat dari jaraknya kurang lebih ${km}km. Dari pricelist kami di 20-25 km ada tambahan ongkir 35.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi 25.000 saja bunda ☺️ \nMau pilih treatment apa bund? 🤗`;
   }
 
   return {
-    shortcut: `o${km}`,
+    shortcut: `ongkir${km}`,
     title,
     content,
     category: 'Lokasi',
@@ -210,8 +228,29 @@ export function renderBankAccounts(paymentInfo: any): string {
  * Resolusi SSOT: gambar + teks rekening HANYA dari Tenant.settings.paymentInfo.
  * Template di DB tetap bertuliskan placeholder — bisa di-edit admin tanpa menyentuh data bank.
  */
-export async function resolveQuickReplyMedia(row: any, tenantId: string): Promise<any> {
+export async function resolveQuickReplyMedia(row: any, tenantId: string, cachedPaymentInfo?: any): Promise<any> {
   if (!row) return row;
+
+  let paymentInfo = cachedPaymentInfo;
+  const contentStr = typeof row.content === 'string' ? row.content : '';
+  const needsPaymentInfo =
+    row.media_type === 'QRIS' || contentStr.includes('{bank_accounts}') || contentStr.includes('{petunjuk}');
+
+  if (needsPaymentInfo && paymentInfo === undefined) {
+    try {
+      const { StaffReservationService } = await import('../../services/staff-reservation.service');
+      paymentInfo = await StaffReservationService.getPaymentInfo(tenantId);
+    } catch {
+      paymentInfo = null;
+    }
+  }
+
+  let finalContent = contentStr;
+  if (paymentInfo && (finalContent.includes('{bank_accounts}') || finalContent.includes('{petunjuk}'))) {
+    finalContent = finalContent
+      .replace(/\{bank_accounts\}/g, renderBankAccounts(paymentInfo))
+      .replace(/\{petunjuk\}/g, paymentInfo.instructions?.trim() || '-');
+  }
 
   if (row.media_type === 'PRICELIST') {
     try {
@@ -222,104 +261,61 @@ export async function resolveQuickReplyMedia(row: any, tenantId: string): Promis
       const deliverable = isDeliverableMediaRef(raw) ? raw : null;
       return {
         ...row,
+        content: contentStr,
+        resolved_content: finalContent,
         image_url: deliverable,
         mime_type: deliverable ? extToMime(deliverable) : undefined,
       };
     } catch {
-      return { ...row, image_url: null, mime_type: undefined };
+      return {
+        ...row,
+        content: contentStr,
+        resolved_content: finalContent,
+        image_url: null,
+        mime_type: undefined,
+      };
     }
   }
 
-  if (row.media_type !== 'QRIS') {
+  if (row.media_type === 'QRIS') {
+    const qrisUrl = paymentInfo?.qrisImageUrl ?? null;
     return {
       ...row,
-      mime_type: row.image_url ? extToMime(row.image_url) : undefined,
+      content: contentStr,
+      resolved_content: finalContent,
+      image_url: qrisUrl,
+      mime_type: extToMime(qrisUrl),
     };
   }
-  try {
-    const { StaffReservationService } = await import('../../services/staff-reservation.service');
-    const paymentInfo = await StaffReservationService.getPaymentInfo(tenantId);
-    return {
-      ...row,
-      image_url: paymentInfo.qrisImageUrl ?? null,
-      mime_type: extToMime(paymentInfo.qrisImageUrl),
-      content: (row.content || '')
-        .replace(/\{bank_accounts\}/g, renderBankAccounts(paymentInfo))
-        .replace(/\{petunjuk\}/g, paymentInfo.instructions?.trim() || '-'),
-    };
-  } catch (err) {
-    return {
-      ...row,
-      image_url: null,
-      mime_type: 'image/jpeg',
-      content: (row.content || '')
-        .replace(/\{bank_accounts\}/g, '-')
-        .replace(/\{petunjuk\}/g, '-'),
-    };
-  }
+
+  return {
+    ...row,
+    content: contentStr,
+    resolved_content: finalContent,
+    mime_type: row.image_url ? extToMime(row.image_url) : undefined,
+  };
 }
 
-export function interpolateQuickReply(
-  content: string,
-  vars: {
-    name?: string;
-    nama?: string;
-    nama_bunda?: string;
-    phone?: string;
-    hp?: string;
-    no_hp?: string;
-    kec?: string;
-    kecamatan?: string;
-    kota?: string;
-    alamat?: string;
-    address?: string;
-    clinic_name?: string;
-    admin_name?: string;
-    [key: string]: string | undefined;
+export function initMemoryDefaults(tenantId: string) {
+  if (memoryInitializedTenants.has(tenantId)) {
+    return;
   }
-): string {
-  let out = content;
-  const nameVal = vars.name || vars.nama || vars.nama_bunda || 'Bunda';
-  const phoneVal = vars.phone || vars.hp || vars.no_hp || '-';
-  const kecVal = vars.kec || vars.kecamatan || '';
-  const kotaVal = vars.kota || '';
-  const alamatVal = vars.alamat || vars.address || '';
-  const clinicNameVal = vars.clinic_name || 'Klinik Kami';
-  const adminNameVal = vars.admin_name || 'Admin';
-
-  out = out.replace(/\{(?:name|nama|nama_bunda)\}/gi, nameVal);
-  out = out.replace(/\{(?:phone|hp|no_hp)\}/gi, phoneVal);
-  out = out.replace(/\{(?:kec|kecamatan)\}/gi, kecVal);
-  out = out.replace(/\{kota\}/gi, kotaVal);
-  out = out.replace(/\{(?:alamat|address)\}/gi, alamatVal);
-  out = out.replace(/\{clinic_name\}/gi, clinicNameVal);
-  out = out.replace(/\{admin_name\}/gi, adminNameVal);
-  return out;
-}
-
-function initMemoryDefaults(tenantId: string) {
-  const existingShortcuts = new Set(
-    Array.from(memoryQuickReplies.values())
-      .filter((r) => r.tenant_id === tenantId)
-      .map((r) => r.shortcut)
-  );
+  memoryInitializedTenants.add(tenantId);
   for (const item of DEFAULT_QUICK_REPLIES) {
-    if (!existingShortcuts.has(item.shortcut)) {
-      const id = `mem_qr_${tenantId}_${item.shortcut}`;
-      const now = new Date();
-      memoryQuickReplies.set(id, {
-        id,
-        tenant_id: tenantId,
-        shortcut: item.shortcut,
-        title: item.title,
-        content: item.content,
-        category: item.category,
-        media_type: item.media_type || 'NONE',
-        image_url: item.image_url || null,
-        created_at: now,
-        updated_at: now,
-      });
-    }
+    const id = `mem_qr_${tenantId}_${item.shortcut}`;
+    const now = new Date();
+    memoryQuickReplies.set(id, {
+      id,
+      tenant_id: tenantId,
+      shortcut: item.shortcut,
+      title: item.title,
+      content: item.content,
+      category: item.category,
+      media_type: item.media_type || 'NONE',
+      image_url: item.image_url || null,
+      created_at: now,
+      updated_at: now,
+    });
   }
 }
 
@@ -336,62 +332,73 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
         orderBy: [{ category: 'asc' }, { shortcut: 'asc' }],
       });
       if (rows.length === 0) {
-        for (const item of DEFAULT_QUICK_REPLIES) {
-          await (prisma as any).quickReply.upsert({
-            where: { tenant_id_shortcut: { tenant_id: tenantId, shortcut: item.shortcut } },
-            update: {},
-            create: {
-              tenant_id: tenantId,
-              shortcut: item.shortcut,
-              title: item.title,
-              content: item.content,
-              category: item.category,
-              media_type: item.media_type || 'NONE',
-              image_url: item.image_url || null,
-            },
+        // Cek flag di tenant.settings untuk memastikan tenant baru belum pernah di-seed
+        let alreadySeeded = false;
+        try {
+          const tenant = await (prisma as any).tenant.findUnique({
+            where: { id: tenantId },
+            select: { settings: true },
+          });
+          alreadySeeded = Boolean((tenant?.settings as any)?.quickRepliesSeeded);
+        } catch {}
+
+        if (!alreadySeeded) {
+          for (const item of DEFAULT_QUICK_REPLIES) {
+            await (prisma as any).quickReply.upsert({
+              where: { tenant_id_shortcut: { tenant_id: tenantId, shortcut: item.shortcut } },
+              update: {},
+              create: {
+                tenant_id: tenantId,
+                shortcut: item.shortcut,
+                title: item.title,
+                content: item.content,
+                category: item.category,
+                media_type: item.media_type || 'NONE',
+                image_url: item.image_url || null,
+              },
+            });
+          }
+          try {
+            const currentTenant = await (prisma as any).tenant.findUnique({
+              where: { id: tenantId },
+              select: { settings: true },
+            });
+            const prevSettings = (currentTenant?.settings as any) || {};
+            await (prisma as any).tenant.update({
+              where: { id: tenantId },
+              data: { settings: { ...prevSettings, quickRepliesSeeded: true } },
+            });
+          } catch {}
+
+          rows = await (prisma as any).quickReply.findMany({
+            where: { tenant_id: tenantId },
+            orderBy: [{ category: 'asc' }, { shortcut: 'asc' }],
           });
         }
-        rows = await (prisma as any).quickReply.findMany({
-          where: { tenant_id: tenantId },
-          orderBy: [{ category: 'asc' }, { shortcut: 'asc' }],
-        });
       }
-      const present = new Set(rows.map((r: any) => r.shortcut));
-      let refetch = false;
-      for (const sc of ['qris', 'pricelist', ...ONGKIR_QUICK_REPLIES.map((o) => o.shortcut)]) {
-        if (!present.has(sc)) {
-          const item = DEFAULT_QUICK_REPLIES.find((d) => d.shortcut === sc);
-          if (!item) continue;
-          await (prisma as any).quickReply.upsert({
-            where: { tenant_id_shortcut: { tenant_id: tenantId, shortcut: item.shortcut } },
-            update: {},
-            create: {
-              tenant_id: tenantId,
-              shortcut: item.shortcut,
-              title: item.title,
-              content: item.content,
-              category: item.category,
-              media_type: item.media_type || 'NONE',
-              image_url: item.image_url || null,
-            },
-          });
-          refetch = true;
-        }
-      }
-      if (refetch) {
-        rows = await (prisma as any).quickReply.findMany({
-          where: { tenant_id: tenantId },
-          orderBy: [{ category: 'asc' }, { shortcut: 'asc' }],
-        });
-      }
-      const resolved = await Promise.all(rows.map((r: any) => resolveQuickReplyMedia(r, tenantId)));
+
+      // Ambil paymentInfo sekali per request untuk mencegah N+1 DB query
+      let paymentInfo: any = null;
+      try {
+        const { StaffReservationService } = await import('../../services/staff-reservation.service');
+        paymentInfo = await StaffReservationService.getPaymentInfo(tenantId);
+      } catch {}
+
+      const resolved = await Promise.all(rows.map((r: any) => resolveQuickReplyMedia(r, tenantId, paymentInfo)));
       return reply.status(200).send({ success: true, data: resolved });
     } catch (err: any) {
       initMemoryDefaults(tenantId);
       const list = Array.from(memoryQuickReplies.values())
         .filter((r) => r.tenant_id === tenantId)
         .sort((a, b) => (a.category || '').localeCompare(b.category || '') || a.shortcut.localeCompare(b.shortcut));
-      const resolvedList = await Promise.all(list.map((r: any) => resolveQuickReplyMedia(r, tenantId)));
+      
+      let paymentInfo: any = null;
+      try {
+        const { StaffReservationService } = await import('../../services/staff-reservation.service');
+        paymentInfo = await StaffReservationService.getPaymentInfo(tenantId);
+      } catch {}
+
+      const resolvedList = await Promise.all(list.map((r: any) => resolveQuickReplyMedia(r, tenantId, paymentInfo)));
       return reply.status(200).send({ success: true, data: resolvedList, note: 'Fallback in-memory mode' });
     }
   });
@@ -446,7 +453,14 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
         finalImageUrl = saved.hdUrl;
         finalMediaType = 'CUSTOM_IMAGE';
       } else if (finalMediaType === 'CUSTOM_IMAGE') {
-        finalImageUrl = image_url?.trim() || null;
+        const candidateUrl = image_url?.trim() || null;
+        if (!candidateUrl || !isDeliverableMediaRef(candidateUrl)) {
+          return reply.status(400).send({
+            success: false,
+            error: 'Lampiran gambar kustom wajib diunggah atau memiliki URL media yang valid.',
+          });
+        }
+        finalImageUrl = candidateUrl;
       } else {
         finalImageUrl = null;
       }
@@ -481,7 +495,15 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
         const resolved = await resolveQuickReplyMedia(created, tenantId);
         return reply.status(201).send({ success: true, data: resolved });
       } catch (err: any) {
-        // Check duplicate in memory
+        if (!isDatabaseOfflineError(err)) {
+          request.log.error({ err, tenantId, shortcut }, '[QUICK_REPLIES] Gagal membuat quick reply di database');
+          if (err?.code === 'P2002') {
+            return reply.status(409).send({ success: false, error: `Shortcut /${shortcut} sudah digunakan.` });
+          }
+          return reply.status(500).send({ success: false, error: 'Terjadi kesalahan basis data saat menyimpan balasan cepat.' });
+        }
+        // Fallback memori hanya saat database offline (mock unit test)
+        initMemoryDefaults(tenantId);
         const dup = Array.from(memoryQuickReplies.values()).find((r) => r.tenant_id === tenantId && r.shortcut === shortcut);
         if (dup) return reply.status(409).send({ success: false, error: `Shortcut /${shortcut} sudah digunakan.` });
         const id = `mem_qr_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -578,8 +600,22 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
           });
           updateData.image_url = saved.hdUrl;
           updateData.media_type = 'CUSTOM_IMAGE';
-        } else if (image_url !== undefined && updateData.media_type !== 'QRIS' && updateData.media_type !== 'PRICELIST' && updateData.media_type !== 'NONE') {
-          updateData.image_url = image_url?.trim() || null;
+        } else if (updateData.media_type === 'CUSTOM_IMAGE' || (updateData.media_type === undefined && existing.media_type === 'CUSTOM_IMAGE')) {
+          const isChangingToCustom = updateData.media_type === 'CUSTOM_IMAGE' && existing.media_type !== 'CUSTOM_IMAGE';
+          const isExplicitlyUpdatingUrl = image_url !== undefined;
+
+          // D-4: Hanya tolak jika beralih ke CUSTOM_IMAGE tanpa gambar, atau jika secara eksplisit mengirimkan URL gambar baru yang rusak.
+          // Jika hanya mengedit title/content pada baris eksisting CUSTOM_IMAGE, pertahankan existing.image_url.
+          if (isChangingToCustom || isExplicitlyUpdatingUrl) {
+            const candidateUrl = image_url !== undefined ? image_url?.trim() || null : existing.image_url;
+            if (!candidateUrl || !isDeliverableMediaRef(candidateUrl)) {
+              return reply.status(400).send({
+                success: false,
+                error: 'Lampiran gambar kustom wajib diunggah atau memiliki URL media yang valid.',
+              });
+            }
+            updateData.image_url = candidateUrl;
+          }
         }
 
         const updated = await (prisma as any).quickReply.update({ where: { id }, data: updateData });
@@ -595,6 +631,13 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
         const resolved = await resolveQuickReplyMedia(updated, tenantId);
         return reply.status(200).send({ success: true, data: resolved });
       } catch (err: any) {
+        if (!isDatabaseOfflineError(err)) {
+          request.log.error({ err, tenantId, id }, '[QUICK_REPLIES] Gagal memperbarui quick reply di database');
+          if (err?.code === 'P2002') {
+            return reply.status(409).send({ success: false, error: 'Shortcut sudah digunakan.' });
+          }
+          return reply.status(500).send({ success: false, error: 'Terjadi kesalahan basis data saat memperbarui balasan cepat.' });
+        }
         const mem = memoryQuickReplies.get(id);
         if (!mem || mem.tenant_id !== tenantId) {
           return reply.status(404).send({ success: false, error: 'Balasan cepat tidak ditemukan.' });
@@ -663,13 +706,17 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
         } as any);
         return reply.status(200).send({ success: true, message: `Balasan /${existing.shortcut} dihapus.` });
       } catch (err: any) {
+        if (!isDatabaseOfflineError(err)) {
+          request.log.error({ err, tenantId, id }, '[QUICK_REPLIES] Gagal menghapus quick reply di database');
+          return reply.status(500).send({ success: false, error: 'Gagal menghapus balasan cepat.' });
+        }
         if (memoryQuickReplies.has(id)) {
           const mem = memoryQuickReplies.get(id)!;
           if (mem.tenant_id !== tenantId) return reply.status(404).send({ success: false, error: 'Balasan cepat tidak ditemukan.' });
           memoryQuickReplies.delete(id);
           return reply.status(200).send({ success: true, message: `Balasan /${mem.shortcut} dihapus.`, note: 'Fallback in-memory mode' });
         }
-        return reply.status(500).send({ success: false, error: 'Gagal menghapus balasan cepat.' });
+        return reply.status(404).send({ success: false, error: 'Balasan cepat tidak ditemukan.' });
       }
     }
   );
@@ -705,12 +752,27 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
         where: { tenant_id: tenantId },
         orderBy: [{ category: 'asc' }, { shortcut: 'asc' }],
       });
-      const resolved = await Promise.all(rows.map((r: any) => resolveQuickReplyMedia(r, tenantId)));
+      let paymentInfo: any = null;
+      try {
+        const { StaffReservationService } = await import('../../services/staff-reservation.service');
+        paymentInfo = await StaffReservationService.getPaymentInfo(tenantId);
+      } catch {}
+      const resolved = await Promise.all(rows.map((r: any) => resolveQuickReplyMedia(r, tenantId, paymentInfo)));
       return reply.status(200).send({ success: true, data: resolved });
     } catch (err: any) {
+      if (!isDatabaseOfflineError(err)) {
+        request.log.error({ err, tenantId }, '[QUICK_REPLIES] Gagal seed defaults di database');
+        return reply.status(500).send({ success: false, error: 'Gagal melakukan seed template bawaan.' });
+      }
+      memoryInitializedTenants.delete(tenantId);
       initMemoryDefaults(tenantId);
       const list = Array.from(memoryQuickReplies.values()).filter((r) => r.tenant_id === tenantId);
-      const resolvedList = await Promise.all(list.map((r: any) => resolveQuickReplyMedia(r, tenantId)));
+      let paymentInfo: any = null;
+      try {
+        const { StaffReservationService } = await import('../../services/staff-reservation.service');
+        paymentInfo = await StaffReservationService.getPaymentInfo(tenantId);
+      } catch {}
+      const resolvedList = await Promise.all(list.map((r: any) => resolveQuickReplyMedia(r, tenantId, paymentInfo)));
       return reply.status(200).send({ success: true, data: resolvedList, note: 'Fallback in-memory mode' });
     }
   });

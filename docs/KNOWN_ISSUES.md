@@ -3,6 +3,23 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 305. [Quick Chat / Balasan Cepat Hardening] Penghapusan Zombie, Overwrite Deploy, dan Ghost Error CRUD (2026-11-04, RESOLVED)
+
+- **Status:** **RESOLVED** (Fase 1 s/d 5 + Verifikasi Hardening D-1 s/d D-7 Tuntas, 0 new runtime dependencies, 0 DB migration)
+- **Gejala:** Pengguna melaporkan error misterius pada fitur Balasan Cepat (Quick Chat): template bawaan yang dihapus hidup kembali sendiri (zombie seeding), editan admin tertimpa setiap kali deploy, phantom success saat simpan, tombol Minta Shareloc tidak mengisi composer, media QRIS/Pricelist menempel ke template teks, dan placeholder `{bank_accounts}` rusak permanen jika diedit.
+- **Akar Masalah:**
+  1. Operasi `GET` melakukan re-seed paksa jika ada template hilang, dan deploy runner mengeksekusi `seed-ongkir-quick-replies.js --commit` dengan klausul update.
+  2. Fallback memori digunakan sebagai penangkap error database umum tanpa memeriksa status koneksi fisik.
+  3. `resolveQuickReplyMedia` menimpa field `content` mentah sehingga placeholder `{bank_accounts}` di database terhapus saat template disimpan ulang dari form editor (D-1).
+  4. Komponen `LiveChatComposer` menimpa seluruh teks sebelum garis miring `/` dan memiliki event `onTouchEnd` yang membajak scrolling sentuh.
+- **Solusi Fondasional:**
+  1. **Pemisahan Kontrak SSOT Konten (D-1):** Endpoint `GET` mengembalikan `content` mentah (placeholder `{bank_accounts}` utuh) dan `resolved_content` (rekening siap kirim untuk Live Chat). Form editor di dashboard mengedit konten mentah, mencegah korupsi placeholder di database.
+  2. **Eliminasi Auto-Overwrite & Zombie Seeding (N-01, N-02):** Hapus auto-seed dari skrip deploy server. Auto-seed di `GET` hanya dijalankan sekali seumur hidup untuk tenant baru dengan proteksi flag `tenant.settings.quickRepliesSeeded`. Pemulihan manual lewat `POST /seed-defaults` diproteksi dialog konfirmasi bahaya di UI (D-3).
+  3. **Isolasi Database Offline & Longgarkan PUT Legacy (D-4, D-6):** `isDatabaseOfflineError` diperluas mencakup kode Prisma `P1000`, `P1001`, `P1002`, `P1008`, `P1017`. PUT template gambar kustom lama tidak lagi diblokir jika hanya mengubah judul/isi.
+  4. **Pembersihan Nama Presisi (D-5):** `cleanBundaName` memotong token prefix mandiri (`(?:\s+|$)`) sehingga nama kontak persis `"Bunda"` tidak menghasilkan sapaan dobel `"Bunda Bunda"`.
+  5. **UX Live Chat:** Tombol Shareloc memanggil `composerRef.current.setText`, penggantian token slash hanya memotong akhiran `/<token>`, `onTouchEnd` dihapus, dan media bawaan dibersihkan saat memilih template teks dengan pemisahan `origin: 'quick-reply' | 'upload'`.
+- **Bukti & Pengujian:** `tests/unit/quick-replies.test.ts` (20 test lulus, termasuk uji PostgreSQL anti-zombie dan pemisahan kontrak `resolved_content`) + `tests/integration/quick-replies-media.test.ts` (6 test lulus) = 26/26 test hijau. `npm run build` dan dashboard build lulus 100%.
+
 ## 304. [Buku Alamat] Drift JSON `saved_addresses` vs Tabel `customer_addresses` (A-002) (2026-11-03, RESOLVED)
 
 - **Status:** RESOLVED (2026-11-03) — rekonsiliasi deterministik + dry-run/commit di produksi.

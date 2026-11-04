@@ -35,7 +35,20 @@ async function main() {
   const params = parseArgs();
   console.log(`[SEED ONGKIR QR] Target Tenant: ${params.tenantId}`);
   console.log(`[SEED ONGKIR QR] Mode: ${params.commit ? 'COMMIT (Write to DB)' : 'DRY RUN (No changes)'}`);
-  console.log(`[SEED ONGKIR QR] Total Quick Replies: ${ONGKIR_QUICK_REPLIES.length} template (/o1 s/d /o25)`);
+  console.log(`[SEED ONGKIR QR] Total Quick Replies: ${ONGKIR_QUICK_REPLIES.length} template (/ongkir1 s/d /ongkir25)`);
+
+  if (params.commit) {
+    const legacyShortcuts = Array.from({ length: 25 }, (_, i) => `o${i + 1}`);
+    const deletedLegacy = await (prisma as any).quickReply.deleteMany({
+      where: {
+        tenant_id: params.tenantId,
+        shortcut: { in: legacyShortcuts },
+      },
+    });
+    if (deletedLegacy.count > 0) {
+      console.log(`[CLEANUP] Berhasil membersihkan ${deletedLegacy.count} shortcut lama (/o1 s/d /o25).`);
+    }
+  }
 
   let countSuccess = 0;
   for (const item of ONGKIR_QUICK_REPLIES) {

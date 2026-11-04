@@ -29,6 +29,7 @@ interface QuickReply {
   shortcut: string;
   title: string;
   content: string;
+  resolved_content?: string | null;
   category: string | null;
   media_type?: 'NONE' | 'CUSTOM_IMAGE' | 'QRIS' | 'PRICELIST' | null;
   image_url?: string | null;
@@ -46,21 +47,29 @@ const PLACEHOLDERS = [
   { tag: '{alamat}', label: 'Alamat / Kelurahan' },
   { tag: '{clinic_name}', label: 'Nama Klinik' },
   { tag: '{admin_name}', label: 'Nama Admin/Bidan' },
+  { tag: '{nama_anak}', label: 'Nama Anak / Bayi' },
+  { tag: '{usia_anak}', label: 'Usia Anak' },
+  { tag: '{layanan}', label: 'Nama Layanan/Treatment' },
+  { tag: '{tanggal}', label: 'Tanggal Booking' },
+  { tag: '{jam}', label: 'Jam Booking' },
   { tag: '{bank_accounts}', label: 'Daftar Rekening Bank' },
   { tag: '{petunjuk}', label: 'Petunjuk Pembayaran' },
 ];
 
-
-
-function interpolatePreview(content: string, pInfo?: any): string {
+function interpolatePreview(content: string, pInfo?: any, clinicName?: string): string {
   let text = content
     .replace(/\{(?:name|nama|nama_bunda)\}/gi, 'Bunda Retno')
     .replace(/\{(?:phone|hp|no_hp)\}/gi, '628123456789')
     .replace(/\{(?:kec|kecamatan)\}/gi, 'Rungkut')
     .replace(/\{kota\}/gi, 'Surabaya')
     .replace(/\{(?:alamat|address)\}/gi, 'Jl. Rungkut Asri Timur No. 12')
-    .replace(/\{clinic_name\}/gi, BRAND.businessName)
-    .replace(/\{admin_name\}/gi, 'Kak Sinta');
+    .replace(/\{clinic_name\}/gi, clinicName || BRAND.businessName)
+    .replace(/\{admin_name\}/gi, 'Kak Sinta')
+    .replace(/\{(?:nama_anak|child_name|nama_bayi)\}/gi, 'si Kecil Keenan')
+    .replace(/\{(?:usia_anak|usia_bayi|child_age|usia)\}/gi, '6 bulan')
+    .replace(/\{(?:layanan|treatment|treatment_name)\}/gi, 'Baby Massage & Spa')
+    .replace(/\{tanggal\}/gi, '12 November 2026')
+    .replace(/\{jam\}/gi, '10.00 WIB');
 
   if (pInfo?.bankAccounts && Array.isArray(pInfo.bankAccounts) && pInfo.bankAccounts.length > 0) {
     const bAcc = pInfo.bankAccounts.map((a: any) => `• *${a.bank}*: \`${a.accountNumber}\`\n  a.n ${a.accountName}`).join('\n');
@@ -93,6 +102,7 @@ export const QuickReplies: React.FC = () => {
     instructions?: string;
   } | null>(null);
   const [pricelistImageUrl, setPricelistImageUrl] = useState<string | null>(null);
+  const [clinicBrandName, setClinicBrandName] = useState<string>(BRAND.businessName);
 
   const [saving, setSaving] = useState(false);
   const [seeding, setSeeding] = useState(false);
@@ -127,10 +137,21 @@ export const QuickReplies: React.FC = () => {
     } catch (_) {}
   };
 
+  const loadBrandName = async () => {
+    try {
+      const res: any = await apiRequest('/api/admin/settings');
+      const brand = res?.brand ?? res?.data?.brand;
+      if (brand && typeof brand.businessName === 'string' && brand.businessName.trim()) {
+        setClinicBrandName(brand.businessName.trim());
+      }
+    } catch (_) {}
+  };
+
   useEffect(() => {
     load();
     loadPaymentInfo();
     loadPricelistImage();
+    loadBrandName();
   }, []);
 
   const filtered = useMemo(() => {
@@ -145,6 +166,18 @@ export const QuickReplies: React.FC = () => {
       );
     });
   }, [items, search, categoryFilter]);
+
+  const handleSelectMediaType = (type: 'NONE' | 'CUSTOM_IMAGE' | 'QRIS' | 'PRICELIST') => {
+    setFormMediaType(type);
+    if (type !== 'CUSTOM_IMAGE') {
+      setCustomImageFile(null);
+      setCustomImagePreview(null);
+    } else if (editing?.media_type !== 'CUSTOM_IMAGE') {
+      // N-05: Jangan bocorkan gambar template bawaan (QRIS/Pricelist) ke template Gambar Kustom
+      setCustomImageFile(null);
+      setCustomImagePreview(null);
+    }
+  };
 
   const openCreate = () => {
     setEditing(null);
@@ -164,9 +197,10 @@ export const QuickReplies: React.FC = () => {
     setFormTitle(it.title);
     setFormContent(it.content);
     setFormCategory(it.category || 'Umum');
-    setFormMediaType(it.media_type === 'PRICELIST' ? 'PRICELIST' : it.media_type === 'QRIS' ? 'QRIS' : it.media_type === 'CUSTOM_IMAGE' ? 'CUSTOM_IMAGE' : 'NONE');
+    const mType = it.media_type === 'PRICELIST' ? 'PRICELIST' : it.media_type === 'QRIS' ? 'QRIS' : it.media_type === 'CUSTOM_IMAGE' ? 'CUSTOM_IMAGE' : 'NONE';
+    setFormMediaType(mType);
     setCustomImageFile(null);
-    setCustomImagePreview(it.image_url || null);
+    setCustomImagePreview(mType === 'CUSTOM_IMAGE' ? (it.image_url || null) : null);
     setShowModal(true);
   };
 
@@ -174,6 +208,10 @@ export const QuickReplies: React.FC = () => {
     const shortcutRaw = formShortcut.trim().replace(/^\//, '').toLowerCase();
     if (!shortcutRaw || !formTitle.trim() || !formContent.trim()) {
       toast('Shortcut, judul, dan isi wajib diisi.', 'error');
+      return;
+    }
+    if (formMediaType === 'CUSTOM_IMAGE' && !customImageFile && !customImagePreview) {
+      toast('Pilih atau unggah berkas gambar kustom terlebih dahulu.', 'error');
       return;
     }
     setSaving(true);
@@ -242,6 +280,16 @@ export const QuickReplies: React.FC = () => {
   };
 
   const handleSeed = async () => {
+    const ok = await confirm({
+      title: 'Pulihkan Template Bawaan?',
+      message:
+        'Perhatian: Seluruh template bawaan klinik (ongkir /ongkir1 s/d /ongkir25, QRIS, dan Pricelist) yang pernah Anda edit akan dikembalikan ke teks standar. Tindakan ini tidak dapat dibatalkan. Lanjutkan?',
+      confirmText: 'Ya, Pulihkan Default',
+      cancelText: 'Batal',
+      danger: true,
+    });
+    if (!ok) return;
+
     setSeeding(true);
     try {
       await apiRequest('/api/admin/quick-replies/seed-defaults', { method: 'POST' });
@@ -384,7 +432,7 @@ export const QuickReplies: React.FC = () => {
                 <p className="text-xs text-ink-2 line-clamp-3 whitespace-pre-wrap leading-relaxed mt-1 bg-surface-2 border border-divider rounded-xl p-2.5">{it.content}</p>
               </div>
               <div className="pt-2 border-t border-divider dark:border-divider flex items-center gap-1.5 text-[11px] text-ink-3">
-                <Eye size={12} /> Preview: <span className="text-ink-2 line-clamp-1 truncate flex-1">{interpolatePreview(it.content, paymentInfo).slice(0, 70)}</span>
+                <Eye size={12} /> Preview: <span className="text-ink-2 line-clamp-1 truncate flex-1">{interpolatePreview(it.content, paymentInfo, clinicBrandName).slice(0, 70)}</span>
               </div>
             </div>
           ))}
@@ -428,7 +476,7 @@ export const QuickReplies: React.FC = () => {
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
                   <button
                     type="button"
-                    onClick={() => setFormMediaType('NONE')}
+                    onClick={() => handleSelectMediaType('NONE')}
                     className={`p-2.5 rounded-xl border text-left transition flex flex-col gap-1 ${
                       formMediaType === 'NONE'
                         ? 'bg-accent-soft border-accent text-accent'
@@ -444,7 +492,7 @@ export const QuickReplies: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => {
-                      setFormMediaType('QRIS');
+                      handleSelectMediaType('QRIS');
                       if (!formContent.trim()) {
                         setFormContent(
                           'Berikut barcode QRIS & rekening resmi kami ya Bunda {name} ✨\n\n' +
@@ -469,7 +517,7 @@ export const QuickReplies: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => {
-                      setFormMediaType('PRICELIST');
+                      handleSelectMediaType('PRICELIST');
                       if (!formContent.trim()) {
                         setFormContent(
                           'Berikut pricelist dan daftar treatment lengkap di {clinic_name} ya Bunda {name} ✨\n\n' +
@@ -491,7 +539,7 @@ export const QuickReplies: React.FC = () => {
 
                   <button
                     type="button"
-                    onClick={() => setFormMediaType('CUSTOM_IMAGE')}
+                    onClick={() => handleSelectMediaType('CUSTOM_IMAGE')}
                     className={`p-2.5 rounded-xl border text-left transition flex flex-col gap-1 ${
                       formMediaType === 'CUSTOM_IMAGE'
                         ? 'bg-accent-soft border-accent text-accent'
@@ -659,7 +707,7 @@ export const QuickReplies: React.FC = () => {
 
               <div className="bg-surface-2 border border-divider rounded-xl p-3">
                 <p className="text-[11px] font-bold text-accent flex items-center gap-1"><Eye size={12} /> Live Preview</p>
-                <p className="text-xs text-ink whitespace-pre-wrap leading-relaxed mt-1">{formContent ? interpolatePreview(formContent, paymentInfo) : <span className="text-ink-3 italic">Preview akan muncul di sini...</span> as any}</p>
+                <p className="text-xs text-ink whitespace-pre-wrap leading-relaxed mt-1">{formContent ? interpolatePreview(formContent, paymentInfo, clinicBrandName) : <span className="text-ink-3 italic">Preview akan muncul di sini...</span> as any}</p>
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-divider bg-surface-2">

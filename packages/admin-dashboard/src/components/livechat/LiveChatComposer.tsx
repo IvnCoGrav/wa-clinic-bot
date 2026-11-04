@@ -437,11 +437,33 @@ const LiveChatComposerInner = (
 
   const applyQuickReply = useCallback((qr: ComposerQuickReply) => {
     const interpolated = onApplyQuickReply?.(qr) ?? qr.content;
-    writeText(interpolated);
+    const current = readText();
+    // A-006: Ganti hanya token slash di akhir teks, pertahankan prefix yang sudah diketik sebelumnya
+    const match = current.match(/(?:^|\s)\/([a-z0-9_-]*)$/i);
+    let nextText = interpolated;
+    if (match && typeof match.index === 'number') {
+      const slashIndex = current.lastIndexOf('/');
+      const prefix = slashIndex >= 0 ? current.slice(0, slashIndex) : '';
+      nextText = prefix ? `${prefix}${interpolated}` : interpolated;
+    }
+    writeText(nextText);
     setQuickReplyFilter(null);
     setQuickReplyActiveIdx(0);
-    setTimeout(() => inputRef.current?.focus(), 50);
-  }, [onApplyQuickReply, writeText]);
+    setTimeout(() => {
+      const el = inputRef.current;
+      if (el) {
+        el.focus();
+        try {
+          const range = document.createRange();
+          const sel = window.getSelection();
+          range.selectNodeContents(el);
+          range.collapse(false);
+          sel?.removeAllRanges();
+          sel?.addRange(range);
+        } catch (_) {}
+      }
+    }, 50);
+  }, [onApplyQuickReply, readText, writeText]);
 
   const insertEmoji = useCallback((emoji: string) => {
     const el = inputRef.current;
@@ -612,7 +634,6 @@ const LiveChatComposerInner = (
                 key={qr.id}
                 type="button"
                 onClick={() => applyQuickReply(qr)}
-                onTouchEnd={(e) => { e.preventDefault(); applyQuickReply(qr); }}
                 onMouseEnter={() => setQuickReplyActiveIdx(idx)}
                 className={`w-full text-left px-3 py-3 sm:py-2 flex items-start gap-2.5 transition cursor-pointer active:scale-[0.99] min-h-[48px] sm:min-h-0 ${idx === quickReplyActiveIdx ? 'bg-accent-soft border-l-4 border-accent' : 'hover:bg-fill-1 border-l-4 border-transparent active:bg-accent-soft'}`}
               >

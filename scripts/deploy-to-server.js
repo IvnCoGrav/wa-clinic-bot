@@ -62,9 +62,6 @@ docker compose exec -T app npx prisma migrate deploy
 echo "--> Run Purchase Values Backfill & DB Sanitization..."
 docker compose exec -T app npx tsx src/scripts/sanitize-purchase-values.ts || true
 
-echo "--> Seed 25 Ongkir Quick Replies..."
-docker compose exec -T app node dist/scripts/seed-ongkir-quick-replies.js --commit || true
-
 echo "--> Check Docker Compose Status..."
 docker compose ps
 `;

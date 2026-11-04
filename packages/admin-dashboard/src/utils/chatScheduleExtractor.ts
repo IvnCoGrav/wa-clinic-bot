@@ -388,7 +388,7 @@ function escapeRegexLiteral(s: string): string {
  */
 export function cleanBundaName(name?: string | null, kecamatan?: string | null, kota?: string | null): string {
   if (!name) return '';
-  let clean = name.replace(/^(?:bunda|ibu|mama|moms?|ny\.?|mrs\.?|kak|kakak)\s+/i, '').trim();
+  let clean = name.replace(/^(?:bunda|ibu|mama|moms?|ny\.?|mrs\.?|kak|kakak)(?:\s+|$)/i, '').trim();
   let prev = '';
   while (prev !== clean) {
     prev = clean;

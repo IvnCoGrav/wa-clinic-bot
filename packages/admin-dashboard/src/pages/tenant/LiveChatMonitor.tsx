@@ -473,6 +473,7 @@ export const LiveChatMonitor: React.FC = () => {
     mimeType: string;
     fileName: string;
     mediaUrl?: string;
+    origin?: 'upload' | 'quick-reply';
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Fase A v3: DOM input composer dimiliki LiveChatComposer (isolasi render ketikan).
@@ -869,7 +870,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
   const interpolateQuickReplyContent = useCallback((content: string): string => {
     const rawName = customerDetailData?.name || selectedChat?.customerName || '';
-    const name = rawName && rawName.trim() !== '-' ? rawName.trim() : 'Bunda';
+    const cleaned = cleanBundaName(rawName);
+    const hasValidName = Boolean(cleaned && cleaned.trim() !== '-');
+    const name = hasValidName ? cleaned.trim() : '';
     const phone = customerDetailData?.phone || selectedChat?.customerPhone || '-';
     const kec = customerDetailData?.kecamatan || selectedChat?.kecamatan || '';
     const kota = customerDetailData?.kota || selectedChat?.kota || '';
@@ -881,7 +884,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     // Data anak/bayi + reservasi aktif untuk variabel jadwal.
     const children = (customerDetailData?.children || (selectedChat as any)?.children || []) as any[];
     const firstChild = Array.isArray(children) && children.length > 0 ? children[0] : null;
-    const childName = firstChild?.name || (selectedChat as any)?.child_name || '';
+    const childName = firstChild?.name || (selectedChat as any)?.child_name || 'si Kecil';
     const childAge = firstChild?.current_age || firstChild?.raw_age_text || firstChild?.age || firstChild?.ageText || '';
     // Reservasi aktif diturunkan lokal (memo active* dideklarasikan lebih bawah).
     const resList = (customerDetailData?.reservations || []) as any[];
@@ -904,15 +907,22 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       }
     }
 
-    return content
-      .replace(/\{(?:name|nama|nama_bunda)\}/gi, name)
+    let interpolated = content;
+    // A-009: Jika tidak ada nama spesifik, ganti sapaan Bunda {name} / {name} menjadi "Bunda" tanpa dobel "Bunda Bunda"
+    if (hasValidName) {
+      interpolated = interpolated.replace(/\{(?:name|nama|nama_bunda)\}/gi, name);
+    } else {
+      interpolated = interpolated.replace(/(?:bunda\s+)?\{(?:name|nama|nama_bunda)\}/gi, 'Bunda');
+    }
+
+    return interpolated
       .replace(/\{(?:phone|hp|no_hp)\}/gi, phone)
       .replace(/\{(?:kec|kecamatan)\}/gi, kec)
       .replace(/\{kota\}/gi, kota)
       .replace(/\{(?:alamat|address)\}/gi, alamat)
       .replace(/\{clinic_name\}/gi, clinicName)
       .replace(/\{admin_name\}/gi, adminName)
-      .replace(/\{(?:nama_anak|child_name|nama_bayi)\}/gi, childName)
+      .replace(/\{(?:nama_anak|child_name|nama_bayi)\}/gi, childName || 'si Kecil')
       .replace(/\{(?:usia_anak|usia_bayi|child_age|usia)\}/gi, childAge)
       .replace(/\{(?:layanan|treatment|treatment_name)\}/gi, treatmentName)
       .replace(/\{tanggal\}/gi, tanggal)
@@ -938,11 +948,13 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
   // Fase A v3: interpolasi milik monitor (butuh data customer); penyisipan DOM milik composer.
   const applyQuickReply = useCallback((qr: {
     content: string;
+    resolved_content?: string | null;
     media_type?: string | null;
     image_url?: string | null;
     mime_type?: string | null;
   }) => {
-    const interpolated = interpolateQuickReplyContent(qr.content);
+    const rawTemplate = qr.resolved_content || qr.content;
+    const interpolated = interpolateQuickReplyContent(rawTemplate);
     replyTextRef.current = interpolated;
     setHasReplyText(true);
     if (selectedIdRef.current) {
@@ -954,7 +966,10 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         mediaUrl: qr.image_url,
         mimeType: qr.mime_type || 'image/jpeg',
         fileName: qr.media_type === 'QRIS' ? 'qris-klinik' : qr.media_type === 'PRICELIST' ? 'pricelist-klinik' : 'lampiran-quick-chat',
+        origin: 'quick-reply',
       });
+    } else {
+      setSelectedImage((prev) => (prev?.origin === 'quick-reply' ? null : prev));
     }
     return interpolated;
   }, [interpolateQuickReplyContent]);
@@ -3982,9 +3997,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           // Fase 2.1: JANGAN kirim thumbB64 == imageB64 (dobel payload ~50%).
           // Backend membuat blur thumbnail server-side via sharp (media.service.ts).
           body.imageB64 = image.dataUrl;
-          body.mimeType = image.mimeType;
-          body.fileName = image.fileName;
         }
+        if (image.mimeType) body.mimeType = image.mimeType;
+        if (image.fileName) body.fileName = image.fileName;
       }
       if (dispatchOriginRef.current) {
         body.dispatchOrigin = true;
@@ -4038,6 +4053,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         dataUrl: prepared.dataUrl,
         mimeType: prepared.mimeType,
         fileName: prepared.fileName,
+        origin: 'upload',
       });
     } catch (err: any) {
       toast(err?.message || 'Gagal memproses foto.', 'error');
@@ -5303,7 +5319,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                               const content =
                                 qr?.content ||
                                 'Boleh bantu kirimkan titik lokasi (shareloc WhatsApp) atau seret pin peta di rumah Bunda {name} agar Bidan kami langsung sampai tepat di depan rumah dan tidak tersasar ya Bunda 🙏';
-                              applyQuickReply({ content });
+                              const text = applyQuickReply({ content });
+                              composerRef.current?.setText(text);
                               toast('Template shareloc dimasukkan ke composer balasan.', 'success');
                             }}
                             title={sharelocStatus.label || 'Minta Titik Presisi (Shareloc)'}

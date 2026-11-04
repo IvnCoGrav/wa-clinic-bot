@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { buildApp } from '../../src/app';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
-import { memoryQuickReplies } from '../../src/routes/admin/quick-replies.subroute';
+import { memoryQuickReplies, memoryInitializedTenants } from '../../src/routes/admin/quick-replies.subroute';
 
 describe('Integration: Quick Replies Media & BodyLimit Hardening', () => {
   const ADMIN_KEY = 'test_admin_key_quick_replies_int';
@@ -14,6 +14,7 @@ describe('Integration: Quick Replies Media & BodyLimit Hardening', () => {
 
   beforeEach(() => {
     memoryQuickReplies.clear();
+    memoryInitializedTenants.clear();
   });
 
   it('POST /api/admin/quick-replies accepts ~3MB base64 payload without 413 error', async () => {
@@ -139,5 +140,94 @@ describe('Integration: Quick Replies Media & BodyLimit Hardening', () => {
     const body = JSON.parse(res.body);
     expect(body.success).toBe(false);
     expect(body.error).toContain('media_type tidak valid');
+  });
+
+  it('POST with media_type CUSTOM_IMAGE rejects missing or non-deliverable image_url with 400', async () => {
+    // Missing image
+    const resNoImage = await app.inject({
+      method: 'POST',
+      url: '/api/admin/quick-replies',
+      headers: {
+        'x-api-key': ADMIN_KEY,
+        'x-tenant-id': DEFAULT_TENANT_ID,
+      },
+      payload: {
+        shortcut: 'custom_tanpa_gambar',
+        title: 'Tanpa Gambar',
+        content: 'Isi template',
+        category: 'Umum',
+        media_type: 'CUSTOM_IMAGE',
+      },
+    });
+
+    expect(resNoImage.statusCode).toBe(400);
+    const bodyNoImage = JSON.parse(resNoImage.body);
+    expect(bodyNoImage.success).toBe(false);
+    expect(bodyNoImage.error).toContain('Lampiran gambar kustom wajib diunggah atau memiliki URL media yang valid');
+
+    // Invalid non-deliverable URL
+    const resInvalidUrl = await app.inject({
+      method: 'POST',
+      url: '/api/admin/quick-replies',
+      headers: {
+        'x-api-key': ADMIN_KEY,
+        'x-tenant-id': DEFAULT_TENANT_ID,
+      },
+      payload: {
+        shortcut: 'custom_url_rusak',
+        title: 'URL Rusak',
+        content: 'Isi template',
+        category: 'Umum',
+        media_type: 'CUSTOM_IMAGE',
+        image_url: 'not-a-valid-url',
+      },
+    });
+
+    expect(resInvalidUrl.statusCode).toBe(400);
+    const bodyInvalid = JSON.parse(resInvalidUrl.body);
+    expect(bodyInvalid.success).toBe(false);
+    expect(bodyInvalid.error).toContain('Lampiran gambar kustom wajib diunggah atau memiliki URL media yang valid');
+  });
+
+  it('Anti-Zombie: deleting a shortcut permanently removes it and does not resurrect on subsequent GET', async () => {
+    // 1. Initial GET seeds memory defaults for this tenant
+    const getRes1 = await app.inject({
+      method: 'GET',
+      url: '/api/admin/quick-replies',
+      headers: {
+        'x-api-key': ADMIN_KEY,
+        'x-tenant-id': DEFAULT_TENANT_ID,
+      },
+    });
+    expect(getRes1.statusCode).toBe(200);
+    const body1 = JSON.parse(getRes1.body);
+    expect(body1.success).toBe(true);
+    const qrisItem = body1.data.find((it: any) => it.shortcut === 'qris');
+    expect(qrisItem).toBeDefined();
+
+    // 2. Delete the item
+    const delRes = await app.inject({
+      method: 'DELETE',
+      url: `/api/admin/quick-replies/${qrisItem.id}`,
+      headers: {
+        'x-api-key': ADMIN_KEY,
+        'x-tenant-id': DEFAULT_TENANT_ID,
+      },
+    });
+    expect(delRes.statusCode).toBe(200);
+
+    // 3. Second GET: qris MUST NOT be resurrected!
+    const getRes2 = await app.inject({
+      method: 'GET',
+      url: '/api/admin/quick-replies',
+      headers: {
+        'x-api-key': ADMIN_KEY,
+        'x-tenant-id': DEFAULT_TENANT_ID,
+      },
+    });
+    expect(getRes2.statusCode).toBe(200);
+    const body2 = JSON.parse(getRes2.body);
+    const qrisAfter = body2.data.find((it: any) => it.shortcut === 'qris');
+    expect(qrisAfter).toBeUndefined();
   });
 });
