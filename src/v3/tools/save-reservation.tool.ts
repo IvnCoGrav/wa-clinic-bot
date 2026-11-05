@@ -4,6 +4,7 @@ import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { parseIndonesianDate, applyBookingTimeToDate } from '../../utils/indonesian-date-parser';
 import { buildCustomerReservationIntake } from '../../services/reservation-intake';
 import { treatmentCatalogService } from '../../services/treatment-catalog.service';
+import { evaluateReservationEligibility } from '../../services/clinical-eligibility.service';
 import { isValidChildName } from '../../utils/name-sanitizer';
 import { GoalTracker } from '../state/goal-tracker';
 
@@ -81,6 +82,10 @@ export interface SaveReservationInput {
   savedAddress?: { id?: string; label?: string };
   /** Snapshot nominal ongkir (dari sesi) untuk kolom Reservation.delivery_fee. */
   deliveryFee?: number;
+  /** Fase 2: kontraindikasi demam dari state sesi (bukan argumen LLM). */
+  feverContraindication?: boolean;
+  /** Fase 2: skrining klinis sudah dikonfirmasi bidan/admin. */
+  screeningConfirmed?: boolean;
 }
 
 /**
@@ -543,6 +548,67 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
     const { subtotalPromo } = calcBookedSubtotal(allTreatments, tenantId);
     const purchaseValue = subtotalPromo > 0 ? subtotalPromo : null;
 
+    // Fase 2 — gerbang kelayakan klinis deterministik (tool contract).
+    // DILARANG menulis reservasi yang melanggar kontraindikasi/ambang gestasional,
+    // meskipun LLM memanggil tool. Satu layanan terblokir = seluruh reservasi ditolak.
+    const eligibility = evaluateReservationEligibility({
+      tenantId,
+      treatmentNames: allTreatments,
+      context: {
+        momStage: effectiveMomStage,
+        gestationalWeeks,
+        childAgeMonths: eldestChildAgeMonths ?? undefined,
+        feverContraindication: Boolean(input.feverContraindication),
+        screeningConfirmed: Boolean(input.screeningConfirmed),
+      },
+    });
+    if (!eligibility.allowed) {
+      console.warn(JSON.stringify({
+        event: 'V3_CLINICAL_ELIGIBILITY_BLOCKED',
+        tenantId,
+        code: eligibility.code,
+        treatments: allTreatments,
+        momStage: effectiveMomStage,
+        gestationalWeeks,
+        timestamp: new Date().toISOString(),
+      }));
+      return {
+        success: false,
+        summary: 'Layanan belum dapat dipesan sesuai hasil skrining klinis',
+        message: eligibility.message || 'Bidan kami perlu memeriksa kesesuaian layanan terlebih dahulu ya Bunda.',
+      };
+    }
+
+    // Fase 3 — blokir klinis WAJIB menghasilkan handoff durable ke manusia
+    // (bukan sekadar pesan). Best-effort: kegagalan eskalasi tidak mengubah
+    // keputusan keselamatan (booking tetap tidak disimpan).
+    if (
+      eligibility.code === 'CONTRAINDICATION'
+      || eligibility.code === 'STAGE_MISMATCH'
+      || eligibility.code === 'GESTATIONAL_MIN'
+      || eligibility.code === 'GESTATIONAL_MAX'
+    ) {
+      try {
+        const { executeEscalateHuman } = await import('./escalate-human.tool');
+        const phone = String(chatId || '').split('@')[0].replace(/\D/g, '');
+        await executeEscalateHuman({
+          conversationId: conversationId || '',
+          phone,
+          tenantId,
+          reason: `Blokir klinis ${eligibility.code}: ${allTreatments.join(' + ')}`,
+          severity: 'MANUAL_HANDLING',
+        });
+      } catch (err: any) {
+        console.warn(JSON.stringify({
+          event: 'V3_CLINICAL_ESCALATION_FAILED',
+          tenantId,
+          conversationId,
+          error: err?.message || String(err),
+          timestamp: new Date().toISOString(),
+        }));
+      }
+    }
+
     const result = await reservationCoreService.saveReservation({
       tenantId,
       customerId,
@@ -561,6 +627,10 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
       // resolver membaca Customer.ongkir bila null.
       deliveryFee: input.deliveryFee,
       customerAddressId: input.savedAddress?.id || null,
+      // Fase 1: state maternal eksplisit dari tool contract (fallback raw_text
+      // tetap berjalan di reservation-core bila argumen ini kosong).
+      gestationalWeeks: gestationalWeeks ?? undefined,
+      momStage: effectiveMomStage ?? undefined,
       // Stage 7 (R6): idempotency key stabil untuk retry webhook yang sama.
       // FIX 173f: sertakan JAM WIB (HH:MM) agar dua booking treatment sama pada
       // slot BERBEDA (pagi & sore) tidak saling menimpa via short-circuit

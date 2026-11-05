@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { parseAgeTextToMonths } from '../utils/age-calculator';
+import { canonicalMomStage } from './maternal-state.service';
 import { checkMedicalKeywords } from '../config/medical-keywords';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 // Taksonomi usia kanonis (modul murni, tanpa dependensi service → tanpa cycle).
@@ -80,6 +81,11 @@ export interface ClinicServiceItem {
   eligibleLifeStages?: string[]; // PREGNANT, PREGNANT_ATERM, POSTPARTUM, LACTATING, GENERAL, BABY, KIDS
   contraindications?: string[];
   requiresScreening?: boolean;
+  /** Fase 2: ambang gestasional (minggu). Null = tidak dibatasi. */
+  minGestationalWeeks?: number | null;
+  maxGestationalWeeks?: number | null;
+  /** Fase 2: keluarga klinis data-driven (INDUCTION/PERINEUM/PRENATAL/...). */
+  clinicalFamily?: string | null;
 }
 
 export const SERVICES_FILE = path.join(process.cwd(), 'services_custom.json');
@@ -119,6 +125,27 @@ export function inferEligibleLifeStages(item: {
     return ['GENERAL', 'PREGNANT', 'POSTPARTUM', 'LACTATING'];
   }
   return ['GENERAL'];
+}
+
+/**
+ * Fase 2 — inferensi keluarga klinis dari data katalog.
+ * HANYA fallback saat kolom DB `clinical_family` kosong (data lama).
+ * Prioritas kata kunci: induksi > perineum > prenatal > laktasi > postpartum.
+ */
+export function inferClinicalFamily(item: {
+  id?: string;
+  name?: string;
+  description?: string;
+  eligibleLifeStages?: string[];
+}): string | null {
+  const text = `${item.id || ''} ${item.name || ''} ${item.description || ''}`.toLowerCase();
+  if (text.includes('induksi')) return 'INDUCTION';
+  if (text.includes('perineum')) return 'PERINEUM';
+  if (text.includes('prenatal') || text.includes('pregnant') || text.includes('hamil')) return 'PRENATAL';
+  if (text.includes('laktasi') || text.includes('oksitosin') || text.includes('breast care')) return 'LACTATION';
+  if (text.includes('postpartum') || text.includes('nifas')) return 'POSTPARTUM';
+  if ((item.eligibleLifeStages || []).includes('GENERAL')) return 'GENERAL';
+  return null;
 }
 
 /**
@@ -996,6 +1023,9 @@ export async function loadServicesFromDb(tenantId: string): Promise<void> {
           eligibleLifeStages: itemStages,
           contraindications: (s as any).contraindications || [],
           requiresScreening: (s as any).requires_screening ?? false,
+          minGestationalWeeks: (s as any).min_gestational_weeks ?? null,
+          maxGestationalWeeks: (s as any).max_gestational_weeks ?? null,
+          clinicalFamily: (s as any).clinical_family ?? null,
         });
       });
       return;
@@ -1066,6 +1096,9 @@ export async function saveServicesToDb(tenantId: string): Promise<boolean> {
           eligible_life_stages: s.eligibleLifeStages || [],
           contraindications: s.contraindications || [],
           requires_screening: s.requiresScreening ?? false,
+          min_gestational_weeks: s.minGestationalWeeks ?? null,
+          max_gestational_weeks: s.maxGestationalWeeks ?? null,
+          clinical_family: s.clinicalFamily ?? inferClinicalFamily(s),
         };
     });
 
@@ -1819,7 +1852,8 @@ export class TreatmentCatalogService {
     // MomStage UNKNOWN -> layanan stage-spesifik (Prenatal/Induksi/Laktasi) diblokir
     // dari rekomendasi langsung. Jika keluhan paling cocok dengan layanan yang diblokir,
     // return dengan askStage: true (deterministik).
-    const effectiveMomStage = momStage || (category === 'MOMS' ? 'UNKNOWN' : undefined);
+    const effectiveMomStage = canonicalMomStage(momStage)
+      ?? (momStage || (category === 'MOMS' ? 'UNKNOWN' : undefined));
     const stageSpecificBlocked: ClinicServiceItem[] = [];
 
     if (effectiveMomStage) {

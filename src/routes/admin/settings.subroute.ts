@@ -1883,6 +1883,13 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       promoPrice: Number(serviceData.promoPrice) || 0,
       description: serviceData.description || '',
       isActive: serviceData.isActive ?? true,
+      // Fase 3 — metadata kelayakan klinis (tenant-aware, editable admin).
+      eligibleLifeStages: Array.isArray(serviceData.eligibleLifeStages) ? serviceData.eligibleLifeStages : [],
+      contraindications: Array.isArray(serviceData.contraindications) ? serviceData.contraindications : [],
+      requiresScreening: serviceData.requiresScreening === true,
+      minGestationalWeeks: serviceData.minGestationalWeeks == null ? null : Number(serviceData.minGestationalWeeks),
+      maxGestationalWeeks: serviceData.maxGestationalWeeks == null ? null : Number(serviceData.maxGestationalWeeks),
+      clinicalFamily: serviceData.clinicalFamily || null,
     });
 
     await auditService.logAdminAction({
@@ -1951,6 +1958,17 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         durationMinutes: Number(merged.durationMinutes),
         originalPrice: Number(merged.originalPrice),
         promoPrice: Number(merged.promoPrice),
+        // Fase 3 — anti-wipe: field tidak dikirim = pertahankan nilai lama.
+        eligibleLifeStages: Array.isArray(merged.eligibleLifeStages)
+          ? merged.eligibleLifeStages
+          : (existing.eligibleLifeStages || []),
+        contraindications: Array.isArray(merged.contraindications)
+          ? merged.contraindications
+          : (existing.contraindications || []),
+        requiresScreening: merged.requiresScreening === true,
+        minGestationalWeeks: merged.minGestationalWeeks == null ? null : Number(merged.minGestationalWeeks),
+        maxGestationalWeeks: merged.maxGestationalWeeks == null ? null : Number(merged.maxGestationalWeeks),
+        clinicalFamily: merged.clinicalFamily || null,
       });
 
       await auditService.logAdminAction({

@@ -124,6 +124,47 @@ describe('Live Chat Admin Endpoints (monitor & balas)', () => {
     expect(callCaption).toBe('Berikut lampiran QRIS resmi kami');
   });
 
+  it('payload media hasil reply memakai thumbUrl RELATIF (bukan path absolut Windows)', async () => {
+    const fake = {
+      providerType: 'WAHA',
+      sendImageMessage: vi.fn().mockResolvedValue({ success: true, messageId: 'waid_img_thumb', provider: 'WAHA' }),
+    } as any;
+    createTestGateway(fake, DEFAULT_TENANT_ID);
+
+    const { mediaService } = await import('../../src/services/media.service');
+    const saved = await mediaService.saveOutboundMedia({
+      tenantId: DEFAULT_TENANT_ID,
+      imageB64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      mimeType: 'image/png',
+      fileName: 'pricelist-klinik.png',
+    });
+    expect(saved.thumbUrl).toBeTruthy();
+
+    const phone = `628512${Date.now().toString().slice(-7)}`;
+    const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Thumb Test', DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/admin/live-chat/conversations/${conversation.id}/reply`,
+      headers: { 'x-api-key': ADMIN_KEY },
+      payload: { mediaUrl: saved.hdUrl, mimeType: 'image/png', fileName: 'pricelist-klinik.png', adminName: 'Admin' },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const msgRes = await app.inject({
+      method: 'GET',
+      url: `/api/admin/live-chat/conversations/${conversation.id}/messages`,
+      headers: { 'x-api-key': ADMIN_KEY },
+    });
+    const msgs = JSON.parse(msgRes.body).data;
+    const outbound = msgs.find((m: any) => m.direction === 'OUTBOUND');
+    const media = outbound?.payload_raw?.media || outbound?.payloadRaw?.media;
+    expect(media?.thumbUrl).toBeTruthy();
+    expect(media.thumbUrl.startsWith('/media/')).toBe(true);
+    expect(media.thumbUrl).not.toMatch(/^[A-Za-z]:\\/); // bukan C:\...
+  });
+
   it('GET /api/admin/live-chat/conversations & :id/messages menampilkan thread dengan sender ADMIN', async () => {
     const phone = `628600${Date.now().toString().slice(-7)}`;
     const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Thread', DEFAULT_TENANT_ID);

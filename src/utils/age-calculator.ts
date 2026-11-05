@@ -46,6 +46,8 @@ export interface MomGestationalInfo {
   isPregnant: boolean;
   currentWeeks?: number;
   stageLabel: string;
+  /** Fase 1: label HPL opsional dari kolom terstruktur `hpl_date`. */
+  hplLabel?: string;
 }
 
 const YEAR_DAYS = 365.25;
@@ -388,11 +390,35 @@ export function resolveMomGestationalInfo(params: {
   treatmentCategory?: string | null;
   registeredAt?: Date | null;
   today?: Date;
+  /** Fase 1: kolom terstruktur (diutamakan atas teks). */
+  gestationalWeeks?: number | null;
+  momStage?: string | null;
+  hplDate?: Date | null;
 }): MomGestationalInfo {
   const { text, treatmentCategory, registeredAt, today = new Date() } = params;
   const cat = String(treatmentCategory || '').toUpperCase();
   const isMomContext = cat === 'MOMS' || cat === 'BOTH' || isGestationalText(text);
   if (!isMomContext) return { isPregnant: false, stageLabel: '' };
+
+  const hplLabel = params.hplDate && !isNaN(new Date(params.hplDate).getTime())
+    ? ` • HPL ${new Date(params.hplDate).toISOString().slice(0, 10)}`
+    : '';
+
+  // Fase 1: prioritaskan state terstruktur; teks hanya fallback data lama.
+  if (typeof params.gestationalWeeks === 'number' && params.gestationalWeeks > 0) {
+    const anchor = registeredAt || today;
+    const base = computeGestationalAge({
+      registeredAt: anchor,
+      gestationalWeeksAtReg: params.gestationalWeeks,
+      today,
+    });
+    return { ...base, stageLabel: `${base.stageLabel}${hplLabel}` };
+  }
+
+  const stage = String(params.momStage || '').toUpperCase();
+  if (stage === 'POSTPARTUM') return { isPregnant: false, stageLabel: 'Pasca Salin / Nifas' };
+  if (stage === 'LACTATING' || stage === 'BREASTFEEDING') return { isPregnant: false, stageLabel: 'Ibu Menyusui / Laktasi' };
+  if (stage === 'GENERAL') return { isPregnant: false, stageLabel: 'Relaksasi Umum' };
 
   const weeks = extractGestationalWeeks(text);
   if (weeks != null) {

@@ -4,6 +4,31 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-05 - Fix: Flash "Memuat..." Gambar Live Chat & Path Thumbnail Absolut (Pricelist Quick Reply)
+
+- **Masalah:** setiap mengirim gambar/pricelist dari Live Chat (terutama quick reply `/pricelist`), bubble menampilkan overlay "Memuat..." jauh lebih lama dari seharusnya. Investigasi kode menemukan `src/services/live-chat.service.ts` menyimpan **path absolut filesystem** (`C:\...\storage\media\...`) sebagai `payload_raw.media.url`/`thumbUrl`; browser gagal memuatnya lalu jatuh ke file HD. Fallback thumbnail WABA juga tidak pernah aktif, dan log pricelist bot tidak menyertakan `thumbUrl`.
+- **Perubahan fondasional:**
+  1. `src/services/media.service.ts`: seam baru `resolveThumbRelativeUrl()` (lookup murni, **tanpa sharp**) mengembalikan URL relatif `/media/..._thumb.jpg`; `resolveThumbFallback()` direfaktor lewat helper privat yang sama (perilaku lama dipertahankan); cabang WABA `resolveOutboundForProvider()` diperbaiki.
+  2. `src/services/pricelist-config.service.ts`: `getPricelistImageAssets()` + `toPricelistDisplayUrl()` sebagai kontrak aset pricelist tunggal (**tanpa migrasi DB**).
+  3. `src/services/live-chat.service.ts` & `src/state-machine/machine.ts`: menyimpan `thumbUrl` relatif pada payload media (pricelist bot ikut memakai thumbnail 640px).
+  4. Dashboard: `preloadChatImage()` + `optimisticMessageIdsRef` — pra-muat thumbnail sebelum bubble optimis (blob lokal) diganti versi server, sehingga overlay "Memuat..." tidak muncul.
+- **Prinsip resource:** thumbnail tetap dibuat **sekali saat upload**; jalur kirim hanya melakukan `fs.existsSync` (tanpa sharp, tanpa file baru).
+- **Verifikasi:** test baru `media-thumb-relative-url` (5) + `pricelist-image-assets` (5) + kasus integrasi `live-chat-reply` (`thumbUrl` relatif); regresi media/live-chat/pricelist hijau; `npm run build` & dashboard `npm run build` exit 0. Kegagalan full suite (11 test di 6 file: katalog/jadwal/parser/agent) terbukti **pre-existing** via revert-and-rerun (stash 4 file sumber → 11 failure identik).
+- **Limitasi tersisa:** pricelist berupa URL eksternal `http(s)` tidak punya thumbnail lokal (memakai URL asli). Dicatat di `KNOWN_ISSUES.md` #308.
+
+#### 2026-11-05 - Feat: Maternal Treatment Hardening (State Kehamilan Terstruktur, Gerbang Klinis Deterministik, Follow-Up Sadar Fase)
+
+- **Latar Belakang:** audit menemukan layanan pregnant/Moms sudah ada di katalog, tetapi usia kehamilan hanya tersimpan sebagai teks `raw_text`, `contraindications`/`requires_screening` tidak pernah ditegakkan, ambang 34/37 minggu masih hardcode, dan follow-up `NO_PURCHASE` masih bernarasi bayi untuk prospek ibu.
+- **Perubahan Fondasional (5 fase):**
+  1. **Fase 1 — State maternal terstruktur:** kolom `reservations.gestational_weeks`, `mom_stage`, `hpl_date`; modul murni `src/services/maternal-state.service.ts` (kanonisasi `BREASTFEEDING`→`LACTATING`, ekstraksi label-first, HPL); seam kanonis `reservationCoreService.saveReservation` menulis state untuk semua saluran (bot/webhook/admin); skrip backfill `src/scripts/backfill-maternal-state.ts`.
+  2. **Fase 2 — Mesin kelayakan klinis:** `src/services/clinical-eligibility.service.ts` (ELIGIBLE/BLOCKED/NEEDS_SCREENING) dipakai tool katalog & gerbang `save_reservation`; ambang gestasional + `clinical_family` pindah ke tabel `clinic_services` (menutup KNOWN_ISSUES #218); bundle diwarisi kelayakan anak-anaknya.
+  3. **Fase 3 — Skrining & operasional:** blokir klinis memicu handoff durable ke Bidan; kartu bidan menampilkan usia kehamilan/HPL dari state; API + UI katalog admin dapat mengatur `eligible_life_stages`, `contraindications`, `requires_screening`, ambang minggu, dan keluarga klinis.
+  4. **Fase 4 — Follow-up sadar fase:** kolom `follow_ups.mom_stage`; template `NEXT_TREATMENT_MOMS_*` memakai narasi hamil/nifas/menyusui; keluarga baru `NO_PURCHASE_MOMS_1..3` + mapping WABA `followup_no_purchase_moms_*`; kontrak placeholder MOMS diperluas.
+  5. **Fase 5 — Konsistensi:** tahap ibu dikanoniskan sebelum filter katalog (menutup celah `BREASTFEEDING` lintas kategori); referensi layanan nonaktif `moms-relaksasi` dihapus.
+- **Keputusan produk:** induksi/perineum di bawah ambang kini **diblokir + dieskalasi** (bukan hanya disaring dari katalog). Pengingat HPL ditunda dan dicatat di `KNOWN_ISSUES.md`. Rekonsiliasi harga katalog menunggu keputusan pemilik klinik.
+- **Verifikasi:** `npm run typecheck` bersih; test baru `maternal-state`, `reservation-maternal-state`, `clinical-eligibility`, `save-reservation-clinical-gate`, `follow-up-maternal-stage`; regresi katalog/booking/follow-up hijau. Kegagalan `v3-conversation-matrix` CM-07/CM-08 & `catalog-seed-drift` terbukti pre-existing (KNOWN_ISSUES #273/#148).
+- **Migrasi:** `20261105120000_add_maternal_state`, `20261105121000_add_clinical_service_thresholds`, `20261105122000_add_followup_mom_stage` (wajib `npx prisma migrate deploy` saat DB tersedia).
+
 #### 2026-11-04 - Feature: Skill Rekonsiliasi & Audit Treatment Harian (`reconcile-daily-treatment`)
 
 - **Latar Belakang & Masalah**:

@@ -459,6 +459,13 @@ export class ToolExecutionPipeline {
         }
       }
 
+      // Fase 2 — fakta klinis deterministik untuk gerbang booking.
+      if (fnName === 'save_reservation') {
+        if (fnArgs.feverContraindication == null && (session as any).feverContraindication === true) {
+          fnArgs.feverContraindication = true;
+        }
+      }
+
       // Fase 4' (Turn 4: presisi usia & durasi): bila LLM memanggil
       // get_catalog_and_price tanpa usia anak padahal profil sesi sudah tahu
       // (mis. balita 2 tahun), suntikkan agar filter tier usia + peringkat

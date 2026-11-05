@@ -20,6 +20,7 @@ import {
   isMomsCategory,
 } from '../utils/treatment-category';
 import { findForbiddenPlaceholders, findUnresolvedPlaceholders } from '../utils/followup-placeholder';
+import { canonicalMomStage } from './maternal-state.service';
 
 // Parameter batch/throttle follow-up â€” env-drivable (Fase 4.3 docs/HARDCODED_FIX_PLAN.md)
 const FOLLOWUP_BATCH_LIMIT = parsePositiveInt(process.env.FOLLOWUP_BATCH_LIMIT, 20);
@@ -432,6 +433,22 @@ export class FollowUpService {
 
     const stages = [1, 2, 3];
       const days = [3, 7, 14];
+
+      // Fase 4: audiens & tahap ibu dari state sesi terakhir (best-effort,
+      // offline-safe). Tanpa state → perilaku lama (template anak) agar tidak
+      // menebak audiens secara sepihak.
+      let audience: 'MOMS' | null = null;
+      let momStage: string | null = null;
+      try {
+        const conv = await prisma.conversation?.findFirst?.({
+          where: { customer_id: customerId, tenant_id: tenantId },
+          orderBy: { last_message_at: 'desc' },
+          select: { session_data: true },
+        });
+        const sd: any = (conv as any)?.session_data || {};
+        if (sd.targetAudience === 'MOMS' || sd.momProfile?.stage) audience = 'MOMS';
+        momStage = canonicalMomStage(sd.momProfile?.stage);
+      } catch {}
       
       await Promise.all(
         stages.map(async (stage, idx) => {
@@ -446,6 +463,8 @@ export class FollowUpService {
                 customer_id: customerId,
                 type: 'NO_PURCHASE',
                 stage,
+                ...(audience === 'MOMS' ? { treatment_category: 'MOMS' as any } : {}),
+                ...(momStage ? { mom_stage: momStage } : {}),
                 scheduled_at: scheduledAt,
                 status: 'QUEUED',
               },
@@ -937,6 +956,18 @@ export class FollowUpService {
       // Nilai tak dikenal -> null (jangan ditebak).
       const normalizedCategory = normalizeTreatmentCategory(treatmentCategory);
 
+      // Fase 4: tahap ibu ikut disimpan agar narasi follow-up sesuai fase.
+      let reservationMomStage: string | null = null;
+      if (reservationId) {
+        try {
+          const row = await prisma.reservation?.findUnique?.({
+            where: { id: reservationId },
+            select: { mom_stage: true },
+          });
+          reservationMomStage = (row as any)?.mom_stage ?? null;
+        } catch {}
+      }
+
       let created = 0;
       let skippedPast = 0;
       let skippedExists = 0;
@@ -1049,6 +1080,7 @@ export class FollowUpService {
               customer_id: customerId,
               ...(reservationId ? { reservation_id: reservationId } : {}),
               ...(normalizedCategory ? { treatment_category: normalizedCategory } : {}),
+              ...(reservationMomStage ? { mom_stage: reservationMomStage } : {}),
               type: 'NEXT_TREATMENT',
               stage,
               scheduled_at: scheduledAt,
@@ -2065,7 +2097,13 @@ export class FollowUpService {
           }
         } catch (_) {}
 
-        templateType = `NO_PURCHASE_${Math.min(3, Math.max(1, fu.stage))}` as any;
+        // Fase 4: prospek IBU mendapat keluarga MOMS (tanpa narasi bayi).
+        const isMomsNoPurchase = isMomsCategory(
+          (fu as any).treatment_category ?? (fu as any).reservation?.treatment_category
+        );
+        templateType = (isMomsNoPurchase
+          ? `NO_PURCHASE_MOMS_${Math.min(3, Math.max(1, fu.stage))}`
+          : `NO_PURCHASE_${Math.min(3, Math.max(1, fu.stage))}`) as any;
       } else if (fu.type === 'REMINDER_H1') {
         templateType = 'REMINDER_H1';
       } else if (fu.type === 'REVIEW_H1_BABY') {
@@ -2147,6 +2185,7 @@ export class FollowUpService {
             const { text } = getRollingFollowUpMessage(templateType, {
               name: cleanName,
               babyName,
+              momStage: (fu as any).mom_stage ?? null,
               time: timeStr,
               index: rollingVariant - 1,
             });
@@ -2157,6 +2196,7 @@ export class FollowUpService {
           const { text } = getRollingFollowUpMessage(templateType, {
             name: cleanName,
             babyName,
+            momStage: (fu as any).mom_stage ?? null,
             time: timeStr,
             index: rollingVariant - 1,
           });
@@ -2386,6 +2426,7 @@ export class FollowUpService {
             const { text } = getRollingFollowUpMessage(templateType as any, {
               name,
               babyName: babyName || '',
+              momStage: (fu as any).mom_stage ?? null,
               time: timeStr || '',
               index: Math.max(0, variant - 1),
             });

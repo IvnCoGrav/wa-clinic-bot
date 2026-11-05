@@ -48,6 +48,12 @@ export interface ClinicServiceItem {
   isActive: boolean;
   totalSessions?: number;
   sessionScheduleType?: string;
+  eligibleLifeStages?: string[];
+  contraindications?: string[];
+  requiresScreening?: boolean;
+  minGestationalWeeks?: number | null;
+  maxGestationalWeeks?: number | null;
+  clinicalFamily?: string | null;
 }
 
 export const ClinicServices: React.FC = () => {
@@ -80,6 +86,13 @@ export const ClinicServices: React.FC = () => {
   const [formTotalSessions, setFormTotalSessions] = useState<number | ''>('');
   const [formDescription, setFormDescription] = useState('');
   const [formIsActive, setFormIsActive] = useState(true);
+  // Fase 3 — metadata kelayakan klinis (khusus MOMS/BOTH).
+  const [formLifeStages, setFormLifeStages] = useState<string[]>([]);
+  const [formContraindications, setFormContraindications] = useState<string[]>([]);
+  const [formRequiresScreening, setFormRequiresScreening] = useState(false);
+  const [formMinWeeks, setFormMinWeeks] = useState<number | ''>('');
+  const [formMaxWeeks, setFormMaxWeeks] = useState<number | ''>('');
+  const [formClinicalFamily, setFormClinicalFamily] = useState('');
 
   const loadServices = async () => {
     setLoading(true);
@@ -180,6 +193,12 @@ export const ClinicServices: React.FC = () => {
     setFormTotalSessions('');
     setFormDescription('');
     setFormIsActive(true);
+    setFormLifeStages([]);
+    setFormContraindications([]);
+    setFormRequiresScreening(false);
+    setFormMinWeeks('');
+    setFormMaxWeeks('');
+    setFormClinicalFamily('');
     setIsModalOpen(true);
   };
 
@@ -203,6 +222,12 @@ export const ClinicServices: React.FC = () => {
     setFormTotalSessions(srv.totalSessions ?? '');
     setFormDescription(srv.description);
     setFormIsActive(srv.isActive);
+    setFormLifeStages(srv.eligibleLifeStages || []);
+    setFormContraindications(srv.contraindications || []);
+    setFormRequiresScreening(srv.requiresScreening === true);
+    setFormMinWeeks(srv.minGestationalWeeks ?? '');
+    setFormMaxWeeks(srv.maxGestationalWeeks ?? '');
+    setFormClinicalFamily(srv.clinicalFamily || '');
     setIsModalOpen(true);
   };
 
@@ -226,8 +251,15 @@ export const ClinicServices: React.FC = () => {
     }
   };
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const toggleLifeStage = (stage: string) => {
+    setFormLifeStages((prev) => prev.includes(stage) ? prev.filter((x) => x !== stage) : [...prev, stage]);
+  };
+
+  const toggleContraindication = (code: string) => {
+    setFormContraindications((prev) => prev.includes(code) ? prev.filter((x) => x !== code) : [...prev, code]);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {    e.preventDefault();
     
     // Auto-generate ID if it's new
     const finalId = formId.trim() || formName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -267,7 +299,13 @@ export const ClinicServices: React.FC = () => {
       promoPrice: formPromoPrice === '' ? 0 : Number(formPromoPrice),
       totalSessions: formTotalSessions === '' ? undefined : Number(formTotalSessions),
       description: formDescription,
-      isActive: formIsActive
+      isActive: formIsActive,
+      eligibleLifeStages: formLifeStages,
+      contraindications: formContraindications,
+      requiresScreening: formRequiresScreening,
+      minGestationalWeeks: formMinWeeks === '' ? null : Number(formMinWeeks),
+      maxGestationalWeeks: formMaxWeeks === '' ? null : Number(formMaxWeeks),
+      clinicalFamily: formClinicalFamily || null,
     };
 
     try {
@@ -1179,6 +1217,99 @@ export const ClinicServices: React.FC = () => {
                 />
                 <p className="text-[10px] text-ink-3">Jika diisi, layanan ini akan menawarkan pembuatan paket multi-sesi otomatis saat reservasi.</p>
               </div>
+
+              {(formCategory === 'MOMS' || formCategory === 'BOTH') && (
+                <div className="p-3 bg-surface border border-divider rounded-2xl space-y-3">
+                  <div>
+                    <div className="text-[10px] text-ink-3 uppercase font-bold">Kelayakan Klinis (Moms)</div>
+                    <p className="text-[10px] text-ink-3 mt-0.5">
+                      Dipakai gerbang keselamatan otomatis: layanan tidak akan ditawarkan/dipesan bila tahap hidup atau usia kehamilan tidak sesuai.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] text-ink-3 uppercase font-bold block">Tahap Hidup yang Diperbolehkan</label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {['PREGNANT', 'PREGNANT_ATERM', 'POSTPARTUM', 'LACTATING', 'GENERAL'].map((stage) => (
+                        <label key={stage} className="flex items-center space-x-2 text-[11px] text-ink">
+                          <input
+                            type="checkbox"
+                            checked={formLifeStages.includes(stage)}
+                            onChange={() => toggleLifeStage(stage)}
+                          />
+                          <span>{stage}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-ink-3 uppercase font-bold block">Min. Usia Kehamilan (minggu)</label>
+                      <input
+                        type="number"
+                        value={formMinWeeks}
+                        onChange={(e) => setFormMinWeeks(e.target.value === '' ? '' : Number(e.target.value))}
+                        placeholder="Contoh: 37"
+                        className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-ink-3 uppercase font-bold block">Maks. Usia Kehamilan (minggu)</label>
+                      <input
+                        type="number"
+                        value={formMaxWeeks}
+                        onChange={(e) => setFormMaxWeeks(e.target.value === '' ? '' : Number(e.target.value))}
+                        placeholder="Kosongkan bila bebas"
+                        className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-ink-3 uppercase font-bold block">Keluarga Klinis</label>
+                      <select
+                        value={formClinicalFamily}
+                        onChange={(e) => setFormClinicalFamily(e.target.value)}
+                        className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs"
+                      >
+                        <option value="">Otomatis (dari nama)</option>
+                        <option value="PRENATAL">PRENATAL</option>
+                        <option value="INDUCTION">INDUCTION</option>
+                        <option value="PERINEUM">PERINEUM</option>
+                        <option value="POSTPARTUM">POSTPARTUM</option>
+                        <option value="LACTATION">LACTATION</option>
+                        <option value="GENERAL">GENERAL</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-ink-3 uppercase font-bold block">Kontraindikasi</label>
+                      <div className="space-y-1.5 pt-1">
+                        {['FEVER', 'TRIMESTER_1'].map((code) => (
+                          <label key={code} className="flex items-center space-x-2 text-[11px] text-ink">
+                            <input
+                              type="checkbox"
+                              checked={formContraindications.includes(code)}
+                              onChange={() => toggleContraindication(code)}
+                            />
+                            <span>{code}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <label className="flex items-center space-x-2 text-[11px] text-ink">
+                    <input
+                      type="checkbox"
+                      checked={formRequiresScreening}
+                      onChange={(e) => setFormRequiresScreening(e.target.checked)}
+                    />
+                    <span>Wajib skrining bidan sebelum booking</span>
+                  </label>
+                </div>
+              )}
 
               <div className="space-y-1">
                 <label className="text-[10px] text-ink-3 uppercase font-bold block">Deskripsi & Manfaat Treatment</label>

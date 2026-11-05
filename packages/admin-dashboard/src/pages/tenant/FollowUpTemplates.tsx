@@ -104,6 +104,21 @@ const TYPE_CONFIG: Record<string, { label: string; category: string; description
     category: 'NEXT_TREATMENT',
     description: 'Reminder treatment berkala bulan ke-3 khusus kategori MOMS. Tanpa variabel nama bayi.',
   },
+  NO_PURCHASE_MOMS_1: {
+    label: 'Follow-Up Ibu Belum Reservasi — Hari ke-3',
+    category: 'NO_PURCHASE',
+    description: 'Sentuhan ramah hari ke-3 untuk prospek perawatan ibu (hamil/nifas/menyusui). Tanpa narasi bayi.',
+  },
+  NO_PURCHASE_MOMS_2: {
+    label: 'Follow-Up Ibu Belum Reservasi — Hari ke-7',
+    category: 'NO_PURCHASE',
+    description: 'Edukasi manfaat perawatan ibu hari ke-7. Tanpa narasi bayi.',
+  },
+  NO_PURCHASE_MOMS_3: {
+    label: 'Follow-Up Ibu Belum Reservasi — Hari ke-14',
+    category: 'NO_PURCHASE',
+    description: 'Tawaran penutup ramah hari ke-14 untuk prospek perawatan ibu. Tanpa narasi bayi.',
+  },
   MILESTONE_3M: {
     label: 'Milestone 3 Bulan — Tummy Time',
     category: 'MILESTONE',

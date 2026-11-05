@@ -803,7 +803,7 @@ export class ConversationStateMachine {
           console.log(`[PRICELIST SKIP] Outbound cut-off aktif untuk tenant ${tenantId}; gambar pricelist tidak dikirim.`);
         } else {
           const gateway = await resolveGatewayForTenant(tenantId);
-          const { resolvePricelistImageTarget, getPricelistImageUrl } = await import('../services/pricelist-config.service');
+          const { resolvePricelistImageTarget } = await import('../services/pricelist-config.service');
           const target = await resolvePricelistImageTarget(tenantId, gateway.providerType);
           const { getBrandIdentityAsync } = await import('../config/brand');
           const brand = await getBrandIdentityAsync(tenantId);
@@ -860,11 +860,9 @@ export class ConversationStateMachine {
               customer.pricelist_sent = true;
               try {
                 const pathMod = await import('path');
-                const rawUrl = await getPricelistImageUrl(tenantId);
-                let mediaUrl = rawUrl;
-                if (!rawUrl.startsWith('http://') && !rawUrl.startsWith('https://') && !rawUrl.startsWith('/media/')) {
-                  mediaUrl = `/media/asset/${pathMod.basename(rawUrl)}`;
-                }
+                const { getPricelistImageAssets, toPricelistDisplayUrl } = await import('../services/pricelist-config.service');
+                const assets = await getPricelistImageAssets(tenantId);
+                const mediaUrl = toPricelistDisplayUrl(assets.hd);
                 const ext = pathMod.extname(target || mediaUrl).toLowerCase();
                 const mimetype = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : ext === '.gif' ? 'image/gif' : 'image/jpeg';
                 await messageService.logMessage({
@@ -876,7 +874,19 @@ export class ConversationStateMachine {
                   senderType: 'BOT',
                   senderName: `Bot (${brand.businessName})`,
                   deliveryStatus: 'sent',
-                  payloadRaw: { type: 'image', caption, media: { url: mediaUrl, hdUrl: mediaUrl, caption, mimetype } },
+                  payloadRaw: {
+                    type: 'image',
+                    caption,
+                    media: {
+                      url: mediaUrl,
+                      hdUrl: mediaUrl,
+                      // Lookup murni (tanpa sharp): thumbnail 640px sudah dibuat
+                      // sekali saat upload/di aset default.
+                      thumbUrl: assets.thumbUrl ?? undefined,
+                      caption,
+                      mimetype,
+                    },
+                  },
                 });
               } catch (logErr: any) {
                 console.warn('[PRICELIST LOG ERROR] Gagal mencatat gambar pricelist ke DB:', logErr?.message || logErr);

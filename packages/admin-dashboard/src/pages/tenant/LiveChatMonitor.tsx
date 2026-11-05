@@ -79,7 +79,7 @@ import { ToggleSwitch } from '../../components/common/ToggleSwitch';
 import { LiveChatComposer, LiveChatComposerHandle } from '../../components/livechat/LiveChatComposer';
 import { AdminCopilotPanel } from '../../components/copilot/AdminCopilotPanel';
 import { ChatExport } from './ChatExport';
-import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
+import { MediaImage, ChatMediaData, preloadChatImage } from '../../components/common/MediaImage';
 import { VoiceNotePlayer } from '../../components/common/VoiceNotePlayer';
 import {
   extractMedia,
@@ -363,6 +363,9 @@ export const LiveChatMonitor: React.FC = () => {
   });
   const selectedChat = chats.find((c) => c.conversationId === selectedId);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // ID bubble optimis (temp_) yang sedang menunggu konfirmasi server.
+  // Dipakai untuk pra-muat gambar sebelum bubble diganti versi server (anti-flash "Memuat...").
+  const optimisticMessageIdsRef = useRef<Set<string>>(new Set());
   const [pinnedBubble, setPinnedBubble] = useState<PinnedMessageData | null>(null);
   const [isPinningMessageId, setIsPinningMessageId] = useState<string | null>(null);
   const [isHidingMessageId, setIsHidingMessageId] = useState<string | null>(null);
@@ -2270,44 +2273,58 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
           // Append ke thread yang sedang dibuka / replace optimistic message
           if (selectedIdRef.current === conversationId) {
-            setMessages((prev) => {
-              const mediaUrlOf = (x: ChatMessage) => (x.media as any)?.url || (x.media as any)?.hdUrl || (x.media as any)?.thumbUrl || null;
-              // Cek apakah ada optimistic message (temp_) yang cocok — cocokkan via content identik atau media URL sama
-              const tempIndex = prev.findIndex(
-                (m) =>
-                  m.id.startsWith('temp_') &&
-                  m.direction === msg.direction &&
-                  (m.content === msg.content || (mediaUrlOf(m) && mediaUrlOf(msg) && mediaUrlOf(m) === mediaUrlOf(msg)))
-              );
-              if (tempIndex !== -1) {
-                const next = [...prev];
-                next[tempIndex] = {
-                  ...msg,
-                  id: msg.id || next[tempIndex].id,
-                  media: msg.media || next[tempIndex].media,
-                };
-                return next;
-              }
+            const applyMessageCreated = () => {
+              // User bisa pindah percakapan selama pra-muat berjalan.
+              if (selectedIdRef.current !== conversationId) return;
+              setMessages((prev) => {
+                const mediaUrlOf = (x: ChatMessage) => (x.media as any)?.url || (x.media as any)?.hdUrl || (x.media as any)?.thumbUrl || null;
+                // Cek apakah ada optimistic message (temp_) yang cocok — cocokkan via content identik atau media URL sama
+                const tempIndex = prev.findIndex(
+                  (m) =>
+                    m.id.startsWith('temp_') &&
+                    m.direction === msg.direction &&
+                    (m.content === msg.content || (mediaUrlOf(m) && mediaUrlOf(msg) && mediaUrlOf(m) === mediaUrlOf(msg)))
+                );
+                if (tempIndex !== -1) {
+                  const next = [...prev];
+                  next[tempIndex] = {
+                    ...msg,
+                    id: msg.id || next[tempIndex].id,
+                    media: msg.media || next[tempIndex].media,
+                  };
+                  return next;
+                }
 
-              const isDuplicate = prev.some((m) => {
-                if (m.id === msg.id) return true;
-                const eWa = (m as any).wa_message_id || (m as any).waMessageId;
-                const nWa = (msg as any).wa_message_id || (msg as any).waMessageId;
-                if (eWa && nWa && eWa === nWa) return true;
-                if (m.direction === msg.direction && m.content && msg.content && m.content === msg.content) {
-                  if (Math.abs(new Date(m.created_at).getTime() - new Date(msg.created_at).getTime()) < 2000) return true;
-                }
-                const eUrl = mediaUrlOf(m);
-                const nUrl = mediaUrlOf(msg);
-                if (eUrl && nUrl && eUrl === nUrl && m.direction === msg.direction) {
-                  if (Math.abs(new Date(m.created_at).getTime() - new Date(msg.created_at).getTime()) < 2000) return true;
-                }
-                return false;
+                const isDuplicate = prev.some((m) => {
+                  if (m.id === msg.id) return true;
+                  const eWa = (m as any).wa_message_id || (m as any).waMessageId;
+                  const nWa = (msg as any).wa_message_id || (msg as any).waMessageId;
+                  if (eWa && nWa && eWa === nWa) return true;
+                  if (m.direction === msg.direction && m.content && msg.content && m.content === msg.content) {
+                    if (Math.abs(new Date(m.created_at).getTime() - new Date(msg.created_at).getTime()) < 2000) return true;
+                  }
+                  const eUrl = mediaUrlOf(m);
+                  const nUrl = mediaUrlOf(msg);
+                  if (eUrl && nUrl && eUrl === nUrl && m.direction === msg.direction) {
+                    if (Math.abs(new Date(m.created_at).getTime() - new Date(msg.created_at).getTime()) < 2000) return true;
+                  }
+                  return false;
+                });
+                if (isDuplicate) return prev;
+                return [...prev, msg];
               });
-              if (isDuplicate) return prev;
-              return [...prev, msg];
-            });
-            setTimeout(() => scrollToBottom(true), 50);
+              optimisticMessageIdsRef.current.clear();
+              setTimeout(() => scrollToBottom(true), 50);
+            };
+
+            // Anti-flash: bubble optimis masih menampilkan blob lokal. Pra-muat
+            // thumbnail server DULU, baru ganti sumbernya → tidak ada overlay "Memuat...".
+            const preloadTarget = (msg.media as any)?.thumbUrl || (msg.media as any)?.url;
+            if (optimisticMessageIdsRef.current.size > 0 && preloadTarget) {
+              void preloadChatImage(preloadTarget).then(applyMessageCreated);
+            } else {
+              applyMessageCreated();
+            }
           }
 
           // Update preview daftar
@@ -3949,6 +3966,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
     // 1. Instan tampil di thread pesan (0ms delay)
     setMessages((prev) => [...prev, optimisticMsg]);
+    optimisticMessageIdsRef.current.add(tempId);
+    // Safety net: lepaskan penanda bila event SSE tidak pernah datang.
+    window.setTimeout(() => optimisticMessageIdsRef.current.delete(tempId), 10000);
 
     // 2. Instan update preview teks di daftar chat list.
     // Catatan internal TIDAK mengubah isAwaitingReply (bukan balasan ke customer).
@@ -4030,6 +4050,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       }
     } catch (err: any) {
       toast(`Gagal mengirim balasan: ${err.message}`, 'error');
+      optimisticMessageIdsRef.current.delete(tempId);
       setMessages((prev) =>
         prev.map((m) => (m.id === tempId ? { ...m, delivery_status: 'failed' } : m))
       );

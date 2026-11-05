@@ -426,6 +426,9 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
               text: `${r.raw_text || ''} ${r.treatment_detail || ''}`,
               treatmentCategory: (r as any).treatment_category,
               registeredAt: (r as any).created_at,
+              gestationalWeeks: (r as any).gestational_weeks,
+              momStage: (r as any).mom_stage,
+              hplDate: (r as any).hpl_date,
             }),
             customer: r.customer
               ? {

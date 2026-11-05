@@ -652,7 +652,10 @@ export class LiveChatService {
       if (mediaUrl) {
         // Reuse existing saved media URL without creating duplicate files on disk
         hdUrl = mediaUrl;
-        thumbUrl = mediaService.resolveThumbFallback(mediaUrl);
+        // PENTING: resolveThumbRelativeUrl mengembalikan URL publik relatif
+        // (/media/...). resolveThumbFallback mengembalikan PATH ABSOLUT dan akan
+        // merusak <img src> di browser (dashboard jatuh ke HD + flash "Memuat...").
+        thumbUrl = mediaService.resolveThumbRelativeUrl(mediaUrl);
       } else {
         const saved = await mediaService.saveOutboundMedia({
           tenantId,
@@ -674,6 +677,7 @@ export class LiveChatService {
       mediaMeta = {
         url: thumbUrl || hdUrl,
         hdUrl: hdUrl,
+        thumbUrl: thumbUrl ?? undefined,
         mimeType,
         caption: hasText ? text!.trim() : null,
         fileName,

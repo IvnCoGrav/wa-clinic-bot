@@ -3,6 +3,62 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 309. [Maternal] Sisa Pekerjaan Setelah Maternal Treatment Hardening (2026-11-05, OPEN — by decision)
+
+- **Konteks:** Fase 1–5 (lihat CHANGELOG 2026-11-05) sudah menutup state maternal
+  terstruktur, gerbang klinis deterministik, follow-up sadar fase, dan kanonisasi
+  `BREASTFEEDING`→`LACTATING`.
+- **Ditunda dengan keputusan pengguna:**
+  1. **Pengingat HPL** (`REMINDER_HPL` + cron harian). Kolom `reservations.hpl_date`
+     sudah tersedia; eksekusi ditunda agar blast radius kecil.
+  2. **Rekonsiliasi harga/status katalog** (KNOWN_ISSUES #148): `catalog-seed-drift`
+     masih gagal karena harga `baby-massage-pulih-ceria-newborn`, `moms-oksitosin-fullbody`,
+     `bundle-laktasi-oksitosin`, `add-on-nebulizer*`, dan status `moms-postpartum-massage`
+     berbeda antar sumber. `npm run catalog:seed` BELUM dijalankan — menunggu
+     keputusan pemilik klinik.
+  3. **Template WABA `followup_no_purchase_moms_1..3`** baru dipetakan di kode; wajib
+     didaftarkan & disetujui di Meta sebelum dipakai produksi.
+- **Catatan operasional:** migrasi Fase 1–4 harus dijalankan (`npx prisma migrate deploy`)
+  sebelum deploy kode; DB lokal saat implementasi offline sehingga migrasi belum di-apply.
+- **Verifikasi terkait:** `tests/unit/maternal-state.test.ts`,
+  `tests/unit/clinical-eligibility.test.ts`,
+  `tests/integration/save-reservation-clinical-gate.test.ts`,
+  `tests/unit/follow-up-maternal-stage.test.ts`.
+
+## 308. [Live Chat] Flash "Memuat..." pada Gambar Pricelist & Path Thumbnail Absolut (2026-11-05, FIXED + 1 LIMITASI)
+
+- **Gejala:** Setiap kali mengirim gambar/pricelist dari Live Chat (terutama via
+  quick reply `/pricelist`), bubble gambar menampilkan overlay "Memuat..." lebih
+  lama dari seharusnya, padahal thumbnail sudah ada di disk.
+- **Akar masalah (terverifikasi kode):**
+  1. `src/services/live-chat.service.ts` memakai `mediaService.resolveThumbFallback()`
+     yang mengembalikan **path absolut filesystem** (`C:\...\storage\media\...`),
+     lalu nilai itu disimpan sebagai `payload_raw.media.url`/`thumbUrl`. Browser
+     gagal memuat path absolut → `onError` → jatuh ke file HD (lebih berat).
+  2. Fallback thumbnail WABA di `resolveOutboundForProvider()` tidak pernah aktif
+     karena `filePathFromRelativeUrl()` menerima path absolut.
+  3. Payload log pricelist bot (`src/state-machine/machine.ts`) tidak menyertakan
+     `thumbUrl` sama sekali.
+  4. Frontend mengganti bubble optimis (blob lokal) dengan URL server tanpa
+     pra-muat → `MediaImage` menampilkan overlay "Memuat..." lagi.
+- **Perbaikan (2026-11-05):**
+  - Seam baru `mediaService.resolveThumbRelativeUrl()` (lookup murni, tanpa sharp)
+    mengembalikan URL relatif `/media/..._thumb.jpg`.
+  - `getPricelistImageAssets()` + `toPricelistDisplayUrl()` sebagai kontrak aset
+    pricelist tunggal (tanpa migrasi DB, tanpa generate ulang).
+  - `live-chat.service` & log pricelist bot menyimpan `thumbUrl` relatif.
+  - `preloadChatImage()` + `optimisticMessageIdsRef` di dashboard: pra-muat
+    thumbnail sebelum bubble optimis diganti versi server.
+  - **Biaya resource:** thumbnail tetap dibuat SEKALI saat upload; jalur kirim
+    hanya melakukan `fs.existsSync` (tanpa sharp, tanpa file baru).
+- **Limitasi tersisa:** bila `tenants.pricelist_image_url` berupa URL eksternal
+  `http(s)` (bukan `/media/outbound/...`), tidak ada thumbnail lokal sehingga
+  dashboard memakai URL asli (bergantung cache/CDN). Tidak dilakukan fetch/generate
+  karena berisiko SSRF dan menambah biaya di jalur baca.
+- **Verifikasi:** `tests/unit/media-thumb-relative-url.test.ts`,
+  `tests/unit/pricelist-image-assets.test.ts`,
+  `tests/integration/live-chat-reply.test.ts` (kasus `thumbUrl` relatif).
+
 ## 307. [Insentif Retensi Bidan] Gap Observabilitas Penyebab Churn, Keluhan, dan Mutasi Staf (2026-11-04, OPEN - MEDIUM)
 
 - **Status:** OPEN (2026-11-04) — diidentifikasi saat perancangan skema insentif retensi bidan.
@@ -1817,7 +1873,18 @@ dicatat di CHANGELOG 2026-10-05. Sisa batasan:
   `tests/unit/holistic-review-gate.test.ts`,
   `tests/eval/conversation-scripts.eval.test.ts`.
 
-## 218. [Katalog/Klinis] Ambang klinis & ID layanan masih konstanta kode (tech debt SaaS) (2026-10-04, OPEN — Confirmation Gate)
+## 218. [Katalog/Klinis] Ambang klinis & ID layanan masih konstanta kode (tech debt SaaS) (2026-10-04, PARTIAL — F1–F2 2026-11-05)
+
+- **Update 2026-11-05:** ambang gestasional & keluarga klinis kini punya kolom DB
+  `clinic_services.min_gestational_weeks`, `max_gestational_weeks`, `clinical_family`
+  dan ditegakkan oleh `src/services/clinical-eligibility.service.ts` (dipakai katalog
+  + gerbang booking). Nilai awal di-seed lewat migrasi
+  `20261105121000_add_clinical_service_thresholds`; admin dapat mengubahnya via
+  `/api/admin/services` dan UI Katalog → tab MOMS.
+- **Sisa:** fallback konstanta (`INDUKSI_MIN_WEEKS`/`PERINEUM_MIN_WEEKS`) masih hidup di
+  `clinical-eligibility.service.ts` untuk data lama (paritas perilaku), dan ID katalog
+  pada tes/seed masih literal. Menghapus total fallback menunggu seluruh tenant
+  ter-backfill.
 
 - **Konteks:** perbaikan Fase 1–5 (2026-10-04) menambah gerbang keselamatan bumil di
   `src/v3/tools/get-catalog.tool.ts` (blok `momStage === 'PREGNANT'`). Ambang saat ini

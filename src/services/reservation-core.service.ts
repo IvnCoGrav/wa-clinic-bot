@@ -4,6 +4,7 @@ import { TreatmentCategory } from '@prisma/client';
 import type { Prisma } from '@prisma/client';
 import type { BabyDetail } from '../utils/reservation-text-parser';
 import { PURCHASE_REVIEW_NOT_APPLICABLE } from './capi-review-status';
+import { resolveMaternalState } from './maternal-state.service';
 
 /**
  * Canonical Reservation Domain Service — Single Source of Truth untuk SEMUA
@@ -34,6 +35,12 @@ export interface ReservationMutationParams {
   /** KB-6: snapshot ongkir saat booking (riwayat abadi). Null = tidak diubah. */
   deliveryFee?: number | null;
   rawText?: string;
+  /** Fase 1: usia kehamilan (minggu) dari state sesi/parser. Null = bukan hamil. */
+  gestationalWeeks?: number | null;
+  /** Fase 1: tahap ibu (PREGNANT/POSTPARTUM/BREASTFEEDING/LACTATING/GENERAL). */
+  momStage?: string | null;
+  /** Fase 1: waktu jangkar saat minggu kehamilan dicatat (untuk HPL). */
+  maternalAnchorAt?: Date | null;
   babies?: BabyDetail[];
   customerName?: string;
   kecamatan?: string;
@@ -770,6 +777,9 @@ export class ReservationCoreService {
       purchaseValue,
       discountAmount,
       rawText,
+      gestationalWeeks,
+      momStage,
+      maternalAnchorAt,
       babies = [],
       customerName,
       kecamatan,
@@ -834,6 +844,18 @@ export class ReservationCoreService {
       `${outsideHoursTag}${rawText ||
       `[RESERVATION:${source}] ${treatmentDetail || '-'} | ${bookingDate ? bookingDate.toISOString().slice(0, 10) : '-'} | ${customerName || '-'}`}`;
 
+    // Fase 1 — state maternal diturunkan dari eksplisit (state sesi) atau raw_text.
+    // Deep seam: semua pemanggil (bot, webhook, admin) otomatis mendapat data
+    // terstruktur tanpa duplikasi parser di tiap call-site.
+    const maternal = resolveMaternalState({
+      rawText: effectiveRawText,
+      treatmentDetail,
+      treatmentCategory: validCategory,
+      gestationalWeeks,
+      momStage,
+      anchorAt: maternalAnchorAt ?? new Date(),
+    });
+
     // A3: baca-cek + tulis kritis (idempotency, cek bentrok, merge/create) dijalankan
     // di dalam advisory lock per (tenant+staf+hari WIB) — menutup race check-then-insert
     // double-booking. Efek samping (lifecycle/follow-up/notifikasi) dijalankan SETELAH
@@ -877,6 +899,10 @@ export class ReservationCoreService {
                   : PURCHASE_REVIEW_NOT_APPLICABLE,
                 purchase_event_sent_at: null,
                 purchase_occurred_at: null,
+                // Fase 1: state maternal terbaru (reaktivasi = booking baru).
+                gestational_weeks: maternal.gestationalWeeks ?? (existingByRequest as any).gestational_weeks ?? null,
+                mom_stage: maternal.momStage ?? (existingByRequest as any).mom_stage ?? null,
+                hpl_date: maternal.hplDate ?? (existingByRequest as any).hpl_date ?? null,
                 // Intake tanpa tanggal: pertahankan tanggal lama (jangan null-kan).
                 booking_date: hasValidDate ? bookingDate : (existingByRequest as any).booking_date,
                 assigned_staff_id:
@@ -1001,6 +1027,10 @@ export class ReservationCoreService {
                 assigned_staff_id: assignedStaffId !== undefined ? assignedStaffId || null : primary.assigned_staff_id,
                 raw_text: effectiveRawText,
                 purchase_value: purchaseValue !== undefined && purchaseValue !== null ? purchaseValue : primary.purchase_value,
+                // Fase 1: state maternal ikut diperbarui pada merge same-day.
+                gestational_weeks: maternal.gestationalWeeks ?? (primary as any).gestational_weeks ?? null,
+                mom_stage: maternal.momStage ?? (primary as any).mom_stage ?? null,
+                hpl_date: maternal.hplDate ?? (primary as any).hpl_date ?? null,
                 ...(discountAmount !== undefined && discountAmount !== null ? { discount_amount: Math.round(discountAmount) } : {}),
                 is_repeat_order: isRepeatOrder,
                 // KB-6: snapshot ongkir bila diberikan eksplisit.
@@ -1056,6 +1086,10 @@ export class ReservationCoreService {
             treatment_category: validCategory,
             treatment_detail: treatmentDetail !== undefined ? treatmentDetail : recentPending.treatment_detail,
             raw_text: effectiveRawText,
+            // Fase 1: intake merge mempertahankan state maternal lama bila baru kosong.
+            gestational_weeks: maternal.gestationalWeeks ?? (recentPending as any).gestational_weeks ?? null,
+            mom_stage: maternal.momStage ?? (recentPending as any).mom_stage ?? null,
+            hpl_date: maternal.hplDate ?? (recentPending as any).hpl_date ?? null,
             purchase_value: purchaseValue !== undefined ? purchaseValue : recentPending.purchase_value,
             duration_minutes: duration ?? recentPending.duration_minutes ?? null,
             assigned_staff_id: assignedStaffId !== undefined ? assignedStaffId || null : recentPending.assigned_staff_id,
@@ -1077,6 +1111,10 @@ export class ReservationCoreService {
       duration_minutes: duration,
       assigned_staff_id: assignedStaffId || null,
       raw_text: effectiveRawText,
+      // Fase 1: state maternal terstruktur (usia kehamilan, tahap ibu, HPL).
+      gestational_weeks: maternal.gestationalWeeks,
+      mom_stage: maternal.momStage,
+      hpl_date: maternal.hplDate,
       status: bookingStatus,
       purchase_value: purchaseValue ?? null,
       discount_amount: typeof discountAmount === 'number' && Number.isFinite(discountAmount) && discountAmount >= 0 ? Math.round(discountAmount) : null,

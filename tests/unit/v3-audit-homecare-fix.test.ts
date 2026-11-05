@@ -56,8 +56,9 @@ describe('Layer 1 — Kategori dinamis save_reservation (tanpa regex momsCue)', 
       chatId: '6281@c.us',
       treatmentName: OKSI_FULLBODY,
       bookingDate: futureDate(),
-      gestationalWeeks: 38,
-      momStage: 'PREGNANT',
+      // Fase 2: state klinis konsisten — Oksitosin adalah layanan nifas/menyusui,
+      // jadi fixture tidak boleh menyatakan PREGNANT (dulu gate belum menolak).
+      momStage: 'POSTPARTUM',
     } as any);
     expect(res.success).toBe(true);
     const called = vi.mocked(reservationCoreService.saveReservation).mock.calls[0][0] as any;
@@ -94,7 +95,8 @@ describe('Layer 1 — Kategori dinamis save_reservation (tanpa regex momsCue)', 
       treatmentName: OKSI_FULLBODY,
       additionalTreatments: [BABY_CERIA],
       bookingDate: futureDate(),
-      gestationalWeeks: 38,
+      // Fase 2: state klinis konsisten (Oksitosin = fase nifas/menyusui).
+      momStage: 'POSTPARTUM',
       children: [{ ageMonths: 2 }],
     } as any);
     expect(res.success).toBe(true);

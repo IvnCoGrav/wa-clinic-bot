@@ -565,6 +565,9 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
               text: `${(reservation as any).raw_text || ''} ${(reservation as any).treatment_detail || ''}`,
               treatmentCategory: (reservation as any).treatment_category,
               registeredAt: (reservation as any).created_at,
+              gestationalWeeks: (reservation as any).gestational_weeks,
+              momStage: (reservation as any).mom_stage,
+              hplDate: (reservation as any).hpl_date,
             }),
             customer: (reservation as any).customer
               ? { ...(reservation as any).customer, children: enrichedChildren }

@@ -454,16 +454,17 @@ export class MediaService {
   public resolveOutboundForProvider(relativeUrl: string, provider: 'WAHA' | 'WABA'): string | null {
     if (!relativeUrl.startsWith('/media/outbound/')) return null;
     if (provider === 'WABA') {
-      // P3-5: provider-aware — cek eksistensi dulu, fallback ke thumb bila HD expired
+      // P3-5: provider-aware — cek eksistensi dulu, fallback ke thumb bila HD expired.
+      // resolveThumbRelativeUrl wajib dipakai di sini (bukan resolveThumbFallback yang
+      // mengembalikan path absolut) agar URL publik thumb benar-benar terbentuk.
       const hdPath = this.filePathFromRelativeUrl(relativeUrl);
-      const thumb = this.resolveThumbFallback(relativeUrl);
-      if (hdPath && fs.existsSync(hdPath)) return this.getPublicMediaUrl(relativeUrl);
-      if (thumb) {
-        const thumbPath = this.filePathFromRelativeUrl(thumb);
-        if (thumbPath && fs.existsSync(thumbPath)) return this.getPublicMediaUrl(thumb);
+      if (hdPath && fs.existsSync(hdPath)) {
+        const hdPublic = this.getPublicMediaUrl(relativeUrl);
+        if (hdPublic) return hdPublic;
       }
+      const thumbRel = this.resolveThumbRelativeUrl(relativeUrl);
+      if (thumbRel) return this.getPublicMediaUrl(thumbRel);
       // HD hilang & thumb juga hilang → jangan paksa Meta fetch URL mati
-      if (hdPath && fs.existsSync(hdPath)) return this.getPublicMediaUrl(relativeUrl);
       return null;
     }
     const hdPath = this.filePathFromRelativeUrl(relativeUrl);
@@ -481,6 +482,44 @@ export class MediaService {
   }
 
   /**
+   * Cari file thumbnail di disk untuk sebuah relative URL HD.
+   * Murni lookup (TANPA sharp). Berlaku baik HD ada maupun HD hilang.
+   * Mengembalikan path absolut + URL relatif publik agar pemanggil tidak
+   * keliru memakai path absolut sebagai `<img src>`.
+   */
+  private findThumbFile(relativeUrl: string): { abs: string; rel: string } | null {
+    const match = relativeUrl.match(/^\/media\/(outbound|inbound)\/([^/]+)\/([^/]+)$/);
+    if (!match) return null;
+    if (isThumbName(match[3])) return null; // sudah thumb, tidak fallback balik
+    const scope = match[1] as 'outbound' | 'inbound';
+    const tenantId = match[2];
+    const hdFile = match[3];
+    const thumbDir = path.join(MEDIA_ROOT, scope, tenantId);
+    const candidates = [
+      withThumbName(hdFile), // thumb ekstensi sama (thumb kustom)
+      `${hdFile.replace(/(\.\w+)$/, '')}_thumb.jpg`, // blur thumb default .jpg
+    ];
+    for (const name of candidates) {
+      const abs = path.join(thumbDir, name);
+      if (!abs.startsWith(MEDIA_ROOT)) continue;
+      if (fs.existsSync(abs) && fs.statSync(abs).isFile()) {
+        return { abs, rel: toRelativeUrl(scope, tenantId, name) };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * URL relatif thumbnail publik (mis. `/media/outbound/<tenant>/<stem>_thumb.jpg`)
+   * bila file thumb ada di disk. BERBEDA dari `resolveThumbFallback` yang
+   * mengembalikan path absolut dan hanya aktif saat HD hilang.
+   * Tidak memicu pembuatan file — murni lookup (tanpa sharp).
+   */
+  public resolveThumbRelativeUrl(relativeUrl: string): string | null {
+    return this.findThumbFile(relativeUrl)?.rel ?? null;
+  }
+
+  /**
    * Fallback ke thumbnail (_thumb.*) bila file HD tidak ada di disk.
    * Hanya untuk URL /media/... valid, bukan thumb, HD hilang, thumb ada & di dalam MEDIA_ROOT.
    * Coba ekstensi yang sama dulu, lalu fallback ke .jpg (blur thumb default).
@@ -489,27 +528,9 @@ export class MediaService {
     const match = relativeUrl.match(/^\/media\/(outbound|inbound)\/([^/]+)\/([^/]+)$/);
     if (!match) return null;
     if (isThumbName(match[3])) return null; // sudah thumb, tidak fallback balik
-    const scope = match[1] as 'outbound' | 'inbound';
-    const tenantId = match[2];
-    const hdFile = match[3];
     const hdPath = this.filePathFromRelativeUrl(relativeUrl);
     if (!hdPath || fs.existsSync(hdPath)) return null; // HD ada, tidak perlu fallback
-
-    const thumbDir = path.join(MEDIA_ROOT, scope, tenantId);
-    // 1) Coba ekstensi sama dengan HD (thumb kustom)
-    const thumbFileSameExt = withThumbName(hdFile);
-    const thumbPathSameExt = path.join(thumbDir, thumbFileSameExt);
-    if (thumbPathSameExt.startsWith(MEDIA_ROOT) && fs.existsSync(thumbPathSameExt) && fs.statSync(thumbPathSameExt).isFile()) {
-      return thumbPathSameExt;
-    }
-    // 2) Fallback ke blur thumb default .jpg (stem_thumb.jpg)
-    const stem = hdFile.replace(/(\.\w+)$/, '');
-    const blurThumbFile = `${stem}_thumb.jpg`;
-    const blurThumbPath = path.join(thumbDir, blurThumbFile);
-    if (blurThumbPath.startsWith(MEDIA_ROOT) && fs.existsSync(blurThumbPath) && fs.statSync(blurThumbPath).isFile()) {
-      return blurThumbPath;
-    }
-    return null;
+    return this.findThumbFile(relativeUrl)?.abs ?? null;
   }
 
   /**

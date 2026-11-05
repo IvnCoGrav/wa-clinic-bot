@@ -1,6 +1,7 @@
 import { prisma } from '../db/client';
 import { BabyDetail, classifyPatientEntity } from '../utils/reservation-text-parser';
 import { isGenericCustomerName } from '../utils/name-sanitizer';
+import { extractGestationalWeeksFromRawText } from './maternal-state.service';
 import { TreatmentCategory, ConversationState } from '@prisma/client';
 
 /**
@@ -629,6 +630,9 @@ export async function tryCaptureReservationFormFromRaw(params: TryCaptureReserva
     treatmentDetail: p.treatmentDetail,
     bookingDate,
     rawText: raw,
+    // Fase 1: state maternal dari form WA (usia kehamilan + tahap ibu).
+    gestationalWeeks: extractGestationalWeeksFromRawText(p.momProfile?.gestationalWeeks || raw) ?? undefined,
+    momStage: p.momProfile?.stage,
     purchaseValue: initialVal,
     babies: p.babies || [],
     customerName: p.name,

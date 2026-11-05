@@ -1,4 +1,5 @@
-import { treatmentCatalogService, resolveServiceAudience, ClinicServiceItem } from '../../services/treatment-catalog.service';
+import { treatmentCatalogService, resolveServiceAudience, inferClinicalFamily, ClinicServiceItem } from '../../services/treatment-catalog.service';
+import { evaluateServiceEligibility } from '../../services/clinical-eligibility.service';
 import { PatientProfileExtractor } from '../state/patient-extractor';
 import { TEMPLATES } from '../../config/persona';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
@@ -596,87 +597,87 @@ export async function executeGetCatalog(
       || ((isQuickSupport(a.id) ? 1 : 0) - (isQuickSupport(b.id) ? 1 : 0))
     );
 
-    // Phase 2 — Clinical linkage: ibu PASCA MELAHIRKAN / MENYUSUI
-    // DILARANG ditawari Prenatal (Pijat Hamil). Keluarkan layanan prenatal
-    // dari daftar (kecuali customer menyebut namanya eksplisit), lalu posisikan
-    // Laktasi/Oksitosin/Relaksasi sesuai fase.
+    // Fase 2 — Kelayakan klinis terpusat (satu seam, data-driven).
+    // Berlaku LINTAS KATEGORI (MOMS/BOTH/kosong): momStage hanya terisi untuk
+    // subjek ibu, jadi DILARANG dikunci ke category==='MOMS'.
     let momGeneralUnsupported = false;
-    if (category === 'MOMS' && (momStage === 'POSTPARTUM' || momStage === 'BREASTFEEDING')) {
-      const isPrenatalId = (id: string): boolean =>
-        id === 'moms-prenatal-massage' || id === 'moms-prenatal-yoga';
-      const explicitPrenatalQuery = (specificTreatmentName || '').toLowerCase();
-      const explicitlyWantsPrenatal = explicitPrenatalQuery.includes('prenatal')
-        || explicitPrenatalQuery.includes('hamil')
-        || explicitPrenatalQuery.includes('yoga');
-      if (!explicitlyWantsPrenatal) {
-        const pool = formattedTreatments.filter((t) => !isPrenatalId(t.id));
-        const priorityOf = (id: string): number => {
-          if (momStage === 'BREASTFEEDING') {
-            return id === 'moms-paket-laktasi' ? 0
-              : id === 'moms-oksitosin-fullbody' ? 1
-              : id === 'moms-relaksasi' ? 2
-              : id === 'moms-postpartum-massage' ? 3
-              : isPrenatalId(id) ? 99 : 4;
+
+    const explicitServiceId = (() => {
+      if (!specificTreatmentName || !specificTreatmentName.trim()) return null;
+      try {
+        return (treatmentCatalogService.matchCatalogItem(specificTreatmentName, tenantId) as any)?.id ?? null;
+      } catch {
+        return null;
+      }
+    })();
+
+    const isExplicitlyRequested = (t: CatalogTreatmentDetail): boolean => {
+      if (!specificTreatmentName || !specificTreatmentName.trim()) return false;
+      if (explicitServiceId === t.id) return true;
+      const q = specificTreatmentName.toLowerCase();
+      const family = (t as any).clinicalFamily ?? inferClinicalFamily(t as any);
+      // Paritas perilaku lama: sebutan eksplisit "prenatal/hamil/yoga" tetap
+      // ditampilkan untuk edukasi — booking tetap diblokir gerbang F2.
+      return family === 'PRENATAL'
+        && (q.includes('prenatal') || q.includes('hamil') || q.includes('yoga'));
+    };
+
+    const resolveCatalogService = (id: string): ClinicServiceItem | undefined => {
+      try {
+        return treatmentCatalogService.getServiceById(id, tenantId);
+      } catch {
+        return undefined;
+      }
+    };
+
+    if (momStage === 'PREGNANT' || momStage === 'POSTPARTUM' || momStage === 'BREASTFEEDING') {
+      const eligible = formattedTreatments.filter((t) => {
+        const decision = evaluateServiceEligibility(
+          t as unknown as ClinicServiceItem,
+          { momStage, gestationalWeeks, childAgeMonths },
+          resolveCatalogService
+        );
+        if (decision.status !== 'BLOCKED') return true;
+        return isExplicitlyRequested(t);
+      });
+
+      {
+        const familyOf = (t: CatalogTreatmentDetail): string | null =>
+          (t as any).clinicalFamily ?? inferClinicalFamily(t as any);
+        const priorityOf = (t: CatalogTreatmentDetail): number => {
+          const family = familyOf(t);
+          if (momStage === 'PREGNANT') {
+            if (family === 'PRENATAL') return t.id === 'moms-prenatal-massage' ? 0 : 1;
+            if (family === 'INDUCTION' || family === 'PERINEUM') return 3;
+            return 2;
           }
-          return id === 'moms-oksitosin-fullbody' ? 0
-            : id === 'moms-paket-laktasi' ? 1
-            : id === 'moms-postpartum-massage' ? 2
-            : id === 'moms-relaksasi' ? 3
-            : isPrenatalId(id) ? 99 : 4;
+          if (momStage === 'BREASTFEEDING') {
+            return t.id === 'moms-paket-laktasi' ? 0
+              : t.id === 'moms-oksitosin-fullbody' ? 1
+              : family === 'PRENATAL' ? 99
+              : family === 'LACTATION' ? 2
+              : 3;
+          }
+          return t.id === 'moms-oksitosin-fullbody' ? 0
+            : t.id === 'moms-paket-laktasi' ? 1
+            : family === 'PRENATAL' ? 99
+            : family === 'LACTATION' ? 2
+            : 3;
         };
-        pool.sort((a, b) => {
-          const p = priorityOf(a.id) - priorityOf(b.id);
+        eligible.sort((a, b) => {
+          if (momStage === 'PREGNANT') {
+            // Paritas perilaku lama: rekomendasi klinis selalu di atas.
+            const rec = (b.isRecommendedForSymptoms ? 1 : 0) - (a.isRecommendedForSymptoms ? 1 : 0);
+            if (rec !== 0) return rec;
+            return priorityOf(a) - priorityOf(b);
+          }
+          const p = priorityOf(a) - priorityOf(b);
           if (p !== 0) return p;
           return (b.isRecommendedForSymptoms ? 1 : 0) - (a.isRecommendedForSymptoms ? 1 : 0);
         });
         formattedTreatments.length = 0;
-        formattedTreatments.push(...pool);
+        formattedTreatments.push(...eligible);
       }
-    }
-
-    // Phase 1 — Clinical Safety (fase PREGNANT): ibu hamil umum DILARANG
-    // ditawari layanan INDUKSI persalinan (merangsang kontraksi) & PERINEUM
-    // sebelum ambang klinisnya. Ambang dari label katalog resmi: Induksi =
-    // "Aterm (37+ Minggu)", Perineum = "Min. 34-36 Minggu". Gerbang pada STATE
-    // (minggu kehamilan dari sesi + pemahaman semantik specificTreatmentName),
-    // BUKAN hafalan kalimat user. Dikecualikan bila customer EKSPLISIT meminta.
-    // Fase 1 lanjutan: gerbang berlaku LINTAS KATEGORI (MOMS/BOTH/kosong) —
-    // momStage 'PREGNANT' hanya terisi untuk subjek ibu, jadi tak boleh
-    // dikunci ke category==='MOMS' (kalau tidak, bumil di kategori BOTH/kosong
-    // tetap bocor ke induksi pre-term).
-    if (momStage === 'PREGNANT') {
-      const INDUKSI_MIN_WEEKS = 37;
-      const PERINEUM_MIN_WEEKS = 34;
-      const weeks = typeof gestationalWeeks === 'number' && Number.isFinite(gestationalWeeks)
-        ? gestationalWeeks : null;
-      const INDUCT_IDS = new Set(['moms-induksi-massage', 'moms-induksi-fullbody']);
-      const PERINEUM_IDS = new Set(['moms-perineum-massage']);
-      let explicitId: string | undefined;
-      if (specificTreatmentName && specificTreatmentName.trim()) {
-        try {
-          explicitId = (treatmentCatalogService.matchCatalogItem(specificTreatmentName, tenantId) as any)?.id;
-        } catch { explicitId = undefined; }
-      }
-      const explicitlyWants = (ids: Set<string>): boolean => explicitId != null && ids.has(explicitId);
-      const inductBlocked = !explicitlyWants(INDUCT_IDS) && (weeks === null || weeks < INDUKSI_MIN_WEEKS);
-      const perineumBlocked = !explicitlyWants(PERINEUM_IDS) && (weeks !== null && weeks < PERINEUM_MIN_WEEKS);
-      const pool = formattedTreatments.filter((t) => {
-        if (inductBlocked && INDUCT_IDS.has(t.id)) return false;
-        if (perineumBlocked && PERINEUM_IDS.has(t.id)) return false;
-        return true;
-      });
-      const priorityOf = (id: string): number =>
-        id === 'moms-prenatal-massage' ? 0
-        : id === 'moms-prenatal-yoga' ? 1
-        : (INDUCT_IDS.has(id) || PERINEUM_IDS.has(id)) ? 3
-        : 2;
-      pool.sort((a, b) => {
-        const rec = (b.isRecommendedForSymptoms ? 1 : 0) - (a.isRecommendedForSymptoms ? 1 : 0);
-        if (rec !== 0) return rec;
-        return priorityOf(a.id) - priorityOf(b.id);
-      });
-      formattedTreatments.length = 0;
-      formattedTreatments.push(...pool);
     }
 
     // momStage GENERAL: bila GENERAL dipanggil tanpa konteks bayi, jangan
@@ -690,9 +691,8 @@ export async function executeGetCatalog(
         const priorityOf = (id: string): number =>
           id === 'moms-paket-laktasi' ? 0
           : id === 'moms-oksitosin-fullbody' ? 1
-          : id === 'moms-relaksasi' ? 2
           : id === 'moms-postpartum-massage' ? 3
-          : isPrenatalId(id) ? 99 : 4;
+          : isPrenatalId(id) ? 99 : 2;
         pool.sort((a, b) => {
           const p = priorityOf(a.id) - priorityOf(b.id);
           if (p !== 0) return p;
@@ -704,7 +704,9 @@ export async function executeGetCatalog(
         const explicitQuery = (specificTreatmentName || '').toLowerCase();
         const wantsSpecificMoms = explicitQuery.trim().length > 0;
         if (!wantsSpecificMoms) {
-          const relaxationServices = formattedTreatments.filter((t) => t.id === 'moms-relaksasi' || /relaksasi/i.test(t.name));
+          // Data-driven: relaksasi dikenali dari nama (ID legacy `moms-relaksasi`
+          // sudah dinonaktifkan dan tidak boleh dirujuk lagi).
+          const relaxationServices = formattedTreatments.filter((t) => /relaksasi/i.test(t.name));
           if (relaxationServices.length > 0) {
             formattedTreatments.length = 0;
             formattedTreatments.push(...relaxationServices);

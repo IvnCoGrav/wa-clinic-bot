@@ -32,6 +32,10 @@ const DEFAULT_TEMPLATE_NAMES: Record<string, WabaTemplateMeta> = {
   NO_PURCHASE_1: { templateName: 'followup_no_purchase_1', category: 'MARKETING' },
   NO_PURCHASE_2: { templateName: 'followup_no_purchase_2', category: 'MARKETING' },
   NO_PURCHASE_3: { templateName: 'followup_no_purchase_3', category: 'MARKETING' },
+  // Fase 4: varian NO_PURCHASE untuk prospek IBU (tanpa variabel nama bayi).
+  NO_PURCHASE_MOMS_1: { templateName: 'followup_no_purchase_moms_1', category: 'MARKETING' },
+  NO_PURCHASE_MOMS_2: { templateName: 'followup_no_purchase_moms_2', category: 'MARKETING' },
+  NO_PURCHASE_MOMS_3: { templateName: 'followup_no_purchase_moms_3', category: 'MARKETING' },
   NEXT_TREATMENT_1: { templateName: 'followup_next_treatment_1', category: 'MARKETING' },
   NEXT_TREATMENT_2: { templateName: 'followup_next_treatment_2', category: 'MARKETING' },
   NEXT_TREATMENT_3: { templateName: 'followup_next_treatment_3', category: 'MARKETING' },

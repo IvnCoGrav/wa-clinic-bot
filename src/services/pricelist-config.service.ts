@@ -1,3 +1,4 @@
+import path from 'path';
 import { prisma } from '../db/client';
 import { mediaService } from './media.service';
 
@@ -30,6 +31,43 @@ export async function getPricelistImageUrl(tenantId: string): Promise<string> {
     // DB offline → lanjut ke fallback env/aset
   }
   return process.env.CLINIC_PRICELIST_IMAGE_URL || DEFAULT_PRICELIST_IMAGE;
+}
+
+export interface PricelistImageAssets {
+  /** Sumber HD (DB → env → aset default), belum dipetakan ke URL tampilan. */
+  hd: string;
+  /** URL thumbnail 640px untuk dashboard; null bila tidak tersedia. */
+  thumbUrl: string | null;
+}
+
+/**
+ * Ambil aset pricelist (HD + thumbnail) dalam satu pembacaan.
+ *
+ * PENTING: thumbnail TIDAK dibuat ulang di sini — hanya lookup file yang sudah
+ * dibuat sekali saat upload (`saveOutboundMedia`). Pricelist dikecualikan dari
+ * pruning media, sehingga thumbnail tetap tersedia.
+ */
+export async function getPricelistImageAssets(tenantId: string): Promise<PricelistImageAssets> {
+  const hd = await getPricelistImageUrl(tenantId);
+  const thumbUrl = hd.startsWith('/media/') ? mediaService.resolveThumbRelativeUrl(hd) : null;
+  return { hd, thumbUrl };
+}
+
+/**
+ * URL tampilan dashboard untuk gambar pricelist:
+ * - URL absolut http(s) → dipakai apa adanya
+ * - path `/media/...`    → dipakai apa adanya
+ * - path file lain       → `/media/asset/<basename>` (aset statis)
+ */
+export function toPricelistDisplayUrl(hd: string): string {
+  try {
+    const u = new URL(hd);
+    if (u.protocol === 'http:' || u.protocol === 'https:') return hd;
+  } catch {
+    // bukan URL absolut → lanjut ke pemetaan path
+  }
+  if (hd.startsWith('/media/')) return hd;
+  return `/media/asset/${path.basename(hd)}`;
 }
 
 /**

@@ -104,6 +104,20 @@ describe('Fase 4 — Track 2C: Metadata Kelayakan Katalog & Stage Filter (determ
       const name = rec?.name.toLowerCase() || '';
       expect(name.includes('laktasi') || name.includes('oksitosin')).toBe(true);
     });
+
+    it('menyusui (BREASTFEEDING) lintas kategori → tidak ditawari Prenatal (kanonis LACTATING)', () => {
+      const rec = treatmentCatalogService.recommendServiceBySymptoms(
+        ['laktasi', 'asi'],
+        null,
+        undefined as any,
+        DEFAULT_TENANT_ID,
+        'BREASTFEEDING'
+      );
+      expect(rec).toBeDefined();
+      const name = rec?.name.toLowerCase() || '';
+      expect(name.includes('laktasi') || name.includes('oksitosin')).toBe(true);
+      expect(name.includes('prenatal') || name.includes('pregnant')).toBe(false);
+    });
   });
 
   describe('executeGetCatalog dengan momStage UNKNOWN', () => {

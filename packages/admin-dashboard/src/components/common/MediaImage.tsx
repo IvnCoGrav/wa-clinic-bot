@@ -2,6 +2,36 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { ImageOff, Loader, X, ArrowLeft, Check, ZoomIn, ZoomOut, Download } from 'lucide-react';
 
+// Cache URL gambar yang sudah selesai dipra-muat pada sesi ini.
+// Dipakai agar MediaImage tidak menampilkan overlay "Memuat..." untuk gambar
+// yang sudah diunduh (mis. setelah bubble optimis diganti versi server).
+const preloadedChatImageUrls = new Set<string>();
+
+/**
+ * Pra-muat gambar chat. Setelah selesai, MediaImage untuk URL ini langsung
+ * tampil tanpa overlay "Memuat..." — menghilangkan flash saat SSE mengganti
+ * pratinjau blob lokal dengan URL server.
+ */
+export function preloadChatImage(url?: string | null): Promise<void> {
+  if (!url || typeof window === 'undefined') return Promise.resolve();
+  if (preloadedChatImageUrls.has(url)) return Promise.resolve();
+  return new Promise((resolve) => {
+    const img = new Image();
+    let settled = false;
+    const done = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      if (ok) preloadedChatImageUrls.add(url);
+      resolve();
+    };
+    img.onload = () => done(true);
+    img.onerror = () => done(false);
+    img.src = url;
+    // Jangan menggantung UI bila jaringan lambat.
+    window.setTimeout(() => done(false), 2000);
+  });
+}
+
 export interface ChatMediaData {
   url?: string;
   hdUrl?: string;
@@ -25,7 +55,16 @@ export const MediaImage: React.FC<{
   blur?: boolean;
   alt?: string;
 }> = ({ src, downloadSrc, thumbUrl, caption, alt }) => {
-  const [thumbnailLoading, setThumbnailLoading] = useState(true);
+  // Fast preview for inline chat bubble (lightweight thumb or compressed)
+  const previewSrc = thumbUrl || src || downloadSrc || '';
+  // High quality for modal lightbox (full clear uncompressed)
+  const standardSrc = (src && !src.includes('_thumb.')) ? src : (downloadSrc || src || thumbUrl || '');
+  const hdSrc = downloadSrc || src || '';
+  const hasHdOption = Boolean(hdSrc && standardSrc && hdSrc !== standardSrc);
+
+  const [thumbnailLoading, setThumbnailLoading] = useState(
+    () => !preloadedChatImageUrls.has(previewSrc)
+  );
   const [error, setError] = useState(false);
   const [isViewerOpen, setIsViewerOpen] = useState(false);
 
@@ -40,18 +79,12 @@ export const MediaImage: React.FC<{
   const [isDragging, setIsDragging] = useState(false);
   const touchStartYRef = useRef<number>(0);
   const isHistoryPushedRef = useRef<boolean>(false);
-  // Fast preview for inline chat bubble (lightweight thumb or compressed)
-  const previewSrc = thumbUrl || src || downloadSrc || '';
-  // High quality for modal lightbox (full clear uncompressed)
-  const standardSrc = (src && !src.includes('_thumb.')) ? src : (downloadSrc || src || thumbUrl || '');
-  const hdSrc = downloadSrc || src || '';
-  const hasHdOption = Boolean(hdSrc && standardSrc && hdSrc !== standardSrc);
 
   const [currentImgSrc, setCurrentImgSrc] = useState(previewSrc);
 
   useEffect(() => {
     setCurrentImgSrc(previewSrc);
-    setThumbnailLoading(true);
+    setThumbnailLoading(!preloadedChatImageUrls.has(previewSrc));
     setError(false);
   }, [previewSrc]);
 

@@ -292,6 +292,14 @@ model Reservation {
   booking_date             DateTime?
   duration_minutes         Int?
   raw_text                 String?
+  /// Fase 1 (Maternal Structured State) — usia kehamilan saat booking (minggu).
+  /// NULL = bukan pasien hamil / data lama (baca fallback raw_text).
+  gestational_weeks        Int?
+  /// Tahap klinis ibu kanonis: PREGNANT | POSTPARTUM | LACTATING | GENERAL.
+  /// NULL = bukan pasien Moms / data lama.
+  mom_stage                String?
+  /// Perkiraan Hari Perkiraan Lahir = anchor + (40 - gestational_weeks) x 7 hari.
+  hpl_date                 DateTime?
   status                   String            @default("confirmed")
   // Stage 7 (R6): idempotency key per-tenant — cegah baris reservasi ganda
   // dari retry webhook / concurrency. Null untuk jalur admin manual.
@@ -356,6 +364,7 @@ model Reservation {
   @@index([tenant_id, created_at])
   @@index([customer_id])
   @@index([customer_id, status])
+  @@index([tenant_id, hpl_date])
   @@index([assigned_staff_id])
   @@index([series_id])
   @@index([customer_address_id])
@@ -526,6 +535,13 @@ model ClinicService {
   eligible_life_stages String[] @default([]) // Stage yang diperbolehkan (PREGNANT, PREGNANT_ATERM, POSTPARTUM, LACTATING, GENERAL, BABY, KIDS)
   contraindications String[] @default([]) // Kontraindikasi medis (misal demam, trauma kepala, TM1)
   requires_screening Boolean  @default(false) // Wajib verifikasi skrining sebelum booking
+  /// Fase 2: ambang usia kehamilan minimum (minggu) — null = tidak dibatasi.
+  min_gestational_weeks Int?
+  /// Fase 2: ambang usia kehamilan maksimum (minggu) — null = tidak dibatasi.
+  max_gestational_weeks Int?
+  /// Fase 2: keluarga klinis data-driven: INDUCTION | PERINEUM | PRENATAL |
+  /// POSTPARTUM | LACTATION | GENERAL | null.
+  clinical_family       String?
   created_at       DateTime @default(now())
   updated_at       DateTime @updatedAt
   reservation_items ReservationItem[]
@@ -627,6 +643,9 @@ model FollowUp {
   // agar pemilihan template tidak lagi menebak dari relasi reservasi yang bisa
   // kosong (reservation_id nullable / sudah di-SetNull). NULL = data lama.
   treatment_category TreatmentCategory?
+  /// Fase 4: tahap ibu saat baris dibuat (PREGNANT|POSTPARTUM|LACTATING|GENERAL).
+  /// NULL = bukan Moms / data lama.
+  mom_stage       String?
   custom_text    String?
   scheduled_at   DateTime
   sent_at        DateTime?

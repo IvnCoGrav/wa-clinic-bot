@@ -15,7 +15,9 @@
 export function isMomsFollowUpTemplateType(type: string | null | undefined): boolean {
   const t = String(type || '').toUpperCase().trim();
   if (!t) return false;
-  return t === 'REVIEW_H1_MOMS' || t.startsWith('NEXT_TREATMENT_MOMS_');
+  return t === 'REVIEW_H1_MOMS'
+    || t.startsWith('NEXT_TREATMENT_MOMS_')
+    || t.startsWith('NO_PURCHASE_MOMS_');
 }
 
 /** Placeholder yang DILARANG muncul pada template keluarga MOMS. */

@@ -24,6 +24,8 @@ export interface FollowUpTemplateParams {
   delayMinutes?: number | string;
   /** Estimasi jam tiba WIB (untuk template pemberitahuan telat CS). */
   arrivalTime?: string;
+  /** Fase 4: tahap ibu untuk memilih narasi (PREGNANT|POSTPARTUM|LACTATING). */
+  momStage?: string | null;
 }
 
 export type FollowUpTemplateType =
@@ -42,6 +44,10 @@ export type FollowUpTemplateType =
   | 'NEXT_TREATMENT_MOMS_1'
   | 'NEXT_TREATMENT_MOMS_2'
   | 'NEXT_TREATMENT_MOMS_3'
+  // Fase 4: varian NO_PURCHASE untuk prospek IBU (tanpa narasi bayi).
+  | 'NO_PURCHASE_MOMS_1'
+  | 'NO_PURCHASE_MOMS_2'
+  | 'NO_PURCHASE_MOMS_3'
   | 'MILESTONE_3M'
   | 'MILESTONE_6M'
   | 'MILESTONE_9M'
@@ -51,6 +57,18 @@ export type FollowUpTemplateType =
   | 'STAFF_ARRIVAL'
   | 'STAFF_TRIP_STATUS'
   | 'STAFF_TRIP_DELAY';
+
+/**
+ * Fase 4 — narasi fase ibu yang deterministik (bukan tebakan LLM).
+ * Dilarang memuat istilah bayi; hanya konteks perawatan Bunda.
+ */
+function momPhaseLine(momStage?: string | null): string {
+  const s = String(momStage || '').toUpperCase();
+  if (s === 'PREGNANT' || s === 'PREGNANT_ATERM') return 'selama masa kehamilan';
+  if (s === 'POSTPARTUM') return 'di masa nifas dan pemulihan pasca persalinan';
+  if (s === 'LACTATING' || s === 'BREASTFEEDING') return 'selama masa menyusui';
+  return 'untuk perawatan Bunda';
+}
 
 export const FOLLOWUP_ROLLING_TEMPLATES: Record<
   FollowUpTemplateType,
@@ -161,17 +179,17 @@ export const FOLLOWUP_ROLLING_TEMPLATES: Record<
   // laktasi, relaksasi nifas). DILARANG memuat {babyName}, "si kecil",
   // "tumbuh kembang" — narasi bayi hanya sah untuk klaster ANAK.
   NEXT_TREATMENT_MOMS_1: [
-    ({ name }) =>
-      `Halo Bunda ${name}! 🌸 Sudah 1 bulan sejak perawatan terakhir Bunda di ${getBrandIdentity().businessName}. Bagaimana kondisi badan Bunda sekarang? Kami siap bantu jadwalkan sesi perawatan berikutnya kapan pun Bunda siap. 🥰`,
-    ({ name }) =>
-      `Selamat pagi Bunda ${name}! ✨ Sudah sebulan nih sejak sesi perawatan terakhir Bunda. Kalau badan mulai terasa pegal lagi, Bidan kami siap datang membantu Bunda relaksasi di rumah. Mau kami bantu pilih jadwalnya? 😊`,
-    ({ name }) =>
-      `Pagi Bunda ${name}! 💖 Tidak terasa sudah sebulan sejak perawatan terakhir Bunda. Yuk amankan waktu untuk diri sendiri — kami siap bantu jadwalkan sesi perawatan Bunda minggu ini. ✨`,
+    ({ name, momStage }) =>
+      `Halo Bunda ${name}! 🌸 Sudah 1 bulan sejak perawatan terakhir Bunda di ${getBrandIdentity().businessName}. Bagaimana kondisi Bunda ${momPhaseLine(momStage)} sekarang? Kami siap bantu jadwalkan sesi perawatan berikutnya kapan pun Bunda siap. 🥰`,
+    ({ name, momStage }) =>
+      `Selamat pagi Bunda ${name}! ✨ Sudah sebulan nih sejak sesi perawatan terakhir Bunda ${momPhaseLine(momStage)}. Kalau badan mulai terasa pegal lagi, Bidan kami siap datang membantu Bunda relaksasi di rumah. Mau kami bantu pilih jadwalnya? 😊`,
+    ({ name, momStage }) =>
+      `Pagi Bunda ${name}! 💖 Tidak terasa sudah sebulan sejak perawatan terakhir Bunda ${momPhaseLine(momStage)}. Yuk amankan waktu untuk diri sendiri — kami siap bantu jadwalkan sesi perawatan Bunda minggu ini. ✨`,
   ],
 
   NEXT_TREATMENT_MOMS_2: [
-    ({ name }) =>
-      `Halo Bunda ${name}! 💖 Sudah 2 bulan sejak perawatan terakhir Bunda. Bagaimana kabar Bunda sekarang? Kami siap bantu jadwalkan sesi pemulihan & relaksasi berikutnya kalau Bunda butuh. 🥰`,
+    ({ name, momStage }) =>
+      `Halo Bunda ${name}! 💖 Sudah 2 bulan sejak perawatan terakhir Bunda ${momPhaseLine(momStage)}. Bagaimana kabar Bunda sekarang? Kami siap bantu jadwalkan sesi pemulihan & relaksasi berikutnya kalau Bunda butuh. 🥰`,
     ({ name }) =>
       `Selamat pagi Bunda ${name}! 🌸 Badan Bunda sudah terasa pegal lagi? Yuk manjakan diri dengan perawatan homecare ${getBrandIdentity().businessName} bulan ini. Bidan kami siap datang ke rumah Bunda. ✨`,
     ({ name }) =>
@@ -179,12 +197,41 @@ export const FOLLOWUP_ROLLING_TEMPLATES: Record<
   ],
 
   NEXT_TREATMENT_MOMS_3: [
-    ({ name }) =>
-      `Halo Bunda ${name}! 🌸 Sudah 3 bulan sejak perawatan terakhir Bunda. Ini sapaan terakhir dari kami untuk sesi rutin bulan ini ya Bunda. Semoga Bunda selalu sehat & bugar! 🥰`,
+    ({ name, momStage }) =>
+      `Halo Bunda ${name}! 🌸 Sudah 3 bulan sejak perawatan terakhir Bunda ${momPhaseLine(momStage)}. Ini sapaan terakhir dari kami untuk sesi rutin bulan ini ya Bunda. Semoga Bunda selalu sehat & bugar! 🥰`,
     ({ name }) =>
       `Pagi Bunda ${name}! ✨ Kalau Bunda butuh relaksasi atau perawatan pemulihan, Bidan kami di ${getBrandIdentity().businessName} selalu siap kapan saja ya Bunda. Sehat selalu! ❤️`,
     ({ name }) =>
       `Salam Bunda ${name}! 💖 Terima kasih telah memercayakan perawatan Bunda kepada ${getBrandIdentity().businessName}. Simpan kontak ini ya, kapan pun butuh treatment homecare kami siap datang. ✨`,
+  ],
+
+  // 9c. Follow-Up NO_PURCHASE MOMS — prospek IBU yang belum reservasi.
+  // DILARANG memuat narasi bayi ("si kecil", "tumbuh kembang", {babyName}).
+  NO_PURCHASE_MOMS_1: [
+    ({ name, momStage }) =>
+      `Halo Bunda ${name}! ✨ Kemarin sempat tanya-tanya perawatan ${momPhaseLine(momStage)} ya bund. Apakah ada yang mau ditanyakan lagi atau mau Bidan bantu jadwalkan? 😊`,
+    ({ name, momStage }) =>
+      `Pagi Bunda ${name}! 🌸 Bidan siap bantu rekomendasikan perawatan yang sesuai ${momPhaseLine(momStage)}. Mau Bidan bantu pilihkan? 🤗`,
+    ({ name, momStage }) =>
+      `Salam Bunda ${name}! ✨ Kalau Bunda butuh informasi seputar perawatan ${momPhaseLine(momStage)}, jangan ragu tanya Bidan ya bund. Kami siap datang ke rumah! 🥰`,
+  ],
+
+  NO_PURCHASE_MOMS_2: [
+    ({ name, momStage }) =>
+      `Halo Bunda ${name}! 🌸 Sudah seminggu nih sejak Bunda menghubungi ${getBrandIdentity().businessName}. Bidan siap bantu perawatan ${momPhaseLine(momStage)} kapan pun Bunda siap. 🥰`,
+    ({ name, momStage }) =>
+      `Pagi Bunda ${name}! ✨ Promo dan slot perawatan ${momPhaseLine(momStage)} masih tersedia minggu ini lho bund. Mau Bidan bantu jadwalkan? 😊`,
+    ({ name, momStage }) =>
+      `Selamat pagi Bunda ${name}! 💖 Menjaga kondisi Bunda ${momPhaseLine(momStage)} itu penting. Yuk amankan waktu untuk perawatan homecare bersama Bidan kami! ✨`,
+  ],
+
+  NO_PURCHASE_MOMS_3: [
+    ({ name, momStage }) =>
+      `Halo Bunda ${name}! 💖 Ini pesan sapaan terakhir dari Bidan ya bund. Kalau sewaktu-waktu butuh perawatan ${momPhaseLine(momStage)}, simpan kontak ${getBrandIdentity().businessName} ini ya! 🤗✨`,
+    ({ name }) =>
+      `Pagi Bunda ${name}! 🌸 Bidan selalu mendoakan Bunda sehat & bugar. Jika nanti butuh perawatan ibu, bisa langsung hubungi kami kembali ya bund. 🥰`,
+    ({ name }) =>
+      `Salam hangat Bunda ${name}! ✨ Terima kasih sudah pernah menghubungi ${getBrandIdentity().businessName}. Jangan sungkan chat Bidan kapan pun butuh layanan homecare terpercaya ya bund! ❤️`,
   ],
 
   // 10. Milestone Edukasi 3 Bulan (tummy time / stimulasi)

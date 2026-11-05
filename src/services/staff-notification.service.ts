@@ -836,12 +836,21 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
             .join(', ');
           patientDetail = `👶 ${chStr}`;
         } else {
-          const category = String(reservation.treatment_category || '').toUpperCase();
           const detail = String(reservation.treatment_detail || '').toLowerCase();
-          if (category === 'PREGNANCY' || detail.includes('hamil') || detail.includes('prenatal') || detail.includes('postpartum')) {
-            patientDetail = 'Ibu Hamil';
+          const structuredStage = String((reservation as any).mom_stage || '').toUpperCase();
+          const weeks = (reservation as any).gestational_weeks;
+          if (structuredStage === 'PREGNANT' || (!structuredStage && (detail.includes('hamil') || detail.includes('prenatal')))) {
+            patientDetail = weeks ? `Ibu Hamil (${weeks} minggu)` : 'Ibu Hamil';
+          } else if (structuredStage === 'POSTPARTUM' || (!structuredStage && detail.includes('postpartum'))) {
+            patientDetail = 'Ibu Nifas / Pasca Salin';
+          } else if (structuredStage === 'LACTATING') {
+            patientDetail = 'Ibu Menyusui / Laktasi';
           } else {
             patientDetail = 'Moms';
+          }
+          if ((reservation as any).hpl_date) {
+            const hpl = new Date((reservation as any).hpl_date);
+            if (!isNaN(hpl.getTime())) patientDetail += ` • HPL ${hpl.toISOString().slice(0, 10)}`;
           }
         }
 

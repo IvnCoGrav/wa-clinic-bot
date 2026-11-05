@@ -65,8 +65,10 @@ Tool yang belum memenuhi syarat status sesi dicabut secara fisik dari JSON schem
    - Menghitung jarak rute berkendara dan tarif ongkir homecare berdasarkan teks kelurahan/kecamatan/link peta atau ID alamat tersimpan.
 2. **`get_catalog_and_price`**:
    - Mengambil data layanan resmi dari basis data berdasarkan kategori (`BABY`, `KIDS`, `MOMS`), usia anak, usia kehamilan, atau keluhan klinis (*symptoms*). Menjaga *clinical dominance* (keluhan wajib diprioritaskan).
+   - **Gerbang kelayakan klinis (Fase 2):** memakai `clinical-eligibility.service` — tahap hidup (`PREGNANT`/`POSTPARTUM`/`LACTATING`), ambang gestasional (`min/max_gestational_weeks`), kontraindikasi, dan `requires_screening` dari DB. Bundle mewarisi kelayakan layanan penyusunnya.
 3. **`save_reservation`**:
    - Memvalidasi dan mengunci pemesanan jadwal ke database hanya saat kesepakatan final telah tercapai.
+   - **Gerbang booking deterministik:** menolak layanan yang melanggar ambang gestasional/kontraindikasi dan memicu handoff ke Bidan (bukan sekadar pesan penolakan).
 4. **`escalate_to_human`**:
    - Mengalihkan percakapan ke tim Admin/CS manusia saat terdeteksi keluhan medis darurat, permintaan manual, atau kemacetan percakapan.
 5. **`get_clinic_policy_faq`**:
@@ -89,6 +91,7 @@ Tool yang belum memenuhi syarat status sesi dicabut secara fisik dari JSON schem
 - **`CartManager`**: Keranjang transaksi layanan yang menampung paket pilihan customer dengan aturan penguncian ketat.
 - **`GoalTracker`**: Pelacak progres percakapan (pengumpulan alamat, usia pasien, keluhan, penetapan jadwal).
 - **`PatientExtractor`**: Ekstraktor entitas profil pasien (Ibu hamil, Ibu nifas, bayi/anak) beserta penanganan multi-anak (`children`).
+- **State Maternal Terstruktur (Fase 1):** `reservations.gestational_weeks`, `mom_stage`, `hpl_date` diisi oleh `maternal-state.service` melalui seam kanonis `saveReservation`; pembaca admin & bidan memakai kolom ini dengan fallback `raw_text` untuk data lama.
 - **`ConversationSummarizer`**: Peringkas riwayat obrolan panjang untuk menjaga efisiensi token context window.
 
 ---
@@ -153,6 +156,7 @@ Pusat kendali percakapan di Admin Dashboard untuk Customer Service manusia menga
 | **Pengambilalihan Manual (Takeover / Release)** | `POST /api/admin/live-chat/conversations/:id/takeover`, `PATCH /release` | Mematikan bot AI pada sesi tersebut (`is_human_handling = true`) agar CS dapat menangani percakapan secara penuh. |
 | **Enrichment Latar Belakang Senyap** | `src/services/human-background-enrichment.service.ts` | Saat mode takeover aktif, sistem di latar belakang tetap menganalisis data profil customer (nama, alamat, keluhan). |
 | **Pengiriman Pesan Multi-Media** | `POST /api/admin/live-chat/conversations/:id/reply` | Mengirim balasan teks, gambar brosur, dokumen PDF SOP, dan pesan suara (voice note). |
+| **Pipeline Thumbnail Media (SSOT)** | `src/services/media.service.ts` (`resolveThumbRelativeUrl`), `src/services/pricelist-config.service.ts` (`getPricelistImageAssets`), `MediaImage.tsx` (`preloadChatImage`) | Thumbnail 640px dibuat **sekali saat upload**, tidak pernah di jalur kirim. Dashboard memakai URL relatif `/media/..._thumb.jpg` (bukan path absolut) dan pra-muat gambar sebelum bubble optimis diganti versi server, sehingga tidak ada flash "Memuat..." saat mengirim gambar/pricelist. |
 | **Pemutar Voice Note Audio** | `packages/admin-dashboard/src/components/common/VoiceNotePlayer.tsx`, `src/routes/media.route.ts` | Streaming dan pemutaran voice note WhatsApp dari customer langsung di antarmuka web. |
 | **Sematkan & Sembunyikan Pesan** | `PATCH /live-chat/conversations/:id/messages/:messageId/pin`, `/hide` | Menyematkan pesan penting di bagian atas ruang chat atau menyembunyikan pesan sensitif dari tampilan CS. |
 | **Reaksi Emoji WhatsApp** | `POST /live-chat/conversations/:id/messages/:messageId/reaction` | Mengirimkan emoji reaksi langsung ke gelembung chat WhatsApp customer. |
@@ -194,7 +198,7 @@ Sistem menjalankan 21 background worker mandiri untuk memastikan integritas data
 | **Trip Auto-Close Sweep** | Setiap 15 menit | Menutup otomatis sesi pelacakan GPS bidan yang perjalanannya telah melewati jadwal kunjungan. |
 | **Slot Overlap Sweep** | Setiap 15 menit | Mendeteksi potensi bentrok jadwal antar-kunjungan dan memberi tahu admin. |
 | **Shareloc Reminder Sweep** | Setiap 15 menit | Mengirimkan pengingat halus kepada customer yang sudah sepakat booking namun lupa mengirim shareloc lokasi. |
-| **Follow-Up Drip Worker** | Setiap 15 menit | Mengeksekusi antrean pesan follow-up otomatis (H+1 kepuasan, H+3 evaluasi, H+7 penawaran sesi lanjutan). |
+| **Follow-Up Drip Worker** | Setiap 15 menit | Mengeksekusi antrean pesan follow-up otomatis (H+1 kepuasan, H+3 evaluasi, H+7 penawaran sesi lanjutan). Sejak Fase 4 memilih keluarga template berbasis state: `NEXT_TREATMENT_MOMS_*` + `NO_PURCHASE_MOMS_*` untuk perawatan ibu (hamil/nifas/menyusui), tanpa narasi bayi. |
 | **Nightly Watchdog** | Setiap 21:00 WIB | Laporan pengawasan malam ke Telegram/WhatsApp pemilik klinik: rekap tugas selesai, hold tersisa, dan pesan belum tertangani. |
 | **Morning Jobs & Briefing** | Setiap 06:00 WIB | Persiapan sistem harian dan pengiriman jadwal kunjungan pagi ke masing-masing bidan yang bertugas. |
 | **Daily Ops Report** | Setiap 07:00 WIB | Pengiriman laporan performa bisnis harian (omzet, jumlah booking, konversi chat) ke manajemen via Telegram/WA. |

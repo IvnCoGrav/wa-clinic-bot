@@ -34,6 +34,7 @@ const TYPE_LABELS: Record<string, string> = {
   REVIEW_H1_BABY: 'Review H+1 Pasca Terapi Bayi',
   REVIEW_H1_MOMS: 'Review H+1 Pasca Terapi Bunda',
   NO_PURCHASE: 'Follow-Up No-Purchase',
+  NO_PURCHASE_MOMS: 'Follow-Up No-Purchase (Ibu)',
   NEXT_TREATMENT: 'Pengingat Perawatan Rutin',
 };
 
