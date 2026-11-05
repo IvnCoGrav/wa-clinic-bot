@@ -3,7 +3,17 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
-## 309. [Maternal] Sisa Pekerjaan Setelah Maternal Treatment Hardening (2026-11-05, OPEN — by decision)
+## 310. [Deploy] `deploy-prod.sh` Menyalakan `app` Sebelum Migrasi & Tidak Me-rebuild `worker` (2026-11-05, OPEN - TECH DEBT)
+
+- **Gejala (terjadi saat deploy 2026-11-05):**
+  1. Runbook `scripts/deploy-prod.sh` menjalankan `docker compose up -d --build app` (langkah 2) **sebelum** `npx prisma migrate deploy` (langkah 3). Saat commit berisi kolom baru, boot `app` sempat gagal: `prisma:error ... The column clinic_services.min_gestational_weeks does not exist` dan `reservations.gestational_weeks does not exist`; inisialisasi tenant/katalog jatuh ke fallback sampai container di-restart.
+  2. Service `worker` memakai definisi `build:` terpisah. `deploy-prod.sh` hanya build/up `app`, sehingga `worker` tetap berjalan dengan image commit lama sampai di-build manual.
+- **Dampak:** jendela singkat pasca-deploy di mana query yang menyentuh kolom baru error; worker bisa menjalankan kode lama (cron/sweep tidak sinkron dengan app).
+- **Mitigasi yang dilakukan 2026-11-05:** setelah migrasi selesai dijalankan `docker compose build worker` + `docker compose up -d --no-deps app worker`, lalu `docker compose restart app worker`; log bersih, `/ready` = database CONNECTED + waha WORKING.
+- **Rekomendasi perbaikan runbook (belum dieksekusi):** urutan aman = build semua image → `docker compose run --rm app npx prisma migrate deploy` (tanpa menghentikan app lama) → `docker compose up -d --no-deps app worker` → health check. Wajib juga menyertakan `worker` pada langkah build/recreate.
+- **Catatan drift:** `prisma migrate status` = up to date (105 migrasi), tetapi `migrate diff` masih melaporkan drift lama (tabel backup manual, `ALTER COLUMN ... DROP DEFAULT`, rename index). Drift itu **pre-existing**, bukan dari migrasi maternal.
+
+## 309. [Maternal] Sisa Pekerjaan Setelah Maternal Treatment Hardening (2026-11-05, OPEN - by decision)
 
 - **Konteks:** Fase 1–5 (lihat CHANGELOG 2026-11-05) sudah menutup state maternal
   terstruktur, gerbang klinis deterministik, follow-up sadar fase, dan kanonisasi
