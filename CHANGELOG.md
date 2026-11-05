@@ -4,6 +4,22 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-05 - Feature: Ikon Pembeda Pengirim Pesan di Daftar Live Chat (Pasien, Admin, Bot AI)
+
+- **Latar Belakang & Masalah**:
+  - Pada daftar percakapan Live Chat WhatsApp (`LiveChatMonitor.tsx`), setiap kartu percakapan menampilkan cuplikan teks dari pesan terakhir (*preview text*), namun tanpa penanda siapa pengirimnya. Admin harus membuka percakapan satu per satu untuk memastikan apakah pesan terakhir berasal dari pasien yang belum dibalas atau sudah dijawab oleh staf/bot.
+- **Perubahan Utama**:
+  1. `packages/admin-dashboard/src/utils/chatSenderIndicator.ts`:
+     - Modul murni deterministik untuk mengekstrak arah dan jenis pengirim pesan terakhir:
+       - `INBOUND` / `CUSTOMER` → Pasien (ikon `User`, tooltip "Pesan dari Pasien").
+       - `OUTBOUND` + non-bot (`ADMIN`, `STAFF`, `HUMAN`) → Saya / Admin (ikon `CheckCheck` hijau khas WhatsApp, tooltip "Pesan dari Saya / Admin").
+       - `OUTBOUND` + `BOT` / `SYSTEM` → Bot AI (ikon `Bot` ungu, tooltip "Pesan dari Bot AI").
+  2. `packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx`:
+     - Menampilkan ikon penanda pengirim tepat di depan teks cuplikan pesan pada kartu percakapan dengan layout inline-flex rapi (`flex items-center gap-1.5 min-w-0 truncate`).
+  3. `tests/unit/live-chat-sender-indicator.test.ts`:
+     - 7 unit test adversarial memverifikasi deteksi pengirim pesan masuk, pesan keluar staf, pesan bot, dan ketahanan terhadap data kosong/null.
+- **Verifikasi**: Unit test 7 passed (100%), root build `tsc` exit 0, admin dashboard Vite build exit 0.
+
 #### 2026-11-05 - Fix: Flash "Memuat..." Gambar Live Chat & Path Thumbnail Absolut (Pricelist Quick Reply)
 
 - **Masalah:** setiap mengirim gambar/pricelist dari Live Chat (terutama quick reply `/pricelist`), bubble menampilkan overlay "Memuat..." jauh lebih lama dari seharusnya. Investigasi kode menemukan `src/services/live-chat.service.ts` menyimpan **path absolut filesystem** (`C:\...\storage\media\...`) sebagai `payload_raw.media.url`/`thumbUrl`; browser gagal memuatnya lalu jatuh ke file HD. Fallback thumbnail WABA juga tidak pernah aktif, dan log pricelist bot tidak menyertakan `thumbUrl`.

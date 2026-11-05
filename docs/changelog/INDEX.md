@@ -5,8 +5,11 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 649
+Total entri terindeks: 652
 
+- 2026-11-05 | Feature: Ikon Pembeda Pengirim Pesan di Daftar Live Chat (Pasien, Admin, Bot AI)
+- 2026-11-05 | Fix: Flash "Memuat..." Gambar Live Chat & Path Thumbnail Absolut (Pricelist Quick Reply)
+- 2026-11-05 | Feat: Maternal Treatment Hardening (State Kehamilan Terstruktur, Gerbang Klinis Determinis
 - 2026-11-04 | Feature: Skill Rekonsiliasi & Audit Treatment Harian (`reconcile-daily-treatment`)
 - 2026-11-04 | Feature: Skema Insentif Retensi Bidan 60 Hari (Pool 6 Bulan Bergulir & Benchmark 34,6%) +
 - 2026-11-04 | Fix: F14 Admin Copilot (Ambiguitas Nama Terapis, Batas Ambil Data, Tautan Yatim, Deploy &

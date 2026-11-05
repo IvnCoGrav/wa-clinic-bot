@@ -113,6 +113,7 @@ import { MessagePinBanner, PinnedMessageData } from '../../components/livechat/M
 import { AiOffStrip } from '../../components/livechat/AiOffStrip';
 import { resolveEffectiveLocationSource, getLocationBadgeConfig, getGoogleMapsDirectionUrl } from '../../utils/geoUtils';
 import { getSharelocCardStatus } from '../../utils/sharelocCardStatus';
+import { resolveChatSenderIndicator } from '../../utils/chatSenderIndicator';
 
 // Cache referensi wilayah (backend gazetteer) — diambil sekali per sesi invoice
 let cachedWilayahRef: WilayahReference | null = null;
@@ -4731,6 +4732,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   const preview = isLastMsgHidden
                     ? `👁️🗨️ [Hidden] ${lastMsg?.content || 'Pesan'}`
                     : lastMsg?.content || null;
+                  const senderInd = resolveChatSenderIndicator(lastMsg);
                   // Draf typing tersimpan sementara (24 jam): untuk chat yang sedang dibuka
                   // pakai teks live composer, untuk lainnya baca dari penyimpanan. draftTick
                   // memastikan nilai ini segar setiap render ulang terjadwal.
@@ -5040,8 +5042,32 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           );
                         }
                         return (
-                          <p className="text-xs text-ink-2 dark:text-ink-2 line-clamp-1 italic leading-snug">
-                            &quot;{preview || 'Tidak ada pesan'}&quot;
+                          <p className="text-xs text-ink-2 dark:text-ink-2 line-clamp-1 italic leading-snug flex items-center gap-1.5 min-w-0">
+                            {senderInd.isCustomer && (
+                              <span
+                                className="shrink-0 inline-flex items-center text-sky-600 dark:text-sky-400"
+                                title={senderInd.tooltip}
+                              >
+                                <User size={12} />
+                              </span>
+                            )}
+                            {senderInd.isAdmin && (
+                              <span
+                                className="shrink-0 inline-flex items-center text-[#008069] dark:text-[#00a884]"
+                                title={senderInd.tooltip}
+                              >
+                                <CheckCheck size={13} />
+                              </span>
+                            )}
+                            {senderInd.isBot && (
+                              <span
+                                className="shrink-0 inline-flex items-center text-indigo-600 dark:text-indigo-400"
+                                title={senderInd.tooltip}
+                              >
+                                <Bot size={12} />
+                              </span>
+                            )}
+                            <span className="truncate">&quot;{preview || 'Tidak ada pesan'}&quot;</span>
                           </p>
                         );
                       })()}
