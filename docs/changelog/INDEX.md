@@ -5,8 +5,9 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 652
+Total entri terindeks: 653
 
+- 2026-11-05 | Fix: Buku Alamat Satu Sumber Kebenaran & Alamat Kedua Tidak Lagi "Hilang"/Salah Wilayah
 - 2026-11-05 | Feature: Ikon Pembeda Pengirim Pesan di Daftar Live Chat (Pasien, Admin, Bot AI)
 - 2026-11-05 | Fix: Flash "Memuat..." Gambar Live Chat & Path Thumbnail Absolut (Pricelist Quick Reply)
 - 2026-11-05 | Feat: Maternal Treatment Hardening (State Kehamilan Terstruktur, Gerbang Klinis Determinis

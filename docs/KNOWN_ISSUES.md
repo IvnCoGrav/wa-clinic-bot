@@ -3,6 +3,30 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 311. [Buku Alamat] Alamat Kedua Tidak Terlihat, Wilayah Salah & Reservasi Tertaut Kartu Primary (2026-11-05, RESOLVED - HIGH)
+
+- **Status:** RESOLVED (2026-11-05) — gerbang kode deterministik + remediasi data produksi.
+- **Gejala (pelanggan `6283856165785`, Bunda Briella):**
+  1. Customer menyebut rumah kedua `Gunung anyar lor no 94`; kartu di `customer_addresses` lahir tetapi **tidak muncul** di Buku Alamat/AI (`preferences.saved_addresses` hanya berisi kartu Tandes).
+  2. Kartu baru mewarisi wilayah kartu lama (`Karangpoh/Tandes/Surabaya`) — bukan `Gunung Anyar Lor/Gunung Anyar/Surabaya`.
+  3. Reservasi 2026-11-06 09:00 WIB tertaut ke kartu **Rumah Tandes** (`72dc1274-…`), bukan kartu Gunung Anyar (`eb642bc1-…`).
+- **Akar Masalah (multi-layer):**
+  - **Tulis:** `reservation-dispatch.route.ts` (RC-1) selalu mewarisi `kelurahan/kecamatan/kota` dari kartu reservasi lama/profil root untuk kandidat alamat apa pun; lalu menulis ulang **seluruh** `preferences` dari snapshot awal request → `saved_addresses` baru terhapus (lost update).
+  - **Resolusi kartu:** `resolveCustomerAddressId` tidak punya identitas teks; kandidat tanpa koordinat meminjam koordinat root (rumah Tandes) → tertarik ke kartu primary yang salah.
+  - **Baca:** `getSavedAddresses` hanya membaca JSON `preferences`, bukan tabel kanonis `customer_addresses` → kartu tabel-only tidak terlihat.
+- **Solusi Fondasional:**
+  1. `src/domain/customer-address.ts` — `normalizeAddressText()` + `reconcileAddressLists()` (kanonis menang, dedup id/identitas rumah, tepat 1 primary).
+  2. `src/services/customer.service.ts` — baca `tabel ∪ cache`; lock per-customer; merge JSONB atomik (`preferences || patch`); seam `mergeCustomerPreferences()` untuk patch parsial.
+  3. `src/routes/admin/reservation-dispatch.route.ts` — wilayah hanya diwarisi bila `sameHouse`; preferences ditulis parsial.
+  4. `src/services/reservation-core.service.ts` — identitas teks alamat diprioritaskan; koordinat root hanya boleh diwarisi bila terbukti rumah yang sama.
+  5. `src/routes/admin/reservation-crud.route.ts` — resolusi kartu dari teks alamat; wilayah hanya dari kartu cocok/profil root; rumah baru tidak dikaruniai wilayah palsu.
+- **Bukti:** `tests/unit/address-book-single-source.test.ts` (9) + test RC-1 baru; 128 test alamat lulus; `npm run build` exit 0; suite penuh 11 gagal/6 file = baseline pre-existing (revert-and-rerun), 0 regresi.
+- **Remediasi produksi:** backup `backups/pre-address-fix-20261105-215235.sql` (1,4 MB); kartu diperbaiki (`Rumah Gunung Anyar`, Gunung Anyar Lor/Gunung Anyar, 5,2 km, ongkir 15.000, **lat/lng NULL**), reservasi ditautkan ulang, JSON 2 kartu/1 primary, audit `ADDRESS_REMEDIATION`. Root profile & primary Tandes sengaja **tidak** diubah.
+- **Sisa risiko / tindak lanjut:**
+  1. Customer belum mengirim shareloc (`Besok tak sharelock kak`) → koordinat Gunung Anyar tetap `NULL` sampai pin asli masuk; jangan mengisi estimasi palsu.
+  2. Reservasi belum tersinkron ke Google Sheet (`sheets_sync_status=pending`, sync hanya saat `completed`) — saat selesai, formatter membaca kartu reservasi sehingga otomatis benar.
+  3. Pola drift JSON↔tabel (#304) berpotensi kambuh untuk jalur tulis baru yang tidak memakai seam ini; wajib memakai `upsertSavedAddress`/`mergeCustomerPreferences`.
+
 ## 310. [Deploy] `deploy-prod.sh` Menyalakan `app` Sebelum Migrasi & Tidak Me-rebuild `worker` (2026-11-05, OPEN - TECH DEBT)
 
 - **Gejala (terjadi saat deploy 2026-11-05):**
@@ -168,6 +192,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   2. `src/scripts/reconcile-customer-addresses.ts` — eksekutor idempoten, default **dry-run**, `--commit` transaksional per customer, tenant-scoped, filter `--tenant=`/`--customer=`.
 - **Bukti & Verifikasi:** `tests/unit/address-reconciliation.test.ts` (7 kasus R1–R7) lulus; `npm run build` exit 0; dry-run & commit dijalankan setelah `pg_dump` (backup `/opt/wa-clinic-bot/backups/`). **Hasil produksi:** 25 customer, adopt 16, hapus 0, upsert 8 → **drift 0, orphan 0, primary anomaly 0** (166 baris).
 - **Sisa risiko:** perubahan primary mengikuti tabel; sinkronisasi kolom root `customers.*` dengan kartu primary tetap isu A-003 (di luar rekonsiliasi ini).
+- **Kambuh 2026-11-05 (lihat #311):** drift kembali terjadi dalam bentuk kartu tabel-only (Gunung Anyar) yang hilang dari JSON. Perbaikan permanen: `getSavedAddresses` membaca tabel ∪ cache dan semua tulis memakai merge JSONB atomik.
 - **Remediasi data tambahan (2026-11-03):** Bunda Gina (`6285194925518`) — `Rumah Driyorejo` (salah) dihapus, `Rumah Gunung Anyar` (5.000, 2 reservasi) jadi primary, root/JSON diselaraskan; kartu sampah `628980707299` (`Rumah Wonocolo 2` berisi teks chat) dihapus. Audit log: `HEAL_DUPLICATE_GPS_GUNUNG_ANYAR`, `HEAL_GARBAGE_ADDRESS_CARD`. **Babyspanisa sengaja dilewati** (menunggu keputusan ongkir).
 
 ## 303. [Buku Alamat] Shareloc Pertama Berubah Menjadi "Alamat Kedua" (2026-11-03, RESOLVED - HIGH)
@@ -199,6 +224,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - Suite regresi domain & multi-rumah: `customer-saved-addresses-enrichment.test.ts`, `address-match-null-kelurahan.test.ts`, `customer-address-rumah-kedua.test.ts`, `customer-saved-addresses.test.ts`, `customer-address-book.test.ts`, `multi-address-fase3.test.ts`, `admin-create-reservation.test.ts`, `gazetteer-border-anchoring.test.ts` (116 test pada 10 suite, 0 regresi).
   - Kasus produksi terverifikasi: Bunda Agnes Noor (`6289501211791`), Bunda Nandawulan (`6285755934855`), Bunda Maulida (`628881626616`), Bunda Mia Rachmawati (`6281332478233`).
 - **Sisa risiko (dicatat):** pelanggan multi-rumah di kelurahan yang sama tanpa bukti koordinat akan jatuh ke perilaku lama (membuat kartu baru) — ini disengaja agar tidak menimpa rumah yang salah.
+- **Kambuh 2026-11-05 (lihat #311):** kasus berbeda — kartu kedua sudah benar dibuat, tetapi wilayahnya diwarisi dari kartu lama dan reservasi tertaut ke primary karena pinjaman koordinat root. Gerbang baru: identitas teks alamat + `sameHouse` sebelum warisan wilayah/koordinat.
 
 ## 302. [Dokumentasi Audit] Label Fase Tertukar & Angka Cakupan Salah pada Laporan Verifikasi Ulang (2026-11-03, RESOLVED - LOW)
 

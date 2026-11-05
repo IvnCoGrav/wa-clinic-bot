@@ -24,6 +24,7 @@ import {
   removeMatchingTombstones,
   buildAddressKey,
   selectEnrichmentTarget,
+  reconcileAddressLists,
 } from '../domain/customer-address';
 import { ACTIVE_RESERVATION_STATUSES, isActiveReservation } from '../domain/reservation-status';
 import { STAFF_VERIFIED_LOCATION_LABEL, resolveLocationSource } from './staff-reservation.service';
@@ -1573,11 +1574,88 @@ export class CustomerService {
   // service ini hanya lapisan baca/tulis tenant-scoped + fallback memori test.
   // ─────────────────────────────────────────────────────────────────────────
 
-  /** Baca daftar alamat tersimpan customer (tahan data kosong/kotor). */
+  /**
+   * Antrean tulis per-customer untuk operasi baca-ubah-tulis buku alamat.
+   * Mencegah lost-update ketika dua request paralel (mis. admin edit reservasi
+   * + sync lokasi) menulis daftar alamat berdasarkan snapshot yang sama.
+   * Satu instance app produksi; multi-instance tetap dijaga oleh baris tabel
+   * kanonis + rekonsiliasi baca.
+   */
+  private addressBookLocks = new Map<string, Promise<unknown>>();
+
+  private async withAddressBookLock<T>(customerId: string, fn: () => Promise<T>): Promise<T> {
+    const key = `address-book:${customerId}`;
+    const previous = this.addressBookLocks.get(key) ?? Promise.resolve();
+    const run = previous.catch(() => undefined).then(fn);
+    const settled = run.catch(() => undefined);
+    this.addressBookLocks.set(key, settled);
+    try {
+      return await run;
+    } finally {
+      if (this.addressBookLocks.get(key) === settled) this.addressBookLocks.delete(key);
+    }
+  }
+
+  /** Normalisasi baris Prisma `customer_addresses` → kontrak domain camelCase. */
+  private mapCanonicalAddressRow(row: any): SavedCustomerAddress {
+    return {
+      id: row.id,
+      label: row.label ?? 'Rumah',
+      address: row.address ?? '',
+      kelurahan: row.kelurahan ?? null,
+      kecamatan: row.kecamatan ?? null,
+      kota: row.kota ?? null,
+      lat: row.lat ?? null,
+      lng: row.lng ?? null,
+      distanceKm: row.distance_km ?? null,
+      ongkir: row.ongkir ?? null,
+      landmark: row.landmark ?? null,
+      locationSource: row.location_source ?? null,
+      isPrimary: Boolean(row.is_primary),
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+      lastUsedAt: row.last_used_at ? new Date(row.last_used_at).toISOString() : new Date().toISOString(),
+    } as SavedCustomerAddress;
+  }
+
+  /**
+   * Baca baris tabel kanonis. `null` = DB tidak tersedia (caller fallback ke
+   * preferences, perilaku lama test offline). Array kosong = tabel memang kosong.
+   */
+  private async readCanonicalAddressRows(
+    customerId: string,
+    tenantId: string
+  ): Promise<SavedCustomerAddress[] | null> {
+    try {
+      if (typeof (prisma as any).customerAddress?.findMany !== 'function') return null;
+      const rows = await prisma.customerAddress.findMany({
+        where: { tenant_id: tenantId, customer_id: customerId },
+        orderBy: [{ is_primary: 'desc' }, { last_used_at: 'desc' }],
+      });
+      return (rows || []).map((row: any) => this.mapCanonicalAddressRow(row));
+    } catch {
+      return null;
+    }
+  }
+
+  /** Daftar alamat efektif: kanonis (tabel) ∪ cache (preferences), tanpa duplikat. */
+  private async canonicalAddressListFor(customer: any, tenantId: string): Promise<SavedCustomerAddress[]> {
+    const fromPreferences = parseSavedAddresses(customer?.preferences);
+    if (!customer?.id) return fromPreferences;
+    const fromTable = await this.readCanonicalAddressRows(customer.id, tenantId);
+    if (!fromTable || fromTable.length === 0) return fromPreferences;
+    return reconcileAddressLists(fromTable, fromPreferences);
+  }
+
+  /**
+   * Baca daftar alamat tersimpan customer (tahan data kosong/kotor).
+   * Sumber kebenaran = tabel `customer_addresses`; `preferences.saved_addresses`
+   * hanya cache. Kartu yang hanya hidup di salah satu sisi tetap dikembalikan
+   * (anti "kartu tak terlihat" seperti kasus alamat kedua 2026-11-05).
+   */
   public async getSavedAddresses(customerId: string, tenantId: string): Promise<SavedCustomerAddress[]> {
     const customer = await this.getCustomerById(customerId, tenantId);
     if (!customer) return [];
-    return parseSavedAddresses(customer.preferences);
+    return this.canonicalAddressListFor(customer, tenantId);
   }
 
   /**
@@ -1589,15 +1667,19 @@ export class CustomerService {
     input: UpsertSavedAddressInput,
     tenantId: string
   ): Promise<SavedCustomerAddress | null> {
-    const customer = await this.getCustomerById(customerId, tenantId);
-    if (!customer) return null;
-    const list = parseSavedAddresses(customer.preferences);
-    const nowIso = new Date().toISOString();
-    const { list: nextList, entry } = upsertAddressIntoList(list, input, nowIso);
-    const existingTombstones = parseAddressTombstones(customer.preferences);
-    const nextTombstones = removeMatchingTombstones(existingTombstones, input);
-    await this.persistSavedAddresses(customer, tenantId, nextList, nowIso, nextTombstones);
-    return entry;
+    return this.withAddressBookLock(customerId, async () => {
+      const customer = await this.getCustomerById(customerId, tenantId);
+      if (!customer) return null;
+      // Baca gabungan kanonis + cache DI DALAM lock agar update paralel tidak
+      // saling menimpa kartu yang baru saja ditulis.
+      const list = await this.canonicalAddressListFor(customer, tenantId);
+      const nowIso = new Date().toISOString();
+      const { list: nextList, entry } = upsertAddressIntoList(list, input, nowIso);
+      const existingTombstones = parseAddressTombstones(customer.preferences);
+      const nextTombstones = removeMatchingTombstones(existingTombstones, input);
+      await this.persistSavedAddresses(customer, tenantId, nextList, nowIso, nextTombstones);
+      return entry;
+    });
   }
 
   /**
@@ -1621,15 +1703,17 @@ export class CustomerService {
 
   /** Tetapkan alamat utama (primary) — pastikan tepat 1 primary. */
   public async setDefaultAddress(customerId: string, addressId: string, tenantId: string): Promise<void> {
-    const customer = await this.getCustomerById(customerId, tenantId);
-    if (!customer) return;
-    const list = parseSavedAddresses(customer.preferences);
-    if (!list.some((a) => a.id === addressId)) return;
-    const nowIso = new Date().toISOString();
-    const next = ensureSinglePrimary(list, addressId).map((a) =>
-      a.id === addressId ? { ...a, lastUsedAt: nowIso } : a
-    );
-    await this.persistSavedAddresses(customer, tenantId, next, nowIso);
+    return this.withAddressBookLock(customerId, async () => {
+      const customer = await this.getCustomerById(customerId, tenantId);
+      if (!customer) return;
+      const list = await this.canonicalAddressListFor(customer, tenantId);
+      if (!list.some((a) => a.id === addressId)) return;
+      const nowIso = new Date().toISOString();
+      const next = ensureSinglePrimary(list, addressId).map((a) =>
+        a.id === addressId ? { ...a, lastUsedAt: nowIso } : a
+      );
+      await this.persistSavedAddresses(customer, tenantId, next, nowIso);
+    });
   }
 
   /** Resolusi alamat aktif: primary menang, fallback lastUsedAt terbaru. */
@@ -1653,62 +1737,119 @@ export class CustomerService {
     addressId: string,
     tenantId: string
   ): Promise<{ deleted: boolean; activeCount: number }> {
-    const customer = await this.getCustomerById(customerId, tenantId);
-    if (!customer) return { deleted: false, activeCount: 0 };
-    const list = parseSavedAddresses(customer.preferences);
-    const target = list.find((a) => a.id === addressId);
-    if (!target) return { deleted: false, activeCount: 0 };
+    return this.withAddressBookLock(customerId, async () => {
+      const customer = await this.getCustomerById(customerId, tenantId);
+      if (!customer) return { deleted: false, activeCount: 0 };
+      const list = await this.canonicalAddressListFor(customer, tenantId);
+      const target = list.find((a) => a.id === addressId);
+      if (!target) return { deleted: false, activeCount: 0 };
 
-    let rows: any[] = [];
-    try {
-      rows = await prisma.reservation.findMany({
-        where: {
-          tenant_id: tenantId,
-          customer_id: customerId,
-          customer_address_id: addressId,
-          status: { in: ACTIVE_RESERVATION_STATUSES },
-        },
-      });
-    } catch (error) {
-      console.error('[CustomerService] deleteSavedAddress guard query failed (fail-closed):', (error as Error)?.message);
-      throw error;
-    }
-    const activeCount = (rows || []).filter((r: any) => isActiveReservation(r)).length;
-    if (activeCount > 0) return { deleted: false, activeCount };
+      let rows: any[] = [];
+      try {
+        rows = await prisma.reservation.findMany({
+          where: {
+            tenant_id: tenantId,
+            customer_id: customerId,
+            customer_address_id: addressId,
+            status: { in: ACTIVE_RESERVATION_STATUSES },
+          },
+        });
+      } catch (error) {
+        console.error('[CustomerService] deleteSavedAddress guard query failed (fail-closed):', (error as Error)?.message);
+        throw error;
+      }
+      const activeCount = (rows || []).filter((r: any) => isActiveReservation(r)).length;
+      if (activeCount > 0) return { deleted: false, activeCount };
 
-    const nowIso = new Date().toISOString();
-    const { list: nextList } = removeAddressFromList(list, addressId);
+      const nowIso = new Date().toISOString();
+      const { list: nextList } = removeAddressFromList(list, addressId);
 
-    // F-3 / S-3: Rekam tombstone agar kartu tidak auto-rebirth saat sync lokasi berikutnya
-    const existingTombstones = parseAddressTombstones(customer.preferences);
-    const newTombstone: AddressTombstone = {
-      address: target.address ?? null,
-      kelurahan: target.kelurahan ?? null,
-      kecamatan: target.kecamatan ?? null,
-      kota: target.kota ?? null,
-      lat: target.lat ?? null,
-      lng: target.lng ?? null,
-      deletedAt: nowIso,
-    };
-    const nextTombstones = pruneAddressTombstones([...existingTombstones, newTombstone], nowIso);
+      // F-3 / S-3: Rekam tombstone agar kartu tidak auto-rebirth saat sync lokasi berikutnya
+      const existingTombstones = parseAddressTombstones(customer.preferences);
+      const newTombstone: AddressTombstone = {
+        address: target.address ?? null,
+        kelurahan: target.kelurahan ?? null,
+        kecamatan: target.kecamatan ?? null,
+        kota: target.kota ?? null,
+        lat: target.lat ?? null,
+        lng: target.lng ?? null,
+        deletedAt: nowIso,
+      };
+      const nextTombstones = pruneAddressTombstones([...existingTombstones, newTombstone], nowIso);
 
-    await this.persistSavedAddresses(customer, tenantId, nextList, nowIso, nextTombstones);
+      await this.persistSavedAddresses(customer, tenantId, nextList, nowIso, nextTombstones);
 
-    // Dual-write cleanup baris tabel (best-effort + event terstruktur bila gagal).
-    try {
-      if (typeof (prisma as any).customerAddress?.deleteMany === 'function') {
-        await prisma.customerAddress.deleteMany({
-          where: { id: addressId, customer_id: customerId, tenant_id: tenantId },
+      // Dual-write cleanup baris tabel (best-effort + event terstruktur bila gagal).
+      try {
+        if (typeof (prisma as any).customerAddress?.deleteMany === 'function') {
+          await prisma.customerAddress.deleteMany({
+            where: { id: addressId, customer_id: customerId, tenant_id: tenantId },
+          });
+        }
+      } catch (error) {
+        console.warn('[CustomerService] ADDR_BOOK_DELETE_TABLE_FAILED:', {
+          customerId,
+          addressId,
+          message: (error as Error)?.message,
         });
       }
-    } catch (error) {
-      console.warn('[CustomerService] ADDR_BOOK_DELETE_TABLE_FAILED:', {
-        customerId,
-        addressId,
-        message: (error as Error)?.message,
-      });
+      return { deleted: true, activeCount: 0 };
+    });
+  }
+
+  /**
+   * Patch SEBAGIAN kunci `preferences` tanpa menimpa kunci lain.
+   *
+   * Dipakai jalur edit reservasi yang hanya ingin memperbarui
+   * `preferences.address` / `landmark`: versi lama menulis ulang SELURUH objek
+   * dari snapshot awal request sehingga `saved_addresses` yang baru ditulis
+   * RC-1 hilang (insiden alamat kedua 2026-11-05). Di produksi memakai merge
+   * JSONB atomik (`preferences || patch`); fallback read-merge-write.
+   */
+  public async mergeCustomerPreferences(
+    customerId: string,
+    tenantId: string,
+    patch: Record<string, unknown>
+  ): Promise<void> {
+    const clean = Object.fromEntries(
+      Object.entries(patch || {}).filter(([, value]) => value !== undefined)
+    );
+    if (Object.keys(clean).length === 0) return;
+
+    const rawExec = (prisma as any).$executeRawUnsafe;
+    if (typeof rawExec === 'function') {
+      try {
+        const affected = await rawExec.call(
+          prisma,
+          `UPDATE customers
+              SET preferences = COALESCE(preferences, '{}'::jsonb) || $2::jsonb,
+                  updated_at = NOW()
+            WHERE id = $1 AND tenant_id = $3`,
+          customerId,
+          JSON.stringify(clean),
+          tenantId
+        );
+        // 0 baris = customer/tenant tidak cocok → jangan anggap sukses.
+        if (typeof affected === 'number' && affected === 0) {
+          throw new Error('CUSTOMER_PREFERENCES_UPDATE_NO_ROWS');
+        }
+        return;
+      } catch (error) {
+        if (!isTestRuntime()) {
+          console.warn(
+            '[CustomerService] mergeCustomerPreferences atomic merge gagal, fallback read-merge-write:',
+            (error as Error)?.message
+          );
+        }
+      }
     }
-    return { deleted: true, activeCount: 0 };
+
+    const customer = await this.getCustomerById(customerId, tenantId);
+    if (!customer) return;
+    const repo = (await import('../repositories/customer.repository')).getCustomerRepository();
+    await repo.update(customerId, {
+      preferences: { ...((customer.preferences as any) || {}), ...clean },
+    } as any);
   }
 
   /**
@@ -1722,28 +1863,62 @@ export class CustomerService {
     nowIso: string,
     tombstones?: AddressTombstone[]
   ): Promise<void> {
-    const currentPrefs = (customer?.preferences as any) || {};
-    const newPrefs = {
-      ...currentPrefs,
+    const patch: Record<string, unknown> = {
       saved_addresses: list,
       saved_addresses_updated_at: nowIso,
       ...(tombstones !== undefined ? { address_tombstones: tombstones } : {}),
     };
-    try {
-      const repo = (await import('../repositories/customer.repository')).getCustomerRepository();
-      await repo.update(customer.id, { preferences: newPrefs });
-      customer.preferences = newPrefs;
-    } catch (error) {
-      if (!isTestRuntime()) {
-        console.error('[CustomerService] persistSavedAddresses DB failed (fail-fast):', (error as Error)?.message);
-        throw error;
-      }
-      for (const cust of memoryCustomers.values()) {
-        if (cust.id === customer.id && cust.tenant_id === tenantId) {
-          cust.preferences = newPrefs;
+    const newPrefs = { ...((customer?.preferences as any) || {}), ...patch };
+
+    // Merge JSONB atomik: hanya kunci buku alamat yang diganti. Kunci lain
+    // (mis. preferences.address dari edit reservasi paralel) TIDAK tersentuh —
+    // akar masalah "kartu baru terhapus snapshot basi" 2026-11-05.
+    let persistedAtomically = false;
+    const rawExec = (prisma as any).$executeRawUnsafe;
+    if (typeof rawExec === 'function') {
+      try {
+        const affected = await rawExec.call(
+          prisma,
+          `UPDATE customers
+              SET preferences = COALESCE(preferences, '{}'::jsonb) || $2::jsonb,
+                  updated_at = NOW()
+            WHERE id = $1 AND tenant_id = $3`,
+          customer.id,
+          JSON.stringify(patch),
+          tenantId
+        );
+        if (typeof affected === 'number' && affected === 0) {
+          throw new Error('CUSTOMER_PREFERENCES_UPDATE_NO_ROWS');
+        }
+        persistedAtomically = true;
+        customer.preferences = newPrefs;
+      } catch (error) {
+        if (!isTestRuntime()) {
+          console.warn(
+            '[CustomerService] persistSavedAddresses atomic merge gagal, fallback read-merge-write:',
+            (error as Error)?.message
+          );
         }
       }
-      customer.preferences = newPrefs;
+    }
+
+    if (!persistedAtomically) {
+      try {
+        const repo = (await import('../repositories/customer.repository')).getCustomerRepository();
+        await repo.update(customer.id, { preferences: newPrefs });
+        customer.preferences = newPrefs;
+      } catch (error) {
+        if (!isTestRuntime()) {
+          console.error('[CustomerService] persistSavedAddresses DB failed (fail-fast):', (error as Error)?.message);
+          throw error;
+        }
+        for (const cust of memoryCustomers.values()) {
+          if (cust.id === customer.id && cust.tenant_id === tenantId) {
+            cust.preferences = newPrefs;
+          }
+        }
+        customer.preferences = newPrefs;
+      }
     }
 
     // Dual-write ke tabel relasional customer_addresses (Fase 3C)
@@ -1803,20 +1978,30 @@ export class CustomerService {
     tenantId: string,
     loc: UpsertSavedAddressInput & { isPrimary?: boolean }
   ): Promise<void> {
-    const tombstones = parseAddressTombstones(customer?.preferences);
-    if (tombstones.some((t) => matchesTombstone(t, loc))) {
-      return;
-    }
-    const list = parseSavedAddresses(customer?.preferences);
-    const nowIso = new Date().toISOString();
-    // GERBANG: pin GPS memperkaya kartu lama yang belum ber-GPS presisi, bukan membuat kartu baru.
-    const target = selectEnrichmentTarget(list, loc);
-    const { list: nextList } = upsertAddressIntoList(
-      list,
-      target ? { ...loc, id: target.id } : loc,
-      nowIso
-    );
-    await this.persistSavedAddresses(customer, tenantId, nextList, nowIso);
+    if (!customer?.id) return;
+    return this.withAddressBookLock(customer.id, async () => {
+      // Baca state TERBARU di dalam lock — jangan memakai snapshot pemanggil
+      // yang bisa saja sudah basi oleh tulisan buku alamat paralel.
+      const fresh = await this.getCustomerById(customer.id, tenantId);
+      if (!fresh) return;
+      const tombstones = parseAddressTombstones(fresh.preferences);
+      if (tombstones.some((t) => matchesTombstone(t, loc))) {
+        return;
+      }
+      const list = await this.canonicalAddressListFor(fresh, tenantId);
+      const nowIso = new Date().toISOString();
+      // GERBANG: pin GPS memperkaya kartu lama yang belum ber-GPS presisi, bukan membuat kartu baru.
+      const target = selectEnrichmentTarget(list, loc);
+      const { list: nextList } = upsertAddressIntoList(
+        list,
+        target ? { ...loc, id: target.id } : loc,
+        nowIso
+      );
+      await this.persistSavedAddresses(fresh, tenantId, nextList, nowIso);
+      // Pertahankan kontrak pemanggil lama: objek customer yang dipegang
+      // pemanggil ikut melihat preferences terbaru.
+      customer.preferences = fresh.preferences;
+    });
   }
 
   /**

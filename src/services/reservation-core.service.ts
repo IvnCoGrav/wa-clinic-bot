@@ -486,6 +486,7 @@ export async function resolveCustomerAddressId(params: {
   const { customerService } = await import('./customer.service');
   const {
     addressesMatch,
+    normalizeAddressText,
     parseAddressTombstones,
     pruneAddressTombstones,
     matchesTombstone,
@@ -544,6 +545,18 @@ export async function resolveCustomerAddressId(params: {
         candidate.kecamatan ||
         (typeof candidate.lat === 'number' && typeof candidate.lng === 'number'))
     ) {
+      // 1b. Identitas rumah berbasis TEKS: teks alamat yang persis sama dengan
+      // sebuah kartu adalah bukti terkuat. Tanpa ini, koordinat root bisa
+      // "menarik" kandidat ke kartu primary yang berbeda rumah (insiden
+      // Gunung Anyar tertaut ke kartu Tandes, 2026-11-05).
+      const candidateStreet = normalizeAddressText((candidate as any).address);
+      if (candidateStreet) {
+        const textMatches = list.filter(
+          (a: any) => normalizeAddressText(a.address) === candidateStreet
+        );
+        if (textMatches.length === 1) return textMatches[0].id;
+      }
+
       // 2. Bila candidate.lat/lng kosong TAPI customer punya koordinat valid, warisi secara aman
       const candidateHasCoords =
         typeof candidate.lat === 'number' &&
@@ -551,7 +564,31 @@ export async function resolveCustomerAddressId(params: {
         Number.isFinite(candidate.lat) &&
         Number.isFinite(candidate.lng);
 
-      if (!candidateHasCoords && customer) {
+      // Warisan koordinat root HANYA sah bila kandidat jelas rumah yang sama
+      // dengan profil root (teks jalan identik ATAU wilayah+kecamatan cocok).
+      // Rumah berbeda WAJIB membawa koordinat sendiri — DILARANG meminjam
+      // pin rumah lain (menyebabkan reservasi tertaut ke kartu yang salah).
+      const rootStreet = normalizeAddressText((customer?.preferences as any)?.address);
+      const sameStreetAsRoot = Boolean(candidateStreet) && candidateStreet === rootStreet;
+      const sameHouseAsRoot =
+        sameStreetAsRoot ||
+        (!!customer &&
+          addressesMatch(
+            {
+              address: (customer.preferences as any)?.address ?? '',
+              kelurahan: customer.kelurahan ?? null,
+              kecamatan: customer.kecamatan ?? null,
+              kota: customer.kota ?? null,
+            },
+            {
+              address: candidate.address,
+              kelurahan: candidate.kelurahan,
+              kecamatan: candidate.kecamatan,
+              kota: candidate.kota,
+            }
+          ));
+
+      if (!candidateHasCoords && customer && sameHouseAsRoot) {
         const custLat = customer.lat;
         const custLng = customer.lng;
         if (

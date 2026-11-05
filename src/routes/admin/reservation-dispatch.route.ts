@@ -1160,9 +1160,14 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
               : false;
             const entry = await customerService.upsertSavedAddress(existing.customer_id, {
               address: String(address).trim(),
-              kelurahan: kelurahan ?? card?.kelurahan ?? cust?.kelurahan ?? null,
-              kecamatan: kecamatan ?? card?.kecamatan ?? cust?.kecamatan ?? null,
-              kota: kota ?? card?.kota ?? cust?.kota ?? null,
+              // Wilayah HANYA boleh diwarisi bila ini rumah yang SAMA. Untuk
+              // rumah berbeda, menyalin kelurahan/kecamatan/kota dari kartu lain
+              // (atau profil root) menghasilkan wilayah palsu — akar insiden
+              // "Gunung Anyar dicap Tandes" 2026-11-05. Biarkan null sampai
+              // di-geocode/diverifikasi; jangan mengarang administratif.
+              kelurahan: kelurahan ?? (sameHouse ? (card?.kelurahan ?? cust?.kelurahan ?? null) : null),
+              kecamatan: kecamatan ?? (sameHouse ? (card?.kecamatan ?? cust?.kecamatan ?? null) : null),
+              kota: kota ?? (sameHouse ? (card?.kota ?? cust?.kota ?? null) : null),
               lat: sameHouse ? (card?.lat ?? cust?.lat ?? null) : null,
               lng: sameHouse ? (card?.lng ?? cust?.lng ?? null) : null,
               // A-010: baris Prisma customer_address memakai snake_case
@@ -1428,16 +1433,28 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           if (kecamatan) custUpdate.kecamatan = kecamatan;
           if (kota) custUpdate.kota = kota;
           if (kelurahan) custUpdate.kelurahan = kelurahan;
+          // Proteksi Integritas Spasial: alamat jalan fisik DILARANG disalin ke
+          // kolom kelurahan (sumber pencemaran "Jl. Griya...(https://maps...)").
+          // Kolom kelurahan hanya diisi entitas desa/kelurahan resmi dari
+          // geocoding/gazetteer; alamat jalan hidup di preferences.address.
+          //
+          // PATCH PARSIAL (bukan timpa seluruh preferences): `existing.customer`
+          // adalah snapshot awal request — menulis ulang objeknya menghapus
+          // `saved_addresses` yang baru dibuat RC-1 di atas (split-brain
+          // 2026-11-05). Seam merge hanya menyentuh kunci address/landmark.
           if (address || landmark) {
-            const currentPrefs = (existing.customer?.preferences as any) || {};
-            const nextPrefs: any = { ...currentPrefs };
-            if (address) nextPrefs.address = address;
-            if (landmark) nextPrefs.landmark = landmark;
-            custUpdate.preferences = nextPrefs;
-            // Proteksi Integritas Spasial: alamat jalan fisik DILARANG disalin ke
-            // kolom kelurahan (sumber pencemaran "Jl. Griya...(https://maps...)").
-            // Kolom kelurahan hanya diisi entitas desa/kelurahan resmi dari
-            // geocoding/gazetteer; alamat jalan hidup di preferences.address.
+            try {
+              const { customerService } = await import('../../services/customer.service');
+              await customerService.mergeCustomerPreferences(existing.customer_id, tenantId, {
+                ...(address ? { address } : {}),
+                ...(landmark ? { landmark } : {}),
+              });
+            } catch (mergeErr: any) {
+              console.warn(
+                '[Admin API] Failed to merge customer preferences on reservation patch:',
+                mergeErr?.message
+              );
+            }
           }
           // assigned_staff_id: string kosong -> null agar tidak menabrak FK
           if (Object.keys(custUpdate).length > 0) {

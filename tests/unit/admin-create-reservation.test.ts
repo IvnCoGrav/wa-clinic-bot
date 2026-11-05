@@ -538,6 +538,42 @@ describe('Admin Create Reservation (POST /api/admin/reservation)', () => {
       expect(captured.delivery_fee).toBe(22000);
     });
 
+    it('rumah BEDA tanpa wilayah eksplisit → DILARANG mewarisi kelurahan/kecamatan/kota kartu lama atau profil root', async () => {
+      const card = {
+        id: 'card-tandes', address: 'Gadel, tandes', kelurahan: 'Karangpoh', kecamatan: 'Tandes', kota: 'Surabaya',
+        lat: -7.260442, lng: 112.681097, distance_km: 19.77, ongkir: 15000, is_primary: true,
+      };
+      const existing = baseExisting({
+        customer_address: card,
+        customer: {
+          id: 'cust-rc1', name: 'Bunda RC1', phone: '6281200', children: [],
+          kelurahan: 'Karangpoh', kecamatan: 'Tandes', kota: 'Surabaya',
+          lat: -7.260442, lng: 112.681097,
+          preferences: { address: 'Gadel, tandes' },
+        },
+      });
+      // Kandidat HANYA teks jalan — wilayah tidak dikirim admin (persis insiden 2026-11-05).
+      vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(existing as any);
+      const upsertSpy = vi.spyOn(customerService, 'upsertSavedAddress').mockResolvedValue({ id: 'card-gunung-anyar', ongkir: 15000 } as any);
+      vi.mocked(prisma.reservation.update).mockImplementationOnce(async ({ data }: any) => baseExisting({ ...data }) as any);
+
+      const app = buildApp();
+      const res = await app.inject({
+        method: 'PATCH', url: '/api/admin/reservation/res-rc1',
+        headers: { 'x-api-key': ADMIN_KEY },
+        payload: { address: 'Gunung anyar lor no 94' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const arg = upsertSpy.mock.calls[0][1] as any;
+      expect(arg.kelurahan).toBeNull();
+      expect(arg.kecamatan).toBeNull();
+      expect(arg.kota).toBeNull();
+      expect(arg.lat).toBeNull();
+      expect(arg.lng).toBeNull();
+      expect(arg.isPrimary).toBe(false);
+    });
+
     it('ID kartu eksplisit dihormati → seam upsert TIDAK dipanggil (otoritas admin menang)', async () => {
       const card = { id: 'card-current', address: 'Jl. A', is_primary: true, ongkir: 15000 };
       vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(baseExisting({ customer_address: card }) as any);

@@ -13,6 +13,7 @@ import { reservationCoreService, ReservationConflictError, resolveReservationPay
 import { auditService } from '../../services/audit.service';
 import { customerService } from '../../services/customer.service';
 import { staffNotificationService } from '../../services/staff-notification.service';
+import { normalizeAddressText } from '../../domain/customer-address';
 
 /**
  * Reservation CRUD Routes — Read/Write dasar reservasi.
@@ -967,14 +968,48 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
           if (ref !== null) parsedOngkir = ref;
         } catch {}
       }
- 
+
+      // Wilayah kandidat & kartu kanonis (anti pencemaran wilayah root):
+      //  - ID kartu eksplisit → otoritas admin, dipakai apa adanya.
+      //  - Teks alamat sama dengan salah satu kartu → tautkan kartu itu.
+      //  - Teks alamat sama dengan alamat profil root → wilayah root sah.
+      //  - Rumah BARU tanpa ID → JANGAN warisi wilayah root; biarkan null
+      //    sampai diverifikasi (insiden "Gunung Anyar dicap Tandes" 2026-11-05).
+      let resolvedCustomerAddressId = customerAddressId;
+      let candidateKecamatan: string | undefined = customer.kecamatan || undefined;
+      let candidateKota: string | undefined = customer.kota || undefined;
+      let candidateKelurahan: string | undefined = customer.kelurahan || undefined;
+
+      if (!resolvedCustomerAddressId && address?.trim()) {
+        const street = normalizeAddressText(address);
+        let matchedCard: any = null;
+        try {
+          const cards = await customerService.getSavedAddresses(customerId, tenantId);
+          const matches = cards.filter((card) => normalizeAddressText(card.address) === street);
+          if (matches.length === 1) matchedCard = matches[0];
+        } catch {}
+        const rootStreet = normalizeAddressText((customer.preferences as any)?.address);
+        if (matchedCard) {
+          resolvedCustomerAddressId = matchedCard.id;
+          candidateKecamatan = matchedCard.kecamatan || undefined;
+          candidateKota = matchedCard.kota || undefined;
+          candidateKelurahan = matchedCard.kelurahan || undefined;
+        } else if (street && street === rootStreet) {
+          // Rumah utama customer — wilayah profil tetap sumber sah.
+        } else {
+          candidateKecamatan = undefined;
+          candidateKota = undefined;
+          candidateKelurahan = undefined;
+        }
+      }
+
       try {
         let coreResult: any;
         try {
           coreResult = await reservationCoreService.saveReservation({
             tenantId: tenantId,
             customerId,
-            customerAddressId,
+            customerAddressId: resolvedCustomerAddressId,
             chatId: `${customer.phone}@c.us`,
             bookingDate: parsedDate,
             treatmentCategory: dbCategory,
@@ -988,9 +1023,9 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
             rawText: `[Admin Manual] ${treatmentCategory}: ${treatmentDetail}${address?.trim() ? `\nAlamat: ${address.trim()}` : ''}${rawNotes}`,
             babies: (babies || []).map((b) => ({ name: b.name, age: b.ageText || '' })),
             customerName: customer.name,
-            kecamatan: customer.kecamatan || undefined,
-            kota: customer.kota || undefined,
-            kelurahan: customer.kelurahan || undefined,
+            kecamatan: candidateKecamatan,
+            kota: candidateKota,
+            kelurahan: candidateKelurahan,
             // Integritas spasial: alamat jalan fisik hidup di preferences.address
             // (di-persist via lifecycle); kolom kelurahan tetap entitas desa resmi.
             address: address?.trim() || undefined,

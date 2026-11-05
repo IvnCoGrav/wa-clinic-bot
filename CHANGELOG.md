@@ -4,6 +4,43 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-05 - Fix: Buku Alamat Satu Sumber Kebenaran & Alamat Kedua Tidak Lagi "Hilang"/Salah Wilayah
+
+- **Latar Belakang & Masalah**:
+  - Insiden pelanggan `6283856165785` (Bunda Briella): customer menyebut rumah kedua **"Gunung anyar lor no 94"**, tetapi kartu `customer_addresses` yang lahir dari alur edit reservasi justru mewarisi wilayah kartu lama (`Karangpoh/Tandes/Surabaya`) dan **tidak muncul** di `preferences.saved_addresses`. Akibatnya admin/AI hanya melihat satu alamat, dan reservasi 2026-11-06 tertaut ke kartu **Rumah Tandes** (bukan Gunung Anyar).
+  - Tiga akar masalah lintas lapisan:
+    1. **Tulis (RC-1, `reservation-dispatch.route.ts`)**: kandidat alamat baru selalu mewarisi `kelurahan/kecamatan/kota` dari kartu reservasi lama atau profil root; lalu seluruh objek `preferences` ditulis ulang dari snapshot awal request sehingga `saved_addresses` yang baru dibuat hilang (lost update).
+    2. **Resolusi kartu (`reservation-core.service.ts`)**: `resolveCustomerAddressId` hanya mencocokkan via `addressesMatch`; kandidat tanpa koordinat lalu **meminjam koordinat root** milik rumah Tandes, sehingga kandidat Gunung Anyar "ditarik" ke kartu primary yang salah.
+    3. **Baca (`customer.service.ts`)**: `getSavedAddresses` hanya membaca `preferences.saved_addresses`, padahal tabel `customer_addresses` adalah sumber operasional reservasi/staf. Kartu yang hanya ada di tabel menjadi tidak terlihat.
+- **Perubahan Utama**:
+  1. `src/domain/customer-address.ts`:
+     - `normalizeAddressText()` — normalisasi teks alamat untuk **identitas rumah** (tanda baca/spasi), bukan gerbang intent.
+     - `reconcileAddressLists()` — penggabungan murni kanonis ∪ cache: kanonis menang, dedup by `id` + `addressesMatch`, tepat 1 primary.
+  2. `src/services/customer.service.ts`:
+     - `getSavedAddresses` kini membaca **tabel kanonis ∪ cache** (`canonicalAddressListFor`), dengan fallback aman ke preferences saat DB tidak tersedia.
+     - `upsertSavedAddress` / `setDefaultAddress` / `deleteSavedAddress` / `syncSavedAddressFromLocation` dijalankan di **lock per-customer** dan membaca state terbaru di dalam lock (anti lost-update).
+     - `persistSavedAddresses` memakai **merge JSONB atomik** (`preferences || patch`) sehingga hanya kunci buku alamat yang diganti; kunci lain tidak tersentuh. Fallback read-merge-write untuk lingkungan non-Postgres.
+     - Seam baru `mergeCustomerPreferences()` untuk patch parsial `preferences.address` / `landmark` tanpa menghapus `saved_addresses`.
+  3. `src/routes/admin/reservation-dispatch.route.ts`:
+     - RC-1 hanya mewarisi `kelurahan/kecamatan/kota` bila kandidat terbukti **rumah yang sama** (`sameHouse`); rumah berbeda dibiarkan `null` sampai diverifikasi.
+     - Penggantian seluruh `preferences` diganti `mergeCustomerPreferences()` (patch parsial).
+  4. `src/services/reservation-core.service.ts`:
+     - `resolveCustomerAddressId` memprioritaskan **identitas teks alamat** yang persis sama sebelum fallback `addressesMatch`.
+     - Warisan koordinat root hanya sah bila `sameStreetAsRoot` atau `addressesMatch` membuktikan rumah yang sama; rumah baru **dilarang meminjam** pin rumah lain.
+  5. `src/routes/admin/reservation-crud.route.ts`:
+     - Kartu kanonis diresolusi dari teks alamat lebih dulu; `customerAddressId` eksplisit dihormati.
+     - Wilayah hanya diambil dari kartu yang cocok atau profil root saat teks sama dengan alamat root; rumah baru tidak dikaruniai wilayah palsu.
+- **Bukti & Verifikasi**:
+  - Test baru `tests/unit/address-book-single-source.test.ts` (9 kasus: rekonsiliasi domain, baca kanonis ∪ cache, merge parsial, kartu sekunder, anti-pinjam-koordinat).
+  - Test baru di `tests/unit/admin-create-reservation.test.ts`: "rumah BEDA tanpa wilayah eksplisit → DILARANG mewarisi kelurahan/kecamatan/kota".
+  - Suite alamat terkait: **128 test lulus**; `npm run build` exit 0.
+  - Gate regresi suite penuh: **11 gagal / 6 file — identik dengan baseline pre-existing** (dibuktikan revert-and-rerun via stash), **0 regresi baru**.
+- **Remediasi Data Produksi (2026-11-05, setelah `pg_dump` 1,4 MB)**:
+  - Kartu `eb642bc1-…` diperbaiki menjadi `Rumah Gunung Anyar` / `Gunung Anyar Lor` / `Gunung Anyar` / `Surabaya`, `distance_km=5.2`, `ongkir=15000`, **koordinat tetap NULL** (customer akan mengirim shareloc).
+  - Reservasi `b14afb4f-…` (2026-11-06 09:00 WIB) ditautkan ke kartu Gunung Anyar.
+  - `preferences.saved_addresses` diselaraskan: **2 kartu, tepat 1 primary (Rumah Tandes)**, profil root tidak diubah.
+  - Audit log `ADDRESS_REMEDIATION` dicatat; reservasi belum pernah tersinkron ke Sheet (`sheets_sync_status=pending`).
+
 #### 2026-11-05 - Feature: Ikon Pembeda Pengirim Pesan di Daftar Live Chat (Pasien, Admin, Bot AI)
 
 - **Latar Belakang & Masalah**:

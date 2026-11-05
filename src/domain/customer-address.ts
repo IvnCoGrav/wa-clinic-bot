@@ -322,6 +322,18 @@ export function selectEnrichmentTarget(
   return null;
 }
 
+/**
+ * Normalisasi teks alamat jalan untuk perbandingan IDENTITAS RUMAH.
+ * Hanya untuk kesetaraan teks (bukan gerbang intent / pencocokan kalimat bebas):
+ * buang tanda baca & rapatkan spasi sehingga "No. 94" == "no 94".
+ */
+export function normalizeAddressText(value?: string | null): string {
+  return norm(value)
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /** Baca daftar dari preferences JSON (tahan data kotor — entri invalid dibuang). */
 export function parseSavedAddresses(preferences: unknown): SavedCustomerAddress[] {
   const raw = (preferences as any)?.saved_addresses;
@@ -369,6 +381,33 @@ export function ensureSinglePrimary(
     id = existing?.id || resolveActiveAddress(list)?.id;
   }
   return list.map((a) => ({ ...a, isPrimary: a.id === id }));
+}
+
+/**
+ * Rekonsiliasi dua sumber buku alamat (murni, tanpa I/O).
+ *
+ * `canonical` WAJIB menang (tabel `customer_addresses` = sumber operasional
+ * reservasi/staf). `secondary` (cache `preferences.saved_addresses`) hanya
+ * menyumbang kartu yang BELUM ada di kanonis — baik berdasarkan id maupun
+ * identitas rumah (`addressesMatch`), sehingga drift lama tidak hilang tetapi
+ * juga tidak menghasilkan kartu ganda.
+ *
+ * Invarian: tepat 1 primary bila hasil tidak kosong; primary kanonis diutamakan.
+ */
+export function reconcileAddressLists(
+  canonical: SavedCustomerAddress[],
+  secondary: SavedCustomerAddress[]
+): SavedCustomerAddress[] {
+  const merged = canonical.slice();
+  for (const candidate of secondary) {
+    if (merged.some((a) => a.id === candidate.id)) continue;
+    if (merged.some((a) => addressesMatch(a, candidate))) continue;
+    merged.push(candidate);
+  }
+  if (merged.length === 0) return merged;
+  const preferredPrimaryId =
+    canonical.find((a) => a.isPrimary)?.id ?? secondary.find((a) => a.isPrimary)?.id;
+  return ensureSinglePrimary(merged, preferredPrimaryId);
 }
 
 /** Alamat aktif: primary menang; fallback `lastUsedAt` terbaru. */
