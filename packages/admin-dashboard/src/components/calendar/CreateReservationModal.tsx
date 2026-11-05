@@ -232,12 +232,25 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   const [correctingCardId, setCorrectingCardId] = useState<string | null>(null);
   const [showAddressDrawer, setShowAddressDrawer] = useState(false);
 
+  // Kanonik fallback: sebagian payload reservasi (list/LiveChat) hanya membawa
+  // customer ramping TANPA `preferences.saved_addresses`. Tanpa hidrasi eksplisit,
+  // pemilih alamat kosong → admin merasa "tidak bisa pilih alamat". Simpan hasil
+  // GET /customers/:id/addresses (sumber kanonik) sebagai override.
+  const [authoritativeAddresses, setAuthoritativeAddresses] = useState<any[] | null>(null);
+  // Anti fetch berulang saat `selectedCustomerInfo` berganti identitas objek.
+  const addressFetchRef = useRef<string | null>(null);
+
   const savedAddresses: any[] = useMemo(() => {
-    if (!selectedCustomerInfo) return [];
-    if (Array.isArray(selectedCustomerInfo.saved_addresses)) return selectedCustomerInfo.saved_addresses;
-    if (Array.isArray(selectedCustomerInfo.preferences?.saved_addresses)) return selectedCustomerInfo.preferences.saved_addresses;
-    return [];
-  }, [selectedCustomerInfo]);
+    const fromProps: any[] = !selectedCustomerInfo
+      ? []
+      : Array.isArray(selectedCustomerInfo.saved_addresses)
+        ? selectedCustomerInfo.saved_addresses
+        : Array.isArray(selectedCustomerInfo.preferences?.saved_addresses)
+          ? selectedCustomerInfo.preferences.saved_addresses
+          : [];
+    if (fromProps.length > 0) return fromProps;
+    return Array.isArray(authoritativeAddresses) ? authoritativeAddresses : [];
+  }, [selectedCustomerInfo, authoritativeAddresses]);
 
   // Silang-cek mismatch dan selectedCard dipromosikan ke useMemo (Micro-Task 4.2)
   const selectedCard = useMemo(
@@ -259,6 +272,48 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   }, [selectedCard, address]);
 
   const mismatchActive = mismatchComputed && !savedAsNewHouse && !correctingCardId;
+
+  // Ganti customer → buang daftar kartu milik customer sebelumnya (anti salah-orang).
+  useEffect(() => {
+    setAuthoritativeAddresses(null);
+    addressFetchRef.current = null;
+  }, [customerId]);
+
+  // Reset hidrasi saat modal ditutup agar buka-ulang tetap menyegarkan kartu.
+  useEffect(() => {
+    if (!isOpen) {
+      addressFetchRef.current = null;
+      setAuthoritativeAddresses(null);
+    }
+  }, [isOpen]);
+
+  // Hidrasi kanonik buku alamat: bila payload customer tidak membawa kartu,
+  // ambil langsung dari endpoint buku alamat (single source of truth).
+  useEffect(() => {
+    if (!isOpen || !customerId) return;
+    const cust = selectedCustomerInfo;
+    const fromProps: any[] | null = Array.isArray(cust?.saved_addresses)
+      ? cust.saved_addresses
+      : Array.isArray(cust?.preferences?.saved_addresses)
+        ? cust.preferences.saved_addresses
+        : null;
+    if (fromProps && fromProps.length > 0) return;
+    if (addressFetchRef.current === customerId) return;
+    addressFetchRef.current = customerId;
+    let cancelled = false;
+    apiRequest<{ success: boolean; addresses: any[] }>(`/api/admin/customers/${customerId}/addresses`)
+      .then((res: any) => {
+        if (cancelled) return;
+        const list = Array.isArray(res) ? res : (res?.addresses || res?.data || []);
+        setAuthoritativeAddresses(Array.isArray(list) ? list : []);
+      })
+      .catch(() => {
+        if (!cancelled) setAuthoritativeAddresses([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, customerId, selectedCustomerInfo]);
 
   // Sinkronisasi alamat/patokan saat modal dibuka / customer berganti (anti-stale props).
   // Prioritas: bila customer terpilih SAMA dengan konteks chat (initialCustomerId),
@@ -477,6 +532,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     setCustomerSearch('');
     setSelectedCustomerInfo(null);
     setCustomerResults([]);
+    setAuthoritativeAddresses(null);
     setSelectedTreatments([]);
     setCustomServiceName('');
     setCustomServiceDuration(60);
@@ -811,7 +867,13 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       const custHasLocation = Boolean(cust?.preferences?.address || cust?.preferences?.full_address || cust?.address);
       const custHasChildren = Array.isArray(cust?.children) && cust.children.length > 0;
       const resHasRaw = Boolean((res as any).raw_text);
-      const needsFullFetch = Boolean(res.id) && (!cust || (!custHasLocation && !custHasChildren) || !resHasRaw);
+      // Buku alamat WAJIB ikut dinilai: payload ramping (LiveChat/list) bisa punya
+      // phone + distance_km + children tapi TANPA preferences.saved_addresses →
+      // pemilih alamat hilang. Dulu gate ini melewatkan fetch detail.
+      const custHasAddressBook = Array.isArray(cust?.saved_addresses)
+        ? cust.saved_addresses.length > 0
+        : Boolean(Array.isArray(cust?.preferences?.saved_addresses) && cust.preferences.saved_addresses.length > 0);
+      const needsFullFetch = Boolean(res.id) && (!cust || !custHasAddressBook || (!custHasLocation && !custHasChildren) || !resHasRaw);
       if (needsFullFetch) {
         apiRequest(`/api/admin/reservation/${res.id}`)
           .then((r: any) => {

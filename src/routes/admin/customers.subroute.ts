@@ -13,6 +13,43 @@ import { resolveReservationPaymentEvaluation } from '../../services/reservation-
 import { MAX_ADDRESS_LABEL_LENGTH } from '../../domain/customer-address';
 import { normalizePhoneID } from '../../utils/phone-normalizer';
 
+/**
+ * Relink jadwal AKTIF yang memakai kartu alamat tertentu + selaraskan ongkir.
+ * Seam tunggal agar semua jalur penulisan lokasi (PUT kartu, PUT /location
+ * berbasis kartu) memakai gerbang yang sama — mencegah jadwal tertinggal di
+ * rumah lama saat pin/kartu diperbarui. Best-effort, tidak pernah throw.
+ */
+async function relinkActiveReservationsForCard(params: {
+  tenantId: string;
+  customerId: string;
+  cardId: string;
+  fee?: number | null;
+}): Promise<void> {
+  const { tenantId, customerId, cardId, fee } = params;
+  try {
+    const { isActiveReservation, ACTIVE_RESERVATION_STATUSES } = await import('../../domain/reservation-status');
+    const activeRows = await prisma.reservation.findMany({
+      where: {
+        tenant_id: tenantId,
+        customer_id: customerId,
+        customer_address_id: cardId,
+        status: { in: ACTIVE_RESERVATION_STATUSES },
+      },
+    }).catch(() => []);
+    for (const r of ((activeRows || []) as any[]).filter((row) => isActiveReservation(row))) {
+      await prisma.reservation.update({
+        where: { id: r.id },
+        data: {
+          customer_address_id: cardId,
+          ...(typeof fee === 'number' ? { delivery_fee: fee } : {}),
+        },
+      }).catch(() => {});
+    }
+  } catch (syncErr: any) {
+    console.warn('[ADMIN][addresses] relink active reservation skipped:', syncErr?.message);
+  }
+}
+
 export async function customerAdminRoutes(fastify: FastifyInstance) {
   // Invalidate cache saat ada create/update/delete customer
   fastify.addHook('onResponse', async (request) => {
@@ -894,31 +931,12 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           (typeof body.lng === 'number' && Number.isFinite(body.lng) && body.lng !== card.lng);
 
         if (coordsChanged) {
-          try {
-            const { isActiveReservation, ACTIVE_RESERVATION_STATUSES } = await import('../../domain/reservation-status');
-            const activeRows = await prisma.reservation.findMany({
-              where: {
-                tenant_id: tenantId,
-                customer_id: id,
-                customer_address_id: card.id,
-                status: { in: ACTIVE_RESERVATION_STATUSES },
-              },
-            }).catch(() => []);
-
-            const active = (activeRows || []).filter((r) => isActiveReservation(r));
-            for (const r of active) {
-              const newFee = typeof entry.ongkir === 'number' ? entry.ongkir : undefined;
-              await prisma.reservation.update({
-                where: { id: r.id },
-                data: {
-                  customer_address_id: card.id,
-                  ...(newFee !== undefined ? { delivery_fee: newFee } : {}),
-                },
-              }).catch(() => {});
-            }
-          } catch (syncErr: any) {
-            console.warn('[ADMIN][addresses] relink active reservation skipped:', syncErr?.message);
-          }
+          await relinkActiveReservationsForCard({
+            tenantId,
+            customerId: id,
+            cardId: card.id,
+            fee: entry.ongkir,
+          });
         }
 
         return reply.status(200).send({ success: true, entry });
@@ -1581,13 +1599,15 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           lat?: number | null;
           lng?: number | null;
           removePhoto?: boolean;
+          /** Bila diisi, perubahan landmark/GPS ditulis ke KARTU ini (bukan profil root). */
+          customerAddressId?: string | null;
         };
       }>,
       reply: FastifyReply
     ) => {
       const { id } = request.params;
       const tenantId = tenantOf(request);
-      const { housePhotoB64, landmark, lat, lng, removePhoto } = request.body || {};
+      const { housePhotoB64, landmark, lat, lng, removePhoto, customerAddressId } = request.body || {};
 
       try {
         const customer = await customerService.getCustomerById(id, tenantId);
@@ -1596,21 +1616,39 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           return reply.status(404).send({ success: false, error: 'Customer tidak ditemukan.' });
         }
 
+        // Mode KARTU: admin mengedit panduan lokasi rumah tertentu (multi-rumah).
+        // Tanpa mode ini, titik GPS rumah kedua menimpa koordinat profil root →
+        // jadwal rumah lain ikut bergeser (insiden multi-alamat 2026-11-05).
+        let targetCard: any = null;
+        if (customerAddressId) {
+          const cards = await customerService.getSavedAddresses(id, tenantId).catch(() => []);
+          targetCard = (Array.isArray(cards) ? cards : []).find((c: any) => c?.id === customerAddressId) || null;
+          if (!targetCard) {
+            return reply.status(404).send({
+              success: false,
+              code: 'CUSTOMER_ADDRESS_NOT_FOUND',
+              error: 'Kartu alamat tidak ditemukan pada buku alamat customer ini.',
+            });
+          }
+        }
+
         const { mediaService } = await import('../../services/media.service');
 
         const hasNewPhoto = !!housePhotoB64 && housePhotoB64.startsWith('data:image/');
-        const targetLatPre = lat !== undefined ? lat : customer.lat;
-        const targetLngPre = lng !== undefined ? lng : customer.lng;
+        const preLat = targetCard ? targetCard.lat : customer.lat;
+        const preLng = targetCard ? targetCard.lng : customer.lng;
+        const targetLatPre = lat !== undefined ? lat : preLat;
+        const targetLngPre = lng !== undefined ? lng : preLng;
         if (hasNewPhoto && (targetLatPre == null || targetLngPre == null)) {
           return reply.status(400).send({ success: false, error: 'Foto rumah wajib disertai koordinat GPS. Isi titik GPS dulu sebelum menyimpan foto.' });
         }
 
         let housePhotoUrl: string | null = (customer.preferences as any)?.house_photo_url || null;
 
-        let distanceKm = customer.distance_km;
+        let distanceKm = targetCard ? targetCard.distanceKm : customer.distance_km;
         let newOngkir: number | null = null;
-        const targetLat = lat !== undefined ? lat : customer.lat;
-        const targetLng = lng !== undefined ? lng : customer.lng;
+        const targetLat = lat !== undefined ? lat : preLat;
+        const targetLng = lng !== undefined ? lng : preLng;
 
         if (targetLat != null && targetLng != null) {
           // Validasi range koordinat Indonesia
@@ -1638,11 +1676,12 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
             });
           }
 
-          // Skema kroscek 2: Tolak jika pergeseran titik melenceng > 25 km dari data kelurahan/wilayah customer sebelumnya
-          if (customer.distance_km && Math.abs(distanceKm - customer.distance_km) > 25) {
+          // Skema kroscek 2: Tolak jika pergeseran titik melenceng > 25 km dari data kelurahan/wilayah sebelumnya
+          const distanceBaseline = targetCard ? targetCard.distanceKm : customer.distance_km;
+          if (distanceBaseline && Math.abs(distanceKm - distanceBaseline) > 25) {
             return reply.status(400).send({
               success: false,
-              error: `Titik GPS melenceng terlalu jauh (${Math.abs(distanceKm - customer.distance_km).toFixed(1)} km selisih) dari estimasi area ${customer.kelurahan || 'pasien'}. Pembaruan lokasi ditolak untuk mencegah salah alamat.`,
+              error: `Titik GPS melenceng terlalu jauh (${Math.abs(distanceKm - distanceBaseline).toFixed(1)} km selisih) dari estimasi area ${(targetCard ? targetCard.kelurahan : customer.kelurahan) || 'pasien'}. Pembaruan lokasi ditolak untuk mencegah salah alamat.`,
             });
           }
         }
@@ -1650,14 +1689,16 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
         // Cek selisih jarak dengan koordinat awal (Haversine > 1km)
         let shouldUpdatePrimaryCoords = true;
         let diffFromOriginalKm: number | null = null;
-        const baseLandmark = landmark !== undefined ? (landmark?.trim() || null) : ((customer.preferences as any)?.landmark || null);
+        const baseLandmark = landmark !== undefined
+          ? (landmark?.trim() || null)
+          : (targetCard ? targetCard.landmark : ((customer.preferences as any)?.landmark || null));
         let finalLandmark = baseLandmark;
 
         if (lat !== undefined && lng !== undefined && lat != null && lng != null) {
-          if (customer.lat != null && customer.lng != null) {
+          if (preLat != null && preLng != null) {
             const { calculateHaversineDistance } = await import('../../utils/haversine');
             diffFromOriginalKm = calculateHaversineDistance(
-              { lat: customer.lat, lng: customer.lng },
+              { lat: preLat, lng: preLng },
               { lat, lng }
             );
 
@@ -1697,8 +1738,8 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
             lng: targetLng,
             customerName: (customer as any).name || undefined,
             customerHonorific: brand.addressTermForCustomer,
-            kelurahan: customer.kelurahan,
-            kecamatan: customer.kecamatan,
+            kelurahan: targetCard ? targetCard.kelurahan : customer.kelurahan,
+            kecamatan: targetCard ? targetCard.kecamatan : customer.kecamatan,
             landmark: baseLandmark,
             takerName: adminName,
             staffName: adminName,
@@ -1744,10 +1785,46 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
         // landmark/foto TIDAK memicu relink (jadwal Rumah 2 tetap aman).
         const coordsChanged =
           lat !== undefined && lng !== undefined && lat != null && lng != null &&
-          (lat !== (customer as any).lat || lng !== (customer as any).lng);
+          (lat !== preLat || lng !== preLng);
 
         let updatedCustomer: any = customer;
-        if (coordsChanged) {
+        if (targetCard) {
+          // Mode KARTU: tulis landmark/GPS ke kartu rumah yang dipilih. Profil
+          // root TIDAK disentuh agar rumah lain tidak ikut bergeser.
+          try {
+            const entry = await customerService.upsertSavedAddress(
+              customer.id,
+              {
+                id: targetCard.id,
+                label: targetCard.label,
+                address: targetCard.address,
+                kelurahan: targetCard.kelurahan,
+                kecamatan: targetCard.kecamatan,
+                kota: targetCard.kota,
+                lat: targetLat ?? null,
+                lng: targetLng ?? null,
+                distanceKm: typeof distanceKm === 'number' ? distanceKm : (targetCard.distanceKm ?? null),
+                ongkir: typeof newOngkir === 'number' ? newOngkir : (targetCard.ongkir ?? null),
+                landmark: finalLandmark,
+                locationSource: (targetCard.locationSource ?? targetCard.location_source ?? LocationSource.manual_staff) as any,
+                isPrimary: Boolean(targetCard.isPrimary ?? targetCard.is_primary),
+              },
+              tenantId
+            );
+            if (entry) targetCard = { ...targetCard, ...entry };
+            if (coordsChanged) {
+              await relinkActiveReservationsForCard({
+                tenantId,
+                customerId: customer.id,
+                cardId: targetCard.id,
+                fee: typeof newOngkir === 'number' ? newOngkir : (targetCard.ongkir ?? null),
+              });
+            }
+          } catch (cardErr: any) {
+            console.error('[ADMIN CUSTOMER] Gagal memperbarui kartu alamat:', cardErr?.message);
+            return reply.status(500).send({ success: false, error: cardErr?.message || 'Gagal memperbarui kartu alamat.' });
+          }
+        } else if (coordsChanged) {
           try {
             updatedCustomer = await customerService.updateCustomerLocation(
               customer.id,
@@ -1777,8 +1854,9 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           const mergedPrefs = {
             ...seamPrefs,
             house_photo_url: housePhotoUrl,
-            landmark: finalLandmark,
-            ...(diffFromOriginalKm != null && diffFromOriginalKm > 1.0
+            // Mode kartu: landmark milik kartu — jangan menimpa landmark profil root.
+            landmark: targetCard ? (seamPrefs.landmark ?? null) : finalLandmark,
+            ...(!targetCard && diffFromOriginalKm != null && diffFromOriginalKm > 1.0
               ? {
                   field_gps_lat: lat,
                   field_gps_lng: lng,
@@ -1788,7 +1866,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
               : {}),
             location_updated_at: new Date().toISOString(),
             location_updated_by_staff_name: (request as any).adminIdentity || 'Admin CS',
-            ...(newHistoryEntry ? { location_history: [...seamHistory.slice(-9), newHistoryEntry] } : {}),
+            ...(!targetCard && newHistoryEntry ? { location_history: [...seamHistory.slice(-9), newHistoryEntry] } : {}),
           };
           try {
             const patched = await prisma.customer.update({
@@ -1832,8 +1910,10 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
             lng: updatedCustomer.lng,
             distance_km: updatedCustomer.distance_km,
             house_photo_url: housePhotoUrl,
-            landmark: updatedPrefs.landmark || null,
+            landmark: targetCard ? (targetCard.landmark ?? null) : (updatedPrefs.landmark || null),
             preferences: updatedPrefs,
+            customer_address_id: targetCard?.id || null,
+            card: targetCard || null,
           },
         });
       } catch (err: any) {

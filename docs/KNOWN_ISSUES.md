@@ -3,6 +3,30 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 312. [Buku Alamat] Pemilih Alamat Kosong Saat Edit Reservasi & Modal Lokasi Menimpa Rumah Utama (2026-11-05, RESOLVED - HIGH)
+
+- **Status:** RESOLVED (2026-11-05) — gerbang kode + kontrak tool/route, bukan tambalan prompt.
+- **Gejala (pelanggan `6283856165785`, Bunda Briella):**
+  1. Menekan **"Edit Reservasi"** tidak menampilkan/mengizinkan pilihan kartu alamat → admin menyimpulkan reservasi harus dihapus lalu dibuat ulang.
+  2. Tombol pensil pada blok "Panduan Lokasi & Foto Rumah" membuka modal yang **tidak punya pemilih kartu**; "Alamat Pasien" hanya teks mati.
+  3. Modal tersebut menyimpan ke `PUT /customers/:id/location` (profil **root**) → berpotensi menimpa koordinat rumah utama (Tandes) dengan titik rumah kedua.
+- **Akar Masalah (multi-layer):**
+  1. **Hidrasi payload:** `ReservationDetailModal` melewati fetch detail bila `customer.phone && customer.distance_km != null`; `CreateReservationModal` melewati fetch bila customer punya lokasi/anak/`raw_text`. Payload LiveChat/list yang ramping (tanpa `preferences.saved_addresses`) lolos keduanya → `savedAddresses = []` → seluruh blok pemilih disembunyikan.
+  2. **Kontrak route:** `PATCH /api/admin/reservation/:id` menerima `customerAddressId` **tanpa** memverifikasi kepemilikan kartu (risiko IDOR lintas tenant) dan **tidak** menyelaraskan `delivery_fee` dengan `ongkir` kartu (hanya jalur RC-1 yang melakukannya).
+  3. **Penulisan lokasi:** modal panduan lokasi tidak mengenal `customer_address_id`, sehingga selalu menulis koordinat ke root.
+- **Solusi Fondasional:**
+  1. `CreateReservationModal.tsx` — hidrasi kanonik `GET /customers/:id/addresses` ketika payload tidak membawa kartu; reset daftar saat customer berganti; `needsFullFetch` menilai kelengkapan buku alamat.
+  2. `ReservationDetailModal.tsx` — heuristik `phone + distance_km` dihapus, diganti pemeriksaan buku alamat/kartu tertaut; tombol pensil membuka `AddressBookDrawer` + `refreshCanonicalDetail`.
+  3. `reservation-dispatch.route.ts` — validasi kartu tenant-scoped + sinkron `delivery_fee` dari kartu; `null` eksplisit tetap berarti detach.
+  4. `customers.subroute.ts` — `PUT /location` menerima `customerAddressId` (mode kartu): tulis landmark/GPS ke kartu, guard 25 km memakai baseline kartu, watermark memakai wilayah kartu, root tidak disentuh; helper `relinkActiveReservationsForCard()` dipakai bersama.
+  5. `Reservations.tsx` — modal lokasi memakai kartu tertaut untuk inisialisasi & penyimpanan.
+- **Bukti:** `tests/unit/reservation-address-card-selection.test.ts` (5 kasus adversarial) + 8 suite terkait lulus; `npm run build` backend & dashboard exit 0; suite penuh = 11 kegagalan baseline + 1 flake timeout `copilot-tenant-gate` (lulus saat sendiri).
+- **Sisa risiko / tindak lanjut:**
+  1. **Foto rumah belum per-kartu.** `CustomerAddress` tidak punya kolom foto; `preferences.house_photo_url` masih level customer. Untuk pelanggan multi-rumah, foto rumah kedua menimpa foto rumah pertama. Solusi benar = migrasi kolom foto pada `customer_addresses` (belum dilakukan, perlu persetujuan).
+  2. `PUT /customers/:id/addresses/:addressId` **belum** menghitung ulang `distance_km`/`ongkir` bila koordinat kartu diubah tanpa mengirim kedua field itu. Saat ini `AddressBookDrawer` mengirim nilai hasil state; jalur `PUT /location` mode kartu sudah menghitung ulang.
+  3. Tombol "+ Tambah Foto Rumah & Patokan" pada Live Chat & Database Pelanggan masih menampilkan toast (belum ada modal foto di halaman itu); edit alamat/kartu sendiri sudah berfungsi karena drawer dipasang di `ReservationDetailModal`.
+  4. Flake `tests/integration/copilot-tenant-gate.test.ts` (timeout 15 dtk saat suite paralel) — bukan regresi perubahan ini; pertimbangkan menaikkan timeout/isolasi test.
+
 ## 311. [Buku Alamat] Alamat Kedua Tidak Terlihat, Wilayah Salah & Reservasi Tertaut Kartu Primary (2026-11-05, RESOLVED - HIGH)
 
 - **Status:** RESOLVED (2026-11-05) — gerbang kode deterministik + remediasi data produksi.

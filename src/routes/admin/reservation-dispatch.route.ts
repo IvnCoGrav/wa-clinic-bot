@@ -1126,7 +1126,33 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
         }
         if (body.customerAddressId !== undefined || body.customer_address_id !== undefined) {
           const caId = body.customerAddressId !== undefined ? body.customerAddressId : body.customer_address_id;
-          updateData.customer_address_id = caId || null;
+          if (!caId) {
+            // `null` eksplisit = lepas tautan kartu (detach) — hormati.
+            updateData.customer_address_id = null;
+          } else {
+            // Kontrak kanonis kartu alamat: admin memilih kartu dari buku alamat
+            // customer. Tanpa validasi kepemilikan, ID kartu customer lain bisa
+            // ditempelkan (IDOR lintas tenant) dan ongkir reservasi tetap memakai
+            // tarif rumah lama → "alamat berubah tapi ongkir bohong".
+            const { customerService } = await import('../../services/customer.service');
+            let cards: any[] = [];
+            try {
+              cards = (await customerService.getSavedAddresses(existing.customer_id, tenantId)) as any[];
+            } catch {
+              cards = [];
+            }
+            const chosen = (Array.isArray(cards) ? cards : []).find((c: any) => c?.id === caId);
+            if (!chosen) {
+              return reply.status(400).send({
+                success: false,
+                code: 'CUSTOMER_ADDRESS_NOT_FOUND',
+                error: 'Kartu alamat yang dipilih tidak ada di buku alamat customer ini.',
+              });
+            }
+            updateData.customer_address_id = chosen.id;
+            // Snapshot ongkir: reservasi WAJIB mengikuti tarif kartu yang dipilih.
+            if (typeof chosen.ongkir === 'number') updateData.delivery_fee = chosen.ongkir;
+          }
         }
 
         // RC-1 (anti ghost-shadowing): admin mengubah TEKS alamat TANPA ID kartu

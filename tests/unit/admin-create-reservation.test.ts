@@ -577,6 +577,10 @@ describe('Admin Create Reservation (POST /api/admin/reservation)', () => {
     it('ID kartu eksplisit dihormati → seam upsert TIDAK dipanggil (otoritas admin menang)', async () => {
       const card = { id: 'card-current', address: 'Jl. A', is_primary: true, ongkir: 15000 };
       vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(baseExisting({ customer_address: card }) as any);
+      // Kontrak: kartu eksplisit WAJIB ada di buku alamat customer (guard IDOR).
+      vi.spyOn(customerService, 'getSavedAddresses').mockResolvedValue([
+        { id: 'card-explicit', label: 'Rumah Kedua', address: 'Jl. Apa Pun 99', ongkir: 20000, isPrimary: false } as any,
+      ]);
       const upsertSpy = vi.spyOn(customerService, 'upsertSavedAddress').mockResolvedValue({ id: 'nope' } as any);
       let captured: any = null;
       vi.mocked(prisma.reservation.update).mockImplementationOnce(async ({ data }: any) => {

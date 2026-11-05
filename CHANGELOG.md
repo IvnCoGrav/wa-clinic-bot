@@ -4,6 +4,36 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-05 - Fix: Pemilih Alamat di Edit Reservasi Selalu Muncul & Edit Lokasi Tidak Lagi Menimpa Rumah Utama
+
+- **Latar Belakang & Masalah**:
+  - Laporan lanjutan Bunda Briella (`6283856165785`): saat menekan **"Edit Reservasi"**, daftar kartu alamat tidak bisa dipilih sehingga ia menyimpulkan reservasi harus dihapus lalu dibuat ulang.
+  - Empat akar masalah ditemukan (bukan sekadar tampilan):
+    1. **Payload ramping**: `ReservationDetailModal` melewati fetch detail bila `customer.phone` dan `distance_km` ada; `CreateReservationModal` juga melewati hidrasi bila customer punya lokasi/anak/raw_text. Payload LiveChat/list bisa lolos kedua gate **tanpa** `preferences.saved_addresses` → pemilih alamat kosong.
+    2. **Mode kartu tidak ada di form lokasi**: modal "Edit Panduan Lokasi & Foto Rumah" hanya punya teks alamat read-only dan menyimpan ke `PUT /customers/:id/location` (profil **root**), sehingga titik GPS rumah kedua menimpa koordinat rumah utama.
+    3. **Tanpa validasi kepemilikan kartu**: `PATCH /api/admin/reservation/:id` menerima `customerAddressId` apa pun (termasuk kartu customer lain) dan **tidak menyelaraskan `delivery_fee`** dengan ongkir kartu terpilih.
+    4. **Tombol pensil** di blok lokasi membuka modal foto/lokasi yang tidak punya pemilih kartu sama sekali.
+- **Perubahan Utama**:
+  1. `packages/admin-dashboard/src/components/calendar/CreateReservationModal.tsx`:
+     - State `authoritativeAddresses` + hidrasi `GET /api/admin/customers/:id/addresses` saat payload tidak membawa kartu; daftar direset saat customer berganti (anti salah-orang).
+     - Gate `needsFullFetch` kini menilai **kelengkapan buku alamat**, bukan hanya teks lokasi/anak.
+  2. `packages/admin-dashboard/src/components/modals/ReservationDetailModal.tsx`:
+     - Hidrasi detail kanonik bila buku alamat / kartu tertaut / jarak belum lengkap (heuristik `phone + distance_km` dihapus).
+     - Tombol pensil pada blok lokasi kini membuka **`AddressBookDrawer`** (pilih/edit kartu, patokan, koordinat, primary) dan menyegarkan detail reservasi via `refreshCanonicalDetail`.
+  3. `packages/admin-dashboard/src/pages/tenant/Reservations.tsx`:
+     - Modal panduan lokasi memakai kartu tertaut (`customer_address_id`): landmark/GPS diinisialisasi dari kartu, dan `customerAddressId` dikirim saat menyimpan.
+  4. `src/routes/admin/customers.subroute.ts`:
+     - `PUT /customers/:id/location` menerima `customerAddressId` → menulis landmark/GPS ke **kartu** (profil root tidak disentuh), memakai baseline jarak kartu untuk guard 25 km, watermark memakai wilayah kartu.
+     - Relink jadwal aktif diekstrak ke `relinkActiveReservationsForCard()` (dipakai PUT kartu & PUT lokasi mode kartu).
+  5. `src/routes/admin/reservation-dispatch.route.ts`:
+     - `customerAddressId` divalidasi terhadap buku alamat customer (tenant-scoped); kartu asing → `400 CUSTOMER_ADDRESS_NOT_FOUND`.
+     - `delivery_fee` reservasi diselaraskan dengan `ongkir` kartu terpilih (sebelumnya hanya jalur RC-1 yang melakukannya).
+- **Bukti & Verifikasi**:
+  - Test baru `tests/unit/reservation-address-card-selection.test.ts` (5 kasus adversarial): kartu terpilih menang + ongkir ikut kartu, kartu asing ditolak tanpa penulisan, `null` = detach (RC-1 tidak jalan), mode kartu pada `/location` tidak menyentuh root, kartu hantu → 404.
+  - Suite terkait (alamat, create-reservation RC-1, staff assignment, security, quick hold, detail payment): **8 file / 8 lulus**.
+  - `npm run build` (backend + dashboard) exit 0.
+  - Gate regresi suite penuh: 11 kegagalan baseline tetap sama + **1 flake timeout** `tests/integration/copilot-tenant-gate.test.ts` (lulus saat dijalankan sendiri; murni beban paralel, bukan regresi).
+
 #### 2026-11-05 - Fix: Buku Alamat Satu Sumber Kebenaran & Alamat Kedua Tidak Lagi "Hilang"/Salah Wilayah
 
 - **Latar Belakang & Masalah**:

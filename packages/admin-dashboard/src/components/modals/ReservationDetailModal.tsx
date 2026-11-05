@@ -36,6 +36,7 @@ import { resolveChildAgeRows, momGestationalBadge } from '../../utils/clinicalAg
 import { generateReservationInvoiceText } from '../../utils/paymentInvoiceFormatter';
 import { Reservation } from '../../types';
 import { CreateReservationModal } from '../calendar/CreateReservationModal';
+import { AddressBookDrawer } from '../customer/AddressBookDrawer';
 import { extractDurationMinutes } from '../../utils/durationCalculator';
 import { getCleanTreatmentName, getTotalDurationLabel } from '../../utils/treatmentFormatter';
 
@@ -134,10 +135,14 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
   const [activeRes, setActiveRes] = useState<any>(reservation);
   useEffect(() => {
     setActiveRes(reservation);
-    const hasFullCustomer = Boolean(
-      (reservation as any)?.customer?.phone &&
-      (reservation as any)?.customer?.distance_km != null
-    );
+    const cust = (reservation as any)?.customer;
+    // Kelengkapan buku alamat = prasyarat pemilih alamat di form edit. Payload
+    // ramping (LiveChat/list) sering punya phone + distance_km tapi tanpa
+    // preferences.saved_addresses → dulu fetch detail dilewati dan admin tidak
+    // bisa memilih alamat. Hidrasi detail bila salah satu bagian hilang.
+    const hasAddressBook = Array.isArray(cust?.preferences?.saved_addresses) && cust.preferences.saved_addresses.length > 0;
+    const hasLinkedCard = Boolean((reservation as any)?.customer_address || (reservation as any)?.customer_address_id);
+    const hasFullCustomer = Boolean(cust?.phone && cust?.distance_km != null && hasAddressBook && hasLinkedCard);
     if ((reservation as any)?.id && !hasFullCustomer) {
       apiRequest(`/api/admin/reservation/${(reservation as any).id}`)
         .then((res: any) => {
@@ -150,6 +155,22 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
 
   // Gunakan hydrasi penuh jika tersedia
   const displayReservation: any = activeRes || reservation;
+  const addressBookCustomerId = displayReservation?.customer?.id || displayReservation?.customer_id || null;
+
+  // Setelah kartu alamat diubah/dipilih, tarik ulang detail kanonik (kartu +
+  // ongkir + relasi) agar tampilan tidak memakai snapshot lama.
+  const refreshCanonicalDetail = () => {
+    const rid = displayReservation?.id;
+    if (rid) {
+      apiRequest(`/api/admin/reservation/${rid}`)
+        .then((res: any) => {
+          const full = res?.reservation || res?.data || res;
+          if (full) setActiveRes(full);
+        })
+        .catch(() => {});
+    }
+    onUpdate?.();
+  };
 
   // Hitung jarak dinamis jika distance_km kosong tapi lat/lng tersedia
   // Gunakan koordinat klinik dari map-points (tenant-aware) dengan fallback ke CLINIC_COORDS
@@ -176,6 +197,8 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
 
   // Full Edit Mode State (delegates to unified CreateReservationModal in edit mode)
   const [isEditing, setIsEditing] = useState(false);
+  // Buku alamat kartu (edit/pilih alamat) — dipakai tombol pensil di blok lokasi.
+  const [addressBookOpen, setAddressBookOpen] = useState(false);
 
   useEffect(() => {
     if (displayReservation?.booking_date) {
@@ -411,7 +434,9 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
     );
   }
 
-  return createPortal(
+  return (
+    <>
+      {createPortal(
     <div
       data-modal-active="true"
       className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[9999] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fadeIn h-[100dvh] w-[100dvw]"
@@ -620,9 +645,9 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                             )}
                             <button
                               type="button"
-                              onClick={() => onOpenEditLocation?.(reservation)}
+                              onClick={() => setAddressBookOpen(true)}
                               className="text-[11px] text-accent hover:underline font-semibold flex items-center gap-1"
-                              title="Edit foto rumah / patokan / titik koordinat"
+                              title="Edit / pilih kartu alamat, patokan, dan titik koordinat"
                             >
                               <PenLine size={11} />
                               <span>Edit</span>
@@ -992,6 +1017,16 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
         </div>
       </div>
     </div>,
-    document.body
+        document.body
+      )}
+      {addressBookOpen && addressBookCustomerId && (
+        <AddressBookDrawer
+          customer={{ id: addressBookCustomerId, name: displayReservation?.customer?.name }}
+          initialEditingCardId={displayReservation?.customer_address_id || null}
+          onClose={() => setAddressBookOpen(false)}
+          onChanged={refreshCanonicalDetail}
+        />
+      )}
+    </>
   );
 };

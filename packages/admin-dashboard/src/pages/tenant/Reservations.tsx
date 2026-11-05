@@ -866,11 +866,17 @@ export const Reservations: React.FC = () => {
   const handleOpenEditLocation = (res: Reservation) => {
     setEditLocationModal(res);
     const prefs = res.customer?.preferences as any;
+    // Multi-rumah: panduan lokasi milik KARTU yang tertaut jadwal, bukan profil root.
+    const cardId = (res as any).customer_address_id;
+    const card = (Array.isArray(prefs?.saved_addresses) ? prefs.saved_addresses : [])
+      .find((a: any) => a?.id === cardId) || null;
     setEditHousePhotoB64(prefs?.house_photo_url || null);
     setEditRawHousePhotoB64(null);
-    setEditLandmark(prefs?.landmark || '');
-    setEditLat(res.customer?.lat != null ? String(res.customer.lat) : '');
-    setEditLng(res.customer?.lng != null ? String(res.customer.lng) : '');
+    setEditLandmark(card?.landmark || prefs?.landmark || '');
+    const baseLat = card ? card.lat : res.customer?.lat;
+    const baseLng = card ? card.lng : res.customer?.lng;
+    setEditLat(baseLat != null ? String(baseLat) : '');
+    setEditLng(baseLng != null ? String(baseLng) : '');
     setEditRemovePhoto(false);
     setEditMapsUrlInput('');
     setEditGpsAccuracy(null);
@@ -984,6 +990,8 @@ export const Reservations: React.FC = () => {
           lat: parsedLat,
           lng: parsedLng,
           removePhoto: editRemovePhoto,
+          // Wajib: tanpa ini landmark/GPS rumah kedua menimpa profil root.
+          customerAddressId: (editLocationModal as any).customer_address_id || undefined,
         }),
       });
 
@@ -996,6 +1004,7 @@ export const Reservations: React.FC = () => {
           if (!prev || prev.customer_id !== editLocationModal.customer_id) return prev;
           return {
             ...prev,
+            ...(updatedCust.card ? { customer_address: updatedCust.card, customer_address_id: updatedCust.card.id } : {}),
             customer: {
               ...(prev.customer as any),
               lat: updatedCust.lat,
@@ -1981,12 +1990,22 @@ export const Reservations: React.FC = () => {
               {/* Info Alamat Pasien */}
               <div className="p-3 rounded-2xl bg-surface-2 border border-divider text-xs text-ink-2 space-y-1">
                 <span className="text-[10px] font-bold text-ink-3 uppercase tracking-wider block">
-                  Alamat Pasien:
+                  Alamat Rumah:
                 </span>
                 <p className="text-xs text-ink font-medium leading-snug">
-                  {editLocationModal.customer?.kelurahan
-                    ? `${editLocationModal.customer.kelurahan}, ${editLocationModal.customer.kecamatan}, ${editLocationModal.customer.kota}`
-                    : 'Alamat belum tercatat lengkap'}
+                  {(() => {
+                    const cardId = (editLocationModal as any).customer_address_id;
+                    const prefs = editLocationModal.customer?.preferences as any;
+                    const card = (Array.isArray(prefs?.saved_addresses) ? prefs.saved_addresses : [])
+                      .find((a: any) => a?.id === cardId) || null;
+                    if (card) {
+                      return [card.address, card.kelurahan, card.kecamatan, card.kota].filter(Boolean).join(', ') || 'Titik koordinat belum diisi';
+                    }
+                    const cust = editLocationModal.customer;
+                    return cust?.kelurahan
+                      ? `${cust.kelurahan}, ${cust.kecamatan}, ${cust.kota}`
+                      : 'Alamat belum tercatat lengkap';
+                  })()}
                 </p>
               </div>
 
