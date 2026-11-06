@@ -4,6 +4,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { apiRequest } from '../../services/api';
 import { BRAND } from '../../config/brand';
 import { 
+  PanelLeftClose,
+  PanelLeftOpen,
   LayoutDashboard, 
   CalendarRange, 
   BookOpen, 
@@ -158,10 +160,33 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   }, [location.pathname]);
 
   const [showStatusPopover, setShowStatusPopover] = useState(false);
+  const [desktopCollapsed, setDesktopCollapsed] = useState<boolean>(
+    () => localStorage.getItem('kala_desktop_sidebar_collapsed') === 'true'
+  );
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  const handleLogout = async () => {
-    await logout();
-    navigate('/admin/login');
+  const toggleDesktopSidebar = () => {
+    setDesktopCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem('kala_desktop_sidebar_collapsed', String(next));
+      return next;
+    });
+  };
+
+  const handleLogout = async (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    try {
+      await logout();
+    } catch {
+      // ignore
+    } finally {
+      navigate('/admin/login');
+    }
   };
 
   interface NavItem {
@@ -542,20 +567,24 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       />
 
       {/* Sidebar Navigation (Desktop: Left, Mobile: Slide from Right with total GPU masking when closed) */}
-      <aside className={`fixed inset-y-0 right-0 md:right-auto md:left-0 z-50 w-64 bg-sidebar border-l md:border-l-0 md:border-r border-divider flex flex-col transform pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)] ${
+      <aside className={`fixed inset-y-0 right-0 md:right-auto md:left-0 z-50 ${
+        desktopCollapsed ? 'md:w-20' : 'md:w-64'
+      } w-64 bg-sidebar border-l md:border-l-0 md:border-r border-divider flex flex-col transform pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)] ${
         mobileMenuOpen
           ? 'translate-x-0 opacity-100 visible pointer-events-auto'
           : 'translate-x-full opacity-0 invisible pointer-events-none md:opacity-100 md:visible md:pointer-events-auto md:translate-x-0'
       } transition-all duration-300 ease-out shadow-2xl md:shadow-xs`}>
         {/* Brand/Header */}
-        <div className="h-16 border-b border-divider bg-surface flex items-center justify-between px-5">
+        <div className={`h-16 border-b border-divider bg-surface flex items-center ${
+          desktopCollapsed ? 'md:justify-center md:px-0' : 'justify-between px-5'
+        } px-5`}>
           <div className="flex items-center space-x-2.5">
             <img
               src="/admin/apple-touch-icon.png"
               alt="Kala Logo"
               className="h-8 w-8 rounded-lg object-contain shadow-2xs border border-divider shrink-0"
             />
-            <div className="flex flex-col">
+            <div className={`flex flex-col ${desktopCollapsed ? 'md:hidden' : ''}`}>
               <span className="font-extrabold text-sm tracking-wider text-ink uppercase">KALA SPA</span>
               <span className="text-[10px] text-ink-3 font-medium leading-none">Management Bot</span>
             </div>
@@ -600,9 +629,10 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
             return sortedNavGroups.map((group) => (
               <div key={group.title} className="space-y-1">
-                <div className="px-3 pt-1 pb-0.5 text-[10px] font-extrabold uppercase tracking-wider text-ink-3">
+                <div className={`px-3 pt-1 pb-0.5 text-[10px] font-extrabold uppercase tracking-wider text-ink-3 ${desktopCollapsed ? 'md:hidden' : ''}`}>
                   {group.title}
                 </div>
+                {desktopCollapsed && <div className="hidden md:block border-t border-divider my-2 mx-1" />}
                 {group.items.map((item) => {
                   const Icon = item.icon;
                   const isActive = location.pathname === item.path;
@@ -611,23 +641,28 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                       key={item.path}
                       to={item.path}
                       onClick={handleNavClick}
-                      className={`flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-150 text-xs ${
+                      title={desktopCollapsed ? item.name : undefined}
+                      className={`flex items-center ${desktopCollapsed ? 'md:justify-center md:px-0 md:space-x-0' : 'space-x-3 px-3'} py-2.5 rounded-xl transition-all duration-150 text-xs relative group ${
                         isActive 
                           ? 'bg-accent-soft border-l-4 border-accent text-accent font-bold shadow-xs'
                           : 'text-ink-2 hover:bg-fill-1 hover:text-ink font-medium'
                       }`}
                     >
                       <Icon size={17} className={isActive ? 'text-accent' : 'text-ink-3'} />
-                      <span className="flex-1 truncate">{item.name}</span>
+                      <span className={`flex-1 truncate ${desktopCollapsed ? 'md:hidden' : ''}`}>{item.name}</span>
                       {!!item.badge && (
-                        <span
-                          title={`${item.badge} percakapan butuh respons / unread`}
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            isActive ? 'bg-accent text-accent-ink' : 'bg-warning-soft text-warning border border-warning-line'
-                          }`}
-                        >
-                          {item.badge}
-                        </span>
+                        desktopCollapsed ? (
+                          <span className="hidden md:block absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-danger rounded-full ring-2 ring-surface" title={`${item.badge} percakapan`} />
+                        ) : (
+                          <span
+                            title={`${item.badge} percakapan butuh respons / unread`}
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              isActive ? 'bg-accent text-accent-ink' : 'bg-warning-soft text-warning border border-warning-line'
+                            }`}
+                          >
+                            {item.badge}
+                          </span>
+                        )
                       )}
                     </Link>
                   );
@@ -638,12 +673,12 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         </nav>
 
         {/* Quick Controls (Online Status, Sound, & Mode UI) — dipindah dari header mobile */}
-        <div className="px-3 pt-3 pb-2 border-t border-divider bg-surface-2 space-y-2">
+        <div className={`px-3 pt-3 pb-2 border-t border-divider bg-surface-2 space-y-2 ${desktopCollapsed ? 'md:px-2' : ''}`}>
           {/* Status WAHA / Online */}
           <button
             type="button"
             onClick={() => setShowStatusPopover(true)}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl border text-xs font-semibold transition active:scale-98 cursor-pointer shadow-2xs ${
+            className={`w-full flex items-center ${desktopCollapsed ? 'md:justify-center md:px-0' : 'justify-between px-3'} py-2 rounded-xl border text-xs font-semibold transition active:scale-98 cursor-pointer shadow-2xs ${
               wahaStatus === 'WORKING'
                 ? 'bg-success-soft border-success-line text-success hover:bg-success-soft/80'
                 : wahaStatus === 'SCAN_QR_CODE'
@@ -652,7 +687,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             }`}
             title="Klik untuk melihat status sistem WhatsApp & Server"
           >
-            <span className="flex items-center gap-2">
+            <span className={`flex items-center ${desktopCollapsed ? 'md:gap-0' : 'gap-2'}`}>
               <span className="relative flex h-2 w-2">
                 <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
                   wahaStatus === 'WORKING' ? 'bg-success' : 'bg-danger'
@@ -661,15 +696,15 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                   wahaStatus === 'WORKING' ? 'bg-success' : 'bg-danger'
                 }`} />
               </span>
-              <span className="text-[11px] font-bold">
+              <span className={`text-[11px] font-bold ${desktopCollapsed ? 'md:hidden' : ''}`}>
                 {wahaStatus === 'WORKING' ? 'WhatsApp Online' : wahaStatus === 'SCAN_QR_CODE' ? 'Scan QR WA' : 'WhatsApp Offline'}
               </span>
             </span>
-            <ChevronRight size={14} className="opacity-60" />
+            <ChevronRight size={14} className={`opacity-60 ${desktopCollapsed ? 'md:hidden' : ''}`} />
           </button>
 
           {/* Dual Buttons: Sound & Theme */}
-          <div className="flex items-center gap-2">
+          <div className={`flex items-center gap-2 ${desktopCollapsed ? 'md:flex-col md:gap-1.5' : ''}`}>
             {canAccessLiveChat && (
               <button
                 type="button"
@@ -687,7 +722,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                     toast('🔇 Suara notifikasi dimatikan (Mute).', 'info');
                   }
                 }}
-                className={`flex-1 min-h-[38px] flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-xl border text-xs font-semibold transition active:scale-95 cursor-pointer shadow-2xs ${
+                className={`flex-1 min-h-[38px] ${desktopCollapsed ? 'md:w-full md:px-0' : 'px-2.5'} flex items-center justify-center gap-1.5 py-1.5 rounded-xl border text-xs font-semibold transition active:scale-95 cursor-pointer shadow-2xs ${
                   soundActive
                     ? 'bg-success-soft border-success-line text-accent'
                     : 'bg-surface-2 border-divider text-ink-3 hover:text-ink'
@@ -695,22 +730,22 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 title={soundActive ? 'Suara & Push: Aktif (Klik untuk Mute)' : 'Suara & Push: Mati (Klik untuk Aktifkan)'}
               >
                 {soundActive ? <Volume2 size={14} className="text-accent" /> : <VolumeX size={14} />}
-                <span className="text-[11px] font-bold">{soundActive ? 'Suara On' : 'Mute'}</span>
+                <span className={`text-[11px] font-bold ${desktopCollapsed ? 'md:hidden' : ''}`}>{soundActive ? 'Suara On' : 'Mute'}</span>
               </button>
             )}
 
             {/* Mode UI Theme Button */}
-            <div className="flex-1 min-h-[38px] flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-xl border border-divider bg-surface-2 text-xs font-semibold shadow-2xs">
+            <div className={`flex-1 min-h-[38px] ${desktopCollapsed ? 'md:w-full md:px-0' : 'px-2.5'} flex items-center justify-center gap-1.5 py-1.5 rounded-xl border border-divider bg-surface-2 text-xs font-semibold shadow-2xs`}>
               <ThemeToggle size={14} className="!w-6 !h-6 !min-w-[24px] !min-h-[24px] !border-none !bg-transparent !shadow-none" />
-              <span className="text-[11px] font-bold text-ink-2">Mode UI</span>
+              <span className={`text-[11px] font-bold text-ink-2 ${desktopCollapsed ? 'md:hidden' : ''}`}>Mode UI</span>
             </div>
           </div>
         </div>
 
         {/* User profile / Logout */}
-        <div className="p-3.5 border-t border-divider bg-surface-2 space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="truncate pr-2">
+        <div className={`p-3.5 border-t border-divider bg-surface-2 space-y-2 ${desktopCollapsed ? 'md:p-2' : ''}`}>
+          <div className={`flex items-center ${desktopCollapsed ? 'md:flex-col md:gap-2' : 'justify-between'}`}>
+            <div className={`truncate pr-2 ${desktopCollapsed ? 'md:hidden' : ''}`}>
               <p className="text-xs font-bold text-ink truncate">
                 {user?.name || user?.email || 'Admin'}
               </p>
@@ -721,12 +756,14 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               </div>
             </div>
             <button
+              type="button"
               onClick={handleLogout}
-              className="p-2.5 rounded-xl bg-surface hover:bg-danger-soft text-ink-3 hover:text-danger border border-divider transition-colors shadow-xs cursor-pointer"
-              title="Logout"
+              disabled={isLoggingOut}
+              className={`p-2.5 rounded-xl bg-surface hover:bg-danger-soft text-ink-3 hover:text-danger border border-divider transition-colors shadow-xs cursor-pointer ${isLoggingOut ? 'opacity-60 cursor-not-allowed' : ''}`}
+              title="Logout (Keluar)"
               aria-label="Logout"
             >
-              <LogOut size={16} />
+              {isLoggingOut ? <Loader size={16} className="animate-spin text-danger" /> : <LogOut size={16} />}
             </button>
           </div>
         </div>
@@ -735,7 +772,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       {/* Main Content Area */}
       <div
         style={{ height: isLiveChat ? 'var(--vvh, 100dvh)' : undefined, maxHeight: isLiveChat ? 'var(--vvh, 100dvh)' : undefined }}
-        className={`flex-1 md:pl-64 flex flex-col ${isLiveChat ? 'h-[100dvh] max-h-[100dvh] overflow-hidden min-h-0' : 'min-h-screen'}`}
+        className={`flex-1 ${desktopCollapsed ? 'md:pl-20' : 'md:pl-64'} transition-all duration-300 flex flex-col ${isLiveChat ? 'h-[100dvh] max-h-[100dvh] overflow-hidden min-h-0' : 'min-h-screen'}`}
       >
         
         {/* Top Header — iPhone safe-area: notch/Dynamic Island.
@@ -751,7 +788,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             tetap sticky z-40. */}
         <header className={`${isLiveChat ? 'hidden lg:block lg:sticky lg:top-0 z-40' : 'sticky top-0 z-40'} border-b border-divider bg-surface shadow-2xs shrink-0 pt-[env(safe-area-inset-top,0px)] pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))]`}>
           <div className="h-12 md:h-13 px-3 sm:px-5 flex items-center justify-between">
-            <div className="flex items-center space-x-2">
+            {/* Mobile Branding Logo (Header logo hanya muncul di mobile) */}
+            <div className="flex md:hidden items-center space-x-2">
               <img
                 src="/admin/apple-touch-icon.png"
                 alt="Kala Logo"
@@ -760,6 +798,19 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               <span className="font-extrabold text-xs sm:text-sm tracking-wide text-ink">
                 KALA SPA
               </span>
+            </div>
+
+            {/* Desktop Sidebar Toggle Button */}
+            <div className="hidden md:flex items-center space-x-2">
+              <button
+                type="button"
+                onClick={toggleDesktopSidebar}
+                className="p-2 rounded-xl text-ink-2 hover:text-ink hover:bg-fill-1 border border-divider transition-colors shadow-2xs cursor-pointer"
+                title={desktopCollapsed ? 'Perluas Sidebar' : 'Kecilkan Sidebar (Mode Ikon)'}
+                aria-label={desktopCollapsed ? 'Perluas Sidebar' : 'Kecilkan Sidebar'}
+              >
+                {desktopCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+              </button>
             </div>
 
           {/* Right Header: System Liveness Alerts & Mobile Hamburger Menu Button */}

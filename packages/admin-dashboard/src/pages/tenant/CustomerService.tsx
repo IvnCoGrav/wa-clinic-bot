@@ -1,17 +1,23 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
+const CtwaCatchersTab = React.lazy(() => import('../../components/meta-performance/CtwaCatchersTab'));
 import { 
   Headphones, 
   Save, 
   Copy, 
   Check, 
   Link as LinkIcon, 
-  Info
+  Target,
+  Info,
+  Loader
 } from 'lucide-react';
 
 export const CustomerService: React.FC = () => {
   const { toast } = useUiFeedback();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') === 'catchers' ? 'catchers' : 'generator';
 
   // Settings State
   const [csName, setCsName] = useState('Cs Yusi');
@@ -106,14 +112,6 @@ export const CustomerService: React.FC = () => {
     setTimeout(() => setCopied(false), 3000);
   };
 
-  if (loading) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-accent border-t-transparent"></div>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       {/* Header */}
@@ -122,14 +120,49 @@ export const CustomerService: React.FC = () => {
           <Headphones size={22} />
         </div>
         <div>
-          <h2 className="text-xl font-bold text-ink">Customer Service &amp; CTA Link Generator</h2>
+          <h2 className="text-xl font-bold text-ink">CTA &amp; Greetings WhatsApp</h2>
           <p className="text-xs text-ink-3 mt-0.5">
-            Pusat konfigurasi Customer Service dan pembuat CTA Link otomatis terhubung ke WhatsApp.
+            Pusat konfigurasi pesan pembuka WhatsApp, format pelacakan Promo [%ID%], link generator, dan Greeting Catchers CTWA.
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Main Tabs Navigation */}
+      <div className="flex items-center space-x-2 border-b border-divider">
+        <button
+          type="button"
+          onClick={() => setSearchParams({}, { replace: true })}
+          className={`flex items-center space-x-2 px-4 py-2.5 border-b-2 text-xs font-bold transition-colors cursor-pointer ${
+            activeTab === 'generator'
+              ? 'border-accent text-accent'
+              : 'border-transparent text-ink-3 hover:text-ink hover:border-divider'
+          }`}
+        >
+          <LinkIcon size={14} />
+          <span>Generator &amp; Format CTA WA</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setSearchParams({ tab: 'catchers' }, { replace: true })}
+          className={`flex items-center space-x-2 px-4 py-2.5 border-b-2 text-xs font-bold transition-colors cursor-pointer ${
+            activeTab === 'catchers'
+              ? 'border-accent text-accent'
+              : 'border-transparent text-ink-3 hover:text-ink hover:border-divider'
+          }`}
+        >
+          <Target size={14} />
+          <span>Greeting Catchers CTWA</span>
+        </button>
+      </div>
+
+      {/* Tab 1: Generator & Settings */}
+      {activeTab === 'generator' && (
+        loading ? (
+          <div className="flex h-64 items-center justify-center">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-accent border-t-transparent"></div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Panel 1: Settings Form */}
         <div className="bg-surface p-5 space-y-4 rounded-2xl border border-divider shadow-xs">
           <div className="flex items-center space-x-2 border-b border-divider pb-3">
@@ -311,6 +344,21 @@ export const CustomerService: React.FC = () => {
           </div>
         </div>
       </div>
+        )
+      )}
+
+      {/* Tab 2: Greeting Catchers CTWA */}
+      {activeTab === 'catchers' && (
+        <Suspense
+          fallback={
+            <div className="bg-surface border border-divider rounded-2xl p-12 flex items-center justify-center text-ink-3">
+              <Loader size={16} className="animate-spin text-accent mr-2" /> Memuat Greeting Catchers...
+            </div>
+          }
+        >
+          <CtwaCatchersTab />
+        </Suspense>
+      )}
     </div>
   );
 };

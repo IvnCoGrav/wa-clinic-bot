@@ -83,6 +83,60 @@ export const FOLLOWUP_TYPE_PRIORITY: Record<string, number> = {
  * V8: true bila `now` berada dalam jam operasional follow-up (09:00–17:00 WIB).
  * Murni fungsi waktu (deterministik & unit-testable), bukan pencocokan teks.
  */
+export interface ScheduledAtRange {
+  gte?: Date;
+  lte?: Date;
+  lt?: Date;
+}
+
+/**
+ * Membangun batas waktu pencarian jadwal follow-up (WIB = UTC+7).
+ * Fungsi murni (pure function) yang deterministik dan mudah diuji unit test.
+ */
+export function buildScheduledAtRange(
+  dateFilter?: string,
+  referenceDate: Date = new Date()
+): ScheduledAtRange | null {
+  if (!dateFilter || dateFilter === 'all') return null;
+
+  const nowWib = new Date(referenceDate.getTime() + 7 * 60 * 60 * 1000);
+  const year = nowWib.getUTCFullYear();
+  const month = nowWib.getUTCMonth();
+  const date = nowWib.getUTCDate();
+  const dayOfWeek = nowWib.getUTCDay(); // 0 = Minggu, 1 = Senin, ..., 6 = Sabtu
+
+  // Start of today in WIB (00:00:00 WIB)
+  const startOfTodayUtc = new Date(Date.UTC(year, month, date, 0, 0, 0) - 7 * 60 * 60 * 1000);
+  // End of today in WIB (23:59:59.999 WIB)
+  const endOfTodayUtc = new Date(Date.UTC(year, month, date, 23, 59, 59, 999) - 7 * 60 * 60 * 1000);
+
+  if (dateFilter === 'upcoming') {
+    return { gte: startOfTodayUtc };
+  }
+  if (dateFilter === 'today') {
+    return { gte: startOfTodayUtc, lte: endOfTodayUtc };
+  }
+  if (dateFilter === 'this_week') {
+    // Minggu dimulai hari Senin (1). Jika Minggu (0), selisih mundur 6 hari.
+    const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const startOfWeekUtc = new Date(Date.UTC(year, month, date - daysFromMonday, 0, 0, 0) - 7 * 60 * 60 * 1000);
+    const daysToSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
+    const endOfWeekUtc = new Date(Date.UTC(year, month, date + daysToSunday, 23, 59, 59, 999) - 7 * 60 * 60 * 1000);
+    return { gte: startOfWeekUtc, lte: endOfWeekUtc };
+  }
+  if (dateFilter === 'this_month') {
+    // Mulai tanggal 1 jam 00:00:00 WIB
+    const startOfMonthUtc = new Date(Date.UTC(year, month, 1, 0, 0, 0) - 7 * 60 * 60 * 1000);
+    // Akhir bulan jam 23:59:59.999 WIB (month + 1, date 0)
+    const endOfMonthUtc = new Date(Date.UTC(year, month + 1, 0, 23, 59, 59, 999) - 7 * 60 * 60 * 1000);
+    return { gte: startOfMonthUtc, lte: endOfMonthUtc };
+  }
+  if (dateFilter === 'overdue') {
+    return { lt: startOfTodayUtc };
+  }
+  return null;
+}
+
 export function isWithinFollowUpWorkingHours(now: Date): boolean {
   const nowWib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
   const hour = nowWib.getUTCHours();
@@ -224,31 +278,9 @@ export class FollowUpService {
     }
 
     if (options.dateFilter && options.dateFilter !== 'all') {
-      const now = new Date();
-      const nowWib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
-      const year = nowWib.getUTCFullYear();
-      const month = nowWib.getUTCMonth();
-      const date = nowWib.getUTCDate();
-
-      // Start of today in WIB (00:00:00 WIB)
-      const startOfTodayUtc = new Date(Date.UTC(year, month, date, 0, 0, 0) - 7 * 60 * 60 * 1000);
-      // End of today in WIB (23:59:59.999 WIB)
-      const endOfTodayUtc = new Date(Date.UTC(year, month, date, 23, 59, 59, 999) - 7 * 60 * 60 * 1000);
-
-      if (options.dateFilter === 'upcoming') {
-        where.scheduled_at = { gte: startOfTodayUtc };
-      } else if (options.dateFilter === 'today') {
-        where.scheduled_at = { gte: startOfTodayUtc, lte: endOfTodayUtc };
-      } else if (options.dateFilter === 'this_week') {
-        const dayOfWeek = nowWib.getUTCDay(); // 0 is Sunday
-        const daysToSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
-        const endOfWeekUtc = new Date(Date.UTC(year, month, date + daysToSunday, 23, 59, 59, 999) - 7 * 60 * 60 * 1000);
-        where.scheduled_at = { gte: startOfTodayUtc, lte: endOfWeekUtc };
-      } else if (options.dateFilter === 'this_month') {
-        const endOfMonthUtc = new Date(Date.UTC(year, month + 1, 0, 23, 59, 59, 999) - 7 * 60 * 60 * 1000);
-        where.scheduled_at = { gte: startOfTodayUtc, lte: endOfMonthUtc };
-      } else if (options.dateFilter === 'overdue') {
-        where.scheduled_at = { lt: startOfTodayUtc };
+      const range = buildScheduledAtRange(options.dateFilter);
+      if (range) {
+        where.scheduled_at = range;
       }
     }
 

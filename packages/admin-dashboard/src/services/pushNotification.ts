@@ -137,15 +137,21 @@ export async function subscribeToPushNotifications(
 export async function unsubscribeFromPushNotifications(): Promise<{ success: boolean; error?: string }> {
   try {
     if (!('serviceWorker' in navigator)) return { success: true };
-    const registration = await navigator.serviceWorker.ready;
+    // Timeout safeguard: cegah hang jika serviceWorker belum aktif/siap
+    const swReadyWithTimeout = Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500)),
+    ]);
+    const registration = await swReadyWithTimeout;
+    if (!registration) return { success: true };
     const subscription = await registration.pushManager.getSubscription();
     if (subscription) {
       const endpoint = subscription.endpoint;
-      await subscription.unsubscribe();
+      await subscription.unsubscribe().catch(() => {});
       await apiRequest('/api/admin/push/unsubscribe', {
         method: 'POST',
         body: JSON.stringify({ endpoint }),
-      });
+      }).catch(() => {});
     }
     return { success: true };
   } catch (err: any) {

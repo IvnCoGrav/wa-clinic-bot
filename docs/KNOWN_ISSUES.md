@@ -3,6 +3,21 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 319. [Admin Dashboard] 7 Polish Desktop UI, Follow-Up Queue & Treatment Hari Ini (2026-11-06, SELESAI)
+
+- **Status:** SELESAI (Fase 1–8 diimplementasikan, build backend & dashboard exit 0).
+- **Cakupan:** `Layout.tsx`, `pushNotification.ts`, `FollowUpQueue.tsx`, `follow-up.service.ts`, `TodayTreatments.tsx`, `FleetMapModal.tsx`, `DispatchMapModal.tsx`, `Settings.tsx`, `MqlSettingsPanel.tsx`, `MediaRetentionPanel.tsx`, `CustomerService.tsx`, `MetaClickCatcher.tsx`.
+- **Rangkuman Perbaikan:**
+  1. Redundansi logo header desktop dihapus (`flex md:hidden`); digantikan toggle sidebar desktop.
+  2. Sidebar collapsible `w-20` (icon-only + tooltip + persistensi localStorage).
+  3. Logout sekali klik: timeout 1.500 ms pada pembatalan Web Push `ready`, status loading spinner pada tombol Keluar, navigasi seketika tanpa jeda.
+  4. Konsolidasi tab di `CustomerService.tsx` (Generator CTA WA & Greeting Catchers CTWA) + migrasi RBAC `20261106000000_allow_ctwa_catchers_for_advertiser` untuk peran advertiser.
+  5. Reklasifikasi `Settings.tsx`: Broadcast dipindahkan ke `META_MARKETING`, Retensi Media dipisah ke `MediaRetentionPanel` di `APP_OPS`, dan redirect `subTab=cs` langsung ke `/admin/customer-service`.
+  6. Filter `FollowUpQueue.tsx`: fungsi murni `buildScheduledAtRange` (WIB exact: Senin untuk `this_week`, tgl 1 untuk `this_month`) + 8 unit test, auto-switch dateFilter saat filter status riwayat, debounce 400ms search, dan tombol Reset Filter.
+  7. `TodayTreatments.tsx`: default scope `all` untuk admin/supervisor, pemisahan status DB `completed` vs `isOverdue` (badge kuning jam terlewat tanpa menghilang dari daftar tunggu), pembersihan refetch loop `tasks.length`, dan pembaruan modal peta (`FleetMapModal` + `DispatchMapModal`) dengan banner status GPS bidan dan tombol salin koordinat.
+- **Sisa / Catatan Pemeliharaan:**
+  - Migrasi `20261106000000_allow_ctwa_catchers_for_advertiser` perlu dijalankan saat deploy ke server (`npx prisma migrate deploy`).
+
 ## 318. [Ad Watchdog] Klik CTA Nol tapi Chat Masuk Normal Diklasifikasikan `LOW_CTR`, Bukan Sinyal Instrumentasi (2026-11-06, OPEN - DESIGN GAP)
 
 - **Status:** OPEN (belum diperbaiki, butuh persetujuan karena mengubah logika deteksi).
@@ -407,6 +422,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   4. **Pembersihan Nama Presisi (D-5):** `cleanBundaName` memotong token prefix mandiri (`(?:\s+|$)`) sehingga nama kontak persis `"Bunda"` tidak menghasilkan sapaan dobel `"Bunda Bunda"`.
   5. **UX Live Chat:** Tombol Shareloc memanggil `composerRef.current.setText`, penggantian token slash hanya memotong akhiran `/<token>`, `onTouchEnd` dihapus, dan media bawaan dibersihkan saat memilih template teks dengan pemisahan `origin: 'quick-reply' | 'upload'`.
 - **Bukti & Pengujian:** `tests/unit/quick-replies.test.ts` (20 test lulus, termasuk uji PostgreSQL anti-zombie dan pemisahan kontrak `resolved_content`) + `tests/integration/quick-replies-media.test.ts` (6 test lulus) = 26/26 test hijau. `npm run build` dan dashboard build lulus 100%.
+- **Keputusan produk 2026-11-06 — lint shareloc Quick Reply dicabut:** `validateQuickReplyContent()` di `src/routes/admin/quick-replies.subroute.ts` (yang menolak template mengajak shareloc selain kategori `Pasca Booking`) dihapus dari jalur POST/PUT. Alasan: Quick Reply adalah alat bantu manusia/CS, **tidak pernah** disuntikkan ke prompt LLM (tidak ada pembacaan `quickReply` di `src/v3/`), dan dropdown kategori dashboard memang tidak menyediakan `Pasca Booking`. Guardrail output AI (`guardrail-pipeline.ts` blok 7f) + detector `src/domain/shareloc-solicitation.ts` **tetap aktif** untuk balasan bot (Aturan Emas 21). Regresi dijaga `tests/integration/quick-replies-media.test.ts` (template shareloc/`shareloct`/`sharelock` tersimpan; body kosong & shortcut invalid tetap 400).
 
 ## 304. [Buku Alamat] Drift JSON `saved_addresses` vs Tabel `customer_addresses` (A-002) (2026-11-03, RESOLVED)
 

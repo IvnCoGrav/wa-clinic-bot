@@ -90,6 +90,7 @@ export const FollowUpQueue: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [dateFilter, setDateFilter] = useState('upcoming'); // Default: Hari ini & ke depan
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<string>('scheduled_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -110,6 +111,27 @@ export const FollowUpQueue: React.FC = () => {
 
   // Alasan pembatalan manual (opsional) — dikirim ke backend sebagai cancel_reason.
   const [confirmReason, setConfirmReason] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(1);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  const hasActiveFilters = Boolean(
+    statusFilter || typeFilter || dateFilter !== 'upcoming' || searchInput
+  );
+
+  const handleResetFilters = () => {
+    setStatusFilter('');
+    setTypeFilter('');
+    setDateFilter('upcoming');
+    setSearchInput('');
+    setSearch('');
+    setPage(1);
+  };
 
   // Chat History Modal — render, fetch & quick-reply dimiliki ChatHistoryModal
   // terpusat (mode reply via endpoint live-chat valid; tanpa fallback 404).
@@ -208,8 +230,8 @@ export const FollowUpQueue: React.FC = () => {
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setSearch(searchInput);
     setPage(1);
-    loadFollowUps();
   };
 
   const handleRescheduleOverdue = async () => {
@@ -701,8 +723,12 @@ export const FollowUpQueue: React.FC = () => {
           <select
             value={statusFilter}
             onChange={(e) => {
-              setStatusFilter(e.target.value);
+              const nextStatus = e.target.value;
+              setStatusFilter(nextStatus);
               setPage(1);
+              if (['SENT', 'SKIPPED', 'CANCELLED', 'FAILED'].includes(nextStatus) && dateFilter === 'upcoming') {
+                setDateFilter('all');
+              }
             }}
             className="p-2.5 bg-surface border border-divider hover:border-accent rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs transition"
           >
@@ -734,17 +760,30 @@ export const FollowUpQueue: React.FC = () => {
           </select>
         </div>
 
-        {/* Search Bar */}
-        <form onSubmit={handleSearchSubmit} className="relative w-full lg:w-72">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Cari nama / nomor WhatsApp..."
-            className="w-full pl-8 pr-3 py-2.5 bg-surface border border-divider hover:border-accent rounded-xl text-xs text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent shadow-xs transition"
-          />
-        </form>
+        {/* Search Bar & Reset Filter */}
+        <div className="flex items-center gap-2 w-full lg:w-auto">
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold text-ink-2 hover:text-ink bg-fill-1 hover:bg-fill-2 border border-divider shadow-xs transition shrink-0 cursor-pointer"
+              title="Reset semua filter ke kondisi awal"
+            >
+              <X size={13} />
+              <span>Reset</span>
+            </button>
+          )}
+          <form onSubmit={handleSearchSubmit} className="relative w-full lg:w-72">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" />
+            <input
+              type="text"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Cari nama / nomor WhatsApp..."
+              className="w-full pl-8 pr-3 py-2.5 bg-surface border border-divider hover:border-accent rounded-xl text-xs text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent shadow-xs transition"
+            />
+          </form>
+        </div>
       </div>
 
       {/* Main Content: Mobile Card Stack (< md) + Desktop Table (>= md) */}

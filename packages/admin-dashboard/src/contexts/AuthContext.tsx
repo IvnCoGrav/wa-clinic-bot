@@ -266,7 +266,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await unsubscribeFromPushNotifications().catch(() => {});
     } catch {}
     try {
-      await apiRequest('/api/admin/auth/logout', { method: 'POST' });
+      const serverLogout = apiRequest('/api/admin/auth/logout', { method: 'POST' }).catch(() => {});
+      await Promise.race([
+        serverLogout,
+        new Promise((resolve) => setTimeout(resolve, 1500)),
+      ]);
     } catch (err) {
       console.error('Logout error:', err);
     } finally {

@@ -4,6 +4,28 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-06 - Refactor & Polish: 7 Perbaikan Desktop UI, Follow-Up Queue & Operasional Admin Dashboard
+
+- **Latar Belakang**: Permintaan pengguna untuk merapikan pengalaman desktop dan memperbaiki bug operasional pada Admin Dashboard (`packages/admin-dashboard`), meliputi redundansi logo, sidebar collapsible, alur logout lambat, konsolidasi tab greetings CTWA, reklasifikasi pengaturan, filter follow-up queue, dan penanganan jadwal di Treatment Hari Ini.
+- **Perubahan Utama**:
+  1. **Layout & Header**: Logo di header disembunyikan pada desktop (`flex md:hidden`) dan digantikan tombol toggle sidebar (`hidden md:flex`). Menambahkan state `desktopCollapsed` (`w-20` / `pl-20`) dengan icon-only dan tooltip untuk memaksimalkan area kerja desktop.
+  2. **Single-Click Logout**: Menambahkan timeout 1.500 ms pada pembatalan Web Push (`pushNotification.ts`) untuk mencegah hang saat service worker belum siap; menambahkan feedback visual seketika (spinner & tombol dinonaktifkan) pada tombol Keluar di `Layout.tsx` dan langsung navigasi tanpa jeda.
+  3. **Konsolidasi CTA & Greeting Catchers**: Menambahkan sistem tab di `/admin/customer-service`: Tab 1 (Generator & Format CTA WA) dan Tab 2 (Greeting Catchers CTWA). Menambahkan migrasi RBAC `20261106000000_allow_ctwa_catchers_for_advertiser` agar role advertiser memiliki akses penuh ke `/api/admin/ctwa-catchers`.
+  4. **Reklasifikasi Operational Settings**: Memindahkan panel Broadcast & Quiet Hours ke rumpun Marketing (`META_MARKETING`), mengekstrak Retensi Media Live Chat ke komponen mandiri `MediaRetentionPanel` di `APP_OPS`, dan mengalihkan `subTab=cs` langsung ke `/admin/customer-service`.
+  5. **Filter Follow-Up Queue**: Mengekstrak fungsi murni `buildScheduledAtRange()` di `follow-up.service.ts` dengan kalkulasi WIB tepat untuk `this_week` (mulai Senin 00:00 WIB) dan `this_month` (mulai tanggal 1 00:00 WIB). Menambahkan unit test adversarial (`tests/unit/follow-up-date-range.test.ts`). Di UI, menambahkan auto-switch ke `dateFilter='all'` saat status riwayat dipilih, debounce input pencarian 400 ms, dan tombol Reset Filter satu klik.
+  6. **Treatment Hari Ini & Peta**: Mengubah default filter terapis menjadi `all` untuk akun supervisor/admin; memisahkan status DB `completed` dari jadwal yang jam kunjungannya telah lewat (`isOverdue`), sehingga jadwal yang sedang berjalan atau molor tetap tampil di tab "Akan Datang" dengan badge kuning "Jam Terlewat"; memperbarui modal peta (`FleetMapModal` dan `DispatchMapModal`) dengan banner status GPS bidan, tombol buka Google Maps, dan tombol salin koordinat.
+- **Verifikasi**: `npm run build` root (Fastify) dan dashboard (Vite) exit 0; unit test `follow-up-date-range.test.ts` (8 test) 100% lulus.
+
+#### 2026-11-06 - Kebijakan: Lint Shareloc pada Balasan Cepat (Quick Chat) Dicabut
+
+- **Latar Belakang**: Admin tidak bisa menyimpan template Balasan Cepat yang menyebut "shareloct" (mis. *"…atau alamat lengkapnya? Atau mungkin bisa shareloct bund…"*). Gerbang `validateQuickReplyContent()` menolak semua kategori selain `Pasca Booking`, sementara dropdown dashboard tidak menyediakan kategori itu. Template Quick Reply adalah alat bantu **manusia (CS/Bidan)**, bukan output AI.
+- **Keputusan Produk**: Lint shareloc pada penyimpanan Quick Reply **dicabut** dari `POST/PUT /api/admin/quick-replies`. Quick Reply tidak pernah disuntikkan ke prompt LLM (tidak ada pembacaan `quickReply` di `src/v3/`), sehingga tidak ada jalur kebocoran ke balasan bot.
+- **Perubahan**:
+  1. `src/routes/admin/quick-replies.subroute.ts` — hapus `validateQuickReplyContent()` beserta pemanggilan di POST (baris ~454) dan PUT (baris ~598) serta import yang tidak terpakai.
+  2. `src/domain/shareloc-solicitation.ts` + guardrail output AI (`guardrail-pipeline.ts` blok 7f) **tetap utuh** — Aturan Emas 21 tetap berlaku untuk balasan BOT.
+  3. `tests/unit/quick-reply-shareloc-lint.test.ts` dihapus; regresi baru di `tests/integration/quick-replies-media.test.ts` memastikan template shareloc tersimpan (termasuk typo `sharelock`/`shareloct`) dan validasi lain (isi kosong, shortcut invalid) tetap menolak 400.
+- **Verifikasi**: `npm run build` exit 0; 5 suite terkait **56 test hijau** (`quick-replies`, `quick-replies-media`, `shareloc-solicitation`, `shareloc-solicitation-audit`, `persona-shareloc-anti-solicitation`). Deploy produksi belum dieksekusi.
+
 #### 2026-11-06 - Audit Live Chat Fase 0–5: Ghost Error, Integritas Data, Isolasi Tenant & UX Mobile (#316)
 
 - **Latar Belakang**: Audit 5 dimensi pada Live Chat (backend + `LiveChatMonitor.tsx` 7.900 baris + mobile) menemukan ghost error, pesan dobel, invoice fiktif, riwayat bolong, badge unread drift, kebocoran media lintas tenant, dan navigasi back yang rusak.

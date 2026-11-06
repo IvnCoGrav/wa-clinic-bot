@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, Suspense } from 'react';
+import { Link } from 'react-router-dom';
 import { apiRequest, fetchMetaClicks, fetchMetaSummary, testCapiEvent, sendManualCapiEvent, fetchManualCapiHistory } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { Pagination } from '../../components/common/Pagination';
@@ -29,6 +30,7 @@ import {
   DollarSign,
   Clock,
   Eye,
+  ArrowRight,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------- Types
@@ -1163,15 +1165,30 @@ export const MetaClickCatcher: React.FC = () => {
       )}
 
       {activeTab === 'catchers' && (
-        <Suspense
-          fallback={
-            <div className="bg-surface border border-divider rounded-2xl p-12 flex items-center justify-center text-ink-3">
-              <Loader size={16} className="animate-spin text-accent mr-2" /> Memuat Greeting Catchers...
+        <div className="space-y-4">
+          <div className="flex items-center justify-between p-3.5 rounded-2xl bg-accent-soft border border-accent/25 text-xs shadow-2xs">
+            <div className="flex items-center gap-2 text-ink">
+              <Target size={15} className="text-accent shrink-0" />
+              <span>Pengaturan Greeting Catchers CTWA kini juga dapat dikelola terpusat di menu <b>CTA &amp; Greetings WA</b>.</span>
             </div>
-          }
-        >
-          <CtwaCatchersTab />
-        </Suspense>
+            <Link
+              to="/admin/customer-service?tab=catchers"
+              className="inline-flex items-center gap-1 font-bold text-accent hover:underline shrink-0 text-xs ml-2"
+            >
+              <span>Buka di CTA &amp; Greetings WA</span>
+              <ArrowRight size={13} />
+            </Link>
+          </div>
+          <Suspense
+            fallback={
+              <div className="bg-surface border border-divider rounded-2xl p-12 flex items-center justify-center text-ink-3">
+                <Loader size={16} className="animate-spin text-accent mr-2" /> Memuat Greeting Catchers...
+              </div>
+            }
+          >
+            <CtwaCatchersTab />
+          </Suspense>
+        </div>
       )}
 
       {/* ---------------- 5. Human-Friendly Detail Modal Inspector ---------------- */}

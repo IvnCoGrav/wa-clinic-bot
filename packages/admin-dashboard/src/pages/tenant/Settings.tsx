@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { CustomerService } from './CustomerService';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { TelegramIntegration } from './TelegramIntegration';
+import { MediaRetentionPanel } from '../../components/settings/MediaRetentionPanel';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { BRAND } from '../../config/brand';
@@ -737,14 +737,7 @@ export const Settings: React.FC = () => {
   };
 
   if (subTab === 'cs') {
-    return (
-      <div className="space-y-4">
-        <button onClick={() => setSearchParams({}, { replace: true })} className="text-xs text-accent hover:underline flex items-center gap-1">
-          ← Kembali ke Settings
-        </button>
-        <CustomerService />
-      </div>
-    );
+    return <Navigate to="/admin/customer-service" replace />;
   }
   if (subTab === 'telegram') {
     return (
@@ -933,7 +926,7 @@ export const Settings: React.FC = () => {
             handleSavePurchasePolicy={handleSavePurchasePolicy}
           />
 
-          {/* Pricelist, MQL Automation & Media Retention Settings */}
+          {/* Pricelist & MQL Automation Settings */}
           <MqlSettingsPanel
             initialPricelistUrl={pricelistImageUrl}
             onPricelistSaved={loadPricelistImage}
@@ -943,17 +936,83 @@ export const Settings: React.FC = () => {
             setMqlAutoLeadEnabled={setMqlAutoLeadEnabled}
             savingMql={savingMql}
             handleSaveMql={handleSaveMqlSettings}
-            mediaRetentionDays={mediaRetentionDays}
-            setMediaRetentionDays={setMediaRetentionDays}
-            mediaEnvFallbackDays={mediaEnvFallbackDays}
-            savingMediaRetention={savingMediaRetention}
-            handleSaveMediaRetention={handleSaveMediaRetention}
           />
 
           {/* Logo Brand Publik & Promo Diskon Melayang */}
           <PricelistPromoPanel />
 
-          {/* Gateway: CTA & Greetings WA (konsolidasi dari rute /admin/customer-service) */}
+            {/* Broadcast & Quiet Hours with Alert Banner */}
+            <div className="bg-surface border border-divider rounded-2xl p-5 space-y-4 shadow-xs">
+              {/* Out of scope Alert banner */}
+              <div className="p-3.5 rounded-xl bg-warning-soft border border-warning-line text-warning flex items-start space-x-2 text-xs">
+                <AlertTriangle className="flex-shrink-0 mt-0.5 text-warning" size={15} />
+                <div>
+                  <p className="font-bold">Broadcast &amp; Quiet Hours Engine</p>
+                  <p className="mt-0.5 text-[11px] text-warning">
+                    Fitur broadcast campaign terjadwal saat ini bersifat antrian manual.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h3 className="text-sm font-bold text-ink flex items-center space-x-2">
+                  <Volume2 className="text-accent" size={16} />
+                  <span>Broadcast Message Editor</span>
+                </h3>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-ink">Broadcast Teks</label>
+                  <textarea
+                    rows={3}
+                    value={broadcastText}
+                    onChange={(e) => setBroadcastText(e.target.value)}
+                    placeholder="Kirim promo bulanan ke pelanggan loyal..."
+                    className="w-full p-2.5 bg-surface border border-divider rounded-xl text-xs text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent resize-none shadow-xs"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-ink">Random Delay (detik)</label>
+                    <input
+                      type="number"
+                      value={randomDelay}
+                      onChange={(e) => setRandomDelay(parseInt(e.target.value) || 0)}
+                      className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-ink">Quiet Hours (Mulai - Selesai)</label>
+                    <div className="flex space-x-1.5 items-center">
+                      <input
+                        type="time"
+                        value={quietHoursStart}
+                        onChange={(e) => setQuietHoursStart(e.target.value)}
+                        className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink text-center focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs"
+                      />
+                      <span className="text-ink-3">-</span>
+                      <input
+                        type="time"
+                        value={quietHoursEnd}
+                        onChange={(e) => setQuietHoursEnd(e.target.value)}
+                        className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink text-center focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  disabled
+                  className="w-full py-2 bg-fill-1 border border-divider text-ink-3 rounded-xl text-xs font-semibold cursor-not-allowed flex items-center justify-center space-x-1"
+                  title="Menunggu broadcast scheduler"
+                >
+                  <span>Antrikan Broadcast Campaign</span>
+                </button>
+              </div>
+            </div>
+
+                    {/* Gateway: CTA & Greetings WA (konsolidasi dari rute /admin/customer-service) */}
           <div className="bg-surface border border-divider rounded-2xl p-5 shadow-xs">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-start gap-3">
@@ -967,14 +1026,13 @@ export const Settings: React.FC = () => {
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setSearchParams({ tab: 'cs' }, { replace: true })}
+              <Link
+                to="/admin/customer-service"
                 className="min-h-[36px] px-4 py-2 rounded-xl bg-accent hover:bg-accent active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-accent/40 transition-all text-xs font-bold text-white shadow-xs flex items-center gap-1.5 shrink-0"
               >
                 <span>Buka Pengaturan Greetings &amp; CTA</span>
                 <ArrowRight size={14} />
-              </button>
+              </Link>
             </div>
           </div>
         </div>
@@ -998,13 +1056,22 @@ export const Settings: React.FC = () => {
           <PaymentInfoPanel />
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Left column: Install App + Branch picker */}
+            {/* Left column: Install App, Appearance, & Media Retention */}
           <div className="space-y-6">
             {/* Tampilan & Tema (Light / Dark / System) */}
             <AppearancePanel />
 
             {/* Install App (PWA) */}
             <InstallAppPanel />
+
+            {/* Media Retention Panel */}
+            <MediaRetentionPanel
+              mediaRetentionDays={mediaRetentionDays}
+              setMediaRetentionDays={setMediaRetentionDays}
+              mediaEnvFallbackDays={mediaEnvFallbackDays}
+              savingMediaRetention={savingMediaRetention}
+              handleSaveMediaRetention={handleSaveMediaRetention}
+            />
 
             {/* Coordinate picker & Branch Map */}
             <div className="bg-surface border border-divider rounded-2xl p-5 space-y-3 shadow-xs">
@@ -1195,76 +1262,7 @@ export const Settings: React.FC = () => {
               </div>
             </div>
 
-            {/* Broadcast & Quiet Hours with Alert Banner */}
-            <div className="bg-surface border border-divider rounded-2xl p-5 space-y-4 shadow-xs">
-              {/* Out of scope Alert banner */}
-              <div className="p-3.5 rounded-xl bg-warning-soft border border-warning-line text-warning flex items-start space-x-2 text-xs">
-                <AlertTriangle className="flex-shrink-0 mt-0.5 text-warning" size={15} />
-                <div>
-                  <p className="font-bold">Broadcast &amp; Quiet Hours Engine</p>
-                  <p className="mt-0.5 text-[11px] text-warning">
-                    Fitur broadcast campaign terjadwal saat ini bersifat antrian manual.
-                  </p>
-                </div>
-              </div>
 
-              <div className="space-y-3">
-                <h3 className="text-sm font-bold text-ink flex items-center space-x-2">
-                  <Volume2 className="text-accent" size={16} />
-                  <span>Broadcast Message Editor</span>
-                </h3>
-
-                <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-ink">Broadcast Teks</label>
-                  <textarea
-                    rows={3}
-                    value={broadcastText}
-                    onChange={(e) => setBroadcastText(e.target.value)}
-                    placeholder="Kirim promo bulanan ke pelanggan loyal..."
-                    className="w-full p-2.5 bg-surface border border-divider rounded-xl text-xs text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent resize-none shadow-xs"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-bold text-ink">Random Delay (detik)</label>
-                    <input
-                      type="number"
-                      value={randomDelay}
-                      onChange={(e) => setRandomDelay(parseInt(e.target.value) || 0)}
-                      className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-bold text-ink">Quiet Hours (Mulai - Selesai)</label>
-                    <div className="flex space-x-1.5 items-center">
-                      <input
-                        type="time"
-                        value={quietHoursStart}
-                        onChange={(e) => setQuietHoursStart(e.target.value)}
-                        className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink text-center focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs"
-                      />
-                      <span className="text-ink-3">-</span>
-                      <input
-                        type="time"
-                        value={quietHoursEnd}
-                        onChange={(e) => setQuietHoursEnd(e.target.value)}
-                        className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink text-center focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  disabled
-                  className="w-full py-2 bg-fill-1 border border-divider text-ink-3 rounded-xl text-xs font-semibold cursor-not-allowed flex items-center justify-center space-x-1"
-                  title="Menunggu broadcast scheduler"
-                >
-                  <span>Antrikan Broadcast Campaign</span>
-                </button>
-              </div>
-            </div>
           </div>
         </div>
         </div>

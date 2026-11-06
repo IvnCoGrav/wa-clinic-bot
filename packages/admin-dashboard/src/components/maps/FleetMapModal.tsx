@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { X, MapPin } from 'lucide-react';
+import { X, MapPin, ExternalLink, Copy, Check } from 'lucide-react';
 import { computeFleetView, tileUrl, type LatLng } from '../../utils/dispatchMap';
 
 /**
@@ -51,6 +51,7 @@ export const FleetMapModal: React.FC<FleetMapModalProps> = ({ open, onClose, tas
   const containerRef = useRef<HTMLDivElement>(null);
   const [dims, setDims] = useState<{ w: number; h: number }>({ w: 640, h: 400 });
   const [selected, setSelected] = useState<string | null>(null);
+  const [copiedCoordId, setCopiedCoordId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -173,15 +174,41 @@ export const FleetMapModal: React.FC<FleetMapModalProps> = ({ open, onClose, tas
           )}
 
           {selectedTask && (
-            <div className="absolute top-2 left-2 bg-surface rounded-xl shadow-lg border border-divider px-3 py-2 text-xs max-w-[240px]">
-              <p className="font-bold text-ink truncate">{selectedTask.customerName || 'Pasien'}</p>
-              <p className="text-ink-2 flex items-center gap-1">
-                <MapPin size={11} className="text-accent" />
-                {selectedTask.staffName || 'Belum ditugaskan'}
-              </p>
-              <p className="text-ink-2">
-                {selectedTask.timeLabel || '-'} · {BUCKET_LABEL[bucketOf(selectedTask.status)]}
-              </p>
+            <div className="absolute top-2 left-2 bg-surface rounded-xl shadow-lg border border-divider p-3 text-xs max-w-[280px] space-y-2 z-10">
+              <div>
+                <p className="font-bold text-ink truncate">{selectedTask.customerName || 'Pasien'}</p>
+                <p className="text-ink-2 flex items-center gap-1 mt-0.5">
+                  <MapPin size={11} className="text-accent shrink-0" />
+                  <span className="truncate">{selectedTask.staffName || 'Belum ditugaskan'}</span>
+                </p>
+                <p className="text-ink-2 text-[11px] mt-0.5">
+                  {selectedTask.timeLabel || '-'} · {BUCKET_LABEL[bucketOf(selectedTask.status)]}
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 pt-1.5 border-t border-divider">
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${selectedTask.lat},${selectedTask.lng}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1 rounded-lg bg-accent-soft text-accent border border-accent/30 font-semibold hover:bg-accent-soft transition text-[11px]"
+                >
+                  <ExternalLink size={11} />
+                  <span>Google Maps</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${selectedTask.lat}, ${selectedTask.lng}`);
+                    setCopiedCoordId(selectedTask.reservationId);
+                    setTimeout(() => setCopiedCoordId(null), 2000);
+                  }}
+                  className="inline-flex items-center justify-center gap-1 px-2 py-1 rounded-lg border border-divider hover:bg-fill-1 text-ink font-semibold transition text-[11px] cursor-pointer"
+                  title="Salin koordinat GPS"
+                >
+                  {copiedCoordId === selectedTask.reservationId ? <Check size={11} className="text-success" /> : <Copy size={11} />}
+                  <span>{copiedCoordId === selectedTask.reservationId ? 'Tersalin' : 'Salin'}</span>
+                </button>
+              </div>
             </div>
           )}
         </div>

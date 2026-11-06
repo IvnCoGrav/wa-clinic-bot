@@ -135,13 +135,15 @@ export const TodayTreatments: React.FC = () => {
   const [customDate, setCustomDate] = useState<string>(() => getTodayWibDateKey());
   const [dateMeta, setDateMeta] = useState<DateMeta | null>(null);
 
-  const cachedTasksRes = getCachedApiResponse<any>('/api/staff/today-tasks?scope=mine') || getCachedApiResponse<any>('/api/staff/today-tasks?scope=all');
+  const cachedTasksRes = getCachedApiResponse<any>('/api/staff/today-tasks?scope=all') || getCachedApiResponse<any>('/api/staff/today-tasks?scope=mine');
   const [loading, setLoading] = useState(!cachedTasksRes?.data);
   const [tasks, setTasks] = useState<TreatmentTask[]>(() => Array.isArray(cachedTasksRes?.data) ? cachedTasksRes.data : []);
+  const tasksCountRef = useRef(tasks.length);
+  tasksCountRef.current = tasks.length;
   
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'UPCOMING' | 'COMPLETED' | 'OTW' | 'ALL'>('UPCOMING');
-  const [scopeFilter, setScopeFilter] = useState<string>('mine');
+  const [scopeFilter, setScopeFilter] = useState<string>('all');
   const [isSupervisor, setIsSupervisor] = useState(false);
 
   // Modals
@@ -279,7 +281,7 @@ export const TodayTreatments: React.FC = () => {
   };
 
   const fetchTasks = useCallback(async (isPolling = false) => {
-    if (!isPolling && tasks.length === 0) setLoading(true);
+    if (!isPolling && tasksCountRef.current === 0) setLoading(true);
     try {
       const apiScope = scopeFilter.startsWith('staff:') ? 'all' : scopeFilter;
       const apiDate = dateTab === 'custom' ? customDate : dateTab;
@@ -287,18 +289,22 @@ export const TodayTreatments: React.FC = () => {
       if (res.success && Array.isArray(res.data)) {
         setTasks(res.data);
         if (res.isSupervisor !== undefined) {
-          setIsSupervisor(Boolean(res.isSupervisor));
+          const supervisorBool = Boolean(res.isSupervisor);
+          setIsSupervisor(supervisorBool);
+          if (!supervisorBool && scopeFilter === 'all') {
+            setScopeFilter('mine');
+          }
         }
         if (res.meta) {
           setDateMeta(res.meta);
         }
       }
     } catch (err: any) {
-      if (!isPolling && tasks.length === 0) toast(err.message || 'Gagal memuat tugas treatment.', 'error');
+      if (!isPolling && tasksCountRef.current === 0) toast(err.message || 'Gagal memuat tugas treatment.', 'error');
     } finally {
       setLoading(false);
     }
-  }, [scopeFilter, dateTab, customDate, toast, tasks.length]);
+  }, [scopeFilter, dateTab, customDate, toast]);
 
   const fetchTeamMembers = useCallback(async () => {
     try {
@@ -363,8 +369,8 @@ export const TodayTreatments: React.FC = () => {
     return Date.now() >= endTime;
   };
 
-  const isTaskCompletedOrPast = (t: TreatmentTask) => {
-    return t.status.toLowerCase() === 'completed' || isTaskPastTime(t);
+  const isDbCompleted = (t: TreatmentTask) => {
+    return t.status.toLowerCase() === 'completed';
   };
 
   // Filtered Tasks
@@ -384,12 +390,12 @@ export const TodayTreatments: React.FC = () => {
     }
 
     if (statusFilter === 'UPCOMING') {
-      // Jadwal yang belum selesai dan jamnya belum lewat
-      return t.status.toLowerCase() !== 'completed' && !isTaskPastTime(t);
+      // Seluruh jadwal hari ini yang belum selesai (termasuk yang sedang berjalan/jam terlewat)
+      return t.status.toLowerCase() !== 'completed';
     }
     if (statusFilter === 'COMPLETED') {
-      // Jadwal yang sudah selesai ATAU jamnya sudah lewat (walau belum lunas/klik selesai)
-      return isTaskCompletedOrPast(t);
+      // Hanya jadwal yang berstatus DB 'completed'
+      return isDbCompleted(t);
     }
     if (statusFilter === 'OTW') {
       return isEnRouteStatus(t.status);
@@ -409,8 +415,8 @@ export const TodayTreatments: React.FC = () => {
     status: t.status,
     lat: t.address?.lat ?? null,
     lng: t.address?.lng ?? null,
-  }));  const upcomingCount = tasks.filter((t) => t.status.toLowerCase() !== 'completed' && !isTaskPastTime(t)).length;
-  const completedCount = tasks.filter((t) => isTaskCompletedOrPast(t)).length;
+  }));  const upcomingCount = tasks.filter((t) => t.status.toLowerCase() !== 'completed').length;
+  const completedCount = tasks.filter((t) => t.status.toLowerCase() === 'completed').length;
   const otwCount = tasks.filter((t) => isEnRouteStatus(t.status)).length;
   const lunasCount = tasks.filter((t) => t.pricing.paymentStatus === 'LUNAS').length;
   const totalRevenue = tasks.reduce((sum, t) => sum + (t.pricing.totalFee || 0), 0);
@@ -1047,7 +1053,8 @@ export const TodayTreatments: React.FC = () => {
         <div className="flex flex-col gap-4 max-w-4xl mx-auto w-full">
           {filteredTasks.map((task, index) => {
             const isPast = isTaskPastTime(task);
-            const isCompleted = task.status.toLowerCase() === 'completed' || isPast;
+            const isCompleted = task.status.toLowerCase() === 'completed';
+            const isOverdue = !isCompleted && isPast;
             const isOtw = !isCompleted && isEnRouteStatus(task.status);
             const isLunas = task.pricing.paymentStatus === 'LUNAS';
             const catCfg = getCategoryIcon(task.treatmentCategory);
@@ -1063,6 +1070,8 @@ export const TodayTreatments: React.FC = () => {
                     ? 'border-emerald-200 dark:border-emerald-800/40 bg-emerald-50/10 dark:bg-emerald-950/20'
                     : isOtw
                     ? 'border-sky-300 dark:border-sky-800/40 bg-sky-50/15 dark:bg-sky-950/20 ring-1 ring-sky-300 dark:ring-sky-800/30'
+                    : isOverdue
+                    ? 'border-amber-300 dark:border-amber-800/40 bg-amber-50/15 dark:bg-amber-950/20 ring-1 ring-amber-300/40'
                     : 'border-divider hover:border-accent'
                 }`}
               >
@@ -1138,8 +1147,10 @@ export const TodayTreatments: React.FC = () => {
                         <StatusChip tone="success" label="Selesai" icon={<CheckCircle2 size={12} />} />
                       ) : isOtw ? (
                         <StatusChip tone="info" label="Sedang OTW" icon={<Navigation2 size={12} />} />
+                      ) : isOverdue ? (
+                        <StatusChip tone="warning" label="Jam Terlewat" icon={<AlertTriangle size={12} />} />
                       ) : (
-                        <StatusChip tone="warning" label="Akan Datang" icon={<Clock size={12} />} />
+                        <StatusChip tone="neutral" label="Akan Datang" icon={<Clock size={12} />} />
                       )}
 
                     {isLunas ? (

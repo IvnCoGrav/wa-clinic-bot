@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { X, ExternalLink, Navigation, RefreshCw } from 'lucide-react';
+import { X, ExternalLink, Navigation, RefreshCw, AlertTriangle, Copy, Check } from 'lucide-react';
 import { computeMapView, tileUrl, shouldPulseTherapistMarker, type LatLng } from '../../utils/dispatchMap';
 
 /**
@@ -30,6 +30,15 @@ export const DispatchMapModal: React.FC<DispatchMapModalProps> = ({
   isLive = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyCoord = () => {
+    const targetCoord = customer ? `${customer.lat.toFixed(6)}, ${customer.lng.toFixed(6)}` : null;
+    if (!targetCoord) return;
+    navigator.clipboard.writeText(targetCoord);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
   const [dims, setDims] = useState<{ w: number; h: number }>({ w: 600, h: 360 });
 
   useEffect(() => {
@@ -99,6 +108,13 @@ export const DispatchMapModal: React.FC<DispatchMapModalProps> = ({
             <X size={18} />
           </button>
         </div>
+
+        {!therapist && customer && (
+          <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 text-[11px] text-amber-700 dark:text-amber-300">
+            <AlertTriangle size={13} className="shrink-0 text-amber-600 dark:text-amber-400" />
+            <span>Bidan belum membagikan lokasi GPS aktif. Menampilkan titik koordinat rumah pasien.</span>
+          </div>
+        )}
 
         <div className="flex items-center gap-3 px-4 py-2 text-[11px] text-ink-2 border-b border-divider bg-surface-2">
           <span className="flex items-center gap-1">
@@ -178,12 +194,24 @@ export const DispatchMapModal: React.FC<DispatchMapModalProps> = ({
           )}
         </div>
 
-        <div className="px-4 py-3 border-t border-divider bg-surface flex items-center justify-end">
+        <div className="px-4 py-3 border-t border-divider bg-surface flex items-center justify-between gap-2">
+          {customer ? (
+            <button
+              type="button"
+              onClick={handleCopyCoord}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border border-divider hover:bg-fill-1 text-ink transition active:scale-95 cursor-pointer shadow-2xs"
+              title="Salin koordinat GPS pasien"
+            >
+              {copied ? <Check size={13} className="text-success" /> : <Copy size={13} />}
+              <span>{copied ? 'Tersalin!' : 'Salin Koordinat'}</span>
+            </button>
+          ) : <div />}
+
           <a
             href={routeUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border ${
+            className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border transition ${
               hasAny
                 ? 'text-accent bg-bubble-out border-accent/30 hover:bg-accent-soft'
                 : 'text-ink-3 bg-fill-1 border-divider pointer-events-none'
