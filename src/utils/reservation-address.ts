@@ -1,7 +1,11 @@
 /**
- * reservation-address.ts — Seam baca alamat jalan tunggal (W2).
- * Prioritas: raw_text form → preferences.address/full_address.
- * Reuse pola regex form yang sudah terbukti (bukan pola hafalan baru).
+ * reservation-address.ts — Seam baca alamat jalan tunggal (backend).
+ * Prioritas: kartu alamat tertaut reservasi → raw_text form →
+ * preferences.address/full_address. Paritas dengan
+ * `packages/admin-dashboard/src/utils/reservationAddress.ts`.
+ *
+ * Kartu adalah otoritas per-jadwal: pelanggan multi-rumah tidak boleh
+ * menampilkan alamat rumah utama saat reservasi tertaut ke rumah kedua.
  */
 export function extractAddressFromRawText(raw: string | null | undefined): string | null {
   if (!raw || typeof raw !== 'string') return null;
@@ -11,10 +15,20 @@ export function extractAddressFromRawText(raw: string | null | undefined): strin
   return null;
 }
 
+export interface ReservationAddressSource {
+  raw_text?: string | null;
+  customer_address?: { address?: string | null } | null;
+  customer?: { preferences?: any } | null;
+}
+
+const cleanText = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
+
 export function resolveStreetAddress(
-  reservation: { raw_text?: string | null; customer?: { preferences?: any } | null } | null | undefined,
+  reservation: ReservationAddressSource | null | undefined,
   customer?: { preferences?: any } | null
 ): string {
+  const cardAddress = cleanText(reservation?.customer_address?.address);
+  if (cardAddress) return cardAddress;
   const fromRaw = extractAddressFromRawText(reservation?.raw_text);
   if (fromRaw) return fromRaw;
   const prefs = (customer?.preferences ?? reservation?.customer?.preferences) as any;

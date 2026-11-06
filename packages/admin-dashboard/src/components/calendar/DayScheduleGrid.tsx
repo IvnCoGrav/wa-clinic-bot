@@ -23,7 +23,7 @@ interface DayScheduleGridProps {
 
 import { cleanTreatmentDetailForDisplay, resolveReservationDuration } from '../../utils/durationCalculator';
 import { resolveStaffId, resolveStaffName, staffDisplayName, staffShortName } from '../../utils/resolveStaffName';
-import { formatReservationKelurahan } from '../../utils/reservationAddress';
+import { formatReservationKelurahan, resolveReservationAddress } from '../../utils/reservationAddress';
 import { getStaffColor } from '../../utils/staffColors';
 import { getTreatmentCategoryMeta } from '../../utils/treatmentCategoryIcon';
 import { computeDayCardLod } from '../../utils/calendarCardLod';
@@ -413,10 +413,8 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
               const displayName = stripHonorific(res.customer?.name) || 'Pasien';
               const cleanDetail = cleanTreatmentDetailForDisplay(res.treatment_detail, res.treatment_category);
               const areaLabel = formatReservationKelurahan(res);
-              const distanceKm =
-                typeof res.customer?.distance_km === 'number' && Number.isFinite(res.customer.distance_km)
-                  ? res.customer.distance_km
-                  : null;
+              // Jarak ikut kartu alamat tertaut (rumah kedua), bukan profil induk.
+              const distanceKm = resolveReservationAddress(res).distanceKm;
 
               const evWidth =
                 pos.totalCols > 1

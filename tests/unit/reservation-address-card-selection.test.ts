@@ -182,6 +182,52 @@ describe('PATCH /api/admin/reservation/:id — pilih kartu alamat rumah', () => 
     expect(cardsSpy).not.toHaveBeenCalled();
     expect(captured.customer_address_id).toBeNull();
   });
+
+  it('pilih kartu per-jadwal → DILARANG menulis alamat/wilayah/ongkir ke profil induk (anti data hibrida)', async () => {
+    const existing = makeExisting();
+    let captured: any = null;
+    vi.mocked(prisma.reservation.findFirst)
+      .mockResolvedValueOnce(existing as any)
+      .mockResolvedValueOnce({ ...existing, customer_address_id: CARD_GUNUNG_ANYAR.id } as any);
+    vi.mocked(prisma.reservation.update).mockImplementationOnce(async ({ data }: any) => {
+      captured = data;
+      return { ...existing, ...data } as any;
+    });
+    vi.mocked(prisma.customer.update).mockClear();
+    vi.spyOn(customerService, 'getSavedAddresses').mockResolvedValue([CARD_TANDES, CARD_GUNUNG_ANYAR] as any);
+    const mergeSpy = vi
+      .spyOn(customerService, 'mergeCustomerPreferences')
+      .mockResolvedValue(undefined as any);
+
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/admin/reservation/${existing.id}`,
+      headers: { 'x-api-key': ADMIN_KEY },
+      payload: {
+        customerAddressId: CARD_GUNUNG_ANYAR.id,
+        address: CARD_GUNUNG_ANYAR.address,
+        kelurahan: 'Gunung Anyar Lor',
+        kecamatan: 'Gunung Anyar',
+        kota: 'Surabaya',
+        ongkir: CARD_GUNUNG_ANYAR.ongkir,
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    // Kartu tersimpan di reservasi + ongkir snapshot reservasi.
+    expect(captured.customer_address_id).toBe(CARD_GUNUNG_ANYAR.id);
+    expect(captured.delivery_fee).toBe(CARD_GUNUNG_ANYAR.ongkir);
+    // Profil induk tidak disentuh sama sekali untuk data alamat.
+    expect(mergeSpy).not.toHaveBeenCalled();
+    for (const call of vi.mocked(prisma.customer.update).mock.calls) {
+      const data = (call as any)[0]?.data || {};
+      expect(data.ongkir).toBeUndefined();
+      expect(data.kelurahan).toBeUndefined();
+      expect(data.kecamatan).toBeUndefined();
+      expect(data.kota).toBeUndefined();
+    }
+  });
 });
 
 describe('PUT /api/admin/customers/:id/location — mode kartu (multi-rumah)', () => {

@@ -351,6 +351,9 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
                 assigned_staff: {
                   select: { id: true, name: true, phone: true },
                 },
+                // Kartu alamat tertaut WAJIB ikut: detail reservasi membaca
+                // wilayah/jalan/jarak dari kartu, bukan profil induk.
+                customer_address: true,
               },
               orderBy,
               skip: (page - 1) * pageSize,
@@ -376,6 +379,8 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
                   assigned_staff: {
                     select: { id: true, name: true, phone: true },
                   },
+                  // Kartu alamat tertaut WAJIB ikut (paritas dengan cabang cache).
+                  customer_address: true,
                 },
                 orderBy,
                 skip: (page - 1) * pageSize,

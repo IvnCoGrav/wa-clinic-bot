@@ -326,13 +326,16 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     // W3: fallback alamat jalan dari raw_text reservasi (edit reservasi lama yang
     // alamatnya hanya hidup di formulir chat) — paritas dengan modal detail.
     const rawAddress = resolveStreetAddress(initialReservation, selectedCustomerInfo) || '';
+    // Kartu alamat tertaut = otoritas per-jadwal. Prefill HARUS dari kartu agar
+    // edit reservasi rumah kedua tidak menampilkan jalan rumah utama.
+    const cardAddress = ((initialReservation as any)?.customer_address?.address || '').trim();
     const isInitialCustomer =
       !initialCustomerId || !selectedCustomerInfo?.id || selectedCustomerInfo.id === initialCustomerId;
     // F-B3: di mode edit, data DB/profil adalah OTORITAS — hasil ekstraksi chat
     // (initialAddress) hanya fallback terakhir, agar banner ramping tidak menimpa
     // alamat profil yang lengkap (bug Syarifa). Di create, chat tetap prioritas.
     const addr = mode === 'edit'
-      ? (prefAddress || rawAddress || initialAddress || '')
+      ? (cardAddress || prefAddress || rawAddress || initialAddress || '')
       : (isInitialCustomer ? (initialAddress || prefAddress || rawAddress || '') : (prefAddress || ''));
     setAddress(addr);
     const lm = mode === 'edit'

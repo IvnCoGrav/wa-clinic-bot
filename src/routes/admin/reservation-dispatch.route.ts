@@ -1172,6 +1172,10 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
             : body.customer_address_id !== undefined
               ? body.customer_address_id === null || Boolean(body.customer_address_id)
               : false;
+        // Kartu NON-KOSONG yang dipilih eksplisit = alamat PER-JADWAL.
+        // Pilihan ini DILARANG menulis balik ke profil induk (anti data hibrida:
+        // jalan rumah kedua + wilayah rumah pertama, insiden Briella 2026-11-06).
+        const hasExplicitCardSelection = Boolean(body.customerAddressId);
         if (address !== undefined && address !== null && String(address).trim() !== '' && existing.customer_id && !hasExplicitAddressId) {
           try {
             const { addressesMatch } = await import('../../domain/customer-address');
@@ -1236,8 +1240,10 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           updateData.assigned_staff_id = assignedStaffId || null;
         }
 
-        // Fondasional: jika ongkir dikirim saat edit, sinkronkan ke Customer.ongkir
-        if ((body as any).ongkir !== undefined && (body as any).ongkir !== null && existing.customer_id) {
+        // Fondasional: jika ongkir dikirim saat edit, sinkronkan ke Customer.ongkir.
+        // KECUALI saat admin memilih kartu per-jadwal: tarif itu milik reservasi
+        // (snapshot delivery_fee), bukan tarif default profil.
+        if (!hasExplicitCardSelection && (body as any).ongkir !== undefined && (body as any).ongkir !== null && existing.customer_id) {
           try {
             await prisma.customer.update({
               where: { id: existing.customer_id, tenant_id: tenantId },
@@ -1456,9 +1462,13 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           }
           const custUpdate: any = {};
           if (customerPhone) custUpdate.phone = customerPhone.replace(/\D/g, '');
-          if (kecamatan) custUpdate.kecamatan = kecamatan;
-          if (kota) custUpdate.kota = kota;
-          if (kelurahan) custUpdate.kelurahan = kelurahan;
+          // Wilayah profil induk HANYA boleh berubah lewat jalur profil/alamat
+          // utama, bukan saat admin memilih kartu alamat per-jadwal.
+          if (!hasExplicitCardSelection) {
+            if (kecamatan) custUpdate.kecamatan = kecamatan;
+            if (kota) custUpdate.kota = kota;
+            if (kelurahan) custUpdate.kelurahan = kelurahan;
+          }
           // Proteksi Integritas Spasial: alamat jalan fisik DILARANG disalin ke
           // kolom kelurahan (sumber pencemaran "Jl. Griya...(https://maps...)").
           // Kolom kelurahan hanya diisi entitas desa/kelurahan resmi dari
@@ -1468,7 +1478,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           // adalah snapshot awal request — menulis ulang objeknya menghapus
           // `saved_addresses` yang baru dibuat RC-1 di atas (split-brain
           // 2026-11-05). Seam merge hanya menyentuh kunci address/landmark.
-          if (address || landmark) {
+          if ((address || landmark) && !hasExplicitCardSelection) {
             try {
               const { customerService } = await import('../../services/customer.service');
               await customerService.mergeCustomerPreferences(existing.customer_id, tenantId, {

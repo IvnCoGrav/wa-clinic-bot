@@ -4,6 +4,34 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-06 - Fix: Detail Reservasi Menampilkan Alamat Kartu Terpilih (Bukan Rumah Utama)
+
+- **Latar Belakang & Masalah**:
+  - Lanjutan insiden Bunda Briella (`6283856165785`): reservasi sudah tertaut ke kartu **"Rumah Gunung Anyar"**, tetapi **Detail Reservasi** tetap menampilkan `Karangpoh, Tandes, Surabaya`, jarak `19,8 km`, dan ongkir profil rumah utama. Admin menyimpulkan perbaikan alamat sebelumnya "tidak bekerja" padahal datanya sudah benar.
+- **Akar Masalah (multi-layer)**:
+  1. **Baca (UI):** `ReservationDetailModal` membaca `customer.kelurahan/kecamatan/kota`, `customer.distance_km`, dan `customer.ongkir` langsung dari **profil induk**, bukan dari `customer_address` yang tertaut ke reservasi. Tidak ada proyeksi alamat efektif per-jadwal.
+  2. **Payload:** `GET /api/admin/reservations` (kedua cabang query: cache & non-cache) tidak menyertakan `customer_address`, sehingga objek kartu tidak pernah sampai ke UI.
+  3. **Gerbang hidrasi:** gate `hasLinkedCard` hanya memeriksa `customer_address_id` (yang selalu ada di payload list) → detail menganggap data sudah lengkap dan **tidak pernah** memanggil fetch detail kanonik yang membawa kartu.
+  4. **Tulis (PATCH):** saat admin memilih kartu eksplisit, route tetap menulis `Customer.ongkir`, `kelurahan/kecamatan/kota`, dan `preferences.address` dari kartu pilihan → lahir **data hibrida** (jalan rumah kedua + wilayah rumah utama) yang membuat tampilan berikutnya tidak konsisten.
+- **Perubahan Utama**:
+  1. `packages/admin-dashboard/src/utils/reservationAddress.ts`:
+     - Seam baru `resolveReservationRegion()`, `resolveReservationAddress()` (jalan, wilayah, jarak, ongkir, lat/lng, label & status primary kartu, `source`).
+     - `resolveStreetAddress()`, `formatReservationArea()`, `formatReservationKelurahan()` kini **kartu-first** (kalender Bulanan/Mingguan/Harian ikut benar).
+  2. `src/utils/reservation-address.ts`: paritas `resolveStreetAddress()` backend (kartu → raw_text → preferences) untuk seam yang sama.
+  3. `src/routes/admin/reservation-crud.route.ts`: `customer_address: true` pada **kedua** cabang `findMany` daftar reservasi.
+  4. `packages/admin-dashboard/src/components/modals/ReservationDetailModal.tsx`:
+     - `hasLinkedCard` hanya lolos bila **objek kartu** ikut terkirim → fetch detail kanonik berjalan saat hanya ID yang tersedia.
+     - Seluruh blok lokasi/jarak/ongkir memakai `resolvedAddress` (satu sumber), termasuk aksi edit lokasi & lihat bukti memakai `displayReservation` (bukan prop basi).
+     - Badge kehamilan & daftar anak tidak lagi membaca prop `reservation` yang usang.
+  5. `packages/admin-dashboard/src/components/calendar/CreateReservationModal.tsx`: prefill alamat mode edit memprioritaskan kartu tertaut.
+  6. `src/routes/admin/reservation-dispatch.route.ts`: `hasExplicitCardSelection` — pilihan kartu eksplisit tidak lagi menulis `Customer.ongkir`, wilayah root, maupun `preferences.address/landmark` (kartu adalah otoritas per-jadwal; profil hanya berubah lewat jalur profil/alamat).
+- **Bukti & Verifikasi**:
+  - Test baru/revisi: `tests/unit/reservation-address-seam.test.ts` (11 — kartu menang atas raw_text/preferences, proyeksi wilayah+jarak+ongkir, fallback profil, paritas kalender) dan `tests/unit/reservation-address-card-selection.test.ts` (kartu eksplisit tidak menyentuh profil induk).
+  - Suite terkait lulus: `reservation-address-seam`, `reservation-address-card-selection`, `admin-create-reservation`, `admin-update-reservation-safe-address` (41 test).
+  - `npm run build` backend + dashboard exit 0.
+  - Gate regresi suite penuh: **11 gagal / 6 file** (6441 lulus) — dibuktikan **pre-existing** via revert-and-rerun: `git stash` → suite di HEAD murni = **11 gagal / 6 file identik** (`chat-schedule-extractor`, `hybrid-reservation-parser`, `catalog-seed-drift`, `adversarial-reservation-resilience`, `v3-conversation-matrix`, `v3/agent-runner`).
+- **Catatan**: profil root Bunda Briella (Tandes) sengaja **tidak** diubah — tampilan sudah membaca kartu, sehingga data historis boleh tetap apa adanya.
+
 #### 2026-11-05 - Fix: Pemilih Alamat di Edit Reservasi Selalu Muncul & Edit Lokasi Tidak Lagi Menimpa Rumah Utama
 
 - **Latar Belakang & Masalah**:

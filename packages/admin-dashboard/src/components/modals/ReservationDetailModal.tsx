@@ -31,7 +31,7 @@ import {
 } from 'lucide-react';
 import { evaluatePaymentProof } from '../../utils/paymentProof';
 import { extractBabiesFromRawText } from '../../utils/reservationBabies';
-import { resolveStreetAddress } from '../../utils/reservationAddress';
+import { resolveReservationAddress } from '../../utils/reservationAddress';
 import { resolveChildAgeRows, momGestationalBadge } from '../../utils/clinicalAge';
 import { generateReservationInvoiceText } from '../../utils/paymentInvoiceFormatter';
 import { Reservation } from '../../types';
@@ -88,7 +88,7 @@ const getPaymentMethodLabel = (m?: string | null) => {
  */
 const getDetailedAddress = (res: Reservation): string | null => {
   if (!res) return null;
-  return resolveStreetAddress(res) || null;
+  return resolveReservationAddress(res as any).street || null;
 };
 
 const formatBookingDate = (dateStr: string | null | undefined, detail?: string | null) => {
@@ -141,7 +141,11 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
     // preferences.saved_addresses → dulu fetch detail dilewati dan admin tidak
     // bisa memilih alamat. Hidrasi detail bila salah satu bagian hilang.
     const hasAddressBook = Array.isArray(cust?.preferences?.saved_addresses) && cust.preferences.saved_addresses.length > 0;
-    const hasLinkedCard = Boolean((reservation as any)?.customer_address || (reservation as any)?.customer_address_id);
+    // ID kartu selalu ada di payload list, tetapi OBJEK kartu hanya dikirim oleh
+    // GET detail. Bila ID ada tanpa objek, fetch tetap wajib — kalau tidak,
+    // detail jatuh ke profil induk (kasus alamat kedua Bunda Briella 2026-11-06).
+    const hasLinkedCard = Boolean((reservation as any)?.customer_address)
+      || !Boolean((reservation as any)?.customer_address_id);
     const hasFullCustomer = Boolean(cust?.phone && cust?.distance_km != null && hasAddressBook && hasLinkedCard);
     if ((reservation as any)?.id && !hasFullCustomer) {
       apiRequest(`/api/admin/reservation/${(reservation as any).id}`)
@@ -172,21 +176,27 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
     onUpdate?.();
   };
 
-  // Hitung jarak dinamis jika distance_km kosong tapi lat/lng tersedia
-  // Gunakan koordinat klinik dari map-points (tenant-aware) dengan fallback ke CLINIC_COORDS
+  // Proyeksi alamat efektif: kartu tertaut → raw_text → preferences → profil.
+  // Satu seam agar jalan, wilayah, jarak, ongkir, dan titik peta tidak divergen.
+  const resolvedAddress = useMemo(
+    () => resolveReservationAddress(displayReservation),
+    [displayReservation]
+  );
+
+  // Jarak WAJIB ikut kartu: rumah kedua bisa jauh lebih dekat daripada profil
+  // induk (19.8 km vs 5.2 km pada kasus Bunda Briella).
   const resolvedDistanceKm = useMemo(() => {
-    const cust = displayReservation.customer;
-    if (typeof cust?.distance_km === 'number' && cust.distance_km > 0) {
-      return cust.distance_km;
+    if (typeof resolvedAddress.distanceKm === 'number' && resolvedAddress.distanceKm > 0) {
+      return resolvedAddress.distanceKm;
     }
-    if (cust?.lat != null && cust?.lng != null) {
+    if (resolvedAddress.lat != null && resolvedAddress.lng != null) {
       // Koordinat klinik default (Sidoarjo) - akan di-override oleh fetch map-points jika perlu
       const clinicLat = -7.34886;
       const clinicLng = 112.751677;
-      return calculateHaversineKm(clinicLat, clinicLng, cust.lat, cust.lng);
+      return calculateHaversineKm(clinicLat, clinicLng, resolvedAddress.lat, resolvedAddress.lng);
     }
     return null;
-  }, [displayReservation.customer]);
+  }, [resolvedAddress]);
 
   const { toast, confirm } = useUiFeedback();
   const [editDate, setEditDate] = useState('');
@@ -498,41 +508,37 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                       {displayReservation.customer?.name || 'Bunda'} ({displayReservation.customer?.phone})
                     </span>
                   </div>
-                  {displayReservation.customer?.kelurahan && (
+                  {resolvedAddress.regionLabel && (
                     <div className="flex items-center space-x-2 text-ink-2 text-[11px]">
                       <MapPin size={13} className="text-ink-3 flex-shrink-0" />
                       <span className="break-words">
-                        {displayReservation.customer?.kelurahan}, {displayReservation.customer?.kecamatan}, {displayReservation.customer?.kota}
+                        {resolvedAddress.regionLabel}
                       </span>
                     </div>
                   )}
-                  {(() => {
-                    const detailAddr = getDetailedAddress(reservation);
-                    if (!detailAddr || detailAddr === displayReservation.customer?.kelurahan) return null;
-                    return (
-                      <div className="flex items-start space-x-2 text-ink text-[11px]">
-                        <MapPin size={13} className="text-accent flex-shrink-0 mt-0.5" />
-                        <span className="break-words font-medium">{detailAddr}</span>
-                      </div>
-                    );
-                  })()}
+                  {resolvedAddress.street && resolvedAddress.street !== resolvedAddress.regionLabel && (
+                    <div className="flex items-start space-x-2 text-ink text-[11px]">
+                      <MapPin size={13} className="text-accent flex-shrink-0 mt-0.5" />
+                      <span className="break-words font-medium">{resolvedAddress.street}</span>
+                    </div>
+                  )}
 
                   {/* Info Moms (kehamilan / nifas) — badge dinamis, bukan teks mentah */}
-                  {momGestationalBadge((reservation as any).mom_gestational_info) && (
+                  {momGestationalBadge((displayReservation as any).mom_gestational_info) && (
                     <div className="mt-2 pt-2 border-t border-divider">
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-pink-50 dark:bg-pink-950/40 text-pink-800 dark:text-rose-400 border border-pink-200 dark:border-pink-800/40 text-[11px] font-bold">
-                        {momGestationalBadge((reservation as any).mom_gestational_info)}
+                        {momGestationalBadge((displayReservation as any).mom_gestational_info)}
                       </span>
                     </div>
                   )}
 
                   {/* Baby / Anak info */}
-                  {getBabyRows(reservation).length > 0 && (
+                  {getBabyRows(displayReservation).length > 0 && (
                     <div className="mt-2 pt-2 border-t border-divider space-y-1.5">
                       <span className="text-[11px] text-accent font-bold uppercase tracking-wider block">
-                        Bayi / Anak ({getBabyRows(reservation).length})
+                        Bayi / Anak ({getBabyRows(displayReservation).length})
                       </span>
-                      {getBabyRows(reservation).map((baby, i) => (
+                      {getBabyRows(displayReservation).map((baby, i) => (
                         <div key={i} className="flex items-center space-x-2 text-ink">
                           <Baby size={14} className="text-accent flex-shrink-0" />
                           <span className="break-words">
@@ -561,11 +567,9 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                   <div className="flex justify-between text-xs">
                     <span className="text-ink-3">Ongkir</span>
                     <span className="text-ink font-bold">
-                      {(() => {
-                        const card = (displayReservation as any).customer_address;
-                        const effectiveOngkir = card?.ongkir ?? displayReservation.customer?.ongkir;
-                        return effectiveOngkir != null ? `Rp ${Number(effectiveOngkir).toLocaleString('id-ID')}` : 'Gratis / Belum dihitung';
-                      })()}
+                      {resolvedAddress.ongkir != null
+                        ? `Rp ${Number(resolvedAddress.ongkir).toLocaleString('id-ID')}`
+                        : 'Gratis / Belum dihitung'}
                     </span>
                   </div>
                   <div className="flex justify-between text-xs text-accent">
@@ -612,7 +616,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                         <div className="mt-2 pt-2 border-t border-divider">
                           <button
                             type="button"
-                            onClick={() => onOpenEditLocation?.(reservation)}
+                            onClick={() => onOpenEditLocation?.(displayReservation)}
                             className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-surface hover:bg-accent-soft dark:hover:bg-fill-2 text-accent text-xs font-semibold border border-dashed border-accent/40 transition shadow-xs"
                           >
                             <Camera size={13} />
@@ -739,7 +743,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                         <p className="text-[10px] text-ink-3">Bukti tersimpan (versi ringan)</p>
                       </div>
                       <button
-                        onClick={() => onProofView?.(reservation)}
+                        onClick={() => onProofView?.(displayReservation)}
                         className="p-2 rounded-lg bg-accent-soft hover:bg-accent-soft dark:bg-accent-soft dark:hover:bg-accent-hover/30 text-accent border border-divider dark:border-accent/40 transition flex items-center justify-center"
                         title="Lihat Detail Bukti Bayar"
                       >

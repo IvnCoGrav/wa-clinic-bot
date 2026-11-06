@@ -3,6 +3,32 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 313. [Buku Alamat] Detail Reservasi Masih Menampilkan Wilayah/Jarak/Ongkir Rumah Utama (2026-11-06, RESOLVED - HIGH)
+
+- **Status:** RESOLVED (2026-11-06) — proyeksi kartu-first + gerbang tulis, bukan tambalan tampilan.
+- **Gejala (pelanggan `6283856165785`, Bunda Briella):**
+  1. Reservasi 2026-11-06 sudah tertaut kartu `Rumah Gunung Anyar`, tetapi **Detail Reservasi** menampilkan `Karangpoh, Tandes, Surabaya`, jarak `19,8 km`, dan ongkir `15.000` (nilai profil rumah utama).
+  2. Kalender (Bulanan/Mingguan/Harian) membaca wilayah dari profil induk pada reservasi yang sama.
+  3. Setelah admin memilih kartu lain di form edit, sebagian nilai ikut tertulis ke profil induk → tampilan berikutnya makin tidak konsisten (data hibrida).
+- **Akar Masalah (multi-layer):**
+  1. **Baca UI:** `ReservationDetailModal` memakai `customer.kelurahan/kecamatan/kota`, `customer.distance_km`, `customer.ongkir` — bukan kartu tertaut. Tidak ada seam proyeksi alamat per-jadwal.
+  2. **Payload:** `GET /api/admin/reservations` tidak menyertakan `customer_address` di kedua cabang query → objek kartu tidak pernah sampai ke klien.
+  3. **Gerbang hidrasi:** `hasLinkedCard` hanya menilai `customer_address_id` (selalu ada di payload list) → fetch detail kanonik dilewati.
+  4. **Tulis PATCH:** saat `customerAddressId` eksplisit dikirim, route tetap menulis `Customer.ongkir`, `kelurahan/kecamatan/kota`, dan `preferences.address` dari kartu pilihan.
+- **Solusi Fondasional:**
+  1. `packages/admin-dashboard/src/utils/reservationAddress.ts` — seam tunggal `resolveReservationAddress()` / `resolveReservationRegion()`; `resolveStreetAddress`, `formatReservationArea`, `formatReservationKelurahan` jadi kartu-first (prioritas: kartu → `raw_text` → preferensi → profil).
+  2. `src/utils/reservation-address.ts` — paritas backend untuk seam yang sama.
+  3. `reservation-crud.route.ts` — `customer_address: true` pada kedua cabang `findMany`.
+  4. `ReservationDetailModal.tsx` — gate memerlukan objek kartu; blok lokasi/jarak/ongkir/badge/anak memakai `displayReservation` + `resolvedAddress`.
+  5. `reservation-dispatch.route.ts` — `hasExplicitCardSelection` memblokir penulisan alamat/wilayah/ongkir ke profil induk saat kartu dipilih eksplisit.
+  6. `CreateReservationModal.tsx` — prefill mode edit memprioritaskan kartu.
+- **Bukti:** `tests/unit/reservation-address-seam.test.ts` (11) + `tests/unit/reservation-address-card-selection.test.ts` (anti-hibrida) + `admin-create-reservation` + `admin-update-reservation-safe-address` = 41 test lulus; `npm run build` backend & dashboard exit 0.
+- **Sisa risiko / tindak lanjut:**
+  1. **Data produksi belum diverifikasi langsung** saat perbaikan (PostgreSQL lokal mati). Verifikasi pasca-deploy: reservasi Bunda Briella harus menampilkan `Gunung Anyar Lor, Gunung Anyar, Surabaya` + `5,2 km`.
+  2. Profil root Bunda Briella masih menyimpan wilayah Tandes (sengaja tidak diubah). Fitur/script yang **masih** membaca kolom profil secara langsung akan tetap menampilkan data lama — migrasikan ke seam kartu-first bila ditemukan.
+  3. `distance_km` kartu Gunung Anyar masih `NULL`-nya koordinat pin asli (lihat #311). Jarak 5,2 km berasal dari data kartu, bukan hasil hitung Haversine.
+  4. `resolveStreetAddress()` backend belum punya pemanggil runtime (dipakai test paritas + script backfill memakai `extractAddressFromRawText`). Bila kelak dipakai, jangan menambah jalur baca profil langsung.
+
 ## 312. [Buku Alamat] Pemilih Alamat Kosong Saat Edit Reservasi & Modal Lokasi Menimpa Rumah Utama (2026-11-05, RESOLVED - HIGH)
 
 - **Status:** RESOLVED (2026-11-05) — gerbang kode + kontrak tool/route, bukan tambalan prompt.
