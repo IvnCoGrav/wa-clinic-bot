@@ -3,8 +3,18 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 318. [Ad Watchdog] Klik CTA Nol tapi Chat Masuk Normal Diklasifikasikan `LOW_CTR`, Bukan Sinyal Instrumentasi (2026-11-06, OPEN - DESIGN GAP)
+
+- **Status:** OPEN (belum diperbaiki, butuh persetujuan karena mengubah logika deteksi).
+- **Gejala (bukti backtest produksi 14 hari):** 2026-10-29 `paidViews` 36 (di atas ambang 30) tetapi `uniquePaidClicks` **0** (CTR 0%) dan `paidMatchedLeads` 0, sementara `inboundChats` tetap **20** pelanggan nyata. Watchdog memberi label `LOW_CTR` ("iklan kurang performa"). Hari 2026-10-28 serupa (32 views, 1 klik, CTR 3,1%, inbound 22).
+- **Akar masalah:** `listSignals()` di `src/services/ad-watchdog.service.ts` menetapkan `INSTRUMENTATION_SUSPECT` hanya jika `paidAgedClicks >= minAgedClicks` (3) **dan** `inboundChats >= minAgedClicks` **dan** `paidMatchedLeads = 0`. Ketika klik tidak tercatat sama sekali (`0`), sinyal instrumentasi mustahil muncul sehingga kerusakan pencatatan klik (skrip CTA/`AdClick` di landing page) jatuh ke `LOW_CTR`.
+- **Dampak:** rekomendasi alert menyesatkan arah investigasi (menyuruh cek status/saldo Meta Ads padahal tracker klik yang rusak) — bertentangan dengan prinsip Mandat Anti-Penyelesaian Case-by-Case (guardrail harus berbasis state, bukan asumsi).
+- **Usulan perbaikan (belum dieksekusi):** tambahkan sinyal deterministik `CLICK_TRACKING_SUSPECT` dengan presedensi di atas `LOW_CTR`: `paidViews >= minViews` **dan** `uniquePaidClicks === 0` **dan** `inboundChats >= minAgedClicks` → artinya trafik ada, chat tetap masuk, tetapi tidak ada satu pun klik yang tercatat (kontradiksi → tracker klik rusak). Wajib disertai uji adversial (trafik benar-benar tidak tertarik vs tracker rusak) dan pengukuran holdout sebelum diaktifkan.
+- **Bukti:** `docs/plans/EVIDENCE_AD_FUNNEL_2026-11-06.md` §3.3–§3.4.
+
 ## 317. [Ad Watchdog] Cakupan Khusus Kampanye LPWA & Keterbatasan Deteksi Native CTWA (2026-11-06, MITIGATED - DESIGN BOUNDARY)
 
+- **Status aktivasi:** **AKTIF di produksi** sejak 2026-11-06 19:06 WIB (`ENABLE_AD_WATCHDOG_CRON=true`, interval 30 menit, `Tenant.settings.adWatchdog.enabled=true`) — cron hanya berjalan di container `worker`.
 - **Status:** MITIGATED / BY DESIGN (2026-11-06) — arsitektur pemantauan corong landing page ber-tracker (LPWA).
 - **Gejala / Batasan:**
   1. Ad Funnel Watchdog mengandalkan event pelacakan `LandingPageView` (`beacon` / `cta-fallback`) dan `AdClick` (`matched_at`).

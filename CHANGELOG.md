@@ -85,6 +85,14 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - **Catatan**: profil root Bunda Briella (Tandes) sengaja **tidak** diubah — tampilan sudah membaca kartu, sehingga data historis boleh tetap apa adanya.
 - **Deploy live (2026-11-06 07:39 WIB)**: `app` + `worker` di-rebuild, WAHA tidak disentuh, tanpa migrasi tertunda. Verifikasi: `/health` OK, `/ready` READY (DB CONNECTED, WAHA WORKING), `GET /api/admin/reservations?startDate=2026-11-06` mengembalikan `customer_address` = `Rumah Gunung Anyar` / `Gunung Anyar Lor` / `Gunung Anyar` / `5.2 km` / `ongkir 15000`.
 
+#### 2026-11-06 - Deploy: Aktivasi Ad Funnel Watchdog di Produksi + Backtest 14 Hari
+
+- **Yang dijalankan:** deploy produksi pertama memakai runbook baru 6 langkah (`build app worker` → `migrate deploy` one-shot → `up -d --no-deps app worker`), lalu seed tenant `default-tenant` (`settings.adWatchdog.enabled=true`) dan aktivasi `.env` server (`ENABLE_AD_WATCHDOG_CRON=true`, `AD_WATCHDOG_INTERVAL_MINUTES=30`, backup `.env` dibuat lebih dulu).
+- **Verifikasi:** `/health` OK; `/ready` READY (DB CONNECTED, WAHA WORKING); `worker` running `RestartCount=0`; log `🎯 Ad Funnel Watchdog cron started (every 30m, staggered)`; `settings.adWatchdog` terkonfirmasi di DB. WAHA tidak disentuh.
+- **Backtest produksi 14 hari (read-only):** 12 hari OK, 2 hari ALERT (`LOW_CTR` pada 2026-10-28 & 2026-10-29) — alert rate terukur **14,3%**, bukan klaim "0% false alarm". Hari insiden 6 November tidak memicu alert (konsisten dengan diagnosis drop-off WhatsApp).
+- **Temuan baru:** pada 28–29 Oktober views di atas ambang tetapi klik CTA tercatat 0–1 sementara chat masuk tetap normal (20–22 pelanggan) → indikasi kegagalan pencatatan klik, bukan CTR riil. Watchdog masih melabelinya `LOW_CTR` karena `INSTRUMENTATION_SUSPECT` mensyaratkan ≥3 klik. Dicatat sebagai `docs/KNOWN_ISSUES.md` **#318** (OPEN, usulan `CLICK_TRACKING_SUSPECT` menunggu persetujuan).
+- **Dokumentasi:** bukti lengkap di `docs/plans/EVIDENCE_AD_FUNNEL_2026-11-06.md` §3.
+
 #### 2026-11-06 - Fix: Runbook Deploy Selalu Me-rebuild `worker` & Migrasi Sebelum Recreate
 
 - **Latar Belakang & Masalah** (KNOWN_ISSUES #310): `scripts/deploy-prod.sh` hanya mem-build `app` dan menjalankan migrasi **setelah** app baru menyala. Karena `docker-compose.yml` menyetel `SEPARATE_WORKER=true`, seluruh cron/sweep hanya berjalan di container `worker` — sehingga setiap cron baru (termasuk Ad Watchdog) tidak akan pernah jalan bila deploy lewat runbook ini. Urutan lama juga membuka jendela error kolom-baru pada boot.
