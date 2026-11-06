@@ -17,6 +17,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   7. `TodayTreatments.tsx`: default scope `all` untuk admin/supervisor, pemisahan status DB `completed` vs `isOverdue` (badge kuning jam terlewat tanpa menghilang dari daftar tunggu), pembersihan refetch loop `tasks.length`, dan pembaruan modal peta (`FleetMapModal` + `DispatchMapModal`) dengan banner status GPS bidan dan tombol salin koordinat.
 - **Sisa / Catatan Pemeliharaan:**
   - Migrasi `20261106000000_allow_ctwa_catchers_for_advertiser` perlu dijalankan saat deploy ke server (`npx prisma migrate deploy`).
+  - **Verifikasi full-suite (2026-11-06, `npm test`):** 820 file (816 lulus / 3 gagal / 1 skipped), 6.659 test (6.627 lulus / 4 gagal / 28 skipped). Kegagalan **tidak terkait** file yang diubah pada commit ini (0 regresi baru): `hybrid-reservation-parser` (2, pre-existing #287) + **2 timeout 15 dtk yang belum tercatat** — `tests/unit/copilot-heartbeat.test.ts` ("pipeline mengalirkan event stage terstruktur"; gagal juga saat diisolasi) dan `tests/unit/production_edge_cases.test.ts` #13 ("LOCATION_CONFIRMED lenient override via V3 Agent"; berbeda dari flaky #28). Keduanya memanggil pipeline LLM tanpa mock → perlu mock/timeout khusus atau dicatat sebagai pre-existing pada audit berikutnya.
 
 ## 318. [Ad Watchdog] Klik CTA Nol tapi Chat Masuk Normal Diklasifikasikan `LOW_CTR`, Bukan Sinyal Instrumentasi (2026-11-06, OPEN - DESIGN GAP)
 
