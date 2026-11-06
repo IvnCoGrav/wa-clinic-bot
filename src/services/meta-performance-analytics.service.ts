@@ -3,6 +3,7 @@ import { prisma } from '../db/client';
 import { responseCacheService } from './response-cache.service';
 import { resolveTreatmentValue } from './capi.service';
 import { resolveDeliveryFeeSnapshot } from './reservation-core.service';
+import { computeFunnelMetrics } from './ad-funnel-metrics.service';
 
 /**
  * META ADS PERFORMANCE & SALES ANALYTICS — kontrak kanonis (Fase 0).
@@ -1046,14 +1047,22 @@ export async function getMetaPerformanceReport(
     if (!firstEverByCustomer.has(r.customer_id)) firstEverByCustomer.set(r.customer_id, r);
   }
 
-  // ── Funnel ────────────────────────────────────────────────────────────────
-  const totalClicks = rangeClicks.length;
-  const matchedChats = rangeClicks.filter((a) => a.matchedAt).length;
-  const unmatchedDrain = Math.max(0, totalClicks - matchedChats);
+  // ── Funnel (Seam kanonik ad-funnel-metrics.service.ts) ──────────────────────
+  const funnelMetrics = await computeFunnelMetrics(
+    tenantId,
+    { start, end },
+    {
+      provider: {
+        countViews: async () => (pvModel && typeof pvModel.count === 'function' ? (pvModel.count({ where: { ...baseWhere, ...dateWhere } }) as Promise<number>).catch(() => 0) : 0),
+        listPaidClicks: async () => rangeClicks,
+      },
+    }
+  );
 
-  const pageViews = pvModel && typeof pvModel.count === 'function'
-    ? await (pvModel.count({ where: { ...baseWhere, ...dateWhere } }) as Promise<number>).catch(() => 0)
-    : 0;
+  const totalClicks = funnelMetrics ? funnelMetrics.uniquePaidClicks : rangeClicks.length;
+  const matchedChats = funnelMetrics ? funnelMetrics.matchedChats : rangeClicks.filter((a) => a.matchedAt).length;
+  const unmatchedDrain = Math.max(0, totalClicks - matchedChats);
+  const pageViews = funnelMetrics ? funnelMetrics.paidViews : 0;
 
   // Pelanggan aktif pada rentang tanggal ini (chat matched atau konversi first-ever)
   const rangeMatchedCustomerIds = new Set<string>();

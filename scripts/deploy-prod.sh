@@ -7,10 +7,11 @@
 #
 # Melakukan (dengan cek-cek otomatis):
 #   1. Validasi .env (ADMIN_API_KEY, WAHA_WEBHOOK_SECRET, WAHA_API_KEY, WAHA_BASE_URL)
-#   2. Build & start container app
-#   3. Prisma migrate deploy (+ fallback resolve migration "children" bila perlu)
-#   4. Verifikasi no-drift skema
-#   5. Health check /health + /ready
+#   2. Build image app + worker (worker WAJIB ikut: cron hanya jalan di worker)
+#   3. Prisma migrate deploy lewat container sekali pakai (app lama tetap melayani)
+#   4. Recreate app + worker berbarengan
+#   5. Verifikasi no-drift skema
+#   6. Health check /health + /ready + status container worker
 # Aman dijalankan ulang (idempoten).
 # =============================================================================
 set -euo pipefail
@@ -22,7 +23,7 @@ echo "==> Direktori: $(pwd)"
 # 1. Validasi .env
 # -----------------------------------------------------------------------------
 echo
-echo "==> [1/5] Validasi .env ..."
+echo "==> [1/6] Validasi .env ..."
 
 require_env() {
   local key="$1"
@@ -56,13 +57,44 @@ fi
 echo "  OK: ADMIN_API_KEY ✓ WAHA_WEBHOOK_SECRET ✓ WAHA_API_KEY ✓ WAHA_BASE_URL ✓"
 
 # -----------------------------------------------------------------------------
-# 2. Build & start app
+# 2. Build image app + worker
 # -----------------------------------------------------------------------------
 echo
-echo "==> [2/5] docker compose up -d --build app ..."
-docker compose up -d --build app
+echo "==> [2/6] Build image app + worker ..."
+# PENTING: docker-compose.yml menyetel SEPARATE_WORKER=true, sehingga seluruh cron
+# dan sweep hanya berjalan di container `worker`. Kalau `worker` tidak ikut
+# di-build, ia tetap memakai image commit lama dan cron baru (mis. Ad Watchdog)
+# tidak akan pernah jalan walau flag env-nya sudah dinyalakan.
+docker compose build app worker
 
-echo "==> Menunggu container app up ..."
+# -----------------------------------------------------------------------------
+# 3. Prisma migrate deploy (container sekali pakai; app lama tetap melayani)
+# -----------------------------------------------------------------------------
+echo
+echo "==> [3/6] npx prisma migrate deploy (one-shot container) ..."
+MIGRATE_LOG=$(mktemp)
+if ! docker compose run --rm app npx prisma migrate deploy 2>&1 | tee "$MIGRATE_LOG"; then
+  if grep -q 'relation "children" already exists' "$MIGRATE_LOG"; then
+    echo "  Dikenali sebagai known pitfall. Jalankan resolve lalu deploy ulang ..."
+    docker compose run --rm app npx prisma migrate resolve --applied 20260802000000_add_children
+    docker compose run --rm app npx prisma migrate deploy
+  else
+    echo "ERROR: migrate deploy gagal (bukan pola children)." >&2
+    rm -f "$MIGRATE_LOG"
+    exit 1
+  fi
+fi
+rm -f "$MIGRATE_LOG"
+echo "  Migrate deploy: OK"
+
+# -----------------------------------------------------------------------------
+# 4. Recreate app + worker
+# -----------------------------------------------------------------------------
+echo
+echo "==> [4/6] docker compose up -d --no-deps app worker ..."
+docker compose up -d --no-deps app worker
+
+echo "==> Menunggu container app running ..."
 for i in $(seq 1 30); do
   if docker compose ps app --format '{{.State}}' 2>/dev/null | grep -q running; then
     break
@@ -86,28 +118,17 @@ if docker compose logs app --tail 200 2>&1 | grep -qE "Critical Configuration Mi
 fi
 echo "  Boot log: bersih dari throw env kritikal"
 
-# -----------------------------------------------------------------------------
-# 3. Prisma migrate deploy
-# -----------------------------------------------------------------------------
-echo
-echo "==> [3/5] npx prisma migrate deploy ..."
-if ! docker compose exec app npx prisma migrate deploy; then
-  echo "  Migration gagal — cek pola 'relation \"children\" already exists' ..."
-  if docker compose exec app npx prisma migrate deploy 2>&1 | grep -q 'relation "children" already exists'; then
-    echo "  Dikenali sebagai known pitfall. Jalankan resolve lalu deploy ulang ..."
-    docker compose exec app npx prisma migrate resolve --applied 20260802000000_add_children
-    docker compose exec app npx prisma migrate deploy
-  else
-    echo "ERROR: migrate deploy gagal (bukan pola children)." >&2
-    exit 1
-  fi
+if ! docker compose ps worker --format '{{.State}}' 2>/dev/null | grep -q running; then
+  echo "ERROR: container worker tidak running — cron/sweep tidak akan jalan. Cek log:" >&2
+  docker compose logs --tail 40 worker >&2
+  exit 1
 fi
-echo "  Migrate deploy: OK"
+echo "  Container worker: RUNNING"
 
 # -----------------------------------------------------------------------------
-# 4. Verifikasi no drift
+# 5. Verifikasi no drift
 # -----------------------------------------------------------------------------
-echo "==> [4/5] Cek drift skema (harus '-- This is an empty migration.') ..."
+echo "==> [5/6] Cek drift skema (harus '-- This is an empty migration.') ..."
 DRIFT=$(docker compose exec -T app sh -c 'npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script' 2>&1 || true)
 if ! echo "$DRIFT" | grep -q "This is an empty migration"; then
   echo "WARNING: ada drift antara DB dan schema. Periksa manual:" >&2
@@ -117,15 +138,18 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# 5. Health check
+# 6. Health check
 # -----------------------------------------------------------------------------
 echo
-echo "==> [5/5] Health check ..."
+echo "==> [6/6] Health check ..."
 echo "  GET /health:"
 docker compose exec -T app node -e "fetch('http://localhost:3000/health').then(r=>r.text()).then(console.log)" || { echo "  GAGAL hubungi /health"; exit 1; }
 echo
 echo "  GET /ready:"
 docker compose exec -T app node -e "fetch('http://localhost:3000/ready').then(r=>r.text()).then(console.log)" || { echo "  GAGAL hubungi /ready"; exit 1; }
+echo
+echo "  Log worker (10 baris terakhir, pastikan tidak crash-loop):"
+docker compose logs --tail 10 worker 2>&1 || true
 echo
 echo
 echo "Selesai. Kalau /ready menunjukkan waha bukan WORKING, scan QR via admin dashboard."

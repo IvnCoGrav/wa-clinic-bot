@@ -85,6 +85,47 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - **Catatan**: profil root Bunda Briella (Tandes) sengaja **tidak** diubah — tampilan sudah membaca kartu, sehingga data historis boleh tetap apa adanya.
 - **Deploy live (2026-11-06 07:39 WIB)**: `app` + `worker` di-rebuild, WAHA tidak disentuh, tanpa migrasi tertunda. Verifikasi: `/health` OK, `/ready` READY (DB CONNECTED, WAHA WORKING), `GET /api/admin/reservations?startDate=2026-11-06` mengembalikan `customer_address` = `Rumah Gunung Anyar` / `Gunung Anyar Lor` / `Gunung Anyar` / `5.2 km` / `ongkir 15000`.
 
+#### 2026-11-06 - Fix: Runbook Deploy Selalu Me-rebuild `worker` & Migrasi Sebelum Recreate
+
+- **Latar Belakang & Masalah** (KNOWN_ISSUES #310): `scripts/deploy-prod.sh` hanya mem-build `app` dan menjalankan migrasi **setelah** app baru menyala. Karena `docker-compose.yml` menyetel `SEPARATE_WORKER=true`, seluruh cron/sweep hanya berjalan di container `worker` — sehingga setiap cron baru (termasuk Ad Watchdog) tidak akan pernah jalan bila deploy lewat runbook ini. Urutan lama juga membuka jendela error kolom-baru pada boot.
+- **Perubahan Utama** (`scripts/deploy-prod.sh`, 5 → 6 langkah):
+  1. `[2/6] docker compose build app worker` — image `worker` selalu ikut di-build.
+  2. `[3/6] docker compose run --rm app npx prisma migrate deploy` — migrasi di container sekali pakai, `app` lama tetap melayani; log migrate ditangkap `mktemp` (tidak lagi menjalankan migrate dua kali untuk grep fallback `relation "children" already exists`).
+  3. `[4/6] docker compose up -d --no-deps app worker` — recreate bersamaan setelah skema siap, dengan gate gagal-keras bila `worker` tidak RUNNING.
+  4. `[5/6]` drift check, `[6/6]` health check + tail log `worker` untuk deteksi crash-loop.
+- **Bukti & Verifikasi:** `bash -n scripts/deploy-prod.sh` → sintaks OK. Tidak ada perubahan kode runtime, tidak ada dependency atau migrasi baru.
+- **Catatan:** efektivitas urutan baru baru terverifikasi saat deploy server berikutnya. Fitur Ad Watchdog sendiri **masih belum aktif** (`Tenant.settings.adWatchdog.enabled=false`, `ENABLE_AD_WATCHDOG_CRON` belum diset di server).
+
+#### 2026-11-06 - Fitur: Funnel & Ad Delivery Watchdog (Deteksi Anomali Iklan & Pelacakan LPWA)
+
+- **Latar Belakang & Masalah**:
+  - Pertanyaan operasional: iklan Meta aktif berjalan namun tidak ada lead yang masuk. Perlu kroscek sistem internal klinik sebelum mengecek Meta Ads.
+  - Audit empiris 14 hari membuktikan: drop-off terjadi di sisi pengguna antara membuka `wa.me` dan menekan kirim (p95 jeda kirim 2.8 menit, 97.2% chat tiba dalam < 5 menit). Sinyal anomali corong membutuhkan pemantauan otomatis (watchdog) tanpa menimbulkan alarm palsu (*false alarm*).
+- **Perubahan Utama**:
+  1. `src/services/ad-funnel-metrics.service.ts`:
+     - Seam kanonis tunggal untuk menghitung metrik corong berbayar (`computeFunnelMetrics` & `computeBaselineWindow`).
+     - Metrik terstandarisasi: `paidViews`, `uniquePaidClicks`, `ctr`, `paidMatchedLeads`, `paidAgedClicks` (>20m grace), dan `inboundChats` nyata (non-sandbox, non-internal).
+     - Menjaga paritas 100% dengan `meta-performance-analytics.service.ts` tanpa mengubah output dashboard eksisting.
+  2. `src/services/ad-watchdog.service.ts`:
+     - Detektor anomali fungsi murni (`evaluate`, `listSignals`, `diagnose`, `formatMessage`).
+     - 4 sinyal presedensi ketat: `INSTRUMENTATION_SUSPECT` (chat ada, klik ada, matched nol -> prioritas tertinggi, jangan matikan iklan) > `TOTAL_SILENCE` (klik ada, chat nol) > `LOW_TRAFFIC` (views <= 50% baseline 7 hari jam-sama) > `LOW_CTR` (CTR < 4%).
+     - Gate jam operasional WIB (08:00 - 21:00 WIB), ambang dinamis via Zod schema.
+     - Cooldown 180 menit dan idempotency record via `AdminNotificationLog` dengan penanganan P2002 collision.
+  3. `src/services/alert.service.ts`:
+     - Penambahan `AD_FUNNEL_ANOMALY` pada enum `AlertType` dengan dukungan `rawMessage: true` dan per-tenant Telegram topic.
+  4. `src/lifecycle/background-crons.ts`:
+     - Registrasi background cron `adWatchdog` dengan env flag `ENABLE_AD_WATCHDOG_CRON` (default OFF) dan interval `AD_WATCHDOG_INTERVAL_MINUTES || '30'` menggunakan jitter staggered.
+  5. `src/scripts/seed-ad-watchdog-settings.ts` & `src/scripts/ad-watchdog-backtest.ts`:
+     - CLI seed konfigurasi per-tenant `Tenant.settings.adWatchdog` (idempoten, dry-run default).
+     - CLI backtest 14 hari untuk validasi historis dan audit false positive.
+  6. Dokumentasi:
+     - `docs/METRIC_DEFINITIONS.md` §7: Rumus matematis dan filter kanonis.
+     - `docs/FEATURE_INVENTORY.md` §7: Pencatatan modul dan cron.
+     - `docs/KNOWN_ISSUES.md` #317: Batasan desain untuk kampanye LPWA vs native CTWA.
+- **Bukti & Verifikasi**:
+  - Unit tests baru: `tests/unit/ad-funnel-metrics.test.ts`, `tests/unit/ad-funnel-parity.test.ts`, `tests/unit/ad-watchdog-config.test.ts`, `tests/unit/ad-watchdog-detectors.test.ts`, `tests/unit/ad-watchdog-cooldown.test.ts`, `tests/unit/ad-watchdog-db-offline.test.ts` (34 test lulus 100%).
+  - `npm run build` (tsc) exit code 0.
+
 #### 2026-11-05 - Fix: Pemilih Alamat di Edit Reservasi Selalu Muncul & Edit Lokasi Tidak Lagi Menimpa Rumah Utama
 
 - **Latar Belakang & Masalah**:

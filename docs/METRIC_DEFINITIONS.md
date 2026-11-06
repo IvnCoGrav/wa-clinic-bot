@@ -85,3 +85,21 @@ $$\text{Utilisasi (\%)} = \frac{\text{Total Sesi Layanan Selesai / Terjadwal}}{\
 | **2026-10-28** | `4e366631` | Rekonsiliasi data bentrok kapasitas terapis dan penambahan kalkulasi margin laba kotor kohort. |
 | **2026-10-29** | `a496c813` | Eliminasi hardcode periode kohort dan slot terapis; migrasi penuh ke konfigurasi dinamis `Tenant.settings.metaPerformanceSettings` (A-001). |
 | **2026-11-04** | pending | Penambahan kontrak definisi metrik 4A Retensi per Bidan (Staff Retention) jendela 60 hari pool 6 bulan. |
+| **2026-11-06** | pending | Penambahan §7 Funnel Watchdog: definisi kanonis paidViews, uniquePaidClicks, paidAgedClicks, paidMatchedLeads, inboundChats, dan baseline jam-sama. |
+
+---
+
+## 7. Funnel Watchdog (Early Warning System & Deteksi Kebocoran Corong Iklan)
+
+Kontrak kanonis perhitungan corong iklan (*Ad Funnel Metrics*) yang bersumber dari seam tunggal `src/services/ad-funnel-metrics.service.ts`:
+
+| Metrik | Definisi Teknis & Filter | Sumber Data |
+|---|---|---|
+| **paidViews** | Jumlah kunjungan landing page pada jendela waktu tertentu dengan `source IN ('beacon', 'cta-fallback')` dan memiliki parameter `fbclid != null` ATAU `utmMedium IN ('cpc','paid','ctwa','ctwa_fuzzy')`. Dikecualikan: baris `source='meta-reconciliation'` dan `backfill-synthetic`. | `LandingPageView` (`schema.prisma:741-768`) |
+| **uniquePaidClicks** | Jumlah klik tombol CTA WhatsApp dari trafik berbayar (`fbclid != null` OR `utmMedium IN paidMediums`), dideduplikasi distinct per `COALESCE(fbclid, id)`. | `AdClick` (`schema.prisma:691-715`) |
+| **paidAgedClicks** | Subset dari `uniquePaidClicks` yang belum terhubung ke percakapan (`matchedAt IS NULL`) dan telah berusia lebih dari atau sama dengan `graceMinutes` (default: 20 menit). Menandakan pengunjung yang membatalkan niat chat. | `AdClick` (`schema.prisma:691-715`) |
+| **paidMatchedLeads** | Jumlah prospek unik (`distinct customerId`) dari `uniquePaidClicks` yang berhasil terhubung dengan chat WhatsApp (`matchedAt != null`). | `AdClick` (`schema.prisma:691-715`) |
+| **inboundChats** | Jumlah pelanggan riil (`distinct conversation.customer_id`) yang mengirim pesan masuk (`direction='INBOUND'`, `sender_type != 'INTERNAL_NOTE'`) pada jendela waktu tersebut, dengan mengecualikan akun sandbox dan staf internal (`is_sandbox_test=false`, `is_internal_staff=false`). Ground truth percakapan nyata. | `Message` & `Conversation` (`schema.prisma:185, 243`) |
+| **baselineViewsAtHour** | Nilai tengah (*median*) jumlah `paidViews` pada jendela jam operasional yang sama selama 7 hari terakhir (WIB). Digunakan sebagai pembanding dinamis untuk mendeteksi penurunan trafik abnormal (*low traffic ratio*). | Perhitungan historis dinamis |
+| **ctr** | Rasio klik terhadap kunjungan: $\text{CTR} = \frac{\text{uniquePaidClicks}}{\text{paidViews}}$ (bernilai 0 jika `paidViews = 0`). | Turunan |
+

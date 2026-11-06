@@ -318,4 +318,29 @@ export function startBackgroundCrons(): void {
     }, 15 * 60 * 1000);
     console.log(`🌅 Morning Jobs (06:00 WIB) & Weekly Backup (Senin 02:00 WIB) cron registered`);
   }).catch(e => console.error('[CRON SERVICE START ERROR]', e));
+
+  // Ad Funnel Watchdog cron (Fase 5 / flag: ENABLE_AD_WATCHDOG_CRON)
+  if (process.env.ENABLE_AD_WATCHDOG_CRON === 'true') {
+    const watchdogIntervalMinutes = parseInt(process.env.AD_WATCHDOG_INTERVAL_MINUTES || '30', 10);
+    import('../services/ad-watchdog.service').then(({ adWatchdogService }) => {
+      import('../services/media.service').then(({ getAllTenantIds }) => {
+        trackIntervalStaggered(async () => {
+          try {
+            const tenants = await getAllTenantIds();
+            for (const tId of tenants) {
+              const res = await adWatchdogService.checkAndNotify(tId);
+              if (res.sent) {
+                console.log(`🎯 [AD WATCHDOG] Alert dispatched for tenant ${tId}: ${res.signal}`);
+              }
+            }
+          } catch (err: any) {
+            console.error('[AD WATCHDOG CRON ERROR]', err?.message || err);
+          }
+        }, watchdogIntervalMinutes * 60 * 1000);
+        console.log(`🎯 Ad Funnel Watchdog cron started (every ${watchdogIntervalMinutes}m, staggered)`);
+      }).catch(e => console.error('[AD WATCHDOG MEDIA SERVICE ERROR]', e));
+    }).catch(e => console.error('[AD WATCHDOG START ERROR]', e));
+  } else {
+    console.log(`🛑 Ad Funnel Watchdog cron is DISABLED (ENABLE_AD_WATCHDOG_CRON is not 'true')`);
+  }
 }

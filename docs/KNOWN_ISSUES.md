@@ -3,6 +3,20 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 317. [Ad Watchdog] Cakupan Khusus Kampanye LPWA & Keterbatasan Deteksi Native CTWA (2026-11-06, MITIGATED - DESIGN BOUNDARY)
+
+- **Status:** MITIGATED / BY DESIGN (2026-11-06) — arsitektur pemantauan corong landing page ber-tracker (LPWA).
+- **Gejala / Batasan:**
+  1. Ad Funnel Watchdog mengandalkan event pelacakan `LandingPageView` (`beacon` / `cta-fallback`) dan `AdClick` (`matched_at`).
+  2. Kampanye WhatsApp Direct / Native CTWA (iklan Click to WhatsApp yang langsung membuka aplikasi WhatsApp tanpa landing page perantara) tidak melalui tahap Landing Page, sehingga tidak menghasilkan data `LandingPageView` atau `AdClick` pra-chat.
+  3. Spend / Anggaran iklan Meta belum tersinkronisasi per-jam (Meta Insights API hanya mencatat agregat harian `meta-reconciliation`, bukan per-menit), sehingga sinyal `LOW_TRAFFIC` mengandalkan baseline kunjungan jam-sama (median 7 hari), bukan rasio spend aktual per jam.
+- **Solusi & Mitigasi:**
+  1. Watchdog secara eksplisit menyaring `paidMediums: ['cpc', 'paid', 'ctwa', 'ctwa_fuzzy']` dan membuang agregat sintetis `meta-reconciliation`.
+  2. Judul dan rekomendasi pesan di Telegram menyertakan diagnosa transparan agar tim marketing memahami ranah masalah (misal: tracker external, nomor WA di tombol landing page, atau status iklan di Meta Ads Manager).
+- **Sisa Risiko / Tindak Lanjut:**
+  1. Jika suatu saat klinik beralih 100% ke Native CTWA tanpa Landing Page, metrik `paidViews` akan nol sehingga watchdog otomatis berada dalam status OK (tidak menghasilkan false alarm).
+  2. Fitur sinkronisasi saldo/spend real-time via Meta Marketing API dapat dipertimbangkan di masa depan jika Meta menyediakan webhook/granularity per jam yang andal.
+
 ## 316. [Live Chat] Audit Menyeluruh 5 Dimensi — Ghost Error, Kontrak Data & Mobile (2026-11-06, SELESAI — FASE 0–5 IMPLEMENTED; SISA UJI PERANGKAT & DEPLOY)
 
 - **Status:** **SELESAI (kode)** — Fase 0 (quick-safe), Fase 1 (integritas data & uang), Fase 2 (state/paginasi/navigasi), Fase 3 (isolasi tenant, disetujui via Confirmation Gate), Fase 4 (UX mobile), Fase 5 (ekstraksi logika murni + test). Sisa di luar kode: uji perangkat fisik & deploy staging (2-step verification).
@@ -222,7 +236,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   2. Reservasi belum tersinkron ke Google Sheet (`sheets_sync_status=pending`, sync hanya saat `completed`) — saat selesai, formatter membaca kartu reservasi sehingga otomatis benar.
   3. Pola drift JSON↔tabel (#304) berpotensi kambuh untuk jalur tulis baru yang tidak memakai seam ini; wajib memakai `upsertSavedAddress`/`mergeCustomerPreferences`.
 
-## 310. [Deploy] `deploy-prod.sh` Menyalakan `app` Sebelum Migrasi & Tidak Me-rebuild `worker` (2026-11-05, OPEN - TECH DEBT)
+## 310. [Deploy] `deploy-prod.sh` Menyalakan `app` Sebelum Migrasi & Tidak Me-rebuild `worker` (2026-11-05, RESOLVED 2026-11-06 - TECH DEBT)
 
 - **Gejala (terjadi saat deploy 2026-11-05):**
   1. Runbook `scripts/deploy-prod.sh` menjalankan `docker compose up -d --build app` (langkah 2) **sebelum** `npx prisma migrate deploy` (langkah 3). Saat commit berisi kolom baru, boot `app` sempat gagal: `prisma:error ... The column clinic_services.min_gestational_weeks does not exist` dan `reservations.gestational_weeks does not exist`; inisialisasi tenant/katalog jatuh ke fallback sampai container di-restart.
@@ -230,6 +244,12 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Dampak:** jendela singkat pasca-deploy di mana query yang menyentuh kolom baru error; worker bisa menjalankan kode lama (cron/sweep tidak sinkron dengan app).
 - **Mitigasi yang dilakukan 2026-11-05:** setelah migrasi selesai dijalankan `docker compose build worker` + `docker compose up -d --no-deps app worker`, lalu `docker compose restart app worker`; log bersih, `/ready` = database CONNECTED + waha WORKING.
 - **Rekomendasi perbaikan runbook (belum dieksekusi):** urutan aman = build semua image → `docker compose run --rm app npx prisma migrate deploy` (tanpa menghentikan app lama) → `docker compose up -d --no-deps app worker` → health check. Wajib juga menyertakan `worker` pada langkah build/recreate.
+- **RESOLUSI 2026-11-06 (`scripts/deploy-prod.sh`):** urutan runbook diubah menjadi 6 langkah mengikuti rekomendasi di atas:
+  1. `[2/6] docker compose build app worker` — image `worker` **selalu** ikut di-build; ini prasyarat mutlak karena `SEPARATE_WORKER=true` membuat seluruh cron/sweep hanya hidup di container `worker` (tanpa ini fitur cron baru seperti Ad Watchdog tidak akan pernah jalan).
+  2. `[3/6] docker compose run --rm app npx prisma migrate deploy` — migrasi dijalankan di container sekali pakai sehingga `app` lama tetap melayani trafik; fallback `relation "children" already exists` kini memakai container one-shot dan log migrate disimpan ke `mktemp` (sebelumnya perintah migrate dijalankan dua kali hanya untuk grep).
+  3. `[4/6] docker compose up -d --no-deps app worker` — recreate `app` **dan** `worker` berbarengan setelah skema siap, lalu verifikasi `app` RUNNING + boot log bersih + `worker` RUNNING (gagal keras bila worker mati).
+  4. `[5/6]` drift check, `[6/6]` health check `/health` + `/ready`, ditambah tail log `worker` 10 baris untuk mendeteksi crash-loop.
+- **Verifikasi:** `bash -n scripts/deploy-prod.sh` → sintaks OK. Efektivitas urutan baru baru terbukti saat deploy produksi berikutnya (belum diuji di server pada commit ini).
 - **Catatan drift:** `prisma migrate status` = up to date (105 migrasi), tetapi `migrate diff` masih melaporkan drift lama (tabel backup manual, `ALTER COLUMN ... DROP DEFAULT`, rename index). Drift itu **pre-existing**, bukan dari migrasi maternal.
 
 ## 309. [Maternal] Sisa Pekerjaan Setelah Maternal Treatment Hardening (2026-11-05, OPEN - by decision)

@@ -5,8 +5,14 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 654
+Total entri terindeks: 660
 
+- 2026-11-06 | Audit Live Chat Fase 0–5: Ghost Error, Integritas Data, Isolasi Tenant & UX Mobile (#316)
+- 2026-11-06 | Fix: Badge & Teks "Butuh Shareloc" pada Pelanggan Terverifikasi (Audit #315)
+- 2026-11-06 | Hardening: Reservasi & State Machine FSM (A-001–A-015, P1–P10)
+- 2026-11-06 | Fix: Detail Reservasi Menampilkan Alamat Kartu Terpilih (Bukan Rumah Utama)
+- 2026-11-06 | Fix: Runbook Deploy Selalu Me-rebuild `worker` & Migrasi Sebelum Recreate
+- 2026-11-06 | Fitur: Funnel & Ad Delivery Watchdog (Deteksi Anomali Iklan & Pelacakan LPWA)
 - 2026-11-05 | Fix: Pemilih Alamat di Edit Reservasi Selalu Muncul & Edit Lokasi Tidak Lagi Menimpa Rumah
 - 2026-11-05 | Fix: Buku Alamat Satu Sumber Kebenaran & Alamat Kedua Tidak Lagi "Hilang"/Salah Wilayah
 - 2026-11-05 | Feature: Ikon Pembeda Pengirim Pesan di Daftar Live Chat (Pasien, Admin, Bot AI)
