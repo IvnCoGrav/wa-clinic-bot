@@ -81,7 +81,10 @@ export class PostgresConversationRepository implements ConversationRepository {
     if (tenantId && (existing as any).tenant_id && (existing as any).tenant_id !== tenantId) {
       throw new Error(`Conversation ${id} bukan milik tenant ${tenantId}`);
     }
-    return await prisma.conversation.update({ where: { id }, data });
+    // AUDIT FASE 3: tenant_id juga masuk WHERE (anti TOCTOU / cross-tenant write).
+    const res = await prisma.conversation.updateMany({ where: { id, tenant_id: tenantId }, data });
+    if (res.count === 0) throw new Error(`Conversation ${id} not found for tenant ${tenantId}`);
+    return await prisma.conversation.findUnique({ where: { id } });
   }
 
   async flagForReview(id: string, reason: string, tenantId: string): Promise<any> {
@@ -90,10 +93,12 @@ export class PostgresConversationRepository implements ConversationRepository {
     if (tenantId && (existing as any).tenant_id && (existing as any).tenant_id !== tenantId) {
       throw new Error(`Conversation ${id} bukan milik tenant ${tenantId}`);
     }
-    return await prisma.conversation.update({
-      where: { id },
+    const res = await prisma.conversation.updateMany({
+      where: { id, tenant_id: tenantId },
       data: { review_flagged: true, escalation_reason: reason },
     });
+    if (res.count === 0) throw new Error(`Conversation ${id} not found for tenant ${tenantId}`);
+    return await prisma.conversation.findUnique({ where: { id } });
   }
 }
 

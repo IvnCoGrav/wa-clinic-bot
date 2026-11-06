@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+﻿import { describe, it, expect } from 'vitest';
 import { generateReservationInvoiceText } from '../../packages/admin-dashboard/src/utils/paymentInvoiceFormatter';
 
 describe('Payment Invoice Formatter Unit Tests', () => {
@@ -28,10 +28,10 @@ describe('Payment Invoice Formatter Unit Tests', () => {
       },
     });
 
-    expect(text).toContain('Berikut reservasi 🐣');
+    expect(text).toContain('Berikut reservasi');
     expect(text).toContain('Hari dan tanggal : Kamis 27 Agustus 2026 jam 12.00-12.30');
     expect(text).toContain('Nama Bunda: Karmila');
-    expect(text).toContain('Alamat & Shareloc : infesta residense/homestay alas tipis pabean lantai 3 no 301');
+    expect(text).toContain('Alamat Lengkap & Patokan : infesta residense/homestay alas tipis pabean lantai 3 no 301');
     expect(text).toContain('Kec : Sedati');
     expect(text).toContain('Kota : Sidoarjo');
     expect(text).toContain('No. Hp : 081280482533');
@@ -43,8 +43,8 @@ describe('Payment Invoice Formatter Unit Tests', () => {
     expect(text).toContain('Treatment = 60.000');
     expect(text).toContain('Ongkir 3,0 km = free');
     expect(text).toContain('Total = 60.000');
-    expect(text).toContain('H-1 sebelum treatment akan kami reminder kembali bunda 🥰');
-    expect(text).toContain('Terimakasih.  ☺️');
+    expect(text).toContain('H-1 sebelum treatment akan kami reminder kembali bunda');
+    expect(text).toContain('Terimakasih.');
   });
 
   it('should correctly format charged ongkir when distance > 3km', () => {

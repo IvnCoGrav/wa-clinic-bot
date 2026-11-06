@@ -6,6 +6,10 @@ import { PatientProfileExtractor } from './patient-extractor';
 import { isAskedLocationRecently } from './location-helpers';
 import { getCoverageCities } from '../../config/coverage';
 import { computeGestationalAge } from '../../utils/age-calculator';
+import {
+  resolveLocationAdequacy,
+  extractStaffVerifiedCoords,
+} from '../../domain/location-adequacy';
 import type {
   LocationState,
   ChildState,
@@ -198,20 +202,38 @@ export class GoalTracker {
         : 'Bunda';
       const custName = conv.customer?.name || prefs.customerName || '';
 
-      return {
-        customerName: custName || undefined,
-        genderGreeting: storedGreeting,
-        targetAudience: prefs.targetAudience || undefined,
-        momProfile: prefs.momProfile || undefined,
-        location: prefs.location || (conv.customer?.kelurahan ? {
+      // Provenance titik: pakai resolver kanonik (kolom + preferences + kartu
+      // alamat primer), BUKAN kolom mentah. Mencegah prompt menyuruh shareloc
+      // saat pelanggan sudah diverifikasi staf (audit C-002/C-003).
+      const customerPrefs: any = conv.customer?.preferences || {};
+      const savedCards = Array.isArray(customerPrefs.saved_addresses) ? customerPrefs.saved_addresses : [];
+      const primaryCard = savedCards.find((a: any) => a?.isPrimary) || savedCards[0] || null;
+      const locAdequacy = resolveLocationAdequacy({
+        columnSource: (conv.customer as any)?.location_source ?? null,
+        preferenceSource: customerPrefs.location_source ?? customerPrefs.source ?? null,
+        primaryAddressSource: primaryCard?.locationSource ?? null,
+        shareLocationSent: Boolean((conv.customer as any)?.share_location_sent),
+        lat: (conv.customer as any)?.lat ?? null,
+        lng: (conv.customer as any)?.lng ?? null,
+        staffVerified: Boolean(
+          customerPrefs.location_updated_by_staff_id ||
+            customerPrefs.location_updated_by_staff_name ||
+            customerPrefs.location_accuracy_m != null
+        ),
+        staffVerifiedCoords: extractStaffVerifiedCoords(customerPrefs),
+        housePhotoUrl: customerPrefs.house_photo_url || null,
+        hasVisitedAddress: Boolean(primaryCard?.lastUsedAt),
+        hasCompleteAddress: Boolean(primaryCard?.address || (conv.customer as any)?.kelurahan),
+      });
+      const canonicalLocationSource =
+        locAdequacy.source === 'unknown' ? null : locAdequacy.source;
+
+      const baseLocation = prefs.location || (conv.customer?.kelurahan ? {
           rawText: conv.customer.kelurahan,
           kelurahan: conv.customer.kelurahan || undefined,
           kecamatan: conv.customer.kecamatan || undefined,
           kota: conv.customer.kota || undefined,
           distanceKm: conv.customer.distance_km != null ? Number(conv.customer.distance_km) : undefined,
-          // REVISI-1 Tahap 4.2: provenance titik untuk state-gated pruning
-          // (gps_pin vs estimasi) — dibaca dari kolom DB, bukan tebakan teks.
-          locationSource: (conv.customer as any)?.location_source ?? null,
           // Catatan: `Customer.ongkir` menyimpan HARGA PROMO (temuan audit:
           // label 'ongkirPromoFee' di preferences tak pernah ditulis siapa pun,
           // sehingga ongkir hilang lintas-turn → total katalog & rekap keranjang
@@ -221,7 +243,16 @@ export class GoalTracker {
           ongkirPromo: prefs.ongkirPromoFee
             ?? (conv.customer.ongkir != null ? Number(conv.customer.ongkir) : undefined),
           isOutOfCoverage: Boolean(conv.customer.is_out_of_coverage)
-        } : undefined),
+        } : undefined);
+
+      return {
+        customerName: custName || undefined,
+        genderGreeting: storedGreeting,
+        targetAudience: prefs.targetAudience || undefined,
+        momProfile: prefs.momProfile || undefined,
+        location: baseLocation
+          ? { ...baseLocation, locationSource: canonicalLocationSource ?? baseLocation.locationSource ?? null }
+          : undefined,
         childProfile: prefs.childProfile || (prefs.childAgeMonths ? {
           ageMonths: prefs.childAgeMonths,
           symptoms: prefs.symptoms || []
@@ -486,20 +517,20 @@ export class GoalTracker {
       );
     }
     if (session.location?.kelurahan || session.location?.distanceKm) {
-      // REVISI-1 Tahap 4.2: STATE-GATED PRUNING (information hiding) — hanya
-      // SATU cabang status yang dikirim per kondisi sesi. Larangan absolut
-      // "DILARANG TANYA ALAMAT LAGI!" dihapus: pada titik ESTIMASI, AI wajib
-      // masih boleh meminta shareloc saat booking (anti-Bidan-tersasar).
-      // Gerbangnya kode di sini; teks prompt hanya lapis sekunder.
+      // REVISI-1 Tahap 4.2 + audit 2026-11-06 (C-003): state-gated pruning.
+      // `manual_staff` = titik sudah diverifikasi staf → SAMA memadainya dengan
+      // pin GPS. Status ESTIMASI tidak lagi boleh memerintahkan shareloc; cukup
+      // menandai bahwa titik masih perkiraan (guardrail shareloc tetap dijaga
+      // kode di guardrail-pipeline, bukan instruksi prompt).
       const locSource = (session.location as any)?.locationSource ?? null;
-      const isPrecisePin = locSource === 'gps_pin';
+      const isAdequatePin = locSource === 'gps_pin' || locSource === 'manual_staff';
       const locLine = `• Lokasi: ${session.location.kelurahan || '-'}, ${session.location.kecamatan || '-'}, ${session.location.kota || '-'} (Jarak: ${session.location.distanceKm || '-'} km)`;
       if (savedAddresses.length > 1) {
         lines.push(locLine + ' [STATUS: SUDAH DIKETAHUI (boleh konfirmasi pilihan rumah tersimpan via [ALAMAT TERSIMPAN CUSTOMER])]');
-      } else if (isPrecisePin) {
-        lines.push(locLine + ' [STATUS: SUDAH DIKETAHUI (titik presisi)]');
+      } else if (isAdequatePin) {
+        lines.push(locLine + ' [STATUS: SUDAH DIKETAHUI (titik presisi/terverifikasi staf)]');
       } else {
-        lines.push(locLine + ' [STATUS: ESTIMASI WILAYAH — bila customer sepakat booking, minta shareloc WhatsApp terkini agar Bidan tidak tersasar]');
+        lines.push(locLine + ' [STATUS: ESTIMASI WILAYAH — titik masih perkiraan; alamat wilayah sudah tercatat]');
       }
       // Rule 2 (Strict Information Hiding, state-gated prompt pruning): nominal
       // ongkir DILARANG disuntik ke prompt LLM bila customer belum pernah

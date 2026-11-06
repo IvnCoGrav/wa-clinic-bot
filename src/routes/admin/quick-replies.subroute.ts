@@ -2,6 +2,24 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../../db/client';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { auditService } from '../../services/audit.service';
+import { hasShareLocationSolicitation } from '../../domain/shareloc-solicitation';
+
+/**
+ * Gerbang kode deterministik untuk template bisnis (Aturan Emas 21).
+ * Template Quick Reply / balasan cepat DILARANG mengajak customer mengirim
+ * shareloc / titik lokasi. Ini menjaga data bisnis di DB, bukan hanya prompt AI.
+ */
+export function validateQuickReplyContent(content?: string | null, category?: string | null): string | null {
+  if (!content) return null;
+  if (!hasShareLocationSolicitation(content)) return null;
+  // Pengecualian sempit & eksplisit: permintaan titik presisi PASCA-BOOKING
+  // (setelah form reservasi valid) memang diizinkan produk — lihat
+  // `TEMPLATES.askShareLocation` di machine.ts. Semua kategori lain
+  // (terutama "Lokasi"/"Umum"/"Reservasi") DILARANG mengajak shareloc.
+  const isPostBooking = (category || '').trim().toLowerCase() === 'pasca booking';
+  if (isPostBooking) return null;
+  return 'Isi template mengajak customer mengirim shareloc/titik lokasi. Gunakan pertanyaan kelurahan, nama perumahan, atau patokan terdekat (Aturan Emas 21).';
+}
 
 export interface MemoryQuickReply {
   id: string;
@@ -171,7 +189,7 @@ export const DEFAULT_QUICK_REPLIES: Array<{
   {
     shortcut: 'shareloc',
     title: 'Permintaan Titik Presisi (Shareloc GPS)',
-    category: 'Lokasi',
+    category: 'Pasca Booking',
     media_type: 'NONE',
     image_url: null,
     content:
@@ -433,6 +451,8 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
       if (err) return reply.status(400).send({ success: false, error: err });
       if (!title || !title.trim()) return reply.status(400).send({ success: false, error: 'Judul wajib diisi.' });
       if (!content || !content.trim()) return reply.status(400).send({ success: false, error: 'Isi template wajib diisi.' });
+      const sharelocErr = validateQuickReplyContent(content, category);
+      if (sharelocErr) return reply.status(400).send({ success: false, error: sharelocErr });
 
       if (media_type && !['NONE', 'CUSTOM_IMAGE', 'QRIS', 'PRICELIST'].includes(media_type)) {
         return reply.status(400).send({ success: false, error: 'media_type tidak valid. Harus NONE, CUSTOM_IMAGE, QRIS, atau PRICELIST.' });
@@ -575,6 +595,8 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
         }
         if (content !== undefined) {
           if (!content.trim()) return reply.status(400).send({ success: false, error: 'Isi template tidak boleh kosong.' });
+          const sharelocErr = validateQuickReplyContent(content, category ?? existing.category);
+          if (sharelocErr) return reply.status(400).send({ success: false, error: sharelocErr });
           updateData.content = content.trim();
         }
         if (category !== undefined) updateData.category = category?.trim() || null;

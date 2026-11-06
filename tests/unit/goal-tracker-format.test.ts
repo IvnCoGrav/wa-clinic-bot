@@ -22,11 +22,26 @@ describe('GoalTracker.formatGoalSessionForPrompt — grounding bulletproof', () 
       },
     } as any);
     expect(text).toContain('Pelemwatu');
-    expect(text).toContain('[STATUS: SUDAH DIKETAHUI (titik presisi)]');
+    expect(text).toContain('[STATUS: SUDAH DIKETAHUI (titik presisi/terverifikasi staf)]');
     expect(text).not.toContain('DILARANG TANYA ALAMAT LAGI');
   });
 
-  it('lokasi estimasi (tanpa source) → status ESTIMASI + izin minta shareloc saat booking', () => {
+  it('lokasi manual_staff (terverifikasi staf) → status diketahui, TIDAK menyuruh shareloc', () => {
+    const text = GoalTracker.formatGoalSessionForPrompt({
+      ...baseSession,
+      location: {
+        kelurahan: 'Tambakwedi',
+        kecamatan: 'Kenjeran',
+        kota: 'Surabaya',
+        distanceKm: 22.71,
+        locationSource: 'manual_staff',
+      },
+    } as any);
+    expect(text).toContain('SUDAH DIKETAHUI');
+    expect(text).not.toContain('shareloc');
+  });
+
+  it('lokasi estimasi (tanpa source) → status ESTIMASI tanpa instruksi shareloc', () => {
     const text = GoalTracker.formatGoalSessionForPrompt({
       ...baseSession,
       location: {
@@ -38,7 +53,7 @@ describe('GoalTracker.formatGoalSessionForPrompt — grounding bulletproof', () 
     } as any);
     expect(text).toContain('Pelemwatu');
     expect(text).toContain('ESTIMASI WILAYAH');
-    expect(text).toContain('shareloc');
+    expect(text).not.toContain('shareloc');
     expect(text).not.toContain('DILARANG TANYA ALAMAT LAGI');
   });
 

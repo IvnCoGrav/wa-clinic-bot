@@ -90,6 +90,21 @@ describe('Shareloc Signal Service — Pure Evaluator & Adversarial Tests', () =>
         })
       ).toBe(false);
     });
+
+    it('manual_staff (terverifikasi staf) dianggap memadai — tidak perlu shareloc', () => {
+      expect(
+        isPreciseGpsLike({
+          locationSource: 'manual_staff',
+          shareLocationSent: false,
+          lat: -7.2148994,
+          lng: 112.7723543,
+          reservationStatus: 'confirmed',
+          reservationBookingDate: null,
+          reservationCreatedAt: null,
+          sharelocRequestedAt: null,
+        })
+      ).toBe(true);
+    });
   });
 
   describe('computeSharelocSignal', () => {

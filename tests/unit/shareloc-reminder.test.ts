@@ -32,13 +32,14 @@ describe('Shareloc Reminder Service — Sweep & Template Resolution', () => {
       expect(text).toBe('Bunda Dewi, mohon pin peta ya.');
     });
 
-    it('fallback ke default jika QuickReply dan ClinicPolicy keduanya kosong', async () => {
+    it('mengembalikan kosong (template_missing) jika QuickReply dan ClinicPolicy kosong', async () => {
       vi.mocked((prisma as any).quickReply.findFirst).mockResolvedValueOnce(null);
       vi.mocked((prisma as any).clinicPolicy.findFirst).mockResolvedValueOnce(null);
 
+      // Data bisnis wajib dari DB. DILARANG memakai template hardcoded sebagai
+      // fallback; sweep akan berhenti dengan alasan template_missing.
       const text = await sharelocReminderService.resolveTemplate('default-tenant', null);
-      expect(text).toContain('Bunda Bunda');
-      expect(text).toContain('shareloc WhatsApp');
+      expect(text).toBe('');
     });
   });
 

@@ -1,3 +1,4 @@
+import { ACTIVE_RESERVATION_STATUSES } from '../domain/reservation-status';
 import { resolveExpectedPayment } from '../domain/payment-expected';
 import { prisma } from '../db/client';
 import { TreatmentCategory } from '@prisma/client';
@@ -87,7 +88,7 @@ export class ReservationConflictError extends Error {
   }
 }
 
-const ACTIVE_STATUSES = ['confirmed', 'en_route', 'hold'];
+const ACTIVE_STATUSES = ACTIVE_RESERVATION_STATUSES;
 const WIB_OFFSET_MS = 7 * 3600000;
 
 /** Error saat cek bentrok tidak dapat dijalankan (DB error) di production. */
@@ -287,6 +288,15 @@ async function runWithAdvisoryLock<T>(key: number, work: (tx: any) => Promise<T>
   } catch (e: any) {
     if (entered) throw e; // error berasal dari work() → teruskan, jangan ulang.
     if (isBusinessError(e)) throw e;
+    console.error(JSON.stringify({
+      event: 'ADVISORY_LOCK_FALLBACK',
+      reason: e?.message || String(e),
+      nodeEnv: process.env.NODE_ENV || 'unknown',
+    }));
+    const allowFallback = process.env.ALLOW_ADVISORY_LOCK_FALLBACK === 'true';
+    if (process.env.NODE_ENV === 'production' && !allowFallback) {
+      throw new ConflictCheckUnavailableError('advisory_lock', e?.message);
+    }
     return work(prisma); // lock tak tersedia → fallback tanpa lock.
   }
 }
@@ -314,7 +324,7 @@ function intervalsOverlap(aStart: Date, aMins: number, bStart: Date, bMins: numb
   return aStart.getTime() < bEnd && aStart.getTime() + aMins * 60000 > bStart.getTime() && aEnd > bStart.getTime() && bStart.getTime() < aEnd;
 }
 
-async function findOverlappingCustomerReservations(params: {
+export async function findOverlappingCustomerReservations(params: {
   tenantId: string;
   customerId: string;
   bookingDate: Date;
@@ -331,7 +341,7 @@ async function findOverlappingCustomerReservations(params: {
       where: {
         tenant_id: tenantId,
         customer_id: customerId,
-        status: { in: ['confirmed', 'en_route', 'hold', 'pending', 'in_progress'] },
+        status: { in: ['confirmed', 'en_route', 'hold', 'pending'] },
         booking_date: { gte: dayStart, lte: dayEnd },
       },
       orderBy: { booking_date: 'asc' },

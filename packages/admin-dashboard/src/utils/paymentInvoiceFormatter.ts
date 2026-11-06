@@ -3,6 +3,7 @@ import { extractBabiesFromRawText } from './reservationBabies';
 import { stripBufferMetadata } from './treatmentStringParser';
 import { calculateOngkirFromTiers } from './deliveryTierCalculator';
 import { isValidChildName } from './chatScheduleExtractor';
+import { resolveReservationAddress } from './reservationAddress';
 
 const INDONESIAN_DAYS = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 const INDONESIAN_MONTHS = [
@@ -203,25 +204,24 @@ function buildBabyDetails(reservation: GenerateInvoiceParams['reservation'], cus
   return extractBabiesFromRawText(reservation.raw_text, reservation.treatment_detail);
 }
 
-function resolveAddress(customer: InvoiceCustomerData | null | undefined, reservation: GenerateInvoiceParams['reservation']): string {
-  // Prioritas 1: baris alamat eksplisit dari form mentah reservasi
-  // ("Alamat & Shareloc : perum. Shoji land, etsu garden blok EF-20").
-  // Mencegah kehilangan alamat jalan saat jatuh ke kelurahan (Karangtanjung/Mojo).
-  if (reservation?.raw_text) {
-    const mt = reservation.raw_text.match(/(?:alamat\s*&(?:amp;)?\s*shareloc|alamat\s*lengkap|alamat)\s*[:=][ \t]*([^\r\n\t]+)/i);
-    if (mt && mt[1]?.trim() && mt[1].trim() !== '-' && mt[1].trim().length > 3) {
-      return mt[1].trim();
-    }
-  }
-  // Prioritas 2: profil customer / preferences (kanal resmi backend)
+function resolveAddress(
+  customer: InvoiceCustomerData | null | undefined,
+  reservation: GenerateInvoiceParams['reservation']
+): string {
+  const mergedReservation = {
+    ...reservation,
+    customer: reservation?.customer || customer,
+  };
+  const view = resolveReservationAddress(mergedReservation as any);
+  if (view.street) return view.street;
   return (
     customer?.address ||
-    customer?.preferences?.address ||          // ← kanal resmi backend
+    customer?.preferences?.address ||
     customer?.preferences?.address_detail ||
     customer?.kelurahan ||
-    (reservation.customer as any)?.preferences?.address ||
-    (reservation.customer as any)?.preferences?.address_detail ||
-    (reservation.customer as any)?.kelurahan ||
+    (reservation?.customer as any)?.preferences?.address ||
+    (reservation?.customer as any)?.preferences?.address_detail ||
+    (reservation?.customer as any)?.kelurahan ||
     ''
   );
 }
@@ -310,7 +310,7 @@ export function generateReservationInvoiceText(params: GenerateInvoiceParams): s
     '',
     `Hari dan tanggal : ${dateTimeStr}`,
     `Nama Bunda: ${bundaName ? `${bundaName}` : '-'}`,
-    `Alamat & Shareloc : ${address || '-'}`,
+    `Alamat Lengkap & Patokan : ${address || '-'}`,
     `Kec : ${kec || '-'}`,
     `Kota : ${kota || '-'}`,
     `No. Hp : ${phone || '-'}`,

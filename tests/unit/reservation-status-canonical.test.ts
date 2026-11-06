@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   ACTIVE_RESERVATION_STATUSES,
   isActiveReservationStatus as canonicalIsActive,
+  canTransition,
 } from '../../src/domain/reservation-status';
 import {
   isTreatmentCategoryOverlap,
@@ -53,5 +54,11 @@ describe('kontrak kanonis status aktif — satu sumber kebenaran', () => {
     expect(isTreatmentCategoryOverlap('BABY', 'KIDS')).toBe(true);
     expect(isTreatmentCategoryOverlap('MOMS', 'BABY')).toBe(false);
     expect(isTreatmentCategoryOverlap(null, 'MOMS')).toBe(true);
+  });
+
+  it('canTransition mengizinkan pending -> en_route dan confirmed -> en_route (Fase 1)', () => {
+    expect(canTransition('pending', 'en_route')).toBe(true);
+    expect(canTransition('confirmed', 'en_route')).toBe(true); // alur operasional: confirmed -> en_route -> completed
+    expect(canTransition('en_route', 'completed')).toBe(true);
   });
 });

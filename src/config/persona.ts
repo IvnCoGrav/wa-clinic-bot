@@ -508,7 +508,7 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
 
 ${prefill('Hari dan tanggal', params?.bookingDate)}
 Nama Bunda:${params?.name ? ` ${params.name}` : ''}
-${prefill('Alamat & Shareloc', params?.address)}
+${prefill('Alamat Lengkap & Patokan', params?.address)}
 ${prefill('Kec', params?.kecamatan)}
 ${prefill('Kota', params?.kota)}
 ${prefill('No. Hp', params?.phone)}
@@ -563,7 +563,7 @@ Terimakasih.  ☺️`;
 
 Hari dan tanggal : ${params.date}
 Nama Bunda: ${params.name}
-Alamat & Shareloc : ${params.address}
+Alamat Lengkap & Patokan : ${params.address}
 Kec : ${params.kec}
 Kota : ${params.kota}
 No. Hp : ${params.phone}

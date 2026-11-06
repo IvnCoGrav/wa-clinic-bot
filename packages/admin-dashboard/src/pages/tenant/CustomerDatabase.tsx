@@ -15,6 +15,8 @@ import { ReservationDetailModal } from '../../components/modals/ReservationDetai
 import { getCleanTreatmentName } from '../../utils/treatmentFormatter';
 import { resolveStaffName } from '../../utils/resolveStaffName';
 import { formatClinicalAge } from '../../utils/clinicalAge';
+import { StaffOwnershipBadge } from '../../components/common/StaffOwnershipBadge';
+import type { StaffOwnership } from '../../utils/staffOwnershipBadge';
 import { getLocationBadgeConfig, getGoogleMapsDirectionUrl, resolveEffectiveLocationSource } from '../../utils/geoUtils';
 import {
   Users,
@@ -76,6 +78,7 @@ interface CustomerItem {
   kelurahan?: string | null;
   distanceKm?: number | null;
   ongkir?: number | null;
+  staffOwnership?: StaffOwnership | null;
 }
 
 interface ChatMessage {
@@ -857,6 +860,9 @@ export const CustomerDatabase: React.FC = () => {
                           </span>
                         </div>
                       )}
+                      <div className="mt-1">
+                        <StaffOwnershipBadge ownership={customer.staffOwnership} />
+                      </div>
                     </div>
 
                     <div className="flex items-center space-x-2 shrink-0">
@@ -967,6 +973,9 @@ export const CustomerDatabase: React.FC = () => {
                             <div className="flex items-center space-x-1 text-[11px] text-ink-3 font-mono mt-0.5">
                               <Phone size={11} className="text-ink-3 shrink-0" />
                               <span>{customer.phone}</span>
+                            </div>
+                            <div className="mt-1">
+                              <StaffOwnershipBadge ownership={customer.staffOwnership} />
                             </div>
                             {customer.adClick?.utmCampaign && (
                               <p className="text-[10px] text-ink-3 truncate max-w-[170px] mt-0.5">
@@ -1252,6 +1261,11 @@ export const CustomerDatabase: React.FC = () => {
                 </div>
               ) : (
                 <>
+                  <StaffOwnershipBadge
+                    variant="banner"
+                    ownership={(detailData as any)?.staffOwnership ?? activeDetailCustomer.staffOwnership}
+                    showNew
+                  />
                   {/* Grid Top Cards: LTV & MQL Status */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                     <div className="p-3 bg-surface-2 border border-divider rounded-2xl">

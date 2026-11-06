@@ -1,3 +1,9 @@
+import {
+  reservationStatusService,
+  InvalidTransitionError,
+  PrematureCompletionError,
+} from './reservation-status.service';
+import { canTransition, isPrematureCompletion } from '../domain/reservation-status';
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { calculateHaversineDistance, Coordinates } from '../utils/haversine';
@@ -1754,19 +1760,51 @@ export class StaffReservationService {
       const purchaseReviewStatus = resolveNextPurchaseReviewStatus(reservation as any);
       const purchaseEventSentAt = (reservation as any).purchase_event_sent_at ?? null;
 
-      const updated = await prisma.reservation.update({
-        where: { id: reservationId },
-        data: {
-          purchase_occurred_at: now,
-          purchase_value: pureTreatmentValue,
-          purchase_review_status: purchaseReviewStatus,
-          // Pertahankan jejak kirim lama; null tetap null (belum dikirim → tetap antre).
-          purchase_event_sent_at: purchaseEventSentAt,
-          status: 'completed',
-          payment_method: paymentMethod,
-          proof_url: proofUrl,
-        },
-      });
+      let updated: any;
+      const canComplete = canTransition(reservation.status, 'completed') && !isPrematureCompletion(reservation.booking_date);
+      if (canComplete) {
+        const applied = await reservationStatusService.applyTransition(reservation, {
+          to: 'completed',
+          allowUnassignedStaff: isSupervisor,
+          extraData: {
+            purchase_occurred_at: now,
+            purchase_value: pureTreatmentValue,
+            purchase_review_status: purchaseReviewStatus,
+            purchase_event_sent_at: purchaseEventSentAt,
+            payment_method: paymentMethod,
+            proof_url: proofUrl,
+          },
+        });
+        if (applied.ok) {
+          updated = applied.reservation;
+        } else {
+          updated = await prisma.reservation.update({
+            where: { id: reservationId },
+            data: {
+              purchase_occurred_at: now,
+              purchase_value: pureTreatmentValue,
+              purchase_review_status: purchaseReviewStatus,
+              purchase_event_sent_at: purchaseEventSentAt,
+              payment_method: paymentMethod,
+              proof_url: proofUrl,
+            },
+          });
+        }
+      } else {
+        // Reservasi masa depan (premature) atau status yang belum sah completed (misal: hold)
+        // -> Catat data pembayaran tanpa mengubah status ke completed secara prematur
+        updated = await prisma.reservation.update({
+          where: { id: reservationId },
+          data: {
+            purchase_occurred_at: now,
+            purchase_value: pureTreatmentValue,
+            purchase_review_status: purchaseReviewStatus,
+            purchase_event_sent_at: purchaseEventSentAt,
+            payment_method: paymentMethod,
+            proof_url: proofUrl,
+          },
+        });
+      }
 
       // [FITUR NONAKTIF]: Pengiriman pesan konfirmasi pembayaran otomatis ke WhatsApp customer
       // dinonaktifkan atas arahan bisnis untuk mencegah pesan kaku/salah konteks (seperti template
@@ -1786,7 +1824,7 @@ export class StaffReservationService {
       // tanpa NEXT akibat create parsial gagal) WAJIB tetap memicu retry idempoten.
       try {
         const { reservationLifecycleService } = await import('./reservation-lifecycle.service');
-        if (reservation.booking_date) {
+        if (updated.status === 'completed' && reservation.booking_date) {
           const existingNext = await (prisma as any).followUp?.findFirst?.({
             where: {
               reservation_id: reservationId,
@@ -2638,10 +2676,25 @@ export class StaffReservationService {
         };
       }
 
-      const updated = await prisma.reservation.update({
-        where: { id: reservationId },
-        data: { status: 'completed' },
-      });
+      let updated: any;
+      try {
+        const applied = await reservationStatusService.applyTransition(reservation, {
+          to: 'completed',
+          allowUnassignedStaff: isSupervisor,
+        });
+        if (!applied.ok) {
+          return { success: false, error: 'Reservasi belum memiliki bidan yang ditugaskan.' };
+        }
+        updated = applied.reservation;
+      } catch (err: any) {
+        if (err instanceof InvalidTransitionError) {
+          return { success: false, error: `Transisi status tidak valid: ${err.message}` };
+        }
+        if (err instanceof PrematureCompletionError) {
+          return { success: false, error: err.message };
+        }
+        throw err;
+      }
 
       // FIX 173i-b: jalankan seam completion kanonis (REVIEW/NEXT_TREATMENT +
       // reset sesi V3). Sebelumnya jalur ini melewati lifecycle sepenuhnya

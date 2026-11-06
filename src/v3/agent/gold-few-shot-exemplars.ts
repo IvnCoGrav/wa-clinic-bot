@@ -63,7 +63,7 @@ export const GOLD_FEW_SHOT_EXEMPLARS: FewShotExemplar[] = [
     tags: ['lokasi', 'domisili', 'kelurahan', 'kecamatan', 'alamat', 'ongkir', 'kec', 'kel', 'desa', 'perum', 'sidoarjo', 'surabaya', 'jarak', 'detail', 'lengkap', 'akurat'],
     customerMessage: 'Saya di daerah Gunung Anyar, Surabaya kak',
     idealResponse:
-      'Baik Bunda 😊 Kalau boleh tahu rumahnya di kelurahan mana ya Bunda? Karena jarak yang berbeda bisa memengaruhi estimasi kunjungan kami. Boleh juga kirim titik lokasinya agar lebih akurat 🙏',
+      'Baik Bunda 😊 Kalau boleh tahu rumahnya di kelurahan mana ya Bunda? Karena jarak yang berbeda bisa memengaruhi estimasi kunjungan kami. Boleh juga sebutkan nama perumahan atau patokan terdekatnya 🙏',
     isActive: true,
     sortOrder: 11,
   },

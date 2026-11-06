@@ -7,6 +7,8 @@
  * - Single source of truth untuk perhitungan retensi 60-hari pool 6-bulan bergulir.
  */
 
+import { formatWibDateYYYYMMDD } from '../utils/wib-time';
+
 export interface RetentionVisitRow {
   customerId: string;
   staffId: string | null;
@@ -128,6 +130,94 @@ export function buildVisits(rows: RetentionVisitRow[]): Visit[] {
   }
 
   return Array.from(visitMap.values());
+}
+
+/** Baris reservasi mentah untuk menentukan pemilik retensi per customer. */
+export interface CustomerOwnershipReservationRow {
+  customerId: string;
+  status?: string | null;
+  bookingDate?: Date | string | null;
+  assignedStaffId?: string | null;
+  createdAt?: Date | string | null;
+  seriesId?: string | null;
+  sessionNumber?: number | null;
+}
+
+export interface CustomerStaffOwnership {
+  customerId: string;
+  ownerStaffId: string | null;
+  /** Tanggal kunjungan pertama (YYYY-MM-DD WIB). */
+  ownerSince: string;
+  lastStaffId: string | null;
+  /** Tanggal kunjungan terakhir (YYYY-MM-DD WIB). */
+  lastVisitDate: string;
+  totalVisits: number;
+  hasRotation: boolean;
+}
+
+/**
+ * Tentukan bidan pemilik (first-touch) + bidan terakhir per customer.
+ *
+ * ATURAN WAJIB SAMA DENGAN PAYROLL (`staff-retention.service.ts`):
+ * - hanya status `completed`;
+ * - 1 kunjungan per tanggal WIB (dedupe via `buildVisits`);
+ * - paket series hanya sesi ke-1;
+ * - staf pada tanggal yang sama dipilih dari `createdAt` paling awal.
+ *
+ * Fungsi ini MURNI. Pemfilteran sandbox/internal/deleted dilakukan pemanggil
+ * (service) karena butuh kolom milik tabel Customer.
+ */
+export function resolveCustomerOwnerships(
+  rows: CustomerOwnershipReservationRow[]
+): Map<string, CustomerStaffOwnership> {
+  const visitRows: RetentionVisitRow[] = [];
+
+  for (const row of rows) {
+    if (String(row.status ?? '').toLowerCase() !== 'completed') continue;
+    if (!row.bookingDate) continue;
+    if (row.seriesId && row.sessionNumber !== 1) continue;
+
+    const bookingDate = row.bookingDate instanceof Date
+      ? row.bookingDate
+      : new Date(row.bookingDate);
+    if (Number.isNaN(bookingDate.getTime())) continue;
+
+    visitRows.push({
+      customerId: row.customerId,
+      staffId: row.assignedStaffId ?? null,
+      visitDate: formatWibDateYYYYMMDD(bookingDate),
+      createdAt: row.createdAt ?? undefined,
+    });
+  }
+
+  const visits = buildVisits(visitRows);
+  const byCustomer = new Map<string, Visit[]>();
+  for (const visit of visits) {
+    const list = byCustomer.get(visit.customerId);
+    if (list) list.push(visit);
+    else byCustomer.set(visit.customerId, [visit]);
+  }
+
+  const result = new Map<string, CustomerStaffOwnership>();
+  for (const [customerId, list] of byCustomer.entries()) {
+    list.sort((a, b) => a.visitDate.localeCompare(b.visitDate));
+    const first = list[0];
+    const last = list[list.length - 1];
+    result.set(customerId, {
+      customerId,
+      ownerStaffId: first.staffId,
+      ownerSince: first.visitDate,
+      lastStaffId: last.staffId,
+      lastVisitDate: last.visitDate,
+      totalVisits: list.length,
+      hasRotation:
+        first.staffId !== null &&
+        last.staffId !== null &&
+        first.staffId !== last.staffId,
+    });
+  }
+
+  return result;
 }
 
 /**

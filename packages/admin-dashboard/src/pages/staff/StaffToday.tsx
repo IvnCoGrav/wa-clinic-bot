@@ -400,6 +400,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
   // Gateway capability (WAHA supportsRevoke=true, supportsEdit=true vs WABA supportsRevoke=false)
   const [gatewayCapability, setGatewayCapability] = useState<{ provider: string; supportsRevoke: boolean; supportsEdit?: boolean } | null>(null);
+  const [quickReplyTemplates, setQuickReplyTemplates] = useState<Array<{ shortcut: string; title: string; content: string; category?: string | null }>>([]);
   const [revokingId, setRevokingId] = useState<string | null>(null);
 
   // Fase 1.2: outbox pesan gagal (sinyal 1-bar). Bertahan di layar + localStorage
@@ -643,6 +644,12 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     apiRequest('/api/staff/gateway-capability')
       .then((res) => {
         if (res?.success && res.data) setGatewayCapability(res.data);
+      })
+      .catch(() => {});
+    // Template permintaan titik presisi WAJIB dari DB (bukan hardcode).
+    apiRequest('/api/staff/quick-replies')
+      .then((res) => {
+        if (res?.success && Array.isArray(res.data)) setQuickReplyTemplates(res.data);
       })
       .catch(() => {});
     return cleanupAudio;
@@ -1936,19 +1943,23 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
   const buildSharelocDraft = (task: StaffTask): string => {
     const name = (task.customerName || '').trim() || 'Bunda';
-    const waktu = task.bookingDate ? formatTime(task.bookingDate) : 'sesuai kesepakatan';
-    const patokan = (task.address?.landmark || '').trim();
-    return (
-      `Halo ${name}, Bidan kami izin konfirmasi untuk persiapan treatment jam ${waktu}. ` +
-      `Boleh minta tolong kirimkan shareloc WhatsApp terkini${patokan ? ` dan patokan rumah (${patokan})` : ''} ya Bun ` +
-      `agar Bidan tidak tersasar? Terima kasih Bunda 🤗`
-    );
+    const template =
+      quickReplyTemplates.find((q) => q.shortcut === 'shareloc')?.content ||
+      quickReplyTemplates.find((q) => q.shortcut === 'shareloct')?.content ||
+      '';
+    if (!template.trim()) return '';
+    return template.replace(/\{(?:name|nama|nama_bunda)\}/gi, name);
   };
 
   const handleRequestShareloc = () => {
     const task = preflightTask;
     if (!task) return;
     const draft = buildSharelocDraft(task);
+    if (!draft) {
+      toast('Template titik presisi belum diatur di Balasan Cepat (kategori Pasca Booking).', 'error');
+      setPreflightTask(null);
+      return;
+    }
     setReplyText(draft);
     setPreflightTask(null);
     handleOpenChat(task);

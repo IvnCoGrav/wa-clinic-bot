@@ -143,6 +143,13 @@ function openShared() {
     sharedEs.addEventListener('staff.task_completed', (e) => handleEvent('staff.task_completed', e));
     sharedEs.addEventListener('staff.telemetry_updated', (e) => handleEvent('staff.telemetry_updated', e));
     sharedEs.addEventListener('staff.trip_closed', (e) => handleEvent('staff.trip_closed', e));
+    // AUDIT FASE 0: event berikut SUDAH dipublikasikan backend tetapi belum pernah
+    // didaftarkan di klien, sehingga toast/alert & progres sync tidak pernah tampil.
+    sharedEs.addEventListener('staff.trip_delay_warning', (e) => handleEvent('staff.trip_delay_warning', e));
+    sharedEs.addEventListener('staff.trip_arrived', (e) => handleEvent('staff.trip_arrived', e));
+    sharedEs.addEventListener('sync.progress', (e) => handleEvent('sync.progress', e));
+    sharedEs.addEventListener('bot.active_changed', (e) => handleEvent('bot.active_changed', e));
+    sharedEs.addEventListener('BOT_ACTIVE_CHANGED', (e) => handleEvent('bot.active_changed', e));
     sharedEs.addEventListener('ping', () => resetWatchdog());
     sharedEs.addEventListener('open', () => resetWatchdog());
 

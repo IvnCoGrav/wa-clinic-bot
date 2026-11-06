@@ -1,5 +1,5 @@
 import { prisma } from '../db/client';
-import { wahaClient } from '../integrations/waha/client';
+import { wahaClient, WahaClient } from '../integrations/waha/client';
 import { Direction } from '@prisma/client';
 import { customerService } from './customer.service';
 import { conversationService } from './conversation.service';
@@ -36,6 +36,20 @@ export interface BackgroundSyncProgress {
 
 const DEFAULT_BATCH = 50;
 const DEFAULT_MESSAGES_PER_CHAT = 100;
+
+/**
+ * AUDIT FASE 3 (K-03): tentukan session WAHA milik tenant.
+ * Tenant yang punya `waha_session_id` TIDAK BOLEH memakai session env global
+ * (itu milik tenant default). Diekspor murni agar bisa diuji adversarial.
+ */
+export function resolveWahaSessionKey(
+  tenantSession?: string | null,
+  envSession?: string | null
+): string {
+  const env = (envSession || 'default').trim() || 'default';
+  const own = (tenantSession || '').trim();
+  return own || env;
+}
 
 /**
  * Ekstraksi nama customer dari isi pesan/form reservasi jika kontak tidak memiliki pushname di WA
@@ -91,7 +105,37 @@ function resolveMediaPlaceholder(msgType: string): string {
  */
 export class WahaHistorySyncService {
   private syncProgressMap = new Map<string, BackgroundSyncProgress>();
-  private cancelFlags = new Map<string, boolean>();
+  /**
+   * AUDIT FASE 3 (K-03/LC-07): penanda RUN (bukan flag boolean bersama).
+   * Start baru menimpa token → loop lama otomatis berhenti walau flag tidak
+   * sempat di-reset, sehingga dua sync tidak pernah berjalan paralel.
+   */
+  private syncRunTokens = new Map<string, number>();
+  private runCounter = 0;
+  private wahaClients = new Map<string, WahaClient>();
+
+  /**
+   * Resolusi client WAHA per-tenant (tenants.waha_session_id). Jangan memakai
+   * singleton global untuk mengimpor chat tenant lain (K-03).
+   */
+  private async resolveWahaClient(tenantId: string): Promise<WahaClient> {
+    const envSession = (process.env.WAHA_SESSION || 'default').trim() || 'default';
+    let sessionId = envSession;
+    try {
+      const { whatsappProviderService } = await import('./whatsapp-provider.service');
+      sessionId = await whatsappProviderService.getSessionIdForTenant(tenantId);
+    } catch {
+      // DB offline → fallback env (single-tenant behavior).
+    }
+    const key = resolveWahaSessionKey(sessionId, envSession);
+    if (key === envSession) return wahaClient;
+    let client = this.wahaClients.get(key);
+    if (!client) {
+      client = new WahaClient({ session: key });
+      this.wahaClients.set(key, client);
+    }
+    return client;
+  }
 
   public getBackgroundSyncStatus(tenantId = DEFAULT_TENANT_ID): BackgroundSyncProgress {
     return (
@@ -110,7 +154,8 @@ export class WahaHistorySyncService {
   public stopBackgroundSync(tenantId = DEFAULT_TENANT_ID): boolean {
     const current = this.syncProgressMap.get(tenantId);
     if (!current || !current.isSyncing) return false;
-    this.cancelFlags.set(tenantId, true);
+    // Invalidate token run yang sedang berjalan (loop akan berhenti sendiri).
+    this.syncRunTokens.set(tenantId, -1);
     current.status = 'cancelled';
     current.isSyncing = false;
     this.publishProgress(tenantId, current);
@@ -142,7 +187,8 @@ export class WahaHistorySyncService {
       };
     }
 
-    this.cancelFlags.set(tenantId, false);
+    const runToken = ++this.runCounter;
+    this.syncRunTokens.set(tenantId, runToken);
     const initialProgress: BackgroundSyncProgress = {
       isSyncing: true,
       status: 'in_progress',
@@ -160,9 +206,10 @@ export class WahaHistorySyncService {
     void (async () => {
       try {
         console.log(`[WAHA BACKGROUND SYNC] Memulai sinkronisasi seluruh chat di background untuk tenant: ${tenantId}...`);
+        const client = await this.resolveWahaClient(tenantId);
 
         // 1. Fetch seluruh contacts dari WAHA untuk matching nama buku telepon / pushname
-        const contacts = await wahaClient.getAllContacts();
+        const contacts = await client.getAllContacts();
         const contactMap = new Map<string, string>();
         for (const c of contacts) {
           const contactName = (c.name || c.pushname || c.shortName || '').trim();
@@ -176,7 +223,7 @@ export class WahaHistorySyncService {
           if (c.id) contactMap.set(c.id, contactName);
         }
 
-        const chats = await wahaClient.getChats();
+        const chats = await client.getChats();
         const totalChats = chats.length;
         initialProgress.totalChats = totalChats;
         this.publishProgress(tenantId, initialProgress);
@@ -185,7 +232,7 @@ export class WahaHistorySyncService {
         const batchSize = 10; // Batch per 10 chat agar responsif & tidak membebani memori
 
         while (offset < totalChats) {
-          if (this.cancelFlags.get(tenantId)) {
+          if (this.syncRunTokens.get(tenantId) !== runToken) {
             console.log(`[WAHA BACKGROUND SYNC] Dibatalkan oleh admin pada offset ${offset}/${totalChats}`);
             initialProgress.status = 'cancelled';
             initialProgress.isSyncing = false;
@@ -195,7 +242,7 @@ export class WahaHistorySyncService {
 
           const batch = chats.slice(offset, offset + batchSize);
           for (const chat of batch) {
-            if (this.cancelFlags.get(tenantId)) break;
+            if (this.syncRunTokens.get(tenantId) !== runToken) break;
 
             if (chat.id.includes('@g.us') || chat.id.includes('broadcast') || chat.id.includes('@newsletter')) {
               initialProgress.skippedChats++;
@@ -205,7 +252,7 @@ export class WahaHistorySyncService {
             let phone: string | null = null;
             try {
               if (chat.id.includes('@lid')) {
-                phone = await wahaClient.getPhoneNumberFromLid(chat.id);
+                phone = await client.getPhoneNumberFromLid(chat.id);
               }
             } catch (e) {
               phone = null;
@@ -219,7 +266,7 @@ export class WahaHistorySyncService {
             }
 
             const targetChatId = chat.id.includes('@lid') ? chat.id : `${phone}@c.us`;
-            const rawMessages = await wahaClient.getMessages(targetChatId, messagesPerChat);
+            const rawMessages = await client.getMessages(targetChatId, messagesPerChat);
             const validMessages = (rawMessages || [])
               .filter((m) => (m.body && typeof m.body === 'string' && m.body.trim().length > 0) || isMediaOrNonText(m))
               .sort((a, b) => ((a as any).timestamp || 0) - ((b as any).timestamp || 0));
@@ -228,7 +275,7 @@ export class WahaHistorySyncService {
             let customerName = chat.name || contactMap.get(phone) || contactMap.get(chat.id) || undefined;
             if (!customerName) {
               try {
-                const contact = await wahaClient.getContact(phone);
+                const contact = await client.getContact(phone);
                 customerName = (contact?.name || contact?.pushname || contact?.shortName || '').trim() || undefined;
               } catch (e) {}
             }
@@ -298,7 +345,7 @@ export class WahaHistorySyncService {
               if (isMedia) {
                 try {
                   const { mediaService } = await import('./media.service');
-                  const buffer = await wahaClient.downloadMedia(msg.id, targetChatId);
+                  const buffer = await client.downloadMedia(msg.id, targetChatId);
                   if (buffer && buffer.length > 0) {
                     let mimeType = (msg as any).media?.mimetype || (msg as any).mimetype || (msg as any).mime_type;
                     if (!mimeType) {
@@ -355,17 +402,26 @@ export class WahaHistorySyncService {
 
             if (latestMsgDate) {
               try {
-                await prisma.conversation.update({
-                  where: { id: conversation.id },
+                // AUDIT FASE 3: tenant-scoped + JANGAN mundurkan last_message_at
+                // bila DB sudah punya pesan yang lebih baru (anti urutan chat rusak).
+                await prisma.conversation.updateMany({
+                  where: {
+                    id: conversation.id,
+                    tenant_id: tenantId,
+                    last_message_at: { lt: latestMsgDate },
+                  },
                   data: {
                     last_message_at: latestMsgDate,
                     updated_at: latestMsgDate,
                   },
                 });
-                const memConv = conversationService.getMemoryConversations().find((c) => c.id === conversation.id);
+                const memConv = conversationService.getMemoryConversations().find((c) => c.id === conversation.id && (!tenantId || c.tenant_id === tenantId));
                 if (memConv) {
-                  memConv.last_message_at = latestMsgDate;
-                  memConv.updated_at = latestMsgDate;
+                  const existingTs = memConv.last_message_at ? new Date(memConv.last_message_at).getTime() : 0;
+                  if (!existingTs || existingTs < latestMsgDate.getTime()) {
+                    memConv.last_message_at = latestMsgDate;
+                    memConv.updated_at = latestMsgDate;
+                  }
                 }
               } catch (_) {}
             }
@@ -410,7 +466,8 @@ export class WahaHistorySyncService {
     tenantId = DEFAULT_TENANT_ID
   ): Promise<WahaHistorySyncResult> {
     try {
-      const contacts = await wahaClient.getAllContacts();
+      const client = await this.resolveWahaClient(tenantId);
+      const contacts = await client.getAllContacts();
       const contactMap = new Map<string, string>();
       for (const c of contacts) {
         const contactName = (c.name || c.pushname || c.shortName || '').trim();
@@ -424,7 +481,7 @@ export class WahaHistorySyncService {
         if (c.id) contactMap.set(c.id, contactName);
       }
 
-      const chats = await wahaClient.getChats();
+      const chats = await client.getChats();
       const totalChats = chats.length;
       const batch = chats.slice(offset, offset + limit);
 
@@ -443,7 +500,7 @@ export class WahaHistorySyncService {
         let phone: string | null = null;
         try {
           if (chat.id.includes('@lid')) {
-            phone = await wahaClient.getPhoneNumberFromLid(chat.id);
+            phone = await client.getPhoneNumberFromLid(chat.id);
           }
         } catch (e) {
           phone = null;
@@ -463,7 +520,7 @@ export class WahaHistorySyncService {
         }
 
         const targetChatId = chat.id.includes('@lid') ? chat.id : `${phone}@c.us`;
-        const rawMessages = await wahaClient.getMessages(targetChatId, messagesPerChat);
+        const rawMessages = await client.getMessages(targetChatId, messagesPerChat);
         const validMessages = (rawMessages || [])
           .filter((m) => (m.body && typeof m.body === 'string' && m.body.trim().length > 0) || isMediaOrNonText(m))
           .sort((a, b) => ((a as any).timestamp || 0) - ((b as any).timestamp || 0));
@@ -472,7 +529,7 @@ export class WahaHistorySyncService {
         let customerName = chat.name || contactMap.get(phone) || contactMap.get(chat.id) || undefined;
         if (!customerName) {
           try {
-            const contact = await wahaClient.getContact(phone);
+            const contact = await client.getContact(phone);
             customerName = (contact?.name || contact?.pushname || contact?.shortName || '').trim() || undefined;
           } catch (e) {}
         }
@@ -542,7 +599,7 @@ export class WahaHistorySyncService {
           if (isMedia) {
             try {
               const { mediaService } = await import('./media.service');
-              const buffer = await wahaClient.downloadMedia(msg.id, targetChatId);
+              const buffer = await client.downloadMedia(msg.id, targetChatId);
               if (buffer && buffer.length > 0) {
                 let mimeType = (msg as any).media?.mimetype || (msg as any).mimetype || (msg as any).mime_type;
                 if (!mimeType) {
@@ -600,17 +657,24 @@ export class WahaHistorySyncService {
         // Sinkronkan waktu percakapan (last_message_at & updated_at) dengan waktu asli pesan terakhir WhatsApp
         if (latestMsgDate) {
           try {
-            await prisma.conversation.update({
-              where: { id: conversation.id },
+            await prisma.conversation.updateMany({
+              where: {
+                id: conversation.id,
+                tenant_id: tenantId,
+                last_message_at: { lt: latestMsgDate },
+              },
               data: {
                 last_message_at: latestMsgDate,
                 updated_at: latestMsgDate,
               },
             });
-            const memConv = conversationService.getMemoryConversations().find((c) => c.id === conversation.id);
+            const memConv = conversationService.getMemoryConversations().find((c) => c.id === conversation.id && (!tenantId || c.tenant_id === tenantId));
             if (memConv) {
-              memConv.last_message_at = latestMsgDate;
-              memConv.updated_at = latestMsgDate;
+              const existingTs = memConv.last_message_at ? new Date(memConv.last_message_at).getTime() : 0;
+              if (!existingTs || existingTs < latestMsgDate.getTime()) {
+                memConv.last_message_at = latestMsgDate;
+                memConv.updated_at = latestMsgDate;
+              }
             }
           } catch (_) {}
         }

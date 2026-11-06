@@ -43,6 +43,17 @@ describe('FASE 5b — conversation repository', () => {
     ).rejects.toThrow();
   });
 
+  it('Postgres: updateState menulis dengan tenant_id di WHERE (FASE 3 K-03)', async () => {
+    vi.mocked(prisma.conversation.findUnique).mockResolvedValue({ id: 'c1', tenant_id: 't' } as any);
+    vi.mocked(prisma.conversation.updateMany).mockResolvedValue({ count: 1 } as any);
+    const repo = new PostgresConversationRepository();
+    await repo.updateState('c1', { currentState: ConversationState.HUMAN_HANDLING }, 't');
+    expect(prisma.conversation.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'c1', tenant_id: 't' } })
+    );
+    expect(prisma.conversation.update).not.toHaveBeenCalled();
+  });
+
   it('InMemory: getOrCreate idempoten per (customer, tenant)', async () => {
     const repo = new InMemoryConversationRepository();
     const a = await repo.getOrCreate('cust-1', 't');

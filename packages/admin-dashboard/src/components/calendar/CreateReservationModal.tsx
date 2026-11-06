@@ -38,9 +38,8 @@ import { calculateOngkirFromTiers, DeliveryTierItem } from '../../utils/delivery
 import { useFormDraft } from '../../hooks/useFormDraft';
 import { calculateHaversineKm as calculateHaversine, checkTravelTimeSufficiency, estimateTravelMinutesKm } from '../../utils/geoUtils';
 import { 
-  parseTreatmentsFromDetail, 
-  DEFAULT_CLINIC_SERVICES_FALLBACK, 
-  isAddonService, 
+  parseTreatmentsFromDetail,
+  isAddonService,
   SelectedTreatmentItem 
 } from '../../utils/treatmentParser';
 import { StaffScheduleTimelineStrip } from './StaffScheduleTimelineStrip';
@@ -188,6 +187,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   const { user } = useAuth();
   const { toast, confirm } = useUiFeedback();
   const [submitting, setSubmitting] = useState(false);
+  const submitRequestIdRef = useRef<string>('');
 
   // Form State
   const [customerId, setCustomerId] = useState('');
@@ -197,7 +197,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   const [searchingCustomer, setSearchingCustomer] = useState(false);
 
   // Service Catalog
-  const [services, setServices] = useState<ClinicServiceItem[]>(DEFAULT_CLINIC_SERVICES_FALLBACK);
+  const [services, setServices] = useState<ClinicServiceItem[]>([]);
   const [loadingServices, setLoadingServices] = useState(false);
   const [serviceSearch, setServiceSearch] = useState('');
   const [isServiceDropdownOpen, setIsServiceDropdownOpen] = useState(false);
@@ -708,8 +708,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         const res = await apiRequest('/api/admin/services');
         const list = Array.isArray(res) ? res : res?.data || [];
         const activeList = list.filter((s: ClinicServiceItem) => s.isActive !== false);
-        const finalList = activeList.length > 0 ? activeList : DEFAULT_CLINIC_SERVICES_FALLBACK;
-        setServices(finalList);
+        // Single source: DB/API. Empty list = tampilkan empty state, bukan harga fallback.
+        setServices(activeList);
 
         // Auto-repair any selected treatments that currently have price === 0
         setSelectedTreatments((prev) => {
@@ -717,7 +717,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           let changed = false;
           const next = prev.map((t) => {
             if (!t.price || t.price === 0) {
-              const matched = matchCatalogService(t.name, finalList as any);
+              const matched = matchCatalogService(t.name, activeList as any);
               if (matched) {
                 changed = true;
                 return {
@@ -732,7 +732,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           return changed ? next : prev;
         });
       } catch {
-        setServices(DEFAULT_CLINIC_SERVICES_FALLBACK);
+        setServices([]);
       } finally {
         setLoadingServices(false);
       }
@@ -824,7 +824,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   // Pre-fill state when opened in edit mode — Fase 3R anti-race hidrasi katalog
   useEffect(() => {
     if (isOpen && mode === 'edit' && initialReservation) {
-      const isLiveCatalogReady = services !== DEFAULT_CLINIC_SERVICES_FALLBACK && services.length > 0;
+      const isLiveCatalogReady = services.length > 0;
       const alreadyHydratedForm = initializedEditIdRef.current === initialReservation.id;
 
       if (alreadyHydratedForm) {
@@ -1145,7 +1145,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     // 4. Auto-match treatment ke katalog dinamis database.
     // F-B4: tunggu katalog LIVE (jangan kunci ke fallback statis) agar harga/nama
     // resmi DB yang dipakai, bukan fallback JSON.
-    const isLiveCatalogReady = services !== DEFAULT_CLINIC_SERVICES_FALLBACK && services.length > 0;
+    const isLiveCatalogReady = services.length > 0;
     if (initialTreatmentName && selectedTreatments.length === 0 && !prefillTreatmentMatchedRef.current && isLiveCatalogReady) {
       const matched = matchCatalogService(initialTreatmentName, services as any);
       if (matched) {
@@ -1486,6 +1486,9 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   };
 
   const buildCreatePayload = (force = false) => {
+    if (!submitRequestIdRef.current) {
+      submitRequestIdRef.current = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `req_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    }
     let fullBookingIso: string | undefined = undefined;
     if (bookingDate && bookingTime) {
       fullBookingIso = buildWibIso(bookingDate, bookingTime);
@@ -1516,6 +1519,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         purchaseValue: subtotalTreatments,
         discountAmount: Number(discount) || 0,
         ongkir: Number(ongkir) || 0,
+        requestId: submitRequestIdRef.current || undefined,
         ...(force ? { force: true } : {}),
       },
     };
@@ -1603,6 +1607,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       setShowConflictModal(false);
       setConflictInfo(null);
       discardDraft(true);
+      submitRequestIdRef.current = '';
       const savedRes = res?.reservation || res?.data || res;
       const enrichedRes = enrichResWithFormState(savedRes);
       onSuccess(enrichedRes);
@@ -1744,6 +1749,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           });
           toast('Jadwal reservasi multi-treatment berhasil dibuat!', 'success');
           discardDraft(true);
+          submitRequestIdRef.current = '';
           const savedRes = res?.reservation || res?.data || res;
           const enrichedRes = enrichResWithFormState(savedRes);
           onSuccess(enrichedRes);
@@ -2513,6 +2519,13 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                         </div>
                       );
                     })}
+                    {filteredServices.length === 0 && (
+                      <div className="p-4 text-center text-xs text-ink-3">
+                        {loadingServices
+                          ? 'Memuat katalog layanan...'
+                          : 'Katalog layanan belum tersedia. Periksa koneksi DB lalu buka ulang form ini.'}
+                      </div>
+                    )}
                   </div>
 
                   {/* Bottom Checklist / OK Button */}

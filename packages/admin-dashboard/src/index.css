@@ -270,6 +270,13 @@ html[data-keyboard-open="true"] .chat-composer-container {
   margin-bottom: 0px !important;
 }
 
+/* AUDIT FASE 4: padding safe-area sebenarnya berada di wrapper DALAM composer,
+   bukan hanya container luar. Tanpa rule ini, keyboard iOS menyisakan celah
+   ±0.5rem + inset di atas keyboard. */
+html[data-keyboard-open="true"] .chat-composer-inner {
+  padding-bottom: 2px !important;
+}
+
 /* Modal & Sidebar Backdrop overscroll isolation */
 .modal-backdrop,
 .backdrop-blur-xs,

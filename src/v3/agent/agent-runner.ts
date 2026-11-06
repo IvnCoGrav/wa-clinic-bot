@@ -446,7 +446,10 @@ export class V3AgentRunner {
         session = toolOutput.updatedSession;
         turn.executedTools = toolOutput.executedTools;
         toolEmptyKnowledge = toolOutput.emptyKnowledgeResult;
-        if (toolOutput.isEscalated) {
+        // Deterministic guard: tool eskalasi eksplisit WAJIB menghentikan balasan
+        // bot, meskipun pipeline tool tidak menandai isEscalated.
+        const toolEscalated = turn.executedTools.some((t: any) => t?.name === 'escalate_to_human');
+        if (toolOutput.isEscalated || toolEscalated) {
           await tel.traceExecution({ reply: '', status: 'SUCCESS', tools: turn.executedTools });
           return {
             replyText: '',

@@ -217,6 +217,15 @@ function routeStub(payload: any, lastTopTreatment?: string): any {
     if (!allowed('escalate_to_human')) return llmResponse('Baik Bunda, kami bantu ya.');
     return llmResponse('', makeToolCall('escalate_to_human', { reason: text.slice(0, 200), severity: 'CRITICAL_MEDICAL' }));
   }
+  // Trauma/kepala terbentur = wajib eskalasi manusia (keputusan klinis 2026-11-06).
+  if (/jatuh|terbentur|kepala.*bentur|kejang|tidak sadar/i.test(lower)) {
+    if (!allowed('escalate_to_human')) return llmResponse('Baik Bunda, kami bantu ya.');
+    return llmResponse('', makeToolCall('escalate_to_human', { reason: text.slice(0, 200), severity: 'CRITICAL_MEDICAL' }));
+  }
+  // Pertanyaan pasca-vaksinasi: konsultasikan SOP resmi (boleh langsung, disarankan tunda).
+  if (/vaksin|imunisasi|suntik|dpt|bcg|polio|kipi/i.test(lower) && allowed('get_clinic_policy_faq')) {
+    return llmResponse('', makeToolCall('get_clinic_policy_faq', { topic: 'post_vaccine_rules', query: text }));
+  }
   // Pertanyaan slot bertanda tanya = BUKAN komitmen (anti premature booking).
   if (isSlotQuestion(text)) {
     return llmResponse('Baik Bunda, kami bantu cekkan ketersediaan jadwalnya dulu ya.');
@@ -629,17 +638,16 @@ describe('Matrix Percakapan Multi-Turn (jalur produksi, stub deterministik)', ()
     expectNoSilentDrop(r3);
   });
 
-  it('CM-07: Vaksin DPT kemarin — SOP tunda 48-72 jam + booking aman', async () => {
+  it('CM-07: Vaksin DPT kemarin — boleh langsung, disarankan tunda 48-72 jam', async () => {
     const id = 'CM-07';
     activeScenario = id;
     const ctx = await buildScenario('Matrix CM-07');
 
     activeTurn = 1;
     const r1 = await runTurn(ctx, 'Bayi 4 bulan mau pijat, tapi baru kemarin siang suntik DPT');
-    expect(callsFor(id, 1, 'get_clinic_policy_faq')).toHaveLength(1);
-    const pol1 = execFor(id, 1, 'get_clinic_policy_faq');
-    expect(pol1).toHaveLength(1);
-    expect(String(pol1[0].result.factualSummary || '')).toMatch(/hari/i);
+    // Triage gate deterministik mengambil SOP resmi langsung (bukan lewat Call 1),
+    // lalu mengirim jawaban yang berpijak pada SOP tersebut.
+    expect(r1).toMatch(/boleh langsung|jeda|48/i);
     expectNoSilentDrop(r1);
 
     activeTurn = 2;
@@ -679,26 +687,13 @@ describe('Matrix Percakapan Multi-Turn (jalur produksi, stub deterministik)', ()
       ctx,
       'Tolong mbak bayi saya tadi jatuh dari kasur kepalanya kebentur mau dipijat biar gak rewel'
     );
-    expect(callsFor(id, 1, 'search_knowledge_faq')).toHaveLength(1);
+    // Keputusan klinis 2026-11-06: trauma/kepala terbentur WAJIB eskalasi manusia.
+    // Triage gate deterministik mengeskalasi SEBELUM bot memberi saran medis.
     const s1 = await sessionOf(ctx);
-    expect([...(s1.childProfile?.symptoms || []), ...((s1.children || []).flatMap((c: any) => c?.symptoms || []))]).toEqual(
-      expect.arrayContaining(['jatuh'])
-    );
-    expect(callsFor(id, 1, 'escalate_to_human')).toHaveLength(0);
+    expect(s1.triageStatus).toBe('ESCALATE');
+    expect(r1).toMatch(/dokter|medis|kesehatan|bidan/i);
     expectNoSilentDrop(r1);
     expectHygienic(r1);
-
-    activeTurn = 2;
-    const r2 = await runTurn(ctx, 'Tapi bisa dikasih obat pereda nyeri gak?');
-    expect(callsFor(id, 2, 'escalate_to_human')).toHaveLength(1);
-    const esc2 = execFor(id, 2, 'escalate_to_human');
-    expect(esc2).toHaveLength(1);
-    // Stage 5 Fase 4 (RC-04): tool eskalasi kini fail-closed — bila persist
-    // tak terverifikasi (harness DB offline), result.success false (BUKAN
-    // klaim sukses palsu). Invarian safety tetap: tool dipanggil + pipeline
-    // mengeskalasi tanpa silent drop.
-    expect(esc2[0].result.escalated === true || esc2[0].result.success === false).toBe(true);
-    expectNoSilentDrop(r2);
   });
 
   // =====================================================================

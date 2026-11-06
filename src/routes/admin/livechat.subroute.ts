@@ -10,6 +10,7 @@ import { messageService } from '../../services/message.service';
 import { responseCacheService } from '../../services/response-cache.service';
 import { ConversationState } from '@prisma/client';
 import { createMonotonicSseSequencer } from '../../utils/sse-sequence';
+import { encodeMessageCursor } from '../../utils/message-cursor';
 
 /**
  * Fase 0.4: penomoran event SSE monotonik proses-wide (bukan acak). Klien admin
@@ -17,6 +18,56 @@ import { createMonotonicSseSequencer } from '../../utils/sse-sequence';
  * terdeteksi klien merekonsiliasi via loadChats/loadThread (lihat LiveChatMonitor).
  */
 const liveChatSseSeq = createMonotonicSseSequencer();
+
+/**
+ * AUDIT FASE 2 (T-01): verifikasi kebenaran status baca SEBELUM menyiarkan
+ * `unreadCount` ke dashboard lain. Service memakai memory fallback saat DB
+ * offline; tanpa verifikasi ini, badge padam di semua tab lalu unread muncul
+ * lagi setelah reload (ghost read).
+ */
+async function isConversationReadStatePersisted(
+  conversationId: string,
+  tenantId: string,
+  expectUnread: boolean
+): Promise<boolean> {
+  try {
+    const conv = await prisma.conversation.findFirst({
+      where: { id: conversationId, tenant_id: tenantId },
+      select: { is_manual_unread: true },
+    });
+    if (!conv) return false;
+    if (expectUnread) return conv.is_manual_unread === true;
+    if (conv.is_manual_unread !== false) return false;
+    const remaining = await prisma.message.count({
+      where: {
+        conversation_id: conversationId,
+        tenant_id: tenantId,
+        direction: 'INBOUND',
+        read_at: null,
+      },
+    });
+    return remaining === 0;
+  } catch {
+    return false;
+  }
+}
+
+/** Paritas untuk mark-all-read: pastikan tidak ada unread tersisa di DB. */
+async function isTenantFullyReadPersisted(tenantId: string): Promise<boolean> {
+  try {
+    const remaining = await prisma.message.count({
+      where: {
+        tenant_id: tenantId,
+        direction: 'INBOUND',
+        read_at: null,
+        conversation: { customer: { is_sandbox_test: false } },
+      },
+    });
+    return remaining === 0;
+  } catch {
+    return false;
+  }
+}
 
 export async function livechatAdminRoutes(fastify: FastifyInstance) {
   /**
@@ -340,6 +391,46 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * PATCH /api/admin/live-chat/conversations/:id/shareloc-requested
+   * Menandai bahwa staf SUDAH meminta titik presisi (shareloc) pada percakapan
+   * ini. Sinyal ini dipakai badge/reminder sebagai cooldown 6 jam agar staf
+   * tidak diminta menagih shareloc berulang-ulang (audit C-006).
+   */
+  fastify.patch(
+    '/api/admin/live-chat/conversations/:id/shareloc-requested',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply) => {
+      const { id } = request.params;
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      try {
+        const conv = await (prisma as any).conversation.findFirst({
+          where: { id, tenant_id: tenantId },
+          select: { id: true, session_data: true },
+        });
+        if (!conv) {
+          return reply.status(404).send({ success: false, error: 'Conversation tidak ditemukan' });
+        }
+        const nowIso = new Date().toISOString();
+        const prevSession =
+          conv.session_data && typeof conv.session_data === 'object' ? conv.session_data : {};
+        await (prisma as any).conversation.updateMany({
+          where: { id, tenant_id: tenantId },
+          data: { session_data: { ...prevSession, shareloc_requested_at: nowIso } },
+        });
+        void getLiveChatHub()
+          .publish({
+            type: 'conversation.updated',
+            tenantId,
+            payload: { conversationId: id, sharelocRequestedAt: nowIso },
+          })
+          .catch(() => {});
+        return reply.status(200).send({ success: true, data: { sharelocRequestedAt: nowIso } });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
    * GET /api/admin/live-chat/conversations/:id/messages
    * Thread pesan sebuah percakapan (kronologis) + cursor pagination opsional:
    * ?limit=50&before=<ISO timestamp>. Tanpa param = 50 pesan terakhir (identik legacy).
@@ -366,13 +457,15 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
           before,
           focusMessageId
         );
-        const oldest = messages.length > 0 ? (messages[0] as any)?.created_at : null;
+        // Cursor komposit (created_at|id) agar pesan bertimestamp sama tidak
+        // terlewat di batas halaman (audit #316 / T-09).
+        const oldest = messages.length > 0 ? (messages[0] as any) : null;
         return reply.status(200).send({
           success: true,
           count: messages.length,
           data: messages,
           hasMore,
-          oldestCursor: oldest ? new Date(oldest).toISOString() : null,
+          oldestCursor: oldest ? encodeMessageCursor(oldest.created_at, oldest.id) : null,
           pinnedMessage: pinnedMessage || null,
         });
       } catch (err: any) {
@@ -521,7 +614,9 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
         }
         // 2. Mulai status typing ("sedang mengetik...")
         if (gateway.providerType === 'WAHA') {
-          const { wahaClient } = await import('../../integrations/waha/client');
+          // K-03b: session WAHA milik tenant, bukan env global.
+          const { getWahaClientForTenant } = await import('../../integrations/whatsapp/factory');
+          const wahaClient = await getWahaClientForTenant(tenantId);
           await wahaClient.startTyping(phone).catch((err: any) => console.warn('[TYPING ERROR] startTyping failed:', err.message));
         } else if (typeof gateway.sendTypingIndicator === 'function') {
           await gateway.sendTypingIndicator(phone, undefined, 4000).catch(() => {});
@@ -529,7 +624,8 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       } else {
         // Hentikan status typing
         if (gateway.providerType === 'WAHA') {
-          const { wahaClient } = await import('../../integrations/waha/client');
+          const { getWahaClientForTenant } = await import('../../integrations/whatsapp/factory');
+          const wahaClient = await getWahaClientForTenant(tenantId);
           await wahaClient.stopTyping(phone).catch((err: any) => console.warn('[TYPING ERROR] stopTyping failed:', err.message));
         }
       }
@@ -879,8 +975,9 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
         }
         restoredState = existing.previous_state || 'INITIAL';
 
-        const updated = await prisma.conversation.update({
-          where: { id },
+        // AUDIT FASE 3: tenant-scoped write (bukan hanya pre-check findFirst).
+        const releaseRes = await prisma.conversation.updateMany({
+          where: { id, tenant_id: tenantId },
           data: {
             is_human_handling: false,
             human_handling_since: null,
@@ -888,6 +985,9 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
             current_state: restoredState as any,
           },
         });
+        if (releaseRes.count === 0) throw new Error('Conversation not found for tenant');
+        const updated = await prisma.conversation.findFirst({ where: { id, tenant_id: tenantId } });
+        if (!updated) throw new Error('Conversation not found for tenant');
 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
@@ -992,8 +1092,8 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       const now = new Date();
       let updated: any = null;
       try {
-        updated = await prisma.conversation.update({
-          where: { id },
+        const takeoverRes = await prisma.conversation.updateMany({
+          where: { id, tenant_id: tenantId },
           data: {
             is_human_handling: true,
             human_handling_since: now,
@@ -1001,6 +1101,8 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
             previous_state: existing.current_state || 'INITIAL',
           },
         });
+        if (takeoverRes.count === 0) throw new Error('Conversation not found for tenant');
+        updated = await prisma.conversation.findFirst({ where: { id, tenant_id: tenantId } });
       } catch (dbErr: any) {
         console.warn('[ADMIN TAKEOVER DB ERROR]', dbErr.message);
       }
@@ -1144,6 +1246,17 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     try {
       const count = await messageService.markAllMessagesAsRead(tenantId);
 
+      // GERBANG (T-01): jangan siarkan allRead bila DB belum benar-benar bersih.
+      const persisted = await isTenantFullyReadPersisted(tenantId);
+      if (!persisted) {
+        return reply.status(200).send({
+          success: true,
+          degraded: true,
+          count,
+          message: 'Perintah diterima, tetapi status baca belum tersinkron ke database. Muat ulang setelah koneksi pulih.',
+        });
+      }
+
       // Broadcast update via LiveChatHub
       try {
         const hub = getLiveChatHub();
@@ -1177,6 +1290,16 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
       try {
         await messageService.markConversationMessagesAsRead(id, tenantId);
+
+        // GERBANG (T-01): hanya siarkan unread=0 jika DB benar-benar sudah tersinkron.
+        const persisted = await isConversationReadStatePersisted(id, tenantId, false);
+        if (!persisted) {
+          return reply.status(200).send({
+            success: true,
+            degraded: true,
+            message: 'Percakapan ditandai dibaca secara lokal, tetapi database belum tersinkron. Muat ulang setelah koneksi pulih.',
+          });
+        }
         const conv = await conversationService.getConversationById(id, tenantId);
 
         // Broadcast update via LiveChatHub
@@ -1212,6 +1335,16 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
       try {
         await messageService.markConversationAsUnread(id, tenantId);
+
+        // GERBANG (T-01): paritas — jangan siarkan "belum dibaca" bila DB gagal.
+        const persisted = await isConversationReadStatePersisted(id, tenantId, true);
+        if (!persisted) {
+          return reply.status(200).send({
+            success: true,
+            degraded: true,
+            message: 'Status belum dibaca disimpan lokal, tetapi database belum tersinkron.',
+          });
+        }
         const conv = await conversationService.getConversationById(id, tenantId);
 
         // Broadcast update via LiveChatHub

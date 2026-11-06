@@ -30,6 +30,10 @@ export function useLiveChatNotification(currentRole: string) {
   const [unreadLiveChatCount, setUnreadLiveChatCount] = useState<number>(0);
   const recentMessageIdsRef = useRef<Set<string>>(new Set());
   const toastTimeoutRef = useRef<any>(null);
+  // AUDIT FASE 2 (K-06): badge unread dulu hanya NAIK (setiap SSE inbound +1,
+  // reset hanya saat "mark all read") sehingga bisa jauh lebih besar dari
+  // kenyataan. Sekarang angka di-rekonsiliasi dari endpoint DB (debounced).
+  const unreadRefreshTimerRef = useRef<any>(null);
 
   // Check if current logged-in role has permissions to access Live Chat
   const canAccessLiveChat = hasAccess(currentRole, '/admin/live-chat');
@@ -98,16 +102,48 @@ export function useLiveChatNotification(currentRole: string) {
     return cleanup;
   }, [canAccessLiveChat]);
 
+  const refreshUnreadCount = useCallback((immediate = false) => {
+    if (unreadRefreshTimerRef.current) {
+      clearTimeout(unreadRefreshTimerRef.current);
+      unreadRefreshTimerRef.current = null;
+    }
+    const run = () => {
+      apiRequest('/api/admin/live-chat/unread-count')
+        .then((res) => {
+          if (res?.success && typeof res.count === 'number') {
+            setUnreadLiveChatCount(res.count);
+          } else if (typeof res === 'number') {
+            setUnreadLiveChatCount(res);
+          }
+        })
+        .catch(() => {
+          // Biarkan angka lama saat offline; jangan reset ke 0.
+        });
+    };
+    if (immediate) {
+      void run();
+    } else {
+      unreadRefreshTimerRef.current = setTimeout(run, 1200);
+    }
+  }, []);
+
   // Persistent Live Chat SSE Subscription for Notifications
   useEffect(() => {
     if (!canAccessLiveChat) return;
 
     const unsubscribe = connectLiveChatSse({
+      onStatusChange: (connected) => {
+        // Reconnect → angka badge bisa tertinggal selama offline. Rekonsiliasi.
+        if (connected) refreshUnreadCount(true);
+      },
       onEvent: (type, payload) => {
         if (type === 'conversation.updated') {
           if (payload?.allRead) {
             setUnreadLiveChatCount(0);
           }
+          // Setiap perubahan status (read/unread/pin/takeover) bisa mengubah
+          // total unread — jangan hanya menaikkan angka secara optimistis.
+          refreshUnreadCount();
         }
 
         if (type === 'message.created') {
@@ -156,8 +192,10 @@ export function useLiveChatNotification(currentRole: string) {
             });
           }
 
-          // 3. Increment sidebar unread badge
+          // 3. Increment sidebar unread badge (feedback instan) lalu rekonsiliasi
+          //    dengan hitungan DB agar tidak drift saat admin membaca chat.
           setUnreadLiveChatCount((prev) => prev + 1);
+          refreshUnreadCount();
 
           // 4. Show sleek in-app top drop-down banner (if not currently replying in live-chat)
           const isCurrentlyInLiveChat = location.pathname.includes('/live-chat');
@@ -182,9 +220,10 @@ export function useLiveChatNotification(currentRole: string) {
 
     return () => {
       if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+      if (unreadRefreshTimerRef.current) clearTimeout(unreadRefreshTimerRef.current);
       unsubscribe();
     };
-  }, [canAccessLiveChat, location.pathname, navigate]);
+  }, [canAccessLiveChat, location.pathname, navigate, refreshUnreadCount]);
 
   const dismissToast = useCallback(() => {
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);

@@ -17,6 +17,7 @@ import { sanitizeMessageForStaff, sanitizeStaffHubPayload } from '../../utils/pi
 import { sanitizeCustomerNameForGreeting } from '../../utils/name-sanitizer';
 import { ensureStaffSignature } from '../../utils/staff-signature';
 import { EN_ROUTE_STATUS } from '../../domain/reservation-status';
+import { reservationStatusService } from '../../services/reservation-status.service';
 import { createMonotonicSseSequencer } from '../../utils/sse-sequence';
 
 /**
@@ -556,16 +557,20 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ success: false, error: replyResult.error });
       }
 
-      // Persist status OTW + (opsional) pindah status ke `en_route` (dalam 1 update).
+      // Persist status OTW + (opsional) pindah status ke `en_route` (lewat seam kanonis).
       const nextStatus =
-        markEnRoute && ['confirmed', 'pending'].includes(statusLower) ? EN_ROUTE_STATUS : undefined;
-      await prisma.reservation.update({
-        where: { id },
-        data: {
-          otw_sent_at: new Date(),
-          ...(nextStatus ? { status: nextStatus } : {}),
-        },
-      });
+        markEnRoute && (await import('../../domain/reservation-status')).canTransition(statusLower, EN_ROUTE_STATUS) ? EN_ROUTE_STATUS : undefined;
+      if (nextStatus) {
+        await reservationStatusService.applyTransition(reservation as any, {
+          to: nextStatus,
+          extraData: { otw_sent_at: new Date() },
+        });
+      } else {
+        await prisma.reservation.update({
+          where: { id },
+          data: { otw_sent_at: new Date() },
+        });
+      }
 
       // Fase 1 (plan 2026-10-02): sambungkan titik keberangkatan Bidan ke memori
       // pemantauan CS. Tanpa ini, peta/motor & sisa km di widget CS kosong.

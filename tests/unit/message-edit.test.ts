@@ -52,15 +52,16 @@ describe('messageService.updateMessageContent (WAHA message.edited)', () => {
     // Tiru DB: cari baris hanya jika where cocok dengan baris tersimpan.
     vi.mocked(prisma.message.findFirst).mockImplementation((async (args: any) =>
       matchesWhere(storedRow, args?.where) ? storedRow : null) as any);
-    vi.mocked(prisma.message.update).mockResolvedValue({} as any);
+    // AUDIT FASE 3: mutasi memakai updateMany + tenant_id di WHERE.
+    vi.mocked(prisma.message.updateMany).mockResolvedValue({ count: 1 } as any);
   });
 
   it('E1: match raw key (editedMessageId) terhadap wa_message_id serialized', async () => {
     await messageService.updateMessageContent(RAW_KEY, 'Teks baru dari edit', TENANT);
 
-    const updateArg = vi.mocked(prisma.message.update).mock.calls[0]?.[0];
+    const updateArg = vi.mocked(prisma.message.updateMany).mock.calls[0]?.[0];
     expect(updateArg).toBeTruthy();
-    expect(updateArg.where).toEqual({ id: 'local-uuid-1' });
+    expect(updateArg.where).toEqual({ id: 'local-uuid-1', tenant_id: 'tenant-a' });
     expect(updateArg.data.content).toBe('Teks baru dari edit');
     expect(updateArg.data.payload_raw.is_edited).toBe(true);
   });
@@ -68,21 +69,28 @@ describe('messageService.updateMessageContent (WAHA message.edited)', () => {
   it('E2: match exact wa_message_id serialized (admin edit dari livechat)', async () => {
     await messageService.updateMessageContent(STORED_WA_ID, 'Teks baru', TENANT);
 
-    const updateArg = vi.mocked(prisma.message.update).mock.calls[0]?.[0];
-    expect(updateArg.where).toEqual({ id: 'local-uuid-1' });
+    const updateArg = vi.mocked(prisma.message.updateMany).mock.calls[0]?.[0];
+    expect(updateArg.where).toEqual({ id: 'local-uuid-1', tenant_id: 'tenant-a' });
   });
 
   it('E3: match via id internal (edit dari dashboard livechat)', async () => {
     await messageService.updateMessageContent('local-uuid-1', 'Teks baru', TENANT);
 
-    const updateArg = vi.mocked(prisma.message.update).mock.calls[0]?.[0];
-    expect(updateArg.where).toEqual({ id: 'local-uuid-1' });
+    const updateArg = vi.mocked(prisma.message.updateMany).mock.calls[0]?.[0];
+    expect(updateArg.where).toEqual({ id: 'local-uuid-1', tenant_id: 'tenant-a' });
   });
 
   it('E4: tidak match → tidak ada update (tidak crash)', async () => {
     await messageService.updateMessageContent('key-tidak-dikenal', 'text', TENANT);
 
-    expect(prisma.message.update).not.toHaveBeenCalled();
+    expect(prisma.message.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('E7 (ADVERSARIAL): tenant lain TIDAK bisa mengedit pesan tenant pemilik', async () => {
+    await messageService.updateMessageContent(STORED_WA_ID, 'Teks dari tenant lain', 'tenant-b');
+
+    // findFirst tenant-scoped mengembalikan null → tidak ada mutasi sama sekali.
+    expect(prisma.message.updateMany).not.toHaveBeenCalled();
   });
 
   it('E5: DB error → fallback memory tidak crash', async () => {

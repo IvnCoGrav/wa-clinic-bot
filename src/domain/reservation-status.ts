@@ -1,3 +1,4 @@
+export const PAUSED_STATUS = 'paused';
 /**
  * reservation-status.ts — Single Source of Truth domain status reservasi.
  *
@@ -136,8 +137,10 @@ export function canTransition(from: string | null | undefined, to: string | null
   const t = String(to);
   if (t === 'hold') return f === 'pending';
   if (f === 'hold') return t === 'confirmed' || t === 'pending' || t === 'cancelled';
-  if (f === 'pending') return t === 'confirmed' || t === 'cancelled' || t === 'hold';
-  if (f === 'confirmed' || f === 'en_route') return t === 'completed' || t === 'cancelled';
+  if (f === 'pending') return t === 'confirmed' || t === 'cancelled' || t === 'hold' || t === 'en_route' || t === 'paused';
+  if (f === 'confirmed') return t === 'completed' || t === 'cancelled' || t === 'paused' || t === 'en_route';
+  if (f === 'en_route') return t === 'completed' || t === 'cancelled';
+  if (f === 'paused') return t === 'confirmed' || t === 'cancelled';
   return false;
 }
 

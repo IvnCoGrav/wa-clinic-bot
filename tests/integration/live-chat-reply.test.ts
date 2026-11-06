@@ -4,6 +4,7 @@ import { customerService } from '../../src/services/customer.service';
 import { conversationService } from '../../src/services/conversation.service';
 import { messageService } from '../../src/services/message.service';
 import { createTestGateway, resetGateway } from '../../src/integrations/whatsapp/factory';
+import { callChatCompletionsWithFallback } from '../../src/integrations/llm/model-fallback';
 import { FastifyInstance } from 'fastify';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 
@@ -27,12 +28,19 @@ const { getChats: mockGetChats, getMessages: mockGetMessages, getPhoneNumberFrom
 // Mock LLM transport: suggest-reply TIDAK boleh menembak network LLM nyata saat test offline
 // (kebocoran kredensial `.env` membuat request 15s-timeout + retry → flaky). Isolasi seam,
 // bukan menurunkan validasi: endpoint tetap harus menghasilkan draft.
-vi.mock('../../src/integrations/llm/model-fallback', () => ({
-  callChatCompletionsWithFallback: vi.fn().mockResolvedValue({
-    data: { choices: [{ message: { content: 'Draf saran balasan dari Bidan Yusi untuk test.' } }] },
-    usage: {},
-  }),
-}));
+vi.mock('../../src/integrations/llm/model-fallback', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/integrations/llm/model-fallback')>();
+  return {
+    ...actual,
+    // Hanya transport LLM yang di-stub. Export lain (mis. getFallbackModel yang
+    // dipakai llm-gateway) WAJIB tetap nyata — kalau tidak, service jatuh ke
+    // catch fallback dan test "green" padahal LLM tidak pernah dipanggil.
+    callChatCompletionsWithFallback: vi.fn().mockResolvedValue({
+      data: { choices: [{ message: { content: 'Draf saran balasan dari Bidan Yusi untuk test.' } }] },
+      usage: {},
+    }),
+  };
+});
 
 const ADMIN_KEY = 'test_admin_key_livechat';
 
@@ -79,6 +87,39 @@ describe('Live Chat Admin Endpoints (monitor & balas)', () => {
     expect(body.success).toBe(true);
     expect(body.data.conversation.isHumanHandling).toBe(true);
     expect(fake.sendTextMessage).toHaveBeenCalledWith(phone, 'Baik Bunda, dokter akan segera merespon');
+  });
+
+  it('ADVERSARIAL: pesan SUDAH terkirim ke gateway tetapi pencatatan DB gagal → tetap 200 + warning, bukan 500', async () => {
+    const fake = {
+      providerType: 'WAHA',
+      sendTextMessage: vi.fn().mockResolvedValue({ success: true, messageId: 'waid_persist_fail', provider: 'WAHA' }),
+    } as any;
+    createTestGateway(fake, DEFAULT_TENANT_ID);
+
+    const phone = `628512${Date.now().toString().slice(-7)}`;
+    const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Persist Fail', DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+
+    // Simulasi DB down TEPAT setelah gateway sukses (akar K-01: admin kirim ulang → dobel).
+    const logSpy = vi.spyOn(messageService, 'logMessage').mockRejectedValueOnce(new Error('DB write failed'));
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/admin/live-chat/conversations/${conversation.id}/reply`,
+        headers: { 'x-api-key': ADMIN_KEY },
+        payload: { text: 'Pesan yang sudah sampai ke pasien', adminName: 'Admin Uji' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.success).toBe(true);
+      expect(body.data.messageId).toBe('waid_persist_fail');
+      expect(body.data.warning).toBe('MESSAGE_SENT_NOT_PERSISTED');
+      // Gateway tetap dipanggil tepat sekali — tidak ada retry yang mengirim dobel.
+      expect(fake.sendTextMessage).toHaveBeenCalledTimes(1);
+    } finally {
+      logSpy.mockRestore();
+    }
   });
 
   it('POST /api/admin/live-chat/conversations/:id/reply menerima mediaUrl dan mengirim pesan gambar ke gateway', async () => {
@@ -354,7 +395,29 @@ describe('Live Chat Admin Endpoints (monitor & balas)', () => {
     const body = JSON.parse(res.body);
     expect(body.success).toBe(true);
     expect(typeof body.data.draftText).toBe('string');
-    expect(body.data.draftText.length).toBeGreaterThan(0);
+    // Assert isi stub — membuktikan jalur LLM benar-benar dieksekusi, bukan
+    // kalimat fallback dari catch (anti "hijau palsu").
+    expect(body.data.draftText).toBe('Draf saran balasan dari Bidan Yusi untuk test.');
+  });
+
+  it('ADVERSARIAL: LLM gagal → endpoint 500 (bukan draf template yang dilaporkan "berhasil")', async () => {
+    const phone = `628902${Date.now().toString().slice(-7)}`;
+    const cust = await customerService.getOrCreateCustomer(phone, 'Bunda AI Gagal', DEFAULT_TENANT_ID);
+    const conv = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
+
+    (callChatCompletionsWithFallback as any).mockRejectedValueOnce(new Error('LLM provider down'));
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/admin/live-chat/conversations/${conv.id}/suggest-reply`,
+      headers: { 'x-api-key': ADMIN_KEY },
+    });
+
+    expect(res.statusCode).toBe(500);
+    const body = JSON.parse(res.body);
+    expect(body.success).toBe(false);
+    expect(body.data).toBeUndefined();
+    expect(String(body.error)).toContain('Gagal membuat draf balasan AI');
   });
 
   it('GET /api/admin/customers/:id mengembalikan detail customer & metrik', async () => {
@@ -371,6 +434,9 @@ describe('Live Chat Admin Endpoints (monitor & balas)', () => {
     expect(body.data.id).toBe(cust.id);
     expect(typeof body.data.ltv).toBe('number');
     expect(typeof body.data.purchaseCount).toBe('number');
+    // Badge ownership read-only: field harus selalu ada (null bila belum ada kunjungan selesai).
+    expect(body.data).toHaveProperty('staffOwnership');
+    expect(body.data.staffOwnership).toBeNull();
   });
 });
 

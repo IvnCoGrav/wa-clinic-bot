@@ -411,8 +411,32 @@ export function cleanBundaName(name?: string | null, kecamatan?: string | null, 
 }
 
 /**
+ * Validasi label treatment form. Satu label pendek ATAU multi-treatment yang
+ * dipisah `+`, `,`, `&`, atau `dan`. Setiap bagian divalidasi terpisah agar
+ * nama sah seperti "pijat bayi pulih ceria + sinar moksa" tidak ditolak hanya
+ * karena panjang totalnya melebihi 35 karakter (audit #301).
+ */
+export function splitTreatmentLabel(raw: string | null | undefined): string[] {
+  return (raw || '')
+    .split(/\s*(?:\+|,|&|\bdan\b)\s*/i)
+    .map((p) => p.trim())
+    .filter(Boolean);
+}
+
+export function isValidTreatmentLabel(raw: string | null | undefined): boolean {
+  const s = (raw || '').trim();
+  if (!s || s === '-' || s.includes('?')) return false;
+  const parts = splitTreatmentLabel(s);
+  if (parts.length === 0) return false;
+  return parts.every((p) => {
+    const words = p.split(/\s+/).filter(Boolean);
+    return words.length > 0 && words.length <= 5 && p.length <= 35;
+  });
+}
+
+/**
  * Guard ketat: teks label teknis formulir ("Treatment :", "Usia Bayi/Anak :", ...)
- * DILARANG menjadi usia anak — cegah data korup (mis. raw_age_text "Treatment :")
+ * DILARANG menjadi usia anak - cegah data korup (mis. raw_age_text "Treatment :")
  * bocor ke invoice. Berbeda dengan isValidChildName (validasi nama), ini validasi usia.
  */
 export function isFormLabelAge(age: string | null | undefined): boolean {
@@ -931,21 +955,19 @@ export function extractScheduleFromMessages(
   if (babyTreatMatch && babyTreatMatch[1].trim()) {
     const rawT = babyTreatMatch[1].trim().replace(/^(?:baby|anak)\s*:\s*/i, '');
     if (rawT && rawT !== '-' && !/^(?:pilihan|payment|harga|total|ongkir)\b/i.test(rawT)) {
-      if (clinicServices.length > 0) {
+      // Multi-treatment WAJIB dipertahankan utuh; jangan di-kanonikalisasi ke
+      // satu layanan pertama (add-on seperti Sinar Moksa bisa hilang).
+      if (splitTreatmentLabel(rawT).length > 1) {
+        if (isValidTreatmentLabel(rawT)) babyTreatment = rawT;
+      } else if (clinicServices.length > 0) {
         const matched = matchCatalogService(rawT, clinicServices as any);
         if (matched) {
           babyTreatment = matched.name;
-        } else {
-          const words = rawT.split(/\s+/).filter(Boolean);
-          if (words.length <= 5 && rawT.length <= 35 && !rawT.includes(',') && !rawT.includes('?')) {
-            babyTreatment = rawT;
-          }
-        }
-      } else {
-        const words = rawT.split(/\s+/).filter(Boolean);
-        if (words.length <= 5 && rawT.length <= 35 && !rawT.includes(',') && !rawT.includes('?')) {
+        } else if (isValidTreatmentLabel(rawT)) {
           babyTreatment = rawT;
         }
+      } else if (isValidTreatmentLabel(rawT)) {
+        babyTreatment = rawT;
       }
     }
   }
@@ -957,21 +979,17 @@ export function extractScheduleFromMessages(
     if (momsTreatMatch && momsTreatMatch[1].trim()) {
       const rawT = momsTreatMatch[1].trim().replace(/^moms?\s*:\s*/i, '');
       if (rawT && rawT !== '-' && !/^(?:pilihan|payment|harga|total|ongkir|usia)\b/i.test(rawT)) {
-        if (clinicServices.length > 0) {
+        if (splitTreatmentLabel(rawT).length > 1) {
+          if (isValidTreatmentLabel(rawT)) momsTreatment = rawT;
+        } else if (clinicServices.length > 0) {
           const matched = matchCatalogService(rawT, clinicServices as any);
           if (matched) {
             momsTreatment = matched.name;
-          } else {
-            const words = rawT.split(/\s+/).filter(Boolean);
-            if (words.length <= 5 && rawT.length <= 35 && !rawT.includes(',') && !rawT.includes('?')) {
-              momsTreatment = rawT;
-            }
-          }
-        } else {
-          const words = rawT.split(/\s+/).filter(Boolean);
-          if (words.length <= 5 && rawT.length <= 35 && !rawT.includes(',') && !rawT.includes('?')) {
+          } else if (isValidTreatmentLabel(rawT)) {
             momsTreatment = rawT;
           }
+        } else if (isValidTreatmentLabel(rawT)) {
+          momsTreatment = rawT;
         }
       }
     }

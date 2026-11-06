@@ -667,6 +667,9 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
             source: 'ADMIN_PANEL',
             force: force === true,
             status: 'confirmed',
+            requestId: typeof (request.body as any)?.requestId === 'string'
+              ? (request.body as any).requestId.trim() || undefined
+              : undefined,
           });
           reservation = result.reservation;
         } catch (conflictErr: any) {
@@ -814,6 +817,9 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
             source: 'ADMIN_PANEL',
             force,
             status: 'hold',
+            requestId: typeof (request.body as any)?.requestId === 'string'
+              ? (request.body as any).requestId.trim() || undefined
+              : undefined,
           });
         } catch (conflictErr: any) {
           if (conflictErr instanceof ReservationConflictError) {

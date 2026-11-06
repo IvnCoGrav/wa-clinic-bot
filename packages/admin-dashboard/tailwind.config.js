@@ -3,6 +3,12 @@ const c = (name) => `rgb(var(--c-${name}) / <alpha-value>)`;
 
 export default {
   darkMode: 'class',
+  // AUDIT FASE 4 (S-06): Tailwind v3 hanya membungkus hover dengan
+  // `@media (hover: hover)` bila flag ini aktif. Tanpa flag, gaya hover
+  // "menempel" setelah tap di HP dan admin salah mengira chat terpilih.
+  future: {
+    hoverOnlyWhenSupported: true,
+  },
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",

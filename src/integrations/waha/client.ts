@@ -96,10 +96,11 @@ export class WahaClient implements IWahaClient {
   // mutasi untuk chat yang sama dijalankan sekuensial.
   private labelLocks = new Map<string, Promise<void>>();
 
-  constructor() {
+  constructor(options?: { session?: string }) {
     this.baseUrl = (process.env.WAHA_BASE_URL || 'http://localhost:3001').replace(/\/$/, '');
     this.apiKey = process.env.WAHA_API_KEY || '';
-    this.session = process.env.WAHA_SESSION || 'default';
+    // AUDIT FASE 3: session per-tenant (tenants.waha_session_id). Default tetap env.
+    this.session = (options?.session || process.env.WAHA_SESSION || 'default').trim() || 'default';
   }
 
   private get headers() {

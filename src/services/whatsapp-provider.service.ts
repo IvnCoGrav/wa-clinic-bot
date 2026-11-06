@@ -83,6 +83,14 @@ export class WhatsappProviderService {
     return process.env.WAHA_SESSION || 'default';
   }
 
+  /**
+   * AUDIT FASE 3 (K-03): seam publik untuk membaca session WAHA milik tenant.
+   * Dipakai sync history agar TIDAK memakai session global lintas tenant.
+   */
+  public async getSessionIdForTenant(tenantId: string): Promise<string> {
+    return this.resolveSessionId(tenantId);
+  }
+
   private statusMessage(status: string): string {
     switch (status) {
       case 'FAILED':

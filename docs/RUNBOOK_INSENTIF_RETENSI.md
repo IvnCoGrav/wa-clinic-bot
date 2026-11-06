@@ -87,9 +87,9 @@ Bidan memiliki hak transparansi penuh atas pasien yang masuk ke dalam kohort eva
      ```sql
      SELECT * FROM reservation_staff_assignment_logs
      WHERE reservation_id = '<id-reservasi>'
-     ORDER BY changed_at DESC;
+     ORDER BY created_at DESC;
      ```
-   - Log ini mencatat: `previous_staff_id`, `new_staff_id`, `changed_by_staff_id`, dan `reason`.
+   - Log ini mencatat: `from_staff_id`, `to_staff_id`, `actor`, dan `reason`.
 
 ---
 

@@ -86,7 +86,7 @@ export const MessagePinBanner: React.FC<MessagePinBannerProps> = ({
             e.stopPropagation();
             onUnpin(pinnedMessage.id);
           }}
-          className="p-1.5 rounded-full text-ink-2 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition active:scale-95 disabled:opacity-50 cursor-pointer shrink-0"
+          className="p-1.5 min-w-[38px] min-h-[38px] rounded-full text-ink-2 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition active:scale-95 disabled:opacity-50 cursor-pointer shrink-0 flex items-center justify-center"
           title="Lepas sematan pesan ini"
         >
           {isUnpinning ? (

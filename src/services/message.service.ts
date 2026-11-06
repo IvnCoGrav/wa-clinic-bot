@@ -3,11 +3,24 @@ import { Direction, Prisma } from '@prisma/client';
 import { getLiveChatHub } from './live-chat-hub.service';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
 import { responseCacheService } from './response-cache.service';
+import { decodeMessageCursor } from '../utils/message-cursor';
 
 // In-Memory store fallback untuk idempotency check jika DB belum terkoneksi saat dev local.
 // Batas FIFO agar tidak tumbuh tanpa batas (memory leak) pada proses long-running.
 const memoryWaMessageIds = new Set<string>();
 const MAX_MEMORY_WA_IDS = 5000;
+
+// AUDIT FASE 3 (K-03): seluruh mutasi pesan/percakapan WAJIB tenant-scoped.
+// `updateMany` dipakai karena `where` unik Prisma tidak menerima kolom non-unik.
+// Tidak melempar saat count=0: baris yang hilang/berbeda tenant = no-op (fail-closed),
+// bukan memicu fallback yang bisa menulis ke memori tenant lain.
+async function updateScopedMessage(id: string, tenantId: string, data: Record<string, any>) {
+  return prisma.message.updateMany({ where: { id, tenant_id: tenantId }, data });
+}
+
+async function updateScopedConversation(id: string, tenantId: string, data: Record<string, any>) {
+  return prisma.conversation.updateMany({ where: { id, tenant_id: tenantId }, data });
+}
 
 function addMemoryWaMessageId(key: string): void {
   if (!key) return;
@@ -364,10 +377,7 @@ export class MessageService {
 
       if (existing) {
         if (!existing.wa_message_id && waMessageId) {
-          await prisma.message.update({
-            where: { id: existing.id },
-            data: { wa_message_id: waMessageId },
-          });
+          await updateScopedMessage(existing.id, tenantId, { wa_message_id: waMessageId });
         }
         addMemoryWaMessageId(`${tenantId}:${waMessageId}`);
         if (shortId && shortId !== waMessageId) {
@@ -661,9 +671,7 @@ export class MessageService {
       });
       if (existing) {
         resolvedId = existing.id;
-        await prisma.message.update({
-          where: { id: existing.id },
-          data: {
+        await updateScopedMessage(existing.id, tenantId, {
             payload_raw: {
               ...(typeof existing.payload_raw === 'object' && existing.payload_raw ? existing.payload_raw : {}),
               media: {
@@ -673,7 +681,6 @@ export class MessageService {
                 ...media,
               },
             },
-          },
         });
       }
     } catch (error) {
@@ -768,11 +775,12 @@ export class MessageService {
       hidden_at: m.hidden_at || m.payload_raw?.hidden_at || null,
     });
 
-    const beforeDate = before ? new Date(before) : null;
-    const validBefore = beforeDate && !isNaN(beforeDate.getTime()) ? beforeDate : null;
+    // Cursor komposit (created_at, id) — tie-breaker anti "riwayat bolong" (T-09).
+    const beforeCursor = decodeMessageCursor(before);
+    const validBefore = beforeCursor?.createdAt || null;
     // Focus-window: kembalikan batch yang pasti memuat pesan target (search-to-message direct jump).
     // Tenant-aware via conversation_id + tenant_id; tanpa hardcode bisnis.
-    if (focusMessageId && !validBefore) {
+    if (focusMessageId && !beforeCursor) {
       try {
         const target = await prisma.message.findFirst({
           where: {
@@ -837,23 +845,47 @@ export class MessageService {
       }
       // Target tak ditemukan → lanjut ke path normal di bawah
     }
+    const beforeWhere = beforeCursor
+      ? beforeCursor.id
+        ? {
+            OR: [
+              { created_at: { lt: beforeCursor.createdAt } },
+              { created_at: beforeCursor.createdAt, id: { lt: beforeCursor.id } },
+            ],
+          }
+        : { created_at: { lt: beforeCursor.createdAt } }
+      : {};
     try {
       const rows = await prisma.message.findMany({
         where: {
           conversation_id: conversationId,
           tenant_id: tenantId,
-          ...(validBefore ? { created_at: { lt: validBefore } } : {}),
+          ...beforeWhere,
         },
-        orderBy: { created_at: 'desc' },
+        // Tie-breaker id WAJIB konsisten dengan filter `id: { lt: ... }` di atas.
+        orderBy: [{ created_at: 'desc' }, { id: 'desc' }],
         take: limit + 1,
       });
       const hasMore = rows.length > limit;
       const pinnedMessage = await this.getPinnedMessage(conversationId, tenantId);
       return { messages: rows.slice(0, limit).reverse().map(enrichMessage), hasMore, pinnedMessage };
     } catch (error) {
+      const isOlderThanCursor = (m: any): boolean => {
+        if (!beforeCursor) return true;
+        const t = new Date(m.created_at).getTime();
+        const c = beforeCursor.createdAt.getTime();
+        if (Number.isNaN(t)) return false;
+        if (t !== c) return t < c;
+        return beforeCursor.id ? String(m.id) < beforeCursor.id : false;
+      };
       const all = memoryMessages
-        .filter((m) => m.conversation_id === conversationId && m.tenant_id === tenantId && (!validBefore || new Date(m.created_at) < validBefore))
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        .filter((m) => m.conversation_id === conversationId && m.tenant_id === tenantId && isOlderThanCursor(m))
+        .sort((a, b) => {
+          const ta = new Date(a.created_at).getTime();
+          const tb = new Date(b.created_at).getTime();
+          if (ta !== tb) return tb - ta;
+          return String(b.id).localeCompare(String(a.id));
+        });
       const pinnedMessage = await this.getPinnedMessage(conversationId, tenantId);
       return { messages: all.slice(0, limit).reverse().map(enrichMessage), hasMore: all.length > limit, pinnedMessage };
     }
@@ -889,6 +921,7 @@ export class MessageService {
 
     // 1. Update memory store fallback
     for (const mem of memoryMessages) {
+      if (mem.tenant_id !== tenantId) continue;
       if (
         mem.wa_message_id === waMessageId ||
         mem.id === waMessageId ||
@@ -1025,12 +1058,9 @@ export class MessageService {
           delete updatedPayload.pinned_by;
           delete updatedPayload.pinned_at;
 
-          await prisma.message.update({
-            where: { id: msgWa.id },
-            data: {
-              content: revokedContent,
-              payload_raw: updatedPayload,
-            },
+          await updateScopedMessage(msgWa.id, tenantId, {
+            content: revokedContent,
+            payload_raw: updatedPayload,
           });
         }
       } else {
@@ -1047,12 +1077,9 @@ export class MessageService {
         delete updatedPayload.pinned_by;
         delete updatedPayload.pinned_at;
 
-        await prisma.message.update({
-          where: { id: msg.id },
-          data: {
-            content: revokedContent,
-            payload_raw: updatedPayload,
-          },
+        await updateScopedMessage(msg.id, tenantId, {
+          content: revokedContent,
+          payload_raw: updatedPayload,
         });
       }
 
@@ -1066,10 +1093,7 @@ export class MessageService {
           const session = conv?.session_data && typeof conv.session_data === 'object' ? { ...(conv.session_data as any) } : {};
           if (session.pinned_message_id === resolvedMessageId || session.pinned_message_id === resolvedWaMessageId || wasPinned) {
             delete session.pinned_message_id;
-            await prisma.conversation.update({
-              where: { id: conv!.id },
-              data: { session_data: session },
-            });
+            await updateScopedConversation(conv!.id, tenantId, { session_data: session });
           }
         } catch (_) {}
       }
@@ -1242,15 +1266,15 @@ export class MessageService {
             targetPayload.pinned_by = pinnedBy;
             targetPayload.pinned_at = nowIso;
 
-            await tx.message.update({
-              where: { id: msg.id },
+            await tx.message.updateMany({
+              where: { id: msg.id, tenant_id: tenantId },
               data: { payload_raw: targetPayload },
             });
 
             // Merge aman session_data (jangan menimpa data booking/cart)
             existingSession.pinned_message_id = msg.id;
-            await tx.conversation.update({
-              where: { id: conv.id },
+            await tx.conversation.updateMany({
+              where: { id: conv.id, tenant_id: tenantId },
               data: { session_data: existingSession },
             });
           } else {
@@ -1263,8 +1287,8 @@ export class MessageService {
             delete targetPayload.pinned_by;
             delete targetPayload.pinned_at;
 
-            await tx.message.update({
-              where: { id: msg.id },
+            await tx.message.updateMany({
+              where: { id: msg.id, tenant_id: tenantId },
               data: { payload_raw: targetPayload },
             });
 
@@ -1274,8 +1298,8 @@ export class MessageService {
               existingSession.pinned_message_id === msg.wa_message_id
             ) {
               delete existingSession.pinned_message_id;
-              await tx.conversation.update({
-                where: { id: conv.id },
+              await tx.conversation.updateMany({
+                where: { id: conv.id, tenant_id: tenantId },
                 data: { session_data: existingSession },
               });
             }
@@ -1494,10 +1518,7 @@ export class MessageService {
           delete payload.hidden_at;
         }
 
-        await prisma.message.update({
-          where: { id: msg.id },
-          data: { payload_raw: payload },
-        });
+        await updateScopedMessage(msg.id, tenantId, { payload_raw: payload });
       } catch (dbErr: any) {
         console.warn('DB update error in toggleMessageHide (using memory fallback):', dbErr.message);
         if (msg.payload_raw) {
@@ -1638,10 +1659,7 @@ export class MessageService {
               if (conv) {
                 const session = conv.session_data && typeof conv.session_data === 'object' ? { ...(conv.session_data as any) } : {};
                 delete session.pinned_message_id;
-                await prisma.conversation.update({
-                  where: { id: conv.id },
-                  data: { session_data: session },
-                });
+                await updateScopedConversation(conv.id, tenantId, { session_data: session });
               }
             } catch (_) {}
             try {
@@ -1739,15 +1757,12 @@ export class MessageService {
         conversationId = msg.conversation_id;
         resolvedMessageId = msg.id;
         resolvedWaMessageId = msg.wa_message_id ?? null;
-        await prisma.message.update({
-          where: { id: msg.id },
-          data: {
-            content: newContent,
-            payload_raw: {
-              ...(typeof msg.payload_raw === 'object' && msg.payload_raw ? msg.payload_raw : {}),
-              is_edited: true,
-              edited_at: new Date().toISOString(),
-            },
+        await updateScopedMessage(msg.id, tenantId, {
+          content: newContent,
+          payload_raw: {
+            ...(typeof msg.payload_raw === 'object' && msg.payload_raw ? msg.payload_raw : {}),
+            is_edited: true,
+            edited_at: new Date().toISOString(),
           },
         });
       }
@@ -1844,13 +1859,10 @@ export class MessageService {
           });
         }
 
-        await prisma.message.update({
-          where: { id: msg.id },
-          data: {
-            payload_raw: {
-              ...currentPayload,
-              reactions,
-            },
+        await updateScopedMessage(msg.id, tenantId, {
+          payload_raw: {
+            ...currentPayload,
+            reactions,
           },
         });
       }
@@ -1908,6 +1920,7 @@ export class MessageService {
    */
   public async markConversationMessagesAsRead(conversationId: string, tenantId: string): Promise<void> {
     const now = new Date();
+    let dbPersisted = false;
 
     // 1. Update di DB Prisma
     try {
@@ -1923,14 +1936,15 @@ export class MessageService {
         },
       });
 
-      await prisma.conversation.update({
-        where: { id: conversationId },
-        data: {
-          is_manual_unread: false,
-        },
-      }).catch(() => {});
+      // Jangan telan error update conversation: `dbPersisted` harus mencerminkan
+      // status baca yang benar-benar tersinkron (T-01).
+      await updateScopedConversation(conversationId, tenantId, {
+        is_manual_unread: false,
+      });
+      dbPersisted = true;
     } catch (error) {
-      // Memory fallback
+      // Memory fallback. JANGAN klaim persisten — lihat gerbang publish di bawah.
+      console.warn('[MESSAGE] mark-as-read DB gagal, memakai memory fallback:', (error as Error)?.message);
     }
 
     // 2. Update memory store fallback
@@ -1947,19 +1961,27 @@ export class MessageService {
 
     // Broadcast ke seluruh dashboard agar badge unread admin lain padam real-time
     // (bukan hanya klien yang memicu mark-as-read).
-    try {
-      const hub = getLiveChatHub();
-      await hub.publish({
-        type: 'conversation.updated',
-        tenantId,
-        payload: {
-          conversationId,
-          unreadCount: 0,
-          isManualUnread: false,
-        },
-      });
-    } catch (hubErr: any) {
-      console.warn('[HUB] Failed to publish conversation.updated (mark-as-read):', hubErr.message);
+    //
+    // GERBANG KODE (audit #316 / T-01): HANYA siarkan unread=0 bila update DB
+    // benar-benar berhasil. Sebelumnya kegagalan DB ditelan lalu semua dashboard
+    // diberi tahu "sudah dibaca" — badge padam, lalu unread muncul lagi saat reload.
+    if (dbPersisted) {
+      try {
+        const hub = getLiveChatHub();
+        await hub.publish({
+          type: 'conversation.updated',
+          tenantId,
+          payload: {
+            conversationId,
+            unreadCount: 0,
+            isManualUnread: false,
+          },
+        });
+      } catch (hubErr: any) {
+        console.warn('[HUB] Failed to publish conversation.updated (mark-as-read):', hubErr.message);
+      }
+    } else {
+      console.warn('[MESSAGE] Skip broadcast unread=0: status baca belum tersinkron ke DB.');
     }
 
     responseCacheService.invalidatePrefix('livechat:');
@@ -1972,11 +1994,8 @@ export class MessageService {
   public async markConversationAsUnread(conversationId: string, tenantId: string): Promise<void> {
     // 1. Update di DB Prisma
     try {
-      await prisma.conversation.update({
-        where: { id: conversationId },
-        data: {
-          is_manual_unread: true,
-        },
+      await updateScopedConversation(conversationId, tenantId, {
+        is_manual_unread: true,
       });
 
       // Cari pesan inbound terakhir dan set read_at = null
@@ -1990,10 +2009,7 @@ export class MessageService {
       });
 
       if (lastInbound) {
-        await prisma.message.update({
-          where: { id: lastInbound.id },
-          data: { read_at: null },
-        });
+        await updateScopedMessage(lastInbound.id, tenantId, { read_at: null });
       }
     } catch (error) {
       // Memory fallback

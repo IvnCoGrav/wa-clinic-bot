@@ -89,4 +89,46 @@ describe('Live Chat Cursor Pagination Pesan (infinite scroll up)', () => {
     expect(body.count).toBe(5);
     expect(body.hasMore).toBe(false);
   });
+
+  it('ADVERSARIAL: created_at identik di batas halaman TIDAK menghilangkan pesan (tie-breaker id)', async () => {
+    const phone = `628701${Date.now().toString().slice(-7)}`;
+    const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Tie Break', DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+    const sameTime = new Date(Date.now() - 30000);
+    const contents = ['tie satu', 'tie dua', 'tie tiga'];
+
+    for (const content of contents) {
+      await messageService.logMessage({
+        tenantId: DEFAULT_TENANT_ID,
+        conversationId: conversation.id,
+        direction: 'INBOUND',
+        content,
+        senderType: 'CUSTOMER',
+        createdAt: sameTime,
+      });
+    }
+
+    const getFor = async (qs = '') => {
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/admin/live-chat/conversations/${conversation.id}/messages${qs}`,
+        headers: { 'x-api-key': ADMIN_KEY },
+      });
+      expect(res.statusCode).toBe(200);
+      return JSON.parse(res.body);
+    };
+
+    const p1 = await getFor('?limit=2');
+    expect(p1.count).toBe(2);
+    expect(p1.hasMore).toBe(true);
+    // Cursor wajib komposit: timestamp + id.
+    expect(String(p1.oldestCursor)).toContain('|');
+
+    const p2 = await getFor(`?limit=2&before=${encodeURIComponent(p1.oldestCursor)}`);
+    const combined = [...p2.data, ...p1.data].map((m: any) => m.content);
+
+    expect(combined).toHaveLength(3);
+    expect(new Set(combined).size).toBe(3);
+    expect([...combined].sort()).toEqual([...contents].sort());
+  });
 });

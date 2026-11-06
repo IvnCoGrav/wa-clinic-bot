@@ -3,6 +3,151 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 316. [Live Chat] Audit Menyeluruh 5 Dimensi — Ghost Error, Kontrak Data & Mobile (2026-11-06, SELESAI — FASE 0–5 IMPLEMENTED; SISA UJI PERANGKAT & DEPLOY)
+
+- **Status:** **SELESAI (kode)** — Fase 0 (quick-safe), Fase 1 (integritas data & uang), Fase 2 (state/paginasi/navigasi), Fase 3 (isolasi tenant, disetujui via Confirmation Gate), Fase 4 (UX mobile), Fase 5 (ekstraksi logika murni + test). Sisa di luar kode: uji perangkat fisik & deploy staging (2-step verification).
+- **Cakupan:** `src/routes/admin/livechat.subroute.ts`, `src/services/live-chat.service.ts`, `conversation.service.ts`, `message.service.ts`, `live-chat-hub.service.ts`, `waha-history-sync.service.ts`, `media.route.ts`, `packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx` (7.932 baris), `LiveChatComposer.tsx`, `liveChatSse.ts`, `useLiveChatNotification.ts`, `index.css`, `tailwind.config.js`, `manifest.json`.
+- **Metode:** audit baca-saja 5 dimensi (rules, flow/UX, log mesin, RAG tidak relevan untuk UI, prompt tidak relevan) + verifikasi bukti `file:line` + `npm run build` backend/dashboard + 219 test iterasi Live Chat/media/util hijau (27 file) + full suite 6.590 lulus. **Uji perangkat fisik belum dilakukan.**
+- **Temuan kritis (status per item):**
+  1. **K-01 (FIXED Fase 0):** pesan sudah terkirim ke WhatsApp lalu `logMessage` gagal → route 500 → UI "gagal" → admin kirim ulang (dobel). `live-chat.service.ts:793`, `message.service.ts:454`, `livechat.subroute.ts:455`.
+  2. **K-02 (FIXED Fase 1):** invoice dari chat memakai fallback fiktif `distanceKm 3.0`, `ongkir 0`, treatment `"Pijat Ceria"`, jam `"12.00-12.30"`. `LiveChatMonitor.tsx:3914,3929,3940-3941`. Bertentangan dengan #313. Kini diblokir gerbang kode bila jadwal/layanan/jarak/ongkir tidak lengkap.
+  3. **K-03 (FIXED Fase 3, disetujui Confirmation Gate):** mutasi `where:{id}` tanpa `tenant_id` + fallback memory lintas tenant; media inbound tidak membandingkan tenant + `Cache-Control: public`; sync history memakai `wahaClient` global. Kini: seluruh mutasi conversation/message memakai `updateMany({ id, tenant_id })` (termasuk transaksi pin, repository `updateState`/`flagForReview`, release/takeover, shareloc, webhook revoke, frustration clear); fallback memory tenant-scoped; media memvalidasi tenant sesi staff (admin/API key lintas tenant), `Cache-Control: private`, guard path traversal; sync memakai `WahaClient` session per tenant + run-token. **K-03b (FIXED Fase 5):** `WahaGatewayDriver` kini memakai `WahaClient` session per tenant; humanizer memakai `typingService.setTransportResolver` (wired di `buildApp`); typing route admin memakai `getWahaClientForTenant`. **Sisa by-design:** `AdminSession` tidak menyimpan `tenant_id` → admin diperlakukan super-admin lintas tenant.
+  4. **K-04 (FIXED Fase 1):** persona AI saran balasan hardcode `"Bidan Yusi dari Kala Moms & Baby Spa"` (`live-chat.service.ts:1497`) dan kegagalan LLM disamarkan sebagai sukses dengan template generik (`:1508-1510`). Kini persona dari `getBrandIdentityAsync(tenantId)`; kegagalan LLM menjadi HTTP 500 eksplisit.
+  5. **K-05 (FIXED Fase 0):** `error` berupa objek → `new Error(obj)` = `"[object Object]"` (`livechat.subroute.ts:481` + `api.ts:372`); `acknowledgeOutsideWindow` tidak pernah dikirim FE.
+  6. **K-06 (FIXED Fase 2):** badge unread sidebar hanya naik, reset hanya pada `allRead` (`useLiveChatNotification.ts:107-111,160`) → beda dengan `getTotalUnreadCount`. Kini direkonsiliasi dari endpoint DB (debounced 1,2 dtk + saat SSE reconnect + setiap `conversation.updated`).
+- **Temuan tinggi (status per item):**
+  1. **T-01 (FIXED Fase 2):** ghost read — update DB gagal ditelan tetapi SSE tetap `unreadCount:0` + route 200 (`message.service.ts:1932-1960`, `livechat.subroute.ts:1237`). Kini service tidak menyiarkan bila DB gagal; route memverifikasi ulang DB dan mengembalikan `degraded:true` tanpa siaran palsu (read/unread/mark-all-read).
+  2. **T-02 (FIXED Fase 0):** warning `NO_ACTIVE_RESERVATION_TODAY` dikirim backend tetapi dibuang FE (`live-chat.service.ts:935`, `LiveChatMonitor.tsx:4070`).
+  3. **T-03 (FIXED Fase 0):** event SSE dipublikasikan tetapi tidak didaftarkan klien: `staff.trip_delay_warning`, `staff.trip_arrived`, `sync.progress`, `bot.active_changed` (`liveChatSse.ts` vs `LiveChatMonitor.tsx:2242,2572,2653,2678`; publish `today.subroute.ts:787,823`).
+  4. **T-04 (FIXED Fase 2):** stale closure `loadChats` dari effect mount-once memakai `searchQuery`/`labelFilter` lama; filter label memicu 2 request (`LiveChatMonitor.tsx:2220,2229,2739,1265,1290,4594-4598`). Kini `searchQueryRef`/`labelFilterRef` + satu reload via effect.
+  5. **T-05 (FIXED Fase 1):** gagal muat thread → `setMessages([])` → "Belum ada pesan" tanpa error/retry (`:1529,6065`). Kini ada state error + tombol "Coba Lagi", dan bubble lama dipertahankan saat refresh thread yang sama.
+  6. **T-06 (FIXED Fase 0):** gagal kirim menghapus teks + meninggalkan preview sidebar "terkirim" (`:4010,4086`; `LiveChatComposer.tsx:519-531`).
+  7. **T-07 (FIXED Fase 0):** header Live Chat mobile tanpa safe-area notch (`index.html:8,12`; `Layout.tsx:752`; `LiveChatMonitor.tsx:4305`).
+  8. **T-08 (FIXED Fase 2):** history ganda per buka chat + entri `live-chat-modal` tidak di-pop + `popstate` mengabaikan state → back HP terasa mati (`:2164,2166,811-816,1838-1844`). Kini satu entri per chat, restore sessionStorage hanya saat bootstrap, popstate berbasis URL, dan entri modal dikonsumsi saat modal ditutup. **Perlu uji perangkat.**
+  9. **T-09 (FIXED Fase 2):** cursor paginasi hanya `created_at < cursor` tanpa tie-breaker (`message.service.ts:845`). Kini cursor komposit `created_at|id` (`src/utils/message-cursor.ts`) + orderBy id + test pesan bertimestamp identik.
+  10. **T-10 (FIXED Fase 1):** reaksi optimistis tanpa rollback (`LiveChatMonitor.tsx:2901-2961`). Kini `loadThread` dipanggil saat gagal.
+  11. **T-11 (FIXED Fase 4):** modal `90vh`/`85vh`; modal Sinkronisasi tanpa `max-h`/scroll (`:6750,7180,7837`). Kini `dvh` + `overflow-y-auto overscroll-contain`; bottom sheet dibatasi `80dvh` + safe-area bawah.
+  12. **T-12:** God Object 7.932 baris + nyaris tanpa test frontend (hanya 3 test integrasi) — memperparah #288.
+- **Temuan sedang (status akhir):** ~~interpolasi quick reply mengambil reservasi lama~~ **(FIXED Fase 5 — `utils/quickReplyReservation.ts` + 6 test)**; ~~tap target 16–27 px~~ **(FIXED Fase 4)**; ~~toggle AI tidak ada di thread~~ **(FIXED Fase 5 — toggle di menu Tools composer, target 44 px)**; ~~paste gambar diblokir~~ **(FIXED Fase 4)**; ~~gap keyboard composer~~ **(FIXED Fase 4)**; ~~`hover:` sticky~~ **(FIXED Fase 4)**; ~~kontras pemisah tanggal dark~~ **(FIXED Fase 4)**; ~~`recentReplies` tanpa prune~~ **(FIXED Fase 3)**; ~~race cancel sync + `last_message_at` mundur~~ **(FIXED Fase 3)**; ~~dedupe membuang pesan identik <2 dtk~~ **(FIXED Fase 5 — dedupe by id/wa_message_id + 5 test)**; ~~`sync-full` ghost success~~ **(FIXED Fase 5 — UI menghormati `started:false`)**; ~~auto mark-read tanpa rollback~~ **(FIXED Fase 2)**. **Sisa yang diterima sebagai limitasi:** voice note mengunduh penuh (tanpa Range/MediaSource) — memerlukan pipeline streaming khusus.
+- **Eksekusi Fase 0 (2026-11-06):**
+  1. `liveChatSse.ts` — daftarkan 4 event yang hilang (+alias `BOT_ACTIVE_CHANGED`).
+  2. `api.ts` — ekstraksi `error.message`/`error.code` dari objek nested agar tidak `[object Object]`.
+  3. `live-chat.service.ts` — kegagalan `logMessage` pasca-kirim tidak lagi melempar 500; balikan `success:true` + `warning: MESSAGE_SENT_NOT_PERSISTED`.
+  4. `LiveChatMonitor.tsx` — tampilkan warning backend; pada gagal kirim hapus bubble/preview optimis, pulihkan teks hanya bila 4xx (pasti ditolak), lalu rekonsiliasi `loadThread` + `refreshChatItem`.
+  5. `LiveChatMonitor.tsx` — safe-area atas mobile (`pt-[env(safe-area-inset-top,0px)]`).
+  6. `settings.subroute.ts` — publish `bot.active_changed` agar toggle AI sinkron lintas dashboard.
+- **Eksekusi Fase 1 (2026-11-06):**
+  1. **K-02:** `handleGenerateAndInsertInvoice` diblokir bila tanggal/layanan/jarak/ongkir tidak lengkap; fallback `3.0 km`/`0`/`"Pijat Ceria"`/`"12.00-12.30"` dihapus; admin diarahkan ke Buku Alamat. Logika murni diekstrak ke `packages/admin-dashboard/src/utils/invoiceReadiness.ts` + 6 test adversarial (`tests/unit/invoice-readiness.test.ts`), termasuk 0 km/0 ongkir sebagai nilai SAH.
+  2. **K-04:** prompt saran balasan memakai `getBrandIdentityAsync(tenantId)` (bukan brand hardcode); respons LLM kosong / error kini melempar error → route 500, bukan draf template palsu.
+  3. **T-05:** state `threadLoadError` + tombol "Coba Lagi"; refresh thread yang sama tidak lagi mengosongkan bubble yang sudah tampil.
+  4. **T-10:** kegagalan reaksi memicu rekonsiliasi `loadThread`.
+  5. **Anti "hijau palsu":** mock `model-fallback` di `tests/integration/live-chat-reply.test.ts` diperbaiki (partial mock + assert isi stub) — sebelumnya test lulus lewat catch fallback karena `getFallbackModel` hilang dari mock.
+  6. Test regresi baru: `tests/unit/livechat-audit-fase0.test.ts` (4) + 3 test adversarial di `live-chat-reply` (pesan terkirim tapi DB gagal tetap 200+warning; LLM gagal → 500; mock LLM benar-benar dipanggil).
+- **Eksekusi Fase 2 (2026-11-06):**
+  1. **T-09:** `src/utils/message-cursor.ts` (encode/decode `created_at|id`), query `(created_at < c) OR (created_at = c AND id < id)`, `orderBy [{created_at:'desc'},{id:'desc'}]`, fallback memory tie-breaker, route mengembalikan cursor komposit; 5 test cursor + 1 test paginasi timestamp identik.
+  2. **T-01:** service hanya mem-publish `unreadCount:0` bila update DB sukses; route `/read`, `/unread`, `/mark-all-read` memverifikasi DB dan mengembalikan `degraded:true` tanpa siaran palsu; FE menghormati `degraded` (rollback via `refreshChatItem`/`loadChats`, bukan klaim "sudah dibaca"); 3 test adversarial.
+  3. **K-06:** badge unread sidebar direkonsiliasi dari `GET /unread-count` (debounced 1,2 dtk, saat SSE reconnect, dan setiap `conversation.updated`).
+  4. **T-04:** `searchQueryRef`/`labelFilterRef`; `loadChats` dari SSE/poll/visibility memakai filter terkini; hapus request ganda pada perubahan filter label.
+  5. **T-08:** satu entri history per chat (hapus `pushState` manual), restore `sessionStorage` hanya saat bootstrap, `popstate` berbasis URL, entri history modal dikonsumsi saat modal ditutup.
+- **Eksekusi Fase 4 — UX mobile (2026-11-06):**
+  1. **T-11/M-02/M-03:** modal `dvh`; modal Sinkronisasi `max-h-[85dvh]` + scroll; bottom sheet `80dvh` + scroll + safe-area bawah; menu konteks & export mengikuti.
+  2. **S-02/M-04/M-06:** tap target — tombol "+" label 28 px, toggle AI global `min-h-[44px]`, ikon header mobile / pencarian thread / unpin banner 38 px, tombol "tandai semua dibaca" 38 px.
+  3. **S-04/M-14:** paste gambar/screenshot dari clipboard langsung menjadi lampiran (bukan diblokir).
+  4. **S-05/M-13:** koreksi temuan — atribut `data-keyboard-open` dan `.chat-composer-container` ternyata SUDAH ada; celah berasal dari padding safe-area di wrapper dalam. Rule `.chat-composer-inner` ditambahkan.
+  5. **S-06/M-08:** `future.hoverOnlyWhenSupported` (hover tidak lagi menempel setelah tap).
+  6. **S-07/M-10:** pemisah tanggal dark memakai token `surface-2` (kontras layak).
+  7. **M-09:** `theme-color` per `prefers-color-scheme` + `color-scheme` meta.
+  8. **M-15:** toolbar cari-dalam-chat tidak lagi `autoFocus` saat dibuka otomatis; fokus hanya saat admin menekan ikon.
+  9. **M-05:** label "Ambil Alih (CS)" disembunyikan di <sm agar nama pasien tidak terpotong.
+- **Eksekusi Fase 3 — isolasi tenant (2026-11-06, disetujui user):**
+  1. **Mutasi tenant-scoped:** `conversation.service` (`togglePin`, `setManualUnread`, `dismissFrustration`, `updateLastDiscussedTreatment`, `updateLastCustomerMessageAt`) memakai helper `updateConversationScoped` (`updateMany` + `tenant_id`); `message.service` helper `updateScopedMessage`/`updateScopedConversation` menggantikan seluruh `update({where:{id}})` (wa id, media, revoke, pin/hide, edit, reaction, read/unread, session_data); transaksi pin memakai `tx.*.updateMany`; release/takeover/shareloc/revoke webhook ikut tenant-scoped; repository `updateState`/`flagForReview` + fallback memory tenant-scoped.
+  2. **Media:** `getMediaAuthorizedTenant()` mengembalikan tenant sesi — staff tenant A ditolak (404) membaca media tenant B; admin/API key lintas tenant; `Cache-Control: private` untuk inbound; CORS `*` hanya outbound; guard `path.resolve` terhadap traversal; `/api/files/:session` mencocokkan session WAHA tenant staff.
+  3. **Sync history:** `WahaClient` menerima `{ session }`; `resolveWahaSessionKey()` memilih `tenants.waha_session_id` (fallback env); `resolveWahaClient()` per tenant; `syncRunTokens` menggantikan flag boolean (dua sync tidak bisa paralel); `last_message_at` hanya maju (`max`), tidak menimpa pesan yang lebih baru; `recentReplies` diganti `ClientIdempotencyStore` (TTL 2 dtk, max 500) dan baru dicatat setelah validasi lolos.
+  4. **Test baru:** `livechat-tenant-write` (4), `media-tenant-isolation` (5), `waha-sync-tenant` (4), `conversation-repository` (+1), `message-edit` diperbarui + 1 adversarial lintas tenant.
+- **Eksekusi Fase 5 — ekstraksi logika + penyelesaian sisa (2026-11-06):**
+  1. **K-03b:** `resolveGatewayForTenant` memakai `WahaClient` session per tenant (cache, tanpa query ganda); `typingService.setTransportResolver` dipasang di `buildApp` (humanizer: sendSeen/typing/sendText per tenant); route typing admin memakai `getWahaClientForTenant`.
+  2. **Quick reply:** `utils/quickReplyReservation.ts` memilih jadwal terdekat/ongoing, mengabaikan reservasi basi (>24 jam) — 6 test.
+  3. **Dedupe:** `utils/livechatThread.ts` hanya dedupe `id`/`wa_message_id`; dipakai di load thread & SSE — 5 test (pesan identik beruntun tetap tampil).
+  4. **Navigasi:** `utils/livechatNavigation.ts` (`open`/`close`/`none`) + 4 test.
+  5. **`sync-full`:** UI tidak lagi mengklaim "dimulai" saat `started:false`.
+  6. **Toggle AI di thread mobile:** tersedia di menu Tools composer (44 px), memakai konfirmasi yang sama.
+  7. **Struktur:** logika murni yang rawan (dedupe, pemilihan reservasi, navigasi) sudah keluar dari `LiveChatMonitor.tsx` dan diuji. **Dekomposisi komponen visual penuh (Sidebar/MessageList/Header) tetap pekerjaan terpisah** — membutuhkan uji perangkat & PR bertahap agar tidak memecahkan UI 7.900 baris secara buta.
+- **Verifikasi akhir:** `npm run build` backend & dashboard exit 0; CSS hasil build diverifikasi memakai `@media (hover: hover)`; **219 test / 27 file** Live Chat, media & util lulus (50 test baru/regresi), 25/25 gateway & typing, 6/6 toggle bot. **Full suite: 6.590 lulus / 2 gagal / 28 skipped** — kedua kegagalan di `tests/unit/hybrid-reservation-parser.test.ts` yang sudah tercatat pre-existing di #287 dan **tidak terkait** file yang diubah pada audit ini (sumber terkait `src/utils/reservation-text-parser.ts` sudah dimodifikasi sebelum sesi ini; revert-and-rerun tidak dilakukan agar tidak menghapus pekerjaan lain di working tree). **T-08, safe-area, keyboard, tap target, dan pemutaran media wajib diuji di perangkat fisik sebelum deploy.**
+- **Fase berikutnya (belum dieksekusi):** Fase 3 hardening multi-tenant (K-03, butuh Confirmation Gate), Fase 4 UX mobile (T-11, tap target, paste gambar, dark mode, toggle AI di thread), Fase 5 dekomposisi god file + test frontend.
+
+## 315. [Lokasi/Shareloc] Badge & Teks "Butuh Shareloc" Muncul untuk Pelanggan yang Sudah Terverifikasi (2026-11-06, IMPLEMENTED — DEPLOY PENDING)
+
+- **Status:** IMPLEMENTED di repo (2026-11-06) — sumber kebenaran lokasi kanonik + prompt netral + lint template + cooldown manual. **Belum di-deploy ke server produksi** saat catatan ini ditulis.
+- **Gejala (bukti produksi 3 percakapan):**
+  1. `6285168615559` (Bunda Lutfiah): teks "Oh ya boleh izin kirim sharelock nya bund…" terkirim 2× — persis template Quick Reply `shareloct` (kategori Umum), dikirim manual staf (bukan pipeline AI).
+  2. `6282230422079` (Bunda Diana): badge "📍 Butuh Shareloc (Hari Ini)" muncul padahal `location_source='manual_staff'`, akurasi 14 m, foto rumah ada.
+  3. `6287815918787` (Bunda Hida): badge yang sama muncul padahal `preferences.location_source='manual_staff'` + label "Terverifikasi Staf" + foto rumah + 11× kunjungan; kolom `customers.location_source` masih `estimated_area`.
+- **Akar masalah berlapis:**
+  1. Badge hanya menerima `gps_pin` sebagai presisi dan hanya membaca kolom `customers.location_source` (split-brain dengan `preferences`/`saved_addresses`).
+  2. Prompt grounding AI (`goal-tracker.ts`) menyuntik instruksi "minta shareloc WhatsApp terkini" untuk semua lokasi non-`gps_pin`.
+  3. Template DB (`shareloct`, `kelurahan`) dan form reservasi (`Alamat & Shareloc`) masih mengajak shareloc.
+  4. `shareloc_requested_at` hanya ditulis cron yang default OFF → cooldown 6 jam tidak pernah aktif untuk permintaan manual.
+  5. Teks draf shareloc hardcode di LiveChatMonitor/StaffToday dan fallback reminder service.
+  6. Gold few-shot exemplar berisi "Boleh juga kirim titik lokasinya" (risiko laten bila `reset-defaults` dijalankan).
+- **Resolusi fondasional:**
+  1. Modul murni `src/domain/location-adequacy.ts` (prioritas `gps_pin` > `manual_staff` titik sama > bukti lapangan > estimasi) dipakai backend, prompt, dan cermin FE.
+  2. Payload live chat/SSE membawa `effectiveLocationSource`, `locationAdequacy`, `sharelocNeeded`; badge FE memakai kontrak itu dan menganggap `manual_staff` memadai.
+  3. `goal-tracker` memakai resolver kanonik; status ESTIMASI tidak lagi memerintahkan shareloc.
+  4. `src/domain/shareloc-solicitation.ts` menjadi satu pola; guardrail AI, lint Quick Reply, dan audit exemplar memakai definisi sama. Template kategori selain **Pasca Booking** ditolak bila mengajak shareloc.
+  5. Endpoint `PATCH /api/admin/live-chat/conversations/:id/shareloc-requested` menulis cooldown saat staf meminta titik presisi; badge langsung meredup.
+  6. Teks form/invoice menjadi "Alamat Lengkap & Patokan" (parser lama tetap kompatibel); draf staf & live chat mengambil template DB (`GET /api/staff/quick-replies`).
+  7. Data produksi: `shareloct` → `shareloc` (kategori Pasca Booking, isi konteks persiapan treatment), `kelurahan` tanpa shareloc, `reservasi`/`format_reservasi` memakai label baru.
+- **Sisa / tindak lanjut:** deploy container `app` + rebuild dashboard agar kode baru aktif; verifikasi ulang 3 nomor di Live Chat; pertimbangkan migrasi data untuk label lama pada pesan historis (tidak diperlukan untuk parsing karena backward-compatible).
+
+
+## 314. [Reservasi] Pengerasan Menyeluruh Mekanisme Reservasi & State Machine FSM (2026-11-06, RESOLVED - HIGH)
+
+- **Status:** RESOLVED (2026-11-06) — seam kanonis status, advisory lock fail-closed, validasi atomik series, snapshot/restore v2, invoice seam alamat, tool masker single anaphora, admin idempotency, pengerasan post-verifikasi P1–P7, serta penutupan 3 celah lanjutan Fase 10 (P8: assertTransition pada PATCH edit, P9: rollback atomik item series + fail-closed lock, P10: pemetaan 409 ILLEGAL_TRANSITION pada complete satuan, pencabutan bypass allowIllegal).
+- **Gejala & Temuan Audit (A-001 s.d. A-015 + P1 s.d. P10):**
+  1. A-001: Bypass FSM — reservasi berstatus `completed` dapat dibatalkan lewat soft-cancel (DELETE ?soft=true).
+  2. A-002: Mutasi status tersebar tanpa seam kanonis tunggal di dispatch route, staff completion, dan admin routes.
+  3. A-003: Cron `runExpiredHoldSweep` memakai cutoff midnight UTC (bukan jendela dinamis 2 jam) dan membatalkan tanpa hook LTV/follow-up.
+  4. A-004: Series reservation dibuat tanpa transaksi atomik, advisory lock, atau pengecekan tumpang tindih customer (rentan race condition).
+  5. A-005: Snapshot arsip kehilangan 14 field finansial/maternal/durasi, dan restore tidak memulihkan/relink follow-ups.
+  6. A-006: Advisory lock di `reservation-core` fail-open di production jika terjadi kegagalan koneksi Postgres.
+  7. A-007: Definisi `ACTIVE_STATUSES` di `reservation-core` tidak menyertakan `pending` dan masih memuat status usang `in_progress`.
+  8. A-008: Generator invoice pembayaran mengabaikan kartu alamat reservasi dan jatuh ke profil root.
+  9. A-009: Tool masker V3 memindai pesan asisten dari seluruh riwayat dan menyerap rekomendasi ambigu (multi-layanan).
+  10. A-010: Jalur admin `POST /api/admin/reservation` tidak meneruskan `requestId` ke core service sehingga double-submit membuat reservasi ganda.
+  11. A-011 s.d. A-015: Dokumentasi siklus status usang di `FEATURE_INVENTORY.md`, panggilan ganda Google Calendar `deleteEvent` saat arsip, dan status `paused` belum resmi di domain FSM.
+  12. P1: Advisory lock series ditelan diam-diam (`.catch(() => {})`) sehingga transaksi lanjut tanpa lock saat akuisisi gagal.
+  13. P2: `recordPayment` menulis `status: 'completed'` langsung tanpa `canTransition` dan tanpa guard prematur (pembayaran booking masa depan atau hold terancam completed prematur).
+  14. P3 & P4: `pauseSeries`, `resumeSeries`, dan `cancelSeries` kehilangan atomisitas (transaksi terpisah atau bypass seam status).
+  15. P5: Restore arsip v1 mendefault `purchase_review_status: 'pending'` berisiko duplikat CAPI.
+  16. P6: Kontrak test arsip & advisory lock memanggil argumen posisional / non-kontrak.
+  17. P7: Klarifikasi status baseline (8 test baru Fase 0 hijau, 11 kegagalan pre-existing tetap sama).
+  18. P8: `PATCH /api/admin/reservation/:id` menulis status langsung tanpa validasi FSM sehingga status terminal (`completed`, `cancelled`) dapat dibangkitkan atau dilompati secara ilegal.
+  19. P9: Pembuatan `reservationItem` series dibungkus `.catch(() => {})` yang menelan error diam-diam, dan ketiadaan mesin lock di series tidak fail-closed di production.
+  20. P10: Endpoint `PATCH /:id/complete` memetakan penolakan `NOT_ELIGIBLE` ke 404 *"Reservation not found"*, bukan 409 `ILLEGAL_TRANSITION`.
+- **Solusi Fondasional:**
+  1. `ReservationStatusService` (`src/services/reservation-status.service.ts`) sebagai SSoT seluruh mutasi status reservasi, mendukung `db?: any` untuk transaksi atomik, dan menyediakan `assertTransition`.
+  2. Soft-cancel memblokir pembatalan `completed` (409 `ILLEGAL_TRANSITION`).
+  3. Cron hold sweep memakai `ACTIVE_HOLD_WINDOW_MS` (2 jam), findMany, update `cancelled`, dan pemicu hook.
+  4. `reservationSeriesService` membungkus pembuatan series dalam satu `$transaction` ber-advisory-lock (throw saat lock gagal & fail-closed di production), cek bentrok staf dan customer (`findOverlappingCustomerReservations`), dan menautkan alamat serta `reservationItem` secara atomik tanpa penelan error.
+  5. Status `paused` resmi di domain FSM (`src/domain/reservation-status.ts`). `pauseSeries`, `resumeSeries`, dan `cancelSeries` berjalan atomik dalam transaksi bersama `applyTransition`.
+  6. `reservationArchiveService` v2 mencakup 34 field reservasi + follow-ups, dan `restoreReservation` menggunakan fallback aman `purchase_review_status` untuk arsip v1.
+  7. Advisory lock fail-closed di production jika terjadi error Postgres (`ConflictCheckUnavailableError`).
+  8. `paymentInvoiceFormatter.ts` menggunakan seam `resolveReservationAddress` (kartu-first).
+  9. `tool-masker.ts` dibatasi hanya membaca pesan asisten terakhir dan menolak jika lebih dari satu layanan (D4).
+  10. `POST /api/admin/reservation` dan `quick-hold` meneruskan `requestId` ke `saveReservation`, dan `CreateReservationModal.tsx` menyertakan `submitRequestIdRef`.
+  11. `recordPayment` memvalidasi `canTransition` & `!isPrematureCompletion(booking_date)`, menjaga status `hold` & booking H+7 tidak premature-completed.
+  12. Jalur `PATCH /api/admin/reservation/:id` dijaga dengan `reservationStatusService.assertTransition`, menolak transisi ilegal dengan 409 `ILLEGAL_TRANSITION` dan prematur dengan 400 (P8).
+  13. Penghapusan `.catch(() => {})` pada `tx.reservationItem.create` memastikan rollback penuh jika penulisan item gagal (P9).
+  14. Endpoint `PATCH /:id/complete` memetakan `NOT_ELIGIBLE` secara presisi ke HTTP 409 `ILLEGAL_TRANSITION` (P10).
+  15. Parameter `allowIllegal` dicabut total dari `ReservationStatusService.applyTransition` (anti-bypass tanpa audit).
+  16. `FEATURE_INVENTORY.md` diperbarui dengan alur status kanonis.
+- **Bukti:**
+  - Plan implementasi: `docs/plans/FIXING_PLAN_RESERVASI_2026-11-06.md`
+  - Audit komparasi baseline: `node scripts/audit-baseline-diff.mjs docs/audit/2026-11-06/baseline-before.json docs/audit/2026-11-06/baseline-after.json` -> **Gate Pass**: 6.525 test, 6.488 lulus, **9 gagal**, **0 new failures**; 10 test membaik (8 test Fase 0 + 2 parser multi-treatment).
+  - 11 file test suite reservasi (50 tests): 100% lulus.
+  - `npm run build` backend & dashboard exit 0.
+  - `npm run audit:reservation-lock` — probe serialisasi `pg_advisory_xact_lock` (default dry-run; `--confirm` di staging dengan `DATABASE_URL`). **Celah cakupan:** PostgreSQL lokal tidak tersedia saat audit, jadi probe belum dijalankan terhadap DB nyata; jalankan di staging sebelum go-live.
+
 ## 313. [Buku Alamat] Detail Reservasi Masih Menampilkan Wilayah/Jarak/Ongkir Rumah Utama (2026-11-06, RESOLVED - HIGH)
 
 - **Status:** RESOLVED (2026-11-06) — proyeksi kartu-first + gerbang tulis, bukan tambalan tampilan.
@@ -156,6 +301,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   2. [RESOLVED 2026-11-04] Fitur drilldown pasien kohort di Fase 3 & 5 untuk hak banding transparan staf dengan proteksi data terapis.
   3. [RESOLVED 2026-11-04] Supervisor override pada PWA staf kini menulis audit payload `supervisorOverrideUnassigned: true` + `overrideBy` di `STAFF_RECORD_PAYMENT` dan `STAFF_COMPLETE_VISIT`, sehingga penyelesaian kunjungan tanpa bidan tetap dapat ditelusuri.
   4. Integrasi survei kepuasan & auto-disqualification dijadwalkan pada iterasi pasca-gaji #4.
+  5. **Batasan badge pemilik pasien (2026-11-06):** badge di card customer bersifat read-only dan dihitung dari reservasi `completed` yang masih ada di tabel `reservations`. Jika kunjungan pertama pernah diarsipkan (baris dihapus oleh `reservationArchiveService`), pemilik dapat bergeser. Perbaikan penjagaan arsip dijadwalkan Fase 3 (belum dieksekusi).
 
 ## 306. [Admin Copilot] Resolusi Fondasional V1–V12: Urutan Antrean, Peringkat Katalog, Kontrak Waktu WIB, Integritas Tautan & Output Terpotong, Fakta Terhitung Kode, Deteksi Bentrok Interval Durasi & Slot Kosong Data-Driven, SSOT Pembayaran, dan Anti-Duplikasi Tool (2026-11-04, PARTIAL)
 
@@ -290,22 +436,27 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ## 301. [Testing] Kegagalan Test Pre-existing di Luar Cakupan Gate Fase (2026-11-03, OPEN - MEDIUM)
 
-- **Status:** OPEN — **22 → 11 kegagalan**. Fase A (perbaikan test-only) **SELESAI 2026-11-03** tanpa regresi; sisa 11 butuh keputusan bisnis/medis.
-- **Gejala:** Suite penuh menghasilkan **11 test gagal di 6 file**, dan **tidak satu pun** file tersebut masuk `PHASE_FILES` di `scripts/audit-phase-gates.mjs`, sehingga gate 11 fase tetap hijau (87 file, 822 test, 0 gagal).
-- **Sebaran saat ini (`after7.json`):** `catalog-seed-drift` (3), `v3-conversation-matrix` (2: CM-07 vaksin, CM-08 trauma), `chat-schedule-extractor` (2), `hybrid-reservation-parser` (2), `agent-runner` (1), `adversarial-reservation-resilience` (1).
+- **Status:** OPEN — **22 → 2 kegagalan**. Fase A (test-only) **SELESAI 2026-11-03**, Fase B (parser multi-treatment) **SELESAI 2026-11-06**, Fase C (hapus fallback katalog + SOP vaksin/trauma + eskalasi) **SELESAI 2026-11-06**; sisa 2 butuh keputusan kontrak nama.
+- **Gejala:** Suite penuh menghasilkan **2 test gagal di 1 file**, dan **tidak satu pun** file tersebut masuk `PHASE_FILES` di `scripts/audit-phase-gates.mjs`, sehingga gate 11 fase tetap hijau (87 file, 822 test, 0 gagal).
+- **Sebaran saat ini (2026-11-06):** `hybrid-reservation-parser` (2 — kontrak nama anak vs nama bunda).
 - **Dampak:** Gate audit bisa "hijau" sementara modul penting (drift katalog/harga, matriks percakapan AI, eskalasi darurat) sedang gagal. Risiko keputusan bisnis diambil dari laporan yang tampak bersih.
-- **Bukti:** `docs/audit/2026-11-02/baseline-stable.json` (27 gagal, irisan 3 run = 27), `after3`–`after6` (22 gagal, 754 file, 6.254 test), **`after7.json` (11 gagal, 6.215 lulus, 0 regresi)**; `LAPORAN_VERIFIKASI_ULANG.md` §4.1.
+- **Bukti:** `docs/audit/2026-11-02/baseline-stable.json` (27 gagal, irisan 3 run = 27), `after3`–`after6` (22 gagal, 754 file, 6.254 test), **`after7.json` (11 gagal, 6.215 lulus, 0 regresi)**; `LAPORAN_VERIFIKASI_ULANG.md` §4.1. **Update 2026-11-06:** `baseline-after.json` = 6.568 test, 6.536 lulus, **3 gagal** (2 `hybrid-reservation-parser` + 1 flaky `staff-auth-and-reservation` yang lulus saat diisolasi), **0 regresi logika baru** (`node scripts/audit-baseline-diff.mjs docs/audit/2026-11-06/baseline-before.json docs/audit/2026-11-06/baseline-after.json`).
 - **Fase A — SELESAI (2026-11-03, test-only, 11 test):**
   1. `conversation-filter` (5) — **gap mock, bukan bug produksi.** `listConversations()` memanggil `prisma.conversation.count()` sebelum `findMany`; test hanya me-mock `findMany` sehingga `count` menolak → jalur fallback aktif → `where` Prisma tak pernah dibangun. Perbaikan: mock `count` di `beforeEach`.
   2. `reservation-security-and-integrity` (4) — **calendar rot** (`'Sabtu, 10 Oktober 2026'` sudah lewat) + **ekspektasi tenant usang** (route didaftarkan tanpa plugin auth sehingga `tenantOf()` memakai header `x-tenant-id`, bukan `default-tenant`). Perbaikan: helper `nextSaturdayText()` (Sabtu terdekat) + asersi `tenant_id` mengikuti kontrak `route-helpers.ts`.
   3. `staff-otw-chat-poison` (1) — label relatif "Hari ini" diuji dengan tanggal literal; kini memakai `new Date().toISOString()`.
   4. `reservation-idempotency-request-id` (1) — `pendingScheduleCheck` adalah **state sesi V3** (`src/v3/domain/types.ts`), bukan kolom Reservation; asersi diubah menjadi `undefined` + komentar kontrak.
-- **Sisa 11 — butuh keputusan (belum dieksekusi):**
-  - **Drift katalog (4 test: `catalog-seed-drift` 3 + `adversarial-reservation-resilience` 1)** — fallback dashboard 39 item vs backend 38 aktif. `npm run catalog:seed` berhasil tetapi mengubah **harga riil** (`add-on-nebulizer` 45.000/35.000 → 100.000/80.000; `add-on-nebulizer-obat` 60.000/50.000 → 130.000/110.000; `newborn-bapil` 100.000 → 85.000; bundle laktasi 80 menit/140.000 → 60 menit/70.000) dan menghapus `moms-postpartum-massage`. Regenerasi sudah **dibatalkan (revert)**; harga kanonik harus ditetapkan pemilik klinik.
-  - **`chat-schedule-extractor` (2)** — kode produk menolak isi baris form `Treatment : ...` bila >5 kata / >35 karakter, sehingga nama multi-treatment sah ("pijat bayi pulih ceria & sinar moksa") menjadi kosong. Perbaikan fondasional: pecah dulu per pemisah (`+ & dan ,`), lalu validasi tiap bagian — bukan menaikkan batas kata secara asal.
+- **Fase B — SELESAI (2026-11-06, parser):**
+  1. `chat-schedule-extractor` (2) — akar masalah: validasi `Treatment : ...` menolak seluruh string bila >5 kata / >35 karakter, sehingga multi-treatment sah ("pijat bayi pulih ceria + sinar moksa") menjadi kosong. Perbaikan fondasional: helper `isValidTreatmentLabel()` memecah label per pemisah (`+ , & dan`) lalu memvalidasi **setiap bagian** (≤5 kata / ≤35 karakter); bukan menaikkan batas kata global. Diuji ulang: `tests/unit/chat-schedule-extractor.test.ts` 8/8 lulus.
+- **Fase C — SELESAI (2026-11-06, keputusan bisnis/klinis):**
+  1. **Fallback katalog dihapus** — keputusan pemilik: dashboard DILARANG menyimpan salinan harga hardcoded. `packages/admin-dashboard/src/data/clinicServicesFallback.json`, `src/scripts/generate-catalog-seed.ts`, `npm run catalog:seed`, dan `tests/unit/catalog-seed-drift.test.ts` dihapus. Dashboard memakai API/DB saja; empty state ditampilkan bila katalog belum tersedia. Guard baru: `tests/unit/catalog-single-source.test.ts`.
+  2. **Harga add-on multi-treatment** — akar masalah: `chatScheduleExtractor` mengkanonikalisasi seluruh string multi-treatment ke satu layanan pertama sehingga add-on (Sinar Moksa) hilang. Perbaikan: label multi-treatment dipertahankan utuh, lalu tiap bagian dicocokkan ke katalog penuh (termasuk ADD_ON). `adversarial-reservation-resilience` 3.3 lulus (85.000).
+  3. **SOP vaksin** — keputusan klinis: **boleh langsung, disarankan tunda 48–72 jam**. Teks `post_vaccine_rules` dan `triage_screen` di `clinic-faq.tool.ts` diselaraskan; CM-07 lulus.
+  4. **Trauma/darurat** — keputusan klinis: **wajib eskalasi manusia**. CM-08 kini menguji `triageStatus = ESCALATE` + pesan handoff aman; `agent-runner` Skenario 3 menguji eskalasi tanpa jawaban medis.
+- **Sisa 2 — butuh keputusan (belum dieksekusi):**
   - **`hybrid-reservation-parser` (2)** — parser free-form hanya mengambil nama dari pola "nama bunda/ibu/pasien"; nama anak sengaja **tidak** disalin ke `name` (integritas penamaan, `reservation-text-parser.ts:1000`). Test mengharapkan `name = 'Raffa'` (nama anak). Perlu keputusan: ubah ekspektasi test, atau dukung reservasi atas-nama-anak secara eksplisit.
-  - **`v3-conversation-matrix` CM-07/CM-08 (2)** + **`agent-runner` darurat medis (1)** — hasil `[]` dan `escalate_to_human` tidak terpanggil. Menyentuh **keselamatan klinis** → wajib diaudit log mesin (Strict Investigation Gate), bukan ditambal.
-- **Rencana lanjutan:** (a) Fase B — tetapkan harga kanonik → `npm run catalog:seed` → commit; (b) Fase C — audit log CM-07/CM-08 & `agent-runner`; (c) Fase D — perbaiki aturan ekstraksi treatment & kontrak nama parser; (d) setelah hijau, masukkan file-file tersebut ke `PHASE_FILES`; (e) tambahkan gate "seluruh suite" berbasis baseline-diff di CI.
+- **Catatan flakiness (2026-11-06):** `tests/integration/landing-crud.test.ts` test 6 sempat `Test timed out in 15000ms` pada satu run suite penuh; lulus **3/3** saat diisolasi (≈0,4 dtk) dan lulus pada run suite penuh berikutnya. Bukan regresi logika, tetapi beban paralel bisa memicu timeout. Pertimbangkan menaikkan timeout test tersebut atau menurunkan paralelisme khusus suite integrasi.
+- **Rencana lanjutan:** (a) putuskan kontrak nama parser (nama anak vs nama bunda) untuk 2 test tersisa; (b) setelah hijau, masukkan file tersebut ke `PHASE_FILES`; (c) tambahkan gate "seluruh suite" berbasis baseline-diff di CI.
 
 ## 299. [Integritas Audit] Laporan Audit 2026-11-02 Mengklaim PASS Padahal Gate Regresi Gagal & Cakupan Per Fase Tidak Sesuai Plan (2026-11-02, RESOLVED - HIGH)
 

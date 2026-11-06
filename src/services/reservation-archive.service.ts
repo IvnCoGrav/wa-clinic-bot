@@ -60,7 +60,7 @@ export class ReservationArchiveService {
     }
 
     return {
-      schemaVersion: 1,
+      schemaVersion: 2,
       reservation: {
         id: reservation.id,
         tenant_id: reservation.tenant_id,
@@ -68,6 +68,7 @@ export class ReservationArchiveService {
         treatment_category: reservation.treatment_category,
         treatment_detail: reservation.treatment_detail,
         booking_date: reservation.booking_date,
+        duration_minutes: reservation.duration_minutes,
         status: reservation.status,
         raw_text: reservation.raw_text,
         request_id: reservation.request_id,
@@ -80,7 +81,19 @@ export class ReservationArchiveService {
         receipt_reference: reservation.receipt_reference,
         receipt_amount: reservation.receipt_amount,
         is_repeat_order: reservation.is_repeat_order,
+        purchase_review_status: reservation.purchase_review_status,
+        purchase_occurred_at: reservation.purchase_occurred_at,
+        purchase_event_sent_at: reservation.purchase_event_sent_at,
+        needs_staff_verification: reservation.needs_staff_verification,
+        gestational_weeks: reservation.gestational_weeks,
+        mom_stage: reservation.mom_stage,
+        hpl_date: reservation.hpl_date,
+        series_id: reservation.series_id,
+        session_number: reservation.session_number,
+        total_sessions: reservation.total_sessions,
         customer_address_id: reservation.customer_address_id,
+        otw_sent_at: reservation.otw_sent_at,
+        arrived_at: reservation.arrived_at,
         created_at: reservation.created_at,
         updated_at: reservation.updated_at,
       },
@@ -108,9 +121,15 @@ export class ReservationArchiveService {
       })),
       followUps: (reservation.follow_ups || []).map((f) => ({
         id: f.id,
+        type: f.type,
         stage: f.stage,
-        status: f.status,
+        treatment_category: f.treatment_category,
+        mom_stage: f.mom_stage,
+        custom_text: f.custom_text,
         scheduled_at: f.scheduled_at,
+        sent_at: f.sent_at,
+        status: f.status,
+        cancel_reason: f.cancel_reason,
       })),
     };
   }
@@ -182,7 +201,7 @@ export class ReservationArchiveService {
           archived_by: actor || null,
           archived_at: new Date(),
           restore_until: restoreUntil,
-          payload: snapshot as any,
+          payload: JSON.parse(JSON.stringify(snapshot)) as any,
         },
       });
 
@@ -287,6 +306,7 @@ export class ReservationArchiveService {
           treatment_category: resData.treatment_category,
           treatment_detail: resData.treatment_detail,
           booking_date: resData.booking_date ? new Date(resData.booking_date) : null,
+          duration_minutes: resData.duration_minutes ?? null,
           status: resData.status || 'hold',
           raw_text: resData.raw_text,
           request_id: resData.request_id || null,
@@ -299,27 +319,38 @@ export class ReservationArchiveService {
           receipt_reference: resData.receipt_reference || null,
           receipt_amount: resData.receipt_amount || null,
           is_repeat_order: Boolean(resData.is_repeat_order),
+          purchase_review_status:
+            resData.purchase_review_status ?? (resData.purchase_event_sent_at ? 'approved' : 'not_applicable'),
+          purchase_occurred_at: resData.purchase_occurred_at ? new Date(resData.purchase_occurred_at) : null,
+          purchase_event_sent_at: resData.purchase_event_sent_at ? new Date(resData.purchase_event_sent_at) : null,
+          needs_staff_verification: Boolean(resData.needs_staff_verification),
+          gestational_weeks: resData.gestational_weeks ?? null,
+          mom_stage: resData.mom_stage ?? null,
+          hpl_date: resData.hpl_date ? new Date(resData.hpl_date) : null,
+          series_id: resData.series_id ?? null,
+          session_number: resData.session_number ?? null,
+          total_sessions: resData.total_sessions ?? null,
           customer_address_id: resData.customer_address_id || null,
+          otw_sent_at: resData.otw_sent_at ? new Date(resData.otw_sent_at) : null,
+          arrived_at: resData.arrived_at ? new Date(resData.arrived_at) : null,
           created_at: resData.created_at ? new Date(resData.created_at) : new Date(),
         },
       });
 
-      // 2. Pulihkan items jika ada
+      // 2. Pulihkan items jika ada (kegagalan membatalkan transaksi)
       if (Array.isArray(payload.items) && payload.items.length > 0) {
         for (const it of payload.items) {
-          try {
-            await tx.reservationItem.create({
-              data: {
-                id: it.id,
-                tenant_id: it.tenant_id || tenantId,
-                reservation_id: resData.id,
-                service_id: it.service_id || null,
-                custom_name: it.custom_name || it.treatment_name || 'Layanan',
-                price: it.price || 0,
-                duration_minutes: it.duration_minutes || null,
-              },
-            });
-          } catch (_) {}
+          await tx.reservationItem.create({
+            data: {
+              id: it.id,
+              tenant_id: it.tenant_id || tenantId,
+              reservation_id: resData.id,
+              service_id: it.service_id || null,
+              custom_name: it.custom_name || it.treatment_name || 'Layanan',
+              price: it.price || 0,
+              duration_minutes: it.duration_minutes || null,
+            },
+          });
         }
       }
 
@@ -336,7 +367,42 @@ export class ReservationArchiveService {
         }
       }
 
-      // 4. Tandai arsip sebagai telah dipulihkan
+      // 4. Pulihkan / relink follow-ups jika ada
+      if (Array.isArray(payload.followUps) && payload.followUps.length > 0) {
+        for (const f of payload.followUps) {
+          if (!f || !f.id) continue;
+          const existingFu = await tx.followUp.findFirst({
+            where: { id: f.id, tenant_id: tenantId },
+          });
+          if (existingFu) {
+            await tx.followUp.update({
+              where: { id: f.id },
+              data: { reservation_id: resData.id },
+            });
+          } else {
+            await tx.followUp.create({
+              data: {
+                id: f.id,
+                tenant_id: tenantId,
+                customer_id: resData.customer_id,
+                reservation_id: resData.id,
+                type: f.type,
+                stage: typeof f.stage === 'number' ? f.stage : (parseInt(f.stage, 10) || 1),
+                treatment_category: f.treatment_category ?? null,
+                mom_stage: f.mom_stage ?? null,
+                custom_text: f.custom_text ?? null,
+                scheduled_at: f.scheduled_at ? new Date(f.scheduled_at) : new Date(),
+                sent_at: f.sent_at ? new Date(f.sent_at) : null,
+                // Restore tidak boleh memicu kiriman ulang: baris baru masuk CANCELLED.
+                status: 'CANCELLED',
+                cancel_reason: 'RESTORED_REVIEW_REQUIRED',
+              } as any,
+            });
+          }
+        }
+      }
+
+      // 5. Tandai arsip sebagai telah dipulihkan
       await tx.reservationArchive.update({
         where: { id: archive.id },
         data: { restored_at: new Date() },

@@ -5,7 +5,6 @@
   "main": "dist/app.js",
   "scripts": {
     "build": "tsc && node scripts/copy-landing-assets.js",
-    "catalog:seed": "tsx src/scripts/generate-catalog-seed.ts",
     "start": "node dist/app.js",
     "start:worker": "node dist/worker.js",
     "dev": "tsx watch src/app.ts",
@@ -42,7 +41,8 @@
     "scrape:all": "tsx src/cli/scrape-all.ts",
     "sync:history": "tsx scripts/sync-waha-history.ts",
     "backfill:labels": "tsx scripts/backfill-customer-labels.ts",
-    "security:scan": "tsx scripts/scan-secrets.ts"
+    "security:scan": "tsx scripts/scan-secrets.ts",
+    "audit:reservation-lock": "tsx scripts/audit/reservation-lock-probe.ts"
   },
   "dependencies": {
     "@fastify/compress": "^7.0.3",

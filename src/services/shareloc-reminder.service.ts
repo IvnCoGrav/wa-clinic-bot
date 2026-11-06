@@ -19,6 +19,10 @@ import { resolveGatewayForTenant } from '../integrations/whatsapp/factory';
 import { auditService } from './audit.service';
 import { getLiveChatHub } from './live-chat-hub.service';
 import { buildConversationUpdatedPayload } from './conversation.service';
+import {
+  resolveLocationAdequacy,
+  extractStaffVerifiedCoords,
+} from '../domain/location-adequacy';
 
 export interface SharelocSweepResult {
   examined: number;
@@ -30,15 +34,18 @@ export interface SharelocSweepResult {
 
 export class SharelocReminderService {
   /**
-   * Ambil isi pesan template dari QuickReply shortcut 'shareloc'
-   * dengan fallback ke ClinicPolicy topic 'shareloc_request', atau default darurat.
+   * Ambil isi pesan template PASCA-BOOKING dari QuickReply shortcut 'shareloc'
+   * (alias lama 'shareloct'), fallback ke ClinicPolicy topic 'shareloc_request'.
+   * Tanpa teks hardcode: bila tenant belum mengatur template, sweep berhenti
+   * dengan alasan `template_missing` (data bisnis wajib dari DB).
    */
   public async resolveTemplate(tenantId: string, customerName?: string | null): Promise<string> {
     let content: string | null = null;
 
     try {
       const qr = await (prisma as any).quickReply.findFirst({
-        where: { tenant_id: tenantId, shortcut: 'shareloc' },
+        where: { tenant_id: tenantId, shortcut: { in: ['shareloc', 'shareloct'] } },
+        orderBy: { updated_at: 'desc' },
       });
       if (qr?.content && qr.content.trim()) {
         content = qr.content.trim();
@@ -60,10 +67,7 @@ export class SharelocReminderService {
       }
     }
 
-    if (!content) {
-      content =
-        'Boleh bantu kirimkan titik lokasi (shareloc WhatsApp) atau seret pin peta di rumah Bunda {name} agar Bidan kami langsung sampai tepat di depan rumah dan tidak tersasar ya Bunda 🙏';
-    }
+    if (!content) return '';
 
     const name = customerName && customerName.trim() !== '-' ? customerName.trim() : 'Bunda';
     return content.replace(/\{(?:name|nama|nama_bunda)\}/gi, name);
@@ -115,7 +119,9 @@ export class SharelocReminderService {
           },
         },
         include: {
-          customer: true,
+          customer: {
+            include: { _count: { select: { reservations: true } } },
+          },
         },
         orderBy: { created_at: 'desc' },
         take: 100,
@@ -137,8 +143,30 @@ export class SharelocReminderService {
         }
 
         // Customer yang sudah presisi tidak perlu diproses
-        if ((cust.location_source || '').toLowerCase() === 'gps_pin') {
-          countReason('already_gps_pin');
+        // Sumber kebenaran tunggal: kolom + preferences + kartu alamat primer.
+        const prefs: any = (cust as any).preferences || {};
+        const cards = Array.isArray(prefs.saved_addresses) ? prefs.saved_addresses : [];
+        const primaryCard = cards.find((a: any) => a?.isPrimary) || cards[0] || null;
+        const adequacy = resolveLocationAdequacy({
+          columnSource: (cust as any).location_source ?? null,
+          preferenceSource: prefs.location_source ?? prefs.source ?? null,
+          primaryAddressSource: primaryCard?.locationSource ?? null,
+          shareLocationSent: (cust as any).share_location_sent,
+          lat: (cust as any).lat,
+          lng: (cust as any).lng,
+          staffVerified: Boolean(
+            prefs.location_updated_by_staff_id ||
+              prefs.location_updated_by_staff_name ||
+              prefs.location_accuracy_m != null
+          ),
+          staffVerifiedCoords: extractStaffVerifiedCoords(prefs),
+          housePhotoUrl: prefs.house_photo_url || null,
+          purchaseCount: (cust as any)?._count?.reservations ?? 0,
+          hasVisitedAddress: Boolean(primaryCard?.lastUsedAt),
+          hasCompleteAddress: Boolean(primaryCard?.address || (cust as any)?.kelurahan),
+        });
+        if (adequacy.isAdequate) {
+          countReason(adequacy.reason === 'gps_pin' ? 'already_gps_pin' : `already_${adequacy.reason}`);
           continue;
         }
 
@@ -162,7 +190,7 @@ export class SharelocReminderService {
           null;
 
         const signal = computeSharelocSignal({
-          locationSource: cust.location_source,
+          locationSource: adequacy.source === 'unknown' ? null : adequacy.source,
           shareLocationSent: cust.share_location_sent,
           lat: cust.lat,
           lng: cust.lng,
@@ -229,6 +257,10 @@ export class SharelocReminderService {
 
         // 5. Rakit template pesan
         const messageText = await this.resolveTemplate(tenantId, cust.name);
+        if (!messageText.trim()) {
+          countReason('template_missing');
+          continue;
+        }
 
         // 6. Kirim pesan via gateway yang sadar tenant
         const gateway = await resolveGatewayForTenant(tenantId);

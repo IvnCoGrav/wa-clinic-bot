@@ -1,4 +1,4 @@
-import { clinicConfig } from '../../config/clinic';
+﻿import { clinicConfig } from '../../config/clinic';
 import { getBrandIdentity } from '../../config/brand';
 import { TEMPLATES } from '../../config/persona';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
@@ -114,8 +114,8 @@ function getStaticFallbackPolicy(topic: ClinicPolicyTopic): GetClinicFaqOutput {
       return {
         success: true,
         topic,
-        factualSummary: 'Si kecil sebaiknya dipijat minimal 3 hari setelah imunisasi/vaksinasi, dengan syarat si kecil sudah dalam kondisi sehat dan tidak sedang demam/hangat.',
-        suggestedReply: 'Untuk si kecil yang baru saja imunisasi, sebaiknya dijadwalkan minimal *3 hari setelah vaksin* ya Bunda 😊\n\nPastikan juga si kecil sudah tidak demam atau rewel agar saat treatment si kecil merasa lebih nyaman dan rileks 🤗'
+        factualSummary: 'Pijat setelah imunisasi/vaksinasi BOLEH dijadwalkan langsung, tetapi Bidan kami menyarankan menunggu 48â€“72 jam (2â€“3 hari) dan memastikan si kecil tidak demam/rewel. Bila Bunda memilih langsung, Bidan tetap melakukan skrining suhu dan kondisi bayi sebelum treatment.',
+        suggestedReply: 'Boleh langsung ya Bunda, hanya saja Bidan kami menyarankan jeda 48-72 jam (2-3 hari) setelah vaksin agar si kecil lebih nyaman. Kalau Bunda tetap ingin dijadwalkan langsung, kami cek dulu suhu dan kondisi si kecil sebelum treatment ya Bun.'
       };
 
     case 'homebase_and_coverage':
@@ -123,7 +123,7 @@ function getStaticFallbackPolicy(topic: ClinicPolicyTopic): GetClinicFaqOutput {
         success: true,
         topic,
         factualSummary: `Homebase klinik kami berlokasi di Waru, Sidoarjo (dekat perbatasan Surabaya). Layanan resmi kami adalah Homecare (Bidan yang berkunjung langsung ke rumah Bunda) dengan area jangkauan seluruh Surabaya dan Sidoarjo (maksimal 30 km dari homebase).`,
-        suggestedReply: `Homebase kami berada di Waru, Sidoarjo ya Bunda 😊 Layanan kami adalah Homecare treatment di mana Bidan kami yang akan datang langsung ke rumah Bunda untuk seluruh area Surabaya dan Sidoarjo (maksimal 30 km).`
+        suggestedReply: `Homebase kami berada di Waru, Sidoarjo ya Bunda ðŸ˜Š Layanan kami adalah Homecare treatment di mana Bidan kami yang akan datang langsung ke rumah Bunda untuk seluruh area Surabaya dan Sidoarjo (maksimal 30 km).`
       };
 
     case 'operational_hours_and_booking':
@@ -131,7 +131,7 @@ function getStaticFallbackPolicy(topic: ClinicPolicyTopic): GetClinicFaqOutput {
         success: true,
         topic,
         factualSummary: 'Layanan homecare buka setiap hari (Senin - Minggu) pukul 08.00 - 17.00 WIB. Pemilihan slot jam kunjungan dikoordinasikan oleh tim Bidan kami berdasarkan ketersediaan rute bidan yang bertugas.',
-        suggestedReply: `Layanan homecare kami buka setiap hari (Senin - Minggu) mulai pukul 08.00 hingga 17.00 WIB ya Bunda 😊\n\nUntuk ketersediaan jadwal di hari yang Bunda inginkan, akan kami bantu cekkan terlebih dahulu ketersediaan jadwal tim Bidan kami ya Bunda 🤗`
+        suggestedReply: `Layanan homecare kami buka setiap hari (Senin - Minggu) mulai pukul 08.00 hingga 17.00 WIB ya Bunda ðŸ˜Š\n\nUntuk ketersediaan jadwal di hari yang Bunda inginkan, akan kami bantu cekkan terlebih dahulu ketersediaan jadwal tim Bidan kami ya Bunda ðŸ¤—`
       };
 
     case 'triage_escalate':
@@ -139,7 +139,7 @@ function getStaticFallbackPolicy(topic: ClinicPolicyTopic): GetClinicFaqOutput {
         success: true,
         topic,
         factualSummary: 'Kondisi kegawatdaruratan medis, trauma fisik/kepala, atau dugaan komplikasi tidak diperbolehkan pemijatan dan wajib segera dirujuk ke faskes/dokter spesialis.',
-        suggestedReply: 'Aduh Bunda, mohon maaf sekali untuk kondisi si kecil/Bunda saat ini, Bidan kami belum menyarankan untuk dilakukan tindakan pemijatan ya Bun. 🙏 Sebaiknya segera diperiksakan ke Dokter atau fasilitas kesehatan terdekat untuk penanganan medis yang aman dan tepat Bun.'
+        suggestedReply: 'Aduh Bunda, mohon maaf sekali untuk kondisi si kecil/Bunda saat ini, Bidan kami belum menyarankan untuk dilakukan tindakan pemijatan ya Bun. ðŸ™ Sebaiknya segera diperiksakan ke Dokter atau fasilitas kesehatan terdekat untuk penanganan medis yang aman dan tepat Bun.'
       };
 
     case 'triage_ask_stage':
@@ -147,15 +147,15 @@ function getStaticFallbackPolicy(topic: ClinicPolicyTopic): GetClinicFaqOutput {
         success: true,
         topic,
         factualSummary: 'Keluhan maternal memerlukan konfirmasi tahap kehamilan (usia gestasi minggu) atau pasca bersalin sebelum layanan dapat ditentukan secara aman.',
-        suggestedReply: 'Boleh tahu Bunda, untuk keluhannya saat ini sedang hamil (usia berapa minggu), pasca melahirkan, atau untuk relaksasi tubuh ya Bun? 😊'
+        suggestedReply: 'Boleh tahu Bunda, untuk keluhannya saat ini sedang hamil (usia berapa minggu), pasca melahirkan, atau untuk relaksasi tubuh ya Bun? ðŸ˜Š'
       };
 
     case 'triage_screen':
       return {
         success: true,
         topic,
-        factualSummary: 'Kondisi pasca imunisasi atau gejala khusus memerlukan skrining jeda minimal 48 jam dan konfirmasi bebas demam sebelum pemesanan disetujui.',
-        suggestedReply: 'Wah si kecil baru selesai imunisasi ya Bun. 👶 Untuk jadwal pemijatan, Bidan kami menyarankan diberikan jeda minimal 2x24 jam (2 hari) setelah imunisasi ya Bun, serta pastikan si kecil sudah tidak ada demam Bun.'
+        factualSummary: 'Kondisi pasca imunisasi tidak otomatis menggugurkan booking: pijat boleh langsung, tetapi disarankan jeda 48-72 jam dan bebas demam. Bidan melakukan skrining suhu/kondisi sebelum treatment.',
+        suggestedReply: 'Boleh langsung ya Bun, hanya saja Bidan kami menyarankan jeda 48-72 jam setelah imunisasi agar si kecil lebih nyaman. Sebelum treatment, Bidan akan cek suhu dan kondisi si kecil terlebih dahulu.'
       };
 
     case 'general_homecare_info':
@@ -164,7 +164,7 @@ function getStaticFallbackPolicy(topic: ClinicPolicyTopic): GetClinicFaqOutput {
         success: true,
         topic: 'general_homecare_info',
         factualSummary: `${brand.businessName} melayani perawatan ibu dan bayi langsung di rumah Bunda (Homecare treatment). Seluruh peralatan, matras, aromaterapi, dan minyak khusus disiapkan oleh Bidan kami.`,
-        suggestedReply: `Di ${brand.businessName}, kami menyediakan layanan Homecare treatment profesional di mana Bidan kami yang akan datang langsung ke rumah Bunda dengan membawa seluruh perlengkapan steril dan higienis 😊`
+        suggestedReply: `Di ${brand.businessName}, kami menyediakan layanan Homecare treatment profesional di mana Bidan kami yang akan datang langsung ke rumah Bunda dengan membawa seluruh perlengkapan steril dan higienis ðŸ˜Š`
       };
   }
 }

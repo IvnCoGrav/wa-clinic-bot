@@ -411,43 +411,81 @@ export function resolveCandidateTreatment(
   const allServices = treatmentCatalogService.getAllServices(true, tenantId) || [];
   if (allServices.length === 0) return undefined;
 
-  for (let i = conversationHistory.length - 1; i >= 0; i--) {
-    const msg = conversationHistory[i];
-    if (msg.role === 'assistant') {
-      const content = msg.content || '';
+  // D4: Treatment anaphora HANYA dari pesan asisten terakhir dan harus tepat satu layanan
+  const lastAssistantIdx = (() => {
+    for (let i = conversationHistory.length - 1; i >= 0; i--) {
+      if (conversationHistory[i].role === 'assistant') return i;
+    }
+    return -1;
+  })();
+  if (lastAssistantIdx === -1) return undefined;
 
-      // 1. Bold *Nama Layanan* — exact + normalized (toleransi varian usia/parenthesis katalog berevolusi)
-      const boldMatches = content.matchAll(/\*([^*]+)\*/g);
-      for (const m of boldMatches) {
-        const candidate = m[1].trim();
-        if (!candidate) continue;
-        const matched = allServices.find((s) => s.name.toLowerCase() === candidate.toLowerCase());
-        if (matched) return matched.name;
-        // Toleransi varian: "Pijat Lahap Juara (Nafsu Makan)" vs "Pijat Lahap Juara (< 2 thn)" → norm tanpa () harus sama
-        const normCand = candidate.replace(/\([^)]*\)/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
-        const normMatched = allServices.find((s) => {
-          const norm = s.name.replace(/\([^)]*\)/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
-          return norm && norm === normCand;
-        });
-        if (normMatched) return candidate; // kembalikan teks bold asli agar test & histori konsisten, tetap sah karena norm katalog terverifikasi
-      }
+  const content = conversationHistory[lastAssistantIdx].content || '';
+  const matches = new Set<string>();
 
-      // 2. Fallback substring tanpa bold — urut terpanjang dulu cegah partial
-      const contentLower = content.toLowerCase();
-      const sorted = [...allServices].sort((a, b) => b.name.length - a.name.length);
-      for (const s of sorted) {
-        if (s.name.length >= 5 && contentLower.includes(s.name.toLowerCase())) {
-          return s.name;
+  // 1. Bold *Nama Layanan* — exact + normalized
+  const boldMatches = content.matchAll(/\*([^*]+)\*/g);
+  for (const m of boldMatches) {
+    const candidate = m[1].trim();
+    if (!candidate) continue;
+    const matched = allServices.find((s) => s.name.toLowerCase() === candidate.toLowerCase());
+    if (matched) {
+      matches.add(matched.name);
+      continue;
+    }
+    const normCand = candidate.replace(/\([^)]*\)/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const normMatched = allServices.find((s) => {
+      const norm = s.name.replace(/\([^)]*\)/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+      return norm && norm === normCand;
+    });
+    if (normMatched) {
+      matches.add(normMatched.name);
+    }
+  }
+
+  // 2. Fallback substring tanpa bold hanya bila tidak ada bold
+  if (matches.size === 0) {
+    const contentLower = content.toLowerCase();
+    const sorted = [...allServices].sort((a, b) => b.name.length - a.name.length);
+    const matchedSpans: Array<{ start: number; end: number }> = [];
+
+    for (const s of sorted) {
+      const sLower = s.name.toLowerCase();
+      if (s.name.length >= 5) {
+        let idx = contentLower.indexOf(sLower);
+        let found = false;
+        while (idx !== -1) {
+          const end = idx + sLower.length;
+          const isSubspan = matchedSpans.some((span) => idx >= span.start && end <= span.end);
+          if (!isSubspan) {
+            matches.add(s.name);
+            matchedSpans.push({ start: idx, end });
+            found = true;
+          }
+          idx = contentLower.indexOf(sLower, idx + 1);
         }
-        // Fallback norm juga untuk varian tanpa () di content plain
-        const norm = s.name.replace(/\([^)]*\)/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
-        if (norm.length >= 5 && contentLower.includes(norm)) {
-          return s.name;
+        if (!found) {
+          const norm = s.name.replace(/\([^)]*\)/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+          if (norm.length >= 5) {
+            let nIdx = contentLower.indexOf(norm);
+            while (nIdx !== -1) {
+              const nEnd = nIdx + norm.length;
+              const isSubspan = matchedSpans.some((span) => nIdx >= span.start && nEnd <= span.end);
+              if (!isSubspan) {
+                matches.add(s.name);
+                matchedSpans.push({ start: nIdx, end: nEnd });
+              }
+              nIdx = contentLower.indexOf(norm, nIdx + 1);
+            }
+          }
         }
       }
     }
   }
-  return undefined;
+
+  // D4: lebih dari satu layanan = ambigu → jangan menebak
+  if (matches.size !== 1) return undefined;
+  return [...matches][0];
 }
 
 /**

@@ -4,6 +4,58 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-06 - Audit Live Chat Fase 0–5: Ghost Error, Integritas Data, Isolasi Tenant & UX Mobile (#316)
+
+- **Latar Belakang**: Audit 5 dimensi pada Live Chat (backend + `LiveChatMonitor.tsx` 7.900 baris + mobile) menemukan ghost error, pesan dobel, invoice fiktif, riwayat bolong, badge unread drift, kebocoran media lintas tenant, dan navigasi back yang rusak.
+- **Perbaikan Utama**:
+  1. **Pesan & error**: kegagalan pencatatan DB pasca-terkirim tidak lagi 500; `MESSAGE_SENT_NOT_PERSISTED`/`NO_ACTIVE_RESERVATION_TODAY` ditampilkan; gagal kirim tidak meninggalkan ghost bubble; error `{code,message}` tidak lagi `[object Object]`.
+  2. **Uang**: invoice dari chat diblokir bila jadwal/layanan/jarak/ongkir tidak lengkap — fallback 3,0 km / ongkir 0 / "Pijat Ceria" dihapus (`utils/invoiceReadiness.ts`).
+  3. **Data**: cursor paginasi komposit `created_at|id`; ghost read ditutup (`degraded` + tidak menyiarkan unread palsu); badge unread direkonsiliasi dari DB; filter/pencarian tidak ter-reset SSE; navigasi back satu entri + konsumsi entri modal.
+  4. **Tenant**: seluruh mutasi conversation/message memakai `tenant_id` di WHERE; media inbound memvalidasi tenant sesi staff + `Cache-Control: private` + guard traversal; sync history memakai session WAHA per tenant + run-token; humanizer/typing per tenant.
+  5. **UX mobile**: modal/sheet `dvh`, tap target diperbesar, paste gambar, hover tidak menempel, kontras dark, `theme-color` per skema, toggle AI di menu Tools thread.
+  6. **Kualitas**: 50 test baru/regresi (cursor, ghost read, invoice readiness, tenant isolation, media, sync session, dedupe, quick-reply, navigasi); mock LLM "hijau palsu" diperbaiki.
+- **Verifikasi**: `npm run build` backend & dashboard exit 0; full suite **6.590 lulus / 2 gagal pre-existing** (#287); detail di `docs/KNOWN_ISSUES.md` #316.
+- **Sisa**: uji perangkat fisik & deploy staging/produksi (2-step verification karena menyentuh area WAHA).
+
+#### 2026-11-06 - Fix: Badge & Teks "Butuh Shareloc" pada Pelanggan Terverifikasi (Audit #315)
+
+- **Latar Belakang**: Tiga percakapan produksi menunjukkan teks/badge "butuh shareloc" masih muncul meski pelanggan sudah memberi alamat lengkap, diverifikasi staf, atau berulang kali dikunjungi. Audit menemukan empat lapis penyebab: badge hanya menerima `gps_pin`, sumber lokasi split-brain, prompt AI menyuruh shareloc, dan template DB/hardcode masih mengajak shareloc.
+- **Perubahan Utama**:
+  1. `src/domain/location-adequacy.ts` — sumber kebenaran tunggal: `gps_pin` > `manual_staff` pada titik sama (toleransi 150 m) > bukti lapangan (foto rumah + riwayat kunjungan + alamat lengkap) > `estimated_area`; `share_location_sent` tanpa koordinat valid tidak lagi dianggap presisi.
+  2. `live-chat.service.ts` + `conversation.service.ts` — payload list/detail/SSE membawa `effectiveLocationSource`, `locationAdequacy`, `sharelocNeeded` (kolom `location_source` tetap untuk kompatibilitas).
+  3. `sharelocCardStatus.ts` — badge memakai kontrak server dan menganggap `manual_staff` memadai; tidak lagi membaca kolom basi.
+  4. `goal-tracker.ts` — provenance lokasi memakai resolver kanonik; status ESTIMASI **tidak lagi** memerintahkan "minta shareloc" di prompt.
+  5. `src/domain/shareloc-solicitation.ts` + guardrail + lint Quick Reply — satu pola deteksi; template kategori selain **Pasca Booking** ditolak bila mengajak shareloc.
+  6. `PATCH /api/admin/live-chat/conversations/:id/shareloc-requested` — cooldown 6 jam saat staf meminta titik presisi.
+  7. `GET /api/staff/quick-replies` + `StaffToday`/`LiveChatMonitor` — draf shareloc diambil dari DB, bukan hardcode.
+  8. Label form/invoice menjadi "Alamat Lengkap & Patokan" (parser lama tetap menerima "Alamat & Shareloc").
+- **Data produksi**: `shareloct` → `shareloc` (kategori Pasca Booking, isi konteks persiapan treatment), `kelurahan` tanpa ajakan shareloc, `reservasi`/`format_reservasi` memakai label baru.
+- **Verifikasi**: test baru `location-adequacy`, `conversation-location-adequacy`, `shareloc-solicitation`, `quick-reply-shareloc-lint`, `shareloc-solicitation-audit`; `npm run build` backend & dashboard exit 0; suite terkait 164 test hijau. Deploy produksi belum dieksekusi.
+
+
+#### 2026-11-06 - Hardening: Reservasi & State Machine FSM (A-001–A-015, P1–P10)
+
+- **Latar Belakang**: Audit menyeluruh modul reservasi menemukan 15 celah (A-001–A-015), lalu 10 celah lanjutan saat verifikasi (P1–P10): bypass FSM, cron hold tidak konsisten, series melewati seam inti, restore arsip kehilangan data, advisory lock fail-open, invoice memakai alamat profil, dan anaphora treatment dari pesan asisten.
+- **Perubahan Utama**:
+  1. `src/services/reservation-status.service.ts` — seam kanonis `assertTransition()` / `applyTransition()` dengan dukungan handle transaksi (`db`), guard prematur, dan `STAFF_REQUIRED`; `allowIllegal` dicabut.
+  2. `reservation-dispatch.route.ts` — semua jalur status (complete, bulk, confirm, release hold, soft-cancel, PATCH edit) memakai seam; transisi ilegal → 409 `ILLEGAL_TRANSITION`, bukan 404.
+  3. `cron.service.ts` — hold sweep memakai `ACTIVE_HOLD_WINDOW_MS` (2 jam), bukan tengah malam; hook LTV + follow-up dijalankan.
+  4. `reservation-core.service.ts` — `ACTIVE_STATUSES` memakai domain (`pending` ikut; `in_progress` dihapus); advisory lock fail-closed di production + log `ADVISORY_LOCK_FALLBACK`.
+  5. `reservation-series.service.ts` — create/pause/resume/cancel atomik dalam satu transaksi ber-advisory-lock; cek bentrok staf + customer; alamat + `reservationItem` ditautkan; error item tidak lagi ditelan.
+  6. `reservation-archive.service.ts` — snapshot `schemaVersion: 2` (34 field + follow-up), restore me-relink/memulihkan follow-up, default `purchase_review_status` aman untuk arsip v1.
+  7. `staff-reservation.service.ts` — `recordPayment` memakai `canTransition` + guard prematur; booking H+7/hold tercatat lunas tanpa completed prematur.
+  8. `paymentInvoiceFormatter.ts` — invoice memakai seam `resolveReservationAddress()` (kartu-first).
+  9. `tool-masker.ts` — anaphora treatment hanya dari pesan asisten terakhir dan tepat satu layanan.
+  10. `POST /api/admin/reservation` + quick-hold menerima `requestId`; dashboard mengirim `submitRequestIdRef`.
+  11. `chatScheduleExtractor.ts` — `isValidTreatmentLabel()` memecah multi-treatment per pemisah sebelum validasi (audit #301).
+- **Bukti & Verifikasi**:
+  - Test baru: `reservation-status-transition`, `reservation-status-service`, `expired-hold-sweep-window`, `reservation-series-core-gates`, `reservation-archive-restore-v2`, `advisory-lock-fail-closed`, `payment-invoice-address-card`.
+  - `npm run build` backend & dashboard exit 0; 11 suite reservasi terkait lulus.
+  - `scripts/audit/reservation-lock-probe.ts` + `npm run audit:reservation-lock` untuk probe serialisasi lock di staging (default dry-run).
+  - Baseline diff: 0 regresi logika baru; kegagalan deterministik turun 11 → 2 setelah perbaikan parser multi-treatment, penghapusan fallback katalog, perbaikan harga add-on, SOP vaksin, dan eskalasi trauma/darurat. Satu test `staff-auth-and-reservation` flaky di bawah beban suite penuh (lulus saat diisolasi).
+  - **Keputusan bisnis/klinis 2026-11-06:** fallback katalog dashboard dihapus (API/DB satu-satunya sumber); vaksin **boleh langsung, disarankan tunda 48–72 jam**; trauma/darurat **wajib eskalasi manusia**.
+  - Detail: `docs/audit/2026-11-06/LAPORAN_AUDIT_RESERVASI.md`, `docs/plans/FIXING_PLAN_RESERVASI_2026-11-06.md`, `docs/KNOWN_ISSUES.md` #314 & #301.
+
 #### 2026-11-06 - Fix: Detail Reservasi Menampilkan Alamat Kartu Terpilih (Bukan Rumah Utama)
 
 - **Latar Belakang & Masalah**:

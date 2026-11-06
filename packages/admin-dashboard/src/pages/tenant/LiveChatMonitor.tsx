@@ -10,6 +10,8 @@ import { connectLiveChatSse } from '../../services/liveChatSse';
 import { evaluatePaymentProof } from '../../utils/paymentProof';
 import { getCleanTreatmentName } from '../../utils/treatmentFormatter';
 import { resolveStaffName } from '../../utils/resolveStaffName';
+import { StaffOwnershipBadge } from '../../components/common/StaffOwnershipBadge';
+import type { StaffOwnership } from '../../utils/staffOwnershipBadge';
 import { formatClinicalAge } from '../../utils/clinicalAge';
 import { prepareChatImage } from '../../utils/imageCompressor';
 import {
@@ -138,6 +140,10 @@ async function getWilayahRef(): Promise<WilayahReference | null> {
 }
 import { formatChatDateSeparatorWib, isDifferentDayWib, formatLastChatWib, formatWibTime, getWibDateKey, getWibHoursAndMinutes, wibDayStartEnd } from '../../utils/dateWib';
 import { shouldWarnUnregisteredVisit } from '../../utils/dispatchVisitContext';
+import { validateInvoiceReadiness } from '../../utils/invoiceReadiness';
+import { selectQuickReplyReservation } from '../../utils/quickReplyReservation';
+import { dedupeThreadMessages } from '../../utils/livechatThread';
+import { resolveUrlViewTransition } from '../../utils/livechatNavigation';
 import { shouldReloadForSseEvent, shouldPreserveActiveChat, isSameConversation, type SourceFilter } from '../../utils/livechatSourceFilter';
 import { emitBootPhase } from '../../lib/bootProgress';
 
@@ -279,6 +285,7 @@ interface LiveChatItem {
   ltv?: number;
   customerLabels?: CustomerLabelData[];
   customerProfilePictureUrl?: string | null;
+  staffOwnership?: StaffOwnership | null;
   unreadCount?: number;
   isManualUnread?: boolean;
   isPinned?: boolean;
@@ -328,6 +335,9 @@ interface LiveChatItem {
     arrived_at?: string | null;
   } | null;
   locationSource?: string | null;
+  effectiveLocationSource?: string | null;
+  locationAdequacy?: 'gps_pin' | 'staff_verified' | 'field_verified' | 'estimated_area' | 'unknown' | null;
+  sharelocNeeded?: boolean;
   shareLocationSent?: boolean;
   sharelocRequestedAt?: string | null;
 }
@@ -372,6 +382,9 @@ export const LiveChatMonitor: React.FC = () => {
   const [isPinningMessageId, setIsPinningMessageId] = useState<string | null>(null);
   const [isHidingMessageId, setIsHidingMessageId] = useState<string | null>(null);
   const [isThreadLoading, setIsThreadLoading] = useState(false);
+  // AUDIT FASE 1 (T-05): kegagalan muat thread tidak boleh tampil sebagai
+  // "Belum ada pesan" — simpan pesan error agar admin bisa retry.
+  const [threadLoadError, setThreadLoadError] = useState<string | null>(null);
   const activeThreadRequestIdRef = useRef(0);
   // Issue 160: percakapan yang bubble-nya sudah termuat — dipakai mencegah flash spinner
   // saat refresh thread yang sama (SSE reconnect / refresh manual).
@@ -508,6 +521,13 @@ export const LiveChatMonitor: React.FC = () => {
   const [isSearching, setIsSearching] = useState(false);
   const searchDebounceTimerRef = useRef<any>(null);
   const loadChatsAbortControllerRef = useRef<AbortController | null>(null);
+  // AUDIT FASE 2 (T-04): mirror ref agar `loadChats` yang dipanggil dari closure
+  // mount-once (SSE/poll/visibility) TIDAK memakai filter lama. Sebelumnya reload
+  // otomatis bisa menghapus hasil pencarian/filter label yang sedang aktif.
+  const searchQueryRef = useRef('');
+  const labelFilterRef = useRef<'all' | 'medical_concern' | 'unresolved_faq' | 'human_request'>('all');
+  useEffect(() => { searchQueryRef.current = searchQuery; }, [searchQuery]);
+  useEffect(() => { labelFilterRef.current = labelFilter; }, [labelFilter]);
 
   // In-Chat Search & Target Message Highlighting — terpisah dari pencarian daftar (3.1)
   const [inChatSearchQuery, setInChatSearchQuery] = useState('');
@@ -515,6 +535,9 @@ export const LiveChatMonitor: React.FC = () => {
   const [matchingMessageIds, setMatchingMessageIds] = useState<string[]>([]);
   const [currentMatchIndex, setCurrentMatchIndex] = useState<number>(-1);
   const [highlightedMsgId, setHighlightedMsgId] = useState<string | null>(null);
+  // Fokus hanya saat admin MEMBUKA toolbar secara manual — bukan saat toolbar
+  // dibuka otomatis oleh direct-jump pencarian (keyboard menutupi pesan).
+  const inChatSearchInputRef = useRef<HTMLInputElement | null>(null);
 
   // Debounce 350ms: mengetik tidak langsung memicu deep-search/puluhan request paralel.
   const [debouncedInChatQuery, setDebouncedInChatQuery] = useState('');
@@ -739,27 +762,27 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     isTypingActiveRef.current = false;
     setSelectedId(null);
     selectedIdRef.current = null;
+    setMobileView('list');
     try {
       sessionStorage.removeItem('liveChat:selectedId');
       sessionStorage.setItem('liveChat:mobileView', 'list');
     } catch {}
-    // bersihkan query ?conversationId tanpa reload
-    try {
-      window.history.replaceState({}, '', '/admin/live-chat');
-      setSearchParams({}, { replace: true });
-    } catch {}
-    if (isChatHistoryPushedRef.current || (typeof window !== 'undefined' && window.history.state?.view === 'live-chat-detail')) {
+
+    // AUDIT FASE 2 (T-08): jika URL masih membawa conversationId dan chat dibuka
+    // lewat navigasi in-app, POP entri history (bukan replace) agar tombol back
+    // perangkat tetap konsisten dan tidak menyisakan entri hantu.
+    const hasConvInUrl =
+      typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('conversationId');
+    if (hasConvInUrl && isChatHistoryPushedRef.current) {
       isChatHistoryPushedRef.current = false;
-      if (typeof window !== 'undefined' && window.history.state?.view === 'live-chat-detail') {
-        window.history.back();
-        // fallback: pastikan list view setelah popstate tidak tertahan
-        setTimeout(() => setMobileView('list'), 60);
-      } else {
-        setMobileView('list');
-      }
+      window.history.back();
     } else {
-      setMobileView('list');
+      try {
+        window.history.replaceState({}, '', '/admin/live-chat');
+        setSearchParams({}, { replace: true });
+      } catch {}
     }
+    setTimeout(() => setMobileView('list'), 60);
   };
 
   const handleListTouchStart = (e: React.TouchEvent) => {
@@ -809,6 +832,22 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       }
     } catch (_) {}
   };
+
+  // AUDIT FASE 2 (T-08): konsumsi entri history modal saat modal ditutup lewat
+  // tombol UI (bukan tombol back). Tanpa ini, satu tekanan back "termakan"
+  // entri hantu sehingga tombol back perangkat terasa tidak bereaksi.
+  const prevTrackedModalOpenRef = useRef(false);
+  useEffect(() => {
+    const anyTrackedModalOpen = customerDetailModalOpen || showQuickBookingModal || showInvoiceModal;
+    if (!anyTrackedModalOpen && prevTrackedModalOpenRef.current) {
+      try {
+        if (typeof window !== 'undefined' && window.history.state?.view === 'live-chat-modal') {
+          window.history.back();
+        }
+      } catch {}
+    }
+    prevTrackedModalOpenRef.current = anyTrackedModalOpen;
+  }, [customerDetailModalOpen, showQuickBookingModal, showInvoiceModal]);
   const [syncingHistory, setSyncingHistory] = useState(false);
   const [syncNextOffset, setSyncNextOffset] = useState<number | null>(null);
   const [syncProgress, setSyncProgress] = useState<string | null>(null);
@@ -893,14 +932,13 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     const childAge = firstChild?.current_age || firstChild?.raw_age_text || firstChild?.age || firstChild?.ageText || '';
     // Reservasi aktif diturunkan lokal (memo active* dideklarasikan lebih bawah).
     const resList = (customerDetailData?.reservations || []) as any[];
-    const activeRes =
-      resList.find((r: any) => r.status === 'confirmed' || r.status === 'en_route') ||
-      resList.find((r: any) => r.status === 'hold') ||
-      resList.find((r: any) => r.status === 'pending') ||
-      (selectedChat as any)?.activeConfirmedReservation ||
-      (selectedChat as any)?.activeHoldReservation ||
-      (selectedChat as any)?.activePendingReservation ||
-      null;
+    // AUDIT FASE 5: pilih jadwal relevan (bukan `confirmed` pertama yang mungkin basi).
+    const snapshotReservations = [
+      (selectedChat as any)?.activeConfirmedReservation,
+      (selectedChat as any)?.activeHoldReservation,
+      (selectedChat as any)?.activePendingReservation,
+    ].filter(Boolean);
+    const activeRes = selectQuickReplyReservation([...resList, ...snapshotReservations]);
     const treatmentName = activeRes?.treatment_detail || activeRes?.treatment_name || '';
     let tanggal = '';
     let jam = '';
@@ -1022,10 +1060,17 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         body: JSON.stringify({ messagesPerChat: 100 }),
       });
       if (res?.success) {
+        if ((res as any)?.progress) {
+          setBgSyncProgress((res as any).progress);
+        }
+        // AUDIT: backend mengembalikan `started:false` bila sync sudah berjalan.
+        // Jangan klaim "dimulai" (ghost success).
+        if ((res as any)?.started === false) {
+          toast('Sinkronisasi riwayat WhatsApp memang sedang berjalan. Pantau progres di banner.', 'info');
+          return;
+        }
         toast('🚀 Sinkronisasi seluruh riwayat WhatsApp dimulai di latar belakang...', 'success');
-        if (res.progress) {
-          setBgSyncProgress(res.progress);
-        } else {
+        if (!(res as any)?.progress) {
           setBgSyncProgress((prev) => ({ ...prev, isSyncing: true, status: 'in_progress' }));
         }
       }
@@ -1097,6 +1142,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     } catch {}
     if (selectedId) {
       setMessages([]);
+      setThreadLoadError(null);
       loadThread(selectedId);
       // Jika conversation belum ada di chats list (misal dibuka langsung dari URL / Push notif), ambil detailnya
       if (!chatsRef.current.some((c) => c.conversationId === selectedId)) {
@@ -1116,6 +1162,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     } else {
       loadedThreadConvIdRef.current = null;
       setMessages([]);
+      setThreadLoadError(null);
       setIsThreadLoading(false);
     }
   }, [selectedId]);
@@ -1256,7 +1303,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     }, 350);
   };
 
-  const loadChats = async (reset = false, search = searchQuery, isSearchOperation = false) => {
+  const loadChats = async (reset = false, search = searchQueryRef.current, isSearchOperation = false) => {
     // Batalkan request loadChats sebelumnya yang masih in-flight (mencegah bottleneck saat koneksi seluler lambat)
     if (reset && loadChatsAbortControllerRef.current) {
       loadChatsAbortControllerRef.current.abort();
@@ -1281,7 +1328,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     try {
       const offset = reset ? 0 : listOffsetRef.current;
       const searchParam = search && search.trim() ? `&search=${encodeURIComponent(search.trim())}` : '';
-      const labelParam = labelFilter !== 'all' ? `&label=${encodeURIComponent(labelFilter)}` : '';
+      const labelParam = labelFilterRef.current !== 'all' ? `&label=${encodeURIComponent(labelFilterRef.current)}` : '';
       // Sandbox (chat test/QA) dipanggil bila mode sandbox aktif, default memuat real.
       // Baca dari REF (bukan state) agar pemanggil dari closure SSE mount-once tetap
       // memakai filter terkini — mencegah reload mode salah (bug Issue 160).
@@ -1443,34 +1490,14 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       const list: ChatMessage[] = Array.isArray(res) ? res : (res?.data || []);
       setHasMoreOlderMessages(!!(res as any)?.hasMore);
       const cursor = (res as any)?.oldestCursor as string | undefined;
-      oldestMessageCursorRef.current = cursor || (list.length > 0 ? String((list[0] as any)?.created_at || '') || null : null);
+      // Fallback cursor komposit (created_at|id) — paritas dengan backend T-09.
+      const firstLoaded = list[0] as any;
+      oldestMessageCursorRef.current = cursor || (firstLoaded ? `${firstLoaded.created_at}|${firstLoaded.id}` : null);
       
       // Client-side deduplication — hanya duplikat nyata: id/wa_message_id sama, atau teks identik <2s, atau media URL sama <2s. Dua foto berbeda tidak pernah dianggap duplikat.
-      const deduped: ChatMessage[] = [];
-      for (const m of list) {
-        const hasDuplicate = deduped.some((existing) => {
-          if (existing.id === m.id) return true;
-          const eWa = (existing as any).wa_message_id || (existing as any).waMessageId;
-          const mWa = (m as any).wa_message_id || (m as any).waMessageId;
-          if (eWa && mWa && eWa === mWa) return true;
-          // teks identik persis + direction sama + selisih <2s (bukan 20s)
-          if (existing.direction === m.direction && existing.content && m.content && existing.content === m.content) {
-            if (Math.abs(new Date(existing.created_at).getTime() - new Date(m.created_at).getTime()) < 2000) return true;
-          }
-          // media URL spesifik sama → duplikat (bukan semua gambar dianggap sama)
-          if (existing.media && m.media && existing.direction === m.direction) {
-            const eUrl = (existing.media as any).url || (existing.media as any).hdUrl || (existing.media as any).thumbUrl;
-            const mUrl = (m.media as any).url || (m.media as any).hdUrl || (m.media as any).thumbUrl;
-            if (eUrl && mUrl && eUrl === mUrl) {
-              if (Math.abs(new Date(existing.created_at).getTime() - new Date(m.created_at).getTime()) < 2000) return true;
-            }
-          }
-          return false;
-        });
-        if (!hasDuplicate) {
-          deduped.push(m);
-        }
-      }
+      // AUDIT FASE 5: dedupe berbasis ID saja (bukan teks+2 detik) agar pesan
+      // sah yang dikirim beruntun tidak hilang dari riwayat.
+      const deduped: ChatMessage[] = dedupeThreadMessages(list);
 
       if (activeThreadRequestIdRef.current === reqId && selectedIdRef.current === conversationId) {
         const mappedMessages = deduped.map((m) => ({
@@ -1486,6 +1513,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           quoted_message: extractQuotedMessage(m),
         }));
         setMessages(mappedMessages);
+        setThreadLoadError(null);
 
         // Inisialisasi pinnedBubble dari response API atau cari di list pesan
         if (res?.pinnedMessage) {
@@ -1520,7 +1548,10 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     } catch (err: any) {
       if (activeThreadRequestIdRef.current === reqId && selectedIdRef.current === conversationId) {
         console.error('Failed to load conversation thread:', err);
-        setMessages([]);
+        // Pertahankan bubble yang sudah tampil jika ini refresh thread yang sama;
+        // hanya kosongkan saat pergantian percakapan (hindari ilusi "riwayat hilang").
+        if (!isRefreshSameThread) setMessages([]);
+        setThreadLoadError(err?.message || 'Gagal memuat riwayat chat.');
       }
     } finally {
       if (activeThreadRequestIdRef.current === reqId && selectedIdRef.current === conversationId) {
@@ -1548,7 +1579,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       setHasMoreOlderMessages(!!(res as any)?.hasMore);
       const cursor = (res as any)?.oldestCursor as string | undefined;
       if (older.length > 0) {
-        oldestMessageCursorRef.current = cursor || String((older[0] as any)?.created_at || '') || oldestMessageCursorRef.current;
+        const firstOlder = older[0] as any;
+        oldestMessageCursorRef.current = cursor || (firstOlder ? `${firstOlder.created_at}|${firstOlder.id}` : oldestMessageCursorRef.current);
         const mapped = older.map((m) => ({ ...m, media: extractMedia(m), location: (m as any).location || extractLocation(m), quoted_message: extractQuotedMessage(m) }));
         setMessages((prev) => {
           const seen = new Set(prev.map((m) => String(m.id)));
@@ -1602,7 +1634,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           if (!hasMore) oldestMessageCursorRef.current = null;
           break;
         }
-        cursor = nextCursor || String((batch[0] as any)?.created_at || '') || null;
+        const firstBatch = batch[0] as any;
+        cursor = nextCursor || (firstBatch ? `${firstBatch.created_at}|${firstBatch.id}` : null);
         oldestMessageCursorRef.current = cursor;
         setHasMoreOlderMessages(hasMore);
         const mapped = batch.map((m) => ({ ...m, media: extractMedia(m), quoted_message: extractQuotedMessage(m) }));
@@ -1636,26 +1669,53 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
   useEffect(() => { mobileViewRef.current = mobileView; }, [mobileView]);
   useEffect(() => { isDesktopRef.current = isDesktop; }, [isDesktop]);
 
+  // AUDIT FASE 2 (T-08): restore sessionStorage HANYA saat bootstrap awal.
+  // Sebelumnya setiap back (URL tanpa conversationId) membuka chat lagi dari
+  // sessionStorage sehingga tombol back terasa tidak berfungsi.
+  const hasBootstrappedViewRef = useRef(false);
+  const prevUrlConvIdRef = useRef<string | null>(null);
   useEffect(() => {
     try {
       const urlConvId = searchParams.get('conversationId') || searchParams.get('id');
-      const savedView = sessionStorage.getItem('liveChat:mobileView');
-      const savedId = sessionStorage.getItem('liveChat:selectedId');
-      if (urlConvId) {
+      const prevUrlConvId = prevUrlConvIdRef.current;
+      prevUrlConvIdRef.current = urlConvId;
+      if (!hasBootstrappedViewRef.current) {
+        hasBootstrappedViewRef.current = true;
+        const savedView = sessionStorage.getItem('liveChat:mobileView');
+        const savedId = sessionStorage.getItem('liveChat:selectedId');
+        if (urlConvId) {
+          setSelectedId(urlConvId);
+          selectedIdRef.current = urlConvId;
+          setMobileView('chat');
+        } else if (savedView === 'chat' && savedId) {
+          setSelectedId(savedId);
+          selectedIdRef.current = savedId;
+          setMobileView('chat');
+        } else {
+          setMobileView('list');
+          if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+            setSelectedId(null);
+            selectedIdRef.current = null;
+            sessionStorage.removeItem('liveChat:selectedId');
+          }
+        }
+        return;
+      }
+
+      // Perubahan URL berikutnya = navigasi in-app / tombol back browser.
+      const transition = resolveUrlViewTransition(prevUrlConvId, urlConvId);
+      if (transition === 'open' && urlConvId) {
         setSelectedId(urlConvId);
         selectedIdRef.current = urlConvId;
         setMobileView('chat');
-      } else if (savedView === 'chat' && savedId) {
-        setSelectedId(savedId);
-        selectedIdRef.current = savedId;
-        setMobileView('chat');
-      } else {
+      } else if (transition === 'close') {
+        // Khusus transisi "ada conversationId → tidak ada" (tombol back).
+        // Perubahan param lain (mis. ?action=export) TIDAK boleh menutup chat.
+        setSelectedId(null);
+        selectedIdRef.current = null;
         setMobileView('list');
-        if (typeof window !== 'undefined' && window.innerWidth < 1024) {
-          setSelectedId(null);
-          selectedIdRef.current = null;
-          sessionStorage.removeItem('liveChat:selectedId');
-        }
+        isChatHistoryPushedRef.current = false;
+        try { sessionStorage.removeItem('liveChat:selectedId'); } catch {}
       }
     } catch {}
   }, [searchParams]);
@@ -1789,7 +1849,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
   // 📱 Listener untuk Default Android Back button & popstate history navigation
   useEffect(() => {
-    const handlePopState = (e: PopStateEvent) => {
+    const handlePopState = (_e: PopStateEvent) => {
       // Prioritas 1: Tutup menu konteks / modal / popup yang sedang aktif terlebih dahulu
       if (contextMenu) {
         setContextMenu(null);
@@ -1828,18 +1888,16 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         return;
       }
 
-      // Jika state yang baru di-pop adalah live-chat-modal atau masih berada di live-chat-detail
-      if (
-        e.state?.view === 'live-chat-modal' ||
-        e.state?.view === 'live-chat-detail' ||
-        (typeof window !== 'undefined' && (window.history.state?.view === 'live-chat-detail' || window.history.state?.view === 'live-chat-modal'))
-      ) {
-        return;
-      }
+      // AUDIT FASE 2 (T-08): gunakan URL sebagai sumber kebenaran, bukan state
+      // history karangan. Jika URL masih membawa conversationId (mis. pop dari
+      // entri modal), chat HARUS tetap terbuka.
+      const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+      const urlConvId = params?.get('conversationId') || params?.get('id');
+      if (urlConvId) return;
 
-      // Prioritas 2: Jika di tampilan chat mobile, kembali ke list
+      // Prioritas 2: Jika di tampilan chat mobile, kembali ke list.
+      isChatHistoryPushedRef.current = false;
       if (mobileView === 'chat') {
-        isChatHistoryPushedRef.current = false;
         setMobileView('list');
         try { sessionStorage.setItem('liveChat:mobileView', 'list'); } catch {}
       }
@@ -2059,9 +2117,16 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     const isCurrentlyUnread = (chat.unreadCount || 0) > 0 || chat.isManualUnread;
     const targetEndpoint = isCurrentlyUnread ? 'read' : 'unread';
     try {
-      await apiRequest(`/api/admin/conversations/${chat.conversationId}/${targetEndpoint}`, {
+      const res = await apiRequest(`/api/admin/conversations/${chat.conversationId}/${targetEndpoint}`, {
         method: 'PATCH',
       });
+      // T-01: jangan menampilkan status palsu bila DB belum tersinkron.
+      if ((res as any)?.degraded) {
+        toast('Status baca belum tersinkron ke database. Data dimuat ulang dari server.', 'info');
+        void refreshChatItem(chat.conversationId);
+        refreshTotalUnread(true);
+        return;
+      }
       setChats((prev) => {
         const updated = prev.map((c) => {
           if (c.conversationId !== chat.conversationId) return c;
@@ -2114,7 +2179,14 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     });
     if (!confirmed) return;
     try {
-      await apiRequest('/api/admin/live-chat/mark-all-read', { method: 'POST' });
+      const res = await apiRequest('/api/admin/live-chat/mark-all-read', { method: 'POST' });
+      // T-01: jangan nol-kan badge bila DB belum benar-benar tersinkron.
+      if ((res as any)?.degraded) {
+        toast('Perintah diterima, tetapi status baca belum tersinkron ke database. Muat ulang setelah koneksi pulih.', 'info');
+        void loadChats(true);
+        refreshTotalUnread(true);
+        return;
+      }
       const updatedChats = chatsRef.current.map((c) => ({
         ...c,
         unreadCount: 0,
@@ -2154,9 +2226,9 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     try {
       sessionStorage.setItem('liveChat:selectedId', conversationId);
       sessionStorage.setItem('liveChat:mobileView', 'chat');
-      const newUrl = `/admin/live-chat?conversationId=${encodeURIComponent(conversationId)}`;
-      window.history.pushState({ view: 'live-chat-detail', conversationId }, '', newUrl);
-      // sinkron ke react-router agar searchParams tidak stale
+      // AUDIT FASE 2 (T-08): SATU entri history saja. Sebelumnya pushState manual
+      // dilanjutkan setSearchParams → 2 entri per chat, sehingga tombol back harus
+      // ditekan 2× dan forward history hilang.
       setSearchParams({ conversationId }, { replace: false });
       isChatHistoryPushedRef.current = true;
     } catch {}
@@ -2165,7 +2237,14 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     // Kontrak backend: awaiting hanya bila pesan terakhir INBOUND & usia <24 jam.
     const targetChat = chatsRef.current.find((c) => c.conversationId === conversationId);
     if (targetChat && ((targetChat.unreadCount || 0) > 0 || targetChat.isManualUnread)) {
-      apiRequest(`/api/admin/conversations/${conversationId}/read`, { method: 'PATCH' }).catch(() => {});
+      // AUDIT FASE 2 (T-01): jika backend melaporkan `degraded` (DB tidak
+      // tersinkron), pulihkan angka unread dari server — jangan biarkan UI
+      // mengklaim "sudah dibaca" tetapi badge muncul lagi saat reload.
+      apiRequest(`/api/admin/conversations/${conversationId}/read`, { method: 'PATCH' })
+        .then((res: any) => {
+          if (res?.degraded) void refreshChatItem(conversationId);
+        })
+        .catch(() => { void refreshChatItem(conversationId); });
       const lastMsg = (targetChat.lastMessages || [])[(targetChat.lastMessages || []).length - 1] as any;
       const isLastInbound = !!lastMsg && lastMsg.direction === 'INBOUND';
       const lastAgeOk = !!lastMsg && (Date.now() - new Date(lastMsg.created_at).getTime()) <= 24 * 60 * 60 * 1000;
@@ -2297,23 +2376,10 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   return next;
                 }
 
-                const isDuplicate = prev.some((m) => {
-                  if (m.id === msg.id) return true;
-                  const eWa = (m as any).wa_message_id || (m as any).waMessageId;
-                  const nWa = (msg as any).wa_message_id || (msg as any).waMessageId;
-                  if (eWa && nWa && eWa === nWa) return true;
-                  if (m.direction === msg.direction && m.content && msg.content && m.content === msg.content) {
-                    if (Math.abs(new Date(m.created_at).getTime() - new Date(msg.created_at).getTime()) < 2000) return true;
-                  }
-                  const eUrl = mediaUrlOf(m);
-                  const nUrl = mediaUrlOf(msg);
-                  if (eUrl && nUrl && eUrl === nUrl && m.direction === msg.direction) {
-                    if (Math.abs(new Date(m.created_at).getTime() - new Date(msg.created_at).getTime()) < 2000) return true;
-                  }
-                  return false;
-                });
-                if (isDuplicate) return prev;
-                return [...prev, msg];
+                // Dedupe berbasis identitas saja (pesan identik beruntun tetap tampil).
+                const merged = dedupeThreadMessages([...prev, msg]);
+                if (merged.length === prev.length) return prev;
+                return merged;
               });
               optimisticMessageIdsRef.current.clear();
               setTimeout(() => scrollToBottom(true), 50);
@@ -2390,6 +2456,14 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   frustratedAt: payload.isFrustrated !== undefined ? (payload.frustratedAt ?? null) : c.frustratedAt,
                   frustratedReason: payload.isFrustrated !== undefined ? (payload.frustratedReason ?? null) : c.frustratedReason,
                   locationSource: payload.locationSource !== undefined ? payload.locationSource : c.locationSource,
+                  effectiveLocationSource:
+                    payload.effectiveLocationSource !== undefined
+                      ? payload.effectiveLocationSource
+                      : c.effectiveLocationSource,
+                  locationAdequacy:
+                    payload.locationAdequacy !== undefined ? payload.locationAdequacy : c.locationAdequacy,
+                  sharelocNeeded:
+                    payload.sharelocNeeded !== undefined ? payload.sharelocNeeded : c.sharelocNeeded,
                   shareLocationSent: payload.shareLocationSent !== undefined ? payload.shareLocationSent : c.shareLocationSent,
                   sharelocRequestedAt: payload.sharelocRequestedAt !== undefined ? payload.sharelocRequestedAt : c.sharelocRequestedAt,
                   activeConfirmedReservation: payload.activeConfirmedReservation !== undefined ? payload.activeConfirmedReservation : (c as any).activeConfirmedReservation,
@@ -2941,9 +3015,12 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         }
       } else {
         toast(`Gagal mengirim reaksi: ${res?.error || 'Terjadi kesalahan'}`, 'error');
+        // Rollback: muat ulang dari server agar emoji optimistis tidak "nyangkut".
+        void loadThread(selectedChat.conversationId);
       }
     } catch (err: any) {
       toast(`Gagal mengirim reaksi: ${err.message || 'Terjadi kesalahan'}`, 'error');
+      void loadThread(selectedChat.conversationId);
     }
   };
 
@@ -3838,15 +3915,34 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     resolveEffectiveLocationSource(selectedChat?.locationSource) ||
     null;
 
+  // Cooldown 6 jam (audit C-006): tandai permintaan shareloc agar badge tidak
+  // menagih berulang. Ditulis ke session_data oleh endpoint admin.
+  const markSharelocRequested = (conversationId?: string | null) => {
+    if (!conversationId) return;
+    const nowIso = new Date().toISOString();
+    const updated = (chatsRef.current || []).map((c) =>
+      c.conversationId === conversationId ? { ...c, sharelocRequestedAt: nowIso } : c
+    );
+    chatsRef.current = updated;
+    startTransition(() => setChats(updated));
+    apiRequest(`/api/admin/live-chat/conversations/${conversationId}/shareloc-requested`, {
+      method: 'PATCH',
+    }).catch(() => {});
+  };
+
   // Fase 4: susun draf permintaan shareloc lalu sisipkan ke composer (CS tetap
-  // menekan Kirim). Draf dari data pasien; tanpa hardcode tarif/SOP.
+  // menekan Kirim). Teks WAJIB dari template DB (kategori Pasca Booking) —
+  // dilarang hardcode teks bisnis di UI.
   const handleRequestSharelocFromDispatch = () => {
+    const qr = quickReplies.find((q) => q.shortcut === 'shareloc');
+    if (!qr?.content) {
+      toast('Template shareloc belum diatur di Balasan Cepat (kategori Pasca Booking).', 'error');
+      return;
+    }
     const name = (customerDetailData?.name || selectedChat?.customerName || '').trim() || 'Bunda';
-    const draft =
-      `Halo ${name}, Bidan kami izin konfirmasi untuk persiapan treatment. ` +
-      `Boleh minta tolong kirimkan shareloc WhatsApp terkini dan patokan rumahnya ya Bun ` +
-      `agar Bidan tidak tersasar? Terima kasih Bunda 🤗`;
+    const draft = qr.content.replace(/\{name\}/g, name);
     handleInsertDispatchDraft(draft);
+    markSharelocRequested(selectedChat?.conversationId);
   };
 
   const handleGenerateAndInsertInvoice = async (resItem: any) => {
@@ -3864,7 +3960,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       } catch {}
     }
 
-    const custData = customerDetailData || (selectedChat ? {
+    const chatFallback: any = selectedChat ? {
       id: selectedChat.customerId,
       name: selectedChat.customerName,
       phone: selectedChat.customerPhone,
@@ -3873,27 +3969,77 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       kecamatan: (selectedChat as any).kecamatan || null,
       kota: (selectedChat as any).kota || null,
       children: (selectedChat as any).children || [],
-      ongkir: (selectedChat as any).ongkir ?? 0,
+      // JANGAN default 0: 0 adalah nilai sah (mis. ambil sendiri), sedangkan null
+      // berarti "belum dihitung" dan WAJIB memblokir invoice (audit #316/K-02).
+      ongkir: (selectedChat as any).ongkir ?? null,
       distance_km: (selectedChat as any).distanceKm ?? (selectedChat as any).distance_km ?? null,
-    } : null);
+    } : null;
+    // Gabungkan: detail customer menang, tetapi field yang belum ada di detail
+    // (mis. payload preliminary) TIDAK boleh menghapus nilai dari kartu sidebar.
+    const custData: any = customerDetailData
+      ? {
+          ...chatFallback,
+          ...customerDetailData,
+          ongkir: (customerDetailData as any).ongkir ?? chatFallback?.ongkir ?? null,
+          distance_km:
+            (customerDetailData as any).distance_km ??
+            (customerDetailData as any).distanceKm ??
+            chatFallback?.distance_km ??
+            null,
+        }
+      : chatFallback;
 
-    const bookingD = resItem?.booking_date ? new Date(resItem.booking_date) : new Date();
-    let timeStr = '12.00-12.30';
-    try {
-      if (resItem?.booking_date && !isNaN(bookingD.getTime())) {
-        timeStr = bookingD.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }).replace(':', '.');
+    // ================================================================
+    // GERBANG KODE DETERMINISTIK (audit #316 / K-02).
+    // Invoice TIDAK BOLEH dibuat dari angka/treatment karangan. Logika murni
+    // ada di utils/invoiceReadiness.ts dan diuji adversarial.
+    // ================================================================
+    const readiness = validateInvoiceReadiness({
+      bookingDate: resItem?.booking_date,
+      treatmentName: resItem?.treatment_detail || resItem?.treatment_name,
+      distanceKm: custData?.distance_km ?? custData?.distanceKm,
+      ongkir: custData?.ongkir,
+    });
+    if (!readiness.ok) {
+      const reasonMessages: Record<string, string> = {
+        INVALID_SCHEDULE:
+          'Invoice tidak bisa dibuat: tanggal/jadwal reservasi tidak valid. Lengkapi jadwal di kalender terlebih dahulu.',
+        MISSING_TREATMENT:
+          'Invoice tidak bisa dibuat: nama layanan pada reservasi kosong. Lengkapi data reservasi terlebih dahulu.',
+        MISSING_DISTANCE:
+          'Invoice tidak bisa dibuat: jarak/ongkir belum terhitung. Lengkapi alamat & titik lokasi customer (Buku Alamat) agar tagihan tidak salah.',
+        INVALID_NUMBER:
+          'Invoice tidak bisa dibuat: nilai jarak/ongkir tidak valid. Periksa data alamat customer terlebih dahulu.',
+      };
+      toast(reasonMessages[readiness.reason] || 'Invoice tidak bisa dibuat: data reservasi belum lengkap.', 'error');
+      if (readiness.reason === 'MISSING_DISTANCE' && selectedChat) {
+        setAddrBookCustomer({ id: selectedChat.customerId, name: selectedChat.customerName || undefined });
       }
+      return;
+    }
+    const bookingD = readiness.bookingDate;
+    const treatmentNameRaw = readiness.treatmentName;
+    const distanceKm = readiness.distanceKm;
+    const ongkir = readiness.ongkir;
+
+    let timeStr = '';
+    try {
+      timeStr = bookingD.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }).replace(':', '.');
     } catch {}
+    if (!timeStr) {
+      toast('Invoice tidak bisa dibuat: jam reservasi tidak dapat dibaca.', 'error');
+      return;
+    }
 
     // R5: chain babies dari resItem.babies / resItem.children sebelum jatuh ke custData.children[0]
     const babySource = resItem?.babies || resItem?.children || custData?.children || [];
     const firstBaby = Array.isArray(babySource) && babySource.length > 0 ? babySource[0] : null;
 
     const mappedData: ExtractedScheduleData = {
-      bookingDate: !isNaN(bookingD.getTime()) ? bookingD : new Date(),
+      bookingDate: bookingD,
       dateDisplay: formatIndonesianDate(bookingD),
       timeDisplay: timeStr,
-      treatmentName: resItem?.treatment_detail || resItem?.treatment_name || 'Pijat Ceria',
+      treatmentName: treatmentNameRaw,
       treatmentPrice: Number(resItem?.purchase_value ?? resItem?.treatment_price ?? 0) || 0,
       treatmentCategory: (resItem?.treatment_category === 'MOMS' || resItem?.treatment_category === 'BUNDLE' || resItem?.treatment_category === 'BOTH' || resItem?.treatment_detail?.toLowerCase()?.includes('mom')) ? (resItem?.treatment_category === 'BUNDLE' || resItem?.treatment_category === 'BOTH' ? 'BUNDLE' : 'MOMS') : 'BABY',
       childName: firstBaby?.name || resItem?.child_name || '',
@@ -3904,8 +4050,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       address: custData?.address || custData?.preferences?.address || custData?.kelurahan || '',
       kecamatan: custData?.kecamatan || '',
       kota: custData?.kota || '',
-      distanceKm: Number(custData?.distance_km ?? custData?.distanceKm ?? 3.0),
-      ongkir: Number(custData?.ongkir ?? 0),
+      distanceKm,
+      ongkir,
       discount: 0,
       isExtractedFromChat: false,
       confidenceScore: 1.0,
@@ -4050,20 +4196,68 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           )
         );
       }
+
+      // AUDIT FASE 0: warning backend tidak boleh dibuang diam-diam (dulu
+      // `NO_ACTIVE_RESERVATION_TODAY` & kegagalan pencatatan DB hilang di sini).
+      const sendWarning = (res as any)?.data?.warning || (res as any)?.warning;
+      if (sendWarning === 'MESSAGE_SENT_NOT_PERSISTED') {
+        toast(
+          'Pesan SUDAH terkirim ke pasien, tetapi gagal disimpan ke riwayat dashboard. JANGAN kirim ulang — muat ulang halaman untuk rekonsiliasi.',
+          'error'
+        );
+      } else if (sendWarning === 'NO_ACTIVE_RESERVATION_TODAY') {
+        toast(
+          'Pesan terkirim, tetapi tidak ada reservasi aktif HARI INI untuk customer ini. Pastikan kunjungan dicatat di kalender agar tidak hilang dari operasional.',
+          'info'
+        );
+      } else if (sendWarning) {
+        toast(`Pesan terkirim dengan peringatan: ${sendWarning}`, 'info');
+      }
     } catch (err: any) {
-      toast(`Gagal mengirim balasan: ${err.message}`, 'error');
       optimisticMessageIdsRef.current.delete(tempId);
-      setMessages((prev) =>
-        prev.map((m) => (m.id === tempId ? { ...m, delivery_status: 'failed' } : m))
+      // AUDIT FASE 0: jangan tinggalkan "ghost bubble" yang terlihat terkirim.
+      // Hapus bubble optimis + preview sidebar, lalu rekonsiliasi dari server.
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      setChats((prev) => {
+        const updated = prev.map((c) =>
+          c.conversationId === selectedId
+            ? { ...c, lastMessages: (c.lastMessages || []).filter((m: any) => m.id !== tempId) }
+            : c
+        );
+        chatsRef.current = updated;
+        return updated;
+      });
+
+      // Hanya kembalikan teks bila server PASTI menolak (4xx). Untuk timeout/5xx,
+      // pesan bisa saja sudah sampai ke pasien — jangan mendorong kirim ulang buta.
+      const definitelyNotSent = typeof err?.status === 'number' && err.status >= 400 && err.status < 500;
+      if (definitelyNotSent && text) {
+        replyTextRef.current = text;
+        setHasReplyText(true);
+        composerRef.current?.setText(text);
+        if (selectedId) saveConversationDraft(selectedId, text);
+      }
+
+      toast(
+        `Gagal mengirim balasan: ${err.message}${definitelyNotSent && text ? ' — teks dikembalikan ke kolom kirim.' : ' — periksa dulu apakah pesan sudah masuk ke pasien sebelum mengirim ulang.'}`,
+        'error'
       );
+
+      if (selectedId) {
+        void loadThread(selectedId);
+        void refreshChatItem(selectedId);
+      }
     } finally {
       setSending(false);
     }
   };
 
-  const handlePickImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Dipakai bersama oleh pemilih file DAN paste gambar (screenshot) dari clipboard.
+  const handleImageFile = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      toast('File yang ditempel bukan gambar.', 'error');
+      return;
+    }
     try {
       const prepared = await prepareChatImage(file);
       // 3.2: revoke URL lama sebelum ganti agar tidak bocor memori
@@ -4080,6 +4274,14 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       });
     } catch (err: any) {
       toast(err?.message || 'Gagal memproses foto.', 'error');
+    }
+  };
+
+  const handlePickImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      await handleImageFile(file);
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
@@ -4220,8 +4422,11 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     return `Rp ${val}`;
   };
 
+  // AUDIT FASE 0: header global disembunyikan di mobile Live Chat, jadi safe-area
+  // atas (notch/Dynamic Island) WAJIB dipasang di container ini. Tanpa ini judul,
+  // tombol kembali, dan nama pasien tertutup status bar pada iOS PWA.
   return (
-    <div data-no-swipe-menu="true" className="h-full flex flex-col min-h-0 space-y-0 lg:space-y-1.5 p-0 lg:p-1.5 lg:pb-0">
+    <div data-no-swipe-menu="true" className="h-full flex flex-col min-h-0 space-y-0 lg:space-y-1.5 p-0 lg:p-1.5 lg:pb-0 pt-[env(safe-area-inset-top,0px)]">
       {/* Top Header (Desktop / Large screen only - on mobile it scrolls with the list) */}
       <div className="hidden lg:flex justify-between items-center bg-surface border border-divider rounded-xl px-2.5 sm:px-3 py-1 sm:py-1.5 shadow-xs shrink-0">
         <div className="flex items-center space-x-2">
@@ -4284,6 +4489,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
             onLabel="BOT ON"
             offLabel="BOT OFF"
             size="sm"
+            className="min-h-[44px] py-1"
             title={
               chatBotActive
                 ? 'Status: Chatbot AI Aktif (Normal). Klik untuk menonaktifkan AI.'
@@ -4419,7 +4625,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       title={copilotOpen ? 'Sembunyikan AI Copilot' : 'Buka AI Copilot'}
                       aria-label={copilotOpen ? 'Sembunyikan AI Copilot' : 'Buka AI Copilot'}
                       aria-pressed={copilotOpen}
-                      className={`lg:hidden p-1.5 rounded-lg border transition flex items-center justify-center cursor-pointer shadow-2xs active:scale-95 touch-manipulation ${
+                      className={`lg:hidden p-1.5 min-w-[38px] min-h-[38px] rounded-lg border transition flex items-center justify-center cursor-pointer shadow-2xs active:scale-95 touch-manipulation ${
                         copilotOpen
                           ? 'bg-bubble-out dark:bg-accent/20 border-accent/40 text-accent ring-2 ring-accent/30'
                           : 'bg-fill-1 dark:bg-fill-2 border-divider dark:border-strong text-ink-3 hover:text-ink dark:hover:text-ink'
@@ -4432,7 +4638,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   <button
                     onClick={() => setShowSyncInfoModal(true)}
                     disabled={bgSyncProgress.isSyncing}
-                    className="p-1.5 rounded-lg bg-accent text-white shadow-2xs transition flex items-center justify-center disabled:opacity-50 cursor-pointer"
+                    className="p-1.5 min-w-[38px] min-h-[38px] rounded-lg bg-accent text-white shadow-2xs transition flex items-center justify-center disabled:opacity-50 cursor-pointer"
                     title="Sinkronisasi Seluruh Chat WhatsApp"
                   >
                     <RefreshCw size={13} className={bgSyncProgress.isSyncing ? 'animate-spin' : ''} />
@@ -4443,7 +4649,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                     onClick={openMobileMenu}
                     aria-label="Buka Menu"
                     title="Buka Menu Navigasi"
-                    className="lg:hidden p-1.5 rounded-lg bg-fill-1 dark:bg-fill-2 text-ink-2 dark:text-ink-2 hover:text-ink dark:hover:text-ink transition active:scale-95 touch-manipulation cursor-pointer shadow-2xs flex items-center justify-center"
+                    className="lg:hidden p-1.5 min-w-[38px] min-h-[38px] rounded-lg bg-fill-1 dark:bg-fill-2 text-ink-2 dark:text-ink-2 hover:text-ink dark:hover:text-ink transition active:scale-95 touch-manipulation cursor-pointer shadow-2xs flex items-center justify-center"
                   >
                     <Menu size={15} />
                   </button>
@@ -4559,10 +4765,10 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       <select
                         value={labelFilter}
                         onChange={(e) => {
-                          const v = e.target.value as typeof labelFilter;
-                          setLabelFilter(v);
-                          // 3.4: forward ke server agar paginasi konsisten
-                          setTimeout(() => loadChats(true, searchQuery, true), 0);
+                          // AUDIT FASE 2 (T-04): cukup set state. Effect [labelFilter]
+                          // melakukan SATU reload memakai ref terbaru — menghapus
+                          // request kedua yang masih membawa label lama (race).
+                          setLabelFilter(e.target.value as typeof labelFilter);
                         }}
                         className="w-full px-2 py-1 bg-surface border border-divider rounded-lg text-[11px] font-semibold text-ink focus:outline-none focus:border-accent cursor-pointer shadow-2xs truncate"
                       >
@@ -4578,7 +4784,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       onClick={handleMarkAllAsRead}
                       tabIndex={mobileView === 'chat' ? -1 : 0}
                       title="Tandai semua percakapan sebagai telah dibaca"
-                      className="p-1 bg-surface hover:bg-accent-soft border border-divider hover:border-accent/30 text-ink-2 hover:text-accent rounded-lg transition flex items-center justify-center shrink-0 cursor-pointer shadow-2xs active:scale-95"
+                      className="p-2 min-w-[38px] min-h-[38px] bg-surface hover:bg-accent-soft border border-divider hover:border-accent/30 text-ink-2 hover:text-accent rounded-lg transition flex items-center justify-center shrink-0 cursor-pointer shadow-2xs active:scale-95"
                     >
                       <MailCheck size={14} className="text-accent" />
                     </button>
@@ -4648,6 +4854,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                         onLabel="ON"
                         offLabel="OFF"
                         size="sm"
+                        className="min-h-[44px] py-1.5"
                       />
                     </div>
                   </div>
@@ -4710,7 +4917,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       {labelFilter !== 'all' && (
                         <button
                           type="button"
-                          onClick={() => { setLabelFilter('all'); setTimeout(() => loadChats(true, searchQuery, true), 0); }}
+                          onClick={() => setLabelFilter('all')}
                           className="mt-2.5 px-2.5 py-1 rounded-lg bg-accent hover:bg-accent-hover text-white text-[11px] font-semibold transition cursor-pointer shadow-xs"
                         >
                           Reset Filter Label
@@ -4897,6 +5104,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                                   <AlertTriangle size={11} className="text-rose-600 dark:text-danger shrink-0" />
                                 </span>
                               )}
+                              <StaffOwnershipBadge ownership={chat.staffOwnership} />
                               {(chat.customerLabels || []).map((lbl) => (
                                 <span
                                   key={lbl.id}
@@ -5249,6 +5457,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                               {selectedChat.customerPhone || 'Unknown'}
                             </p>
 
+                            <StaffOwnershipBadge ownership={selectedChat.staffOwnership} />
+
                             {/* Active Label Colored Dots */}
                             {(selectedChat.customerLabels || []).map((lbl) => (
                               <span
@@ -5281,7 +5491,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                               <button
                                 type="button"
                                 onClick={() => setLabelPopoverOpen(!labelPopoverOpen)}
-                                className="no-touch-min inline-flex items-center justify-center w-4 h-4 min-w-[16px] min-h-[16px] max-h-[16px] aspect-square rounded-full text-[10px] font-bold bg-fill-1 hover:bg-fill-2 text-ink-2 hover:text-accent border border-divider transition shadow-2xs active:scale-95 ml-0.5 shrink-0"
+                                className="inline-flex items-center justify-center w-7 h-7 min-w-[28px] min-h-[28px] max-h-[28px] aspect-square rounded-full text-[11px] font-bold bg-fill-1 hover:bg-fill-2 text-ink-2 hover:text-accent border border-divider transition shadow-2xs active:scale-95 ml-1 shrink-0"
                                 title="Tambah / Kelola Label Pasien"
                                 aria-label="Tambah Label"
                               >
@@ -5364,11 +5574,13 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                             type="button"
                             onClick={() => {
                               const qr = quickReplies.find((q) => q.shortcut === 'shareloc');
-                              const content =
-                                qr?.content ||
-                                'Boleh bantu kirimkan titik lokasi (shareloc WhatsApp) atau seret pin peta di rumah Bunda {name} agar Bidan kami langsung sampai tepat di depan rumah dan tidak tersasar ya Bunda 🙏';
-                              const text = applyQuickReply({ content });
+                              if (!qr?.content) {
+                                toast('Template shareloc belum diatur di Balasan Cepat (kategori Pasca Booking).', 'error');
+                                return;
+                              }
+                              const text = applyQuickReply({ content: qr.content });
                               composerRef.current?.setText(text);
+                              markSharelocRequested(selectedChat?.conversationId);
                               toast('Template shareloc dimasukkan ke composer balasan.', 'success');
                             }}
                             title={sharelocStatus.label || 'Minta Titik Presisi (Shareloc)'}
@@ -5381,9 +5593,13 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       })()}
                       <button
                         type="button"
-                        onClick={() => setInChatSearchOpen((v) => !v)}
+                        onClick={() => {
+                          const next = !inChatSearchOpen;
+                          setInChatSearchOpen(next);
+                          if (next) setTimeout(() => inChatSearchInputRef.current?.focus(), 60);
+                        }}
                         title={inChatSearchOpen ? 'Tutup pencarian dalam chat' : 'Cari dalam chat'}
-                        className={`p-1.5 rounded-xl border transition shadow-2xs ${inChatSearchOpen ? 'bg-accent text-white border-accent' : 'bg-white dark:bg-fill-2 border-divider dark:border-strong text-ink-2 dark:text-ink-2 hover:text-ink hover:bg-fill-1 dark:hover:bg-strong'}`}
+                        className={`p-1.5 min-w-[38px] min-h-[38px] rounded-xl border transition shadow-2xs flex items-center justify-center ${inChatSearchOpen ? 'bg-accent text-white border-accent' : 'bg-white dark:bg-fill-2 border-divider dark:border-strong text-ink-2 dark:text-ink-2 hover:text-ink hover:bg-fill-1 dark:hover:bg-strong'}`}
                       >
                         <Search size={14} />
                       </button>
@@ -5405,7 +5621,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           className="px-3 py-1.5 bg-warning-soft hover:bg-warning-line text-warning border border-warning-line rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
                         >
                           <User size={14} className="text-warning" />
-                          <span>Ambil Alih (CS)</span>
+                          {/* FASE 4 (M-05): di HP cukup ikon agar nama pasien tidak terpotong. */}
+                          <span className="hidden sm:inline">Ambil Alih (CS)</span>
                         </button>
                       )}
                     </div>
@@ -5857,12 +6074,12 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                   <div className="mx-1 mb-1 p-1.5 bg-surface-2 dark:bg-surface border border-divider dark:border-divider rounded-xl flex items-center gap-1.5 animate-fadeIn shrink-0">
                     <Search size={14} className="text-ink-3 shrink-0 ml-1" />
                     <input
+                      ref={inChatSearchInputRef}
                       type="text"
                       value={inChatSearchQuery}
                       onChange={(e) => setInChatSearchQuery(e.target.value)}
                       placeholder="Cari dalam percakapan ini… (min. 2 huruf)"
                       className="flex-1 bg-transparent text-xs text-ink placeholder-ink-3 focus:outline-none min-w-0"
-                      autoFocus
                     />
                     {inChatSearchQuery && (
                       <button type="button" onClick={handleClearInChatSearch} className="p-1 rounded-lg hover:bg-fill-2 dark:hover:bg-strong text-ink-3">
@@ -6024,6 +6241,19 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       <Loader className="animate-spin text-accent mb-2" size={26} />
                       <p className="font-semibold text-ink-2">Memuat riwayat chat...</p>
                     </div>
+                  ) : messages.length === 0 && threadLoadError ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center text-ink-2 text-xs px-6">
+                      <AlertTriangle size={30} className="mb-2 text-danger" />
+                      <p className="font-bold text-ink">Gagal memuat riwayat chat</p>
+                      <p className="text-[11px] mt-1 max-w-xs break-words">{threadLoadError}</p>
+                      <button
+                        type="button"
+                        onClick={() => { if (selectedId) void loadThread(selectedId); }}
+                        className="mt-3 px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-[11px] font-bold transition active:scale-95 cursor-pointer"
+                      >
+                        Coba Lagi
+                      </button>
+                    </div>
                   ) : messages.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-center text-ink-2 text-xs">
                       <MessageCircle size={32} className="mb-2 text-ink-3" />
@@ -6078,7 +6308,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                         <React.Fragment key={msg.id}>
                           {showDateSeparator && (
                             <div className="flex justify-center my-2 sm:my-2.5">
-                              <div className="bg-white/95 backdrop-blur-xs px-3 py-1 rounded-lg text-[11px] font-semibold text-ink-2 shadow-2xs border border-black/5 select-none tracking-wide">
+                              <div className="bg-white/95 dark:bg-surface-2/95 backdrop-blur-xs px-3 py-1 rounded-lg text-[11px] font-semibold text-ink-2 shadow-2xs border border-black/5 dark:border-white/10 select-none tracking-wide">
                                 {formatChatDateSeparator(msg.created_at)}
                               </div>
                             </div>
@@ -6603,6 +6833,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                         onSend={handleSendReply}
                         onApplyQuickReply={applyQuickReply}
                         onPickImage={() => fileInputRef.current?.click()}
+                        onPasteImageFile={handleImageFile}
                         onRemoveImage={handleRemoveSelectedImage}
                         onCancelReply={() => setReplyingTo(null)}
                         onGenerateAiDraft={handleGenerateAiDraft}
@@ -6612,6 +6843,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                         onGenerateInvoice={handleGenerateActiveReservationInvoice}
                         hasActiveReservation={Boolean(activeConfirmedReservation || activePendingReservation)}
                         onRequestScrollToBottom={() => scrollToBottom(true, false)}
+                        chatBotActive={chatBotActive}
+                        onToggleGlobalBot={() => handleToggleGlobalBot(!chatBotActive)}
                       />
                     )}
                   </>
@@ -6709,7 +6942,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       {/* Customer Detail Modal */}
       {customerDetailModalOpen && (
         <div data-modal-active="true" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-surface border border-divider rounded-2xl w-full max-w-xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+          <div className="bg-surface border border-divider rounded-2xl w-full max-w-xl max-h-[90dvh] flex flex-col shadow-2xl overflow-hidden">
             {/* Modal Header */}
             <div className="flex justify-between items-center px-5 py-4 border-b border-divider bg-surface-2">
               <div className="flex items-center space-x-3">
@@ -6746,6 +6979,11 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                 </div>
               ) : (
                 <>
+                  <StaffOwnershipBadge
+                    variant="banner"
+                    ownership={(customerDetailData as any)?.staffOwnership ?? selectedChat?.staffOwnership}
+                    showNew
+                  />
                   {/* Quick Metric Cards */}
                   <div className="grid grid-cols-3 gap-2.5">
                     <div className="p-3 bg-surface-2 border border-divider rounded-xl text-center space-y-1">
@@ -7134,7 +7372,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
             onClick={() => setProofModalReservation(null)}
           >
             <div
-              className="w-full max-w-md bg-surface border border-divider rounded-3xl p-4 sm:p-5 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto animate-modalScaleUp"
+              className="w-full max-w-md bg-surface border border-divider rounded-3xl p-4 sm:p-5 space-y-4 shadow-2xl max-h-[90dvh] overflow-y-auto animate-modalScaleUp"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between border-b border-divider pb-3">
@@ -7412,7 +7650,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         >
           {/* Mobile Bottom Action Sheet (sm:hidden) */}
           <div
-            className="sm:hidden w-full bg-surface rounded-t-2xl shadow-2xl p-4 space-y-3 animate-in slide-in-from-bottom duration-200 border-t border-divider"
+            className="sm:hidden w-full bg-surface rounded-t-2xl shadow-2xl p-4 space-y-3 animate-in slide-in-from-bottom duration-200 border-t border-divider max-h-[80dvh] overflow-y-auto overscroll-contain pb-[max(1rem,env(safe-area-inset-bottom,1rem))]"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Grab Handle */}
@@ -7573,7 +7811,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
               top: Math.min(contextMenu.y, Math.max(0, (typeof window !== 'undefined' ? window.innerHeight : 0) - 420)),
               zIndex: 51,
             }}
-            className="hidden sm:block bg-surface border border-divider rounded-xl shadow-2xl py-1.5 w-64 text-xs text-ink animate-in fade-in zoom-in-95 origin-top-left duration-100 divide-y divide-divider max-h-[70vh] overflow-y-auto overscroll-contain"
+            className="hidden sm:block bg-surface border border-divider rounded-xl shadow-2xl py-1.5 w-64 text-xs text-ink animate-in fade-in zoom-in-95 origin-top-left duration-100 divide-y divide-divider max-h-[70dvh] overflow-y-auto overscroll-contain"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-3.5 py-2 text-[11px] font-bold text-ink-2 truncate">
@@ -7778,7 +8016,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       {/* Chat Export Modal (konsolidasi dari page ChatExport — via ?action=export) */}
       {(searchParams.get('action') === 'export' || searchParams.get('export') === '1') && (
         <div className="fixed inset-0 z-[10000] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn" onClick={() => { const p = new URLSearchParams(searchParams.toString()); p.delete('action'); p.delete('export'); setSearchParams(p, { replace: true }); }}>
-          <div className="bg-surface rounded-2xl w-full max-w-3xl max-h-[85vh] overflow-y-auto shadow-2xl border border-divider p-4 sm:p-5" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-surface rounded-2xl w-full max-w-3xl max-h-[85dvh] overflow-y-auto shadow-2xl border border-divider p-4 sm:p-5" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-bold text-ink">Ekspor Chat</h3>
               <button onClick={() => { const p = new URLSearchParams(searchParams.toString()); p.delete('action'); p.delete('export'); setSearchParams(p, { replace: true }); }} className="p-1.5 rounded-lg text-ink-3 hover:text-ink hover:bg-fill-1"><X size={16} /></button>
@@ -7791,7 +8029,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       {/* 📋 Modal Informasi & Konfirmasi Sinkronisasi WhatsApp */}
       {showSyncInfoModal && (
         <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-surface rounded-2xl max-w-md w-full p-5 shadow-2xl border border-divider space-y-4 animate-scaleUp">
+          <div className="bg-surface rounded-2xl max-w-md w-full p-5 shadow-2xl border border-divider space-y-4 animate-scaleUp max-h-[85dvh] overflow-y-auto overscroll-contain">
             {/* Header */}
             <div className="flex items-center justify-between pb-3 border-b border-divider">
               <div className="flex items-center space-x-2.5">

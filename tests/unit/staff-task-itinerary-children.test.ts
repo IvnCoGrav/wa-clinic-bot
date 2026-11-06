@@ -327,4 +327,71 @@ describe('Fase 1.3 — gerbang pelunasan completeTask', () => {
     });
     expect(notOwner.success).toBe(false);
   });
+
+  describe('P2: recordPayment tidak boleh menyelesaikan kunjungan prematur / ilegal', () => {
+    it('recordPayment pada booking masa depan (H+7) mencatat lunas TANPA mengubah status menjadi completed', async () => {
+      const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      (prisma.reservation.findUnique as any).mockResolvedValue({
+        id: 'res-future',
+        tenant_id: 'default-tenant',
+        status: 'confirmed',
+        booking_date: futureDate,
+        assigned_staff_id: 'staff-a',
+        customer_id: 'cust-1',
+        purchase_value: 100000,
+        purchase_occurred_at: null,
+      });
+
+      let updatePayload: any = null;
+      (prisma.reservation.update as any).mockImplementation(async ({ data }: any) => {
+        updatePayload = data;
+        return { id: 'res-future', status: 'confirmed', ...data };
+      });
+
+      const res = await StaffReservationService.recordPayment({
+        reservationId: 'res-future',
+        staffId: 'staff-a',
+        tenantId: 'default-tenant',
+        amount: 100000,
+        paymentMethod: 'TRANSFER',
+      });
+
+      expect(res.success).toBe(true);
+      expect(updatePayload).toBeDefined();
+      expect(updatePayload.purchase_occurred_at).toBeInstanceOf(Date);
+      expect(updatePayload.status).toBeUndefined();
+    });
+
+    it('recordPayment pada reservasi berstatus hold mencatat lunas TANPA mengubah status menjadi completed', async () => {
+      (prisma.reservation.findUnique as any).mockResolvedValue({
+        id: 'res-hold',
+        tenant_id: 'default-tenant',
+        status: 'hold',
+        booking_date: new Date(),
+        assigned_staff_id: 'staff-a',
+        customer_id: 'cust-1',
+        purchase_value: 80000,
+        purchase_occurred_at: null,
+      });
+
+      let updatePayload: any = null;
+      (prisma.reservation.update as any).mockImplementation(async ({ data }: any) => {
+        updatePayload = data;
+        return { id: 'res-hold', status: 'hold', ...data };
+      });
+
+      const res = await StaffReservationService.recordPayment({
+        reservationId: 'res-hold',
+        staffId: 'staff-a',
+        tenantId: 'default-tenant',
+        amount: 80000,
+        paymentMethod: 'CASH',
+      });
+
+      expect(res.success).toBe(true);
+      expect(updatePayload).toBeDefined();
+      expect(updatePayload.purchase_occurred_at).toBeInstanceOf(Date);
+      expect(updatePayload.status).toBeUndefined();
+    });
+  });
 });

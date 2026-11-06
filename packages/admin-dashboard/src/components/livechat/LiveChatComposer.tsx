@@ -26,6 +26,7 @@ import {
   QrCode,
   Image as ImageIcon,
   FileText,
+  Bot,
 } from 'lucide-react';
 
 /**
@@ -72,6 +73,8 @@ export interface LiveChatComposerProps {
   /** Interpolasi template di parent (butuh data customer); kembalikan teks final untuk disisipkan. */
   onApplyQuickReply?: (qr: ComposerQuickReply) => string;
   onPickImage?: () => void;
+  /** FASE 4: tempel gambar/screenshot dari clipboard langsung jadi lampiran. */
+  onPasteImageFile?: (file: File) => void;
   onRemoveImage?: () => void;
   onCancelReply?: () => void;
   onGenerateAiDraft?: () => void;
@@ -83,6 +86,9 @@ export interface LiveChatComposerProps {
    *  menentukan label & perilaku aksi invoice (salin vs diarahkan buat reservasi dulu). */
   hasActiveReservation?: boolean;
   onRequestScrollToBottom?: () => void;
+  /** FASE 4: status & toggle Chatbot AI global (akses dari thread mobile via menu Tools). */
+  chatBotActive?: boolean;
+  onToggleGlobalBot?: () => void;
 }
 
 export interface LiveChatComposerHandle {
@@ -234,6 +240,7 @@ const LiveChatComposerInner = (
     onSend,
     onApplyQuickReply,
     onPickImage,
+    onPasteImageFile,
     onRemoveImage,
     onCancelReply,
     onGenerateAiDraft,
@@ -243,6 +250,8 @@ const LiveChatComposerInner = (
     onGenerateInvoice,
     hasActiveReservation,
     onRequestScrollToBottom,
+    chatBotActive,
+    onToggleGlobalBot,
   } = props;
 
   const inputRef = useRef<HTMLDivElement | null>(null);
@@ -571,12 +580,23 @@ const LiveChatComposerInner = (
   }, [showQuickReplyPopover, filteredQuickReplies, quickReplyActiveIdx, applyQuickReply, handleSend]);
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    // FASE 4: prioritas file gambar (screenshot struk/foto) sebelum teks.
+    const imageFile = Array.from(e.clipboardData?.items || [])
+      .filter((item) => item.kind === 'file')
+      .map((item) => item.getAsFile())
+      .find((file): file is File => !!file && file.type.startsWith('image/'));
+    if (imageFile && onPasteImageFile) {
+      e.preventDefault();
+      onPasteImageFile(imageFile);
+      return;
+    }
+
     e.preventDefault();
     const plainText = e.clipboardData.getData('text/plain');
     if (!plainText) return;
     document.execCommand('insertText', false, plainText);
     handleInput();
-  }, [handleInput]);
+  }, [handleInput, onPasteImageFile]);
 
   const sendDisabled = sending || (!hasText && !selectedImage);
 
@@ -679,7 +699,7 @@ const LiveChatComposerInner = (
         </div>
       )}
 
-      <div ref={composerWrapperRef} className={`flex items-end space-x-1.5 sm:space-x-2 bg-fill-1 p-1 sm:p-1.5 md:p-2 pb-[max(0.5rem,env(safe-area-inset-bottom,0.5rem))] border border-divider w-full mb-0 ${replyingTo ? 'rounded-b-none border-t-0' : 'rounded-t-xl rounded-b-none'} border-b-0`}>
+      <div ref={composerWrapperRef} className={`chat-composer-inner flex items-end space-x-1.5 sm:space-x-2 bg-fill-1 p-1 sm:p-1.5 md:p-2 pb-[max(0.5rem,env(safe-area-inset-bottom,0.5rem))] border border-divider w-full mb-0 ${replyingTo ? 'rounded-b-none border-t-0' : 'rounded-t-xl rounded-b-none'} border-b-0`}>
         <div className="relative shrink-0" ref={toolsMenuRef}>
           <button
             type="button"
@@ -700,6 +720,35 @@ const LiveChatComposerInner = (
 
           {toolsMenuOpen && (
             <div className="absolute bottom-full left-0 mb-2 w-60 bg-surface border border-divider rounded-2xl shadow-xl p-1.5 z-30 origin-bottom-left animate-modalScaleUp space-y-1">
+              {onToggleGlobalBot && typeof chatBotActive === 'boolean' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setToolsMenuOpen(false);
+                    onToggleGlobalBot();
+                  }}
+                  className="w-full flex items-center space-x-2.5 px-3 py-2 min-h-[44px] rounded-xl text-xs font-semibold text-ink hover:bg-fill-1 transition text-left group"
+                >
+                  <div
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                      chatBotActive ? 'bg-accent-soft text-accent' : 'bg-danger-soft text-danger'
+                    }`}
+                  >
+                    <Bot size={15} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-[12px] truncate">Chatbot AI: {chatBotActive ? 'ON' : 'OFF'}</p>
+                    <p className="text-[10px] text-ink-2 truncate">
+                      {chatBotActive ? 'Klik untuk alihkan ke CS manual' : 'Klik untuk aktifkan balas otomatis'}
+                    </p>
+                  </div>
+                  <span
+                    className={`w-2 h-2 rounded-full shrink-0 ${chatBotActive ? 'bg-accent' : 'bg-danger'}`}
+                    aria-hidden="true"
+                  />
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={() => {

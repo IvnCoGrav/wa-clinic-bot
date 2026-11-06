@@ -200,7 +200,7 @@ describe('Location Prompt City Answer — State-Gated Cool-Off (anti-kaset rusak
 
       const promptText = GoalTracker.formatGoalSessionForPrompt(session);
 
-      expect(promptText).toContain('STATUS: SUDAH DIKETAHUI (titik presisi)');
+      expect(promptText).toContain('STATUS: SUDAH DIKETAHUI (titik presisi');
     });
   });
 

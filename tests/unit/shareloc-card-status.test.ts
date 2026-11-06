@@ -113,4 +113,61 @@ describe('Shareloc Card Status (Frontend Mirror / Pure Utility)', () => {
     expect(status.urgent).toBe(true);
     expect(status.reason).toBe('same_day');
   });
+
+  it('manual_staff (terverifikasi staf) TIDAK memicu badge shareloc', () => {
+    const status = getSharelocCardStatus({
+      conversationId: 'conv-diana',
+      activeConfirmedReservation: { id: 'res-2', booking_date: '2026-10-13T15:00:00+07:00' },
+      locationSource: 'manual_staff',
+      effectiveLocationSource: 'manual_staff',
+      locationAdequacy: 'staff_verified',
+      sharelocNeeded: false,
+      shareLocationSent: false,
+    }, fixedNow);
+
+    expect(status.needed).toBe(false);
+    expect(status.reason).toBe('already_precise');
+  });
+
+  it('effectiveLocationSource manual_staff menang atas kolom estimated_area yang basi', () => {
+    const status = getSharelocCardStatus({
+      conversationId: 'conv-hida',
+      activeConfirmedReservation: { id: 'res-3', booking_date: '2026-10-13T15:00:00+07:00' },
+      locationSource: 'estimated_area',
+      effectiveLocationSource: 'manual_staff',
+      locationAdequacy: 'staff_verified',
+      sharelocNeeded: false,
+      shareLocationSent: false,
+    }, fixedNow);
+
+    expect(status.needed).toBe(false);
+    expect(status.reason).toBe('already_precise');
+  });
+
+  it('server menandai sharelocNeeded=false → badge disembunyikan walau kolom mentah estimasi', () => {
+    const status = getSharelocCardStatus({
+      conversationId: 'conv-field',
+      activeConfirmedReservation: { id: 'res-4', booking_date: '2026-10-13T15:00:00+07:00' },
+      locationSource: 'estimated_area',
+      sharelocNeeded: false,
+      locationAdequacy: 'field_verified',
+    }, fixedNow);
+
+    expect(status.needed).toBe(false);
+    expect(status.reason).toBe('already_precise');
+  });
+
+  it('server menandai sharelocNeeded=true pada titik estimasi → badge tetap muncul', () => {
+    const status = getSharelocCardStatus({
+      conversationId: 'conv-est',
+      activeConfirmedReservation: { id: 'res-5', booking_date: '2026-10-13T15:00:00+07:00' },
+      locationSource: 'estimated_area',
+      effectiveLocationSource: 'estimated_area',
+      locationAdequacy: 'estimated_area',
+      sharelocNeeded: true,
+    }, fixedNow);
+
+    expect(status.needed).toBe(true);
+    expect(status.reason).toBe('same_day');
+  });
 });

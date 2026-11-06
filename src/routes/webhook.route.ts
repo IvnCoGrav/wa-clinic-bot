@@ -195,6 +195,8 @@ export async function webhookRoutes(fastify: FastifyInstance) {
 
             const updated = await prisma.message.updateMany({
               where: {
+                // AUDIT FASE 3 (K-03): jangan revoke pesan tenant lain.
+                tenant_id: resolvedTenantId,
                 OR: [
                   { wa_message_id: cleanId },
                   { wa_message_id: { contains: targetMsgId } },
@@ -461,8 +463,9 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                   });
                   if (recentBotMsg) {
                     if (!recentBotMsg.wa_message_id && payload.id) {
-                      await prisma.message.update({
-                        where: { id: recentBotMsg.id },
+                      // AUDIT FASE 3 (K-03): tenant_id wajib ikut di WHERE.
+                      await prisma.message.updateMany({
+                        where: { id: recentBotMsg.id, tenant_id: resolvedTenantId },
                         data: { wa_message_id: payload.id },
                       }).catch(() => {});
                     }

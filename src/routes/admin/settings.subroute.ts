@@ -1571,6 +1571,22 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         ipAddress: request.ip,
       });
 
+      // AUDIT FASE 0: siarkan perubahan toggle ke seluruh dashboard admin.
+      // Sebelumnya klien sudah punya handler `bot.active_changed`, tetapi backend
+      // tidak pernah mem-publish → toggle hanya berubah di tab pengirim.
+      try {
+        const { getLiveChatHub } = await import('../../services/live-chat-hub.service');
+        await getLiveChatHub()
+          .publish({
+            type: 'bot.active_changed' as any,
+            tenantId: DEFAULT_TENANT_ID,
+            payload: { globalBotActive },
+          } as any)
+          .catch(() => {});
+      } catch {
+        // Best-effort: perubahan status sudah tersimpan.
+      }
+
       return reply.status(200).send({
         success: true,
         message: `Status respon AI bot otomatis berhasil diubah menjadi: ${globalBotActive ? 'ON' : 'OFF'}.`,

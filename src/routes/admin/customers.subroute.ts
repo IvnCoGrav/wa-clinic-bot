@@ -12,6 +12,7 @@ import { resolveLocationSource } from '../../services/staff-reservation.service'
 import { resolveReservationPaymentEvaluation } from '../../services/reservation-core.service';
 import { MAX_ADDRESS_LABEL_LENGTH } from '../../domain/customer-address';
 import { normalizePhoneID } from '../../utils/phone-normalizer';
+import { staffOwnershipService } from '../../services/staff-ownership.service';
 
 /**
  * Relink jadwal AKTIF yang memakai kartu alamat tertentu + selaraskan ongkir.
@@ -643,6 +644,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
 
         const customerAddress = (customer as any).address || (customer as any).preferences?.address || (customer as any).preferences?.full_address || null;
         const savedAddresses = await customerService.getSavedAddresses(customer.id, tenantId).catch(() => []);
+        const ownershipMap = await staffOwnershipService.getByCustomerIds(tenantId, [customer.id]);
 
         return reply.status(200).send({
           success: true,
@@ -657,6 +659,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
             follow_ups: (customer as any).follow_ups || [],
             ltv: ((customer as any).ltv_cache ?? ltv) as any,
             purchaseCount: purchaseCount as any,
+            staffOwnership: ownershipMap.get(customer.id) ?? null,
           },
         });
       } catch (err: any) {

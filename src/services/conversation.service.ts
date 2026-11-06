@@ -6,6 +6,10 @@ import { AI_ELIGIBILITY_ESCALATION_REASON, ACTIVE_APPOINTMENT_ESCALATION_REASON 
 import { isDummyOrTestContact } from '../utils/dummy-filter';
 import { hasBypassLabel } from '../utils/customer-bypass';
 import { activeReservationWhere, isActiveReservation } from '../domain/reservation-status';
+import {
+  resolveLocationAdequacy,
+  extractStaffVerifiedCoords,
+} from '../domain/location-adequacy';
 
 const memoryConversations = new Map<string, any>();
 
@@ -25,6 +29,28 @@ export function getLastCustomerActivityMs(conversation: any): number {
 }
 
 export function buildConversationUpdatedPayload(conversation: any) {
+  const customer = conversation?.customer || {};
+  const prefs = (customer as any)?.preferences || {};
+  const savedAddresses = Array.isArray(prefs.saved_addresses) ? prefs.saved_addresses : [];
+  const primaryAddress = savedAddresses.find((a: any) => a?.isPrimary) || savedAddresses[0] || null;
+  const adequacy = resolveLocationAdequacy({
+    columnSource: (customer as any)?.location_source ?? null,
+    preferenceSource: prefs.location_source ?? prefs.source ?? null,
+    primaryAddressSource: primaryAddress?.locationSource ?? null,
+    shareLocationSent: Boolean((customer as any)?.share_location_sent),
+    lat: (customer as any)?.lat ?? null,
+    lng: (customer as any)?.lng ?? null,
+    staffVerified: Boolean(
+      prefs.location_updated_by_staff_id ||
+        prefs.location_updated_by_staff_name ||
+        prefs.location_accuracy_m != null
+    ),
+    staffVerifiedCoords: extractStaffVerifiedCoords(prefs),
+    housePhotoUrl: prefs.house_photo_url || null,
+    purchaseCount: (customer as any)?.reservations?.length ?? 0,
+    hasVisitedAddress: Boolean(primaryAddress?.lastUsedAt),
+    hasCompleteAddress: Boolean(primaryAddress?.address || (customer as any)?.kelurahan),
+  });
   return {
     conversationId: conversation.id,
     currentState: conversation.current_state,
@@ -44,6 +70,9 @@ export function buildConversationUpdatedPayload(conversation: any) {
     frustratedAt: conversation.frustrated_at ?? null,
     frustratedReason: conversation.frustrated_reason ?? null,
     locationSource: (conversation.customer as any)?.location_source ?? null,
+    effectiveLocationSource: adequacy.source,
+    locationAdequacy: adequacy.reason,
+    sharelocNeeded: adequacy.needsShareloc,
     shareLocationSent: Boolean((conversation.customer as any)?.share_location_sent),
     sharelocRequestedAt:
       (conversation as any)?.session_data?.shareloc_requested_at ??
@@ -85,13 +114,38 @@ export class ConversationService {
   public async getConversationById(id: string, tenantId: string): Promise<any> {
     // PLAN 8 FASE 5b: baca via Repository (fail-closed); cache baca dipertahankan.
     const repo = (await import('../repositories/conversation.repository')).getConversationRepository();
+    const fromMemory = () => {
+      const mem = memoryConversations.get(id);
+      // AUDIT FASE 3 (K-03): fallback memory WAJIB tenant-scoped.
+      if (!mem) return null;
+      if (tenantId && (mem as any).tenant_id && (mem as any).tenant_id !== tenantId) return null;
+      return mem;
+    };
     try {
       const conv = await repo.findById(id, tenantId);
-      return conv || memoryConversations.get(id) || null;
+      return conv || fromMemory();
     } catch (error) {
       console.warn('[Conversation Service] getConversationById DB error (fail-closed, cek cache baca):', (error as Error)?.message);
-      return memoryConversations.get(id) || null;
+      return fromMemory();
     }
+  }
+
+  /**
+   * AUDIT FASE 3 (K-03): satu-satunya jalur mutasi conversation yang WAJIB
+   * menyertakan tenant_id di WHERE. `updateMany` dipakai karena Prisma tidak
+   * mengizinkan kolom non-unik pada `where` milik `update`.
+   */
+  private async updateConversationScoped(
+    conversationId: string,
+    tenantId: string,
+    data: Record<string, any>
+  ): Promise<any | null> {
+    const res = await prisma.conversation.updateMany({
+      where: { id: conversationId, tenant_id: tenantId },
+      data,
+    });
+    if (res.count === 0) return null;
+    return prisma.conversation.findFirst({ where: { id: conversationId, tenant_id: tenantId } });
   }
 
   /**
@@ -103,13 +157,11 @@ export class ConversationService {
     const now = nextPinned ? new Date() : null;
 
     try {
-      const updated = await prisma.conversation.update({
-        where: { id: conversationId },
-        data: {
-          is_pinned: nextPinned,
-          pinned_at: now,
-        },
+      const updated = await this.updateConversationScoped(conversationId, tenantId, {
+        is_pinned: nextPinned,
+        pinned_at: now,
       });
+      if (!updated) return null;
       memoryConversations.set(conversationId, updated);
       return updated;
     } catch (error) {
@@ -129,10 +181,10 @@ export class ConversationService {
   public async setManualUnread(conversationId: string, tenantId: string, isManualUnread: boolean): Promise<any> {
     const current = await this.getConversationById(conversationId, tenantId);
     try {
-      const updated = await prisma.conversation.update({
-        where: { id: conversationId },
-        data: { is_manual_unread: isManualUnread },
+      const updated = await this.updateConversationScoped(conversationId, tenantId, {
+        is_manual_unread: isManualUnread,
       });
+      if (!updated) return null;
       memoryConversations.set(conversationId, updated);
       return updated;
     } catch (error) {
@@ -155,10 +207,13 @@ export class ConversationService {
     if (!current) return null;
     let updated: any = current;
     try {
-      updated = await prisma.conversation.update({
-        where: { id: conversationId },
-        data: { is_frustrated: false, frustrated_at: null, frustrated_reason: null },
+      const scoped = await this.updateConversationScoped(conversationId, tenantId, {
+        is_frustrated: false,
+        frustrated_at: null,
+        frustrated_reason: null,
       });
+      if (!scoped) return null;
+      updated = scoped;
     } catch (error) {
       // Fallback memory store saat DB offline: tetap padamkan agar UI konsisten.
       updated = { ...current, is_frustrated: false, frustrated_at: null, frustrated_reason: null };
@@ -743,37 +798,39 @@ export class ConversationService {
   ): Promise<any> {
     const now = new Date();
     try {
-      const updated = await prisma.conversation.update({
-        where: { id: conversationId },
-        data: {
-          last_discussed_treatment: treatmentName,
-          last_discussed_treatment_at: now,
-        },
+      const updated = await this.updateConversationScoped(conversationId, tenantId, {
+        last_discussed_treatment: treatmentName,
+        last_discussed_treatment_at: now,
       });
+      if (!updated) return null;
       memoryConversations.set(conversationId, updated);
       this.publishConversationUpdated(updated, tenantId);
       return updated;
     } catch (error) {
       const conv = memoryConversations.get(conversationId);
-      if (conv) {
+      if (conv && (!tenantId || !conv.tenant_id || conv.tenant_id === tenantId)) {
         conv.last_discussed_treatment = treatmentName;
         conv.last_discussed_treatment_at = now;
         conv.updated_at = now;
         this.publishConversationUpdated(conv, tenantId);
+        return conv;
       }
-      return conv || null;
+      return null;
     }
   }
   public async updateLastCustomerMessageAt(conversationId: string, tenantId: string): Promise<void> {
     const now = new Date();
     try {
-      await (prisma.conversation as any).update({
-        where: { id: conversationId },
+      // AUDIT FASE 3 (K-03): tenant_id wajib ikut di WHERE.
+      await prisma.conversation.updateMany({
+        where: { id: conversationId, tenant_id: tenantId },
         data: { last_customer_message_at: now },
       });
     } catch {
       const conv = memoryConversations.get(conversationId);
-      if (conv) conv.last_customer_message_at = now;
+      if (conv && (!tenantId || !conv.tenant_id || conv.tenant_id === tenantId)) {
+        conv.last_customer_message_at = now;
+      }
     }
   }
 

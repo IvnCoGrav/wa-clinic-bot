@@ -189,6 +189,27 @@ export function buildApp() {
   app.register(mediaRoutes);
   app.register(telegramWebhookRoutes);
 
+  // AUDIT FASE 3 (K-03b): humanizer (typing/sendSeen/sendText) WAJIB memakai
+  // transport tenant-nya, bukan session WAHA env global.
+  void (async () => {
+    try {
+      const [{ typingService }, factory, transport] = await Promise.all([
+        import('./services/typing.service'),
+        import('./integrations/whatsapp/factory'),
+        import('./integrations/whatsapp/transport'),
+      ]);
+      typingService.setTransportResolver(async (tenantId: string) => {
+        const gateway = await factory.resolveGatewayForTenant(tenantId);
+        if (gateway.providerType === 'WAHA') {
+          return transport.createWahaTransport(await factory.getWahaClientForTenant(tenantId));
+        }
+        return transport.createGatewayTransport(gateway);
+      });
+    } catch (err: any) {
+      console.warn('[TYPING TRANSPORT] Gagal memasang resolver per-tenant:', err?.message || err);
+    }
+  })();
+
   return app;
 }
 

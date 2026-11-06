@@ -91,6 +91,35 @@ describe('DELETE /api/admin/reservation/:id — Kontrak & Resiliensi Error (#300
     await app.close();
   });
 
+  it('2b. DELETE ?soft=true pada status completed -> 409 ILLEGAL_TRANSITION (D1)', async () => {
+    const mockRes = {
+      id: 'res-soft-completed',
+      tenant_id: 'default-tenant',
+      customer_id: 'cust-soft-1',
+      status: 'completed',
+      customer: { id: 'cust-soft-1', name: 'Bunda Soft', phone: '62822' },
+      google_calendar_event_id: null,
+    };
+
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue(mockRes as any);
+    const updateSpy = vi.mocked(prisma.reservation.update);
+
+    const app = buildApp();
+    await app.ready();
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/api/admin/reservation/res-soft-completed?soft=true',
+      headers: { 'x-api-key': ADMIN_KEY },
+    });
+
+    expect(res.statusCode).toBe(409);
+    const body = JSON.parse(res.body);
+    expect(body.code).toBe('ILLEGAL_TRANSITION');
+    expect(updateSpy).not.toHaveBeenCalled();
+    await app.close();
+  });
+
   it('3. DELETE id tidak ada di DB & memory -> 404 Reservation not found', async () => {
     vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null);
 

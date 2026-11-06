@@ -41,6 +41,11 @@ import { wibDayRangeToUtc } from '../../utils/time-wib';
 import { responseCacheService } from '../../services/response-cache.service';
 import { resolveReservationPaymentEvaluation } from '../../services/reservation-core.service';
 import { reservationArchiveService } from '../../services/reservation-archive.service';
+import {
+  reservationStatusService,
+  InvalidTransitionError,
+  PrematureCompletionError,
+} from '../../services/reservation-status.service';
 function withPaymentEvaluation(r: any) {
   if (!r) return r;
   return { ...r, paymentEvaluation: resolveReservationPaymentEvaluation(r) };
@@ -73,22 +78,14 @@ type CompleteOutcome =
 async function completeReservationById(opts: {
   id: string;
   tenantId: string;
-  strict: boolean;
   forceComplete?: boolean;
   allowUnassignedStaff?: boolean;
   actor?: string;
   apiKey?: string;
   ipAddress?: string;
 }): Promise<CompleteOutcome> {
-  const existing = await prisma.reservation.findFirst({
-    where: { id: opts.id, tenant_id: opts.tenantId },
-  });
+  const existing = await reservationStatusService.getForTransition(opts.id, opts.tenantId);
   if (!existing) return { ok: false, reason: 'NOT_FOUND' };
-
-  if (opts.strict) {
-    const { canTransition } = await import('../../domain/reservation-status');
-    if (!canTransition(existing.status, 'completed')) return { ok: false, reason: 'NOT_ELIGIBLE' };
-  }
 
   if (isPrematureCompletion(existing.booking_date) && !opts.forceComplete) {
     return { ok: false, reason: 'PREMATURE' };
@@ -116,16 +113,30 @@ async function completeReservationById(opts: {
     }).catch((err: any) => console.warn('[AUDIT] Failed to log unassigned bypass:', err.message));
   }
 
-  const reservation = await prisma.reservation.update({
-    where: { id: opts.id },
-    data: { status: 'completed' },
-    include: {
-      customer: { include: { children: true } },
-      assigned_staff: { select: { id: true, name: true, phone: true } },
-      children: true,
-    },
-  });
-  return { ok: true, reservation, existing };
+  try {
+    const applied = await reservationStatusService.applyTransition(existing, {
+      to: 'completed',
+      force: opts.forceComplete,
+      allowUnassignedStaff: opts.allowUnassignedStaff,
+      include: {
+        customer: { include: { children: true } },
+        assigned_staff: { select: { id: true, name: true, phone: true } },
+        children: true,
+      },
+    });
+    if (!applied.ok) return applied;
+
+    const reservation = applied.reservation;
+    return { ok: true, reservation, existing };
+  } catch (err: any) {
+    if (err instanceof PrematureCompletionError) {
+      return { ok: false, reason: 'PREMATURE' };
+    }
+    if (err instanceof InvalidTransitionError) {
+      return { ok: false, reason: 'NOT_ELIGIBLE' };
+    }
+    throw err;
+  }
 }
 
 /**
@@ -392,7 +403,8 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
         if (reservation.status !== 'hold') {
           return reply.status(400).send({ success: false, error: 'Hanya reservasi berstatus hold yang dapat dilepas.' });
         }
-        const cancelled = await prisma.reservation.update({ where: { id: reservation.id }, data: { status: 'cancelled' } });
+        const applied = await reservationStatusService.applyTransition(reservation, { to: 'cancelled' });
+        const cancelled = applied.ok ? applied.reservation : reservation;
         try {
           const { customerService } = await import('../../services/customer.service');
           await customerService.recalculateCustomerLtv(reservation.customer_id, tenantId);
@@ -632,10 +644,9 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           console.error('[Admin API] Google Calendar Event creation failed:', err);
         }
 
-        const reservation = await prisma.reservation.update({
-          where: { id },
-          data: {
-            status: 'confirmed',
+        const applied = await reservationStatusService.applyTransition(existing, {
+          to: 'confirmed',
+          extraData: {
             purchase_review_status: resolvePurchaseReviewOnConfirm(existing as any),
             google_calendar_event_id: calendarEventId,
             needs_staff_verification: false,
@@ -646,6 +657,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
             children: true,
           },
         });
+        const reservation = applied.ok ? applied.reservation : existing;
 
         if (existing.booking_date) {
           try {
@@ -742,8 +754,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
         const outcome = await completeReservationById({
           id,
           tenantId,
-          strict: false, // perilaku lama satuan: tanpa cek transisi
-          forceComplete: (request.body as any)?.forceComplete,
+                    forceComplete: (request.body as any)?.forceComplete,
           allowUnassignedStaff: (request.body as any)?.allowUnassignedStaff,
           actor: (request as any).adminIdentity,
           apiKey: (request as any).adminKeyUsed,
@@ -765,6 +776,13 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
               success: false,
               code: 'STAFF_ASSIGNMENT_REQUIRED',
               error: 'Reservasi tidak dapat diselesaikan tanpa penugasan bidan (assigned_staff_id). Tugaskan bidan terlebih dahulu atau sertakan allowUnassignedStaff: true dengan catatan audit.',
+            });
+          }
+          if (outcome.reason === 'NOT_ELIGIBLE') {
+            return reply.status(409).send({
+              success: false,
+              code: 'ILLEGAL_TRANSITION',
+              error: 'Reservasi tidak dapat diselesaikan karena status saat ini tidak memenuhi syarat untuk transisi ke completed.',
             });
           }
           // NOT_FOUND → lempar agar jatuh ke fallback memori / 404 (perilaku lama).
@@ -881,8 +899,7 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           outcome = await completeReservationById({
             id,
             tenantId,
-            strict: true,
-            forceComplete: false,
+                        forceComplete: false,
             allowUnassignedStaff: (request.body as any)?.allowUnassignedStaff,
             actor: (request as any).adminIdentity,
             apiKey: (request as any).adminKeyUsed,
@@ -1020,17 +1037,30 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           const completionMockDate = bookingDate !== undefined
             ? (bookingDate ? new Date(bookingDate) : null)
             : mock.booking_date;
-          if (
-            status === 'completed' &&
-            mock.status !== 'completed' &&
-            isPrematureCompletion(completionMockDate) &&
-            !(body as any)?.forceComplete
-          ) {
-            return reply.status(400).send({
-              success: false,
-              code: 'PREMATURE_COMPLETION_BLOCKED',
-              error: 'Reservasi masa depan tidak dapat ditandai sebagai completed sebelum tanggal kunjungan tiba. Gunakan forceComplete: true bila ada persetujuan darurat.',
-            });
+          if (status !== undefined) {
+            try {
+              reservationStatusService.assertTransition(
+                { ...mock, booking_date: completionMockDate },
+                status,
+                { force: (body as any)?.forceComplete }
+              );
+            } catch (err: any) {
+              if (err instanceof InvalidTransitionError) {
+                return reply.status(409).send({
+                  success: false,
+                  code: 'ILLEGAL_TRANSITION',
+                  error: err.message,
+                });
+              }
+              if (err instanceof PrematureCompletionError) {
+                return reply.status(400).send({
+                  success: false,
+                  code: 'PREMATURE_COMPLETION_BLOCKED',
+                  error: 'Reservasi masa depan tidak dapat ditandai sebagai completed sebelum tanggal kunjungan tiba. Gunakan forceComplete: true bila ada persetujuan darurat.',
+                });
+              }
+              throw err;
+            }
           }
           if (normalizedCat !== undefined) mock.treatment_category = normalizedCat;
           if (treatmentDetail !== undefined) mock.treatment_detail = treatmentDetail;
@@ -1120,7 +1150,35 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           const gross = purchaseValue !== undefined ? Number(purchaseValue) : Number(existing.purchase_value || 0);
           updateData.discount_amount = d === null ? null : Math.min(d, Math.max(0, gross));
         }
-        if (status !== undefined) updateData.status = status;
+        if (status !== undefined) {
+          const targetBookingDate = bookingDate !== undefined
+            ? (bookingDate ? new Date(bookingDate) : null)
+            : existing.booking_date;
+          try {
+            reservationStatusService.assertTransition(
+              { ...existing, booking_date: targetBookingDate },
+              status,
+              { force: (body as any)?.forceComplete }
+            );
+          } catch (err: any) {
+            if (err instanceof InvalidTransitionError) {
+              return reply.status(409).send({
+                success: false,
+                code: 'ILLEGAL_TRANSITION',
+                error: err.message,
+              });
+            }
+            if (err instanceof PrematureCompletionError) {
+              return reply.status(400).send({
+                success: false,
+                code: 'PREMATURE_COMPLETION_BLOCKED',
+                error: 'Reservasi masa depan tidak dapat ditandai sebagai completed sebelum tanggal kunjungan tiba. Gunakan forceComplete: true bila ada persetujuan darurat.',
+              });
+            }
+            throw err;
+          }
+          updateData.status = status;
+        }
         if (isBecomingConfirmed) {
           updateData.purchase_review_status = resolvePurchaseReviewOnConfirm(existing as any);
         }
@@ -2112,8 +2170,8 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
    * DELETE /api/admin/reservation/:id
    * Kontrak (lihat KNOWN_ISSUES #300):
    * - tanpa query   -> ARSIP (snapshot 60 hari, baris aktif dihapus)
-   * - ?archive=true -> ARSIP (alias eksplisit)
-   * - ?hard=true    -> ARSIP (alias historis, BUKAN hard delete fisik)
+   * - ?archive=true -> @deprecated ARSIP (alias eksplisit historis)
+   * - ?hard=true    -> @deprecated ARSIP (alias historis, BUKAN hard delete fisik)
    * - ?soft=true    -> SOFT-CANCEL (status = 'cancelled', baris tetap ada)
    */
   fastify.delete(
@@ -2168,15 +2226,13 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
       }
 
       try {
-        if (existing.google_calendar_event_id) {
-          try {
-            await googleCalendarService.deleteEvent(existing.google_calendar_event_id);
-          } catch (err) {
-            console.error('[Admin API] Google Calendar Event deletion failed:', err);
-          }
-        }
+        // Kontrak A-013: default adalah ARSIP kecuali ?soft=true
+        const isArchive = !isSoftCancel;
 
-        if (!isSoftCancel) {
+        if (isArchive) {
+          // reservationArchiveService.archiveReservation sudah menangani penghapusan
+          // event Google Calendar (jika ada) di dalam servicenya. DILARANG memanggil
+          // deleteEvent lagi di level route agar tidak terjadi dobel panggilan.
           const archiveResult = await reservationArchiveService.archiveReservation({
             id,
             tenantId: existing.tenant_id || tenantId,
@@ -2194,10 +2250,26 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
           });
         }
 
-        const reservation = await prisma.reservation.update({
-          where: { id },
-          data: { status: 'cancelled' },
+        // Jalur SOFT-CANCEL (?soft=true): hapus event Google Calendar di sini sebelum transisi
+        if (existing.google_calendar_event_id) {
+          try {
+            await googleCalendarService.deleteEvent(existing.google_calendar_event_id);
+          } catch (err: any) {
+            console.error('[Admin API] Google Calendar Event deletion failed (soft-cancel):', err?.message || err);
+          }
+        }
+
+        const applied = await reservationStatusService.applyTransition(existing, {
+          to: 'cancelled',
         });
+        if (!applied.ok) {
+          return reply.status(409).send({
+            success: false,
+            code: 'ILLEGAL_TRANSITION',
+            error: `Transisi ${existing.status} → cancelled ditolak.`,
+          });
+        }
+        const reservation = applied.reservation;
 
         // Audit P1-14: batalkan follow-up pengingat H-1 / review H+1 terkait
         // reservasi yang dibatalkan (sebelumnya hanya membuat NO_PURCHASE baru).
@@ -2272,6 +2344,13 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
 
         return reply.status(200).send({ success: true, data: reservation });
       } catch (error: any) {
+        if (error instanceof InvalidTransitionError) {
+          return reply.status(409).send({
+            success: false,
+            code: 'ILLEGAL_TRANSITION',
+            error: error.message,
+          });
+        }
         const msg = String(error?.message || error);
         const isDbDown = /Database offline|ECONNREFUSED|ETIMEDOUT|P1001|P1002|P2024|connection|timed out/i.test(msg);
         console.error(`[Admin API] DELETE reservasi ${id} gagal:`, msg);

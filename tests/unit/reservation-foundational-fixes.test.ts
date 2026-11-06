@@ -1,15 +1,50 @@
 import { describe, it, expect } from 'vitest';
 import { parseTreatmentsFromDetail } from '../../packages/admin-dashboard/src/utils/treatmentParser';
-import { 
-  calculateHaversineKm, 
-  estimateTravelMinutesKm, 
-  checkTravelTimeSufficiency 
+import {
+  calculateHaversineKm,
+  estimateTravelMinutesKm,
+  checkTravelTimeSufficiency
 } from '../../packages/admin-dashboard/src/utils/geoUtils';
+
+/**
+ * Katalog fixture eksplisit: produksi tidak lagi memakai fallback hardcoded,
+ * jadi parser WAJIB diberi katalog live/DB saat diuji.
+ */
+const TEST_CATALOG: any[] = [
+  {
+    id: 'pulih-ceria',
+    name: 'Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)',
+    category: 'BABY',
+    durationMinutes: 40,
+    originalPrice: 100000,
+    promoPrice: 75000,
+    isActive: true,
+  },
+  {
+    id: 'sinar-moksa',
+    name: 'Sinar Moksa (Infrared / Moxa)',
+    category: 'ADD_ON',
+    isAddon: true,
+    durationMinutes: 15,
+    originalPrice: 25000,
+    promoPrice: 15000,
+    isActive: true,
+  },
+  {
+    id: 'bayi-ceria',
+    name: 'Pijat Bayi Ceria (Rileksasi)',
+    category: 'BABY',
+    durationMinutes: 40,
+    originalPrice: 80000,
+    promoPrice: 70000,
+    isActive: true,
+  },
+];
 
 describe('Fase 1-4: Foundational Reservation Fixes', () => {
   describe('parseTreatmentsFromDetail - Catalog Matching (Fase 2)', () => {
     it('maps "Pijat bayi pulih ceria" to "Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)" with 40m duration', () => {
-      const result = parseTreatmentsFromDetail('Pijat bayi pulih ceria');
+      const result = parseTreatmentsFromDetail('Pijat bayi pulih ceria', TEST_CATALOG);
       expect(result).toHaveLength(1);
       // Tahan rebrand Kala ('Kala Baby – Pijat Pulih Ceria'): durasi/kategori tetap sebagai sinyal.
       expect(result[0].name).toContain('Pulih Ceria');
@@ -18,7 +53,7 @@ describe('Fase 1-4: Foundational Reservation Fixes', () => {
     });
 
     it('maps "Pijat bayi pulih ceria + sinar moksa" to 55m pure + 20m buffer = 75m total', () => {
-      const result = parseTreatmentsFromDetail('Pijat bayi pulih ceria + sinar moksa');
+      const result = parseTreatmentsFromDetail('Pijat bayi pulih ceria + sinar moksa', TEST_CATALOG);
       expect(result).toHaveLength(2);
       expect(result[0].name).toContain('Pulih Ceria');
       expect(result[0].durationMinutes).toBe(40);
@@ -30,14 +65,14 @@ describe('Fase 1-4: Foundational Reservation Fixes', () => {
     });
 
     it('handles typo "pijet bayi pulih ceria" via alias map (pijet→pijat)', () => {
-      const result = parseTreatmentsFromDetail('pijet bayi pulih ceria');
+      const result = parseTreatmentsFromDetail('pijet bayi pulih ceria', TEST_CATALOG);
       expect(result).toHaveLength(1);
       expect(result[0].name).toContain('Pulih Ceria');
       expect(result[0].durationMinutes).toBe(40);
     });
 
     it('handles typo "moxa" alias for moksa', () => {
-      const result = parseTreatmentsFromDetail('sinar moxa');
+      const result = parseTreatmentsFromDetail('sinar moxa', TEST_CATALOG);
       expect(result).toHaveLength(1);
       expect(result[0].name).toContain('Sinar Moksa');
       expect(result[0].durationMinutes).toBe(15);
@@ -45,28 +80,28 @@ describe('Fase 1-4: Foundational Reservation Fixes', () => {
     });
 
     it('handles "Pijet Bayi Ceria" → Pijat Bayi Ceria (Rileksasi) via alias + token matching', () => {
-      const result = parseTreatmentsFromDetail('Pijet Bayi Ceria');
+      const result = parseTreatmentsFromDetail('Pijet Bayi Ceria', TEST_CATALOG);
       expect(result).toHaveLength(1);
       expect(result[0].name).toContain('Ceria');
       expect(result[0].durationMinutes).toBe(40);
     });
 
     it('handles word order variation "Pijat Pulih Ceria Bayi" (anti-overfitting)', () => {
-      const result = parseTreatmentsFromDetail('Pijat Pulih Ceria Bayi');
+      const result = parseTreatmentsFromDetail('Pijat Pulih Ceria Bayi', TEST_CATALOG);
       expect(result).toHaveLength(1);
       expect(result[0].name).toContain('Pulih Ceria');
       expect(result[0].durationMinutes).toBe(40);
     });
 
     it('handles "baby" alias for "bayi"', () => {
-      const result = parseTreatmentsFromDetail('Pijat baby pulih ceria');
+      const result = parseTreatmentsFromDetail('Pijat baby pulih ceria', TEST_CATALOG);
       expect(result).toHaveLength(1);
       expect(result[0].name).toContain('Pulih Ceria');
       expect(result[0].durationMinutes).toBe(40);
     });
 
     it('handles "oksitoksin" typo for "oksitosin"', () => {
-      const result = parseTreatmentsFromDetail('Oksitoksin Massage Non-Fullbody');
+      const result = parseTreatmentsFromDetail('Oksitoksin Massage Non-Fullbody', TEST_CATALOG);
       expect(result).toHaveLength(1);
       // Item nonaktif & absen dari fallback catalog dashboard (treatmentParser.ts:14) → raw dipertahankan
       // (normalisasi ejaan hanya terjadi via match katalog; tanpa match parser DILARANG mengarang nama) + durasi default 60.
@@ -76,27 +111,27 @@ describe('Fase 1-4: Foundational Reservation Fixes', () => {
     });
 
     it('does not match bundle for single treatment input (specificity ranking)', () => {
-      const result = parseTreatmentsFromDetail('Pijat Bayi Ceria');
+      const result = parseTreatmentsFromDetail('Pijat Bayi Ceria', TEST_CATALOG);
       expect(result).toHaveLength(1);
       expect(result[0].name).toContain('Ceria');
       expect(result[0].category).not.toBe('BUNDLE');
     });
 
     it('handles explicit duration tag [45m] overriding catalog', () => {
-      const result = parseTreatmentsFromDetail('Pijat Bayi Ceria [45m]');
+      const result = parseTreatmentsFromDetail('Pijat Bayi Ceria [45m]', TEST_CATALOG);
       expect(result).toHaveLength(1);
       expect(result[0].durationMinutes).toBe(45);
     });
 
     it('strips child name in parentheses', () => {
-      const result = parseTreatmentsFromDetail('Pijat Bayi Pulih Ceria (Nadira)');
+      const result = parseTreatmentsFromDetail('Pijat Bayi Pulih Ceria (Nadira)', TEST_CATALOG);
       expect(result).toHaveLength(1);
       expect(result[0].name).toContain('Pulih Ceria');
       expect(result[0].assignedChildIndex).toBe(0);
     });
 
     it('skips HOLD placeholder', () => {
-      const result = parseTreatmentsFromDetail('[HOLD] Slot Ditawarkan');
+      const result = parseTreatmentsFromDetail('[HOLD] Slot Ditawarkan', TEST_CATALOG);
       expect(result).toHaveLength(0);
     });
   });

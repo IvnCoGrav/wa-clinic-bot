@@ -43,16 +43,26 @@ export function getSharelocCardStatus(chat: any, now: Date = new Date()): Sharel
     };
   }
 
-  // 2. Cek apakah koordinat sudah presisi
+  // 2. Cek apakah koordinat sudah memadai.
+  //    Sumber kanonik dari server (`effectiveLocationSource`) lebih diutamakan
+  //    daripada kolom mentah `locationSource` yang bisa basi (audit C-001/C-002).
   const rawLoc =
+    chat.effectiveLocationSource ||
     chat.locationSource ||
     chat.customer?.location_source ||
     chat.location_source ||
     chat.effective_location_source;
   const effectiveSource = resolveEffectiveLocationSource(rawLoc);
 
+  // `manual_staff` = titik sudah diverifikasi staf di lapangan → setara presisi
+  // untuk keperluan operasional. Jangan lagi dicap "butuh shareloc".
   const isAlreadyPrecise =
+    chat.sharelocNeeded === false ||
+    chat.locationAdequacy === 'gps_pin' ||
+    chat.locationAdequacy === 'staff_verified' ||
+    chat.locationAdequacy === 'field_verified' ||
     isPreciseLocationSource(effectiveSource) ||
+    effectiveSource === 'manual_staff' ||
     Boolean(chat.shareLocationSent || chat.customer?.share_location_sent);
 
   if (isAlreadyPrecise) {

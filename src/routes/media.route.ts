@@ -30,8 +30,16 @@ const SCOPE_IS_PRIVATE: Record<string, boolean> = {
 /**
  * Validasi otentikasi media privat (inbound / WAHA proxy)
  */
-async function isMediaAuthorized(request: FastifyRequest): Promise<boolean> {
-  const isDev = process.env.NODE_ENV !== 'production';
+interface MediaAuthorization {
+  /** '*' = super admin / API key (lintas tenant). Selain itu = tenant milik sesi. */
+  tenantId: string;
+}
+
+/**
+ * AUDIT FASE 3 (K-03): otorisasi media mengembalikan TENANT pemilik sesi.
+ * Sebelumnya hanya boolean → staf tenant A bisa membaca media tenant B.
+ */
+async function getMediaAuthorizedTenant(request: FastifyRequest): Promise<MediaAuthorization | null> {
   const cookieHeader = request.headers['cookie'] || '';
   const sessionCookie = cookieHeader.match(/admin_session=([^;]+)/)?.[1];
   const staffCookie = cookieHeader.match(/staff_session=([^;]+)/)?.[1];
@@ -44,31 +52,45 @@ async function isMediaAuthorized(request: FastifyRequest): Promise<boolean> {
   const { AdminSessionService, SessionStoreUnavailable } = await import('../services/admin-session.service');
   // DB sesi tak tersedia → dianggap belum terotentikasi di lapis media (deny aman,
   // bukan 500). Media bukan jalur logout; fallback lain (staff/API key) tetap dicoba.
-  const adminSessionValid = async (t: string): Promise<boolean> => {
+  const adminSession = async (t: string) => {
     try {
-      return !!(await AdminSessionService.validateSession(t));
+      return await AdminSessionService.validateSession(t);
     } catch (err) {
-      if (err instanceof SessionStoreUnavailable) return false;
+      if (err instanceof SessionStoreUnavailable) return null;
       throw err;
     }
   };
-  // DB sesi staff tak tersedia → deny aman (false), bukan 500/401 ambigu.
-  // Media bukan jalur logout; fallback lain (API key) tetap dicoba.
-  const staffSessionValid = async (t: string): Promise<boolean> => {
+  const staffSession = async (t: string) => {
     try {
       const { StaffAuthService } = await import('../services/staff-auth.service');
-      return !!(await StaffAuthService.validateSession(t));
+      return await StaffAuthService.validateSession(t);
     } catch (err) {
-      if (err instanceof SessionStoreUnavailable) return false;
+      if (err instanceof SessionStoreUnavailable) return null;
       throw err;
     }
   };
-  if (sessionCookie && (await adminSessionValid(sessionCookie))) return true;
-  if (staffCookie && (await staffSessionValid(staffCookie))) return true;
+
+  if (sessionCookie) {
+    const admin = await adminSession(sessionCookie);
+    if (admin) {
+      // AdminSession historis tidak menyimpan tenant_id → super admin lintas tenant.
+      return { tenantId: (admin as any).tenant_id || '*' };
+    }
+  }
+  if (staffCookie) {
+    const staff = await staffSession(staffCookie);
+    if (staff) {
+      const tenantId = (staff as any)?.staff?.tenant_id;
+      // Fail-closed: sesi staff tanpa tenant tidak boleh membaca media tenant mana pun.
+      return tenantId ? { tenantId } : null;
+    }
+  }
   const adminKey = process.env.ADMIN_API_KEY;
-  if (apiKey && adminKey && safeCompare(apiKey, adminKey)) return true;
-  if (authHeader && authHeader.startsWith('Bearer ') && adminKey && safeCompare(authHeader.slice(7), adminKey)) return true;
-  return false;
+  if (apiKey && adminKey && safeCompare(apiKey, adminKey)) return { tenantId: '*' };
+  if (authHeader && authHeader.startsWith('Bearer ') && adminKey && safeCompare(authHeader.slice(7), adminKey)) {
+    return { tenantId: '*' };
+  }
+  return null;
 }
 
 /**
@@ -160,10 +182,15 @@ export async function mediaRoutes(fastify: FastifyInstance) {
     }
 
     // Folder inbound privat → verifikasi session admin/staff atau API key
+    // + pastikan tenant pemanggil SAMA dengan tenant pada path (K-03).
     if (SCOPE_IS_PRIVATE[scope]) {
-      const authorized = await isMediaAuthorized(request);
-      if (!authorized) {
+      const auth = await getMediaAuthorizedTenant(request);
+      if (!auth) {
         return reply.status(401).send({ error: 'Unauthorized' });
+      }
+      if (auth.tenantId !== '*' && auth.tenantId !== tenant) {
+        // 404 (bukan 403) agar keberadaan media tenant lain tidak terungkap.
+        return reply.status(404).send({ error: 'Not Found' });
       }
     }
 
@@ -180,13 +207,26 @@ export async function mediaRoutes(fastify: FastifyInstance) {
       }
     }
 
+    // K-03: cegah path traversal (termasuk `..\` di Windows) — hasil resolve
+    // WAJIB berada di bawah MEDIA_ROOT.
+    const mediaRoot = path.resolve(process.cwd(), 'storage', 'media');
+    const resolvedFinal = path.resolve(finalAbs);
+    if (resolvedFinal !== mediaRoot && !resolvedFinal.startsWith(mediaRoot + path.sep)) {
+      return reply.status(404).send({ error: 'Not Found' });
+    }
+    finalAbs = resolvedFinal;
+
     const stat = fs.statSync(finalAbs);
     const totalSize = stat.size;
     const ext = (path.extname(finalAbs) || '').replace(/^\./, '').toLowerCase();
     const contentType = MIME_MAP[ext] || 'application/octet-stream';
 
-    reply.header('Access-Control-Allow-Origin', '*');
-    reply.header('Cache-Control', 'public, max-age=86400');
+    if (!SCOPE_IS_PRIVATE[scope]) {
+      // Outbound dipakai WABA/Meta untuk mengambil gambar → boleh publik.
+      reply.header('Access-Control-Allow-Origin', '*');
+    }
+    // Media inbound privat: jangan di-cache publik (proxy/browser bersama).
+    reply.header('Cache-Control', SCOPE_IS_PRIVATE[scope] ? 'private, max-age=86400' : 'public, max-age=86400');
     if (isFallback) {
       reply.header('X-Media-Fallback', 'thumbnail');
       console.log(`[MEDIA FALLBACK] HD→thumb served: /media/${scope}/${tenant}/${file}`);
@@ -231,12 +271,24 @@ export async function mediaRoutes(fastify: FastifyInstance) {
   fastify.get('/api/files/:session/:file', async (request: FastifyRequest<{
     Params: { session: string; file: string };
   }>, reply: FastifyReply) => {
-    const authorized = await isMediaAuthorized(request);
-    if (!authorized) {
+    const auth = await getMediaAuthorizedTenant(request);
+    if (!auth) {
       return reply.status(401).send({ error: 'Unauthorized: Authentication required to access WhatsApp files.' });
     }
 
     const { session, file } = request.params;
+    // K-03: staf hanya boleh mengakses file dari session WAHA tenant-nya sendiri.
+    if (auth.tenantId !== '*') {
+      try {
+        const { whatsappProviderService } = await import('../services/whatsapp-provider.service');
+        const expectedSession = await whatsappProviderService.getSessionIdForTenant(auth.tenantId);
+        if (expectedSession !== session) {
+          return reply.status(404).send({ error: 'File tidak ditemukan di server WAHA' });
+        }
+      } catch {
+        return reply.status(404).send({ error: 'File tidak ditemukan di server WAHA' });
+      }
+    }
     const { wahaClient } = await import('../integrations/waha/client');
 
     const result = await wahaClient.fetchFile(session, file);

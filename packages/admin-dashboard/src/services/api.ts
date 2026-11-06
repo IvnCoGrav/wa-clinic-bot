@@ -272,6 +272,21 @@ export async function refreshApi<T = any>(
   return apiRequest<T>(url, { ...options, forceFresh: true });
 }
 
+/**
+ * AUDIT FASE 0: normalisasi payload error backend.
+ * Backend dapat mengirim `error` sebagai string ATAU objek `{ code, message }`.
+ * Tanpa normalisasi, `new Error({...})` menghasilkan "[object Object]" sehingga
+ * admin tidak pernah tahu alasan sebenarnya (WABA window, cut-off, sandbox, dll).
+ */
+export function extractApiErrorPayload(errorData: any): { message?: string; code?: string } {
+  const nested = errorData?.error && typeof errorData.error === 'object' ? errorData.error : null;
+  const stringError = typeof errorData?.error === 'string' ? errorData.error : null;
+  return {
+    message: errorData?.message || nested?.message || stringError || undefined,
+    code: nested?.code || stringError || errorData?.code || undefined,
+  };
+}
+
 export async function apiRequest<T = any>(
   endpoint: string,
   options: RequestInit & { timeoutMs?: number; useCache?: boolean; ttlMs?: number; forceFresh?: boolean; retryCount?: number; keepalive?: boolean } = {}
@@ -371,8 +386,12 @@ export async function apiRequest<T = any>(
       try {
         const errorData = await response.json();
         rawErrorData = errorData;
-        errorMsg = errorData.message || errorData.error || errorMsg;
-        errorCode = errorData.error || errorData.code;
+        // AUDIT FASE 0: beberapa endpoint mengirim `error` sebagai OBJEK
+        // ({ code, message }). Tanpa ekstraksi ini, `new Error(obj)` menghasilkan
+        // pesan "[object Object]" dan admin tidak tahu penyebab kegagalan.
+        const parsedError = extractApiErrorPayload(errorData);
+        errorMsg = parsedError.message || errorMsg;
+        errorCode = parsedError.code;
         existingReservation = errorData.existingReservation;
       } catch (_) {}
       const error = new Error(errorMsg) as Error & { status?: number; code?: string; existingReservation?: any; data?: any };

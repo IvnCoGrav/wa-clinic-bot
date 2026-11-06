@@ -111,4 +111,28 @@ describe('Characterization — PATCH /api/admin/reservation/:id/complete (satuan
     expect(body.code).toBe('STAFF_ASSIGNMENT_REQUIRED');
     expect(update).not.toHaveBeenCalled();
   });
+  it('P10: PATCH /api/admin/reservation/:id/complete pada reservasi cancelled menolak 409 ILLEGAL_TRANSITION (bukan 404)', async () => {
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({
+      id: 'res-cancelled-1',
+      tenant_id: DEFAULT_TENANT_ID,
+      customer_id: 'cust-1',
+      status: 'cancelled',
+      booking_date: new Date(PAST_ISO),
+      treatment_category: 'BABY',
+      assigned_staff_id: 'staff-1',
+    } as any);
+
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/admin/reservation/res-cancelled-1/complete',
+      headers: { 'x-api-key': ADMIN_KEY, 'content-type': 'application/json' },
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(409);
+    const body = JSON.parse(res.body);
+    expect(body.code).toBe('ILLEGAL_TRANSITION');
+    expect(body.error).toMatch(/tidak memenuhi syarat untuk transisi ke completed/i);
+  });
 });

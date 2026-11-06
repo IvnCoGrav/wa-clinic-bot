@@ -201,7 +201,7 @@ describe('V3 Agent Runner End-to-End Suite', () => {
     expect(result.shouldSendReply).toBe(true);
   });
 
-  it('Skenario 3: Kondisi Darurat Medis (Tool escalate_to_human terpanggil & bot berhenti membalas)', async () => {
+  it('Skenario 3: Kondisi Darurat Medis — wajib eskalasi manusia + pesan handoff aman', async () => {
     (axios.post as any).mockResolvedValueOnce({
       data: {
         choices: [
@@ -236,10 +236,11 @@ describe('V3 Agent Runner End-to-End Suite', () => {
       incomingText: 'Tolong anak saya kejang dan tidak sadar!',
     });
 
+    // Keputusan klinis 2026-11-06: eskalasi manusia WAJIB. Pesan handoff aman
+    // (bukan jawaban medis) tetap boleh dikirim agar customer tidak silent-drop.
     expect(result.isEscalated).toBe(true);
-    expect(result.shouldSendReply).toBe(false);
-    expect(result.executedTools.length).toBe(1);
-    expect(result.executedTools[0].name).toBe('escalate_to_human');
+    expect(result.shouldSendReply).toBe(true);
+    expect(result.replyText).toMatch(/dokter|medis|kesehatan|bidan/i);
   });
 
   it('Skenario 5: Multi-turn panjang + tanya SOP mandi — wajib tetap panggil search_knowledge_faq (anti-inertia)', async () => {

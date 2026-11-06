@@ -1,8 +1,10 @@
+import { reservationStatusService } from './reservation-status.service';
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { customerService } from './customer.service';
 import { isValidChildName } from '../utils/name-sanitizer';
 import { classifyPatientEntity } from '../utils/reservation-text-parser';
+import { ConflictCheckUnavailableError } from './reservation-core.service';
 
 export interface CreateSeriesParams {
   customerId: string;
@@ -16,6 +18,8 @@ export interface CreateSeriesParams {
     sessionNumber: number;
     bookingDate: Date | string;
     assignedStaffId?: string;
+    durationMinutes?: number;
+    customerAddressId?: string | null;
   }>;
   babies?: Array<{ name: string; ageText?: string }>;
 }
@@ -97,32 +101,71 @@ class ReservationSeriesService {
     const resolvedCategory = await this.resolveCategory(treatmentName, treatmentCategory);
     const sanitizedStaffId = assignedStaffId?.trim() ? assignedStaffId.trim() : null;
 
-    // Fase 3.3: collision check per sesi SEBELUM transaksi — gagal atomik
-    // (seluruh series ditolak bila ada 1 sesi bentrok), mencegah double-booking
-    // terapis lewat pembuatan paket sesi berulang.
-    const { findOverlappingStaffReservations } = await import('./reservation-core.service');
-    for (const s of sessions) {
-      const sessionStaffId = s.assignedStaffId?.trim() ? s.assignedStaffId.trim() : sanitizedStaffId;
-      if (!sessionStaffId) continue;
-      const bookingDate = typeof s.bookingDate === 'string' ? new Date(s.bookingDate) : s.bookingDate;
-      if (!bookingDate || isNaN(bookingDate.getTime())) continue;
-      const conflicts = await findOverlappingStaffReservations({
-        tenantId,
-        staffId: sessionStaffId,
-        bookingDate,
-        durationMinutes: 60,
-      });
-      if (conflicts.length > 0) {
-        const err: any = new Error('STAFF_COLLISION');
-        err.code = 'STAFF_COLLISION';
-        err.conflict = conflicts[0];
-        err.sessionNumber = s.sessionNumber;
-        throw err;
-      }
-    }
+    const {
+      computeAdvisoryLockKey,
+      findOverlappingStaffReservations,
+      findOverlappingCustomerReservations,
+      resolveCustomerAddressId,
+    } = await import('./reservation-core.service');
 
-    // Create series + all reservations in a transaction
-    const result = await prisma.$transaction(async (tx) => {
+    const resolvedAddressId = await resolveCustomerAddressId({
+      tenantId,
+      customerId,
+      explicitAddressId: sessions.find((s) => s.customerAddressId)?.customerAddressId ?? null,
+      candidate: undefined,
+    });
+
+    const result = await prisma.$transaction(async (tx: any) => {
+      if (typeof tx.$executeRawUnsafe === 'function') {
+        const lockKeys = [
+          ...new Set(
+            sessions.map((s) =>
+              computeAdvisoryLockKey(
+                tenantId,
+                (s.assignedStaffId?.trim() || sanitizedStaffId) || null,
+                typeof s.bookingDate === 'string' ? new Date(s.bookingDate) : s.bookingDate
+              )
+            )
+          ),
+        ].sort((a, b) => a - b);
+
+        for (const key of lockKeys) {
+          await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock($1)', key);
+        }
+      } else if (process.env.NODE_ENV === 'production' && process.env.ALLOW_ADVISORY_LOCK_FALLBACK !== 'true') {
+        throw new ConflictCheckUnavailableError('advisory_lock', 'Advisory lock unavailable on series transaction');
+      }
+
+      for (const s of sessions) {
+        const sessionStaffId = s.assignedStaffId?.trim() ? s.assignedStaffId.trim() : sanitizedStaffId;
+        const bookingDate = typeof s.bookingDate === 'string' ? new Date(s.bookingDate) : s.bookingDate;
+        const duration = s.durationMinutes ?? 60;
+
+        if (sessionStaffId) {
+          const staffConflicts = await findOverlappingStaffReservations({
+            tenantId, staffId: sessionStaffId, bookingDate, durationMinutes: duration, db: tx,
+          });
+          if (staffConflicts.length > 0) {
+            const err: any = new Error('STAFF_COLLISION');
+            err.code = 'STAFF_COLLISION';
+            err.conflict = staffConflicts[0];
+            err.sessionNumber = s.sessionNumber;
+            throw err;
+          }
+        }
+
+        const { exactConflicts } = await findOverlappingCustomerReservations({
+          tenantId, customerId, bookingDate, durationMinutes: duration, db: tx,
+        });
+        if (exactConflicts && exactConflicts.length > 0) {
+          const err: any = new Error('DUPLICATE_BOOKING');
+          err.code = 'DUPLICATE_BOOKING';
+          err.conflict = exactConflicts[0];
+          err.sessionNumber = s.sessionNumber;
+          throw err;
+        }
+      }
+
       const series = await tx.reservationSeries.create({
         data: {
           tenant_id: tenantId,
@@ -140,22 +183,38 @@ class ReservationSeriesService {
         sessions.map(async (s) => {
           const bookingDate = typeof s.bookingDate === 'string' ? new Date(s.bookingDate) : s.bookingDate;
           const sessionStaffId = s.assignedStaffId?.trim() ? s.assignedStaffId.trim() : sanitizedStaffId;
-          return tx.reservation.create({
+          const duration = s.durationMinutes ?? 60;
+          const perSessionPrice = purchaseValue ? Math.round(purchaseValue / totalSessions) : null;
+          const created = await tx.reservation.create({
             data: {
               tenant_id: tenantId,
               customer_id: customerId,
               treatment_category: resolvedCategory,
               treatment_detail: `${treatmentName} [Sesi ${s.sessionNumber}/${totalSessions}]`,
               booking_date: bookingDate,
+              duration_minutes: duration,
               status: 'confirmed',
               assigned_staff_id: sessionStaffId,
-              purchase_value: purchaseValue ? Math.round(purchaseValue / totalSessions) : null,
+              purchase_value: perSessionPrice,
               series_id: series.id,
               session_number: s.sessionNumber,
               total_sessions: totalSessions,
+              customer_address_id: resolvedAddressId,
               raw_text: `[Admin Series] ${treatmentName} - Sesi ${s.sessionNumber}/${totalSessions}`,
             },
           });
+          if (tx.reservationItem) {
+            await tx.reservationItem.create({
+              data: {
+                tenant_id: tenantId,
+                reservation_id: created.id,
+                custom_name: treatmentName,
+                price: perSessionPrice ?? 0,
+                duration_minutes: duration,
+              },
+            });
+          }
+          return created;
         })
       );
 
@@ -171,7 +230,7 @@ class ReservationSeriesService {
         assignedStaffId: series.assigned_staff_id,
         notes: series.notes,
         createdAt: series.created_at,
-        reservations: reservations.map((r) => ({
+        reservations: reservations.map((r: any) => ({
           id: r.id,
           sessionNumber: r.session_number!,
           bookingDate: r.booking_date!,
@@ -415,18 +474,18 @@ class ReservationSeriesService {
       (r) => r.status === 'pending' || r.status === 'confirmed'
     );
 
-    await prisma.$transaction([
-      prisma.reservationSeries.update({
+    await prisma.$transaction(async (tx: any) => {
+      await tx.reservationSeries.update({
         where: { id: seriesId },
         data: { status: 'paused' },
-      }),
-      ...pendingReservations.map((r) =>
-        prisma.reservation.update({
-          where: { id: r.id },
-          data: { status: 'paused' },
-        })
-      ),
-    ]);
+      });
+      for (const r of pendingReservations) {
+        await reservationStatusService.applyTransition(r, {
+          to: 'paused',
+          db: tx,
+        });
+      }
+    });
 
     return { pausedCount: pendingReservations.length };
   }
@@ -443,18 +502,18 @@ class ReservationSeriesService {
 
     const pausedReservations = series.reservations.filter((r) => r.status === 'paused');
 
-    await prisma.$transaction([
-      prisma.reservationSeries.update({
+    await prisma.$transaction(async (tx: any) => {
+      await tx.reservationSeries.update({
         where: { id: seriesId },
         data: { status: 'active' },
-      }),
-      ...pausedReservations.map((r) =>
-        prisma.reservation.update({
-          where: { id: r.id },
-          data: { status: 'confirmed' },
-        })
-      ),
-    ]);
+      });
+      for (const r of pausedReservations) {
+        await reservationStatusService.applyTransition(r, {
+          to: 'confirmed',
+          db: tx,
+        });
+      }
+    });
 
     return { resumedCount: pausedReservations.length };
   }
@@ -473,18 +532,18 @@ class ReservationSeriesService {
       (r) => r.status === 'pending' || r.status === 'confirmed' || r.status === 'paused'
     );
 
-    await prisma.$transaction([
-      prisma.reservationSeries.update({
+    await prisma.$transaction(async (tx: any) => {
+      await tx.reservationSeries.update({
         where: { id: seriesId },
         data: { status: 'cancelled' },
-      }),
-      ...cancellable.map((r) =>
-        prisma.reservation.update({
-          where: { id: r.id },
-          data: { status: 'cancelled' },
-        })
-      ),
-    ]);
+      });
+      for (const r of cancellable) {
+        await reservationStatusService.applyTransition(r, {
+          to: 'cancelled',
+          db: tx,
+        });
+      }
+    });
 
     // Sync LTV cache after cancelling series
     try {

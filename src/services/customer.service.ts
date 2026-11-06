@@ -28,6 +28,7 @@ import {
 } from '../domain/customer-address';
 import { ACTIVE_RESERVATION_STATUSES, isActiveReservation } from '../domain/reservation-status';
 import { STAFF_VERIFIED_LOCATION_LABEL, resolveLocationSource } from './staff-reservation.service';
+import { staffOwnershipService, StaffOwnershipView } from './staff-ownership.service';
 
 // In-Memory store fallback — HANYA untuk test offline (VITEST). Produksi: fail-fast + alert.
 // Mandat: silent fallback ke RAM yang hilang saat restart adalah data-loss di prod.
@@ -2235,6 +2236,7 @@ export class CustomerService {
       kelurahan: string | null;
       distanceKm: number | null;
       ongkir: number | null;
+      staffOwnership?: StaffOwnershipView | null;
     }>;
     total: number;
     page: number;
@@ -2385,6 +2387,11 @@ export class CustomerService {
       }
       const resolveMs = Date.now() - tResolve;
 
+      const ownershipMap = await staffOwnershipService.getByCustomerIds(
+        tenantId,
+        rawCustomers.map((c) => c.id)
+      );
+
       let customers = rawCustomers.map((c) => {
           let ltv = 0;
           if (c.reservations && c.reservations.length > 0) {
@@ -2430,6 +2437,7 @@ export class CustomerService {
             kelurahan: c.kelurahan || c.pending_kelurahan || null,
             distanceKm: c.distance_km ?? null,
             ongkir: c.ongkir ?? null,
+            staffOwnership: ownershipMap.get(c.id) ?? null,
             location_source: c.location_source || null,
             effective_location_source: resolveLocationSource(c),
             location_source_label: (c.preferences as any)?.location_source_label || null,

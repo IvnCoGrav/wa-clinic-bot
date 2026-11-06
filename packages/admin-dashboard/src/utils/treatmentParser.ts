@@ -1,5 +1,4 @@
 import { ClinicServiceItem } from '../components/calendar/types';
-import clinicServicesFallback from '../data/clinicServicesFallback.json';
 
 export interface SelectedTreatmentItem {
   instanceId: string;
@@ -13,16 +12,11 @@ export interface SelectedTreatmentItem {
 }
 
 /**
- * Issue-128-FaseA (A2) — Fallback katalog DASHBOARD (offline-safe).
- *
- * Sumber: `src/data/clinicServicesFallback.json`, di-generate dari SATU sumber
- * kebenaran backend (`DEFAULT_CLINIC_SERVICES` via `npm run catalog:seed`).
- * DILARANG menyunting array manual di sini lagi (dulu drift: 11 layanan aktif
- * backend hilang). Guard: `tests/unit/catalog-seed-drift.test.ts`.
+ * Katalog layanan TIDAK memiliki salinan hardcoded di dashboard.
+ * Satu-satunya sumber adalah API/DB (`GET /api/admin/services`). Bila katalog
+ * belum tersedia, pemanggil wajib menampilkan empty state — DILARANG memakai
+ * harga fallback lama yang bisa drift dari harga resmi.
  */
-export const DEFAULT_CLINIC_SERVICES_FALLBACK: ClinicServiceItem[] =
-  clinicServicesFallback as ClinicServiceItem[];
-
 export function isAddonService(t: { name: string; category?: string; serviceType?: string; isAddon?: boolean }): boolean {
   if (t.isAddon === true || t.category === 'ADD_ON' || t.serviceType === 'ADD_ON') {
     return true;
@@ -160,7 +154,7 @@ export function parseTreatmentsFromDetail(
   babiesForChildMatch?: Array<{ name: string }> | null
 ): SelectedTreatmentItem[] {
   if (!detail) return [];
-  const effectiveCatalog = catalog && catalog.length > 0 ? catalog : DEFAULT_CLINIC_SERVICES_FALLBACK;
+  const effectiveCatalog = catalog && catalog.length > 0 ? catalog : [];
   // Fase 4R: bersihkan semua variasi tag total durasi sebelum split (anti-snowball)
   const cleanSummary = detail
     .replace(/\[\s*Total[^]]*\]/gi, '')
@@ -190,12 +184,6 @@ export function parseTreatmentsFromDetail(
     let matchedService = matchCatalogItem(cleanName, effectiveCatalog);
     if (!matchedService) {
       matchedService = findBySubstringFallback(cleanName, effectiveCatalog);
-    }
-    if (!matchedService) {
-      matchedService = matchCatalogItem(cleanName, DEFAULT_CLINIC_SERVICES_FALLBACK);
-    }
-    if (!matchedService) {
-      matchedService = findBySubstringFallback(cleanName, DEFAULT_CLINIC_SERVICES_FALLBACK);
     }
 
     let price = matchedService ? (matchedService.promoPrice ?? (matchedService as any).price ?? matchedService.originalPrice ?? 0) : 0;

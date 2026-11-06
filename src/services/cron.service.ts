@@ -1,3 +1,4 @@
+import { ACTIVE_HOLD_WINDOW_MS } from '../domain/reservation-status';
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { followUpService } from './follow-up.service';
@@ -495,38 +496,41 @@ export class CronService {
   }
 
   /**
-   * KB-1 (2026-09-30) — Auto-expire reservasi `hold` yang dibuat SEBELUM awal
-   * hari WIB ini (kebijakan pemilik: hold berlaku sampai tengah malam WIB hari
-   * pembuatan). Berbasis `created_at`, bukan `booking_date`, sehingga hold masa
-   * depan pun kedaluwarsa (sebelumnya membeku tanpa batas). Tenant-scoped,
-   * best-effort: DB offline → silent.
+   * Auto-expire reservasi `hold` yang telah melewati `ACTIVE_HOLD_WINDOW_MS` (2 jam
+   * sejak pembuatan). Berbasis `created_at`, bukan `booking_date`, sehingga hold
+   * kedaluwarsa secara adil dan terukur. Tenant-scoped, best-effort: DB offline → silent.
    */
   public async runExpiredHoldSweep(): Promise<void> {
     try {
       const { getAllTenantIds } = await import('./media.service');
       const tenantIds = await getAllTenantIds();
-      let expired = 0;
+      let expiredCount = 0;
       for (const tenantId of tenantIds) {
         try {
-          // Batas awal hari ini WIB (hold yang dibuat sebelum ini = kedaluwarsa).
-          const nowWib = new Date(Date.now() + 7 * 60 * 60 * 1000);
-          const startOfTodayWibUtc = new Date(
-            Date.UTC(nowWib.getUTCFullYear(), nowWib.getUTCMonth(), nowWib.getUTCDate(), 0, 0, 0, 0) - 7 * 60 * 60 * 1000
-          );
-          const res = await prisma.reservation.updateMany({
-            where: {
-              tenant_id: tenantId,
-              status: 'hold',
-              created_at: { lt: startOfTodayWibUtc },
-            },
-            data: { status: 'cancelled' },
+          const cutoff = new Date(Date.now() - ACTIVE_HOLD_WINDOW_MS);
+          const expiredRows = await prisma.reservation.findMany({
+            where: { tenant_id: tenantId, status: 'hold', created_at: { lt: cutoff } },
+            select: { id: true, customer_id: true },
+            take: 500,
           });
-          expired += res?.count || 0;
+          if (expiredRows.length > 0) {
+            await prisma.reservation.updateMany({
+              where: { id: { in: expiredRows.map((r) => r.id) }, tenant_id: tenantId, status: 'hold' },
+              data: { status: 'cancelled' },
+            });
+            for (const row of expiredRows) {
+              const { followUpService } = await import('./follow-up.service');
+              await followUpService.onReservationCancelled(row.id, tenantId).catch(() => {});
+              const { customerService } = await import('./customer.service');
+              await customerService.recalculateCustomerLtv(row.customer_id, tenantId).catch(() => {});
+            }
+            expiredCount += expiredRows.length;
+          }
         } catch (e: any) {
           console.warn(`[Cron Service] Expired hold sweep tenant ${tenantId} skipped:`, e?.message);
         }
       }
-      if (expired > 0) console.log(`[Cron Service] Hold kedaluwarsa (lewat tengah malam WIB) di-expire: ${expired} reservasi.`);
+      if (expiredCount > 0) console.log(`[Cron Service] Hold kedaluwarsa di-expire: ${expiredCount} reservasi.`);
     } catch (err) {
       console.error('[Cron Service] Error running expired hold sweep:', (err as Error).message);
     }

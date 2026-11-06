@@ -8,6 +8,11 @@ import { ClientIdempotencyStore } from '../utils/client-idempotency';
 import { alertService, AlertType, AlertSeverity } from './alert.service';
 import { CONFIRMED_FAMILY_STATUSES, isHoldActive, isTreatmentWithinActiveWindow } from '../domain/reservation-status';
 import { resolveReservationPaymentEvaluation } from './reservation-core.service';
+import { staffOwnershipService, StaffOwnershipView } from './staff-ownership.service';
+import {
+  resolveLocationAdequacy,
+  extractStaffVerifiedCoords,
+} from '../domain/location-adequacy';
 
 // WABA free-form text hanya diperbolehkan dalam 24 jam sejak pesan inbound terakhir customer
 const WABA_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -61,8 +66,16 @@ export interface LiveChatConversationItem {
   activeConfirmedReservation?: LiveChatReservationItem | null;
   activePendingReservation?: LiveChatReservationItem | null;
   locationSource?: string | null;
+  /** Sumber kanonik lintas lapisan (kolom + preferences + kartu alamat primer). */
+  effectiveLocationSource?: string | null;
+  /** Alasan adequacy: gps_pin | staff_verified | field_verified | estimated_area | unknown. */
+  locationAdequacy?: 'gps_pin' | 'staff_verified' | 'field_verified' | 'estimated_area' | 'unknown';
+  /** True bila pelanggan masih benar-benar perlu diminta shareloc. */
+  sharelocNeeded?: boolean;
   shareLocationSent?: boolean;
   sharelocRequestedAt?: string | Date | null;
+  /** Pemilik retensi first-touch + bidan terakhir (read-only). */
+  staffOwnership?: StaffOwnershipView | null;
 }
 
 /**
@@ -160,8 +173,10 @@ export function parseInternalNoteCommand(
 }
 
 export class LiveChatService {
-  // Local cache for idempotency check (to prevent double tap)
-  private static recentReplies = new Map<string, number>();
+  // Local cache for idempotency check (to prevent double tap).
+  // AUDIT FASE 3 (LC-12): store ber-TTL + batas kapasitas (dulu Map tanpa prune
+  // → tumbuh sepanjang umur proses).
+  private static recentReplies = new ClientIdempotencyStore(2000, 500);
   // Fase 1.2: idempotensi berbasis `clientTempId` dari HP terapis (retry setelah
   // timeout sinyal 1-bar). Jendela lebih panjang dari double-tap (5 menit).
   // CATATAN: penyimpanan di memori proses; deploy saat ini single-instance app
@@ -190,6 +205,7 @@ export class LiveChatService {
 
     const conversationIds = conversations.map((c) => c.id);
     const customerIds = [...new Set(conversations.map((c) => c.customer_id))];
+    const ownershipMap = await staffOwnershipService.getByCustomerIds(tenantId, customerIds);
 
     // Batch fetch semua customer (1 query, bukan N query).
     let customers = new Map<string, any>();
@@ -320,7 +336,8 @@ export class LiveChatService {
           matchedMessage: matchedMessageByConv.get(c.id) || null,
         },
         customerStats.get(c.customer_id),
-        unreadMap.get(c.id) || 0
+        unreadMap.get(c.id) || 0,
+        ownershipMap.get(c.customer_id) ?? null
       )
     );
     // Urutan sudah dijamin DB (pinned desc, lalu last_message_at desc absolut waktu) — stabil antar halaman.
@@ -355,6 +372,7 @@ export class LiveChatService {
     }
     const lastMessages = await messageService.getRecentMessages(conversationId, 3, tenantId);
     const unreadMap = await messageService.getUnreadCountsBatch([conversationId], tenantId);
+    const ownershipMap = await staffOwnershipService.getByCustomerIds(tenantId, [conv.customer_id]);
 
     const { resolveTreatmentValue } = await import('./capi.service');
     let ltv = 0;
@@ -371,7 +389,8 @@ export class LiveChatService {
         messages: lastMessages,
       },
       { purchaseCount: resList.length, ltv },
-      unreadMap.get(conversationId) || 0
+      unreadMap.get(conversationId) || 0,
+      ownershipMap.get(conv.customer_id) ?? null
     );
   }
 
@@ -460,12 +479,12 @@ export class LiveChatService {
     
     // Idempotency Check: cegah pengiriman ganda dalam 2 detik
     const hash = `${conversationId}:${hasText ? text!.trim() : ''}:${!!imageB64 || !!mediaUrl}:${replyToMessageId || ''}:${clientTempId || ''}`;
-    const now = Date.now();
+    // Store ber-TTL: `get` hanya mengembalikan entri yang belum kedaluwarsa.
     const lastSent = LiveChatService.recentReplies.get(hash);
-    if (lastSent && now - lastSent < 2000) {
+    if (lastSent) {
+
       return { success: false, error: { code: 'DUPLICATE_REPLY', message: 'Pesan yang sama sedang diproses/sudah dikirim dalam 2 detik terakhir.' } };
     }
-    LiveChatService.recentReplies.set(hash, now);
     const hasImage = !!imageB64 || !!mediaUrl;
     if (!hasText && !hasImage) {
       return { success: false, error: { code: 'EMPTY_REPLY', message: 'Isi balasan tidak boleh kosong.' } };
@@ -699,6 +718,10 @@ export class LiveChatService {
       followUpTexts = splitResult.followUpTexts;
     }
 
+    // Catat idempotency HANYA setelah seluruh validasi lolos — kegagalan validasi
+    // (kosong/sandbox/cut-off/window) tidak boleh memblokir percobaan berikutnya.
+    LiveChatService.recentReplies.set(hash, {});
+
     // Skema Retry Lokal (Maksimal 2 Percobaan)
     let attempts = 0;
     const maxAttempts = 2;
@@ -773,16 +796,31 @@ export class LiveChatService {
     if (params.forceEscalate === true) payloadRaw.forceEscalate = true;
 
     // Audit Trail + Live Chat publish (message.created)
-    const logged = await messageService.logMessage({
-      tenantId,
-      conversationId,
-      direction: Direction.OUTBOUND,
-      content,
-      waMessageId: sendResult.messageId,
-      senderType: 'ADMIN',
-      senderName: adminName || 'Admin',
-      payloadRaw: Object.keys(payloadRaw).length > 0 ? payloadRaw : undefined,
-    });
+    //
+    // GERBANG KODE (audit Fase 0): pesan SUDAH diterima gateway WhatsApp di titik ini.
+    // Kegagalan pencatatan DB TIDAK boleh mengubah hasil menjadi HTTP 500, karena
+    // dashboard akan menandai bubble "gagal" dan admin mengirim ulang → pasien
+    // menerima pesan dobel. Catat sebagai warning eksplisit, balikan tetap sukses.
+    let logged: any = null;
+    let persistenceWarning: string | undefined;
+    try {
+      logged = await messageService.logMessage({
+        tenantId,
+        conversationId,
+        direction: Direction.OUTBOUND,
+        content,
+        waMessageId: sendResult.messageId,
+        senderType: 'ADMIN',
+        senderName: adminName || 'Admin',
+        payloadRaw: Object.keys(payloadRaw).length > 0 ? payloadRaw : undefined,
+      });
+    } catch (persistErr: any) {
+      console.error(
+        '[LIVE CHAT] Pesan sudah terkirim ke WhatsApp tetapi gagal dicatat ke DB:',
+        persistErr?.message || persistErr
+      );
+      persistenceWarning = 'MESSAGE_SENT_NOT_PERSISTED';
+    }
 
     // Sync unread: balasan admin dashboard juga langsung tandai sudah dibaca (paritas dengan WA HP)
     try {
@@ -796,10 +834,15 @@ export class LiveChatService {
     // di atas → jadi di sini cukup pastikan tipe pengirim adalah ADMIN.
     if (logged?.sender_type === 'ADMIN') {
       try {
-        const cleared = await prisma.conversation.update({
-          where: { id: conversationId },
+        // AUDIT FASE 3: tenant_id masuk WHERE (anti cross-tenant write).
+        const clearRes = await prisma.conversation.updateMany({
+          where: { id: conversationId, tenant_id: tenantId },
           data: { is_frustrated: false, frustrated_at: null, frustrated_reason: null },
         });
+        const cleared = clearRes.count > 0
+          ? await prisma.conversation.findFirst({ where: { id: conversationId, tenant_id: tenantId } })
+          : null;
+        if (!cleared) throw new Error('Conversation not found for tenant');
         // Multi-viewer sync: siarkan pemadaman ke SEMUA dashboard admin
         // (bukan hanya tab pengirim) via SSE conversation.updated.
         try {
@@ -915,7 +958,7 @@ export class LiveChatService {
       id: logged?.id,
       provider: gateway.providerType,
       conversation: updated ? buildConversationUpdatedPayload(updated) : undefined,
-      warning: dispatchWarning,
+      warning: persistenceWarning || dispatchWarning,
     };
   }
 
@@ -1247,7 +1290,7 @@ export class LiveChatService {
     return { success: true };
   }
 
-  private serialize(c: any, stats?: { purchaseCount: number; ltv: number }, unreadCount = 0): LiveChatConversationItem {
+  private serialize(c: any, stats?: { purchaseCount: number; ltv: number }, unreadCount = 0, staffOwnership: StaffOwnershipView | null = null): LiveChatConversationItem {
     const lastMsg = c.messages && c.messages.length > 0 ? c.messages[c.messages.length - 1] : null;
     const effectiveLastMsgAt = lastMsg?.created_at || c.last_message_at || c.updated_at;
 
@@ -1357,6 +1400,33 @@ export class LiveChatService {
     const activeConfirmedReservation = formatReservationItem(activeConfirmed);
     const activePendingReservation = formatReservationItem(activePending);
 
+    // Sumber kebenaran tunggal lokasi (audit C-001/C-002): kolom, preferences,
+    // dan kartu alamat primer bisa berbeda. Jangan biarkan badge membaca kolom
+    // basi saja.
+    const prefs = (c.customer as any)?.preferences || {};
+    const savedAddresses = Array.isArray(prefs.saved_addresses) ? prefs.saved_addresses : [];
+    const primaryAddress =
+      savedAddresses.find((a: any) => a?.isPrimary) || savedAddresses[0] || null;
+    const purchaseCount = stats?.purchaseCount ?? (c.customer?.reservations?.length || 0);
+    const adequacy = resolveLocationAdequacy({
+      columnSource: (c.customer as any)?.location_source ?? null,
+      preferenceSource: prefs.location_source ?? prefs.source ?? null,
+      primaryAddressSource: primaryAddress?.locationSource ?? null,
+      shareLocationSent: Boolean((c.customer as any)?.share_location_sent),
+      lat: (c.customer as any)?.lat ?? null,
+      lng: (c.customer as any)?.lng ?? null,
+      staffVerified: Boolean(
+        prefs.location_updated_by_staff_id ||
+          prefs.location_updated_by_staff_name ||
+          prefs.location_accuracy_m != null
+      ),
+      staffVerifiedCoords: extractStaffVerifiedCoords(prefs),
+      housePhotoUrl: prefs.house_photo_url || null,
+      purchaseCount,
+      hasVisitedAddress: Boolean(primaryAddress?.lastUsedAt),
+      hasCompleteAddress: Boolean(primaryAddress?.address || (c.customer as any)?.kelurahan),
+    });
+
     return {
       conversationId: c.id,
       customerId: c.customer_id,
@@ -1379,7 +1449,7 @@ export class LiveChatService {
       mqlTriggeredAt: c.customer?.mql_triggered_at || null,
       isSandboxTest: !!c.customer?.is_sandbox_test,
       trafficSource: detectTrafficSource(c.customer?.adClick, !!c.customer?.is_legacy_source),
-      purchaseCount: stats?.purchaseCount ?? (c.customer?.reservations?.length || 0),
+      purchaseCount,
       ltv: stats?.ltv || 0,
       customerLabels: c.customer?.labels?.map((cl: any) => cl.label || cl) || [],
       customerProfilePictureUrl: c.customer?.profile_picture_url || null,
@@ -1399,11 +1469,15 @@ export class LiveChatService {
       activePendingReservation,
       matchedMessage: (c as any).matchedMessage || null,
       locationSource: (c.customer as any)?.location_source || null,
+      effectiveLocationSource: adequacy.source,
+      locationAdequacy: adequacy.reason,
+      sharelocNeeded: adequacy.needsShareloc,
       shareLocationSent: Boolean((c.customer as any)?.share_location_sent),
       sharelocRequestedAt:
         (c as any)?.session_data?.shareloc_requested_at ||
         (c.customer as any)?.preferences?.share_location_requested_at ||
         null,
+      staffOwnership,
     };
   }
 
@@ -1430,6 +1504,11 @@ export class LiveChatService {
       const { messageService } = await import('./message.service');
       const { getLlmEndpointConfig } = await import('../integrations/llm/llm-gateway');
       const { callChatCompletionsWithFallback } = await import('../integrations/llm/model-fallback');
+      // Identitas klinik WAJIB tenant-aware (mandat non-hardcode). Sebelumnya
+      // prompt menulis literal "Bidan Yusi dari Kala Moms & Baby Spa" untuk
+      // SEMUA tenant sehingga draf tenant lain bisa menyebut brand asing.
+      const { getBrandIdentityAsync } = await import('../config/brand');
+      const brand = await getBrandIdentityAsync(tenantId);
       const recent = await messageService.getRecentMessages(conversationId, 6, tenantId);
       // Catatan internal (INTERNAL_NOTE) DIKECUALIKAN dari konteks AI — bukan bagian
       // percakapan customer; mencegah koordinasi staf bocor ke draf balasan.
@@ -1447,20 +1526,27 @@ export class LiveChatService {
           messages: [
             {
               role: 'system',
-              content: 'Kamu adalah Bidan Yusi dari Kala Moms & Baby Spa. Buatkan 1 saran balasan WhatsApp yang hangat, profesional, sopan, dan solutif untuk membantu tim CS/Bidan membalas chat customer.'
+              content: `Kamu adalah ${brand.botDisplayName} dari ${brand.businessName}. Buatkan 1 saran balasan WhatsApp yang hangat, profesional, sopan, dan solutif untuk membantu tim CS/Bidan membalas chat customer.`
             },
             {
               role: 'user',
-              content: `Berikut riwayat percakapan:\n${historyFormatted}\n\nBuatkan draf balasan singkat (1 bubble WhatsApp) dari sudut pandang Bidan Yusi:`
+              content: `Berikut riwayat percakapan:\n${historyFormatted}\n\nBuatkan draf balasan singkat (1 bubble WhatsApp) dari sudut pandang ${brand.botDisplayName}:`
             }
           ],
           max_tokens: 250,
         }
       });
-      return resp.data?.choices?.[0]?.message?.content?.trim() || `Halo Bunda, terima kasih atas pesannya. Ada yang bisa kami bantu? 🙏✨`;
+      const draft = resp.data?.choices?.[0]?.message?.content?.trim();
+      if (!draft) {
+        // Jangan menyerahkan kalimat template sebagai "draf AI" — itu ghost success.
+        throw new Error('Model AI tidak mengembalikan isi draf.');
+      }
+      return draft;
     } catch (err: any) {
       console.warn('[AI SUGGESTION ERROR]:', err.message);
-      return `Halo Bunda, terima kasih atas pesannya. Terkait pertanyaan Bunda, ada yang bisa Bidan bantu lebih lanjut hari ini? 🙏✨`;
+      // Naikkan error ke route (HTTP 500) agar UI menampilkan kegagalan nyata,
+      // bukan toast "Draf jawaban AI berhasil dibuat" untuk kalimat cadangan.
+      throw new Error(`Gagal membuat draf balasan AI: ${err.message || 'layanan AI tidak tersedia'}`);
     }
   }
 

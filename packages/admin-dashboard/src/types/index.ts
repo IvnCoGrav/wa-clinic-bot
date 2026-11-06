@@ -53,7 +53,7 @@ export interface Reservation {
   treatment_detail: string;
   booking_date: string | null;
   duration_minutes?: number | null;
-  status: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'hold';
+  status: 'pending' | 'confirmed' | 'en_route' | 'paused' | 'completed' | 'cancelled' | 'hold';
   raw_text: string;
   purchase_event_sent_at?: string | null;
   purchase_occurred_at?: string | null;
@@ -88,6 +88,19 @@ export interface Reservation {
   series_id?: string | null;
   session_number?: number | null;
   total_sessions?: number | null;
+  customer_address_id?: string | null;
+  customer_address?: {
+    id?: string;
+    label?: string;
+    address?: string;
+    kelurahan?: string | null;
+    kecamatan?: string | null;
+    kota?: string | null;
+    lat?: number | null;
+    lng?: number | null;
+    ongkir?: number | null;
+    is_primary?: boolean | null;
+  } | null;
   created_at: string;
 }
 

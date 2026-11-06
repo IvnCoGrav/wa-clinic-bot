@@ -9,6 +9,10 @@ import { SAME_DAY_DISCLAIMER } from './generation-stage';
 import type { V3RetrievedChunk } from '../agent-runner';
 import { DAY_EVIDENCE_WORDS } from '../../../utils/date-confirmation';
 import { countDistinctPrimaryOffers } from '../../state/cart-manager';
+import {
+  hasShareLocationSolicitation,
+  detectSharelocSolicitation,
+} from '../../../domain/shareloc-solicitation';
 
 export interface NumericRepromptDeps {
   tenantId: string;
@@ -904,38 +908,13 @@ export class GuardrailPipeline {
 
     // 7f. Validator anti-solicitation SHARE LOCATION (Sesi 662917 / Issue #77,
     // Aturan Emas 21): DILARANG mengajak customer mengirim share location —
-    // cukup tanya nama kelurahan/desa/perumahan/patokan. Template persona telah
-    // dibersihkan (Fase 1), TAPI riwayat terhapusnya status menjadi bukti celah
-    // gaya tetap bisa bocor via generasi Call 2 — kendali kuota WAJIB gerbang
-    // kode deterministik, bukan patuh prompt semata (anti-makeup).
+    // cukup tanya nama kelurahan/desa/perumahan/patokan. Pola netral dipusatkan
+    // di `src/domain/shareloc-solicitation.ts` agar guardrail AI, lint template
+    // Quick Reply, dan audit exemplar memakai definisi yang SAMA.
     // State-gated: SENGGAJA di-bypass di jalur pasca-booking (machine.ts legacy,
     // isHumanHandling + isEscalated=true → guard di bawah tidak terpenuhi).
-    // Pola netral: kata 'kirim*' berdekatan dengan share-location/shareloc/
-    // sharelock (dua arah). Negasi penjaga ("tanpa menanyakan ... share
-    // location") di jendela konteks → bukan solicitation (eksklusi defensif).
-    const hasShareLocationSolicitation = (text: string): boolean => {
-      const lower = (text || '').toLowerCase();
-      if (!lower) return false;
-      const patterns: RegExp[] = [
-        /\bkirim\w*\s+[^\n.!?]{0,50}?\b(share\s*location|shareloc|sharelock)\b/i,
-        /\b(share\s*location|shareloc|sharelock)\b[^\n.!?]{0,40}?\bkirim\w*\b/i,
-      ];
-      for (const re of patterns) {
-        let m: RegExpExecArray | null;
-        re.lastIndex = 0;
-        while ((m = re.exec(lower)) !== null) {
-          const around = lower.slice(Math.max(0, m.index - 60), m.index + m[0].length + 60);
-          if (/dilarang menanyakan|tanpa menanyakan|tanpa meminta|jangan menanyakan|jangan meminta|tidak meminta/i.test(around)) {
-            re.lastIndex = m.index + 1;
-            continue;
-          }
-          return true;
-        }
-      }
-      return false;
-    };
     if (hasShareLocationSolicitation(finalReply) && shouldSendReply && !isEscalated && finalReply.trim()) {
-      violationsDetected.push('shareloc_solicitation_detected');
+      violationsDetected.push(detectSharelocSolicitation(finalReply) || 'shareloc_solicitation_detected');
       const locRepromptStartedAt = Date.now();
       let locRepromptOk = false;
       try {

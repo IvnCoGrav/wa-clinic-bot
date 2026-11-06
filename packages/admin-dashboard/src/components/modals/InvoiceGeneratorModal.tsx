@@ -272,7 +272,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
       '',
       `Hari dan tanggal :  ${dateTimeLine}`,
       `Nama Bunda:  ${safeBundaName}`,
-      `Alamat & Shareloc : ${safeAddress}`,
+      `Alamat Lengkap & Patokan : ${safeAddress}`,
       `Kec : ${safeKec}`,
       `Kota : ${safeKota}`,
       `No. Hp : ${safePhone}`,
@@ -645,7 +645,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                 </div>
               </div>
               <div>
-                <label className="block text-[11px] font-semibold text-ink-2 mb-1">Alamat & Shareloc</label>
+                <label className="block text-[11px] font-semibold text-ink-2 mb-1">Alamat Lengkap & Patokan</label>
                 <textarea
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}

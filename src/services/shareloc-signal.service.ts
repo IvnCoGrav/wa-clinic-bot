@@ -22,16 +22,26 @@ export interface SharelocSignalInput {
 }
 
 /**
- * Cek apakah koordinat pelanggan sudah termasuk kategori presisi (pin GPS langsung / link koordinat).
- * Samakan dengan CustomerService.isPreciseGps dan geoUtils: gps_pin, bidan_shareloc, customer_shareloc, url_coords
- * ATAU (shareLocationSent=true dengan lat/lng valid).
+ * Cek apakah koordinat pelanggan sudah memadai untuk operasional.
+ * `gps_pin` (pin presisi) ATAU `manual_staff` (diverifikasi staf di lapangan)
+ * sama-sama tidak memerlukan shareloc lagi. Samakan dengan
+ * `src/domain/location-adequacy.ts` yang menjadi sumber kebenaran tunggal.
  */
 export function isPreciseGpsLike(i: SharelocSignalInput): boolean {
   const src = (i.locationSource || '').toLowerCase().trim();
-  if (src === 'gps_pin' || src === 'bidan_shareloc' || src === 'customer_shareloc' || src === 'url_coords') {
+  if (
+    src === 'gps_pin' ||
+    src === 'bidan_shareloc' ||
+    src === 'customer_shareloc' ||
+    src === 'url_coords' ||
+    src === 'manual_staff' ||
+    src === 'field_staff_gps'
+  ) {
     return true;
   }
-  return !!i.shareLocationSent && Number.isFinite(Number(i.lat)) && Number.isFinite(Number(i.lng));
+  if (!i.shareLocationSent) return false;
+  if (i.lat == null || i.lng == null) return false;
+  return Number.isFinite(Number(i.lat)) && Number.isFinite(Number(i.lng));
 }
 
 /**

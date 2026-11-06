@@ -53,11 +53,12 @@ function applyResolvedTheme(resolved: ResolvedTheme) {
     root.classList.remove('dark');
     root.style.colorScheme = 'light';
   }
-  // Sinkronkan theme-color untuk mobile browser chrome / PWA.
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) {
-    meta.setAttribute('content', resolved === 'dark' ? '#111b21' : '#ffffff');
-  }
+  // Sinkronkan SEMUA theme-color (light & dark media) agar status bar tetap
+  // benar walau tema aplikasi berbeda dari preferensi OS.
+  const themeColor = resolved === 'dark' ? '#0a0a0a' : '#f0f2f5';
+  document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => {
+    meta.setAttribute('content', themeColor);
+  });
 }
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {

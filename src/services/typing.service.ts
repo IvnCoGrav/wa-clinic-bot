@@ -42,6 +42,16 @@ export class TypingService {
     this.transportResolver = transportResolver;
   }
 
+  /**
+   * AUDIT FASE 3 (K-03b): seam untuk memasang transport per-tenant saat boot.
+   * Tanpa ini, humanizer (typing/sendSeen/sendText) memakai session WAHA env global.
+   */
+  public setTransportResolver(
+    resolver?: (tenantId: string) => Promise<MessageTransport | undefined>
+  ): void {
+    this.transportResolver = resolver;
+  }
+
   public setSpeedFactor(factor: number): void {
     this.speedFactor = Math.max(0.1, factor);
   }

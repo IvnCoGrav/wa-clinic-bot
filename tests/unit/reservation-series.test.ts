@@ -20,12 +20,36 @@ vi.mock('../../src/db/client', () => ({
     $transaction: vi.fn(async (fn: any) => {
       if (typeof fn === 'function') {
         const tx = {
+          $executeRawUnsafe: vi.fn().mockResolvedValue(1),
           reservationSeries: {
             create: vi.fn().mockImplementation(async ({ data }: any) => ({
-              id: 'series_1', customer_id: data.customer_id, treatment_name: data.treatment_name, total_sessions: data.total_sessions, purchase_value: data.purchase_value ?? 100, assigned_staff_id: data.assigned_staff_id ?? null, notes: data.notes ?? null, status: 'active', created_at: new Date(),
+              id: 'series_1',
+              customer_id: data.customer_id,
+              treatment_name: data.treatment_name,
+              total_sessions: data.total_sessions,
+              purchase_value: data.purchase_value ?? 100,
+              assigned_staff_id: data.assigned_staff_id ?? null,
+              notes: data.notes ?? null,
+              status: 'active',
+              created_at: new Date(),
             })),
+            update: vi.fn().mockImplementation(async (args: any) => prisma.reservationSeries.update(args)),
           },
-          reservation: { create: vi.fn().mockImplementation(async ({ data }: any) => ({ id: `res_${data.session_number}`, session_number: data.session_number, booking_date: data.booking_date, status: data.status, assigned_staff_id: data.assigned_staff_id, treatment_category: data.treatment_category })) },
+          reservation: {
+            create: vi.fn().mockImplementation(async ({ data }: any) => ({
+              id: `res_${data.session_number}`,
+              session_number: data.session_number,
+              booking_date: data.booking_date,
+              status: data.status,
+              assigned_staff_id: data.assigned_staff_id,
+              treatment_category: data.treatment_category,
+            })),
+            findMany: vi.fn().mockImplementation(async (args: any) => prisma.reservation.findMany(args)),
+            update: vi.fn().mockImplementation(async (args: any) => prisma.reservation.update(args)),
+          },
+          reservationItem: {
+            create: vi.fn().mockResolvedValue({ id: 'item_1' }),
+          },
         };
         return fn(tx);
       }
@@ -148,7 +172,7 @@ describe('ReservationSeriesService', () => {
         sessions: [{ sessionNumber: 1, bookingDate: new Date('2026-09-02T02:30:00Z'), assignedStaffId: 'staff_1' }],
       } as any, 'default-tenant')
     ).rejects.toMatchObject({ code: 'STAFF_COLLISION' });
-    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.reservation.create).not.toHaveBeenCalled();
   });
 
   it('6. FIX 173i-e — createSeries menjalankan efek samping lifecycle per sesi', async () => {
@@ -190,5 +214,60 @@ describe('ReservationSeriesService', () => {
     ]);
     const list = await reservationSeriesService.getCustomerSeries('cust_1', 'default-tenant');
     expect(list[0].completed_sessions).toBe(1);
+  });
+  it('7. P1: advisory lock series throw saat gagal akuisisi lock (fail-closed)', async () => {
+    vi.mocked(prisma.reservation.findMany).mockResolvedValue([]);
+    const originalTransaction = prisma.$transaction;
+    (prisma.$transaction as any) = vi.fn(async (fn: any) => {
+      const tx = {
+        $executeRawUnsafe: vi.fn().mockRejectedValue(new Error('pg_advisory_xact_lock failed')),
+      };
+      return fn(tx);
+    });
+
+    try {
+      await expect(
+        reservationSeriesService.createSeries({
+          customerId: 'cust_1',
+          treatmentName: 'Prenatal Massage (Pijat Hamil)',
+          totalSessions: 1,
+          sessions: [{ sessionNumber: 1, bookingDate: new Date('2026-09-02T02:00:00Z') }],
+        } as any, 'default-tenant')
+      ).rejects.toThrow('pg_advisory_xact_lock failed');
+    } finally {
+      (prisma.$transaction as any) = originalTransaction;
+    }
+  });
+  it('8. P9: error pada reservationItem.create menggagalkan seluruh transaksi (anti silent swallow)', async () => {
+    vi.mocked(prisma.reservation.findMany).mockResolvedValue([]);
+    const originalTransaction = prisma.$transaction;
+    (prisma.$transaction as any) = vi.fn(async (fn: any) => {
+      const tx = {
+        $executeRawUnsafe: vi.fn().mockResolvedValue(1),
+        reservationSeries: {
+          create: vi.fn().mockResolvedValue({ id: 's1', customer_id: 'cust_1', total_sessions: 1, treatment_name: 'Pijat' }),
+        },
+        reservation: {
+          create: vi.fn().mockResolvedValue({ id: 'r1', session_number: 1, booking_date: new Date() }),
+        },
+        reservationItem: {
+          create: vi.fn().mockRejectedValue(new Error('FK constraint reservation_id failed')),
+        },
+      };
+      return fn(tx);
+    });
+
+    try {
+      await expect(
+        reservationSeriesService.createSeries({
+          customerId: 'cust_1',
+          treatmentName: 'Prenatal Massage (Pijat Hamil)',
+          totalSessions: 1,
+          sessions: [{ sessionNumber: 1, bookingDate: new Date('2026-09-02T02:00:00Z') }],
+        } as any, 'default-tenant')
+      ).rejects.toThrow('FK constraint reservation_id failed');
+    } finally {
+      (prisma.$transaction as any) = originalTransaction;
+    }
   });
 });

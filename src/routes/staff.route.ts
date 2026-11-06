@@ -4,6 +4,7 @@ import { AdminSessionService, SessionStoreUnavailable } from '../services/admin-
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { staffAuthRoutes } from './staff/auth.subroute';
 import { staffTodayRoutes } from './staff/today.subroute';
+import { staffQuickRepliesRoutes } from './staff/quick-replies.subroute';
 
 export function isStaffSupervisorRole(role?: string | null): boolean {
   const r = String(role || '').toLowerCase();
@@ -90,4 +91,5 @@ export async function staffRoutes(fastify: FastifyInstance) {
   // Daftarkan subroute staff
   fastify.register(staffAuthRoutes);
   fastify.register(staffTodayRoutes);
+  fastify.register(staffQuickRepliesRoutes);
 }
