@@ -74,6 +74,7 @@ import {
   Radar,
   EyeOff,
   Menu,
+  ArrowDownLeft,
 } from 'lucide-react';
 import { ToggleSwitch } from '../../components/common/ToggleSwitch';
 import { LiveChatComposer, LiveChatComposerHandle } from '../../components/livechat/LiveChatComposer';
@@ -5045,15 +5046,15 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                           <p className="text-xs text-ink-2 dark:text-ink-2 line-clamp-1 italic leading-snug flex items-center gap-1.5 min-w-0">
                             {senderInd.isCustomer && (
                               <span
-                                className="shrink-0 inline-flex items-center text-sky-600 dark:text-sky-400"
+                                className="shrink-0 inline-flex items-center text-rose-600 dark:text-rose-400"
                                 title={senderInd.tooltip}
                               >
-                                <User size={12} />
+                                <ArrowDownLeft size={13} strokeWidth={2.5} />
                               </span>
                             )}
                             {senderInd.isAdmin && (
                               <span
-                                className="shrink-0 inline-flex items-center text-[#008069] dark:text-[#00a884]"
+                                className="shrink-0 inline-flex items-center text-accent"
                                 title={senderInd.tooltip}
                               >
                                 <CheckCheck size={13} />
