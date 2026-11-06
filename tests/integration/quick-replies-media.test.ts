@@ -189,6 +189,90 @@ describe('Integration: Quick Replies Media & BodyLimit Hardening', () => {
     expect(bodyInvalid.error).toContain('Lampiran gambar kustom wajib diunggah atau memiliki URL media yang valid');
   });
 
+  it('POST & PUT menyimpan template shareloc (Balasan Cepat = alat manusia, bukan AI)', async () => {
+    // Keputusan produk 2026-11-06: lint shareloc pada Quick Reply dicabut.
+    // Template hanya dipakai CS/Bidan dan tidak pernah masuk prompt LLM.
+    const sharelocText =
+      'Kalau boleh tau rumahnya kelurahan mana bunda atau alamat lengkapnya?\n\nAtau mungkin bisa shareloct bund, Nanti kami bantu cek kan ongkirnya 🤗';
+
+    const postRes = await app.inject({
+      method: 'POST',
+      url: '/api/admin/quick-replies',
+      headers: {
+        'x-api-key': ADMIN_KEY,
+        'x-tenant-id': DEFAULT_TENANT_ID,
+      },
+      payload: {
+        shortcut: 'kelurahan_shareloc',
+        title: 'Tanya Kelurahan + Shareloc',
+        content: sharelocText,
+        category: 'Lokasi',
+        media_type: 'NONE',
+      },
+    });
+
+    expect(postRes.statusCode).toBe(201);
+    const postBody = JSON.parse(postRes.body);
+    expect(postBody.success).toBe(true);
+    expect(postBody.data.content).toBe(sharelocText);
+    expect(postBody.data.category).toBe('Lokasi');
+    const createdId = postBody.data.id;
+
+    // Variasi adversarial: kategori lain, typo "sharelock", ajakan kirim titik lokasi.
+    const putRes = await app.inject({
+      method: 'PUT',
+      url: `/api/admin/quick-replies/${createdId}`,
+      headers: {
+        'x-api-key': ADMIN_KEY,
+        'x-tenant-id': DEFAULT_TENANT_ID,
+      },
+      payload: {
+        content: 'Boleh bantu kirimkan sharelock atau titik lokasi rumahnya ya Bunda 🙏',
+        category: 'Reservasi',
+      },
+    });
+
+    expect(putRes.statusCode).toBe(200);
+    const putBody = JSON.parse(putRes.body);
+    expect(putBody.success).toBe(true);
+    expect(putBody.data.content).toBe('Boleh bantu kirimkan sharelock atau titik lokasi rumahnya ya Bunda 🙏');
+    expect(putBody.data.category).toBe('Reservasi');
+  });
+
+  it('POST tetap menolak body tidak valid meski lint shareloc dicabut', async () => {
+    const resNoContent = await app.inject({
+      method: 'POST',
+      url: '/api/admin/quick-replies',
+      headers: {
+        'x-api-key': ADMIN_KEY,
+        'x-tenant-id': DEFAULT_TENANT_ID,
+      },
+      payload: {
+        shortcut: 'tanpa_isi',
+        title: 'Tanpa Isi',
+        content: '   ',
+        category: 'Umum',
+      },
+    });
+    expect(resNoContent.statusCode).toBe(400);
+
+    const resBadShortcut = await app.inject({
+      method: 'POST',
+      url: '/api/admin/quick-replies',
+      headers: {
+        'x-api-key': ADMIN_KEY,
+        'x-tenant-id': DEFAULT_TENANT_ID,
+      },
+      payload: {
+        shortcut: 'shortcut dengan spasi!',
+        title: 'Judul',
+        content: 'Isi template',
+        category: 'Umum',
+      },
+    });
+    expect(resBadShortcut.statusCode).toBe(400);
+  });
+
   it('Anti-Zombie: deleting a shortcut permanently removes it and does not resurrect on subsequent GET', async () => {
     // 1. Initial GET seeds memory defaults for this tenant
     const getRes1 = await app.inject({
