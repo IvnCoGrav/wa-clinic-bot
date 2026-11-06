@@ -22,12 +22,12 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   4. `ReservationDetailModal.tsx` — gate memerlukan objek kartu; blok lokasi/jarak/ongkir/badge/anak memakai `displayReservation` + `resolvedAddress`.
   5. `reservation-dispatch.route.ts` — `hasExplicitCardSelection` memblokir penulisan alamat/wilayah/ongkir ke profil induk saat kartu dipilih eksplisit.
   6. `CreateReservationModal.tsx` — prefill mode edit memprioritaskan kartu.
-- **Bukti:** `tests/unit/reservation-address-seam.test.ts` (11) + `tests/unit/reservation-address-card-selection.test.ts` (anti-hibrida) + `admin-create-reservation` + `admin-update-reservation-safe-address` = 41 test lulus; `npm run build` backend & dashboard exit 0.
+- **Bukti:** `tests/unit/reservation-address-seam.test.ts` (11) + `tests/unit/reservation-address-card-selection.test.ts` (anti-hibrida) + `admin-create-reservation` + `admin-update-reservation-safe-address` = 41 test lulus; `npm run build` backend & dashboard exit 0; suite penuh = 11 gagal/6 file **identik dengan baseline HEAD** (revert-and-rerun `git stash`).
+- **Verifikasi produksi (deploy 2026-11-06 07:39 WIB):** `GET /api/admin/reservations?startDate=2026-11-06` kini mengembalikan `customer_address` = `Rumah Gunung Anyar` / `Gunung Anyar Lor` / `Gunung Anyar` / `5.2 km` / `ongkir 15000` untuk reservasi `b14afb4f…`; bundle dashboard yang disajikan berisi proyeksi kartu (`regionLabel`/`cardLabel`); `/health` OK dan `/ready` READY (DB CONNECTED, WAHA WORKING); WAHA tidak disentuh.
 - **Sisa risiko / tindak lanjut:**
-  1. **Data produksi belum diverifikasi langsung** saat perbaikan (PostgreSQL lokal mati). Verifikasi pasca-deploy: reservasi Bunda Briella harus menampilkan `Gunung Anyar Lor, Gunung Anyar, Surabaya` + `5,2 km`.
-  2. Profil root Bunda Briella masih menyimpan wilayah Tandes (sengaja tidak diubah). Fitur/script yang **masih** membaca kolom profil secara langsung akan tetap menampilkan data lama — migrasikan ke seam kartu-first bila ditemukan.
-  3. `distance_km` kartu Gunung Anyar masih `NULL`-nya koordinat pin asli (lihat #311). Jarak 5,2 km berasal dari data kartu, bukan hasil hitung Haversine.
-  4. `resolveStreetAddress()` backend belum punya pemanggil runtime (dipakai test paritas + script backfill memakai `extractAddressFromRawText`). Bila kelak dipakai, jangan menambah jalur baca profil langsung.
+  1. Profil root Bunda Briella masih menyimpan wilayah Tandes (sengaja tidak diubah). Fitur/script yang **masih** membaca kolom profil secara langsung akan tetap menampilkan data lama — migrasikan ke seam kartu-first bila ditemukan.
+  2. Koordinat kartu Gunung Anyar masih `NULL` (pin asli belum pernah masuk, lihat #311). Jarak 5,2 km berasal dari data kartu, bukan hasil hitung Haversine; pengisian estimasi palsu dilarang.
+  3. `resolveStreetAddress()` backend belum punya pemanggil runtime (dipakai script backfill via `extractAddressFromRawText` + test paritas). Bila kelak dipakai, jangan menambah jalur baca profil langsung.
 
 ## 312. [Buku Alamat] Pemilih Alamat Kosong Saat Edit Reservasi & Modal Lokasi Menimpa Rumah Utama (2026-11-05, RESOLVED - HIGH)
 

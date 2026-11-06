@@ -31,6 +31,7 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
   - `npm run build` backend + dashboard exit 0.
   - Gate regresi suite penuh: **11 gagal / 6 file** (6441 lulus) — dibuktikan **pre-existing** via revert-and-rerun: `git stash` → suite di HEAD murni = **11 gagal / 6 file identik** (`chat-schedule-extractor`, `hybrid-reservation-parser`, `catalog-seed-drift`, `adversarial-reservation-resilience`, `v3-conversation-matrix`, `v3/agent-runner`).
 - **Catatan**: profil root Bunda Briella (Tandes) sengaja **tidak** diubah — tampilan sudah membaca kartu, sehingga data historis boleh tetap apa adanya.
+- **Deploy live (2026-11-06 07:39 WIB)**: `app` + `worker` di-rebuild, WAHA tidak disentuh, tanpa migrasi tertunda. Verifikasi: `/health` OK, `/ready` READY (DB CONNECTED, WAHA WORKING), `GET /api/admin/reservations?startDate=2026-11-06` mengembalikan `customer_address` = `Rumah Gunung Anyar` / `Gunung Anyar Lor` / `Gunung Anyar` / `5.2 km` / `ongkir 15000`.
 
 #### 2026-11-05 - Fix: Pemilih Alamat di Edit Reservasi Selalu Muncul & Edit Lokasi Tidak Lagi Menimpa Rumah Utama
 
