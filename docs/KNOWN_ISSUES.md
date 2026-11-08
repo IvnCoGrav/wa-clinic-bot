@@ -3,6 +3,12 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 321. [Database Schema] Kolom Tenant.auto_send_purchase_capi Dipertahankan Pasca-Deprecate Purchase Moderation (2026-11-08, TECH DEBT / BY DESIGN)
+
+- **Status:** BY DESIGN (Fase 1 Cleanup 2026-11-08, Keputusan D2).
+- **Gejala / Latar Belakang:** Endpoint GET/PATCH /api/admin/purchase-moderation dan toggle UI di Admin Dashboard telah dihapus karena sistem kini sepenuhnya menggunakan alur Queue-First untuk pengiriman Meta CAPI event Purchase. Kolom uto_send_purchase_capi pada tabel basis data Tenant sengaja dipertahankan (tidak di-drop melalui migrasi) untuk mencegah risiko downtime, locking tabel, atau schema drift.
+- **Rencana Tindak Lanjut:** Kolom ini berstatus deprecated tanpa pembaca di runtime produksi dan akan di-drop secara aman pada batch migrasi database terjadwal berikutnya.
+
 ## 320. [Security, Clinical & Systems Audit] Eksekusi Staged Plan Audit 2026-11-07 (Fase 0 s.d. Fase 10 - SELESAI)
 
 - **Status:** SELESAI (Fase 0â€“10 diimplementasikan penuh, build backend & dashboard exit 0, secret scan 0 leaks di 1.962 file).
@@ -7445,3 +7451,13 @@ px prisma db push + generate penuh (kill dev server dulu, EPERM DLL lock trap) â
   relatif-waktu agar tidak lapuk.
 
 
+
+## 322. [AI Copilot Session & Transkrip] Batasan Terdesain: Sesi Plaintext di LocalStorage, Tanpa Transkrip Server, & Konstanta UI Belum Per-Tenant
+
+- **Status:** ACCEPTED LIMITATION (Keputusan desain D2 & D5 terkonfirmasi pengguna, 2026-11-08).
+- **Konteks/gejala:** AI Clinic Copilot di admin dashboard kini bertahan 48 jam di browser admin dan menampilkan indikator status floating di mobile. Tiga batasan desain diterima secara sadar:
+  1. **Riwayat sesi tersimpan di `localStorage` per admin (`copilot:session:<tenantId>:<email>`)**: Browser di PC klinik yang digunakan bergantian oleh staf menyimpan riwayat obrolan Copilot secara lokal dalam teks terstruktur (JSON). Mitigasi: TTL 48 jam sliding, batas maksimal 60 pesan & 4.000 karakter, tombol reset manual sadar dengan modal konfirmasi (`danger: true`), serta payload mentah tool tidak pernah disimpan.
+  2. **Transkrip jawaban Copilot tidak disimpan di database server**: Audit log server hanya mencatat metadata dan ringkasan pertanyaan 200 karakter (`llm_audit_logs`). Jika staf mengajukan keluhan UX terhadap respons model di masa lalu, detail lengkap jawaban tidak dapat direkonstruksi pasca-kejadian.
+  3. **Konstanta batas dan navigasi UI belum per-tenant**: Konstanta TTL 48 jam (`COPILOT_SESSION_TTL_MS`), batas maksimal 8 baris (`COPILOT_MAX_VISIBLE_ROWS`), dan peta navigasi halaman tabel (`COPILOT_TOOL_PAGE`) didefinisikan secara statis di dashboard modul. Bila di masa mendatang masing-masing tenant memerlukan aturan berbeda, perlu migrasi kolom `Tenant.settings.copilot` dan endpoint settings terkait.
+- **Dampak:** Rendah untuk operasional harian klinik saat ini; tidak ada risiko data leak lintas-tenant karena key storage terisolasi per tenant ID dan user email.
+- **Rencana Tindak Lanjut:** Evaluasi penyimpanan transkrip terenkripsi atau audit log lengkap di server jika audit operasional Copilot diperlukan di level manajerial multi-cabang.
