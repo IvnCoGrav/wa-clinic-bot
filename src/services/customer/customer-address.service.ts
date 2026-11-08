@@ -420,7 +420,8 @@ export async function updateCustomerLocation(
     savedAddressId?: string;
   },
   tenantId: string,
-  getCustomerByIdFn: (id: string, tenantId: string) => Promise<any>
+  getCustomerByIdFn: (id: string, tenantId: string) => Promise<any>,
+  syncSavedAddressFn?: (customer: any, tenantId: string, loc: any) => Promise<void>
 ): Promise<any> {
   const safeKelurahanRaw = data.kelurahan;
   let safeKelurahan = safeKelurahanRaw !== undefined
@@ -634,7 +635,13 @@ export async function updateCustomerLocation(
       const hasLoc = Boolean(
         safeKelurahan || safeKecamatan || safeKota || data.lat !== undefined || data.lng !== undefined || savedEntry
       );
-      if (hasLoc) await syncSavedAddressFromLocation(existing, tenantId, writeLoc as any, getCustomerByIdFn);
+      if (hasLoc) {
+        if (syncSavedAddressFn) {
+          await syncSavedAddressFn(existing, tenantId, writeLoc as any);
+        } else {
+          await syncSavedAddressFromLocation(existing, tenantId, writeLoc as any, getCustomerByIdFn);
+        }
+      }
     } catch (syncErr) {
       console.warn('[CustomerService] syncSavedAddressFromLocation failed (best-effort):', (syncErr as Error)?.message);
     }
@@ -763,7 +770,13 @@ export async function updateCustomerLocation(
           const hasLoc = Boolean(
             memSafeKel || memSafeKec || memSafeKota || d.lat !== undefined || d.lng !== undefined || savedEntry
           );
-          if (hasLoc) await syncSavedAddressFromLocation(cust, tenantId, writeLoc as any, getCustomerByIdFn);
+          if (hasLoc) {
+            if (syncSavedAddressFn) {
+              await syncSavedAddressFn(cust, tenantId, writeLoc as any);
+            } else {
+              await syncSavedAddressFromLocation(cust, tenantId, writeLoc as any, getCustomerByIdFn);
+            }
+          }
         } catch (syncErr) {
           console.warn('[CustomerService] sync (mem) failed (best-effort):', (syncErr as Error)?.message);
         }
