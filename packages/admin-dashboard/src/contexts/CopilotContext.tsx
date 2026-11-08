@@ -1,19 +1,19 @@
 import React, { createContext, useCallback, useContext, useRef, useState } from 'react';
+import { useAuth } from './AuthContext';
+import { useCopilotSession, type CopilotSessionState } from './copilot/useCopilotSession';
 
 /**
- * CopilotContext — state UI shell terpusat: panel AI Copilot + menu mobile.
+ * CopilotContext — state UI shell & sesi terpusat: panel AI Copilot + menu mobile.
  *
- * Dibuat terpusat agar tombol on/off dapat diletakkan di SIDEBAR (Layout.tsx)
- * maupun di dalam scroll LiveChat (Mobile Page Header LiveChatMonitor.tsx),
- * sementara panelnya hidup di LiveChatMonitor.tsx. Preferensi copilot disimpan
- * di localStorage (preferensi UI per-browser, bukan data bisnis → tidak perlu DB).
- * State menu mobile bersifat sesi (tanpa persist) agar tidak terkunci terbuka
- * setelah reload.
+ * Dibuat terpusat agar:
+ * 1. Tombol on/off + status Copilot dapat diletakkan di SIDEBAR (Layout.tsx) maupun header LiveChat.
+ * 2. Sesi chat & pemrosesan Copilot tetap hidup di level App saat panel ditutup atau admin berpindah halaman.
+ * 3. Menu mobile terkoordinasi dengan history browser.
  */
 
 const STORAGE_KEY = 'wa_clinic_copilot_open';
 
-interface CopilotContextValue {
+export interface CopilotContextValue {
   open: boolean;
   setOpen: (open: boolean) => void;
   toggle: () => void;
@@ -24,6 +24,15 @@ interface CopilotContextValue {
   openMobileMenu: () => void;
   /** Tutup sidebar + rapikan history. */
   dismissMobileMenu: () => void;
+  /** Mesin sesi & riwayat Copilot */
+  session: CopilotSessionState;
+  send: (text: string, ctx?: { conversationId?: string | null; customerId?: string | null }) => Promise<void>;
+  cancel: () => void;
+  reset: () => void;
+  markRead: () => void;
+  /** Konteks percakapan/pasien aktif saat ini */
+  context: { conversationId: string | null; customerId: string | null };
+  setContext: (ctx: { conversationId: string | null; customerId: string | null }) => void;
 }
 
 const CopilotContext = createContext<CopilotContextValue | null>(null);
@@ -38,21 +47,41 @@ function getStoredOpen(): boolean {
 }
 
 export const CopilotProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user } = useAuth();
   const [open, setOpenState] = useState<boolean>(() => getStoredOpen());
   const [mobileMenuOpen, setMobileMenuOpenState] = useState<boolean>(false);
+  const [chatContext, setChatContext] = useState<{ conversationId: string | null; customerId: string | null }>({
+    conversationId: null,
+    customerId: null,
+  });
 
-  const setOpen = useCallback((next: boolean) => {
-    setOpenState(next);
-    try {
-      localStorage.setItem(STORAGE_KEY, next ? 'true' : 'false');
-    } catch {
-      // Abaikan (private mode) — state tetap berlaku untuk sesi ini.
-    }
-  }, []);
+  const session = useCopilotSession({
+    tenantId: user?.tenantId ?? 'default-tenant',
+    adminEmail: user?.email ?? 'anon',
+    getPanelVisible: () => open && typeof document !== 'undefined' && document.visibilityState === 'visible',
+  });
+
+  const setOpen = useCallback(
+    (next: boolean) => {
+      setOpenState(next);
+      if (next) {
+        session.markRead();
+      }
+      try {
+        localStorage.setItem(STORAGE_KEY, next ? 'true' : 'false');
+      } catch {
+        // Abaikan (private mode) — state tetap berlaku untuk sesi ini.
+      }
+    },
+    [session]
+  );
 
   const toggle = useCallback(() => {
     setOpenState((prev) => {
       const next = !prev;
+      if (next) {
+        session.markRead();
+      }
       try {
         localStorage.setItem(STORAGE_KEY, next ? 'true' : 'false');
       } catch {
@@ -60,7 +89,7 @@ export const CopilotProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
       return next;
     });
-  }, []);
+  }, [session]);
 
   const setMobileMenuOpen = useCallback((next: boolean) => {
     setMobileMenuOpenState(next);
@@ -90,8 +119,29 @@ export const CopilotProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, [menuHistoryPushedRef]);
 
+  const setContext = useCallback((ctx: { conversationId: string | null; customerId: string | null }) => {
+    setChatContext(ctx);
+  }, []);
+
   return (
-    <CopilotContext.Provider value={{ open, setOpen, toggle, mobileMenuOpen, setMobileMenuOpen, openMobileMenu, dismissMobileMenu }}>
+    <CopilotContext.Provider
+      value={{
+        open,
+        setOpen,
+        toggle,
+        mobileMenuOpen,
+        setMobileMenuOpen,
+        openMobileMenu,
+        dismissMobileMenu,
+        session,
+        send: session.send,
+        cancel: session.cancel,
+        reset: session.reset,
+        markRead: session.markRead,
+        context: chatContext,
+        setContext,
+      }}
+    >
       {children}
     </CopilotContext.Provider>
   );

@@ -55,11 +55,18 @@ import { ThemeToggle } from './ThemeToggle';
 import { AppErrorBoundary } from './AppErrorBoundary';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 import { useCopilot } from '../../contexts/CopilotContext';
+import { resolveCopilotBadge } from '../../utils/copilotStatus';
+import { CopilotStatusPill } from '../copilot/CopilotStatusPill';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, logout } = useAuth();
   const { toast } = useUiFeedback();
-  const { open: copilotOpen, setOpen: setCopilotOpen, mobileMenuOpen, setMobileMenuOpen, openMobileMenu, dismissMobileMenu } = useCopilot();
+  const { open: copilotOpen, setOpen: setCopilotOpen, mobileMenuOpen, setMobileMenuOpen, openMobileMenu, dismissMobileMenu, session: copilotSession } = useCopilot();
+  const copilotBadge = resolveCopilotBadge({
+    status: copilotSession.status,
+    hasUnread: copilotSession.hasUnread,
+    panelOpen: copilotOpen,
+  });
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -917,15 +924,24 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 type="button"
                 onClick={() => setCopilotOpen(!copilotOpen)}
                 title={copilotOpen ? 'Sembunyikan AI Copilot' : 'Buka AI Copilot'}
-                aria-label={copilotOpen ? 'Sembunyikan AI Copilot' : 'Buka AI Copilot'}
+                aria-label={copilotBadge.kind !== 'none' ? `${copilotBadge.label} — ${copilotOpen ? 'Sembunyikan AI Copilot' : 'Buka AI Copilot'}` : (copilotOpen ? 'Sembunyikan AI Copilot' : 'Buka AI Copilot')}
                 aria-pressed={copilotOpen}
-                className={`w-9 h-9 sm:w-8 sm:h-8 min-w-[36px] min-h-[36px] rounded-full border transition flex items-center justify-center cursor-pointer shadow-2xs aspect-square active:scale-95 touch-manipulation ${
+                className={`relative w-9 h-9 sm:w-8 sm:h-8 min-w-[36px] min-h-[36px] rounded-full border transition flex items-center justify-center cursor-pointer shadow-2xs aspect-square active:scale-95 touch-manipulation ${
                   copilotOpen
                     ? 'bg-bubble-out dark:bg-accent/20 border-accent/40 text-accent ring-2 ring-accent/30'
                     : 'bg-fill-1 dark:bg-fill-2 border-divider dark:border-strong text-ink-3 hover:text-ink'
                 }`}
               >
                 <Bot size={16} />
+                {copilotBadge.kind === 'spinner' && (
+                  <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+                )}
+                {copilotBadge.kind === 'dot' && (
+                  <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-danger" />
+                )}
+                {copilotBadge.kind === 'warn' && (
+                  <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-warning" />
+                )}
               </button>
             )}
 
@@ -1055,6 +1071,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         >
           <AppErrorBoundary scopeLabel="page">{children}</AppErrorBoundary>
         </main>
+        {user?.copilotEnabled !== false && <CopilotStatusPill />}
       </div>
     </div>
   );

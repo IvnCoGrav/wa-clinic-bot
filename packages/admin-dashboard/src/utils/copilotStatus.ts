@@ -51,3 +51,31 @@ export function formatElapsedSeconds(elapsedMs: number): string {
   const ms = Number.isFinite(elapsedMs) && elapsedMs > 0 ? elapsedMs : 0;
   return `${Math.floor(ms / 1000)}s`;
 }
+
+export type CopilotRunStatus = 'idle' | 'running' | 'done' | 'error';
+
+export interface CopilotBadge {
+  kind: 'none' | 'spinner' | 'dot' | 'warn';
+  label: string; // untuk aria-label
+}
+
+/**
+ * Petakan status Copilot, unread state, dan visibilitas panel ke badge indikator.
+ * Menentukan apakah tombol Copilot menampilkan spinner, badge titik merah, warning, atau bersih.
+ */
+export function resolveCopilotBadge(input: {
+  status: CopilotRunStatus;
+  hasUnread: boolean;
+  panelOpen: boolean;
+}): CopilotBadge {
+  if (input.status === 'running') {
+    return { kind: 'spinner', label: 'AI Copilot sedang memproses…' };
+  }
+  if (input.status === 'error') {
+    return { kind: 'warn', label: 'Copilot mengalami kendala' };
+  }
+  if (input.status === 'done' && input.hasUnread && !input.panelOpen) {
+    return { kind: 'dot', label: 'Jawaban Copilot baru tersedia' };
+  }
+  return { kind: 'none', label: 'AI Copilot' };
+}

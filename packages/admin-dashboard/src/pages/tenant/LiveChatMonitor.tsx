@@ -81,6 +81,7 @@ import {
 import { ToggleSwitch } from '../../components/common/ToggleSwitch';
 import { LiveChatComposer, LiveChatComposerHandle } from '../../components/livechat/LiveChatComposer';
 import { AdminCopilotPanel } from '../../components/copilot/AdminCopilotPanel';
+import { resolveCopilotBadge } from '../../utils/copilotStatus';
 import { ChatExport } from './ChatExport';
 import { MediaImage, ChatMediaData, preloadChatImage } from '../../components/common/MediaImage';
 import { VoiceNotePlayer } from '../../components/common/VoiceNotePlayer';
@@ -349,7 +350,12 @@ export const LiveChatMonitor: React.FC = () => {
   const { user } = useAuth();
   // Shell global: buka sidebar mobile (☰) + panel copilot dari dalam scroll
   // (pengganti tombol header global yang disembunyikan di mobile livechat).
-  const { open: copilotOpen, setOpen: setCopilotOpen, openMobileMenu } = useCopilot();
+  const { open: copilotOpen, setOpen: setCopilotOpen, openMobileMenu, setContext: setCopilotContext, session: copilotSession } = useCopilot();
+  const copilotBadge = resolveCopilotBadge({
+    status: copilotSession.status,
+    hasUnread: copilotSession.hasUnread,
+    panelOpen: copilotOpen,
+  });
   const { resolved: currentTheme } = useTheme();
   const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
@@ -374,6 +380,12 @@ export const LiveChatMonitor: React.FC = () => {
     }
   });
   const selectedChat = chats.find((c) => c.conversationId === selectedId);
+  useEffect(() => {
+    setCopilotContext({
+      conversationId: selectedChat?.conversationId ?? null,
+      customerId: selectedChat?.customerId ?? null,
+    });
+  }, [selectedChat?.conversationId, selectedChat?.customerId, setCopilotContext]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   // ID bubble optimis (temp_) yang sedang menunggu konfirmasi server.
   // Dipakai untuk pra-muat gambar sebelum bubble diganti versi server (anti-flash "Memuat...").
@@ -4623,15 +4635,24 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
                       type="button"
                       onClick={() => setCopilotOpen(!copilotOpen)}
                       title={copilotOpen ? 'Sembunyikan AI Copilot' : 'Buka AI Copilot'}
-                      aria-label={copilotOpen ? 'Sembunyikan AI Copilot' : 'Buka AI Copilot'}
+                      aria-label={copilotBadge.kind !== 'none' ? `${copilotBadge.label} — ${copilotOpen ? 'Sembunyikan AI Copilot' : 'Buka AI Copilot'}` : (copilotOpen ? 'Sembunyikan AI Copilot' : 'Buka AI Copilot')}
                       aria-pressed={copilotOpen}
-                      className={`lg:hidden p-1.5 min-w-[38px] min-h-[38px] rounded-lg border transition flex items-center justify-center cursor-pointer shadow-2xs active:scale-95 touch-manipulation ${
+                      className={`relative lg:hidden p-1.5 min-w-[44px] min-h-[44px] rounded-lg border transition flex items-center justify-center cursor-pointer shadow-2xs active:scale-95 touch-manipulation ${
                         copilotOpen
                           ? 'bg-bubble-out dark:bg-accent/20 border-accent/40 text-accent ring-2 ring-accent/30'
                           : 'bg-fill-1 dark:bg-fill-2 border-divider dark:border-strong text-ink-3 hover:text-ink dark:hover:text-ink'
                       }`}
                     >
                       <Bot size={15} />
+                      {copilotBadge.kind === 'spinner' && (
+                        <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+                      )}
+                      {copilotBadge.kind === 'dot' && (
+                        <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-danger" />
+                      )}
+                      {copilotBadge.kind === 'warn' && (
+                        <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-warning" />
+                      )}
                     </button>
                   )}
                   {/* Tombol sinkronisasi chat */}
@@ -8120,7 +8141,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           </div>
         </div>
       )}
-      <AdminCopilotPanel conversationId={selectedChat?.conversationId} customerId={selectedChat?.customerId} />
+      <AdminCopilotPanel conversationId={selectedChat?.conversationId} customerId={selectedChat?.customerId} patientName={selectedChat?.customerName} />
     </div>
   );
 };
