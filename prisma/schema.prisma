@@ -707,10 +707,12 @@ model AdClick {
   customerId  String?   @unique
   customer    Customer? @relation(fields: [customerId], references: [id])
   createdAt   DateTime  @default(now())
+  expires_at  DateTime?
   tenant_id   String
 
   @@index([tenant_id])
   @@index([trackingCode])
+  @@index([expires_at])
   @@map("ad_clicks")
 }
 
@@ -1381,4 +1383,13 @@ model ReservationStaffAssignmentLog {
   @@index([tenant_id, reservation_id])
   @@index([tenant_id, created_at])
   @@map("reservation_staff_assignment_logs")
+}
+
+model CronLease {
+  job_name    String   @id
+  holder_id   String
+  acquired_at DateTime @default(now())
+  expires_at  DateTime
+
+  @@map("cron_leases")
 }

@@ -6,6 +6,7 @@ import {
   generateBackupFileName,
   sanitizeBackupFileName,
   isValidGzipHeader,
+  isValidEncryptedHeader,
   formatBytes,
   BACKUP_STORAGE_DIR,
 } from '../../src/utils/backup-file';
@@ -70,16 +71,35 @@ describe('Database Backup & Restore Suite', () => {
 
   describe('BackupService Core', () => {
     it('creates a compressed database dump file with valid gzip signature', async () => {
-      const dump = await backupService.createDatabaseDump('test-tenant');
+      const spies = [
+        vi.spyOn(prisma.customer, 'findMany').mockResolvedValue([{ id: 'c1' }] as any),
+        vi.spyOn(prisma.child, 'findMany').mockResolvedValue([] as any),
+        vi.spyOn(prisma.reservation, 'findMany').mockResolvedValue([] as any),
+        vi.spyOn(prisma.reservationArchive, 'findMany').mockResolvedValue([] as any),
+        vi.spyOn(prisma.clinicService, 'findMany').mockResolvedValue([] as any),
+        vi.spyOn(prisma.deliveryTier, 'findMany').mockResolvedValue([] as any),
+        vi.spyOn(prisma.staff, 'findMany').mockResolvedValue([] as any),
+        vi.spyOn(prisma.tenantPersona, 'findMany').mockResolvedValue([] as any),
+        vi.spyOn(prisma.tenantAiConfig, 'findMany').mockResolvedValue([] as any),
+        vi.spyOn(prisma.knowledgeChunk, 'findMany').mockResolvedValue([] as any),
+        vi.spyOn(prisma.conversation, 'findMany').mockResolvedValue([] as any),
+        vi.spyOn(prisma.message, 'findMany').mockResolvedValue([] as any),
+      ];
 
-      expect(dump.fileName).toBeDefined();
-      expect(fs.existsSync(dump.filePath)).toBe(true);
-      expect(isValidGzipHeader(dump.filePath)).toBe(true);
-      expect(dump.sizeBytes).toBeGreaterThan(0);
+      try {
+        const dump = await backupService.createDatabaseDump('test-tenant');
 
-      // Bersihkan file hasil test
-      if (fs.existsSync(dump.filePath)) {
-        fs.unlinkSync(dump.filePath);
+        expect(dump.fileName).toBeDefined();
+        expect(fs.existsSync(dump.filePath)).toBe(true);
+        expect(isValidEncryptedHeader(dump.filePath) || isValidGzipHeader(dump.filePath)).toBe(true);
+        expect(dump.sizeBytes).toBeGreaterThan(0);
+
+        // Bersihkan file hasil test
+        if (fs.existsSync(dump.filePath)) {
+          fs.unlinkSync(dump.filePath);
+        }
+      } finally {
+        spies.forEach((s) => s.mockRestore());
       }
     });
 

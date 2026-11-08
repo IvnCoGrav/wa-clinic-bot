@@ -595,7 +595,7 @@ export class ConversationService {
           }
           if (!releasePhone) return;
           const { customerService } = await import('./customer.service');
-          await customerService.setLabelFlags(releasePhone, { isHoldLabeled: false });
+          await customerService.setLabelFlags(releasePhone, { isHoldLabeled: false }, tenantId);
           console.log(`[AUTO-RELEASE DB] is_hold_labeled=false untuk ${releasePhone}.`);
         } catch (err: any) {
           console.warn('[AUTO-RELEASE DB] Gagal clear is_hold_labeled:', err.message);
@@ -719,7 +719,7 @@ export class ConversationService {
     if (!isSandbox && !isGlobalDisabled) {
       try {
         const { customerService } = await import('./customer.service');
-        await customerService.setLabelFlags(phone, { isHoldLabeled: true });
+        await customerService.setLabelFlags(phone, { isHoldLabeled: true }, tenantId);
         console.log(`[ESCALATION DB] is_hold_labeled=true untuk ${phone}.`);
       } catch (err: any) {
         console.warn(`[ESCALATION DB] Gagal set is_hold_labeled untuk ${phone}:`, err.message);
@@ -918,7 +918,7 @@ export class ConversationService {
         });
         if (cust?.phone) {
           const { customerService } = await import('./customer.service');
-          await customerService.setLabelFlags(cust.phone, { isHoldLabeled: false });
+          await customerService.setLabelFlags(cust.phone, { isHoldLabeled: false }, tenantId);
         }
       }
     } catch {}

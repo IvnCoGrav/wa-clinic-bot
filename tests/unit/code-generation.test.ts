@@ -11,13 +11,13 @@ describe('generateTrackingCode() — Insert-and-Catch-Conflict + Retry-and-Escal
     vi.clearAllMocks();
   });
 
-  it('1. should generate a 2-character code when DB has plenty of room (no collisions)', async () => {
-    const mockRecord = { id: 'cuid_1', trackingCode: 'ab', createdAt: new Date() };
+  it('1. should generate a 12-character code when DB has plenty of room (no collisions)', async () => {
+    const mockRecord = { id: 'cuid_1', trackingCode: 'abcdefghjkmn', createdAt: new Date() };
     vi.mocked(prisma.adClick.create).mockResolvedValueOnce(mockRecord as any);
 
     const result = await generateTrackingCode({ tenant_id: 'default-tenant' }, prisma);
 
-    expect(result.trackingCode).toHaveLength(2);
+    expect(result.trackingCode).toHaveLength(12);
     expect(result.record).toBe(mockRecord);
     expect(prisma.adClick.create).toHaveBeenCalledTimes(1);
   });
@@ -45,11 +45,11 @@ describe('generateTrackingCode() — Insert-and-Catch-Conflict + Retry-and-Escal
     }
   });
 
-  it('3. should escalate to 3-character codes when 2-char space is full (5 consecutive P2002)', async () => {
+  it('3. should escalate to 14-character codes when 12-char space is full (5 consecutive P2002)', async () => {
     const p2002 = Object.assign(new Error('Unique constraint failed'), { code: 'P2002' });
-    const mockRecord3 = { id: 'cuid_3char', trackingCode: 'abc', createdAt: new Date() };
+    const mockRecord3 = { id: 'cuid_3char', trackingCode: 'abcdefghjkmnpq', createdAt: new Date() };
 
-    // 5 kolisi di 2-karakter, lalu sukses di 3-karakter
+    // 5 kolisi di 12-karakter, lalu sukses di 14-karakter
     vi.mocked(prisma.adClick.create)
       .mockRejectedValueOnce(p2002)
       .mockRejectedValueOnce(p2002)
@@ -60,31 +60,31 @@ describe('generateTrackingCode() — Insert-and-Catch-Conflict + Retry-and-Escal
 
     const result = await generateTrackingCode({ tenant_id: 'default-tenant' }, prisma);
 
-    expect(result.trackingCode).toHaveLength(3);
+    expect(result.trackingCode).toHaveLength(14);
     expect(prisma.adClick.create).toHaveBeenCalledTimes(6); // 5 kolisi + 1 sukses
   });
 
-  it('4. should escalate to 4-character codes when both 2-char and 3-char spaces are full', async () => {
+  it('4. should escalate to 16-character codes when both 12-char and 14-char spaces are full', async () => {
     const p2002 = Object.assign(new Error('Unique constraint failed'), { code: 'P2002' });
-    const mockRecord4 = { id: 'cuid_4char', trackingCode: 'abcd', createdAt: new Date() };
+    const mockRecord4 = { id: 'cuid_4char', trackingCode: 'abcdefghjkmnpqrs', createdAt: new Date() };
 
-    // 5 kolisi 2-char + 5 kolisi 3-char + 1 sukses 4-char = 11 total calls
+    // 5 kolisi 12-char + 5 kolisi 14-char + 1 sukses 16-char = 11 total calls
     vi.mocked(prisma.adClick.create)
-      .mockRejectedValueOnce(p2002) // 2-char attempt 1
-      .mockRejectedValueOnce(p2002) // 2-char attempt 2
-      .mockRejectedValueOnce(p2002) // 2-char attempt 3
-      .mockRejectedValueOnce(p2002) // 2-char attempt 4
-      .mockRejectedValueOnce(p2002) // 2-char attempt 5
-      .mockRejectedValueOnce(p2002) // 3-char attempt 1
-      .mockRejectedValueOnce(p2002) // 3-char attempt 2
-      .mockRejectedValueOnce(p2002) // 3-char attempt 3
-      .mockRejectedValueOnce(p2002) // 3-char attempt 4
-      .mockRejectedValueOnce(p2002) // 3-char attempt 5
-      .mockResolvedValueOnce(mockRecord4 as any); // 4-char sukses
+      .mockRejectedValueOnce(p2002)
+      .mockRejectedValueOnce(p2002)
+      .mockRejectedValueOnce(p2002)
+      .mockRejectedValueOnce(p2002)
+      .mockRejectedValueOnce(p2002)
+      .mockRejectedValueOnce(p2002)
+      .mockRejectedValueOnce(p2002)
+      .mockRejectedValueOnce(p2002)
+      .mockRejectedValueOnce(p2002)
+      .mockRejectedValueOnce(p2002)
+      .mockResolvedValueOnce(mockRecord4 as any);
 
     const result = await generateTrackingCode({ tenant_id: 'default-tenant' }, prisma);
 
-    expect(result.trackingCode).toHaveLength(4);
+    expect(result.trackingCode).toHaveLength(16);
     expect(prisma.adClick.create).toHaveBeenCalledTimes(11);
   });
 

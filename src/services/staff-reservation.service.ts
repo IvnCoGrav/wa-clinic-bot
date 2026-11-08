@@ -2465,16 +2465,10 @@ export class StaffReservationService {
         }
       }
 
-      // 3. Fallback default data-driven dari data tenant
+      // 3. Bila belum dikonfigurasi di DB/tenant settings, kembalikan kosong (pembayaran belum diatur)
       return {
         qrisImageUrl: null,
-        bankAccounts: [
-          {
-            bank: 'BCA',
-            accountNumber: '1234567890',
-            accountName: tenant?.name || 'Kala Moms and Baby Spa',
-          },
-        ],
+        bankAccounts: [],
       };
     } catch (err: any) {
       console.error('[STAFF RESERVATION] Error fetching payment info:', err.message);

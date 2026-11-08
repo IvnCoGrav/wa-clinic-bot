@@ -233,6 +233,8 @@ export interface CustomerGoalSession {
   awaitingScreeningAnswer?: boolean;
   /** State triase: jenis topik skrining aktif ('VACCINE' | 'FEVER' | 'TRAUMA') */
   activeScreeningTopic?: string;
+  /** Daftar nama layanan katalog yang telah disepakati dan diverifikasi oleh customer (Task 4.5). */
+  verifiedTreatmentNames?: string[];
 }
 
 /** Scope penerima layanan: satu anak yang sama vs pasien berbeda. */

@@ -102,7 +102,7 @@ export function shouldRetryCall1(input: {
  * Parse respons Call 1 → tool calls (terstruktur atau hasil salvage DSML).
  * Murni terhadap `data` (tanpa I/O); logging dilakukan pemanggil.
  */
-function parseCall1Data(data: any): {
+function parseCall1Data(data: any, options?: { allowedToolNames?: string[] }): {
   assistantMessage: any;
   toolCalls: any;
   parsedCalls: any[];
@@ -121,7 +121,7 @@ function parseCall1Data(data: any): {
   const hasDsml = /DSML/i.test(rawContent);
   let salvagedFromDsml = false;
   if (!Array.isArray(toolCalls) || toolCalls.length === 0) {
-    const salvaged = salvageToolCallsFromDsml(rawContent);
+    const salvaged = salvageToolCallsFromDsml(rawContent, options);
     if (salvaged.length > 0) {
       toolCalls = salvaged;
       salvagedFromDsml = true;
@@ -412,6 +412,8 @@ export interface RoutingOutput {
   reasoning: string | null;
   /** ST6 (RC-05): verdict komitmen semantik dari Call 1 (opsional). */
   commitment?: 'EXPLORING' | 'CONSIDERING' | 'COMMITTED' | null;
+  /** Daftar nama tool yang diotorisasi pada Call 1 (Task 4.3.1 / P0-A). */
+  allowedToolNames?: string[];
 }
 
 /** Persistensi INBOUND/OUTBOUND turn (dilewati bila skipDbLogging). */
@@ -680,7 +682,8 @@ export class GenerationStage {
     });
 
     // Parse Call 1 (terstruktur atau salvage DSML — insiden "Wonokusumo").
-    let parsed = parseCall1Data(firstData);
+    const allowedToolNames = toolsForCall1.map((t: any) => t?.function?.name || t?.name).filter(Boolean);
+    let parsed = parseCall1Data(firstData, { allowedToolNames });
     if (parsed.salvagedFromDsml) {
       console.warn(JSON.stringify({
         event: 'CALL1_DSML_TOOL_SALVAGED',
@@ -718,7 +721,7 @@ export class GenerationStage {
         tel.addUsage((retryData as any)?.usage);
         const retryModel = (retryData as any)?.__actualModel || call1Model;
         await tel.auditUsage((retryData as any)?.usage, retryStartedAt, retryModel, (turn as any).routerBaseUrl || turn.baseUrl, undefined, 'INTENT_CLASSIFICATION');
-        const retryParsed = parseCall1Data(retryData);
+        const retryParsed = parseCall1Data(retryData, { allowedToolNames });
         console.warn(JSON.stringify({
           event: 'CALL1_DEGENERATE_RETRIED',
           tenantId: turn.tenantId,
@@ -888,7 +891,7 @@ export class GenerationStage {
       }));
     } catch {}
 
-    return { assistantMessage, toolCalls, reasoning, commitment: commitmentVerdict };
+    return { assistantMessage, toolCalls, reasoning, commitment: commitmentVerdict, allowedToolNames };
   }
 
   public static async generateReply(

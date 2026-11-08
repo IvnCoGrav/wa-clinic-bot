@@ -34,7 +34,8 @@ export const StaffAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   async function restoreSession(): Promise<'ok' | 'invalid' | 'network'> {
     // Pola sama dengan AuthContext admin: hanya 401/403/400 tegas yang menghapus
     // token cadangan; timeout & 5xx → 'network' (token dipertahankan + retry).
-    return restoreSessionToken('/api/staff/auth/restore', TOKEN_STORAGE_KEY);
+    try { localStorage.removeItem(TOKEN_STORAGE_KEY); } catch {}
+    return 'invalid';
   }
 
   // Check auth session on mount
@@ -180,7 +181,6 @@ export const StaffAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         body: JSON.stringify({ phone, password }),
       });
       if (data.success && data.staff) {
-        if (data.token) localStorage.setItem(TOKEN_STORAGE_KEY, data.token);
         localStorage.setItem(LAST_ROLE_KEY, data.staff.role || 'therapist');
         setStaff({
           id: data.staff.id,
@@ -208,6 +208,17 @@ export const StaffAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const logout = async () => {
     setLoading(true);
     localStorage.removeItem(TOKEN_STORAGE_KEY);
+    localStorage.removeItem('staff_failed_outbox_v1');
+    localStorage.removeItem(LAST_ROLE_KEY);
+    // Task 7.2: Bersihkan seluruh outbox chat & draft PII dari localStorage saat logout
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('livechat_draft:') || k.startsWith('staff_') || k.startsWith('draft_'))) {
+          localStorage.removeItem(k);
+        }
+      }
+    } catch {}
     // Disosiasi perangkat SEBELUM sesi dimusnahkan: batalkan langganan push browser
     // + hapus baris di DB. Mencegah ghost subscription yang membocorkan notifikasi
     // ke perangkat terapis setelah logout.

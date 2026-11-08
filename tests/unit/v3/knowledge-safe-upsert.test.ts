@@ -59,8 +59,8 @@ describe('Knowledge Safe Upsert (Plan 4 Phase 2)', () => {
     expect(b.id).not.toBe(a.id);
   });
 
-  it('korpus seed mencakup 48 artikel termasuk 14 kurasi live', () => {
-    expect(faqs.length).toBe(48);
+  it('korpus seed mencakup 45 artikel termasuk kurasi live bersih', () => {
+    expect(faqs.length).toBe(45);
     const titles = faqs.map((f) => (f as any).question as string);
     // Sampel kurasi live hasil safe-merge (Issue #46)
     expect(titles).toContain('Minyak apa yang digunakan untuk memijat bayi? Apakah aman untuk kulit sensitif?');

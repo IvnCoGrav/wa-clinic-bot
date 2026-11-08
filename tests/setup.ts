@@ -40,6 +40,7 @@ process.env.WAHA_WEBHOOK_SECRET = '';
 // Test environment label mocks
 process.env.ENABLE_WAHA_HOLD_LABEL = 'true';
 process.env.ENABLE_LIFECYCLE_LABELS = 'true';
+process.env.BACKUP_ENCRYPTION_KEY = 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2';
 
 // Blank LLM keys so the AI Router (default ON) never hits the network during tests.
 // rawLlmCall() throws when apiKey is empty/mock, so the CircuitBreaker falls back to
@@ -75,6 +76,7 @@ vi.mock('../src/db/client', () => {
         create: vi.fn().mockRejectedValue(new Error('Database offline')),
         update: vi.fn().mockRejectedValue(new Error('Database offline')),
         updateMany: vi.fn().mockRejectedValue(new Error('Database offline')),
+        upsert: vi.fn().mockRejectedValue(new Error('Database offline')),
       },
       conversation: {
         findUnique: vi.fn().mockRejectedValue(new Error('Database offline')),
@@ -99,8 +101,30 @@ vi.mock('../src/db/client', () => {
         updateMany: vi.fn().mockRejectedValue(new Error('Database offline')),
       },
       knowledgeChunk: {
+        findUnique: vi.fn().mockRejectedValue(new Error('Database offline')),
+        findFirst: vi.fn().mockRejectedValue(new Error('Database offline')),
+        findMany: vi.fn().mockRejectedValue(new Error('Database offline')),
         create: vi.fn().mockRejectedValue(new Error('Database offline')),
         update: vi.fn().mockRejectedValue(new Error('Database offline')),
+        delete: vi.fn().mockRejectedValue(new Error('Database offline')),
+        deleteMany: vi.fn().mockRejectedValue(new Error('Database offline')),
+        count: vi.fn().mockRejectedValue(new Error('Database offline')),
+      },
+      tenantPersona: {
+        findUnique: vi.fn().mockRejectedValue(new Error('Database offline')),
+        findFirst: vi.fn().mockRejectedValue(new Error('Database offline')),
+        findMany: vi.fn().mockRejectedValue(new Error('Database offline')),
+        create: vi.fn().mockRejectedValue(new Error('Database offline')),
+        update: vi.fn().mockRejectedValue(new Error('Database offline')),
+        upsert: vi.fn().mockRejectedValue(new Error('Database offline')),
+      },
+      tenantAiConfig: {
+        findUnique: vi.fn().mockRejectedValue(new Error('Database offline')),
+        findFirst: vi.fn().mockRejectedValue(new Error('Database offline')),
+        findMany: vi.fn().mockRejectedValue(new Error('Database offline')),
+        create: vi.fn().mockRejectedValue(new Error('Database offline')),
+        update: vi.fn().mockRejectedValue(new Error('Database offline')),
+        upsert: vi.fn().mockRejectedValue(new Error('Database offline')),
       },
       reservation: {
         delete: vi.fn().mockRejectedValue(new Error('Database offline')),
@@ -326,6 +350,7 @@ vi.mock('../src/db/client', () => {
         createMany: vi.fn().mockRejectedValue(new Error('Database offline')),
         update: vi.fn().mockRejectedValue(new Error('Database offline')),
         updateMany: vi.fn().mockRejectedValue(new Error('Database offline')),
+        upsert: vi.fn().mockRejectedValue(new Error('Database offline')),
         deleteMany: vi.fn().mockRejectedValue(new Error('Database offline')),
         count: vi.fn().mockRejectedValue(new Error('Database offline')),
       },

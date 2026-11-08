@@ -167,7 +167,8 @@ const TRACKING_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
  *   3 karakter → 32³ = 32.768 kombinasi
  *   4 karakter → 32⁴ = 1.048.576 kombinasi (batas maksimal, nyaris tidak pernah dicapai)
  */
-const RETRY_LENGTHS = [2, 3, 4] as const;
+// Task 7.4 & Keputusan D5: Kode tracking >= 12 karakter untuk cegah brute-force/kolisi
+const RETRY_LENGTHS = [12, 14, 16] as const;
 const MAX_ATTEMPTS_PER_LENGTH = 5;
 
 /**
@@ -219,6 +220,7 @@ export async function generateTrackingCode(
           data: {
             trackingCode,
             ...data,
+            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
           },
         });
         return { trackingCode, record };
@@ -353,7 +355,7 @@ export async function trackingRoutes(fastify: FastifyInstance) {
         }
 
         // DB offline → fallback ke in-memory
-        const trackingCode = _randomCode(2);
+        const trackingCode = _randomCode(12);
         const clickRecord = {
           id: `cuid_${Date.now()}_${Math.random().toString(36).substring(7)}`,
           trackingCode,

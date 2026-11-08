@@ -59,6 +59,13 @@ async function shutdownWorker(signal: string): Promise<void> {
   }
 
   try {
+    const { cronAdvisoryLock } = await import('./lifecycle/cron-advisory-lock');
+    await cronAdvisoryLock.releaseLock();
+  } catch (e: any) {
+    console.error('[WORKER SHUTDOWN] cronAdvisoryLock.releaseLock gagal:', e?.message);
+  }
+
+  try {
     await prisma.$disconnect();
     console.log('[WORKER SHUTDOWN] Prisma terputus.');
   } catch (e: any) {

@@ -416,6 +416,43 @@ export class PatientProfileExtractor {
   }
 
   /**
+   * Deteksi kecurigaan demam deterministik dari kata gejala ("demam", "panas", "meriang")
+   * meskipun pelanggan tidak menyebutkan suhu numerik (°C).
+   */
+  public static isFeverSuspected(text: string): boolean {
+    const lower = (text || '').toLowerCase();
+    if (!lower) return false;
+
+    // 1. Cek suhu numerik >= 37.5 bila ada
+    const temp = this.parseFeverTemperature(lower);
+    if (temp !== null && temp >= 37.5) {
+      return true;
+    }
+
+    // 2. Deteksi kata gejala demam
+    const feverWords = ['demam', 'panas', 'meriang', 'sumer', 'suhu tinggi', 'badan panas', 'badannya panas'];
+    const hasFeverWord = feverWords.some((w) => lower.includes(w));
+    if (!hasFeverWord) return false;
+
+    // 3. Pastikan bukan negasi ("tidak demam", "ga panas", dll.)
+    const negationPatterns = [
+      /(?:tidak|ga|gak|nggak|bukan|bebas|tanpa)\s+(?:ada\s+)?(?:demam|panas|meriang|sumer)/,
+      /(?:demam|panas)\s+(?:sudah\s+)?(?:turun|sembuh|hilang)/,
+      /(?:udah|sudah)\s+(?:ga|gak|nggak|tidak)\s+(?:demam|panas)/,
+    ];
+    for (const neg of negationPatterns) {
+      if (neg.test(lower)) {
+        // Cek apakah ada frasa kontradiktif seperti "tapi masih demam"
+        if (!/(?:tapi|namun|tetapi)\s+(?:masih\s+)?(?:demam|panas)/.test(lower)) {
+          return false;
+        }
+      }
+    }
+
+    return true;
+  }
+
+  /**
    * Parser suhu deterministik untuk kontraindikasi demam (data-driven threshold
    * dari ClinicPolicy, fallback 37.8). Mendukung "38", "38°C", "38.5", "37,8".
    */

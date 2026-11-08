@@ -651,7 +651,58 @@ export class CronService {
   /**
    * Auto-Backup Mingguan ke Google Drive (Dijalankan setiap Senin jam 02:00 WIB)
    */
-  public async runWeeklyBackup(tenantId: string = DEFAULT_TENANT_ID): Promise<void> {
+  private weeklyBackupClaimKey(tenantId: string, dateStr: string): string {
+    return `${tenantId}:WEEKLY_BACKUP:${dateStr}`;
+  }
+
+  private async tryClaimWeeklyBackup(tenantId: string, dateStr: string): Promise<boolean> {
+    try {
+      await prisma.adminNotificationLog.create({
+        data: {
+          tenant_id: tenantId,
+          channel: 'SYSTEM',
+          recipient: 'system',
+          notification_type: 'WEEKLY_BACKUP',
+          report_date: dateStr,
+          idempotency_key: this.weeklyBackupClaimKey(tenantId, dateStr),
+          title: 'Weekly Backup',
+          message_content: 'Penanda idempotensi eksekusi auto-backup mingguan (tahan restart).',
+          status: 'SENT',
+        },
+      });
+      return true;
+    } catch {
+      try {
+        const existing = await prisma.adminNotificationLog.findFirst({
+          where: { idempotency_key: this.weeklyBackupClaimKey(tenantId, dateStr) },
+        });
+        return !existing;
+      } catch {
+        return true;
+      }
+    }
+  }
+
+  private async releaseWeeklyBackupClaim(tenantId: string, dateStr: string): Promise<void> {
+    try {
+      await prisma.adminNotificationLog.deleteMany({
+        where: { idempotency_key: this.weeklyBackupClaimKey(tenantId, dateStr) },
+      });
+    } catch {}
+  }
+
+  /**
+   * Auto-Backup Mingguan ke Google Drive (Dijalankan setiap Senin jam 02:00 WIB)
+   */
+  public async runWeeklyBackup(tenantId: string = DEFAULT_TENANT_ID): Promise<{ success: boolean; error?: string }> {
+    const wibNow = new Date(Date.now() + 7 * 60 * 60 * 1000);
+    const dateStr = wibNow.toISOString().slice(0, 10);
+    const claimed = await this.tryClaimWeeklyBackup(tenantId, dateStr);
+    if (!claimed) {
+      console.log(`[Cron Service] Auto-Backup untuk tenant ${tenantId} sudah dijalankan hari/minggu ini. Dilewati (idempoten).`);
+      return { success: true };
+    }
+
     try {
       console.log('[Cron Service] 📦 Starting Weekly Auto-Backup to Google Drive...');
       const { backupService } = await import('./backup.service');
@@ -662,8 +713,56 @@ export class CronService {
       } else {
         console.log(`[Cron Service] 💾 Weekly Auto-Backup saved locally: ${dump.fileName} (${dump.sizeBytes} bytes)`);
       }
+      return { success: true };
     } catch (err: any) {
       console.error('[Cron Service] ❌ Error running weekly backup:', err?.message);
+      await this.releaseWeeklyBackupClaim(tenantId, dateStr);
+      try {
+        const { alertService, AlertType, AlertSeverity } = await import('./alert.service');
+        await alertService.notifyAlert({
+          type: AlertType.BACKUP_FAILED,
+          severity: AlertSeverity.CRITICAL,
+          message: `[BACKUP FAILED ALERT] Auto-Backup mingguan gagal untuk tenant '${tenantId}': ${err?.message}`,
+          metadata: { tenantId, error: err?.message },
+          tenantId,
+        });
+      } catch (alertErr: any) {
+        console.error('[Cron Service] Failed to send backup failure alert:', alertErr?.message);
+      }
+      return { success: false, error: err?.message };
+    }
+  }
+
+  /**
+   * Turn Recovery Sweep (Fase 5 / W-001):
+   * Replay pesan inbound yang macet (>2 menit) agar tidak ada pesan tertinggal.
+   */
+  public async runTurnRecoverySweep(): Promise<{ replayed: number }> {
+    try {
+      const { turnRecoveryService } = await import('./turn-recovery.service');
+      const replayed = await turnRecoveryService.replayPendingTurns();
+      return { replayed };
+    } catch (err: any) {
+      console.error('[CRON TURN RECOVERY SWEEP ERROR]', err?.message || err);
+      return { replayed: 0 };
+    }
+  }
+
+  /**
+   * Log Retention Sweep (Fase 8 / C-009):
+   * Membersihkan berkas log LLM JSONL yang lebih tua dari batas retensi (30 hari).
+   */
+  public async runLogRetentionSweep(): Promise<{ success: boolean; deletedCount: number }> {
+    try {
+      const { pruneOldLlmLogs } = await import('../utils/llm-execution-logger');
+      const count = await pruneOldLlmLogs(30);
+      if (count > 0) {
+        console.log(`[Cron Service] 🧹 Log retention sweep: ${count} berkas log LLM usang (>30 hari) dibersihkan.`);
+      }
+      return { success: true, deletedCount: count };
+    } catch (err: any) {
+      console.warn('[Cron Service] Log retention sweep warning:', err?.message);
+      return { success: false, deletedCount: 0 };
     }
   }
 }

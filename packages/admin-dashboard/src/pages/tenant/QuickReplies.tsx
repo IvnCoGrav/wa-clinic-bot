@@ -62,7 +62,7 @@ function interpolatePreview(content: string, pInfo?: any, clinicName?: string): 
     .replace(/\{(?:phone|hp|no_hp)\}/gi, '628123456789')
     .replace(/\{(?:kec|kecamatan)\}/gi, 'Rungkut')
     .replace(/\{kota\}/gi, 'Surabaya')
-    .replace(/\{(?:alamat|address)\}/gi, 'Jl. Rungkut Asri Timur No. 12')
+    .replace(/\{(?:alamat|address)\}/gi, '(Alamat klinik belum diatur)')
     .replace(/\{clinic_name\}/gi, clinicName || BRAND.businessName)
     .replace(/\{admin_name\}/gi, 'Kak Sinta')
     .replace(/\{(?:nama_anak|child_name|nama_bayi)\}/gi, 'si Kecil Keenan')
@@ -75,7 +75,7 @@ function interpolatePreview(content: string, pInfo?: any, clinicName?: string): 
     const bAcc = pInfo.bankAccounts.map((a: any) => `• *${a.bank}*: \`${a.accountNumber}\`\n  a.n ${a.accountName}`).join('\n');
     text = text.replace(/\{bank_accounts\}/g, bAcc);
   } else {
-    text = text.replace(/\{bank_accounts\}/g, '• *BCA*: `1234567890`\n  a.n Kala Moms & Baby Spa');
+    text = text.replace(/\{bank_accounts\}/g, '(Belum ada rekening bank yang diatur)');
   }
   text = text.replace(/\{petunjuk\}/g, pInfo?.instructions?.trim() || 'Mohon konfirmasi atau kirimkan bukti transfer');
   return text;

@@ -60,6 +60,22 @@ export function isValidGzipHeader(filePath: string): boolean {
 }
 
 /**
+ * Memeriksa magic header untuk format terenkripsi (ENC1)
+ */
+export function isValidEncryptedHeader(filePath: string): boolean {
+  if (!fs.existsSync(filePath)) return false;
+  try {
+    const buffer = Buffer.alloc(4);
+    const fd = fs.openSync(filePath, 'r');
+    fs.readSync(fd, buffer, 0, 4, 0);
+    fs.closeSync(fd);
+    return buffer.toString('ascii') === 'ENC1';
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Format bytes ke ukuran yang mudah dibaca (KB / MB)
  */
 export function formatBytes(bytes: number): string {

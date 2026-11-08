@@ -35,7 +35,7 @@ dotenv.config();
  * Event dengan payload.label null (mis. baru selesai scan QR) dilewati —
  * LabelReconciliationService tetap menjadi safety-net periodik.
  */
-async function handleLabelChatEvent(event: WahaWebhookEvent): Promise<void> {
+async function handleLabelChatEvent(event: WahaWebhookEvent, tenantId: string): Promise<void> {
   try {
     const payload: any = event.payload;
     const chatId: string | undefined = payload?.chatId;
@@ -55,7 +55,7 @@ async function handleLabelChatEvent(event: WahaWebhookEvent): Promise<void> {
     await customerService.setLabelFlags(phone, {
       isAdminLabeled: lower === 'admin' ? isAdded : undefined,
       isHoldLabeled: lower === 'hold' ? isAdded : undefined,
-    });
+    }, tenantId);
     invalidateCachedLabels(chatId);
   } catch (err: any) {
     console.warn(`[LABEL EVENT] Failed to process label event ${event.event}:`, err.message);
@@ -129,7 +129,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       }
 
       if (event.event === 'label.chat.added' || event.event === 'label.chat.deleted') {
-        await handleLabelChatEvent(event);
+        await handleLabelChatEvent(event, resolvedTenantId);
         return reply.status(200).send({ status: 'LABEL_EVENT_PROCESSED' });
       }
 
@@ -969,7 +969,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           const isAdmin = labels.some((l) => l.toLowerCase() === 'admin');
           const isHold = labels.some((l) => l.toLowerCase() === 'hold');
           if (existingCustomer) {
-            customerService.setLabelFlags(phone, { isAdminLabeled: isAdmin || hasBypass, isHoldLabeled: isHold }).catch(() => {});
+            customerService.setLabelFlags(phone, { isAdminLabeled: isAdmin || hasBypass, isHoldLabeled: isHold }, resolvedTenantId).catch(() => {});
           }
           if (isAdmin || hasBypass) {
             isBypassChat = true;
@@ -1421,14 +1421,14 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           if (labels !== null) {
             hasHoldLabel = labels.some(l => l.toLowerCase() === 'hold');
             const isAdmin = labels.some(l => l.toLowerCase() === 'admin');
-            customerService.setLabelFlags(phone, { isAdminLabeled: isAdmin, isHoldLabeled: hasHoldLabel }).catch(() => {});
+            customerService.setLabelFlags(phone, { isAdminLabeled: isAdmin, isHoldLabeled: hasHoldLabel }, resolvedTenantId).catch(() => {});
           }
         }
 
         if (!hasHoldLabel && enableHoldLabel) {
           console.log(`[ADMIN RELEASE] Hold label removed by admin for chat ${chatId}. Auto-releasing from HUMAN_HANDLING.`);
           // Sinkronkan kolom flag (event label.chat.deleted bisa terlewat; safety-net tetap reconciliation)
-          customerService.setLabelFlags(phone, { isHoldLabeled: false }).catch(() => {});
+          customerService.setLabelFlags(phone, { isHoldLabeled: false }, resolvedTenantId).catch(() => {});
           const restoredState = conversation.previous_state || ConversationState.INITIAL;
           const updatedConv = await conversationService.updateConversationState(
             conversation.id,
@@ -1526,27 +1526,9 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         incomingMessage,
       });
 
-      // Pre-logging inbound: tampil seketika di LiveChat (SSE message.created)
-      // tanpa tertahan antrean/LLM. Guard _preLogged di machine.ts mencegah catat ganda.
-      if (!coalesceResult.handled && !(incomingMessage as any)._preLogged) {
-        try {
-          await messageService.logMessage({
-            tenantId: resolvedTenantId,
-            conversationId: conversation.id,
-            direction: 'INBOUND' as any,
-            content: (incomingMessage as any).originalText || inboundContent || incomingMessage.text?.body || '[PESAN]',
-            waMessageId,
-            payloadRaw: mergeMediaIntoPayload(payload),
-          });
-          (incomingMessage as any)._preLogged = true;
-        } catch (preLogErr: any) {
-          console.warn('[PRE-LOG INBOUND WARN]', preLogErr?.message || preLogErr);
-        }
-      }
-
+      // Task 5.1.1: Urutan kanonis persistInbound -> enqueue -> logMessage
       if (!coalesceResult.handled) {
-        // Stage 5 Fase 2: persist turn inbound (RECEIVED) SEBELUM enqueue —
-        // durable sebelum ack. Best-effort (DB offline tidak menggagalkan alur).
+        // 1. Persist inbound turn (RECEIVED) sebelum enqueue
         try {
           const { turnRepository } = await import('../repositories/turn.repository');
           await turnRepository.persistInbound({
@@ -1557,8 +1539,14 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             conversationId: conversation.id,
             payload: { tenantId: resolvedTenantId, customerId: customer.id, phone: customer.phone, incomingMessage },
           });
-        } catch {}
+        } catch (turnErr: any) {
+          console.warn('[WEBHOOK TURN PERSIST WARN]', turnErr?.message || turnErr);
+          if (process.env.NODE_ENV === 'production') {
+            throw new Error(`[WEBHOOK INGRESS DURABILITY] Gagal persist inbound turn: ${turnErr?.message || turnErr}`);
+          }
+        }
 
+        // 2. Enqueue ke durable queue (bila gagal, throw agar webhook retry dan pesan tidak diklaim terkirim)
         await queueService.enqueueMessage({
           tenantId: resolvedTenantId,
           customerId: customer.id,
@@ -1569,6 +1557,23 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           provider: 'WAHA',
           inboundMessageId: waMessageId,
         });
+
+        // 3. Pre-logging inbound ke LiveChat HANYA SETELAH enqueue durable sukses
+        if (!(incomingMessage as any)._preLogged) {
+          try {
+            await messageService.logMessage({
+              tenantId: resolvedTenantId,
+              conversationId: conversation.id,
+              direction: 'INBOUND' as any,
+              content: (incomingMessage as any).originalText || inboundContent || incomingMessage.text?.body || '[PESAN]',
+              waMessageId,
+              payloadRaw: mergeMediaIntoPayload(payload),
+            });
+            (incomingMessage as any)._preLogged = true;
+          } catch (preLogErr: any) {
+            console.warn('[PRE-LOG INBOUND WARN]', preLogErr?.message || preLogErr);
+          }
+        }
       }
 
       return reply.status(200).send({ status: 'EVENT_PROCESSED' });

@@ -48,6 +48,8 @@ export interface LlmExecutionRecord {
   costIdr?: number;
   toolsCalled?: Array<{ name: string; args: any }>;
   callSequence?: number;
+  deliveredReply?: string;
+  guardrailActions?: string[];
 }
 
 export interface GroupedBubbleChat {
@@ -81,6 +83,16 @@ function maskCustomerName(name?: string): string {
     .split(/\s+/)
     .map((w) => (w.length <= 1 ? w : `${w[0]}${'*'.repeat(Math.min(w.length - 1, 3))}`))
     .join(' ');
+}
+
+/**
+ * Redaksi PII nomor telepon dan detail sensitif pada input teks bebas.
+ */
+export function redactPiiText(text?: string): string {
+  if (!text) return '';
+  return String(text)
+    .replace(/(?:\+?62|08)[0-9\s\-]{8,14}/g, '[PHONE_REDACTED]')
+    .replace(/\b(?:08\d{8,12})\b/g, '[PHONE_REDACTED]');
 }
 
 /** Diekspor untuk testing (CG-09). */
@@ -198,6 +210,8 @@ export function recordLlmExecution(
     costIdr: data.costIdr,
     toolsCalled: data.toolsCalled,
     callSequence: data.callSequence,
+    deliveredReply: data.deliveredReply,
+    guardrailActions: data.guardrailActions,
   };
 
   llmExecutionBuffer.unshift(entry);
@@ -215,6 +229,7 @@ export function recordLlmExecution(
         ...entry,
         customerPhone: entry.customerPhone ? hashPiiPhone(entry.customerPhone) : entry.customerPhone,
         customerName: entry.customerName ? maskCustomerName(entry.customerName) : entry.customerName,
+        customerInput: redactPiiText(entry.customerInput),
       };
       llmWriteQueue.push(JSON.stringify(persisted));
       if (llmWriteQueue.length >= 10) {
@@ -479,4 +494,32 @@ export function clearLlmExecutionLogs(): void {
       fs.writeFileSync(todayPath, '', 'utf8');
     }
   } catch {}
+}
+
+/**
+ * Prune file log LLM JSONL yang lebih tua dari batas retensi (default 30 hari).
+ */
+export async function pruneOldLlmLogs(retentionDays = 30): Promise<number> {
+  try {
+    ensureLogsDir();
+    if (!fs.existsSync(LOGS_DIR)) return 0;
+    const files = await fs.promises.readdir(LOGS_DIR);
+    const now = Date.now();
+    const maxAgeMs = retentionDays * 24 * 60 * 60 * 1000;
+    let deleted = 0;
+    for (const f of files) {
+      if (!f.startsWith('llm-') || !f.endsWith('.jsonl')) continue;
+      const filePath = path.join(LOGS_DIR, f);
+      try {
+        const stat = await fs.promises.stat(filePath);
+        if (now - stat.mtimeMs > maxAgeMs) {
+          await fs.promises.unlink(filePath);
+          deleted++;
+        }
+      } catch {}
+    }
+    return deleted;
+  } catch {
+    return 0;
+  }
 }

@@ -1031,6 +1031,13 @@ export async function loadServicesFromDb(tenantId: string): Promise<void> {
       return;
     }
 
+    // Task 6.4: Jangan auto-seed katalog ke tenant baru (SaaS-readiness & onboarding eksplisit).
+    // Hanya DEFAULT_TENANT_ID yang menerima fallback default saat DB kosong.
+    if (tenantId !== DEFAULT_TENANT_ID) {
+      console.log(`[TREATMENT CATALOG] Tenant '${tenantId}' belum memiliki katalog treatment di database. Tidak ada auto-seed.`);
+      return;
+    }
+
     // Tidak ada data di DB -> seed dari file/default lalu simpan
     let source: ClinicServiceItem[] = [];
     try {

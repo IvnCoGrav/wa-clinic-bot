@@ -27,7 +27,7 @@ export const SEARCH_KNOWLEDGE_FAQ_TOOL_SCHEMA = {
   type: 'function',
   function: {
     name: 'search_knowledge_faq',
-    description: 'Mencari artikel FAQ resmi, pengetahuan medis, panduan SOP klinik, penjelasan terapi tambahan (Sinar Moksa / inframerah hangat), aturan model cukur rambut bayi (apakah harus gundul/tidak), persiapan sebelum kunjungan, aturan mandi sebelum/sesudah, minum susu, jenis minyak/balsem, tumbuh gigi, fisioterapi, dan kondisi medis bayi/ibu dari Knowledge Base (47 artikel knowledge_chunks). WAJIB PANGGIL TOOL INI ketika customer menanyakan hal medis, khasiat/fungsi alat, model cukur rambut, atau aturan perawatan. JANGAN panggil untuk sapaan awal murni, hitung ongkir/lokasi, atau tanya harga katalog.',
+    description: 'Mencari artikel FAQ resmi, pengetahuan medis, panduan SOP klinik, penjelasan terapi tambahan (Sinar Moksa / inframerah hangat), aturan model cukur rambut bayi (apakah harus gundul/tidak), persiapan sebelum kunjungan, aturan mandi sebelum/sesudah, minum susu, jenis minyak/balsem, tumbuh gigi, fisioterapi, dan kondisi medis bayi/ibu dari Knowledge Base klinik. WAJIB PANGGIL TOOL INI ketika customer menanyakan hal medis, khasiat/fungsi alat, model cukur rambut, atau aturan perawatan. JANGAN panggil untuk sapaan awal murni, hitung ongkir/lokasi, atau tanya harga katalog.',
     parameters: {
       type: 'object',
       properties: {
@@ -38,11 +38,6 @@ export const SEARCH_KNOWLEDGE_FAQ_TOOL_SCHEMA = {
         limit: {
           type: 'number',
           description: 'Jumlah chunk maksimal yang diambil (default 3, maksimal 5).'
-        },
-        commitment: {
-          type: 'string',
-          enum: ['EXPLORING', 'CONSIDERING', 'COMMITTED'],
-          description: 'Penilaian SEMANTIK atas seluruh percakapan: customer SEDANG BERTANYA/MENJELAJAH (EXPLORING), MENIMBANG/MENYATAKAN MINAT (CONSIDERING), atau SUDAH MEMUTUSKAN mengambil layanan (COMMITTED). Berdasarkan makna & konteks, bukan ada/tidak tanda tanya.'
         }
       },
       required: ['query']
@@ -70,16 +65,14 @@ export async function executeSearchKnowledgeFaq(input: SearchKnowledgeFaqInput):
     }));
 
     if (chunks.length === 0) {
-      // Fallback generik zero-hardcode: tanpa nama treatment/usia statis, tanpa instruksi
-      // "mengaku bukan bidan / konsultasikan ke bidan / tawarkan eskalasi" untuk ranah
-      // komplementer standar. LLM menjawab sebagai Bidan Yusi memakai katalog dinamis
-      // (tool get_catalog_and_price) + kompetensi kebidanan umum. Eskalasi HANYA untuk
-      // kegawatdaruratan medis patologis di luar ranah komplementer.
+      // Fallback generik zero-hardcode: tanpa nama treatment/usia statis.
+      // LLM menjawab memakai katalog dinamis (tool get_catalog_and_price) + kompetensi kebidanan umum Bidan Yusi.
+      // DILARANG mengarang fakta medis atau menodong jadwal (statement-only).
       return {
         success: true,
         query,
         chunks: [],
-        message: `Tidak ditemukan artikel FAQ spesifik untuk query "${query}". Sebagai Bidan Yusi, berikan penjelasan edukatif komplementer umum yang ramah, solutif, dan profesional berdasarkan prinsip kebidanan, serta gunakan informasi resmi dari katalog layanan via tool get_catalog_and_price bila relevan. HANYA tawarkan bantuan eskalasi ke tim/dokter jika pertanyaan menyangkut kegawatdaruratan medis, komplikasi patologis kehamilan (seperti pendarahan atau ketuban pecah dini), atau kebutuhan medis di luar ranah komplementer. DILARANG MENAMBAHKAN PERTANYAAN JADWAL (Aturan Emas 6: statement-only response untuk pertanyaan teknis/persiapan/SOP).`,
+        message: `Tidak ditemukan artikel FAQ spesifik untuk query "${query}". Sebagai Bidan Yusi, gunakan informasi resmi dari katalog layanan (tool get_catalog_and_price) dan prinsip kebidanan komplementer umum untuk menjawab pertanyaan Bunda secara ramah, solutif, dan profesional tanpa mengarang fakta medis di luar kompetensi. HANYA tawarkan bantuan eskalasi ke tim/dokter jika pertanyaan menyangkut kegawatdaruratan medis, komplikasi patologis kehamilan (seperti pendarahan atau ketuban pecah dini), atau kebutuhan medis di luar ranah komplementer. DILARANG MENAMBAHKAN PERTANYAAN JADWAL (Aturan Emas 6: statement-only response).`,
       };
     }
 

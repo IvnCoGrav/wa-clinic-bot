@@ -5,8 +5,18 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 661
+Total entri terindeks: 671
 
+- 2026-11-08 | Fix: Verifikasi Backup SQL pg_dump & Penegakan Expiry Tracking Code (Remediasi Lanjutan)
+- 2026-11-08 | RAG, Korpus, Prompt & Log PII: Fase 8 & 9 (Pembersihan Korpus Chat, Red Flag Batuk Kronis,
+- 2026-11-08 | Staf & Marketing: Fase 7 (HttpOnly Cookie Sesi Staf, Pembersihan PII LocalStorage, Entropi
+- 2026-11-08 | Ghost Config & Hardcode: Fase 6 (Persistensi Perilaku Chat, Hapus Rekening Fiktif, Anti Au
+- 2026-11-08 | Durabilitas Ingress, Outbox & Cron: Fase 5 (Urutan Kanonis Webhook, Outbox Atomic Claim, A
+- 2026-11-08 | Keselamatan Klinis & Kontrak AI: Fase 4 (Tri-State Triage, Single-Source Vaksin, Otorisasi
+- 2026-11-08 | Security & Architecture Hardening: Fase 3 (Backup & Recovery Fail-Closed + AES-256-GCM)
+- 2026-11-08 | Security & Architecture Hardening: Fase 1 (Perimeter & Kredensial) & Fase 2 (RBAC Allow-Li
+- 2026-11-06 | Refactor & Polish: 7 Perbaikan Desktop UI, Follow-Up Queue & Operasional Admin Dashboard
+- 2026-11-06 | Kebijakan: Lint Shareloc pada Balasan Cepat (Quick Chat) Dicabut
 - 2026-11-06 | Audit Live Chat Fase 0–5: Ghost Error, Integritas Data, Isolasi Tenant & UX Mobile (#316)
 - 2026-11-06 | Fix: Badge & Teks "Butuh Shareloc" pada Pelanggan Terverifikasi (Audit #315)
 - 2026-11-06 | Hardening: Reservasi & State Machine FSM (A-001–A-015, P1–P10)

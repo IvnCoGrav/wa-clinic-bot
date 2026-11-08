@@ -333,7 +333,7 @@ export async function composeSystemPromptAsync(
     const dbPrompt = await TenantPromptConfigService.getActivePromptConfig(tenantId);
     if (dbPrompt) {
       const goalSummary = GoalTracker.formatGoalSessionForPrompt(session, opts);
-      const brand = getBrandIdentity();
+      const brand = await getBrandIdentityAsync(tenantId);
       const greetingInstruction = buildGreetingInstruction(isFollowUp, brand.businessName);
       // Audit best-practice (SEDANG-3): jalur DB WAJIB menghormati phaseInjection
       // (fokus fase) + flag masking tool — jangan diam-diam mengabaikannya.
@@ -346,7 +346,7 @@ export async function composeSystemPromptAsync(
       const saveLine = opts?.isSaveReservationMasked
         ? '4. save_reservation: SAAT INI DISEMBUNYIKAN dari daftar tool (prasyarat belum lengkap) — JANGAN memanggilnya.'
         : '4. save_reservation: saat booking';
-      base = `Kamu adalah Bidan Yusi, bidan konsultan resmi dari "${brand.businessName}" — layanan homecare treatment profesional untuk ibu dan bayi langsung ke rumah di area Surabaya dan Sidoarjo.
+      base = `Kamu adalah ${brand.botDisplayName}, bidan konsultan resmi dari "${brand.businessName}" — layanan homecare treatment profesional untuk ibu dan bayi langsung ke rumah di area Surabaya dan Sidoarjo.
 
 ${dbPrompt.personalityTone}
 
@@ -357,7 +357,10 @@ ${dbPrompt.answeringHierarchy}
 
 ${dbPrompt.medicalOverclaimRules}
 
-${dbPrompt.negativeConstraints}
+${buildNegativeConstraintsBlock(session)}
+
+[TAMBAHAN KEBIJAKAN KHUSUS TENANT (OVERLAY)]
+${dbPrompt.negativeConstraints || ''}
 
 [PANDUAN PENGGUNAAN TOOLS]
 ${calcLine}

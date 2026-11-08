@@ -27,8 +27,9 @@ export interface ScopeDecision {
 }
 
 /**
- * SEC-AUDIT-04: keputusan otorisasi berbasis data (tabel `role_api_scopes`).
- * - Role tanpa baris → unmanaged → perilaku legacy (existing guards berlaku).
+ * SEC-AUDIT-04 & Fase 2: keputusan otorisasi berbasis data (tabel `role_api_scopes`).
+ * - Super-admin: bypass eksplisit.
+ * - Role tanpa baris → default-deny (fail-closed).
  * - Role berbaris → default-deny kecuali (prefix, method) cocok.
  * - DB error → deny (fail-closed, konsisten dengan StaffAuthService).
  */
@@ -38,7 +39,14 @@ export async function isApiScopeAllowed(
   urlPath: string,
   method: string,
 ): Promise<ScopeDecision> {
-  const cacheKey = `${tenantId}::${roleKey}`;
+  const normalizedRole = normalizeRoleKey(roleKey);
+
+  // Super Admin memiliki hak akses penuh eksplisit
+  if (normalizedRole === 'super_admin') {
+    return { allowed: true, managed: true };
+  }
+
+  const cacheKey = `${tenantId}::${normalizedRole}`;
   const now = Date.now();
   const cached = scopeCache.get(cacheKey);
 
@@ -48,19 +56,21 @@ export async function isApiScopeAllowed(
   } else {
     try {
       const found = await prisma.roleApiScope.findMany({
-        where: { tenant_id: tenantId, role_key: roleKey },
+        where: { tenant_id: tenantId, role_key: normalizedRole },
         select: { api_prefix: true, methods: true },
       });
       rows = (found as any[]).map((r) => ({ api_prefix: r.api_prefix, methods: r.methods || '*' }));
       scopeCache.set(cacheKey, { at: now, rows });
     } catch (err: any) {
-      console.warn(`[RBAC SCOPE GUARD] DB unreachable for role '${roleKey}', denying by default:`, err?.message);
+      console.warn(`[RBAC SCOPE GUARD] DB unreachable for role '${normalizedRole}', denying by default:`, err?.message);
       return { allowed: false, managed: true };
     }
   }
 
+  // S-002 / Fase 2.1.1: Fail-closed — role tanpa baris terdaftar di role_api_scopes
+  // ditolak secara default (allowed: false).
   if (rows.length === 0) {
-    return { allowed: true, managed: false };
+    return { allowed: false, managed: false };
   }
 
   const m = String(method || 'GET').toUpperCase();

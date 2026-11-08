@@ -137,6 +137,22 @@ export class BurstCoalesceService {
       payloadRaw: incomingMessage,
     });
 
+    // Task 5.1.2 / W-005: persist turn inbound secara durable saat masuk buffer
+    try {
+      const { turnRepository } = await import('../repositories/turn.repository');
+      const provider = (incomingMessage as any)._provider || 'WAHA';
+      await turnRepository.persistInbound({
+        tenantId,
+        provider,
+        inboundMessageId: String(incomingMessage.id || `coalesce_${Date.now()}`),
+        customerId: opts.customerId,
+        conversationId: conversation.id,
+        payload: { tenantId, customerId: opts.customerId, phone, incomingMessage },
+      });
+    } catch (persistErr: any) {
+      console.warn('[BURST COALESCE] persistInbound error:', persistErr?.message || persistErr);
+    }
+
     // 5. Buffer sudah penuh → flush dulu, mulai batch baru dengan pesan ini.
     if (existing && existing.messages.length >= this.getMaxMessages()) {
       await this.flush(key);

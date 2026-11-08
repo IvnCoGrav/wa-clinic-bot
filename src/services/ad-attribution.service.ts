@@ -121,7 +121,8 @@ export async function matchAdClickAndFireContact(
     // Memory cache fallback (for unit tests / in-memory mode)
     if (memoryAdClicks && typeof memoryAdClicks.get === 'function') {
       const memClick = memoryAdClicks.get(trackingCode);
-      if (memClick) {
+      const isExpired = memClick?.createdAt && (Date.now() - new Date(memClick.createdAt).getTime()) > 7 * 24 * 60 * 60 * 1000;
+      if (memClick && !isExpired) {
         if (memClick.tenant_id && memClick.tenant_id !== tenantId) {
           console.warn(`[ATTRIBUTION ISOLATION] Memory click ${trackingCode} belongs to tenant ${memClick.tenant_id}, not ${tenantId}. Skipped.`);
         } else {
@@ -139,11 +140,19 @@ export async function matchAdClickAndFireContact(
 
     // Atomic DB updateMany to avoid race conditions on website /cta clicks
     try {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const now = new Date();
       const updateResult = await prisma.adClick.updateMany({
         where: {
           trackingCode,
           ...(tenantId ? { tenant_id: tenantId } : {}),
           matchedAt: null,
+          // Penegakan expiry: kode dengan expires_at wajib belum kedaluwarsa.
+          // Fallback createdAt hanya untuk baris legacy sebelum kolom expires_at diisi.
+          OR: [
+            { expires_at: { gt: now } },
+            { expires_at: null, createdAt: { gte: sevenDaysAgo } },
+          ],
         },
 
         data: {

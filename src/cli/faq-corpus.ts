@@ -31,7 +31,8 @@ export const faqs = [
   },
   {
     "question": "Apa saja yang perlu disiapkan sebelum treatment?",
-    "answer": "Bunda tidak perlu menyiapkan apa-apa. Seluruh perlengkapan medis dan perawatan sudah disiapkan secara lengkap dan steril oleh Bidan kami, termasuk baby oil, minyak telon, matras, dan perlak. Bunda di rumah cukup menyiapkan tempat yang nyaman/alas tidur untuk si kecil berbaring."
+    "answer": "Bunda cukup menyiapkan tempat yang nyaman/alas tidur untuk si kecil berbaring dan kabel roll panjang jika mengambil paket dengan alat bantu seperti Sinar Moksa atau Nebulizer. Seluruh perlengkapan medis dan perawatan lainnya (seperti baby oil, minyak telon, matras, dan perlak) sudah disiapkan secara lengkap dan steril oleh Bidan kami.",
+    "keywords": "siap, persiapan, disiapkan, menyiapkan, sedia, menyediakan, perlengkapan, alat, alas tidur, perlak, kabel olor, roll kabel, colokan listrik, bawa apa saja, bawa apa, sebelum treatment, perlu bawa"
   },
   {
     "question": "Metode pembayaran apa saja yang bisa dipakai?",
@@ -69,7 +70,8 @@ export const faqs = [
   // --- Tambahan FAQ Pelengkap dari Draft Sebelumnya ---
   {
     "question": "Apakah bayi sedang flu, batuk, atau pilek (bapil) boleh dipijat?",
-    "answer": "Masih bisa dan sangat dianjurkan, Bunda. Kita bisa menggunakan treatment \"Pijat Bayi Pulih Ceria\" khusus bapil yang dirancang untuk membantu meredakan flu/batuk/pilek, mengencerkan lendir, dan merilekskan otot pernapasan si kecil."
+    "answer": "Masih bisa dan sangat dianjurkan, Bunda. Kita bisa menggunakan treatment \"Pijat Bayi Pulih Ceria\" khusus bapil yang dirancang untuk membantu meredakan flu/batuk/pilek, mengencerkan lendir, dan merilekskan otot pernapasan si kecil.",
+    "keywords": "bapil, batuk, pilek, flu, grok, lendir, bersin, hidung mampet, batuk pilek, boleh dipijat"
   },
   {
     "question": "Apakah bayi perlu mandi sebelum dipijat?",
@@ -170,15 +172,9 @@ export const faqs = [
 // === BEGIN MERGED LIVE CURATIONS (scripts/sync-live-knowledge.ts) ===
   {
     // Kurasi admin live (merged 2026-09-12, source: docs/live-snapshots/knowledge-chunks-2026-09-12.json)
-    "question": "Pijet bayi ceria berapa lama?",
-    "answer": "Hallo bunda 😊\nUntuk bayi durasi nya kurang lebih 40 menit bunda 😊 \n\nMau rencana ambil treatment apa bunda?🤗",
-    "keywords": "durasi, lama, menit, 40 menit, 60 menit, jam, waktu treatment, berapa lama, lama pijat, estimasi, ceria, pulih ceria, terapi, relaksasi, perbedaan, beda, banding, pilih, mana, jenis pijat"
-  },
-  {
-    // Kurasi admin live (merged 2026-09-12, source: docs/live-snapshots/knowledge-chunks-2026-09-12.json)
-    "question": "Nanti saya info lagi",
-    "answer": "Baik bunda, kami tunggu infonya 🤗",
-    "keywords": "basa basi, nanti, pending, mikir dulu, kabari lagi"
+    "question": "Pijat Bayi Ceria berapa lama?",
+    "answer": "Untuk bayi durasinya berkisar kurang lebih 40 menit Bunda.",
+    "keywords": "durasi, lama, menit, 40 menit, 60 menit, jam, waktu treatment, berapa lama, lama pijat, estimasi, ceria, pulih ceria, terapi, relaksasi"
   },
   {
     // Kurasi admin live (merged 2026-09-12, source: docs/live-snapshots/knowledge-chunks-2026-09-12.json)
@@ -194,12 +190,6 @@ export const faqs = [
   },
   {
     // Kurasi admin live (merged 2026-09-12, source: docs/live-snapshots/knowledge-chunks-2026-09-12.json)
-    "question": "Apa saja perlengkapan yang perlu disiapkan di rumah sebelum Bidan datang?",
-    "answer": "cukup menyiapkan alas tidur untuk si kecil dan kabel olor (roll kabel panjang) jika mengambil paket yang menyertakan alat bantu seperti Sinar Moksa atau Nebulizer. Selebihnya\nakan kami siapkan.",
-    "keywords": "siap, persiapan, disiapkan, menyiapkan, sedia, menyediakan, perlengkapan, alat, alas tidur, perlak, kabel olor, roll kabel, colokan listrik, bawa apa saja, bawa apa, sebelum treatment, perlu bawa"
-  },
-  {
-    // Kurasi admin live (merged 2026-09-12, source: docs/live-snapshots/knowledge-chunks-2026-09-12.json)
     "question": "Apakah sebelum pijat bayi boleh diberi susu?",
     "answer": "Sangat boleh. Memberikan susu sebelum pijat justru disarankan agar bayi merasa kenyang,\nsehingga mood-nya lebih tenang dan terhindar dari rewel saat dipijat.",
     "keywords": "susu, asi, formula, minum, sebelum pijat, muntah, gumoh, jeda, kenyang, boleh minum"
@@ -209,12 +199,6 @@ export const faqs = [
     "question": "Sebaiknya pijat dilakukan sebelum atau sesudah mandi?",
     "answer": "Pijat bisa dilakukan sebelum mandi. Setelah treatment selesai, Bunda bisa memandikan si\nkecil dengan jeda istirahat sekitar 5-10 menit.",
     "keywords": "mandi, sebelum mandi, sesudah mandi, setelah pijat, habis pijat, minyak, berendam, kapan mandi, boleh mandi"
-  },
-  {
-    // Kurasi admin live (merged 2026-09-12, source: docs/live-snapshots/knowledge-chunks-2026-09-12.json)
-    "question": "Apa perbedaan antara Pijat Bayi Ceria dan Pijat Terapi (Pulih Ceria)?",
-    "answer": "Pijat Ceria bertujuan untuk relaksasi pada bayi yang sehat tanpa keluhan. Sedangkan Pijat\nTerapi (Pulih Ceria) ditujukan untuk keluhan khusus (seperti batuk pilek, rewel, susah BAB, atau\nkolik), yang mana titik pijatnya sedikit berbeda dan disertai tambahan double aromaterapi.",
-    "keywords": "ceria, pulih ceria, terapi, relaksasi, perbedaan, beda, banding, pilih, mana, jenis pijat"
   },
   {
     // Kurasi admin live (merged 2026-09-12, source: docs/live-snapshots/knowledge-chunks-2026-09-12.json)

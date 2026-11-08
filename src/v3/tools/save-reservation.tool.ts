@@ -233,11 +233,6 @@ export const SAVE_RESERVATION_TOOL_SCHEMA = {
         address: {
           type: 'string',
           description: 'Alamat kunjungan homecare bila sudah diketahui (mis. "Jl Mawar no 12, Kedungkendo"). Opsional — alamat wilayah sesi sudah cukup; detail dilengkapi via form reservasi.'
-        },
-        commitment: {
-          type: 'string',
-          enum: ['EXPLORING', 'CONSIDERING', 'COMMITTED'],
-          description: 'Penilaian SEMANTIK atas seluruh percakapan: EXPLORING (bertanya/menjelajah), CONSIDERING (menimbang/minat), COMMITTED (sudah memutuskan mengambil layanan). Berdasarkan makna & konteks.'
         }
       },
       required: ['treatmentName', 'bookingDate']
@@ -450,6 +445,52 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
       momStage === 'POSTPARTUM' && !isPostpartumStageValid(eldestChildAgeMonths) ? undefined : momStage;
     if (momStage === 'POSTPARTUM' && effectiveMomStage === undefined) {
       console.warn(JSON.stringify({ event: 'V3_TOOL_RESERVATION_POSTPARTUM_DOWNGRADED', tenantId, eldestChildAgeMonths, timestamp: new Date().toISOString() }));
+    }
+
+    // Task 4.5.2: Tolak treatmentName di luar verifiedTreatmentNames sesi (Anti-Hijacking Layanan)
+    if (
+      Array.isArray(gateSession?.verifiedTreatmentNames) &&
+      gateSession.verifiedTreatmentNames.length > 0
+    ) {
+      const normTreatment = treatmentName.toLowerCase().trim();
+      const matchedReq = treatmentCatalogService.matchCatalogItem(treatmentName, tenantId);
+      const isVerified = gateSession.verifiedTreatmentNames.some((vName: string) => {
+        const normV = String(vName || '').toLowerCase().trim();
+        if (normTreatment.includes(normV) || normV.includes(normTreatment)) return true;
+
+        const matchedV = treatmentCatalogService.matchCatalogItem(vName, tenantId);
+        if (matchedReq && matchedV && (matchedReq.id === matchedV.id || matchedReq.name.toLowerCase() === matchedV.name.toLowerCase())) {
+          return true;
+        }
+
+        const cleanReq = normTreatment.replace(/^kala\s+(?:baby|kids|mom|bundle|terapi)?\s*[–-]?\s*/gi, '').replace(/\([^)]*\)/g, '').trim();
+        const cleanV = normV.replace(/^kala\s+(?:baby|kids|mom|bundle|terapi)?\s*[–-]?\s*/gi, '').replace(/\([^)]*\)/g, '').trim();
+        if (cleanReq && cleanV && (cleanReq.includes(cleanV) || cleanV.includes(cleanReq))) {
+          return true;
+        }
+
+        const toksReq = cleanReq.split(/[^a-z0-9]+/).filter((t) => t.length > 2);
+        const toksV = cleanV.split(/[^a-z0-9]+/).filter((t) => t.length > 2);
+        const vSet = new Set(toksV);
+        const commonCount = toksReq.filter((t) => vSet.has(t)).length;
+        return commonCount >= 2;
+      });
+
+      if (!isVerified) {
+        console.warn(JSON.stringify({
+          event: 'V3_TOOL_RESERVATION_UNVERIFIED_TREATMENT_REJECTED',
+          tenantId,
+          conversationId,
+          requestedTreatment: treatmentName,
+          verifiedTreatments: gateSession.verifiedTreatmentNames,
+          timestamp: new Date().toISOString(),
+        }));
+        return {
+          success: false,
+          summary: 'Layanan belum diverifikasi atau tidak sesuai kesepakatan',
+          message: `Layanan "${treatmentName}" belum disepakati oleh Bunda. Layanan yang tercatat dalam kesepakatan adalah: ${gateSession.verifiedTreatmentNames.join(', ')}. Mohon konfirmasi kembali layanan yang diinginkan Bunda ya.`,
+        };
+      }
     }
 
     // Multi-treatment / multi-pasien: gabung semua layanan; kategori otomatis BOTH bila multi.

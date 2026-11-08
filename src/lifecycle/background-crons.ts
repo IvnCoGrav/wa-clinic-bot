@@ -18,6 +18,23 @@ export function trackIntervalStaggered(fn: () => Promise<void>, intervalMs: numb
  * 2. src/worker.ts (mode separated worker / SEPARATE_WORKER === 'true')
  */
 export function startBackgroundCrons(): void {
+  // Task 5.4.1 / K-001: PostgreSQL Advisory Lock untuk Cron Leader
+  import('./cron-advisory-lock').then(async ({ cronAdvisoryLock }) => {
+    const isLeader = await cronAdvisoryLock.tryAcquireLock();
+    if (!isLeader) {
+      console.log('🛡️ [CRON RUNNER] Standby mode: proses lain memegang advisory lock. Lewati registrasi cron lokal.');
+      return;
+    }
+    registerCronWorkers();
+  }).catch((err) => {
+    console.warn('[CRON LOCK WARN] Gagal inisiasi lock:', err?.message);
+    if (process.env.NODE_ENV !== 'production') {
+      registerCronWorkers();
+    }
+  });
+}
+
+export function registerCronWorkers(): void {
   // Start label reconciliation cron (Task 7 / flag: ENABLE_LABEL_RECONCILIATION_CRON)
   if (process.env.ENABLE_LABEL_RECONCILIATION_CRON === 'true') {
     const intervalHours = parseInt(process.env.LABEL_RECONCILIATION_INTERVAL_HOURS || '4', 10);
@@ -311,6 +328,7 @@ export function startBackgroundCrons(): void {
         if (wibDay === 1 && wibHour === 2 && lastWeeklyBackupRunDate !== todayDateStr) {
           lastWeeklyBackupRunDate = todayDateStr;
           await cron.runWeeklyBackup();
+          await cron.runLogRetentionSweep();
         }
       } catch (err: any) {
         console.error('[CRON SCHEDULE ERROR]', err.message);
@@ -342,5 +360,15 @@ export function startBackgroundCrons(): void {
     }).catch(e => console.error('[AD WATCHDOG START ERROR]', e));
   } else {
     console.log(`🛑 Ad Funnel Watchdog cron is DISABLED (ENABLE_AD_WATCHDOG_CRON is not 'true')`);
+  }
+
+  // Start Turn Recovery Sweep (Fase 5 - W-001): replay pesan macet setiap 2 menit
+  if (process.env.ENABLE_TURN_RECOVERY_CRON !== 'false') {
+    const intervalMinutes = parseInt(process.env.TURN_RECOVERY_INTERVAL_MINUTES || '2', 10);
+    import('../services/cron.service').then(({ CronService }) => {
+      const cron = new CronService();
+      trackIntervalStaggered(async () => { await cron.runTurnRecoverySweep(); }, intervalMinutes * 60 * 1000);
+      console.log(`🔄 Turn recovery sweep cron started (every ${intervalMinutes}m, staggered)`);
+    }).catch(e => console.error('[TURN RECOVERY START ERROR]', e));
   }
 }

@@ -137,6 +137,13 @@ export async function getDeliveryTiersFromDb(tenantId: string = DEFAULT_TENANT_I
       }));
     }
 
+    // Task 6.4: Jangan auto-seed delivery tiers ke tenant baru (SaaS-readiness & onboarding eksplisit).
+    // Hanya DEFAULT_TENANT_ID yang menerima fallback default saat DB kosong.
+    if (tenantId !== DEFAULT_TENANT_ID) {
+      console.log(`[DELIVERY TIERS] Tenant '${tenantId}' belum memiliki delivery tiers di database. Tidak ada auto-seed.`);
+      return [];
+    }
+
     // Tidak ada data di DB -> seed dari file/default lalu simpan
     const source = activeDeliveryTiers.length > 0 ? activeDeliveryTiers : DEFAULT_TIERS;
     console.warn(`[SEED] Delivery tiers kosong untuk tenant ${tenantId}; seeding dari ${activeDeliveryTiers.length > 0 ? 'file delivery_tiers_custom.json' : 'DEFAULT_TIERS (code default)'} (${source.length} tier). Set nilai via admin API / DB untuk produksi.`);

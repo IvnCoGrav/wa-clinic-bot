@@ -16,9 +16,10 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
+        const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
         const page = Math.max(1, parseInt(request.query?.page || '1', 10) || 1);
         const pageSize = Math.min(500, Math.max(1, parseInt(request.query?.pageSize || '200', 10) || 200));
-        const where = { tenant_id: DEFAULT_TENANT_ID };
+        const where = { tenant_id: tenantId };
         const { isMissingKeywordsColumnError } = await import('../../services/knowledge.service');
         let rows: any[];
         try {
@@ -70,9 +71,10 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
    */
   fastify.get('/api/admin/knowledge/unanswered', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
       const unanswered = await prisma.conversation.findMany({
         where: {
-          tenant_id: DEFAULT_TENANT_ID,
+          tenant_id: tenantId,
           is_human_handling: true,
           escalation_reason: { in: ['unresolved_faq', 'out_of_domain'] },
         },
@@ -121,6 +123,7 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
+      const tenantIdResolve = (request as any).tenantId || DEFAULT_TENANT_ID;
       const { id } = request.params;
       const { answer, category = 'general' } = request.body || {};
 
@@ -129,8 +132,8 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
       }
 
       try {
-        const conversation = await prisma.conversation.findUnique({
-          where: { id },
+        const conversation = await prisma.conversation.findFirst({
+          where: { id, tenant_id: tenantIdResolve },
           include: { customer: true, messages: { orderBy: { created_at: 'desc' }, take: 1 } },
         });
 
@@ -141,7 +144,7 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
         const rawQuestion = conversation.messages[0]?.content || 'Pertanyaan';
 
         await knowledgeBaseService.addFaqItem({
-          tenantId: DEFAULT_TENANT_ID,
+          tenantId: tenantIdResolve,
           category,
           question: rawQuestion,
           answer,
@@ -150,7 +153,6 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
 
         // F4.1/F4.3: lepas via pintu TUNGGAL (pulihkan previous_state + clear hold),
         // JANGAN reset manual yang menghancurkan previous_state.
-        const tenantIdResolve = (request as any).tenantId || DEFAULT_TENANT_ID;
         const { conversationService } = await import('../../services/conversation.service');
         await conversationService.releaseToBot(id, tenantIdResolve);
         // Beri makna pada antrean sebelumnya agar loop ditutup.
@@ -189,6 +191,7 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
       request: FastifyRequest<{ Params: { id: string }; Body: { title: string; content: string; keywords?: string } }>,
       reply: FastifyReply
     ) => {
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
       const { id } = request.params;
       const { title, content, keywords } = request.body || {};
 
@@ -198,11 +201,19 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
       const cleanKeywords = typeof keywords === 'string' && keywords.trim() ? keywords.trim() : null;
 
       try {
+        const existing = await prisma.knowledgeChunk.findFirst({
+          where: { id, tenant_id: tenantId },
+        });
+
+        if (!existing) {
+          return reply.status(404).send({ error: 'Knowledge chunk not found' });
+        }
+
         const { isMissingKeywordsColumnError } = await import('../../services/knowledge.service');
         let updated: any;
         try {
           updated = await prisma.knowledgeChunk.update({
-            where: { id },
+            where: { id: existing.id },
             data: {
               title,
               content,
@@ -213,7 +224,7 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
           // Skema lama tanpa kolom keywords (P2022): update tanpa keywords + peringatan.
           if (!isMissingKeywordsColumnError(updateErr)) throw updateErr;
           updated = await prisma.knowledgeChunk.update({
-            where: { id },
+            where: { id: existing.id },
             data: { title, content },
           });
           updated = { ...updated, keywords: null };
@@ -229,11 +240,12 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
           targetId: id,
           payload: { title },
           ipAddress: request.ip,
+          tenantId,
         });
 
         try {
           const { faqCacheService } = await import('../../services/faq-cache.service');
-          await faqCacheService.invalidateAll(updated?.tenant_id || DEFAULT_TENANT_ID).catch(() => {});
+          await faqCacheService.invalidateAll(updated?.tenant_id || tenantId).catch(() => {});
         } catch (_) {}
 
         return reply.status(200).send({
@@ -247,7 +259,7 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
         if (updatedInMemory) {
           try {
             const { faqCacheService } = await import('../../services/faq-cache.service');
-            await faqCacheService.invalidateAll(DEFAULT_TENANT_ID).catch(() => {});
+            await faqCacheService.invalidateAll(tenantId).catch(() => {});
           } catch (_) {}
 
           return reply.status(200).send({
@@ -269,12 +281,21 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
   fastify.delete(
     '/api/admin/knowledge/chunks/:id',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
       const { id } = request.params;
       try {
-        await prisma.knowledgeChunk.delete({ where: { id } });
+        const existing = await prisma.knowledgeChunk.findFirst({
+          where: { id, tenant_id: tenantId },
+        });
+
+        if (!existing) {
+          return reply.status(404).send({ error: 'Knowledge chunk not found' });
+        }
+
+        await prisma.knowledgeChunk.delete({ where: { id: existing.id } });
         try {
           const { faqCacheService } = await import('../../services/faq-cache.service');
-          await faqCacheService.invalidateAll(DEFAULT_TENANT_ID).catch(() => {});
+          await faqCacheService.invalidateAll(tenantId).catch(() => {});
         } catch (_) {}
 
         await auditService.logAdminAction({
@@ -283,6 +304,7 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
           action: 'DELETE_KNOWLEDGE_CHUNK',
           targetId: id,
           ipAddress: request.ip,
+          tenantId,
         });
         return reply.status(200).send({ success: true, message: 'Knowledge chunk deleted successfully' });
       } catch (err: any) {
@@ -301,15 +323,16 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
       request: FastifyRequest<{ Body: { faqs: Array<{ question: string; answer: string; keywords?: string }> } }>,
       reply: FastifyReply
     ) => {
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
       const { faqs } = request.body || {};
       if (!faqs || !Array.isArray(faqs) || faqs.length === 0) {
         return reply.status(400).send({ error: 'Body must contain non-empty faqs array [{question, answer}]' });
       }
 
-      const importedCount = await knowledgeBaseService.importFaqs(faqs, DEFAULT_TENANT_ID);
+      const importedCount = await knowledgeBaseService.importFaqs(faqs, tenantId);
       try {
         const { faqCacheService } = await import('../../services/faq-cache.service');
-        await faqCacheService.invalidateAll(DEFAULT_TENANT_ID).catch(() => {});
+        await faqCacheService.invalidateAll(tenantId).catch(() => {});
       } catch (_) {}
 
       await auditService.logAdminAction({
@@ -318,6 +341,7 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
         action: 'IMPORT_FAQS',
         payload: { count: faqs.length },
         ipAddress: request.ip,
+        tenantId,
       });
       return reply.status(200).send({
         success: true,
@@ -336,15 +360,16 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
       request: FastifyRequest<{ Body: { documentName: string; textContent: string } }>,
       reply: FastifyReply
     ) => {
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
       const { documentName, textContent } = request.body || {};
       if (!documentName || !textContent) {
         return reply.status(400).send({ error: 'documentName and textContent are required' });
       }
 
-      const chunkCount = await knowledgeBaseService.importDocument(documentName, textContent, DEFAULT_TENANT_ID);
+      const chunkCount = await knowledgeBaseService.importDocument(documentName, textContent, tenantId);
       try {
         const { faqCacheService } = await import('../../services/faq-cache.service');
-        await faqCacheService.invalidateAll(DEFAULT_TENANT_ID).catch(() => {});
+        await faqCacheService.invalidateAll(tenantId).catch(() => {});
       } catch (_) {}
 
       await auditService.logAdminAction({
@@ -354,6 +379,7 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
         targetId: documentName,
         payload: { length: textContent.length },
         ipAddress: request.ip,
+        tenantId,
       });
       return reply.status(200).send({
         success: true,

@@ -529,17 +529,48 @@ export class PrismaSheetsSyncStore implements SheetsSyncStore {
   }
 
   async listPending(tenantId: string, now: Date, limit: number): Promise<OutboxRow[]> {
-    const rows = await prisma.sheetsSyncOutbox.findMany({
+    const candidates = await prisma.sheetsSyncOutbox.findMany({
       where: {
         tenant_id: tenantId,
-        OR: [{ status: 'pending' }, { status: 'processing' }],
+        OR: [
+          { status: 'pending' },
+          { status: 'processing', next_retry_at: { lte: now } },
+        ],
         AND: [{ OR: [{ next_retry_at: null }, { next_retry_at: { lte: now } }] }],
       },
       orderBy: { created_at: 'asc' },
       take: limit,
-      select: { id: true, tenant_id: true, reservation_id: true, attempts: true },
+      select: { id: true, tenant_id: true, reservation_id: true, attempts: true, status: true },
     });
-    return rows;
+
+    const claimed: OutboxRow[] = [];
+    const leaseExpiry = new Date(now.getTime() + 5 * 60 * 1000); // 5 menit lease
+
+    for (const c of candidates) {
+      // Atomic claim: update status='processing' dan next_retry_at=leaseExpiry
+      // HANYA bila status masih sesuai dengan kandidat (mencegah double-claim oleh worker paralel)
+      const res = await prisma.sheetsSyncOutbox.updateMany({
+        where: {
+          id: c.id,
+          status: c.status,
+        },
+        data: {
+          status: 'processing',
+          next_retry_at: leaseExpiry,
+        },
+      });
+
+      if (res.count > 0) {
+        claimed.push({
+          id: c.id,
+          tenant_id: c.tenant_id,
+          reservation_id: c.reservation_id,
+          attempts: c.attempts,
+        });
+      }
+    }
+
+    return claimed;
   }
 
   async markDone(id: string): Promise<void> {

@@ -1,5 +1,6 @@
 import axios from 'axios';
 import dotenv from 'dotenv';
+import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { normalizeWhatsAppFormat } from '../../utils/whatsapp-format';
 import {
   getCachedLabels,
@@ -85,6 +86,7 @@ export class WahaClient implements IWahaClient {
   private baseUrl: string;
   private apiKey: string;
   private session: string;
+  private tenantId: string;
 
   // Semaphore sederhana untuk membatasi call HTTP WAHA yang berjalan bersamaan
   private concurrentCalls = 0;
@@ -96,11 +98,12 @@ export class WahaClient implements IWahaClient {
   // mutasi untuk chat yang sama dijalankan sekuensial.
   private labelLocks = new Map<string, Promise<void>>();
 
-  constructor(options?: { session?: string }) {
+  constructor(options?: { session?: string; tenantId?: string }) {
     this.baseUrl = (process.env.WAHA_BASE_URL || 'http://localhost:3001').replace(/\/$/, '');
     this.apiKey = process.env.WAHA_API_KEY || '';
     // AUDIT FASE 3: session per-tenant (tenants.waha_session_id). Default tetap env.
     this.session = (options?.session || process.env.WAHA_SESSION || 'default').trim() || 'default';
+    this.tenantId = options?.tenantId || DEFAULT_TENANT_ID;
   }
 
   private get headers() {
@@ -225,7 +228,7 @@ export class WahaClient implements IWahaClient {
       await customerService.setLabelFlags(phone, {
         isAdminLabeled: lower === 'admin' ? isAdded : undefined,
         isHoldLabeled: lower === 'hold' ? isAdded : undefined,
-      });
+      }, this.tenantId);
     } catch (err: any) {
       console.warn(`[LABEL SYNC] Failed to sync "${lower}" column for ${targetChatId}:`, err.message);
     }

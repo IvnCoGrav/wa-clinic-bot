@@ -41,7 +41,8 @@
     "scrape:all": "tsx src/cli/scrape-all.ts",
     "sync:history": "tsx scripts/sync-waha-history.ts",
     "backfill:labels": "tsx scripts/backfill-customer-labels.ts",
-    "security:scan": "tsx scripts/scan-secrets.ts",
+    "security:scan": "tsx scripts/scan-secrets.ts --all",
+    "security:scan:staged": "tsx scripts/scan-secrets.ts --staged",
     "audit:reservation-lock": "tsx scripts/audit/reservation-lock-probe.ts"
   },
   "dependencies": {

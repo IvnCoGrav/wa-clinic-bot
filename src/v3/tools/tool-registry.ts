@@ -62,9 +62,21 @@ export interface ToolExecutionContext {
   };
   /** Snapshot nominal ongkir sesi (hartan deterministik untuk save_reservation). */
   deliveryFeeSnapshot?: number;
+  /** Daftar nama tool yang diotorisasi untuk dieksekusi turn ini (Task 4.3.1). */
+  allowedToolNames?: string[];
 }
 
 export async function executeToolByName(name: string, args: any, ctx: ToolExecutionContext): Promise<any> {
+  // Task 4.3.1: Tolak eksekusi tool di luar daftar allowedToolNames (defense-in-depth)
+  if (Array.isArray(ctx.allowedToolNames) && !ctx.allowedToolNames.includes(name)) {
+    console.warn(`[ToolExecutionAuthz] Ditolak: tool '${name}' tidak terdaftar dalam allowedToolNames`);
+    return {
+      success: false,
+      error: 'UNAUTHORIZED_TOOL',
+      message: `Tool '${name}' tidak diizinkan untuk dieksekusi pada giliran percakapan ini.`,
+    };
+  }
+
   switch (name) {
     case 'calculate_delivery': {
       const input: CalculateDeliveryInput = {

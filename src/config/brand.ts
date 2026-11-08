@@ -53,8 +53,12 @@ export async function getBrandIdentityAsync(tenantId: string = DEFAULT_TENANT_ID
     // lag dari schema + kolom tenants.settings belum ada di sebagian DB (P2022).
     const tenant = await (prisma as any).tenant.findUnique({
       where: { id: tenantId },
-      select: { settings: true },
+      select: { name: true, cs_name: true, settings: true },
     });
+    if (tenant && tenantId !== DEFAULT_TENANT_ID) {
+      if (tenant.name) resolved.businessName = tenant.name;
+      if (tenant.cs_name) resolved.botDisplayName = tenant.cs_name;
+    }
     const override = (tenant?.settings as any)?.brand;
     if (override && typeof override === 'object') {
       const pick = (v: any, fallback: string) =>

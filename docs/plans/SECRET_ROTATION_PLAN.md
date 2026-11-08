@@ -51,11 +51,11 @@ sanitasi) juga memuat **password SSH login** server live secara plaintext
 ### Vektor D: Kredensial Historis di Blob Git
 | # | Secret / File | Lokasi Bocor | Status Nilai |
 |---|---|---|---|
-| 1 | `ADMIN_API_KEY` | `.env` di commit `42d346f` | `"admin_prod_key_123"` (20 char) — Hak akses penuh `/api/admin/*` |
+| 1 | `ADMIN_API_KEY` | `.env` di commit `42d346f` | `"[REDACTED_admin_prod_***]"` (sidik jari 12 char) — Hak akses penuh `/api/admin/*` |
 | 2 | `LLM_API_KEY` (SumoPod) | `.env` di commit `8869ea8`, `28425e3`, `42d346f` | `"[REVOKED_KEY]"` (25 char) |
-| 3 | `WAHA_API_KEY` | 3 blob `.env` yang sama | `"3659a2481bce46a2801173dc5ec7d668"` (32 char hex) |
+| 3 | `WAHA_API_KEY` | 3 blob `.env` yang sama | `"[REDACTED_3659a248***]"` (sidik jari 8 char hex) |
 | 4 | `ORS_API_KEY` | `.env` di commit `42d346f` + 4 file scratch | `"eyJvcmciOiI1..."` (OpenRouteService token) |
-| 5 | `apiKey` di `opencode.json` | Commit `abc9bd6`, `0939230`, `6d4ef6b` | `"sk-8ff19ada8ced4e29-9rq5n2-861940cb"` (9Router local proxy) |
+| 5 | `apiKey` di `opencode.json` | Commit `abc9bd6`, `0939230`, `6d4ef6b` | `"[REDACTED_sk-8ff19a***]"` (sidik jari 9Router) |
 | 6 | `DATABASE_URL` | 3 blob `.env` yang sama | Password default lokal `"postgres:postgres@localhost:5432"` |
 | 7 | `GOOGLE_MAPS_API_KEY` | 3 blob `.env` yang sama | `"mock_google_maps_key"` (**Bukan bocor**, nilai adalah mock) |
 

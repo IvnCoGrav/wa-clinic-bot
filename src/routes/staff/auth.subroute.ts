@@ -3,6 +3,7 @@ import { StaffAuthService } from '../../services/staff-auth.service';
 import { SessionStoreUnavailable } from '../../services/admin-session.service';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { verifyPassword } from '../../utils/bcrypt';
+import { checkAccountLockout, recordAccountFailedAttempt, resetAccountLockout } from '../../services/account-lockout.service';
 import { prisma } from '../../db/client';
 
 // Rate limiting khusus endpoint staff login (terpisah dari admin)
@@ -48,8 +49,25 @@ export async function staffAuthRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ error: 'Nomor HP dan password wajib diisi.' });
     }
 
+    const lockout = checkAccountLockout(phone);
+    if (lockout.locked) {
+      return reply.status(423).send({
+        error: `Akun terkunci sementara karena 5 kali percobaan login gagal. Silakan coba lagi setelah ${Math.ceil(lockout.remainingSeconds / 60)} menit.`,
+        code: 'ACCOUNT_LOCKED',
+        retryAfterSeconds: lockout.remainingSeconds,
+      });
+    }
+
     const result = await StaffAuthService.login(phone, password, tenantId);
     if (!result) {
+      const fail = recordAccountFailedAttempt(phone);
+      if (fail.locked) {
+        return reply.status(423).send({
+          error: 'Akun terkunci sementara karena 5 kali percobaan login gagal. Silakan coba lagi setelah 15 menit.',
+          code: 'ACCOUNT_LOCKED',
+          retryAfterSeconds: fail.remainingSeconds,
+        });
+      }
       try {
         const normalizedPhone = phone.replace(/\D/g, '');
         const staff = await prisma.staff.findFirst({
@@ -75,6 +93,9 @@ export async function staffAuthRoutes(fastify: FastifyInstance) {
     }
 
     staffLoginAttemptsMap.delete(ip);
+    resetAccountLockout(phone);
+    if (result.staff?.phone) resetAccountLockout(result.staff.phone);
+    if (result.staff?.name) resetAccountLockout(result.staff.name);
 
     const isSecureRequest =
       request.protocol === 'https' ||
@@ -103,7 +124,6 @@ export async function staffAuthRoutes(fastify: FastifyInstance) {
       data: {
         expiresAt: result.expiresAt,
       },
-      token: result.token,
     });
   });
 

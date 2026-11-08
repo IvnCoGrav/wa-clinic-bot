@@ -275,9 +275,10 @@ export class ContextGrounder {
         } catch (e) {}
       }
     }
-    // Kontraindikasi demam: suhu ≥ ambang (default 37.8°C, ClinicPolicy DB bila ada).
+    // Kontraindikasi demam: suhu ≥ ambang (default 37.8°C, ClinicPolicy DB bila ada) atau demam terindikasi (feverSuspected).
     const feverTemp = PatientProfileExtractor.parseFeverTemperature(cleanIncomingText);
-    if (conversationId && feverTemp !== null) {
+    const feverSuspected = PatientProfileExtractor.isFeverSuspected(cleanIncomingText);
+    if (conversationId && (feverTemp !== null || feverSuspected)) {
       // Threshold dari ClinicPolicy bila tersedia, fallback 37.8
       let feverThreshold = 37.8;
       try {
@@ -290,11 +291,13 @@ export class ContextGrounder {
           if (Number.isFinite(v) && v >= 37 && v <= 39) feverThreshold = v;
         }
       } catch {}
-      if (feverTemp >= feverThreshold) {
+      const isContraindicated = feverTemp !== null ? feverTemp >= feverThreshold : feverSuspected;
+      if (isContraindicated) {
         try {
-          session = await GoalTracker.updateGoalSession(conversationId, { feverContraindication: true } as any, tenantId);
+          session = await GoalTracker.updateGoalSession(conversationId, { feverContraindication: true, feverSuspected: true } as any, tenantId);
         } catch {}
         (session as any).feverContraindication = true;
+        (session as any).feverSuspected = true;
       }
     }
 

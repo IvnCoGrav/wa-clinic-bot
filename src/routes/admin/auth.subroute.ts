@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { safeCompare } from '../../utils/auth';
-import { getAdminEmail, loginAttemptsMap, pruneLoginAttempts, LOGIN_ATTEMPTS_MAX_ENTRIES } from './stores';
+import { getAdminEmail, loginAttemptsMap, pruneLoginAttempts, LOGIN_ATTEMPTS_MAX_ENTRIES, checkAccountLockout, recordAccountFailedAttempt, resetAccountLockout } from './stores';
 import { StaffAuthService } from '../../services/staff-auth.service';
 import type { StaffSessionWithStaff } from '../../services/staff-auth.service';
 import { verifyPassword } from '../../utils/bcrypt';
@@ -80,7 +80,19 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
       adminIdentity?: string;
     };
     const inputKey = body.password || body.apiKey || '';
-    const identifier = (body.identifier || body.email || body.phone || '').trim();
+    const identifier = (body.identifier || body.email || body.phone || body.adminIdentity || '').trim();
+
+    // Account lockout check (Task 1.4.4: 5x gagal -> lockout 15 menit)
+    if (identifier) {
+      const lockout = checkAccountLockout(identifier);
+      if (lockout.locked) {
+        return reply.status(423).send({
+          error: `Akun terkunci sementara karena 5 kali percobaan login gagal. Silakan coba lagi setelah ${Math.ceil(lockout.remainingSeconds / 60)} menit.`,
+          code: 'ACCOUNT_LOCKED',
+          retryAfterSeconds: lockout.remainingSeconds,
+        });
+      }
+    }
 
     const isSecureRequest =
       request.protocol === 'https' ||
@@ -92,6 +104,7 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
     const adminKey = process.env.ADMIN_API_KEY;
     if (adminKey && inputKey && safeCompare(inputKey, adminKey)) {
       loginAttemptsMap.delete(ip);
+      if (identifier) resetAccountLockout(identifier);
 
       const session = await AdminSessionService.createSession(body.adminIdentity || identifier || 'Super Admin');
       const cookieValue = `admin_session=${session.token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${
@@ -139,6 +152,9 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
 
         if (staff && (await verifyPassword(inputKey, staff.password_hash))) {
           loginAttemptsMap.delete(ip);
+          if (identifier) resetAccountLockout(identifier);
+          if (staff.phone) resetAccountLockout(staff.phone);
+          if (staff.name) resetAccountLockout(staff.name);
 
           const result = await StaffAuthService.login(staff.phone, inputKey, DEFAULT_TENANT_ID);
           if (result) {
@@ -206,6 +222,16 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
     }
 
     // --- TAHAP C: Kredensial tidak valid ---
+    if (identifier) {
+      const fail = recordAccountFailedAttempt(identifier);
+      if (fail.locked) {
+        return reply.status(423).send({
+          error: 'Akun terkunci sementara karena 5 kali percobaan login gagal. Silakan coba lagi setelah 15 menit.',
+          code: 'ACCOUNT_LOCKED',
+          retryAfterSeconds: fail.remainingSeconds,
+        });
+      }
+    }
     return reply.status(401).send({ error: 'Email / Nomor WhatsApp atau password salah.' });
   });
 

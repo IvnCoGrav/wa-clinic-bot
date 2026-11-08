@@ -118,3 +118,14 @@ if ((loginAttemptsCleanupTimer as any)?.unref) (loginAttemptsCleanupTimer as any
 export function stopLoginAttemptsCleanupTimer(): void {
   clearInterval(loginAttemptsCleanupTimer);
 }
+
+// Re-export account lockout utilities (Task 1.4.4)
+export {
+  checkAccountLockout,
+  recordAccountFailedAttempt,
+  resetAccountLockout,
+  pruneAccountLockouts,
+  normalizeAccountIdentifier,
+  ACCOUNT_LOCKOUT_MAX_ATTEMPTS,
+  ACCOUNT_LOCKOUT_DURATION_MS,
+} from '../../services/account-lockout.service';

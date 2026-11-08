@@ -230,11 +230,6 @@ export const GET_CATALOG_TOOL_SCHEMA = {
         targetPrice: {
           type: 'number',
           description: 'Nominal rupiah yang disebut customer (mis. "100rb" -> 100000, "60 ribu" -> 60000). WAJIB diisi bila customer menyebut angka nominal tanpa nama paket. Tool mencocokkan promoPrice/originalPrice katalog lintas kategori (MOMS/BABY/KIDS) dan mengembalikan klarifikasi paket mana yang sesuai nominal.'
-        },
-        commitment: {
-          type: 'string',
-          enum: ['EXPLORING', 'CONSIDERING', 'COMMITTED'],
-          description: 'Penilaian SEMANTIK atas seluruh percakapan: apakah customer pada giliran ini SEDANG BERTANYA/MENJELAJAH (EXPLORING), MENIMBANG/MENYATAKAN MINAT (CONSIDERING), atau SUDAH MEMUTUSKAN mengambil layanan (COMMITTED). Isi berdasarkan makna & konteks percakapan (bukan sekadar ada/tidak tanda tanya). Contoh EXPLORING: "bapil pakai treatment apa", "oksitosin itu untuk apa", "anaknya kembung bisa dipijat?". Contoh COMMITTED: "boleh bund", "mau ambil yang pulih ceria", "ambil deh pijat ceria buat adek". Contoh CONSIDERING: "yang ceria kayaknya cocok ya", "yang itu boleh juga sih".'
         }
       }
     }

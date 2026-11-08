@@ -51,7 +51,10 @@ export function sanitizeQueryForFts(userQuery: string): string {
     .replace(/\bthn\b/gi, 'tahun')
     .replace(/\bdgn\b/gi, 'dengan')
     .replace(/\b(klo|kalo)\b/gi, 'kalau')
-    .replace(/\bkrn\b/gi, 'karena');
+    .replace(/\bkrn\b/gi, 'karena')
+    .replace(/\bbapil\b/gi, 'batuk pilek bapil')
+    .replace(/\bkena\b/gi, ' ')
+    .replace(/\blagi\b/gi, ' ');
 
   // 3. Hapus tanda baca & stopword umum + stopword domain generik klinik (anti false-positive FTS)
   text = text

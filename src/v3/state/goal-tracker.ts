@@ -437,7 +437,7 @@ export class GoalTracker {
    */
   public static formatGoalSessionForPrompt(
     session: CustomerGoalSession,
-    opts?: { history?: Array<{ role: string; content: string }>; askedLocationRecently?: boolean; incomingText?: string }
+    opts?: { history?: Array<{ role: string; content: string }>; askedLocationRecently?: boolean; incomingText?: string; tenantId?: string; phaseInjection?: any }
   ): string {
     // Pre-grounding deterministik (Zero-Code) — audience-aware:
     // keluhan ibu (momProfile.complaints) dan keluhan anak digabung sesuai subjek.
@@ -459,7 +459,8 @@ export class GoalTracker {
     } else if (allSymptoms.length > 0 && !session.selectedTreatment) {
       try {
         const categoryHint = session.targetAudience === 'MOMS' ? 'MOMS' as any : session.targetAudience === 'BOTH' ? undefined : session.targetAudience as any;
-        const rec = treatmentCatalogService.recommendServiceBySymptoms(allSymptoms, session.childProfile?.ageMonths ?? session.children?.[0]?.ageMonths ?? null, categoryHint);
+        const tenantId = (session as any).tenantId || opts?.tenantId || DEFAULT_TENANT_ID;
+        const rec = treatmentCatalogService.recommendServiceBySymptoms(allSymptoms, session.childProfile?.ageMonths ?? session.children?.[0]?.ageMonths ?? null, categoryHint, tenantId, session.momProfile?.stage, session.momProfile?.gestationalWeeks);
         if (rec) {
           const subjectLabel = isMomSubject && momComplaints.length > 0 && childSymptoms.length === 0 ? 'keluhan Bunda' : 'keluhan si kecil';
           // I4 (quick-win kecerdasan): nominal promo HANYA bila customer sudah
@@ -482,7 +483,8 @@ export class GoalTracker {
         const categoryHint: any = isMomDefault
           ? (session.targetAudience === 'BOTH' ? 'BOTH' : 'MOMS')
           : session.targetAudience === 'KIDS' ? 'KIDS' : 'BABY';
-        const def = treatmentCatalogService.getDefaultRelaxationService(categoryHint, isMomDefault ? null : childAge as number | null);
+        const tenantId = (session as any).tenantId || opts?.tenantId || DEFAULT_TENANT_ID;
+        const def = treatmentCatalogService.getDefaultRelaxationService(categoryHint, isMomDefault ? null : childAge as number | null, tenantId);
         if (def) {
           const headerLabel = isMomDefault
             ? 'Rekomendasi Paket Dasar (Ibu Sehat Relaksasi)'
@@ -609,7 +611,8 @@ export class GoalTracker {
       const fmtRp = (n: number) => `Rp ${n.toLocaleString('id-ID')}`;
       let catalogServices: any[] = [];
       try {
-        catalogServices = treatmentCatalogService.getAllServices(true);
+        const tenantId = (session as any).tenantId || opts?.tenantId || DEFAULT_TENANT_ID;
+        catalogServices = treatmentCatalogService.getAllServices(true, tenantId);
       } catch (_) {}
 
       const ageSuffixFor = (scope?: string, label?: string): string => {
@@ -674,7 +677,8 @@ export class GoalTracker {
       // tak ada satupun durasi resmi ditemukan.
       if (session.cartItems.length >= 2) {
         try {
-          const allSvc = treatmentCatalogService.getAllServices(true);
+          const tenantId = (session as any).tenantId || opts?.tenantId || DEFAULT_TENANT_ID;
+          const allSvc = treatmentCatalogService.getAllServices(true, tenantId);
           const durParts: string[] = [];
           let durTotal = 0;
           for (const it of session.cartItems) {

@@ -25,9 +25,10 @@ export async function rolesAdminRoutes(fastify: FastifyInstance) {
    * Mengambil daftar custom role yang tersimpan di database per-tenant.
    */
   fastify.get('/api/admin/roles', async (request: FastifyRequest, reply: FastifyReply) => {
+    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
     try {
       const dbRoles = await prisma.customRole.findMany({
-        where: { tenant_id: DEFAULT_TENANT_ID },
+        where: { tenant_id: tenantId },
         orderBy: { created_at: 'asc' },
       });
 
@@ -66,6 +67,7 @@ export async function rolesAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
       const { key, label, description, allowedPaths = [], defaultRedirect = '/admin/overview' } =
         request.body || {};
 
@@ -76,13 +78,38 @@ export async function rolesAdminRoutes(fastify: FastifyInstance) {
         });
       }
 
+      if (!Array.isArray(allowedPaths)) {
+        return reply.status(400).send({
+          success: false,
+          error: 'allowedPaths harus berupa array string.',
+        });
+      }
+
       const cleanKey = key.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
+
+      // Task 2.1.4: Tolak allowedPaths: ['*'] untuk role non-super-admin
+      if (cleanKey !== 'super_admin' && allowedPaths.some((p) => p === '*')) {
+        return reply.status(400).send({
+          success: false,
+          error: "Karakter '*' (akses penuh) hanya diizinkan khusus untuk role super_admin.",
+        });
+      }
+
+      // Validasi registry path: setiap path harus diawali '/'
+      for (const p of allowedPaths) {
+        if (typeof p !== 'string' || !p.trim() || (!p.startsWith('/') && p !== '*')) {
+          return reply.status(400).send({
+            success: false,
+            error: `Path '${p}' tidak valid. Setiap path harus diawali dengan tanda '/'.`,
+          });
+        }
+      }
 
       try {
         const roleRecord = await prisma.customRole.upsert({
           where: {
             tenant_id_key: {
-              tenant_id: DEFAULT_TENANT_ID,
+              tenant_id: tenantId,
               key: cleanKey,
             },
           },
@@ -93,7 +120,7 @@ export async function rolesAdminRoutes(fastify: FastifyInstance) {
             default_redirect: defaultRedirect,
           },
           create: {
-            tenant_id: DEFAULT_TENANT_ID,
+            tenant_id: tenantId,
             key: cleanKey,
             label: label.trim(),
             description: description ? description.trim() : null,
@@ -119,7 +146,7 @@ export async function rolesAdminRoutes(fastify: FastifyInstance) {
           targetId: roleRecord.id,
           payload: { key: cleanKey, label, allowedPathsCount: allowedPaths.length },
           ipAddress: request.ip,
-          tenantId: DEFAULT_TENANT_ID,
+          tenantId,
         });
 
         return reply.status(200).send({
@@ -155,13 +182,14 @@ export async function rolesAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
       const { key } = request.params;
       const cleanKey = key.trim().toLowerCase();
 
       try {
         await prisma.customRole.deleteMany({
           where: {
-            tenant_id: DEFAULT_TENANT_ID,
+            tenant_id: tenantId,
             key: cleanKey,
             is_system: false,
           },
@@ -176,7 +204,7 @@ export async function rolesAdminRoutes(fastify: FastifyInstance) {
           targetId: cleanKey,
           payload: { key: cleanKey },
           ipAddress: request.ip,
-          tenantId: DEFAULT_TENANT_ID,
+          tenantId,
         });
 
         return reply.status(200).send({

@@ -130,7 +130,7 @@ export const DEFAULT_QUICK_REPLIES: Array<{
     media_type: 'NONE',
     image_url: null,
     content:
-      'Alamat lengkap klinik kami:\n📍 Jl. Raya Rungkut No. 45, Surabaya.\nPatokan: Sebelah Apotek K-24.\nJam operasional: 08.00 - 17.00 WIB.\nDitunggu kedatangannya Bunda {name} 🙏',
+      'Alamat lengkap klinik kami:\n📍 {address}\nJam operasional: 08.00 - 17.00 WIB.\nDitunggu kedatangannya Bunda {name} 🙏',
   },
   {
     shortcut: 'ongkir',

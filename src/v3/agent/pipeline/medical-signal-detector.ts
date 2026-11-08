@@ -7,6 +7,7 @@
  */
 import { hasBookingCommitSignal } from '../../../utils/date-confirmation';
 import { checkMedicalKeywords, EMERGENCY_SYMPTOM_PATTERNS } from '../../../config/medical-keywords';
+import { MedicalDetectionService } from '../../../services/medical-detection.service';
 import type { ClinicPolicyTopic } from '../../tools/clinic-faq.tool';
 import type { CustomerGoalSession } from '../../domain/types';
 
@@ -337,13 +338,13 @@ export function detectPhysicalTraumaSignal(text: string): boolean {
 /**
  * Deteksi kegawatdaruratan medis berat (Red Flag — ESCALATE).
  */
-export function detectHighSeverityEmergency(text: string): { isEmergency: boolean; symptoms: string[] } {
+export function detectHighSeverityEmergency(text: string, recentHistory?: string[]): { isEmergency: boolean; symptoms: string[] } {
   const lower = (text || '').toLowerCase();
   if (!lower) return { isEmergency: false, symptoms: [] };
 
-  const check = checkMedicalKeywords(lower);
-  if (check.severity === 'HIGH') {
-    return { isEmergency: true, symptoms: check.detectedSymptoms };
+  const concern = MedicalDetectionService.detectMedicalConcern(lower, recentHistory);
+  if (concern.severity === 'HIGH') {
+    return { isEmergency: true, symptoms: concern.detectedSymptoms };
   }
 
   for (const re of EMERGENCY_SYMPTOM_PATTERNS) {
@@ -366,32 +367,68 @@ export function evaluateScreeningAnswer(text: string, session?: CustomerGoalSess
   const lower = (text || '').toLowerCase();
   if (!lower) return { resolved: false, isSafe: false };
 
-  // Cek jeda waktu aman pasca vaksin (>= 2 hari / 48 jam)
+  // Task 4.1.1: Tri-state triage {safeTime, unsafeHealth, unknown}
+  // unsafeHealth & unsafeTime menang; isSafe HANYA jika waktu cukup DAN bebas demam.
+
+  // 1. Sinyal kesehatan tidak aman (demam / panas / meriang)
+  const unsafeHealthSignals = [
+    'masih demam', 'masih panas', 'panasnya belum turun', 'agak anget',
+    'agak hangat', 'badannya anget', 'badannya hangat', 'meriang', 'suhu tinggi'
+  ];
+  let hasUnsafeHealth = unsafeHealthSignals.some((s) => lower.includes(s));
+  if (!hasUnsafeHealth && /\b(?:demam|panas|sumer)\b/.test(lower)) {
+    // Periksa apakah bukan dinegasikan
+    const isNegated = /(?:tidak|ga|gak|nggak|bukan|bebas|sudah\s+tidak|udah\s+ga|udah\s+gak|tanpa)\s+(?:ada\s+)?(?:demam|panas|sumer)/.test(lower);
+    if (!isNegated || /(?:tapi|namun|tetapi)\s+(?:masih\s+)?(?:demam|panas)/.test(lower)) {
+      hasUnsafeHealth = true;
+    }
+  }
+
+  // 2. Sinyal waktu belum aman (< 48 jam)
+  const unsafeTimeSignals = [
+    'tadi pagi', 'baru tadi', 'kemarin sore', 'baru kemarin', 'kemarin',
+    'tadi siang', 'tadi malam', 'hari ini', 'baru saja', 'baru vaksin',
+    'baru imunisasi', 'kemarin siang', 'kemarin malam', '1 hari', 'satu hari'
+  ];
+  const hasUnsafeTime = unsafeTimeSignals.some((s) => lower.includes(s));
+
+  if (hasUnsafeHealth) {
+    return { resolved: true, isSafe: false, note: 'Kondisi anak masih bergejala atau demam (kontraindikasi klinis)' };
+  }
+
+  if (hasUnsafeTime) {
+    return { resolved: true, isSafe: false, note: 'Belum memenuhi jeda waktu aman pasca-vaksin (minimal 48 jam)' };
+  }
+
+  // 3. Sinyal waktu aman (>= 48 jam / 2 hari)
   const safeTimeSignals = [
     '2 hari', '3 hari', '4 hari', '5 hari', '6 hari', '7 hari',
     'seminggu', '1 minggu', 'minggu lalu', 'kemarin lusa', 'lusa lalu',
-    'sudah lewat 2 hari', 'udah 2 hari', 'udah 3 hari', 'udah seminggu'
+    'sudah lewat 2 hari', 'udah 2 hari', 'udah 3 hari', 'udah seminggu',
+    'lewat 48 jam', 'lebih dari 48 jam'
   ];
+  const hasSafeTime = safeTimeSignals.some((s) => lower.includes(s));
+
+  // 4. Sinyal kondisi sehat / bebas demam
   const safeHealthSignals = [
     'tidak demam', 'ga demam', 'gak demam', 'nggak demam', 'suhu normal',
     'sudah sembuh', 'udah sembuh', 'udah sehat', 'sudah sehat', 'tidak panas',
-    'ga panas', 'gak panas', 'udah ga panas'
+    'ga panas', 'gak panas', 'udah ga panas', 'bebas demam'
   ];
-
-  const hasSafeTime = safeTimeSignals.some((s) => lower.includes(s));
   const hasSafeHealth = safeHealthSignals.some((s) => lower.includes(s));
 
-  if (hasSafeTime || hasSafeHealth) {
+  // isSafe HANYA jika waktu cukup DAN bebas demam
+  if (hasSafeTime && hasSafeHealth) {
     return { resolved: true, isSafe: true, note: 'Jeda waktu dan kondisi pasca-skrining aman' };
   }
 
-  // Cek sinyal belum aman
-  const unsafeSignals = [
-    'tadi pagi', 'baru tadi', 'kemarin sore', 'baru kemarin', 'masih demam',
-    'masih panas', 'panasnya belum turun', 'agak anget', 'agak hangat'
-  ];
-  if (unsafeSignals.some((s) => lower.includes(s))) {
-    return { resolved: true, isSafe: false, note: 'Belum memenuhi jeda waktu atau masih bergejala' };
+  if (hasSafeTime && !hasUnsafeHealth) {
+    return { resolved: true, isSafe: true, note: 'Jeda waktu pasca-vaksin aman dan tidak ada laporan gejala' };
+  }
+
+  // Jika hanya menyatakan tidak demam tanpa informasi waktu vaksin
+  if (hasSafeHealth && !hasSafeTime) {
+    return { resolved: false, isSafe: false, note: 'Kondisi sehat namun informasi jeda waktu vaksin belum diketahui' };
   }
 
   return { resolved: false, isSafe: false };
@@ -451,7 +488,10 @@ export function evaluateTriageGate(params: {
     };
   }
 
-  const emergency = detectHighSeverityEmergency(lower);
+  const historyTexts = (params.conversationHistory || [])
+    .filter((m) => m.role === 'user')
+    .map((m) => m.content);
+  const emergency = detectHighSeverityEmergency(lower, historyTexts);
   if (emergency.isEmergency) {
     return {
       action: 'ESCALATE',

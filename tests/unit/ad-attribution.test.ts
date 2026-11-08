@@ -34,7 +34,7 @@ describe('ad-attribution.service Unit Tests', () => {
     expect(result.trackingCode).toBe('a7');
     expect(result.strippedText).toBe('halo min');
     expect(prisma.adClick.updateMany).toHaveBeenCalledWith({
-      where: { trackingCode: 'a7', tenant_id: 'default-tenant', matchedAt: null },
+      where: expect.objectContaining({ trackingCode: 'a7', tenant_id: 'default-tenant', matchedAt: null }),
       data: { matchedAt: expect.any(Date), customerId: 'cust_1' },
     });
     expect(capiService.sendCapiEvent).toHaveBeenCalledWith(
@@ -68,7 +68,7 @@ describe('ad-attribution.service Unit Tests', () => {
     expect(result.trackingCode).toBe('a7');
     expect(result.strippedText).toBe('halo min');
     expect(prisma.adClick.updateMany).toHaveBeenCalledWith({
-      where: { trackingCode: 'a7', tenant_id: 'default-tenant', matchedAt: null },
+      where: expect.objectContaining({ trackingCode: 'a7', tenant_id: 'default-tenant', matchedAt: null }),
       data: { matchedAt: expect.any(Date), customerId: 'cust_existing' },
     });
     expect(capiService.sendCapiEvent).toHaveBeenCalledWith(
@@ -184,5 +184,28 @@ describe('ad-attribution.service Unit Tests', () => {
         phone: '628123456793',
       },
     });
+  });
+
+  it('should enforce expires_at when matching a tracking code', async () => {
+    const updateSpy = vi.spyOn(prisma.adClick, 'updateMany').mockResolvedValue({ count: 0 } as any);
+
+    await matchAdClickAndFireContact({
+      bodyText: 'Promo[a7] halo min',
+      isNewCustomerRecord: true,
+      customer: { id: 'cust_expired', phone: '628123456795' },
+      tenantId: 'default-tenant',
+    });
+
+    expect(updateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          OR: expect.arrayContaining([
+            expect.objectContaining({
+              expires_at: expect.objectContaining({ gt: expect.any(Date) }),
+            }),
+          ]),
+        }),
+      })
+    );
   });
 });

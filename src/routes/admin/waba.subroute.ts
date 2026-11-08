@@ -4,6 +4,29 @@ import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { auditService } from '../../services/audit.service';
 
 export async function wabaAdminRoutes(fastify: FastifyInstance) {
+  // Pre-handler hook: perlindungan berlapis (defense-in-depth) khusus provider WAHA/WABA.
+  // Hanya Super Admin yang berhak membaca status session, QR, maupun mengubah konfigurasi WhatsApp.
+  fastify.addHook('preHandler', async (request: FastifyRequest, reply: FastifyReply) => {
+    const staffRole = (request as any).staffRole;
+    if (staffRole && staffRole !== 'SUPER_ADMIN') {
+      try {
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity || (request as any).staffName || `staff:${staffRole}`,
+          action: 'UNAUTHORIZED_WHATSAPP_PROVIDER_ACCESS_ATTEMPT',
+          targetId: request.url,
+          payload: { method: request.method, url: request.url, staffRole },
+          ipAddress: request.ip,
+        });
+      } catch (_) {}
+
+      return reply.status(403).send({
+        error: 'Forbidden: Insufficient role privileges for WhatsApp provider operations.',
+        code: 'FORBIDDEN_STAFF_ROLE',
+      });
+    }
+  });
+
   /**
    * GET /api/admin/whatsapp-provider
    */

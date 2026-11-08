@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
@@ -14,8 +14,17 @@ import {
   isValidGzipHeader,
   BACKUP_STORAGE_DIR,
 } from '../utils/backup-file';
+import {
+  getBackupEncryptionKey,
+  encryptBufferWithKey,
+  decryptBufferWithKey,
+  isEncryptedBackupBuffer,
+} from '../utils/encryption';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
+
+/** Ukuran minimum dump SQL agar file kosong/terpotong tidak dianggap backup sah. */
+const MIN_SQL_DUMP_BYTES = 1024;
 
 export interface BackupItem {
   id: string;
@@ -39,7 +48,7 @@ export class BackupService {
    */
   private async isPgDumpAvailable(): Promise<boolean> {
     try {
-      await execAsync('pg_dump --version');
+      await execFileAsync('pg_dump', ['--version']);
       return true;
     } catch {
       return false;
@@ -49,22 +58,59 @@ export class BackupService {
   /**
    * Membuat file dump database yang dikompresi (.sql.gz)
    */
-  public async createDatabaseDump(tenantId: string = DEFAULT_TENANT_ID): Promise<BackupResult> {
+  public async createDatabaseDump(
+    tenantId: string = DEFAULT_TENANT_ID,
+    options?: { prefix?: string }
+  ): Promise<BackupResult> {
     ensureBackupDirectory();
-    const fileName = generateBackupFileName();
+    const fileName = generateBackupFileName(options?.prefix || 'wa_clinic_backup');
     const filePath = path.join(BACKUP_STORAGE_DIR, fileName);
 
     const dbUrl = process.env.DATABASE_URL;
     const hasPgDump = await this.isPgDumpAvailable();
 
     if (hasPgDump && dbUrl && !dbUrl.includes('localhost') && !process.env.WAHA_MOCK) {
+      // Task 3.4 / backup SQL: jangan pakai pipeline shell `pg_dump | gzip`.
+      // Pipeline tanpa pipefail dapat mengembalikan exit 0 walau pg_dump gagal,
+      // sehingga terbentuk gzip kosong yang tampak "sukses". Tulis SQL ke file
+      // sementara, validasi header/ukuran, lalu gzip + enkripsi di Node.
+      const tmpSqlPath = `${filePath}.tmp.sql`;
       try {
-        // Jalankan pg_dump pipa ke gzip
-        const cmd = `pg_dump "${dbUrl}" | gzip > "${filePath}"`;
-        await execAsync(cmd);
+        await execFileAsync(
+          'pg_dump',
+          ['--no-owner', '--no-privileges', '--file', tmpSqlPath, dbUrl],
+          { maxBuffer: 16 * 1024 * 1024 }
+        );
+
+        if (!fs.existsSync(tmpSqlPath)) {
+          throw new Error('pg_dump tidak menghasilkan file dump.');
+        }
+        const sqlStat = fs.statSync(tmpSqlPath);
+        if (sqlStat.size < MIN_SQL_DUMP_BYTES) {
+          throw new Error(`Dump SQL terlalu kecil (${sqlStat.size} bytes); kemungkinan kosong/terpotong.`);
+        }
+
+        const sqlBuffer = fs.readFileSync(tmpSqlPath);
+        const header = sqlBuffer.subarray(0, Math.min(4096, sqlBuffer.length)).toString('utf-8');
+        const isPostgresDump =
+          header.includes('PostgreSQL database dump') ||
+          /(^|\n)CREATE TABLE\s/i.test(header) ||
+          /(^|\n)COPY\s+\S+\s+FROM\s+stdin/i.test(header);
+        if (!isPostgresDump) {
+          throw new Error('Header dump SQL tidak dikenali; file bukan pg_dump plain-format yang sah.');
+        }
+
+        const compressed = zlib.gzipSync(sqlBuffer);
+        const key = getBackupEncryptionKey();
+        const encrypted = encryptBufferWithKey(compressed, key);
+        fs.writeFileSync(filePath, encrypted);
       } catch (err: any) {
-        console.warn('[BackupService] pg_dump command failed, falling back to programmatic dump:', err?.message);
-        await this.createProgrammaticDump(filePath, tenantId);
+        console.error('[BackupService] pg_dump command failed:', err?.message);
+        throw new Error(`pg_dump gagal menghasilkan backup: ${err?.message}`);
+      } finally {
+        try {
+          if (fs.existsSync(tmpSqlPath)) fs.unlinkSync(tmpSqlPath);
+        } catch {}
       }
     } else {
       // Fallback programmatic dump (kompatibel lintas platform Windows/Linux & offline tests)
@@ -82,21 +128,62 @@ export class BackupService {
   }
 
   /**
-   * Export database tables secara programatik menggunakan Prisma & gzip
+   * Export database tables secara programatik menggunakan Prisma, gzip & AES-256-GCM
    */
   private async createProgrammaticDump(filePath: string, tenantId: string): Promise<void> {
-    let dumpData: any = {
-      meta: {
-        exportedAt: new Date().toISOString(),
-        tenantId,
-        version: '1.0',
-      },
-      tables: {},
+    // Task 3.1 & 3.2: Fail-closed (tanpa .catch(() => [])) agar pembacaan tabel yang gagal membatalkan backup
+    const [
+      customers,
+      children,
+      reservations,
+      reservationArchives,
+      services,
+      deliveryTiers,
+      staff,
+      personas,
+      aiConfigs,
+      knowledgeChunks,
+      conversations,
+      messages,
+    ] = await Promise.all([
+      prisma.customer.findMany(),
+      prisma.child.findMany(),
+      prisma.reservation.findMany(),
+      prisma.reservationArchive.findMany(),
+      prisma.clinicService.findMany(),
+      prisma.deliveryTier.findMany(),
+      prisma.staff.findMany(),
+      prisma.tenantPersona.findMany(),
+      prisma.tenantAiConfig.findMany(),
+      prisma.knowledgeChunk.findMany(),
+      prisma.conversation.findMany(),
+      prisma.message.findMany(),
+    ]);
+
+    const tableCounts: Record<string, number> = {
+      customers: customers.length,
+      children: children.length,
+      reservations: reservations.length,
+      reservationArchives: reservationArchives.length,
+      services: services.length,
+      deliveryTiers: deliveryTiers.length,
+      staff: staff.length,
+      personas: personas.length,
+      aiConfigs: aiConfigs.length,
+      knowledgeChunks: knowledgeChunks.length,
+      conversations: conversations.length,
+      messages: messages.length,
     };
 
-    try {
-      // Ambil data tabel utama
-      const [
+    const dumpData: any = {
+      meta: {
+        schemaVersion: '2.0',
+        exportedAt: new Date().toISOString(),
+        tenantId,
+        tableCounts,
+        format: 'JSON_GZIP_ENCRYPTED_V1',
+      },
+      tables: {
         customers,
         children,
         reservations,
@@ -109,42 +196,22 @@ export class BackupService {
         knowledgeChunks,
         conversations,
         messages,
-      ] = await Promise.all([
-        prisma.customer.findMany().catch(() => []),
-        prisma.child.findMany().catch(() => []),
-        prisma.reservation.findMany().catch(() => []),
-        prisma.reservationArchive.findMany().catch(() => []),
-        prisma.clinicService.findMany().catch(() => []),
-        prisma.deliveryTier.findMany().catch(() => []),
-        prisma.staff.findMany().catch(() => []),
-        prisma.tenantPersona.findMany().catch(() => []),
-        prisma.tenantAiConfig.findMany().catch(() => []),
-        prisma.knowledgeChunk.findMany().catch(() => []),
-        prisma.conversation.findMany().catch(() => []),
-        prisma.message.findMany().catch(() => []),
-      ]);
+      },
+    };
 
-      dumpData.tables = {
-        customers,
-        children,
-        reservations,
-        reservationArchives,
-        services,
-        deliveryTiers,
-        staff,
-        personas,
-        aiConfigs,
-        knowledgeChunks,
-        conversations,
-        messages,
-      };
-    } catch (err: any) {
-      console.warn('[BackupService] Database read partially degraded during programmatic dump:', err?.message);
-    }
-
+    const crypto = await import('crypto');
     const jsonString = JSON.stringify(dumpData, null, 2);
-    const compressed = zlib.gzipSync(Buffer.from(jsonString, 'utf-8'));
-    fs.writeFileSync(filePath, compressed);
+    const checksum = crypto.createHash('sha256').update(jsonString, 'utf8').digest('hex');
+    dumpData.meta.sha256 = checksum;
+
+    const finalJson = JSON.stringify(dumpData, null, 2);
+    const compressed = zlib.gzipSync(Buffer.from(finalJson, 'utf-8'));
+
+    // Task 3.4: Enkripsi dengan BACKUP_ENCRYPTION_KEY sebelum ditulis ke disk
+    const { getBackupEncryptionKey, encryptBufferWithKey } = await import('../utils/encryption');
+    const key = getBackupEncryptionKey();
+    const encrypted = encryptBufferWithKey(compressed, key);
+    fs.writeFileSync(filePath, encrypted);
   }
 
   /**
@@ -163,6 +230,17 @@ export class BackupService {
 
     if (!fs.existsSync(targetPath)) {
       throw new Error(`File backup tidak ditemukan: ${targetPath}`);
+    }
+
+    const stat = fs.statSync(targetPath);
+    if (stat.size === 0) {
+      throw new Error(`File backup kosong (0 bytes): ${targetPath}`);
+    }
+
+    // Task 3.5: Verifikasi integritas & dekripsi sebelum upload
+    const counts = this.getBackupFileCounts(targetPath);
+    if (!counts) {
+      throw new Error(`File backup korup atau tidak dapat didekripsi/diverifikasi: ${targetPath}`);
     }
 
     const authClient = await googleOAuthClientManager.getAuthenticatedClient(tenantId);
@@ -258,21 +336,45 @@ export class BackupService {
   public getBackupFileCounts(filePath: string): Record<string, number> | null {
     try {
       if (!fs.existsSync(filePath)) return null;
-      let decompressed: string;
-      if (isValidGzipHeader(filePath)) {
-        decompressed = zlib.gunzipSync(fs.readFileSync(filePath)).toString('utf-8');
-      } else {
-        decompressed = fs.readFileSync(filePath, 'utf-8');
+      const rawBytes = fs.readFileSync(filePath);
+      let payloadToGunzip: Buffer = rawBytes;
+      if (isEncryptedBackupBuffer(rawBytes)) {
+        const key = getBackupEncryptionKey();
+        payloadToGunzip = decryptBufferWithKey(rawBytes, key);
       }
-      if (!decompressed.trim().startsWith('{')) return null;
-      const parsed = JSON.parse(decompressed);
-      if (parsed.meta?.tableCounts) return parsed.meta.tableCounts;
-      if (parsed.tables) {
-        const counts: Record<string, number> = {};
-        for (const [table, rows] of Object.entries(parsed.tables)) {
-          counts[table] = Array.isArray(rows) ? rows.length : 0;
+
+      let decompressed: string;
+      if (payloadToGunzip.length >= 2 && payloadToGunzip[0] === 0x1f && payloadToGunzip[1] === 0x8b) {
+        decompressed = zlib.gunzipSync(payloadToGunzip).toString('utf-8');
+      } else {
+        decompressed = payloadToGunzip.toString('utf-8');
+      }
+      const trimmed = decompressed.trim();
+      if (trimmed.startsWith('{')) {
+        const parsed = JSON.parse(decompressed);
+        if (parsed.meta?.tableCounts) return parsed.meta.tableCounts;
+        if (parsed.tables) {
+          const counts: Record<string, number> = {};
+          for (const [table, rows] of Object.entries(parsed.tables)) {
+            counts[table] = Array.isArray(rows) ? rows.length : 0;
+          }
+          return counts;
         }
-        return counts;
+        return null;
+      }
+
+      // Backup produksi memakai `pg_dump` plain-format (SQL), bukan JSON.
+      // Verifikasi integritas SQL: gzip sudah berhasil didekompresi (CRC valid)
+      // dan header dump PostgreSQL dikenali. Jumlah baris per tabel tidak
+      // tersedia untuk SQL; kembalikan sentinel agar upload tetap lolos
+      // verifikasi format-aware tanpa memalsukan table counts.
+      if (trimmed.length < MIN_SQL_DUMP_BYTES) return null;
+      const isPostgresDump =
+        trimmed.includes('PostgreSQL database dump') ||
+        /(^|\n)CREATE TABLE\s/i.test(trimmed) ||
+        /(^|\n)COPY\s+\S+\s+FROM\s+stdin/i.test(trimmed);
+      if (isPostgresDump) {
+        return { __format_sql: 1 };
       }
       return null;
     } catch {
@@ -289,17 +391,27 @@ export class BackupService {
       throw new Error(`File backup tidak ditemukan pada lokasi: ${filePath}`);
     }
 
-    let decompressed: string;
-    if (isValidGzipHeader(filePath)) {
-      const compressed = fs.readFileSync(filePath);
+    const rawBytes = fs.readFileSync(filePath);
+    let payloadToGunzip: Buffer = rawBytes;
+    if (isEncryptedBackupBuffer(rawBytes)) {
       try {
-        decompressed = zlib.gunzipSync(compressed).toString('utf-8');
+        const key = getBackupEncryptionKey();
+        payloadToGunzip = decryptBufferWithKey(rawBytes, key);
+      } catch (err: any) {
+        throw new Error(`Gagal mendekripsi file backup terenkripsi: ${err?.message}`);
+      }
+    }
+
+    let decompressed: string;
+    if (payloadToGunzip.length >= 2 && payloadToGunzip[0] === 0x1f && payloadToGunzip[1] === 0x8b) {
+      try {
+        decompressed = zlib.gunzipSync(payloadToGunzip).toString('utf-8');
       } catch (err: any) {
         throw new Error(`Gagal mengekstrak isi file backup gzip: ${err?.message}`);
       }
     } else {
       // Plain text SQL / JSON file
-      decompressed = fs.readFileSync(filePath, 'utf-8');
+      decompressed = payloadToGunzip.toString('utf-8');
     }
 
     let tablesRestored = 0;
@@ -322,6 +434,19 @@ export class BackupService {
     } catch (err: any) {
       throw new Error(`Format JSON tidak valid dalam file backup: ${err?.message}`);
     }
+
+    // Verifikasi checksum SHA-256 manifest jika tersedia
+    if (parsed.meta && typeof parsed.meta.sha256 === 'string' && parsed.meta.sha256.length === 64) {
+      const expectedChecksum = parsed.meta.sha256;
+      const crypto = await import('crypto');
+      const clone = { ...parsed, meta: { ...parsed.meta } };
+      delete clone.meta.sha256;
+      const computed = crypto.createHash('sha256').update(JSON.stringify(clone, null, 2), 'utf8').digest('hex');
+      if (computed !== expectedChecksum) {
+        throw new Error(`Integritas backup gagal: checksum SHA-256 tidak cocok (${computed} !== ${expectedChecksum}). File mungkin korup atau dimanipulasi.`);
+      }
+    }
+
     const tables = parsed.tables || {};
 
     // 6.3 Validasi kelengkapan data (Completeness Guard)

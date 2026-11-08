@@ -23,40 +23,42 @@ export const WAHA_STATUS_WITHOUT_QR = ['FAILED', 'STOPPED', 'STOPPING', 'DISCONN
  * saat DB tidak tersedia (sesuai pola degrade service lain).
  */
 export class WhatsappProviderService {
-  private cutoffCache: Map<string, boolean> = new Map();
+  private static readonly CUTOFF_TTL_MS = 5000;
+  private cutoffCache: Map<string, { value: boolean; expiresAt: number }> = new Map();
 
   /**
    * Mengecek apakah aliran outbound WAHA internal sedang diputus (Emergency Cut-Off aktif).
    */
   public async isOutboundCutOff(tenantId: string = DEFAULT_TENANT_ID): Promise<boolean> {
-    if (this.cutoffCache.has(tenantId)) {
-      return this.cutoffCache.get(tenantId)!;
+    const cached = this.cutoffCache.get(tenantId);
+    if (cached && Date.now() < cached.expiresAt) {
+      return cached.value;
     }
 
     try {
       const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
       const isCutOff = Boolean((tenant as any)?.waha_outbound_cutoff);
-      this.cutoffCache.set(tenantId, isCutOff);
+      this.cutoffCache.set(tenantId, { value: isCutOff, expiresAt: Date.now() + WhatsappProviderService.CUTOFF_TTL_MS });
       return isCutOff;
     } catch (err: any) {
       console.warn(`[WhatsAppProvider] DB tidak tersedia untuk cek cut-off, fallback cache: ${err.message}`);
     }
 
-    return this.cutoffCache.get(tenantId) ?? false;
+    return cached?.value ?? false;
   }
 
   /**
    * Cek instan synchronous dari memory cache.
    */
   public isOutboundCutOffSync(tenantId: string = DEFAULT_TENANT_ID): boolean {
-    return this.cutoffCache.get(tenantId) ?? false;
+    return this.cutoffCache.get(tenantId)?.value ?? false;
   }
 
   /**
    * Mengubah status cut-off outbound internal WAHA per-tenant.
    */
   public async setOutboundCutOff(tenantId: string = DEFAULT_TENANT_ID, cutoff: boolean): Promise<boolean> {
-    this.cutoffCache.set(tenantId, cutoff);
+    this.cutoffCache.set(tenantId, { value: cutoff, expiresAt: Date.now() + WhatsappProviderService.CUTOFF_TTL_MS });
 
     try {
       await prisma.tenant.update({

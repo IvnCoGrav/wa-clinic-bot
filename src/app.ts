@@ -67,8 +67,16 @@ export function buildApp() {
     }
   }
 
+  const trustProxyConfig = process.env.TRUST_PROXY_ANY === 'true'
+    ? true
+    : (process.env.TRUST_PROXY_CIDRS
+        ? (process.env.TRUST_PROXY_CIDRS.includes(',')
+            ? process.env.TRUST_PROXY_CIDRS.split(',').map((s) => s.trim()).filter(Boolean)
+            : process.env.TRUST_PROXY_CIDRS.trim())
+        : ['127.0.0.1/8', '::1/128', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16']);
+
   const app = Fastify({
-    trustProxy: true,
+    trustProxy: trustProxyConfig,
     logger: {
       level: process.env.FASTIFY_LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'warn' : (process.env.LOG_LEVEL === 'debug' ? 'debug' : 'info')),
     },
@@ -136,17 +144,23 @@ export function buildApp() {
   app.register(rateLimit, {
     max: process.env.NODE_ENV === 'test' ? 100 : 1000,
     timeWindow: '1 minute',
-    // SEC-AUDIT-13: sebelumnya hampir semua rute dikecualikan total (allowList
-    // return true) → flood webhook/SSE/API admin tanpa batas. Kini hanya request
-    // yang benar-benar tidak boleh di-throttle (SSE long-lived) yang di-skip;
-    // webhook & API admin tetap dibatasi dengan kuota tinggi agar tidak DoS.
+    // SEC-AUDIT-13 & Task 1.4.3: Hanya request yang benar-benar tidak boleh di-throttle
+    // (SSE real-time stream long-lived pada path kanonis) yang di-skip.
+    // Parsing URL secara ketat agar /foo/events atau spoofing path tidak lolos.
     allowList: (request) => {
-      const url = request.url || '';
-      // SSE Real-time stream: koneksi long-lived, jangan dihitung per-event.
-      if (url.includes('/events') || url.includes('/stream')) {
-        return true;
+      const rawUrl = request.url || '';
+      let pathname = rawUrl;
+      try {
+        pathname = new URL(rawUrl, 'http://localhost').pathname;
+      } catch {
+        pathname = rawUrl.split('?')[0];
       }
-      return false;
+      const sseAllowedPrefixes = [
+        '/api/admin/live-chat/events',
+        '/api/admin/events',
+        '/api/events',
+      ];
+      return sseAllowedPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
     },
     keyGenerator: (request) => {
       const url = request.url || '';
@@ -156,9 +170,12 @@ export function buildApp() {
       if (url.startsWith('/webhook') || url.startsWith('/api/webhook')) {
         return `webhook:${clientIp}`;
       }
-      const apiKey = request.headers['x-api-key'] as string;
-      if (apiKey) {
-        return `${apiKey}-${clientIp}`;
+      const apiKey = request.headers['x-api-key'] as string | undefined;
+      const validAdminKey = process.env.ADMIN_API_KEY;
+      // S-005 / Fase 1.4.2: Hanya x-api-key yang SAH yang diberikan bucket terpisah.
+      // Kunci palsu/acak ditolak dari pembuatan bucket baru dan dijatuhkan ke bucket IP.
+      if (apiKey && validAdminKey && apiKey === validAdminKey) {
+        return `admin-key:${apiKey}`;
       }
       return clientIp;
     },
@@ -319,4 +336,3 @@ if (require.main === module) {
     }
   });
 }
-

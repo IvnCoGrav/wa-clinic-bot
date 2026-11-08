@@ -763,6 +763,14 @@ export class CartManager {
     // Plan regresi Fase 3: persist riwayat konsultasi ke sesi (unik,
     // preservasi lintas turn) sebelum keluar — tanpa memengaruhi cart.
     (session as CustomerGoalSession).discussedTreatments = [...discussed];
+    // Task 4.5.3: Simpan userConfirmedNames dari pesan user ke verifiedTreatmentNames sesi
+    (session as CustomerGoalSession).verifiedTreatmentNames = Array.from(
+      new Set([
+        ...((session as CustomerGoalSession).verifiedTreatmentNames || []),
+        ...userConfirmedNames,
+        ...cart.map((c) => c.name),
+      ])
+    );
     if (!cart.some((it) => it.type !== 'ADDON')) {
       return cart.filter((it) => it.type !== 'ADDON');
     }

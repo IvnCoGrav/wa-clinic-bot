@@ -27,6 +27,7 @@ export interface ClinicalContext {
   gestationalWeeks?: number | null;
   childAgeMonths?: number | null;
   feverContraindication?: boolean;
+  feverSuspected?: boolean;
   screeningConfirmed?: boolean;
 }
 
@@ -73,7 +74,7 @@ export function evaluateServiceEligibility(
   }
 
   // 1. Kontraindikasi deterministik dari fakta klinis terstruktur.
-  if (ctx.feverContraindication && (service.contraindications || []).includes('FEVER')) {
+  if ((ctx.feverContraindication || ctx.feverSuspected) && !ctx.screeningConfirmed && (service.contraindications || []).includes('FEVER')) {
     return { status: 'BLOCKED', code: 'CONTRAINDICATION', reason: 'suhu tubuh terindikasi demam' };
   }
 

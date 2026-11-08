@@ -18,8 +18,8 @@ describe('Ad Click Attribution & Meta CAPI Unit Tests', () => {
     const { trackingCode: code1 } = await generateTrackingCode({ tenant_id: 'default-tenant' }, prisma);
     const { trackingCode: code2 } = await generateTrackingCode({ tenant_id: 'default-tenant' }, prisma);
 
-    expect(code1).toHaveLength(2);
-    expect(code2).toHaveLength(2);
+    expect(code1).toHaveLength(12);
+    expect(code2).toHaveLength(12);
     // Alphabet bersih: tanpa 0,1,i,l,o
     expect(/^[abcdefghjkmnpqrstuvwxyz23456789]+$/i.test(code1)).toBe(true);
   });

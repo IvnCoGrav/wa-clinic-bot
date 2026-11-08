@@ -164,7 +164,7 @@ export class CustomerService {
   public async setLabelFlags(
     phone: string,
     flags: { isAdminLabeled?: boolean; isHoldLabeled?: boolean },
-    tenantId: string = DEFAULT_TENANT_ID
+    tenantId: string
   ): Promise<void> {
     const data: any = { labels_synced_at: new Date() };
     if (flags.isAdminLabeled !== undefined) data.is_admin_labeled = flags.isAdminLabeled;

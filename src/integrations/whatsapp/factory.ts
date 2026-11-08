@@ -15,7 +15,7 @@ function getOrCreateWahaClient(tenantId: string, sessionId?: string | null): Wah
   const key = getKey(tenantId);
   let client = wahaClientCache.get(key);
   if (!client) {
-    client = new WahaClient({ session: own });
+    client = new WahaClient({ session: own, tenantId });
     wahaClientCache.set(key, client);
   }
   return client;

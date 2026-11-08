@@ -602,6 +602,17 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
 
         responseCacheService.clear();
 
+        // Task 7.6: Audit log perubahan spend dan margin iklan per-tenant
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminSession?.user?.id || 'ADMIN_API_KEY',
+          adminIdentity: (request as any).adminSession?.user?.email || 'admin',
+          action: 'UPDATE_META_SPEND_SETTINGS',
+          targetId: tenantId,
+          payload: { updatedPerf, monthlySpends: body.monthlySpends },
+          ipAddress: request.ip,
+          tenantId,
+        });
+
         return reply.status(200).send({ success: true, data: updatedPerf });
       } catch (err: any) {
         return reply.status(500).send({
@@ -688,9 +699,13 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
       }
 
       try {
+        const tenantId = tenantOf(request);
         // Cari customer di DB jika ada untuk ambil PII & adClick
         let customer = await prisma.customer.findFirst({
-          where: { phone: { contains: cleanPhone.slice(-9) } },
+          where: {
+            phone: { contains: cleanPhone.slice(-9) },
+            ...(tenantId ? { tenant_id: tenantId } : {}),
+          },
           include: { adClick: true },
         });
 
@@ -698,7 +713,7 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
           id: `temp_${Date.now()}`,
           phone: cleanPhone,
           name: name || 'Manual Customer',
-          tenant_id: DEFAULT_TENANT_ID,
+          tenant_id: tenantId,
         } as any);
 
         if (name && customer && !customer.name) {
@@ -711,7 +726,7 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
           adClick: customer?.adClick || undefined,
           value: value !== undefined && value !== null && !isNaN(Number(value)) ? Number(value) : undefined,
           currency: currency || 'IDR',
-          tenantId: DEFAULT_TENANT_ID,
+          tenantId,
           customData: {
             source: 'MANUAL_DASHBOARD_SEND',
             treatment: treatment ? treatment.trim() : undefined,
@@ -781,6 +796,7 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
           targetId: effectiveCustomer.id,
           payload: fullAuditPayload,
           ipAddress: request.ip,
+          tenantId,
         });
 
         return reply.status(200).send({
@@ -805,9 +821,10 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
    */
   fastify.get('/api/admin/debug/meta-manual-history', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
+      const tenantId = tenantOf(request);
       const logs = await prisma.auditLog.findMany({
         where: {
-          tenant_id: DEFAULT_TENANT_ID,
+          tenant_id: tenantId,
           action: { in: ['MANUAL_SEND_META_EVENT', 'TEST_SEND_CAPI_EVENT', 'APPROVE_PURCHASE_EVENT'] },
         },
         orderBy: { created_at: 'desc' },

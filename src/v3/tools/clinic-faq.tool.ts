@@ -1,4 +1,4 @@
-﻿import { clinicConfig } from '../../config/clinic';
+import { clinicConfig } from '../../config/clinic';
 import { getBrandIdentity } from '../../config/brand';
 import { TEMPLATES } from '../../config/persona';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
@@ -30,7 +30,7 @@ export const GET_CLINIC_POLICY_FAQ_TOOL_SCHEMA = {
   type: 'function',
   function: {
     name: 'get_clinic_policy_faq',
-    description: 'Mengambil informasi resmi, SOP, dan kebijakan klinik Kala Moms & Baby Spa. PANGGIL TOOL INI ketika customer bertanya: asal/lokasi/homebase klinik ("dari mana asal klinik", "lokasinya dimana", "dari surabaya kah?", "sus nya dimana", "bidannya dimana", "posisi bidan dari mana"), kualifikasi terapis ber-STR, metode pembayaran transfer/QRIS/cash, ongkir multi-anak, aturan pijat pasca-vaksinasi, atau jam operasional.',
+    description: 'Mengambil informasi resmi, SOP, dan kebijakan klinik. PANGGIL TOOL INI ketika customer bertanya: asal/lokasi/homebase klinik ("dari mana asal klinik", "lokasinya dimana", "dari surabaya kah?", "sus nya dimana", "bidannya dimana", "posisi bidan dari mana"), kualifikasi terapis ber-STR, metode pembayaran transfer/QRIS/cash, ongkir multi-anak, aturan pijat pasca-vaksinasi, atau jam operasional.',
     parameters: {
       type: 'object',
       properties: {
@@ -46,11 +46,6 @@ export const GET_CLINIC_POLICY_FAQ_TOOL_SCHEMA = {
             'general_homecare_info'
           ],
           description: 'Topik kebijakan atau SOP yang ditanyakan customer: asal/lokasi klinik (homebase_and_coverage), kualifikasi bidan (therapist_qualification), pembayaran (payment_methods), ongkir multi anak (multi_child_transport), vaksin (post_vaccine_rules), operasional (operational_hours_and_booking).'
-        },
-        commitment: {
-          type: 'string',
-          enum: ['EXPLORING', 'CONSIDERING', 'COMMITTED'],
-          description: 'Penilaian SEMANTIK atas seluruh percakapan: customer SEDANG BERTANYA/MENJELAJAH (EXPLORING), MENIMBANG/MENYATAKAN MINAT (CONSIDERING), atau SUDAH MEMUTUSKAN mengambil layanan (COMMITTED). Berdasarkan makna & konteks, bukan ada/tidak tanda tanya.'
         }
       },
       required: ['topic']
@@ -90,7 +85,7 @@ function getStaticFallbackPolicy(topic: ClinicPolicyTopic): GetClinicFaqOutput {
       return {
         success: true,
         topic,
-        factualSummary: 'Seluruh tenaga terapis di Kala Moms & Baby Spa adalah Bidan profesional lulusan D3/D4/Profesi Kebidanan yang memiliki STR (Surat Tanda Registrasi) aktif, terlatih khusus baby & mom treatment, dan menerapkan protokol higienis ketat.',
+        factualSummary: `Seluruh tenaga terapis di ${brand.businessName} adalah Bidan profesional lulusan D3/D4/Profesi Kebidanan yang memiliki STR (Surat Tanda Registrasi) aktif, terlatih khusus baby & mom treatment, dan menerapkan protokol higienis ketat.`,
         suggestedReply: TEMPLATES.therapistQualificationPolicy()
       };
 
@@ -98,7 +93,7 @@ function getStaticFallbackPolicy(topic: ClinicPolicyTopic): GetClinicFaqOutput {
       return {
         success: true,
         topic,
-        factualSummary: 'Metode pembayaran tersedia via Transfer Bank (BCA, Mandiri, BRI), QRIS Universal, atau Cash langsung ke Bidan setelah treatment selesai. Nomor rekening resmi BCA a.n Kala Moms and Baby Spa akan diinfokan Admin saat konfirmasi jadwal.',
+        factualSummary: `Metode pembayaran tersedia via Transfer Bank, QRIS Universal, atau Cash langsung ke Bidan setelah treatment selesai. Nomor rekening resmi ${brand.businessName} akan diinfokan saat konfirmasi jadwal.`,
         suggestedReply: TEMPLATES.paymentMethodPolicy()
       };
 
@@ -114,8 +109,8 @@ function getStaticFallbackPolicy(topic: ClinicPolicyTopic): GetClinicFaqOutput {
       return {
         success: true,
         topic,
-        factualSummary: 'Pijat setelah imunisasi/vaksinasi BOLEH dijadwalkan langsung, tetapi Bidan kami menyarankan menunggu 48â€“72 jam (2â€“3 hari) dan memastikan si kecil tidak demam/rewel. Bila Bunda memilih langsung, Bidan tetap melakukan skrining suhu dan kondisi bayi sebelum treatment.',
-        suggestedReply: 'Boleh langsung ya Bunda, hanya saja Bidan kami menyarankan jeda 48-72 jam (2-3 hari) setelah vaksin agar si kecil lebih nyaman. Kalau Bunda tetap ingin dijadwalkan langsung, kami cek dulu suhu dan kondisi si kecil sebelum treatment ya Bun.'
+        factualSummary: 'Pijat pasca imunisasi/vaksinasi wajib ditunda minimal 48–72 jam (2–3 hari) dan memastikan si kecil dalam kondisi sehat bebas demam. Jika belum memenuhi jeda 48–72 jam atau masih demam, jadwal pemijatan belum dapat dilaksanakan.',
+        suggestedReply: 'Untuk si kecil yang baru vaksin/imunisasi, Bidan kami menyarankan menjadwalkan treatment setelah jeda minimal 48–72 jam (2–3 hari) dan si kecil sudah bebas demam ya Bunda, agar si kecil merasa lebih nyaman saat pemijatan.'
       };
 
     case 'homebase_and_coverage':
@@ -154,8 +149,8 @@ function getStaticFallbackPolicy(topic: ClinicPolicyTopic): GetClinicFaqOutput {
       return {
         success: true,
         topic,
-        factualSummary: 'Kondisi pasca imunisasi tidak otomatis menggugurkan booking: pijat boleh langsung, tetapi disarankan jeda 48-72 jam dan bebas demam. Bidan melakukan skrining suhu/kondisi sebelum treatment.',
-        suggestedReply: 'Boleh langsung ya Bun, hanya saja Bidan kami menyarankan jeda 48-72 jam setelah imunisasi agar si kecil lebih nyaman. Sebelum treatment, Bidan akan cek suhu dan kondisi si kecil terlebih dahulu.'
+        factualSummary: 'Kondisi pasca imunisasi memerlukan jeda aman minimal 48–72 jam dan si kecil bebas demam. Jadwal treatment diarahkan ke tanggal setelah jeda waktu aman terpenuhi.',
+        suggestedReply: 'Untuk si kecil pasca imunisasi, kami bantu jadwalkan setelah jeda 48–72 jam dan si kecil sudah bebas demam ya Bunda, agar si kecil tetap nyaman saat treatment.'
       };
 
     case 'general_homecare_info':

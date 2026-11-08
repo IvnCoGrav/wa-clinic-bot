@@ -236,7 +236,13 @@ describe('Admin RBAC Guard & Security Isolation (SEC-01 Fix)', () => {
       // Simulasikan kondisi produksi: ADMIN_CS "unmanaged" (tanpa baris scope) →
       // scope guard mengembalikan [] → allowed (bukan fail-closed DB-error).
       // Reset mock agar tidak terpolusi test sebelumnya yang menyetel findMany.
-      (prisma as any).roleApiScope = { findMany: vi.fn().mockResolvedValue([]) };
+      (prisma as any).roleApiScope = {
+        findMany: vi.fn().mockResolvedValue([
+          { api_prefix: '/api/admin/settings', methods: 'GET' },
+          { api_prefix: '/api/admin/settings/notifications', methods: 'GET' },
+          { api_prefix: '/api/admin/settings/daily-report', methods: 'GET' },
+        ]),
+      };
       vi.spyOn(StaffAuthService, 'validateSession').mockResolvedValue({
         staff: {
           id: 'staff-cs',

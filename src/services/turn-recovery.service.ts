@@ -16,7 +16,29 @@ export class TurnRecoveryService {
     let replayed = 0;
     try {
       const pending = await turnRepository.listReplayable({ limit });
+      if (pending.length >= 10) {
+        console.error(`[TURN RECOVERY ALARM] Terdeteksi ${pending.length} turn masuk kondisi STUCK (>2 menit)!`);
+        try {
+          const { alertService, AlertType, AlertSeverity } = await import('./alert.service');
+          await alertService.notifyAlert({
+            type: AlertType.UNINTENDED_SILENT_DROP,
+            severity: AlertSeverity.CRITICAL,
+            message: `[TURN RECOVERY ALARM] Terdeteksi ${pending.length} pesan inbound macet (>2 menit) belum terselesaikan. Sistem melakukan replay otomatis.`,
+          });
+        } catch {}
+      }
+
       for (const t of pending) {
+        if ((t.attempts ?? 0) >= 5) {
+          await turnRepository.markStatus({
+            tenantId: t.tenant_id,
+            provider: t.provider,
+            inboundMessageId: t.inbound_message_id,
+            status: 'FAILED',
+            error: 'MAX_REPLAY_ATTEMPTS_EXCEEDED',
+          });
+          continue;
+        }
         const payload = t.payload_json;
         if (!payload || typeof payload !== 'object') {
           // Tanpa payload → tidak bisa replay; tandai FAILED agar tidak macet.

@@ -7,7 +7,48 @@
  * (utils, bukan tool) + tipe sesi — tanpa siklus impor.
  */
 import type { CustomerGoalSession } from '../../state/goal-tracker';
-import { DAY_EVIDENCE_WORDS, hasBookingCommitSignal, isConsultativeUserText, isAvailabilityInquiryText } from '../../../utils/date-confirmation';
+import {
+  DAY_EVIDENCE_WORDS,
+  hasBookingCommitSignal,
+  hasBookingRetreatSignal,
+  isConsultativeUserText,
+  isAvailabilityInquiryText,
+} from '../../../utils/date-confirmation';
+
+/**
+ * Single seam kanonis mutasi komitmen booking (Task 4.4.1).
+ * HANYA pesan eksplisit customer yang boleh me-latch bookingCommitConfirmed.
+ * LLM verdict 'COMMITTED' / tool argument DILARANG mengunci booking bila
+ * customer tidak memberikan sinyal komitmen aktif.
+ */
+export function applyUserCommitmentSignal(
+  session: CustomerGoalSession,
+  incomingText: string,
+  llmCommitmentSignal?: string | null
+): CustomerGoalSession {
+  const text = (incomingText || '').trim();
+  if (!text) return session;
+
+  const userHasCommit = hasBookingCommitSignal(text);
+  const userHasRetreat = hasBookingRetreatSignal(text) || isAvailabilityInquiryText(text);
+
+  // Jika user mundur atau bertanya ketersediaan slot, lepas flag komitmen
+  if (session.bookingCommitConfirmed && userHasRetreat && !userHasCommit) {
+    return { ...session, bookingCommitConfirmed: false };
+  }
+
+  // Jika pesan user memuat sinyal komitmen aktif dan bukan konsultatif murni
+  if (userHasCommit && !isConsultativeUserText(text, session)) {
+    return { ...session, bookingCommitConfirmed: true };
+  }
+
+  // Jika LLM mengklaim COMMITTED tapi pesan user TIDAK memiliki komitmen aktif: tolak penguncian
+  if (llmCommitmentSignal === 'COMMITTED' && !userHasCommit) {
+    return { ...session, bookingCommitConfirmed: false };
+  }
+
+  return session;
+}
 
 /**
  * Audit sesi 614425 (commit booking deterministik): true bila customer sudah

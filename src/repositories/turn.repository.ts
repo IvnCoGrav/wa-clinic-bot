@@ -51,13 +51,15 @@ export class TurnRepository {
    * belum diproses, ATAU PROCESSING yang macet (worker crash) melewati ambang.
    * Mengembalikan payload untuk di-enqueue ulang.
    */
-  public async listReplayable(opts: { olderThanMs?: number; limit?: number } = {}): Promise<Array<{ tenant_id: string; provider: string; inbound_message_id: string; payload_json: any; status: string }>> {
+  public async listReplayable(opts: { olderThanMs?: number; limit?: number; maxAttempts?: number } = {}): Promise<Array<{ tenant_id: string; provider: string; inbound_message_id: string; payload_json: any; status: string; attempts: number }>> {
     const olderThanMs = opts.olderThanMs ?? 2 * 60 * 1000;
     const limit = opts.limit ?? 50;
+    const maxAttempts = opts.maxAttempts ?? 5;
     const cutoff = new Date(Date.now() - olderThanMs);
     try {
       return await (prisma as any).inboundTurn.findMany({
         where: {
+          attempts: { lt: maxAttempts },
           OR: [
             { status: { in: ['RECEIVED', 'QUEUED'] }, updated_at: { lt: cutoff } },
             { status: 'PROCESSING', updated_at: { lt: cutoff } },
@@ -65,7 +67,7 @@ export class TurnRepository {
         },
         orderBy: { created_at: 'asc' },
         take: limit,
-        select: { tenant_id: true, provider: true, inbound_message_id: true, payload_json: true, status: true },
+        select: { tenant_id: true, provider: true, inbound_message_id: true, payload_json: true, status: true, attempts: true },
       }) || [];
     } catch (err: any) {
       console.warn('[TURN] listReplayable gagal:', err?.message);

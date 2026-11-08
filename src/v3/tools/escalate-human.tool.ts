@@ -31,11 +31,6 @@ export const ESCALATE_HUMAN_TOOL_SCHEMA = {
           type: 'string',
           enum: ['CRITICAL_MEDICAL', 'CUSTOMER_REQUEST', 'MANUAL_HANDLING'],
           description: 'Tingkat urgensi pengalihan.'
-        },
-        commitment: {
-          type: 'string',
-          enum: ['EXPLORING', 'CONSIDERING', 'COMMITTED'],
-          description: 'Penilaian SEMANTIK atas seluruh percakapan: EXPLORING (bertanya/menjelajah), CONSIDERING (menimbang/minat), COMMITTED (sudah memutuskan mengambil layanan). Berdasarkan makna & konteks.'
         }
       },
       required: ['reason', 'severity']

@@ -1,4 +1,5 @@
 import type { CustomerGoalSession } from '../domain/types';
+import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { treatmentCatalogService } from '../../services/treatment-catalog.service';
 import { getCoverageCities } from '../../config/coverage';
 import type { ExtractedEntities } from '../../types/nlu';
@@ -99,15 +100,16 @@ export class V3ConversationSummarizer {
       const momComplaints = [...(session.momProfile?.complaints || [])].filter((s, i, arr) => arr.indexOf(s) === i);
       const activeSymptoms = session.targetAudience === 'MOMS' ? momComplaints : symptoms;
       if (activeSymptoms.length > 0) {
-        const allServices = treatmentCatalogService.getAllServices(true);
+        const tenantId = (session as any).tenantId || DEFAULT_TENANT_ID;
+        const allServices = treatmentCatalogService.getAllServices(true, tenantId);
         const candidates = session.targetAudience === 'MOMS'
           ? treatmentCatalogService.filterServicesByAudience(allServices, { audienceIntent: 'MOMS', isMaternalKeyword: true })
           : ageMonths != null
             ? treatmentCatalogService.filterServicesByAudience(allServices, { ageMonths })
             : allServices;
         const matchedService = session.targetAudience === 'MOMS'
-          ? treatmentCatalogService.recommendServiceBySymptoms(activeSymptoms, ageMonths, 'MOMS')?.name
-          : treatmentCatalogService.recommendServiceBySymptoms(activeSymptoms, ageMonths, undefined)?.name;
+          ? treatmentCatalogService.recommendServiceBySymptoms(activeSymptoms, ageMonths, 'MOMS', tenantId)?.name
+          : treatmentCatalogService.recommendServiceBySymptoms(activeSymptoms, ageMonths, undefined, tenantId)?.name;
         const suggested = matchedService || undefined;
         if (session.targetAudience === 'MOMS') {
           if (suggested) sudahDibahas.push(`Keluhan Bunda: ${momComplaints.join(', ')} (disarankan *${suggested}* dari katalog aktif)`);

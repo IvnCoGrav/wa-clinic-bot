@@ -161,7 +161,7 @@ export const PaymentInfoPanel: React.FC = () => {
       p = p.split('{total_tagihan}').join('Rp 170.000');
       p = p.split('{rincian_biaya}').join('Treatment: Rp 150.000 + Ongkir: Rp 20.000');
       p = p.split('{daftar_layanan}').join('Pijat Bayi 60 menit');
-      p = p.split('{daftar_rekening}').join('• BCA: 8877665544 a.n. PT Kala Sejahtera');
+      p = p.split('{daftar_rekening}').join(bankAccounts.length ? bankAccounts.map((a) => `• ${a.bank}: ${a.accountNumber} a.n. ${a.accountName || '-'}`).join('\n') : '(Belum ada rekening yang diatur)');
       p = p.split('{keterangan_qris}').join('Barcode QRIS terlampir di atas');
       p = p.split('{petunjuk}').join(instructions.trim() || 'Mohon cantumkan nama pasien pada berita transfer');
       p = p.split('{nama_terapis}').join('Bidan Rina');
@@ -172,7 +172,7 @@ export const PaymentInfoPanel: React.FC = () => {
       '{total_tagihan}': 'Rp 170.000',
       '{rincian_biaya}': 'Treatment: Rp 150.000 + Ongkir: Rp 20.000',
       '{daftar_layanan}': 'Pijat Bayi 60 menit',
-      '{daftar_rekening}': bankAccounts.length ? bankAccounts.map((a) => `• ${a.bank}: ${a.accountNumber} a.n. ${a.accountName || '-'}`).join('\n') : '• BCA: 8877665544 a.n. PT Kala Sejahtera',
+      '{daftar_rekening}': bankAccounts.length ? bankAccounts.map((a) => `• ${a.bank}: ${a.accountNumber} a.n. ${a.accountName || '-'}`).join('\n') : '(Belum ada rekening yang diatur)',
       '{keterangan_qris}': qrisImageUrl ? 'Barcode QRIS terlampir di atas' : '-',
       '{petunjuk}': instructions.trim() || '-',
       '{nama_terapis}': 'Bidan Rina',

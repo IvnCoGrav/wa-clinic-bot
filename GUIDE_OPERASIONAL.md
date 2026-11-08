@@ -68,7 +68,7 @@ Semua antarmuka dashboard admin kini dilayani langsung oleh server Fastify di or
    👉 **`http://localhost:3000/admin/login`** (atau legacy: **`http://localhost:3000/admin/login.html`**)
 2. Masukkan kredensial berikut:
    - **Email / Username:** `admin@kalamomsspa.com` (Bisa diisi email/username apa saja bebas, karena di fase single-tenant ini backend hanya mencocokkan password).
-   - **Password:** Masukkan nilai `ADMIN_API_KEY` dari file `.env` Anda (secara default di file `.env` lokal Anda adalah: **`admin_prod_key_123`**).
+   - **Password:** Masukkan nilai `ADMIN_API_KEY` dari file `.env` Anda (contoh placeholder: `<ADMIN_API_KEY_DARI_ENV>`).
 3. Klik **Sign In** (atau isi form di legacy page). Browser Anda akan otomatis mendapatkan cookie `admin_session` yang aman dan Anda akan diarahkan ke dashboard utama.
 
 ---

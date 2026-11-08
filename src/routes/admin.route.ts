@@ -217,6 +217,8 @@ export async function adminRoutes(fastify: FastifyInstance) {
         // rute riil '/api/admin/integrations/google/*' (mismatch = semua staf bisa akses).
         '/api/admin/integrations/google',
         '/api/admin/waba',
+        '/api/admin/whatsapp-provider',
+        '/api/admin/waba-templates',
         // Tahap-B hardening: unduh PII massal (Custom Audience Meta) hanya Super Admin.
         '/api/admin/customers/audience-export',
       ];
@@ -275,9 +277,9 @@ export async function adminRoutes(fastify: FastifyInstance) {
       // untuk therapist. Endpoint sensitif (`test-staff`, `staff-device-counts`)
       // TIDAK di-seed → tetap default-deny. Tidak ada bypass hardcode di sini.
 
-      // SEC-AUDIT-04: scope enforcement data-driven (tabel role_api_scopes).
-      // Role yang punya baris = managed → default-deny kecuali (prefix, method)
-      // cocok. Role tanpa baris = legacy (guards di atas yang berlaku).
+      // Fase 2 (Task 2.1.2): scope enforcement data-driven (tabel role_api_scopes).
+      // Seluruh role wajib punya baris allowlist di tabel role_api_scopes (fail-closed).
+      // Role tanpa baris atau tanpa kecocokan (prefix, method) langsung ditolak (403).
       const { isApiScopeAllowed, normalizeRoleKey } = await import('../services/role-scope.service');
       const staffTenant = (request as any).staffTenantId || DEFAULT_TENANT_ID;
       const scope = await isApiScopeAllowed(staffTenant, normalizeRoleKey(staffRole), urlPath, request.method);
@@ -287,6 +289,15 @@ export async function adminRoutes(fastify: FastifyInstance) {
           error: 'Forbidden: Peran Anda tidak memiliki hak akses ke resource ini.',
           code: 'FORBIDDEN_ROLE_SCOPE',
         });
+      }
+    }
+
+    // Fase 2 (Task 2.2.1): Isolasi Tenant Sesi Staf.
+    // Body request tidak boleh membajak tenant sesi (tenant B diabaikan).
+    if ((request as any).staffTenantId) {
+      if (request.body && typeof request.body === 'object') {
+        if ('tenantId' in (request.body as any)) (request.body as any).tenantId = (request as any).staffTenantId;
+        if ('tenant_id' in (request.body as any)) (request.body as any).tenant_id = (request as any).staffTenantId;
       }
     }
   });

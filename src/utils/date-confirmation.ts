@@ -161,6 +161,11 @@ function hasDeixisCommit(tokens: string[]): boolean {
   return tokens.some((t) => DEIXIS_VERB_TOKENS.has(t) || DEIXIS_PARTICLE_TOKENS.has(t));
 }
 
+/** Kata penanda tanya prosedural/syarat yang membatalkan klaim verba komitmen tunggal. */
+const PROCEDURAL_INQUIRY_TOKENS = new Set([
+  'cara', 'caranya', 'bagaimana', 'bgmn', 'syarat', 'prosedur', 'aturan', 'panduan',
+]);
+
 export function hasBookingCommitSignal(text: string | undefined): boolean {
   const lower = (text || '').toLowerCase();
   if (!lower) return false;
@@ -186,6 +191,11 @@ export function hasBookingCommitSignal(text: string | undefined): boolean {
   // Kata tunggal via token-exact agar "fix" tak cocok di "prefix".
   const toks = lower.split(/[^a-z0-9]+/).filter((t) => t.length > 0);
   const tokSet = new Set(toks);
+  // Pertanyaan prosedural ("cara booking", "syarat booking") BUKAN komitmen booking
+  if (toks.some((t) => PROCEDURAL_INQUIRY_TOKENS.has(t))) {
+    return false;
+  }
+
   return BOOKING_COMMIT_SINGLE_TOKENS.some((w) => tokSet.has(w));
 }
 

@@ -98,7 +98,7 @@ describe('Staff Routes Integration Tests (/api/staff/*)', () => {
       const body = JSON.parse(res.body);
       expect(body.success).toBe(true);
       expect(body.staff.name).toBe('Bidan Dewi');
-      expect(body.token).toBe('mock_token_abc');
+      expect(body.token).toBeUndefined();
       expect(res.headers['set-cookie']).toBeDefined();
       const setCookie = ([] as string[]).concat(res.headers['set-cookie'] as any).join(';');
       expect(setCookie).toContain('staff_session=mock_token_abc');

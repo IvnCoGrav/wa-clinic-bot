@@ -137,7 +137,10 @@ export function salvagePartialDsmlArgs(bodyText: string): Record<string, unknown
  * Argumen yang tidak bisa diparse sebagai JSON → dibuang (fail-safe), bukan
  * ditebak. Nama fungsi wajib non-kosong.
  */
-export function salvageToolCallsFromDsml(content: string): SalvagedToolCall[] {
+export function salvageToolCallsFromDsml(
+  content: string,
+  options?: { allowedToolNames?: string[] }
+): SalvagedToolCall[] {
   if (!content || typeof content !== 'string') return [];
   if (!DSML_RE.test(content)) return [];
 
@@ -147,6 +150,9 @@ export function salvageToolCallsFromDsml(content: string): SalvagedToolCall[] {
   while ((m = invokeRe.exec(content)) !== null) {
     const name = (m[1] || '').trim();
     if (!name) continue;
+    if (Array.isArray(options?.allowedToolNames) && !options.allowedToolNames.includes(name)) {
+      continue;
+    }
     const after = content.slice(invokeRe.lastIndex);
 
     let args: Record<string, unknown> | null = null;

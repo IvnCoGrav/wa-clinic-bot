@@ -83,6 +83,13 @@ export async function gracefulShutdown(server: FastifyInstance, signal: string):
   }
 
   try {
+    const { cronAdvisoryLock } = await import('./cron-advisory-lock');
+    await cronAdvisoryLock.releaseLock();
+  } catch (e: any) {
+    console.error('[SHUTDOWN] cronAdvisoryLock.releaseLock() gagal:', e?.message);
+  }
+
+  try {
     await prisma.$disconnect();
     console.log('[SHUTDOWN] Prisma terputus.');
   } catch (e: any) {

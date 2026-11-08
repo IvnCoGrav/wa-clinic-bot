@@ -421,15 +421,16 @@ export class V3AgentRunner {
         }
       }
 
-      // ST6-4 (RC-05): verdict COMMITTED me-latch komitmen booking (sticky) —
-      // menyatukan cart & tool-masker pada SATU sumber (penilaian semantik LLM),
-      // menggantikan ketergantungan pada daftar verba hafalan. Pengaman tidak
-      // berubah: save_reservation tetap butuh treatment + lokasi + tanggal.
-      if (routing.commitment === 'COMMITTED' && !session.bookingCommitConfirmed) {
+      // Task 4.4.1: Active User Commitment Mutlak via seam kanonis applyUserCommitmentSignal
+      // LLM verdict COMMITTED DILARANG me-latch booking bila pesan user tidak memuat komitmen aktif.
+      const { applyUserCommitmentSignal } = await import('./pipeline/booking-commit-gate');
+      const commitmentSession = applyUserCommitmentSignal(session, cleanIncomingText, routing.commitment);
+      if (commitmentSession.bookingCommitConfirmed !== session.bookingCommitConfirmed) {
+        session = commitmentSession;
         try {
-          session = await GoalTracker.updateGoalSession(conversationId, { bookingCommitConfirmed: true }, tenantId);
+          await GoalTracker.updateGoalSession(conversationId, { bookingCommitConfirmed: session.bookingCommitConfirmed }, tenantId);
         } catch {
-          (session as any).bookingCommitConfirmed = true;
+          (session as any).bookingCommitConfirmed = commitmentSession.bookingCommitConfirmed;
         }
       }
 
@@ -442,6 +443,7 @@ export class V3AgentRunner {
           session, tenantId, customerId, phone, conversationId, chatId,
           conversationHistory, cleanIncomingText, grounding,
           seenChunkKeys, retrievedChunks, messages,
+          allowedToolNames: routing.allowedToolNames,
         });
         session = toolOutput.updatedSession;
         turn.executedTools = toolOutput.executedTools;
@@ -529,6 +531,7 @@ export class V3AgentRunner {
             session, tenantId, customerId, phone, conversationId, chatId,
             conversationHistory, cleanIncomingText, grounding,
             seenChunkKeys, retrievedChunks, messages,
+            allowedToolNames: ['get_clinic_policy_faq'],
           });
           session = toolOutput.updatedSession;
           turn.executedTools = toolOutput.executedTools;

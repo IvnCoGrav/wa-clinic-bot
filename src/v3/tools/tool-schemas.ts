@@ -17,8 +17,6 @@ export const CalculateDeliveryArgsSchema = z
     streetDetail: z.string().optional(),
     candidateTreatmentName: z.string().optional(),
     asksDeliveryFee: z.boolean().optional().default(false),
-    /** ST6 shadow: verdict komitmen semantik dari Call 1 (belum dipakai keputusan). */
-    commitment: z.enum(['EXPLORING', 'CONSIDERING', 'COMMITTED']).optional(),
   })
   .refine((d) => d.locationText.trim().length > 0 || Boolean(d.savedAddressId), {
     message: 'locationText atau savedAddressId wajib diisi',
@@ -34,8 +32,6 @@ export const GetCatalogArgsSchema = z.object({
   inquirePrice: z.boolean().optional().default(false),
   targetPrice: z.number().positive().optional(),
   asksDuration: z.boolean().optional().default(false),
-  /** ST6 shadow: verdict komitmen semantik dari Call 1 (belum dipakai keputusan). */
-  commitment: z.enum(['EXPLORING', 'CONSIDERING', 'COMMITTED']).optional(),
 });
 
 export const SaveReservationArgsSchema = z.object({
@@ -52,15 +48,11 @@ export const SaveReservationArgsSchema = z.object({
   momNotes: z.string().optional(),
   notes: z.string().optional(),
   address: z.string().optional(),
-  /** ST6: verdict komitmen semantik dari Call 1. */
-  commitment: z.enum(['EXPLORING', 'CONSIDERING', 'COMMITTED']).optional(),
 });
 
 export const EscalateHumanArgsSchema = z.object({
   reason: z.string().min(1, 'Alasan eskalasi wajib diisi'),
   severity: z.enum(['CRITICAL_MEDICAL', 'CUSTOMER_REQUEST', 'MANUAL_HANDLING']),
-  /** ST6: verdict komitmen semantik dari Call 1. */
-  commitment: z.enum(['EXPLORING', 'CONSIDERING', 'COMMITTED']).optional(),
 });
 
 export const ClinicFaqArgsSchema = z.object({
@@ -73,15 +65,11 @@ export const ClinicFaqArgsSchema = z.object({
     'operational_hours_and_booking',
     'general_homecare_info',
   ]),
-  /** ST6: verdict komitmen semantik dari Call 1. */
-  commitment: z.enum(['EXPLORING', 'CONSIDERING', 'COMMITTED']).optional(),
 });
 
 export const SearchKnowledgeFaqArgsSchema = z.object({
   query: z.string().min(1, 'Query FAQ wajib diisi'),
   limit: z.number().int().min(1).max(5).optional().default(3),
-  /** ST6: verdict komitmen semantik dari Call 1. */
-  commitment: z.enum(['EXPLORING', 'CONSIDERING', 'COMMITTED']).optional(),
 });
 
 export function validateToolArgs(toolName: string, rawArgs: any): { success: true; data: any } | { success: false; error: string } {

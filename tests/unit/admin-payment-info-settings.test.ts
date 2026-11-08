@@ -61,7 +61,7 @@ describe('Admin & Staff Payment Info Settings', () => {
     expect(result.instructions).toBe('Scan QRIS untuk pembayaran instan');
   });
 
-  it('getPaymentInfo: should return safe default bank account if no settings or policy exist', async () => {
+  it('getPaymentInfo: should return empty bank accounts if no settings or policy exist', async () => {
     vi.mocked(prisma.tenant.findUnique).mockResolvedValueOnce({
       id: DEFAULT_TENANT_ID,
       name: 'Kala Moms and Baby Spa',
@@ -73,8 +73,6 @@ describe('Admin & Staff Payment Info Settings', () => {
     const result = await StaffReservationService.getPaymentInfo(DEFAULT_TENANT_ID);
 
     expect(result.qrisImageUrl).toBeNull();
-    expect(result.bankAccounts).toHaveLength(1);
-    expect(result.bankAccounts[0].bank).toBe('BCA');
-    expect(result.bankAccounts[0].accountName).toBe('Kala Moms and Baby Spa');
+    expect(result.bankAccounts).toEqual([]);
   });
 });
