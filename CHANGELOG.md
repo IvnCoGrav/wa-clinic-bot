@@ -4,6 +4,29 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-08 - Dekomposisi Seluruh God Object Backend (Fase 2: Cleanup Plan 2026-11-08)
+
+- **Latar Belakang**: Eksekusi penuh Fase 2 dari `docs/plans/CLEANUP_PLAN_DEADCODE_SPAGHETTI_2026-11-08.md` untuk mengeliminasi seluruh file raksasa (*God Object*) di backend (`src/**/*.ts`) yang berukuran > 1.500 baris kode menjadi modul domain-driven terisolasi, meningkatkan modularitas dan maintainability tanpa breaking change.
+- **Perubahan Utama**:
+  1. **Pemecahan 13 File God Object Backend ke Sub-Modul Domain**:
+     - `reservation-dispatch.route.ts` (3.245 baris) dipecah ke 12 sub-modul di `src/routes/admin/reservation-dispatch/`.
+     - `customer.service.ts` (3.211 baris) dipecah ke 6 sub-modul di `src/services/customer/`.
+     - `staff-reservation.service.ts` (2.981 baris) dipecah ke 6 sub-modul di `src/services/staff-reservation/`.
+     - `follow-up.service.ts` (2.895 baris) dipecah ke 8 sub-modul di `src/services/follow-up/`.
+     - `settings.subroute.ts` (2.582 baris) dipecah ke 7 sub-modul di `src/routes/admin/settings/`.
+     - `treatment-catalog.service.ts` (2.433 baris) dipecah ke 5 sub-modul di `src/services/treatment-catalog/`.
+     - `message.service.ts` (2.179 baris) dipecah ke 7 sub-modul di `src/services/message/`.
+     - `customers.subroute.ts` (1.998 baris) dipecah ke 7 sub-modul di `src/routes/admin/customers/`.
+     - `copilot-tools.ts` (1.794 baris) dipecah ke 5 sub-modul di `src/services/copilot/tools/`.
+     - `webhook.route.ts` (1.582 baris) dipecah ke 3 handler (`event-handlers.ts`, `inbound.handler.ts`, `outbound-sync.handler.ts`) dengan controller tipis (126 baris).
+     - `capi.service.ts` (1.569 baris) dipecah ke 4 sub-modul di `src/services/capi/`.
+     - `live-chat.service.ts` (1.564 baris) dipecah ke 4 sub-modul di `src/services/live-chat/`.
+     - `meta-performance-analytics.service.ts` (1.536 baris) dipecah ke 3 sub-modul di `src/services/meta-performance/` (`types.ts`, `monthly-cohorts.ts`, `report-generator.ts`).
+  2. **Zero Breaking Change & Facade Re-export**: Seluruh file asal dipertahankan sebagai facade backward-compatible (`export * from ...`) sehingga tidak ada modul pemanggil lain atau tes integrasi yang rusak.
+  3. **Preservasi Spy Method pada Test**: Menghubungkan delegasi pemanggilan internal metode seperti `getAllServices` pada `TreatmentCatalogService` dan `sendAdminReply` pada `LiveChatService` agar mock/spy test Vitest tetap terpicu sempurna.
+  4. **Pembaruan Invariant Test**: Memperbarui aturan pencarian teks di `tests/unit/v3/waha-label-ban-invariant.test.ts` agar menyertakan modul pecahan webhook (`src/routes/webhook/**`).
+- **Verifikasi**: `npm run build` (`tsc`) exit 0; seluruh file backend `src/**/*.ts` kini berukuran < 1.380 baris (0 file > 1.500 baris); full test suite 6.699+ test lulus (hanya menyisakan 2 kegagalan pre-existing lama #287 di `hybrid-reservation-parser.test.ts`).
+
 #### 2026-11-08 - Pembersihan Dead Code & Fitur Deprecated (Fase 1: Cleanup Plan 2026-11-08)
 
 - **Latar Belakang**: Eksekusi Fase 1 dari docs/plans/CLEANUP_PLAN_DEADCODE_SPAGHETTI_2026-11-08.md untuk mengeliminasi dead exports, memangkas sanitizer mati yang tidak terpakai di runtime, menghapus toggle palsu dan endpoint purchase-moderation, menghapus template usang morningReminder, serta menegakkan Mandat Mutlak Larangan Menyentuh Label WAHA dengan mencabut metode ddLabel, emoveLabel, dan atchUpdateLabels dari interface dan klien WAHA.
