@@ -3,7 +3,7 @@ import axios from 'axios';
 import { isPureLeadGreeting, stripAdTags } from '../../src/utils/lead-greeting-detector';
 import { V3AgentRunner } from '../../src/v3/agent/agent-runner';
 import { OutputSanitizer } from '../../src/v3/guardrails/sanitizer';
-import { sanitizeGreetingRepetitionForFollowUp } from '../../src/utils/language-sanitizer';
+
 import { PersonaPromptBuilder } from '../../src/v3/agent/persona';
 import { TEMPLATES } from '../../src/config/persona';
 
@@ -205,8 +205,8 @@ describe('Lead Greeting Preservation & Static Greeting Gate', () => {
   });
 
   it('Case 3: language-sanitizer follow-up memotong perkenalan diri', () => {
-    const raw = 'Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. Jawaban rekomendasi.';
-    const out = sanitizeGreetingRepetitionForFollowUp(raw, true);
+    const raw = 'Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa.\n\nJawaban rekomendasi.';
+    const out = OutputSanitizer.sanitizeFollowUpGreetingRepetition(raw, true);
     expect(out).not.toContain('Perkenalkan, saya Bidan Yusi');
     expect(out).toContain('Jawaban rekomendasi');
   });

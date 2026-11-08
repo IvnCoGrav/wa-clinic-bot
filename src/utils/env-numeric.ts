@@ -14,10 +14,3 @@ export function parsePositiveInt(value: string | undefined, fallback: number): n
   return n;
 }
 
-/** Parse env sebagai angka NON-NEGATIF (>= 0). NaN/negatif → fallback. */
-export function parseNonNegativeNumber(value: string | undefined, fallback: number): number {
-  if (value === undefined || value === null || String(value).trim() === '') return fallback;
-  const n = Number(value);
-  if (!Number.isFinite(n) || n < 0) return fallback;
-  return n;
-}

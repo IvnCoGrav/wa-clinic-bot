@@ -1,0 +1,299 @@
+{
+  "timestamp": "2026-11-08T12:54:06.395Z",
+  "metrics": {
+    "totalSrcFiles": 369,
+    "totalExportsScanned": 1715,
+    "deadExportsCount": 1,
+    "testOnlyExportsCount": 41,
+    "activeExportsCount": 1673,
+    "orphanFilesCount": 31
+  },
+  "deadExports": [
+    {
+      "symbol": "importLegacyReservation",
+      "file": "src/scripts/import-legacy.ts",
+      "line": 32
+    }
+  ],
+  "testOnlyExports": [
+    {
+      "symbol": "getClinicLocation",
+      "file": "src/config/clinic-location.ts",
+      "line": 88,
+      "testRefs": 2
+    },
+    {
+      "symbol": "__clearClinicLocationCacheForTest",
+      "file": "src/config/clinic-location.ts",
+      "line": 93,
+      "testRefs": 4
+    },
+    {
+      "symbol": "DEFAULT_COVERAGE",
+      "file": "src/config/coverage.ts",
+      "line": 50,
+      "testRefs": 2
+    },
+    {
+      "symbol": "isToolMaskingShadowMode",
+      "file": "src/config/feature-flags.ts",
+      "line": 9,
+      "testRefs": 4
+    },
+    {
+      "symbol": "clearOperationalHoursCache",
+      "file": "src/config/operational-hours.ts",
+      "line": 96,
+      "testRefs": 6
+    },
+    {
+      "symbol": "clearStaffChatWindowConfigCache",
+      "file": "src/config/staff-chat-window-config.ts",
+      "line": 72,
+      "testRefs": 3
+    },
+    {
+      "symbol": "clearStaffNotificationConfigCache",
+      "file": "src/config/staff-notification-config.ts",
+      "line": 56,
+      "testRefs": 1
+    },
+    {
+      "symbol": "getPaymentDisplayLabel",
+      "file": "src/domain/reservation-payment.ts",
+      "line": 31,
+      "testRefs": 4
+    },
+    {
+      "symbol": "SLOT_BUFFER_MIN",
+      "file": "src/domain/reservation-status.ts",
+      "line": 122,
+      "testRefs": 2
+    },
+    {
+      "symbol": "clearLabelCache",
+      "file": "src/integrations/waha/label-cache.ts",
+      "line": 57,
+      "testRefs": 4
+    },
+    {
+      "symbol": "activeIntervalCount",
+      "file": "src/lifecycle/interval-registry.ts",
+      "line": 35,
+      "testRefs": 8
+    },
+    {
+      "symbol": "isShuttingDown",
+      "file": "src/lifecycle/shutdown.ts",
+      "line": 26,
+      "testRefs": 4
+    },
+    {
+      "symbol": "resetConversationRepository",
+      "file": "src/repositories/conversation.repository.ts",
+      "line": 199,
+      "testRefs": 3
+    },
+    {
+      "symbol": "resetCustomerRepository",
+      "file": "src/repositories/customer.repository.ts",
+      "line": 169,
+      "testRefs": 22
+    },
+    {
+      "symbol": "resetMessageRepository",
+      "file": "src/repositories/message.repository.ts",
+      "line": 135,
+      "testRefs": 5
+    },
+    {
+      "symbol": "isCopilotBusy",
+      "file": "src/routes/admin/copilot.subroute.ts",
+      "line": 14,
+      "testRefs": 3
+    },
+    {
+      "symbol": "releaseCopilotTurn",
+      "file": "src/routes/admin/copilot.subroute.ts",
+      "line": 18,
+      "testRefs": 3
+    },
+    {
+      "symbol": "clusterAddressesWithPass4",
+      "file": "src/scripts/heal-customer-addresses-split-brain.ts",
+      "line": 72,
+      "testRefs": 5
+    },
+    {
+      "symbol": "_clearAccountLockoutMapForTest",
+      "file": "src/services/account-lockout.service.ts",
+      "line": 147,
+      "testRefs": 3
+    },
+    {
+      "symbol": "sha256Hash",
+      "file": "src/services/capi.service.ts",
+      "line": 144,
+      "testRefs": 2
+    },
+    {
+      "symbol": "getTenantCapiMatchingGeo",
+      "file": "src/services/capi.service.ts",
+      "line": 752,
+      "testRefs": 4
+    },
+    {
+      "symbol": "MAX_ITERATIONS",
+      "file": "src/services/copilot/copilot.service.ts",
+      "line": 138,
+      "testRefs": 2
+    },
+    {
+      "symbol": "DEFAULT_TOTAL_BUDGET_MS",
+      "file": "src/services/copilot/copilot.service.ts",
+      "line": 155,
+      "testRefs": 2
+    },
+    {
+      "symbol": "cronService",
+      "file": "src/services/cron.service.ts",
+      "line": 770,
+      "testRefs": 10
+    },
+    {
+      "symbol": "_clearProcessedCacheForTesting",
+      "file": "src/services/customer-payment-proof.service.ts",
+      "line": 35,
+      "testRefs": 4
+    },
+    {
+      "symbol": "clearScopeCache",
+      "file": "src/services/role-scope.service.ts",
+      "line": 91,
+      "testRefs": 18
+    },
+    {
+      "symbol": "resolveYearlyFileName",
+      "file": "src/services/sheets/month-resolver.ts",
+      "line": 66,
+      "testRefs": 5
+    },
+    {
+      "symbol": "__clearSlotOverlapDedupFallback",
+      "file": "src/services/slot-overlap.service.ts",
+      "line": 460,
+      "testRefs": 2
+    },
+    {
+      "symbol": "isWithinPreTripWindow",
+      "file": "src/services/staff-trip-tracking.service.ts",
+      "line": 222,
+      "testRefs": 9
+    },
+    {
+      "symbol": "silentEscalateState",
+      "file": "src/state-machine/conversation-gates.ts",
+      "line": 87,
+      "testRefs": 3
+    },
+    {
+      "symbol": "generateEncryptionKey",
+      "file": "src/utils/encryption.ts",
+      "line": 118,
+      "testRefs": 7
+    },
+    {
+      "symbol": "__resetGazetteerCache",
+      "file": "src/utils/gazetteer.ts",
+      "line": 712,
+      "testRefs": 6
+    },
+    {
+      "symbol": "hasSpecificTurn0Question",
+      "file": "src/utils/lead-greeting-detector.ts",
+      "line": 108,
+      "testRefs": 2
+    },
+    {
+      "symbol": "hasTurn0LocationEntity",
+      "file": "src/utils/lead-greeting-detector.ts",
+      "line": 112,
+      "testRefs": 2
+    },
+    {
+      "symbol": "kindFromMime",
+      "file": "src/utils/media-kind.ts",
+      "line": 96,
+      "testRefs": 8
+    },
+    {
+      "symbol": "totalOf",
+      "file": "src/utils/money-contract.ts",
+      "line": 19,
+      "testRefs": 2
+    },
+    {
+      "symbol": "getWibTimeInfo",
+      "file": "src/utils/time-wib.ts",
+      "line": 24,
+      "testRefs": 5
+    },
+    {
+      "symbol": "isScheduleCheckCommitment",
+      "file": "src/v3/agent/agent-runner.ts",
+      "line": 25,
+      "testRefs": 15
+    },
+    {
+      "symbol": "MAX_CALL1_RETRIES",
+      "file": "src/v3/agent/pipeline/generation-stage.ts",
+      "line": 76,
+      "testRefs": 2
+    },
+    {
+      "symbol": "__clearMemorySessions",
+      "file": "src/v3/state/goal-tracker.ts",
+      "line": 88,
+      "testRefs": 6
+    },
+    {
+      "symbol": "hasStreetDetail",
+      "file": "src/v3/tools/save-reservation.tool.ts",
+      "line": 138,
+      "testRefs": 5
+    }
+  ],
+  "orphanFiles": [
+    "src/scripts/ad-watchdog-backtest.ts",
+    "src/scripts/backfill-auto-send-purchase-capi.ts",
+    "src/scripts/backfill-customer-addresses.ts",
+    "src/scripts/backfill-customer-name-source.ts",
+    "src/scripts/backfill-double-ongkir-purchase-value.ts",
+    "src/scripts/backfill-maternal-state.ts",
+    "src/scripts/backfill-orphaned-followups.ts",
+    "src/scripts/backfill-pageviews-from-meta.ts",
+    "src/scripts/backfill-reminder-no-time-templates.ts",
+    "src/scripts/backfill-reservation-items.ts",
+    "src/scripts/fix-poisoned-previous-state.ts",
+    "src/scripts/geocode-text-wilayah-drift.ts",
+    "src/scripts/heal-corrupted-children-and-customers.ts",
+    "src/scripts/heal-firda-active-address.ts",
+    "src/scripts/heal-non-human-customer-names.ts",
+    "src/scripts/heal-shareloc-split-cards.ts",
+    "src/scripts/import-legacy.ts",
+    "src/scripts/reanchor-premature-next-treatment.ts",
+    "src/scripts/reconcile-children-birth-dates-and-moms.ts",
+    "src/scripts/reconcile-customer-addresses.ts",
+    "src/scripts/reconcile-customer-locations-and-reservations.ts",
+    "src/scripts/reconcile-meta-pageviews.ts",
+    "src/scripts/reconcile-trapped-customer-locations.ts",
+    "src/scripts/sanitize-customer-names-and-kelurahan.ts",
+    "src/scripts/seed-ad-watchdog-settings.ts",
+    "src/scripts/seed-analytics-settings.ts",
+    "src/scripts/seed-copilot-sop-owner.ts",
+    "src/scripts/seed-delivery-settings.ts",
+    "src/scripts/seed-ongkir-quick-replies.ts",
+    "src/scripts/sync-catalog-rebrand.ts",
+    "src/scripts/sync-customer-distance-dyah-w.ts"
+  ]
+}

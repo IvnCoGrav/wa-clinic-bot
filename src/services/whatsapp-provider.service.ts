@@ -15,7 +15,6 @@ export interface ProviderQrData {
  * Status WAHA selain SCAN_QR_CODE/WORKING yang berarti QR tidak tersedia.
  * UI tidak boleh berasumsi QR selalu ada — QR hanya muncul saat status === 'SCAN_QR_CODE'.
  */
-export const WAHA_STATUS_WITHOUT_QR = ['FAILED', 'STOPPED', 'STOPPING', 'DISCONNECTED', 'UNKNOWN', 'STARTING', 'AUTHENTICATING'];
 
 /**
  * Service tenant-aware untuk koneksi WhatsApp provider via QR.

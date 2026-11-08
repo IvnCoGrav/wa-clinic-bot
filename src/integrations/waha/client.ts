@@ -54,10 +54,6 @@ export interface IWahaClient {
   sendTextDetailed?(chatId: string, text: string, replyTo?: string): Promise<{ success: boolean; messageId?: string }>;
   sendImage(chatId: string, url: string, caption?: string, replyTo?: string): Promise<boolean>;
   sendImageDetailed?(chatId: string, url: string, caption?: string, replyTo?: string): Promise<{ success: boolean; messageId?: string }>;
-  /** @deprecated MANDAT LARANGAN LABEL WAHA — gunakan DB internal */
-  addLabel(chatId: string, labelName: string): Promise<boolean>;
-  /** @deprecated MANDAT LARANGAN LABEL WAHA — gunakan DB internal */
-  removeLabel(chatId: string, labelName: string): Promise<boolean>;
   getChatLabels(chatId: string): Promise<string[]>;
   getChatLabelsOrNull(chatId: string): Promise<string[] | null>;
 
@@ -562,6 +558,24 @@ export class WahaClient implements IWahaClient {
   public mockChats: WahaChat[] = [];
   public mockMessages: Map<string, WahaMessage[]> = new Map();
 
+  /** Testing helper: menyetel label mock untuk chat dan membersihkan cache label terkait. */
+  public async setMockLabels(chatId: string, labels: string[]): Promise<void> {
+    const targetChatId = `${chatId.replace(/@.*$/, '')}@c.us`;
+    if (!labels || labels.length === 0) {
+      this.mockLabels.delete(targetChatId);
+    } else {
+      this.mockLabels.set(targetChatId, labels);
+    }
+    invalidateCachedLabels(targetChatId);
+    const phone = chatId.replace(/@.*$/, '');
+    const isAdmin = labels ? labels.some((l) => l.toLowerCase() === 'admin') : false;
+    const isHold = labels ? labels.some((l) => l.toLowerCase() === 'hold') : false;
+    await Promise.all([
+      this.syncLabelColumn(targetChatId, 'admin', isAdmin),
+      this.syncLabelColumn(targetChatId, 'hold', isHold),
+    ]);
+  }
+
   /**
    * Mengirim media/gambar ke WAHA API (/api/sendImage)
    * Mendukung konversi URL (remote) dan File Path (lokal) menjadi Base64 Payload secara otomatis
@@ -644,266 +658,6 @@ export class WahaClient implements IWahaClient {
       console.error(`[WAHA API ERROR] sendImage failed for ${targetChatId}:`, error?.response?.data || error.message);
       return { success: false };
     }
-  }
-
-  /**
-   * Menambahkan label ke chat menggunakan API WAHA baru (PUT /api/{session}/labels/chats/{chatId})
-   * Best-effort: kegagalan tidak pernah melempar ke pemanggil (return false).
-   */
-  public async addLabel(chatId: string, labelName: string): Promise<boolean> {
-    console.warn(`[DEPRECATED] wahaClient.addLabel() called — MANDAT LARANGAN LABEL WAHA aktif. Gunakan DB internal (Customer.labels, is_hold_labeled, is_admin_labeled) instead. Caller stack:`, new Error().stack?.split('\n').slice(1, 4).join(' | '));
-    const targetChatId = await this.resolvePrimaryJid(chatId);
-
-    const isTest = process.env.NODE_ENV === 'test';
-    const isHold = labelName.toLowerCase() === 'hold' || labelName.toLowerCase() === 'admin';
-    const isEnabled = isTest || (isHold
-      ? process.env.ENABLE_WAHA_HOLD_LABEL === 'true'
-      : process.env.ENABLE_LIFECYCLE_LABELS === 'true');
-
-    if (!isEnabled || this.shouldMock) {
-      if (this.shouldMock) {
-        const existing = this.mockLabels.get(targetChatId) || [];
-        if (!existing.includes(labelName)) {
-          existing.push(labelName);
-        }
-        this.mockLabels.set(targetChatId, existing);
-        invalidateCachedLabels(targetChatId);
-      }
-      await this.syncLabelColumn(targetChatId, labelName, true);
-      return true;
-    }
-
-    return this.withLabelLock(targetChatId, () =>
-      this.runSerialized(() =>
-        this.withRetry('addLabel', async () => {
-          // 1. Dapatkan ID label dari daftar label yang ada di session
-          const labelsListResponse = await axios.get(
-            `${this.baseUrl}/api/${this.session}/labels`,
-            { headers: this.headers, timeout: this.timeoutMs }
-          );
-          const labels = labelsListResponse.data?.value || labelsListResponse.data || [];
-          let targetLabel = labels.find((l: any) => l.name === labelName) ||
-                            labels.find((l: any) => l.name.toLowerCase() === labelName.toLowerCase() && l.color !== 1) ||
-                            labels.find((l: any) => l.name.toLowerCase() === labelName.toLowerCase());
-
-          // Jika label belum ada di session, kita buat baru
-          if (!targetLabel) {
-            const createResponse = await axios.post(
-              `${this.baseUrl}/api/${this.session}/labels`,
-              { name: labelName, color: 1 },
-              { headers: this.headers, timeout: this.timeoutMs }
-            );
-            targetLabel = createResponse.data;
-          }
-
-          if (!targetLabel) {
-            console.error(`[WAHA API ERROR] addLabel failed for ${targetChatId}: Could not find or create label "${labelName}"`);
-            return false;
-          }
-
-          // 2. Dapatkan label yang saat ini menempel pada chat
-          const currentLabelsResponse = await axios.get(
-            `${this.baseUrl}/api/${this.session}/labels/chats/${targetChatId}`,
-            { headers: this.headers, timeout: this.timeoutMs }
-          );
-          const currentLabels = currentLabelsResponse.data?.value || currentLabelsResponse.data || [];
-
-          // 3. Gabungkan label target jika belum terpasang
-          const alreadyHas = currentLabels.some((l: any) => l.id === targetLabel.id);
-          if (alreadyHas) {
-            console.log(`[WAHA LABEL] Chat ${targetChatId} already has label "${targetLabel.name}" (id: ${targetLabel.id}) in WAHA state`);
-            return true;
-          }
-
-          const newLabelsList = [...currentLabels, targetLabel].map((l: any) => ({ id: l.id }));
-
-          // 4. Update label chat menggunakan PUT
-          await axios.put(
-            `${this.baseUrl}/api/${this.session}/labels/chats/${targetChatId}`,
-            { labels: newLabelsList },
-            { headers: this.headers, timeout: this.timeoutMs }
-          );
-          invalidateCachedLabels(targetChatId);
-          console.log(`[WAHA LABEL] Successfully added label "${targetLabel.name}" (id: ${targetLabel.id}) to ${targetChatId}`);
-          
-          const defaultCooldown = process.env.NODE_ENV === 'test' ? '0' : '2000';
-          const cooldownMs = parseInt(process.env.WAHA_LABEL_COOLDOWN_MS || defaultCooldown, 10);
-          if (cooldownMs > 0) {
-            await this.sleep(cooldownMs);
-          }
-          return true;
-        })
-      )
-    ).then(async (ok) => {
-        if (ok) await this.syncLabelColumn(targetChatId, labelName, true);
-        return ok;
-      }).catch((error: any) => {
-      console.error(`[WAHA API ERROR] addLabel failed for ${targetChatId} (label: "${labelName}"):`, error?.response?.data || error.message);
-      return false;
-    });
-  }
-
-  /**
-   * Menghapus label dari chat menggunakan API WAHA baru (PUT /api/{session}/labels/chats/{chatId})
-   * Best-effort: kegagalan tidak pernah melempar ke pemanggil (return false).
-   */
-  public async removeLabel(chatId: string, labelName: string): Promise<boolean> {
-    console.warn(`[DEPRECATED] wahaClient.removeLabel() called — MANDAT LARANGAN LABEL WAHA aktif. Gunakan DB internal (Customer.labels, is_hold_labeled, is_admin_labeled) instead. Caller stack:`, new Error().stack?.split('\n').slice(1, 4).join(' | '));
-    const targetChatId = await this.resolvePrimaryJid(chatId);
-
-    const isTest = process.env.NODE_ENV === 'test';
-    const isHold = labelName.toLowerCase() === 'hold' || labelName.toLowerCase() === 'admin';
-    const isEnabled = isTest || (isHold
-      ? process.env.ENABLE_WAHA_HOLD_LABEL === 'true'
-      : process.env.ENABLE_LIFECYCLE_LABELS === 'true');
-
-    if (!isEnabled || this.shouldMock) {
-      if (this.shouldMock) {
-        const existing = this.mockLabels.get(targetChatId) || [];
-        const filtered = existing.filter(l => l !== labelName);
-        this.mockLabels.set(targetChatId, filtered);
-        invalidateCachedLabels(targetChatId);
-      }
-      await this.syncLabelColumn(targetChatId, labelName, false);
-      return true;
-    }
-
-    return this.withLabelLock(targetChatId, () =>
-      this.runSerialized(() =>
-        this.withRetry('removeLabel', async () => {
-          // 1. Dapatkan label yang saat ini menempel pada chat
-          const currentLabelsResponse = await axios.get(
-            `${this.baseUrl}/api/${this.session}/labels/chats/${targetChatId}`,
-            { headers: this.headers, timeout: this.timeoutMs }
-          );
-          const currentLabels = currentLabelsResponse.data?.value || currentLabelsResponse.data || [];
-
-          // 2. Filter buang label yang sesuai dengan nama target
-          const filteredLabels = currentLabels
-            .filter((l: any) => l.name.toLowerCase() !== labelName.toLowerCase())
-            .map((l: any) => ({ id: l.id }));
-
-          // 3. Update label chat menggunakan PUT
-          await axios.put(
-            `${this.baseUrl}/api/${this.session}/labels/chats/${targetChatId}`,
-            { labels: filteredLabels },
-            { headers: this.headers, timeout: this.timeoutMs }
-          );
-          invalidateCachedLabels(targetChatId);
-          console.log(`[WAHA LABEL] Successfully removed label "${labelName}" from ${targetChatId}`);
-          
-          const defaultCooldown = process.env.NODE_ENV === 'test' ? '0' : '2000';
-          const cooldownMs = parseInt(process.env.WAHA_LABEL_COOLDOWN_MS || defaultCooldown, 10);
-          if (cooldownMs > 0) {
-            await this.sleep(cooldownMs);
-          }
-          return true;
-        })
-      )
-    ).then(async (ok) => {
-        if (ok) await this.syncLabelColumn(targetChatId, labelName, false);
-        return ok;
-      }).catch((error: any) => {
-      console.error(`[WAHA API ERROR] removeLabel failed for ${targetChatId} (label: "${labelName}"):`, error?.response?.data || error.message);
-      return false;
-    });
-  }
-
-  /**
-   * Aplikasikan beberapa perubahan label untuk 1 chat sebagai SATU operasi atomik
-   * (1x GET daftar label session + 1x GET label chat + 1x PUT), bukan berkali-kali
-   * GET/PUT terpisah per label yang bisa saling menimpa (race condition).
-   *
-   * Best-effort: return false bila gagal, tidak pernah melempar ke pemanggil.
-   * addLabel/removeLabel tetap dipertahankan untuk pemakaian 1-label di tempat lain.
-   */
-  public async batchUpdateLabels(
-    chatId: string,
-    changes: { add?: string[]; remove?: string[] }
-  ): Promise<boolean> {
-    const targetChatId = await this.resolvePrimaryJid(chatId);
-    const toAdd = changes.add || [];
-    const toRemove = (changes.remove || []).map(l => l.toLowerCase());
-
-    const isTest = process.env.NODE_ENV === 'test';
-    const isEnabled = isTest || process.env.ENABLE_LIFECYCLE_LABELS === 'true' || process.env.ENABLE_WAHA_HOLD_LABEL === 'true';
-
-    if (!isEnabled || this.shouldMock) {
-      if (this.shouldMock) {
-        const existing = this.mockLabels.get(targetChatId) || [];
-        const next = existing.filter(l => !toRemove.includes(l.toLowerCase()));
-        for (const l of toAdd) if (!next.includes(l)) next.push(l);
-        this.mockLabels.set(targetChatId, next);
-        invalidateCachedLabels(targetChatId);
-      }
-      for (const l of toAdd) await this.syncLabelColumn(targetChatId, l, true);
-      for (const l of toRemove) await this.syncLabelColumn(targetChatId, l, false);
-      return true;
-    }
-
-    return this.withLabelLock(targetChatId, () =>
-      this.runSerialized(() =>
-        this.withRetry('batchUpdateLabels', async () => {
-          // 1. Ambil semua label yang ada di session
-          const labelsListResponse = await axios.get(
-            `${this.baseUrl}/api/${this.session}/labels`,
-            { headers: this.headers, timeout: this.timeoutMs }
-          );
-          const sessionLabels = labelsListResponse.data?.value || labelsListResponse.data || [];
-
-          // 2. Pastikan semua label yang mau ditambah sudah ada id-nya (buat jika belum ada)
-          const addTargets: any[] = [];
-          for (const name of toAdd) {
-            let found = sessionLabels.find((l: any) => l.name.toLowerCase() === name.toLowerCase());
-            if (!found) {
-              const createResponse = await axios.post(
-                `${this.baseUrl}/api/${this.session}/labels`,
-                { name, color: 1 },
-                { headers: this.headers, timeout: this.timeoutMs }
-              );
-              found = createResponse.data;
-              sessionLabels.push(found);
-            }
-            if (found) addTargets.push(found);
-          }
-
-          // 3. Ambil label yang saat ini menempel di chat (SEKALI, bukan per-operasi)
-          const currentLabelsResponse = await axios.get(
-            `${this.baseUrl}/api/${this.session}/labels/chats/${targetChatId}`,
-            { headers: this.headers, timeout: this.timeoutMs }
-          );
-          const currentLabels = currentLabelsResponse.data?.value || currentLabelsResponse.data || [];
-
-          // 4. Hitung state akhir: buang yang di-remove, tambah yang di-add (dedupe by id)
-          const afterRemove = currentLabels.filter((l: any) => !toRemove.includes(l.name.toLowerCase()));
-          const finalMap = new Map<string, any>(afterRemove.map((l: any) => [l.id, l]));
-          for (const t of addTargets) finalMap.set(t.id, t);
-          const finalList = Array.from(finalMap.values()).map((l: any) => ({ id: l.id }));
-
-          // 5. Satu kali PUT untuk semua perubahan
-          await axios.put(
-            `${this.baseUrl}/api/${this.session}/labels/chats/${targetChatId}`,
-            { labels: finalList },
-            { headers: this.headers, timeout: this.timeoutMs }
-          );
-
-          invalidateCachedLabels(targetChatId);
-          for (const l of toAdd) await this.syncLabelColumn(targetChatId, l, true);
-          for (const l of toRemove) await this.syncLabelColumn(targetChatId, l, false);
-          console.log(`[WAHA LABEL] batchUpdateLabels OK for ${targetChatId} | add: ${JSON.stringify(toAdd)} | remove: ${JSON.stringify(toRemove)}`);
-          
-          const defaultCooldown = process.env.NODE_ENV === 'test' ? '0' : '2000';
-          const cooldownMs = parseInt(process.env.WAHA_LABEL_COOLDOWN_MS || defaultCooldown, 10);
-          if (cooldownMs > 0) {
-            await this.sleep(cooldownMs);
-          }
-          return true;
-        })
-      )
-    ).catch((error: any) => {
-      console.error(`[WAHA API ERROR] batchUpdateLabels failed for ${targetChatId}:`, error?.response?.data || error.message);
-      return false;
-    });
   }
 
   /**

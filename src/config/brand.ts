@@ -86,14 +86,7 @@ export async function getBrandIdentityAsync(tenantId: string = DEFAULT_TENANT_ID
   return resolved;
 }
 
-export function setBrandIdentity(partial: Partial<BrandIdentity>): BrandIdentity {
-  currentBrand = { ...currentBrand, ...partial };
-  return currentBrand;
-}
 
-export function resetBrandIdentity(): void {
-  currentBrand = { ...DEFAULT_BRAND_IDENTITY };
-}
 
 /** Clear cache untuk testing */
 export function __clearBrandCacheForTest(tenantId?: string): void {

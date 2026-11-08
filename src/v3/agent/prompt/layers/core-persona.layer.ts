@@ -143,7 +143,6 @@ export function buildToneNegConstraints(session?: {
 }
 
 /** Kompatibilitas: konstanta kanonis = builder tanpa sesi (usia belum diketahui). */
-export const TONE_NEG_CONSTRAINTS = buildToneNegConstraints();
 
 /** Butir negative-constraints format & grounding SOP: aturan 13–14. */
 export const FORMAT_NEG_CONSTRAINTS = `13. FORMAT WHATSAPP: Cetak tebal HANYA dengan 1 bintang (*teks*). Nominal rupiah wajib berformat *Rp XX.XXX*.

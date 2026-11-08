@@ -30,11 +30,11 @@ export interface AiTaskModelConfig {
 export const SUMOPOD_PRIMARY_MODEL = 'glm-5.3-flash';
 export const SUMOPOD_SECONDARY_MODEL = 'deepseek-v4-flash';
 export const KENARI_PRIMARY_MODEL = 'deepseek-v4-1-flash';
-export const KENARI_SECONDARY_MODEL = 'deepseek-v4-1-flash';
+
 export const DEEPSEEK_DIRECT_MODEL = 'deepseek-chat';
 
 /** Label display model default runtime. */
-export const DISPLAY_MODEL_LABEL = 'glm-5.3-flash (SumoPod Utama)';
+
 
 /** Katalog resmi SumoPod (server utama) — hanya 5 model ini yang valid. */
 export const SUMOPOD_CATALOG = new Set([

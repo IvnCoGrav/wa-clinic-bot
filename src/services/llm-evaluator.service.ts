@@ -34,11 +34,6 @@ export interface EvaluatedSample {
   aiReasoning?: string | null;
 }
 
-export interface EvalResult {
-  dispatchMessageId: string;
-  score?: number;
-  feedback?: string;
-}
 
 /**
  * Verdict per dimensi persona (PLAN 9 FASE 9.2). `score` = rata-rata dibulatkan

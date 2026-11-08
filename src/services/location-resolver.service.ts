@@ -99,18 +99,3 @@ export async function resolveLocationFromUrl(
   }
 }
 
-/**
- * Extract first valid Google Maps URL from text and resolve location.
- * Returns null if no valid URL found.
- */
-export async function resolveFirstMapsUrlInText(
-  text: string,
-  tenantId: string
-): Promise<ResolveLocationResult | null> {
-  const urls = extractGoogleMapsUrls(text);
-  for (const u of urls) {
-    const res = await resolveLocationFromUrl(u, tenantId);
-    if (res.success) return res;
-  }
-  return null;
-}

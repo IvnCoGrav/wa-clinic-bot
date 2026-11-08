@@ -34,4 +34,3 @@ export interface AiHealthSummary {
   generatedAt: string;
 }
 
-export type HealthStatus = AiHealthSummary['status'];

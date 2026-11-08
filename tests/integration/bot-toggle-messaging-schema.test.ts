@@ -71,8 +71,8 @@ describe('Skema Testing Full Cycle: Bot Toggle ON/OFF & Kirim Pesan', () => {
       },
       DEFAULT_TENANT_ID
     );
-    await wahaClient.addLabel(`${phone}@c.us`, 'hold');
-
+    await wahaClient.setMockLabels(`${phone}@c.us`, ['hold']);
+    
     const payloadPhase2 = {
       event: 'message',
       session: 'default',
@@ -109,7 +109,7 @@ describe('Skema Testing Full Cycle: Bot Toggle ON/OFF & Kirim Pesan', () => {
       },
       DEFAULT_TENANT_ID
     );
-    await wahaClient.removeLabel(`${phone}@c.us`, 'hold');
+    await wahaClient.setMockLabels(`${phone}@c.us`, []);
 
     const payloadPhase3 = {
       event: 'message',

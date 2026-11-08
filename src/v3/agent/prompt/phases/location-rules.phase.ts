@@ -106,12 +106,6 @@ function buildUnknownLocationBlock(priceDiscussed: boolean): string {
   return LOCATION_HIERARCHY_BLOCK.split(transaksional).join(konsultasi);
 }
 
-/**
- * Pin deterministik Rule 2: melarang LLM menyebut nominal rupiah ongkir/harga
- * selama customer belum menanyakan biaya. Gerbang kode di atas kepatuhan prompt.
- */
-export const FEE_INFORMATION_HIDING_PIN = `[DILARANG SEBUT NOMINAL ONGKIR/HARGA — MODE KONSULTASI]
-Customer BELUM menanyakan biaya/ongkir/harga. DILARANG KERAS menyebut nominal rupiah apa pun (ongkir, promo, harga treatment, total) — termasuk menyalin angka dari contoh pada instruksi di atas. Setelah lokasi diketahui, cukup sampaikan bahwa area customer MASUK dalam jangkauan layanan homecare kami (tanpa nominal dan tanpa jarak km). Baru bahas nominal HANYA jika customer menanyakan biaya/ongkir secara eksplisit.`;
 
 /** Butir negative-constraints lokasi: aturan 11 (tebak kota — tenant-agnostic). */
 export const NO_GUESS_CITY_RULE = `11. DILARANG TEBAK KOTA/WILAYAH: Dilarang menyebutkan atau mengasumsikan nama kota, kecamatan, atau daerah yang TIDAK BERDASAR (tidak disebut customer DAN bukan wilayah hasil tool calculate_delivery). PENGECUALIAN SAH: kecamatan/kota yang merupakan bagian administratif dari wilayah target yang dikembalikan tool (contoh: "Bungurasih" → Kecamatan Waru) BOLEH disebut sebagai fakta geografis — itu wilayah customer sendiri, bukan tebakan.`;

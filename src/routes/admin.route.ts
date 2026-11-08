@@ -49,11 +49,6 @@ let cachedIndexHtml: string | null = null;
 let cachedManifest: Buffer | null = null;
 let cachedSwJs: Buffer | null = null;
 
-export function clearAdminStaticCache() {
-  cachedIndexHtml = null;
-  cachedManifest = null;
-  cachedSwJs = null;
-}
 
 export async function adminRoutes(fastify: FastifyInstance) {
   const { AdminSessionService, SessionStoreUnavailable } = await import('../services/admin-session.service');

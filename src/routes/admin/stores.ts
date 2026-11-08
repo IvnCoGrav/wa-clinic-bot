@@ -114,10 +114,6 @@ const loginAttemptsCleanupTimer: NodeJS.Timeout = setInterval(() => {
 }, LOGIN_ATTEMPTS_CLEANUP_INTERVAL_MS);
 if ((loginAttemptsCleanupTimer as any)?.unref) (loginAttemptsCleanupTimer as any).unref();
 
-/** Untuk testing / graceful shutdown: hentikan timer periodik loginAttempts. */
-export function stopLoginAttemptsCleanupTimer(): void {
-  clearInterval(loginAttemptsCleanupTimer);
-}
 
 // Re-export account lockout utilities (Task 1.4.4)
 export {

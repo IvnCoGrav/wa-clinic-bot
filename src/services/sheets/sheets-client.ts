@@ -87,17 +87,6 @@ export interface SheetsGateway {
 export const SHEETS_NOT_CONNECTED = 'SHEETS_NOT_CONNECTED';
 export const TEMPLATE_SHEET_NOT_FOUND = 'TEMPLATE_SHEET_NOT_FOUND';
 
-/**
- * Ambil nomor baris dari `updatedRange` Google, mis. "okt!A5:P5" → 5.
- * Murni & defensif: format tak dikenal → lempar agar tidak menyimpan nomor salah.
- */
-export function parseRowIndexFromRange(updatedRange: string | null | undefined): number {
-  const m = String(updatedRange || '').match(/![A-Z]+(\d+)/);
-  if (!m) throw new Error('UNPARSEABLE_UPDATED_RANGE');
-  const n = parseInt(m[1], 10);
-  if (!Number.isFinite(n) || n < 1) throw new Error('UNPARSEABLE_UPDATED_RANGE');
-  return n;
-}
 
 /** Angka kolom 1-based → huruf (1 → A, 16 → P). */
 export function columnLetter(count: number): string {

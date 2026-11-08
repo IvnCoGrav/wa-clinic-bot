@@ -115,7 +115,7 @@ describe('Per-Contact Legacy Scrape', () => {
     const chatId = `${phone}@c.us`;
     wahaClient.mockLabels.set(chatId, ['legacy']);
     const scrapeSpy = vi.spyOn(perContactLegacyScrapeService, 'scrapeContactUntilFirstLead');
-    const addLabelSpy = vi.spyOn(wahaClient, 'addLabel');
+    // addLabel telah dihapus dari wahaClient
 
     const app = buildApp();
     const res = await app.inject({
@@ -137,6 +137,6 @@ describe('Per-Contact Legacy Scrape', () => {
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body)).toEqual({ status: 'LEGACY_SCRAPE_TRIGGERED' });
     expect(scrapeSpy).toHaveBeenCalled();
-    expect(addLabelSpy).not.toHaveBeenCalledWith(chatId, 'hold');
+    expect((wahaClient as any).addLabel).toBeUndefined();
   });
 });

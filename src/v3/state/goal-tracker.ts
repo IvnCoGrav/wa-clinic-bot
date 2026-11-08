@@ -85,13 +85,6 @@ export function pruneMemoryMap(map: Map<string, CustomerGoalSession>, max = MAX_
   }
 }
 
-/** Untuk testing / diagnostik: ukuran store & akses internal. */
-export function __getMemorySessionsMap(): Map<string, CustomerGoalSession> {
-  return memorySessions;
-}
-export function __getMemorySessionTimestampsMap(): Map<string, number> {
-  return memorySessionTimestamps;
-}
 export function __clearMemorySessions(): void {
   memorySessions.clear();
   memorySessionTimestamps.clear();

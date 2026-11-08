@@ -383,14 +383,6 @@ export function getGazetteerCoordinates(query: string): GazetteerCoordinateHit |
   return rankedGazetteerScan(qNorm, cityScope);
 }
 
-/**
- * Thin zipcode delegate — resolves via central data so resolver can delegate.
- * For full 3-layer logic use gazetteer-zipcode-resolver.ts (which itself now delegates to this dataset).
- */
-export function getGazetteerZipcode(query: string): string | null {
-  const hit = getGazetteerCoordinates(query);
-  return hit ? hit.zipcode : null;
-}
 
 // ---------------------------------------------------------------------------
 // Ranked phrase-hit scan (Fondasional: city scope + anti-subtoken hijack)

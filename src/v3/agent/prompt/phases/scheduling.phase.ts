@@ -30,7 +30,6 @@ ${MEDICAL_SOP_MANDATE_BLOCK}`;
 export const SCHEDULING_HIERARCHY_BLOCK = SCHEDULING_HIERARCHY_ITEM6;
 
 /** Butir negative-constraints jadwal: aturan 5 (hierarki anti-afirmasi). */
-export const SCHEDULE_NEG_CONSTRAINTS_HEAD = buildScheduleNegConstraintsHead();
 
 type ScheduleSession = {
   location?: { kelurahan?: string; kecamatan?: string; kota?: string; rawText?: string };

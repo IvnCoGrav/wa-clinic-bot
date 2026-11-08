@@ -110,13 +110,4 @@ export function isWithinWibHourRange(startHour: number, endHour: number, referen
   }
 }
 
-/**
- * Menghapus cache konfigurasi notifikasi chat staf (misal setelah admin mengupdate pengaturan).
- */
-export function clearStaffChatConfigCache(tenantId?: string): void {
-  if (tenantId) {
-    configCache.delete(tenantId);
-  } else {
-    configCache.clear();
-  }
-}
+

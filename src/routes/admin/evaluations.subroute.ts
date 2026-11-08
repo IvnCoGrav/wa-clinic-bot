@@ -80,12 +80,6 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
                 return false;
               }
             }
-            public async addLabel(chatId: string, labelId: string): Promise<boolean> {
-              return true;
-            }
-            public async removeLabel(chatId: string, labelId: string): Promise<boolean> {
-              return true;
-            }
             public async getChatLabels(chatId: string): Promise<string[]> {
               return [];
             }

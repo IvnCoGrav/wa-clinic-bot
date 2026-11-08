@@ -1,4 +1,5 @@
 import { getMaxCharsPerReply } from '../../config/persona';
+import { sanitizeStrayBackslashes, stripNonIndonesianScripts } from '../../utils/language-sanitizer';
 
 export class OutputSanitizer {
   /** Plafon default tenant-aware (sesi 381894): umum 1200, konteks katalog/keranjang 1500. */
@@ -212,6 +213,10 @@ export class OutputSanitizer {
 
     // 5. Pastikan semua format nominal harga dibungkus bintang tunggal (*Rp 10.000*)
     text = text.replace(/(?<!\*)\b(Rp\s*\d{1,3}(?:\.\d{3})*(?:,\d+)?)\b(?!\*)/g, '*$1*');
+
+    // 5b. Sanitasi teknis non-semantik (D1 Opsi A): backslash liar & aksara asing CJK/Cyrillic
+    text = sanitizeStrayBackslashes(text);
+    text = stripNonIndonesianScripts(text);
 
     // 6. Normalisasi spasi dan baris baru berlebih (sesi 381894: blank-line
     // ber-spasi "\n   \n" diserap menjadi "\n\n" agar hitung batas paragraf benar)

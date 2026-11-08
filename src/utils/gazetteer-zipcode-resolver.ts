@@ -209,8 +209,3 @@ export function __resetGazetteerResolverCache(): void {
   kecamatanSet = new Set();
 }
 
-/** Expose representative map untuk observability / testing */
-export function getKecamatanRepresentativeMap(): Map<string, string> {
-  ensureInit();
-  return new Map(kecToZip);
-}

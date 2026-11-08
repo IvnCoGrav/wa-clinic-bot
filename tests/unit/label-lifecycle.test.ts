@@ -142,7 +142,7 @@ describe('Label Lifecycle (DB-only)', () => {
 
   it('2. Form reservasi pertama masuk → DB: tambah Pending Payment, hapus New Customer (zero WAHA)', async () => {
     vi.mocked(prisma.reservation.count as any).mockResolvedValueOnce(0);
-    const batchSpy = vi.spyOn(wahaClient, 'batchUpdateLabels');
+    // batchUpdateLabels telah dihapus dari wahaClient
 
     const { customer } = await setupInterestConversation(`6289921${Date.now()}`, 'Bunda NC');
     const res = await stateMachine.processMessage({
@@ -160,7 +160,7 @@ describe('Label Lifecycle (DB-only)', () => {
 
     expect(res.nextState).toBe(ConversationState.HUMAN_HANDLING);
     // Zero WAHA label mutation (mandat mutlak).
-    expect(batchSpy).not.toHaveBeenCalled();
+    expect((wahaClient as any).batchUpdateLabels).toBeUndefined();
     // DB: Pending Payment terpasang untuk customer ini.
     const upsertCalls = vi.mocked((prisma as any).customerLabel.upsert).mock.calls;
     const upsertedNames = upsertCalls.map((c: any) => labelNameById(c[0].create.label_id));
@@ -178,7 +178,7 @@ describe('Label Lifecycle (DB-only)', () => {
     // Riwayat confirmed konsisten sepanjang alur (core menghitung repeat status,
     // lalu lifecycle membacanya) — bukan agains urutan pemanggilan yang rapuh.
     vi.mocked(prisma.reservation.count as any).mockResolvedValue(1);
-    const batchSpy = vi.spyOn(wahaClient, 'batchUpdateLabels');
+    // batchUpdateLabels telah dihapus dari wahaClient
 
     const { customer } = await setupInterestConversation(`6289931${Date.now()}`, 'Bunda Repeat');
     const res = await stateMachine.processMessage({
@@ -195,7 +195,7 @@ describe('Label Lifecycle (DB-only)', () => {
     });
 
     expect(res.nextState).toBe(ConversationState.HUMAN_HANDLING);
-    expect(batchSpy).not.toHaveBeenCalled();
+    expect((wahaClient as any).batchUpdateLabels).toBeUndefined();
     const upsertCalls = vi.mocked((prisma as any).customerLabel.upsert).mock.calls;
     const upsertedNames = upsertCalls.map((c: any) => labelNameById(c[0].create.label_id));
     expect(upsertedNames).toEqual(['Repeat Order']);
@@ -225,7 +225,7 @@ describe('Label Lifecycle (DB-only)', () => {
       name: 'Pending Payment',
     });
     customerLabels.add('cust-confirm:lbl_pending');
-    const removeLabelSpy = vi.spyOn(wahaClient, 'removeLabel');
+    // removeLabel telah dihapus dari wahaClient
 
     const app = buildApp();
     const res = await app.inject({
@@ -237,7 +237,7 @@ describe('Label Lifecycle (DB-only)', () => {
     expect(res.statusCode).toBe(200);
     expect(mockRes.status).toBe('confirmed');
     // Zero WAHA label mutation (mandat mutlak) — pelunasan via CustomerLabel DB.
-    expect(removeLabelSpy).not.toHaveBeenCalled();
+    expect((wahaClient as any).removeLabel).toBeUndefined();
     const delCalls = vi.mocked((prisma as any).customerLabel.deleteMany).mock.calls;
     expect(delCalls).toHaveLength(1);
     expect(delCalls[0][0]).toEqual({
@@ -248,7 +248,7 @@ describe('Label Lifecycle (DB-only)', () => {
 
   it('5. Customer berlabel "Legacy" mengisi form → lifecycle DB jalan, "Legacy" TIDAK pernah dilepas', async () => {
     vi.mocked(prisma.reservation.count as any).mockResolvedValueOnce(0);
-    const batchSpy = vi.spyOn(wahaClient, 'batchUpdateLabels');
+    // batchUpdateLabels telah dihapus dari wahaClient
 
     const { customer } = await setupInterestConversation(`6289951${Date.now()}`, 'Bunda Legacy');
     // Tandai legacy di DB internal (bukan WAHA): label + join row milik customer.
@@ -273,7 +273,7 @@ describe('Label Lifecycle (DB-only)', () => {
     });
 
     expect(res.nextState).toBe(ConversationState.HUMAN_HANDLING);
-    expect(batchSpy).not.toHaveBeenCalled();
+    expect((wahaClient as any).batchUpdateLabels).toBeUndefined();
     // Hanya 3 nama kanonis lifecycle yang boleh di-upsert/di-delete.
     const upsertCalls = vi.mocked((prisma as any).customerLabel.upsert).mock.calls;
     for (const c of upsertCalls) {
@@ -314,7 +314,7 @@ describe('Label Lifecycle (DB-only)', () => {
 
   it('7. Flag ENABLE_LIFECYCLE_LABELS=false → tidak ada penulisan label lifecycle DB maupun WAHA', async () => {
     process.env.ENABLE_LIFECYCLE_LABELS = 'false';
-    const batchSpy = vi.spyOn(wahaClient, 'batchUpdateLabels');
+    // batchUpdateLabels telah dihapus dari wahaClient
 
     const { customer } = await setupInterestConversation(`6289971${Date.now()}`, 'Bunda NoFlag');
     const res = await stateMachine.processMessage({
@@ -331,7 +331,7 @@ describe('Label Lifecycle (DB-only)', () => {
     });
 
     expect(res.nextState).toBe(ConversationState.HUMAN_HANDLING);
-    expect(batchSpy).not.toHaveBeenCalled();
+    expect((wahaClient as any).batchUpdateLabels).toBeUndefined();
     expect(vi.mocked((prisma as any).label.upsert)).not.toHaveBeenCalled();
     expect(vi.mocked((prisma as any).customerLabel.upsert)).not.toHaveBeenCalled();
     expect(vi.mocked((prisma as any).customerLabel.deleteMany)).not.toHaveBeenCalled();

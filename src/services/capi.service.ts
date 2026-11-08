@@ -697,10 +697,6 @@ async function resolveNewVsRepeatContext(params: {
  */
 export type MetaPurchasePolicy = 'SUPPRESS_REPEAT' | 'DUAL_EVENT' | 'ALL_WITH_TAG';
 
-export type MetaRepeatDecision =
-  | { action: 'SEND'; eventName: string; optOut: boolean; segmentation: 'new_customer_to_business' }
-  | { action: 'SUPPRESS' }
-  | { action: 'SEND_REPEAT'; eventName: string; optOut: boolean; segmentation: 'existing_customer_to_business' };
 
 /**
  * Membaca kebijakan perutean event Purchase CAPI Meta untuk pelanggan repeat.
@@ -788,16 +784,6 @@ export function buildLegacyPurchaseEventId(params: {
   return `${params.trackingCode || 'org'}_pur_${subject}_${params.eventTimeSec}`;
 }
 
-export async function getTenantAutoSendPurchaseCapi(tenantId?: string): Promise<boolean> {
-  if (!tenantId) return false;
-  try {
-    const { prisma } = await import('../db/client');
-    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
-    return tenant?.auto_send_purchase_capi ?? false;
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Fire-and-forget helper: kirim event CAPI jika customer punya atribusi adClick,

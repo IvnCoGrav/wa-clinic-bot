@@ -1,8 +1,3 @@
-export interface WebhookVerificationQuery {
-  'hub.mode'?: string;
-  'hub.verify_token'?: string;
-  'hub.challenge'?: string;
-}
 
 export interface WhatsAppLocationPayload {
   latitude: number;

@@ -26,6 +26,3 @@ export const GEO_TOKEN_SKIPLIST = new Set([
   'kawasan', 'wilayah', 'daerah', 'area',
 ]);
 
-export function isSkippedGeoToken(t: string): boolean {
-  return GEO_TOKEN_SKIPLIST.has(t);
-}

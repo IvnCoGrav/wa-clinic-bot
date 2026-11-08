@@ -8,18 +8,6 @@ import { conversationService } from './conversation.service';
 import { StagingStatus, TreatmentCategory } from '@prisma/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 
-export function parseTimestampSafe(ts: any): Date {
-  if (!ts) return new Date();
-  const num = Number(ts);
-  if (isNaN(num)) {
-    const d = new Date(ts);
-    return isNaN(d.getTime()) ? new Date() : d;
-  }
-  if (num > 1e11) {
-    return new Date(num);
-  }
-  return new Date(num * 1000);
-}
 
 export class MigrationService {
   /**

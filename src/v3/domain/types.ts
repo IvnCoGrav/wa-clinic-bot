@@ -251,20 +251,6 @@ export type RecipientScope = 'MOMS' | 'CHILD_1' | 'CHILD_2' | 'GENERAL';
  */
 export type CommitmentLevel = 'EXPLORING' | 'CONSIDERING' | 'COMMITTED';
 
-/**
- * ST6 (Audit RC-05) — Interpretasi satu giliran percakapan dari Call 1.
- * Menjadi kontrak data antara pemahaman LLM dan konsumen deterministik
- * (CartManager, tool-masker). Guardrail deterministik tetap berlaku sebagai
- * PAGAR STATE (mis. save_reservation butuh COMMITTED), bukan sebagai otak.
- */
-export interface TurnInterpretation {
-  /** Tingkat komitmen pada giliran ini. */
-  commitment: CommitmentLevel;
-  /** ID layanan katalog yang benar-benar dirujuk/dipilih pada giliran ini (opsional). */
-  referencedServiceIds?: string[];
-  /** True bila customer meminta berbicara dengan manusia/admin (prioritas tertinggi). */
-  handoffRequested?: boolean;
-}
 
 
 /**

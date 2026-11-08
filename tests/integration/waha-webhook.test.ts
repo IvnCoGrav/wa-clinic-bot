@@ -81,9 +81,8 @@ describe('WAHA Webhook & Guard Clause Integration Tests', { timeout: 20000 }, ()
       },
       DEFAULT_TENANT_ID
     );
-
     // Pasang label hold di mock WAHA agar terdeteksi masih dalam hold
-    await wahaClient.addLabel(`${phone}@c.us`, 'hold');
+    await wahaClient.setMockLabels(`${phone}@c.us`, ['hold']);
 
     const payload = {
       event: 'message',
@@ -105,6 +104,8 @@ describe('WAHA Webhook & Guard Clause Integration Tests', { timeout: 20000 }, ()
 
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body)).toEqual({ status: 'HUMAN_HANDLING_ACTIVE_SILENT' });
+    // Bersihkan mock label
+    await wahaClient.setMockLabels(`${phone}@c.us`, []);
   });
 
   it('POST /webhook: should verify X-Webhook-Secret signature security token', async () => {
@@ -162,8 +163,8 @@ describe('WAHA Webhook & Guard Clause Integration Tests', { timeout: 20000 }, ()
     const chatId = `${adminPhone}@c.us`;
 
     // Pasang label Admin di mock WAHA
-    await wahaClient.addLabel(chatId, 'Admin');
-
+    wahaClient.setMockLabels(chatId, ['Admin']);
+    
     const payload = {
       event: 'message',
       session: 'default',
@@ -186,8 +187,8 @@ describe('WAHA Webhook & Guard Clause Integration Tests', { timeout: 20000 }, ()
     expect(JSON.parse(res.body)).toEqual({ status: 'IGNORED_ADMIN' });
 
     // Hapus label Admin setelah pengujian
-    await wahaClient.removeLabel(chatId, 'Admin');
-  });
+    wahaClient.setMockLabels(chatId, []);
+      });
 
   it('POST /webhook: menyimpan gambar inbound (WAHA) ke storage/media/inbound dan melampirkan metadata media', async () => {
     const { mediaService } = await import('../../src/services/media.service');
@@ -481,7 +482,7 @@ describe('WAHA Webhook & Guard Clause Integration Tests', { timeout: 20000 }, ()
     const adminPhone = `628199${Date.now().toString().slice(-6)}`;
     const chatId = `${adminPhone}@c.us`;
     // Anti-Label WAHA: pakai mockLabels (DB-internal), bukan wahaClient.addLabel.
-    wahaClient.mockLabels.set(chatId, ['Admin']);
+    wahaClient.setMockLabels(chatId, ['Admin']);
 
     const ctwaClid = 'AfiAndhVXv11SVsc5IxbflJRvrJOHBl2GoLULF8ZUcAyk7pBCPpmUOyoG7ttTwqKD7yX2w9TBCtAqBiHT77Hma1DafFvhNHY0lHzbF863EKfTz8ulGRtS8PYDBSQv5YQl0vc5tyimWW5b8tc_YFA7LG-acM5xRhwqS1hxgLyDaoqh0rQaa';
     const payload = {
@@ -522,7 +523,7 @@ describe('WAHA Webhook & Guard Clause Integration Tests', { timeout: 20000 }, ()
       })
     );
 
-    wahaClient.mockLabels.delete(chatId);
+    wahaClient.setMockLabels(chatId, []);
     attrSpy.mockRestore();
   });
 
@@ -535,7 +536,7 @@ describe('WAHA Webhook & Guard Clause Integration Tests', { timeout: 20000 }, ()
     const adminPhone = `628198${Date.now().toString().slice(-6)}`;
     const chatId = `${adminPhone}@c.us`;
     // Anti-Label WAHA: pakai mockLabels (DB-internal), bukan wahaClient.addLabel.
-    wahaClient.mockLabels.set(chatId, ['Admin']);
+    wahaClient.setMockLabels(chatId, ['Admin']);
 
     const payload = {
       event: 'message',
@@ -559,7 +560,7 @@ describe('WAHA Webhook & Guard Clause Integration Tests', { timeout: 20000 }, ()
 
     expect(attrSpy).not.toHaveBeenCalled();
 
-    wahaClient.mockLabels.delete(chatId);
+    wahaClient.setMockLabels(chatId, []);
     attrSpy.mockRestore();
   });
 

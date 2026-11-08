@@ -1,4 +1,3 @@
-export const PAUSED_STATUS = 'paused';
 /**
  * reservation-status.ts — Single Source of Truth domain status reservasi.
  *
@@ -10,7 +9,6 @@ export const PAUSED_STATUS = 'paused';
 /** Status reservasi yang dihitung sebagai "jadwal aktif" (menjadwalkan pasien). */
 export const ACTIVE_RESERVATION_STATUSES: string[] = ['confirmed', 'en_route', 'pending', 'hold'];
 
-export type ActiveReservationStatus = 'confirmed' | 'en_route' | 'pending' | 'hold';
 
 /**
  * `en_route` — Bidan sudah berangkat menuju lokasi pasien (dipicu dari tombol
@@ -39,13 +37,6 @@ export const ACTIVE_HOLD_WINDOW_MS = 2 * 60 * 60 * 1000;
  */
 export const ACTIVE_TREATMENT_WINDOW_MS = ACTIVE_HOLD_WINDOW_MS;
 
-/**
- * Batas bawah booking_date agar sebuah `hold` masih dianggap aktif.
- * Dipakai untuk membangun kondisi Prisma (`booking_date: { gte: cutoff }`).
- */
-export function activeHoldCutoff(nowMs: number = Date.now()): Date {
-  return new Date(nowMs - ACTIVE_HOLD_WINDOW_MS);
-}
 
 /** Batas bawah booking_date agar treatment masih dalam jendela aktif (alias hold). */
 export function activeTreatmentCutoff(nowMs: number = Date.now()): Date {
