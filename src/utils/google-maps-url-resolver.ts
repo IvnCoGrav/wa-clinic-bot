@@ -252,6 +252,69 @@ function isValidCoordinate(lat: number, lng: number): boolean {
  * presisinya. Redirect HTTP di-follow generik (max 5) sehingga domain pendek
  * baru tetap ter-resolve tanpa perubahan kode tambahan.
  */
+
+/**
+ * UTL-04 / CCL-03: SSRF Protection & Host Allowlist untuk Google Maps.
+ * Memastikan URL yang di-fetch secara network benar-benar mengarah ke domain resmi Google Maps,
+ * serta secara tegas memblokir private IP, localhost, cloud metadata, dan skema berbahaya.
+ */
+export function isAllowedGoogleMapsHost(urlOrHost: string): boolean {
+  if (!urlOrHost || typeof urlOrHost !== 'string') return false;
+  try {
+    let hostname: string;
+    if (urlOrHost.includes('://')) {
+      const parsed = new URL(urlOrHost);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        return false;
+      }
+      hostname = parsed.hostname.toLowerCase();
+    } else {
+      hostname = urlOrHost.split('/')[0].split(':')[0].toLowerCase();
+    }
+
+    if (!hostname) return false;
+
+    // 1. Blokir localhost, hostnames lokal / internal
+    if (
+      hostname === 'localhost' ||
+      hostname.endsWith('.localhost') ||
+      hostname.endsWith('.local') ||
+      hostname.endsWith('.internal')
+    ) {
+      return false;
+    }
+
+    // 2. Blokir IPv4 loopback, link-local, private, broadcast, 0.0.0.0
+    if (/^(?:127\.|10\.|192\.168\.|169\.254\.|0\.0\.0\.0)/.test(hostname)) {
+      return false;
+    }
+    const match172 = hostname.match(/^172\.(1[6-9]|2[0-9]|3[0-1])\./);
+    if (match172) {
+      return false;
+    }
+
+    // 3. Blokir IPv6 (termasuk loopback ::1)
+    if (hostname.startsWith('[') || hostname.includes(':')) {
+      return false;
+    }
+
+    // 4. Allowlist resmi Google Maps
+    if (hostname === 'maps.app.goo.gl' || hostname === 'goo.gl' || hostname === 'share.google') {
+      return true;
+    }
+
+    // Domain Google resmi dengan TLD standar (mis. .com, .co.id, .co.uk, .de)
+    // Cegah bypass subdomain spoofing seperti maps.google.com.attacker.com
+    if (/^(?:(?:maps|www)\.)?google\.(?:[a-z]{2,4}|[a-z]{2,3}\.[a-z]{2,3})$/.test(hostname)) {
+      return true;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 export async function resolveGoogleMapsUrl(url: string, timeoutMs = 6000): Promise<ResolvedCoordinates> {
   if (!url || typeof url !== 'string') {
     return { success: false, error: 'Empty URL' };
@@ -271,18 +334,41 @@ export async function resolveGoogleMapsUrl(url: string, timeoutMs = 6000): Promi
     };
   }
 
+  // Pre-flight SSRF check: hanya izinkan host yang valid sebelum melakukan network request
+  if (!isAllowedGoogleMapsHost(cleanUrl)) {
+    return {
+      success: false,
+      rawUrl: cleanUrl,
+      error: 'SSRF protection: host not allowed',
+    };
+  }
+
   // Jika berupa shortlink, ikuti redirect HTTP
   try {
     const response = await axios.get(cleanUrl, {
       maxRedirects: 5,
       timeout: timeoutMs,
       validateStatus: (status) => status >= 200 && status < 400,
+      beforeRedirect: (options: any) => {
+        const targetHost = options.hostname || options.host || (options.href ? new URL(options.href).hostname : '');
+        if (!isAllowedGoogleMapsHost(targetHost)) {
+          throw new Error(`SSRF protection: redirect to forbidden host ${targetHost} blocked`);
+        }
+      },
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       },
     });
 
-    const finalUrl = (response.request as any)?.res?.responseUrl || response.config.url || cleanUrl;
+    const finalUrl = (response.request as any)?.res?.responseUrl || response.config?.url || cleanUrl;
+    if (!isAllowedGoogleMapsHost(finalUrl)) {
+      return {
+        success: false,
+        rawUrl: cleanUrl,
+        resolvedUrl: finalUrl,
+        error: 'SSRF protection: redirect to forbidden host blocked',
+      };
+    }
     let coords = extractCoordinatesFromUrlString(finalUrl);
 
     // Jika di final URL tidak ada, periksa body html untuk meta tag atau link canonical

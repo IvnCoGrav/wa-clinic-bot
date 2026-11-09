@@ -147,18 +147,18 @@
 | `UTL-01` | `src/utils/conversation-transaction-extractor.ts:208-293` | Hapus default `month = 6`; tanpa bulan → `null`, bukan Juli fiktif | `tests/unit/conversation-date-null.test.ts` | Input tanpa bulan tidak menghasilkan tanggal | **FIXED** |
 | `D-01` | `prisma/schema.prisma` Conversation; `conversation.repository.ts:40-60` | Partial unique index `(tenant_id, customer_id) WHERE closed_at IS NULL` + kolom penanda | test repository + migration dry-run | Satu conversation aktif per customer/tenant | **FIXED** |
 
-#### F2B — Tinggi: keamanan & isolasi tenant
+#### F2B — Tinggi: keamanan & isolasi tenant - **SELESAI (PASS)**
 
-| ID | File:Line | Perbaikan fondasional | Test baru | Acceptance |
-|---|---|---|---|---|
-| `UTL-04` | `src/utils/google-maps-url-resolver.ts:276` | Host allowlist Google Maps; batasi redirect; blok private IP; `URL` API | `tests/unit/google-maps-ssrf.test.ts` | Host asing/redirect internal ditolak |
-| `UTL-05` | `src/utils/language-sanitizer.ts:23-42` | Hapus `/g` dari regex `.test()` atau reset `lastIndex` | `tests/unit/language-sanitizer-state.test.ts` | Hasil `.test()` deterministik berulang |
-| `D-02` | `customer.service.ts:435,722,1102,1246,1392`; `message.service.ts:460-475` | Semua mutasi customer lewat `CustomerRepository` seam | test seam + grep call-site | 0 `prisma.customer.update` langsung |
-| `D-03` | `customer.repository.ts:37,75-77` | `update(id, patch, tenantId)` wajib; hapus `as any` | test dua tenant | Update lintas tenant ditolak |
-| `API-02` | `src/routes/staff.route.ts:71` | Tenant impersonation dari sesi/header terverifikasi, bukan `DEFAULT_TENANT_ID` | test dua tenant | Admin Tenant B hanya melihat data B |
-| `API-03` | `src/routes/admin/auth.subroute.ts:146-148` | Login staf menerima `tenantId` (body/header), query scoped | test login tenant A/B | Staf tenant B bisa login, tidak bocor |
-| `FN-02` | `src/services/shareloc-reminder.service.ts:267` | Setelah kirim: `logMessage` OUTBOUND + `registerInFlightBotOutbound`; clear saat gagal | test outbound livechat + echo | Pesan shareloc muncul di Live Chat |
-| `FN-05` | `src/services/web-push.service.ts:29,68-93` | Production wajib ENV VAPID; file plaintext ditolak/dienkripsi | test config fail-closed | Tanpa ENV di production → gagal jelas |
+| ID | File:Line | Perbaikan fondasional | Test baru | Acceptance | Status |
+|---|---|---|---|---|---|
+| `UTL-04` | `src/utils/google-maps-url-resolver.ts:276` | Host allowlist Google Maps; batasi redirect; blok private IP; `URL` API | `tests/unit/google-maps-ssrf.test.ts` | Host asing/redirect internal ditolak | **FIXED** |
+| `UTL-05` | `src/utils/language-sanitizer.ts:23-42` | Hapus `/g` dari regex `.test()` atau reset `lastIndex` | `tests/unit/language-sanitizer-state.test.ts` | Hasil `.test()` deterministik berulang | **FIXED** |
+| `D-02` | `customer.service.ts:435,722,1102,1246,1392`; `message.service.ts:460-475` | Semua mutasi customer lewat `CustomerRepository` seam | test seam + grep call-site | 0 `prisma.customer.update` langsung | **FIXED** |
+| `D-03` | `customer.repository.ts:37,75-77` | `update(id, patch, tenantId)` wajib; hapus `as any` | test dua tenant | Update lintas tenant ditolak | **FIXED** |
+| `API-02` | `src/routes/staff.route.ts:71` | Tenant impersonation dari sesi/header terverifikasi, bukan `DEFAULT_TENANT_ID` | test dua tenant | Admin Tenant B hanya melihat data B | **FIXED** |
+| `API-03` | `src/routes/admin/auth.subroute.ts:146-148` | Login staf menerima `tenantId` (body/header), query scoped | test login tenant A/B | Staf tenant B bisa login, tidak bocor | **FIXED** |
+| `FN-02` | `src/services/shareloc-reminder.service.ts:267` | Setelah kirim: `logMessage` OUTBOUND + `registerInFlightBotOutbound`; clear saat gagal | test outbound livechat + echo | Pesan shareloc muncul di Live Chat | **FIXED** |
+| `FN-05` | `src/services/web-push.service.ts:29,68-93` | Production wajib ENV VAPID; file plaintext ditolak/dienkripsi | test config fail-closed | Tanpa ENV di production → gagal jelas | **FIXED** |
 
 #### F2C — Tinggi: arsitektur & operasional
 

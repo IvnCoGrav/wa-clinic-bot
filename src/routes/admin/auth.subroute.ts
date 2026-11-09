@@ -137,15 +137,24 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
     }
 
     // --- TAHAP B: Verifikasi Staff (Phone/Username + Bcrypt Password di tabel Staff) ---
+    const targetTenantId =
+      (body as any)?.tenantId ||
+      (body as any)?.tenant_id ||
+      (request.headers['x-tenant-id'] as string) ||
+      (request as any).tenantId ||
+      DEFAULT_TENANT_ID;
+
     if (identifier && inputKey) {
       const cleanPhone = identifier.trim().replace(/^(\+62|62)/, '0');
       try {
         const staff = await prisma.staff.findFirst({
           where: {
+            tenant_id: targetTenantId,
+            active: true,
             OR: [
-              { phone: cleanPhone, tenant_id: DEFAULT_TENANT_ID, active: true },
-              { phone: identifier.trim(), tenant_id: DEFAULT_TENANT_ID, active: true },
-              { name: identifier.trim(), tenant_id: DEFAULT_TENANT_ID, active: true },
+              { phone: cleanPhone },
+              { phone: identifier.trim() },
+              { name: identifier.trim() },
             ],
           },
         });
@@ -156,7 +165,7 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
           if (staff.phone) resetAccountLockout(staff.phone);
           if (staff.name) resetAccountLockout(staff.name);
 
-          const result = await StaffAuthService.login(staff.phone, inputKey, DEFAULT_TENANT_ID);
+          const result = await StaffAuthService.login(staff.phone, inputKey, targetTenantId);
           if (result) {
             const cookieValue = `staff_session=${result.token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${
               isSecureRequest ? '; Secure' : ''

@@ -34,7 +34,7 @@ export interface CustomerRepository {
   findByPhone(phone: string, tenantId: string): Promise<any | null>;
   findById(id: string, tenantId: string): Promise<any | null>;
   create(data: CustomerCreateData): Promise<any>;
-  update(id: string, patch: Record<string, unknown>): Promise<any>;
+  update(id: string, patch: Record<string, unknown>, tenantId?: string): Promise<any>;
   /**
    * Update SEMUA record dalam SATU tenant dengan nomor ini (tenant-scoped).
    * Semantik setLabelFlags kini per-tenant (skema: @@unique([tenant_id, phone])).
@@ -72,7 +72,20 @@ export class PostgresCustomerRepository implements CustomerRepository {
     return created;
   }
 
-  async update(id: string, patch: Record<string, unknown>): Promise<any> {
+  async update(id: string, patch: Record<string, unknown>, tenantId?: string): Promise<any> {
+    if (tenantId) {
+      const existing = await prisma.customer.findUnique({ where: { id } });
+      if (!existing) throw new Error(`Customer ${id} not found`);
+      if ((existing as any).tenant_id && (existing as any).tenant_id !== tenantId) {
+        throw new Error(`Customer ${id} bukan milik tenant ${tenantId}`);
+      }
+      const res = await prisma.customer.updateMany({
+        where: { id, tenant_id: tenantId },
+        data: patch as any,
+      });
+      if (res.count === 0) throw new Error(`Customer ${id} not found for tenant ${tenantId}`);
+      return await prisma.customer.findUnique({ where: { id } });
+    }
     return await prisma.customer.update({ where: { id }, data: patch as any });
   }
 
@@ -121,9 +134,12 @@ export class InMemoryCustomerRepository implements CustomerRepository {
     return row;
   }
 
-  async update(id: string, patch: Record<string, unknown>): Promise<any> {
+  async update(id: string, patch: Record<string, unknown>, tenantId?: string): Promise<any> {
     const existing = this.store.get(id);
     if (!existing) throw new Error(`InMemoryCustomerRepository: customer ${id} not found`);
+    if (tenantId && existing.tenant_id && existing.tenant_id !== tenantId) {
+      throw new Error(`Customer ${id} bukan milik tenant ${tenantId}`);
+    }
     const updated = { ...existing, ...patch, updated_at: new Date() };
     this.store.set(id, updated);
     return updated;

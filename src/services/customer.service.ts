@@ -1,4 +1,5 @@
 import { prisma } from '../db/client';
+import { getCustomerRepository } from '../repositories/customer.repository';
 import { Customer, LocationSource } from '@prisma/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
@@ -432,9 +433,9 @@ export class CustomerService {
         }
       }
 
-      const updated = await prisma.customer.update({
-        where: { id: customerId },
-        data: {
+      const updated = await getCustomerRepository().update(
+        customerId,
+        {
           kelurahan: finalKelurahan,
           kecamatan: finalKecamatan,
           kota: data.kota ?? existing.kota,
@@ -446,7 +447,8 @@ export class CustomerService {
           zipcode: data.zipcode ?? existing.zipcode,
           ...(effectiveSource !== undefined ? { location_source: effectiveSource } : {}),
         },
-      });
+        tenantId
+      );
 
       // P2-5: seam atomik — tulis history + audit (jangan campur nama-teks + koordinat-GPS parsial)
       try {
@@ -465,9 +467,9 @@ export class CustomerService {
           timestamp: new Date().toISOString(),
         };
         const rawAddr = (data as any)?.address?.trim();
-        await prisma.customer.update({
-          where: { id: customerId },
-          data: {
+        await getCustomerRepository().update(
+          customerId,
+          {
             preferences: {
               ...prevPrefs,
               ...(rawAddr ? { address: rawAddr, full_address: rawAddr } : {}),
@@ -476,7 +478,8 @@ export class CustomerService {
               location_updated_at: new Date().toISOString(),
             } as any,
           },
-        });
+          tenantId
+        );
       } catch {}
       try {
         const { auditService } = await import('./audit.service');
@@ -769,10 +772,11 @@ export class CustomerService {
    */
   public async markShareLocationSent(customerId: string, tenantId: string): Promise<any> {
     try {
-      const updated = await prisma.customer.update({
-        where: { id: customerId },
-        data: { share_location_sent: true },
-      });
+      const updated = await getCustomerRepository().update(
+        customerId,
+        { share_location_sent: true },
+        tenantId
+      );
       memoryCustomers.set(updated.phone, updated);
       return updated;
     } catch (error) {
@@ -810,9 +814,9 @@ export class CustomerService {
         throw new Error(`Customer ${customerId} not found for tenant ${tenantId}`);
       }
 
-      return await prisma.customer.update({
-        where: { id: customerId },
-        data: {
+      return await getCustomerRepository().update(
+        customerId,
+        {
           pending_kelurahan: data.kelurahan,
           pending_kecamatan: data.kecamatan,
           pending_kota: data.kota,
@@ -820,7 +824,8 @@ export class CustomerService {
           pending_lng: CustomerService.toNumberOrNull(data.lng),
           pending_zipcode: data.zipcode,
         },
-      });
+        tenantId
+      );
     } catch (error) {
       // Fallback in-memory
       for (const [phone, cust] of memoryCustomers.entries()) {
@@ -873,9 +878,9 @@ export class CustomerService {
    */
   public async resetFullLocation(customerId: string, tenantId: string): Promise<any> {
     try {
-      return await prisma.customer.update({
-        where: { id: customerId },
-        data: {
+      return await getCustomerRepository().update(
+        customerId,
+        {
           kelurahan: null,
           kecamatan: null,
           kota: null,
@@ -892,7 +897,8 @@ export class CustomerService {
           pending_lng: null,
           pending_zipcode: null,
         },
-      });
+        tenantId
+      );
     } catch (error) {
       // Memory fallback update
       for (const [phone, cust] of memoryCustomers.entries()) {
@@ -1051,14 +1057,15 @@ export class CustomerService {
    */
   public async blockCustomer(customerId: string, reason: string, tenantId: string): Promise<any> {
     try {
-      return await prisma.customer.update({
-        where: { id: customerId },
-        data: {
+      return await getCustomerRepository().update(
+        customerId,
+        {
           status: 'blocked',
           block_reason: reason,
           blocked_at: new Date(),
         },
-      });
+        tenantId
+      );
     } catch (error) {
       // Memory fallback update
       for (const [phone, cust] of memoryCustomers.entries()) {
@@ -1078,14 +1085,15 @@ export class CustomerService {
    */
   public async unblockCustomer(customerId: string, tenantId: string): Promise<any> {
     try {
-      return await prisma.customer.update({
-        where: { id: customerId },
-        data: {
+      return await getCustomerRepository().update(
+        customerId,
+        {
           status: 'active',
           block_reason: null,
           blocked_at: null,
         },
-      });
+        tenantId
+      );
     } catch (error) {
       // Memory fallback update
       for (const [phone, cust] of memoryCustomers.entries()) {
@@ -1149,13 +1157,14 @@ export class CustomerService {
     const finalName = normalizeHonorificPrefix(candidate);
 
     try {
-      const updated = await prisma.customer.update({
-        where: { id: customerId },
-        data: {
+      const updated = await getCustomerRepository().update(
+        customerId,
+        {
           name: finalName,
           name_source: source,
         },
-      });
+        tenantId
+      );
 
       // Google Contacts auto-sync (best-effort, non-blocking)
       import('./google-contacts.service')
@@ -1293,11 +1302,11 @@ export class CustomerService {
     }
 
     try {
-      const updated = await prisma.customer.update({
-        where: { id: customerId },
-        data: updateData,
-        include: { children: true },
-      });
+      const updated = await getCustomerRepository().update(
+        customerId,
+        updateData,
+        tenantId
+      );
 
       // Penulis kanonis tunggal = `prisma.customer.update` di atas (+ sinkron cache
       // memori). DILARANG menambah tulis repo kedua di sini: repo default
@@ -1439,10 +1448,11 @@ export class CustomerService {
               is_out_of_coverage: delivery.isOutOfCoverage,
               location_source: LocationSource.manual_staff,
             };
-            await prisma.customer.update({
-              where: { id: customerId },
-              data: recalcPatch,
-            }).catch((e) => {
+            await getCustomerRepository().update(
+              customerId,
+              recalcPatch,
+              tenantId
+            ).catch((e: any) => {
               // Fail-visible: jarak/ongkir basi WAJIB terlihat di log, jangan ditelan diam.
               console.error(
                 '[CUSTOMER UPDATE] Gagal menulis hasil recalc jarak (data bisa basi):',
@@ -1560,10 +1570,11 @@ export class CustomerService {
    */
   public async setAiOverride(customerId: string, tenantId: string, aiOverride: 'FORCE_ON' | 'FORCE_OFF' | null): Promise<any> {
     try {
-      return await prisma.customer.update({
-        where: { id: customerId },
-        data: { ai_override: aiOverride },
-      });
+      return await getCustomerRepository().update(
+        customerId,
+        { ai_override: aiOverride },
+        tenantId
+      );
     } catch (error) {
       // Memory fallback update
       for (const [phone, cust] of memoryCustomers.entries()) {
@@ -2628,7 +2639,7 @@ export class CustomerService {
   public async recalculateCustomerLtv(customerId: string, tenantId?: string): Promise<number> {
     try {
       const ltv = await computeCustomerLtv(customerId, tenantId);
-      await prisma.customer.update({ where: { id: customerId }, data: { ltv_cache: ltv } });
+      await getCustomerRepository().update(customerId, { ltv_cache: ltv }, tenantId);
       return ltv;
     } catch (err: any) {
       console.warn('[CUSTOMER] recalculateCustomerLtv failed:', err.message);
@@ -3108,13 +3119,13 @@ export class CustomerService {
   ): Promise<void> {
     const now = new Date();
     try {
-      await prisma.customer.update({
-        where: { id: customerId },
-        data: {
+      await getCustomerRepository().update(
+        customerId,
+        {
           profile_picture_url: profilePictureUrl || null,
           profile_picture_updated_at: now,
-        },
-      });
+        }
+      );
     } catch {
       // Memory fallback
     }

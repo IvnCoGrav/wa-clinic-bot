@@ -177,6 +177,7 @@ export async function staffAuthRoutes(fastify: FastifyInstance) {
         id: session.staff.id,
         name: session.staff.name,
         role: (session.staff.role || 'THERAPIST').toLowerCase(),
+        tenant_id: session.staff.tenant_id,
       },
     });
   });
@@ -214,6 +215,7 @@ export async function staffAuthRoutes(fastify: FastifyInstance) {
         id: session.staff.id,
         name: session.staff.name,
         role: (session.staff.role || 'THERAPIST').toLowerCase(),
+        tenant_id: session.staff.tenant_id,
       },
     });
   });

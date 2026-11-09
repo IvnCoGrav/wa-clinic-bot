@@ -98,4 +98,39 @@ describe('FASE 5a — customer repository', () => {
       expect.objectContaining({ where: { phone: '6281', tenant_id: 'tenant-a' } })
     );
   });
+
+  it('D-03: Postgres update dengan tenantId menulis dengan tenant_id di WHERE', async () => {
+    vi.mocked(prisma.customer.findUnique)
+      .mockResolvedValueOnce({ id: 'c1', tenant_id: 'tenant-a' } as any)
+      .mockResolvedValueOnce({ id: 'c1', tenant_id: 'tenant-a', name: 'Baru' } as any);
+    vi.mocked(prisma.customer.updateMany).mockResolvedValue({ count: 1 } as any);
+
+    const repo = new PostgresCustomerRepository();
+    const updated = await repo.update('c1', { name: 'Baru' }, 'tenant-a');
+    expect(prisma.customer.updateMany).toHaveBeenCalledWith({
+      where: { id: 'c1', tenant_id: 'tenant-a' },
+      data: { name: 'Baru' },
+    });
+    expect(updated.name).toBe('Baru');
+  });
+
+  it('D-03: Postgres update lintas tenant melempar error (anti cross-tenant update)', async () => {
+    vi.mocked(prisma.customer.findUnique).mockResolvedValue({ id: 'c1', tenant_id: 'tenant-other' } as any);
+    const repo = new PostgresCustomerRepository();
+    await expect(repo.update('c1', { name: 'Baru' }, 'tenant-a')).rejects.toThrow(/bukan milik tenant/i);
+    expect(prisma.customer.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('D-03: InMemory update dengan tenantId mismatch melempar error', async () => {
+    const repo = new InMemoryCustomerRepository();
+    const created = await repo.create({ tenant_id: 'tenant-a', phone: '6281' });
+    await expect(repo.update(created.id, { name: 'Baru' }, 'tenant-b')).rejects.toThrow(/bukan milik tenant/i);
+  });
+
+  it('D-03: InMemory update dengan tenantId cocok berhasil mengupdate', async () => {
+    const repo = new InMemoryCustomerRepository();
+    const created = await repo.create({ tenant_id: 'tenant-a', phone: '6281' });
+    const updated = await repo.update(created.id, { name: 'Baru' }, 'tenant-a');
+    expect(updated.name).toBe('Baru');
+  });
 });

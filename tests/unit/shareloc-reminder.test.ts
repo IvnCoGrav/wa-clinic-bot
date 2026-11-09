@@ -5,6 +5,7 @@ import * as factory from '../../src/integrations/whatsapp/factory';
 import { auditService } from '../../src/services/audit.service';
 import * as hubService from '../../src/services/live-chat-hub.service';
 import * as signalService from '../../src/services/shareloc-signal.service';
+import { messageService } from '../../src/services/message.service';
 
 describe('Shareloc Reminder Service — Sweep & Template Resolution', () => {
   beforeEach(() => {
@@ -126,6 +127,8 @@ describe('Shareloc Reminder Service — Sweep & Template Resolution', () => {
         session_data: {},
       });
 
+
+
       const res = await sharelocReminderService.sweep('default-tenant', now);
       expect(res.examined).toBe(1);
       expect(res.needed).toBe(1);
@@ -192,12 +195,26 @@ describe('Shareloc Reminder Service — Sweep & Template Resolution', () => {
         customer: { id: 'c-1', is_sandbox_test: false },
       });
 
+      const logSpy = vi.spyOn(messageService, 'logMessage').mockResolvedValue({ id: 'msg-1' } as any);
+      const inFlightSpy = vi.spyOn(messageService, 'registerInFlightBotOutbound').mockImplementation(() => {});
+
       const res = await sharelocReminderService.sweep('default-tenant', now);
       expect(res.examined).toBe(1);
       expect(res.needed).toBe(1);
       expect(res.sent).toBe(1);
 
       expect(mockSendTextMessage).toHaveBeenCalledWith('62812345678', 'Bunda Ani, mohon shareloc ya 🙏');
+      // FN-02: Verifikasi pencatatan pesan outbound dan in-flight tracking
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenantId: 'default-tenant',
+          conversationId: 'conv-1',
+          direction: 'OUTBOUND',
+          content: 'Bunda Ani, mohon shareloc ya 🙏',
+          senderType: 'BOT',
+        })
+      );
+      expect(inFlightSpy).toHaveBeenCalledWith('62812345678@c.us', 'Bunda Ani, mohon shareloc ya 🙏', 'default-tenant');
       expect(auditSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'SHARELOC_REMINDER_SENT',

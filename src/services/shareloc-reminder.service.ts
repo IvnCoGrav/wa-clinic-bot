@@ -16,6 +16,7 @@ import { CONFIRMED_FAMILY_STATUSES, activeTreatmentCutoff } from '../domain/rese
 import { getWibNow, formatWibDateYYYYMMDD } from '../utils/wib-time';
 import { computeSharelocSignal, isFriendlyHoursWib } from './shareloc-signal.service';
 import { resolveGatewayForTenant } from '../integrations/whatsapp/factory';
+import { messageService } from './message.service';
 import { auditService } from './audit.service';
 import { getLiveChatHub } from './live-chat-hub.service';
 import { buildConversationUpdatedPayload } from './conversation.service';
@@ -264,11 +265,30 @@ export class SharelocReminderService {
 
         // 6. Kirim pesan via gateway yang sadar tenant
         const gateway = await resolveGatewayForTenant(tenantId);
+        const chatId = cust.phone.includes('@') ? cust.phone : `${cust.phone.replace(/\D/g, '')}@c.us`;
+        messageService.registerInFlightBotOutbound(chatId, messageText, tenantId);
         const sendResult = await gateway.sendTextMessage(cust.phone, messageText);
 
         if (!sendResult.success) {
           countReason('gateway_send_failed');
           continue;
+        }
+
+        // FN-02: Catat pesan outbound ke pesan Live Chat agar terlihat oleh CS/Admin
+        if (conversation?.id) {
+          try {
+            await messageService.logMessage({
+              tenantId,
+              conversationId: conversation.id,
+              direction: 'OUTBOUND',
+              content: messageText,
+              senderType: 'BOT',
+              senderName: 'Bot (Shareloc Reminder)',
+              waMessageId: sendResult.messageId || undefined,
+            });
+          } catch (logErr: any) {
+            console.warn('[SharelocReminder] Gagal log outbound message ke Live Chat:', logErr?.message || logErr);
+          }
         }
 
         // 7. Catat waktu permintaan ke state sesi & preferensi

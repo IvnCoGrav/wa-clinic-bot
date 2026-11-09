@@ -57,6 +57,15 @@ export class WebPushService {
       this.vapidSubject = envSubject;
     }
 
+    // FN-05: Di mode production, VAPID keys WAJIB disuplai lewat environment variables (fail-closed).
+    // Dilarang keras fallback ke file plaintext atau key generate baru di production.
+    const isProd = process.env.NODE_ENV === 'production';
+    if (isProd && (!envPublic || !envPrivate)) {
+      throw new Error(
+        '[WEB PUSH] VAPID_PUBLIC_KEY dan VAPID_PRIVATE_KEY wajib dikonfigurasi di environment variables pada mode production (fail-closed, plaintext storage file dilarang).'
+      );
+    }
+
     if (envPublic && envPrivate) {
       this.vapidKeys = {
         publicKey: envPublic.trim(),

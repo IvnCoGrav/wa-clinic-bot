@@ -62,13 +62,20 @@ export async function staffRoutes(fastify: FastifyInstance) {
         throw err;
       }
       if (adminSession) {
+        const impersonatedTenantId =
+          (request as any).tenantId ||
+          (request.headers['x-tenant-id'] as string) ||
+          (request.query as any)?.tenant_id ||
+          (adminSession as any)?.tenant_id ||
+          DEFAULT_TENANT_ID;
+
         session = {
           token: adminCookie,
           staff: {
             id: adminSession.id || 'admin',
             name: adminSession.adminIdentity || 'Admin',
             role: 'SPV_CS',
-            tenant_id: DEFAULT_TENANT_ID,
+            tenant_id: impersonatedTenantId,
           },
           createdAt: adminSession.createdAt,
           expiresAt: adminSession.expiresAt,

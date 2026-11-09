@@ -20,8 +20,12 @@
 // - Hiragana/Katakana (Jepang): \u3040-\u30FF
 // - Hangul (Korea): \uAC00-\uD7AF, \u1100-\u11FF
 // - Cyrillic (Rusia/Bulgaria): \u0400-\u04FF
-const FOREIGN_SCRIPT_RE =
-  /[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\u3040-\u30FF\uAC00-\uD7AF\u1100-\u11FF\u0400-\u04FF]/g;
+const FOREIGN_SCRIPT_CHARS =
+  '\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\u3040-\u30FF\uAC00-\uD7AF\u1100-\u11FF\u0400-\u04FF';
+
+// UTL-05: Regex stateless tanpa flag /g khusus untuk pemeriksaan .test()
+// Menghilangkan bug stateful lastIndex yang membuat pemanggilan berulang bergantian true/false.
+const FOREIGN_SCRIPT_TEST_RE = new RegExp(`[${FOREIGN_SCRIPT_CHARS}]`);
 
 /**
  * Buang semua karakter aksara asing (CJK/Kanji, Jepang, Korea, Rusia) dari teks.
@@ -29,7 +33,7 @@ const FOREIGN_SCRIPT_RE =
  */
 export function stripNonIndonesianScripts(text: string): string {
   if (!text) return text;
-  return text.replace(FOREIGN_SCRIPT_RE, '');
+  return text.replace(new RegExp(`[${FOREIGN_SCRIPT_CHARS}]`, 'g'), '');
 }
 
 /**
@@ -38,7 +42,7 @@ export function stripNonIndonesianScripts(text: string): string {
  */
 export function containsForeignScripts(text: string): boolean {
   if (!text) return false;
-  return FOREIGN_SCRIPT_RE.test(text);
+  return FOREIGN_SCRIPT_TEST_RE.test(text);
 }
 
 /**
