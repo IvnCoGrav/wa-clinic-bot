@@ -216,27 +216,35 @@ Hanya area yang belum tercakup Track B. Seluruh 4 modul telah selesai diaudit se
 
 ## 7. FASE S5 — Fase 9: God Object & Data-Driven
 
-**Prasyarat:** S0–S2 hijau; S4 selesai; persetujuan terpisah untuk migrasi DB.
+**Prasyarat:** S0–S2 hijau; S4 selesai; S5.0 re-baseline selesai; persetujuan terpisah untuk migrasi DB.
 
-### Task S5.1 — Pecah `LiveChatMonitor.tsx`
-| Langkah | Aksi |
-|---|---|
-| 5.1.1 | Inventaris section & dependency via `rg`; catat line range aktual (jangan menebak) |
-| 5.1.2 | Ekstrak hooks: `useLiveChatThreads`, `useLiveChatSse`, `useLiveChatFilters` ke `src/hooks/` |
-| 5.1.3 | Ekstrak komponen: `ThreadList`, `MessagePane`, `Composer`, `CustomerSidebar` |
-| 5.1.4 | Pertahankan props/behavior; test render + interaction |
-| Acceptance | File utama < 1.500 baris; build dashboard; test livechat hijau |
+### Task S5.0 — Re-baseline LiveChatMonitor (SELESAI 2026-11-09)
+- Lokasi aktual terverifikasi: `packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx` (8.127 baris, 427.033 bytes).
+- Baseline build: `npm --prefix packages/admin-dashboard run build` PASS (Exit 0, 16.48s; chunk 305.58 kB).
+- Baseline unit test frontend: `npx vitest run tests/unit/livechat-*.test.ts` PASS (20/20 test).
+- Dokumen pemetaan lengkap: `docs/plans/REBASELINE_LIVECHAT_S5_2026-11-09.md`.
+
+### Task S5.1 — Pecah `packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx` (8.127 Baris)
+| Langkah | Aksi | Target File |
+|---|---|---|
+| 5.1.1 | Ekstrak hooks modular: draf chat & scroll tracker | `packages/admin-dashboard/src/hooks/useLiveChatDrafts.ts`, `useLiveChatScroll.ts` |
+| 5.1.2 | Ekstrak Panel Kiri: Thread List, Header, Search & Filter Cards (baris 4.430–5.409) | `packages/admin-dashboard/src/components/livechat/LiveChatThreadList.tsx` (~850 baris) |
+| 5.1.3 | Ekstrak Panel Tengah: Chat Header, Alert Banners, Bubbles & Reactions (baris 5.410–6.800) | `packages/admin-dashboard/src/components/livechat/LiveChatMessagePane.tsx` (~1.100 baris) |
+| 5.1.4 | Ekstrak Modals Sekunder: Customer Detail, Payment Proof, Action Sheet / Context Menu | `packages/admin-dashboard/src/components/livechat/LiveChatCustomerModal.tsx`, `LiveChatPaymentProofModal.tsx`, `LiveChatMessageContextMenu.tsx` |
+| 5.1.5 | Hubungkan orchestrator utama `LiveChatMonitor.tsx` dengan sub-komponen terpisah | `packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx` (< 1.500 baris) |
+| Acceptance | File utama < 1.500 baris; `npm run build` dashboard PASS; 20 unit test livechat hijau; tidak ada regresi visual/fungsional. |
 
 ### Task S5.2 — Katalog/SOP data-driven
+*Catatan: Eksekusi S5.2 WAJIB melalui konfirmasi persetujuan migrasi database terpisah.*
 | Langkah | Aksi |
 |---|---|
-| 5.2.1 | Audit 42 layanan di `src/services/treatment-catalog.service.ts:199-926` + 7 tier `delivery.service.ts:22-30`; petakan ke tabel `Treatment`/delivery tier |
+| 5.2.1 | Audit 42 layanan di `src/services/treatment-catalog.service.ts:199-926` (39 teks "Kala") + 7 tier `delivery.service.ts:22-30`; petakan ke tabel `Treatment`/delivery tier |
 | 5.2.2 | Migration/seed eksplisit per tenant; hapus auto-seed diam-diam |
 | 5.2.3 | Dual-read + feature flag `USE_DB_CATALOG`; fallback hanya untuk tenant default dengan peringatan |
 | 5.2.4 | Onboarding tenant baru: state “belum dikonfigurasi”, bukan katalog Kala |
 | Acceptance | `rg "Kala" src/services/treatment-catalog.service.ts` = 0 atau hanya dokumentasi; dua tenant berbeda katalog |
 
-**Gate S5:** build backend+dashboard; test katalog; dua tenant; migration dry-run + approval.
+**Gate S5:** build backend+dashboard; test livechat & katalog hijau; dua tenant; migration dry-run + approval.
 
 ---
 
