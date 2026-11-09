@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { prisma } from '../../src/db/client';
 import { sanitizeKelurahanInput, isCorruptedKelurahan } from '../../src/utils/kelurahan-guard';
 import { customerService } from '../../src/services/customer.service';
+import { getCustomerRepository } from '../../src/repositories/customer.repository';
 
 /**
  * Fase 165b — Gerbang SEAM TULIS kolom `kelurahan`.
@@ -60,13 +61,14 @@ describe('kelurahan-guard (pure)', () => {
 
 describe('customer.service.updateCustomerLocation — gerbang seam tulis', () => {
   const TENANT = 'default-tenant';
+  let updateSpy: any;
 
   beforeEach(() => {
     vi.restoreAllMocks();
   });
 
   function mockExisting(overrides: Record<string, any> = {}) {
-    vi.mocked(prisma.customer.findFirst).mockResolvedValue({
+    const row = {
       id: 'cust-1',
       tenant_id: TENANT,
       name: 'Bunda Uji',
@@ -83,9 +85,11 @@ describe('customer.service.updateCustomerLocation — gerbang seam tulis', () =>
       share_location_sent: false,
       preferences: {},
       ...overrides,
-    } as any);
-    vi.mocked(prisma.customer.update).mockImplementation(
-      async (args: any) => ({ id: 'cust-1', ...args.data } as any)
+    };
+    vi.mocked(prisma.customer.findFirst).mockResolvedValue(row as any);
+    vi.mocked(prisma.customer.findUnique).mockResolvedValue(row as any);
+    updateSpy = vi.spyOn(getCustomerRepository(), 'update').mockImplementation(
+      async (_id: string, patch: any) => ({ ...row, ...patch })
     );
   }
 
@@ -98,9 +102,9 @@ describe('customer.service.updateCustomerLocation — gerbang seam tulis', () =>
       TENANT
     );
 
-    // Pemanggilan DB pertama = baris utama; kelurahan harus tetap 'Waru'
-    const firstCall = vi.mocked(prisma.customer.update).mock.calls[0][0] as any;
-    expect(firstCall.data.kelurahan).toBe('Waru');
+    // Pemanggilan repo seam pertama = baris utama; kelurahan harus tetap 'Waru'
+    const firstCall = updateSpy.mock.calls[0][1] as any;
+    expect(firstCall.kelurahan).toBe('Waru');
     expect(out).toBeTruthy();
   });
 
@@ -113,8 +117,8 @@ describe('customer.service.updateCustomerLocation — gerbang seam tulis', () =>
       TENANT
     );
 
-    const firstCall = vi.mocked(prisma.customer.update).mock.calls[0][0] as any;
-    expect(firstCall.data.kelurahan).toBe('Bulakbanteng');
+    const firstCall = updateSpy.mock.calls[0][1] as any;
+    expect(firstCall.kelurahan).toBe('Bulakbanteng');
   });
 });
 
@@ -126,7 +130,7 @@ describe('customer.service.updateCustomer — gerbang + redirect ke preferences.
   });
 
   it('kelurahan cemar dialihkan ke preferences.address, kolom kelurahan tidak ditulis', async () => {
-    vi.mocked(prisma.customer.findFirst).mockResolvedValue({
+    const row = {
       id: 'cust-2',
       tenant_id: TENANT,
       name: 'Bunda Uji',
@@ -134,20 +138,22 @@ describe('customer.service.updateCustomer — gerbang + redirect ke preferences.
       kecamatan: null,
       kota: null,
       preferences: {},
-    } as any);
-    vi.mocked(prisma.customer.update).mockImplementation(
-      async (args: any) => ({ id: 'cust-2', ...args.data } as any)
+    };
+    vi.mocked(prisma.customer.findFirst).mockResolvedValue(row as any);
+    vi.mocked(prisma.customer.findUnique).mockResolvedValue(row as any);
+    const updateSpy = vi.spyOn(getCustomerRepository(), 'update').mockImplementation(
+      async (_id: string, patch: any) => ({ ...row, ...patch })
     );
 
     await customerService.updateCustomer('cust-2', { kelurahan: 'Jl. Griya Kebraon 12' }, TENANT);
 
-    const call = vi.mocked(prisma.customer.update).mock.calls[0][0] as any;
-    expect(call.data.kelurahan).toBeUndefined();
-    expect(call.data.preferences?.address).toBe('Jl. Griya Kebraon 12');
+    const patch = updateSpy.mock.calls[0][1] as any;
+    expect(patch.kelurahan).toBeUndefined();
+    expect(patch.preferences?.address).toBe('Jl. Griya Kebraon 12');
   });
 
   it('kelurahan resmi tidak dialihkan (tetap di kolom kelurahan)', async () => {
-    vi.mocked(prisma.customer.findFirst).mockResolvedValue({
+    const row = {
       id: 'cust-3',
       tenant_id: TENANT,
       name: 'Bunda Uji',
@@ -155,20 +161,22 @@ describe('customer.service.updateCustomer — gerbang + redirect ke preferences.
       kecamatan: null,
       kota: null,
       preferences: {},
-    } as any);
-    vi.mocked(prisma.customer.update).mockImplementation(
-      async (args: any) => ({ id: 'cust-3', ...args.data } as any)
+    };
+    vi.mocked(prisma.customer.findFirst).mockResolvedValue(row as any);
+    vi.mocked(prisma.customer.findUnique).mockResolvedValue(row as any);
+    const updateSpy = vi.spyOn(getCustomerRepository(), 'update').mockImplementation(
+      async (_id: string, patch: any) => ({ ...row, ...patch })
     );
 
     await customerService.updateCustomer('cust-3', { kelurahan: 'Mulyorejo' }, TENANT);
 
-    const call = vi.mocked(prisma.customer.update).mock.calls[0][0] as any;
-    expect(call.data.kelurahan).toBe('Mulyorejo');
-    expect(call.data.preferences?.address).toBeUndefined();
+    const patch = updateSpy.mock.calls[0][1] as any;
+    expect(patch.kelurahan).toBe('Mulyorejo');
+    expect(patch.preferences?.address).toBeUndefined();
   });
 
   it('null eksplisit (pembersihan admin) tetap diteruskan sebagai null', async () => {
-    vi.mocked(prisma.customer.findFirst).mockResolvedValue({
+    const row = {
       id: 'cust-4',
       tenant_id: TENANT,
       name: 'Bunda Uji',
@@ -176,14 +184,16 @@ describe('customer.service.updateCustomer — gerbang + redirect ke preferences.
       kecamatan: null,
       kota: null,
       preferences: {},
-    } as any);
-    vi.mocked(prisma.customer.update).mockImplementation(
-      async (args: any) => ({ id: 'cust-4', ...args.data } as any)
+    };
+    vi.mocked(prisma.customer.findFirst).mockResolvedValue(row as any);
+    vi.mocked(prisma.customer.findUnique).mockResolvedValue(row as any);
+    const updateSpy = vi.spyOn(getCustomerRepository(), 'update').mockImplementation(
+      async (_id: string, patch: any) => ({ ...row, ...patch })
     );
 
     await customerService.updateCustomer('cust-4', { kelurahan: null }, TENANT);
 
-    const call = vi.mocked(prisma.customer.update).mock.calls[0][0] as any;
-    expect(call.data.kelurahan).toBeNull();
+    const patch = updateSpy.mock.calls[0][1] as any;
+    expect(patch.kelurahan).toBeNull();
   });
 });

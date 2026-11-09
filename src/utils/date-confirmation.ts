@@ -169,33 +169,23 @@ const PROCEDURAL_INQUIRY_TOKENS = new Set([
 export function hasBookingCommitSignal(text: string | undefined): boolean {
   const lower = (text || '').toLowerCase();
   if (!lower) return false;
-  // Fase 4: kelas deiksis (tahan slang/typo/parafrasa) — dievaluasi lebih dulu.
-  if (hasDeixisCommit(tokenizeAlnum(lower))) return true;
-  // Frasa multi-kata via includes (distinctive, tak ambigu, mencakup variasi partikel percakapan alami).
-  if (
-    lower.includes('mau yang itu') || lower.includes('boleh yang itu')
-    || lower.includes('mau deh yang itu') || lower.includes('boleh deh yang itu')
-    || lower.includes('mau dong yang itu') || lower.includes('boleh dong yang itu')
-    || lower.includes('mau aja yang itu') || lower.includes('boleh aja yang itu')
-    || lower.includes('yang itu aja') || lower.includes('yang itu deh')
-    // Anaphora commitment patterns (F2: single source untuk anaphora "yang tadi/itu/barusan" + verba setuju)
-    || lower.includes('mau yang tadi') || lower.includes('boleh yang tadi')
-    || lower.includes('ambil yang tadi') || lower.includes('pesan yang tadi')
-    || lower.includes('yang tadi aja') || lower.includes('yang tadi deh')
-    || lower.includes('mau yang barusan') || lower.includes('boleh yang barusan')
-    || lower.includes('ambil yang barusan') || lower.includes('pesan yang barusan')
-    || lower.includes('yang barusan aja') || lower.includes('yang barusan deh')
-    || lower.includes('sesuai rekomendasi') || lower.includes('sesuai saran')
-    || lower.includes('ikut rekomendasi') || lower.includes('ikut saran')
-  ) return true;
-  // Kata tunggal via token-exact agar "fix" tak cocok di "prefix".
-  const toks = lower.split(/[^a-z0-9]+/).filter((t) => t.length > 0);
-  const tokSet = new Set(toks);
+
+  const tokens = tokenizeAlnum(lower);
+  // UTL-06: Evaluasi tata bahasa deiksis semantik (tahan slang/typo/parafrasa, anti-overfitting)
+  if (hasDeixisCommit(tokens)) return true;
+
   // Pertanyaan prosedural ("cara booking", "syarat booking") BUKAN komitmen booking
-  if (toks.some((t) => PROCEDURAL_INQUIRY_TOKENS.has(t))) {
+  if (tokens.some((t) => PROCEDURAL_INQUIRY_TOKENS.has(t))) {
     return false;
   }
 
+  // Penolakan / pembatalan membatalkan verba komitmen tunggal ("jangan booking", "batal pesan")
+  if (tokens.some((t) => DEIXIS_STOP.has(t))) {
+    return false;
+  }
+
+  // Kata tunggal via token-exact agar "fix" tak cocok di "prefix"
+  const tokSet = new Set(tokens);
   return BOOKING_COMMIT_SINGLE_TOKENS.some((w) => tokSet.has(w));
 }
 

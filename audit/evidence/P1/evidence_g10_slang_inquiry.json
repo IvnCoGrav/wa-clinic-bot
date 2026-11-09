@@ -2,7 +2,7 @@
   "summary": {
     "totalTested": 100,
     "identifiedAsInquiry": 80,
-    "hasBookingCommitSignal": 5,
+    "hasBookingCommitSignal": 4,
     "leakedAsCommit": 0,
     "leakedPercentage": "0.0%",
     "leakedExamples": []
@@ -772,7 +772,7 @@
       "index": 96,
       "text": "mau booking sabtu jam 10 kosong gak",
       "isAvailabilityInquiryText": true,
-      "hasBookingCommitSignal": true,
+      "hasBookingCommitSignal": false,
       "isBookingCommitReady": false,
       "leakedAsCommit": false
     },

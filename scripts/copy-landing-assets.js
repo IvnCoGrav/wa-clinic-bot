@@ -17,3 +17,18 @@ for (const file of fs.readdirSync(srcDir)) {
 }
 
 console.log(`[copy-landing-assets] Template landing disalin ke ${path.relative(process.cwd(), outDir)}`);
+
+// CFG-02: Pastikan asset konfigurasi runtime juga disalin ke dist/config
+const configSrc = path.join(__dirname, '..', 'src', 'config');
+const configDist = path.join(__dirname, '..', 'dist', 'config');
+if (fs.existsSync(configSrc)) {
+  fs.mkdirSync(configDist, { recursive: true });
+  for (const filename of ['persona_custom.txt', 'surabaya_sidoarjo_subdistricts.json']) {
+    const fileSrc = path.join(configSrc, filename);
+    const fileDist = path.join(configDist, filename);
+    if (fs.existsSync(fileSrc)) {
+      fs.copyFileSync(fileSrc, fileDist);
+      console.log(`[copy-landing-assets] Config asset ${filename} disalin ke ${path.relative(process.cwd(), fileDist)}`);
+    }
+  }
+}

@@ -160,20 +160,20 @@
 | `FN-02` | `src/services/shareloc-reminder.service.ts:267` | Setelah kirim: `logMessage` OUTBOUND + `registerInFlightBotOutbound`; clear saat gagal | test outbound livechat + echo | Pesan shareloc muncul di Live Chat | **FIXED** |
 | `FN-05` | `src/services/web-push.service.ts:29,68-93` | Production wajib ENV VAPID; file plaintext ditolak/dienkripsi | test config fail-closed | Tanpa ENV di production → gagal jelas | **FIXED** |
 
-#### F2C — Tinggi: arsitektur & operasional
+#### F2C — Tinggi: arsitektur & operasional - **SELESAI (PASS)**
 
-| ID | File:Line | Perbaikan | Acceptance |
-|---|---|---|---|
-| `CFG-02` | `config/persona.ts:12,101-107`; `Dockerfile:50-51` | Salin `persona_custom.txt` ke image; satu sumber persona | Build image memuat persona |
-| `CFG-04` | `config/brand.ts:27-38`; `followup-templates.ts:80-334` | Semua brand/follow-up lewat `getBrandIdentityAsync(tenantId)` | Dua tenant beda brand |
-| `CFG-05` | `services/delivery.service.ts:244,335` | Origin ongkir dari `getClinicLocationAsync(tenantId)` | Ongkir beda per tenant |
-| `UTL-02` | `utils/reservation-text-parser.ts:795-958` | Tanggal pakai timezone WIB, bukan `getDay()` UTC | Test dini hari WIB |
-| `UTL-03` | `utils/reservation-text-parser.ts:1-1148` | Pecah parser >1.148 baris per domain | File <1.500; test parser hijau |
-| `UTL-06` | `utils/date-confirmation.ts:170-185` | Normalisasi konfirmasi tanggal deterministik | Test variasi parafrase |
-| `DEL-01` | `.github/workflows/ci.yml` (baru) | CI: secret scan, typecheck, build backend+dashboard, test | Workflow valid; PR gate |
-| `DEL-02` | `scripts/deploy.sh` | Delegasi ke `deploy-prod.sh`, bukan restart app saja | `bash -n`; worker & migrasi ikut |
-| `DEL-05` | `Dockerfile:46-47` | Copy `.prisma`/`@prisma/client` dari builder; hapus `npx prisma generate` runner | Build offline runner |
-| `DEL-07` | `scripts/backup.sh:32-48` | Backup via container + `verify-backup-restore.ts`; tanpa `.env` plaintext | Restore drill row-count |
+| ID | File:Line | Perbaikan | Acceptance | Status |
+|---|---|---|---|---|
+| `CFG-02` | `config/persona.ts:12,101-107`; `Dockerfile:50-51` | Salin `persona_custom.txt` ke image; satu sumber persona | Build image memuat persona | **FIXED** |
+| `CFG-04` | `config/brand.ts:27-38`; `followup-templates.ts:80-334` | Semua brand/follow-up lewat `getBrandIdentityAsync(tenantId)` | Dua tenant beda brand | **FIXED** |
+| `CFG-05` | `services/delivery.service.ts:244,335` | Origin ongkir dari `getClinicLocationAsync(tenantId)` | Ongkir beda per tenant | **FIXED** |
+| `UTL-02` | `utils/reservation-text-parser.ts:795-958` | Tanggal pakai timezone WIB, bukan `getDay()` UTC | Test dini hari WIB | **FIXED** |
+| `UTL-03` | `utils/reservation-text-parser.ts:1-1148` | Pecah parser >1.148 baris per domain | File <1.500; test parser hijau | **FIXED** |
+| `UTL-06` | `utils/date-confirmation.ts:170-185` | Normalisasi konfirmasi tanggal deterministik | Test variasi parafrase | **FIXED** |
+| `DEL-01` | `.github/workflows/ci.yml` (baru) | CI: secret scan, typecheck, build backend+dashboard, test | Workflow valid; PR gate | **FIXED** |
+| `DEL-02` | `scripts/deploy.sh` | Delegasi ke `deploy-prod.sh`, bukan restart app saja | `bash -n`; worker & migrasi ikut | **FIXED** |
+| `DEL-05` | `Dockerfile:46-47` | Copy `.prisma`/`@prisma/client` dari builder; hapus `npx prisma generate` runner | Build offline runner | **FIXED** |
+| `DEL-07` | `scripts/backup.sh:32-48` | Backup via container + `verify-backup-restore.ts`; tanpa `.env` plaintext | Restore drill row-count | **FIXED** |
 
 **Gate F2:** semua test baru hijau; build backend+dashboard; typecheck; full suite baseline-diff 0 failure baru; security scan bersih; commit per kelompok (F2A/F2B/F2C).
 

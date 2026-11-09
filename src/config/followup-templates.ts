@@ -4,7 +4,7 @@
  * to prevent repetitive bot messaging patterns and maintain high engagement.
  */
 
-import { getBrandIdentity } from './brand';
+import { getBrandIdentity, getBrandIdentityAsync } from './brand';
 import {
   sanitizeCustomerNameForGreeting,
   formatGreetingBunda,
@@ -26,6 +26,9 @@ export interface FollowUpTemplateParams {
   arrivalTime?: string;
   /** Fase 4: tahap ibu untuk memilih narasi (PREGNANT|POSTPARTUM|LACTATING). */
   momStage?: string | null;
+  businessName?: string;
+  botDisplayName?: string;
+  tenantId?: string;
 }
 
 export type FollowUpTemplateType =
@@ -76,102 +79,102 @@ export const FOLLOWUP_ROLLING_TEMPLATES: Record<
 > = {
   // 1. Reminder Hari-H (06:00 WIB)
   REMINDER_H0: [
-    ({ name }) =>
-      `Selamat pagi Bunda ${name}! ✨ Reminder untuk jadwal treatment homecare ${getBrandIdentity().businessName} hari ini ya bund. Tim bidan kami akan datang berkunjung sesuai jadwal. Sampai jumpa Bunda! 🥰`,
-    ({ name }) =>
-      `Halo Bunda ${name}, selamat pagi! 🌸 Mengingatkan kembali jadwal treatment ${getBrandIdentity().businessName} hari ini ya. Mohon disiapkan tempat yang nyaman ya bund. Terimakasih! ✨`,
-    ({ name }) =>
-      `Pagi Bunda ${name}! 🥰 Hari ini tim bidan ${getBrandIdentity().businessName} akan menuju ke rumah Bunda untuk treatment. Sampai ketemu nanti ya bund! ✨`,
+    ({ name, businessName }) =>
+      `Selamat pagi Bunda ${name}! ✨ Reminder untuk jadwal treatment homecare ${businessName || getBrandIdentity().businessName} hari ini ya bund. Tim bidan kami akan datang berkunjung sesuai jadwal. Sampai jumpa Bunda! 🥰`,
+    ({ name, businessName }) =>
+      `Halo Bunda ${name}, selamat pagi! 🌸 Mengingatkan kembali jadwal treatment ${businessName || getBrandIdentity().businessName} hari ini ya. Mohon disiapkan tempat yang nyaman ya bund. Terimakasih! ✨`,
+    ({ name, businessName }) =>
+      `Pagi Bunda ${name}! 🥰 Hari ini tim bidan ${businessName || getBrandIdentity().businessName} akan menuju ke rumah Bunda untuk treatment. Sampai ketemu nanti ya bund! ✨`,
   ],
 
   // 1b. Reminder H-1 Malam (19:00 WIB)
   REMINDER_H1: [
-    ({ name }) =>
-      `Selamat malam Bunda ${name}! ✨ Mengingatkan kembali untuk jadwal treatment homecare ${getBrandIdentity().businessName} besok ya bund. Tim bidan kami akan datang berkunjung sesuai jadwal. Sampai jumpa besok Bunda! 🥰`,
-    ({ name }) =>
-      `Halo Bunda ${name}, selamat malam! 🌸 Mengingatkan kembali jadwal treatment ${getBrandIdentity().businessName} besok ya. Mohon disiapkan tempat yang nyaman ya bund. Terimakasih! ✨`,
-    ({ name }) =>
-      `Malam Bunda ${name}! 🥰 Besok tim bidan ${getBrandIdentity().businessName} akan menuju ke rumah Bunda untuk treatment. Sampai ketemu besok ya bund! ✨`,
+    ({ name, businessName }) =>
+      `Selamat malam Bunda ${name}! ✨ Mengingatkan kembali untuk jadwal treatment homecare ${businessName || getBrandIdentity().businessName} besok ya bund. Tim bidan kami akan datang berkunjung sesuai jadwal. Sampai jumpa besok Bunda! 🥰`,
+    ({ name, businessName }) =>
+      `Halo Bunda ${name}, selamat malam! 🌸 Mengingatkan kembali jadwal treatment ${businessName || getBrandIdentity().businessName} besok ya. Mohon disiapkan tempat yang nyaman ya bund. Terimakasih! ✨`,
+    ({ name, businessName }) =>
+      `Malam Bunda ${name}! 🥰 Besok tim bidan ${businessName || getBrandIdentity().businessName} akan menuju ke rumah Bunda untuk treatment. Sampai ketemu besok ya bund! ✨`,
   ],
 
   // 2. Review H+1 Baby (07:00 WIB)
   REVIEW_H1_BABY: [
-    ({ name, babyName }) =>
+    ({ name, babyName, businessName }) =>
       `Selamat pagi Bunda ${name}! 🌸 Bagaimana kabar dek ${babyName || 'si kecil'} setelah treatment kemarin bund? Semoga tidurnya lebih nyenyak dan makin sehat ya! Jika ada masukan, kabari Bidan ya bund 🥰`,
-    ({ name, babyName }) =>
+    ({ name, babyName, businessName }) =>
       `Halo Bunda ${name}! ✨ Bidan mau tanya nih, gimana perkembangan dek ${babyName || 'si kecil'} setelah dipijat kemarin? Semoga makin aktif & rewelnya berkurang ya bund. Sehat selalu! ❤️`,
-    ({ name, babyName }) =>
+    ({ name, babyName, businessName }) =>
       `Pagi Bunda ${name}! 🥰 Semoga dek ${babyName || 'si kecil'} makin ceria & rileks ya pasca treatment kemarin. Kalau mau konsultasi atau tanya-tanya seputar perawatan bayi, jangan ragu chat Bidan lagi ya bund! ✨`,
   ],
 
   // 3. Review H+1 Moms (07:00 WIB)
   REVIEW_H1_MOMS: [
-    ({ name }) =>
+    ({ name, businessName }) =>
       `Selamat pagi Bunda ${name}! 🌸 Bagaimana kondisi badan Bunda setelah treatment kemarin? Semoga pegalnya berkurang & makin rileks ya bund. Jika ada keluhan, kabari Bidan ya! 🥰`,
-    ({ name }) =>
-      `Halo Bunda ${name}! ✨ Semoga istirahatnya makin nyenyak & tubuh terasa lebih segar setelah treatment kemarin ya bund. Terimakasih sudah memercayakan perawatan ke ${getBrandIdentity().businessName}! ❤️`,
-    ({ name }) =>
+    ({ name, businessName }) =>
+      `Halo Bunda ${name}! ✨ Semoga istirahatnya makin nyenyak & tubuh terasa lebih segar setelah treatment kemarin ya bund. Terimakasih sudah memercayakan perawatan ke ${businessName || getBrandIdentity().businessName}! ❤️`,
+    ({ name, businessName }) =>
       `Pagi Bunda ${name}! 🥰 Bidan berharap badan Bunda terasa jauh lebih enteng & segar hari ini. Kalau butuh reservasi atau perawatan lanjutan, Bidan siap bantu kapan saja ya bund! ✨`,
   ],
 
   // 4. Follow-Up No Purchase Stage 1 (Hari ke-3)
   NO_PURCHASE_1: [
-    ({ name }) =>
-      `Halo Bunda ${name}! ✨ Kemarin sempat tanya-tanya treatment homecare ${getBrandIdentity().businessName} ya bund. Apakah ada yang mau ditanyakan lagi atau mau Bidan bantu jadwalkan? 😊`,
-    ({ name }) =>
+    ({ name, businessName }) =>
+      `Halo Bunda ${name}! ✨ Kemarin sempat tanya-tanya treatment homecare ${businessName || getBrandIdentity().businessName} ya bund. Apakah ada yang mau ditanyakan lagi atau mau Bidan bantu jadwalkan? 😊`,
+    ({ name, businessName }) =>
       `Pagi Bunda ${name}! 🌸 Masih bingung pilih paket treatment yang cocok untuk si kecil? Bidan siap bantu rekomendasikan lho bund, mumpung ada promo bulan ini! 🤗`,
-    ({ name }) =>
+    ({ name, businessName }) =>
       `Salam Bunda ${name}! ✨ Kalau Bunda butuh informasi tambahan seputar perawatan bayi/ibu hamil, jangan ragu tanya Bidan ya bund. Kami siap datang langsung ke rumah! 🥰`,
   ],
 
   // 5. Follow-Up No Purchase Stage 2 (Hari ke-7)
   NO_PURCHASE_2: [
-    ({ name }) =>
-      `Halo Bunda ${name}! 🌸 Sudah seminggu nih sejak Bunda kontak ${getBrandIdentity().businessName}. Si kecil sedang rewel atau butuh pijat relaksasi bund? Bidan ada slot kosong minggu ini lho! 🥰`,
-    ({ name }) =>
+    ({ name, businessName }) =>
+      `Halo Bunda ${name}! 🌸 Sudah seminggu nih sejak Bunda kontak ${businessName || getBrandIdentity().businessName}. Si kecil sedang rewel atau butuh pijat relaksasi bund? Bidan ada slot kosong minggu ini lho! 🥰`,
+    ({ name, businessName }) =>
       `Pagi Bunda ${name}! ✨ Bidan cuma mau kasih info nih, promo potongan ongkir & voucher treatment homecare masih berlaku ya bund. Mau dijadwalkan minggu ini? 😊`,
-    ({ name }) =>
+    ({ name, businessName }) =>
       `Selamat pagi Bunda ${name}! 💖 Momen tumbuh kembang si kecil sangat berharga. Yuk bantu stimulasi & relaksasinya lewat pijat bayi homecare dari bidan bersertifikat! ✨`,
   ],
 
   // 6. Follow-Up No Purchase Stage 3 (Hari ke-14)
   NO_PURCHASE_3: [
-    ({ name }) =>
-      `Halo Bunda ${name}! 💖 Ini pesan sapaan terakhir dari Bidan ya bund. Kalau sewaktu-waktu si kecil atau Bunda butuh treatment homecare, simpan kontak ${getBrandIdentity().businessName} ini ya! 🤗✨`,
-    ({ name }) =>
+    ({ name, businessName }) =>
+      `Halo Bunda ${name}! 💖 Ini pesan sapaan terakhir dari Bidan ya bund. Kalau sewaktu-waktu si kecil atau Bunda butuh treatment homecare, simpan kontak ${businessName || getBrandIdentity().businessName} ini ya! 🤗✨`,
+    ({ name, businessName }) =>
       `Pagi Bunda ${name}! 🌸 Bidan selalu mendoakan si kecil sehat & Bunda tetap bahagia. Jika nanti butuh perawatan bayi/ibu hamil, bisa langsung hubungi kami kembali ya bund! 🥰`,
-    ({ name }) =>
-      `Salam hangat Bunda ${name}! ✨ Terima kasih sudah pernah menghubungi ${getBrandIdentity().businessName}. Jangan sungkan chat Bidan kapan pun butuh layanan pijat homecare terpercaya ya bund! ❤️`,
+    ({ name, businessName }) =>
+      `Salam hangat Bunda ${name}! ✨ Terima kasih sudah pernah menghubungi ${businessName || getBrandIdentity().businessName}. Jangan sungkan chat Bidan kapan pun butuh layanan pijat homecare terpercaya ya bund! ❤️`,
   ],
 
   // 7. Follow-Up Next Treatment Stage 1 (Bulan ke-1)
   NEXT_TREATMENT_1: [
-    ({ name, babyName }) =>
-      `Halo Bunda ${name}! 🌸 Sudah 1 bulan nih sejak treatment terakhir di ${getBrandIdentity().businessName}. Saatnya ${babyName || 'si kecil'} pijat rutin bulanan nih bund, supaya tumbuh kembangnya makin optimal! 🥰`,
-    ({ name, babyName }) =>
+    ({ name, babyName, businessName }) =>
+      `Halo Bunda ${name}! 🌸 Sudah 1 bulan nih sejak treatment terakhir di ${businessName || getBrandIdentity().businessName}. Saatnya ${babyName || 'si kecil'} pijat rutin bulanan nih bund, supaya tumbuh kembangnya makin optimal! 🥰`,
+    ({ name, babyName, businessName }) =>
       `Selamat pagi Bunda ${name}! ✨ Pijat rutin 1 bulan sekali sangat bagus untuk menjaga kelenturan otot & kualitas tidur ${babyName || 'si kecil'} lho bund. Mau Bidan jadwalkan minggu ini? 😊`,
-    ({ name, babyName }) =>
-      `Pagi Bunda ${name}! 💖 Tidak terasa sudah sebulan lalu ya bund. Yuk amankan slot treatment rutin ${babyName || 'si kecil'} atau ibu hamil/nifas minggu ini bersama Bidan ${getBrandIdentity().businessName}! ✨`,
+    ({ name, babyName, businessName }) =>
+      `Pagi Bunda ${name}! 💖 Tidak terasa sudah sebulan lalu ya bund. Yuk amankan slot treatment rutin ${babyName || 'si kecil'} atau ibu hamil/nifas minggu ini bersama Bidan ${businessName || getBrandIdentity().businessName}! ✨`,
   ],
 
   // 8. Follow-Up Next Treatment Stage 2 (Bulan ke-2)
   NEXT_TREATMENT_2: [
-    ({ name, babyName }) =>
+    ({ name, babyName, businessName }) =>
       `Halo Bunda ${name}! 💖 Sudah 2 bulan tidak kelihatan nih. ${babyName || 'Si kecil'} sudah tambah pinter apa aja bund? Jangan lupa agendakan pijat stimulasi tumbuh kembang ya bund! 🥰`,
-    ({ name, babyName }) =>
-      `Pagi Bunda ${name}! 🌸 Tubuh Bunda atau ${babyName || 'si kecil'} sudah terasa pegal/capek lagi? Yuk manjakan diri & ${babyName || 'si kecil'} dengan perawatan homecare ${getBrandIdentity().businessName} bulan ini bund! ✨`,
-    ({ name }) =>
+    ({ name, babyName, businessName }) =>
+      `Pagi Bunda ${name}! 🌸 Tubuh Bunda atau ${babyName || 'si kecil'} sudah terasa pegal/capek lagi? Yuk manjakan diri & ${babyName || 'si kecil'} dengan perawatan homecare ${businessName || getBrandIdentity().businessName} bulan ini bund! ✨`,
+    ({ name, businessName }) =>
       `Salam hangat Bunda ${name}! ✨ Bidan siap bantu reservasi pijat rutin bulanan lagi nih bund. Bidan favorit Bunda masih tersedia lho! Mau pilih hari apa bund? 😊`,
   ],
 
   // 9. Follow-Up Next Treatment Stage 3 (Bulan ke-3)
   NEXT_TREATMENT_3: [
-    ({ name, babyName }) =>
+    ({ name, babyName, businessName }) =>
       `Halo Bunda ${name}! 🌸 Sudah 3 bulan sejak perawatan terakhir. Ini reminder perawatan rutin terakhir dari Bidan ya bund. Semoga ${babyName || 'si kecil'} selalu sehat & makin aktif! 🥰`,
-    ({ name, babyName }) =>
-      `Pagi Bunda ${name}! ✨ Kalau ${babyName || 'si kecil'} butuh pijat tumbuh kembang atau Bunda butuh relaksasi, Bidan ${getBrandIdentity().businessName} selalu siap kapan saja ya bund. Sehat selalu! ❤️`,
-    ({ name }) =>
-      `Salam Bunda ${name}! 💖 Terima kasih telah menjadi pelanggan setia ${getBrandIdentity().businessName}. Simpan kontak ini ya bund, kapan pun butuh treatment homecare kami siap datang! ✨`,
+    ({ name, babyName, businessName }) =>
+      `Pagi Bunda ${name}! ✨ Kalau ${babyName || 'si kecil'} butuh pijat tumbuh kembang atau Bunda butuh relaksasi, Bidan ${businessName || getBrandIdentity().businessName} selalu siap kapan saja ya bund. Sehat selalu! ❤️`,
+    ({ name, businessName }) =>
+      `Salam Bunda ${name}! 💖 Terima kasih telah menjadi pelanggan setia ${businessName || getBrandIdentity().businessName}. Simpan kontak ini ya bund, kapan pun butuh treatment homecare kami siap datang! ✨`,
   ],
 
   // 9b. Follow-Up Next Treatment MOMS — Stage 1..3 (Bulan ke-1..3).
@@ -179,98 +182,98 @@ export const FOLLOWUP_ROLLING_TEMPLATES: Record<
   // laktasi, relaksasi nifas). DILARANG memuat {babyName}, "si kecil",
   // "tumbuh kembang" — narasi bayi hanya sah untuk klaster ANAK.
   NEXT_TREATMENT_MOMS_1: [
-    ({ name, momStage }) =>
-      `Halo Bunda ${name}! 🌸 Sudah 1 bulan sejak perawatan terakhir Bunda di ${getBrandIdentity().businessName}. Bagaimana kondisi Bunda ${momPhaseLine(momStage)} sekarang? Kami siap bantu jadwalkan sesi perawatan berikutnya kapan pun Bunda siap. 🥰`,
-    ({ name, momStage }) =>
+    ({ name, momStage, businessName }) =>
+      `Halo Bunda ${name}! 🌸 Sudah 1 bulan sejak perawatan terakhir Bunda di ${businessName || getBrandIdentity().businessName}. Bagaimana kondisi Bunda ${momPhaseLine(momStage)} sekarang? Kami siap bantu jadwalkan sesi perawatan berikutnya kapan pun Bunda siap. 🥰`,
+    ({ name, momStage, businessName }) =>
       `Selamat pagi Bunda ${name}! ✨ Sudah sebulan nih sejak sesi perawatan terakhir Bunda ${momPhaseLine(momStage)}. Kalau badan mulai terasa pegal lagi, Bidan kami siap datang membantu Bunda relaksasi di rumah. Mau kami bantu pilih jadwalnya? 😊`,
-    ({ name, momStage }) =>
+    ({ name, momStage, businessName }) =>
       `Pagi Bunda ${name}! 💖 Tidak terasa sudah sebulan sejak perawatan terakhir Bunda ${momPhaseLine(momStage)}. Yuk amankan waktu untuk diri sendiri — kami siap bantu jadwalkan sesi perawatan Bunda minggu ini. ✨`,
   ],
 
   NEXT_TREATMENT_MOMS_2: [
-    ({ name, momStage }) =>
+    ({ name, momStage, businessName }) =>
       `Halo Bunda ${name}! 💖 Sudah 2 bulan sejak perawatan terakhir Bunda ${momPhaseLine(momStage)}. Bagaimana kabar Bunda sekarang? Kami siap bantu jadwalkan sesi pemulihan & relaksasi berikutnya kalau Bunda butuh. 🥰`,
-    ({ name }) =>
-      `Selamat pagi Bunda ${name}! 🌸 Badan Bunda sudah terasa pegal lagi? Yuk manjakan diri dengan perawatan homecare ${getBrandIdentity().businessName} bulan ini. Bidan kami siap datang ke rumah Bunda. ✨`,
-    ({ name }) =>
+    ({ name, businessName }) =>
+      `Selamat pagi Bunda ${name}! 🌸 Badan Bunda sudah terasa pegal lagi? Yuk manjakan diri dengan perawatan homecare ${businessName || getBrandIdentity().businessName} bulan ini. Bidan kami siap datang ke rumah Bunda. ✨`,
+    ({ name, businessName }) =>
       `Salam hangat Bunda ${name}! ✨ Bidan kami siap bantu reservasi perawatan rutin bulanan Bunda lagi nih. Mau pilih hari apa, Bunda? 😊`,
   ],
 
   NEXT_TREATMENT_MOMS_3: [
-    ({ name, momStage }) =>
+    ({ name, momStage, businessName }) =>
       `Halo Bunda ${name}! 🌸 Sudah 3 bulan sejak perawatan terakhir Bunda ${momPhaseLine(momStage)}. Ini sapaan terakhir dari kami untuk sesi rutin bulan ini ya Bunda. Semoga Bunda selalu sehat & bugar! 🥰`,
-    ({ name }) =>
-      `Pagi Bunda ${name}! ✨ Kalau Bunda butuh relaksasi atau perawatan pemulihan, Bidan kami di ${getBrandIdentity().businessName} selalu siap kapan saja ya Bunda. Sehat selalu! ❤️`,
-    ({ name }) =>
-      `Salam Bunda ${name}! 💖 Terima kasih telah memercayakan perawatan Bunda kepada ${getBrandIdentity().businessName}. Simpan kontak ini ya, kapan pun butuh treatment homecare kami siap datang. ✨`,
+    ({ name, businessName }) =>
+      `Pagi Bunda ${name}! ✨ Kalau Bunda butuh relaksasi atau perawatan pemulihan, Bidan kami di ${businessName || getBrandIdentity().businessName} selalu siap kapan saja ya Bunda. Sehat selalu! ❤️`,
+    ({ name, businessName }) =>
+      `Salam Bunda ${name}! 💖 Terima kasih telah memercayakan perawatan Bunda kepada ${businessName || getBrandIdentity().businessName}. Simpan kontak ini ya, kapan pun butuh treatment homecare kami siap datang. ✨`,
   ],
 
   // 9c. Follow-Up NO_PURCHASE MOMS — prospek IBU yang belum reservasi.
   // DILARANG memuat narasi bayi ("si kecil", "tumbuh kembang", {babyName}).
   NO_PURCHASE_MOMS_1: [
-    ({ name, momStage }) =>
+    ({ name, momStage, businessName }) =>
       `Halo Bunda ${name}! ✨ Kemarin sempat tanya-tanya perawatan ${momPhaseLine(momStage)} ya bund. Apakah ada yang mau ditanyakan lagi atau mau Bidan bantu jadwalkan? 😊`,
-    ({ name, momStage }) =>
+    ({ name, momStage, businessName }) =>
       `Pagi Bunda ${name}! 🌸 Bidan siap bantu rekomendasikan perawatan yang sesuai ${momPhaseLine(momStage)}. Mau Bidan bantu pilihkan? 🤗`,
-    ({ name, momStage }) =>
+    ({ name, momStage, businessName }) =>
       `Salam Bunda ${name}! ✨ Kalau Bunda butuh informasi seputar perawatan ${momPhaseLine(momStage)}, jangan ragu tanya Bidan ya bund. Kami siap datang ke rumah! 🥰`,
   ],
 
   NO_PURCHASE_MOMS_2: [
-    ({ name, momStage }) =>
-      `Halo Bunda ${name}! 🌸 Sudah seminggu nih sejak Bunda menghubungi ${getBrandIdentity().businessName}. Bidan siap bantu perawatan ${momPhaseLine(momStage)} kapan pun Bunda siap. 🥰`,
-    ({ name, momStage }) =>
+    ({ name, momStage, businessName }) =>
+      `Halo Bunda ${name}! 🌸 Sudah seminggu nih sejak Bunda menghubungi ${businessName || getBrandIdentity().businessName}. Bidan siap bantu perawatan ${momPhaseLine(momStage)} kapan pun Bunda siap. 🥰`,
+    ({ name, momStage, businessName }) =>
       `Pagi Bunda ${name}! ✨ Promo dan slot perawatan ${momPhaseLine(momStage)} masih tersedia minggu ini lho bund. Mau Bidan bantu jadwalkan? 😊`,
-    ({ name, momStage }) =>
+    ({ name, momStage, businessName }) =>
       `Selamat pagi Bunda ${name}! 💖 Menjaga kondisi Bunda ${momPhaseLine(momStage)} itu penting. Yuk amankan waktu untuk perawatan homecare bersama Bidan kami! ✨`,
   ],
 
   NO_PURCHASE_MOMS_3: [
-    ({ name, momStage }) =>
-      `Halo Bunda ${name}! 💖 Ini pesan sapaan terakhir dari Bidan ya bund. Kalau sewaktu-waktu butuh perawatan ${momPhaseLine(momStage)}, simpan kontak ${getBrandIdentity().businessName} ini ya! 🤗✨`,
-    ({ name }) =>
+    ({ name, momStage, businessName }) =>
+      `Halo Bunda ${name}! 💖 Ini pesan sapaan terakhir dari Bidan ya bund. Kalau sewaktu-waktu butuh perawatan ${momPhaseLine(momStage)}, simpan kontak ${businessName || getBrandIdentity().businessName} ini ya! 🤗✨`,
+    ({ name, businessName }) =>
       `Pagi Bunda ${name}! 🌸 Bidan selalu mendoakan Bunda sehat & bugar. Jika nanti butuh perawatan ibu, bisa langsung hubungi kami kembali ya bund. 🥰`,
-    ({ name }) =>
-      `Salam hangat Bunda ${name}! ✨ Terima kasih sudah pernah menghubungi ${getBrandIdentity().businessName}. Jangan sungkan chat Bidan kapan pun butuh layanan homecare terpercaya ya bund! ❤️`,
+    ({ name, businessName }) =>
+      `Salam hangat Bunda ${name}! ✨ Terima kasih sudah pernah menghubungi ${businessName || getBrandIdentity().businessName}. Jangan sungkan chat Bidan kapan pun butuh layanan homecare terpercaya ya bund! ❤️`,
   ],
 
   // 10. Milestone Edukasi 3 Bulan (tummy time / stimulasi)
   MILESTONE_3M: [
-    ({ name, babyName }) =>
+    ({ name, babyName, businessName }) =>
       `Halo Bunda ${name}! 🌸 Si kecil (${babyName || 'dek kecil'}) sudah 3 bulan, saatnya stimulasi tummy time & pijat bayi demi tumbuh kembang optimal. Mau Bidan jadwalkan? 😊`,
-    ({ name }) =>
+    ({ name, businessName }) =>
       `Selamat pagi Bunda ${name}! Di usia 3 bulan si kecil mulai banyak tidur & aktif bergerak. Pijat bayi rutin membantu relaksasi otot & kualitas tidurnya. Bidan siap datang lho bund! 🥰`,
-    ({ name }) =>
-      `Pagi Bunda ${name}! Usia 3 bulan itu golden moment tummy time & interaksi. Yuk amankan slot pijat stimulasi tumbuh kembang bersama ${getBrandIdentity().businessName}! ✨`,
+    ({ name, businessName }) =>
+      `Pagi Bunda ${name}! Usia 3 bulan itu golden moment tummy time & interaksi. Yuk amankan slot pijat stimulasi tumbuh kembang bersama ${businessName || getBrandIdentity().businessName}! ✨`,
   ],
 
   // 11. Milestone 6 Bulan (duduk / merangkak)
   MILESTONE_6M: [
-    ({ name, babyName }) =>
+    ({ name, babyName, businessName }) =>
       `Halo Bunda ${name}! 💖 Si kecil (${babyName || 'dek kecil'}) sudah 6 bulan, mulai mau duduk & merangkak ya. Supaya otot inti & tulangnya kuat, yuk rutin pijat stimulasi bersama Bidan! 😊`,
-    ({ name }) =>
+    ({ name, businessName }) =>
       `Selamat pagi Bunda ${name}! Di milestone 6 bulan tumbuh kembang si kecil makin pesat. Pijat bayi bantu dukung motorik halus & tidur nyenyak. Mau Bidan jadwalkan minggu ini? ✨`,
-    ({ name }) =>
+    ({ name, businessName }) =>
       `Salam hangat Bunda ${name}! 🥰 Usia 6 bulan waktunya diperhatikan tummy time & perkenalan MPASI. Biar tumbuh kembang makin optimal, yuk agendakan pijat stimulasi homecare! ❤️`,
   ],
 
   // 12. Milestone 9 Bulan (berdiri/pelan jalan)
   MILESTONE_9M: [
-    ({ name, babyName }) =>
+    ({ name, babyName, businessName }) =>
       `Halo Bunda ${name}! 🌸 Si kecil (${babyName || 'dek kecil'}) sudah 9 bulan, mulai belajar berdiri & melangkah ya. Pijat bayi bantu rawat karya bayi agar badan tetap bugar! 🥰`,
-    ({ name }) =>
+    ({ name, businessName }) =>
       `Selamat pagi Bunda ${name}! Di usia 9 bulan si kecil aktif merambat. Stimulasi & pijat ringan sangat bantu perkembangannya. Kunjungi kami utk sesi rutin ya bund! 😊`,
-    ({ name }) =>
+    ({ name, businessName }) =>
       `Pagi Bunda ${name}! 🌸 Momen 9 bulan butuh ekstra perhatian utk motorik kasar. Kami siap datang bantu pijat & stimulasi di rumah. Yuk booking slot nya! ✨`,
   ],
 
   // 13. Milestone 12 Bulan (MPASI / berjalan)
   MILESTONE_12M: [
-    ({ name, babyName }) =>
+    ({ name, babyName, businessName }) =>
       `Halo Bunda ${name}! 🎉 Si kecil (${babyName || 'si kecil'}) sudah 1 tahun! Selamat ulang tahun ya. Saatnya perhatian tumbuh kembang & nutrisi MPASI seimbang. Pijat rutin juga tetap penting lho! 😊`,
-    ({ name }) =>
+    ({ name, businessName }) =>
       `Selamat ulang tahun utk si kecil, Bunda ${name}! 🎂 Di usia 12 bulan anak mulai berjalan lancar. Kami siap dampingi pijat stimulasi & tumbuh kembang bareng Bidan. Yuk booking! ✨`,
-    ({ name }) =>
+    ({ name, businessName }) =>
       `Pagi Bunda ${name}! 🥳 Si kecil sudah 1 tahun — usia emas eksplorasi & berjalan. Pijat rutin tetap bantu jaga kelenturan & kualitas tidurnya. Mau Bidan jadwalkan bulan ini? 😊`,
   ],
 
@@ -278,17 +281,17 @@ export const FOLLOWUP_ROLLING_TEMPLATES: Record<
   // Sapaan silaturahmi untuk MQL/legacy yang sudah lama tidak berinteraksi.
   // Ringkas (2–3 kalimat), kata ganti "Bidan kami", tanpa angka durasi eksplisit.
   WINBACK_60D: [
-    ({ name, babyName }) => {
+    ({ name, babyName, businessName }) => {
       const greeting = formatGreetingBunda(name);
       const child = babyName || 'si kecil';
       return `Halo ${greeting}! 😊 Gimana kabarnya ${child}? Sudah lama Bidan kami tidak dengar kabar Bunda, semoga sekeluarga sehat selalu ya. Kalau butuh pijat relaksasi atau stimulasi tumbuh kembang, Bidan kami siap bantu kapan saja 🙏🥰`;
     },
-    ({ name, babyName }) => {
+    ({ name, babyName, businessName }) => {
       const greeting = formatGreetingBunda(name);
       const child = babyName || 'si kecil';
       return `Selamat pagi ${greeting}! 🌸 Gimana kabar ${child} sekarang? Sudah lama Bidan kami tidak bersilaturahmi, semoga rutinitas Bunda dan keluarga menyenangkan selalu. Kalau butuh homecare atau konsultasi tumbuh kembang, pintu kami selalu terbuka ✨`;
     },
-    ({ name, babyName }) => {
+    ({ name, babyName, businessName }) => {
       const greeting = formatGreetingBunda(name);
       const child = babyName || 'si kecil';
       return `Halo ${greeting}! ✨ Semoga Bunda dan ${child} selalu sehat dan bahagia ya. Sudah lama tidak jumpa, Bidan kami cuma ingin menyapa dan menanyakan kabar. Kalau si kecil butuh pijat relaksasi di rumah, kabari Bidan ya 🤗`;
@@ -353,6 +356,7 @@ export function getRollingFollowUpMessage(
     ...params,
     name: cleanName,
     babyName: params.babyName ? params.babyName.trim() : 'si kecil',
+    businessName: params.businessName || getBrandIdentity().businessName,
   };
 
   if (!templates || templates.length === 0) {
@@ -405,4 +409,29 @@ export function getRollingVariant(customerId: string, scheduledAt?: Date | strin
     hash |= 0;
   }
   return (Math.abs(hash) % 3) + 1;
+}
+
+/**
+ * Varian async tenant-aware: mengambil businessName dari tenant settings bila belum ada di params.
+ */
+export async function getRollingFollowUpMessageAsync(
+  type: FollowUpTemplateType,
+  params: FollowUpTemplateParams,
+  tenantId?: string
+): Promise<{ text: string; templateIndex: number }> {
+  const effectiveTenantId = tenantId || params.tenantId;
+  let businessName = params.businessName;
+  if (!businessName && effectiveTenantId) {
+    try {
+      const brand = await getBrandIdentityAsync(effectiveTenantId);
+      businessName = brand.businessName;
+    } catch {
+      businessName = getBrandIdentity().businessName;
+    }
+  }
+  return getRollingFollowUpMessage(type, {
+    ...params,
+    businessName: businessName || getBrandIdentity().businessName,
+    tenantId: effectiveTenantId,
+  });
 }

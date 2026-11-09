@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { prisma } from '../../src/db/client';
 import { customerService } from '../../src/services/customer.service';
+import { getCustomerRepository } from '../../src/repositories/customer.repository';
 
 /**
  * Component 4 — Invarian Sticky Verified GPS (kasus Bunda Retno).
@@ -36,7 +37,7 @@ describe('Sticky Verified GPS invariant (updateCustomerLocation)', () => {
 
   it('DB: teks "Alamat saya di Gedangan" tidak mendegradasi GPS 10.92 km', async () => {
     vi.mocked(prisma.customer.findFirst).mockResolvedValue(verifiedExisting() as any);
-    const updateMock = vi.mocked(prisma.customer.update).mockImplementation(async (args: any) => args.data as any);
+    const updateSpy = vi.spyOn(getCustomerRepository(), 'update').mockImplementation(async (_id: string, patch: any) => patch);
 
     await customerService.updateCustomerLocation(
       'cust-verified-1',
@@ -52,19 +53,21 @@ describe('Sticky Verified GPS invariant (updateCustomerLocation)', () => {
     );
 
     // Fire-and-forget google-contacts sync (customer.service.ts:241-247) dapat menambah panggilan
-    // prisma.customer.update di background — assert invarian pada call PERTAMA (update lokasi), bukan hitungan eksak.
-    expect(updateMock.mock.calls.length).toBeGreaterThanOrEqual(1);
-    const data = updateMock.mock.calls[0][0].data;
+    // repository update di background — assert invarian pada call PERTAMA (update lokasi), bukan hitungan eksak.
+    expect(updateSpy.mock.calls.length).toBeGreaterThanOrEqual(1);
+    const data = updateSpy.mock.calls[0][1] as any;
     expect(data.lat).toBeCloseTo(-7.393858, 6);
     expect(data.lng).toBeCloseTo(112.745941, 6);
     expect(data.distance_km).toBe(10.92);
     expect(data.ongkir).toBe(15000);
     expect(data.kelurahan).toBe('Gedangan');
+
+    updateSpy.mockRestore();
   });
 
   it('DB: shareloc baru (isNativePin) boleh meng-override GPS lama', async () => {
     vi.mocked(prisma.customer.findFirst).mockResolvedValue(verifiedExisting() as any);
-    const updateMock = vi.mocked(prisma.customer.update).mockImplementation(async (args: any) => args.data as any);
+    const updateSpy = vi.spyOn(getCustomerRepository(), 'update').mockImplementation(async (_id: string, patch: any) => patch);
 
     await customerService.updateCustomerLocation(
       'cust-verified-1',
@@ -72,10 +75,12 @@ describe('Sticky Verified GPS invariant (updateCustomerLocation)', () => {
       TENANT,
     );
 
-    const data = updateMock.mock.calls[0][0].data;
+    const data = updateSpy.mock.calls[0][1] as any;
     expect(data.lat).toBeCloseTo(-7.4, 6);
     expect(data.lng).toBeCloseTo(112.75, 6);
     expect(data.distance_km).toBe(12.1);
+
+    updateSpy.mockRestore();
   });
 
   it('DB: tanpa pin terverifikasi, koordinat teks dipakai normal', async () => {
@@ -83,7 +88,7 @@ describe('Sticky Verified GPS invariant (updateCustomerLocation)', () => {
       ...verifiedExisting(),
       share_location_sent: false,
     } as any);
-    const updateMock = vi.mocked(prisma.customer.update).mockImplementation(async (args: any) => args.data as any);
+    const updateSpy = vi.spyOn(getCustomerRepository(), 'update').mockImplementation(async (_id: string, patch: any) => patch);
 
     await customerService.updateCustomerLocation(
       'cust-verified-1',
@@ -91,9 +96,11 @@ describe('Sticky Verified GPS invariant (updateCustomerLocation)', () => {
       TENANT,
     );
 
-    const data = updateMock.mock.calls[0][0].data;
+    const data = updateSpy.mock.calls[0][1] as any;
     expect(data.lat).toBeCloseTo(-7.38, 6);
     expect(data.distance_km).toBe(8.5);
+
+    updateSpy.mockRestore();
   });
 
   it('Memory fallback: GPS pin dipertahankan saat DB offline', async () => {
@@ -106,16 +113,24 @@ describe('Sticky Verified GPS invariant (updateCustomerLocation)', () => {
     seeded.ongkir = 15000;
     seeded.share_location_sent = true;
 
-    const out: any = await customerService.updateCustomerLocation(
+    await customerService.updateCustomerLocation(
       seeded.id,
-      { kelurahan: 'Gedangan', lat: -7.38, lng: 112.73, distanceKm: 8.5, ongkir: 20000 },
+      {
+        kelurahan: 'Gedangan',
+        kecamatan: 'Gedangan',
+        lat: -7.38, // centroid teks — wajib diabaikan
+        lng: 112.73,
+        distanceKm: 8.5,
+        ongkir: 20000,
+      },
       TENANT,
     );
 
-    expect(out.lat).toBeCloseTo(-7.393858, 6);
-    expect(out.lng).toBeCloseTo(112.745941, 6);
-    expect(out.distance_km).toBe(10.92);
-    expect(out.ongkir).toBe(15000);
-    expect(out.kelurahan).toBe('Gedangan');
+    const after: any = await customerService.getCustomerById(seeded.id, TENANT);
+    expect(after.lat).toBeCloseTo(-7.393858, 6);
+    expect(after.lng).toBeCloseTo(112.745941, 6);
+    expect(after.distance_km).toBe(10.92);
+    expect(after.ongkir).toBe(15000);
+    expect(after.kelurahan).toBe('Gedangan');
   });
 });

@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Lint, Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Backend Dependencies
+        run: npm ci
+
+      - name: Install Admin Dashboard Dependencies
+        run: |
+          cd packages/admin-dashboard
+          npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Security Scan (Secret Leak Detection)
+        run: npm run security:scan
+
+      - name: Typecheck Backend
+        run: npm run typecheck
+
+      - name: Build Backend & Assets
+        run: npm run build
+
+      - name: Build Admin Dashboard
+        run: |
+          cd packages/admin-dashboard
+          npm run build
+
+      - name: Run Unit Tests (Offline / Mock DB)
+        run: npm test

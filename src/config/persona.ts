@@ -9,7 +9,17 @@ import fs from 'fs';
 import path from 'path';
 import { getBrandIdentity } from './brand';
 
-const CUSTOM_PERSONA_PATH = path.join(__dirname, 'persona_custom.txt');
+export function resolveCustomPersonaPath(): string {
+  const localDistOrSrc = path.join(__dirname, 'persona_custom.txt');
+  if (fs.existsSync(localDistOrSrc)) return localDistOrSrc;
+  const projectSrc = path.join(process.cwd(), 'src', 'config', 'persona_custom.txt');
+  if (fs.existsSync(projectSrc)) return projectSrc;
+  const projectDist = path.join(process.cwd(), 'dist', 'config', 'persona_custom.txt');
+  if (fs.existsSync(projectDist)) return projectDist;
+  return localDistOrSrc;
+}
+
+const CUSTOM_PERSONA_PATH = resolveCustomPersonaPath();
 
 // 2. SYSTEM PROMPT — dipakai LLM untuk FAQ & respons yang butuh generation
 

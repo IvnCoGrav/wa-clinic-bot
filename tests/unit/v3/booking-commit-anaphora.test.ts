@@ -34,20 +34,14 @@ describe('hasBookingCommitSignal - Anaphora Patterns (F2)', () => {
     expect(hasBookingCommitSignal('mau yang tadi?')).toBe(true);
   });
 
-  it('negation words before pattern still match (guards applied by callers)', () => {
-    // "tidak mau yang tadi" contains "mau yang tadi"
-    expect(hasBookingCommitSignal('tidak mau yang tadi')).toBe(true);
-    // "batal yang tadi" does NOT match any pattern (no affirmative verb + anaphora)
+  it('negation words before pattern do not match (DEIXIS_STOP)', () => {
+    expect(hasBookingCommitSignal('tidak mau yang tadi')).toBe(false);
     expect(hasBookingCommitSignal('batal yang tadi')).toBe(false);
-    // "jangan yang tadi" does NOT match
     expect(hasBookingCommitSignal('jangan yang tadi')).toBe(false);
   });
 
-  it('deferral words after pattern still match (simple includes, guards applied by callers)', () => {
-    // "mau yang tadi nanti" contains "mau yang tadi" -> matches
-    expect(hasBookingCommitSignal('mau yang tadi nanti')).toBe(true);
-    // "pikir dulu yang tadi" contains "yang tadi" but no pattern matches exactly
-    // (patterns require verb+anaphora or anaphora+particle)
+  it('deferral words after pattern do not match (DEIXIS_STOP)', () => {
+    expect(hasBookingCommitSignal('mau yang tadi nanti')).toBe(false);
     expect(hasBookingCommitSignal('pikir dulu yang tadi')).toBe(false);
   });
 

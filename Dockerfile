@@ -44,10 +44,14 @@ COPY prisma ./prisma/
 
 # Install production dependencies only
 RUN npm ci --only=production
-RUN npx prisma generate
+# DEL-05: Copy generated Prisma client from builder stage (avoid running prisma generate in runner)
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
 
 # Copy built code from builder stage
 COPY --from=builder /app/dist ./dist
+# CFG-02: Salin persona_custom.txt ke container agar dibaca bot di production
+COPY --from=builder /app/src/config/persona_custom.txt ./src/config/persona_custom.txt
 COPY --from=builder /app/src/config/surabaya_sidoarjo_subdistricts.json ./src/config/surabaya_sidoarjo_subdistricts.json
 # Katalog layanan & tier delivery (runtime dibaca dari file + DB) — wajib ikut
 # agar /api/admin/services dan TreatmentCatalogService tidak fallback ke default lama.

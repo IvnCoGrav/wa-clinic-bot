@@ -1,5 +1,6 @@
 import { calculateHaversineDistance, Coordinates } from '../utils/haversine';
 import { clinicConfig } from '../config/clinic';
+import { getClinicLocationAsync } from '../config/clinic-location';
 import { IOrsClient, orsClient as defaultOrsClient } from '../integrations/ors/client';
 import {
   IGoogleDistanceClient,
@@ -30,6 +31,11 @@ export const DEFAULT_TIERS: DeliveryTier[] = [
 ];
 
 export let activeDeliveryTiers: DeliveryTier[] = [];
+const tenantActiveTiers = new Map<string, DeliveryTier[]>();
+
+export function setTenantDeliveryTiersForTest(tenantId: string, tiers: DeliveryTier[]): void {
+  tenantActiveTiers.set(tenantId, tiers);
+}
 
 /**
  * Faktor pembulatan jarak lurus (Haversine) ke estimasi jarak jalan.
@@ -122,6 +128,11 @@ loadDeliveryTiers();
  * Fallback: file delivery_tiers_custom.json (legacy single-tenant).
  */
 export async function getDeliveryTiersFromDb(tenantId: string = DEFAULT_TENANT_ID): Promise<DeliveryTier[]> {
+  const inMemoryTenantTiers = tenantActiveTiers.get(tenantId);
+  if (inMemoryTenantTiers && inMemoryTenantTiers.length > 0) {
+    return inMemoryTenantTiers;
+  }
+
   // Feature flag S5.2: rollback darurat ke fallback file/default in-memory.
   if (process.env.USE_DB_CATALOG === 'false') {
     if (tenantId !== DEFAULT_TENANT_ID) {
@@ -241,23 +252,26 @@ export class DeliveryService {
    */
   public async calculateDelivery(
     customerCoords: Coordinates,
-    clinicCoords: Coordinates = { lat: clinicConfig.lat, lng: clinicConfig.lng },
+    clinicCoords?: Coordinates,
     tenantId: string = DEFAULT_TENANT_ID
   ): Promise<DeliveryCalculationResult> {
     let distanceKm: number;
     let isEstimated = false;
 
+    const clinicLoc = await getClinicLocationAsync(tenantId);
+    const resolvedClinicCoords: Coordinates = clinicCoords || { lat: clinicLoc.lat, lng: clinicLoc.lng };
+
     // 1. Lapis 1: Coba hit OpenRouteService (ORS) Directions API (Mode Rute Mobil Hindari Tol / Motor)
     const orsResult = await this.orsClient.calculateRoute(
-      clinicCoords.lat,
-      clinicCoords.lng,
+      resolvedClinicCoords.lat,
+      resolvedClinicCoords.lng,
       customerCoords.lat,
       customerCoords.lng
     );
 
     if (orsResult && typeof orsResult.distanceMeters === 'number') {
       const rawDistanceKm = orsResult.distanceMeters / 1000;
-      const straightLineKm = calculateHaversineDistance(clinicCoords, customerCoords);
+      const straightLineKm = calculateHaversineDistance(resolvedClinicCoords, customerCoords);
       const effectiveBuffer = getAdaptiveBufferFactor(rawDistanceKm);
       const { finalKm, capped, bufferedKm, maxFinalKm } = applyCircuityCapToFinalDistance(
         rawDistanceKm,
@@ -268,25 +282,25 @@ export class DeliveryService {
       isEstimated = false;
       if (capped) {
         console.warn(
-          `[DISTANCE CIRCUITY CAP] ORS buffered ${bufferedKm.toFixed(2)} km > straight ${straightLineKm.toFixed(2)} km x${ORS_MAX_CIRCUITY_RATIO} (cap ${maxFinalKm.toFixed(2)} km). Clamped to ${finalKm} km. Clinic [${clinicCoords.lat},${clinicCoords.lng}] -> Cust [${customerCoords.lat},${customerCoords.lng}]`
+          `[DISTANCE CIRCUITY CAP] ORS buffered ${bufferedKm.toFixed(2)} km > straight ${straightLineKm.toFixed(2)} km x${ORS_MAX_CIRCUITY_RATIO} (cap ${maxFinalKm.toFixed(2)} km). Clamped to ${finalKm} km. Clinic [${resolvedClinicCoords.lat},${resolvedClinicCoords.lng}] -> Cust [${customerCoords.lat},${customerCoords.lng}]`
         );
       }
       const durationMins = orsResult.durationSeconds ? Math.round(orsResult.durationSeconds / 60) : null;
       console.log(
-        `[DISTANCE CALC] 🛣️ Method: OpenRouteService (ORS API) | Raw: ${rawDistanceKm.toFixed(2)} km ──▶ Buffered (${effectiveBuffer}x): ${distanceKm} km${durationMins ? ` (est. travel: ${durationMins} mins)` : ''}${capped ? ' [CAPPED]' : ''} | Clinic: [${clinicCoords.lat}, ${clinicCoords.lng}] ──▶ Customer: [${customerCoords.lat}, ${customerCoords.lng}]`
+        `[DISTANCE CALC] 🛣️ Method: OpenRouteService (ORS API) | Raw: ${rawDistanceKm.toFixed(2)} km ──▶ Buffered (${effectiveBuffer}x): ${distanceKm} km${durationMins ? ` (est. travel: ${durationMins} mins)` : ''}${capped ? ' [CAPPED]' : ''} | Clinic: [${resolvedClinicCoords.lat}, ${resolvedClinicCoords.lng}] ──▶ Customer: [${customerCoords.lat}, ${customerCoords.lng}]`
       );
     } else {
       // 2. Lapis 2 (Fallback 1): Coba hit Google Maps Distance Matrix API (Mode Motor / Hindari Tol)
       const googleResult = await this.googleDistanceClient.calculateDistance(
-        clinicCoords.lat,
-        clinicCoords.lng,
+        resolvedClinicCoords.lat,
+        resolvedClinicCoords.lng,
         customerCoords.lat,
         customerCoords.lng
       );
 
       if (googleResult && typeof googleResult.distanceMeters === 'number') {
         const rawDistanceKm = googleResult.distanceMeters / 1000;
-        const straightLineKm = calculateHaversineDistance(clinicCoords, customerCoords);
+        const straightLineKm = calculateHaversineDistance(resolvedClinicCoords, customerCoords);
         const effectiveBuffer = getAdaptiveBufferFactor(rawDistanceKm);
         const { finalKm, capped, bufferedKm, maxFinalKm } = applyCircuityCapToFinalDistance(
           rawDistanceKm,
@@ -297,23 +311,23 @@ export class DeliveryService {
         isEstimated = false;
         if (capped) {
           console.warn(
-            `[DISTANCE CIRCUITY CAP] Google buffered ${bufferedKm.toFixed(2)} km > straight ${straightLineKm.toFixed(2)} km x${ORS_MAX_CIRCUITY_RATIO} (cap ${maxFinalKm.toFixed(2)} km). Clamped to ${finalKm} km. Clinic [${clinicCoords.lat},${clinicCoords.lng}] -> Cust [${customerCoords.lat},${customerCoords.lng}]`
+            `[DISTANCE CIRCUITY CAP] Google buffered ${bufferedKm.toFixed(2)} km > straight ${straightLineKm.toFixed(2)} km x${ORS_MAX_CIRCUITY_RATIO} (cap ${maxFinalKm.toFixed(2)} km). Clamped to ${finalKm} km. Clinic [${resolvedClinicCoords.lat},${resolvedClinicCoords.lng}] -> Cust [${customerCoords.lat},${customerCoords.lng}]`
           );
         }
         const durationMins = googleResult.durationSeconds ? Math.round(googleResult.durationSeconds / 60) : null;
         console.log(
-          `[DISTANCE CALC] 🗺️ Method: Google Maps Distance Matrix (Motorbike/Avoid Tolls) | Raw: ${rawDistanceKm.toFixed(2)} km ──▶ Buffered (${effectiveBuffer}x): ${distanceKm} km${durationMins ? ` (est. travel: ${durationMins} mins)` : ''}${capped ? ' [CAPPED]' : ''} | Clinic: [${clinicCoords.lat}, ${clinicCoords.lng}] ──▶ Customer: [${customerCoords.lat}, ${customerCoords.lng}]`
+          `[DISTANCE CALC] 🗺️ Method: Google Maps Distance Matrix (Motorbike/Avoid Tolls) | Raw: ${rawDistanceKm.toFixed(2)} km ──▶ Buffered (${effectiveBuffer}x): ${distanceKm} km${durationMins ? ` (est. travel: ${durationMins} mins)` : ''}${capped ? ' [CAPPED]' : ''} | Clinic: [${resolvedClinicCoords.lat}, ${resolvedClinicCoords.lng}] ──▶ Customer: [${customerCoords.lat}, ${customerCoords.lng}]`
         );
       } else {
         // 3. Lapis 3 (Fallback 2): Rumus Matematis Haversine + circuity factor
         console.warn(
           `[DELIVERY SERVICE FALLBACK] ORS & Google Maps route calculation failed/unavailable for coords (${customerCoords.lat}, ${customerCoords.lng}). Falling back to Haversine distance with ${HAVERSINE_CIRCUITY_FACTOR}x circuity multiplier.`
         );
-        const straightLineKm = calculateHaversineDistance(clinicCoords, customerCoords);
+        const straightLineKm = calculateHaversineDistance(resolvedClinicCoords, customerCoords);
         distanceKm = parseFloat((straightLineKm * HAVERSINE_CIRCUITY_FACTOR).toFixed(2));
         isEstimated = true;
         console.log(
-          `[DISTANCE CALC] 📐 Method: Haversine Fallback (${HAVERSINE_CIRCUITY_FACTOR}x circuity) | Straight: ${straightLineKm.toFixed(2)} km ──▶ Road Est: ${distanceKm} km | Clinic: [${clinicCoords.lat}, ${clinicCoords.lng}] ──▶ Customer: [${customerCoords.lat}, ${customerCoords.lng}]`
+          `[DISTANCE CALC] 📐 Method: Haversine Fallback (${HAVERSINE_CIRCUITY_FACTOR}x circuity) | Straight: ${straightLineKm.toFixed(2)} km ──▶ Road Est: ${distanceKm} km | Clinic: [${resolvedClinicCoords.lat}, ${resolvedClinicCoords.lng}] ──▶ Customer: [${customerCoords.lat}, ${customerCoords.lng}]`
         );
       }
     }
@@ -344,9 +358,9 @@ export class DeliveryService {
 
     // 5. Construct message template (angka dinamis dari tier, bukan hardcode; brand dari config)
     let messageTemplate = '';
-    const clinicName = (clinicConfig as any).name || 'klinik kami';
+    const clinicName = (clinicLoc?.name && clinicLoc.name.trim()) || (clinicConfig as any).name || 'klinik kami';
     const freeTierKm = tiers.find((t) => t.fee === 0)?.maxDist;
-    const maxCoverageKm = tiers.length > 0 ? Math.max(...tiers.map((t) => t.maxDist)) : clinicConfig.maxDeliveryDistanceKm;
+    const maxCoverageKm = tiers.length > 0 ? Math.max(...tiers.map((t) => t.maxDist)) : (clinicLoc?.maxCoverageKm || clinicConfig.maxDeliveryDistanceKm);
     if (freeTierKm !== undefined && distanceKm <= freeTierKm) {
       messageTemplate = `Wah, Deket Bunda, Lokasi Anda berjarak ${distanceKm.toFixed(1)} km dari ${clinicName} (masih dalam jangkauan gratis ongkir hingga ${freeTierKm} km), sehingga layanan kami GRATIS ongkir!`;
     } else if (!isOutOfCoverage) {

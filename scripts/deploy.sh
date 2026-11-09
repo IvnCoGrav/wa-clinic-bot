@@ -1,14 +1,20 @@
-set -e
-cd /opt/wa-clinic-bot
+#!/usr/bin/env bash
+# =============================================================================
+# deploy.sh — Entrypoint deploy produksi WAHA Clinic Bot
+#
+# DEL-02: Mendelegasikan ke runbook kanonis deploy-prod.sh yang mencakup
+# validasi .env, migrasi database Prisma, build & restart container app + worker,
+# verifikasi skema, dan health check otomatis.
+# =============================================================================
+set -euo pipefail
 
-echo "=== 1. Pull Latest Code from Master ==="
-git pull origin master
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROD_SCRIPT="${SCRIPT_DIR}/deploy-prod.sh"
 
-echo "=== 2. Build App Image ==="
-docker compose build app
+if [[ ! -f "${PROD_SCRIPT}" ]]; then
+  echo "ERROR: deploy-prod.sh tidak ditemukan di ${SCRIPT_DIR}" >&2
+  exit 1
+fi
 
-echo "=== 3. Safe Restart App Container (WAHA untouched) ==="
-docker compose up -d --no-deps app
-
-echo "=== 4. Check Container Status ==="
-docker compose ps
+echo "==> [deploy.sh] Menjalankan runbook produksi deploy-prod.sh ..."
+exec bash "${PROD_SCRIPT}" "$@"

@@ -1,5 +1,6 @@
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { getBrandIdentityAsync } from '../config/brand';
 import { getRollingFollowUpMessage, FollowUpTemplateType, FOLLOWUP_ROLLING_TEMPLATES, getRollingVariant, getWibDateKey } from '../config/followup-templates';
 import { typingService } from './typing.service';
 import { resolveGatewayForTenant } from '../integrations/whatsapp/factory';
@@ -2180,6 +2181,8 @@ export class FollowUpService {
       let messageText: string;
 
       const rollingVariant = getRollingVariant(fu.customer_id || fu.customer?.id || '', fu.scheduled_at);
+      const tenantBrand = await getBrandIdentityAsync(tenantId).catch(() => null);
+      const businessName = tenantBrand?.businessName;
 
       // 1. Prioritaskan teks kustom spesifik yang diedit admin untuk customer ini
       if (fu.custom_text && fu.custom_text.trim()) {

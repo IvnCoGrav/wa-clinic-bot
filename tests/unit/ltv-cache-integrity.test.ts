@@ -5,6 +5,7 @@ import { customerService, computeCustomerLtv } from '../../src/services/customer
 import { checkDailyInvariants, autoRepairLtvDrift } from '../../src/services/daily-invariant-monitor.service';
 import { alertService } from '../../src/services/alert.service';
 import { prisma } from '../../src/db/client';
+import { getCustomerRepository } from '../../src/repositories/customer.repository';
 
 describe('LTV Cache Integrity & Single-Writer Guard', () => {
   beforeEach(() => {
@@ -83,7 +84,7 @@ describe('LTV Cache Integrity & Single-Writer Guard', () => {
         const notIn = args?.where?.status?.notIn || [];
         return mockReservations.filter((r) => !notIn.includes(r.status)) as any;
       });
-      const updateSpy = vi.spyOn(prisma.customer, 'update').mockResolvedValue({ id: 'c1', ltv_cache: 200000 } as any);
+      const updateSpy = vi.spyOn(getCustomerRepository(), 'update').mockResolvedValue({ id: 'c1', ltv_cache: 200000 } as any);
 
       const computed = await computeCustomerLtv('c1', 'default-tenant');
       expect(computed).toBe(200000);
@@ -100,10 +101,7 @@ describe('LTV Cache Integrity & Single-Writer Guard', () => {
           }),
         })
       );
-      expect(updateSpy).toHaveBeenCalledWith({
-        where: { id: 'c1' },
-        data: { ltv_cache: 200000 },
-      });
+      expect(updateSpy).toHaveBeenCalledWith('c1', { ltv_cache: 200000 }, 'default-tenant');
     });
 
     it('resolves unpriced completed treatments via resolveTreatmentValue', async () => {
@@ -112,14 +110,11 @@ describe('LTV Cache Integrity & Single-Writer Guard', () => {
       ];
 
       vi.spyOn(prisma.reservation, 'findMany').mockResolvedValue(mockReservations as any);
-      const updateSpy = vi.spyOn(prisma.customer, 'update').mockResolvedValue({ id: 'c2', ltv_cache: 150000 } as any);
+      const updateSpy = vi.spyOn(getCustomerRepository(), 'update').mockResolvedValue({ id: 'c2', ltv_cache: 150000 } as any);
 
       const calculatedLtv = await customerService.recalculateCustomerLtv('c2', 'default-tenant');
       expect(calculatedLtv).toBe(150000);
-      expect(updateSpy).toHaveBeenCalledWith({
-        where: { id: 'c2' },
-        data: { ltv_cache: 150000 },
-      });
+      expect(updateSpy).toHaveBeenCalledWith('c2', { ltv_cache: 150000 }, 'default-tenant');
     });
   });
 
