@@ -19,7 +19,7 @@ export interface DeliveryTier {
 
 const TIERS_FILE = path.join(process.cwd(), 'delivery_tiers_custom.json');
 
-const DEFAULT_TIERS: DeliveryTier[] = [
+export const DEFAULT_TIERS: DeliveryTier[] = [
   { id: 1, maxDist: 5, fee: 0, promoDiscount: 0 },
   { id: 2, maxDist: 7, fee: 15000, promoDiscount: 10000 },
   { id: 3, maxDist: 10, fee: 15000, promoDiscount: 5000 },
@@ -122,6 +122,17 @@ loadDeliveryTiers();
  * Fallback: file delivery_tiers_custom.json (legacy single-tenant).
  */
 export async function getDeliveryTiersFromDb(tenantId: string = DEFAULT_TENANT_ID): Promise<DeliveryTier[]> {
+  // Feature flag S5.2: rollback darurat ke fallback file/default in-memory.
+  if (process.env.USE_DB_CATALOG === 'false') {
+    if (tenantId !== DEFAULT_TENANT_ID) {
+      console.log(`[DELIVERY TIERS] USE_DB_CATALOG=false; tenant '${tenantId}' state: unconfigured.`);
+      return [];
+    }
+    const source = activeDeliveryTiers.length > 0 ? activeDeliveryTiers : DEFAULT_TIERS;
+    console.warn(`[DELIVERY TIERS] USE_DB_CATALOG=false; tenant '${tenantId}' memakai fallback in-memory (${source.length} tier).`);
+    return source;
+  }
+
   try {
     const dbTiers = await prisma.deliveryTier.findMany({
       where: { tenant_id: tenantId },
@@ -138,33 +149,22 @@ export async function getDeliveryTiersFromDb(tenantId: string = DEFAULT_TENANT_I
     }
 
     // Task 6.4: Jangan auto-seed delivery tiers ke tenant baru (SaaS-readiness & onboarding eksplisit).
-    // Hanya DEFAULT_TENANT_ID yang menerima fallback default saat DB kosong.
+    // Hanya DEFAULT_TENANT_ID yang menerima fallback default in-memory saat DB kosong.
     if (tenantId !== DEFAULT_TENANT_ID) {
-      console.log(`[DELIVERY TIERS] Tenant '${tenantId}' belum memiliki delivery tiers di database. Tidak ada auto-seed.`);
+      console.log(`[DELIVERY TIERS] Tenant '${tenantId}' belum memiliki delivery tiers di database. State: unconfigured.`);
       return [];
     }
 
-    // Tidak ada data di DB -> seed dari file/default lalu simpan
+    // Tidak ada data di DB -> gunakan fallback in-memory tanpa auto-seed diam-diam ke DB (S5.2)
     const source = activeDeliveryTiers.length > 0 ? activeDeliveryTiers : DEFAULT_TIERS;
-    console.warn(`[SEED] Delivery tiers kosong untuk tenant ${tenantId}; seeding dari ${activeDeliveryTiers.length > 0 ? 'file delivery_tiers_custom.json' : 'DEFAULT_TIERS (code default)'} (${source.length} tier). Set nilai via admin API / DB untuk produksi.`);
-    // D.1 (audit #199): hapus+isi atomik dalam SATU transaksi — cegah tier
-    // kosong/setengah bila proses terputus di tengah.
-    await prisma.$transaction([
-      prisma.deliveryTier.deleteMany({ where: { tenant_id: tenantId } }),
-      prisma.deliveryTier.createMany({
-        data: source.map((t, idx) => ({
-          tenant_id: tenantId,
-          max_dist: t.maxDist,
-          fee: t.fee,
-          promo_discount: t.promoDiscount,
-          sort_order: idx + 1,
-        })),
-      }),
-    ]);
+    console.warn(`[DELIVERY TIERS] Delivery tiers kosong di database untuk tenant '${tenantId}'. Menggunakan fallback in-memory (${source.length} tier). Jalankan seed-tenant-catalog.ts untuk mengisi database secara eksplisit.`);
     return source;
   } catch (err) {
-    // DB offline -> fallback file
-    console.warn('[DELIVERY TIERS] DB unavailable, using file fallback:', (err as Error).message);
+    console.warn('[DELIVERY TIERS] DB unavailable:', (err as Error).message);
+    if (tenantId !== DEFAULT_TENANT_ID) {
+      console.warn(`[DELIVERY TIERS] Tenant '${tenantId}' unconfigured (no cross-tenant fallback).`);
+      return [];
+    }
     return activeDeliveryTiers.length > 0 ? activeDeliveryTiers : DEFAULT_TIERS;
   }
 }
@@ -320,6 +320,21 @@ export class DeliveryService {
 
     // 4. Ambil tier ongkir per tenant (DB -> fallback file)
     const tiers = await getDeliveryTiersFromDb(tenantId);
+
+    // S5.2: tenant tanpa tier = belum dikonfigurasi (jangan pakai coverage global tenant lain).
+    if (tiers.length === 0) {
+      return {
+        distanceKm,
+        ongkir: 0,
+        normalPrice: 0,
+        promoPrice: 0,
+        isOutOfCoverage: true,
+        isEstimated,
+        freeTierKm: undefined,
+        maxCoverageKm: 0,
+        messageTemplate: 'Layanan pengiriman/home-treatment untuk lokasi ini belum dikonfigurasi. Silakan hubungi admin kami.',
+      };
+    }
 
     // 4. Evaluasi threshold jarak & tentukan tarif ongkir
     const { normalPrice, promoDiscount, isOutOfCoverage } = this.calculateOngkirByDistance(distanceKm, tiers);

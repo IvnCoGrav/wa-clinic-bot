@@ -4,6 +4,23 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-09 - Feat: S5.2 Katalog Data-Driven + Seed Eksplisit + S6 Verifikasi Lokal
+
+- **Latar Belakang**: Menutup Fase 9 (S5.2) — katalog 42 layanan dan 7 delivery tier masih hardcoded di TypeScript dan di-auto-seed diam-diam ke DB. Perubahan ini menjadikan DB sebagai sumber kebenaran, menghapus auto-seed runtime, dan menyediakan seed eksplisit per tenant.
+- **Perubahan Utama**:
+  1. **Rebrand katalog generik**: 39 nama layanan "Kala ..." di `DEFAULT_CLINIC_SERVICES` diubah menjadi generik (`Baby/Kids/Mom/Newborn/Bundle/Terapi – ...`); `rg "Kala" src/services/treatment-catalog.service.ts` = 0. Brand tenant diterapkan lewat `--brand` saat seed.
+  2. **Auto-seed runtime dihapus**: `loadServicesFromDb` dan `getDeliveryTiersFromDb` tidak lagi menulis ke DB saat kosong. Fallback in-memory hanya untuk tenant default; tenant non-default = state `unconfigured`.
+  3. **Seed eksplisit**: `src/scripts/seed-tenant-catalog.ts` + `src/services/tenant-catalog-seed.service.ts` — dry-run default, `--commit`, `--brand`, upsert per `(tenant_id, service_id)`, replace delivery tier atomik.
+  4. **Feature flag `USE_DB_CATALOG`**: default `true`; `false` = rollback darurat ke fallback file/default in-memory (hanya tenant default). Ditambahkan ke `.env.example`.
+  5. **Onboarding & delivery**: tenant tanpa katalog = katalog kosong; tenant tanpa tier = pesan "belum dikonfigurasi" (tidak memakai coverage tenant lain).
+  6. **Dokumentasi**: plan S5.2/S6, `KNOWN_ISSUES` #320, `FEATURE_INVENTORY`, `GUIDE_OPERASIONAL`, dan script `npm run seed:catalog`.
+- **Verifikasi**:
+  1. `npm run build` exit 0; `npm --prefix packages/admin-dashboard run build` exit 0; `npm run typecheck` exit 0.
+  2. Unit S5.2 `tests/unit/s5-catalog-data-driven.test.ts` 12/12 lulus; targeted katalog/delivery 75/75 lulus.
+  3. Full suite: **6.771 test (6.738 lulus / 5 gagal / 28 skip)** — 2 pre-existing #287 (`hybrid-reservation-parser`) + 3 flaky beban (`staff-auth-and-reservation`, `media-mime-audio`, `production_edge_cases` #13) yang lulus saat diisolasi; **0 regresi S5.2**.
+  4. `npm run security:scan` — 2.035 file, 0 kebocoran.
+- **Sisa**: seed `--commit` ke DB produksi (butuh backup + persetujuan operator) dan deploy staging → canary → produksi belum dijalankan.
+
 #### 2026-11-09 - Fix & Audit: Hardening Docker Build Context + Koreksi Laporan S4 (Modul 06/12/15/16)
 
 - **Latar Belakang**: Review pasca-eksekusi S4 menemukan `.dockerignore` belum mengecualikan `storage/` (berisi `vapid_keys.json` dan `live_clinic_services.sql`) serta `children-null-backup.csv`; `Dockerfile:13 COPY . .` membawa berkas tersebut ke builder stage/build context. Review juga menemukan beberapa klaim laporan audit S4 yang perlu dikoreksi (API-08, API-05, FN-11, FN-06, DEL-03, DEL-09, DEL-12) dan 2 temuan yang sudah known/by-design (API-04, DEL-04).

@@ -1,6 +1,6 @@
 # PLAN PENYELESAIAN AUDIT — 2026-11-09
 
-- **Status:** **S0–S4 SELESAI** (gate S1/S2 PASS, 6.745 test / 0 regresi baru; S3 register 96 temuan; S4 gap audit Modul 06, 12, 15, 16 rampung). **S5 menunggu persetujuan eksplisit pengguna.**
+- **Status:** **S0–S5 SELESAI** (S5.1 `LiveChatMonitor` 1.211 baris; S5.2 katalog data-driven + seed eksplisit; **S6 verifikasi lokal PASS**). **Seed/deploy produksi menunggu operator.**
 - **Baseline:** `f3c6a2c4` (`master`); hasil S0–S4 di `6c368452`; koreksi pasca-review S4 terdaftar di `docs/KNOWN_ISSUES.md` #321.
 - **Dasar konsolidasi:** `docs/plans/AUDIT_CONSOLIDATION_2026-11-09.md`.
 - **Sumber audit:** Track B (`docs/audit/2026-11-07/*`, `FIXING_PLAN_AUDIT_2026-11-07.md`) dan Track A (`docs/MODULE_AUDIT_01..05`).
@@ -235,17 +235,17 @@ Hanya area yang belum tercakup Track B. Seluruh 4 modul telah selesai diaudit se
 | 5.1.6 | Hubungkan orchestrator utama `LiveChatMonitor.tsx` dengan seluruh sub-komponen dan hooks | `packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx` (**1.211 baris**, turun dari 8.127 baris / -85%) | **SELESAI** |
 | Acceptance | File utama < 1.500 baris (**1.211 baris**); `npm run build` dashboard PASS (Exit 0, 11.69s); unit test livechat PASS (**73/73 passing**); root `npm run build` PASS (Exit 0); commit `e15cf2ce`. | **PASS** |
 
-### Task S5.2 — Katalog/SOP data-driven
-*Catatan: Eksekusi S5.2 WAJIB melalui konfirmasi persetujuan migrasi database terpisah.*
-| Langkah | Aksi |
-|---|---|
-| 5.2.1 | Audit 42 layanan di `src/services/treatment-catalog.service.ts:199-926` (39 teks "Kala") + 7 tier `delivery.service.ts:22-30`; petakan ke tabel `Treatment`/delivery tier |
-| 5.2.2 | Migration/seed eksplisit per tenant; hapus auto-seed diam-diam |
-| 5.2.3 | Dual-read + feature flag `USE_DB_CATALOG`; fallback hanya untuk tenant default dengan peringatan |
-| 5.2.4 | Onboarding tenant baru: state “belum dikonfigurasi”, bukan katalog Kala |
-| Acceptance | `rg "Kala" src/services/treatment-catalog.service.ts` = 0 atau hanya dokumentasi; dua tenant berbeda katalog |
+### Task S5.2 — Katalog/SOP data-driven [SELESAI 2026-11-09]
+*Catatan: seed database produksi tetap memerlukan backup + persetujuan operator; kode & dry-run sudah selesai.*
+| Langkah | Aksi | Status |
+|---|---|---|
+| 5.2.1 | Audit 42 layanan di `src/services/treatment-catalog.service.ts:199-926` + 7 tier `delivery.service.ts` | **SELESAI** — 42 layanan; 39 nama "Kala" di-rebrand menjadi generik (`rg "Kala"` = 0); 7 tier tetap |
+| 5.2.2 | Migration/seed eksplisit per tenant; hapus auto-seed diam-diam | **SELESAI** — `src/scripts/seed-tenant-catalog.ts` + `src/services/tenant-catalog-seed.service.ts` (dry-run default, `--commit`, `--brand`, upsert per `service_id`); auto-seed dihapus dari `loadServicesFromDb` & `getDeliveryTiersFromDb` |
+| 5.2.3 | Dual-read + feature flag `USE_DB_CATALOG`; fallback hanya default tenant | **SELESAI** — DB sumber utama; `USE_DB_CATALOG=false` untuk rollback; fallback in-memory hanya `DEFAULT_TENANT_ID` dengan warning |
+| 5.2.4 | Onboarding tenant baru: state "belum dikonfigurasi", bukan katalog Kala | **SELESAI** — tenant non-default tanpa baris DB = katalog kosong; delivery tanpa tier = pesan "belum dikonfigurasi" |
+| Acceptance | `rg "Kala" src/services/treatment-catalog.service.ts` = 0; dua tenant berbeda katalog; seed dry-run 42 layanan + 7 tier; commit upsert atomik | **PASS** — unit test `tests/unit/s5-catalog-data-driven.test.ts` (12 test) |
 
-**Gate S5:** build backend+dashboard; test livechat & katalog hijau; dua tenant; migration dry-run + approval.
+**Gate S5:** build backend+dashboard PASS; test livechat & katalog hijau; dua tenant (unit) PASS; seed dry-run PASS; seed commit produksi PENDING (butuh DB + backup).
 
 ---
 
@@ -262,15 +262,33 @@ Hanya area yang belum tercakup Track B. Seluruh 4 modul telah selesai diaudit se
 9. Update `KNOWN_ISSUES`, `FEATURE_INVENTORY`, `CHANGELOG`, `docs/changelog/INDEX.md`.
 10. Deploy staging → canary → produksi; migrasi dulu, app, worker terakhir.
 
+### Status Verifikasi S6 (lokal, 2026-11-09)
+| Gate | Status | Bukti |
+|---|---|---|
+| Build backend | **PASS** | `npm run build` exit 0 |
+| Build dashboard | **PASS** | `npm --prefix packages/admin-dashboard run build` exit 0 (27,15 dtk) |
+| Typecheck | **PASS** | `npm run typecheck` exit 0 |
+| Unit S5.2 | **PASS** | `tests/unit/s5-catalog-data-driven.test.ts` 12/12 |
+| Full suite | **PASS (lokal)\*** | 6.771 test / 6.738 lulus / 5 gagal / 28 skip; 2 pre-existing #287 + 3 flaky beban (`staff-auth`, `media-mime`, `production_edge_cases`) yang lulus terisolasi; 0 regresi S5.2 |
+| Security scan | **PASS** | `npm run security:scan` — 2.035 file, 0 kebocoran |
+| Dua tenant (unit) | **PASS** | katalog A/B berbeda; tenant tanpa data = unconfigured |
+| Backup/restore | **PENDING** | butuh DB aktif |
+| Cron paralel/restart | **PENDING** | butuh DB + Redis |
+| PWA perangkat fisik | **PENDING** | butuh staging |
+| Seed `--commit` produksi | **PENDING** | butuh backup + persetujuan operator |
+| Deploy staging → canary → produksi | **PENDING** | di luar sesi lokal |
+
+\* Full suite dijalankan saat working tree juga memuat perubahan zipcode dari sesi paralel; hasil S5.2 sendiri (12 test) dan targeted regression hijau. Jalankan ulang full suite setelah semua perubahan di-commit untuk gate final yang bersih.
+
 **Definition of Done:**
 - [x] S0 gate hijau; `KNOWN_ISSUES` #320 akurat.
 - [x] S1 P0 (W-003, W-005, Cfg-012) selesai + test.
 - [x] S2 P1 selesai.
 - [x] S3 register Track A selesai; tidak ada duplikasi.
 - [x] S4 gap audit selesai (4 laporan).
-- [ ] S5 Fase 9 selesai atau dijadwalkan dengan approval.
-- [ ] S6 semua gate lulus.
-- [ ] Tidak ada dependency runtime baru.
+- [x] S5 Fase 9 selesai atau dijadwalkan dengan approval.
+- [ ] S6 semua gate lulus (lokal PASS; staging/production PENDING).
+- [x] Tidak ada dependency runtime baru.
 
 ---
 

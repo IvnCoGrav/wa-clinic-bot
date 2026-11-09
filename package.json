@@ -35,6 +35,7 @@
     "seed:faq": "tsx src/cli/seed-faq.ts",
     "seed:faq:dry": "tsx src/cli/seed-faq.ts --dry-run",
     "seed:faq:prod": "node dist/cli/seed-faq.js",
+    "seed:catalog": "tsx src/scripts/seed-tenant-catalog.ts",
     "radar:guardrail": "node dist/cli/guardrail-radar.js",
     "radar:guardrail:dev": "tsx src/cli/guardrail-radar.ts",
     "sync:knowledge": "tsx scripts/sync-live-knowledge.ts",

@@ -151,6 +151,21 @@ NLU berjalan di GATE 2 state machine pada setiap pesan inbound non-human-handlin
 - **`AI_PROVIDER_NLU`** / **`AI_MODEL_NLU`** (default `MiniMax` / `MiniMax-M2.7-highspeed`): provider & model task INTENT_CLASSIFICATION (per-tenant via DB `tenant_ai_config`, read default env).
 - **`NLU_CONFIDENCE_THRESHOLD`** (default `0.60`): intent hasil LLM dipakai hanya jika `confidence >= threshold && !isFallback`; di bawah itu turun ke fallback deterministik.
 
+### Katalog Treatment Data-Driven (S5.2)
+
+Sumber runtime adalah tabel `clinic_services` per tenant. Tenant baru tanpa baris DB berada pada state **belum dikonfigurasi** (bukan memakai katalog Kala).
+
+Seed eksplisit (default dry-run):
+
+```powershell
+npm run seed:catalog -- --tenant=default-tenant --brand=Kala
+npm run seed:catalog -- --tenant=default-tenant --brand=Kala --commit
+```
+
+- `--commit` menulis 42 layanan + 7 delivery tier secara atomik (upsert layanan, replace tier).
+- Lakukan backup database sebelum `--commit` di produksi.
+- Rollback darurat: `USE_DB_CATALOG=false` (fallback file/default in-memory hanya untuk tenant default).
+
 ### Burst Coalescing (Pesan Text Beruntun → 1 Balasan)
 
 - **`BURST_COALESCE_MS`** (default `0` = nonaktif; contoh `5000` = gabung pesan text dalam window 5 detik): bot di-debounce, gabung pesan text beruntun di state open-ended jadi **satu job satu balasan** yang membaca seluruh konteks. Pesan lokasi/media & state menunggu input spesifik (`AWAITING_LOCATION`, `LOCATION_CONFIRMED`, `RESERVATION_SENT`, `HUMAN_HANDLING`) TIDAK pernah di-merge.

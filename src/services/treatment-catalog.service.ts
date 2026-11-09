@@ -199,7 +199,7 @@ const serviceCatalog: Map<string, ClinicServiceItem> = getTenantCatalog(DEFAULT_
 export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   {
     "id": "baby-cukur",
-    "name": "Kala Baby – Cukur Rambut",
+    "name": "Baby – Cukur Rambut",
     "category": "BABY",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -231,7 +231,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "baby-mandi",
-    "name": "Kala Baby – Memandikan Bayi",
+    "name": "Baby – Memandikan Bayi",
     "category": "BABY",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -267,7 +267,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "baby-tindik",
-    "name": "Kala Baby – Tindik Telinga",
+    "name": "Baby – Tindik Telinga",
     "category": "BABY",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -299,7 +299,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "baby-massage-ceria-newborn",
-    "name": "Kala Baby – Pijat Ceria Newborn",
+    "name": "Baby – Pijat Ceria Newborn",
     "category": "BABY",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -315,7 +315,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "baby-massage-ceria",
-    "name": "Kala Baby – Pijat Ceria",
+    "name": "Baby – Pijat Ceria",
     "category": "BABY",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -331,7 +331,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "baby-massage-pulih-ceria",
-    "name": "Kala Baby – Pijat Pulih Ceria",
+    "name": "Baby – Pijat Pulih Ceria",
     "category": "BABY",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -347,7 +347,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "baby-massage-pulih-ceria-newborn",
-    "name": "Kala Baby – Pijat Pulih Ceria Newborn",
+    "name": "Baby – Pijat Pulih Ceria Newborn",
     "category": "BABY",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -363,7 +363,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "baby-massage-lahap-juara",
-    "name": "Kala Baby – Pijat Lahap",
+    "name": "Baby – Pijat Lahap",
     "category": "BABY",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -379,7 +379,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "NewBorn",
-    "name": "Kala Newborn – Paket Pendampingan 14 Sesi",
+    "name": "Newborn – Paket Pendampingan 14 Sesi",
     "category": "BABY",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -395,7 +395,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "kids-massage-2-4th",
-    "name": "Kala Kids – Pijat Ceria",
+    "name": "Kids – Pijat Ceria",
     "category": "KIDS",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -411,7 +411,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "kids-massage-4-6th",
-    "name": "Kala Kids – Pijat Ceria",
+    "name": "Kids – Pijat Ceria",
     "category": "KIDS",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -427,7 +427,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "kids-massage-6-8th",
-    "name": "Kala Kids – Pijat Ceria",
+    "name": "Kids – Pijat Ceria",
     "category": "KIDS",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -443,7 +443,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "baby-massage-lahap-juara-gt2",
-    "name": "Kala Kids – Pijat Lahap",
+    "name": "Kids – Pijat Lahap",
     "category": "KIDS",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -459,7 +459,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "kids-pulih-2-4th",
-    "name": "Kala Kids – Pijat Pulih Ceria",
+    "name": "Kids – Pijat Pulih Ceria",
     "category": "KIDS",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -475,7 +475,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "kids-pulih-4-6th",
-    "name": "Kala Kids – Pijat Pulih Ceria",
+    "name": "Kids – Pijat Pulih Ceria",
     "category": "KIDS",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -491,7 +491,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "kids-pulih-6-8th",
-    "name": "Kala Kids – Pijat Pulih Ceria",
+    "name": "Kids – Pijat Pulih Ceria",
     "category": "KIDS",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -507,7 +507,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "moms-prenatal-yoga",
-    "name": "Kala Mom – Prenatal Gentle Yoga",
+    "name": "Mom – Prenatal Gentle Yoga",
     "category": "MOMS",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -523,7 +523,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "moms-perineum-massage",
-    "name": "Kala Mom – Perineum Massage",
+    "name": "Mom – Perineum Massage",
     "category": "MOMS",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -539,7 +539,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "moms-oksitosin",
-    "name": "Kala Mom – Oksitosin Massage (Punggung)",
+    "name": "Mom – Oksitosin Massage (Punggung)",
     "category": "MOMS",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -555,7 +555,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "moms-paket-laktasi",
-    "name": "Kala Mom – Laktasi & Breast Care",
+    "name": "Mom – Laktasi & Breast Care",
     "category": "MOMS",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -571,7 +571,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "moms-prenatal-massage",
-    "name": "Kala Mom – Pregnant Massage",
+    "name": "Mom – Pregnant Massage",
     "category": "MOMS",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -587,7 +587,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "moms-induksi-massage",
-    "name": "Kala Mom – Induksi Massage",
+    "name": "Mom – Induksi Massage",
     "category": "MOMS",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -603,7 +603,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "moms-induksi-fullbody",
-    "name": "Kala Mom – Induksi Massage Fullbody",
+    "name": "Mom – Induksi Massage Fullbody",
     "category": "MOMS",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -619,7 +619,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "moms-postpartum-massage",
-    "name": "Kala Mom – Postpartum Recovery Massage",
+    "name": "Mom – Postpartum Recovery Massage",
     "category": "MOMS",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -635,7 +635,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "moms-oksitosin-fullbody",
-    "name": "Kala Mom – Oksitosin Massage (Full Body)",
+    "name": "Mom – Oksitosin Massage (Full Body)",
     "category": "MOMS",
     "serviceType": "STANDARD",
     "ageTier": {
@@ -651,7 +651,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "baby-paket-selapan",
-    "name": "Kala Bundle Selapan – Cukur + Pijat Ceria",
+    "name": "Bundle Selapan – Cukur + Pijat Ceria",
     "category": "BUNDLE",
     "serviceType": "BUNDLE",
     "ageTier": {
@@ -671,7 +671,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "baby-paket-selapan-terapi",
-    "name": "Kala Bundle Selapan – Cukur + Pijat Pulih Ceria",
+    "name": "Bundle Selapan – Cukur + Pijat Pulih Ceria",
     "category": "BUNDLE",
     "serviceType": "BUNDLE",
     "ageTier": {
@@ -691,7 +691,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "baby-paket-selapan-full",
-    "name": "Kala Bundle Selapan Full – Cukur + Ceria + Mandi",
+    "name": "Bundle Selapan Full – Cukur + Ceria + Mandi",
     "category": "BUNDLE",
     "serviceType": "BUNDLE",
     "ageTier": {
@@ -712,7 +712,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "baby-paket-selapan-terapi-full",
-    "name": "Kala Bundle Selapan Full – Cukur + Pulih Ceria + Mandi",
+    "name": "Bundle Selapan Full – Cukur + Pulih Ceria + Mandi",
     "category": "BUNDLE",
     "serviceType": "BUNDLE",
     "ageTier": {
@@ -733,7 +733,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "bundle-perineum-yoga",
-    "name": "Kala Bundle Pra-Kelahiran – Perineum + Yoga",
+    "name": "Bundle Pra-Kelahiran – Perineum + Yoga",
     "category": "BUNDLE",
     "serviceType": "BUNDLE",
     "ageTier": {
@@ -753,7 +753,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "bundle-yoga-breast",
-    "name": "Kala Bundle Pra-Kelahiran – Yoga + Breast Care",
+    "name": "Bundle Pra-Kelahiran – Yoga + Breast Care",
     "category": "BUNDLE",
     "serviceType": "BUNDLE",
     "ageTier": {
@@ -773,7 +773,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "bundle-perineum-breast",
-    "name": "Kala Bundle Pra-Kelahiran – Perineum + Breast Care",
+    "name": "Bundle Pra-Kelahiran – Perineum + Breast Care",
     "category": "BUNDLE",
     "serviceType": "BUNDLE",
     "ageTier": {
@@ -793,7 +793,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "bundle-pra-kelahiran-lengkap",
-    "name": "Kala Bundle Pra-Kelahiran Lengkap (3-in-1)",
+    "name": "Bundle Pra-Kelahiran Lengkap (3-in-1)",
     "category": "BUNDLE",
     "serviceType": "BUNDLE",
     "ageTier": {
@@ -814,7 +814,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "bundle-mom-baby-ceria",
-    "name": "Kala Bundle Duo – Mom & Baby Ceria Newborn",
+    "name": "Bundle Duo – Mom & Baby Ceria Newborn",
     "category": "BUNDLE",
     "serviceType": "BUNDLE",
     "ageTier": {
@@ -834,7 +834,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "bundle-laktasi-oksitosin",
-    "name": "Kala Bundle – Laktasi Booster (Breast + Oksitosin Punggung)",
+    "name": "Bundle – Laktasi Booster (Breast + Oksitosin Punggung)",
     "category": "BUNDLE",
     "serviceType": "BUNDLE",
     "ageTier": {
@@ -854,7 +854,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "moms-laktasi-oksitosin-full",
-    "name": "Kala Bundle – Laktasi Total (Breast + Oksitosin Full Body)",
+    "name": "Bundle – Laktasi Total (Breast + Oksitosin Full Body)",
     "category": "BUNDLE",
     "serviceType": "BUNDLE",
     "ageTier": {
@@ -874,7 +874,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "add-on-sinar-moksa",
-    "name": "Kala Terapi – Infrared (Sinar Moksa)",
+    "name": "Terapi – Infrared (Sinar Moksa)",
     "category": "ADD_ON",
     "serviceType": "ADD_ON",
     "ageTier": {
@@ -891,7 +891,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "add-on-nebulizer",
-    "name": "Kala Terapi – Nebulizer",
+    "name": "Terapi – Nebulizer",
     "category": "ADD_ON",
     "serviceType": "ADD_ON",
     "ageTier": {
@@ -908,7 +908,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   },
   {
     "id": "add-on-nebulizer-obat",
-    "name": "Kala Terapi – Nebulizer + Obat",
+    "name": "Terapi – Nebulizer + Obat",
     "category": "ADD_ON",
     "serviceType": "ADD_ON",
     "ageTier": {
@@ -960,10 +960,55 @@ export function saveServices() {
 }
 
 /**
+ * Feature flag S5.2: DB catalog sebagai sumber kebenaran.
+ * Set USE_DB_CATALOG=false untuk rollback darurat ke file/default in-memory.
+ */
+function isDbCatalogEnabled(): boolean {
+  return process.env.USE_DB_CATALOG !== 'false';
+}
+
+/**
+ * Fallback in-memory untuk tenant default saat DB kosong/offline/flag off.
+ * TIDAK menulis ke DB (tidak ada auto-seed diam-diam).
+ */
+function loadFallbackCatalog(
+  targetCatalog: Map<string, ClinicServiceItem>,
+  tenantId: string,
+  reason: string
+): void {
+  let source: ClinicServiceItem[] = [];
+  try {
+    if (fs.existsSync(SERVICES_FILE)) {
+      const raw = fs.readFileSync(SERVICES_FILE, 'utf-8');
+      const fileData = JSON.parse(raw) as ClinicServiceItem[];
+      if (Array.isArray(fileData) && fileData.length > 0) source = fileData;
+    }
+  } catch {}
+  if (source.length === 0) source = [...DEFAULT_CLINIC_SERVICES];
+
+  source.forEach((item) => targetCatalog.set(item.id, sanitizeCatalogItem(item)));
+  console.warn(
+    `[TREATMENT CATALOG] ${reason}; tenant '${tenantId}' memakai fallback in-memory (${source.length} layanan). ` +
+    `Tidak ada auto-seed ke DB. Jalankan seed-tenant-catalog.ts untuk mengisi database secara eksplisit.`
+  );
+}
+
+/**
  * Load services dari database per tenant (SaaS-ready).
- * Sumber kebenaran: tabel clinic_services. Fallback: file services_custom.json.
+ * Sumber kebenaran: tabel clinic_services. Fallback in-memory HANYA untuk tenant default.
  */
 export async function loadServicesFromDb(tenantId: string): Promise<void> {
+  if (!isDbCatalogEnabled()) {
+    const targetCatalog = getTenantCatalog(tenantId);
+    targetCatalog.clear();
+    if (tenantId === DEFAULT_TENANT_ID) {
+      loadFallbackCatalog(targetCatalog, tenantId, 'USE_DB_CATALOG=false');
+    } else {
+      console.log(`[TREATMENT CATALOG] USE_DB_CATALOG=false; tenant '${tenantId}' state: unconfigured.`);
+    }
+    return;
+  }
+
   try {
     const { prisma } = await import('../db/client');
     const dbServices = await prisma.clinicService.findMany({
@@ -1031,39 +1076,20 @@ export async function loadServicesFromDb(tenantId: string): Promise<void> {
       return;
     }
 
-    // Task 6.4: Jangan auto-seed katalog ke tenant baru (SaaS-readiness & onboarding eksplisit).
-    // Hanya DEFAULT_TENANT_ID yang menerima fallback default saat DB kosong.
+    // S5.2: Tidak ada auto-seed. Fallback in-memory hanya untuk tenant default.
     if (tenantId !== DEFAULT_TENANT_ID) {
-      console.log(`[TREATMENT CATALOG] Tenant '${tenantId}' belum memiliki katalog treatment di database. Tidak ada auto-seed.`);
+      console.log(`[TREATMENT CATALOG] Tenant '${tenantId}' belum memiliki katalog treatment di database. State: unconfigured. Tidak ada auto-seed.`);
       return;
     }
-
-    // Tidak ada data di DB -> seed dari file/default lalu simpan
-    let source: ClinicServiceItem[] = [];
-    try {
-      const fs = await import('fs');
-      const path = await import('path');
-      const filePath = path.join(process.cwd(), 'services_custom.json');
-      if (fs.existsSync(filePath)) {
-        const raw = fs.readFileSync(filePath, 'utf-8');
-        const fileData = JSON.parse(raw) as ClinicServiceItem[];
-        if (Array.isArray(fileData) && fileData.length > 0) {
-          source = fileData;
-          console.warn(`[SEED] Catalog kosong untuk tenant ${tenantId}; seeding dari file services_custom.json (${source.length} layanan).`);
-        }
-      }
-    } catch {}
-    if (source.length === 0) {
-      source = [...DEFAULT_CLINIC_SERVICES];
-      console.warn(`[SEED] Catalog treatment kosong untuk tenant ${tenantId}; seeding dari DEFAULT_CLINIC_SERVICES (code default, ${source.length} layanan). Set harga/layanan via admin API / DB untuk produksi.`);
-    }
-    // Sanitasi display fondasional (Fase 1.1): jalur fallback file/default juga
-    // melewati sanitizeCatalogItem (jalur DB sudah strip di atas) — tag storage
-    // DILARANG bocor ke prompt Call 2 / balasan (bukti CASE-063).
-    source.forEach((item) => targetCatalog.set(item.id, sanitizeCatalogItem(item)));
-    await saveServicesToDb(tenantId);
+    loadFallbackCatalog(targetCatalog, tenantId, 'Katalog DB kosong');
   } catch (err) {
-    console.warn('[TREATMENT CATALOG] DB unavailable, using file/default:', (err as Error).message);
+    const targetCatalog = getTenantCatalog(tenantId);
+    targetCatalog.clear();
+    if (tenantId === DEFAULT_TENANT_ID) {
+      loadFallbackCatalog(targetCatalog, tenantId, 'DB unavailable');
+    } else {
+      console.warn(`[TREATMENT CATALOG] DB unavailable; tenant '${tenantId}' unconfigured (no cross-tenant fallback).`);
+    }
   }
 }
 
