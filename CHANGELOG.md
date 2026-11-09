@@ -17,7 +17,7 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - **Verifikasi**:
   1. `npm run build` exit 0; `npm --prefix packages/admin-dashboard run build` exit 0; `npm run typecheck` exit 0.
   2. Unit S5.2 `tests/unit/s5-catalog-data-driven.test.ts` 12/12 lulus; targeted katalog/delivery 75/75 lulus.
-  3. Full suite: **6.771 test (6.738 lulus / 5 gagal / 28 skip)** — 2 pre-existing #287 (`hybrid-reservation-parser`) + 3 flaky beban (`staff-auth-and-reservation`, `media-mime-audio`, `production_edge_cases` #13) yang lulus saat diisolasi; **0 regresi S5.2**.
+  3. Full suite (worktree bersih `b45f9d46`): **6.738 test (6.707 lulus / 3 gagal / 28 skip)** — 2 pre-existing #287 (`hybrid-reservation-parser`) + 1 known flaky/LLM (`production_edge_cases` #13, lulus saat diisolasi); **0 regresi S5.2**. Artefak: `docs/audit/2026-11-09/after-s5-clean.json`.
   4. `npm run security:scan` — 2.035 file, 0 kebocoran.
 - **Sisa**: seed `--commit` ke DB produksi (butuh backup + persetujuan operator) dan deploy staging → canary → produksi belum dijalankan.
 

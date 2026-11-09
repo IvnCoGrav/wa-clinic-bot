@@ -17,25 +17,23 @@
 | Security scan | `npm run security:scan` | **PASS** — 2.035 file, 0 kebocoran |
 | Seed dry-run | `npm run seed:catalog -- --tenant=default-tenant --brand=Kala` | **PASS** — 42 layanan + 7 tier, tidak menulis DB |
 
-## Full Suite
+## Full Suite (clean worktree @ `b45f9d46`)
 
-- **Total:** 6.771 test
-- **Lulus:** 6.738
-- **Gagal:** 5
+- **Total:** 6.738 test
+- **Lulus:** 6.707
+- **Gagal:** 3
 - **Skip:** 28
 
-Klasifikasi 5 kegagalan:
+Klasifikasi 3 kegagalan:
 
 | Test | Klasifikasi | Bukti |
 |---|---|---|
 | `hybrid-reservation-parser` (2) | Pre-existing #287 | Gagal juga pada baseline `f3c6a2c4` |
-| `staff-auth-and-reservation` | Flaky beban | Lulus 28/28 saat diisolasi |
-| `media-mime-audio` | Flaky beban | Lulus 2/2 saat diisolasi |
-| `production_edge_cases` #13 | Flaky beban/LLM | Lulus saat diisolasi (`-t` spesifik) |
+| `production_edge_cases` #13 | Known flaky/LLM | Lulus saat diisolasi (`-t` spesifik) |
 
-**Kesimpulan:** tidak ada regresi fungsional S5.2.
+**Kesimpulan:** tidak ada regresi fungsional S5.2. Artifact: `docs/audit/2026-11-09/after-s5-clean.json`.
 
-> Catatan: full suite dijalankan saat working tree juga memuat perubahan zipcode dari sesi paralel. Artifact mentah disimpan di luar repo; jalankan ulang full suite setelah semua perubahan di-commit untuk gate final yang bersih.
+> Catatan: run awal (6.771 test / 5 gagal) dilakukan di working tree yang juga memuat perubahan zipcode dari sesi paralel. Gate resmi S5.2 memakai worktree bersih pada commit `b45f9d46`; hasilnya 0 regresi S5.2.
 
 ## Acceptance S5.2
 

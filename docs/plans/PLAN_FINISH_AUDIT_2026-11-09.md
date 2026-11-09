@@ -269,7 +269,7 @@ Hanya area yang belum tercakup Track B. Seluruh 4 modul telah selesai diaudit se
 | Build dashboard | **PASS** | `npm --prefix packages/admin-dashboard run build` exit 0 (27,15 dtk) |
 | Typecheck | **PASS** | `npm run typecheck` exit 0 |
 | Unit S5.2 | **PASS** | `tests/unit/s5-catalog-data-driven.test.ts` 12/12 |
-| Full suite | **PASS (lokal)\*** | 6.771 test / 6.738 lulus / 5 gagal / 28 skip; 2 pre-existing #287 + 3 flaky beban (`staff-auth`, `media-mime`, `production_edge_cases`) yang lulus terisolasi; 0 regresi S5.2 |
+| Full suite | **PASS (lokal)** | 6.738 test / 6.707 lulus / 3 gagal / 28 skip; 2 pre-existing #287 + 1 known flaky (`production_edge_cases` #13, lulus terisolasi); 0 regresi S5.2 (worktree bersih `b45f9d46`) |
 | Security scan | **PASS** | `npm run security:scan` — 2.035 file, 0 kebocoran |
 | Dua tenant (unit) | **PASS** | katalog A/B berbeda; tenant tanpa data = unconfigured |
 | Backup/restore | **PENDING** | butuh DB aktif |
@@ -277,8 +277,6 @@ Hanya area yang belum tercakup Track B. Seluruh 4 modul telah selesai diaudit se
 | PWA perangkat fisik | **PENDING** | butuh staging |
 | Seed `--commit` produksi | **PENDING** | butuh backup + persetujuan operator |
 | Deploy staging → canary → produksi | **PENDING** | di luar sesi lokal |
-
-\* Full suite dijalankan saat working tree juga memuat perubahan zipcode dari sesi paralel; hasil S5.2 sendiri (12 test) dan targeted regression hijau. Jalankan ulang full suite setelah semua perubahan di-commit untuk gate final yang bersih.
 
 **Definition of Done:**
 - [x] S0 gate hijau; `KNOWN_ISSUES` #320 akurat.
