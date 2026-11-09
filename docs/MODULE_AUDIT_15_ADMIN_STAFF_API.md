@@ -83,7 +83,7 @@ Modul 15 merupakan **lapisan API eksternal terbesar** dalam sistem dengan 21.725
    - `src/routes/admin/customers.subroute.ts` (1.997 baris)
 2. **Kebocoran Multi-Tenant pada Admin Impersonation**: Pada `src/routes/staff.route.ts:71`, ketika admin login dan membuka portal staf, sesi impersonasi staf secara hardcoded diberi `tenant_id: DEFAULT_TENANT_ID`. Admin Tenant B yang memeriksa portal staf akan disajikan data tugas milik Tenant A.
 3. **Hardcoded Tenant pada Unified Admin Login**: Di `src/routes/admin/auth.subroute.ts:146-148`, kueri pencarian akun staf dikunci ke `tenant_id: DEFAULT_TENANT_ID`, membuat staf dari cabang/tenant lain mustahil melakukan login melalui portal login admin.
-4. **Duplikasi Rute Alias (*Double Route Registration*)**: Di `src/routes/admin/livechat.subroute.ts`, setidaknya 6 pasang rute didaftarkan dua kali berturut-turut (misal `/api/admin/conversations/:id/typing` dan `/api/admin/live-chat/conversations/:id/typing`) dengan closure handler ganda yang rawan mengalami *drift*.
+4. **Duplikasi Rute Alias (*Double Route Registration*)**: Di `src/routes/admin/livechat.subroute.ts`, setidaknya 6 pasang rute didaftarkan dua kali berturut-turut (misal `/api/admin/conversations/:id/typing` dan `/api/admin/live-chat/conversations/:id/typing`). Keduanya memakai **handler yang sama** (bukan closure ganda), sehingga risiko drift rendah; yang tersisa adalah ambiguitas dokumentasi dan permukaan routing.
 5. **Kurangnya Validasi Skema Formal (Zod/JSON Schema)**: Sebagian besar handler rute membaca body melalui `request.body as any` tanpa schema validation bawaan Fastify, mengandalkan pengecekan manual *if-else* yang rawan celah mass-assignment.
 
 **Skor Kesehatan: 2.5 / 5 (Fitur sangat kaya dan guard keamanan CSRF/RBAC berjalan baik, tetapi memiliki 3 god controller berukuran raksasa >2.000 baris, celah kebocoran impersonasi multi-tenant, dan duplikasi alias endpoint).**
@@ -97,11 +97,11 @@ Modul 15 merupakan **lapisan API eksternal terbesar** dalam sistem dengan 21.725
 | **API-01** | **Tinggi** | `reservation-dispatch.route.ts:1-3244`, `settings.subroute.ts:1-2817`, `customers.subroute.ts:1-1997` | Tiga file rute controller berukuran raksasa (>1.500 baris) menggabungkan puluhan domain bisnis yang tidak sejenis. | Tingginya risiko regresi saat refaktor, konflik merge antar pengembang, dan kesulitan pengujian terisolasi. | Batas Modul Jelas Mandate (<1.500 baris), Modularity-First Mandate | Pecah per sub-domain: `dispatch-telemetry.route.ts`, `reservation-moderation.route.ts`, `settings-ai.route.ts`, `customer-address.route.ts`. **Cost:** M. **Benefit:** Kode modular dan terisolasi. | M | H | TERVERIFIKASI |
 | **API-02** | **Tinggi** | `src/routes/staff.route.ts:71` | Sesi admin impersonation staf secara hardcoded menetapkan `tenant_id: DEFAULT_TENANT_ID`. | Admin dari Tenant B yang membuka portal staf akan mengakses dan memutasi data jadwal milik Tenant Default (Kebocoran Lintas-Tenant). | Multi-Tenant & SaaS-Readiness Mandate, Tenant Isolation Mandate | Ambil `tenant_id` dari sesi admin atau header terverifikasi `x-tenant-id`. **Cost:** S. **Benefit:** Isolasi impersonasi multi-tenant terjamin. | S | H | TERVERIFIKASI |
 | **API-03** | **Tinggi** | `src/routes/admin/auth.subroute.ts:146-148` | Kueri pencarian akun staf pada unified login dikunci secara kaku ke `tenant_id: DEFAULT_TENANT_ID`. | Staf/terapis dari tenant selain default-tenant tidak akan pernah bisa login melalui form login admin. | Multi-Tenant Architecture, Correctness | Berikan dukungan `tenantId` dari payload login atau resolusi domain tenant. **Cost:** S. **Benefit:** Seluruh staf cabang/tenant dapat login. | S | H | TERVERIFIKASI |
-| **API-04** | **Sedang** | `src/services/admin-session.service.ts:6-13`, `src/routes/admin.route.ts:158` | Entitas `AdminSession` tidak memiliki atribut `tenant_id`, bergantung pada header client `x-tenant-id` tanpa verifikasi kepemilikan. | Potensi eksploitasi manipulasi header untuk mengakses data tenant lain jika client memegang token admin yang valid (*tenant hopping*). | Multi-Tenant Security & Tenant Isolation Mandate | Tautkan `tenant_id` ke dalam tabel `AdminSession` saat login dan validasi kecocokan header di preHandler. **Cost:** M. **Benefit:** Otorisasi tenant tidak bisa dimanipulasi client. | M | H | TERVERIFIKASI |
-| **API-05** | **Sedang** | `reservation-dispatch.route.ts:2025, 2108` | Mutasi data reservasi (`prisma.reservation.update`) menggunakan `where: { id }` tanpa menyertakan `tenant_id` pada klausa update. | Inkonsistensi pola keamanan; pembaruan tidak dijamin scoped pada level kueri mutasi jika terjadi konkurensi data. | Secure Coding Standards, Repository Scoping Mandate | Gunakan `updateMany` scoped: `where: { id, tenant_id: tenantId }` atau fungsi kanonis repository. **Cost:** S. **Benefit:** Kueri mutasi fail-closed multi-tenant. | S | H | TERVERIFIKASI |
+| **API-04** | **Sedang (KNOWN — by-design)** | `src/services/admin-session.service.ts:6-13`, `src/routes/admin.route.ts:158` | Entitas `AdminSession` tidak memiliki atribut `tenant_id`, bergantung pada header client `x-tenant-id` tanpa verifikasi kepemilikan. | Potensi manipulasi header untuk berpindah tenant jika client memegang token admin valid. **Catatan:** perilaku ini sudah tercatat sebagai by-design di `docs/KNOWN_ISSUES.md:75` — admin diperlakukan sebagai super-admin lintas tenant; perubahan ke isolasi admin per-tenant adalah keputusan produk, bukan regresi. | Multi-Tenant Security & Tenant Isolation Mandate | Bila isolasi admin per-tenant diputuskan: tautkan `tenant_id` ke `AdminSession` dan validasi header di preHandler. **Cost:** M. **Benefit:** Otorisasi tenant tidak bisa dimanipulasi client. | M | H | KNOWN / BY-DESIGN |
+| **API-05** | **Sedang** | `reservation-dispatch.route.ts:2025, 2108` | Mutasi data reservasi (`prisma.reservation.update`) menggunakan `where: { id }` tanpa menyertakan `tenant_id` pada klausa update. | **Mitigasi terverifikasi:** kedua call-site didahului `findFirst({ id, tenant_id })` (baris 2003-2005 & 2067-2069), sehingga bukan kebocoran aktif. Ini defense-in-depth agar kueri mutasi tetap fail-closed bila terjadi konkurensi/perubahan data. | Secure Coding Standards, Repository Scoping Mandate | Gunakan `updateMany` scoped: `where: { id, tenant_id: tenantId }` atau fungsi kanonis repository. **Cost:** S. **Benefit:** Kueri mutasi fail-closed multi-tenant. | S | H | TERVERIFIKASI (defense-in-depth) |
 | **API-06** | **Sedang** | `src/routes/admin/stores.ts:3-4` | Penampung memori fallback `memoryReservations` dan `memoryLandings` berupa `Map` tanpa batasan kapasitas (*unbounded*). | Potensi kebocoran memori RAM saat database offline berkepanjangan pada lingkungan dev/staging. | Resource Management & Scalability Mandate | Terapkan batas maksimal FIFO (misal `MAX_MEMORY_RESERVATIONS = 1000`). **Cost:** S. **Benefit:** Konsumsi memori server stabil. | S | H | TERVERIFIKASI |
 | **API-07** | **Sedang** | Sebagian besar subroute `admin/*` | Penggunaan `request.body as any` tanpa schema validation deklaratif (Fastify JSON Schema / Zod). | Risiko mass assignment, payload malformed yang lolos ke service, dan tidak adanya kontrak API formal untuk dokumentasi. | Defensive Programming, API Contract Integrity | Pasang schema validator Zod / Fastify schema pada endpoint mutasi kritis. **Cost:** M. **Benefit:** Sanitasi input terjamin sebelum mencapai handler. | M | H | TERVERIFIKASI |
-| **API-08** | **Sedang** | `src/routes/admin/livechat.subroute.ts:640, 757, 808, 858, 885, 1168` | Pendaftaran rute ganda / alias berturut-turut untuk fungsionalitas yang sama (dengan vs tanpa `/live-chat`). | Pendaftaran ganda membebani tabel router Fastify; risiko *route drift* jika salah satu handler diperbarui tanpa aliasnya. | Single Canonical Contract Mandate, Anti-Dangling Mandate | Gunakan satu rute kanonis dan pasang redirect HTTP 308 atau deklarasikan wrapper alias yang jelas. **Cost:** S. **Benefit:** Struktur routing bersih dan terstandar. | S | H | TERVERIFIKASI |
+| **API-08** | **Rendah** | `src/routes/admin/livechat.subroute.ts:640, 757, 808, 858, 885, 1168` | Pendaftaran dua path alias berturut-turut untuk fungsionalitas yang sama (dengan vs tanpa `/live-chat`). **Koreksi:** kedua path memakai handler yang sama (`typingHandler`, `reactionHandler`, `pinMessageHandler`, `hideMessageHandler`, `getPinnedHandler`, `handleTakeoverRoute`), bukan duplikasi implementasi. | Menambah permukaan routing dan ambiguitas dokumentasi; risiko *route drift* rendah karena handler identik. | Single Canonical Contract Mandate, Anti-Dangling Mandate | Tetapkan satu path kanonis dan pertahankan alias hanya dengan deprecation header/ dokumentasi eksplisit; hapus alias bila tidak ada konsumen. **Cost:** S. **Benefit:** Struktur routing bersih dan terstandar. | S | H | TERVERIFIKASI (dikoreksi) |
 | **API-09** | **Rendah** | `src/routes/admin/*`, `src/routes/staff/*` | Casting masif `(request as any)` untuk mengakses `tenantId`, `staffSession`, dan `adminIdentity`. | Menghilangkan manfaat pengecekan tipe statis TypeScript; rentan salah ketik nama properti context. | TypeScript Strictness & Maintainability | Buat file definisi tipe `types/fastify.d.ts` dengan declaration merging untuk request context. **Cost:** S. **Benefit:** Autocomplete dan type safety penuh pada rute. | S | H | TERVERIFIKASI |
 | **API-10** | **Rendah** | `src/routes/admin.route.ts:66-70, 351, 376, 401, 437` | Tumpang tindih penetapan header `Cache-Control` antara hook `preHandler` dan handler file statis asset. | Kerumitan pelacakan aturan cache browser; berisiko aset statis terkirim dengan header `no-store` yang tidak diinginkan. | Configuration Locality & DRY | Pusatkan kebijakan cache aset statis di handler statis dan batasi `no-store` hanya untuk rute API dinamis. **Cost:** S. **Benefit:** Caching browser bekerja optimal. | S | H | TERVERIFIKASI |
 | **API-11** | **Rendah** | `reservation-dispatch.route.ts:2130, 2132` | Perekaman log penugasan bidan `ReservationStaffAssignmentLog` di-swallow dengan `console.warn` jika gagal. | Hilangnya jejak audit pergantian bidan saat database sibuk tanpa ada peringatan alert terstruktur. | Audit Trail Integrity Mandate | Kirim peringatan terstruktur via `alertService` saat pencatatan audit log gagal. **Cost:** S. **Benefit:** Integritas audit log terpantau. | S | H | TERVERIFIKASI |
@@ -195,30 +195,20 @@ const staff = await prisma.staff.findFirst({
 
 ### C-3. Konsolidasi Alias Rute Ganda di Live Chat Subroute
 
-**Before** (`src/routes/admin/livechat.subroute.ts:639-642`):
+**Before** (`src/routes/admin/livechat.subroute.ts:640-641`):
 ```typescript
-// Duplikasi pendaftaran rute dengan implementasi inline ganda
-fastify.post('/api/admin/conversations/:id/typing', async (request, reply) => {
-  // ... handler logika ...
-});
-
-fastify.post('/api/admin/live-chat/conversations/:id/typing', async (request, reply) => {
-  // ... handler logika identik diduplikasi ...
-});
+// Kedua path memakai handler yang SAMA (bukan closure ganda):
+fastify.post('/api/admin/conversations/:id/typing', typingHandler);
+fastify.post('/api/admin/live-chat/conversations/:id/typing', typingHandler);
 ```
 
 **After**:
 ```typescript
-// Ekstrak handler tunggal yang kanonis
-const handleConversationTyping = async (request: FastifyRequest, reply: FastifyReply) => {
-  // ... satu implementasi tunggal ...
-};
+// Tetapkan satu path kanonis; alias lama dipertahankan sementara dengan dokumentasi/deprecation header.
+fastify.post('/api/admin/live-chat/conversations/:id/typing', typingHandler);
 
-// Daftarkan rute kanonis
-fastify.post('/api/admin/live-chat/conversations/:id/typing', handleConversationTyping);
-
-// Rute alias untuk backward compatibility (menunjuk ke handler yang sama)
-fastify.post('/api/admin/conversations/:id/typing', handleConversationTyping);
+// Alias backward-compatibility (opsional; hapus setelah tidak ada konsumen)
+fastify.post('/api/admin/conversations/:id/typing', typingHandler);
 ```
 
 ---
@@ -305,3 +295,12 @@ export function setMemoryReservation(id: string, reservation: any): void {
 1. **Bounded FIFO pada Stores (API-06)**: Batasi kapasitas maksimal penampung memori di `stores.ts`.
 2. **Deklarasi Tipe Request Fastify (API-09)**: Buat declaration merging `FastifyRequest` untuk mengeliminasi casting `(request as any)`.
 3. **Rate Limiting Endpoint Berat (API-12)**: Tambahkan pembatas laju pemanggilan pada rute ekspor data dan analitik.
+
+---
+
+## Catatan Koreksi Pasca-Review (2026-11-09)
+
+- **API-04** ditandai **KNOWN / BY-DESIGN**: `AdminSession` tanpa `tenant_id` dan admin sebagai super-admin lintas tenant sudah tercatat di `docs/KNOWN_ISSUES.md:75`. Perubahan ke isolasi admin per-tenant adalah keputusan produk, bukan regresi.
+- **API-05** ditambahkan catatan mitigasi: kedua `prisma.reservation.update({ where: { id } })` didahului `findFirst({ id, tenant_id })` di baris 2003-2005 dan 2067-2069; temuan ini defense-in-depth, bukan kebocoran aktif.
+- **API-08** dikoreksi: rute alias memakai **handler yang sama** (`typingHandler`, `reactionHandler`, `pinMessageHandler`, `hideMessageHandler`, `getPinnedHandler`, `handleTakeoverRoute`), bukan closure ganda. Snippet Before yang menggambarkan duplikasi implementasi dihapus; severity diturunkan dari **Sedang** ke **Rendah**.
+- **Verifikasi ulang**: total 35 file / 21.725 baris tetap cocok; API-02 (`staff.route.ts:71`) dan API-03 (`auth.subroute.ts:146-148`) terverifikasi pada baris yang disebut.

@@ -3,6 +3,22 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 321. [Audit S4] Gap Audit Modul 06/12/15/16 — 50 Temuan (2026-11-09, OPEN — 48 BARU + 2 KNOWN/BY-DESIGN)
+
+- **Status:** OPEN (audit read-only selesai; remediasi belum dieksekusi).
+- **Laporan:** `docs/MODULE_AUDIT_06_STATE_MACHINE.md` (14: SM-01..14), `docs/MODULE_AUDIT_12_FOLLOWUP_NOTIF.md` (12: FN-01..12), `docs/MODULE_AUDIT_15_ADMIN_STAFF_API.md` (12: API-01..12), `docs/MODULE_AUDIT_16_DELIVERY.md` (12: DEL-01..12). Total **50 temuan; 48 baru + 2 known/by-design**.
+- **Known/by-design:**
+  - `API-04` (AdminSession tanpa `tenant_id`; admin diperlakukan super-admin lintas tenant) — sudah by-design pada #320 (K-03 sisa by-design).
+  - `DEL-04` (`hermes-net` external belum dibuat otomatis) — known #196a; fix hanya di server lama, host fresh akan gagal lagi.
+- **P1 (segera):**
+  1. `DEL-03`: `.dockerignore` belum mengecualikan `storage/` (berisi `vapid_keys.json` 171 B dan `live_clinic_services.sql` 28 KB) serta `children-null-backup.csv`; `Dockerfile:13 COPY . .` membawa ke builder context/cache. Final runner image tidak menyalin `storage/`.
+  2. `API-02`: impersonation admin di `staff.route.ts:71` hardcoded `DEFAULT_TENANT_ID`.
+  3. `API-03`: unified login staf di `auth.subroute.ts:146-148` terkunci `DEFAULT_TENANT_ID`.
+  4. `FN-02`: shareloc reminder tidak mencatat outbound ke `messageService.logMessage`/`registerInFlightBotOutbound`.
+  5. `FN-05`: VAPID private key plaintext fallback di `storage/vapid_keys.json`.
+- **P2/P3:** God object/service: `message.service.ts` 2.208, `follow-up.service.ts` 2.895, `reservation-dispatch.route.ts` 3.244, `settings.subroute.ts` 2.817, `customers.subroute.ts` 1.997; tenancy alert cooldown (`FN-07`), default tenant di 15 method follow-up (`FN-06`), bounded memory (`SM-03`, `FN-04`, `API-06`), CI absen (`DEL-01`), backup host plaintext (`DEL-07`), dll.
+- **Koreksi pasca-review 2026-11-09:** `API-08` (alias memakai handler sama; Sedang→Rendah), `API-05` (mitigasi tenant-scoped `findFirst`), `FN-11` (`staff-chat-config.ts` 07:00–21:00), `FN-06` (tepat 15), `DEL-03`/`DEL-09`/`DEL-12`, total baris Modul 16 (2.715).
+
 ## 320. [Security, Clinical & Systems Audit] Eksekusi Staged Plan Audit 2026-11-07 (Fase 0 s.d. Fase 10 - SEBAGIAN BESAR SELESAI)
 
 - **Status:** PARTIALLY SELESAI (Fase 0–8 & 10 diimplementasikan; Fase 9 (data-driven & God Object) masih pending; build backend & dashboard exit 0; secret scan 0 leaks di 1.962 file).

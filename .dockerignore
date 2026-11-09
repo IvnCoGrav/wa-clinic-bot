@@ -11,6 +11,15 @@ packages/**/dist
 .env.*
 *.local
 
+# Runtime storage & data sensitif (VAPID key, dump SQL, backup CSV)
+storage
+storage/**
+*.sql
+*.csv
+.watchdog.env
+vapid_keys.json
+children-null-backup.csv
+
 # Git & tooling
 .git
 .gitignore

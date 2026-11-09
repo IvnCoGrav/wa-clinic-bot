@@ -1,7 +1,7 @@
 # PLAN PENYELESAIAN AUDIT — 2026-11-09
 
 - **Status:** **S0–S4 SELESAI** (gate S1/S2 PASS, 6.745 test / 0 regresi baru; S3 register 96 temuan; S4 gap audit Modul 06, 12, 15, 16 rampung). **S5 menunggu persetujuan eksplisit pengguna.**
-- **Baseline:** `f3c6a2c4` (`master`); hasil S0–S3 di `54586872`.
+- **Baseline:** `f3c6a2c4` (`master`); hasil S0–S4 di `6c368452`; koreksi pasca-review S4 terdaftar di `docs/KNOWN_ISSUES.md` #321.
 - **Dasar konsolidasi:** `docs/plans/AUDIT_CONSOLIDATION_2026-11-09.md`.
 - **Sumber audit:** Track B (`docs/audit/2026-11-07/*`, `FIXING_PLAN_AUDIT_2026-11-07.md`) dan Track A (`docs/MODULE_AUDIT_01..05`).
 - **Prinsip wajib:** fondasional (DB/state/tool contract), tenant-aware, TDD (test merah dulu), tanpa dependency runtime baru, tanpa solusi “DILARANG...” di prompt sebagai pengganti gerbang kode, regression gate per fase.
@@ -206,11 +206,11 @@ Hanya area yang belum tercakup Track B. Seluruh 4 modul telah selesai diaudit se
 | Task | Modul | Scope file | Status | Output & Bukti |
 |---|---|---|---|---|
 | S4.1 | State machine & conversation core | `src/state-machine/*`, `conversation.service.ts`, `message.service.ts`, dll. (12 file / 5.721 baris) | **SELESAI** | `docs/MODULE_AUDIT_06_STATE_MACHINE.md` (14 temuan SM-01..SM-14, skor 3.0/5, commit `62f64472`) |
-| S4.2 | Follow-up & notification | `follow-up*.ts`, `shareloc-*.ts`, `alert.service.ts`, dll. (10 file / 5.911 baris) | **SELESAI** | `docs/MODULE_AUDIT_12_FOLLOWUP_NOTIF.md` (12 temuan FN-01..FN-12, skor 3.0/5, commit `a99c758d`) |
-| S4.3 | Admin/staff API penuh | `src/routes/admin/*`, `src/routes/staff/*`, dll. (35 file / 21.725 baris) | **SELESAI** | `docs/MODULE_AUDIT_15_ADMIN_STAFF_API.md` (12 temuan API-01..API-12, skor 2.5/5, commit `b8876012`) |
-| S4.4 | Dashboard/tests/build/deploy/CI | `packages/admin-dashboard`, `Dockerfile`, `docker-compose.yml`, `Caddyfile`, deploy scripts (2.548 baris) | **SELESAI** | `docs/MODULE_AUDIT_16_DELIVERY.md` (12 temuan DEL-01..DEL-12, skor 2.5/5, commit `d9c0ea59`) |
+| S4.2 | Follow-up & notification | `follow-up*.ts`, `shareloc-*.ts`, `alert.service.ts`, dll. (11 file / 6.033 baris) | **SELESAI** | `docs/MODULE_AUDIT_12_FOLLOWUP_NOTIF.md` (12 temuan FN-01..FN-12, skor 3.0/5, commit `a99c758d`) |
+| S4.3 | Admin/staff API penuh | `src/routes/admin/*`, `src/routes/staff/*`, dll. (35 file / 21.725 baris) | **SELESAI** | `docs/MODULE_AUDIT_15_ADMIN_STAFF_API.md` (12 temuan API-01..API-12, 1 known: API-04, skor 2.5/5, commit `b8876012`) |
+| S4.4 | Dashboard/tests/build/deploy/CI | `packages/admin-dashboard`, `Dockerfile`, `docker-compose.yml`, `Caddyfile`, deploy scripts (2.715 baris) | **SELESAI** | `docs/MODULE_AUDIT_16_DELIVERY.md` (12 temuan DEL-01..DEL-12, 1 known: DEL-04, skor 2.5/5, commit `d9c0ea59`) |
 
-**Hasil Akhir S4:** 4 dokumen audit resmi diterbitkan, total 50 temuan kesenjangan arsitektur terpetakan, 0 baris kode runtime disentuh (kepatuhan read-only 100%). Menunggu konfirmasi pengguna untuk eksekusi Fase S5.
+**Hasil Akhir S4:** 4 dokumen audit resmi diterbitkan, total **50 temuan (48 baru + 2 known/by-design: API-04, DEL-04)**, 0 baris kode runtime disentuh (kepatuhan read-only 100%). Koreksi pasca-review 2026-11-09 sudah diterapkan pada keempat laporan. Menunggu konfirmasi pengguna untuk eksekusi Fase S5.
 
 ---
 
@@ -258,7 +258,7 @@ Hanya area yang belum tercakup Track B. Seluruh 4 modul telah selesai diaudit se
 - [x] S1 P0 (W-003, W-005, Cfg-012) selesai + test.
 - [x] S2 P1 selesai.
 - [x] S3 register Track A selesai; tidak ada duplikasi.
-- [ ] S4 gap audit selesai (4 laporan).
+- [x] S4 gap audit selesai (4 laporan).
 - [ ] S5 Fase 9 selesai atau dijadwalkan dengan approval.
 - [ ] S6 semua gate lulus.
 - [ ] Tidak ada dependency runtime baru.

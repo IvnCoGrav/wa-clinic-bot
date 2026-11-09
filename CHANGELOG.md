@@ -4,6 +4,16 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-09 - Fix & Audit: Hardening Docker Build Context + Koreksi Laporan S4 (Modul 06/12/15/16)
+
+- **Latar Belakang**: Review pasca-eksekusi S4 menemukan `.dockerignore` belum mengecualikan `storage/` (berisi `vapid_keys.json` dan `live_clinic_services.sql`) serta `children-null-backup.csv`; `Dockerfile:13 COPY . .` membawa berkas tersebut ke builder stage/build context. Review juga menemukan beberapa klaim laporan audit S4 yang perlu dikoreksi (API-08, API-05, FN-11, FN-06, DEL-03, DEL-09, DEL-12) dan 2 temuan yang sudah known/by-design (API-04, DEL-04).
+- **Perubahan Utama**:
+  1. **Hardening `.dockerignore`**: Menambahkan `storage`, `storage/**`, `*.sql`, `*.csv`, `.watchdog.env`, `vapid_keys.json`, dan `children-null-backup.csv`. Final runner image tetap tidak menyalin `storage/`; hardening ini melindungi build context dan build cache/remote builder.
+  2. **Koreksi laporan S4**: API-08 dikoreksi (rute alias memakai handler yang sama, bukan closure ganda; severity Sedang→Rendah); API-05 ditambah catatan mitigasi tenant-scoped `findFirst`; API-04 ditandai known/by-design; FN-11 dikoreksi ke `staff-chat-config.ts` 07:00–21:00; FN-06 menjadi tepat 15 method; DEL-03 path/remediasi diperbaiki; DEL-04 ditandai known #196a; DEL-09 dikoreksi (3 test utilitas dashboard di root); DEL-12 path aset diperbaiki; total baris Modul 16 menjadi 2.715.
+  3. **Registrasi `KNOWN_ISSUES` #321**: 50 temuan S4 (48 baru + 2 known/by-design) dengan prioritas P1 dan tautan ke empat laporan.
+  4. **Sinkronisasi plan**: Status S4, rincian 11 file/6.033 baris Modul 12, total 2.715 baris Modul 16, dan checklist Definition of Done S4.
+- **Verifikasi**: `npm run build` dan `npm run typecheck` exit 0; line count Modul 06/12/15/16 diverifikasi ulang terhadap kode aktual.
+
 #### 2026-11-09 - Feat: Hardening P1 (Echo Bot Dinamis S2.1, Error & 404 Handler S2.2, Readiness Provider-Aware S2.3, Tenant Bootstrap S2.4, Worker Shutdown Order S2.5) — Fase S2
 
 - **Latar Belakang**: Eksekusi Fase S2 (P1 Hardening) dari `docs/plans/PLAN_FINISH_AUDIT_2026-11-09.md` untuk menghilangkan pola echo bot hardcoded, memasang centralized error handler dan 404 handler, membuat readiness probe `/ready` provider-aware, mengekstrak lifecycle inisialisasi tenant sebelum listen, dan menyelaraskan urutan shutdown worker.
