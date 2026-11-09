@@ -3,10 +3,13 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
-## 320. [Security, Clinical & Systems Audit] Eksekusi Staged Plan Audit 2026-11-07 (Fase 0 s.d. Fase 10 - SELESAI)
+## 320. [Security, Clinical & Systems Audit] Eksekusi Staged Plan Audit 2026-11-07 (Fase 0 s.d. Fase 10 - SEBAGIAN BESAR SELESAI)
 
-- **Status:** SELESAI (Fase 0–10 diimplementasikan penuh, build backend & dashboard exit 0, secret scan 0 leaks di 1.962 file).
-- **Koreksi verifikasi independen (2026-11-08):** Klaim "143 test unit / 22 file" adalah subset test audit, bukan full suite. Full suite aktual: **6.724 test (6.694 lulus / 2 gagal pre-existing #287 / 28 skipped)** — 0 regresi baru. Dua celah lanjutan ditemukan saat verifikasi dan sudah diperbaiki: (a) verifikasi backup hanya menerima JSON sehingga dump SQL `pg_dump` ditolak — kini format-aware + `execFile` tanpa pipeline shell; (b) `ad_clicks.expires_at` belum ditegakkan — kini `updateMany` memfilter `expires_at > now` dengan fallback legacy `createdAt`.
+- **Status:** PARTIALLY SELESAI (Fase 0–8 & 10 diimplementasikan; Fase 9 (data-driven & God Object) masih pending; build backend & dashboard exit 0; secret scan 0 leaks di 1.962 file).
+- **Koreksi & Rekonsiliasi Gate Full Suite (2026-11-09, S0 Gate Verifikasi):**
+  - **Penjelasan 14 Failure di `after-fase10.json` vs 2 di Laporan:** Snapshot `docs/audit/2026-11-07/after-fase10.json` (14 gagal = 2 pre-existing + 12 baru) adalah artefak pengujian intermediate *sebelum* penyesuaian assertions test suite pasca-fase 10 (seperti penyesuaian query filter `expires_at`, update assertion penghapusan rekening BCA fiktif di Fase 6, penyesuaian korpus hasil deduplikasi 48->45 di Fase 8, dan cookie HttpOnly staf di Fase 7).
+  - **Bukti Artefak Penutup:** Setelah penyesuaian assertions test suite diselesaikan, eksekusi test ulang menghasilkan `docs/audit/2026-11-07/after-backup-expiry-fix.json`: **6.724 test (6.694 lulus / 2 gagal pre-existing #287 / 28 skipped)** dengan status `[GATE PASS]` (0 regresi baru).
+  - **Verifikasi Independen Baseline `f3c6a2c4`:** Pengujian penuh ulang pada `docs/audit/2026-11-09/baseline-f3c6a2c4.json` menghasilkan total **6.724 test (6.693 lulus / 3 gagal / 28 skipped)**. Dari 3 kegagalan tersebut: 2 adalah pre-existing #287 (`hybrid-reservation-parser.test.ts`), dan 1 adalah timeout beban tinggi konkurensi 820 file pada `staff-auth-and-reservation.test.ts` (yang lulus 100% 28/28 saat diuji terisolasi). Ke-12 failure baru dari `after-fase10.json` terbukti **100% LULUS (GREEN)** di baseline ini.
 - **Cakupan Dokumen Rujukan:** `docs/plans/FIXING_PLAN_AUDIT_2026-11-07.md` dan seluruh laporan audit Modul 01–11 di `docs/audit/2026-11-07/`.
 - **Rangkuman Resolusi Fondasional:**
   1. **Fase 1 (Perimeter & Akses Hardening)**: Enkripsi terdedikasi `WABA_TOKEN_ENCRYPTION_KEY` & skrip re-enkripsi rahasia tenant; integrasi Secret Scanner `--all` ke CI; trust proxy `loopback,linklocal,uniquelocal`; rate-limit bucket terpisah (API key bucket per-key, webhook per-tenant, public per-IP); pengamanan endpoint `whatsapp-provider/*` khusus SUPER_ADMIN.
@@ -17,7 +20,8 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   6. **Fase 6 (Ghost Config & Pembersihan Hardcode)**: Persistensi perilaku percakapan (`idle_greeting_enabled` & `idle_greeting_min_hours`) ke model `Tenant`; penghapusan total nomor rekening fiktif (`BCA 1234567890` & `BCA 8877665544`); penghapusan auto-seed diam-diam ke tenant baru; dinamisasi nama klinik & alamat di FAQ tool, quick replies, dan dashboard.
   7. **Fase 7 (Staf & Marketing)**: Sesi staf murni HttpOnly cookie (`staff_session`); pembersihan total PII (`staff_failed_outbox_v1`, draft chat, token) di localStorage saat logout; entropi kode tracking 12–16 karakter + kedaluwarsa 7 hari; isolasi multi-tenant CAPI manual; audit log perubahan spend/anggaran marketing.
   8. **Fase 8 (RAG, Korpus, Prompt & Log PII)**: Pembersihan korpus FAQ dari cuplikan canned chat (`Nanti saya info lagi`); perbaikan ejaan "Pijat" & hapus counter-question sales push; deduplikasi semantik artikel kembar; red flag klinis batuk kronis ≥14 hari (`MedicalDetectionService` -> ESCALATE); redaksi PII nomor telepon at-rest di file JSONL; retensi otomatis pemusnahan log LLM usang (>30 hari) via background sweep; isolasi multi-tenant pada katalog & prompt goal-tracker.
-  9. **Fase 9 & 10 (Verifikasi & Penutupan)**: 143 test unit audit hijau 100%; build TypeScript server & React dashboard sukses 0 error; pemindaian rahasia 1.962 file bersih (0 kebocoran); dokumentasi dan changelog terindeks mutakhir.
+  9. **Fase 10 (Verifikasi & Penutupan)**: 143 test unit audit hijau 100%; build TypeScript server & React dashboard sukses 0 error; pemindaian rahasia 1.962 file bersih (0 kebocoran); dokumentasi dan changelog terindeks mutakhir.
+  10. **Fase 9 (Data-Driven & God Object)**: **PENDING** — `LiveChatMonitor.tsx` masih 7.751 baris; 42 layanan katalog “Kala” (47 kemunculan teks) belum dipindah ke DB.
 
 ## 319. [Admin Dashboard] 7 Polish Desktop UI, Follow-Up Queue & Treatment Hari Ini (2026-11-06, SELESAI)
 

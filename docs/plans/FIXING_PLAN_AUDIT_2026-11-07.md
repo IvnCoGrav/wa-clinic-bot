@@ -1,6 +1,6 @@
 # Rencana Perbaikan Bertahap — Hasil Audit Deep-Dive 2026-11-07
 
-- **Status:** DRAFT — **belum ada eksekusi kode**. Menunggu persetujuan eksplisit pengguna.
+- **Status:** PARTIALLY IMPLEMENTED (Fase 1–8 & 10 selesai di `f3c6a2c4`; Fase 9 (data-driven & God Object) masih pending; gate S0 rekonsiliasi full suite terverifikasi pada `baseline-f3c6a2c4.json`).
 - **Dasar:** `docs/audit/2026-11-07/RINGKASAN_AKHIR_AUDIT_MODUL_1-11.md` (122 temuan: 22 kritis, 44 tinggi, 46 sedang, 10 rendah).
 - **Cakupan perbaikan:** Modul 1, 2, 3A/3B, 5, 7, 8, 9, 10, 11. Modul 4 & 6 tidak diubah dalam plan ini kecuali titik sambung yang disebut eksplisit.
 - **Prinsip wajib:** fondasional (DB/skema, state machine, tool contract, RAG/retrieval), tenant-aware, tanpa dependency runtime baru, tanpa solusi "DILARANG..." di prompt sebagai pengganti gerbang kode, TDD (test merah dulu), dan regression gate per fase.

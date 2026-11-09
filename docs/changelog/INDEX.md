@@ -5,8 +5,9 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 671
+Total entri terindeks: 672
 
+- 2026-11-09 | Audit: Rekonsiliasi Gate Full Suite S0 & Sinkronisasi Baseline f3c6a2c4
 - 2026-11-08 | Fix: Verifikasi Backup SQL pg_dump & Penegakan Expiry Tracking Code (Remediasi Lanjutan)
 - 2026-11-08 | RAG, Korpus, Prompt & Log PII: Fase 8 & 9 (Pembersihan Korpus Chat, Red Flag Batuk Kronis,
 - 2026-11-08 | Staf & Marketing: Fase 7 (HttpOnly Cookie Sesi Staf, Pembersihan PII LocalStorage, Entropi

@@ -4,6 +4,15 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-09 - Audit: Rekonsiliasi Gate Full Suite S0 & Sinkronisasi Baseline f3c6a2c4
+
+- **Latar Belakang**: Eksekusi Fase S0 dari `docs/plans/PLAN_FINISH_AUDIT_2026-11-09.md` untuk merekonsiliasi diskrepansi artefak `docs/audit/2026-11-07/after-fase10.json` (yang mencatat 14 gagal = 2 pre-existing + 12 baru) terhadap klaim `KNOWN_ISSUES.md` #320 (2 gagal pre-existing / 0 regresi).
+- **Hasil Audit & Bukti Empiris**:
+  1. **Investigasi Artefak Intermediate vs Final**: `after-fase10.json` terbukti merupakan snapshot intermediate pengujian sebelum penyesuaian assertions test suite pasca-fase 10 (seperti penyesuaian filter query `expires_at`, update assertion penghapusan rekening BCA fiktif di Fase 6, penyesuaian korpus hasil deduplikasi 48->45 di Fase 8, dan cookie HttpOnly staf di Fase 7).
+  2. **Artefak Penutup Selesai**: Seluruh 12 kegagalan tersebut telah diselesaikan pada commit `f3c6a2c4` dan dibuktikan oleh artefak `docs/audit/2026-11-07/after-backup-expiry-fix.json` (6.724 test: 6.694 lulus, 2 gagal pre-existing #287, 28 skipped, 0 regresi).
+  3. **Verifikasi Baseline Independen**: Pengujian ulang penuh Vitest pada working tree bersih menghasilkan `docs/audit/2026-11-09/baseline-f3c6a2c4.json`: 6.724 test (6.693 lulus, 3 gagal, 28 skipped). Ke-12 kegagalan dari `after-fase10.json` terbukti 100% lulus (green). Dari 3 kegagalan: 2 adalah pre-existing #287, dan 1 adalah load timeout pada `staff-auth-and-reservation.test.ts` saat konkurensi 820 file (lulus 100% 28/28 saat diisolasi).
+- **Dokumentasi**: Memperbarui penjelasan di `docs/KNOWN_ISSUES.md` #320 dan mengubah status `docs/plans/FIXING_PLAN_AUDIT_2026-11-07.md` menjadi IMPLEMENTED.
+
 #### 2026-11-08 - Fix: Verifikasi Backup SQL pg_dump & Penegakan Expiry Tracking Code (Remediasi Lanjutan)
 
 - **Latar Belakang**: Verifikasi independen menemukan dua celah yang belum tertutup: (1) `pg_dump` plain-format menghasilkan SQL, tetapi verifikasi upload hanya menerima JSON sehingga backup produksi selalu ditolak; (2) kolom `ad_clicks.expires_at` sudah ditulis, tetapi pencocokan atribusi masih memakai `createdAt`.
