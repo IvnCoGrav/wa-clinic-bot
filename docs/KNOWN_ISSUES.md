@@ -11,7 +11,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - `API-04` (AdminSession tanpa `tenant_id`; admin diperlakukan super-admin lintas tenant) — sudah by-design pada #320 (K-03 sisa by-design).
   - `DEL-04` (`hermes-net` external belum dibuat otomatis) — known #196a; fix hanya di server lama, host fresh akan gagal lagi.
 - **P1 (segera):**
-  1. `DEL-03`: `.dockerignore` belum mengecualikan `storage/` (berisi `vapid_keys.json` 171 B dan `live_clinic_services.sql` 28 KB) serta `children-null-backup.csv`; `Dockerfile:13 COPY . .` membawa ke builder context/cache. Final runner image tidak menyalin `storage/`.
+  1. `DEL-03`: `.dockerignore` belum mengecualikan `storage/` (berisi `vapid_keys.json` 171 B dan `live_clinic_services.sql` 28 KB) serta `children-null-backup.csv`; `Dockerfile:13 COPY . .` membawa ke builder context/cache. Final runner image tidak menyalin `storage/`. **REMEDIATED 2026-11-09 (commit `d227c947`)**: `.dockerignore` diperluas dengan `storage`, `storage/**`, `*.sql`, `*.csv`, `.watchdog.env`, `vapid_keys.json`, `children-null-backup.csv`; verifikasi `docker build` masih pending karena daemon Docker tidak aktif di mesin ini.
   2. `API-02`: impersonation admin di `staff.route.ts:71` hardcoded `DEFAULT_TENANT_ID`.
   3. `API-03`: unified login staf di `auth.subroute.ts:146-148` terkunci `DEFAULT_TENANT_ID`.
   4. `FN-02`: shareloc reminder tidak mencatat outbound ke `messageService.logMessage`/`registerInFlightBotOutbound`.
