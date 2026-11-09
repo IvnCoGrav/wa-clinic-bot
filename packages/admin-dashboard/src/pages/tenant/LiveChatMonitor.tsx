@@ -1,407 +1,140 @@
-import React, { useEffect, useRef, useState, useCallback, useMemo, startTransition } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCopilot } from '../../contexts/CopilotContext';
-import { useTheme } from '../../contexts/ThemeContext';
-import { connectLiveChatSse } from '../../services/liveChatSse';
-import { evaluatePaymentProof } from '../../utils/paymentProof';
-import { getCleanTreatmentName } from '../../utils/treatmentFormatter';
-import { resolveStaffName } from '../../utils/resolveStaffName';
-import { StaffOwnershipBadge } from '../../components/common/StaffOwnershipBadge';
-import type { StaffOwnership } from '../../utils/staffOwnershipBadge';
-import { formatClinicalAge } from '../../utils/clinicalAge';
-import { prepareChatImage } from '../../utils/imageCompressor';
 import {
   MessageSquare,
   AlertTriangle,
-  Play,
-  User,
-  Clock,
   Loader,
-  CheckCircle,
-  MessageCircle,
-  Send,
-  Wifi,
-  WifiOff,
-  Bot,
-  ImagePlus,
-  X,
-  Zap,
-  Info,
-  Facebook,
-  Layers,
-  ShoppingBag,
-  FlaskConical,
   RefreshCw,
-  Trash2,
-  ChevronLeft,
-  ChevronUp,
-  ChevronDown,
-  Tag,
-  Plus,
-  Check,
-  CheckCheck,
-  AlertCircle,
-  ExternalLink,
-  Calendar,
   FileText,
-  Phone,
-  Pin,
-  Mail,
-  MailCheck,
-  Search,
-  MoreVertical,
-  PenLine,
-  Smartphone,
-  MapPin,
-  Eye,
-  Ban,
-  Reply,
-  CalendarPlus,
-  Archive,
-  Receipt,
-  Smile,
   ShieldAlert,
-  ShieldCheck,
-  Download,
-  Volume2,
-  Video,
-  Lock,
-  Copy,
-  BellOff,
-  MessageSquareDot,
   Radar,
-  EyeOff,
-  Menu,
-  ArrowDownLeft,
 } from 'lucide-react';
 import { ToggleSwitch } from '../../components/common/ToggleSwitch';
-import { LiveChatComposer, LiveChatComposerHandle } from '../../components/livechat/LiveChatComposer';
+import { LiveChatComposerHandle } from '../../components/livechat/LiveChatComposer';
 import { AdminCopilotPanel } from '../../components/copilot/AdminCopilotPanel';
-import { ChatExport } from './ChatExport';
-import { MediaImage, ChatMediaData, preloadChatImage } from '../../components/common/MediaImage';
-import { VoiceNotePlayer } from '../../components/common/VoiceNotePlayer';
-import {
-  extractMedia,
-  extractLocation,
-  extractAudio,
-  extractDocument,
-  extractContact,
-  extractVideo,
-  extractImageCaption,
-  resolveMessageDisplayText,
-  ChatLocationData,
-  ChatAudioData,
-  ChatDocumentData,
-  ChatContactData,
-  ChatVideoData,
-} from '../../utils/mediaExtractor';
-import { CustomerAvatar } from '../../components/common/CustomerAvatar';
-import { CustomerEditForm } from '../../components/modals/CustomerEditForm';
-import { AddressBookDrawer } from '../../components/customer/AddressBookDrawer';
-import { ReservationDetailModal } from '../../components/modals/ReservationDetailModal';
-import { CustomerFollowUpSection } from '../../components/customer/CustomerFollowUpSection';
-import { LiveChatDispatchWidget, DispatchTripData } from '../../components/livechat/LiveChatDispatchWidget';
-import { CreateReservationModal } from '../../components/calendar/CreateReservationModal';
-import { QuickHoldModal } from '../../components/calendar/QuickHoldModal';
-import { DailyScheduleModal } from '../../components/calendar/DailyScheduleModal';
-import { InvoiceGeneratorModal } from '../../components/modals/InvoiceGeneratorModal';
-import { generateReservationInvoiceText } from '../../utils/paymentInvoiceFormatter';
-import { BRAND } from '../../config/brand';
-import { extractScheduleFromMessages, ExtractedScheduleData, formatIndonesianDate, cleanBundaName, formatFormBannerAudienceLabel, hasExistingReservationForSchedule, findExistingReservationForSchedule, isNegotiatedScheduleCommitted, WilayahReference, shouldShowNeutralExistingReservationBanner } from '../../utils/chatScheduleExtractor';
-import { MessagePinBanner, PinnedMessageData } from '../../components/livechat/MessagePinBanner';
+import { LiveChatDispatchWidget } from '../../components/livechat/LiveChatDispatchWidget';
 import { AiOffStrip } from '../../components/livechat/AiOffStrip';
-import { resolveEffectiveLocationSource, getLocationBadgeConfig, getGoogleMapsDirectionUrl } from '../../utils/geoUtils';
-import { getSharelocCardStatus } from '../../utils/sharelocCardStatus';
-import { resolveChatSenderIndicator } from '../../utils/chatSenderIndicator';
-
-// Cache referensi wilayah (backend gazetteer) — diambil sekali per sesi invoice
-let cachedWilayahRef: WilayahReference | null = null;
-let wilayahRefInflight: Promise<WilayahReference | null> | null = null;
-async function getWilayahRef(): Promise<WilayahReference | null> {
-  if (cachedWilayahRef) return cachedWilayahRef;
-  if (!wilayahRefInflight) {
-    wilayahRefInflight = (async () => {
-      try {
-        const res = await apiRequest('/api/admin/geo/areas');
-        const data = res?.data as WilayahReference | undefined;
-        if (data && (Array.isArray(data.kecamatan) || Array.isArray(data.kota))) {
-          cachedWilayahRef = { kecamatan: data.kecamatan || [], kota: data.kota || [] };
-          return cachedWilayahRef;
-        }
-      } catch {}
-      return null;
-    })().finally(() => { wilayahRefInflight = null; });
-  }
-  return wilayahRefInflight;
-}
-import { formatChatDateSeparatorWib, isDifferentDayWib, formatLastChatWib, formatWibTime, getWibDateKey, getWibHoursAndMinutes, wibDayStartEnd } from '../../utils/dateWib';
-import { shouldWarnUnregisteredVisit } from '../../utils/dispatchVisitContext';
-import { validateInvoiceReadiness } from '../../utils/invoiceReadiness';
-import { selectQuickReplyReservation } from '../../utils/quickReplyReservation';
-import { dedupeThreadMessages } from '../../utils/livechatThread';
-import { resolveUrlViewTransition } from '../../utils/livechatNavigation';
-import { shouldReloadForSseEvent, shouldPreserveActiveChat, isSameConversation, type SourceFilter } from '../../utils/livechatSourceFilter';
-import { emitBootPhase } from '../../lib/bootProgress';
-
-function renderHighlightedText(text: string, query: string) {
-  if (!query || !query.trim() || !text) return text;
-  const q = query.trim();
-  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  try {
-    const regex = new RegExp(`(^|\\W)(${escaped})($|\\W)`, 'gi');
-    const parts = text.split(regex);
-    if (parts.length <= 1) return text;
-    const testRegex = new RegExp(`^${escaped}$`, 'i');
-    return parts.map((part, i) =>
-      testRegex.test(part) ? (
-        <mark key={i} className="bg-amber-200 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 font-bold px-0.5 rounded">
-          {part}
-        </mark>
-      ) : (
-        part
-      )
-    );
-  } catch {
-    return text;
-  }
-}
-
-function cleanSnippetText(s: string): string {
-  const c = extractImageCaption(s);
-  return (c || s || '').trim();
-}
-
-function extractSmartSearchSnippet(fullText: string, query: string, maxLength = 85): string {
-  const text = cleanSnippetText(fullText);
-  if (!query || !query.trim() || text.length <= maxLength) return text;
-  const q = query.trim().toLowerCase();
-  const idx = text.toLowerCase().indexOf(q);
-  if (idx === -1) return text.slice(0, maxLength) + '...';
-  const start = Math.max(0, idx - 30);
-  const end = Math.min(text.length, start + maxLength);
-  return `${start > 0 ? '...' : ''}${text.slice(start, end).trim()}${end < text.length ? '...' : ''}`;
-}
-
-interface QuotedMessageData {
-  id?: string;
-  wa_message_id?: string | null;
-  direction?: 'INBOUND' | 'OUTBOUND';
-  sender_name?: string | null;
-  sender_type?: string | null;
-  content?: string;
-  media?: ChatMediaData;
-}
-
-interface ChatMessage {
-  id: string;
-  wa_message_id?: string | null;
-  direction: 'INBOUND' | 'OUTBOUND';
-  content: string;
-  sender_type?: string | null;
-  sender_name?: string | null;
-  delivery_status?: 'sent' | 'delivered' | 'read' | 'failed' | null;
-  delivered_at?: string | null;
-  read_at?: string | null;
-  created_at: string;
-  media?: ChatMediaData;
-  location?: ChatLocationData | null;
-  quoted_message?: QuotedMessageData;
-  is_revoked?: boolean;
-  is_edited?: boolean;
-  is_message_pinned?: boolean;
-  is_message_hidden?: boolean;
-  pinned_by?: string | null;
-  pinned_at?: string | null;
-  hidden_by?: string | null;
-  hidden_at?: string | null;
-  payload_raw?: any;
-}
-
-function extractQuotedMessage(msg: any): QuotedMessageData | undefined {
-  const q = msg?.quoted_message ??
-            msg?.payload_raw?.quoted_message ??
-            msg?.payloadRaw?.quoted_message ??
-            msg?.payload_raw?.quotedMsg ??
-            msg?.payload_raw?._data?.quotedMsg;
-  if (!q) return undefined;
-
-  const content = q.content ?? q.body ?? q.text ?? (q.message?.conversation || q.message?.extendedTextMessage?.text) ?? '';
-  const senderName = q.sender_name ?? q.senderName ?? q.pushName ?? (q.fromMe ? 'Bidan / CS' : undefined);
-  const media = extractMedia(q);
-
-  return {
-    id: q.id ?? q.messageId ?? q.key?.id,
-    wa_message_id: q.wa_message_id ?? q.id ?? q.key?.id,
-    direction: q.direction ?? (q.fromMe ? 'OUTBOUND' : 'INBOUND'),
-    sender_name: senderName,
-    sender_type: q.sender_type ?? (q.fromMe ? 'ADMIN' : 'CUSTOMER'),
-    content,
-    media,
-  };
-}
-
-function formatChatDateSeparator(dateStr: string): string {
-  return formatChatDateSeparatorWib(dateStr);
-}
-
-function isDifferentDay(d1Str: string, d2Str?: string | null): boolean {
-  return isDifferentDayWib(d1Str, d2Str);
-}
-
-// extractMedia terpusat di utils/mediaExtractor.ts (single source of truth).
-interface CustomerLabelData {
-  id: string;
-  name: string;
-  color: string;
-  description?: string | null;
-}
-
-interface LiveChatItem {
-  conversationId: string;
-  customerId: string;
-  customerName: string | null;
-  customerPhone: string | null;
-  kelurahan?: string | null;
-  kecamatan?: string | null;
-  kota?: string | null;
-  distanceKm?: number | null;
-  ongkir?: number | null;
-  currentState: string;
-  isHumanHandling: boolean;
-  humanHandlingSince: string | null;
-  escalationReason: string | null;
-  lastMessageAt: string | null;
-  createdAt: string;
-  lastMessages?: { content: string; direction?: string; created_at?: string }[];
-  isMql?: boolean;
-  mqlBubbleCount?: number;
-  isSandboxTest?: boolean;
-  trafficSource?: 'meta' | 'legacy' | null;
-  purchaseCount?: number;
-  ltv?: number;
-  customerLabels?: CustomerLabelData[];
-  customerProfilePictureUrl?: string | null;
-  staffOwnership?: StaffOwnership | null;
-  unreadCount?: number;
-  isManualUnread?: boolean;
-  isPinned?: boolean;
-  pinnedAt?: string | null;
-  isAwaitingReply?: boolean;
-  /** Pulse alert (Fase 4): percakapan butuh respon segera (SLA-breach). */
-  isFrustrated?: boolean;
-  frustratedAt?: string | null;
-  frustratedReason?: string | null;
-  hasActiveHold?: boolean;
-  hasUpcomingBooking?: boolean;
-  hasPendingBooking?: boolean;
-  activeHoldReservation?: {
-    id: string;
-    booking_date: string | null;
-    treatment_category?: string | null;
-    treatment_detail?: string | null;
-    assigned_staff_id?: string | null;
-    assigned_staff?: { id: string; name: string } | null;
-    notes?: string | null;
-    customer_id?: string | null;
-    otw_sent_at?: string | null;
-    arrived_at?: string | null;
-  } | null;
-  activeConfirmedReservation?: {
-    id: string;
-    booking_date: string | null;
-    treatment_category?: string | null;
-    treatment_detail?: string | null;
-    assigned_staff_id?: string | null;
-    assigned_staff?: { id: string; name: string } | null;
-    notes?: string | null;
-    customer_id?: string | null;
-    otw_sent_at?: string | null;
-    arrived_at?: string | null;
-  } | null;
-  activePendingReservation?: {
-    id: string;
-    booking_date: string | null;
-    treatment_category?: string | null;
-    treatment_detail?: string | null;
-    assigned_staff_id?: string | null;
-    assigned_staff?: { id: string; name: string } | null;
-    notes?: string | null;
-    customer_id?: string | null;
-    otw_sent_at?: string | null;
-    arrived_at?: string | null;
-  } | null;
-  locationSource?: string | null;
-  effectiveLocationSource?: string | null;
-  locationAdequacy?: 'gps_pin' | 'staff_verified' | 'field_verified' | 'estimated_area' | 'unknown' | null;
-  sharelocNeeded?: boolean;
-  shareLocationSent?: boolean;
-  sharelocRequestedAt?: string | null;
-}
-
-// Katalog emoji & favorit dimiliki LiveChatComposer (Fase A v3) — single source of truth.
+import { saveConversationDraft } from '../../hooks/useLiveChatDrafts';
+import { useLiveChatSse } from '../../hooks/useLiveChatSse';
+import { useLiveChatMessageOperations } from '../../hooks/useLiveChatMessageOperations';
+import { useLiveChatComposerHandler } from '../../hooks/useLiveChatComposerHandler';
+import { useLiveChatBanners } from '../../hooks/useLiveChatBanners';
+import { useLiveChatBackgroundSync } from '../../hooks/useLiveChatBackgroundSync';
+import { useLiveChatThreads } from '../../hooks/useLiveChatThreads';
+import { useLiveChatActiveThread } from '../../hooks/useLiveChatActiveThread';
+import { useLiveChatReservations } from '../../hooks/useLiveChatReservations';
+import { useLiveChatBotAndLabels } from '../../hooks/useLiveChatBotAndLabels';
+import { LiveChatThreadList } from '../../components/livechat/LiveChatThreadList';
+import { LiveChatMessagePane } from '../../components/livechat/LiveChatMessagePane';
+import { LiveChatModals } from '../../components/livechat/LiveChatModals';
+import type { SourceFilter } from '../../utils/livechatSourceFilter';
+import {
+  type ChatMessage,
+  type LiveChatItem,
+} from '../../types/livechat';
 
 export const LiveChatMonitor: React.FC = () => {
   const { toast, confirm } = useUiFeedback();
   const { user } = useAuth();
-  // Shell global: buka sidebar mobile (☰) + panel copilot dari dalam scroll
-  // (pengganti tombol header global yang disembunyikan di mobile livechat).
   const { open: copilotOpen, setOpen: setCopilotOpen, openMobileMenu } = useCopilot();
-  const { resolved: currentTheme } = useTheme();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [loading, setLoading] = useState(true);
-  const [chats, setChats] = useState<LiveChatItem[]>([]);
-  // Early warning keterlambatan Bidan (SSE): banner pulse di header + toast sekali.
-  const [delayAlert, setDelayAlert] = useState<{
-    reservationId: string;
-    staffName?: string;
-    patientName?: string;
-    level: 'warning' | 'critical';
-    delayMinutes: number;
-    formattedArrivalWib?: string;
-  } | null>(null);
-  const delayAlertedRef = useRef<Set<string>>(new Set());
+
+  // Mobile View Navigation: 'list' (daftar chat) vs 'chat' (pesan aktif)
+  const [mobileView, setMobileView] = useState<'list' | 'chat'>(() => {
+    try {
+      const cached = sessionStorage.getItem('liveChat:mobileView');
+      if (cached === 'list' || cached === 'chat') return cached;
+    } catch {}
+    const hasConvInUrl =
+      typeof window !== 'undefined' &&
+      (new URLSearchParams(window.location.search).has('conversationId') ||
+        new URLSearchParams(window.location.search).has('id'));
+    return hasConvInUrl ? 'chat' : 'list';
+  });
+
+  const [isDesktop, setIsDesktop] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(min-width: 1024px)').matches : true
+  );
+
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     try {
-      const urlParam = new URLSearchParams(window.location.search).get('conversationId') || new URLSearchParams(window.location.search).get('id');
-      if (urlParam) return urlParam;
-      return sessionStorage.getItem('liveChat:selectedId');
-    } catch {
-      return null;
-    }
+      const fromUrl = searchParams.get('conversationId') || searchParams.get('id');
+      if (fromUrl) return fromUrl;
+      const cached = sessionStorage.getItem('liveChat:selectedId');
+      if (cached) return cached;
+    } catch {}
+    return null;
   });
-  const selectedChat = chats.find((c) => c.conversationId === selectedId);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  // ID bubble optimis (temp_) yang sedang menunggu konfirmasi server.
-  // Dipakai untuk pra-muat gambar sebelum bubble diganti versi server (anti-flash "Memuat...").
-  const optimisticMessageIdsRef = useRef<Set<string>>(new Set());
-  const [pinnedBubble, setPinnedBubble] = useState<PinnedMessageData | null>(null);
-  const [isPinningMessageId, setIsPinningMessageId] = useState<string | null>(null);
-  const [isHidingMessageId, setIsHidingMessageId] = useState<string | null>(null);
-  const [isThreadLoading, setIsThreadLoading] = useState(false);
-  // AUDIT FASE 1 (T-05): kegagalan muat thread tidak boleh tampil sebagai
-  // "Belum ada pesan" — simpan pesan error agar admin bisa retry.
-  const [threadLoadError, setThreadLoadError] = useState<string | null>(null);
-  const activeThreadRequestIdRef = useRef(0);
-  // Issue 160: percakapan yang bubble-nya sudah termuat — dipakai mencegah flash spinner
-  // saat refresh thread yang sama (SSE reconnect / refresh manual).
-  const loadedThreadConvIdRef = useRef<string | null>(null);
-  // Cursor pagination riwayat lama (infinite scroll up)
-  const [hasMoreOlderMessages, setHasMoreOlderMessages] = useState(false);
-  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
-  const [isDeepSearching, setIsDeepSearching] = useState(false);
-  const oldestMessageCursorRef = useRef<string | null>(null);
-  // Direct-jump target dari hasil pencarian sidebar (focusMessageId) — dikonsumsi loadThread sekali pakai.
-  const pendingFocusMessageIdRef = useRef<string | null>(null);
-  // Auto-deep-search sekali per query agar tidak loop saat riwayat bertambah bertahap.
-  const autoDeepSearchDoneRef = useRef<string>('');
+  const selectedIdRef = useRef<string | null>(selectedId);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Search & Filter States
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchQueryRef = useRef('');
+  searchQueryRef.current = searchQuery;
+  const searchDebounceTimerRef = useRef<any>(null);
+
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
+  const sourceFilterRef = useRef<string>(sourceFilter);
+  sourceFilterRef.current = sourceFilter;
+
+  const [labelFilter, setLabelFilter] = useState<'all' | 'medical_concern' | 'unresolved_faq' | 'human_request'>('all');
+  const labelFilterRef = useRef<string>(labelFilter);
+  labelFilterRef.current = labelFilter;
+
+  const [reservationStaffFilter, setReservationStaffFilter] = useState<string>('all');
+  const reservationStaffFilterRef = useRef<string>(reservationStaffFilter);
+  reservationStaffFilterRef.current = reservationStaffFilter;
+
+  const {
+    chats,
+    setChats,
+    chatsRef,
+    loading,
+    loadingMore,
+    hasMore,
+    totalUnreadCount,
+    setTotalUnreadCount,
+    syncProgress,
+    isSearching,
+    loadChats,
+    refreshChatItem,
+    refreshTotalUnread,
+    triggerDebouncedSearch,
+    handleTogglePin,
+    handleToggleReadStatus,
+    handleMarkAllAsRead,
+    handleDismissFrustration,
+    sortChats,
+    filteredChats,
+    sortedChats,
+  } = useLiveChatThreads({
+    selectedIdRef,
+    searchQuery,
+    searchQueryRef,
+    labelFilter,
+    labelFilterRef,
+    sourceFilter,
+    sourceFilterRef,
+    reservationStaffFilter,
+    reservationStaffFilterRef,
+    setErrorMessage,
+    confirm,
+    toast,
+  });
+
+  const selectedChat = useMemo(() => {
+    if (!selectedId) return null;
+    return chats.find((c) => c.conversationId === selectedId) || null;
+  }, [chats, selectedId]);
+
   const replyTextRef = useRef('');
   const [hasReplyText, setHasReplyText] = useState(false);
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
-  // Memicu render ulang daftar chat (debounced) agar preview draf typing ikut segar saat mengetik
   const [draftTick, setDraftTick] = useState(0);
   const draftListTimerRef = useRef<any>(null);
 
@@ -411,245 +144,11 @@ export const LiveChatMonitor: React.FC = () => {
     composerRef.current?.focus();
   };
 
-  const [sending, setSending] = useState(false);
-  const [generatingDraft, setGeneratingDraft] = useState(false);
-  const [customerDetailModalOpen, setCustomerDetailModalOpen] = useState(false);
-  const [customerDetailEditMode, setCustomerDetailEditMode] = useState(false);
-  const [customerDetailLoading, setCustomerDetailLoading] = useState(false);
-  const [customerDetailData, setCustomerDetailData] = useState<any>(null);
-  const [addrBookCustomer, setAddrBookCustomer] = useState<{ id: string; name?: string } | null>(null);
-  const [savedAddressCount, setSavedAddressCount] = useState<number>(0);
-
-  // Cache address count bila customer aktif berganti (Fase 3, Micro-Task 3.1)
-  useEffect(() => {
-    const cid = customerDetailData?.id || selectedChat?.customerId;
-    if (!cid) {
-      setSavedAddressCount(0);
-      return;
-    }
-    apiRequest<{ success: boolean; addresses: any[] }>(`/api/admin/customers/${cid}/addresses`)
-      .then((res) => {
-        if (res?.success && Array.isArray(res.addresses)) {
-          setSavedAddressCount(res.addresses.length);
-        }
-      })
-      .catch(() => setSavedAddressCount(0));
-  }, [customerDetailData?.id, selectedChat?.customerId]);
-  const [refreshingLocation, setRefreshingLocation] = useState(false);
-  // Reservation detail dari riwayat (klik card reservasi)
-  const [selectedReservation, setSelectedReservation] = useState<any>(null);
-  // Modal Bukti Transfer dari banner reservasi aktif
-  const [proofModalReservation, setProofModalReservation] = useState<any>(null);
-  // F-C: ref ke handler refetch reservasi customer aktif (dipanggil saat SSE
-  // conversation.updated tiba agar banner/HOLD/OTW tidak basi sampai refresh manual).
-  const reservationRefreshRef = useRef<(() => void) | null>(null);
-  const lastReservationRefreshTimeRef = useRef<number>(0);
-  // Widget pemantauan perjalanan terapis (OTW) untuk CS.
-  const [dispatchTrip, setDispatchTrip] = useState<DispatchTripData | null>(null);
-  const [dispatchLoading, setDispatchLoading] = useState(false);
-  // Fase 3 (plan 2026-10-02): drawer radar OTW untuk laptop <1280px.
-  const [dispatchDrawerOpen, setDispatchDrawerOpen] = useState(false);
-  const loadDispatchTripRef = useRef<((reservationId: string) => void) | null>(null);
-
-  const [reservationStaffList, setReservationStaffList] = useState<any[]>([]);
-  // Prefetch staff list on mount agar modal edit tidak kosong saat diklik
-  useEffect(() => {
-    if (reservationStaffList.length === 0) {
-      apiRequest('/api/admin/staff')
-        .then((res: any) => {
-          const list = res?.data || (Array.isArray(res) ? res : []);
-          if (Array.isArray(list) && list.length > 0) setReservationStaffList(list);
-        })
-        .catch(() => {});
-    }
-  }, []);
-  const [showQuickBookingModal, setShowQuickBookingModal] = useState(false);
-  const [showQuickHoldModal, setShowQuickHoldModal] = useState(false);
-  const [quickHoldInitialDate, setQuickHoldInitialDate] = useState<Date | string | null>(null);
-  const [quickHoldInitialTime, setQuickHoldInitialTime] = useState<string | null>(null);
-    const [convertingHoldId, setConvertingHoldId] = useState<string | null>(null);
-    const [activeEditingHoldReservation, setActiveEditingHoldReservation] = useState<any | null>(null);
-    const [activeEditingConfirmedReservation, setActiveEditingConfirmedReservation] = useState<any | null>(null);
-  // Smart Micro-Pill auto-collapse (mobile <768px): banner penuh 3 detik lalu menciut
-  const [isBannerCollapsed, setIsBannerCollapsed] = useState(false);
-  const [userManuallyExpanded, setUserManuallyExpanded] = useState(false);
-  const manualExpandRef = useRef(false);
-  const [quickBookingTargetSlot, setQuickBookingTargetSlot] = useState<any>(null);
-  const [quickBookingExtracted, setQuickBookingExtracted] = useState<ExtractedScheduleData | null>(null);
-  // Fase 4B: dismiss smart-banner "FORM RESERVASI MASUK" — kunci per-signatur form
-  // (percakapan + entitas), sehingga form BARU (konten beda) bisa muncul kembali.
-  const [dismissedFormBanner, setDismissedFormBanner] = useState<string | null>(null);
-  const [showDailyScheduleModal, setShowDailyScheduleModal] = useState(false);
-  // Invoice Generator Modal (Draft Preview)
-  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
-  const [invoiceModalData, setInvoiceModalData] = useState<ExtractedScheduleData | null>(null);
-  const [clinicServices, setClinicServices] = useState<any[]>([]);
-  const [selectedImage, setSelectedImage] = useState<{
-    file?: File;
-    preview: string;
-    dataUrl?: string;
-    mimeType: string;
-    fileName: string;
-    mediaUrl?: string;
-    origin?: 'upload' | 'quick-reply';
-  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // Fase A v3: DOM input composer dimiliki LiveChatComposer (isolasi render ketikan).
   const composerRef = useRef<LiveChatComposerHandle | null>(null);
-  const dispatchOriginRef = useRef<boolean>(false);
-  const [releasingId, setReleasingId] = useState<string | null>(null);
-  const [editingMsg, setEditingMsg] = useState<{ id: string; content: string } | null>(null);
-  const [editContent, setEditContent] = useState('');
-  const [isEditingSaving, setIsEditingSaving] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [sseConnected, setSseConnected] = useState(false);
-  const sseConnectedRef = useRef(false);
-  const [showSyncInfoModal, setShowSyncInfoModal] = useState(false);
-  const [labelFilter, setLabelFilter] = useState<'all' | 'medical_concern' | 'unresolved_faq' | 'human_request'>('all');
-  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
-  // Filter bidan bertugas (khusus tab Reservasi Aktif): 'all' | 'unassigned' | staffId.
-  const [reservationStaffFilter, setReservationStaffFilter] = useState<string>('all');
-  const reservationStaffFilterRef = useRef<string>('all');
-  useEffect(() => { reservationStaffFilterRef.current = reservationStaffFilter; }, [reservationStaffFilter]);
-  // Indikator unread global dari DB (bukan hanya 50 chat pertama) — akurat walau
-  // chat unread berada di luar halaman yang termuat.
-  const [totalUnreadCount, setTotalUnreadCount] = useState(0);
-  // Ref mirror agar closure SSE (mount sekali) melihat filter terkini — gerbang anti-kedip Issue 160.
-  const sourceFilterRef = useRef<SourceFilter>('all');
-  useEffect(() => { sourceFilterRef.current = sourceFilter; }, [sourceFilter]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
-  const searchDebounceTimerRef = useRef<any>(null);
-  const loadChatsAbortControllerRef = useRef<AbortController | null>(null);
-  // AUDIT FASE 2 (T-04): mirror ref agar `loadChats` yang dipanggil dari closure
-  // mount-once (SSE/poll/visibility) TIDAK memakai filter lama. Sebelumnya reload
-  // otomatis bisa menghapus hasil pencarian/filter label yang sedang aktif.
-  const searchQueryRef = useRef('');
-  const labelFilterRef = useRef<'all' | 'medical_concern' | 'unresolved_faq' | 'human_request'>('all');
-  useEffect(() => { searchQueryRef.current = searchQuery; }, [searchQuery]);
-  useEffect(() => { labelFilterRef.current = labelFilter; }, [labelFilter]);
-
-  // In-Chat Search & Target Message Highlighting — terpisah dari pencarian daftar (3.1)
-  const [inChatSearchQuery, setInChatSearchQuery] = useState('');
-  const [inChatSearchOpen, setInChatSearchOpen] = useState(false);
-  const [matchingMessageIds, setMatchingMessageIds] = useState<string[]>([]);
-  const [currentMatchIndex, setCurrentMatchIndex] = useState<number>(-1);
-  const [highlightedMsgId, setHighlightedMsgId] = useState<string | null>(null);
-  // Fokus hanya saat admin MEMBUKA toolbar secara manual — bukan saat toolbar
-  // dibuka otomatis oleh direct-jump pencarian (keyboard menutupi pesan).
-  const inChatSearchInputRef = useRef<HTMLInputElement | null>(null);
-
-  // Debounce 350ms: mengetik tidak langsung memicu deep-search/puluhan request paralel.
-  const [debouncedInChatQuery, setDebouncedInChatQuery] = useState('');
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedInChatQuery(inChatSearchQuery), 350);
-    return () => clearTimeout(t);
-  }, [inChatSearchQuery]);
-  const effectiveInChatQuery = useMemo(() => {
-    const q = debouncedInChatQuery.trim().toLowerCase();
-    if (!selectedId || !q || q.length < 2) return '';
-    return q;
-  }, [debouncedInChatQuery, selectedId]);
-  const lastScrolledInChatQueryRef = useRef<string>('');
-  const [hasMore, setHasMore] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  // Offset server murni (jumlah item yang benar-benar ditarik dari DB, bukan panjang
-  // array lokal) — mencegah lompatan halaman akibat ghost-chat yang di-prepend.
-  const listOffsetRef = useRef(0);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; chat: LiveChatItem } | null>(null);
-  const longPressTimerRef = useRef<any>(null);
-  const longPressTriggeredRef = useRef(false);
-  const longPressTouchRef = useRef<{ x: number; y: number } | null>(null);
-
-  // Press-and-Hold Tooltip for filter icons on mobile (tanpa getaran haptik)
-  const [iconTooltip, setIconTooltip] = useState<string | null>(null);
-  const iconTooltipTimerRef = useRef<any>(null);
-
-  const handleIconTouchStart = (title: string) => {
-    if (iconTooltipTimerRef.current) clearTimeout(iconTooltipTimerRef.current);
-    iconTooltipTimerRef.current = setTimeout(() => {
-      setIconTooltip(title);
-    }, 280);
-  };
-
-  const handleIconTouchEnd = () => {
-    if (iconTooltipTimerRef.current) {
-      clearTimeout(iconTooltipTimerRef.current);
-      iconTooltipTimerRef.current = null;
-    }
-    setTimeout(() => {
-      setIconTooltip(null);
-    }, 1500);
-  };
-
-  // 🤖 Internal Chatbot AI ON/OFF (bukan Emergency Kill-Switch)
-  const [chatBotActive, setChatBotActive] = useState(() => {
-    try {
-      const cached = localStorage.getItem('wa_chatbot_active_state');
-      return cached ? cached === 'true' : true;
-    } catch { return true; }
-  });
-  const [togglingBotCutoff, setTogglingBotCutoff] = useState(false);
-  // Brand klinik tenant-aware (dari DB) untuk interpolasi template balasan.
-  // Fallback BRAND (env/konstanta) hanya bila DB belum termuat — bukan sumber utama.
-  const [clinicBrandName, setClinicBrandName] = useState<string>(BRAND.businessName);
-
-  const loadBotCutoffStatus = async () => {
-    try {
-      const data = await apiRequest('/api/admin/settings');
-      const active = (data as any)?.globalBotActive ?? (data as any)?.data?.globalBotActive;
-      if (typeof active === 'boolean') {
-        setChatBotActive(active);
-        try { localStorage.setItem('wa_chatbot_active_state', String(active)); } catch {}
-      }
-      // Brand tenant-aware dari DB untuk interpolasi template balasan (bukan hardcode).
-      const brand = (data as any)?.brand ?? (data as any)?.data?.brand;
-      if (brand && typeof brand.businessName === 'string' && brand.businessName.trim()) {
-        setClinicBrandName(brand.businessName.trim());
-      }
-    } catch (_) {}
-  };
-
-  useEffect(() => {
-    loadBotCutoffStatus();
-  }, []);
-
-  const handleToggleGlobalBot = async (enableBot: boolean) => {
-    const isConfirm = await confirm({
-      title: enableBot ? 'Aktifkan Chatbot AI?' : 'Nonaktifkan Chatbot AI?',
-      message: enableBot
-        ? 'Chatbot AI akan kembali membalas pesan customer secara otomatis. Follow-Up & balasan Live Chat manual tetap bisa dikirim.'
-        : 'Chatbot AI akan dinonaktifkan — AI tidak membalas, percakapan dialihkan ke CS manual. Follow-Up & balasan Live Chat manual tetap aktif. Emergency Kill-Switch ada di Settings → WhatsApp Provider.',
-      confirmText: enableBot ? 'Ya, Aktifkan Chatbot' : 'Ya, Nonaktifkan AI',
-      danger: !enableBot,
-    });
-    if (!isConfirm) return;
-
-    setTogglingBotCutoff(true);
-    try {
-      const res = await apiRequest('/api/admin/settings', {
-        method: 'PATCH',
-        body: JSON.stringify({ globalBotActive: enableBot }),
-      });
-      if (res && res.success) {
-        const newActive = Boolean((res as any)?.globalBotActive ?? (res as any)?.data?.globalBotActive ?? enableBot);
-        setChatBotActive(newActive);
-        try { localStorage.setItem('wa_chatbot_active_state', String(newActive)); } catch {}
-        toast(
-          newActive
-            ? 'Chatbot AI DIAKTIFKAN — AI kembali membalas otomatis.'
-            : 'Chatbot AI DINONAKTIFKAN — AI diam, dialihkan ke CS manual.',
-          newActive ? 'success' : 'info'
-        );
-      }
-    } catch (err: any) {
-      toast(`Gagal mengubah status Chatbot: ${err?.message || err}`, 'error');
-    } finally {
-      setTogglingBotCutoff(false);
-    }
-  };
-
-  // ✍️ WhatsApp Typing Presence — dipicu LiveChatComposer via onTyping (debounce 500ms di composer).
+  const chatListContainerRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const isTypingActiveRef = useRef(false);
 
   const notifyTyping = (isTyping: boolean) => {
@@ -663,99 +162,354 @@ export const LiveChatMonitor: React.FC = () => {
     }).catch(() => {});
   };
 
-const DRAFT_KEY_PREFIX = 'liveChat:draft:';
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; chat: LiveChatItem } | null>(null);
 
-function saveConversationDraft(convId: string, text: string) {
-  if (!convId) return;
-  try {
-    const key = `${DRAFT_KEY_PREFIX}${convId}`;
-    if (!text || !text.trim()) {
-      localStorage.removeItem(key);
-    } else {
-      localStorage.setItem(key, JSON.stringify({ text, timestamp: Date.now() }));
-    }
-  } catch (_) {}
-}
+  // Active chat thread hook
+  const {
+    messages,
+    setMessages,
+    optimisticMessageIdsRef,
+    pinnedBubble,
+    setPinnedBubble,
+    isThreadLoading,
+    threadLoadError,
+    hasMoreOlderMessages,
+    isLoadingOlder,
+    isDeepSearching,
+    pendingFocusMessageIdRef,
+    wasNearBottomRef,
+    savedScrollTopRef,
+    isChatHistoryPushedRef,
+    inChatSearchQuery,
+    setInChatSearchQuery,
+    effectiveInChatQuery,
+    inChatSearchOpen,
+    setInChatSearchOpen,
+    matchingMessageIds,
+    setMatchingMessageIds,
+    currentMatchIndex,
+    setCurrentMatchIndex,
+    highlightedMsgId,
+    setHighlightedMsgId,
+    inChatSearchInputRef,
+    loadThread,
+    loadOlderMessages,
+    handleDeepSearchInHistory,
+    scrollToBottom,
+    scrollToMessage,
+    handleNextMatch,
+    handlePrevMatch,
+    handleClearInChatSearch,
+    handleSelect,
+  } = useLiveChatActiveThread({
+    selectedId,
+    setSelectedId,
+    selectedIdRef,
+    chatsRef,
+    setChats,
+    chatContainerRef,
+    messagesEndRef,
+    mobileView,
+    setMobileView,
+    setSearchParams,
+    isTypingActiveRef,
+    notifyTyping,
+    customerDetailData: null,
+    setCustomerDetailData: (val) => reservations.setCustomerDetailData(val),
+    refreshChatItem,
+    replyTextRef,
+    setHasReplyText,
+    toast,
+  });
 
-function loadConversationDraft(convId: string): string {
-  if (!convId) return '';
-  try {
-    const key = `${DRAFT_KEY_PREFIX}${convId}`;
-    const raw = localStorage.getItem(key);
-    if (!raw) return '';
-    try {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object') {
-        // Bertahan 24 jam (86.400.000 ms)
-        if (Date.now() - (parsed.timestamp || 0) > 86400000) {
-          localStorage.removeItem(key);
-          return '';
-        }
-        return parsed.text || '';
-      }
-    } catch {
-      // Fallback jika tersimpan format string biasa
-      return raw;
-    }
-    return '';
-  } catch (_) {
-    return '';
-  }
-}
+  // Reservations, Customer Detail, Dispatch & Modals hook
+  const reservations = useLiveChatReservations({
+    selectedChat,
+    selectedIdRef,
+    chatsRef,
+    setChats,
+    messages,
+    toast,
+    confirm,
+  });
 
-function clearConversationDraft(convId: string) {
-  if (!convId) return;
-  try {
-    localStorage.removeItem(`${DRAFT_KEY_PREFIX}${convId}`);
-  } catch (_) {}
-}
+  const {
+    customerDetailModalOpen,
+    setCustomerDetailModalOpen,
+    customerDetailEditMode,
+    setCustomerDetailEditMode,
+    customerDetailLoading,
+    customerDetailData,
+    setCustomerDetailData,
+    addrBookCustomer,
+    setAddrBookCustomer,
+    savedAddressCount,
+    setSavedAddressCount,
+    selectedReservation,
+    setSelectedReservation,
+    proofModalReservation,
+    setProofModalReservation,
+    reservationRefreshRef,
+    lastReservationRefreshTimeRef,
+    dispatchTrip,
+    dispatchLoading,
+    dispatchDrawerOpen,
+    setDispatchDrawerOpen,
+    loadDispatchTripRef,
+    dispatchReservationIdRef,
+    dispatchOriginRef,
+    reservationStaffList,
+    showQuickBookingModal,
+    setShowQuickBookingModal,
+    showQuickHoldModal,
+    setShowQuickHoldModal,
+    quickHoldInitialDate,
+    setQuickHoldInitialDate,
+    quickHoldInitialTime,
+    setQuickHoldInitialTime,
+    convertingHoldId,
+    setConvertingHoldId,
+    activeEditingHoldReservation,
+    setActiveEditingHoldReservation,
+    activeEditingConfirmedReservation,
+    setActiveEditingConfirmedReservation,
+    quickBookingTargetSlot,
+    setQuickBookingTargetSlot,
+    quickBookingExtracted,
+    setQuickBookingExtracted,
+    dismissedFormBanner,
+    setDismissedFormBanner,
+    showDailyScheduleModal,
+    setShowDailyScheduleModal,
+    showInvoiceModal,
+    setShowInvoiceModal,
+    invoiceModalData,
+    setInvoiceModalData,
+    clinicServices,
+    setClinicServices,
+    pushModalHistory,
+    handleOpenCustomerDetail,
+    handleSaveCustomerDetail,
+    handleOpenReservationDetail,
+    handleReservationUpdate,
+    handleOpenQuickReservation,
+    handleOpenQuickHold,
+    handleSlotHold,
+    handleConvertHoldToBooking,
+    handleConfirmPendingBooking,
+    activeHoldReservation,
+    activeConfirmedReservation,
+    activePendingReservation,
+    currentActiveReservation,
+    dispatchReservationId,
+    loadDispatchTrip,
+    dispatchLocationSource,
+  } = reservations;
 
-const SCROLL_POS_STORAGE_KEY = 'liveChat:scrollPositions';
+  // Bot cutoff & labels management hook
+  const {
+    chatBotActive,
+    setChatBotActive,
+    togglingBotCutoff,
+    clinicBrandName,
+    handleToggleGlobalBot,
+    gatewayCapability,
+    allLabels,
+    labelPopoverOpen,
+    setLabelPopoverOpen,
+    togglingLabelId,
+    labelPopoverRef,
+    handleToggleLabel,
+  } = useLiveChatBotAndLabels({
+    chatsRef,
+    setChats,
+    loadChats,
+    setContextMenu,
+    setCustomerDetailData,
+    toast,
+    confirm,
+  });
 
-function getConversationScroll(convId: string): { scrollTop: number; isNearBottom: boolean } | null {
-  if (!convId) return null;
-  try {
-    const raw = sessionStorage.getItem(SCROLL_POS_STORAGE_KEY);
-    if (!raw) return null;
-    const map = JSON.parse(raw);
-    return map[convId] || null;
-  } catch (_) {
-    return null;
-  }
-}
+  // Background WA sync hook
+  const [showSyncInfoModal, setShowSyncInfoModal] = useState(false);
+  const {
+    bgSyncProgress,
+    setBgSyncProgress,
+    handleStartBackgroundFullSync,
+    handleCancelBackgroundSync,
+  } = useLiveChatBackgroundSync({
+    loadChats,
+    toast,
+  });
 
-function saveConversationScroll(convId: string, scrollTop: number, isNearBottom: boolean) {
-  if (!convId) return;
-  try {
-    const raw = sessionStorage.getItem(SCROLL_POS_STORAGE_KEY);
-    const map = raw ? JSON.parse(raw) : {};
-    map[convId] = { scrollTop, isNearBottom, updatedAt: Date.now() };
-    sessionStorage.setItem(SCROLL_POS_STORAGE_KEY, JSON.stringify(map));
-  } catch (_) {}
-}
+  const [sseConnected, setSseConnected] = useState(false);
+  const sseConnectedRef = useRef(false);
+  const mobileViewRef = useRef(mobileView);
+  mobileViewRef.current = mobileView;
+  const isDesktopRef = useRef(isDesktop);
+  isDesktopRef.current = isDesktop;
+  const [delayAlert, setDelayAlert] = useState<any>(null);
+  const delayAlertedRef = useRef<Set<string>>(new Set());
 
-  // Fase A v3: dipanggil LiveChatComposer per perubahan teks. Composer bersifat
-  // uncontrolled — monitor hanya mirror transisi kosong<->terisi agar thread/sidebar
-  // tidak re-render per keystroke. Draft & typing-debounce dimiliki composer.
+  // SSE real-time hook
+  useLiveChatSse({
+    selectedIdRef,
+    sseConnectedRef,
+    setSseConnected,
+    loadChats,
+    refreshTotalUnread,
+    loadThread,
+    setChatBotActive,
+    setChats,
+    chatsRef,
+    setTotalUnreadCount,
+    setMessages,
+    optimisticMessageIdsRef,
+    scrollToBottom,
+    chatContainerRef,
+    wasNearBottomRef,
+    savedScrollTopRef,
+    mobileViewRef,
+    isDesktopRef,
+    sourceFilterRef: sourceFilterRef as any,
+    reservationRefreshRef,
+    lastReservationRefreshTimeRef,
+    delayAlertedRef,
+    loadDispatchTripRef,
+    sortChats,
+    setCustomerDetailData,
+    setPinnedBubble,
+    setBgSyncProgress,
+    setSelectedReservation,
+    setDelayAlert,
+    dispatchReservationIdRef,
+  });
+
+  // Message & Bot operations hook
+  const {
+    revokingId,
+    editingMsg,
+    setEditingMsg,
+    isEditingSaving,
+    editContent,
+    setEditContent,
+    isPinningMessageId,
+    setIsPinningMessageId,
+    isHidingMessageId,
+    releasingId,
+    generatingDraft,
+    handleRevokeMessage,
+    handleStartEdit,
+    handleSaveEdit,
+    handleCopyMessageText,
+    handleToggleReaction,
+    handleToggleMessagePin,
+    handleToggleMessageHide,
+    handleJumpToPinnedMessage,
+    handleRelease,
+    handleTakeover,
+    handleGenerateAiDraft,
+  } = useLiveChatMessageOperations({
+    selectedChat,
+    selectedId,
+    selectedIdRef,
+    messages,
+    setMessages,
+    chatsRef,
+    setChats,
+    refreshChatItem,
+    composerRef,
+    replyTextRef,
+    setHasReplyText,
+    scrollToMessage,
+    loadThread,
+    setPinnedBubble,
+  });
+
+  // Banners smart detection hook
+  const {
+    formBannerExtracted,
+    matchedExistingReservation,
+    formBannerKey,
+    showFormReservasiBanner,
+    showNeutralExistingReservationBanner,
+    showUnregisteredVisitBanner,
+  } = useLiveChatBanners({
+    messages,
+    customerDetailData,
+    clinicServices,
+    selectedChat,
+    dismissedFormBanner,
+    activeConfirmedReservation,
+    activeHoldReservation,
+    activePendingReservation,
+    dispatchReservationId,
+  });
+
+  // Composer & sending hook
+  const {
+    selectedImage,
+    sending,
+    quickReplies,
+    applyQuickReply,
+    handleSendReply,
+    handleImageFile,
+    handlePickImage,
+    handleRemoveSelectedImage,
+    handleInsertInvoiceToChat,
+    handleInsertDispatchDraft,
+    markSharelocRequested,
+    handleRequestSharelocFromDispatch,
+    handleGenerateActiveReservationInvoice,
+  } = useLiveChatComposerHandler({
+    selectedId,
+    selectedIdRef,
+    selectedChat,
+    user,
+    customerDetailData,
+    clinicBrandName,
+    clinicServices,
+    setClinicServices,
+    replyingTo,
+    setReplyingTo,
+    composerRef,
+    fileInputRef,
+    replyTextRef,
+    setHasReplyText,
+    dispatchOriginRef,
+    setDispatchDrawerOpen,
+    setInvoiceModalData,
+    setShowInvoiceModal,
+    pushModalHistory,
+    setAddrBookCustomer,
+    setMessages,
+    setChats,
+    chatsRef,
+    optimisticMessageIdsRef,
+    sortChats,
+    scrollToBottom,
+    notifyTyping,
+    loadThread,
+    refreshChatItem,
+    activeConfirmedReservation,
+    activePendingReservation,
+    handleOpenQuickReservation,
+    toast,
+  });
+
   const handleComposerTextChange = (text: string) => {
     replyTextRef.current = text;
     const isNotEmpty = text.trim().length > 0;
     if (hasReplyText !== isNotEmpty) {
       setHasReplyText(isNotEmpty);
     }
-    // Segarkan preview draf di daftar chat (debounce agar tidak render tiap keystroke)
     if (draftListTimerRef.current) clearTimeout(draftListTimerRef.current);
     draftListTimerRef.current = setTimeout(() => {
       setDraftTick((t) => t + 1);
     }, 700);
   };
 
-  const listTouchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
-  const isChatHistoryPushedRef = useRef(false);
-
   const handleBackToList = () => {
-    // 1.1: hentikan typing, bersihkan state & URL agar reload tidak jebak di chat
-    // (timer debounce typing dimiliki LiveChatComposer; unmount menghentikannya).
     if (isTypingActiveRef.current) {
       try { notifyTyping(false); } catch {}
     }
@@ -768,9 +522,6 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       sessionStorage.setItem('liveChat:mobileView', 'list');
     } catch {}
 
-    // AUDIT FASE 2 (T-08): jika URL masih membawa conversationId dan chat dibuka
-    // lewat navigasi in-app, POP entri history (bukan replace) agar tombol back
-    // perangkat tetap konsisten dan tidak menyisakan entri hantu.
     const hasConvInUrl =
       typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('conversationId');
     if (hasConvInUrl && isChatHistoryPushedRef.current) {
@@ -785,940 +536,8 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     setTimeout(() => setMobileView('list'), 60);
   };
 
-  const handleListTouchStart = (e: React.TouchEvent) => {
-    if (mobileView !== 'list' || e.touches.length !== 1) return;
-    const target = e.target as HTMLElement | null;
-    if (target && (
-      target.tagName === 'INPUT' ||
-      target.tagName === 'TEXTAREA' ||
-      target.tagName === 'SELECT' ||
-      target.tagName === 'BUTTON' ||
-      target.closest('button') ||
-      target.closest('input') ||
-      target.closest('textarea')
-    )) {
-      listTouchStartRef.current = null;
-      return;
-    }
-    const touch = e.touches[0];
-    // Zona tepi kiri (<= 45px dari tepi kiri layar)
-    if (touch && touch.clientX <= 45) {
-      listTouchStartRef.current = {
-        x: touch.clientX,
-        y: touch.clientY,
-        time: Date.now(),
-      };
-    }
-  };
-
-  const handleListTouchMove = (e: React.TouchEvent) => {
-    if (!listTouchStartRef.current || e.touches.length === 0) return;
-    const touch = e.touches[0];
-    const deltaX = touch.clientX - listTouchStartRef.current.x;
-    const deltaY = touch.clientY - listTouchStartRef.current.y;
-    // Mencegah OS Android/iOS mencegat gestur tepi kiri menjadi history back preview
-    if (deltaX > 10 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
-      if (e.cancelable) e.preventDefault();
-    }
-  };
-
-  // ⬅️ Sentralisasi Gestur Usapan Tepi Layar:
-  // Seluruh tracking sentuhan tepi kiri dipusatkan di Layout.tsx via event 'app-swipe-back'
-  // untuk mengeliminasi konflik dual-listener dan double-trigger.
-  const pushModalHistory = (modalName: string) => {
-    try {
-      if (typeof window !== 'undefined' && window.history.state?.view !== 'live-chat-modal') {
-        window.history.pushState({ view: 'live-chat-modal', modal: modalName }, '');
-      }
-    } catch (_) {}
-  };
-
-  // AUDIT FASE 2 (T-08): konsumsi entri history modal saat modal ditutup lewat
-  // tombol UI (bukan tombol back). Tanpa ini, satu tekanan back "termakan"
-  // entri hantu sehingga tombol back perangkat terasa tidak bereaksi.
-  const prevTrackedModalOpenRef = useRef(false);
-  useEffect(() => {
-    const anyTrackedModalOpen = customerDetailModalOpen || showQuickBookingModal || showInvoiceModal;
-    if (!anyTrackedModalOpen && prevTrackedModalOpenRef.current) {
-      try {
-        if (typeof window !== 'undefined' && window.history.state?.view === 'live-chat-modal') {
-          window.history.back();
-        }
-      } catch {}
-    }
-    prevTrackedModalOpenRef.current = anyTrackedModalOpen;
-  }, [customerDetailModalOpen, showQuickBookingModal, showInvoiceModal]);
-  const [syncingHistory, setSyncingHistory] = useState(false);
-  const [syncNextOffset, setSyncNextOffset] = useState<number | null>(null);
-  const [syncProgress, setSyncProgress] = useState<string | null>(null);
-  const [bgSyncProgress, setBgSyncProgress] = useState<{
-    isSyncing: boolean;
-    status: 'idle' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
-    syncedChats: number;
-    skippedChats: number;
-    syncedMessages: number;
-    totalChats: number;
-    currentChatName?: string;
-    currentOffset: number;
-    error?: string;
-  }>({
-    isSyncing: false,
-    status: 'idle',
-    syncedChats: 0,
-    skippedChats: 0,
-    syncedMessages: 0,
-    totalChats: 0,
-    currentOffset: 0,
-  });
-  const [gatewayCapability, setGatewayCapability] = useState<{ provider: string; supportsRevoke: boolean; supportsEdit?: boolean } | null>(null);
-  const [revokingId, setRevokingId] = useState<string | null>(null);
-  const chatsRef = useRef<LiveChatItem[]>([]);
-  const selectedIdRef = useRef<string | null>(null);
-  const chatListContainerRef = useRef<HTMLDivElement>(null);
-  const chatContainerRef = useRef<HTMLDivElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchInputFocusedRef = useRef(false);
-  const loadingMoreRef = useRef(false);
-  const firstRenderRef = useRef(true);
-  const wasNearBottomRef = useRef(true);
-  const savedScrollTopRef = useRef<number | null>(null);
-  const isInitialMessagesLoadRef = useRef(true);
-
-  const [allLabels, setAllLabels] = useState<CustomerLabelData[]>([]);
-  const [labelPopoverOpen, setLabelPopoverOpen] = useState(false);
-  const [togglingLabelId, setTogglingLabelId] = useState<string | null>(null);
-  const labelPopoverRef = useRef<HTMLDivElement>(null);
-
-  // ⚡ Quick Chat / Balasan Cepat (/shortcut) — daftar template milik monitor
-  // (butuh data customer untuk interpolasi); UI popover & filter dimiliki composer.
-  const [quickReplies, setQuickReplies] = useState<Array<{
-    id: string;
-    shortcut: string;
-    title: string;
-    content: string;
-    category: string | null;
-    media_type?: string | null;
-    image_url?: string | null;
-    mime_type?: string | null;
-  }>>([]);
-
-  useEffect(() => {
-    apiRequest('/api/admin/quick-replies')
-      .then((res: any) => {
-        if (res?.success && Array.isArray(res.data)) setQuickReplies(res.data);
-        else if (Array.isArray(res)) setQuickReplies(res);
-      })
-      .catch(() => {});
-  }, []);
-
-  const interpolateQuickReplyContent = useCallback((content: string): string => {
-    const rawName = customerDetailData?.name || selectedChat?.customerName || '';
-    const cleaned = cleanBundaName(rawName);
-    const hasValidName = Boolean(cleaned && cleaned.trim() !== '-');
-    const name = hasValidName ? cleaned.trim() : '';
-    const phone = customerDetailData?.phone || selectedChat?.customerPhone || '-';
-    const kec = customerDetailData?.kecamatan || selectedChat?.kecamatan || '';
-    const kota = customerDetailData?.kota || selectedChat?.kota || '';
-    const alamat = customerDetailData?.address || customerDetailData?.kelurahan || selectedChat?.kelurahan || '';
-    // Brand dari DB tenant (clinicBrandName), fallback konstanta build-time.
-    const clinicName = clinicBrandName || BRAND.businessName;
-    const adminName = (user as any)?.name || (user as any)?.email || 'Admin';
-
-    // Data anak/bayi + reservasi aktif untuk variabel jadwal.
-    const children = (customerDetailData?.children || (selectedChat as any)?.children || []) as any[];
-    const firstChild = Array.isArray(children) && children.length > 0 ? children[0] : null;
-    const childName = firstChild?.name || (selectedChat as any)?.child_name || 'si Kecil';
-    const childAge = firstChild?.current_age || firstChild?.raw_age_text || firstChild?.age || firstChild?.ageText || '';
-    // Reservasi aktif diturunkan lokal (memo active* dideklarasikan lebih bawah).
-    const resList = (customerDetailData?.reservations || []) as any[];
-    // AUDIT FASE 5: pilih jadwal relevan (bukan `confirmed` pertama yang mungkin basi).
-    const snapshotReservations = [
-      (selectedChat as any)?.activeConfirmedReservation,
-      (selectedChat as any)?.activeHoldReservation,
-      (selectedChat as any)?.activePendingReservation,
-    ].filter(Boolean);
-    const activeRes = selectQuickReplyReservation([...resList, ...snapshotReservations]);
-    const treatmentName = activeRes?.treatment_detail || activeRes?.treatment_name || '';
-    let tanggal = '';
-    let jam = '';
-    if (activeRes?.booking_date) {
-      const bd = new Date(activeRes.booking_date);
-      if (!isNaN(bd.getTime())) {
-        tanggal = bd.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' });
-        jam = bd.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }).replace(':', '.');
-      }
-    }
-
-    let interpolated = content;
-    // A-009: Jika tidak ada nama spesifik, ganti sapaan Bunda {name} / {name} menjadi "Bunda" tanpa dobel "Bunda Bunda"
-    if (hasValidName) {
-      interpolated = interpolated.replace(/\{(?:name|nama|nama_bunda)\}/gi, name);
-    } else {
-      interpolated = interpolated.replace(/(?:bunda\s+)?\{(?:name|nama|nama_bunda)\}/gi, 'Bunda');
-    }
-
-    return interpolated
-      .replace(/\{(?:phone|hp|no_hp)\}/gi, phone)
-      .replace(/\{(?:kec|kecamatan)\}/gi, kec)
-      .replace(/\{kota\}/gi, kota)
-      .replace(/\{(?:alamat|address)\}/gi, alamat)
-      .replace(/\{clinic_name\}/gi, clinicName)
-      .replace(/\{admin_name\}/gi, adminName)
-      .replace(/\{(?:nama_anak|child_name|nama_bayi)\}/gi, childName || 'si Kecil')
-      .replace(/\{(?:usia_anak|usia_bayi|child_age|usia)\}/gi, childAge)
-      .replace(/\{(?:layanan|treatment|treatment_name)\}/gi, treatmentName)
-      .replace(/\{tanggal\}/gi, tanggal)
-      .replace(/\{jam\}/gi, jam);
-  }, [
-    clinicBrandName,
-    selectedChat?.customerName,
-    selectedChat?.customerPhone,
-    selectedChat?.kecamatan,
-    selectedChat?.kota,
-    selectedChat?.kelurahan,
-    customerDetailData?.name,
-    customerDetailData?.phone,
-    customerDetailData?.kecamatan,
-    customerDetailData?.kota,
-    customerDetailData?.address,
-    customerDetailData?.kelurahan,
-    customerDetailData?.children,
-    customerDetailData?.reservations,
-    user,
-  ]);
-
-  // Fase A v3: interpolasi milik monitor (butuh data customer); penyisipan DOM milik composer.
-  const applyQuickReply = useCallback((qr: {
-    content: string;
-    resolved_content?: string | null;
-    media_type?: string | null;
-    image_url?: string | null;
-    mime_type?: string | null;
-  }) => {
-    const rawTemplate = qr.resolved_content || qr.content;
-    const interpolated = interpolateQuickReplyContent(rawTemplate);
-    replyTextRef.current = interpolated;
-    setHasReplyText(true);
-    if (selectedIdRef.current) {
-      saveConversationDraft(selectedIdRef.current, interpolated);
-    }
-    if (qr.image_url) {
-      setSelectedImage({
-        preview: qr.image_url,
-        mediaUrl: qr.image_url,
-        mimeType: qr.mime_type || 'image/jpeg',
-        fileName: qr.media_type === 'QRIS' ? 'qris-klinik' : qr.media_type === 'PRICELIST' ? 'pricelist-klinik' : 'lampiran-quick-chat',
-        origin: 'quick-reply',
-      });
-    } else {
-      setSelectedImage((prev) => (prev?.origin === 'quick-reply' ? null : prev));
-    }
-    return interpolated;
-  }, [interpolateQuickReplyContent]);
-
-  // Periksa status background sync saat pertama kali buka halaman
-  const checkBackgroundSyncStatus = async () => {
-    try {
-      const res = await apiRequest('/api/admin/live-chat/sync-status');
-      if (res?.success && res.data) {
-        setBgSyncProgress(res.data);
-      }
-    } catch (_) {}
-  };
-
-  useEffect(() => {
-    checkBackgroundSyncStatus();
-  }, []);
-
-  // Polling halus setiap 2.5 detik selama background sync berjalan
-  useEffect(() => {
-    if (!bgSyncProgress.isSyncing) return;
-    const interval = setInterval(async () => {
-      try {
-        const res = await apiRequest('/api/admin/live-chat/sync-status');
-        if (res?.success && res.data) {
-          setBgSyncProgress(res.data);
-          if (!res.data.isSyncing) {
-            loadChats(true);
-            if (res.data.status === 'completed') {
-              toast(`🎉 Sinkronisasi seluruh riwayat WhatsApp selesai: ${res.data.syncedChats} chat (${res.data.syncedMessages} pesan baru)!`, 'success');
-            } else if (res.data.status === 'failed') {
-              toast(`Sinkronisasi latar belakang terhenti: ${res.data.error || 'Terjadi kesalahan'}`, 'error');
-            }
-          }
-        }
-      } catch (_) {}
-    }, 2500);
-    return () => clearInterval(interval);
-  }, [bgSyncProgress.isSyncing]);
-
-  const handleStartBackgroundFullSync = async () => {
-    try {
-      const res = await apiRequest('/api/admin/live-chat/sync-full', {
-        method: 'POST',
-        body: JSON.stringify({ messagesPerChat: 100 }),
-      });
-      if (res?.success) {
-        if ((res as any)?.progress) {
-          setBgSyncProgress((res as any).progress);
-        }
-        // AUDIT: backend mengembalikan `started:false` bila sync sudah berjalan.
-        // Jangan klaim "dimulai" (ghost success).
-        if ((res as any)?.started === false) {
-          toast('Sinkronisasi riwayat WhatsApp memang sedang berjalan. Pantau progres di banner.', 'info');
-          return;
-        }
-        toast('🚀 Sinkronisasi seluruh riwayat WhatsApp dimulai di latar belakang...', 'success');
-        if (!(res as any)?.progress) {
-          setBgSyncProgress((prev) => ({ ...prev, isSyncing: true, status: 'in_progress' }));
-        }
-      }
-    } catch (err: any) {
-      toast(`Gagal memulai sinkronisasi: ${err.message}`, 'error');
-    }
-  };
-
-  const handleCancelBackgroundSync = async () => {
-    try {
-      await apiRequest('/api/admin/live-chat/sync-cancel', { method: 'POST' });
-      toast('Sinkronisasi latar belakang dihentikan.', 'info');
-      setBgSyncProgress((prev) => ({ ...prev, isSyncing: false, status: 'cancelled' }));
-    } catch (err: any) {
-      toast(`Gagal membatalkan: ${err.message}`, 'error');
-    }
-  };
-
-  // Close label popover on outside click (tools/emoji/quick-reply dimiliki composer).
-  useEffect(() => {
-    const handleDocumentClick = (e: MouseEvent) => {
-      if (labelPopoverRef.current && !labelPopoverRef.current.contains(e.target as Node)) {
-        setLabelPopoverOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleDocumentClick);
-    return () => {
-      document.removeEventListener('mousedown', handleDocumentClick);
-    };
-  }, []);
-
-  // Fase A v3: DOM composer & draf per-chat dimiliki LiveChatComposer (prop conversationId).
-  // Monitor hanya mirror teks untuk preview daftar chat.
-
-  useEffect(() => {
-    selectedIdRef.current = selectedId;
-    isInitialMessagesLoadRef.current = true;
-
-    // Pulihkan posisi scroll tersimpan jika user sebelumnya sedang membaca history chat ini
-    if (selectedId) {
-      const savedScroll = getConversationScroll(selectedId);
-      if (savedScroll && !savedScroll.isNearBottom && savedScroll.scrollTop > 0) {
-        wasNearBottomRef.current = false;
-        savedScrollTopRef.current = savedScroll.scrollTop;
-      } else {
-        wasNearBottomRef.current = true;
-        savedScrollTopRef.current = null;
-      }
-    } else {
-      wasNearBottomRef.current = true;
-      savedScrollTopRef.current = null;
-    }
-
-    setReplyingTo(null);
-
-    // Mirror draf tersimpan 24 jam untuk preview daftar chat (DOM milik composer).
-    if (selectedId) {
-      const draft = loadConversationDraft(selectedId);
-      replyTextRef.current = draft;
-      setHasReplyText(draft.trim().length > 0);
-    } else {
-      replyTextRef.current = '';
-      setHasReplyText(false);
-    }
-
-    try {
-      if (selectedId) sessionStorage.setItem('liveChat:selectedId', selectedId);
-      else sessionStorage.removeItem('liveChat:selectedId');
-    } catch {}
-    if (selectedId) {
-      setMessages([]);
-      setThreadLoadError(null);
-      loadThread(selectedId);
-      // Jika conversation belum ada di chats list (misal dibuka langsung dari URL / Push notif), ambil detailnya
-      if (!chatsRef.current.some((c) => c.conversationId === selectedId)) {
-        apiRequest(`/api/admin/live-chat/conversations/${selectedId}`)
-          .then((res) => {
-            if (res?.success && res.data) {
-              setChats((prev) => {
-                if (prev.some((c) => c.conversationId === selectedId)) return prev;
-                const updated = [res.data, ...prev];
-                chatsRef.current = updated;
-                return updated;
-              });
-            }
-          })
-          .catch(() => {});
-      }
-    } else {
-      loadedThreadConvIdRef.current = null;
-      setMessages([]);
-      setThreadLoadError(null);
-      setIsThreadLoading(false);
-    }
-  }, [selectedId]);
-
-  // Auto-save draft saat berpindah menu (unmount) atau meninggalkan halaman.
-  // Sumber teks: mirror replyTextRef (composer menyimpan drafnya sendiri per keystroke).
-  useEffect(() => {
-    const saveCurrentDraft = () => {
-      if (selectedIdRef.current) {
-        const currentText = replyTextRef.current || '';
-        if (currentText.trim()) {
-          saveConversationDraft(selectedIdRef.current, currentText);
-        }
-      }
-    };
-
-    window.addEventListener('beforeunload', saveCurrentDraft);
-    window.addEventListener('pagehide', saveCurrentDraft);
-
-    return () => {
-      saveCurrentDraft();
-      if (draftListTimerRef.current) clearTimeout(draftListTimerRef.current);
-      window.removeEventListener('beforeunload', saveCurrentDraft);
-      window.removeEventListener('pagehide', saveCurrentDraft);
-    };
-  }, []);
-
-  // Load gateway capability & available customer labels on mount
-  useEffect(() => {
-    emitBootPhase('done');
-    apiRequest('/api/admin/gateway-capability')
-      .then((res) => {
-        if (res?.success && res.data) setGatewayCapability(res.data);
-      })
-      .catch(() => {});
-
-    apiRequest('/api/admin/labels')
-      .then((res) => {
-        if (res?.success && Array.isArray(res.data)) {
-          setAllLabels(res.data);
-        } else if (Array.isArray(res)) {
-          setAllLabels(res);
-        }
-      })
-      .catch(() => {});
-  }, []);
-
-  const handleToggleLabel = async (customerId: string, label: CustomerLabelData) => {
-    if (togglingLabelId) return;
-    setTogglingLabelId(label.id);
-    try {
-      const targetChat = chatsRef.current.find((c) => c.customerId === customerId);
-      const currentLabels = targetChat?.customerLabels || [];
-      const isAssigned = currentLabels.some((l) => l.id === label.id);
-      const action = isAssigned ? 'unassign' : 'assign';
-
-      // Optimistic update for chats list
-      const nextLabels = isAssigned
-        ? currentLabels.filter((l) => l.id !== label.id)
-        : [...currentLabels, label];
-
-      setChats((prev) => {
-        const updated = prev.map((c) =>
-          c.customerId === customerId ? { ...c, customerLabels: nextLabels } : c
-        );
-        chatsRef.current = updated;
-        return updated;
-      });
-
-      // Optimistic update for contextMenu if open
-      setContextMenu((prev) => {
-        if (!prev || prev.chat.customerId !== customerId) return prev;
-        return {
-          ...prev,
-          chat: {
-            ...prev.chat,
-            customerLabels: nextLabels,
-          },
-        };
-      });
-
-      // Optimistic update for customer detail modal if open
-      setCustomerDetailData((prev: any) => {
-        if (!prev) return prev;
-        if (prev.id !== customerId && prev.phone !== targetChat?.customerPhone) return prev;
-        return {
-          ...prev,
-          labels: nextLabels.map((l) => ({ label: l })),
-        };
-      });
-
-      await apiRequest(`/api/admin/customers/${customerId}/labels`, {
-        method: 'POST',
-        body: JSON.stringify({ labelId: label.id, action }),
-      });
-    } catch (err: any) {
-      toast(err.message || 'Gagal memperbarui label customer.', 'error');
-      loadChats(true);
-    } finally {
-      setTogglingLabelId(null);
-    }
-  };
-
-  // Ganti filter label → reset daftar ke halaman pertama.
-  useEffect(() => {
-    if (firstRenderRef.current) {
-      firstRenderRef.current = false;
-      return;
-    }
-    loadChats(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [labelFilter]);
-
-  // Ganti filter sumber (WhatsApp asli / sandbox) → reset daftar ke halaman pertama.
-  useEffect(() => {
-    if (firstRenderRef.current) return;
-    loadChats(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sourceFilter]);
-
-  // Ganti filter bidan (tab reservasi) → reset daftar ke halaman pertama.
-  const reservationStaffFilterFirstRenderRef = useRef(true);
-  useEffect(() => {
-    if (reservationStaffFilterFirstRenderRef.current) {
-      reservationStaffFilterFirstRenderRef.current = false;
-      return;
-    }
-    if (sourceFilterRef.current === 'reservation') loadChats(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reservationStaffFilter]);
-
-  const triggerDebouncedSearch = (q: string) => {
-    if (searchDebounceTimerRef.current) {
-      clearTimeout(searchDebounceTimerRef.current);
-    }
-    searchDebounceTimerRef.current = setTimeout(() => {
-      loadChats(true, q, true);
-    }, 350);
-  };
-
-  const loadChats = async (reset = false, search = searchQueryRef.current, isSearchOperation = false) => {
-    // Batalkan request loadChats sebelumnya yang masih in-flight (mencegah bottleneck saat koneksi seluler lambat)
-    if (reset && loadChatsAbortControllerRef.current) {
-      loadChatsAbortControllerRef.current.abort();
-    }
-    const abortController = new AbortController();
-    if (reset) {
-      loadChatsAbortControllerRef.current = abortController;
-    }
-
-    // Hanya aktifkan full-page loader saat boot awal (chats belum pernah dimuat sama sekali)
-    if (reset && chatsRef.current.length === 0) {
-      setLoading(true);
-    }
-    if (isSearchOperation) {
-      setIsSearching(true);
-    }
-    if (loadingMoreRef.current && !reset) return;
-    loadingMoreRef.current = true;
-    if (!reset) {
-      setLoadingMore(true);
-    }
-    try {
-      const offset = reset ? 0 : listOffsetRef.current;
-      const searchParam = search && search.trim() ? `&search=${encodeURIComponent(search.trim())}` : '';
-      const labelParam = labelFilterRef.current !== 'all' ? `&label=${encodeURIComponent(labelFilterRef.current)}` : '';
-      // Sandbox (chat test/QA) dipanggil bila mode sandbox aktif, default memuat real.
-      // Baca dari REF (bukan state) agar pemanggil dari closure SSE mount-once tetap
-      // memakai filter terkini — mencegah reload mode salah (bug Issue 160).
-      const backendMode = sourceFilterRef.current === 'sandbox' ? 'sandbox' : 'real';
-      // Filter unread/reservation dikirim ke server agar paginasi & hasMore akurat
-      // dari total sesungguhnya di DB, bukan hasil filter 50 item di memori browser.
-      const activeSource = sourceFilterRef.current;
-      const filterParam = activeSource === 'unread' || activeSource === 'reservation' ? `&filter=${activeSource}` : '';
-      // Filter bidan server-side hanya saat tab reservasi aktif — agar paginasi akurat.
-      const staffParam =
-        activeSource === 'reservation' && reservationStaffFilterRef.current !== 'all'
-          ? `&staffId=${encodeURIComponent(reservationStaffFilterRef.current)}`
-          : '';
-      const res = await apiRequest(`/api/admin/live-chat/conversations?limit=50&offset=${offset}&mode=${backendMode}${searchParam}${labelParam}${filterParam}${staffParam}`, {
-        signal: abortController.signal,
-        timeoutMs: isSearchOperation ? 8000 : 10000,
-      });
-      const data = Array.isArray(res) ? res : (res?.data || []);
-      const nextHasMore = typeof res?.hasMore === 'boolean' ? res.hasMore : data.length === 50;
-      listOffsetRef.current = reset ? data.length : listOffsetRef.current + data.length;
-      if (reset) {
-        // Jika chat yang sedang dibuka tidak ada di 50 percakapan pertama, pertahankan agar tidak hilang —
-        // KECUALI saat pencarian aktif: jangan paksa masuk chat yang tidak cocok keyword.
-        const isSearchActive = !!(search && search.trim());
-        const rawActive = !isSearchActive ? chatsRef.current.find((c) => c.conversationId === selectedIdRef.current) : null;
-        // Ghost-chat guard (Issue 160 + tab terfilter): chat aktif HANYA dipertahankan
-        // (a) bila modenya cocok (real/sandbox), dan (b) di tab 'all'/'sandbox'.
-        // Di tab unread/reservation, chat yang baru saja dibaca TIDAK boleh "nyangkut".
-        const canPreserveActive = activeSource === 'all' || activeSource === 'sandbox';
-        const currentActive = rawActive && canPreserveActive && shouldPreserveActiveChat(rawActive, sourceFilterRef.current) ? rawActive : null;
-        const finalData = (currentActive && !data.some((c: LiveChatItem) => c.conversationId === currentActive.conversationId))
-          ? [currentActive, ...data]
-          : data;
-        startTransition(() => setChats(finalData));
-        chatsRef.current = finalData;
-      } else {
-        const merged = [...chatsRef.current];
-        const seen = new Set(merged.map((c) => c.conversationId));
-        for (const item of data) {
-          if (!seen.has(item.conversationId)) {
-            merged.push(item);
-            seen.add(item.conversationId);
-          }
-        }
-        startTransition(() => setChats(merged));
-        chatsRef.current = merged;
-      }
-      setHasMore(nextHasMore);
-      setErrorMessage(null);
-    } catch (err: any) {
-      if (err.name === 'AbortError' || abortController.signal.aborted) {
-        // Request dibatalkan oleh pencarian baru atau navigasi, abaikan error
-        return;
-      }
-      console.error('Failed to load live chat conversations:', err);
-      setErrorMessage(err.message || 'Gagal memuat percakapan.');
-    } finally {
-      if (reset && loadChatsAbortControllerRef.current === abortController) {
-        loadChatsAbortControllerRef.current = null;
-      }
-      loadingMoreRef.current = false;
-      setLoadingMore(false);
-      setIsSearching(false);
-      setLoading(false);
-    }
-  };
-
-  // Refresh SATU item percakapan dari server (tanpa menggeser offset paginasi sidebar).
-  // Dipakai untuk aksi yang mengubah state satu chat (takeover/release) agar data
-  // server (mis. humanHandlingSince) tersinkron tanpa `loadChats(true/false)`.
-  const refreshChatItem = useCallback(async (conversationId: string) => {
-    try {
-      const res = await apiRequest(`/api/admin/live-chat/conversations/${conversationId}`);
-      const item = res?.data;
-      if (!item) return;
-      const updated = chatsRef.current.map((c) =>
-        c.conversationId === conversationId ? { ...c, ...item } : c
-      );
-      chatsRef.current = updated;
-      startTransition(() => setChats(updated));
-    } catch {
-      // Biarkan optimistic state bila detail gagal diambil (mis. offline).
-    }
-  }, []);
-
-  // Sinkronisasi badge unread GLOBAL (bukan 50 item yang sudah ditarik ke browser).
-  // Debounced agar SSE storm (pesan masuk beruntun) tidak membanjiri endpoint.
-  const unreadCountFetchTimerRef = useRef<any>(null);
-  const refreshTotalUnread = useCallback((immediate = false) => {
-    if (unreadCountFetchTimerRef.current) {
-      clearTimeout(unreadCountFetchTimerRef.current);
-    }
-    const run = async () => {
-      try {
-        const res = await apiRequest('/api/admin/live-chat/unread-count');
-        const count = typeof res?.count === 'number' ? res.count : (typeof res === 'number' ? res : 0);
-        startTransition(() => setTotalUnreadCount(count));
-      } catch {
-        // Biarkan nilai lama saat offline; jangan reset ke 0 agar badge tidak berkedip.
-      }
-    };
-    if (immediate) {
-      void run();
-    } else {
-      unreadCountFetchTimerRef.current = setTimeout(run, 1500);
-    }
-  }, []);
-
-  useEffect(() => {
-    refreshTotalUnread(true);
-  }, [refreshTotalUnread]);
-
-  const handleSyncHistory = async (offset = 0) => {
-    setSyncingHistory(true);
-    try {
-      const res = await apiRequest('/api/admin/live-chat/sync-history', {
-        method: 'POST',
-        body: JSON.stringify({ limit: 50, offset }),
-        timeoutMs: 120000,
-      });
-      const data = res?.data || res;
-      if (!data || data.success === false) {
-        throw new Error(data?.error || 'Sync history gagal.');
-      }
-      setSyncNextOffset(data.hasMore ? data.nextOffset : null);
-      setSyncProgress(
-        `Sync selesai: ${data.syncedChats} chat diproses (${data.syncedMessages} pesan baru) dari total ${data.totalChats}${data.hasMore ? ' — klik Load More untuk lanjut' : ''}`
-      );
-      loadChats(true);
-      toast(`Sync history: ${data.syncedMessages} pesan dari ${data.syncedChats} chat ditambahkan.`, 'success');
-    } catch (err: any) {
-      toast(`Sync history gagal: ${err.message}`, 'error');
-    } finally {
-      setSyncingHistory(false);
-    }
-  };
-
-  const loadThread = async (conversationId: string, focusMessageId?: string) => {
-    const reqId = ++activeThreadRequestIdRef.current;
-    const effectiveFocus = focusMessageId || pendingFocusMessageIdRef.current || undefined;
-    if (focusMessageId) pendingFocusMessageIdRef.current = focusMessageId;
-    // Issue 160 flash-spinner guard: refresh percakapan yang SAMA (SSE reconnect / refresh
-    // manual) TIDAK boleh menyembunyikan bubble yang sudah tampil di balik spinner.
-    // Spinner hanya untuk pergantian percakapan atau muat pertama.
-    const isRefreshSameThread = isSameConversation(loadedThreadConvIdRef.current, conversationId);
-    if (!isRefreshSameThread) {
-      setIsThreadLoading(true);
-    }
-    // Reset cursor pagination setiap ganti/refresh percakapan
-    setHasMoreOlderMessages(false);
-    setIsLoadingOlder(false);
-    oldestMessageCursorRef.current = null;
-    try {
-      const focusQs = effectiveFocus ? `&focusMessageId=${encodeURIComponent(effectiveFocus)}` : '';
-      const res = await apiRequest(`/api/admin/live-chat/conversations/${conversationId}/messages?limit=50${focusQs}`);
-      if (activeThreadRequestIdRef.current !== reqId || selectedIdRef.current !== conversationId) {
-        return;
-      }
-      const list: ChatMessage[] = Array.isArray(res) ? res : (res?.data || []);
-      setHasMoreOlderMessages(!!(res as any)?.hasMore);
-      const cursor = (res as any)?.oldestCursor as string | undefined;
-      // Fallback cursor komposit (created_at|id) — paritas dengan backend T-09.
-      const firstLoaded = list[0] as any;
-      oldestMessageCursorRef.current = cursor || (firstLoaded ? `${firstLoaded.created_at}|${firstLoaded.id}` : null);
-      
-      // Client-side deduplication — hanya duplikat nyata: id/wa_message_id sama, atau teks identik <2s, atau media URL sama <2s. Dua foto berbeda tidak pernah dianggap duplikat.
-      // AUDIT FASE 5: dedupe berbasis ID saja (bukan teks+2 detik) agar pesan
-      // sah yang dikirim beruntun tidak hilang dari riwayat.
-      const deduped: ChatMessage[] = dedupeThreadMessages(list);
-
-      if (activeThreadRequestIdRef.current === reqId && selectedIdRef.current === conversationId) {
-        const mappedMessages = deduped.map((m) => ({
-          ...m,
-          is_message_pinned: !!(m.is_message_pinned || (m as any).payload_raw?.is_pinned),
-          is_message_hidden: !!(m.is_message_hidden || (m as any).payload_raw?.is_hidden),
-          pinned_by: m.pinned_by || (m as any).payload_raw?.pinned_by || null,
-          pinned_at: m.pinned_at || (m as any).payload_raw?.pinned_at || null,
-          hidden_by: m.hidden_by || (m as any).payload_raw?.hidden_by || null,
-          hidden_at: m.hidden_at || (m as any).payload_raw?.hidden_at || null,
-          media: extractMedia(m),
-          location: (m as any).location || extractLocation(m),
-          quoted_message: extractQuotedMessage(m),
-        }));
-        setMessages(mappedMessages);
-        setThreadLoadError(null);
-
-        // Inisialisasi pinnedBubble dari response API atau cari di list pesan
-        if (res?.pinnedMessage) {
-          setPinnedBubble(res.pinnedMessage);
-        } else {
-          const foundPinned = mappedMessages.find((m) => m.is_message_pinned);
-          if (foundPinned) {
-            setPinnedBubble({
-              id: foundPinned.id,
-              wa_message_id: foundPinned.wa_message_id,
-              content: foundPinned.content,
-              sender_name: foundPinned.sender_name,
-              sender_type: foundPinned.sender_type,
-              created_at: foundPinned.created_at,
-              pinned_by: foundPinned.pinned_by,
-              pinned_at: foundPinned.pinned_at,
-            });
-          } else {
-            setPinnedBubble(null);
-          }
-        }
-
-        loadedThreadConvIdRef.current = conversationId; // Issue 160: tandai thread ini sudah termuat
-        // Direct jump: DOM #msg-<focus> sudah ada setelah batch focus-window termuat.
-        if (effectiveFocus) {
-          pendingFocusMessageIdRef.current = null;
-          setHighlightedMsgId(effectiveFocus);
-          setTimeout(() => scrollToMessage(effectiveFocus, true), 80);
-          setTimeout(() => scrollToMessage(effectiveFocus, true), 350);
-        }
-      }
-    } catch (err: any) {
-      if (activeThreadRequestIdRef.current === reqId && selectedIdRef.current === conversationId) {
-        console.error('Failed to load conversation thread:', err);
-        // Pertahankan bubble yang sudah tampil jika ini refresh thread yang sama;
-        // hanya kosongkan saat pergantian percakapan (hindari ilusi "riwayat hilang").
-        if (!isRefreshSameThread) setMessages([]);
-        setThreadLoadError(err?.message || 'Gagal memuat riwayat chat.');
-      }
-    } finally {
-      if (activeThreadRequestIdRef.current === reqId && selectedIdRef.current === conversationId) {
-        setIsThreadLoading(false);
-      }
-    }
-  };
-
-  // Muat batch riwayat lama (cursor pagination) + scroll anchoring agar posisi baca tidak melonjak
-  const loadOlderMessages = async () => {
-    const conversationId = selectedIdRef.current;
-    const el = chatContainerRef.current;
-    if (!conversationId || !el || isLoadingOlder || !hasMoreOlderMessages || !oldestMessageCursorRef.current) {
-      return;
-    }
-    setIsLoadingOlder(true);
-    const prevScrollHeight = el.scrollHeight;
-    const prevScrollTop = el.scrollTop;
-    try {
-      const res = await apiRequest(
-        `/api/admin/live-chat/conversations/${conversationId}/messages?limit=50&before=${encodeURIComponent(oldestMessageCursorRef.current)}`
-      );
-      if (selectedIdRef.current !== conversationId) return;
-      const older: ChatMessage[] = Array.isArray(res) ? res : (res?.data || []);
-      setHasMoreOlderMessages(!!(res as any)?.hasMore);
-      const cursor = (res as any)?.oldestCursor as string | undefined;
-      if (older.length > 0) {
-        const firstOlder = older[0] as any;
-        oldestMessageCursorRef.current = cursor || (firstOlder ? `${firstOlder.created_at}|${firstOlder.id}` : oldestMessageCursorRef.current);
-        const mapped = older.map((m) => ({ ...m, media: extractMedia(m), location: (m as any).location || extractLocation(m), quoted_message: extractQuotedMessage(m) }));
-        setMessages((prev) => {
-          const seen = new Set(prev.map((m) => String(m.id)));
-          const fresh = mapped.filter((m) => {
-            const wa = String((m as any).wa_message_id || (m as any).waMessageId || '');
-            if (seen.has(String(m.id))) return false;
-            if (wa && prev.some((p) => String((p as any).wa_message_id || (p as any).waMessageId || '') === wa)) return false;
-            return true;
-          });
-          return [...fresh, ...prev];
-        });
-      } else if (!(res as any)?.hasMore) {
-        setHasMoreOlderMessages(false);
-      }
-      // Scroll anchoring: kompensasi selisih tinggi agar pandangan tetap di pesan yang sama
-      requestAnimationFrame(() => {
-        const target = chatContainerRef.current;
-        if (target && selectedIdRef.current === conversationId) {
-          target.scrollTop = prevScrollTop + (target.scrollHeight - prevScrollHeight);
-        }
-      });
-    } catch (err: any) {
-      console.error('Failed to load older messages:', err);
-    } finally {
-      if (selectedIdRef.current === conversationId) {
-        setIsLoadingOlder(false);
-      }
-    }
-  };
-
-  // Deep search: muat batch riwayat lama hingga kata kunci ditemukan / riwayat habis
-  const handleDeepSearchInHistory = async () => {
-    const conversationId = selectedIdRef.current;
-    const q = effectiveInChatQuery;
-    if (!conversationId || !q || isDeepSearching || isLoadingOlder) return;
-    setIsDeepSearching(true);
-    try {
-      let cursor = oldestMessageCursorRef.current;
-      let guard = 0;
-      while (cursor && guard < 20) {
-        guard++;
-        const res = await apiRequest(
-          `/api/admin/live-chat/conversations/${conversationId}/messages?limit=50&before=${encodeURIComponent(cursor)}`
-        );
-        if (selectedIdRef.current !== conversationId) return;
-        const batch: ChatMessage[] = Array.isArray(res) ? res : (res?.data || []);
-        const hasMore = !!(res as any)?.hasMore;
-        const nextCursor = (res as any)?.oldestCursor as string | undefined;
-        if (batch.length === 0) {
-          setHasMoreOlderMessages(hasMore);
-          if (!hasMore) oldestMessageCursorRef.current = null;
-          break;
-        }
-        const firstBatch = batch[0] as any;
-        cursor = nextCursor || (firstBatch ? `${firstBatch.created_at}|${firstBatch.id}` : null);
-        oldestMessageCursorRef.current = cursor;
-        setHasMoreOlderMessages(hasMore);
-        const mapped = batch.map((m) => ({ ...m, media: extractMedia(m), quoted_message: extractQuotedMessage(m) }));
-        setMessages((prev) => {
-          const seen = new Set(prev.map((m) => String(m.id)));
-          const fresh = mapped.filter((m) => {
-            const wa = String((m as any).wa_message_id || (m as any).waMessageId || '');
-            if (seen.has(String(m.id))) return false;
-            if (wa && prev.some((p) => String((p as any).wa_message_id || (p as any).waMessageId || '') === wa)) return false;
-            return true;
-          });
-          return [...fresh, ...prev];
-        });
-        if (batch.some((m) => ((m as any)?.content || '').toLowerCase().includes(q))) break;
-        if (!hasMore) break;
-      }
-    } catch (err: any) {
-      console.error('Failed deep search history:', err);
-    } finally {
-      if (selectedIdRef.current === conversationId) {
-        setIsDeepSearching(false);
-      }
-    }
-  };
-
-  const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
-  const [isDesktop, setIsDesktop] = useState(() => typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
-  // Refs mirror agar SSE closure (mount sekali) melihat nilai terbaru mobileView/isDesktop untuk unread badge
-  const mobileViewRef = useRef<'list' | 'chat'>('list');
-  const isDesktopRef = useRef<boolean>(typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
-  useEffect(() => { mobileViewRef.current = mobileView; }, [mobileView]);
-  useEffect(() => { isDesktopRef.current = isDesktop; }, [isDesktop]);
-
-  // AUDIT FASE 2 (T-08): restore sessionStorage HANYA saat bootstrap awal.
-  // Sebelumnya setiap back (URL tanpa conversationId) membuka chat lagi dari
-  // sessionStorage sehingga tombol back terasa tidak berfungsi.
-  const hasBootstrappedViewRef = useRef(false);
-  const prevUrlConvIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    try {
-      const urlConvId = searchParams.get('conversationId') || searchParams.get('id');
-      const prevUrlConvId = prevUrlConvIdRef.current;
-      prevUrlConvIdRef.current = urlConvId;
-      if (!hasBootstrappedViewRef.current) {
-        hasBootstrappedViewRef.current = true;
-        const savedView = sessionStorage.getItem('liveChat:mobileView');
-        const savedId = sessionStorage.getItem('liveChat:selectedId');
-        if (urlConvId) {
-          setSelectedId(urlConvId);
-          selectedIdRef.current = urlConvId;
-          setMobileView('chat');
-        } else if (savedView === 'chat' && savedId) {
-          setSelectedId(savedId);
-          selectedIdRef.current = savedId;
-          setMobileView('chat');
-        } else {
-          setMobileView('list');
-          if (typeof window !== 'undefined' && window.innerWidth < 1024) {
-            setSelectedId(null);
-            selectedIdRef.current = null;
-            sessionStorage.removeItem('liveChat:selectedId');
-          }
-        }
-        return;
-      }
-
-      // Perubahan URL berikutnya = navigasi in-app / tombol back browser.
-      const transition = resolveUrlViewTransition(prevUrlConvId, urlConvId);
-      if (transition === 'open' && urlConvId) {
-        setSelectedId(urlConvId);
-        selectedIdRef.current = urlConvId;
-        setMobileView('chat');
-      } else if (transition === 'close') {
-        // Khusus transisi "ada conversationId → tidak ada" (tombol back).
-        // Perubahan param lain (mis. ?action=export) TIDAK boleh menutup chat.
-        setSelectedId(null);
-        selectedIdRef.current = null;
-        setMobileView('list');
-        isChatHistoryPushedRef.current = false;
-        try { sessionStorage.removeItem('liveChat:selectedId'); } catch {}
-      }
-    } catch {}
-  }, [searchParams]);
 
   useEffect(() => {
     try { sessionStorage.setItem('liveChat:mobileView', mobileView); } catch {}
@@ -1733,89 +552,60 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     return () => mql.removeEventListener('change', handler);
   }, []);
 
-  // Focus restoration: jika search input fokus sebelum re-render (loadChats/SSE), restore fokusnya
+  useEffect(() => {
+    const saveCurrentDraft = () => {
+      if (selectedIdRef.current) {
+        const currentText = replyTextRef.current || '';
+        if (currentText.trim()) {
+          saveConversationDraft(selectedIdRef.current, currentText);
+        }
+      }
+    };
+    window.addEventListener('beforeunload', saveCurrentDraft);
+    window.addEventListener('pagehide', saveCurrentDraft);
+    return () => {
+      saveCurrentDraft();
+      if (draftListTimerRef.current) clearTimeout(draftListTimerRef.current);
+      window.removeEventListener('beforeunload', saveCurrentDraft);
+      window.removeEventListener('pagehide', saveCurrentDraft);
+    };
+  }, []);
+
   useEffect(() => {
     if (searchInputFocusedRef.current && searchInputRef.current) {
       searchInputRef.current.focus();
     }
   });
 
-  const scrollToBottom = useCallback((smooth = false, force = false) => {
-    const el = chatContainerRef.current;
-    if (!el) return;
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    const isNearBottom = distanceFromBottom < 300;
-    if (!isNearBottom && !force) return;
-    wasNearBottomRef.current = true;
-    const doScroll = () => {
-      if (chatContainerRef.current) {
-        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight + 99999;
-      }
-      if ((isNearBottom || force) && messagesEndRef.current) {
-        messagesEndRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'end' });
-      }
-    };
-    doScroll();
-    requestAnimationFrame(doScroll);
-    if (force) {
-      setTimeout(doScroll, 60);
-      setTimeout(doScroll, 150);
-    }
-  }, []);
-
-  const scrollToMessage = useCallback((msgId: string, smooth = true) => {
-    setHighlightedMsgId(msgId);
-    const doScroll = () => {
-      const el = document.getElementById(`msg-${msgId}`);
-      if (el) {
-        el.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'center' });
-      }
-    };
-    doScroll();
-    requestAnimationFrame(doScroll);
-    setTimeout(doScroll, 40);
-    setTimeout(doScroll, 120);
-    setTimeout(doScroll, 300);
-
-    // Hilangkan flash highlight setelah 3.5 detik
-    setTimeout(() => {
-      setHighlightedMsgId((prev) => (prev === msgId ? null : prev));
-    }, 3500);
-  }, []);
-
-  // 📱 Visual Viewport API: throttle 200ms + cek nearBottom untuk hindari goyang saat ketik
+  // Visual Viewport API: throttle 200ms
   useEffect(() => {
     if (typeof window === 'undefined' || !window.visualViewport) return;
     let throttleTimer: any = null;
     let lastVpHeight = window.visualViewport?.height || 0;
     const handleViewportChange = () => {
       if (mobileView !== 'chat') return;
-      // hanya scroll jika tinggi viewport berubah signifikan (>80px = keyboard open/close), bukan tiap karakter
       const newH = window.visualViewport?.height || 0;
       if (Math.abs(newH - lastVpHeight) < 80) return;
       lastVpHeight = newH;
       if (throttleTimer) return;
       throttleTimer = setTimeout(() => {
         throttleTimer = null;
-        scrollToBottom(true, false); // false = hanya jika nearBottom
+        scrollToBottom(true, false);
       }, 200);
     };
     const vp = window.visualViewport;
     vp.addEventListener('resize', handleViewportChange);
-    // scroll event tidak perlu, hanya resize untuk keyboard
     return () => {
       vp.removeEventListener('resize', handleViewportChange);
       if (throttleTimer) clearTimeout(throttleTimer);
     };
   }, [mobileView, scrollToBottom]);
 
-  // ⬅️ Listener untuk Edge Swipe-Back Navigation dari Layout (Kembali dari Chat ke List di Mobile)
+  // Swipe-back listener from Layout
   useEffect(() => {
     const handleAppSwipeBack = (e: Event) => {
-      // Prioritas 1: Tutup modal/popup/menu jika sedang terbuka di mobile
       if (contextMenu) { setContextMenu(null); e.preventDefault(); return; }
       if (labelPopoverOpen) { setLabelPopoverOpen(false); e.preventDefault(); return; }
-      // Popover composer (tools/emoji/quick-reply) dimiliki LiveChatComposer.
       if (composerRef.current) {
         composerRef.current.closePopovers();
       }
@@ -1827,7 +617,6 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       if (showSyncInfoModal) { setShowSyncInfoModal(false); e.preventDefault(); return; }
       if (selectedReservation) { setSelectedReservation(null); e.preventDefault(); return; }
 
-      // Prioritas 2: Jika di tampilan chat mobile, kembali ke list
       if (mobileView === 'chat') {
         e.preventDefault();
         handleBackToList();
@@ -1847,55 +636,23 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     selectedReservation,
   ]);
 
-  // 📱 Listener untuk Default Android Back button & popstate history navigation
+  // Popstate history navigation
   useEffect(() => {
     const handlePopState = (_e: PopStateEvent) => {
-      // Prioritas 1: Tutup menu konteks / modal / popup yang sedang aktif terlebih dahulu
-      if (contextMenu) {
-        setContextMenu(null);
-        return;
-      }
-      if (labelPopoverOpen) {
-        setLabelPopoverOpen(false);
-        return;
-      }
-      // Popover composer (tools/emoji/quick-reply) dimiliki LiveChatComposer.
-      if (composerRef.current) {
-        composerRef.current.closePopovers();
-      }
-      if (customerDetailModalOpen) {
-        setCustomerDetailModalOpen(false);
-        return;
-      }
-      if (customerDetailEditMode) {
-        setCustomerDetailEditMode(false);
-        return;
-      }
-      if (showQuickBookingModal) {
-        setShowQuickBookingModal(false);
-        return;
-      }
-      if (showInvoiceModal) {
-        setShowInvoiceModal(false);
-        return;
-      }
-      if (showSyncInfoModal) {
-        setShowSyncInfoModal(false);
-        return;
-      }
-      if (selectedReservation) {
-        setSelectedReservation(null);
-        return;
-      }
+      if (contextMenu) { setContextMenu(null); return; }
+      if (labelPopoverOpen) { setLabelPopoverOpen(false); return; }
+      if (composerRef.current) { composerRef.current.closePopovers(); }
+      if (customerDetailModalOpen) { setCustomerDetailModalOpen(false); return; }
+      if (customerDetailEditMode) { setCustomerDetailEditMode(false); return; }
+      if (showQuickBookingModal) { setShowQuickBookingModal(false); return; }
+      if (showInvoiceModal) { setShowInvoiceModal(false); return; }
+      if (showSyncInfoModal) { setShowSyncInfoModal(false); return; }
+      if (selectedReservation) { setSelectedReservation(null); return; }
 
-      // AUDIT FASE 2 (T-08): gunakan URL sebagai sumber kebenaran, bukan state
-      // history karangan. Jika URL masih membawa conversationId (mis. pop dari
-      // entri modal), chat HARUS tetap terbuka.
       const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
       const urlConvId = params?.get('conversationId') || params?.get('id');
       if (urlConvId) return;
 
-      // Prioritas 2: Jika di tampilan chat mobile, kembali ke list.
       isChatHistoryPushedRef.current = false;
       if (mobileView === 'chat') {
         setMobileView('list');
@@ -1917,9 +674,6 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     selectedReservation,
   ]);
 
-  // Saat pindah percakapan, reset in-chat search agar banner tidak persisten.
-  // PENGECUALIAN: bila ini direct-jump dari hasil pencarian sidebar, JANGAN hapus
-  // highlight target (loadThread akan menyetelnya kembali) agar highlight tidak hilang.
   useEffect(() => {
     setMatchingMessageIds([]);
     setCurrentMatchIndex(-1);
@@ -1927,7 +681,6 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     setHighlightedMsgId(null);
   }, [selectedId]);
 
-  // Hitung daftar matching message IDs dalam thread percakapan aktif — minimal 2 karakter agar tidak spam untuk nomor pendek
   useEffect(() => {
     const q = effectiveInChatQuery;
     if (!q || messages.length === 0) {
@@ -1947,129 +700,12 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     }
   }, [effectiveInChatQuery, messages]);
 
-  const handlePrevMatch = () => {
-    if (matchingMessageIds.length === 0) return;
-    const newIdx = currentMatchIndex > 0 ? currentMatchIndex - 1 : matchingMessageIds.length - 1;
-    setCurrentMatchIndex(newIdx);
-    const targetId = matchingMessageIds[newIdx];
-    if (targetId) scrollToMessage(targetId, true);
-  };
-
-  const handleNextMatch = () => {
-    if (matchingMessageIds.length === 0) return;
-    const newIdx = currentMatchIndex < matchingMessageIds.length - 1 ? currentMatchIndex + 1 : 0;
-    setCurrentMatchIndex(newIdx);
-    const targetId = matchingMessageIds[newIdx];
-    if (targetId) scrollToMessage(targetId, true);
-  };
-
-  const handleClearInChatSearch = () => {
-    setInChatSearchQuery('');
-    setDebouncedInChatQuery('');
-    setInChatSearchOpen(false);
-    setMatchingMessageIds([]);
-    setCurrentMatchIndex(-1);
-    setHighlightedMsgId(null);
-    scrollToBottom(true, true);
-  };
-
-  useEffect(() => {
-    if (messages.length > 0) {
-      const q = effectiveInChatQuery;
-      if (q) {
-        if (lastScrolledInChatQueryRef.current !== q) {
-          const matches = messages
-            .filter((m) => m.content && m.content.toLowerCase().includes(q))
-            .map((m) => m.id);
-          if (matches.length > 0) {
-            const targetId = matches[matches.length - 1];
-            lastScrolledInChatQueryRef.current = q;
-            scrollToMessage(targetId, false);
-            return;
-          }
-          // Belum ada match di batch saat ini (mungkin di riwayat lama) — jangan tandai scrolled agar retry saat history termuat
-        }
-        // In-chat search aktif: jangan paksa scroll ke bawah saat SSE/pagination menambah pesan
-        return;
-      } else {
-        lastScrolledInChatQueryRef.current = '';
-      }
-      // Direct-jump aktif: scroll ke target pesan ditangani loadThread (scrollToMessage).
-      // Jangan paksa scroll ke bottom/posisi tersimpan agar target tidak terpental.
-      if (pendingFocusMessageIdRef.current || highlightedMsgId) {
-        isInitialMessagesLoadRef.current = false;
-        return;
-      }
-      if (isInitialMessagesLoadRef.current) {
-        if (!wasNearBottomRef.current && savedScrollTopRef.current !== null) {
-          // Pulihkan posisi scroll tersimpan (user sebelumnya sedang membaca pesan lama di atas)
-          const targetScroll = savedScrollTopRef.current;
-          const restoreScroll = () => {
-            if (chatContainerRef.current) {
-              chatContainerRef.current.scrollTop = targetScroll;
-            }
-          };
-          restoreScroll();
-          requestAnimationFrame(restoreScroll);
-          setTimeout(restoreScroll, 50);
-          setTimeout(restoreScroll, 150);
-        } else {
-          scrollToBottom(false, true);
-        }
-        isInitialMessagesLoadRef.current = false;
-      } else {
-        scrollToBottom(false, false);
-      }
-    }
-  }, [messages, selectedId, effectiveInChatQuery, scrollToBottom, scrollToMessage]);
-
-  // Auto-deep-search: kata kunci di riwayat lama dicari otomatis di latar tanpa klik manual.
-  // Berhenti otomatis begitu kecocokan pertama ditemukan (via efek scroll di atas).
-  useEffect(() => {
-    if (!effectiveInChatQuery || selectedId == null) {
-      autoDeepSearchDoneRef.current = '';
-      return;
-    }
-    // Issue 160-4: saat keyword berasal dari pencarian daftar (bukan toolbar in-chat),
-    // pastikan toolbar pencarian dalam-chat terbuka otomatis agar banner hasil &
-    // navigasi match tampil tanpa perlu klik manual lagi.
-    if (!inChatSearchOpen) {
-      setInChatSearchOpen(true);
-    }
-    if (
-      matchingMessageIds.length === 0 &&
-      hasMoreOlderMessages &&
-      !isDeepSearching &&
-      !isLoadingOlder &&
-      !isThreadLoading &&
-      messages.length > 0 &&
-      autoDeepSearchDoneRef.current !== `${selectedId}:${effectiveInChatQuery}`
-    ) {
-      autoDeepSearchDoneRef.current = `${selectedId}:${effectiveInChatQuery}`;
-      void handleDeepSearchInHistory();
-    }
-  }, [effectiveInChatQuery, matchingMessageIds.length, hasMoreOlderMessages, isDeepSearching, isLoadingOlder, isThreadLoading, messages.length, selectedId, inChatSearchOpen]);
-
-  const sortChats = (list: LiveChatItem[]): LiveChatItem[] => {
-    return [...list].sort((a, b) => {
-      if (!!a.isPinned !== !!b.isPinned) return a.isPinned ? -1 : 1;
-      return new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime();
-    });
-  };
-
-  // Close context menu ONLY on outside click. Scroll listener `capture=true`
-  // DILARANG di sini: ia mencegat scroll internal daftar label (max-h-36/32)
-  // sehingga modal lenyap saat digulir (desktop wheel & swipe mobile).
   useEffect(() => {
     const handleClose = () => setContextMenu(null);
     window.addEventListener('click', handleClose);
-    return () => {
-      window.removeEventListener('click', handleClose);
-    };
+    return () => window.removeEventListener('click', handleClose);
   }, []);
 
-  // Body scroll lock + Escape saat context menu aktif: kunci scroll latar agar
-  // halaman di belakang tidak bergeser; kompensasi lebar scrollbar anti layout-shift.
   useEffect(() => {
     if (!contextMenu) return;
     const originalOverflow = document.body.style.overflow;
@@ -2090,177 +726,6 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
     };
   }, [contextMenu]);
 
-  const handleTogglePin = async (chat: LiveChatItem) => {
-    setContextMenu(null);
-    const newPinned = !chat.isPinned;
-    try {
-      await apiRequest(`/api/admin/conversations/${chat.conversationId}/pin`, {
-        method: 'PATCH',
-        body: JSON.stringify({ isPinned: newPinned }),
-      });
-      setChats((prev) => {
-        const updated = prev.map((c) =>
-          c.conversationId === chat.conversationId ? { ...c, isPinned: newPinned } : c
-        );
-        const sorted = sortChats(updated);
-        chatsRef.current = sorted;
-        return sorted;
-      });
-      toast(newPinned ? 'Percakapan disematkan di atas.' : 'Sematan percakapan dilepas.', 'success');
-    } catch (err: any) {
-      toast(`Gagal mengubah status sematan: ${err.message}`, 'error');
-    }
-  };
-
-  const handleToggleReadStatus = async (chat: LiveChatItem) => {
-    setContextMenu(null);
-    const isCurrentlyUnread = (chat.unreadCount || 0) > 0 || chat.isManualUnread;
-    const targetEndpoint = isCurrentlyUnread ? 'read' : 'unread';
-    try {
-      const res = await apiRequest(`/api/admin/conversations/${chat.conversationId}/${targetEndpoint}`, {
-        method: 'PATCH',
-      });
-      // T-01: jangan menampilkan status palsu bila DB belum tersinkron.
-      if ((res as any)?.degraded) {
-        toast('Status baca belum tersinkron ke database. Data dimuat ulang dari server.', 'info');
-        void refreshChatItem(chat.conversationId);
-        refreshTotalUnread(true);
-        return;
-      }
-      setChats((prev) => {
-        const updated = prev.map((c) => {
-          if (c.conversationId !== chat.conversationId) return c;
-          if (targetEndpoint === 'read') {
-            return { ...c, unreadCount: 0, isManualUnread: false, isAwaitingReply: false };
-          } else {
-            return { ...c, unreadCount: 1, isManualUnread: true, isAwaitingReply: false };
-          }
-        });
-        chatsRef.current = updated;
-        return updated;
-      });
-      refreshTotalUnread();
-      toast(
-        targetEndpoint === 'unread' ? 'Ditandai belum dibaca (Hijau Tua).' : 'Ditandai sudah dibaca.',
-        'success'
-      );
-    } catch (err: any) {
-      toast(`Gagal mengubah status dibaca: ${err.message}`, 'error');
-    }
-  };
-
-  const handleDismissFrustration = async (chat: LiveChatItem) => {
-    setContextMenu(null);
-    try {
-      await apiRequest(`/api/admin/live-chat/conversations/${chat.conversationId}/dismiss-frustration`, {
-        method: 'PATCH',
-      });
-      setChats((prev) => {
-        const updated = prev.map((c) =>
-          c.conversationId === chat.conversationId
-            ? { ...c, isFrustrated: false, frustratedAt: null, frustratedReason: null }
-            : c
-        );
-        chatsRef.current = updated;
-        return updated;
-      });
-      toast('Peringatan SLA dipadamkan.', 'success');
-    } catch (err: any) {
-      toast(`Gagal memadamkan peringatan SLA: ${err.message}`, 'error');
-    }
-  };
-
-  const handleMarkAllAsRead = async () => {
-    const confirmed = await confirm({
-      title: 'Tandai Semua Telah Dibaca',
-      message: 'Tandai semua pesan dari seluruh pelanggan sebagai telah dibaca?',
-      confirmText: 'Tandai Semua Dibaca',
-      cancelText: 'Batal',
-    });
-    if (!confirmed) return;
-    try {
-      const res = await apiRequest('/api/admin/live-chat/mark-all-read', { method: 'POST' });
-      // T-01: jangan nol-kan badge bila DB belum benar-benar tersinkron.
-      if ((res as any)?.degraded) {
-        toast('Perintah diterima, tetapi status baca belum tersinkron ke database. Muat ulang setelah koneksi pulih.', 'info');
-        void loadChats(true);
-        refreshTotalUnread(true);
-        return;
-      }
-      const updatedChats = chatsRef.current.map((c) => ({
-        ...c,
-        unreadCount: 0,
-        isManualUnread: false,
-      }));
-      setChats(updatedChats);
-      chatsRef.current = updatedChats;
-      setTotalUnreadCount(0);
-      toast('Semua percakapan berhasil ditandai telah dibaca!', 'success');
-    } catch (err: any) {
-      toast(`Gagal menandai semua dibaca: ${err.message}`, 'error');
-    }
-  };
-
-  const handleSelect = (conversationId: string) => {
-    // 2.4/1.2: batalkan typing di percakapan lama sebelum pindah
-    // (timer debounce dimiliki composer; ganti conversationId menghentikannya).
-    if (selectedIdRef.current && selectedIdRef.current !== conversationId && isTypingActiveRef.current) {
-      try { notifyTyping(false); } catch {}
-    }
-    isTypingActiveRef.current = false;
-
-    // Simpan posisi scroll percakapan lama sebelum berpindah ke percakapan baru
-    if (selectedIdRef.current && chatContainerRef.current) {
-      const el = chatContainerRef.current;
-      const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-      saveConversationScroll(selectedIdRef.current, el.scrollTop, distance < 300);
-    }
-
-    const targetChatPre = chatsRef.current.find((c) => c.conversationId === conversationId);
-    if (targetChatPre && customerDetailData && customerDetailData.id !== targetChatPre.customerId) {
-      setCustomerDetailData(null);
-    }
-    setSelectedId(conversationId);
-    selectedIdRef.current = conversationId;
-    setMobileView('chat');
-    try {
-      sessionStorage.setItem('liveChat:selectedId', conversationId);
-      sessionStorage.setItem('liveChat:mobileView', 'chat');
-      // AUDIT FASE 2 (T-08): SATU entri history saja. Sebelumnya pushState manual
-      // dilanjutkan setSearchParams → 2 entri per chat, sehingga tombol back harus
-      // ditekan 2× dan forward history hilang.
-      setSearchParams({ conversationId }, { replace: false });
-      isChatHistoryPushedRef.current = true;
-    } catch {}
-
-    // Auto mark-as-read jika masih ada unread atau isManualUnread.
-    // Kontrak backend: awaiting hanya bila pesan terakhir INBOUND & usia <24 jam.
-    const targetChat = chatsRef.current.find((c) => c.conversationId === conversationId);
-    if (targetChat && ((targetChat.unreadCount || 0) > 0 || targetChat.isManualUnread)) {
-      // AUDIT FASE 2 (T-01): jika backend melaporkan `degraded` (DB tidak
-      // tersinkron), pulihkan angka unread dari server — jangan biarkan UI
-      // mengklaim "sudah dibaca" tetapi badge muncul lagi saat reload.
-      apiRequest(`/api/admin/conversations/${conversationId}/read`, { method: 'PATCH' })
-        .then((res: any) => {
-          if (res?.degraded) void refreshChatItem(conversationId);
-        })
-        .catch(() => { void refreshChatItem(conversationId); });
-      const lastMsg = (targetChat.lastMessages || [])[(targetChat.lastMessages || []).length - 1] as any;
-      const isLastInbound = !!lastMsg && lastMsg.direction === 'INBOUND';
-      const lastAgeOk = !!lastMsg && (Date.now() - new Date(lastMsg.created_at).getTime()) <= 24 * 60 * 60 * 1000;
-      setChats((prev) => {
-        const updated = prev.map((c) =>
-          c.conversationId === conversationId
-            ? { ...c, unreadCount: 0, isManualUnread: false, isAwaitingReply: isLastInbound && lastAgeOk }
-            : c
-        );
-        chatsRef.current = updated;
-        return updated;
-      });
-    }
-  };
-
-  // Global capture listener untuk memblokir total popup native 'Copy / Salin' Android Chrome saat hold-press
   useEffect(() => {
     const handleContextMenuCapture = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null;
@@ -2268,7 +733,6 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         e.preventDefault();
       }
     };
-
     const handleSelectionChange = () => {
       const selection = window.getSelection();
       if (selection && selection.rangeCount > 0) {
@@ -2279,2166 +743,26 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         }
       }
     };
-
     window.addEventListener('contextmenu', handleContextMenuCapture, { capture: true, passive: false });
     document.addEventListener('selectionchange', handleSelectionChange);
-
     return () => {
       window.removeEventListener('contextmenu', handleContextMenuCapture, { capture: true });
       document.removeEventListener('selectionchange', handleSelectionChange);
     };
   }, []);
 
-  // SSE real-time: message.created & conversation.updated
-  useEffect(() => {
-    loadChats(true);
-
-    const unsubscribe = connectLiveChatSse({
-      onStatusChange: (connected) => {
-        const wasDisconnected = !sseConnectedRef.current && connected;
-        setSseConnected(connected);
-        sseConnectedRef.current = connected;
-        if (wasDisconnected) {
-          loadChats(true);
-          refreshTotalUnread(true);
-          if (selectedIdRef.current) {
-            loadThread(selectedIdRef.current);
-          }
-        }
-      },
-      onEvent: (type, payload) => {
-        if (type === 'bot.cutoff_changed' || type === 'BOT_CUTOFF_CHANGED') {
-          // Emergency cut-off change tidak lagi ditampilkan di LiveChat header (internal chatbot)
-          // Tetap sync cache untuk Settings panel jika ada
-          return;
-        }
-        if (type === 'bot.active_changed' || type === 'BOT_ACTIVE_CHANGED') {
-          const active = (payload as any)?.globalBotActive;
-          if (typeof active === 'boolean') {
-            setChatBotActive(active);
-            try { localStorage.setItem('wa_chatbot_active_state', String(active)); } catch {}
-          }
-          return;
-        }
-        if (type === 'conversation.updated' && payload?.allRead) {
-          startTransition(() => setChats((prev) =>
-            prev.map((c) => ({
-              ...c,
-              unreadCount: 0,
-              isManualUnread: false,
-            }))
-          ));
-          setTotalUnreadCount(0);
-          return;
-        }
-
-        if (type === 'message.created') {
-          refreshTotalUnread();
-          const conversationId = payload.conversationId;
-          const msgTime = payload.createdAt || payload.created_at || new Date().toISOString();
-          const rawPayload = payload.payloadRaw || payload.payload_raw || payload.payload;
-          const msg: ChatMessage = {
-            id: payload.messageId || `sse_${Date.now()}`,
-            wa_message_id: payload.waMessageId || payload.wa_message_id || null,
-            direction: payload.direction,
-            content: payload.content || '',
-            sender_type: payload.senderType || payload.sender_type || null,
-            sender_name: payload.senderName || payload.sender_name || null,
-            created_at: msgTime,
-            delivery_status: payload.deliveryStatus || 'sent',
-            media: extractMedia(payload),
-            location: payload.location || extractLocation(payload),
-            quoted_message: extractQuotedMessage(payload),
-            payload_raw: rawPayload,
-          };
-
-          // Append ke thread yang sedang dibuka / replace optimistic message
-          if (selectedIdRef.current === conversationId) {
-            const applyMessageCreated = () => {
-              // User bisa pindah percakapan selama pra-muat berjalan.
-              if (selectedIdRef.current !== conversationId) return;
-              setMessages((prev) => {
-                const mediaUrlOf = (x: ChatMessage) => (x.media as any)?.url || (x.media as any)?.hdUrl || (x.media as any)?.thumbUrl || null;
-                // Cek apakah ada optimistic message (temp_) yang cocok — cocokkan via content identik atau media URL sama
-                const tempIndex = prev.findIndex(
-                  (m) =>
-                    m.id.startsWith('temp_') &&
-                    m.direction === msg.direction &&
-                    (m.content === msg.content || (mediaUrlOf(m) && mediaUrlOf(msg) && mediaUrlOf(m) === mediaUrlOf(msg)))
-                );
-                if (tempIndex !== -1) {
-                  const next = [...prev];
-                  next[tempIndex] = {
-                    ...msg,
-                    id: msg.id || next[tempIndex].id,
-                    media: msg.media || next[tempIndex].media,
-                  };
-                  return next;
-                }
-
-                // Dedupe berbasis identitas saja (pesan identik beruntun tetap tampil).
-                const merged = dedupeThreadMessages([...prev, msg]);
-                if (merged.length === prev.length) return prev;
-                return merged;
-              });
-              optimisticMessageIdsRef.current.clear();
-              setTimeout(() => scrollToBottom(true), 50);
-            };
-
-            // Anti-flash: bubble optimis masih menampilkan blob lokal. Pra-muat
-            // thumbnail server DULU, baru ganti sumbernya → tidak ada overlay "Memuat...".
-            const preloadTarget = (msg.media as any)?.thumbUrl || (msg.media as any)?.url;
-            if (optimisticMessageIdsRef.current.size > 0 && preloadTarget) {
-              void preloadChatImage(preloadTarget).then(applyMessageCreated);
-            } else {
-              applyMessageCreated();
-            }
-          }
-
-          // Update preview daftar
-          const current = chatsRef.current;
-          const existing = current.find((c) => c.conversationId === conversationId);
-          if (existing) {
-            const isMsgInbound = msg.direction === 'INBOUND';
-            const isAdminOutbound = msg.direction === 'OUTBOUND' && (msg.sender_type === 'ADMIN' || (msg as any).senderType === 'ADMIN');
-            const isChatVisuallyActive = isDesktopRef.current || mobileViewRef.current === 'chat';
-            const isCurrentOpen = selectedIdRef.current === conversationId && isChatVisuallyActive;
-            const nextUnread = (isCurrentOpen || isAdminOutbound) ? 0 : (existing.unreadCount || 0) + (isMsgInbound ? 1 : 0);
-
-            const updated = current.map((c) =>
-              c.conversationId !== conversationId
-                ? c
-                : {
-                    ...c,
-                    lastMessageAt: msgTime,
-                    lastMessages: [...(c.lastMessages || []), msg].slice(-3),
-                    unreadCount: nextUnread,
-                    isAwaitingReply: isAdminOutbound ? false : (isCurrentOpen && isMsgInbound),
-                    isManualUnread: isAdminOutbound ? false : c.isManualUnread,
-                    // Pulse alert SLA: balasan admin (dari web mana pun) memadamkan badge seketika.
-                    isFrustrated: isAdminOutbound ? false : c.isFrustrated,
-                    frustratedAt: isAdminOutbound ? null : c.frustratedAt,
-                    frustratedReason: isAdminOutbound ? null : c.frustratedReason,
-                  }
-            );
-            const sorted = sortChats(updated);
-            startTransition(() => setChats(sorted));
-            chatsRef.current = sorted;
-          } else if (shouldReloadForSseEvent(payload, sourceFilterRef.current)) {
-            // Percakapan baru muncul → reload daftar dari awal.
-            // Issue 160: HANYA bila mode event cocok dengan filter aktif — mencegah
-            // thrashing/kedip saat event real masuk di filter Sandbox (dan sebaliknya).
-            loadChats(true);
-          }
-        } else if (type === 'conversation.updated') {
-          refreshTotalUnread();
-          const current = chatsRef.current;
-          if (!current.some((c) => c.conversationId === payload.conversationId)) {
-            if (shouldReloadForSseEvent(payload, sourceFilterRef.current)) {
-              loadChats(true);
-            }
-            return;
-          }
-          const updated = current.map((c) =>
-            c.conversationId === payload.conversationId
-              ? {
-                  ...c,
-                  currentState: payload.currentState ?? c.currentState,
-                  isHumanHandling: payload.isHumanHandling !== undefined ? !!payload.isHumanHandling : c.isHumanHandling,
-                  humanHandlingSince: payload.humanHandlingSince ?? c.humanHandlingSince,
-                  escalationReason: payload.escalationReason ?? c.escalationReason,
-                  isPinned: payload.isPinned !== undefined ? !!payload.isPinned : c.isPinned,
-                  pinnedAt: payload.pinnedAt ?? c.pinnedAt,
-                  unreadCount: payload.unreadCount !== undefined ? payload.unreadCount : c.unreadCount,
-                  isManualUnread: payload.isManualUnread !== undefined ? payload.isManualUnread : c.isManualUnread,
-                  // Pulse alert SLA: satu bentuk payload standar — selalu ikut terpetakan.
-                  isFrustrated: payload.isFrustrated !== undefined ? !!payload.isFrustrated : c.isFrustrated,
-                  frustratedAt: payload.isFrustrated !== undefined ? (payload.frustratedAt ?? null) : c.frustratedAt,
-                  frustratedReason: payload.isFrustrated !== undefined ? (payload.frustratedReason ?? null) : c.frustratedReason,
-                  locationSource: payload.locationSource !== undefined ? payload.locationSource : c.locationSource,
-                  effectiveLocationSource:
-                    payload.effectiveLocationSource !== undefined
-                      ? payload.effectiveLocationSource
-                      : c.effectiveLocationSource,
-                  locationAdequacy:
-                    payload.locationAdequacy !== undefined ? payload.locationAdequacy : c.locationAdequacy,
-                  sharelocNeeded:
-                    payload.sharelocNeeded !== undefined ? payload.sharelocNeeded : c.sharelocNeeded,
-                  shareLocationSent: payload.shareLocationSent !== undefined ? payload.shareLocationSent : c.shareLocationSent,
-                  sharelocRequestedAt: payload.sharelocRequestedAt !== undefined ? payload.sharelocRequestedAt : c.sharelocRequestedAt,
-                  activeConfirmedReservation: payload.activeConfirmedReservation !== undefined ? payload.activeConfirmedReservation : (c as any).activeConfirmedReservation,
-                }
-              : c
-          );
-          const sorted = sortChats(updated);
-          startTransition(() => setChats(sorted));
-          chatsRef.current = sorted;
-          // F-C: bila event untuk chat yang sedang dibuka, segarkan snapshot reservasi
-          if (payload.conversationId && payload.conversationId === selectedIdRef.current) {
-            if (payload.activeConfirmedReservation) {
-              setCustomerDetailData((prev: any) => {
-                if (!prev) return prev;
-                const existing = Array.isArray(prev.reservations) ? prev.reservations : [];
-                const foundIndex = existing.findIndex((r: any) => r.id === payload.activeConfirmedReservation.id);
-                let nextRes: any[];
-                if (foundIndex >= 0) {
-                  nextRes = [...existing];
-                  nextRes[foundIndex] = { ...nextRes[foundIndex], ...payload.activeConfirmedReservation };
-                } else {
-                  nextRes = [payload.activeConfirmedReservation, ...existing];
-                }
-                return { ...prev, reservations: nextRes };
-              });
-            }
-            const now = Date.now();
-            if (now - lastReservationRefreshTimeRef.current >= 1000) {
-              lastReservationRefreshTimeRef.current = now;
-              reservationRefreshRef.current?.();
-            }
-          }
-        } else if (type === 'message.updated' && (payload?.messageId || payload?.waMessageId)) {
-          const { messageId, waMessageId, content, isRevoked, isEdited, isMessagePinned, isMessageHidden, payload_raw } = payload;
-          const matchesUpdated = (m: any) => {
-            if (messageId && (m.id === messageId || m.wa_message_id === messageId)) return true;
-            if (waMessageId && (m.id === waMessageId || m.wa_message_id === waMessageId)) return true;
-            const shortA = messageId ? String(messageId).split('_').pop() : null;
-            if (shortA && m.wa_message_id && String(m.wa_message_id).endsWith(`_${shortA}`)) return true;
-            return false;
-          };
-          if (selectedIdRef.current === payload.conversationId) {
-            setMessages((prev) =>
-              prev.map((m) =>
-                matchesUpdated(m)
-                  ? {
-                      ...m,
-                      content: content !== undefined ? content : m.content,
-                      is_revoked: isRevoked !== undefined ? isRevoked : m.is_revoked,
-                      is_edited: isEdited !== undefined ? isEdited : (m as any).is_edited,
-                      is_message_pinned: isMessagePinned !== undefined ? isMessagePinned : ((m as any).is_message_pinned ?? (m as any).payload_raw?.is_pinned),
-                      is_message_hidden: isMessageHidden !== undefined ? isMessageHidden : ((m as any).is_message_hidden ?? (m as any).payload_raw?.is_hidden),
-                      pinned_by: payload.pinnedBy !== undefined ? payload.pinnedBy : (m.pinned_by || (m as any).payload_raw?.pinned_by),
-                      pinned_at: payload.pinnedAt !== undefined ? payload.pinnedAt : (m.pinned_at || (m as any).payload_raw?.pinned_at),
-                      hidden_by: payload.hiddenBy !== undefined ? payload.hiddenBy : (m.hidden_by || (m as any).payload_raw?.hidden_by),
-                      hidden_at: payload.hiddenAt !== undefined ? payload.hiddenAt : (m.hidden_at || (m as any).payload_raw?.hidden_at),
-                      media: payload.media !== undefined ? payload.media : (m as any).media,
-                      payload_raw: {
-                        ...((m as any).payload_raw || {}),
-                        ...(payload_raw || {}),
-                        ...(payload.media !== undefined ? { media: payload.media } : {}),
-                        ...(isMessagePinned !== undefined ? { is_pinned: isMessagePinned } : {}),
-                        ...(isMessageHidden !== undefined ? { is_hidden: isMessageHidden } : {}),
-                      },
-                    }
-                  : (isMessagePinned ? {
-                      // single-pin: jika pesan lain di-pin di percakapan yang sama, unpin pesan ini
-                      ...m,
-                      is_message_pinned: false,
-                      payload_raw: {
-                        ...((m as any).payload_raw || {}),
-                        is_pinned: false,
-                      },
-                    } : m)
-              )
-            );
-
-            // Sinkronkan state pinnedBubble di header percakapan aktif
-            if (isMessagePinned === true) {
-              setPinnedBubble({
-                id: messageId || waMessageId,
-                wa_message_id: waMessageId || messageId,
-                content: content || 'Pesan yang disematkan',
-                sender_name: payload.sender_name,
-                sender_type: payload.sender_type,
-                created_at: payload.created_at || new Date().toISOString(),
-                pinned_by: payload.pinnedBy,
-                pinned_at: payload.pinnedAt,
-              });
-            } else if (isMessagePinned === false) {
-              setPinnedBubble((current) => {
-                if (!current) return null;
-                const matchId = messageId || waMessageId;
-                if (current.id === matchId || (current.wa_message_id && current.wa_message_id === matchId)) return null;
-                return current;
-              });
-            }
-          }
-        } else if ((type === 'message:reaction' || type === 'message.reaction') && (payload?.messageId || payload?.waMessageId)) {
-          const { messageId, waMessageId, conversationId, reactions } = payload;
-          const idsMatch = (a?: string | null, b?: string | null) => {
-            if (!a || !b) return false;
-            if (a === b) return true;
-            const shortA = String(a).split('_').pop() || a;
-            const shortB = String(b).split('_').pop() || b;
-            return shortA === shortB || String(a).endsWith(String(b)) || String(b).endsWith(String(a));
-          };
-          if (!conversationId || selectedIdRef.current === conversationId) {
-            setMessages((prev) =>
-              prev.map((m) => {
-                if (
-                  (messageId && (m.id === messageId || idsMatch(m.id, messageId) || idsMatch((m as any).wa_message_id, messageId))) ||
-                  (waMessageId && (m.wa_message_id === waMessageId || m.id === waMessageId || idsMatch((m as any).wa_message_id, waMessageId) || idsMatch(m.id, waMessageId)))
-                ) {
-                  return {
-                    ...m,
-                    reactions,
-                    payload_raw: {
-                      ...(typeof m.payload_raw === 'object' && m.payload_raw ? m.payload_raw : {}),
-                      reactions,
-                    },
-                  };
-                }
-                return m;
-              })
-            );
-          }
-        } else if (type === 'message.status_updated' && (payload?.messageId || payload?.waMessageId)) {
-          const { messageId, waMessageId, conversationId, status, deliveredAt, readAt } = payload;
-          if (!conversationId || selectedIdRef.current === conversationId) {
-            setMessages((prev) =>
-              prev.map((m) => {
-                if (
-                  (messageId && m.id === messageId) ||
-                  (waMessageId && (m.wa_message_id === waMessageId || m.id === waMessageId))
-                ) {
-                  return {
-                    ...m,
-                    delivery_status: status,
-                    delivered_at: deliveredAt || m.delivered_at,
-                    read_at: readAt || m.read_at,
-                  };
-                }
-                return m;
-              })
-            );
-          }
-          // Sinkronisasi ticks sidebar: centang di daftar ikut realtime saat ACK tiba.
-          if (conversationId) {
-            const updatedChats = chatsRef.current.map((c) =>
-              c.conversationId !== conversationId
-                ? c
-                : {
-                    ...c,
-                    lastMessages: (c.lastMessages || []).map((m: any) =>
-                      (messageId && (m.id === messageId || m.wa_message_id === messageId)) ||
-                      (waMessageId && (m.wa_message_id === waMessageId || m.id === waMessageId))
-                        ? { ...m, delivery_status: status, delivered_at: deliveredAt || m.delivered_at, read_at: readAt || m.read_at }
-                        : m
-                    ),
-                  }
-            );
-            chatsRef.current = updatedChats;
-            startTransition(() => setChats([...updatedChats]));
-          }
-        } else if (type === ('sync.progress' as any) || payload?.status) {
-          const syncData = payload.payload || payload;
-          if (syncData && typeof syncData.syncedChats === 'number') {
-            setBgSyncProgress((prev) => ({ ...prev, ...syncData }));
-            if (syncData.status === 'completed') {
-              loadChats(true);
-            }
-          }
-        } else if (type === 'customer.location_updated') {
-          const { customerId, reservationId, lat, lng, distanceKm, ongkir, landmark, housePhotoUrl } = payload;
-          if (selectedIdRef.current) {
-            setSelectedReservation((prev: any) => {
-              if (!prev) return prev;
-              const needsUpdate = prev.reservationId === reservationId;
-              if (!needsUpdate) return prev;
-              return {
-                ...prev,
-                lat: lat ?? prev.lat,
-                lng: lng ?? prev.lng,
-                distanceKm: distanceKm ?? prev.distanceKm,
-                ongkir: ongkir ?? prev.ongkir,
-                landmark: landmark ?? prev.landmark,
-                housePhotoUrl: housePhotoUrl ?? prev.housePhotoUrl,
-              };
-            });
-          }
-          // Sinkron kartu sidebar + drawer profil pasien agar jarak & ongkir konsisten
-          // di seluruh permukaan (sidebar, profil, modal reservasi).
-          if (customerId) {
-            const updatedChats = chatsRef.current.map((c) =>
-              c.customerId === customerId
-                ? {
-                    ...c,
-                    distanceKm: distanceKm ?? (c as any).distanceKm,
-                    ongkir: ongkir ?? (c as any).ongkir,
-                    lat: lat ?? (c as any).lat,
-                    lng: lng ?? (c as any).lng,
-                  }
-                : c
-            );
-            chatsRef.current = updatedChats;
-            startTransition(() => setChats(updatedChats));
-            setCustomerDetailData((prev: any) => {
-              if (!prev || prev.id !== customerId) return prev;
-              return {
-                ...prev,
-                distance_km: distanceKm ?? prev.distance_km,
-                ongkir: ongkir ?? prev.ongkir,
-                lat: lat ?? prev.lat,
-                lng: lng ?? prev.lng,
-                preferences: {
-                  ...(prev.preferences || {}),
-                  ...(landmark ? { landmark } : {}),
-                },
-              };
-            });
-          }
-        } else if (type === 'staff.task_completed') {
-          const { reservationId, staffId, staffName, completedAt } = payload;
-          if (selectedIdRef.current) {
-            setSelectedReservation((prev: any) => {
-              if (!prev || prev.reservationId !== reservationId) return prev;
-              return {
-                ...prev,
-                reservationStatus: 'completed',
-                completedAt,
-                completedBy: staffName,
-              };
-            });
-          }
-        } else if (type === 'staff.telemetry_updated') {
-          // Posisi terapis terbaru — perbarui widget bila relevan dengan chat terpilih.
-          const reservationId = payload?.reservationId;
-          if (reservationId && dispatchReservationIdRef.current === reservationId) {
-            loadDispatchTripRef.current?.(reservationId);
-          }
-        } else if (type === 'staff.trip_closed') {
-          const reservationId = payload?.reservationId;
-          if (reservationId && dispatchReservationIdRef.current === reservationId) {
-            loadDispatchTripRef.current?.(reservationId);
-          }
-        } else if (type === 'staff.trip_delay_warning') {
-          const reservationId = payload?.reservationId;
-          if (!reservationId) return;
-          const level = payload?.level === 'critical' ? 'critical' : 'warning';
-          setDelayAlert({
-            reservationId,
-            staffName: payload?.staffName,
-            patientName: payload?.patientName,
-            level,
-            delayMinutes: Number(payload?.delayMinutes) || 0,
-            formattedArrivalWib: payload?.formattedArrivalWib,
-          });
-          // Toast SEKALI per reservasi (dedupe) — ikon pulse di header tetap tampil.
-          if (!delayAlertedRef.current.has(reservationId)) {
-            delayAlertedRef.current.add(reservationId);
-            const who = payload?.staffName ? `Bidan ${payload.staffName}` : 'Bidan';
-            const eta = payload?.formattedArrivalWib ? ` (estimasi tiba ±${payload.formattedArrivalWib} WIB)` : '';
-            toast(
-              `⚠️ ${who} diprediksi terlambat ${Number(payload?.delayMinutes) || 0} menit${eta}.`,
-              level === 'critical' ? 'error' : 'info'
-            );
-          }
-          if (dispatchReservationIdRef.current === reservationId) {
-            loadDispatchTripRef.current?.(reservationId);
-          }
-        } else if (type === 'staff.trip_arrived') {
-          const reservationId = payload?.reservationId;
-          if (reservationId) {
-            setDelayAlert((prev) => (prev && prev.reservationId === reservationId ? null : prev));
-          }
-          const staffName = payload?.staffName ? `Bidan ${payload.staffName}` : 'Bidan';
-          const patientName = payload?.patientName ? `Bunda ${payload.patientName}` : 'pasien';
-          toast(`${staffName} telah tiba di lokasi ${patientName}.`, 'success');
-          if (reservationId && dispatchReservationIdRef.current === reservationId) {
-            loadDispatchTripRef.current?.(reservationId);
-          }
-        }
-      },
-    });
-
-    // 🔄 Smart Event-Driven / Fallback Background Sync
-    // Saat SSE aktif, polling konstan 3.5s dimatikan untuk menghemat 95% resource & mencegah UI jitter.
-    // Jika SSE terputus, gunakan fallback interval 15s.
-    const pollInterval = setInterval(() => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        if (!sseConnectedRef.current) {
-          loadChats(true);
-        }
-      }
-    }, 15000);
-
-    const captureCurrentScroll = () => {
-      const el = chatContainerRef.current;
-      if (el) {
-        savedScrollTopRef.current = el.scrollTop;
-        const isNear = (el.scrollHeight - el.scrollTop - el.clientHeight) < 300;
-        wasNearBottomRef.current = isNear;
-        if (selectedIdRef.current) {
-          saveConversationScroll(selectedIdRef.current, el.scrollTop, isNear);
-        }
-      }
-    };
-
-    const restoreCurrentScroll = () => {
-      const el = chatContainerRef.current;
-      if (!el) return;
-      if (wasNearBottomRef.current) {
-        scrollToBottom(true, false);
-      } else if (savedScrollTopRef.current !== null) {
-        el.scrollTop = savedScrollTopRef.current;
-      }
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        captureCurrentScroll();
-      } else if (document.visibilityState === 'visible') {
-        // Jangan reset paginasi/urutan sidebar saat tab kembali terlihat. Saat SSE aktif,
-        // cukup segarkan badge unread & thread aktif (silent). Fallback loadChats(true)
-        // HANYA bila SSE terputus (data memang mungkin basi).
-        if (sseConnectedRef.current) {
-          refreshTotalUnread();
-          if (selectedIdRef.current) {
-            void loadThread(selectedIdRef.current);
-          }
-        } else {
-          loadChats(true);
-        }
-        // Preserve posisi baca: hanya auto-scroll jika sebelumnya memang di bawah
-        setTimeout(restoreCurrentScroll, 60);
-        setTimeout(restoreCurrentScroll, 160);
-      }
-    };
-
-    const handleWindowBlur = () => {
-      captureCurrentScroll();
-    };
-
-    const handleWindowFocus = () => {
-      setTimeout(restoreCurrentScroll, 60);
-      setTimeout(restoreCurrentScroll, 160);
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('blur', handleWindowBlur);
-    window.addEventListener('focus', handleWindowFocus);
-
-    return () => {
-      unsubscribe();
-      clearInterval(pollInterval);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('blur', handleWindowBlur);
-      window.removeEventListener('focus', handleWindowFocus);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const handleRevokeMessage = async (msg: ChatMessage) => {
-    if (!selectedChat?.conversationId || revokingId) return;
-
-    const confirmed = await confirm({
-      title: 'Tarik Pesan WhatsApp',
-      message: `Tarik / Hapus pesan ini untuk semua orang di WhatsApp?\n\n"${msg.content}"`,
-      confirmText: 'Tarik Pesan',
-      cancelText: 'Batal',
-      danger: true,
-    });
-
-    if (!confirmed) return;
-
-    setRevokingId(msg.id);
-    try {
-      const res = await apiRequest(
-        `/api/admin/conversations/${selectedChat.conversationId}/messages/${msg.id}`,
-        { method: 'DELETE' }
-      );
-
-      if (res?.success) {
-        toast('Pesan berhasil ditarik dari WhatsApp!', 'success');
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === msg.id ? { ...m, content: '🚫 Pesan ini telah ditarik', is_revoked: true } : m
-          )
-        );
-      } else {
-        toast(`Gagal menarik pesan: ${res?.error || 'Terjadi kesalahan'}`, 'error');
-      }
-    } catch (err: any) {
-      toast(`Gagal menarik pesan: ${err.message || 'Terjadi kesalahan'}`, 'error');
-    } finally {
-      setRevokingId(null);
-    }
-  };
-
-  const handleStartEdit = (msg: ChatMessage) => {
-    setEditingMsg({ id: msg.id, content: msg.content });
-    setEditContent(msg.content);
-  };
-
-  const handleSaveEdit = async () => {
-    if (!editingMsg || !selectedChat?.conversationId || isEditingSaving) return;
-    if (!editContent.trim()) {
-      toast('Teks pesan tidak boleh kosong.', 'error');
-      return;
-    }
-
-    setIsEditingSaving(true);
-    try {
-      const res = await apiRequest(
-        `/api/admin/conversations/${selectedChat.conversationId}/messages/${editingMsg.id}/edit`,
-        {
-          method: 'PUT',
-          body: JSON.stringify({ text: editContent.trim() }),
-        }
-      );
-
-      if (res?.success) {
-        toast('Pesan berhasil diperbarui di WhatsApp!', 'success');
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === editingMsg.id
-              ? { ...m, content: editContent.trim(), is_edited: true }
-              : m
-          )
-        );
-        setEditingMsg(null);
-      } else {
-        toast(`Gagal mengedit pesan: ${res?.error || 'Terjadi kesalahan'}`, 'error');
-      }
-    } catch (err: any) {
-      toast(`Gagal mengedit pesan: ${err.message || 'Terjadi kesalahan'}`, 'error');
-    } finally {
-      setIsEditingSaving(false);
-    }
-  };
-
-  const [activeReactionMsgId, setActiveReactionMsgId] = useState<string | null>(null);
-  const [customEmojiMsgId, setCustomEmojiMsgId] = useState<string | null>(null);
-
-  const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
-  const EXTRA_REACTIONS = ['🔥', '👏', '🎉', '💯', '✨', '🤝', '🌸', '💐', '👶', '🍼', '🤱', '💪'];
-
-  /**
-   * Salin teks dengan fallback aman: Clipboard API bisa ditolak di luar user-gesture
-   * (mis. setelah setTimeout hold), jadi fallback ke execCommand('copy') legacy.
-   */
-  const copyTextWithFallback = async (text: string): Promise<boolean> => {
-    if (!text) return false;
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-        return true;
-      }
-    } catch {
-      // jatuh ke fallback di bawah
-    }
-    try {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.select();
-      const ok = document.execCommand('copy');
-      ta.remove();
-      return ok;
-    } catch {
-      return false;
-    }
-  };
-
-  const handleCopyMessageText = async (content: string) => {
-    const ok = await copyTextWithFallback(content);
-    toast(ok ? '📋 Teks pesan berhasil disalin!' : 'Gagal menyalin teks pesan.', ok ? 'success' : 'error');
-  };
-
-  const handleToggleReaction = async (msg: ChatMessage, emoji: string) => {
-    if (!selectedChat?.conversationId || !msg) return;
-    setActiveReactionMsgId(null);
-    setCustomEmojiMsgId(null);
-
-    const targetMsgId = msg.id || msg.wa_message_id;
-    const currentReactions: Array<{ emoji: string; fromMe: boolean; senderName?: string; actorId?: string }> =
-      (msg as any).reactions || (msg as any).payload_raw?.reactions || [];
-    const myReaction = currentReactions.find((r) => r.fromMe);
-    const newEmoji = myReaction && myReaction.emoji === emoji ? '' : emoji;
-
-    // Optimistic UI update
-    setMessages((prev) =>
-      prev.map((m) => {
-        if (m.id === msg.id || (msg.wa_message_id && m.wa_message_id === msg.wa_message_id)) {
-          let updatedReactions = (
-            (m as any).reactions || (m as any).payload_raw?.reactions || []
-          ).filter((r: any) => !r.fromMe);
-
-          if (newEmoji) {
-            updatedReactions.push({
-              emoji: newEmoji,
-              fromMe: true,
-              senderName: (user as any)?.name || 'Admin',
-              createdAt: new Date().toISOString(),
-            });
-          }
-          return {
-            ...m,
-            reactions: updatedReactions,
-            payload_raw: {
-              ...(typeof (m as any).payload_raw === 'object' && (m as any).payload_raw ? (m as any).payload_raw : {}),
-              reactions: updatedReactions,
-            },
-          };
-        }
-        return m;
-      })
-    );
-
-    try {
-      const res = await apiRequest(
-        `/api/admin/live-chat/conversations/${selectedChat.conversationId}/messages/${targetMsgId}/reaction`,
-        {
-          method: 'POST',
-          body: JSON.stringify({ emoji: newEmoji }),
-        }
-      );
-
-      if (res?.success) {
-        if (res.reactions) {
-          setMessages((prev) =>
-            prev.map((m) => {
-              if (m.id === msg.id || (msg.wa_message_id && m.wa_message_id === msg.wa_message_id)) {
-                return {
-                  ...m,
-                  reactions: res.reactions,
-                  payload_raw: {
-                    ...(typeof (m as any).payload_raw === 'object' && (m as any).payload_raw ? (m as any).payload_raw : {}),
-                    reactions: res.reactions,
-                  },
-                };
-              }
-              return m;
-            })
-          );
-        }
-      } else {
-        toast(`Gagal mengirim reaksi: ${res?.error || 'Terjadi kesalahan'}`, 'error');
-        // Rollback: muat ulang dari server agar emoji optimistis tidak "nyangkut".
-        void loadThread(selectedChat.conversationId);
-      }
-    } catch (err: any) {
-      toast(`Gagal mengirim reaksi: ${err.message || 'Terjadi kesalahan'}`, 'error');
-      void loadThread(selectedChat.conversationId);
-    }
-  };
-
-  const handleToggleMessagePin = async (msg: ChatMessage, explicitPinned?: boolean) => {
-    if (!selectedChat?.conversationId || isPinningMessageId) return;
-    const nextPinned = explicitPinned !== undefined
-      ? explicitPinned
-      : !(msg.is_message_pinned || (msg as any).payload_raw?.is_pinned);
-    setIsPinningMessageId(msg.id);
-
-    // Optimistic update
-    setMessages((prev) =>
-      prev.map((m) =>
-        m.id === msg.id
-          ? {
-              ...m,
-              is_message_pinned: nextPinned,
-              payload_raw: {
-                ...((m as any).payload_raw || {}),
-                is_pinned: nextPinned,
-              },
-            }
-          : nextPinned
-          ? {
-              ...m,
-              is_message_pinned: false,
-              payload_raw: {
-                ...((m as any).payload_raw || {}),
-                is_pinned: false,
-              },
-            }
-          : m
-      )
-    );
-
-    if (nextPinned) {
-      setPinnedBubble({
-        id: msg.id,
-        wa_message_id: msg.wa_message_id,
-        content: msg.content,
-        sender_name: msg.sender_name,
-        sender_type: msg.sender_type,
-        created_at: msg.created_at,
-      });
-    } else {
-      setPinnedBubble((cur) => (cur?.id === msg.id ? null : cur));
-    }
-
-    try {
-      const res = await apiRequest(
-        `/api/admin/live-chat/conversations/${selectedChat.conversationId}/messages/${msg.id}/pin`,
-        {
-          method: 'PATCH',
-          body: JSON.stringify({ isPinned: nextPinned }),
-        }
-      );
-      if (res?.success) {
-        toast(nextPinned ? 'Pesan berhasil disematkan.' : 'Sematan pesan dilepas.', 'success');
-      } else {
-        toast(`Gagal mengubah sematan: ${res?.error || 'Terjadi kesalahan'}`, 'error');
-        void loadThread(selectedChat.conversationId);
-      }
-    } catch (err: any) {
-      toast(`Gagal mengubah sematan: ${err.message || 'Terjadi kesalahan'}`, 'error');
-      void loadThread(selectedChat.conversationId);
-    } finally {
-      setIsPinningMessageId(null);
-    }
-  };
-
-  const handleToggleMessageHide = async (msg: ChatMessage, explicitHidden?: boolean) => {
-    if (!selectedChat?.conversationId || isHidingMessageId) return;
-    const nextHidden = explicitHidden !== undefined
-      ? explicitHidden
-      : !(msg.is_message_hidden || (msg as any).payload_raw?.is_hidden);
-    setIsHidingMessageId(msg.id);
-
-    // Optimistic update
-    setMessages((prev) =>
-      prev.map((m) =>
-        m.id === msg.id
-          ? {
-              ...m,
-              is_message_hidden: nextHidden,
-              payload_raw: {
-                ...((m as any).payload_raw || {}),
-                is_hidden: nextHidden,
-              },
-            }
-          : m
-      )
-    );
-
-    try {
-      const res = await apiRequest(
-        `/api/admin/live-chat/conversations/${selectedChat.conversationId}/messages/${msg.id}/hide`,
-        {
-          method: 'PATCH',
-          body: JSON.stringify({ isHidden: nextHidden }),
-        }
-      );
-      if (res?.success) {
-        toast(nextHidden ? 'Pesan disembunyikan dari dashboard.' : 'Pesan ditampilkan kembali.', 'success');
-      } else {
-        toast(`Gagal menyembunyikan pesan: ${res?.error || 'Terjadi kesalahan'}`, 'error');
-        void loadThread(selectedChat.conversationId);
-      }
-    } catch (err: any) {
-      toast(`Gagal menyembunyikan pesan: ${err.message || 'Terjadi kesalahan'}`, 'error');
-      void loadThread(selectedChat.conversationId);
-    } finally {
-      setIsHidingMessageId(null);
-    }
-  };
-
-  const handleJumpToPinnedMessage = (msgId: string) => {
-    const el = document.getElementById(`msg-${msgId}`);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      el.classList.add('ring-3', 'ring-accent', 'bg-success-soft/50');
-      setTimeout(() => el.classList.remove('ring-3', 'ring-accent', 'bg-success-soft/50'), 2000);
-    } else if (selectedChat?.conversationId) {
-      // Belum termuat di paginasi saat ini: trigger focusMessageId
-      void loadThread(selectedChat.conversationId, msgId);
-    }
-  };
-
-  const handleRelease = async (chat: LiveChatItem) => {
-    const isMedical = chat.escalationReason === 'medical_concern';
-
-    const isConfirmed = await confirm({
-      title: 'Kembalikan ke Bot?',
-      message: isMedical
-        ? 'Percakapan ini ditandai sebagai eskalasi medis. Bot AI tidak memiliki auto-release waktu untuk kasus medis demi keselamatan. Apakah Anda benar-benar yakin ingin mengembalikan chat ini ke respon otomatis AI Bot?'
-        : 'Apakah Anda yakin ingin mengembalikan percakapan ini ke bot otomatis? Bot akan mulai merespon chat berikutnya secara mandiri.',
-      confirmText: 'Ya, Kembalikan',
-      danger: isMedical,
-    });
-    if (!isConfirmed) return;
-
-    setReleasingId(chat.conversationId);
-    try {
-      await apiRequest(`/api/admin/conversation/${chat.conversationId}/release`, {
-        method: 'PATCH',
-        body: JSON.stringify({}),
-      });
-
-      // Optimistic in-place update: chat tetap terbuka dan badge langsung beralih ke Bot secara mulus
-      setChats((prev) =>
-        prev.map((c) =>
-          c.conversationId === chat.conversationId
-            ? { ...c, isHumanHandling: false, escalationReason: null, status: 'active', lastHandledBy: 'bot' }
-            : c
-        )
-      );
-      chatsRef.current = chatsRef.current.map((c) =>
-        c.conversationId === chat.conversationId
-          ? { ...c, isHumanHandling: false, escalationReason: null, status: 'active', lastHandledBy: 'bot' }
-          : c
-      );
-
-      // Sinkronisasi data server satu item (tanpa menggeser offset paginasi sidebar)
-      void refreshChatItem(chat.conversationId);
-      toast('Percakapan berhasil dikembalikan ke bot.', 'success');
-    } catch (err: any) {
-      toast(`Gagal merilis percakapan ke bot: ${err.message}`, 'error');
-    } finally {
-      setReleasingId(null);
-    }
-  };
-
-  const handleTakeover = async (chat: LiveChatItem) => {
-    const isConfirmed = await confirm({
-      title: 'Ambil Alih Percakapan (CS)?',
-      message: `Apakah Anda yakin ingin mengambil alih percakapan dengan ${chat.customerName || chat.customerPhone || 'pelanggan'}? Bot AI akan berhenti merespon secara otomatis agar Anda dapat melayani secara manual.`,
-      confirmText: 'Ya, Ambil Alih',
-    });
-    if (!isConfirmed) return;
-
-    setReleasingId(chat.conversationId);
-    try {
-      await apiRequest(`/api/admin/conversation/${chat.conversationId}/takeover`, {
-        method: 'PATCH',
-        body: JSON.stringify({}),
-      });
-
-      // Optimistic in-place update
-      setChats((prev) =>
-        prev.map((c) =>
-          c.conversationId === chat.conversationId
-            ? { ...c, isHumanHandling: true, escalationReason: 'manual_takeover', lastHandledBy: 'human' }
-            : c
-        )
-      );
-      chatsRef.current = chatsRef.current.map((c) =>
-        c.conversationId === chat.conversationId
-          ? { ...c, isHumanHandling: true, escalationReason: 'manual_takeover', lastHandledBy: 'human' }
-          : c
-      );
-
-      void refreshChatItem(chat.conversationId);
-      toast('Percakapan berhasil diambil alih oleh admin (CS).', 'success');
-    } catch (err: any) {
-      toast(`Gagal mengambil alih percakapan: ${err.message || err}`, 'error');
-    } finally {
-      setReleasingId(null);
-    }
-  };
-
-  const handleGenerateAiDraft = async () => {
-    if (!selectedId) return;
-    setGeneratingDraft(true);
-    try {
-      const res = await apiRequest(`/api/admin/live-chat/conversations/${selectedId}/suggest-reply`, {
-        method: 'POST',
-      });
-      if (res?.data?.draftText) {
-        replyTextRef.current = res.data.draftText;
-        setHasReplyText(true);
-        composerRef.current?.setText(res.data.draftText);
-        if (selectedId) {
-          saveConversationDraft(selectedId, res.data.draftText);
-        }
-        toast('Draf jawaban AI berhasil dibuat! Anda dapat mengedit sebelum mengirim.', 'success');
-      } else {
-        toast('Gagal mendapatkan saran balasan AI.', 'error');
-      }
-    } catch (err: any) {
-      toast(`Gagal memuat saran AI: ${err.message}`, 'error');
-    } finally {
-      setGeneratingDraft(false);
-    }
-  };
-
-  const handleOpenCustomerDetail = async (chat: LiveChatItem) => {
-    setCustomerDetailModalOpen(true);
-    pushModalHistory('customer-detail');
-    setCustomerDetailLoading(true);
-    // Instant preliminary data so modal never opens empty
-    const initialLabels = (chat.customerLabels || []).map((l) => ({ label: l }));
-    setCustomerDetailData({
-      id: chat.customerId,
-      name: chat.customerName,
-      phone: chat.customerPhone,
-      profile_picture_url: chat.customerProfilePictureUrl,
-      labels: initialLabels,
-      purchaseCount: chat.purchaseCount || 0,
-      ltv: chat.ltv || 0,
-    });
-    try {
-      const res = await apiRequest(`/api/admin/customers/${chat.customerId}`);
-      if (res?.data) {
-        const fetchedLabels = (res.data.labels && res.data.labels.length > 0)
-          ? res.data.labels
-          : initialLabels;
-        setCustomerDetailData({
-          ...res.data,
-          labels: fetchedLabels,
-        });
-      }
-    } catch (err: any) {
-      // Preliminary data already active
-    } finally {
-      setCustomerDetailLoading(false);
-    }
-  };
-
-  const handleSaveCustomerDetail = async (data: any) => {
-    const customerId = customerDetailData?.id || selectedChat?.customerId;
-    if (!customerId) throw new Error('Customer ID tidak ditemukan');
-    await apiRequest(`/api/admin/customers/${customerId}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
-    // Refresh customer detail data after save
-    const res = await apiRequest(`/api/admin/customers/${customerId}`);
-    if (res?.data) {
-      setCustomerDetailData({ ...res.data, labels: customerDetailData?.labels || [] });
-      // 2.3: sinkronkan nama/telepon ke daftar tanpa tunggu refresh penuh
-      const updatedName = (res.data.name ?? res.data.customerName ?? data.name) as string | undefined;
-      const updatedPhone = (res.data.phone ?? res.data.customerPhone ?? data.phone) as string | undefined;
-      if (updatedName || updatedPhone) {
-        const final = chatsRef.current.map((c) =>
-          c.customerId === customerId || c.conversationId === selectedIdRef.current
-            ? { ...c, customerName: updatedName ?? c.customerName, customerPhone: updatedPhone ?? c.customerPhone }
-            : c
-        );
-        setChats(final);
-        chatsRef.current = final;
-      }
-    }
-    setCustomerDetailEditMode(false);
-  };
-
-  const handleRefreshLocation = async () => {
-    const customerId = customerDetailData?.id || selectedChat?.customerId;
-    if (!customerId) {
-      toast('Customer ID tidak ditemukan', 'error');
-      return;
-    }
-    setRefreshingLocation(true);
-    try {
-      const res: any = await apiRequest(`/api/admin/customers/${customerId}/refresh-location`, { method: 'POST' });
-      if (res?.success && res?.data) {
-        const d = res.data;
-        setCustomerDetailData((prev: any) => ({
-          ...prev,
-          lat: d.lat,
-          lng: d.lng,
-          distance_km: d.distanceKm,
-          ongkir: d.ongkir,
-          is_out_of_coverage: d.isOutOfCoverage,
-          kelurahan: d.kelurahan ?? prev?.kelurahan,
-          kecamatan: d.kecamatan ?? prev?.kecamatan,
-          kota: d.kota ?? prev?.kota,
-          preferences: {
-            ...(prev?.preferences || {}),
-            location_source: d.source,
-            location_source_label: d.sourceLabel,
-            location_refreshed_at: d.refreshedAt,
-            location_refreshed_by: d.refreshedBy,
-          },
-        }));
-        // sync ke daftar chats tanpa reload
-        const updatedChats = chatsRef.current.map((c) =>
-          c.customerId === customerId
-            ? { ...c, kelurahan: d.kelurahan ?? c.kelurahan, kecamatan: d.kecamatan ?? c.kecamatan, kota: d.kota ?? c.kota, distanceKm: d.distanceKm, ongkir: d.ongkir }
-            : c
-        );
-        setChats(updatedChats);
-        chatsRef.current = updatedChats;
-        toast(res.message || `Lokasi diperbarui: ${d.sourceLabel} — ${d.distanceKm.toFixed(2)} km, Rp ${d.ongkir.toLocaleString('id-ID')}`, 'success');
-      } else {
-        toast(res?.error || 'Gagal refresh lokasi', 'error');
-      }
-    } catch (err: any) {
-      toast(err?.message || 'Gagal refresh lokasi', 'error');
-    } finally {
-      setRefreshingLocation(false);
-    }
-  };
-
-  const handleOpenReservationDetail = async (reservationId: string) => {
-    try {
-      const res = await apiRequest(`/api/admin/reservation/${reservationId}`);
-      const data = res?.data || res;
-      if (data) {
-        setSelectedReservation(data);
-        // load staff list jika belum
-        if (reservationStaffList.length === 0) {
-          try {
-            const staffRes = await apiRequest('/api/admin/staff');
-            if (staffRes?.success && Array.isArray(staffRes.data)) setReservationStaffList(staffRes.data);
-            else if (Array.isArray(staffRes)) setReservationStaffList(staffRes);
-          } catch {}
-        }
-      }
-    } catch (err: any) {
-      toast(`Gagal memuat detail reservasi: ${err.message}`, 'error');
-    }
-  };
-
-  const handleReservationUpdate = async (deletedReservationId?: string) => {
-    const cid = customerDetailData?.id || selectedChat?.customerId;
-    if (cid) {
-      try {
-        const res = await apiRequest(`/api/admin/customers/${cid}`);
-        const reservations = res?.data?.reservations || [];
-        const isHoldValidLocal = (r: any) => {
-          if (!r || r.status !== 'hold') return false;
-          if (!r.booking_date) return false;
-          const bd = new Date(r.booking_date).getTime();
-          if (isNaN(bd) || bd < Date.now() - 2 * 60 * 60 * 1000) return false;
-          return true;
-        };
-        const activeHold = reservations.find((r: any) => isHoldValidLocal(r)) || null;
-        const startOfToday = new Date();
-        startOfToday.setHours(0, 0, 0, 0);
-        const activeConfirmed = reservations.find((r: any) => {
-          if (!r || (r.status !== 'confirmed' && r.status !== 'en_route') || !r.booking_date) return false;
-          const bd = new Date(r.booking_date).getTime();
-          return !isNaN(bd) && bd >= startOfToday.getTime();
-        }) || null;
-        const activePending = reservations.find((r: any) => r.status === 'pending') || null;
-        const hasActiveHold = Boolean(activeHold);
-        const hasUpcomingBooking = Boolean(activeConfirmed);
-        const hasPendingBooking = Boolean(activePending);
-        setCustomerDetailData((prev: any) => ({ ...prev, ...res.data, reservations }));
-        if (selectedChat) {
-          setChats((prev) => {
-            const updated = prev.map((c) => {
-              if (c.conversationId !== selectedChat?.conversationId) return c;
-              return {
-                ...c,
-                hasUpcomingBooking,
-                hasPendingBooking,
-                hasActiveHold,
-                activeHoldReservation: activeHold ? { ...activeHold } : null,
-                activeConfirmedReservation: activeConfirmed ? { ...activeConfirmed } : null,
-                activePendingReservation: activePending ? { ...activePending } : null,
-                purchaseCount: reservations.length,
-              };
-            });
-            chatsRef.current = updated;
-            return updated;
-          });
-        }
-      } catch {}
-    }
-    if (deletedReservationId) {
-      setSelectedReservation(null);
-      return;
-    }
-    if (selectedReservation?.id) {
-      try {
-        const res = await apiRequest(`/api/admin/reservation/${selectedReservation.id}`);
-        const data = res?.data || res;
-        if (data) setSelectedReservation(data);
-      } catch {}
-    }
-  };
-
-  reservationRefreshRef.current = handleReservationUpdate;
-
-  const handleOpenQuickReservation = async () => {
-    if (!selectedChat) {
-      toast('Pilih percakapan customer terlebih dahulu.', 'info');
-      return;
-    }
-    // Jika chat ini sedang memiliki slot hold aktif, langsung arahkan untuk melengkapi hold tersebut
-    if (activeHoldReservation) {
-      handleConvertHoldToBooking(activeHoldReservation);
-      return;
-    }
-    if (reservationStaffList.length === 0) {
-      try {
-        const staffRes = await apiRequest('/api/admin/staff');
-        if (staffRes?.success && Array.isArray(staffRes.data)) setReservationStaffList(staffRes.data);
-        else if (Array.isArray(staffRes)) setReservationStaffList(staffRes);
-      } catch {}
-    }
-    // Pastikan customer detail terbaru termuat
-    if (selectedChat.customerId && (!customerDetailData || customerDetailData.id !== selectedChat.customerId)) {
-      try {
-        const res = await apiRequest(`/api/admin/customers/${selectedChat.customerId}`);
-        if (res?.data) setCustomerDetailData(res.data);
-      } catch {}
-    }
-    // Fase 2R: Pre-fill cerdas tanggal & jam dari chat (data-driven, tanpa hardcode jam)
-    try {
-      let currentServices = clinicServices;
-      if (currentServices.length === 0) {
-        try {
-          const sRes: any = await apiRequest('/api/admin/services');
-          if (sRes?.data && Array.isArray(sRes.data)) {
-            currentServices = sRes.data;
-            setClinicServices(sRes.data);
-          } else if (Array.isArray(sRes)) {
-            currentServices = sRes;
-            setClinicServices(sRes);
-          }
-        } catch {}
-      }
-      let wilayahRef: WilayahReference | null = null;
-      try { wilayahRef = await getWilayahRef(); } catch {}
-      const custData = customerDetailData || (selectedChat ? {
-        id: (selectedChat as any).customerId,
-        name: (selectedChat as any).customerName,
-        phone: (selectedChat as any).customerPhone,
-      } : null);
-      const extracted = extractScheduleFromMessages(messages, custData as any, currentServices as any, wilayahRef);
-      setQuickBookingExtracted(extracted || null);
-      if (extracted?.bookingDate && extracted?.timeDisplay) {
-        // Normalisasi "13.00-14.30" / "13.00" -> "13:00"
-        const rawTime = String(extracted.timeDisplay).split('-')[0].trim().split('–')[0].trim();
-        const normalized = rawTime.replace('.', ':');
-        const timeHHMM = /^\d{1,2}[:.]\d{2}$/.test(normalized) ? normalized.padStart(5, '0').replace('.', ':') : normalized;
-        const [hhStr] = timeHHMM.split(':');
-        const hh = parseInt(hhStr, 10);
-        if (!isNaN(hh) && extracted.bookingDate) {
-          // Tanggal dalam WIB (bukan zona lokal browser) agar konsisten operasional klinik.
-          const cleanHHMM = /^\d{2}:\d{2}$/.test(timeHHMM) ? timeHHMM : `${String(hh).padStart(2, '0')}:00`;
-          setQuickBookingTargetSlot({
-            date: getWibDateKey(extracted.bookingDate),
-            hour: hh,
-            timeStr: cleanHHMM,
-            staffId: '',
-          });
-        } else {
-          setQuickBookingTargetSlot(null);
-        }
-      } else {
-        setQuickBookingTargetSlot(null);
-      }
-    } catch {
-      setQuickBookingTargetSlot(null);
-    }
-    setShowQuickBookingModal(true);
-    pushModalHistory('quick-booking');
-  };
-
-  const handleOpenQuickHold = async () => {
-    if (!selectedChat) {
-      toast('Pilih percakapan customer terlebih dahulu.', 'info');
-      return;
-    }
-    if (reservationStaffList.length === 0) {
-      try {
-        const staffRes = await apiRequest('/api/admin/staff');
-        if (staffRes?.success && Array.isArray(staffRes.data)) setReservationStaffList(staffRes.data);
-        else if (Array.isArray(staffRes)) setReservationStaffList(staffRes);
-      } catch {}
-    }
-    // Pastikan customer detail terbaru termuat
-    if (selectedChat.customerId && (!customerDetailData || customerDetailData.id !== selectedChat.customerId)) {
-      try {
-        const res = await apiRequest(`/api/admin/customers/${selectedChat.customerId}`);
-        if (res?.data) setCustomerDetailData(res.data);
-      } catch {}
-    }
-    setQuickHoldInitialDate(null);
-    setQuickHoldInitialTime(null);
-    setShowQuickHoldModal(true);
-  };
-
-  const handleSlotHold = async (date: string, time: string) => {
-    setQuickHoldInitialDate(date || null);
-    setQuickHoldInitialTime(time);
-    await handleOpenQuickHold();
-  };
-
-   const handleConvertHoldToBooking = (holdRes: any) => {
-     // WIB, bukan zona lokal browser — admin di luar WIB tetap melihat jam/tanggal operasional klinik.
-     const { hours, timeFormatted } = getWibHoursAndMinutes(holdRes.booking_date);
-     setConvertingHoldId(holdRes.id);
-     setActiveEditingHoldReservation(holdRes);
-     setQuickBookingTargetSlot({
-       date: getWibDateKey(holdRes.booking_date),
-       hour: hours,
-       timeStr: timeFormatted,
-       staffId: holdRes.assigned_staff_id,
-     });
-     setShowQuickBookingModal(true);
-   };
-
-  const handleConfirmPendingBooking = async (pendingRes: any) => {
-    const dateStr = pendingRes.booking_date
-      ? new Date(pendingRes.booking_date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' })
-      : 'jadwal terpilih';
-    const ok = await confirm({
-      title: 'Konfirmasi Jadwal?',
-      message: `Konfirmasi reservasi untuk ${pendingRes.customer?.name || selectedChat?.customerName || 'Bunda'} pada ${dateStr} (${pendingRes.treatment_detail || 'Treatment'}) menjadi Terjadwal?`,
-      confirmText: 'Ya, Konfirmasi Jadwal',
-      cancelText: 'Batal',
-    });
-    if (!ok) return;
-    try {
-      await apiRequest(`/api/admin/reservation/${pendingRes.id}/confirm`, { method: 'PATCH' });
-      toast('Reservasi berhasil dikonfirmasi dan disinkronkan ke Google Calendar! ✨', 'success');
-      await handleReservationUpdate();
-    } catch (err: any) {
-      toast(`Gagal konfirmasi: ${err.message}`, 'error');
-    }
-  };
-
-  const isHoldValid = (r: any) => {
-    if (!r || r.status !== 'hold') return false;
-    if (!r.booking_date) return false;
-    const bd = new Date(r.booking_date).getTime();
-    if (isNaN(bd) || bd < Date.now() - 2 * 60 * 60 * 1000) return false;
-    return true;
-  };
-  const activeHoldReservation = useMemo(() => {
-    if (!selectedChat) return null;
-    if (customerDetailData && customerDetailData.id === selectedChat.customerId) {
-      return customerDetailData.reservations?.find((r: any) => isHoldValid(r)) || null;
-    }
-    const fromChat = (selectedChat as any).activeHoldReservation;
-    if (fromChat && isHoldValid(fromChat)) return fromChat;
-    return null;
-  }, [selectedChat, customerDetailData]);
-
-  const activeConfirmedReservation = useMemo(() => {
-    if (!selectedChat) return null;
-    const isUpcomingConfirmed = (r: any) => {
-      if (!r || (r.status !== 'confirmed' && r.status !== 'en_route') || !r.booking_date) return false;
-      const bd = new Date(r.booking_date).getTime();
-      if (isNaN(bd)) return false;
-      // Jadwal aktif = hari ini atau ke depan (selaras endpoint active-reservations).
-      const startOfToday = new Date();
-      startOfToday.setHours(0, 0, 0, 0);
-      return bd >= startOfToday.getTime();
-    };
-    if (customerDetailData && customerDetailData.id === selectedChat.customerId) {
-      return customerDetailData.reservations?.find((r: any) => isUpcomingConfirmed(r)) || null;
-    }
-    const fromChat = (selectedChat as any).activeConfirmedReservation;
-    if (fromChat && isUpcomingConfirmed(fromChat)) return fromChat;
-    return null;
-  }, [selectedChat, customerDetailData]);
-
-  const activePendingReservation = useMemo(() => {
-    if (!selectedChat) return null;
-    if (customerDetailData && customerDetailData.id === selectedChat.customerId) {
-      return customerDetailData.reservations?.find((r: any) => r.status === 'pending') || null;
-    }
-    const fromChat = (selectedChat as any).activePendingReservation;
-    if (fromChat) return fromChat;
-    return null;
-  }, [selectedChat, customerDetailData]);
-
-  // Reservasi aktif yang sedang berjalan untuk chat terpilih (confirmed / pending / hold)
-  const currentActiveReservation = useMemo(() => {
-    return activeConfirmedReservation || activePendingReservation || activeHoldReservation || null;
-  }, [activeConfirmedReservation, activePendingReservation, activeHoldReservation]);
-
-  // Reservasi aktif terpilih (prioritas: OTW aktif > confirmed > hold > pending).
-  // Sumber utama status OTW kini dari item chat (active*Reservation.otw_sent_at),
-  // sehingga widget tetap muncul tanpa bergantung pembukaan modal detail customer.
-  const dispatchReservationId = useMemo<string | null>(() => {
-    const fromChat = [
-      (selectedChat as any)?.activeConfirmedReservation,
-      (selectedChat as any)?.activeHoldReservation,
-      (selectedChat as any)?.activePendingReservation,
-    ].find((r: any) => r?.otw_sent_at && !r?.arrived_at);
-    if (fromChat?.id) return fromChat.id;
-    const fromDetail = (customerDetailData?.reservations || []).find(
-      (r: any) => r.otw_sent_at && !r.arrived_at && !['completed', 'cancelled', 'rejected'].includes(String(r.status))
-    );
-    if (fromDetail?.id) return fromDetail.id;
-    if (selectedReservation?.reservationId && selectedReservation?.otwSentAt && !selectedReservation?.arrivedAt) {
-      return selectedReservation.reservationId;
-    }
-    return (
-      activeConfirmedReservation?.id ||
-      activeHoldReservation?.id ||
-      activePendingReservation?.id ||
-      null
-    );
-  }, [selectedChat, customerDetailData, selectedReservation, activeConfirmedReservation, activeHoldReservation, activePendingReservation]);
-
-  const dispatchReservationIdRef = useRef<string | null>(null);
-  dispatchReservationIdRef.current = dispatchReservationId;
-
-  const loadDispatchTrip = useCallback(async (reservationId: string) => {
-    setDispatchLoading(true);
-    try {
-      const res = await apiRequest(`/api/admin/dispatch/trip/${reservationId}`);
-      const data = res?.data || res;
-      if (dispatchReservationIdRef.current === reservationId) {
-        setDispatchTrip(data || null);
-      }
-    } catch {
-      if (dispatchReservationIdRef.current === reservationId) setDispatchTrip(null);
-    } finally {
-      setDispatchLoading(false);
-    }
-  }, []);
-  loadDispatchTripRef.current = loadDispatchTrip;
-
-  useEffect(() => {
-    if (!dispatchReservationId) {
-      setDispatchTrip(null);
-      return;
-    }
-    loadDispatchTrip(dispatchReservationId);
-  }, [dispatchReservationId, loadDispatchTrip]);
-
-  // Refresh berkala ringan (10s) hanya bila OTW aktif — jaring bila SSE terputus.
-  useEffect(() => {
-    if ((!dispatchTrip?.otwSentAt && !dispatchTrip?.trip) || dispatchTrip?.arrivedAt) return;
-    const id = dispatchReservationIdRef.current;
-    if (!id) return;
-    const t = setInterval(() => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        loadDispatchTrip(id);
-      }
-    }, 10_000);
-    return () => clearInterval(t);
-  }, [dispatchTrip?.otwSentAt, dispatchTrip?.trip, dispatchTrip?.arrivedAt, loadDispatchTrip]);
-
-  // Smart Micro-Pill: reset tiap ganti chat/reservasi; auto-collapse 3 detik khusus mobile
-  useEffect(() => {
-    setIsBannerCollapsed(false);
-    setUserManuallyExpanded(false);
-    manualExpandRef.current = false;
-    if (typeof window !== 'undefined' && window.innerWidth < 768) {
-      const t = setTimeout(() => {
-        if (!manualExpandRef.current) setIsBannerCollapsed(true);
-      }, 3000);
-      return () => clearTimeout(t);
-    }
-  }, [selectedChat?.conversationId, activeHoldReservation?.id, activeConfirmedReservation?.id, activePendingReservation?.id]);
-
-  const expandBanner = () => {
-    setIsBannerCollapsed(false);
-    setUserManuallyExpanded(true);
-    manualExpandRef.current = true;
-  };
-
-  // Fase 4B — Ekstraksi form terisi untuk smart-banner. useMemo terpisah dari state
-  // `quickBookingExtracted` (alur prefill quick-booking) agar snapshot prefill modal
-  // tidak tertimpa saat katalog/wilayah dimuat ulang. Gerbang banner: flag deterministik
-  // dari extractor (bukan regex baru di UI) + TIDAK ada reservasi hold/confirmed/pending.
-  const formBannerExtracted = useMemo(() => {
-    if (!messages || messages.length === 0) return null;
-    try {
-      return extractScheduleFromMessages(messages, customerDetailData, clinicServices, null);
-    } catch {
-      return null;
-    }
-  }, [messages, customerDetailData, clinicServices]);
-
-  // Fase 4C — Supresi banner bila customer SUDAH punya reservasi pada tanggal yang
-  // sama dengan jadwal ter-ekstrak. Gate pada state DB (customerDetailData.reservations),
-  // bukan hafalan teks (lihat hasExistingReservationForSchedule). Treatment-aware.
-  const hasExistingReservationForExtractedSchedule = useMemo(
-    () =>
-      hasExistingReservationForSchedule(
-        customerDetailData?.reservations,
-        formBannerExtracted?.bookingDate,
-        formBannerExtracted?.treatmentName,
-        formBannerExtracted?.treatmentCategory
-      ),
-    [
-      customerDetailData?.reservations,
-      formBannerExtracted?.bookingDate,
-      formBannerExtracted?.treatmentName,
-      formBannerExtracted?.treatmentCategory,
-    ]
-  );
-
-  const matchedExistingReservation = useMemo(() => {
-    return (
-      findExistingReservationForSchedule(
-        customerDetailData?.reservations,
-        formBannerExtracted?.bookingDate,
-        formBannerExtracted?.treatmentName,
-        formBannerExtracted?.treatmentCategory
-      ) ||
-      (selectedChat as any)?.activeConfirmedReservation ||
-      null
-    );
-  }, [
-    customerDetailData?.reservations,
-    formBannerExtracted?.bookingDate,
-    formBannerExtracted?.treatmentName,
-    formBannerExtracted?.treatmentCategory,
-    selectedChat,
-  ]);
-
-  // MT-2.2: Palang Pintu Dispatch — Deteksi reservasi selesai hari ini di DB (state-based)
-  const hasTodayCompletedReservation = useMemo(() => {
-    if (!selectedChat) return false;
-    const { start, end } = wibDayStartEnd(new Date());
-    const isCompletedToday = (r: any) => {
-      if (!r || r.status !== 'completed' || !r.booking_date) return false;
-      const bd = new Date(r.booking_date).getTime();
-      if (isNaN(bd)) return false;
-      return bd >= start.getTime() && bd <= end.getTime();
-    };
-    if (customerDetailData && customerDetailData.id === selectedChat.customerId) {
-      return (customerDetailData.reservations || []).some(isCompletedToday);
-    }
-    const fromChat = (selectedChat as any).activeConfirmedReservation;
-    return Boolean(fromChat && isCompletedToday(fromChat));
-  }, [selectedChat, customerDetailData]);
-
-  // MT-3.1: Deteksi jadwal hasil negosiasi dengan komitmen aktif user (anti false-positive)
-  const negotiatedScheduleState = useMemo(() => {
-    return isNegotiatedScheduleCommitted(messages, formBannerExtracted);
-  }, [messages, formBannerExtracted]);
-
-  const hasValidNegotiatedSchedule = Boolean(
-    negotiatedScheduleState &&
-      formBannerExtracted?.isExtractedFromChat &&
-      Boolean(formBannerExtracted?.treatmentName || formBannerExtracted?.hasExplicitReservationForm) &&
-      !hasExistingReservationForExtractedSchedule &&
-      !hasTodayCompletedReservation &&
-      selectedChat?.escalationReason !== 'recruitment_inquiry'
-  );
-
-  // Signatur form: percakapan + entitas inti. Dismiss bertahan untuk form yang sama;
-  // form BARU (konten beda) otomatis tampil lagi.
-  const formBannerKey =
-    (formBannerExtracted?.hasExplicitReservationForm || hasValidNegotiatedSchedule) && selectedChat && formBannerExtracted
-      ? `${selectedChat.conversationId}|${formBannerExtracted.dateDisplay}|${formBannerExtracted.timeDisplay}|${formBannerExtracted.treatmentName}`
-      : null;
-
-  const showFormReservasiBanner = Boolean(
-    formBannerKey &&
-      formBannerKey !== dismissedFormBanner &&
-      !hasExistingReservationForExtractedSchedule &&
-      !activeHoldReservation &&
-      !activeConfirmedReservation &&
-      !activePendingReservation &&
-      !hasTodayCompletedReservation &&
-      selectedChat?.escalationReason !== 'recruitment_inquiry'
-  );
-
-  const showNeutralExistingReservationBanner = useMemo(() => {
-    return shouldShowNeutralExistingReservationBanner({
-      showFormReservasiBanner,
-      activeConfirmedReservation,
-      formBannerKey,
-      dismissedFormBanner,
-      hasExistingReservationForExtractedSchedule,
-      matchedExistingReservation,
-    });
-  }, [
-    showFormReservasiBanner,
-    activeConfirmedReservation,
-    formBannerKey,
-    dismissedFormBanner,
-    hasExistingReservationForExtractedSchedule,
-    matchedExistingReservation,
-  ]);
-
-  const visitMessages = useMemo(
-    () =>
-      (messages || []).map((m: any) => ({
-        direction: m.direction,
-        sender_type: m.sender_type,
-        content: m.content,
-        media: m.media,
-        location: m.location,
-        created_at: m.created_at,
-        dispatchOrigin: Boolean(m.payload_raw?.dispatchOrigin),
-        isFieldStaff:
-          String(m.sender_type || '').toUpperCase() === 'STAFF' ||
-          Boolean(m.payload_raw?.forceEscalate),
-      })),
-    [messages]
-  );
-
-  const hasVisitIndicators = useMemo(() => {
-    const { start, end } = wibDayStartEnd(new Date());
-    return shouldWarnUnregisteredVisit({
-      messages: visitMessages,
-      dayStart: start,
-      dayEnd: end,
-      field: {
-        hasTodayReservation: Boolean(
-          activeConfirmedReservation || activePendingReservation || hasTodayCompletedReservation
-        ),
-        hasActiveTrip: Boolean(dispatchReservationId),
-        hasOtwActive: Boolean((activeConfirmedReservation as any)?.otw_sent_at && !(activeConfirmedReservation as any)?.arrived_at),
-      },
-    });
-  }, [visitMessages, activeConfirmedReservation, activePendingReservation, hasTodayCompletedReservation, dispatchReservationId]);
-
-  const showUnregisteredVisitBanner = Boolean(
-    hasVisitIndicators &&
-      !showFormReservasiBanner &&
-      !activeConfirmedReservation &&
-      !activeHoldReservation &&
-      !activePendingReservation &&
-      !hasTodayCompletedReservation &&
-      !hasExistingReservationForExtractedSchedule
-  );
-
-  const handleInsertInvoiceToChat = (text: string) => {
-    composerRef.current?.setText(text);
-    replyTextRef.current = text;
-    setHasReplyText(true);
-    if (selectedIdRef.current) {
-      saveConversationDraft(selectedIdRef.current, text);
-    }
-  };
-
-  // Fase 3 (plan 2026-10-02): sisipkan draf posisi Bidan dari widget dispatch ke
-  // kotak pesan. SENGAJA tidak mengirim — CS menekan Kirim manual (human-in-the-loop).
-  const handleInsertDispatchDraft = (text: string) => {
-    const draft = (text || '').trim();
-    if (!draft) return;
-    dispatchOriginRef.current = true;
-    composerRef.current?.setText(draft);
-    replyTextRef.current = draft;
-    setHasReplyText(true);
-    if (selectedIdRef.current) {
-      saveConversationDraft(selectedIdRef.current, draft);
-    }
-    setDispatchDrawerOpen(false);
-    toast('Draf posisi Bidan disisipkan. Tekan Kirim untuk mengirim.', 'info');
-  };
-
-  // Provenance akurasi lokasi dari data customer-detail via shared geoUtils (Mikro 3.2, D-1a)
-  const dispatchLocationSource =
-    resolveEffectiveLocationSource(customerDetailData) ||
-    resolveEffectiveLocationSource(activeConfirmedReservation) ||
-    resolveEffectiveLocationSource(activeHoldReservation) ||
-    resolveEffectiveLocationSource(selectedChat?.locationSource) ||
-    null;
-
-  // Cooldown 6 jam (audit C-006): tandai permintaan shareloc agar badge tidak
-  // menagih berulang. Ditulis ke session_data oleh endpoint admin.
-  const markSharelocRequested = (conversationId?: string | null) => {
-    if (!conversationId) return;
-    const nowIso = new Date().toISOString();
-    const updated = (chatsRef.current || []).map((c) =>
-      c.conversationId === conversationId ? { ...c, sharelocRequestedAt: nowIso } : c
-    );
-    chatsRef.current = updated;
-    startTransition(() => setChats(updated));
-    apiRequest(`/api/admin/live-chat/conversations/${conversationId}/shareloc-requested`, {
-      method: 'PATCH',
-    }).catch(() => {});
-  };
-
-  // Fase 4: susun draf permintaan shareloc lalu sisipkan ke composer (CS tetap
-  // menekan Kirim). Teks WAJIB dari template DB (kategori Pasca Booking) —
-  // dilarang hardcode teks bisnis di UI.
-  const handleRequestSharelocFromDispatch = () => {
-    const qr = quickReplies.find((q) => q.shortcut === 'shareloc');
-    if (!qr?.content) {
-      toast('Template shareloc belum diatur di Balasan Cepat (kategori Pasca Booking).', 'error');
-      return;
-    }
-    const name = (customerDetailData?.name || selectedChat?.customerName || '').trim() || 'Bunda';
-    const draft = qr.content.replace(/\{name\}/g, name);
-    handleInsertDispatchDraft(draft);
-    markSharelocRequested(selectedChat?.conversationId);
-  };
-
-  const handleGenerateAndInsertInvoice = async (resItem: any) => {
-    let currentServices = clinicServices;
-    if (currentServices.length === 0) {
-      try {
-        const sRes = await apiRequest('/api/admin/services');
-        if (sRes?.data && Array.isArray(sRes.data)) {
-          currentServices = sRes.data;
-          setClinicServices(sRes.data);
-        } else if (Array.isArray(sRes)) {
-          currentServices = sRes;
-          setClinicServices(sRes);
-        }
-      } catch {}
-    }
-
-    const chatFallback: any = selectedChat ? {
-      id: selectedChat.customerId,
-      name: selectedChat.customerName,
-      phone: selectedChat.customerPhone,
-      address: (selectedChat as any).address || '',
-      kelurahan: (selectedChat as any).kelurahan || null,
-      kecamatan: (selectedChat as any).kecamatan || null,
-      kota: (selectedChat as any).kota || null,
-      children: (selectedChat as any).children || [],
-      // JANGAN default 0: 0 adalah nilai sah (mis. ambil sendiri), sedangkan null
-      // berarti "belum dihitung" dan WAJIB memblokir invoice (audit #316/K-02).
-      ongkir: (selectedChat as any).ongkir ?? null,
-      distance_km: (selectedChat as any).distanceKm ?? (selectedChat as any).distance_km ?? null,
-    } : null;
-    // Gabungkan: detail customer menang, tetapi field yang belum ada di detail
-    // (mis. payload preliminary) TIDAK boleh menghapus nilai dari kartu sidebar.
-    const custData: any = customerDetailData
-      ? {
-          ...chatFallback,
-          ...customerDetailData,
-          ongkir: (customerDetailData as any).ongkir ?? chatFallback?.ongkir ?? null,
-          distance_km:
-            (customerDetailData as any).distance_km ??
-            (customerDetailData as any).distanceKm ??
-            chatFallback?.distance_km ??
-            null,
-        }
-      : chatFallback;
-
-    // ================================================================
-    // GERBANG KODE DETERMINISTIK (audit #316 / K-02).
-    // Invoice TIDAK BOLEH dibuat dari angka/treatment karangan. Logika murni
-    // ada di utils/invoiceReadiness.ts dan diuji adversarial.
-    // ================================================================
-    const readiness = validateInvoiceReadiness({
-      bookingDate: resItem?.booking_date,
-      treatmentName: resItem?.treatment_detail || resItem?.treatment_name,
-      distanceKm: custData?.distance_km ?? custData?.distanceKm,
-      ongkir: custData?.ongkir,
-    });
-    if (!readiness.ok) {
-      const reasonMessages: Record<string, string> = {
-        INVALID_SCHEDULE:
-          'Invoice tidak bisa dibuat: tanggal/jadwal reservasi tidak valid. Lengkapi jadwal di kalender terlebih dahulu.',
-        MISSING_TREATMENT:
-          'Invoice tidak bisa dibuat: nama layanan pada reservasi kosong. Lengkapi data reservasi terlebih dahulu.',
-        MISSING_DISTANCE:
-          'Invoice tidak bisa dibuat: jarak/ongkir belum terhitung. Lengkapi alamat & titik lokasi customer (Buku Alamat) agar tagihan tidak salah.',
-        INVALID_NUMBER:
-          'Invoice tidak bisa dibuat: nilai jarak/ongkir tidak valid. Periksa data alamat customer terlebih dahulu.',
-      };
-      toast(reasonMessages[readiness.reason] || 'Invoice tidak bisa dibuat: data reservasi belum lengkap.', 'error');
-      if (readiness.reason === 'MISSING_DISTANCE' && selectedChat) {
-        setAddrBookCustomer({ id: selectedChat.customerId, name: selectedChat.customerName || undefined });
-      }
-      return;
-    }
-    const bookingD = readiness.bookingDate;
-    const treatmentNameRaw = readiness.treatmentName;
-    const distanceKm = readiness.distanceKm;
-    const ongkir = readiness.ongkir;
-
-    let timeStr = '';
-    try {
-      timeStr = bookingD.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }).replace(':', '.');
-    } catch {}
-    if (!timeStr) {
-      toast('Invoice tidak bisa dibuat: jam reservasi tidak dapat dibaca.', 'error');
-      return;
-    }
-
-    // R5: chain babies dari resItem.babies / resItem.children sebelum jatuh ke custData.children[0]
-    const babySource = resItem?.babies || resItem?.children || custData?.children || [];
-    const firstBaby = Array.isArray(babySource) && babySource.length > 0 ? babySource[0] : null;
-
-    const mappedData: ExtractedScheduleData = {
-      bookingDate: bookingD,
-      dateDisplay: formatIndonesianDate(bookingD),
-      timeDisplay: timeStr,
-      treatmentName: treatmentNameRaw,
-      treatmentPrice: Number(resItem?.purchase_value ?? resItem?.treatment_price ?? 0) || 0,
-      treatmentCategory: (resItem?.treatment_category === 'MOMS' || resItem?.treatment_category === 'BUNDLE' || resItem?.treatment_category === 'BOTH' || resItem?.treatment_detail?.toLowerCase()?.includes('mom')) ? (resItem?.treatment_category === 'BUNDLE' || resItem?.treatment_category === 'BOTH' ? 'BUNDLE' : 'MOMS') : 'BABY',
-      childName: firstBaby?.name || resItem?.child_name || '',
-      childAge: firstBaby?.age || firstBaby?.ageText || firstBaby?.raw_age_text || firstBaby?.current_age || resItem?.child_age || '',
-      babies: Array.isArray(babySource) ? babySource.map((b: any) => ({ name: b?.name || '', ageText: b?.age || b?.ageText || b?.raw_age_text || b?.current_age || '' })).filter((b: any) => b.name) : [],
-      bundaName: cleanBundaName(custData?.name || selectedChat?.customerName || '', custData?.kecamatan, custData?.kota),
-      phone: custData?.phone || selectedChat?.customerPhone || '',
-      address: custData?.address || custData?.preferences?.address || custData?.kelurahan || '',
-      kecamatan: custData?.kecamatan || '',
-      kota: custData?.kota || '',
-      distanceKm,
-      ongkir,
-      discount: 0,
-      isExtractedFromChat: false,
-      confidenceScore: 1.0,
-      hasExplicitReservationForm: false,
-    };
-
-    setInvoiceModalData(mappedData);
-    setShowInvoiceModal(true);
-    pushModalHistory('invoice');
-  };
-
-  const handleGenerateActiveReservationInvoice = async () => {
-    if (!selectedChat) {
-      toast('Pilih percakapan customer terlebih dahulu.', 'info');
-      return;
-    }
-    // GERBANG ANTI-INVOICE-HANTU (Fase 5 — konsolidasi menu Tools): format invoice
-    // HANYA boleh dibuat dari reservasi yang tercatat di kalender (confirmed/pending).
-    // Tanpa jadwal aktif, admin diarahkan membuat reservasi dulu — mencegah invoice
-    // teks yang tidak punya jadwal di kalender klinik (eliminasi split-brain).
-    const activeRes = activeConfirmedReservation || activePendingReservation;
-    if (!activeRes) {
-      toast('Belum ada jadwal reservasi aktif di percakapan ini — buat reservasi dulu agar invoice tercatat di kalender.', 'info');
-      void handleOpenQuickReservation();
-      return;
-    }
-    await handleGenerateAndInsertInvoice(activeRes);
-  };
-
-  // Fase A v3: teks balasan dipasok LiveChatComposer (sudah clear DOM-nya sendiri).
-  // isInternal=true → catatan internal (tidak dikirim ke WhatsApp).
-  const handleSendReply = async (composerText?: string, isInternal?: boolean) => {
-    const image = isInternal ? null : selectedImage;
-    const text = (typeof composerText === 'string' ? composerText : replyTextRef.current || '').trim();
-    if (!selectedId || (!text && !image)) return;
-
-    notifyTyping(false);
-
-    const currentReplyingTo = isInternal ? null : replyingTo;
-    const tempId = `temp_${Date.now()}`;
-    const optimisticMsg: ChatMessage = {
-      id: tempId,
-      direction: 'OUTBOUND',
-      content: text || (image ? '[IMAGE]' : ''),
-      sender_type: isInternal ? 'INTERNAL_NOTE' : 'ADMIN',
-      sender_name: user?.email || 'Admin',
-      created_at: new Date().toISOString(),
-      delivery_status: 'sent',
-      media: image ? { url: image.preview, hdUrl: image.preview, mimeType: image.mimeType, caption: text || undefined } : undefined,
-      quoted_message: currentReplyingTo ? {
-        id: currentReplyingTo.id,
-        wa_message_id: currentReplyingTo.wa_message_id,
-        direction: currentReplyingTo.direction,
-        sender_name: currentReplyingTo.sender_name || (currentReplyingTo.direction === 'INBOUND' ? (selectedChat?.customerName || 'Customer') : 'Admin'),
-        sender_type: currentReplyingTo.sender_type,
-        content: currentReplyingTo.content,
-        media: currentReplyingTo.media,
-      } : undefined,
-    };
-
-    // 1. Instan tampil di thread pesan (0ms delay)
-    setMessages((prev) => [...prev, optimisticMsg]);
-    optimisticMessageIdsRef.current.add(tempId);
-    // Safety net: lepaskan penanda bila event SSE tidak pernah datang.
-    window.setTimeout(() => optimisticMessageIdsRef.current.delete(tempId), 10000);
-
-    // 2. Instan update preview teks di daftar chat list.
-    // Catatan internal TIDAK mengubah isAwaitingReply (bukan balasan ke customer).
-    setChats((prev) => {
-      const updated = prev.map((c) =>
-        c.conversationId === selectedId
-          ? {
-              ...c,
-              lastMessageAt: optimisticMsg.created_at,
-              lastMessages: [...(c.lastMessages || []), optimisticMsg].slice(-3),
-              isAwaitingReply: isInternal ? c.isAwaitingReply : false,
-            }
-          : c
-      );
-      const sorted = sortChats(updated);
-      chatsRef.current = sorted;
-      return sorted;
-    });
-
-    // 3. Instan kosongkan mirror input, pratinjau gambar, dan reply state
-    // (DOM & draf composer sudah dibersihkan composer sebelum onSend).
-    replyTextRef.current = '';
-    setHasReplyText(false);
-    if (selectedId) clearConversationDraft(selectedId);
-    if (image?.preview && image.preview.startsWith('blob:')) {
-      try { URL.revokeObjectURL(image.preview); } catch {}
-    }
-    setSelectedImage(null);
-    setReplyingTo(null);
-    setTimeout(() => scrollToBottom(true, true), 50);
-
-    setSending(true);
-    try {
-      const body: Record<string, any> = {
-        adminName: user?.email || 'Admin',
-      };
-      if (text) body.text = text;
-      if (isInternal) body.isInternalNote = true;
-      if (currentReplyingTo) {
-        body.replyToMessageId = currentReplyingTo.wa_message_id || currentReplyingTo.id;
-      }
-      if (image) {
-        if (image.mediaUrl) {
-          body.mediaUrl = image.mediaUrl;
-        } else {
-          // Fase 2.1: JANGAN kirim thumbB64 == imageB64 (dobel payload ~50%).
-          // Backend membuat blur thumbnail server-side via sharp (media.service.ts).
-          body.imageB64 = image.dataUrl;
-        }
-        if (image.mimeType) body.mimeType = image.mimeType;
-        if (image.fileName) body.fileName = image.fileName;
-      }
-      if (dispatchOriginRef.current) {
-        body.dispatchOrigin = true;
-        dispatchOriginRef.current = false;
-      }
-
-      const res = await apiRequest(`/api/admin/live-chat/conversations/${selectedId}/reply`, {
-        method: 'POST',
-        body: JSON.stringify(body),
-        timeoutMs: 45000,
-      });
-
-      const actualMsg = res?.data?.message || res?.data;
-      const actualId = actualMsg?.id || actualMsg?.messageId;
-      if (actualId) {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === tempId
-              ? {
-                  ...m,
-                  id: actualId,
-                  wa_message_id: actualMsg.messageId || actualMsg.wa_message_id || m.wa_message_id,
-                  delivery_status: 'sent',
-                }
-              : m
-          )
-        );
-      }
-
-      // AUDIT FASE 0: warning backend tidak boleh dibuang diam-diam (dulu
-      // `NO_ACTIVE_RESERVATION_TODAY` & kegagalan pencatatan DB hilang di sini).
-      const sendWarning = (res as any)?.data?.warning || (res as any)?.warning;
-      if (sendWarning === 'MESSAGE_SENT_NOT_PERSISTED') {
-        toast(
-          'Pesan SUDAH terkirim ke pasien, tetapi gagal disimpan ke riwayat dashboard. JANGAN kirim ulang — muat ulang halaman untuk rekonsiliasi.',
-          'error'
-        );
-      } else if (sendWarning === 'NO_ACTIVE_RESERVATION_TODAY') {
-        toast(
-          'Pesan terkirim, tetapi tidak ada reservasi aktif HARI INI untuk customer ini. Pastikan kunjungan dicatat di kalender agar tidak hilang dari operasional.',
-          'info'
-        );
-      } else if (sendWarning) {
-        toast(`Pesan terkirim dengan peringatan: ${sendWarning}`, 'info');
-      }
-    } catch (err: any) {
-      optimisticMessageIdsRef.current.delete(tempId);
-      // AUDIT FASE 0: jangan tinggalkan "ghost bubble" yang terlihat terkirim.
-      // Hapus bubble optimis + preview sidebar, lalu rekonsiliasi dari server.
-      setMessages((prev) => prev.filter((m) => m.id !== tempId));
-      setChats((prev) => {
-        const updated = prev.map((c) =>
-          c.conversationId === selectedId
-            ? { ...c, lastMessages: (c.lastMessages || []).filter((m: any) => m.id !== tempId) }
-            : c
-        );
-        chatsRef.current = updated;
-        return updated;
-      });
-
-      // Hanya kembalikan teks bila server PASTI menolak (4xx). Untuk timeout/5xx,
-      // pesan bisa saja sudah sampai ke pasien — jangan mendorong kirim ulang buta.
-      const definitelyNotSent = typeof err?.status === 'number' && err.status >= 400 && err.status < 500;
-      if (definitelyNotSent && text) {
-        replyTextRef.current = text;
-        setHasReplyText(true);
-        composerRef.current?.setText(text);
-        if (selectedId) saveConversationDraft(selectedId, text);
-      }
-
-      toast(
-        `Gagal mengirim balasan: ${err.message}${definitelyNotSent && text ? ' — teks dikembalikan ke kolom kirim.' : ' — periksa dulu apakah pesan sudah masuk ke pasien sebelum mengirim ulang.'}`,
-        'error'
-      );
-
-      if (selectedId) {
-        void loadThread(selectedId);
-        void refreshChatItem(selectedId);
-      }
-    } finally {
-      setSending(false);
-    }
-  };
-
-  // Dipakai bersama oleh pemilih file DAN paste gambar (screenshot) dari clipboard.
-  const handleImageFile = async (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      toast('File yang ditempel bukan gambar.', 'error');
-      return;
-    }
-    try {
-      const prepared = await prepareChatImage(file);
-      // 3.2: revoke URL lama sebelum ganti agar tidak bocor memori
-      if (selectedImage?.preview && selectedImage.preview.startsWith('blob:')) {
-        try { URL.revokeObjectURL(selectedImage.preview); } catch {}
-      }
-      setSelectedImage({
-        file,
-        preview: prepared.preview,
-        dataUrl: prepared.dataUrl,
-        mimeType: prepared.mimeType,
-        fileName: prepared.fileName,
-        origin: 'upload',
-      });
-    } catch (err: any) {
-      toast(err?.message || 'Gagal memproses foto.', 'error');
-    }
-  };
-
-  const handlePickImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      await handleImageFile(file);
-    } finally {
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
-
-  const handleRemoveSelectedImage = () => {
-    if (selectedImage?.preview && selectedImage.preview.startsWith('blob:')) {
-      try { URL.revokeObjectURL(selectedImage.preview); } catch {}
-    }
-    setSelectedImage(null);
-  };
-
-  // 3.2: cleanup saat unmount atau saat preview berganti
-  useEffect(() => {
-    return () => {
-      if (selectedImage?.preview && selectedImage.preview.startsWith('blob:')) {
-        try { URL.revokeObjectURL(selectedImage.preview); } catch {}
-      }
-    };
-  }, [selectedImage?.preview]);
-
-  const getChatLabel = (chat: LiveChatItem): 'medical_concern' | 'unresolved_faq' | 'human_request' | 'all' => {
-    if (chat.escalationReason === 'medical_concern') return 'medical_concern';
-    if (chat.escalationReason === 'unresolved_faq') return 'unresolved_faq';
-    if (chat.isHumanHandling) return 'human_request';
-    return 'all';
-  };
-
-  const filteredChats = useMemo(() => chats.filter((chat) => {
-    // 0. Filter Sandbox vs Real
-    if (sourceFilter === 'sandbox') {
-      if (!(chat as any).isSandboxTest) return false;
-    } else {
-      if ((chat as any).isSandboxTest) return false;
-    }
-    // 0b. Filter Unread
-    if (sourceFilter === 'unread') {
-      const isUnread = (chat.unreadCount || 0) > 0 || chat.isManualUnread;
-      if (!isUnread) return false;
-    }
-    // 1. Filter reservasi aktif (pending/hold/terjadwal) — paritas jendela 2 jam.
-    //    Backend sudah memfilter, tapi guard klien ini menahan chat ghost/SSE yang
-    //    terlanjur dimuat (mis. booking yang jam treatment-nya baru lewat jendela).
-    if (sourceFilter === 'reservation') {
-      const activeRes =
-        (chat as any).activeConfirmedReservation || (chat as any).activeHoldReservation || (chat as any).activePendingReservation;
-      if (!activeRes) return false;
-      const bd = activeRes.booking_date ? new Date(activeRes.booking_date).getTime() : null;
-      const stale = bd !== null && !Number.isNaN(bd) && bd < Date.now() - 2 * 60 * 60 * 1000;
-      if (stale) return false;
-      // Filter bidan (klien) — paritas dengan query server.
-      if (reservationStaffFilter !== 'all') {
-        const sid = activeRes.assigned_staff_id || (activeRes as any).assigned_staff?.id || null;
-        if (reservationStaffFilter === 'unassigned') {
-          if (sid) return false;
-        } else if (sid !== reservationStaffFilter) {
-          return false;
-        }
-      }
-    }
-    // 2. Filter label
-    if (labelFilter !== 'all' && getChatLabel(chat) !== labelFilter) {
-      return false;
-    }
-
-    // 3. Filter search query — anti-mutilasi: jika search aktif, `chats` sudah hasil filter server (RN<=3).
-    // Jangan buang chat yang valid di server hanya karena tidak ada di 3 pesan terakhir lokal.
-    if (searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase();
-      const digitsOnly = q.replace(/\D/g, '');
-      let normalized = digitsOnly;
-      if (normalized.startsWith('0')) normalized = '62' + normalized.slice(1);
-      else if (normalized.startsWith('8')) normalized = '62' + normalized;
-
-      const phone = (chat.customerPhone || '').replace(/\D/g, '');
-      const nameMatch = (chat.customerName || '').toLowerCase().includes(q);
-      const phoneMatch = digitsOnly.length >= 3 && (
-        phone.includes(digitsOnly) ||
-        (normalized.length >= 4 && phone.includes(normalized)) ||
-        (chat.customerPhone || '').toLowerCase().includes(q)
-      );
-      const messageMatch = (chat.lastMessages || []).some((m) =>
-        (m.content || '').toLowerCase().includes(q)
-      );
-
-      if (!nameMatch && !phoneMatch && !messageMatch) {
-        const isFromServerSearch = isSearching || (chatsRef.current.length > 0 && searchQuery.trim().length >= 2);
-        if (!isFromServerSearch) {
-          return false;
-        }
-      }
-    }
-
-    return true;
-  }), [chats, labelFilter, searchQuery, sourceFilter, isSearching, reservationStaffFilter]);
-
-  // Hierarki pencarian 2-Tier: kontak (nama/telepon) lebih diprioritaskan daripada
-  // kecocokan isi pesan, lalu diurutkan berdasarkan aktivitas terakhir. Hanya menata
-  // ulang hasil filter existing — tidak membuang hasil pencarian server.
-  const sortedChats = useMemo(() => {
-    if (!searchQuery.trim()) return filteredChats;
-    const q = searchQuery.trim().toLowerCase();
-    const digitsOnly = q.replace(/\D/g, '');
-    const nameHits = (chat: LiveChatItem): boolean =>
-      (chat.customerName || '').toLowerCase().includes(q) ||
-      (digitsOnly.length >= 3 && (chat.customerPhone || '').replace(/\D/g, '').includes(digitsOnly));
-    return [...filteredChats].sort((a, b) => {
-      const an = nameHits(a);
-      const bn = nameHits(b);
-      if (an && !bn) return -1;
-      if (!an && bn) return 1;
-      return new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime();
-    });
-  }, [filteredChats, searchQuery]);
-
-  const getElapsedTime = (sinceStr: string | null) => {
-    if (!sinceStr) return '';
-    return formatLastChat(sinceStr);
-  };
-
-  const formatLastChat = (dateStr: string | null) => {
-    return formatLastChatWib(dateStr);
-  };
-
-  const senderLabel = (m: ChatMessage) => {
-    if (m.direction === 'INBOUND') return 'Customer';
-    const type = (m.sender_type || '').toUpperCase();
-    return type === 'ADMIN' || type === 'HUMAN' || type === 'STAFF' ? m.sender_name || 'Admin' : 'Bot';
-  };
-
-  const formatRp = (val: number) =>
-    new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val);
-
-  const formatRpShort = (val: number) => {
-    if (!val || val === 0) return 'Rp 0';
-    if (val >= 1_000_000) return `Rp ${(val / 1_000_000).toFixed(1).replace('.0', '')}jt`;
-    if (val >= 1_000) return `Rp ${Math.round(val / 1000)}rb`;
-    return `Rp ${val}`;
-  };
-
-  // AUDIT FASE 0: header global disembunyikan di mobile Live Chat, jadi safe-area
-  // atas (notch/Dynamic Island) WAJIB dipasang di container ini. Tanpa ini judul,
-  // tombol kembali, dan nama pasien tertutup status bar pada iOS PWA.
   return (
     <div data-no-swipe-menu="true" className="h-full flex flex-col min-h-0 space-y-0 lg:space-y-1.5 p-0 lg:p-1.5 lg:pb-0 pt-[env(safe-area-inset-top,0px)]">
-      {/* Top Header (Desktop / Large screen only - on mobile it scrolls with the list) */}
+      {/* Top Header (Desktop only) */}
       <div className="hidden lg:flex justify-between items-center bg-surface border border-divider rounded-xl px-2.5 sm:px-3 py-1 sm:py-1.5 shadow-xs shrink-0">
         <div className="flex items-center space-x-2">
           <h1 className="text-sm sm:text-base font-bold text-ink tracking-tight flex items-center space-x-1.5">
             <MessageSquare className="text-accent" size={18} />
             <span>Live Chat Monitor</span>
           </h1>
-          {/* Total Conversations Badge directly next to Title */}
           <span className="px-2 py-0.5 rounded-full bg-accent-soft text-accent text-xs font-bold font-mono border border-accent/30" title="Total percakapan aktif yang dimuat">
             {filteredChats.length} total
           </span>
-          {/* Real-time Status Icon Indicator */}
           <div
             className="flex items-center space-x-1 px-2 py-0.5 bg-fill-1 border border-divider rounded-full text-[10px] font-semibold text-ink-2"
             title={sseConnected ? 'Status: Real-time Terhubung (SSE Aktif)' : 'Status: Menyambungkan kembali ke server...'}
@@ -4446,7 +770,6 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
             <span className={`h-2 w-2 rounded-full ${sseConnected ? 'bg-success animate-pulse' : 'bg-warning animate-pulse'}`} />
             <span>{sseConnected ? 'Live' : 'Reconnecting'}</span>
           </div>
-          {/* Early Warning keterlambatan Bidan — ikon pulse persisten selama delay aktif. */}
           {delayAlert && (
             <button
               type="button"
@@ -4467,7 +790,6 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
           )}
         </div>
 
-        {/* Controls: Internal Chatbot Toggle + Export */}
         <div className="flex items-center space-x-2">
           <button
             onClick={() => {
@@ -4507,7 +829,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         </div>
       </div>
 
-      {/* Internal Chatbot OFF Warning Banner (desktop: global di atas; mobile: duplikat ringkas di dalam scroll daftar) */}
+      {/* Internal Chatbot OFF Warning Banner */}
       {!chatBotActive && (
         <div className="hidden lg:flex p-2 sm:p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800/40 text-amber-900 dark:text-amber-200 text-xs font-semibold items-center justify-between shadow-2xs shrink-0 animate-fadeIn">
           <div className="flex items-center space-x-2 min-w-0">
@@ -4527,7 +849,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         </div>
       )}
 
-      {/* Real-time Background Sync Banner (desktop: global di atas; mobile: duplikat ringkas di dalam scroll daftar) */}
+      {/* Real-time Background Sync Banner */}
       {bgSyncProgress.isSyncing && (
         <div className="hidden lg:flex p-2 sm:p-2.5 rounded-xl bg-success-soft border border-success-line text-success text-[11px] font-medium items-center justify-between shadow-2xs shrink-0 animate-fadeIn">
           <div className="flex items-center space-x-2 min-w-0">
@@ -4565,7 +887,6 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
 
       {loading && chats.length === 0 ? (
         <div className="flex-1 flex flex-col min-h-0 overflow-y-auto overscroll-contain px-1.5 sm:px-2.5 pt-1.5 pb-2" style={{ overscrollBehavior: 'contain' }}>
-          {/* Loading: strip status AI-off mobile (toggle ada di sticky search bar) */}
           {!chatBotActive && <AiOffStrip />}
           <div className="flex-1 flex justify-center items-center py-20">
             <Loader className="animate-spin text-accent" size={32} />
@@ -4574,2297 +895,170 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
       ) : (
         <div data-no-swipe-menu="true" className="flex-1 min-h-0 flex flex-col lg:flex-row gap-0 lg:gap-2 overflow-hidden">
           {/* Section 1: Conversations List */}
-          <div
-            onTouchStart={handleListTouchStart}
-            onTouchMove={handleListTouchMove}
-            onTouchEnd={() => { listTouchStartRef.current = null; }}
-            onTouchCancel={() => { listTouchStartRef.current = null; }}
-            className={`${mobileView === 'chat' ? 'hidden lg:flex' : 'flex animate-mobile-list-enter lg:animate-none'} w-full lg:w-[320px] xl:w-[360px] lg:shrink-0 flex-col h-full bg-surface border-0 lg:border border-divider rounded-none lg:rounded-2xl shadow-none lg:shadow-xs overflow-hidden min-h-0`}
-          >
-            {/* Scrollable Container covering entire panel: Header & filter bar scroll off, Searchbar sticks at top-0 */}
-            <div
-              ref={chatListContainerRef}
-              className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-1.5 sm:px-2.5 pt-1.5 pb-2"
-              style={{ overscrollBehavior: 'contain' }}
-            >
-              {/* Mobile Page Header (Inside scroll flow so it scrolls off on scroll down) */}
-              <div className="flex lg:hidden justify-between items-center pb-2 border-b border-divider mb-1.5">
-                <div className="flex items-center space-x-2">
-                  <h1 className="text-sm font-bold text-ink tracking-tight flex items-center space-x-1.5">
-                    <MessageSquare className="text-accent" size={16} />
-                    <span>Live Chat</span>
-                  </h1>
-                  <span className="px-2 py-0.5 rounded-full bg-accent-soft text-accent text-xs font-bold font-mono border border-accent/30" title="Total percakapan aktif yang dimuat">
-                    {filteredChats.length} total
-                  </span>
-                  <div className="flex items-center space-x-1 px-1.5 py-0.5 bg-fill-1 border border-divider rounded-full text-[10px] font-semibold text-ink-2">
-                    <span className={`h-1.5 w-1.5 rounded-full ${sseConnected ? 'bg-success animate-pulse' : 'bg-warning animate-pulse'}`} />
-                    <span>{sseConnected ? 'Live' : 'Offline'}</span>
-                  </div>
-                  {delayAlert && (
-                    <div
-                      className={`flex items-center space-x-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold border ${
-                        delayAlert.level === 'critical'
-                          ? 'bg-danger-soft border-danger-line text-danger'
-                          : 'bg-warning-soft border-warning-line text-warning'
-                      }`}
-                      title={`Bidan diprediksi terlambat ${delayAlert.delayMinutes} menit`}
-                    >
-                      <AlertTriangle size={11} />
-                      <span>{delayAlert.delayMinutes}m</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex items-center space-x-1.5">
-                  {/* Pengganti tombol copilot header global (ADR-001: tenant non-owner disembunyikan) */}
-                  {user?.copilotEnabled !== false && (
-                    <button
-                      type="button"
-                      onClick={() => setCopilotOpen(!copilotOpen)}
-                      title={copilotOpen ? 'Sembunyikan AI Copilot' : 'Buka AI Copilot'}
-                      aria-label={copilotOpen ? 'Sembunyikan AI Copilot' : 'Buka AI Copilot'}
-                      aria-pressed={copilotOpen}
-                      className={`lg:hidden p-1.5 min-w-[38px] min-h-[38px] rounded-lg border transition flex items-center justify-center cursor-pointer shadow-2xs active:scale-95 touch-manipulation ${
-                        copilotOpen
-                          ? 'bg-bubble-out dark:bg-accent/20 border-accent/40 text-accent ring-2 ring-accent/30'
-                          : 'bg-fill-1 dark:bg-fill-2 border-divider dark:border-strong text-ink-3 hover:text-ink dark:hover:text-ink'
-                      }`}
-                    >
-                      <Bot size={15} />
-                    </button>
-                  )}
-                  {/* Tombol sinkronisasi chat */}
-                  <button
-                    onClick={() => setShowSyncInfoModal(true)}
-                    disabled={bgSyncProgress.isSyncing}
-                    className="p-1.5 min-w-[38px] min-h-[38px] rounded-lg bg-accent text-white shadow-2xs transition flex items-center justify-center disabled:opacity-50 cursor-pointer"
-                    title="Sinkronisasi Seluruh Chat WhatsApp"
-                  >
-                    <RefreshCw size={13} className={bgSyncProgress.isSyncing ? 'animate-spin' : ''} />
-                  </button>
-                  {/* Tombol ☰ menu navigasi mobile (paling kanan) */}
-                  <button
-                    type="button"
-                    onClick={openMobileMenu}
-                    aria-label="Buka Menu"
-                    title="Buka Menu Navigasi"
-                    className="lg:hidden p-1.5 min-w-[38px] min-h-[38px] rounded-lg bg-fill-1 dark:bg-fill-2 text-ink-2 dark:text-ink-2 hover:text-ink dark:hover:text-ink transition active:scale-95 touch-manipulation cursor-pointer shadow-2xs flex items-center justify-center"
-                  >
-                    <Menu size={15} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Mobile Chatbot OFF Warning (strip teks; toggle ada di sticky search bar) */}
-              {!chatBotActive && <AiOffStrip />}
-
-              {/* Mobile Sync/Error Warnings (ikut scroll bersama daftar; desktop memakai banner global di atas) */}
-              {bgSyncProgress.isSyncing && (
-                <div className="lg:hidden mb-1.5 p-2 rounded-xl bg-success-soft border border-success-line text-success text-[11px] font-medium flex items-center justify-between shadow-2xs animate-fadeIn">
-                  <div className="flex items-center space-x-1.5 min-w-0">
-                    <RefreshCw size={13} className="text-accent animate-spin shrink-0" />
-                    <span className="truncate">
-                      <span className="font-bold text-accent">Sync:</span>{' '}
-                      {bgSyncProgress.syncedChats} / {bgSyncProgress.totalChats || '?'} chat ({bgSyncProgress.syncedMessages} baru)
-                    </span>
-                  </div>
-                  <button
-                    onClick={handleCancelBackgroundSync}
-                    className="px-2 py-0.5 text-[10px] font-bold text-danger bg-danger-soft hover:bg-danger border border-danger-line rounded-md transition shrink-0 ml-2 cursor-pointer shadow-2xs"
-                  >
-                    Batal
-                  </button>
-                </div>
-              )}
-              {syncProgress && !bgSyncProgress.isSyncing && (
-                <div className="lg:hidden mb-1.5 p-2 rounded-xl bg-info-soft border border-info-line text-info text-[11px] font-medium flex items-center space-x-1.5 shadow-2xs">
-                  <RefreshCw size={12} className="text-info animate-spin shrink-0" />
-                  <span className="truncate">{syncProgress}</span>
-                </div>
-              )}
-              {errorMessage && (
-                <div className="lg:hidden mb-1.5 p-2 rounded-xl bg-danger-soft border border-danger-line text-danger text-[11px] font-medium flex items-center space-x-1.5 shadow-2xs">
-                  <AlertTriangle size={12} className="text-danger shrink-0" />
-                  <span className="truncate">{errorMessage}</span>
-                </div>
-              )}
-
-              {/* Header Toolbar: Source Filter + Label Dropdown (Normal in-flow, scrolls away on scroll down) */}
-              <div className="pb-1.5 border-b border-divider">
-                <div className="flex items-center justify-between gap-1.5">
-                  {/* Filter sumber percakapan: WhatsApp Asli, Semua, Sandbox (Ikon Saja + Press Hold Tooltip) */}
-                  <div className="relative flex items-center space-x-0.5 p-0.5 bg-fill-1 border border-divider rounded-lg shrink-0">
-                    {[
-                      { value: 'all', title: 'Semua Percakapan WhatsApp', icon: Layers },
-                      { value: 'unread', title: 'Pesan Belum Dibaca (Unread)', icon: MessageSquareDot },
-                      { value: 'reservation', title: 'Reservasi Aktif (Pending/Hold/Terjadwal)', icon: ShoppingBag },
-                      { value: 'sandbox', title: 'QA Tester / Sandbox (Simulasi Lokal)', icon: FlaskConical },
-                    ].map((opt) => {
-                      const Icon = opt.icon;
-                      const isActive = sourceFilter === opt.value;
-                      const activeClass = opt.value === 'sandbox'
-                        ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-ink-2 border border-purple-200 dark:border-divider shadow-2xs'
-                        : 'bg-accent-soft text-accent border border-accent/30 shadow-2xs';
-                      const hasUnreadBadge = opt.value === 'unread' && (totalUnreadCount > 0 || chats.some(c => !c.isSandboxTest && ((c.unreadCount || 0) > 0 || c.isManualUnread)));
-                      return (
-                        <button
-                          key={opt.value}
-                          onClick={() => setSourceFilter(opt.value as any)}
-                          onTouchStart={() => handleIconTouchStart(opt.title)}
-                          onTouchEnd={handleIconTouchEnd}
-                          onTouchCancel={handleIconTouchEnd}
-                          onContextMenu={(e) => {
-                            e.preventDefault();
-                            setIconTooltip(opt.title);
-                            setTimeout(() => setIconTooltip(null), 2000);
-                          }}
-                          title={opt.title}
-                          className={`p-1.5 rounded-md transition flex items-center justify-center cursor-pointer relative ${
-                            isActive ? activeClass : 'text-ink-2 hover:text-ink'
-                          }`}
-                        >
-                          <Icon size={13} />
-                          {hasUnreadBadge && (
-                            <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-success ring-1 ring-white" />
-                          )}
-                        </button>
-                      );
-                    })}
-
-                    {/* Press-Hold Floating Tooltip */}
-                    {iconTooltip && (
-                      <div className="absolute top-full left-0 mt-1 z-50 px-2 py-1 bg-ink text-white text-[10px] font-bold rounded-lg shadow-lg animate-fadeIn whitespace-nowrap pointer-events-none flex items-center space-x-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-success" />
-                        <span>{iconTooltip}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Label Filter Dropdown & Mark All Read (Disampingnya) */}
-                  <div className="flex items-center space-x-1 flex-1 min-w-0">
-                    {(isDesktop || mobileView === 'list') && sourceFilter === 'reservation' && (
-                      <select
-                        value={reservationStaffFilter}
-                        onChange={(e) => setReservationStaffFilter(e.target.value)}
-                        className="w-full px-2 py-1 bg-surface border border-divider rounded-lg text-[11px] font-semibold text-ink focus:outline-none focus:border-accent cursor-pointer shadow-2xs truncate"
-                        title="Filter bidan yang bertugas"
-                      >
-                        <option value="all">Semua Bidan</option>
-                        <option value="unassigned">⚠️ Belum Ada Bidan</option>
-                        {reservationStaffList
-                          .filter((s: any) => s.role === 'THERAPIST' && s.active !== false)
-                          .map((s: any) => (
-                            <option key={s.id} value={s.id}>
-                              Bidan {s.name}
-                            </option>
-                          ))}
-                      </select>
-                    )}
-                    {(isDesktop || mobileView === 'list') && sourceFilter !== 'reservation' && (
-                      <select
-                        value={labelFilter}
-                        onChange={(e) => {
-                          // AUDIT FASE 2 (T-04): cukup set state. Effect [labelFilter]
-                          // melakukan SATU reload memakai ref terbaru — menghapus
-                          // request kedua yang masih membawa label lama (race).
-                          setLabelFilter(e.target.value as typeof labelFilter);
-                        }}
-                        className="w-full px-2 py-1 bg-surface border border-divider rounded-lg text-[11px] font-semibold text-ink focus:outline-none focus:border-accent cursor-pointer shadow-2xs truncate"
-                      >
-                        <option value="all">Semua Label</option>
-                        <option value="human_request">Human Request</option>
-                        <option value="medical_concern">Medical Emergency</option>
-                        <option value="unresolved_faq">Unresolved FAQ</option>
-                      </select>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={handleMarkAllAsRead}
-                      tabIndex={mobileView === 'chat' ? -1 : 0}
-                      title="Tandai semua percakapan sebagai telah dibaca"
-                      className="p-2 min-w-[38px] min-h-[38px] bg-surface hover:bg-accent-soft border border-divider hover:border-accent/30 text-ink-2 hover:text-accent rounded-lg transition flex items-center justify-center shrink-0 cursor-pointer shadow-2xs active:scale-95"
-                    >
-                      <MailCheck size={14} className="text-accent" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* 🔍 Search Bar Input: STICKY AT TOP ONLY (Searchbar & AI Toggle Stick Bersama Saat Scroll di Mobile) */}
-              {(isDesktop || mobileView === 'list') && (
-                <div className="sticky top-0 z-20 bg-surface py-1.5 border-b border-divider shadow-xs -mx-1 px-1">
-                  <div className="flex items-center gap-1.5">
-                    <div className="relative flex-1 min-w-0">
-                      <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-ink-3">
-                        {isSearching ? (
-                          <Loader size={13} className="animate-spin text-accent" />
-                        ) : (
-                          <Search size={13} />
-                        )}
-                      </span>
-                      <input
-                        ref={searchInputRef}
-                        type="text"
-                        tabIndex={mobileView === 'chat' ? -1 : 0}
-                        value={searchQuery}
-                        onChange={(e) => {
-                          setSearchQuery(e.target.value);
-                          triggerDebouncedSearch(e.target.value);
-                        }}
-                        onFocus={() => { searchInputFocusedRef.current = true; }}
-                        onBlur={(e) => {
-                          if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                            searchInputFocusedRef.current = false;
-                          }
-                        }}
-                        placeholder="Cari nama, no. HP, atau keyword chat..."
-                        className="w-full pl-8 pr-7 py-1.5 bg-fill-1 hover:bg-fill-2 focus:bg-surface border border-divider focus:border-accent rounded-lg text-xs text-ink placeholder-ink-3 focus:outline-none focus:ring-1 focus:ring-accent/20 transition-all shadow-2xs"
-                      />
-                      {searchQuery && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (searchDebounceTimerRef.current) {
-                              clearTimeout(searchDebounceTimerRef.current);
-                              searchDebounceTimerRef.current = null;
-                            }
-                            setSearchQuery('');
-                            loadChats(true, '', true);
-                            // Unified clear: 1 klik X menutup toolbar in-chat, hapus <mark>, reset scroll.
-                            handleClearInChatSearch();
-                          }}
-                          className="absolute inset-y-0 right-0 pr-2 flex items-center text-ink-3 hover:text-ink cursor-pointer"
-                          title="Hapus pencarian"
-                        >
-                          <X size={13} />
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Mobile Sticky AI Toggle: Melayang bersama Search Bar agar mudah diakses saat scroll */}
-                    <div className="lg:hidden shrink-0 flex items-center" title={chatBotActive ? 'Chatbot AI Aktif' : 'Chatbot AI Nonaktif'}>
-                      <ToggleSwitch
-                        checked={chatBotActive}
-                        onChange={(enableBot) => handleToggleGlobalBot(enableBot)}
-                        disabled={togglingBotCutoff}
-                        loading={togglingBotCutoff}
-                        variant={chatBotActive ? 'emerald' : 'rose'}
-                        onLabel="ON"
-                        offLabel="OFF"
-                        size="sm"
-                        className="min-h-[44px] py-1.5"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Chat Cards or Empty State */}
-              {filteredChats.length === 0 ? (
-                <div className="flex flex-col items-center justify-center p-6 text-center text-ink-2 text-xs min-h-[180px]">
-                  {searchQuery ? (
-                    <>
-                      <Search className="mx-auto text-ink-3 mb-2 opacity-50" size={24} />
-                      <p className="font-bold text-ink">Tidak ada hasil pencarian</p>
-                      <p className="text-ink-2 text-[10px] mt-0.5">
-                        Tidak ditemukan chat dengan kata kunci &quot;{searchQuery}&quot;
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (searchDebounceTimerRef.current) {
-                            clearTimeout(searchDebounceTimerRef.current);
-                            searchDebounceTimerRef.current = null;
-                          }
-                          setSearchQuery('');
-                          loadChats(true, '', true);
-                          handleClearInChatSearch();
-                        }}
-                        className="mt-2.5 px-2.5 py-1 rounded-lg bg-fill-1 hover:bg-fill-2 text-accent text-[11px] font-semibold transition cursor-pointer"
-                      >
-                        Reset Pencarian
-                      </button>
-                    </>
-                  ) : sourceFilter === 'unread' ? (
-                    <>
-                      <CheckCircle className="mx-auto text-accent mb-2" size={24} />
-                      <p className="font-bold text-ink">Semua pesan sudah dibaca! 🎉</p>
-                      <p className="text-ink-2 text-[10px] mt-0.5">
-                        Tidak ada percakapan yang menunggu dibalas saat ini.
-                      </p>
-                    </>
-                  ) : sourceFilter === 'reservation' ? (
-                    <>
-                      <ShoppingBag className="mx-auto text-accent mb-2" size={24} />
-                      <p className="font-bold text-ink">Belum ada reservasi aktif</p>
-                      <p className="text-ink-2 text-[10px] mt-0.5">
-                        Percakapan dengan booking pending, hold, atau terjadwal akan muncul di sini.
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="mx-auto text-accent mb-2" size={24} />
-                      <p className="font-bold text-ink">
-                        {chats.length === 0 ? 'Belum ada percakapan' : 'Tidak ada percakapan untuk filter ini'}
-                      </p>
-                      <p className="text-ink-2 text-[10px] mt-0.5">
-                        {chats.length === 0
-                          ? 'Percakapan baru akan muncul secara real-time.'
-                          : 'Coba ubah label atau kata kunci, atau reset filter di bawah.'}
-                      </p>
-                      {labelFilter !== 'all' && (
-                        <button
-                          type="button"
-                          onClick={() => setLabelFilter('all')}
-                          className="mt-2.5 px-2.5 py-1 rounded-lg bg-accent hover:bg-accent-hover text-white text-[11px] font-semibold transition cursor-pointer shadow-xs"
-                        >
-                          Reset Filter Label
-                        </button>
-                      )}
-                    </>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-1.5 pt-1.5">
-                {sortedChats.map((chat) => {
-                  const isMedical = chat.escalationReason === 'medical_concern';
-                  const isSelected = chat.conversationId === selectedId;
-                  const sharelocCard = getSharelocCardStatus(chat);
-                  const chatName = chat.customerName || 'Customer';
-                  const lastMsg = chat.lastMessages && chat.lastMessages.length > 0
-                    ? chat.lastMessages[chat.lastMessages.length - 1]
-                    : null;
-                  const isLastMsgHidden = !!((lastMsg as any)?.is_message_hidden || (lastMsg as any)?.payload_raw?.is_hidden);
-                  const preview = isLastMsgHidden
-                    ? `👁️🗨️ [Hidden] ${lastMsg?.content || 'Pesan'}`
-                    : lastMsg?.content || null;
-                  const senderInd = resolveChatSenderIndicator(lastMsg);
-                  // Draf typing tersimpan sementara (24 jam): untuk chat yang sedang dibuka
-                  // pakai teks live composer, untuk lainnya baca dari penyimpanan. draftTick
-                  // memastikan nilai ini segar setiap render ulang terjadwal.
-                  void draftTick;
-                  const liveDraft = chat.conversationId === selectedId ? (replyTextRef.current || '') : '';
-                  const draftText = (liveDraft || loadConversationDraft(chat.conversationId) || '').trim();
-
-                  return (
-                    <div
-                      key={chat.conversationId}
-                      data-no-select="true"
-                      onClick={() => {
-                        if (longPressTriggeredRef.current) {
-                          longPressTriggeredRef.current = false;
-                          return;
-                        }
-                        const matchedId = (chat as any).matchedMessage?.id || null;
-                        const wasSameConversation = selectedIdRef.current === chat.conversationId;
-                        if (searchQuery.trim() && matchedId) {
-                          setInChatSearchQuery(searchQuery);
-                          setInChatSearchOpen(true);
-                          // Direct jump: backend mengembalikan batch berisi pesan target via focusMessageId.
-                          // Dikonsumsi oleh loadThread (baik via effect pergantian chat maupun panggilan langsung).
-                          pendingFocusMessageIdRef.current = matchedId;
-                        } else if (searchQuery.trim()) {
-                          // Fallback: cari di lastMessages untuk highlight lokal
-                          const q = searchQuery.trim().toLowerCase();
-                          const localMatch = (chat.lastMessages || []).find((m: any) => (m.content || '').toLowerCase().includes(q));
-                          if (localMatch) {
-                            setInChatSearchQuery(searchQuery);
-                            setInChatSearchOpen(true);
-                          }
-                        }
-                        handleSelect(chat.conversationId);
-                        if (matchedId && wasSameConversation) {
-                          // Percakapan sudah aktif → setSelectedId tidak memicu useEffect[selectedId].
-                          // Muat langsung dengan target agar jump tetap bekerja (tanpa double-load race).
-                          loadThread(chat.conversationId, matchedId);
-                        }
-                      }}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        if (typeof window !== 'undefined') {
-                          window.getSelection()?.removeAllRanges();
-                        }
-                        setContextMenu({ x: e.clientX, y: e.clientY, chat });
-                      }}
-                      onTouchStart={(e) => {
-                        const touch = e.touches[0];
-                        if (!touch) return;
-                        const x = touch.clientX;
-                        const y = touch.clientY;
-                        longPressTouchRef.current = { x, y };
-                        if (typeof window !== 'undefined') {
-                          window.getSelection()?.removeAllRanges();
-                        }
-                        longPressTimerRef.current = setTimeout(() => {
-                          longPressTriggeredRef.current = true;
-                          if (typeof window !== 'undefined') {
-                            window.getSelection()?.removeAllRanges();
-                          }
-                          setContextMenu({ x, y, chat });
-                        }, 450);
-                      }}
-                      onTouchEnd={() => {
-                        if (longPressTimerRef.current) {
-                          clearTimeout(longPressTimerRef.current);
-                          longPressTimerRef.current = null;
-                        }
-                        longPressTouchRef.current = null;
-                        setTimeout(() => {
-                          longPressTriggeredRef.current = false;
-                        }, 200);
-                      }}
-                      onTouchMove={(e) => {
-                        if (longPressTimerRef.current && longPressTouchRef.current && e.touches[0]) {
-                          const dx = e.touches[0].clientX - longPressTouchRef.current.x;
-                          const dy = e.touches[0].clientY - longPressTouchRef.current.y;
-                          // Hanya batalkan jika jari bergeser lebih dari 10px (toleransi getaran jari)
-                          if (Math.hypot(dx, dy) > 10) {
-                            clearTimeout(longPressTimerRef.current);
-                            longPressTimerRef.current = null;
-                            longPressTouchRef.current = null;
-                          }
-                        }
-                      }}
-                      onTouchCancel={() => {
-                        if (longPressTimerRef.current) {
-                          clearTimeout(longPressTimerRef.current);
-                          longPressTimerRef.current = null;
-                        }
-                        longPressTouchRef.current = null;
-                        longPressTriggeredRef.current = false;
-                      }}
-                      style={{
-                        WebkitUserSelect: 'none',
-                        userSelect: 'none',
-                        WebkitTouchCallout: 'none',
-                      }}
-                      className={`bg-white dark:bg-surface rounded-xl px-2 pt-1.5 border transition-all duration-150 active:scale-[0.985] cursor-pointer text-left flex flex-col justify-between space-y-1 shadow-2xs relative select-none touch-manipulation ${
-                        chat.isFrustrated
-                          ? 'border-rose-400 dark:border-rose-600/70 border-l-4 border-l-rose-500 bg-rose-50/40 dark:bg-rose-950/20 hover:bg-rose-100/60 dark:hover:bg-rose-950/30'
-                          : isSelected
-                          ? `border-accent dark:border-accent bg-accent-soft/80 dark:bg-accent/15 ${
-                              (chat as any).hasActiveHold
-                                ? 'border-l-4 border-l-amber-500'
-                                : (chat as any).hasPendingBooking
-                                  ? 'border-l-4 border-l-sky-500'
-                                  : (chat as any).hasUpcomingBooking
-                                    ? 'border-l-4 border-l-emerald-500'
-                                    : sharelocCard.needed && sharelocCard.borderClass
-                                      ? sharelocCard.borderClass
-                                      : ''
-                            }`
-                          : isMedical
-                            ? 'border-rose-300 dark:border-rose-700/60 bg-rose-50/40 dark:bg-rose-950/20 hover:bg-rose-50/70 dark:hover:bg-rose-950/30 active:bg-rose-100/50'
-                            : (chat as any).hasActiveHold
-                              ? 'border-divider dark:border-divider border-l-4 border-l-amber-500 bg-amber-100/90 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-900/40 active:bg-amber-200/70'
-                              : (chat as any).hasUpcomingBooking
-                                ? 'border-divider dark:border-divider border-l-4 border-l-emerald-500 bg-emerald-50/65 dark:bg-emerald-950/30 hover:bg-emerald-100/60 dark:hover:bg-emerald-900/40 active:bg-emerald-100'
-                                : (chat as any).hasPendingBooking
-                                  ? 'border-divider dark:border-divider border-l-4 border-l-sky-500 bg-sky-100/90 dark:bg-sky-950/30 hover:bg-sky-100 dark:hover:bg-sky-900/40 active:bg-sky-200/70'
-                                  : sharelocCard.needed && sharelocCard.borderClass
-                                    ? `border-divider dark:border-divider ${sharelocCard.borderClass} ${sharelocCard.urgent ? 'bg-orange-50/40 dark:bg-orange-950/20' : 'bg-amber-50/40 dark:bg-amber-950/20'} hover:bg-surface-2 dark:hover:bg-fill-1`
-                                    : 'border-divider dark:border-divider hover:border-accent/30 dark:hover:border-accent/50 hover:bg-surface-2 dark:hover:bg-fill-1 active:bg-fill-1 dark:active:bg-fill-2'
-                      }`}
-                    >
-                      {/* Top Row: Avatar, Name, Group 1 Labels (Under Name), & Release/Bot Icon + Badges */}
-                      <div className="flex justify-between items-start gap-2">
-                        <div className="flex items-start space-x-2 min-w-0">
-                          <CustomerAvatar
-                            src={chat.customerProfilePictureUrl}
-                            name={chatName}
-                            phone={chat.customerPhone}
-                            size="sm"
-                          />
-                          <div className="space-y-0.5 min-w-0">
-                            <h4 className="font-bold text-ink text-xs flex items-center space-x-1.5 truncate">
-                              {chat.isPinned && (
-                                <span title="Percakapan Disematkan (Pin)" className="inline-flex shrink-0">
-                                  <Pin size={11} className="text-accent fill-current" />
-                                </span>
-                              )}
-                              <span className="truncate">{chatName}</span>
-                              <span className="text-[10px] text-ink-2 font-normal flex-shrink-0">({chat.customerPhone || 'Unknown'})</span>
-                            </h4>
-
-                            {/* GRUP 1: Label Kustom Pelanggan (CRM Tags di bawah nama & nomor) + HOLD/Terjadwal Badge */}
-                            <div className="flex flex-wrap items-center gap-1">
-                              {chat.isFrustrated && (
-                                <span
-                                  title="Butuh Respon Segera (Menunggu balasan > 60 menit)"
-                                  aria-label="Butuh respon segera, menunggu balasan lebih dari 60 menit"
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-danger ring-1 ring-rose-300 dark:ring-rose-800/40 shadow-2xs shrink-0 cursor-help"
-                                >
-                                  <span className="relative flex h-2 w-2">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-danger opacity-75"></span>
-                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-danger"></span>
-                                  </span>
-                                  <AlertTriangle size={11} className="text-rose-600 dark:text-danger shrink-0" />
-                                </span>
-                              )}
-                              <StaffOwnershipBadge ownership={chat.staffOwnership} />
-                              {(chat.customerLabels || []).map((lbl) => (
-                                <span
-                                  key={lbl.id}
-                                  className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold text-white shadow-2xs"
-                                  style={{ backgroundColor: lbl.color || 'rgb(var(--c-accent))' }}
-                                  title={`Label: ${lbl.name}${lbl.description ? ` (${lbl.description})` : ''}`}
-                                >
-                                  {lbl.name}
-                                </span>
-                              ))}
-                              {(chat as any).hasActiveHold && (
-                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-500 text-slate-950 ring-1 ring-amber-300 dark:ring-amber-300/60 shadow-xs tracking-wide">
-                                  ⏳ HOLD
-                                </span>
-                              )}
-                              {(chat as any).hasUpcomingBooking && (
-                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-600 text-white ring-1 ring-emerald-300 dark:ring-emerald-400/60 shadow-xs">
-                                  📅 Terjadwal
-                                </span>
-                              )}
-                              {(chat as any).hasPendingBooking && (
-                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-sky-600 text-white ring-1 ring-sky-300 dark:ring-sky-400/60 shadow-xs">
-                                  🕓 Pending
-                                </span>
-                              )}
-                              {sharelocCard.needed && (
-                                <span
-                                  className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold shadow-2xs border ${sharelocCard.badgeClass}`}
-                                  title={sharelocCard.label || 'Butuh Shareloc'}
-                                >
-                                  {sharelocCard.label}
-                                </span>
-                              )}
-                              {sourceFilter === 'reservation' &&
-                                (() => {
-                                  const ar =
-                                    (chat as any).activeConfirmedReservation ||
-                                    (chat as any).activeHoldReservation ||
-                                    (chat as any).activePendingReservation;
-                                  const staff = ar?.assigned_staff;
-                                  if (staff?.name) {
-                                    return (
-                                      <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-violet-100 dark:bg-violet-950/60 text-violet-800 dark:text-ink-2 ring-1 ring-violet-300 dark:ring-divider shadow-2xs">
-                                        👩‍⚕️ Bidan {staff.name}
-                                      </span>
-                                    );
-                                  }
-                                  if (ar && !ar.assigned_staff_id) {
-                                    return (
-                                      <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-warning ring-1 ring-amber-300 dark:ring-amber-800/40 shadow-2xs">
-                                        ⚠️ Belum Ada Bidan
-                                      </span>
-                                    );
-                                  }
-                                  return null;
-                                })()}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Right Column: Release Icon Button (Khusus Human/CS) + Unread / Awaiting Badge */}
-                        <div className="shrink-0 flex flex-col items-end justify-between self-stretch">
-                          {chat.isHumanHandling ? (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleRelease(chat);
-                              }}
-                              disabled={releasingId === chat.conversationId}
-                              title="Kembalikan percakapan ke Bot AI"
-                              className={`p-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center shadow-2xs disabled:opacity-50 ${
-                                isMedical
-                                  ? 'bg-danger-soft hover:bg-danger text-danger border border-danger-line'
-                                  : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/60 dark:text-ink-2 dark:border-divider'
-                              }`}
-                            >
-                              {releasingId === chat.conversationId ? (
-                                <Loader size={12} className="animate-spin" />
-                              ) : (
-                                <Bot size={13} />
-                              )}
-                            </button>
-                          ) : (
-                            <div className="h-6" />
-                          )}
-
-                          {/* Badge Unread / Orange Dot (Di Bawah Icon Bot) */}
-                          <div className="flex items-center justify-end mt-1 min-h-[19px]">
-                            {(chat.unreadCount || 0) > 0 ? (
-                              chat.isManualUnread ? (
-                                <span
-                                  className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-accent-hover shadow-2xs ring-1 ring-white/50"
-                                  title="Ditandai belum dibaca (Manual)"
-                                >
-                                  <span className="w-1.5 h-1.5 rounded-full bg-surface" />
-                                </span>
-                              ) : (
-                                <span
-                                  className="inline-flex items-center justify-center min-w-[19px] h-[19px] px-1 text-[10px] font-bold text-on-solid bg-success rounded-full shadow-2xs"
-                                  title={`${chat.unreadCount} pesan belum dibaca`}
-                                >
-                                  {chat.unreadCount}
-                                </span>
-                              )
-                            ) : chat.isAwaitingReply ? (
-                              <span
-                                title="Sudah dibaca, menunggu balasan"
-                                className="w-2.5 h-2.5 rounded-full bg-ink-3 shadow-2xs ring-1.5 ring-white inline-block"
-                              />
-                            ) : null}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Chat Preview — snippet pencarian didahulukan saat search aktif */}
-                      {(() => {
-                        const matchedSnippet = searchQuery.trim()
-                          ? (() => {
-                              const q = searchQuery.trim();
-                              const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                              const wbRegex = new RegExp(`(^|\\W)${escaped}($|\\W)`, 'i');
-                              const mm = (chat as any).matchedMessage;
-                              const isMmHidden = !!(mm?.is_message_hidden || mm?.payload_raw?.is_hidden);
-                              const mmContent = isMmHidden ? null : mm?.content;
-                              if (mmContent && wbRegex.test(mmContent)) return mmContent;
-                              const fallbackMsg = (chat.lastMessages || []).find((m: any) => !m?.is_message_hidden && !m?.payload_raw?.is_hidden && wbRegex.test(m.content || ''));
-                              return fallbackMsg?.content || null;
-                            })()
-                          : null;
-                        if (searchQuery.trim() && matchedSnippet) {
-                          return (
-                            <div className="mt-1 p-1.5 rounded bg-amber-50/60 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/20 text-[11px] text-ink dark:text-slate-200 line-clamp-2 leading-tight flex gap-1.5 items-start">
-                              <Search size={10} className="shrink-0 mt-0.5 text-amber-600 dark:text-warning/60" />
-                              <span className="flex-1 min-w-0">&quot;{renderHighlightedText(extractSmartSearchSnippet(matchedSnippet, searchQuery), searchQuery)}&quot;</span>
-                            </div>
-                          );
-                        }
-                        if (draftText) {
-                          return (
-                            <p className="text-xs text-accent line-clamp-1 leading-snug font-medium flex items-center gap-1" title={`Draf belum terkirim: ${draftText}`}>
-                              <PenLine size={11} className="shrink-0" />
-                              <span className="truncate">Draft: {draftText}</span>
-                            </p>
-                          );
-                        }
-                        return (
-                          <p className="text-xs text-ink-2 dark:text-ink-2 line-clamp-1 italic leading-snug flex items-center gap-1.5 min-w-0">
-                            {senderInd.isCustomer && (
-                              <span
-                                className="shrink-0 inline-flex items-center text-rose-600 dark:text-rose-400"
-                                title={senderInd.tooltip}
-                              >
-                                <ArrowDownLeft size={13} strokeWidth={2.5} />
-                              </span>
-                            )}
-                            {senderInd.isAdmin && (
-                              <span
-                                className="shrink-0 inline-flex items-center text-accent"
-                                title={senderInd.tooltip}
-                              >
-                                <CheckCheck size={13} />
-                              </span>
-                            )}
-                            {senderInd.isBot && (
-                              <span
-                                className="shrink-0 inline-flex items-center text-indigo-600 dark:text-indigo-400"
-                                title={senderInd.tooltip}
-                              >
-                                <Bot size={12} />
-                              </span>
-                            )}
-                            <span className="truncate">&quot;{preview || 'Tidak ada pesan'}&quot;</span>
-                          </p>
-                        );
-                      })()}
-
-                      {/* GRUP 2: Metrik, Order, Traffic, Medis, & Jam (Di Footer Bar) — background ikut status */}
-                      <div className={`flex justify-between items-center text-[10px] border-t -mx-2 px-2.5 py-1.5 rounded-b-[11px] mt-1.5 ${
-                        (chat as any).hasActiveHold
-                          ? 'bg-amber-100/90 dark:bg-amber-950/50 border-amber-300/70 dark:border-amber-800/40 text-amber-950 dark:text-amber-200'
-                          : (chat as any).hasUpcomingBooking
-                            ? 'bg-emerald-50/90 dark:bg-emerald-950/50 border-emerald-200/70 dark:border-emerald-800/40 text-emerald-900 dark:text-emerald-200'
-                            : (chat as any).hasPendingBooking
-                              ? 'bg-sky-100/90 dark:bg-sky-950/50 border-sky-300/70 dark:border-sky-800/40 text-sky-950 dark:text-sky-200'
-                              : 'bg-surface-2/60 dark:bg-black/35 border-divider dark:border-divider text-ink-2 dark:text-ink-2'
-                      }`}>
-                        <span className="flex items-center flex-wrap gap-1.5">
-
-                          {/* Medis Badge (icon-only) */}
-                          {isMedical && (
-                            <span
-                              className="inline-flex items-center p-1 rounded text-[9px] font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-danger border border-rose-200 dark:border-rose-800/40"
-                              title="Medical Concern / Emergency — Butuh respon medis"
-                            >
-                              <AlertTriangle size={8} />
-                            </span>
-                          )}
-
-                          {/* MQL Badge (icon-only, disembunyikan bila order sudah terjadi) */}
-                          {chat.isMql && !(chat.purchaseCount && chat.purchaseCount > 0) && (
-                            <span
-                              title={`MQL (${chat.mqlBubbleCount ?? 0} Bubble)`}
-                              className="inline-flex items-center p-1 rounded text-[9px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-accent border border-emerald-200 dark:border-emerald-800/40"
-                            >
-                              <Zap size={8} />
-                            </span>
-                          )}
-
-                          {/* Order Count / Repeat Badge */}
-                          {!!chat.purchaseCount && chat.purchaseCount > 0 && (
-                            <span
-                              title={
-                                chat.purchaseCount === 1
-                                  ? `Purchase 1x (LTV: ${formatRp(chat.ltv || 0)})`
-                                  : `Repeat Order ${chat.purchaseCount}x (LTV: ${formatRp(chat.ltv || 0)})`
-                              }
-                              className={`inline-flex items-center space-x-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold border ${
-                                chat.purchaseCount === 1
-                                  ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-accent border-emerald-200 dark:border-emerald-800/40'
-                                  : 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-warning border-amber-200 dark:border-amber-800/40'
-                              }`}
-                            >
-                              <ShoppingBag size={8} className="mr-0.5" />
-                              <span>{chat.purchaseCount}x</span>
-                            </span>
-                          )}
-
-                          {/* Traffic Source Meta Badge (icon-only) */}
-                          {chat.trafficSource === 'meta' && (
-                            <span
-                              title="Traffic Iklan Meta"
-                              className="inline-flex items-center p-1 rounded text-[9px] font-bold bg-sky-100 dark:bg-sky-950/60 text-sky-800 dark:text-info border border-sky-200 dark:border-sky-800/40"
-                            >
-                              <Facebook size={8} />
-                            </span>
-                          )}
-
-                          {/* Traffic Source Legacy Badge (icon-only, disembunyikan bila order sudah terjadi) */}
-                          {chat.trafficSource === 'legacy' && !(chat.purchaseCount && chat.purchaseCount > 0) && (
-                            <span
-                              title="Pasien Legacy (Data hasil migrasi arsip riwayat WhatsApp lama)"
-                              className="inline-flex items-center p-1 rounded text-[9px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-ink-2 border border-purple-200 dark:border-divider"
-                            >
-                              <Archive size={8} />
-                            </span>
-                          )}
-
-                          {/* Sandbox Badge */}
-                          {chat.isSandboxTest && (
-                            <span
-                              className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-ink-2 border border-purple-200 dark:border-divider"
-                              title="Chat simulasi / sandbox"
-                            >
-                              Sandbox
-                            </span>
-                          )}
-                        </span>
-
-                        {/* Timestamp & Status Alur (chip CS / Bot) */}
-                        <span className="flex items-center gap-1.5">
-                          {chat.lastMessageAt && (
-                            <span className="text-ink-2 dark:text-ink-2 font-sans text-[10px]">
-                              {formatLastChat(chat.lastMessageAt)}
-                            </span>
-                          )}
-                          {chat.currentState === 'HUMAN_HANDLING' ? (
-                            <span
-                              className="inline-flex items-center p-1 rounded-full text-[9px] font-bold bg-amber-100 dark:bg-amber-950/30 text-amber-800 dark:text-warning border border-amber-200 dark:border-amber-800/40"
-                              title="Ditangani CS (manual)"
-                            >
-                              <User size={10} />
-                            </span>
-                          ) : (
-                            <span
-                              className="inline-flex items-center p-1 rounded-full text-[9px] font-bold bg-emerald-100 dark:bg-emerald-950/30 text-emerald-800 dark:text-accent border border-emerald-200 dark:border-emerald-800/40"
-                              title={`Alur: ${chat.currentState}`}
-                            >
-                              <Bot size={10} />
-                            </span>
-                          )}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-                {hasMore && filteredChats.length > 0 && (
-                  <div className="flex justify-center pt-2">
-                    <button
-                      onClick={() => loadChats(false)}
-                      disabled={loadingMore}
-                      className="px-3.5 py-1.5 bg-surface hover:bg-fill-1 border border-divider rounded-xl text-xs font-semibold text-ink transition shadow-xs disabled:opacity-50 flex items-center space-x-1.5"
-                    >
-                      {loadingMore && <Loader size={11} className="animate-spin text-accent" />}
-                      <span>{loadingMore ? 'Memuat...' : 'Muat lebih banyak'}</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-            </div>
-          </div>
+          <LiveChatThreadList
+            mobileView={mobileView}
+            isDesktop={isDesktop}
+            chatListContainerRef={chatListContainerRef}
+            filteredChats={filteredChats}
+            sortedChats={sortedChats}
+            chats={chats}
+            selectedId={selectedId}
+            sseConnected={sseConnected}
+            delayAlert={delayAlert}
+            copilotOpen={copilotOpen}
+            setCopilotOpen={setCopilotOpen}
+            user={user}
+            bgSyncProgress={bgSyncProgress}
+            syncProgress={syncProgress}
+            errorMessage={errorMessage}
+            sourceFilter={sourceFilter}
+            setSourceFilter={setSourceFilter}
+            labelFilter={labelFilter}
+            setLabelFilter={setLabelFilter}
+            reservationStaffFilter={reservationStaffFilter}
+            setReservationStaffFilter={setReservationStaffFilter}
+            reservationStaffList={reservationStaffList}
+            totalUnreadCount={totalUnreadCount}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            isSearching={isSearching}
+            searchInputRef={searchInputRef}
+            triggerDebouncedSearch={triggerDebouncedSearch}
+            handleClearInChatSearch={handleClearInChatSearch}
+            loadChats={loadChats}
+            chatBotActive={chatBotActive}
+            togglingBotCutoff={togglingBotCutoff}
+            handleToggleGlobalBot={handleToggleGlobalBot}
+            handleMarkAllAsRead={handleMarkAllAsRead}
+            setShowSyncInfoModal={setShowSyncInfoModal}
+            handleCancelBackgroundSync={handleCancelBackgroundSync}
+            openMobileMenu={openMobileMenu}
+            hasMore={hasMore}
+            loadingMore={loadingMore}
+            draftTick={draftTick}
+            replyTextRef={replyTextRef}
+            handleSelect={handleSelect}
+            setContextMenu={setContextMenu}
+            handleRelease={handleRelease}
+            releasingId={releasingId}
+            setInChatSearchQuery={setInChatSearchQuery}
+            setInChatSearchOpen={setInChatSearchOpen}
+            pendingFocusMessageIdRef={pendingFocusMessageIdRef}
+            selectedIdRef={selectedIdRef}
+            loadThread={loadThread}
+            searchDebounceTimerRef={searchDebounceTimerRef}
+            searchInputFocusedRef={searchInputFocusedRef}
+          />
 
           {/* Section 2: Right Panel - Live Chat Messages */}
-          <div
-            data-chat-detail="true"
-            className={`${mobileView === 'list' ? 'hidden lg:flex' : 'flex animate-mobile-chat-enter lg:animate-none'} flex-1 min-w-0 h-full min-h-0 flex-col`}
-          >
-            {selectedChat ? (
-              <div className="bg-surface border-0 lg:border border-divider rounded-none lg:rounded-2xl p-1 sm:p-2 md:p-2.5 pb-0 sm:pb-0 md:pb-0 h-full flex flex-col justify-between shadow-none lg:shadow-xs overflow-hidden min-h-0">
-                {/* Header Info: Clickable Card to view full customer detail modal */}
-                <div className="border-b border-divider pb-1 sm:pb-1.5 space-y-1 shrink-0">
-                  {selectedChat.isSandboxTest && (
-                    <div className="flex items-center space-x-2 px-2 py-0.5 rounded-lg bg-violet-soft border border-violet-line text-violet text-[10px] font-bold uppercase tracking-wider">
-                      <FlaskConical size={11} />
-                      <span>QA TEST — chat simulasi</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between items-center gap-2">
-                    <div className="flex items-center min-w-0 flex-1">
-                      {/* Mobile Back Button (Dedicated Independent Touch Target) */}
-                      <button
-                        type="button"
-                        onClick={handleBackToList}
-                        className="lg:hidden flex items-center justify-center w-10 h-10 min-w-[40px] min-h-[40px] -ml-1 mr-2 rounded-xl bg-fill-1 hover:bg-fill-2 active:bg-strong text-ink transition shrink-0 active:scale-95 touch-manipulation z-20 cursor-pointer shadow-2xs"
-                        title="Kembali ke daftar percakapan"
-                        aria-label="Kembali ke daftar percakapan"
-                      >
-                        <ChevronLeft size={22} className="stroke-[2.5]" />
-                      </button>
+          <LiveChatMessagePane
+            mobileView={mobileView}
+            selectedChat={selectedChat}
+            selectedIdRef={selectedIdRef}
+            chatsRef={chatsRef}
+            setChats={setChats}
+            loadThread={loadThread}
+            wasNearBottomRef={wasNearBottomRef}
+            savedScrollTopRef={savedScrollTopRef}
+            searchQuery={searchQuery}
+            handleReservationUpdate={handleReservationUpdate}
+            setSelectedReservation={setSelectedReservation}
+            setActiveEditingConfirmedReservation={setActiveEditingConfirmedReservation}
+            setShowQuickBookingModal={setShowQuickBookingModal}
+            markSharelocRequested={markSharelocRequested}
+            setIsPinningMessageId={setIsPinningMessageId}
+            gatewayCapability={gatewayCapability}
+            selectedId={selectedId}
+            messages={messages}
+            isThreadLoading={isThreadLoading}
+            threadLoadError={threadLoadError}
+            hasMoreOlderMessages={hasMoreOlderMessages}
+            isLoadingOlder={isLoadingOlder}
+            loadOlderMessages={loadOlderMessages}
+            chatContainerRef={chatContainerRef}
+            messagesEndRef={messagesEndRef}
+            composerRef={composerRef}
+            fileInputRef={fileInputRef}
+            inChatSearchInputRef={inChatSearchInputRef}
+            inChatSearchOpen={inChatSearchOpen}
+            setInChatSearchOpen={setInChatSearchOpen}
+            inChatSearchQuery={inChatSearchQuery}
+            setInChatSearchQuery={setInChatSearchQuery}
+            matchingMessageIds={matchingMessageIds}
+            currentMatchIndex={currentMatchIndex}
+            isDeepSearching={isDeepSearching}
+            handlePrevMatch={handlePrevMatch}
+            handleNextMatch={handleNextMatch}
+            handleClearInChatSearch={handleClearInChatSearch}
+            handleDeepSearchInHistory={handleDeepSearchInHistory}
+            highlightedMsgId={highlightedMsgId}
+            handleBackToList={handleBackToList}
+            handleOpenCustomerDetail={handleOpenCustomerDetail}
+            handleToggleLabel={handleToggleLabel}
+            allLabels={allLabels}
+            togglingLabelId={togglingLabelId}
+            labelPopoverOpen={labelPopoverOpen}
+            setLabelPopoverOpen={setLabelPopoverOpen}
+            labelPopoverRef={labelPopoverRef}
+            activeHoldReservation={activeHoldReservation}
+            activeConfirmedReservation={activeConfirmedReservation}
+            activePendingReservation={activePendingReservation}
+            currentActiveReservation={currentActiveReservation}
+            dispatchTrip={dispatchTrip}
+            setDispatchDrawerOpen={setDispatchDrawerOpen}
+            chatBotActive={chatBotActive}
+            handleToggleGlobalBot={handleToggleGlobalBot}
+            releasingId={releasingId}
+            handleRelease={handleRelease}
+            handleTakeover={handleTakeover}
+            handleToggleReadStatus={handleToggleReadStatus}
+            copilotOpen={copilotOpen}
+            setCopilotOpen={setCopilotOpen}
+            showFormReservasiBanner={showFormReservasiBanner}
+            showNeutralExistingReservationBanner={showNeutralExistingReservationBanner}
+            showUnregisteredVisitBanner={showUnregisteredVisitBanner}
+            formBannerExtracted={formBannerExtracted}
+            formBannerKey={formBannerKey}
+            matchedExistingReservation={matchedExistingReservation}
+            setDismissedFormBanner={setDismissedFormBanner}
+            handleOpenQuickReservation={handleOpenQuickReservation}
+            handleOpenQuickHold={handleOpenQuickHold}
+            handleConfirmPendingBooking={handleConfirmPendingBooking}
+            handleConvertHoldToBooking={handleConvertHoldToBooking}
+            handleJumpToPinnedMessage={handleJumpToPinnedMessage}
+            pinnedBubble={pinnedBubble}
+            setPinnedBubble={setPinnedBubble}
+            isPinningMessageId={isPinningMessageId}
+            isHidingMessageId={isHidingMessageId}
+            revokingId={revokingId}
+            handleSelectReply={handleSelectReply}
+            handleCopyMessageText={handleCopyMessageText}
+            handleToggleMessagePin={handleToggleMessagePin}
+            handleToggleMessageHide={handleToggleMessageHide}
+            handleRevokeMessage={handleRevokeMessage}
+            handleStartEdit={handleStartEdit}
+            handleToggleReaction={handleToggleReaction}
+            setProofModalReservation={setProofModalReservation}
+            sending={sending}
+            generatingDraft={generatingDraft}
+            replyingTo={replyingTo}
+            setReplyingTo={setReplyingTo}
+            selectedImage={selectedImage}
+            quickReplies={quickReplies}
+            handleComposerTextChange={handleComposerTextChange}
+            notifyTyping={notifyTyping}
+            handleSendReply={handleSendReply}
+            applyQuickReply={applyQuickReply}
+            handlePickImage={handlePickImage}
+            handleImageFile={handleImageFile}
+            handleRemoveSelectedImage={handleRemoveSelectedImage}
+            handleGenerateAiDraft={handleGenerateAiDraft}
+            setShowDailyScheduleModal={setShowDailyScheduleModal}
+            handleGenerateActiveReservationInvoice={handleGenerateActiveReservationInvoice}
+            scrollToBottom={scrollToBottom}
+          />
 
-                      {/* Clickable Customer Header Box */}
-                      <div
-                        onClick={() => handleOpenCustomerDetail(selectedChat)}
-                        className="flex items-center space-x-2.5 p-1 -m-1 rounded-xl hover:bg-surface-2 cursor-pointer transition border border-transparent hover:border-divider group min-w-0 flex-1"
-                        title="Klik untuk melihat detail lengkap profil customer"
-                      >
-                        <CustomerAvatar
-                          src={selectedChat.customerProfilePictureUrl}
-                          name={selectedChat.customerName}
-                          phone={selectedChat.customerPhone}
-                          size="sm"
-                        />
-                        <div className="min-w-0 flex flex-col justify-center">
-                          <h3 className="text-xs sm:text-sm font-bold text-ink flex items-center space-x-1 group-hover:text-accent transition truncate leading-none">
-                            <span className="truncate">{selectedChat.customerName || 'Customer'}</span>
-                            <ExternalLink size={11} className="text-ink-3 group-hover:text-accent shrink-0" />
-                          </h3>
-                          <div className="flex items-center space-x-1.5 mt-1 flex-wrap gap-y-1">
-                            <p className="text-[11px] text-ink-2 font-mono leading-none">
-                              {selectedChat.customerPhone || 'Unknown'}
-                            </p>
-
-                            <StaffOwnershipBadge ownership={selectedChat.staffOwnership} />
-
-                            {/* Active Label Colored Dots */}
-                            {(selectedChat.customerLabels || []).map((lbl) => (
-                              <span
-                                key={lbl.id}
-                                className="w-2.5 h-2.5 rounded-full inline-block shrink-0 shadow-2xs cursor-help ring-1 ring-white"
-                                style={{ backgroundColor: lbl.color || 'rgb(var(--c-accent))' }}
-                                title={`Label: ${lbl.name}${lbl.description ? ` (${lbl.description})` : ''}`}
-                              />
-                            ))}
-
-                            {/* Active Reservation Badges in Chat Header: Disupresi jika alert banner reservasi sudah tampil di bawah */}
-                            {Boolean((selectedChat as any).hasActiveHold || activeHoldReservation) && !activeHoldReservation && (
-                              <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-500 text-slate-950 ring-1 ring-amber-300 dark:ring-amber-300/60 shadow-xs tracking-wide">
-                                ⏳ HOLD
-                              </span>
-                            )}
-                            {Boolean((selectedChat as any).hasUpcomingBooking || activeConfirmedReservation) && !activeConfirmedReservation && (
-                              <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-600 text-white ring-1 ring-emerald-300 dark:ring-emerald-400/60 shadow-xs">
-                                📅 Terjadwal
-                              </span>
-                            )}
-                            {Boolean((selectedChat as any).hasPendingBooking || activePendingReservation) && !activePendingReservation && (
-                              <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-sky-600 text-white ring-1 ring-sky-300 dark:ring-sky-400/60 shadow-xs">
-                                🕓 Pending
-                              </span>
-                            )}
-
-                            {/* Add / Manage Label Button (+) right next to phone & dots */}
-                            <div className="relative inline-flex items-center" ref={labelPopoverRef} onClick={(e) => e.stopPropagation()}>
-                              <button
-                                type="button"
-                                onClick={() => setLabelPopoverOpen(!labelPopoverOpen)}
-                                className="inline-flex items-center justify-center w-7 h-7 min-w-[28px] min-h-[28px] max-h-[28px] aspect-square rounded-full text-[11px] font-bold bg-fill-1 hover:bg-fill-2 text-ink-2 hover:text-accent border border-divider transition shadow-2xs active:scale-95 ml-1 shrink-0"
-                                title="Tambah / Kelola Label Pasien"
-                                aria-label="Tambah Label"
-                              >
-                                <Plus size={10} />
-                              </button>
-
-                            {/* Label Picker Popover */}
-                            {labelPopoverOpen && (
-                              <div className="absolute left-0 top-full mt-1.5 z-30 w-52 bg-surface border border-divider rounded-xl shadow-lg p-2 space-y-1">
-                                <div className="flex justify-between items-center px-1.5 pb-1 border-b border-divider text-[11px] font-bold text-ink-2">
-                                  <span>PILIH LABEL</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => setLabelPopoverOpen(false)}
-                                    className="text-ink-3 hover:text-ink text-xs font-semibold"
-                                  >
-                                    ✕
-                                  </button>
-                                </div>
-                                {allLabels.length === 0 ? (
-                                  <p className="text-[11px] text-ink-2 p-2 text-center">
-                                    Belum ada label.{' '}
-                                    <a href="/admin/labels" className="text-accent underline font-semibold">
-                                      Buat label
-                                    </a>
-                                  </p>
-                                ) : (
-                                  <div className="max-h-48 overflow-y-auto space-y-0.5 py-1">
-                                    {allLabels.map((lbl) => {
-                                      const isChecked = (selectedChat.customerLabels || []).some((l) => l.id === lbl.id);
-                                      return (
-                                        <button
-                                          key={lbl.id}
-                                          type="button"
-                                          onClick={() => handleToggleLabel(selectedChat.customerId, lbl)}
-                                          disabled={togglingLabelId === lbl.id}
-                                          className={`w-full text-left px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition ${
-                                            isChecked ? 'bg-accent-soft text-accent' : 'hover:bg-fill-1 text-ink'
-                                          }`}
-                                        >
-                                          <span className="flex items-center space-x-2 truncate">
-                                            <span
-                                              className="w-2.5 h-2.5 rounded-full shrink-0"
-                                              style={{ backgroundColor: lbl.color }}
-                                            />
-                                            <span className="truncate">{lbl.name}</span>
-                                          </span>
-                                          {isChecked && <Check size={13} className="text-accent shrink-0" />}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                    {/* Header actions: In-chat search + Unread toggle + Bot Release/Takeover */}
-                    <div className="shrink-0 flex items-center gap-1.5">
-                      {dispatchTrip && !dispatchTrip.arrivedAt && !['completed', 'cancelled', 'rejected'].includes(String(dispatchTrip.status || '')) && (
-                        <button
-                          type="button"
-                          onClick={() => setDispatchDrawerOpen(true)}
-                          title="Buka Radar OTW Bidan"
-                          className="xl:hidden inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-accent-soft text-accent border border-accent/30 text-xs font-bold shadow-2xs active:scale-95 transition"
-                        >
-                          <Radar size={14} />
-                          <span className="hidden sm:inline">Radar OTW</span>
-                        </button>
-                      )}
-                      {(() => {
-                        const sharelocStatus = getSharelocCardStatus(selectedChat);
-                        if (!sharelocStatus.needed) return null;
-                        return (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const qr = quickReplies.find((q) => q.shortcut === 'shareloc');
-                              if (!qr?.content) {
-                                toast('Template shareloc belum diatur di Balasan Cepat (kategori Pasca Booking).', 'error');
-                                return;
-                              }
-                              const text = applyQuickReply({ content: qr.content });
-                              composerRef.current?.setText(text);
-                              markSharelocRequested(selectedChat?.conversationId);
-                              toast('Template shareloc dimasukkan ke composer balasan.', 'success');
-                            }}
-                            title={sharelocStatus.label || 'Minta Titik Presisi (Shareloc)'}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300 border border-orange-300 dark:border-orange-800 text-xs font-bold shadow-2xs active:scale-95 transition cursor-pointer"
-                          >
-                            <MapPin size={14} className="text-orange-600 dark:text-orange-400 shrink-0" />
-                            <span className="hidden sm:inline">Minta Shareloc</span>
-                          </button>
-                        );
-                      })()}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const next = !inChatSearchOpen;
-                          setInChatSearchOpen(next);
-                          if (next) setTimeout(() => inChatSearchInputRef.current?.focus(), 60);
-                        }}
-                        title={inChatSearchOpen ? 'Tutup pencarian dalam chat' : 'Cari dalam chat'}
-                        className={`p-1.5 min-w-[38px] min-h-[38px] rounded-xl border transition shadow-2xs flex items-center justify-center ${inChatSearchOpen ? 'bg-accent text-white border-accent' : 'bg-white dark:bg-fill-2 border-divider dark:border-strong text-ink-2 dark:text-ink-2 hover:text-ink hover:bg-fill-1 dark:hover:bg-strong'}`}
-                      >
-                        <Search size={14} />
-                      </button>
-                      {selectedChat.isHumanHandling ? (
-                        <button
-                          onClick={() => handleRelease(selectedChat)}
-                          disabled={releasingId === selectedChat.conversationId}
-                          title="Kembalikan percakapan ke Bot AI"
-                          className="px-3 py-1.5 bg-info hover:bg-info-hover text-on-solid rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50 cursor-pointer"
-                        >
-                          <Bot size={14} />
-                          <span className="hidden sm:inline">Kembalikan ke Bot</span>
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleTakeover(selectedChat)}
-                          disabled={releasingId === selectedChat.conversationId}
-                          title="Ambil alih percakapan (CS / Manual). Bot AI akan dinonaktifkan untuk percakapan ini."
-                          className="px-3 py-1.5 bg-warning-soft hover:bg-warning-line text-warning border border-warning-line rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
-                        >
-                          <User size={14} className="text-warning" />
-                          {/* FASE 4 (M-05): di HP cukup ikon agar nama pasien tidak terpotong. */}
-                          <span className="hidden sm:inline">Ambil Alih (CS)</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Active Hold Slot Alert Banner - Ultra-Pressed Single-Line (ultra-compact saat banner cut-off merah ikut tampil) */}
-                {/* Smart Micro-Pill (mobile saja): mengapung tanpa background bar yang menutupi livechat */}
-                {isBannerCollapsed && (activeHoldReservation || activeConfirmedReservation || activePendingReservation) && (
-                  <div className="md:hidden h-0 overflow-visible relative z-30 flex justify-center pointer-events-none animate-fadeIn">
-                    <div className="pt-2">
-                      <button
-                        type="button"
-                        onClick={expandBanner}
-                        className={`pointer-events-auto h-[26px] px-3 rounded-full text-[11px] font-bold inline-flex items-center gap-1.5 shadow-md backdrop-blur-md cursor-pointer active:scale-95 transition-all border ${
-                          activeHoldReservation
-                            ? 'bg-amber-50/95 dark:bg-amber-950/90 border-amber-300/80 text-amber-900 dark:text-amber-200 shadow-amber-500/10'
-                            : activeConfirmedReservation
-                              ? 'bg-emerald-50/95 dark:bg-emerald-950/90 border-emerald-300/80 text-emerald-900 dark:text-emerald-200 shadow-emerald-500/10'
-                              : 'bg-sky-50/95 dark:bg-sky-950/90 border-sky-300/80 text-sky-900 dark:text-sky-200 shadow-sky-500/10'
-                        }`}
-                        title="Tampilkan detail banner"
-                      >
-                        <span className={`w-1.5 h-1.5 rounded-full animate-pulse shrink-0 ${
-                          activeHoldReservation ? 'bg-warning' : activeConfirmedReservation ? 'bg-success' : 'bg-info'
-                        }`} />
-                        <span>
-                          {(() => {
-                            const r = activeHoldReservation || activeConfirmedReservation || activePendingReservation;
-                            if (!r?.booking_date) return '';
-                            const d = new Date(r.booking_date).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' });
-                            const t = new Date(r.booking_date).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' });
-                            const dur = Number(r.duration_minutes) > 0 ? ` • ${r.duration_minutes} mnt` : '';
-                            return `${d} ${t}${dur}`;
-                          })()}
-                        </span>
-                        <ChevronDown size={12} className="stroke-[2.5]" />
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Active Hold Slot Alert Banner */}
-                {activeHoldReservation && (
-                  <div className={`mx-1.5 mb-1.5 px-3 py-1.5 min-h-[40px] rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition-all bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent dark:from-amber-500/10 dark:via-transparent dark:to-transparent border-amber-300/80 dark:border-amber-600/50 text-amber-950 dark:text-amber-100`}>
-                    <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
-                      <span className="w-2 h-2 rounded-full bg-warning animate-pulse shrink-0" />
-                      <div className="flex flex-col justify-center leading-tight min-w-0">
-                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-amber-800 dark:text-warning">HOLD</span>
-                        <span className="flex items-center gap-1 min-w-0 text-amber-950 dark:text-amber-100">
-                          <Clock size={11} className="text-amber-700 dark:text-warning shrink-0" />
-                          <span className="font-semibold truncate text-[11px]">
-                            {activeHoldReservation.booking_date
-                              ? new Date(activeHoldReservation.booking_date).toLocaleDateString('id-ID', {
-                                  weekday: 'short',
-                                  day: 'numeric',
-                                  month: 'short',
-                                }) +
-                                ' ' +
-                                new Date(activeHoldReservation.booking_date).toLocaleTimeString('id-ID', {
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                  timeZone: 'Asia/Jakarta',
-                                })
-                              : 'Slot belum ditentukan'}
-                            {Number(activeHoldReservation.duration_minutes) > 0 ? ` • ${activeHoldReservation.duration_minutes} mnt` : ''}
-                          </span>
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => handleConvertHoldToBooking(activeHoldReservation)}
-                        className="inline-flex items-center gap-1.5 h-[30px] px-3 bg-gradient-to-r from-warning to-warning hover:from-warning hover:to-warning active:scale-95 text-white font-bold rounded-full text-xs leading-none transition-all shadow-xs cursor-pointer whitespace-nowrap shrink-0"
-                        title="Lengkapi data booking reservasi ini"
-                      >
-                        <PenLine size={13} className="shrink-0" />
-                        <span>Lengkapi</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          try {
-                            await apiRequest(`/api/admin/reservation/${activeHoldReservation.id}/release-hold`, {
-                              method: 'PATCH',
-                            });
-                            toast('Slot hold berhasil dilepas.', 'success');
-                            await handleReservationUpdate();
-                            if (selectedChat) {
-                              setChats((prev) => {
-                                const updated = prev.map((c) => c.conversationId === selectedChat.conversationId ? { ...c, hasActiveHold: false, activeHoldReservation: null } : c);
-                                chatsRef.current = updated;
-                                return updated;
-                              });
-                            }
-                          } catch {
-                            toast('Gagal melepas slot hold.', 'error');
-                          }
-                        }}
-                        className="inline-flex items-center justify-center h-[30px] w-[30px] bg-white/90 dark:bg-amber-950/60 hover:bg-rose-50 dark:hover:bg-rose-950/50 active:scale-95 text-amber-800 hover:text-rose-600 dark:text-amber-200 dark:hover:text-rose-300 border border-amber-300/70 dark:border-amber-700/60 hover:border-rose-300 dark:hover:border-rose-700 rounded-full transition-all shadow-2xs cursor-pointer shrink-0"
-                        title="Lepas slot hold"
-                      >
-                        <X size={13} strokeWidth={2.5} className="shrink-0" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setIsBannerCollapsed(true)}
-                        className="md:hidden inline-flex items-center justify-center h-[30px] w-[30px] text-amber-700 dark:text-warning hover:bg-amber-500/15 active:scale-95 rounded-full transition-all shrink-0"
-                        title="Ciutkan banner"
-                      >
-                        <ChevronUp size={14} className="stroke-[2.5]" />
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Active Payment Proof Banner (Bukti Bayar Masuk) */}
-                {Boolean(currentActiveReservation?.proof_url) && (() => {
-                  const proofEval = evaluatePaymentProof(currentActiveReservation);
-                  const isMismatch = proofEval.isMismatch;
-                  const bannerBg = isMismatch
-                    ? 'bg-rose-50/95 dark:bg-rose-950/60 border-rose-300 dark:border-rose-700/60 text-rose-950 dark:text-rose-100'
-                    : 'bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700/60 text-emerald-950 dark:text-emerald-100';
-                  const iconColor = isMismatch
-                    ? 'text-rose-600 dark:text-danger'
-                    : 'text-emerald-700 dark:text-accent';
-                  const headerColor = isMismatch
-                    ? 'text-rose-800 dark:text-danger'
-                    : 'text-emerald-800 dark:text-accent';
-                  const subtextColor = isMismatch
-                    ? 'text-rose-900 dark:text-rose-200'
-                    : 'text-emerald-900 dark:text-emerald-200';
-
-                  return (
-                    <div className={`mx-1.5 mb-1.5 px-3 py-2 rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center justify-between gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition-all ${bannerBg}`}>
-                      <div className="flex items-center gap-2 min-w-0">
-                        {isMismatch ? (
-                          <AlertTriangle size={16} className={`${iconColor} shrink-0`} />
-                        ) : (
-                          <Receipt size={16} className={`${iconColor} shrink-0`} />
-                        )}
-                        <div className="flex flex-col justify-center leading-tight min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <span className={`font-extrabold text-[9px] uppercase tracking-wider ${headerColor}`}>
-                              BUKTI TRANSFER ({currentActiveReservation.payment_method || 'Transfer'})
-                            </span>
-                            {isMismatch && (
-                              <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-danger text-on-solid uppercase tracking-wider shadow-2xs">
-                                NOMINAL TIDAK SESUAI
-                              </span>
-                            )}
-                          </div>
-                          <span className={`text-[11px] truncate font-medium ${subtextColor}`}>
-                            {proofEval.description} • Status: <span className="font-bold">{currentActiveReservation.purchase_review_status === 'approved' ? 'Lunas' : 'Menunggu Verifikasi CS'}</span>
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => setProofModalReservation(currentActiveReservation)}
-                          className={`px-2.5 py-1 rounded-lg border text-xs font-semibold transition flex items-center gap-1 cursor-pointer shadow-2xs ${
-                            isMismatch
-                              ? 'bg-white dark:bg-rose-900 border-rose-300 dark:border-rose-600 text-rose-800 dark:text-rose-200 hover:bg-rose-100 dark:hover:bg-rose-800'
-                              : 'bg-white dark:bg-emerald-900 border-emerald-300 dark:border-emerald-600 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-800'
-                          }`}
-                          title="Lihat Bukti Transfer"
-                        >
-                          <Eye size={13} />
-                          <span>Lihat Bukti</span>
-                        </button>
-                        {currentActiveReservation.purchase_review_status !== 'approved' && (
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              const ok = await confirm({
-                                title: isMismatch ? 'Peringatan: Nominal Tidak Sesuai. Tetap Setujui?' : 'Tandai Lunas & Setujui?',
-                                message: isMismatch
-                                  ? `Nominal struk (Rp ${proofEval.receiptAmount?.toLocaleString('id-ID')}) TIDAK SESUAI dengan tagihan resmi (Rp ${proofEval.totalExpected.toLocaleString('id-ID')}). Tetap setujui pembayaran?`
-                                  : `Setujui pembayaran ${currentActiveReservation.payment_method || 'Transfer'} sebesar ${currentActiveReservation.purchase_value ? `Rp ${currentActiveReservation.purchase_value.toLocaleString('id-ID')}` : ''}?`,
-                                confirmText: isMismatch ? 'Ya, Tetap Setujui' : 'Ya, Tandai Lunas',
-                                cancelText: 'Batal',
-                              });
-                              if (!ok) return;
-                              try {
-                                await apiRequest(`/api/admin/reservation/${currentActiveReservation.id}/approve-purchase`, {
-                                  method: 'POST',
-                                  body: JSON.stringify({ force: true, reason: isMismatch ? 'CS Override Mismatched Payment Proof' : 'CS Verified Payment Proof' }),
-                                });
-                                toast('Pembayaran berhasil disetujui & ditandai lunas.', 'success');
-                                await handleReservationUpdate();
-                              } catch (err: any) {
-                                toast(`Gagal memproses persetujuan: ${err?.message || 'Terjadi kesalahan'}`, 'error');
-                              }
-                            }}
-                            className="px-2.5 py-1 rounded-lg bg-success hover:bg-success-hover text-on-solid text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-2xs"
-                            title="Tandai pembayaran telah diverifikasi CS"
-                          >
-                            <CheckCircle size={13} />
-                            <span>Tandai Lunas</span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Active Confirmed / Terjadwal Alert Banner */}
-                 {!activeHoldReservation && activeConfirmedReservation && (
-                   <div className={`mx-1.5 mb-1.5 px-3 py-1.5 min-h-[40px] rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition-all bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent dark:from-emerald-500/10 dark:via-transparent dark:to-transparent border-emerald-300/80 dark:border-emerald-600/50 text-emerald-950 dark:text-emerald-100`}>
-                     <button
-                       type="button"
-                       onClick={() => setSelectedReservation(activeConfirmedReservation)}
-                       className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden text-left cursor-pointer hover:opacity-90 transition-opacity"
-                       title="Lihat Ringkasan Jadwal & Bukti Bayar Pasien"
-                     >
-                       <span className="w-2 h-2 rounded-full bg-success animate-pulse shrink-0" />
-                       <div className="flex flex-col justify-center leading-tight min-w-0">
-                         <span className="font-extrabold text-[9px] uppercase tracking-wider text-emerald-800 dark:text-accent">JADWAL</span>
-                         <span className="flex items-center gap-1 min-w-0 text-emerald-950 dark:text-emerald-100">
-                           <Clock size={11} className="text-emerald-700 dark:text-accent shrink-0" />
-                           <span className="font-semibold truncate text-[11px]">
-                             {activeConfirmedReservation.booking_date
-                               ? new Date(activeConfirmedReservation.booking_date).toLocaleDateString('id-ID', {
-                                   weekday: 'short',
-                                   day: 'numeric',
-                                   month: 'short',
-                                 }) +
-                                 ' ' +
-                                  new Date(activeConfirmedReservation.booking_date).toLocaleTimeString('id-ID', {
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                    timeZone: 'Asia/Jakarta',
-                                  })
-                               : 'Jadwal terkonfirmasi'}
-                              {activeConfirmedReservation.treatment_detail ? ` • ${activeConfirmedReservation.treatment_detail}` : ''}
-                             {Number(activeConfirmedReservation.duration_minutes) > 0 ? ` • ${activeConfirmedReservation.duration_minutes} mnt` : ''}
-                           </span>
-                         </span>
-                       </div>
-                     </button>
-                     <div className={`flex items-center shrink-0 ${chatBotActive ? 'gap-2' : 'gap-1.5'}`}>
-                       <button
-                         type="button"
-                         onClick={() => {
-                           setActiveEditingConfirmedReservation(activeConfirmedReservation);
-                           setShowQuickBookingModal(true);
-                         }}
-                         className={`inline-flex items-center justify-center bg-transparent border-transparent active:scale-95 text-emerald-700 dark:text-accent hover:text-emerald-900 dark:hover:text-emerald-100 transition-all cursor-pointer shrink-0 ${chatBotActive ? 'w-7 h-4' : 'h-[30px] w-[30px]'}`}
-                         title="Ubah Jadwal, Jam, atau Bidan Bertugas"
-                       >
-                         <PenLine size={chatBotActive ? 12 : 14} className="shrink-0" />
-                       </button>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const ok = await confirm({
-                            title: 'Tandai Selesai?',
-                            message: 'Tandai reservasi ini sebagai selesai?',
-                            confirmText: 'Ya, Selesai',
-                            cancelText: 'Batal',
-                          });
-                          if (!ok) return;
-                          try {
-                            await apiRequest(`/api/admin/reservation/${activeConfirmedReservation.id}/complete`, { method: 'PATCH' });
-                            toast('Reservasi ditandai selesai.', 'success');
-                            await handleReservationUpdate();
-                          } catch {
-                            toast('Gagal menandai selesai.', 'error');
-                          }
-                        }}
-                        className={`inline-flex items-center justify-center bg-transparent border-transparent active:scale-95 text-emerald-700 dark:text-accent hover:text-emerald-900 dark:hover:text-emerald-100 transition-all cursor-pointer shrink-0 ${chatBotActive ? 'w-7 h-4' : 'h-[30px] w-[30px]'}`}
-                        title="Tandai reservasi telah selesai treatment"
-                      >
-                        <CheckCircle size={chatBotActive ? 12 : 14} className="shrink-0" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setIsBannerCollapsed(true)}
-                        className="md:hidden inline-flex items-center justify-center h-[30px] w-[30px] text-emerald-700 dark:text-accent hover:bg-emerald-500/15 active:scale-95 rounded-full transition-all shrink-0"
-                        title="Ciutkan banner"
-                      >
-                        <ChevronUp size={14} className="stroke-[2.5]" />
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Active Pending Alert Banner */}
-                {!activeHoldReservation && !activeConfirmedReservation && activePendingReservation && (
-                  <div className={`mx-1.5 mb-1.5 px-3 py-1.5 min-h-[40px] rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition-all bg-gradient-to-r from-sky-500/10 via-sky-500/5 to-transparent dark:from-sky-500/20 dark:via-sky-500/10 dark:to-transparent border-sky-300/80 dark:border-sky-600/50 text-sky-950 dark:text-sky-100`}>
-                    <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
-                      <span className="w-2 h-2 rounded-full bg-info animate-pulse shrink-0" />
-                      <div className="flex flex-col justify-center leading-tight min-w-0">
-                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-sky-800 dark:text-info">PENDING</span>
-                        <span className="flex items-center gap-1 min-w-0 text-sky-950 dark:text-sky-100">
-                          <Clock size={11} className="text-sky-700 dark:text-info shrink-0" />
-                          <span className="font-semibold truncate text-[11px]">
-                            {activePendingReservation.booking_date
-                              ? new Date(activePendingReservation.booking_date).toLocaleDateString('id-ID', {
-                                  weekday: 'short',
-                                  day: 'numeric',
-                                  month: 'short',
-                                }) +
-                                ' ' +
-                                new Date(activePendingReservation.booking_date).toLocaleTimeString('id-ID', {
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                  timeZone: 'Asia/Jakarta',
-                                })
-                              : 'Menunggu konfirmasi jadwal'}
-                            {activePendingReservation.treatment_detail ? ` • ${activePendingReservation.treatment_detail}` : ''}
-                          </span>
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => handleConfirmPendingBooking(activePendingReservation)}
-                        className="inline-flex items-center gap-1.5 h-[30px] px-3 bg-gradient-to-r from-info to-info hover:from-info hover:to-info active:scale-95 text-white font-bold rounded-full text-xs leading-none transition-all shadow-xs cursor-pointer whitespace-nowrap shrink-0"
-                        title="Konfirmasi dan jadwalkan booking ini"
-                      >
-                        <Check size={13} strokeWidth={2.5} className="shrink-0" />
-                        <span>Konfirmasi</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setIsBannerCollapsed(true)}
-                        className="md:hidden inline-flex items-center justify-center h-[30px] w-[30px] text-sky-700 dark:text-info hover:bg-sky-500/15 active:scale-95 rounded-full transition-all shrink-0"
-                        title="Ciutkan banner"
-                      >
-                        <ChevronUp size={14} className="stroke-[2.5]" />
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Fase 4B — Smart Action Banner: form reservasi terdeteksi dari chat
-                    (1-tap booking). Gerbang: flag deterministik extractor + tanpa
-                    reservasi aktif; punya tombol dismiss sendiri per-signatur form. */}
-                {showFormReservasiBanner && formBannerExtracted && (
-                  <div className="mx-1.5 mb-1.5 px-3 py-2 min-h-[44px] rounded-xl border flex items-center justify-between gap-2 text-xs shadow-xs shrink-0 animate-fadeIn bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-transparent border-emerald-300 dark:border-emerald-700 text-emerald-950 dark:text-emerald-100">
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <span className="w-2.5 h-2.5 rounded-full bg-success animate-pulse shrink-0" />
-                      <div className="flex flex-col justify-center leading-tight min-w-0">
-                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-emerald-800 dark:text-accent">
-                          {formBannerExtracted.hasExplicitReservationForm
-                            ? 'FORM RESERVASI MASUK'
-                            : 'KESEPAKATAN JADWAL TERDETEKSI (CHAT)'}
-                        </span>
-                        <span className="font-semibold truncate text-[11px]">
-                          📅 {formBannerExtracted.dateDisplay || 'Jadwal'}{formBannerExtracted.timeDisplay ? ` (${formBannerExtracted.timeDisplay})` : ''} • {formatFormBannerAudienceLabel(formBannerExtracted)} • {formBannerExtracted.isTreatmentFromHistory && formBannerExtracted.treatmentName
-                            ? `Layanan belum dipilih (rekomendasi riwayat: ${formBannerExtracted.treatmentName})`
-                            : formBannerExtracted.treatmentName || 'Layanan belum dipilih'}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => void handleOpenQuickReservation()}
-                        className="inline-flex items-center gap-1.5 h-[34px] px-3.5 bg-accent hover:bg-accent-hover active:scale-95 text-white font-bold rounded-xl text-xs shadow-xs cursor-pointer whitespace-nowrap"
-                        title="Buka form reservasi dengan data chat yang sudah terisi"
-                      >
-                        <CalendarPlus size={14} />
-                        <span>Jadwalkan & Buat Invoice</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDismissedFormBanner(formBannerKey)}
-                        className="inline-flex items-center justify-center w-[30px] h-[30px] text-emerald-700 dark:text-accent hover:bg-emerald-500/15 active:scale-95 rounded-full transition shrink-0"
-                        title="Abaikan banner form ini"
-                      >
-                        <X size={14} strokeWidth={2.5} />
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Banner Netral: Form reservasi terdeteksi tapi SUDAH tercatat (mencegah klik ganda).
-                    Disupresi deterministik bila activeConfirmedReservation sudah tampil di atas. */}
-                {showNeutralExistingReservationBanner && matchedExistingReservation && (
-                  <div className="mx-1.5 mb-1.5 px-3 py-2 min-h-[44px] rounded-xl border flex items-center justify-between gap-2 text-xs shadow-xs shrink-0 animate-fadeIn bg-slate-500/10 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200">
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <span className="w-2.5 h-2.5 rounded-full bg-fill-2 shrink-0" />
-                      <div className="flex flex-col justify-center leading-tight min-w-0">
-                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-slate-600 dark:text-slate-400">
-                          RESERVASI SUDAH TERCATAT (OTOMATIS)
-                        </span>
-                        <span className="font-semibold truncate text-[11px]">
-                          📅 {formBannerExtracted?.dateDisplay || 'Jadwal'}{formBannerExtracted?.timeDisplay ? ` (${formBannerExtracted.timeDisplay})` : ''} • Jadwal untuk chat ini sudah tersimpan di sistem
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedReservation(matchedExistingReservation)}
-                        className="inline-flex items-center gap-1.5 h-[34px] px-3.5 bg-ink-2 hover:bg-ink active:scale-95 text-surface font-bold rounded-xl text-xs shadow-xs cursor-pointer whitespace-nowrap"
-                        title="Lihat detail reservasi yang sudah tercatat"
-                      >
-                        <Calendar size={14} />
-                        <span>Lihat Detail Reservasi</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDismissedFormBanner(formBannerKey)}
-                        className="inline-flex items-center justify-center w-[30px] h-[30px] text-slate-600 dark:text-slate-400 hover:bg-slate-500/15 active:scale-95 rounded-full transition shrink-0"
-                        title="Abaikan pemberitahuan ini"
-                      >
-                        <X size={14} strokeWidth={2.5} />
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* MT-2.2: Banner Oranye Palang Pintu Kunjungan Tanpa Reservasi Aktif */}
-                {showUnregisteredVisitBanner && selectedChat && (
-                  <div className="mx-1.5 mb-1.5 px-3 py-2 min-h-[44px] rounded-xl border flex items-center justify-between gap-2 text-xs shadow-xs shrink-0 animate-fadeIn bg-gradient-to-r from-amber-500/10 via-orange-500/5 to-transparent border-amber-300 dark:border-amber-700 text-amber-950 dark:text-amber-100">
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <span className="w-2.5 h-2.5 rounded-full bg-warning animate-pulse shrink-0" />
-                      <div className="flex flex-col justify-center leading-tight min-w-0">
-                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-amber-800 dark:text-warning">
-                          PERINGATAN KUNJUNGAN LAPANGAN
-                        </span>
-                        <span className="font-semibold truncate text-[11px]">
-                          ⚠️ Kunjungan lapangan terdeteksi tetapi belum ada reservasi aktif di kalender.
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => void handleOpenQuickReservation()}
-                        className="inline-flex items-center gap-1.5 h-[34px] px-3.5 bg-warning hover:bg-warning-hover active:scale-95 text-on-solid font-bold rounded-xl text-xs shadow-xs cursor-pointer whitespace-nowrap"
-                        title="Buat reservasi sekarang dengan data chat yang ada"
-                      >
-                        <CalendarPlus size={14} />
-                        <span>Buat Reservasi Sekarang (+)</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* In-chat search toolbar (terpisah dari pencarian daftar kiri) */}
-                {inChatSearchOpen && (
-                  <div className="mx-1 mb-1 p-1.5 bg-surface-2 dark:bg-surface border border-divider dark:border-divider rounded-xl flex items-center gap-1.5 animate-fadeIn shrink-0">
-                    <Search size={14} className="text-ink-3 shrink-0 ml-1" />
-                    <input
-                      ref={inChatSearchInputRef}
-                      type="text"
-                      value={inChatSearchQuery}
-                      onChange={(e) => setInChatSearchQuery(e.target.value)}
-                      placeholder="Cari dalam percakapan ini… (min. 2 huruf)"
-                      className="flex-1 bg-transparent text-xs text-ink placeholder-ink-3 focus:outline-none min-w-0"
-                    />
-                    {inChatSearchQuery && (
-                      <button type="button" onClick={handleClearInChatSearch} className="p-1 rounded-lg hover:bg-fill-2 dark:hover:bg-strong text-ink-3">
-                        <X size={14} />
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {/* Sticky Pinned Message Banner */}
-                {pinnedBubble && (
-                  <MessagePinBanner
-                    pinnedMessage={pinnedBubble}
-                    onJumpToMessage={handleJumpToPinnedMessage}
-                    onUnpin={(msgId) => {
-                      const target = messages.find((m) => m.id === msgId);
-                      if (target) {
-                        void handleToggleMessagePin(target);
-                      } else if (selectedChat?.conversationId) {
-                        setIsPinningMessageId(msgId);
-                        apiRequest(`/api/admin/live-chat/conversations/${selectedChat.conversationId}/messages/${msgId}/pin`, {
-                          method: 'PATCH',
-                          body: JSON.stringify({ isPinned: false }),
-                        })
-                          .then(() => {
-                            toast('Sematan pesan dilepas.', 'success');
-                            setPinnedBubble(null);
-                          })
-                          .catch((err: any) => {
-                            toast(`Gagal melepas sematan: ${err.message}`, 'error');
-                          })
-                          .finally(() => setIsPinningMessageId(null));
-                      }
-                    }}
-                    isUnpinning={isPinningMessageId === pinnedBubble.id}
-                  />
-                )}
-
-                {/* Chat Bubbles Container with WhatsApp Wallpaper */}
-                <div 
-                  key={selectedChat?.conversationId || 'empty'}
-                  ref={chatContainerRef} 
-                  onScroll={(e) => {
-                    const el = e.currentTarget;
-                    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-                    const isNear = distance < 300;
-                    wasNearBottomRef.current = isNear;
-                    savedScrollTopRef.current = el.scrollTop;
-                    if (selectedIdRef.current) {
-                      saveConversationScroll(selectedIdRef.current, el.scrollTop, isNear);
-                    }
-                    // Infinite scroll up: capai puncak → muat riwayat lama
-                    if (el.scrollTop < 80 && hasMoreOlderMessages && !isLoadingOlder) {
-                      loadOlderMessages();
-                    }
-                  }}
-                  className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-1.5 sm:p-2.5 md:p-3 space-y-1.5 sm:space-y-2 my-1 sm:my-1.5 rounded-lg sm:rounded-xl border border-divider bg-content"
-                  style={{
-                    backgroundImage: currentTheme === 'dark'
-                      ? 'radial-gradient(rgba(255, 255, 255, 0.04) 0.75px, transparent 0.75px)'
-                      : 'radial-gradient(rgb(var(--c-strong)) 0.75px, transparent 0.75px)',
-                    backgroundSize: '16px 16px',
-                    overscrollBehavior: 'contain',
-                  }}
-                >
-                  {/* Indikator riwayat lama di puncak chat */}
-                  {hasMoreOlderMessages && isLoadingOlder && (
-                    <div className="mx-auto w-fit flex items-center gap-2 px-3 py-1.5 my-1 rounded-full bg-white/90 dark:bg-fill-1/90 border border-divider dark:border-divider shadow-xs text-[11px] text-ink-2 animate-fadeIn select-none">
-                      <Loader size={12} className="animate-spin text-accent" />
-                      <span>Memuat riwayat chat sebelumnya...</span>
-                    </div>
-                  )}
-                  {hasMoreOlderMessages && !isLoadingOlder && messages.length > 0 && (
-                    <div className="mx-auto w-fit my-1">
-                      <button
-                        type="button"
-                        onClick={loadOlderMessages}
-                        className="px-3 py-1.5 rounded-full bg-white/90 dark:bg-fill-1/90 border border-divider dark:border-divider shadow-xs text-[11px] font-semibold text-accent hover:bg-accent-soft dark:hover:bg-accent-hover/15 transition active:scale-95 cursor-pointer"
-                      >
-                        ↑ Muat pesan sebelumnya
-                      </button>
-                    </div>
-                  )}
-                  {!hasMoreOlderMessages && !isThreadLoading && messages.length > 50 && (
-                    <div className="mx-auto w-fit my-1 px-3 py-1 rounded-full bg-black/5 dark:bg-white/10 text-[10px] text-ink-3 select-none">
-                      Awal dari riwayat percakapan
-                    </div>
-                  )}
-                  {/* Floating In-Chat Search Navigation Bar — terpisah dari pencarian daftar */}
-                  {effectiveInChatQuery && messages.length > 0 && matchingMessageIds.length > 0 && (
-                    <div className="sticky top-1 z-30 mx-auto w-fit max-w-[94%] bg-warning-soft/95 backdrop-blur-md border border-warning-line shadow-md rounded-full px-3 py-1.5 flex items-center gap-2 text-xs text-warning animate-fadeIn select-none">
-                      <Search size={13} className="text-warning shrink-0" />
-                      <span className="truncate">
-                        Hasil pencarian: <span className="font-semibold text-warning">"{inChatSearchQuery}"</span> ({currentMatchIndex + 1} dari {matchingMessageIds.length})
-                      </span>
-                      <div className="flex items-center gap-0.5 border-l border-warning-line pl-1.5 shrink-0">
-                        <button
-                          type="button"
-                          title="Pesan Sebelumnya (Lebih Lama)"
-                          onClick={handlePrevMatch}
-                          className="p-1 rounded-full hover:bg-warning/70 text-warning transition active:scale-90 cursor-pointer"
-                        >
-                          <ChevronUp size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          title="Pesan Berikutnya (Lebih Baru)"
-                          onClick={handleNextMatch}
-                          className="p-1 rounded-full hover:bg-warning/70 text-warning transition active:scale-90 cursor-pointer"
-                        >
-                          <ChevronDown size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          title="Tutup Navigasi Pencarian"
-                          onClick={handleClearInChatSearch}
-                          className="p-1 rounded-full hover:bg-warning/70 text-warning hover:text-warning ml-0.5 transition active:scale-90 cursor-pointer"
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {effectiveInChatQuery && messages.length > 0 && matchingMessageIds.length === 0 && (
-                    <div className="sticky top-1 z-30 mx-auto w-fit max-w-[94%] bg-surface-2/95 backdrop-blur-md border border-strong shadow-sm rounded-full px-3 py-1 flex items-center gap-2 text-xs text-ink-2 animate-fadeIn select-none">
-                      <Info size={13} className="text-ink-2 shrink-0" />
-                      <span className="truncate">
-                        Tidak ada bubble pesan berisi <span className="font-semibold">"{inChatSearchQuery}"</span> di percakapan ini
-                      </span>
-                      {hasMoreOlderMessages && (
-                        <button
-                          type="button"
-                          onClick={handleDeepSearchInHistory}
-                          disabled={isDeepSearching}
-                          className="shrink-0 ml-1 px-2 py-0.5 rounded-full bg-accent hover:bg-accent-hover disabled:opacity-50 text-white text-[10px] font-bold transition active:scale-95 cursor-pointer flex items-center gap-1"
-                        >
-                          {isDeepSearching ? (
-                            <Loader size={11} className="animate-spin" />
-                          ) : (
-                            <Search size={11} />
-                          )}
-                          <span>{isDeepSearching ? 'Mencari...' : 'Cari di riwayat lama'}</span>
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        title="Tutup"
-                        onClick={handleClearInChatSearch}
-                        className="p-0.5 rounded-full hover:bg-fill-2 text-ink-3 hover:text-ink ml-1 transition active:scale-90 cursor-pointer"
-                      >
-                        <X size={13} />
-                      </button>
-                    </div>
-                  )}
-
-                  {isThreadLoading ? (
-                    <div className="h-full flex flex-col items-center justify-center text-center text-ink-2 text-xs py-16 animate-fadeIn">
-                      <Loader className="animate-spin text-accent mb-2" size={26} />
-                      <p className="font-semibold text-ink-2">Memuat riwayat chat...</p>
-                    </div>
-                  ) : messages.length === 0 && threadLoadError ? (
-                    <div className="h-full flex flex-col items-center justify-center text-center text-ink-2 text-xs px-6">
-                      <AlertTriangle size={30} className="mb-2 text-danger" />
-                      <p className="font-bold text-ink">Gagal memuat riwayat chat</p>
-                      <p className="text-[11px] mt-1 max-w-xs break-words">{threadLoadError}</p>
-                      <button
-                        type="button"
-                        onClick={() => { if (selectedId) void loadThread(selectedId); }}
-                        className="mt-3 px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-[11px] font-bold transition active:scale-95 cursor-pointer"
-                      >
-                        Coba Lagi
-                      </button>
-                    </div>
-                  ) : messages.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-center text-ink-2 text-xs">
-                      <MessageCircle size={32} className="mb-2 text-ink-3" />
-                      <p>Belum ada pesan di percakapan ini.</p>
-                    </div>
-                  ) : (
-                    messages.map((msg, idx) => {
-                      const isCustomer = msg.direction === 'INBOUND';
-                      const senderTypeUpper = (msg.sender_type || '').toUpperCase();
-                      const isAdmin = msg.direction === 'OUTBOUND' && (senderTypeUpper === 'ADMIN' || senderTypeUpper === 'HUMAN' || senderTypeUpper === 'STAFF');
-                      const isInternalNote = senderTypeUpper === 'INTERNAL_NOTE';
-                      const isRevoked = msg.content === '🚫 Pesan ini telah ditarik' || (msg as any).is_revoked || (msg as any).payload_raw?.is_revoked;
-                      const isEdited = !!(msg as any).is_edited || !!(msg as any).payload_raw?.is_edited;
-                      const canRevoke = !isCustomer && !isRevoked && !!gatewayCapability?.supportsRevoke;
-                      const isWithin15Mins = msg.created_at ? (Date.now() - new Date(msg.created_at).getTime() <= 15 * 60 * 1000) : false;
-                      const canEdit = !isCustomer && !isRevoked && isWithin15Mins && !msg.media && (gatewayCapability?.supportsEdit ?? true);
-                      const hasMedia = !!msg.media;
-                      const quotedMsg = msg.quoted_message || extractQuotedMessage(msg);
-                      const showDateSeparator = isDifferentDay(msg.created_at, messages[idx - 1]?.created_at);
-
-                      // Pencarian match & highlight status
-                      const isMatchBubble = effectiveInChatQuery ? matchingMessageIds.includes(msg.id) : false;
-                      const isCurrentActiveMatch = effectiveInChatQuery ? (matchingMessageIds[currentMatchIndex] === msg.id || highlightedMsgId === msg.id) : false;
-
-                      // Ekstraksi data kaya: lokasi, audio/PTT, dokumen, kontak, video via helper terpusat
-                      const locData: ChatLocationData | null = (msg as any).location || extractLocation(msg);
-                      const audioData: ChatAudioData | null = extractAudio(msg);
-                      const docData: ChatDocumentData | null = extractDocument(msg);
-                      const contactData: ChatContactData | null = extractContact(msg);
-                      const videoData: ChatVideoData | null = extractVideo(msg);
-                      const hasMediaOnly = hasMedia && !audioData && !docData && !videoData && !resolveMessageDisplayText({ content: msg.content, media: msg.media });
-
-                      // Reaksi Pesan (WhatsApp Message Reactions)
-                      const reactions: Array<{ emoji: string; fromMe: boolean; senderName?: string; actorId?: string }> =
-                        (msg as any).reactions || (msg as any).payload_raw?.reactions || [];
-                      const myReaction = reactions.find((r) => r.fromMe);
-
-                      const groupedReactionsMap = new Map<string, { emoji: string; count: number; senders: string[] }>();
-                      for (const r of reactions) {
-                        if (!r.emoji) continue;
-                        const entry = groupedReactionsMap.get(r.emoji) || { emoji: r.emoji, count: 0, senders: [] };
-                        entry.count += 1;
-                        entry.senders.push(r.fromMe ? 'Anda' : (r.senderName || 'Customer'));
-                        groupedReactionsMap.set(r.emoji, entry);
-                      }
-                      const groupedReactions = Array.from(groupedReactionsMap.values());
-
-                      const isMessagePinned = !!(msg.is_message_pinned || (msg as any).payload_raw?.is_pinned);
-                      const isMessageHidden = !!(msg.is_message_hidden || (msg as any).payload_raw?.is_hidden);
-
-                      return (
-                        <React.Fragment key={msg.id}>
-                          {showDateSeparator && (
-                            <div className="flex justify-center my-2 sm:my-2.5">
-                              <div className="bg-white/95 dark:bg-surface-2/95 backdrop-blur-xs px-3 py-1 rounded-lg text-[11px] font-semibold text-ink-2 shadow-2xs border border-black/5 dark:border-white/10 select-none tracking-wide">
-                                {formatChatDateSeparator(msg.created_at)}
-                              </div>
-                            </div>
-                          )}
-                          <div
-                            id={`msg-${msg.id}`}
-                            className={`flex ${isCustomer ? 'justify-start' : 'justify-end'} group relative ${
-                              isCurrentActiveMatch
-                                ? 'transition-transform duration-150 ring-3 ring-warning/90 bg-warning-line/30 rounded-2xl p-1 -m-1 shadow-md scale-[1.01]'
-                                : isMatchBubble
-                                ? 'transition-colors duration-150 ring-1 ring-warning/60 bg-warning-soft/20 rounded-2xl p-0.5 -m-0.5'
-                                : ''
-                            }`}
-                          >
-                            {/* Floating WhatsApp-Style Quick Emoji Reaction Toolbar */}
-                            {activeReactionMsgId === msg.id && (
-                              <div
-                                className={`absolute -top-10 ${isCustomer ? 'left-0' : 'right-0'} z-30 bg-surface border border-divider rounded-full shadow-lg px-2 py-1 flex items-center gap-1 animate-fadeIn select-none`}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {QUICK_REACTIONS.map((em) => {
-                                  const isSelected = myReaction?.emoji === em;
-                                  return (
-                                    <button
-                                      key={em}
-                                      type="button"
-                                      onClick={() => handleToggleReaction(msg, em)}
-                                      className={`w-7 h-7 flex items-center justify-center text-base rounded-full hover:scale-125 transition active:scale-95 ${
-                                        isSelected ? 'bg-bubble-out ring-2 ring-accent' : 'hover:bg-fill-1'
-                                      }`}
-                                      title={`Reaksi ${em}${isSelected ? ' (klik untuk batal)' : ''}`}
-                                    >
-                                      {em}
-                                    </button>
-                                  );
-                                })}
-                                <button
-                                  type="button"
-                                  onClick={() => setCustomEmojiMsgId(customEmojiMsgId === msg.id ? null : msg.id)}
-                                  className={`w-7 h-7 flex items-center justify-center text-xs rounded-full hover:bg-fill-1 transition ${
-                                    customEmojiMsgId === msg.id ? 'bg-accent-soft text-accent' : 'text-ink-2'
-                                  }`}
-                                  title="Pilih emoji lainnya"
-                                >
-                                  ➕
-                                </button>
-                              </div>
-                            )}
-
-                            {/* Extra Emoji Grid Popup */}
-                            {activeReactionMsgId === msg.id && customEmojiMsgId === msg.id && (
-                              <div
-                                className={`absolute -top-28 ${isCustomer ? 'left-0' : 'right-0'} z-40 bg-surface border border-divider rounded-2xl shadow-xl p-2 grid grid-cols-6 gap-1 animate-fadeIn select-none`}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {EXTRA_REACTIONS.map((em) => {
-                                  const isSelected = myReaction?.emoji === em;
-                                  return (
-                                    <button
-                                      key={em}
-                                      type="button"
-                                      onClick={() => handleToggleReaction(msg, em)}
-                                      className={`w-7 h-7 flex items-center justify-center text-base rounded-full hover:scale-125 transition active:scale-95 ${
-                                        isSelected ? 'bg-bubble-out ring-2 ring-accent' : 'hover:bg-fill-1'
-                                      }`}
-                                      title={`Reaksi ${em}`}
-                                    >
-                                      {em}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            )}
-
-                            <div
-                              className={`relative ${hasMediaOnly ? 'max-w-[240px] sm:max-w-[280px] p-1 sm:p-1.5' : 'max-w-[88%] sm:max-w-[75%] md:max-w-[70%] px-2.5 sm:px-3 py-1.5'} rounded-lg text-xs leading-relaxed shadow-2xs select-text cursor-text ${
-                                isInternalNote
-                                  ? 'bg-amber-50 dark:bg-amber-950/40 border border-dashed border-amber-300 dark:border-amber-700 text-amber-950 dark:text-amber-100 rounded-tr-none'
-                                  : isRevoked
-                                  ? 'bg-fill-1 text-ink-2 border border-divider'
-                                  : isMessageHidden
-                                  ? isCustomer
-                                    ? 'bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-tl-none'
-                                    : 'bg-slate-200/90 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-200 rounded-tr-none'
-                                  : isCustomer
-                                    ? 'bg-white text-ink rounded-tl-none border border-black/5 dark:bg-fill-1 dark:text-ink dark:border-divider'
-                                    : isAdmin
-                                      ? 'bg-bubble-out text-ink rounded-tr-none border border-accent/20'
-                                      : 'bg-bubble-out text-ink rounded-tr-none border-l-4 border-accent dark:border-l-4 dark:border-accent'
-                              }`}
-                            >
-                              {isMessagePinned && !isRevoked && (
-                                <div className="flex items-center gap-1 text-[10px] font-semibold text-amber-700 dark:text-warning mb-1 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800 w-fit select-none">
-                                  <Pin size={10} className="text-warning fill-warning" />
-                                  <span>Disematkan{msg.pinned_by ? ` • ${msg.pinned_by}` : ''}</span>
-                                </div>
-                              )}
-                              {isInternalNote && !isRevoked && (
-                                <span className="flex items-center gap-1 text-[10px] font-bold mb-0.5 text-amber-700 dark:text-warning">
-                                  <Lock size={10} />
-                                  <span>Catatan Internal — {msg.sender_name || 'Staf'}</span>
-                                </span>
-                              )}
-                              {(!hasMediaOnly || (!isCustomer && !isAdmin)) && !isRevoked && !isInternalNote && (
-                                <span className={`block text-[10px] font-bold mb-0.5 flex items-center space-x-1 ${
-                                  isCustomer ? 'text-ink-2' : isAdmin ? 'text-accent' : 'text-accent'
-                                }`}>
-                                  {!isCustomer && !isAdmin && <Bot size={10} />}
-                                  <span>{senderLabel(msg)}</span>
-                                </span>
-                              )}
-
-                              {/* Quoted Message / WhatsApp Reply preview inside bubble */}
-                              {quotedMsg && !isRevoked && (
-                                <div
-                                  className={`mb-1.5 p-1.5 rounded-md border-l-[3px] text-[11px] leading-snug cursor-pointer transition select-none ${
-                                    isCustomer
-                                      ? 'bg-black/[0.04] hover:bg-black/[0.07] border-accent'
-                                      : 'bg-black/[0.05] hover:bg-black/[0.08] border-accent'
-                                  }`}
-                                  onClick={() => {
-                                    if (quotedMsg.id || quotedMsg.wa_message_id) {
-                                      const targetElem = document.getElementById(`msg-${quotedMsg.id}`) || document.getElementById(`msg-${quotedMsg.wa_message_id}`);
-                                      if (targetElem) {
-                                        targetElem.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                        targetElem.classList.add('ring-2', 'ring-accent');
-                                        setTimeout(() => targetElem.classList.remove('ring-2', 'ring-accent'), 1200);
-                                      }
-                                    }
-                                  }}
-                                  title="Klik untuk melihat pesan asli"
-                                >
-                                  <p className="font-bold text-[10px] text-accent truncate mb-0.5">
-                                    {quotedMsg.sender_name || (quotedMsg.direction === 'INBOUND' ? (selectedChat.customerName || 'Customer') : 'Bidan / CS')}
-                                  </p>
-                                  <p className="text-[11px] text-ink-2 truncate font-sans">
-                                    {quotedMsg.media ? (
-                                      <span className="flex items-center gap-1">
-                                        <span>📷</span>
-                                        <span>Foto</span>
-                                        {quotedMsg.content && !/^\[(IMAGE|MEDIA)/.test(quotedMsg.content) && <span>{quotedMsg.content}</span>}
-                                      </span>
-                                    ) : (
-                                      quotedMsg.content || 'Pesan'
-                                    )}
-                                  </p>
-                                </div>
-                              )}
-
-                              {!isRevoked && (
-                                <>
-                                  {/* 1. Audio / PTT Voice Note */}
-                                  {audioData && audioData.url && (
-                                    <div className="mb-1.5">
-                                      <VoiceNotePlayer src={audioData.url} />
-                                    </div>
-                                  )}
-
-                                  {/* 2. Document / PDF */}
-                                  {docData && docData.url && (
-                                    <div className="mb-1.5">
-                                      <a
-                                        href={docData.url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        download
-                                        className="flex items-center gap-2.5 p-2.5 rounded-xl bg-fill-1 border border-divider hover:bg-accent-soft transition text-left max-w-[260px]"
-                                      >
-                                        <span className="w-8 h-8 rounded-lg bg-info-soft text-info flex items-center justify-center shrink-0">
-                                          <FileText size={16} />
-                                        </span>
-                                        <span className="flex-1 min-w-0">
-                                          <span className="block text-xs font-bold text-ink truncate">
-                                            {String(docData.fileName || 'Dokumen').slice(0, 48)}
-                                          </span>
-                                          <span className="block text-[10px] text-ink-2">
-                                            {docData.fileSize ? `${Math.round(Number(docData.fileSize) / 1024)} KB • Ketuk untuk unduh` : 'Ketuk untuk unduh'}
-                                          </span>
-                                        </span>
-                                        <Download size={14} className="text-ink-3 shrink-0" />
-                                      </a>
-                                    </div>
-                                  )}
-
-                                  {/* 3. Video */}
-                                  {videoData && videoData.url && (
-                                    <div className="mb-1.5 max-w-[280px]">
-                                      <video
-                                        src={videoData.url}
-                                        controls
-                                        className="rounded-lg max-h-[240px] w-full bg-black"
-                                      />
-                                      {videoData.caption && (
-                                        <span className="block mt-1 text-[11px] text-ink break-words">
-                                          {(effectiveInChatQuery || searchQuery) ? renderHighlightedText(videoData.caption, effectiveInChatQuery || searchQuery) : videoData.caption}
-                                        </span>
-                                      )}
-                                    </div>
-                                  )}
-
-                                  {/* 4. Contact vCard */}
-                                  {contactData && (
-                                    <div className="my-1 p-2 bg-fill-1 hover:bg-accent-soft rounded-xl border border-divider transition flex items-center space-x-2.5 text-left max-w-[260px]">
-                                      <div className="w-8 h-8 rounded-lg bg-success-soft text-success flex items-center justify-center shrink-0">
-                                        <User size={16} />
-                                      </div>
-                                      <div className="flex-1 min-w-0">
-                                        <p className="font-bold text-[12px] text-ink leading-tight truncate">
-                                          {contactData.displayName || 'Kontak WhatsApp'}
-                                        </p>
-                                        {contactData.phoneNumber && (
-                                          <p className="text-[11px] text-ink-2 font-mono truncate mt-0.5">
-                                            {contactData.phoneNumber}
-                                          </p>
-                                        )}
-                                      </div>
-                                      {contactData.phoneNumber && (
-                                        <a
-                                          href={`tel:${contactData.phoneNumber}`}
-                                          className="px-2 py-1 bg-accent hover:bg-accent-hover text-white rounded-lg text-[10px] font-bold transition shrink-0"
-                                          title="Hubungi kontak"
-                                        >
-                                          Telepon
-                                        </a>
-                                      )}
-                                    </div>
-                                  )}
-
-                                  {/* 5. Image / Photo */}
-                                   {hasMedia && !audioData && !docData && !videoData && (
-                                     <div className={hasMediaOnly ? 'mb-0.5' : 'mb-1.5'}>
-                                       <MediaImage
-                                         src={msg.media!.url || msg.media!.hdUrl || msg.media!.thumbUrl}
-                                         downloadSrc={msg.media!.hdUrl || msg.media!.url}
-                                         thumbUrl={msg.media!.thumbUrl}
-                                         caption={msg.media!.caption || extractImageCaption(msg.content) || undefined}
-                                       />
-                                     </div>
-                                   )}
-
-                                  {/* 6. Location (Pin GPS & Live Location) */}
-                                  {locData && (
-                                    <div className="my-1 p-2 bg-fill-1 hover:bg-accent-soft rounded-xl border border-divider transition flex items-center space-x-2.5 text-left">
-                                      <div className="w-8 h-8 rounded-lg bg-danger-soft text-danger flex items-center justify-center shrink-0">
-                                        <MapPin size={17} />
-                                      </div>
-                                      <div className="flex-1 min-w-0">
-                                        <p className="font-bold text-[12px] text-ink leading-tight flex items-center gap-1">
-                                          <span>{locData.isLive ? 'Live Location WhatsApp' : 'Lokasi Pin WhatsApp'}</span>
-                                          {locData.isLive && <span className="inline-block w-2 h-2 rounded-full bg-danger animate-pulse" />}
-                                        </p>
-                                        <p className="text-[10px] text-ink-2 font-mono truncate mt-0.5">
-                                          {locData.latitude}, {locData.longitude}
-                                        </p>
-                                        {(locData.name || locData.address) && (
-                                          <p className="text-[11px] text-ink truncate mt-0.5 font-medium">
-                                            {locData.name || locData.address}
-                                          </p>
-                                        )}
-                                      </div>
-                                      <a
-                                        href={locData.url || getGoogleMapsDirectionUrl(locData.latitude, locData.longitude, locData.name || locData.address || null, 'gps_pin')}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="px-2.5 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-[11px] font-bold transition shadow-xs flex items-center space-x-1 shrink-0 active:scale-95"
-                                        title="Buka lokasi di Google Maps"
-                                      >
-                                        <span>Peta</span>
-                                        <ExternalLink size={12} />
-                                      </a>
-                                    </div>
-                                  )}
-
-                                  {/* 7. Text Content (Anti-Hollow Bubble: teks dirender TEPAT 1x via resolver terpusat) */}
-                                  {(() => {
-                                    const hasVisual = (hasMedia && !audioData && !docData && !videoData) || !!locData || !!audioData || !!docData || !!videoData || !!contactData;
-                                    const displayText = resolveMessageDisplayText({ content: msg.content, media: msg.media });
-                                    if (!displayText) {
-                                      if (hasVisual) return null;
-                                      return (
-                                        <p className="font-sans italic text-ink-2 py-0.5 text-[11px]">
-                                          [Pesan tanpa teks]
-                                        </p>
-                                      );
-                                    }
-                                    return (
-                                      <p className="font-sans whitespace-pre-wrap select-text cursor-text">
-                                        {renderHighlightedText(displayText, effectiveInChatQuery || searchQuery)}
-                                      </p>
-                                    );
-                                  })()}
-                                </>
-                              )}
-                              {isRevoked && (
-                                <p className="font-sans whitespace-pre-wrap italic text-ink-2 flex items-center space-x-1.5 py-0.5">
-                                  <Ban size={12} className="text-ink-3 shrink-0" />
-                                  <span>Pesan ini telah ditarik</span>
-                                </p>
-                              )}
-                              {isMessageHidden && !isRevoked && (
-                                <div className="flex items-center justify-between gap-1.5 mt-1 pt-1 border-t border-slate-300/60 dark:border-slate-600/60 text-[10px] text-slate-500 dark:text-slate-400 select-none">
-                                  <span className="flex items-center gap-1 font-medium truncate">
-                                    <EyeOff size={11} className="text-ink-3 shrink-0" />
-                                    <span className="truncate">Disembunyikan dari Staf Bidan{msg.hidden_by ? ` • oleh ${msg.hidden_by}` : ''}</span>
-                                  </span>
-                                  <button
-                                    type="button"
-                                    disabled={isHidingMessageId === msg.id}
-                                    onClick={() => handleToggleMessageHide(msg, false)}
-                                    className="text-accent dark:text-accent hover:underline font-bold cursor-pointer shrink-0 text-[10px]"
-                                    title="Pulihkan pesan agar terlihat kembali oleh staf bidan"
-                                  >
-                                    Pulihkan
-                                  </button>
-                                </div>
-                              )}
-                              <div className="flex items-center justify-end space-x-1 mt-0.5 text-right select-none text-[10px] text-ink-2">
-                                {isEdited && !isRevoked && (
-                                  <span className="text-[9px] text-ink-2 italic mr-0.5">diedit</span>
-                                )}
-                                <span>
-                                  {msg.created_at ? formatWibTime(msg.created_at) : ''}
-                                </span>
-                                {isInternalNote && !isRevoked && (
-                                  <span className="text-[9px] text-amber-700 dark:text-warning italic ml-0.5">
-                                    Hanya tim klinik • tidak dikirim ke WhatsApp
-                                  </span>
-                                )}
-                                {!isCustomer && !isInternalNote && (
-                                  <span
-                                    className="inline-flex items-center ml-0.5"
-                                    title={
-                                      msg.delivery_status === 'read'
-                                        ? `Dibaca ${msg.read_at ? formatWibTime(msg.read_at) : ''}`
-                                        : msg.delivery_status === 'delivered'
-                                        ? `Diterima di HP ${msg.delivered_at ? formatWibTime(msg.delivered_at) : ''}`
-                                        : msg.delivery_status === 'failed'
-                                        ? 'Gagal terkirim'
-                                        : 'Terkirim'
-                                    }
-                                  >
-                                    {msg.delivery_status === 'read' ? (
-                                      <CheckCheck size={13} className="text-info stroke-[2.5]" />
-                                    ) : msg.delivery_status === 'delivered' ? (
-                                      <CheckCheck size={13} className="text-ink-3" />
-                                    ) : msg.delivery_status === 'failed' ? (
-                                      <AlertCircle size={12} className="text-danger" />
-                                    ) : (
-                                      <Check size={12} className="text-ink-3" />
-                                    )}
-                                  </span>
-                                )}
-                                {!isRevoked && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      void handleCopyMessageText(resolveMessageDisplayText({ content: msg.content, media: msg.media }) || msg.content || '');
-                                    }}
-                                    className="ml-0.5 p-0.5 rounded text-ink-3 hover:text-accent hover:bg-accent-soft transition active:scale-90"
-                                    title="Salin seluruh teks pesan"
-                                  >
-                                    <Copy size={11} />
-                                  </button>
-                                )}
-                                {!isRevoked && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setActiveReactionMsgId(activeReactionMsgId === msg.id ? null : msg.id);
-                                      setCustomEmojiMsgId(null);
-                                    }}
-                                    className={`ml-0.5 p-0.5 rounded transition active:scale-90 ${
-                                      activeReactionMsgId === msg.id || myReaction
-                                        ? 'text-accent bg-accent-soft'
-                                        : 'text-ink-3 hover:text-accent hover:bg-accent-soft'
-                                    }`}
-                                    title={myReaction ? `Reaksi Anda: ${myReaction.emoji} (klik untuk ubah/batal)` : 'Beri reaksi emotikon'}
-                                  >
-                                    <Smile size={11} />
-                                  </button>
-                                )}
-                                {!isRevoked && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleSelectReply(msg);
-                                    }}
-                                    className="ml-0.5 p-0.5 rounded text-ink-3 hover:text-accent hover:bg-accent-soft transition active:scale-90"
-                                    title="Balas pesan ini"
-                                  >
-                                    <Reply size={11} />
-                                  </button>
-                                )}
-                                {canEdit && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleStartEdit(msg)}
-                                    className="ml-0.5 p-0.5 rounded text-ink-3 hover:text-accent hover:bg-accent-soft transition active:scale-90"
-                                    title="Edit pesan (maksimal 15 menit)"
-                                  >
-                                    <PenLine size={11} />
-                                  </button>
-                                )}
-                                {canRevoke && (
-                                  <button
-                                    type="button"
-                                    disabled={revokingId === msg.id}
-                                    onClick={() => handleRevokeMessage(msg)}
-                                    className="ml-0.5 p-0.5 rounded text-ink-3 hover:text-danger hover:bg-danger-soft transition active:scale-90"
-                                    title="Tarik / Hapus pesan untuk semua orang (Delete for Everyone)"
-                                  >
-                                    {revokingId === msg.id ? (
-                                      <div className="h-2.5 w-2.5 animate-spin rounded-full border border-danger border-t-transparent" />
-                                    ) : (
-                                      <Trash2 size={11} />
-                                    )}
-                                  </button>
-                                )}
-                                {!isRevoked && (
-                                  <button
-                                    type="button"
-                                    disabled={isPinningMessageId === msg.id}
-                                    onClick={() => handleToggleMessagePin(msg, !isMessagePinned)}
-                                    className={`ml-0.5 p-0.5 rounded transition active:scale-90 ${
-                                      isMessagePinned
-                                        ? 'text-amber-600 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 font-bold'
-                                        : 'text-ink-3 hover:text-warning hover:bg-warning-soft'
-                                    }`}
-                                    title={isMessagePinned ? 'Lepas sematan pesan (Unpin)' : 'Sematkan pesan ini (Pin ke atas)'}
-                                  >
-                                    {isPinningMessageId === msg.id ? (
-                                      <div className="h-2.5 w-2.5 animate-spin rounded-full border border-warning border-t-transparent" />
-                                    ) : (
-                                      <Pin size={11} className={isMessagePinned ? 'fill-warning text-warning' : ''} />
-                                    )}
-                                  </button>
-                                )}
-                                {!isRevoked && !isInternalNote && (
-                                  <button
-                                    type="button"
-                                    disabled={isHidingMessageId === msg.id}
-                                    onClick={() => handleToggleMessageHide(msg, !isMessageHidden)}
-                                    className={`ml-0.5 p-0.5 rounded transition active:scale-90 ${
-                                      isMessageHidden
-                                        ? 'text-ink-2 bg-fill-1 hover:bg-fill-2'
-                                        : 'text-ink-3 hover:text-ink hover:bg-fill-2'
-                                    }`}
-                                    title={isMessageHidden ? 'Tampilkan kembali pesan ini (Unhide)' : 'Sembunyikan bubble ini di dashboard (Hide internal)'}
-                                  >
-                                    {isHidingMessageId === msg.id ? (
-                                      <div className="h-2.5 w-2.5 animate-spin rounded-full border border-strong border-t-transparent" />
-                                    ) : (
-                                      <EyeOff size={11} />
-                                    )}
-                                  </button>
-                                )}
-                              </div>
-
-                              {/* Reaction Badges (WhatsApp Style Pill attached to bottom corner of bubble) */}
-                              {groupedReactions.length > 0 && !isRevoked && (
-                                <div
-                                  className={`absolute -bottom-2.5 ${isCustomer ? 'left-2' : 'right-2'} z-10 flex items-center bg-surface border border-divider rounded-full px-1.5 py-0.5 shadow-xs text-[11px] gap-1 select-none hover:shadow-md cursor-pointer transition`}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setActiveReactionMsgId(activeReactionMsgId === msg.id ? null : msg.id);
-                                    setCustomEmojiMsgId(null);
-                                  }}
-                                  title={reactions.map((r) => `${r.emoji} ${r.fromMe ? 'Anda' : (r.senderName || 'Customer')}`).join('\n')}
-                                >
-                                  {groupedReactions.map((g) => (
-                                    <span key={g.emoji} className="flex items-center gap-0.5">
-                                      <span>{g.emoji}</span>
-                                      {g.count > 1 && <span className="text-[10px] text-ink-2 font-bold">{g.count}</span>}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                             </div>
-                          </div>
-                        </React.Fragment>
-                      );
-                    })
-                  )}
-                  <div ref={messagesEndRef} className="h-0 w-0 pointer-events-none" />
-                </div>
-
-                {/* Reply Composer */}
-                <div className="chat-composer-container pt-0.5 shrink-0 bg-transparent pb-0 border-t-0">
-                  {selectedChat.isSandboxTest ? (
-                    <div className="flex items-center justify-center space-x-2 px-3 py-2.5 rounded-xl bg-violet-soft border border-violet-line text-violet text-xs font-semibold">
-                      <FlaskConical size={13} />
-                      <span>Chat sandbox — balasan admin diblokir otomatis</span>
-                    </div>
-                  ) : (
-                  <>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      tabIndex={-1}
-                      aria-hidden="true"
-                      accept="image/*"
-                      onChange={handlePickImage}
-                      className="hidden"
-                    />
-                    {selectedId && (
-                      <LiveChatComposer
-                        ref={composerRef}
-                        conversationId={selectedId}
-                        sending={sending}
-                        generatingDraft={generatingDraft}
-                        replyingTo={replyingTo ? {
-                          senderLabel: replyingTo.direction === 'INBOUND' ? (selectedChat.customerName || 'Customer') : 'Bidan / CS',
-                          preview: replyingTo.media ? '📷 Foto' : (replyingTo.content || 'Pesan'),
-                        } : null}
-                        selectedImage={selectedImage ? { preview: selectedImage.preview } : null}
-                        quickReplies={quickReplies}
-                        onTextChange={handleComposerTextChange}
-                        onTyping={notifyTyping}
-                        onSend={handleSendReply}
-                        onApplyQuickReply={applyQuickReply}
-                        onPickImage={() => fileInputRef.current?.click()}
-                        onPasteImageFile={handleImageFile}
-                        onRemoveImage={handleRemoveSelectedImage}
-                        onCancelReply={() => setReplyingTo(null)}
-                        onGenerateAiDraft={handleGenerateAiDraft}
-                        onOpenSchedule={() => setShowDailyScheduleModal(true)}
-                        onOpenQuickHold={handleOpenQuickHold}
-                        onOpenQuickReservation={handleOpenQuickReservation}
-                        onGenerateInvoice={handleGenerateActiveReservationInvoice}
-                        hasActiveReservation={Boolean(activeConfirmedReservation || activePendingReservation)}
-                        onRequestScrollToBottom={() => scrollToBottom(true, false)}
-                        chatBotActive={chatBotActive}
-                        onToggleGlobalBot={() => handleToggleGlobalBot(!chatBotActive)}
-                      />
-                    )}
-                  </>
-                    )}
-                  </div>
-              </div>
-            ) : (
-              <div className="bg-surface border border-divider rounded-2xl p-8 h-full flex flex-col justify-center items-center text-center text-ink-2 text-xs shadow-xs">
-                <MessageSquare size={44} className="mb-3 text-ink-3" />
-                <p className="font-bold text-ink text-sm">Pilih Percakapan</p>
-                <p className="text-ink-2 max-w-sm mt-1">
-                  Pilih salah satu percakapan dari daftar di sebelah kiri untuk melihat thread dan membalas langsung.
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Sidebar Kanan: Widget Pemantauan Perjalanan Terapis (OTW manual, passive auto-tracking,
-              atau STANDBY bila jadwal aktif hari ini ada tapi Bidan belum mulai perjalanan).
-              Plan 2026-09-30: sidebar TIDAK BOLEH hilang total → CS tak mengira fitur rusak. */}
+          {/* Sidebar Kanan: Dispatch Radar */}
           {dispatchTrip && !dispatchTrip.arrivedAt && !['completed', 'cancelled', 'rejected'].includes(String(dispatchTrip.status || '')) && (
             <div className="hidden xl:flex xl:w-[340px] xl:shrink-0 p-2 overflow-y-auto">
               <div className="w-full">
@@ -6892,8 +1086,7 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         </div>
       )}
 
-      {/* Fase 3 (plan 2026-10-02): Drawer Radar OTW untuk laptop <1280px. Menggunakan
-          widget yang SAMA; hanya wadah yang berbeda agar tak ada duplikasi logika. */}
+      {/* Drawer Radar OTW untuk laptop <1280px */}
       {dispatchDrawerOpen && dispatchTrip && (
         <div
           data-modal-active="true"
@@ -6939,1189 +1132,80 @@ function saveConversationScroll(convId: string, scrollTop: number, isNearBottom:
         </div>
       )}
 
-      {/* Customer Detail Modal */}
-      {customerDetailModalOpen && (
-        <div data-modal-active="true" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-surface border border-divider rounded-2xl w-full max-w-xl max-h-[90dvh] flex flex-col shadow-2xl overflow-hidden">
-            {/* Modal Header */}
-            <div className="flex justify-between items-center px-5 py-4 border-b border-divider bg-surface-2">
-              <div className="flex items-center space-x-3">
-                <CustomerAvatar
-                  src={customerDetailData?.profile_picture_url || selectedChat?.customerProfilePictureUrl}
-                  name={customerDetailData?.name || selectedChat?.customerName}
-                  phone={customerDetailData?.phone || selectedChat?.customerPhone}
-                  size="md"
-                />
-                <div>
-                  <h3 className="text-base font-bold text-ink">
-                    {customerDetailData?.name || selectedChat?.customerName || 'Customer'}
-                  </h3>
-                  <p className="text-xs text-ink-2 font-mono">
-                    {customerDetailData?.phone || selectedChat?.customerPhone || '-'}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                data-modal-close="true"
-                onClick={() => setCustomerDetailModalOpen(false)}
-                className="p-2 rounded-xl text-ink-3 hover:text-ink hover:bg-fill-2 transition text-sm font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="p-5 space-y-5 overflow-y-auto flex-1 text-xs text-ink">
-              {customerDetailLoading ? (
-                <div className="py-12 flex justify-center items-center">
-                  <Loader size={24} className="animate-spin text-accent" />
-                </div>
-              ) : (
-                <>
-                  <StaffOwnershipBadge
-                    variant="banner"
-                    ownership={(customerDetailData as any)?.staffOwnership ?? selectedChat?.staffOwnership}
-                    showNew
-                  />
-                  {/* Quick Metric Cards */}
-                  <div className="grid grid-cols-3 gap-2.5">
-                    <div className="p-3 bg-surface-2 border border-divider rounded-xl text-center space-y-1">
-                      <p className="text-[10px] text-ink-2 font-semibold uppercase">Total Order</p>
-                      <p className="text-base font-bold text-ink">{customerDetailData?.purchaseCount || customerDetailData?.reservations?.length || 0}x</p>
-                    </div>
-                    <div className="p-3 bg-surface-2 border border-divider rounded-xl text-center space-y-1">
-                      <p className="text-[10px] text-ink-2 font-semibold uppercase">LTV (Value)</p>
-                      <p className="text-base font-bold text-accent">{formatRpShort(customerDetailData?.ltv || 0)}</p>
-                    </div>
-                    <div className="p-3 bg-surface-2 border border-divider rounded-xl text-center space-y-1">
-                      <p className="text-[10px] text-ink-2 font-semibold uppercase">Segment</p>
-                      <p className="text-xs font-bold text-ink truncate">
-                        {customerDetailData?.is_legacy_source ? 'Legacy' : (customerDetailData?.purchaseCount > 0 ? 'Repeat' : 'New Customer')}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Customer Labels Section */}
-                  <div className="space-y-2">
-                    <h4 className="font-bold text-ink-2 uppercase tracking-wider text-[11px] flex items-center space-x-1.5">
-                      <Tag size={12} />
-                      <span>Label Pasien</span>
-                    </h4>
-                    <div className="flex flex-wrap gap-1.5">
-                      {(customerDetailData?.labels || []).length === 0 ? (
-                        <p className="text-ink-3 italic">Belum ada label kustom.</p>
-                      ) : (
-                        customerDetailData.labels.map((cl: any) => {
-                          const lbl = cl.label || cl;
-                          return (
-                            <span
-                              key={lbl.id}
-                              className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold text-white shadow-2xs"
-                              style={{ backgroundColor: lbl.color || 'rgb(var(--c-accent))' }}
-                              title={lbl.description ? `${lbl.name}: ${lbl.description}` : lbl.name}
-                            >
-                              {lbl.name}
-                            </span>
-                          );
-                        })
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Detail Alamat & Lokasi */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-bold text-ink-2 uppercase tracking-wider text-[11px] flex items-center space-x-1.5">
-                        <MapPin size={12} />
-                        <span>Alamat & Lokasi</span>
-                      </h4>
-                      <button
-                        type="button"
-                        onClick={handleRefreshLocation}
-                        disabled={refreshingLocation}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed bg-surface border-divider hover:bg-fill-1 text-accent hover:border-accent"
-                        title="Pindai riwayat chat & hitung ulang jarak/ongkir berdasar shareloc paling valid (Bidan → Customer → DB → Geocoding)"
-                      >
-                        <RefreshCw size={12} className={refreshingLocation ? 'animate-spin' : ''} />
-                        <span>{refreshingLocation ? 'Memperbarui...' : '🔄 Refresh & Hitung Ulang'}</span>
-                      </button>
-                    </div>
-                    {(() => {
-                      const badge = getLocationBadgeConfig(
-                        customerDetailData,
-                        customerDetailData?.preferences?.location_source_label
-                      );
-                      const hasSource = !!(
-                        customerDetailData?.location_source ||
-                        customerDetailData?.effective_location_source ||
-                        customerDetailData?.preferences?.location_source ||
-                        customerDetailData?.preferences?.location_source_label
-                      );
-                      if (!hasSource) return null;
-                      return (
-                        <div className="flex items-center gap-1.5">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${badge.badgeClass}`}>
-                            {badge.label}
-                          </span>
-                          {customerDetailData?.preferences?.location_refreshed_at ? (
-                            <span className="text-[10px] text-ink-3">
-                              {new Date(customerDetailData.preferences.location_refreshed_at).toLocaleString('id-ID')}
-                            </span>
-                          ) : null}
-                        </div>
-                      );
-                    })()}
-                    <div className="p-3 rounded-xl border border-divider bg-surface-2 space-y-2">
-                      <div>
-                        <p className="text-[10px] text-ink-2 font-semibold uppercase">Alamat Lengkap</p>
-                        <p className="font-medium text-ink">{customerDetailData?.preferences?.address || customerDetailData?.address || customerDetailData?.kelurahan || selectedChat?.kelurahan || '-'}</p>
-                        {savedAddressCount > 1 && (
-                          <div className="pt-1">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const cid = customerDetailData?.id || selectedChat?.customerId;
-                                if (cid) setAddrBookCustomer({ id: cid, name: customerDetailData?.name || selectedChat?.customerName });
-                              }}
-                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-accent-soft text-accent border border-accent/30 hover:bg-accent-soft/80 transition active:scale-[0.98] focus-visible:ring-2 cursor-pointer"
-                              title="Lihat semua alamat tersimpan"
-                            >
-                              <MapPin size={11} />
-                              <span>📍 {savedAddressCount} alamat tersimpan</span>
-                            </button>
-                          </div>
-                        )}
-                        {(customerDetailData?.preferences?.landmark || customerDetailData?.preferences?.address_notes) && (
-                          <p className="text-[11px] text-accent mt-0.5 font-medium">📍 Patokan: {customerDetailData?.preferences?.landmark || customerDetailData?.preferences?.address_notes}</p>
-                        )}
-                        {customerDetailData?.kelurahan && (
-                          <p className="text-[10px] text-ink-3 mt-0.5">Kel. {customerDetailData.kelurahan}{customerDetailData?.kecamatan ? `, Kec. ${customerDetailData.kecamatan}` : ''}</p>
-                        )}
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 pt-1 border-t border-divider">
-                        <div>
-                          <p className="text-[10px] text-ink-2 font-semibold uppercase">Kecamatan</p>
-                          <p className="font-medium text-ink">{customerDetailData?.kecamatan || selectedChat?.kecamatan || '-'}</p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-ink-2 font-semibold uppercase">Kota / Kabupaten</p>
-                          <p className="font-medium text-ink">{customerDetailData?.kota || selectedChat?.kota || '-'}</p>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 pt-1 border-t border-divider">
-                        <div>
-                          <p className="text-[10px] text-ink-2 font-semibold uppercase">Jarak & Ongkir</p>
-                          <p className="font-bold text-accent">
-                            {(customerDetailData?.distance_km != null ? customerDetailData.distance_km : selectedChat?.distanceKm != null ? selectedChat.distanceKm : null) != null
-                              ? `${customerDetailData?.distance_km ?? selectedChat?.distanceKm} km`
-                              : '-'} (Rp {Number(customerDetailData?.ongkir ?? selectedChat?.ongkir ?? 0).toLocaleString('id-ID')})
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-ink-2 font-semibold uppercase">Koordinat GPS</p>
-                          {customerDetailData?.lat && customerDetailData?.lng ? (
-                            <a
-                              href={getGoogleMapsDirectionUrl(customerDetailData.lat, customerDetailData.lng, (customerDetailData as any)?.preferences?.address || (customerDetailData as any)?.address || (customerDetailData as any)?.kelurahan || null, resolveEffectiveLocationSource(customerDetailData))}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-[11px] font-bold text-info hover:underline flex items-center space-x-1"
-                            >
-                              <span>{Number(customerDetailData.lat).toFixed(4)}, {Number(customerDetailData.lng).toFixed(4)}</span>
-                              <ExternalLink size={10} />
-                            </a>
-                          ) : (
-                            <p className="text-[11px] text-ink-3 italic">Belum shareloc</p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Children / Anak Data */}
-                  <div className="space-y-2">
-                    <h4 className="font-bold text-ink-2 uppercase tracking-wider text-[11px]">
-                      Data Anak / Bayi ({customerDetailData?.children?.length || 0})
-                    </h4>
-                    {(customerDetailData?.children || []).length === 0 ? (
-                      <div className="p-3 rounded-xl border border-dashed border-divider bg-surface-2 text-center space-y-1">
-                        <p className="text-xs text-ink-3">Belum ada data anak tercatat.</p>
-                        <p className="text-[10px] text-ink-2">Data anak otomatis terdata saat customer mengisi form pemesanan atau menyebutkan usia anak di chat WhatsApp.</p>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {customerDetailData.children.map((ch: any) => (
-                          <div key={ch.id} className="p-2.5 rounded-xl border border-divider bg-surface space-y-0.5">
-                            <p className="font-bold text-ink">{ch.name || 'Anak'}</p>
-                            <p className="text-ink-2 text-[11px]">
-                              {ch.current_age ? `Usia: ${ch.current_age}` : formatClinicalAge(ch.birth_date) ? `Usia: ${formatClinicalAge(ch.birth_date)}` : ch.age_months ? `Usia: ${ch.age_months} bulan` : ch.birth_date ? `Lahir: ${new Date(ch.birth_date).toLocaleDateString('id-ID')}` : ch.raw_age_text ? `Usia: ${ch.raw_age_text}` : '-'}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Riwayat Reservasi */}
-                  <div className="space-y-2">
-                    <h4 className="font-bold text-ink-2 uppercase tracking-wider text-[11px] flex items-center space-x-1.5">
-                      <Calendar size={12} />
-                      <span>Riwayat Reservasi ({customerDetailData?.reservations?.length || 0})</span>
-                    </h4>
-                    {(customerDetailData?.reservations || []).length === 0 ? (
-                      <p className="text-ink-3 italic">Belum pernah membuat reservasi.</p>
-                    ) : (
-                      <>
-                        <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                          {customerDetailData.reservations.map((r: any) => (
-                            <div
-                              key={r.id}
-                              onClick={() => handleOpenReservationDetail(r.id)}
-                              className="p-2.5 rounded-xl border border-divider bg-surface flex justify-between items-center cursor-pointer hover:border-accent hover:bg-surface-2 active:scale-[0.98] transition group"
-                              title="Klik untuk lihat detail reservasi"
-                            >
-                              <div className="flex-1 min-w-0">
-                                <p className="font-bold text-ink group-hover:text-accent truncate">
-                                  {getCleanTreatmentName(r.treatment_detail || r.raw_text)}
-                                </p>
-                                <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                                  <p className="text-[11px] text-ink-2">
-                                    {r.booking_date
-                                      ? new Date(r.booking_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
-                                      : new Date(r.created_at).toLocaleDateString('id-ID')}
-                                  </p>
-                                  {r.purchase_value ? (
-                                    <span className="text-[11px] font-bold text-accent font-mono">
-                                      • Rp {r.purchase_value.toLocaleString('id-ID')}
-                                    </span>
-                                  ) : null}
-                                </div>
-                                <p className="text-[10px] text-accent font-semibold flex items-center space-x-1 mt-0.5">
-                                  <User size={10} />
-                                  <span>Bidan: {resolveStaffName(r, reservationStaffList) || 'Belum ditugaskan'}</span>
-                                </p>
-                              </div>
-                              <div className="flex items-center space-x-1.5 shrink-0 ml-2">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleGenerateAndInsertInvoice(r);
-                                  }}
-                                  className="p-1.5 rounded-lg bg-info-soft hover:bg-info-line text-info border border-info-line transition shadow-2xs group-hover:border-info-line"
-                                  title="Generate & Masukkan Format Invoice ke Box Chat WhatsApp"
-                                >
-                                  <Receipt size={13} />
-                                </button>
-                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
-                                  r.status === 'confirmed' || r.status === 'en_route'
-                                  ? 'bg-success-soft text-success'
-                                  : r.status === 'pending'
-                                    ? 'bg-warning-soft text-warning'
-                                    : 'bg-fill-1 text-ink'
-                                }`}>
-                                  {r.status}
-                                </span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                        <p className="text-[10px] text-ink-3 italic flex items-center space-x-1"><Eye size={10} /><span>Klik card untuk lihat detail lengkap</span></p>
-                      </>
-                    )}
-                  </div>
-
-                  {/* Antrean Follow-Up (reusable modular) */}
-                  <CustomerFollowUpSection
-                    customerId={customerDetailData?.id || selectedChat?.customerId || ''}
-                    customerPhone={customerDetailData?.phone || selectedChat?.customerPhone}
-                    customerName={customerDetailData?.name || selectedChat?.customerName}
-                    followUps={customerDetailData?.follow_ups || []}
-                    onRefresh={async () => {
-                      const cid = customerDetailData?.id || selectedChat?.customerId;
-                      if (!cid) return;
-                      try {
-                        const res: any = await apiRequest(`/api/admin/customers/${cid}`);
-                        if (res?.success && res.data) setCustomerDetailData((prev: any) => ({ ...prev, ...res.data, follow_ups: res.data.follow_ups || prev?.follow_ups }));
-                      } catch {}
-                    }}
-                  />
-                </>
-              )}
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-4 border-t border-divider bg-surface-2 flex justify-end space-x-2">
-              <button
-                type="button"
-                onClick={() => {
-                  const cid = customerDetailData?.id || selectedChat?.customerId;
-                  if (cid) setAddrBookCustomer({ id: cid, name: customerDetailData?.name || selectedChat?.customerName });
-                }}
-                className="min-h-[44px] px-3.5 py-2 bg-surface hover:bg-fill-1 text-ink border border-divider text-xs font-bold rounded-xl transition shadow-xs inline-flex items-center space-x-1.5 active:scale-[0.98] focus-visible:ring-2 cursor-pointer"
-                title="Buka Buku Alamat"
-              >
-                <MapPin size={14} className="text-accent" />
-                <span>Buku Alamat{savedAddressCount > 0 ? ` (${savedAddressCount})` : ''}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setCustomerDetailEditMode(true)}
-                className="min-h-[44px] px-4 py-2 bg-accent-soft hover:bg-accent-soft/80 text-accent border border-accent/30 text-xs font-bold rounded-xl transition shadow-xs flex items-center space-x-1.5 active:scale-[0.98] focus-visible:ring-2 cursor-pointer"
-              >
-                <PenLine size={14} />
-                <span>Edit Profil</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setCustomerDetailModalOpen(false)}
-                className="px-4 py-2 bg-ink hover:bg-black text-white text-xs font-bold rounded-xl transition shadow-xs"
-              >
-                Tutup
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Profil Modal - terpisah, placement seperti ReservationDetailModal (tidak nested, full overlay) */}
-      {customerDetailEditMode && (
-        <CustomerEditForm
-          key={customerDetailData?.id || selectedChat?.customerId}
-          resetKey={customerDetailData?.updated_at || customerDetailData?.updatedAt}
-          customer={{
-            id: customerDetailData?.id || selectedChat?.customerId || '',
-            name: customerDetailData?.name || selectedChat?.customerName || null,
-            phone: customerDetailData?.phone || selectedChat?.customerPhone || '',
-            address: customerDetailData?.preferences?.address || customerDetailData?.preferences?.full_address || '',
-            kelurahan: customerDetailData?.kelurahan || null,
-            kecamatan: customerDetailData?.kecamatan || null,
-            kota: customerDetailData?.kota || null,
-            zipcode: customerDetailData?.zipcode || null,
-            landmark: customerDetailData?.preferences?.landmark || customerDetailData?.preferences?.address_notes || null,
-            lat: customerDetailData?.lat ?? null,
-            lng: customerDetailData?.lng ?? null,
-            children: customerDetailData?.children || [],
-            preferences: customerDetailData?.preferences,
-          }}
-          onSave={handleSaveCustomerDetail}
-          onCancel={() => setCustomerDetailEditMode(false)}
-          loading={customerDetailLoading}
-        />
-      )}
-
-      {/* Buku Alamat Drawer - multi-rumah pelanggan di WhatsApp Live Chat (Fase 3) */}
-      <AddressBookDrawer
-        customer={addrBookCustomer}
-        onClose={() => setAddrBookCustomer(null)}
-        onChanged={async () => {
-          const cid = customerDetailData?.id || selectedChat?.customerId;
-          if (cid) {
-            try {
-              const res: any = await apiRequest(`/api/admin/customers/${cid}`);
-              if (res?.success && res.data) {
-                setCustomerDetailData((prev: any) => ({ ...prev, ...res.data, follow_ups: res.data.follow_ups || prev?.follow_ups }));
-              }
-              const addrRes: any = await apiRequest(`/api/admin/customers/${cid}/addresses`);
-              if (addrRes?.success && Array.isArray(addrRes.addresses)) {
-                setSavedAddressCount(addrRes.addresses.length);
-              }
-            } catch {}
-          }
-        }}
+      <LiveChatModals
+        customerDetailModalOpen={customerDetailModalOpen}
+        activeEditingHoldReservation={activeEditingHoldReservation}
+        setActiveEditingHoldReservation={setActiveEditingHoldReservation}
+        convertingHoldId={convertingHoldId}
+        setConvertingHoldId={setConvertingHoldId}
+        quickBookingTargetSlot={quickBookingTargetSlot}
+        setQuickBookingTargetSlot={setQuickBookingTargetSlot}
+        quickBookingExtracted={quickBookingExtracted}
+        setQuickBookingExtracted={setQuickBookingExtracted}
+        setCustomerDetailModalOpen={setCustomerDetailModalOpen}
+        customerDetailData={customerDetailData}
+        setCustomerDetailData={setCustomerDetailData}
+        selectedChat={selectedChat}
+        customerDetailLoading={customerDetailLoading}
+        savedAddressCount={savedAddressCount}
+        setSavedAddressCount={setSavedAddressCount}
+        customerDetailEditMode={customerDetailEditMode}
+        setCustomerDetailEditMode={setCustomerDetailEditMode}
+        handleSaveCustomerDetail={handleSaveCustomerDetail}
+        addrBookCustomer={addrBookCustomer}
+        setAddrBookCustomer={setAddrBookCustomer}
+        selectedReservation={selectedReservation}
+        setSelectedReservation={setSelectedReservation}
+        reservationStaffList={reservationStaffList}
+        user={user}
+        handleReservationUpdate={handleReservationUpdate}
+        proofModalReservation={proofModalReservation}
+        setProofModalReservation={setProofModalReservation}
+        showQuickBookingModal={showQuickBookingModal}
+        setShowQuickBookingModal={setShowQuickBookingModal}
+        activeEditingConfirmedReservation={activeEditingConfirmedReservation}
+        setActiveEditingConfirmedReservation={setActiveEditingConfirmedReservation}
+        handleInsertInvoiceToChat={handleInsertInvoiceToChat}
+        showQuickHoldModal={showQuickHoldModal}
+        setShowQuickHoldModal={setShowQuickHoldModal}
+        quickHoldInitialDate={quickHoldInitialDate}
+        setQuickHoldInitialDate={setQuickHoldInitialDate}
+        quickHoldInitialTime={quickHoldInitialTime}
+        setQuickHoldInitialTime={setQuickHoldInitialTime}
+        setChats={setChats}
+        chatsRef={chatsRef}
+        loadChats={loadChats}
+        showDailyScheduleModal={showDailyScheduleModal}
+        setShowDailyScheduleModal={setShowDailyScheduleModal}
+        handleSlotHold={handleSlotHold}
+        showInvoiceModal={showInvoiceModal}
+        setShowInvoiceModal={setShowInvoiceModal}
+        invoiceModalData={invoiceModalData}
+        clinicServices={clinicServices}
+        contextMenu={contextMenu}
+        setContextMenu={setContextMenu}
+        allLabels={allLabels}
+        togglingLabelId={togglingLabelId}
+        handleTogglePin={handleTogglePin}
+        handleToggleReadStatus={handleToggleReadStatus}
+        handleTakeover={handleTakeover}
+        handleRelease={handleRelease}
+        handleDismissFrustration={handleDismissFrustration}
+        handleToggleLabel={handleToggleLabel}
+        editingMsg={editingMsg}
+        setEditingMsg={setEditingMsg}
+        isEditingSaving={isEditingSaving}
+        editContent={editContent}
+        setEditContent={setEditContent}
+        handleSaveEdit={handleSaveEdit}
+        searchParams={searchParams}
+        setSearchParams={setSearchParams}
+        showSyncInfoModal={showSyncInfoModal}
+        setShowSyncInfoModal={setShowSyncInfoModal}
+        handleStartBackgroundFullSync={handleStartBackgroundFullSync}
       />
 
-      {/* Reservation Detail Modal dari riwayat (klik card) */}
-      {selectedReservation && (
-        <ReservationDetailModal
-          reservation={selectedReservation}
-          staffList={reservationStaffList}
-          user={user}
-          googleCalendarMockActive={false}
-          onClose={() => setSelectedReservation(null)}
-          onUpdate={handleReservationUpdate}
-          onConfirm={async (id) => { await apiRequest(`/api/admin/reservation/${id}/confirm`, { method: 'PATCH' }); await handleReservationUpdate(); }}
-          onComplete={async (id) => { await apiRequest(`/api/admin/reservation/${id}/complete`, { method: 'PATCH' }); await handleReservationUpdate(); }}
-          onStatusChange={async (id, s) => { await apiRequest(`/api/admin/reservation/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: s }) }); await handleReservationUpdate(); }}
-          onSetDate={async (id, d) => { await apiRequest(`/api/admin/reservation/${id}/set-date`, { method: 'PATCH', body: JSON.stringify({ bookingDate: new Date(d).toISOString() }) }); await handleReservationUpdate(); }}
-          onAssignStaff={async (id, sid) => { await apiRequest(`/api/admin/reservation/${id}/assign-staff`, { method: 'PATCH', body: JSON.stringify({ assigned_staff_id: sid }) }); await handleReservationUpdate(); }}
-          onDelete={async (id) => { await apiRequest(`/api/admin/reservation/${id}?soft=true`, { method: 'DELETE' }); setSelectedReservation(null); await handleReservationUpdate(id); }}
-          onCancel={async (id) => { await apiRequest(`/api/admin/reservation/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'cancelled' }) }); setSelectedReservation(null); await handleReservationUpdate(); }}
-          onDeletePermanent={async (id) => { await apiRequest(`/api/admin/reservation/${id}`, { method: 'DELETE' }); setSelectedReservation(null); await handleReservationUpdate(id); }}
-          onProofUpload={async (file) => {
-            const toB64 = (f: File) => new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = () => rej(new Error('read fail')); r.readAsDataURL(f); });
-            const b64 = await toB64(file);
-            await apiRequest(`/api/admin/reservation/${selectedReservation.id}/proof`, { method: 'PUT', body: JSON.stringify({ imageB64: b64, mimeType: file.type, fileName: file.name }) });
-            await handleReservationUpdate();
-          }}
-          onProofRemove={async () => { await apiRequest(`/api/admin/reservation/${selectedReservation.id}/proof`, { method: 'PUT', body: JSON.stringify({ remove: true }) }); await handleReservationUpdate(); }}
-          onOpenEditLocation={() => toast('Edit lokasi via menu Reservations untuk akses penuh.', 'info')}
-          onProofView={(r) => window.open(r.proof_url!, '_blank')}
-          onHousePhotoView={(url) => window.open(url, '_blank')}
-          // Monitor SUDAH menampilkan thread percakapan: tombol Riwayat Chat
-          // menutup detail agar admin langsung kembali ke thread customer tsb.
-          onOpenChatHistory={() => setSelectedReservation(null)}
-        />
-      )}
-
-      {/* Payment Proof Viewer Modal dari Live Chat Monitor */}
-      {proofModalReservation &&
-        createPortal(
-          <div
-            className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[9999] flex items-center justify-center p-3 sm:p-4 animate-fadeIn h-[100dvh] w-[100dvw]"
-            onClick={() => setProofModalReservation(null)}
-          >
-            <div
-              className="w-full max-w-md bg-surface border border-divider rounded-3xl p-4 sm:p-5 space-y-4 shadow-2xl max-h-[90dvh] overflow-y-auto animate-modalScaleUp"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between border-b border-divider pb-3">
-                <h3 className="text-sm font-bold text-ink flex items-center space-x-2">
-                  <Receipt size={16} className="text-accent flex-shrink-0" />
-                  <span>Bukti Pembayaran</span>
-                </h3>
-                <button
-                  onClick={() => setProofModalReservation(null)}
-                  className="p-1.5 rounded-full text-ink-3 hover:text-ink hover:bg-fill-1 transition cursor-pointer"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              {(() => {
-                const modalEval = evaluatePaymentProof(proofModalReservation);
-                if (!modalEval.isMismatch) return null;
-                return (
-                  <div className="p-3 rounded-2xl bg-danger-soft border border-danger-line text-danger space-y-1.5">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-danger">
-                      <AlertTriangle size={15} className="shrink-0" />
-                      <span>Peringatan: Nominal Transfer Tidak Sesuai Tagihan</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-danger-line">
-                      <div>
-                        <span className="text-[10px] text-danger block uppercase font-bold">Total Tagihan:</span>
-                        <strong>Rp {modalEval.totalExpected.toLocaleString('id-ID')}</strong>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-danger block uppercase font-bold">Nominal di Struk:</span>
-                        <strong className="text-danger font-extrabold">Rp {modalEval.receiptAmount?.toLocaleString('id-ID')}</strong>
-                      </div>
-                    </div>
-                    <div className="text-[11px] font-semibold text-danger">
-                      Selisih: {modalEval.isUnderpaid ? `Kurang Rp ${Math.abs(modalEval.difference).toLocaleString('id-ID')}` : `Lebih Rp ${modalEval.difference.toLocaleString('id-ID')}`}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              <div className="text-xs space-y-1.5 bg-surface-2 border border-divider rounded-2xl p-3.5">
-                <div className="flex justify-between">
-                  <span className="text-ink-2">Pasien:</span>
-                  <span className="font-bold text-ink">
-                    {selectedChat?.customerName || 'Bunda'} ({selectedChat?.customerPhone || '-'})
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-ink-2">Metode:</span>
-                  <span className="font-bold text-ink">{proofModalReservation.payment_method || 'Transfer'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-ink-2">Tagihan Resmi:</span>
-                  <span className="font-bold text-ink">
-                    {proofModalReservation.purchase_value ? `Rp ${proofModalReservation.purchase_value.toLocaleString('id-ID')}` : '-'}
-                  </span>
-                </div>
-                {proofModalReservation.receipt_amount != null && (
-                  <div className="flex justify-between">
-                    <span className="text-ink-2">Nominal di Struk:</span>
-                    <span className="font-bold text-danger">
-                      Rp {proofModalReservation.receipt_amount.toLocaleString('id-ID')}
-                    </span>
-                  </div>
-                )}
-                <div className="flex justify-between items-center pt-1 border-t border-divider">
-                  <span className="text-ink-2">Status Review:</span>
-                  <span className={`font-semibold uppercase ${
-                    proofModalReservation.purchase_review_status === 'approved' ? 'text-success' : 'text-warning'
-                  }`}>
-                    {proofModalReservation.purchase_review_status || 'pending'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="rounded-2xl overflow-hidden border border-divider bg-surface-2">
-                <img
-                  src={proofModalReservation.proof_url!}
-                  alt="Bukti pembayaran"
-                  className="w-full max-h-72 object-contain"
-                />
-              </div>
-
-              <div className="flex justify-end space-x-2 pt-2 border-t border-divider">
-                <button
-                  type="button"
-                  onClick={() => setProofModalReservation(null)}
-                  className="px-4 py-2 rounded-xl border border-divider text-xs font-semibold text-ink-2 hover:bg-fill-1 transition cursor-pointer"
-                >
-                  Tutup
-                </button>
-                <a
-                  href={proofModalReservation.proof_url!}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-4 py-2 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-1.5"
-                >
-                  <ExternalLink size={13} />
-                  <span>Buka Gambar Penuh</span>
-                </a>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
-
-       {/* Quick Create Reservation Modal dari Live Chat */}
-      {showQuickBookingModal && (
-        <CreateReservationModal
-          isOpen={showQuickBookingModal}
-          mode={activeEditingHoldReservation || activeEditingConfirmedReservation ? 'edit' : 'create'}
-          initialReservation={activeEditingHoldReservation || activeEditingConfirmedReservation || undefined}
-          onEditReservation={(res) => setSelectedReservation(res)}
-          onClose={() => {
-            setShowQuickBookingModal(false);
-            setConvertingHoldId(null);
-            setActiveEditingHoldReservation(null);
-            setActiveEditingConfirmedReservation(null);
-            setQuickBookingTargetSlot(null);
-            setQuickBookingExtracted(null);
-          }}
-          staffList={reservationStaffList}
-          initialSlotTarget={quickBookingTargetSlot}
-          initialCustomer={
-            (customerDetailData && customerDetailData.id === selectedChat?.customerId)
-              ? customerDetailData
-              : (selectedChat?.customerId ? {
-                  id: selectedChat.customerId,
-                  name: selectedChat.customerName,
-                  phone: selectedChat.customerPhone,
-                  kelurahan: (selectedChat as any).kelurahan || null,
-                  kecamatan: (selectedChat as any).kecamatan || null,
-                  kota: (selectedChat as any).kota || null,
-                  address: (selectedChat as any).address || (selectedChat as any).preferences?.address || null,
-                  preferences: (selectedChat as any).preferences || {},
-                  children: (selectedChat as any).children || [],
-                  ongkir: (selectedChat as any).ongkir ?? 0,
-                  distance_km: (selectedChat as any).distanceKm ?? (selectedChat as any).distance_km ?? null,
-                } : null)
-          }
-          initialCustomerId={selectedChat?.customerId}
-          initialTreatmentName={quickBookingExtracted?.treatmentName}
-          initialTreatmentCategory={quickBookingExtracted?.treatmentCategory as any}
-          initialBabies={quickBookingExtracted?.babies?.length ? quickBookingExtracted.babies : (quickBookingExtracted?.childName ? [{ name: quickBookingExtracted.childName, ageText: quickBookingExtracted.childAge || '' }] : undefined)}
-          initialNotes={quickBookingExtracted?.treatmentName && quickBookingExtracted.treatmentName.trim() ? `Request dari chat: ${quickBookingExtracted.treatmentName}` : undefined}
-          initialAddress={quickBookingExtracted?.address || (selectedChat as any)?.address || (selectedChat as any)?.preferences?.address || null}
-          initialLandmark={(selectedChat as any)?.preferences?.landmark || (selectedChat as any)?.preferences?.address_notes || null}
-          onSuccess={async (newRes) => {
-            setShowQuickBookingModal(false);
-            setConvertingHoldId(null);
-            setActiveEditingHoldReservation(null);
-            setActiveEditingConfirmedReservation(null);
-            setQuickBookingTargetSlot(null);
-            setQuickBookingExtracted(null);
-            await handleReservationUpdate();
-            // Invoice HANYA dimasukkan lewat onSuccessAndInvoice (pilihan eksplisit
-            // "Simpan & Masukkan Invoice"). "Simpan Jadwal Saja" tidak membuka modal
-            // invoice liar apa pun (kontrak `_withInvoice`).
-          }}
-          onSuccessAndInvoice={(newRes) => {
-            const rawCust = (customerDetailData && customerDetailData.id === selectedChat?.customerId)
-              ? customerDetailData
-              : (selectedChat ? {
-                  name: selectedChat.customerName,
-                  phone: selectedChat.customerPhone,
-                  address: (selectedChat as any).address || (selectedChat as any).preferences?.address || '',
-                  kelurahan: (selectedChat as any).kelurahan || null,
-                  kecamatan: (selectedChat as any).kecamatan || null,
-                  kota: (selectedChat as any).kota || null,
-                  ongkir: (selectedChat as any).ongkir ?? 0,
-                  distance_km: (selectedChat as any).distanceKm ?? (selectedChat as any).distance_km ?? null,
-                  preferences: (selectedChat as any).preferences || {},
-                } : null);
-            // Merge babies: prioritas newRes.babies (form enrichment) > rawCust.children
-            const mergedChildren = (newRes?.babies && Array.isArray(newRes.babies) && newRes.babies.length > 0)
-              ? newRes.babies.map((b: any) => ({ name: b.name, raw_age_text: b.age, current_age: b.age }))
-              : (rawCust?.children || []);
-            const customerObj = rawCust ? { ...rawCust, children: mergedChildren } : null;
-            const invoiceText = generateReservationInvoiceText({
-              reservation: newRes,
-              customer: customerObj as any,
-              discount: Number(newRes?.discount || 0),
-            });
-            handleInsertInvoiceToChat(invoiceText);
-            toast('Reservasi berhasil disimpan & format invoice langsung dimasukkan ke chat WhatsApp! ✨', 'success');
-          }}
-        />
-      )}
-
-      {/* Quick Hold Modal dari Live Chat (Kunci Slot Kilat 3 Detik) */}
-      {showQuickHoldModal && (
-        <QuickHoldModal
-          isOpen={showQuickHoldModal}
-          onClose={() => { setShowQuickHoldModal(false); setQuickHoldInitialDate(null); setQuickHoldInitialTime(null); }}
-          staffList={reservationStaffList}
-          initialDate={quickHoldInitialDate}
-          initialTime={quickHoldInitialTime}
-          initialCustomer={
-            (customerDetailData && customerDetailData.id === selectedChat?.customerId)
-              ? customerDetailData
-              : (selectedChat?.customerId ? {
-                  id: selectedChat.customerId,
-                  name: selectedChat.customerName,
-                  phone: selectedChat.customerPhone,
-                  kelurahan: (selectedChat as any).kelurahan,
-                  kecamatan: (selectedChat as any).kecamatan,
-                  kota: (selectedChat as any).kota,
-                  distance_km: (selectedChat as any).distanceKm ?? (selectedChat as any).distance_km,
-                } : null)
-          }
-          onSuccess={async (newHold) => {
-            setShowQuickHoldModal(false);
-            await handleReservationUpdate();
-            // Instant 0ms: patch chats list so activeHoldReservation langsung muncul tanpa tunggu fetch
-            if (newHold && selectedChat) {
-              const holdObj = {
-                id: newHold.id,
-                booking_date: newHold.booking_date,
-                treatment_category: newHold.treatment_category,
-                treatment_detail: newHold.treatment_detail,
-                assigned_staff_id: newHold.assigned_staff_id,
-                assigned_staff: newHold.assigned_staff || null,
-                notes: newHold.notes || null,
-                customer_id: newHold.customer_id || selectedChat.customerId,
-                status: 'hold',
-              };
-              setChats((prev) => {
-                const updated = prev.map((c) => c.conversationId === selectedChat.conversationId ? { ...c, hasActiveHold: true, activeHoldReservation: holdObj } : c);
-                chatsRef.current = updated;
-                return updated;
-              });
-              // sync detail juga agar fallback konsisten
-              setCustomerDetailData((prev: any) => prev ? { ...prev, reservations: [...(prev.reservations || []), holdObj] } : prev);
-            } else {
-              loadChats(true);
-            }
-          }}
-          onInsertToChat={handleInsertInvoiceToChat}
-        />
-      )}
-
-      {/* Daily Schedule Modal (Tools + → Cek Jadwal Harian) */}
-      {showDailyScheduleModal && (
-        <DailyScheduleModal
-          isOpen={showDailyScheduleModal}
-          onClose={() => setShowDailyScheduleModal(false)}
-          onSelectSlot={handleSlotHold}
-          onSelectReservation={(res) => {
-            setShowDailyScheduleModal(false);
-            setSelectedReservation(res);
-          }}
-          onInsertToChat={handleInsertInvoiceToChat}
-        />
-      )}
-
-      {/* Draft Preview & Invoice Generator Modal */}
-      {showInvoiceModal && invoiceModalData && (
-        <InvoiceGeneratorModal
-          isOpen={showInvoiceModal}
-          onClose={() => setShowInvoiceModal(false)}
-          initialData={invoiceModalData}
-          customerId={(invoiceModalData as any)?.customerId || selectedChat?.customerId}
-          clinicServices={clinicServices}
-          onInsertToChat={handleInsertInvoiceToChat}
-        />
-      )}
-
-      {/* Context Menu: bottom-sheet + backdrop di MOBILE; floating popover di DESKTOP
-          (posisi mengikuti koordinat klik kanan, tanpa backdrop pembajak layar). */}
-      {contextMenu && (
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-start sm:justify-start p-0 bg-black/40 backdrop-blur-2xs sm:bg-transparent sm:backdrop-blur-none animate-in fade-in duration-150"
-          onClick={() => setContextMenu(null)}
-        >
-          {/* Mobile Bottom Action Sheet (sm:hidden) */}
-          <div
-            className="sm:hidden w-full bg-surface rounded-t-2xl shadow-2xl p-4 space-y-3 animate-in slide-in-from-bottom duration-200 border-t border-divider max-h-[80dvh] overflow-y-auto overscroll-contain pb-[max(1rem,env(safe-area-inset-bottom,1rem))]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Grab Handle */}
-            <div className="w-10 h-1 bg-strong rounded-full mx-auto" />
-
-            {/* Header info */}
-            <div className="flex items-center space-x-3 pb-2 border-b border-divider">
-              <CustomerAvatar
-                src={contextMenu.chat.customerProfilePictureUrl}
-                name={contextMenu.chat.customerName || 'Customer'}
-                phone={contextMenu.chat.customerPhone}
-                size="sm"
-              />
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold text-ink truncate">
-                  {contextMenu.chat.customerName || 'Customer'}
-                </p>
-                <p className="text-[11px] text-ink-2 font-mono">
-                  {contextMenu.chat.customerPhone || 'Unknown'}
-                </p>
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="space-y-1.5">
-              <button
-                type="button"
-                onClick={() => handleTogglePin(contextMenu.chat)}
-                className="w-full px-3.5 py-3 text-left rounded-xl bg-surface-2 hover:bg-fill-1 active:bg-fill-2 flex items-center space-x-3 transition font-medium text-xs text-ink cursor-pointer"
-              >
-                <Pin size={16} className={contextMenu.chat.isPinned ? 'text-accent fill-current' : 'text-ink-2'} />
-                <span>{contextMenu.chat.isPinned ? 'Lepas Sematan (Unpin dari Atas)' : 'Sematkan Percakapan (Pin ke Atas)'}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleToggleReadStatus(contextMenu.chat)}
-                className="w-full px-3.5 py-3 text-left rounded-xl bg-surface-2 hover:bg-fill-1 active:bg-fill-2 flex items-center space-x-3 transition font-medium text-xs text-ink cursor-pointer"
-              >
-                {(contextMenu.chat.unreadCount || 0) > 0 || contextMenu.chat.isManualUnread ? (
-                  <>
-                    <MailCheck size={16} className="text-success" />
-                    <span>Tandai Sudah Dibaca</span>
-                  </>
-                ) : (
-                  <>
-                    <Mail size={16} className="text-accent" />
-                    <span>Tandai Belum Dibaca (Badge Hijau Tua)</span>
-                  </>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  const c = contextMenu.chat;
-                  setContextMenu(null);
-                  if (c.isHumanHandling) {
-                    handleRelease(c);
-                  } else {
-                    handleTakeover(c);
-                  }
-                }}
-                className="w-full px-3.5 py-3 text-left rounded-xl bg-surface-2 hover:bg-fill-1 active:bg-fill-2 flex items-center space-x-3 transition font-medium text-xs text-ink-2 cursor-pointer"
-              >
-                {contextMenu.chat.isHumanHandling ? (
-                  <>
-                    <Bot size={16} />
-                    <span>Kembalikan ke Bot AI</span>
-                  </>
-                ) : (
-                  <>
-                    <User size={16} className="text-warning" />
-                    <span>Ambil Alih Manual (CS)</span>
-                  </>
-                )}
-              </button>
-            </div>
-
-            {contextMenu.chat.isFrustrated && (
-              <div>
-                <button
-                  type="button"
-                  onClick={() => handleDismissFrustration(contextMenu.chat)}
-                  className="w-full px-3.5 py-3 text-left rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 active:bg-rose-200/70 flex items-center space-x-3 transition font-medium text-xs text-rose-600 dark:text-danger cursor-pointer"
-                >
-                  <BellOff size={16} className="text-rose-600 dark:text-danger" />
-                  <span>Padamkan Peringatan SLA</span>
-                </button>
-              </div>
-            )}
-
-            {/* System Labels Section */}
-            <div className="pt-2 pb-1 border-t border-divider space-y-1.5">
-              <div className="flex items-center justify-between px-1 text-[11px] font-bold text-ink-2">
-                <span className="flex items-center space-x-1.5">
-                  <Tag size={13} className="text-accent" />
-                  <span>Label Pasien (Sistem CRM)</span>
-                </span>
-                <a
-                  href="/admin/labels"
-                  className="text-[10px] text-accent hover:underline font-semibold"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  Kelola Label
-                </a>
-              </div>
-              {allLabels.length === 0 ? (
-                <p className="text-[11px] text-ink-3 px-1 py-0.5">Belum ada label sistem.</p>
-              ) : (
-                <div className="flex flex-wrap gap-1.5 pt-0.5 max-h-36 overflow-y-auto overscroll-contain" data-no-select="true">
-                  {allLabels.map((lbl) => {
-                    const isAssigned = (contextMenu.chat.customerLabels || []).some((l) => l.id === lbl.id);
-                    return (
-                      <button
-                        key={lbl.id}
-                        type="button"
-                        onClick={() => handleToggleLabel(contextMenu.chat.customerId, lbl)}
-                        disabled={togglingLabelId === lbl.id}
-                        className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer shadow-2xs border active:scale-95 ${
-                          isAssigned
-                            ? 'text-white border-transparent'
-                            : 'bg-surface-2 text-ink-2 border-divider hover:bg-fill-1'
-                        }`}
-                        style={{
-                          backgroundColor: isAssigned ? lbl.color || 'rgb(var(--c-accent))' : undefined,
-                        }}
-                        title={`Klik untuk ${isAssigned ? 'lepas' : 'pasang'} label ${lbl.name}`}
-                      >
-                        <span
-                          className="w-2 h-2 rounded-full shrink-0"
-                          style={{ backgroundColor: isAssigned ? 'rgb(var(--c-surface))' : lbl.color }}
-                        />
-                        <span>{lbl.name}</span>
-                        {isAssigned && <Check size={12} className="text-white shrink-0 ml-0.5 stroke-[3]" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Cancel Button */}
-            <button
-              type="button"
-              onClick={() => setContextMenu(null)}
-              className="w-full py-3 bg-fill-1 active:bg-fill-2 text-ink font-bold text-xs rounded-xl transition cursor-pointer"
-            >
-              Batal
-            </button>
-          </div>
-
-          {/* Desktop Floating Popover (hidden sm:block) — mengikuti koordinat mouse + clamp tepi layar */}
-          <div
-            style={{
-              position: 'fixed',
-              left: Math.min(contextMenu.x, Math.max(0, (typeof window !== 'undefined' ? window.innerWidth : 0) - 272)),
-              top: Math.min(contextMenu.y, Math.max(0, (typeof window !== 'undefined' ? window.innerHeight : 0) - 420)),
-              zIndex: 51,
-            }}
-            className="hidden sm:block bg-surface border border-divider rounded-xl shadow-2xl py-1.5 w-64 text-xs text-ink animate-in fade-in zoom-in-95 origin-top-left duration-100 divide-y divide-divider max-h-[70dvh] overflow-y-auto overscroll-contain"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="px-3.5 py-2 text-[11px] font-bold text-ink-2 truncate">
-              {contextMenu.chat.customerName || contextMenu.chat.customerPhone || 'Opsi Percakapan'}
-            </div>
-            <div className="py-1">
-              <button
-                type="button"
-                onClick={() => handleTogglePin(contextMenu.chat)}
-                className="w-full px-3.5 py-2.5 text-left hover:bg-fill-1 flex items-center space-x-2.5 transition font-medium cursor-pointer"
-              >
-                <Pin size={14} className={contextMenu.chat.isPinned ? 'text-accent fill-current' : 'text-ink-2'} />
-                <span>{contextMenu.chat.isPinned ? 'Lepas Sematan (Unpin)' : 'Sematkan Chat (Pin ke Atas)'}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleToggleReadStatus(contextMenu.chat)}
-                className="w-full px-3.5 py-2.5 text-left hover:bg-fill-1 flex items-center space-x-2.5 transition font-medium cursor-pointer"
-              >
-                {(contextMenu.chat.unreadCount || 0) > 0 || contextMenu.chat.isManualUnread ? (
-                  <>
-                    <MailCheck size={14} className="text-success" />
-                    <span>Tandai Sudah Dibaca</span>
-                  </>
-                ) : (
-                  <>
-                    <Mail size={14} className="text-accent" />
-                    <span>Tandai Belum Dibaca (Hijau Tua)</span>
-                  </>
-                )}
-              </button>
-            </div>
-            <div className="py-1">
-              <button
-                type="button"
-                onClick={() => {
-                  const c = contextMenu.chat;
-                  setContextMenu(null);
-                  if (c.isHumanHandling) {
-                    handleRelease(c);
-                  } else {
-                    handleTakeover(c);
-                  }
-                }}
-                className="w-full px-3.5 py-2.5 text-left hover:bg-fill-1 flex items-center space-x-2.5 transition text-ink-2 font-medium cursor-pointer"
-              >
-                {contextMenu.chat.isHumanHandling ? (
-                  <>
-                    <Bot size={14} />
-                    <span>Kembalikan ke Bot AI</span>
-                  </>
-                ) : (
-                  <>
-                    <User size={14} className="text-warning" />
-                    <span>Ambil Alih Manual (CS)</span>
-                  </>
-                )}
-              </button>
-            </div>
-            {contextMenu.chat.isFrustrated && (
-              <div className="py-1">
-                <button
-                  type="button"
-                  onClick={() => handleDismissFrustration(contextMenu.chat)}
-                  className="w-full px-3.5 py-2.5 text-left hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center space-x-2.5 transition font-medium cursor-pointer text-rose-600 dark:text-danger"
-                >
-                  <BellOff size={14} className="text-rose-600 dark:text-danger" />
-                  <span>Padamkan Peringatan SLA</span>
-                </button>
-              </div>
-            )}
-
-            {/* System Labels Section (Desktop) */}
-            <div className="py-2 px-3 space-y-1.5">
-              <div className="flex items-center justify-between text-[11px] font-bold text-ink-2">
-                <span className="flex items-center space-x-1">
-                  <Tag size={12} className="text-accent" />
-                  <span>Label Sistem (CRM)</span>
-                </span>
-                <a
-                  href="/admin/labels"
-                  className="text-[10px] text-accent hover:underline font-semibold"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  Kelola
-                </a>
-              </div>
-              {allLabels.length === 0 ? (
-                <p className="text-[11px] text-ink-3 py-0.5">Belum ada label sistem.</p>
-              ) : (
-                <div className="flex flex-wrap gap-1 pt-0.5 max-h-32 overflow-y-auto overscroll-contain">
-                  {allLabels.map((lbl) => {
-                    const isAssigned = (contextMenu.chat.customerLabels || []).some((l) => l.id === lbl.id);
-                    return (
-                      <button
-                        key={lbl.id}
-                        type="button"
-                        onClick={() => handleToggleLabel(contextMenu.chat.customerId, lbl)}
-                        disabled={togglingLabelId === lbl.id}
-                        className={`px-2 py-1 rounded-lg text-[11px] font-semibold flex items-center space-x-1 transition cursor-pointer shadow-2xs border ${
-                          isAssigned
-                            ? 'text-white border-transparent'
-                            : 'bg-surface-2 text-ink-2 border-divider hover:bg-fill-1'
-                        }`}
-                        style={{
-                          backgroundColor: isAssigned ? lbl.color || 'rgb(var(--c-accent))' : undefined,
-                        }}
-                        title={`Klik untuk ${isAssigned ? 'lepas' : 'pasang'} label ${lbl.name}`}
-                      >
-                        <span
-                          className="w-1.5 h-1.5 rounded-full shrink-0"
-                          style={{ backgroundColor: isAssigned ? 'rgb(var(--c-surface))' : lbl.color }}
-                        />
-                        <span>{lbl.name}</span>
-                        {isAssigned && <Check size={11} className="text-white shrink-0 ml-0.5 stroke-[3]" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Message Modal */}
-      {editingMsg && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-surface border border-divider rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
-            <div className="flex justify-between items-center px-5 py-3.5 border-b border-divider bg-surface-2">
-              <div className="flex items-center space-x-2">
-                <div className="p-1.5 rounded-lg bg-accent-soft text-accent">
-                  <PenLine size={16} />
-                </div>
-                <h3 className="text-sm font-bold text-ink">Edit Pesan WhatsApp</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setEditingMsg(null)}
-                disabled={isEditingSaving}
-                className="p-1.5 rounded-lg text-ink-3 hover:text-ink hover:bg-fill-2 transition text-xs font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="p-5 space-y-3.5">
-              <div className="p-3 bg-warning-soft border border-warning-line rounded-xl text-[11px] text-warning space-y-1">
-                <p className="font-bold flex items-center gap-1.5">
-                  <Info size={13} className="text-warning shrink-0" />
-                  Batas Waktu Edit WhatsApp: 15 Menit
-                </p>
-                <p className="text-warning leading-relaxed">
-                  WhatsApp hanya mengizinkan pengeditan pesan dalam 15 menit pertama. Pesan yang diedit akan otomatis memiliki label <i>(Diedit)</i> di HP penerima.
-                </p>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="block text-[11px] font-bold text-ink">Isi Pesan Baru</label>
-                <textarea
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  rows={4}
-                  placeholder="Ketik perbaikan teks pesan..."
-                  className="w-full bg-surface border border-divider rounded-xl p-3 text-xs text-ink placeholder-ink-3 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition shadow-xs leading-relaxed"
-                />
-              </div>
-
-              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-divider">
-                <button
-                  type="button"
-                  onClick={() => setEditingMsg(null)}
-                  disabled={isEditingSaving}
-                  className="px-4 py-2 bg-surface hover:bg-fill-1 border border-divider text-ink rounded-xl text-xs font-semibold transition"
-                >
-                  Batal
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveEdit}
-                  disabled={isEditingSaving || !editContent.trim()}
-                  className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs"
-                >
-                  {isEditingSaving ? (
-                    <>
-                      <div className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                      <span>Menyimpan...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Check size={14} />
-                      <span>Simpan Perubahan</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Chat Export Modal (konsolidasi dari page ChatExport — via ?action=export) */}
-      {(searchParams.get('action') === 'export' || searchParams.get('export') === '1') && (
-        <div className="fixed inset-0 z-[10000] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn" onClick={() => { const p = new URLSearchParams(searchParams.toString()); p.delete('action'); p.delete('export'); setSearchParams(p, { replace: true }); }}>
-          <div className="bg-surface rounded-2xl w-full max-w-3xl max-h-[85dvh] overflow-y-auto shadow-2xl border border-divider p-4 sm:p-5" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold text-ink">Ekspor Chat</h3>
-              <button onClick={() => { const p = new URLSearchParams(searchParams.toString()); p.delete('action'); p.delete('export'); setSearchParams(p, { replace: true }); }} className="p-1.5 rounded-lg text-ink-3 hover:text-ink hover:bg-fill-1"><X size={16} /></button>
-            </div>
-            <ChatExport />
-          </div>
-        </div>
-      )}
-
-      {/* 📋 Modal Informasi & Konfirmasi Sinkronisasi WhatsApp */}
-      {showSyncInfoModal && (
-        <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-surface rounded-2xl max-w-md w-full p-5 shadow-2xl border border-divider space-y-4 animate-scaleUp max-h-[85dvh] overflow-y-auto overscroll-contain">
-            {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-divider">
-              <div className="flex items-center space-x-2.5">
-                <div className="p-2 rounded-xl bg-accent-soft text-accent">
-                  <RefreshCw size={20} />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-ink">Sinkronisasi WhatsApp</h3>
-                  <p className="text-[11px] text-ink-2">Penyelarasan Riwayat Chat di Background</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowSyncInfoModal(false)}
-                className="p-1 text-ink-3 hover:text-ink rounded-lg hover:bg-fill-1 transition cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Konten Penjelasan */}
-            <div className="space-y-3 text-xs text-ink-2">
-              {/* Apa yang dilakukan */}
-              <div className="p-3 bg-surface-2 border border-divider rounded-xl space-y-1">
-                <p className="font-bold text-ink flex items-center space-x-1.5">
-                  <span>⚙️</span>
-                  <span>Apa yang dilakukan?</span>
-                </p>
-                <p className="leading-relaxed text-[11px]">
-                  Sistem akan menarik dan menyelaraskan seluruh percakapan dari server WhatsApp (WAHA) langsung ke database bot secara otomatis tanpa mengganggu chat yang sedang aktif.
-                </p>
-              </div>
-
-              {/* Data yang disinkronkan */}
-              <div className="space-y-1.5">
-                <p className="font-bold text-ink flex items-center space-x-1.5">
-                  <span>📥</span>
-                  <span>Data yang disinkronkan (Scrape):</span>
-                </p>
-                <ul className="space-y-1 text-[11px] pl-1">
-                  <li className="flex items-start space-x-2">
-                    <span className="text-accent font-bold">✓</span>
-                    <span><strong>Daftar Kontak & Customer:</strong> Deteksi nomor baru dan update nama pelanggan.</span>
-                  </li>
-                  <li className="flex items-start space-x-2">
-                    <span className="text-accent font-bold">✓</span>
-                    <span><strong>Riwayat Percakapan:</strong> Pesan teks, lampiran media (foto/gambar), dan status kirim/baca.</span>
-                  </li>
-                  <li className="flex items-start space-x-2">
-                    <span className="text-accent font-bold">✓</span>
-                    <span><strong>Foto Profil WhatsApp:</strong> Cache foto profil customer untuk notifikasi mobile & avatar.</span>
-                  </li>
-                </ul>
-              </div>
-
-              {/* Estimasi Waktu */}
-              <div className="p-2.5 bg-warning-soft border border-warning-line/80 rounded-xl space-y-1 text-warning">
-                <p className="font-bold flex items-center space-x-1.5 text-[11px]">
-                  <span>⏱️</span>
-                  <span>Estimasi Waktu Bekerja di Background:</span>
-                </p>
-                <p className="text-[11px] leading-relaxed text-warning">
-                  Estimasi <strong>~1 - 3 menit</strong> (tergantung banyaknya riwayat chat WhatsApp). Anda dapat tetap menggunakan dashboard dan membuka percakapan seperti biasa tanpa menunggu.
-                </p>
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-divider">
-              <button
-                type="button"
-                onClick={() => setShowSyncInfoModal(false)}
-                className="px-3.5 py-1.5 text-xs font-semibold text-ink-2 hover:text-ink hover:bg-fill-1 rounded-xl transition cursor-pointer"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowSyncInfoModal(false);
-                  handleStartBackgroundFullSync();
-                }}
-                className="px-4 py-1.5 text-xs font-bold text-white bg-accent hover:bg-accent-hover rounded-xl shadow-xs transition flex items-center space-x-1.5 cursor-pointer"
-              >
-                <RefreshCw size={12} />
-                <span>Mulai Sinkronisasi Sekarang</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       <AdminCopilotPanel conversationId={selectedChat?.conversationId} customerId={selectedChat?.customerId} />
     </div>
   );
 };
-
