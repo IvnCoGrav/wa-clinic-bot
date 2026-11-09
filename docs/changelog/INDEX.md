@@ -5,8 +5,9 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 676
+Total entri terindeks: 677
 
+- 2026-11-09 | Feat: Zipcode Anti-Loss (CAPI/Delivery) & Tautan Interaktif LiveChat
 - 2026-11-09 | Feat: S5.2 Katalog Data-Driven + Seed Eksplisit + S6 Verifikasi Lokal
 - 2026-11-09 | Fix & Audit: Hardening Docker Build Context + Koreksi Laporan S4 (Modul 06/12/15/16)
 - 2026-11-09 | Feat: Hardening P1 (Echo Bot Dinamis S2.1, Error & 404 Handler S2.2, Readiness Provider-Aw

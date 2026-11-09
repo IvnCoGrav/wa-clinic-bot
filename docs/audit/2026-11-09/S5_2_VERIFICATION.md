@@ -35,6 +35,12 @@ Klasifikasi 3 kegagalan:
 
 > Catatan: run awal (6.771 test / 5 gagal) dilakukan di working tree yang juga memuat perubahan zipcode dari sesi paralel. Gate resmi S5.2 memakai worktree bersih pada commit `b45f9d46`; hasilnya 0 regresi S5.2.
 
+### Full Suite Final (setelah commit zipcode `21b059e6`)
+
+- **Total:** 6.774 test | **Lulus:** 6.743 | **Gagal:** 3 | **Skip:** 28
+- 3 kegagalan sama: 2 pre-existing #287 + 1 known flaky `production_edge_cases` #13.
+- **0 regresi baru** vs gate S5.2. Artefak: `docs/audit/2026-11-09/after-s5-final.json`.
+
 ## Acceptance S5.2
 
 | Kriteria | Hasil |

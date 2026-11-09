@@ -4,6 +4,17 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-09 - Feat: Zipcode Anti-Loss (CAPI/Delivery) & Tautan Interaktif LiveChat
+
+- **Latar Belakang**: Kode pos sering hilang saat form reservasi hanya memuat kecamatan/kota, sehingga advanced matching CAPI (`zp`) kosong. URL di bubble LiveChat juga tidak bisa diklik.
+- **Perubahan Utama**:
+  1. **Seam kanonis `CustomerService.updateCustomerZipcodeIfEmpty`**: non-destruktif (hanya mengisi bila kosong), tenant-scoped, validasi 5 digit, fallback memori saat test.
+  2. **`calculate_delivery`** membawa `__internalZipcode` dari reverse geocode/gazetteer di semua jalur (alamat tersimpan, URL Maps, pin WhatsApp, kandidat lokasi, teks). `tool-pipeline` menyimpannya ke customer tanpa membocorkan field `__internal` ke payload LLM.
+  3. **CAPI** memakai `raw_text` reservasi sebagai fallback wilayah; `reservation-lifecycle` mengisi zipcode saat reservasi dibuat; preview `GET /api/admin/capi-queue` menghitung zip tanpa menulis DB.
+  4. **Human background enrichment** mengekstrak URL Maps dari kata pengantar dan mencoba semua kandidat.
+  5. **LiveChat** merender URL `http(s)`/`www.` sebagai tautan aman (`target="_blank"`, `rel="noopener noreferrer"`) di bubble, caption video, dan modal riwayat; tanda baca akhir dipisahkan dari URL.
+- **Verifikasi**: 42 targeted test PASS; build backend + dashboard & typecheck PASS; security scan 2.044 file, 0 kebocoran; full suite final **6.774 test (6.743 lulus / 3 gagal / 28 skip)** — 2 pre-existing #287 + 1 known flaky `production_edge_cases` #13; **0 regresi baru**. Artefak: `docs/audit/2026-11-09/after-s5-final.json`.
+
 #### 2026-11-09 - Feat: S5.2 Katalog Data-Driven + Seed Eksplisit + S6 Verifikasi Lokal
 
 - **Latar Belakang**: Menutup Fase 9 (S5.2) — katalog 42 layanan dan 7 delivery tier masih hardcoded di TypeScript dan di-auto-seed diam-diam ke DB. Perubahan ini menjadikan DB sebagai sumber kebenaran, menghapus auto-seed runtime, dan menyediakan seed eksplisit per tenant.
