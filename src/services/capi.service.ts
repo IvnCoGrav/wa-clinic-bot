@@ -569,9 +569,21 @@ export async function getTenantCapiFormats(tenantId?: string): Promise<{
 }
 
 /**
- * Pola salam otomatis HP untuk deteksi echo (tenant-aware).
+ * Pola teknis universal penanda bot/sistem yang tidak boleh dianggap balasan manual admin.
+ */
+export const UNIVERSAL_BOT_ECHO_PREFIXES = [
+  '[AUTOMATED]',
+  '[IMAGE:',
+  '[LOCATION:',
+  '[AUDIO:',
+  '[DOCUMENT:',
+  '[VIDEO:',
+] as const;
+
+/**
+ * Pola salam otomatis HP dan kebijakan klinis untuk deteksi echo (tenant-aware).
  * Dipakai webhook untuk memfilter pesan keluar HP yang bukan balasan admin manual.
- * Sumber: Tenant.greetings_text, format_visit, name.
+ * Sumber: Tenant.greetings_text, format_visit, name, dan ClinicPolicy.suggested_reply.
  */
 export async function getTenantEchoPatterns(tenantId?: string): Promise<string[]> {
   if (!tenantId) return [];
@@ -582,8 +594,29 @@ export async function getTenantEchoPatterns(tenantId?: string): Promise<string[]
     const patterns: string[] = [];
     if (tenant.greetings_text?.trim()) patterns.push(tenant.greetings_text.trim());
     if (tenant.format_visit?.trim()) patterns.push(tenant.format_visit.trim());
-    if (tenant.name?.trim()) patterns.push(tenant.name.trim());
-    return patterns.filter(Boolean);
+    if (tenant.name?.trim()) {
+      const name = tenant.name.trim();
+      patterns.push(name);
+      patterns.push(`Pricelist ${name}`);
+    }
+
+    // Ambil cuplikan respons standar / darurat dari ClinicPolicy bila ada
+    try {
+      const policies = await prisma.clinicPolicy.findMany({
+        where: { tenant_id: tenantId, is_active: true },
+        select: { suggested_reply: true },
+      });
+      for (const policy of policies) {
+        if (policy.suggested_reply?.trim()) {
+          const snippet = policy.suggested_reply.trim().slice(0, 40);
+          if (snippet) patterns.push(snippet);
+        }
+      }
+    } catch {
+      // ClinicPolicy optional / offline fallback
+    }
+
+    return Array.from(new Set(patterns.filter(Boolean)));
   } catch {
     return [];
   }

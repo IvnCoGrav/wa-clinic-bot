@@ -25,14 +25,18 @@ initializeConsoleWrapper();
 const FORCE_EXIT_MS = parseInt(process.env.SHUTDOWN_FORCE_EXIT_MS || '10000', 10);
 let shuttingDown = false;
 
-async function shutdownWorker(signal: string): Promise<void> {
+export function __resetWorkerShuttingDownForTest(): void {
+  shuttingDown = false;
+}
+
+export async function shutdownWorker(signal: string, shouldExit = true): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log(`[WORKER SHUTDOWN] ${signal} diterima — memulai graceful shutdown worker (batas ${FORCE_EXIT_MS}ms).`);
 
   const forceTimer = setTimeout(() => {
     console.error('[WORKER SHUTDOWN] Batas waktu terlampaui — force exit.');
-    process.exit(1);
+    if (shouldExit) process.exit(1);
   }, FORCE_EXIT_MS);
   forceTimer.unref();
 
@@ -43,6 +47,15 @@ async function shutdownWorker(signal: string): Promise<void> {
     console.error('[WORKER SHUTDOWN] clearAllIntervals gagal:', e?.message);
   }
 
+  // Task S2.5: urutan yang benar — flush burst SEBELUM menutup queue service
+  try {
+    const { burstCoalesceService } = await import('./services/burst-coalesce.service');
+    await burstCoalesceService.flushAll();
+    console.log('[WORKER SHUTDOWN] Burst coalescer di-flush.');
+  } catch (e: any) {
+    console.error('[WORKER SHUTDOWN] burstCoalesceService.flushAll gagal:', e?.message);
+  }
+
   try {
     await queueService.close();
     console.log('[WORKER SHUTDOWN] Queue service ditutup.');
@@ -51,11 +64,11 @@ async function shutdownWorker(signal: string): Promise<void> {
   }
 
   try {
-    const { burstCoalesceService } = await import('./services/burst-coalesce.service');
-    await burstCoalesceService.flushAll();
-    console.log('[WORKER SHUTDOWN] Burst coalescer di-flush.');
+    const { flushLlmAuditBuffer } = await import('./utils/llm-audit-buffer');
+    await flushLlmAuditBuffer();
+    console.log('[WORKER SHUTDOWN] LLM audit buffer di-flush.');
   } catch (e: any) {
-    console.error('[WORKER SHUTDOWN] burstCoalesceService.flushAll gagal:', e?.message);
+    console.error('[WORKER SHUTDOWN] flushLlmAuditBuffer gagal:', e?.message);
   }
 
   try {
@@ -74,11 +87,10 @@ async function shutdownWorker(signal: string): Promise<void> {
 
   clearTimeout(forceTimer);
   console.log('[WORKER SHUTDOWN] Worker selesai. Keluar.');
-  process.exit(0);
+  if (shouldExit) {
+    process.exit(0);
+  }
 }
-
-process.on('SIGTERM', () => void shutdownWorker('SIGTERM'));
-process.on('SIGINT', () => void shutdownWorker('SIGINT'));
 
 async function main(): Promise<void> {
   console.log('👷 [WORKER] Memulai dedicated background worker process...');
@@ -91,31 +103,10 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // Muat data tenant dari DB (cermin boot app.ts — insiden 12/10/2026: worker
-  // jalan tanpa persona/katalog/AI-config sehingga follow-up memakai fallback
-  // dan status bot tak pernah sinkron). DB offline → fallback DEFAULT_TENANT_ID.
+  // Task S2.4: Muat data tenant dari DB via central tenant bootstrap
   try {
-    const { DEFAULT_TENANT_ID } = await import('./config/tenant');
-    const { loadServicesFromDb } = await import('./services/treatment-catalog.service');
-    const { getDeliveryTiersFromDb } = await import('./services/delivery.service');
-    const { loadPersonaFromDb } = await import('./config/persona');
-    const { AiModelConfigService } = await import('./config/ai-models.config');
-    const { AiEligibilityConfigService } = await import('./config/ai-eligibility-config');
-    let tenantIds: string[] = [DEFAULT_TENANT_ID];
-    try {
-      const tenants = await prisma.tenant.findMany({ select: { id: true } });
-      if (tenants.length > 0) tenantIds = tenants.map((t: any) => t.id);
-    } catch {
-      console.warn('[WORKER INIT TENANT DATA] DB offline — fallback ke DEFAULT_TENANT_ID.');
-    }
-    for (const tid of tenantIds) {
-      await loadServicesFromDb(tid);
-      await getDeliveryTiersFromDb(tid);
-      await loadPersonaFromDb(tid);
-      await AiModelConfigService.loadConfigsFromDb(tid);
-      await AiEligibilityConfigService.loadConfigsFromDb(tid);
-    }
-    console.log(`📦 [WORKER] Data tenant dimuat untuk ${tenantIds.length} tenant(s) (katalog + delivery tiers + persona + AI config).`);
+    const { initializeTenantRuntime } = await import('./lifecycle/tenant-bootstrap');
+    await initializeTenantRuntime();
   } catch (initErr: any) {
     console.warn('[WORKER INIT TENANT DATA] Gagal memuat data tenant:', initErr?.message || initErr);
   }
@@ -125,4 +116,8 @@ async function main(): Promise<void> {
   console.log('🎯 [WORKER] Seluruh background cron & sweep worker telah aktif.');
 }
 
-void main();
+if (require.main === module) {
+  process.on('SIGTERM', () => void shutdownWorker('SIGTERM'));
+  process.on('SIGINT', () => void shutdownWorker('SIGINT'));
+  void main();
+}

@@ -232,8 +232,10 @@ export class MessageService {
   }
 
   /**
-   * Pengecekan Idempotensi: Memeriksa apakah wa_message_id dari Meta sudah pernah diproses.
+   * Pengecekan Idempotensi (Read-Only): Memeriksa apakah wa_message_id dari Meta sudah pernah diproses.
    * Mengembalikan true jika pesan SUDAH PERNAH diproses sebelumnya (duplicate/retry).
+   * Penting (W-005): Bersifat READ-ONLY dan TIDAK mengklaim memory/DB agar kegagalan sebelum
+   * enqueue tidak menyebabkan pesan terbuang saat retry.
    */
   public async isDuplicateMessage(waMessageId: string, tenantId: string): Promise<boolean> {
     if (!waMessageId) return false;
@@ -244,26 +246,54 @@ export class MessageService {
       shortId !== waMessageId ? `${tenantId}:${shortId}` : null,
     ].filter(Boolean) as string[];
 
+    // 1. Cek in-memory claim dulu (in-flight dari proses yang sama)
+    for (const key of keysToCheck) {
+      if (memoryWaMessageIds.has(key)) return true;
+    }
+
     try {
-      // 1. Cek DB dulu — otoritas lintas-instance (bukan Set memori).
+      // 2. Cek DB — otoritas lintas-instance
       const { getMessageRepository } = await import('../repositories/message.repository');
       const exists = await getMessageRepository().existsByWaId(waMessageId, shortId, tenantId);
       if (exists) {
-        // sinkronkan ke memori untuk dedup in-flight berikutnya
-        for (const key of keysToCheck) addMemoryWaMessageId(key);
         return true;
       }
     } catch (error) {
-      // DB offline → fallback ke memori
-      for (const key of keysToCheck) {
-        if (memoryWaMessageIds.has(key)) return true;
-      }
+      // DB offline → fallback ke memori sudah dicek di atas
       return false;
     }
 
-    // 2. Belum ada di DB → kunci in-flight di memori untuk request paralel di proses yang sama
-    for (const key of keysToCheck) addMemoryWaMessageId(key);
     return false;
+  }
+
+  /**
+   * Mengklaim wa_message_id ke in-memory registry setelah pesan berhasil di-enqueue/diproses (W-005).
+   */
+  public claimMessageId(waMessageId: string, tenantId: string): void {
+    if (!waMessageId) return;
+    const shortId = extractShortMessageId(waMessageId);
+    const keysToCheck = [
+      `${tenantId}:${waMessageId}`,
+      shortId !== waMessageId ? `${tenantId}:${shortId}` : null,
+    ].filter(Boolean) as string[];
+    for (const key of keysToCheck) {
+      addMemoryWaMessageId(key);
+    }
+  }
+
+  /**
+   * Melepas klaim wa_message_id bila pemrosesan inbound dibatalkan atau gagal sebelum enqueue (W-005).
+   */
+  public releaseMessageClaim(waMessageId: string, tenantId: string): void {
+    if (!waMessageId) return;
+    const shortId = extractShortMessageId(waMessageId);
+    const keysToCheck = [
+      `${tenantId}:${waMessageId}`,
+      shortId !== waMessageId ? `${tenantId}:${shortId}` : null,
+    ].filter(Boolean) as string[];
+    for (const key of keysToCheck) {
+      memoryWaMessageIds.delete(key);
+    }
   }
 
   /**

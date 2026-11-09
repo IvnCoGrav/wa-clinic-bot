@@ -1,8 +1,91 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { WhatsappProviderService } from '../../src/services/whatsapp-provider.service';
 import { prisma } from '../../src/db/client';
+import { messageService } from '../../src/services/message.service';
 
 describe('FASE 5.1: Ingress Durability & Kill-Switch Cache', () => {
+  describe('5.1.1: W-005 Idempotency Check & Claim Separation', () => {
+    it('isDuplicateMessage should be read-only and NOT mutate memory when message is new', async () => {
+      const msgId = 'test-msg-readonly-' + Date.now();
+      const tenantId = 'tenant-test-w005';
+
+      // First call: not duplicate
+      const isDup1 = await messageService.isDuplicateMessage(msgId, tenantId);
+      expect(isDup1).toBe(false);
+
+      // Second call: should STILL be false because isDuplicateMessage is read-only (no memory claim)
+      const isDup2 = await messageService.isDuplicateMessage(msgId, tenantId);
+      expect(isDup2).toBe(false);
+    });
+
+    it('claimMessageId and releaseMessageClaim should explicitly manage memory claims', async () => {
+      const msgId = 'test-msg-claim-' + Date.now();
+      const tenantId = 'tenant-test-w005';
+
+      // Before claim: not duplicate
+      expect(await messageService.isDuplicateMessage(msgId, tenantId)).toBe(false);
+
+      // Claim ID
+      messageService.claimMessageId(msgId, tenantId);
+
+      // Now it should be detected as duplicate
+      expect(await messageService.isDuplicateMessage(msgId, tenantId)).toBe(true);
+
+      // Release claim
+      messageService.releaseMessageClaim(msgId, tenantId);
+
+      // After release: not duplicate again
+      expect(await messageService.isDuplicateMessage(msgId, tenantId)).toBe(false);
+    });
+
+    it('W-005: unparseable phone should not claim messageId, allowing retry to be processed', async () => {
+      const msgId = 'test-unparseable-phone-' + Date.now();
+      const tenantId = 'tenant-test-phone';
+      // Ensure not claimed initially
+      expect(await messageService.isDuplicateMessage(msgId, tenantId)).toBe(false);
+
+      // Simulate webhook processing: phone is missing/invalid, so claimMessageId is not invoked
+      // Subsequent retry arrives:
+      expect(await messageService.isDuplicateMessage(msgId, tenantId)).toBe(false);
+    });
+
+    it('W-005: queue enqueue failure should not claim messageId, allowing retry to be processed', async () => {
+      const msgId = 'test-enqueue-fail-' + Date.now();
+      const tenantId = 'tenant-test-queue';
+
+      // Step 1: Pre-enqueue check is false
+      expect(await messageService.isDuplicateMessage(msgId, tenantId)).toBe(false);
+
+      // Step 2: Enqueue throws error, so claimMessageId is skipped
+      // Step 3: Webhook retry arrives, should NOT be marked duplicate
+      expect(await messageService.isDuplicateMessage(msgId, tenantId)).toBe(false);
+
+      // Step 4: Successful retry executes claimMessageId
+      messageService.claimMessageId(msgId, tenantId);
+      expect(await messageService.isDuplicateMessage(msgId, tenantId)).toBe(true);
+    });
+
+    it('W-003: getWahaClientForTenant should isolate clients and sessions per tenant', async () => {
+      const { getWahaClientForTenant } = await import('../../src/integrations/whatsapp/factory');
+      vi.spyOn(prisma.tenant, 'findUnique').mockImplementation(async ({ where }: any) => {
+        if (where.id === 'tenant-alpha') {
+          return { id: 'tenant-alpha', waha_session_id: 'session-alpha' } as any;
+        }
+        if (where.id === 'tenant-beta') {
+          return { id: 'tenant-beta', waha_session_id: 'session-beta' } as any;
+        }
+        return null;
+      });
+
+      const clientAlpha = await getWahaClientForTenant('tenant-alpha');
+      const clientBeta = await getWahaClientForTenant('tenant-beta');
+
+      expect(clientAlpha.getSessionName()).toBe('session-alpha');
+      expect(clientBeta.getSessionName()).toBe('session-beta');
+      expect(clientAlpha.getSessionName()).not.toBe(clientBeta.getSessionName());
+    });
+  });
+
   describe('5.1.3: Outbound Kill-Switch TTL Cache', () => {
     let service: WhatsappProviderService;
 

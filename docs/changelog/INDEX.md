@@ -5,8 +5,10 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 672
+Total entri terindeks: 674
 
+- 2026-11-09 | Feat: Hardening P1 (Echo Bot Dinamis S2.1, Error & 404 Handler S2.2, Readiness Provider-Aw
+- 2026-11-09 | Feat: Ingress Durability (W-005), Multi-Tenant WAHA Client (W-003) & Tenant-Aware Settings
 - 2026-11-09 | Audit: Rekonsiliasi Gate Full Suite S0 & Sinkronisasi Baseline f3c6a2c4
 - 2026-11-08 | Fix: Verifikasi Backup SQL pg_dump & Penegakan Expiry Tracking Code (Remediasi Lanjutan)
 - 2026-11-08 | RAG, Korpus, Prompt & Log PII: Fase 8 & 9 (Pembersihan Korpus Chat, Red Flag Batuk Kronis,

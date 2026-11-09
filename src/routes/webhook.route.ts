@@ -5,7 +5,7 @@ import { conversationService } from '../services/conversation.service';
 import { messageService } from '../services/message.service';
 import { queueService } from '../services/queue.service';
 import { burstCoalesceService } from '../services/burst-coalesce.service';
-import { wahaClient } from '../integrations/waha/client';
+import { getWahaClientForTenant } from '../integrations/whatsapp/factory';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { wahaTenantService } from '../services/waha-tenant.service';
 import { ConversationState } from '@prisma/client';
@@ -127,6 +127,8 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         console.warn('[WAHA TENANT] resolusi tenant gagal → DITOLAK (fail-closed):', tenantErr?.message);
         return reply.status(200).send({ status: 'TENANT_RESOLUTION_FAILED' });
       }
+
+      const tenantWaha = await getWahaClientForTenant(resolvedTenantId);
 
       if (event.event === 'label.chat.added' || event.event === 'label.chat.deleted') {
         await handleLabelChatEvent(event, resolvedTenantId);
@@ -333,7 +335,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           if (!phone || parseJidType(customerJid) === 'lid') {
             if (parseJidType(customerJid) === 'lid') {
               try {
-                const pn = await wahaClient.getPhoneNumberFromLid(customerJid);
+                const pn = await tenantWaha.getPhoneNumberFromLid(customerJid);
                 if (pn && parseJidType(`${pn}@c.us`) === 'phone') {
                   phone = pn;
                 }
@@ -364,19 +366,18 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             const adminReplyText = imageCaption || payload.body || '';
 
             // CRITICAL FILTER: Ignore bot automated emergency/waiting templates & device welcome greetings if echoed back
-            // Tenant-aware: pola salam dari DB (greetings_text, format_visit, name), bukan hardcode 'Bidan Yusi'/'Kala Spa'.
-            const { getTenantEchoPatterns } = await import('../services/capi.service');
+            // S2.1: Data-driven echo patterns via getTenantEchoPatterns (name, greetings, format_visit, clinic_policies)
+            // + UNIVERSAL_BOT_ECHO_PREFIXES (tanpa string literal hardcode).
+            const { getTenantEchoPatterns, UNIVERSAL_BOT_ECHO_PREFIXES } = await import('../services/capi.service');
             const echoPatterns = await getTenantEchoPatterns(resolvedTenantId);
-            const isDeviceAutoGreeting = echoPatterns.some((p) => p && adminReplyText.includes(p));
+            const isTechnicalBotMarker = UNIVERSAL_BOT_ECHO_PREFIXES.some(
+              (p) => adminReplyText.startsWith(p) || imageCaption.startsWith(p)
+            );
+            const isDeviceAutoGreeting = echoPatterns.some(
+              (p) => p && (adminReplyText.includes(p) || imageCaption.includes(p))
+            );
 
-            const isBotAutoReply = 
-              adminReplyText.includes('Bunda, untuk kondisi darurat seperti ini') ||
-              adminReplyText.includes('Bunda, untuk pertimbangan kondisi kesehatan') ||
-              adminReplyText.startsWith('Pricelist') ||
-              adminReplyText.startsWith('[IMAGE: Pricelist') ||
-              imageCaption.startsWith('Pricelist') ||
-              adminReplyText.startsWith('[AUTOMATED]') ||
-              isDeviceAutoGreeting;
+            const isBotAutoReply = isTechnicalBotMarker || isDeviceAutoGreeting;
 
             if (adminReplyText.trim() || isOutboundNonText) {
               const customer = await customerService.getOrCreateCustomer(phone, undefined, resolvedTenantId);
@@ -602,13 +603,13 @@ export async function webhookRoutes(fastify: FastifyInstance) {
 
                     if (heavyMediaUrl) {
                       try {
-                        buffer = await wahaClient.fetchUrl(String(heavyMediaUrl));
+                        buffer = await tenantWaha.fetchUrl(String(heavyMediaUrl));
                       } catch {
                         buffer = null;
                       }
                     }
                     if (!buffer || buffer.length === 0) {
-                      buffer = await wahaClient.downloadMedia(payload.id, customerJid || `${phone}@c.us`);
+                      buffer = await tenantWaha.downloadMedia(payload.id, customerJid || `${phone}@c.us`);
                     }
                     if (buffer && buffer.length > 0) {
                       const effectiveMime = candidateMime || (isOutboundImage ? 'image/jpeg' : isOutboundAudio ? 'audio/ogg' : 'application/octet-stream');
@@ -735,7 +736,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       let phone = extractedPhone;
 
       if (!phone || parseJidType(chatId) === 'lid') {
-        const jidFromWaha = await wahaClient.resolvePrimaryJid(chatId);
+        const jidFromWaha = await tenantWaha.resolvePrimaryJid(chatId);
         if (parseJidType(jidFromWaha) === 'phone') {
           phone = normalizeWahaJid(jidFromWaha);
           resolvedJid = `${phone}@c.us`;
@@ -747,18 +748,19 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ status: 'IGNORED_NO_ID' });
       }
 
-      // --- IDEMPOTENCY CHECK ---
+      // Guard (W-005): JID yang tidak bisa diekstrak jadi nomor HP (junk/status) jangan sampai
+      // membuat customer ber-phone kosong/aneh di database. Dievaluasi SEBELUM idempotency
+      // agar phone unresolved tidak mengklaim messageId ke memori.
+      if (!phone) {
+        console.warn(`[NO PHONE] Skipping message from unparseable chat ${chatId || '(unknown)'}.`);
+        return reply.status(200).send({ status: 'IGNORED_NO_PHONE' });
+      }
+
+      // --- IDEMPOTENCY CHECK (W-005: Read-Only, klaim dilakukan setelah enqueue sukses) ---
       const isDuplicate = await messageService.isDuplicateMessage(waMessageId, resolvedTenantId);
       if (isDuplicate) {
         console.log(`[IDEMPOTENCY SKIP] WAHA Message ID ${waMessageId} has already been processed. Skipping retry.`);
         return reply.status(200).send({ status: 'IGNORED_DUPLICATE' });
-      }
-
-      // Guard: JID yang tidak bisa diekstrak jadi nomor HP (junk/status) jangan sampai
-      // membuat customer ber-phone kosong/aneh di database.
-      if (!phone) {
-        console.warn(`[NO PHONE] Skipping message from unparseable chat ${chatId || '(unknown)'}.`);
-        return reply.status(200).send({ status: 'IGNORED_NO_PHONE' });
       }
 
       const msgObj = payload.message as any;
@@ -767,7 +769,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       let contactName = payload._data?.notifyName;
       if (!contactName) {
         try {
-          const cObj = await wahaClient.getContact(chatId);
+          const cObj = await tenantWaha.getContact(chatId);
           contactName = cObj?.pushname || cObj?.name || undefined;
         } catch (_) {}
       }
@@ -801,13 +803,13 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           const mediaUrlCandidate = pAny.media?.url || pAny._data?.mediaUrl || pAny._data?.deprecatedMms3Url || pAny.media?.deprecatedMms3Url || null;
           // 1. Coba download langsung dari URL WAHA jika ada
           if (mediaUrlCandidate) {
-            buffer = await wahaClient.fetchUrl(String(mediaUrlCandidate));
+            buffer = await tenantWaha.fetchUrl(String(mediaUrlCandidate));
           } else if (pAny.media?.url) {
-            buffer = await wahaClient.fetchUrl(String(pAny.media.url));
+            buffer = await tenantWaha.fetchUrl(String(pAny.media.url));
           }
-          // 2. Fallback ke wahaClient.downloadMedia (multi-endpoint)
+          // 2. Fallback ke tenantWaha.downloadMedia (multi-endpoint)
           if (!buffer || buffer.length === 0) {
-            buffer = await wahaClient.downloadMedia(waMessageId, chatId);
+            buffer = await tenantWaha.downloadMedia(waMessageId, chatId);
           }
           // 3. Fallback ke base64 jpegThumbnail jika download gagal
           if ((!buffer || buffer.length === 0) && (pAny.message?.imageMessage?.jpegThumbnail || pAny._data?.jpegThumbnail)) {
@@ -963,7 +965,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
 
       // 2. Fallback jika customer baru atau belum tersinkronisasi labels_synced_at
       if (!isBypassChat && (!existingCustomer || existingCustomer.labels_synced_at === null)) {
-        labels = await wahaClient.getChatLabelsOrNull(chatId);
+        labels = await tenantWaha.getChatLabelsOrNull(chatId);
         if (labels !== null) {
           const hasBypass = labels.some((l) => isBypassLabelName(l));
           const isAdmin = labels.some((l) => l.toLowerCase() === 'admin');
@@ -1053,13 +1055,13 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             let buffer: Buffer | null = null;
             if (heavyMediaUrl) {
               try {
-                buffer = await wahaClient.fetchUrl(String(heavyMediaUrl));
+                buffer = await tenantWaha.fetchUrl(String(heavyMediaUrl));
               } catch {
                 buffer = null;
               }
             }
             if (!buffer || buffer.length === 0) {
-              buffer = await wahaClient.downloadMedia(waMessageId, chatId);
+              buffer = await tenantWaha.downloadMedia(waMessageId, chatId);
             }
             if (buffer && buffer.length > 0) {
               const saved = await mediaService.saveInboundMedia({ tenantId: resolvedTenantId, buffer, mimeType: heavyMime });
@@ -1145,7 +1147,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       if (process.env.ENABLE_LEGACY_LABEL_SCRAPE_TRIGGER === 'true') {
         // Ambil label dari WAHA hanya jika belum di-fetch di jalur admin bypass
         if (labels === null) {
-          labels = await wahaClient.getChatLabels(chatId);
+          labels = await tenantWaha.getChatLabels(chatId);
         }
         if (labels.some(l => l.toLowerCase() === 'legacy')) {
           if (existingCustomer && !existingCustomer.legacy_scraped_at) {
@@ -1416,7 +1418,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           hasHoldLabel = customer.is_hold_labeled;
         } else {
           if (labels === null) {
-            labels = await wahaClient.getChatLabelsOrNull(chatId);
+            labels = await tenantWaha.getChatLabelsOrNull(chatId);
           }
           if (labels !== null) {
             hasHoldLabel = labels.some(l => l.toLowerCase() === 'hold');
@@ -1574,6 +1576,11 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             console.warn('[PRE-LOG INBOUND WARN]', preLogErr?.message || preLogErr);
           }
         }
+        // W-005: Klaim messageId hanya setelah persist + enqueue berhasil
+        messageService.claimMessageId(waMessageId, resolvedTenantId);
+      } else {
+        // W-005: Pesan masuk burst buffer (handled=true), klaim messageId
+        messageService.claimMessageId(waMessageId, resolvedTenantId);
       }
 
       return reply.status(200).send({ status: 'EVENT_PROCESSED' });

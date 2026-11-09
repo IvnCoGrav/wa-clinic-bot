@@ -492,6 +492,12 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
           provider: 'WABA',
           inboundMessageId: msg.messageId,
         });
+
+        // W-005: Klaim messageId ke memory hanya setelah persist + enqueue berhasil
+        messageService.claimMessageId(msg.messageId, tenantId);
+      } else {
+        // W-005: Pesan masuk burst buffer (handled=true), klaim messageId
+        messageService.claimMessageId(msg.messageId, tenantId);
       }
       processed++;
     }

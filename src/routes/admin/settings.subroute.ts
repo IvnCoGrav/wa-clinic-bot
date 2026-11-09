@@ -38,8 +38,20 @@ function buildProvidersStatus(activeProvider: string) {
 
 const inMemoryConversationBehavior: Record<string, { enabled: boolean; minHours: number }> = {};
 
-function resolveTenantId(request: FastifyRequest): string {
-  return (request as any).tenantId || DEFAULT_TENANT_ID;
+export function requireTenantId(request: FastifyRequest): string {
+  const tenantId = (request as any).tenantId;
+  if (!tenantId || typeof tenantId !== 'string' || !tenantId.trim()) {
+    const err: any = new Error('TENANT_REQUIRED: tenantId wajib disertakan pada mutasi settings');
+    err.statusCode = 400;
+    err.code = 'TENANT_REQUIRED';
+    throw err;
+  }
+  return tenantId.trim();
+}
+
+export function resolveTenantId(request: FastifyRequest): string {
+  const tenantId = (request as any).tenantId;
+  return (typeof tenantId === 'string' && tenantId.trim()) ? tenantId.trim() : DEFAULT_TENANT_ID;
 }
 
 export async function settingsAdminRoutes(fastify: FastifyInstance) {
@@ -74,7 +86,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
 
       try {
         const { customerService } = await import('../../services/customer.service');
-        const updated = await customerService.updateMqlSettings(resolveTenantId(request), {
+        const updated = await customerService.updateMqlSettings(requireTenantId(request), {
           mqlThresholdBubbles,
           mqlAutoLeadEnabled,
         });
@@ -139,7 +151,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       }
 
       try {
-        const tenantId = resolveTenantId(request);
+        const tenantId = requireTenantId(request);
         const updated = await prisma.tenant.upsert({
           where: { id: tenantId },
           create: {
@@ -223,7 +235,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
           const { mediaService } = await import('../../services/media.service');
           const rawB64 = imageB64.replace(/^data:image\/[^;]+;base64,/, '');
           const saved = await mediaService.saveOutboundMedia({
-            tenantId: resolveTenantId(request),
+            tenantId: requireTenantId(request),
             imageB64: rawB64,
             mimeType,
             fileName,
@@ -239,13 +251,13 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         }
 
         const { setPricelistImageUrl } = await import('../../services/pricelist-config.service');
-        const result = await setPricelistImageUrl(resolveTenantId(request), storedUrl);
+        const result = await setPricelistImageUrl(requireTenantId(request), storedUrl);
 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
           action: 'UPDATE_PRICELIST_IMAGE',
-          targetId: resolveTenantId(request),
+          targetId: requireTenantId(request),
           payload: { pricelist_image_url: result.url },
           ipAddress: request.ip,
         });
@@ -310,7 +322,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
-        const tenantId = resolveTenantId(request);
+        const tenantId = requireTenantId(request);
         const { promo, brandLogoUrl } = request.body || {};
 
         if (brandLogoUrl !== undefined && brandLogoUrl !== null) {
@@ -454,7 +466,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
-        const tenantId = resolveTenantId(request);
+        const tenantId = requireTenantId(request);
         const { policy } = request.body || {};
 
         const validPolicies = ['SUPPRESS_REPEAT', 'DUAL_EVENT', 'ALL_WITH_TAG'];
@@ -515,7 +527,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
 
   fastify.get('/api/admin/settings/payment-info', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveTenantId(request);
       const { StaffReservationService } = await import('../../services/staff-reservation.service');
       const paymentInfo = await StaffReservationService.getPaymentInfo(tenantId);
       return reply.status(200).send({
@@ -551,7 +563,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = requireTenantId(request);
       const { qrisImageUrl, imageB64, mimeType, fileName, bankAccounts, instructions, customTemplate } = request.body || {};
 
       try {
@@ -655,7 +667,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ error: 'System persona prompt is required' });
       }
 
-      const tenantId = resolveTenantId(request);
+      const tenantId = requireTenantId(request);
       try {
         const { savePersonaToDb, getMaxCharsPerReply } = await import('../../config/persona');
         let maxChars: number | null | undefined;
@@ -700,7 +712,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
    */
   fastify.get('/api/admin/persona/prompt-config', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveTenantId(request);
       const { TenantPromptConfigService } = await import('../../services/tenant-prompt-config.service');
       const resolved = await TenantPromptConfigService.getPromptConfigMeta(tenantId);
       const defaultConfig = TenantPromptConfigService.getDefaultConfig();
@@ -738,7 +750,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
-        const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+        const tenantId = requireTenantId(request);
         const {
           personalityTone,
           answeringHierarchy,
@@ -805,7 +817,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
    * GET /api/admin/few-shots
    */
   fastify.get('/api/admin/few-shots', async (request: FastifyRequest, reply: FastifyReply) => {
-    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+    const tenantId = resolveTenantId(request);
     const { FewShotExemplarBank } = await import('../../v3/agent/few-shot-exemplars');
     const exemplars = await FewShotExemplarBank.getAllExemplars(tenantId);
     return reply.status(200).send({
@@ -831,7 +843,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = requireTenantId(request);
       const { scenario, customerMessage, idealResponse, tags, isActive } = request.body || {};
       const cleanScenario = typeof scenario === 'string' ? scenario.trim() : '';
       const cleanCustomerMessage = typeof customerMessage === 'string' ? customerMessage.trim() : '';
@@ -890,7 +902,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = requireTenantId(request);
       const { orderedIds } = request.body || {};
       if (!Array.isArray(orderedIds) || orderedIds.some((id) => typeof id !== 'string' || !id.trim())) {
         return reply.status(400).send({ error: 'orderedIds wajib berupa array berisi id string' });
@@ -934,7 +946,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = requireTenantId(request);
       const { id } = request.params;
       const body = request.body || {};
 
@@ -1009,7 +1021,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = requireTenantId(request);
       const { id } = request.params;
       const { FewShotExemplarBank } = await import('../../v3/agent/few-shot-exemplars');
       await FewShotExemplarBank.deleteExemplar(id, tenantId);
@@ -1035,7 +1047,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
   fastify.post(
     '/api/admin/few-shots/reset-defaults',
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = requireTenantId(request);
       const { FewShotExemplarBank } = await import('../../v3/agent/few-shot-exemplars');
       const defaults = await FewShotExemplarBank.resetToDefaults(tenantId);
 
@@ -1094,7 +1106,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       landingDomain?: string;
     };
 
-    const tenantId = resolveTenantId(request);
+    const tenantId = requireTenantId(request);
     let tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) {
       tenant = await prisma.tenant.findFirst();
@@ -1176,7 +1188,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const tenantId = resolveTenantId(request);
+      const tenantId = requireTenantId(request);
       const { AiModelConfigService } = await import('../../config/ai-models.config');
       const oldProvider = AiModelConfigService.getActiveProvider(tenantId);
 
@@ -1242,7 +1254,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         const { getLlmEndpointConfig } = await import('../../integrations/llm/llm-gateway');
         const { callChatCompletionsWithFallback } = await import('../../integrations/llm/model-fallback');
         const { AiModelConfigService: AiCfg } = await import('../../config/ai-models.config');
-        const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+        const tenantId = requireTenantId(request);
         const activeProvider = AiCfg.getActiveProvider(tenantId);
         // Resolusi per-target-provider (bukan active provider): kunci API + base URL
         // WAJIB sepasang dari provider yang diuji — sebelumnya apiKey selalu milik
@@ -1336,7 +1348,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       const { configs, presetId, activeProvider: bodyActiveProvider } = request.body || {};
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = requireTenantId(request);
       const { AiModelConfigService, AI_PRESET_PROFILES } = await import('../../config/ai-models.config');
 
       try {
@@ -1429,7 +1441,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
    * Kembalikan semua task ke setelan emas klinik.
    */
   fastify.post('/api/admin/ai-models/reset-defaults', async (request: FastifyRequest, reply: FastifyReply) => {
-    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+    const tenantId = requireTenantId(request);
     const { AiModelConfigService } = await import('../../config/ai-models.config');
     try {
       const configs = await AiModelConfigService.resetToGoldenDefaults(tenantId);
@@ -1478,7 +1490,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       const oldConfig = AiModelConfigService.getModelConfig(upperTask as any);
 
       try {
-        const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+        const tenantId = requireTenantId(request);
         const updated = AiModelConfigService.updateTaskConfig(upperTask as any, request.body || {}, tenantId, { persist: false });
         const persisted = await AiModelConfigService.saveConfigsToDb(tenantId);
 
@@ -1560,7 +1572,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ error: 'Body must contain globalBotActive boolean value.' });
       }
 
-      const tenantId = resolveTenantId(request);
+      const tenantId = requireTenantId(request);
       const { AiModelConfigService } = await import('../../config/ai-models.config');
       const oldVal = AiModelConfigService.isBotActive(tenantId);
       await AiModelConfigService.setBotActive(tenantId, globalBotActive);
@@ -1650,7 +1662,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
     ) => {
       const body = request.body || {};
       const { metaPixelId, capiAccessToken } = body;
-      const tenantId = resolveTenantId(request);
+      const tenantId = requireTenantId(request);
 
       try {
         const existing = await prisma.tenant.findUnique({ where: { id: tenantId } });
@@ -1789,7 +1801,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
           .send({ error: 'Body harus berisi aiCustomerScope, aiScopeCutoffAt, legacyBypassBot, atau repeatPatientBypassBot.' });
       }
 
-      const tenantId = resolveTenantId(request);
+      const tenantId = requireTenantId(request);
       try {
         const { AiEligibilityConfigService } = await import('../../config/ai-eligibility-config');
         const cfg = await AiEligibilityConfigService.saveConfig(tenantId, patch);
@@ -1859,7 +1871,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const tenantId = resolveTenantId(request);
+      const tenantId = requireTenantId(request);
       const body = request.body || {};
       const enabled = body.idleGreeting?.enabled;
       const minHours = body.idleGreeting?.minHours;
@@ -2103,7 +2115,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
   fastify.get('/api/admin/delivery-tiers', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { getDeliveryTiersFromDb } = await import('../../services/delivery.service');
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveTenantId(request);
       const tiers = await getDeliveryTiersFromDb(tenantId);
       return reply.status(200).send({
         success: true,
@@ -2130,7 +2142,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ error: 'Body must contain tiers array' });
       }
       const { saveDeliveryTiersToDb } = await import('../../services/delivery.service');
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = requireTenantId(request);
       const success = await saveDeliveryTiersToDb(tiers, tenantId);
       if (!success) {
         return reply.status(500).send({ error: 'Failed to save delivery tiers' });
@@ -2240,7 +2252,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ error: 'Body harus berisi autoSendPurchaseCapi (boolean).' });
       }
 
-      const tenantId = resolveTenantId(request);
+      const tenantId = requireTenantId(request);
       try {
         // Queue-First: selalu simpan false untuk mencegah pengiriman CAPI ganda/bypass kasir
         const updated = await prisma.tenant.upsert({
@@ -2339,7 +2351,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
    */
   fastify.post('/api/admin/settings/telegram/regenerate-token', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const tenantId = resolveTenantId(request);
+      const tenantId = requireTenantId(request);
       const { telegramService } = await import('../../services/telegram.service');
       const pairingInfo = await telegramService.regeneratePairingToken(tenantId);
 
@@ -2395,7 +2407,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ success: false, error: 'reportHour harus berupa angka antara 0 - 23 (jam WIB).' });
       }
 
-      const tenantId = resolveTenantId(request);
+      const tenantId = requireTenantId(request);
       try {
         const updateData: any = {};
         if (enabled !== undefined) updateData.daily_report_enabled = Boolean(enabled);
@@ -2507,7 +2519,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const tenantId = resolveTenantId(request);
+      const tenantId = requireTenantId(request);
       const {
         nightlyReportEnabled,
         nightlyReportHour,
@@ -2587,7 +2599,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
    * POST /api/admin/settings/notifications/test — kirim simulasi (data dummy) untuk verifikasi kanal.
    */
   fastify.post('/api/admin/settings/notifications/test', async (request: FastifyRequest, reply: FastifyReply) => {
-    const tenantId = resolveTenantId(request);
+    const tenantId = requireTenantId(request);
     try {
       const { notificationDeliveryService } = await import('../../services/notification-delivery.service');
       const tenant = await prisma.tenant.findUnique({
@@ -2673,7 +2685,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
    */
   fastify.get('/api/admin/settings/clinic-policies', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveTenantId(request);
       const policies = await (prisma as any).clinicPolicy.findMany({
         where: { tenant_id: tenantId },
         orderBy: { topic: 'asc' },
@@ -2704,7 +2716,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       if (!factual_summary && !suggested_reply) {
         return reply.status(400).send({ success: false, error: 'factual_summary atau suggested_reply wajib diisi' });
       }
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = requireTenantId(request);
       try {
         const existing = await (prisma as any).clinicPolicy.findUnique({
           where: { tenant_id_topic: { tenant_id: tenantId, topic } },
@@ -2764,7 +2776,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
-        const tenantId = resolveTenantId(request);
+        const tenantId = requireTenantId(request);
         const { telegramBotToken, telegramChatId } = request.body || {};
         const { dailyReportService } = await import('../../services/daily-report.service');
         const result = await dailyReportService.sendTestDailyReport(tenantId, {

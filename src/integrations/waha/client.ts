@@ -106,6 +106,14 @@ export class WahaClient implements IWahaClient {
     this.tenantId = options?.tenantId || DEFAULT_TENANT_ID;
   }
 
+  public getSessionName(): string {
+    return this.session;
+  }
+
+  public getTenantId(): string {
+    return this.tenantId;
+  }
+
   private get headers() {
     const h: Record<string, string> = {
       'Content-Type': 'application/json',

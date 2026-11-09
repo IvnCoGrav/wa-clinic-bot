@@ -459,6 +459,8 @@ vi.mock('../src/db/client', () => {
       $transaction: vi.fn().mockRejectedValue(new Error('Database offline')),
       $queryRaw: vi.fn().mockRejectedValue(new Error('Database offline')),
       $queryRawUnsafe: vi.fn().mockRejectedValue(new Error('Database offline')),
+      $connect: vi.fn().mockResolvedValue(undefined),
+      $disconnect: vi.fn().mockResolvedValue(undefined),
     },
   };
 });

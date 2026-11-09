@@ -689,6 +689,19 @@ export class QueueService {
   public isRedisEnabled(): boolean {
     return this.redisEnabled;
   }
+
+  /**
+   * Ping server Redis untuk readiness probe
+   */
+  public async pingRedis(): Promise<boolean> {
+    if (!this.redisEnabled || !this.redisClient) return false;
+    try {
+      const res = await this.redisClient.ping();
+      return res === 'PONG';
+    } catch {
+      return false;
+    }
+  }
 }
 
 export const queueService = new QueueService();

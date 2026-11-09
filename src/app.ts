@@ -82,6 +82,57 @@ export function buildApp() {
     },
   });
 
+  // Task S2.2: Fastify central error handler (log detail server, respons generik aman tanpa bocor stack trace)
+  app.setErrorHandler((error, request, reply) => {
+    const statusCode = (typeof error.statusCode === 'number' && error.statusCode >= 400 && error.statusCode < 600)
+      ? error.statusCode
+      : 500;
+
+    request.log.error({
+      err: error,
+      reqId: request.id,
+      method: request.method,
+      url: request.url,
+      statusCode,
+    }, error.message || 'Unhandled error occurred');
+
+    if (error.validation) {
+      return reply.status(400).send({
+        statusCode: 400,
+        error: 'Bad Request',
+        code: error.code || 'VALIDATION_ERROR',
+        message: error.message,
+      });
+    }
+
+    const isProd = process.env.NODE_ENV === 'production';
+    if (statusCode >= 500) {
+      return reply.status(500).send({
+        statusCode: 500,
+        error: 'Internal Server Error',
+        code: error.code || 'INTERNAL_SERVER_ERROR',
+        message: isProd ? 'An internal server error occurred' : (error.message || 'Internal Server Error'),
+      });
+    }
+
+    return reply.status(statusCode).send({
+      statusCode,
+      error: error.name || 'Client Error',
+      code: error.code || 'CLIENT_ERROR',
+      message: error.message || 'Client error occurred',
+    });
+  });
+
+  // Task S2.2: Fastify central 404 handler terstruktur untuk route yang tidak terdaftar
+  app.setNotFoundHandler((request, reply) => {
+    return reply.status(404).send({
+      statusCode: 404,
+      error: 'Not Found',
+      code: 'ROUTE_NOT_FOUND',
+      message: `Route ${request.method}:${request.url} not found`,
+    });
+  });
+
   // Observabilitas forensik jalur auth (KNOWN_ISSUES #143): catat SATU baris JSON
   // ringkas untuk respons 401/503 pada rute auth/admin/staff. Token penuh tidak
   // pernah masuk log (hanya hash prefix-8). Deterministik, terpusat, tanpa duplikasi.
@@ -231,61 +282,48 @@ export function buildApp() {
 }
 
 if (require.main === module) {
-  const server = buildApp();
-  const PORT = parseInt(process.env.PORT || '3000', 10);
-  const HOST = process.env.HOST || '0.0.0.0';
+  (async () => {
+    const PORT = parseInt(process.env.PORT || '3000', 10);
+    const HOST = process.env.HOST || '0.0.0.0';
 
-  // PLAN 8 FASE 1: graceful shutdown (SIGTERM/SIGINT) — hentikan cron lebih dulu,
-  // lalu drain queue/burst, lalu putuskan koneksi. Lihat src/lifecycle/shutdown.ts.
-  import('./lifecycle/shutdown').then(({ registerShutdownHooks }) => {
-    registerShutdownHooks(server);
-  }).catch((e: any) => {
-    console.warn('[SHUTDOWN INIT] Gagal mendaftarkan shutdown hooks:', e?.message);
-  });
-
-  server.listen({ port: PORT, host: HOST }, async (err, address) => {
-    if (err) {
-      server.log.error(err);
-      process.exit(1);
-    }
-    console.log(`\n🚀 WhatsApp Clinic Bot Engine listening on ${address}`);
-    console.log(`📌 Webhook URL: ${address}/webhook`);
-    console.log(`📌 Admin Endpoint: ${address}/api/admin/human-handling-conversations\n`);
-
-    // Init data tenant (SaaS-ready): seed catalog & delivery tiers dari DB
-    // PLAN 8 FASE 4: iterasi SELURUH tenant aktif (bukan hanya default).
-    // DB offline → fallback [DEFAULT_TENANT_ID] (perilaku single-tenant tidak berubah).
+    // Task S2.4: Inisialisasi runtime tenant SEBELUM server.listen() agar request pertama tidak melihat cache kosong.
+    // Production: kegagalan init = tolak listen (jangan melayani dengan katalog/persona kosong).
+    // Development: tetap listen dengan warning agar debugging lokal tidak terhambat.
+    let tenantRuntimeReady = true;
     try {
-      const { DEFAULT_TENANT_ID } = await import('./config/tenant');
-      const { loadServicesFromDb } = await import('./services/treatment-catalog.service');
-      const { getDeliveryTiersFromDb } = await import('./services/delivery.service');
-      const { loadPersonaFromDb } = await import('./config/persona');
-      const { AiModelConfigService } = await import('./config/ai-models.config');
-      const { AiEligibilityConfigService } = await import('./config/ai-eligibility-config');
-      let tenantIds: string[] = [DEFAULT_TENANT_ID];
-      try {
-        const { prisma } = await import('./db/client');
-        const tenants = await prisma.tenant.findMany({ select: { id: true } });
-        if (tenants.length > 0) tenantIds = tenants.map((t: any) => t.id);
-      } catch {
-        console.warn('[INIT TENANT DATA] DB offline — fallback ke DEFAULT_TENANT_ID.');
+      const { initializeTenantRuntime } = await import('./lifecycle/tenant-bootstrap');
+      const bootstrap = await initializeTenantRuntime();
+      tenantRuntimeReady = bootstrap.success;
+      if (!bootstrap.success) {
+        console.error('[BOOT INIT] Tenant runtime gagal diinisialisasi:', bootstrap.error?.message || 'unknown error');
       }
-      for (const tid of tenantIds) {
-        await loadServicesFromDb(tid);
-        await getDeliveryTiersFromDb(tid);
-        await loadPersonaFromDb(tid);
-        await AiModelConfigService.loadConfigsFromDb(tid);
-        const aiScopeLoaded = await AiEligibilityConfigService.loadConfigsFromDb(tid);
-        if (!aiScopeLoaded) {
-          console.warn(
-            `[AI_ROLLOUT_SCOPE] DB unreachable at boot for tenant ${tid}, defaulting to fail-closed (NEW_ONLY, cutoff=now).`
-          );
-        }
-      }
-      console.log(`📦 Tenant data initialized for ${tenantIds.length} tenant(s) (catalog + delivery tiers + persona + AI config + AI router + idle greeting + AI scope)`);
-    } catch (initErr) {
-      console.warn('[INIT TENANT DATA] Failed to sync tenant data:', (initErr as Error).message);
+    } catch (bootstrapErr: any) {
+      tenantRuntimeReady = false;
+      console.error('[BOOT INIT] Gagal inisialisasi tenant runtime:', bootstrapErr?.message || bootstrapErr);
     }
+
+    if (!tenantRuntimeReady && process.env.NODE_ENV === 'production') {
+      throw new Error('Tenant runtime bootstrap failed; refusing to listen in production.');
+    }
+
+    const server = await buildApp();
+
+    // PLAN 8 FASE 1: graceful shutdown (SIGTERM/SIGINT) — hentikan cron lebih dulu,
+    // lalu drain queue/burst, lalu putuskan koneksi. Lihat src/lifecycle/shutdown.ts.
+    import('./lifecycle/shutdown').then(({ registerShutdownHooks }) => {
+      registerShutdownHooks(server);
+    }).catch((e: any) => {
+      console.warn('[SHUTDOWN INIT] Gagal mendaftarkan shutdown hooks:', e?.message);
+    });
+
+    server.listen({ port: PORT, host: HOST }, async (err, address) => {
+      if (err) {
+        server.log.error(err);
+        process.exit(1);
+      }
+      console.log(`\n🚀 WhatsApp Clinic Bot Engine listening on ${address}`);
+      console.log(`📌 Webhook URL: ${address}/webhook`);
+      console.log(`📌 Admin Endpoint: ${address}/api/admin/human-handling-conversations\n`);
 
     // Auto-sync WAHA webhook events per tenant (PLAN 8 FASE 4).
     import('./config/tenant').then(({ DEFAULT_TENANT_ID }) => {
@@ -334,5 +372,9 @@ if (require.main === module) {
     } else {
       startBackgroundCrons();
     }
+  });
+  })().catch((err) => {
+    console.error('[FATAL BOOT ERROR]', err);
+    process.exit(1);
   });
 }
