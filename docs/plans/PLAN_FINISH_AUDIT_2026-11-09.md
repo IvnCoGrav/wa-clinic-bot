@@ -224,15 +224,16 @@ Hanya area yang belum tercakup Track B. Seluruh 4 modul telah selesai diaudit se
 - Baseline unit test frontend: `npx vitest run tests/unit/livechat-*.test.ts` PASS (20/20 test).
 - Dokumen pemetaan lengkap: `docs/plans/REBASELINE_LIVECHAT_S5_2026-11-09.md`.
 
-### Task S5.1 — Pecah `packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx` (8.127 Baris)
-| Langkah | Aksi | Target File |
-|---|---|---|
-| 5.1.1 | Ekstrak hooks modular: draf chat & scroll tracker | `packages/admin-dashboard/src/hooks/useLiveChatDrafts.ts`, `useLiveChatScroll.ts` |
-| 5.1.2 | Ekstrak Panel Kiri: Thread List, Header, Search & Filter Cards (baris 4.430–5.409) | `packages/admin-dashboard/src/components/livechat/LiveChatThreadList.tsx` (~850 baris) |
-| 5.1.3 | Ekstrak Panel Tengah: Chat Header, Alert Banners, Bubbles & Reactions (baris 5.410–6.800) | `packages/admin-dashboard/src/components/livechat/LiveChatMessagePane.tsx` (~1.100 baris) |
-| 5.1.4 | Ekstrak Modals Sekunder: Customer Detail, Payment Proof, Action Sheet / Context Menu | `packages/admin-dashboard/src/components/livechat/LiveChatCustomerModal.tsx`, `LiveChatPaymentProofModal.tsx`, `LiveChatMessageContextMenu.tsx` |
-| 5.1.5 | Hubungkan orchestrator utama `LiveChatMonitor.tsx` dengan sub-komponen terpisah | `packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx` (< 1.500 baris) |
-| Acceptance | File utama < 1.500 baris; `npm run build` dashboard PASS; 20 unit test livechat hijau; tidak ada regresi visual/fungsional. |
+### Task S5.1 — Pecah `packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx` (8.127 Baris) [SELESAI 2026-11-09]
+| Langkah | Aksi | Target File | Status |
+|---|---|---|---|
+| 5.1.1 | Ekstrak hooks modular: draf chat & scroll tracker | `packages/admin-dashboard/src/hooks/useLiveChatDrafts.ts`, `useLiveChatScroll.ts` | **SELESAI** |
+| 5.1.2 | Ekstrak Panel Kiri: Thread List, Header, Search & Filter Cards | `packages/admin-dashboard/src/components/livechat/LiveChatThreadList.tsx` (832 baris) | **SELESAI** |
+| 5.1.3 | Ekstrak Panel Tengah: Chat Header, Alert Banners, Bubbles & Reactions | `packages/admin-dashboard/src/components/livechat/LiveChatMessagePane.tsx` (828 baris) | **SELESAI** |
+| 5.1.4 | Ekstrak Modals & Dialogs Sekunder: Customer Detail, Payment Proof, Sync Info, Modals Orchestrator | `packages/admin-dashboard/src/components/livechat/LiveChatCustomerModal.tsx`, `LiveChatPaymentProofModal.tsx`, `LiveChatSyncModal.tsx`, `LiveChatMessageContextMenu.tsx`, `LiveChatModals.tsx` | **SELESAI** |
+| 5.1.5 | Ekstrak Hooks Bisnis & Data: Threads, Active Thread, SSE, Message Ops, Composer/Invoice, Banners, Background Sync, Reservations & Detail, Bot & Labels | `useLiveChatThreads.ts`, `useLiveChatActiveThread.ts`, `useLiveChatSse.ts`, `useLiveChatMessageOperations.ts`, `useLiveChatComposerHandler.ts`, `useLiveChatBanners.ts`, `useLiveChatBackgroundSync.ts`, `useLiveChatReservations.ts`, `useLiveChatBotAndLabels.ts` | **SELESAI** |
+| 5.1.6 | Hubungkan orchestrator utama `LiveChatMonitor.tsx` dengan seluruh sub-komponen dan hooks | `packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx` (**1.211 baris**, turun dari 8.127 baris / -85%) | **SELESAI** |
+| Acceptance | File utama < 1.500 baris (**1.211 baris**); `npm run build` dashboard PASS (Exit 0, 11.69s); unit test livechat PASS (**73/73 passing**); root `npm run build` PASS (Exit 0); commit `e15cf2ce`. | **PASS** |
 
 ### Task S5.2 — Katalog/SOP data-driven
 *Catatan: Eksekusi S5.2 WAJIB melalui konfirmasi persetujuan migrasi database terpisah.*
