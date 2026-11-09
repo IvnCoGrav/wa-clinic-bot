@@ -2,6 +2,8 @@ import { ConversationState, Direction } from '@prisma/client';
 import { QueuePayload } from './queue.service';
 import { messageService } from './message.service';
 import { queueService } from './queue.service';
+import { commandService } from './command.service';
+import { trackTimeout, clearTimeoutTracked } from '../lifecycle/interval-registry';
 
 /**
  * Burst Coalescing Service — gabungkan pesan text beruntun dari customer menjadi
@@ -81,7 +83,7 @@ export class BurstCoalesceService {
   }
 
   private isCommandText(text: string): boolean {
-    return /^\/[a-z]/.test(text.trim().toLowerCase());
+    return commandService.isCommandText(text);
   }
 
   /**
@@ -161,13 +163,13 @@ export class BurstCoalesceService {
     const current = this.buffers.get(key);
     if (current) {
       // Reset timer: setiap pesan baru memperpanjang window.
-      clearTimeout(current.timer);
+      clearTimeoutTracked(current.timer);
       current.messages.push(incomingMessage);
-      current.timer = setTimeout(() => { this.flush(key).catch(e => console.error('[BURST COALESCE TIMER ERROR]', e)); }, this.getWindowMs());
+      current.timer = trackTimeout(() => { this.flush(key).catch(e => console.error('[BURST COALESCE TIMER ERROR]', e)); }, this.getWindowMs());
       return { handled: true };
     }
 
-    const timer = setTimeout(() => { this.flush(key).catch(e => console.error('[BURST COALESCE TIMER ERROR]', e)); }, this.getWindowMs());
+    const timer = trackTimeout(() => { this.flush(key).catch(e => console.error('[BURST COALESCE TIMER ERROR]', e)); }, this.getWindowMs());
     this.buffers.set(key, {
       tenantId,
       customerId: opts.customerId,

@@ -60,6 +60,8 @@ export class TurnRecoveryService {
             turnId: `${t.tenant_id}:${t.provider}:${t.inbound_message_id}`,
           });
           replayed++;
+          // Backpressure throttling (SM-13): jeda mikro 50ms per replay agar antrean pesan tidak lonjak serentak
+          await new Promise((res) => setTimeout(res, 50));
         } catch (e: any) {
           console.warn(`[TURN RECOVERY] gagal replay ${t.inbound_message_id}:`, e?.message);
         }

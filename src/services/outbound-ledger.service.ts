@@ -22,7 +22,7 @@ export class OutboundLedger {
     if (!turnId) return undefined;
     const contentHash = crypto.createHash('sha256').update(content || '').digest('hex').slice(0, 32);
     try {
-      const row = await (prisma as any).outboundAttempt.upsert({
+      const row = await prisma.outboundAttempt.upsert({
         where: { turn_id_bubble_index: { turn_id: turnId, bubble_index: bubbleIndex } },
         create: {
           tenant_id: tenantId,
@@ -44,7 +44,7 @@ export class OutboundLedger {
   public async markSent(attemptId: string | undefined, providerMessageId?: string): Promise<void> {
     if (!attemptId) return;
     try {
-      await (prisma as any).outboundAttempt.update({
+      await prisma.outboundAttempt.update({
         where: { id: attemptId },
         data: { status: 'SENT', provider_message_id: providerMessageId ?? null },
       });
@@ -56,7 +56,7 @@ export class OutboundLedger {
   public async markFailed(attemptId: string | undefined, error?: string): Promise<void> {
     if (!attemptId) return;
     try {
-      await (prisma as any).outboundAttempt.update({
+      await prisma.outboundAttempt.update({
         where: { id: attemptId },
         data: { status: 'FAILED', error: error ?? null },
       });
@@ -68,7 +68,7 @@ export class OutboundLedger {
   public async markUnknown(attemptId: string | undefined, error?: string): Promise<void> {
     if (!attemptId) return;
     try {
-      await (prisma as any).outboundAttempt.update({
+      await prisma.outboundAttempt.update({
         where: { id: attemptId },
         data: { status: 'UNKNOWN', error: error ?? null },
       });

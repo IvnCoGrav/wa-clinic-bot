@@ -99,6 +99,8 @@ vi.mock('../src/db/client', () => {
         createMany: vi.fn().mockRejectedValue(new Error('Database offline')),
         update: vi.fn().mockRejectedValue(new Error('Database offline')),
         updateMany: vi.fn().mockRejectedValue(new Error('Database offline')),
+        groupBy: vi.fn().mockRejectedValue(new Error('Database offline')),
+        count: vi.fn().mockRejectedValue(new Error('Database offline')),
       },
       knowledgeChunk: {
         findUnique: vi.fn().mockRejectedValue(new Error('Database offline')),

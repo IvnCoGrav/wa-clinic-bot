@@ -64,10 +64,12 @@ export class ResponseCacheService {
   /**
    * Menghapus cache berdasarkan prefix (misal: 'livechat:', 'reservations:', 'customers:')
    */
-  public invalidatePrefix(prefix: string): void {
+  public invalidatePrefix(prefix: string, tenantId?: string): void {
     for (const key of this.cache.keys()) {
       if (key.startsWith(prefix) || key.includes(prefix)) {
-        this.cache.delete(key);
+        if (!tenantId || key.includes(tenantId)) {
+          this.cache.delete(key);
+        }
       }
     }
   }

@@ -52,6 +52,18 @@ export class CommandService {
    * Deteksi apakah pesan berupa perintah slash (diawali "/"). Dipakai juga oleh
    * burst-coalesce guard supaya perintah tidak ter-merge dengan pesan lain.
    */
+  public getResetConfirmReply(salutation: string = 'Bunda'): string {
+    return (
+      `${salutation}, perintah ini akan mengarsipkan riwayat chat & data reservasi nomor ini ` +
+      '(data tidak dihapus permanen dan masih dapat dipulihkan oleh admin). ' +
+      'Balas *YA* untuk mengonfirmasi, atau ketik pesan lain untuk membatalkan.'
+    );
+  }
+
+  public getStartOverReply(salutation: string = 'Bunda'): string {
+    return `Baik ${salutation}, kita mulai dari awal. Silakan ketik *Halo* untuk memulai percakapan baru. 😊`;
+  }
+
   public isCommandText(text: string): boolean {
     return /^\/[a-z]/.test(text.trim().toLowerCase());
   }
@@ -83,7 +95,10 @@ export class CommandService {
       case '/reset':
       case '/reset konfirm':
         this.pendingResets.set(customer.id, { expiresAt: Date.now() + RESET_PENDING_TTL_MS });
-        return { replyText: RESET_CONFIRM_REPLY, conversationId: conversation.id };
+        const { getBrandIdentityAsync } = await import('../config/brand');
+        const brand = await getBrandIdentityAsync(tId);
+        const salutation = brand.addressTermForCustomer || 'Bunda';
+        return { replyText: this.getResetConfirmReply(salutation), conversationId: conversation.id };
 
       case '/state':
         // SEC-AUDIT-14: /state membocorkan state machine internal. Hanya

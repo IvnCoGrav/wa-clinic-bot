@@ -368,13 +368,23 @@ export class ConversationService {
         });
       const isProd = process.env.NODE_ENV === 'production';
       const effectiveFilterMode = isProd && mode === 'all' ? 'real' : mode;
+      // Cache memori lokal per-panggilan untuk mencegah query n+1 (SM-14)
+      const customerCache = new Map<string, any>();
+      const getCachedCustomer = async (cid: string) => {
+        if (!cid) return null;
+        if (customerCache.has(cid)) return customerCache.get(cid);
+        const cust = await customerService.getCustomerById(cid, tenantId);
+        customerCache.set(cid, cust);
+        return cust;
+      };
+
       const filtered: any[] = [];
       if (effectiveFilterMode === 'all') {
         filtered.push(...all);
       } else {
         for (const c of all) {
           try {
-            const cust = await customerService.getCustomerById(c.customer_id, tenantId);
+            const cust = await getCachedCustomer(c.customer_id);
             if (cust && !!cust.is_sandbox_test === (effectiveFilterMode === 'sandbox')) filtered.push(c);
           } catch (e) {
             if (effectiveFilterMode === 'real') filtered.push(c);
@@ -396,7 +406,7 @@ export class ConversationService {
         const next: any[] = [];
         for (const c of working) {
           try {
-            const cust: any = await customerService.getCustomerById(c.customer_id, tenantId);
+            const cust: any = await getCachedCustomer(c.customer_id);
             const res: any[] = cust?.reservations || [];
             const matchesStaff: (r: any) => boolean =
               !staffId || staffId === 'all'
@@ -841,7 +851,6 @@ export class ConversationService {
   public async releaseDisabledBotConversations(tenantId: string): Promise<number> {
     let releasedCount = 0;
     try {
-      const { wahaClient } = await import('../integrations/waha/client');
       const { customerService } = await import('./customer.service');
 
       const isGlobalDisabledReason = (r: string | null) =>
@@ -936,6 +945,48 @@ export class ConversationService {
    * aktivitas < ambang jam, atau ke kontak bypass/admin. Ambang memakai env
    * yang sudah ada (Reusability-first; tanpa dependency baru).
    */
+  /**
+   * Reset percakapan ke INITIAL secara atomik (SM-04).
+   * Membersihkan pending location customer, state conversation, last discussed treatment,
+   * dan GoalTracker episodic session dalam satu seam terpadu.
+   */
+  public async resetConversationToInitial(conversationId: string, customerId: string, tenantId: string): Promise<void> {
+    const { customerService } = await import('./customer.service');
+    await customerService.clearPendingLocation(customerId, tenantId).catch(() => {});
+
+    await this.updateConversationState(
+      conversationId,
+      {
+        currentState: ConversationState.INITIAL,
+        previousState: null,
+        locationAttempts: 0,
+      },
+      tenantId
+    );
+    await this.updateLastDiscussedTreatment(conversationId, tenantId, null as any).catch(() => {});
+
+    try {
+      const { GoalTracker } = await import('../v3/state/goal-tracker');
+      await GoalTracker.updateGoalSession(
+        conversationId,
+        {
+          cartItems: [],
+          selectedTreatment: undefined,
+          booking: undefined,
+          discussedTreatments: [],
+          priceDiscussed: undefined,
+          bookingCommitConfirmed: undefined,
+          lastCommitment: undefined,
+          ongkirStatus: undefined,
+          totalPrice: undefined,
+        } as any,
+        tenantId
+      );
+    } catch (resetErr: any) {
+      console.warn('[RESET CONVERSATION] Gagal membersihkan sesi V3 episodik:', resetErr?.message);
+    }
+  }
+
   public bolehKirimProaktif(conversation: any, customer?: any): boolean {
     if (customer && (customer.is_admin_labeled === true || hasBypassLabel(customer))) {
       return false;

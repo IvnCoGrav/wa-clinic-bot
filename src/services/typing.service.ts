@@ -495,13 +495,22 @@ export class TypingService {
         let sentSuccess = false;
         let sentMessageId: string | undefined = undefined;
         if (resolvedTransport) {
-          sentSuccess = await resolvedTransport.sendText(chatId, bubbleContent);
+          const transportRes: any = await resolvedTransport.sendText(chatId, bubbleContent);
+          sentSuccess = typeof transportRes === 'boolean' ? transportRes : !!transportRes?.success;
+          sentMessageId = transportRes?.messageId;
         } else if (typeof (this.client as any).sendTextDetailed === 'function') {
           const detailed = await (this.client as any).sendTextDetailed(chatId, bubbleContent);
           sentSuccess = !!detailed?.success;
           sentMessageId = detailed?.messageId;
         } else {
           sentSuccess = await this.client.sendText(chatId, bubbleContent);
+        }
+
+        if (sentSuccess && sentMessageId) {
+          try {
+            const { messageService } = await import('./message.service');
+            messageService.registerKnownBotMessageId(sentMessageId, effectiveTenantId);
+          } catch {}
         }
 
         if (!sentSuccess) {

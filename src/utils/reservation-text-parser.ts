@@ -84,6 +84,10 @@ export interface ParseResult {
  * Mengecek apakah sebuah pesan WhatsApp merupakan form reservasi / booking layanan
  * secara toleran terhadap berbagai variasi penulisan tanpa false-positive pada chat biasa.
  */
+export function isPotentialReservationForm(rawText: string): boolean {
+  return isReservationFormMessage(rawText);
+}
+
 export function isReservationFormMessage(rawText: string): boolean {
   if (!rawText || typeof rawText !== 'string') return false;
   const lower = rawText.toLowerCase().replace(/\s+/g, ' ');

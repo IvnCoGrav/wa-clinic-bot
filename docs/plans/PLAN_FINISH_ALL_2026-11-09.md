@@ -185,9 +185,9 @@
 
 | Sub-fase | Temuan | Fokus | Acceptance |
 |---|---|---|---|
-| F3.1a | `SM-01` | Pecah `message.service.ts` 2.208 → `messageLogService`, `messagePinService`, `messageReactionService`, `messageReadStatusService`; facade kompatibilitas | File utama <1.500; test livechat/message hijau |
-| F3.1b | `SM-02`, `SM-04`, `SM-06`, `SM-07`, `SM-08` | Form pattern data-driven; reset sesi atomik; sapaan persona; paritas `MessageTransport`; satu `isCommandText` | Test parafrase + dua tenant |
-| F3.1c | `SM-03`, `SM-05`, `SM-09`..`SM-14` | Bounded memory; hapus dead import; alert logging; timer registry; type safety; cache tenant; backpressure; batch memory | Test memory/regresi |
+| F3.1a | `SM-01` | Pecah `message.service.ts` 2.208 → `messagePinService`, `messageReactionService`, `messageReadStatusService`; facade kompatibilitas | File utama 1.390 (<1.500); test hijau | **FIXED** |
+| F3.1b | `SM-02`, `SM-04`, `SM-06`, `SM-07`, `SM-08` | Form pattern data-driven; reset sesi atomik; sapaan persona; paritas `MessageTransport`; satu `isCommandText` | Test parafrase + dua tenant | **FIXED** |
+| F3.1c | `SM-03`, `SM-05`, `SM-09`..`SM-14` | Bounded memory; hapus dead import; alert logging; timer registry; type safety; cache tenant; backpressure; batch memory | Test memory/regresi | **FIXED** |
 
 #### F3.2 Modul 12 — `MODULE_AUDIT_12` (FN-01..FN-12)
 

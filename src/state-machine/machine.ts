@@ -259,52 +259,14 @@ export class ConversationStateMachine {
 
     if ((isIdleTooLong || isConfirmationTimeout) && activeConversation.current_state !== ConversationState.INITIAL && !activeConversation.is_human_handling) {
       console.log(`[TIMEOUT RESET] Resetting conversation ${activeConversation.id} from ${activeConversation.current_state} to INITIAL.`);
-      await customerService.clearPendingLocation(customer.id, tenantId);
+      await conversationService.resetConversationToInitial(activeConversation.id, customer.id, tenantId);
       customer.pending_kelurahan = null;
       customer.pending_kecamatan = null;
       customer.pending_kota = null;
       customer.pending_lat = null;
       customer.pending_lng = null;
-
-      await conversationService.updateConversationState(
-        activeConversation.id,
-        {
-          currentState: ConversationState.INITIAL,
-          previousState: null,
-          locationAttempts: 0,
-        },
-        tenantId
-      );
-      await conversationService.updateLastDiscussedTreatment(activeConversation.id, tenantId, null as any).catch(() => {});
       activeConversation.last_discussed_treatment = null;
       activeConversation.current_state = ConversationState.INITIAL;
-
-      // Stage 4 (R2): idle reset WAJIB menyelaraskan sesi V3 episodik — sebelumnya
-      // hanya enum conversation yang direset, sementara session V3 (cart, treatment
-      // terpilih, booking, komitmen) tetap terbaca ulang → "amnesia palsu"/konteks
-      // lama nyangkut. Bersihkan EPISODIK; pertahankan profil durable
-      // (nama, sapaan, anak, lokasi terverifikasi).
-      try {
-        const { GoalTracker } = await import('../v3/state/goal-tracker');
-        await GoalTracker.updateGoalSession(
-          activeConversation.id,
-          {
-            cartItems: [],
-            selectedTreatment: undefined,
-            booking: undefined,
-            discussedTreatments: [],
-            priceDiscussed: undefined,
-            bookingCommitConfirmed: undefined,
-            lastCommitment: undefined,
-            ongkirStatus: undefined,
-            totalPrice: undefined,
-          } as any,
-          tenantId
-        );
-        console.log(`[TIMEOUT RESET] Sesi V3 episodik dibersihkan untuk conversation ${activeConversation.id}.`);
-      } catch (resetErr: any) {
-        console.warn('[TIMEOUT RESET] Gagal membersihkan sesi V3 episodik:', resetErr?.message);
-      }
     }
 
     // 3. Cek Global Bot Deactivation
@@ -340,9 +302,7 @@ export class ConversationStateMachine {
       checkoutKeyword.length > 0 && lowerFormText.includes(checkoutKeyword.replace(/\s+/g, ' ').trim());
     const isFormSubmission =
       isReservationFormMessage(incomingText) ||
-      tenantCheckoutHit ||
-      lowerFormText.includes('berikut list untuk reservasi') ||
-      (lowerFormText.includes('pilihan treatment') && (lowerFormText.includes('nama bunda') || lowerFormText.includes('alamat')));
+      tenantCheckoutHit;
 
     if (isFormSubmission) {
       const parseResult = parseReservationText(incomingText);
@@ -473,12 +433,8 @@ export class ConversationStateMachine {
         };
       } else {
         const hasFormHeaderOrColonFields =
-          lowerFormText.includes('list untuk reservasi') ||
-          lowerFormText.includes('format reservasi') ||
-          lowerFormText.includes('form reservasi') ||
-          lowerFormText.includes('form booking') ||
-          lowerFormText.includes('pilihan treatment (') ||
-          (lowerFormText.includes('nama') && lowerFormText.includes(':') && (lowerFormText.includes('alamat') || lowerFormText.includes('treatment')));
+          isReservationFormMessage(incomingText) ||
+          tenantCheckoutHit;
 
         if (hasFormHeaderOrColonFields) {
           const missing = parseResult.missingFields || [];
@@ -514,7 +470,10 @@ export class ConversationStateMachine {
             const { GoalTracker } = await import('../v3/state/goal-tracker');
             await GoalTracker.updateGoalSession(activeConversation.id, { formRetryCount: retryCount + 1 }, tenantId);
           } catch {}
-          const incompleteReply = `Mohon maaf Bunda, mohon diisi bagian ${missingStr} pada list reservasi ya bund. Terima kasih! 😊`;
+          const { getBrandIdentityAsync } = await import('../config/brand');
+          const brand = await getBrandIdentityAsync(tenantId);
+          const salutation = brand.addressTermForCustomer || 'Bunda';
+          const incompleteReply = `Mohon maaf ${salutation}, mohon diisi bagian ${missingStr} pada list reservasi ya. Terima kasih! 😊`;
           // V-A: permintaan melengkapi form WAJIB terkirim (bukan sekadar di-return).
           await this.deliverTerminalReply({
             tenantId,
@@ -787,6 +746,15 @@ export class ConversationStateMachine {
         });
       } catch (logErr: any) {
         console.error(`[OUTBOUND LOG ERROR] Gagal mencatat pesan outbound (tidak memicu retry): ${logErr?.message || logErr}`);
+        try {
+          const { alertService, AlertType, AlertSeverity } = await import('../services/alert.service');
+          alertService.notifyAlert({
+            type: AlertType.UNINTENDED_SILENT_DROP,
+            severity: AlertSeverity.WARNING,
+            message: `[OUTBOUND LOG ERROR] Gagal mencatat pesan outbound: ${logErr?.message || logErr}`,
+            tenantId,
+          }).catch(() => {});
+        } catch {}
       }
     }
 
