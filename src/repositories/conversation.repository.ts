@@ -34,28 +34,65 @@ export interface ConversationRepository {
    * kurasi FAQ bukan pengalihan CS; bot tetap aktif menjawab.
    */
   flagForReview(id: string, reason: string, tenantId: string): Promise<any>;
+  /**
+   * D-01: Menutup percakapan aktif berdasarkan ID dan tenant.
+   */
+  closeConversation(id: string, tenantId: string, closedAt?: Date): Promise<any>;
+  /**
+   * D-01: Menutup seluruh percakapan aktif milik customer di tenant ini (mis. saat /reset).
+   */
+  closeActiveConversation(customerId: string, tenantId: string, closedAt?: Date): Promise<any>;
 }
 
 export class PostgresConversationRepository implements ConversationRepository {
   async getOrCreate(customerId: string, tenantId: string): Promise<any> {
     let conversation = await prisma.conversation.findFirst({
-      where: { customer_id: customerId, tenant_id: tenantId },
+      where: { customer_id: customerId, tenant_id: tenantId, closed_at: null },
       orderBy: { updated_at: 'desc' },
     });
     if (!conversation) {
-      conversation = await prisma.conversation.create({
-        data: {
-          tenant_id: tenantId,
-          customer_id: customerId,
-          current_state: ConversationState.INITIAL,
-          is_human_handling: false,
-          is_pinned: false,
-          is_manual_unread: false,
-        },
-      });
+      try {
+        conversation = await prisma.conversation.create({
+          data: {
+            tenant_id: tenantId,
+            customer_id: customerId,
+            current_state: ConversationState.INITIAL,
+            is_human_handling: false,
+            is_pinned: false,
+            is_manual_unread: false,
+            closed_at: null,
+          },
+        });
+      } catch (err: any) {
+        // Race condition handler (D-01): bila ada request paralel yang baru saja membuat
+        // percakapan aktif (terjaring P2002 unique constraint), ambil baris yang baru terbuat.
+        if (err?.code === 'P2002') {
+          conversation = await prisma.conversation.findFirst({
+            where: { customer_id: customerId, tenant_id: tenantId, closed_at: null },
+            orderBy: { updated_at: 'desc' },
+          });
+        }
+        if (!conversation) throw err;
+      }
     }
     if (!conversation) throw new Error('Database create returned null/undefined');
     return conversation;
+  }
+
+  async closeConversation(id: string, tenantId: string, closedAt: Date = new Date()): Promise<any> {
+    const res = await prisma.conversation.updateMany({
+      where: { id, tenant_id: tenantId, closed_at: null },
+      data: { closed_at: closedAt },
+    });
+    return res;
+  }
+
+  async closeActiveConversation(customerId: string, tenantId: string, closedAt: Date = new Date()): Promise<any> {
+    const res = await prisma.conversation.updateMany({
+      where: { customer_id: customerId, tenant_id: tenantId, closed_at: null },
+      data: { closed_at: closedAt },
+    });
+    return res;
   }
 
   async findById(id: string, tenantId: string): Promise<any | null> {
@@ -107,7 +144,7 @@ export class InMemoryConversationRepository implements ConversationRepository {
 
   async getOrCreate(customerId: string, tenantId: string): Promise<any> {
     for (const c of this.store.values()) {
-      if (c?.customer_id === customerId && c?.tenant_id === tenantId) return c;
+      if (c?.customer_id === customerId && c?.tenant_id === tenantId && !c?.closed_at) return c;
     }
     const conv = {
       id: `conv_${Date.now()}_${Math.random().toString(36).substring(7)}`,
@@ -124,11 +161,34 @@ export class InMemoryConversationRepository implements ConversationRepository {
       is_pinned: false,
       pinned_at: null,
       is_manual_unread: false,
+      closed_at: null,
       created_at: new Date(),
       updated_at: new Date(),
     };
     this.store.set(conv.id, conv);
     return conv;
+  }
+
+  async closeConversation(id: string, tenantId: string, closedAt: Date = new Date()): Promise<any> {
+    const c = this.store.get(id);
+    if (c && (!tenantId || c.tenant_id === tenantId)) {
+      c.closed_at = closedAt;
+      c.updated_at = new Date();
+      return { count: 1 };
+    }
+    return { count: 0 };
+  }
+
+  async closeActiveConversation(customerId: string, tenantId: string, closedAt: Date = new Date()): Promise<any> {
+    let count = 0;
+    for (const c of this.store.values()) {
+      if (c?.customer_id === customerId && (!tenantId || c?.tenant_id === tenantId) && !c?.closed_at) {
+        c.closed_at = closedAt;
+        c.updated_at = new Date();
+        count++;
+      }
+    }
+    return { count };
   }
 
   async findById(id: string, tenantId: string): Promise<any | null> {

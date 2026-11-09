@@ -54,6 +54,74 @@ describe('FASE 5b — conversation repository', () => {
     expect(prisma.conversation.update).not.toHaveBeenCalled();
   });
 
+  it('Postgres: getOrCreate memfilter closed_at: null saat mencari percakapan aktif', async () => {
+    const activeRow = { id: 'c-active', tenant_id: 't', customer_id: 'cust-1', closed_at: null };
+    vi.mocked(prisma.conversation.findFirst).mockResolvedValue(activeRow as any);
+    const repo = new PostgresConversationRepository();
+    const result = await repo.getOrCreate('cust-1', 't');
+    expect(prisma.conversation.findFirst).toHaveBeenCalledWith({
+      where: { customer_id: 'cust-1', tenant_id: 't', closed_at: null },
+      orderBy: { updated_at: 'desc' },
+    });
+    expect(result.id).toBe('c-active');
+  });
+
+  it('Postgres: getOrCreate menangani race condition P2002 dan me-read row yang dibuat proses lawan', async () => {
+    vi.mocked(prisma.conversation.findFirst)
+      .mockResolvedValueOnce(null) // Pertama tidak ada
+      .mockResolvedValueOnce({ id: 'c-raced', customer_id: 'cust-1', tenant_id: 't', closed_at: null } as any); // Kedua berhasil temukan row lawan
+
+    const p2002Err: any = new Error('Unique constraint failed');
+    p2002Err.code = 'P2002';
+    vi.mocked(prisma.conversation.create).mockRejectedValueOnce(p2002Err);
+
+    const repo = new PostgresConversationRepository();
+    const result = await repo.getOrCreate('cust-1', 't');
+    expect(result.id).toBe('c-raced');
+    expect(prisma.conversation.findFirst).toHaveBeenCalledTimes(2);
+  });
+
+  it('Postgres: closeConversation menutup percakapan aktif dengan tenant guard', async () => {
+    vi.mocked(prisma.conversation.updateMany).mockResolvedValue({ count: 1 } as any);
+    const repo = new PostgresConversationRepository();
+    const closeDate = new Date('2026-11-09T10:00:00.000Z');
+    await (repo as any).closeConversation('c-1', 't', closeDate);
+    expect(prisma.conversation.updateMany).toHaveBeenCalledWith({
+      where: { id: 'c-1', tenant_id: 't', closed_at: null },
+      data: { closed_at: closeDate },
+    });
+  });
+
+  it('Postgres: closeActiveConversation menutup semua percakapan aktif customer pada tenant', async () => {
+    vi.mocked(prisma.conversation.updateMany).mockResolvedValue({ count: 1 } as any);
+    const repo = new PostgresConversationRepository();
+    const closeDate = new Date('2026-11-09T10:00:00.000Z');
+    await (repo as any).closeActiveConversation('cust-1', 't', closeDate);
+    expect(prisma.conversation.updateMany).toHaveBeenCalledWith({
+      where: { customer_id: 'cust-1', tenant_id: 't', closed_at: null },
+      data: { closed_at: closeDate },
+    });
+  });
+
+  it('InMemory: percakapan yang di-close tidak lagi dikembalikan oleh getOrCreate', async () => {
+    const repo = new InMemoryConversationRepository();
+    const a = await repo.getOrCreate('cust-1', 't');
+    expect(a.closed_at).toBeNull();
+
+    await (repo as any).closeConversation(a.id, 't');
+    const b = await repo.getOrCreate('cust-1', 't');
+    expect(b.id).not.toBe(a.id);
+    expect(b.closed_at).toBeNull();
+  });
+
+  it('InMemory: closeActiveConversation menutup percakapan aktif customer', async () => {
+    const repo = new InMemoryConversationRepository();
+    const a = await repo.getOrCreate('cust-1', 't');
+    await (repo as any).closeActiveConversation('cust-1', 't');
+    const b = await repo.getOrCreate('cust-1', 't');
+    expect(b.id).not.toBe(a.id);
+  });
+
   it('InMemory: getOrCreate idempoten per (customer, tenant)', async () => {
     const repo = new InMemoryConversationRepository();
     const a = await repo.getOrCreate('cust-1', 't');

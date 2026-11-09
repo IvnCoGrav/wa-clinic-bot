@@ -153,8 +153,16 @@ export function checkMedicalKeywords(text: string): {
   // Frasa yang TIDAK boleh dianggap gejala medis meski mengandung keyword pendek.
   // Contoh: "step by step" = tahap demi tahap (bukan kejang), "kuningan" = nama daerah.
   const NON_MEDICAL_PHRASES: RegExp[] = [
-    /\bstep\s+by\s+step\b/i,
+    /\bstep\s+by\s+step\b/gi,
   ];
+
+  // Sanitasi teks untuk pencocokan keyword:
+  // Non-medical phrases diganti spasi berjarak sama agar tidak memicu keyword pendek (seperti 'step'),
+  // namun TIDAK membungkam keyword medis darurat lain dalam kalimat yang sama (seperti 'kejang').
+  let textForMatching = normalizedText;
+  for (const phraseRe of NON_MEDICAL_PHRASES) {
+    textForMatching = textForMatching.replace(phraseRe, (match) => ' '.repeat(match.length));
+  }
 
   // Keyword pendek (≤6 huruf) dipakai dengan word boundary agar "kaku" tidak match
   // "kakun", "kuning" tidak match "kuningan", "step" tidak match "step by step".
@@ -162,13 +170,10 @@ export function checkMedicalKeywords(text: string): {
   // substring match karena false positive-nya jauh lebih kecil.
   const matchesKeyword = (keyword: string): boolean => {
     const kw = keyword.toLowerCase();
-    if (NON_MEDICAL_PHRASES.some((re) => re.test(normalizedText))) {
-      return false;
-    }
     if (kw.length <= 6 && !/\s/.test(kw)) {
-      return new RegExp(`(^|[^a-z0-9])${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z0-9]|$)`, 'i').test(normalizedText);
+      return new RegExp(`(^|[^a-z0-9])${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z0-9]|$)`, 'i').test(textForMatching);
     }
-    return normalizedText.includes(kw);
+    return textForMatching.includes(kw);
   };
 
   // 1. Check High Severity Keywords

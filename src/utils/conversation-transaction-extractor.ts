@@ -237,19 +237,23 @@ export function parseIndonesianDate(dateStr: string): Date | null {
 
   // 2. Ekstrak Hari, Bulan, Tahun
   // Format: 12 agustus 26 atau 7 Juli 2026 atau 7-07-2026
-  // Tahun default = tahun berjalan (dinamis — DILARANG hardcode tahun statis).
-  let day = 1;
-  let month = 6; // default Juli
+  // UTL-01: DILARANG menggunakan default month = 6 (Juli fiktif). Tanpa bulan dan hari valid -> return null.
+  let day: number | null = null;
+  let month: number | null = null;
   let year = new Date().getFullYear();
 
   // Cek format angka DD-MM-YYYY atau DD/MM/YYYY
   const numericMatch = raw.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})/);
   if (numericMatch) {
-    day = parseInt(numericMatch[1], 10);
-    month = parseInt(numericMatch[2], 10) - 1;
+    const d = parseInt(numericMatch[1], 10);
+    const m = parseInt(numericMatch[2], 10) - 1;
     let yr = parseInt(numericMatch[3], 10);
     if (yr < 100) yr += 2000;
-    year = yr;
+    if (d >= 1 && d <= 31 && m >= 0 && m <= 11) {
+      day = d;
+      month = m;
+      year = yr;
+    }
   } else {
     // Format teks bulan: "12 agustus 2026" / "12 agustus 26" / "7 Juli"
     const textMatch = raw.match(/(\d{1,2})\s+([a-z]+)(?:\s+(\d{2,4}))?/i) ||
@@ -267,21 +271,31 @@ export function parseIndonesianDate(dateStr: string): Date | null {
         mStr = tmp;
       }
 
-      day = parseInt(dStr, 10) || 1;
-      const mLower = mStr.toLowerCase();
+      const dParsed = parseInt(dStr, 10);
+      const mLower = (mStr || '').toLowerCase();
+      let matchedMonth: number | null = null;
       for (const [key, val] of Object.entries(monthMap)) {
         if (mLower.startsWith(key)) {
-          month = val;
+          matchedMonth = val;
           break;
         }
       }
 
-      if (yStr) {
-        let yr = parseInt(yStr, 10);
-        if (yr < 100) yr += 2000;
-        year = yr;
+      if (matchedMonth !== null && !isNaN(dParsed) && dParsed >= 1 && dParsed <= 31) {
+        day = dParsed;
+        month = matchedMonth;
+        if (yStr) {
+          let yr = parseInt(yStr, 10);
+          if (yr < 100) yr += 2000;
+          year = yr;
+        }
       }
     }
+  }
+
+  // Tanpa hari dan bulan yang valid, jangan buat tanggal fiktif (UTL-01)
+  if (day === null || month === null) {
+    return null;
   }
 
   try {

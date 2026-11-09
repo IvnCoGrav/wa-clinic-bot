@@ -4,6 +4,7 @@ import { customerService } from './customer.service';
 import { conversationService } from './conversation.service';
 import { messageService } from './message.service';
 import { prisma } from '../db/client';
+import { getConversationRepository } from '../repositories/conversation.repository';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 
 /**
@@ -160,19 +161,12 @@ export class CommandService {
     console.log(`[COMMAND /reset] DB-only label lifecycle reset, zero WAHA label mutation.`);
 
     // 6. Percakapan BARU sebagai rumah bagi balasan konfirmasi (yang lama tetap
-    //    terarsip di DB). Dibuat eksplisit agar tidak menyambung percakapan lama.
+    //    terarsip di DB). D-01: Tutup percakapan aktif lama terlebih dahulu agar partial unique terjaga.
     let newConversationId: string;
     try {
-      const created = await prisma.conversation.create({
-        data: {
-          tenant_id: tenantId,
-          customer_id: customer.id,
-          current_state: ConversationState.INITIAL,
-          is_human_handling: false,
-          is_pinned: false,
-          is_manual_unread: false,
-        },
-      });
+      const convRepo = getConversationRepository();
+      await convRepo.closeActiveConversation(customer.id, tenantId);
+      const created = await convRepo.getOrCreate(customer.id, tenantId);
       newConversationId = created.id;
       conversationService.clearConversationMemory(customer.id);
     } catch {

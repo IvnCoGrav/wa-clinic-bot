@@ -139,13 +139,13 @@
 
 **Aturan tiap task:** tulis test merah dulu; verifikasi `file:line`; perbaiki akar masalah; jangan menambah dependency; jalankan targeted test + build/typecheck.
 
-#### F2A — Kritis (safety & data)
+#### F2A — Kritis (safety & data) — **SELESAI (PASS)**
 
-| ID | File:Line | Perbaikan fondasional | Test baru | Acceptance |
-|---|---|---|---|---|
-| `CFG-01` | `src/config/medical-keywords.ts:155-172` | Evaluasi `NON_MEDICAL_PHRASES` hanya pada frasa yang cocok, bukan seluruh teks; keyword darurat tetap menang | `tests/unit/medical-keywords-scope.test.ts` | “step by step, anak kejang” → terdeteksi darurat |
-| `UTL-01` | `src/utils/conversation-transaction-extractor.ts:208-293` | Hapus default `month = 6`; tanpa bulan → `null`, bukan Juli fiktif | `tests/unit/conversation-date-null.test.ts` | Input tanpa bulan tidak menghasilkan tanggal |
-| `D-01` | `prisma/schema.prisma` Conversation; `conversation.repository.ts:40-60` | Partial unique index `(tenant_id, customer_id) WHERE closed_at IS NULL` + kolom penanda | test repository + migration dry-run | Satu conversation aktif per customer/tenant |
+| ID | File:Line | Perbaikan fondasional | Test baru | Acceptance | Status |
+|---|---|---|---|---|---|
+| `CFG-01` | `src/config/medical-keywords.ts:155-172` | Evaluasi `NON_MEDICAL_PHRASES` hanya pada frasa yang cocok, bukan seluruh teks; keyword darurat tetap menang | `tests/unit/medical-keywords-scope.test.ts` | “step by step, anak kejang” → terdeteksi darurat | **FIXED** |
+| `UTL-01` | `src/utils/conversation-transaction-extractor.ts:208-293` | Hapus default `month = 6`; tanpa bulan → `null`, bukan Juli fiktif | `tests/unit/conversation-date-null.test.ts` | Input tanpa bulan tidak menghasilkan tanggal | **FIXED** |
+| `D-01` | `prisma/schema.prisma` Conversation; `conversation.repository.ts:40-60` | Partial unique index `(tenant_id, customer_id) WHERE closed_at IS NULL` + kolom penanda | test repository + migration dry-run | Satu conversation aktif per customer/tenant | **FIXED** |
 
 #### F2B — Tinggi: keamanan & isolasi tenant
 

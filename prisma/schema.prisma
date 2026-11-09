@@ -211,6 +211,8 @@ model Conversation {
   is_frustrated               Boolean            @default(false)
   frustrated_at               DateTime?
   frustrated_reason           String?
+  // D-01: Penanda sesi ditutup/diarsipkan. NULL = sesi percakapan aktif.
+  closed_at                   DateTime?
   created_at                  DateTime           @default(now())
   updated_at                  DateTime           @updatedAt
   messages                    Message[]
@@ -221,6 +223,7 @@ model Conversation {
   @@index([tenant_id, escalation_reason])
   @@index([tenant_id, review_flagged])
   @@index([tenant_id, is_frustrated, last_message_at])
+  @@index([tenant_id, customer_id, closed_at])
   @@map("conversations")
 }
 
