@@ -22,8 +22,10 @@
 | Zipcode/CAPI + LiveChat links | **SELESAI** — commit `21b059e6` |
 | S6 lokal | **PASS** — build/typecheck/dashboard, full suite, security scan |
 | Seed/deploy produksi | **PENDING** |
-| Audit 16/16 modul | **9 laporan granular + 6 Track B + 1 gap (Modul 11)** |
-| Remediasi | **BELUM SELESAI** — ±132 item terbuka + sisa Track B |
+| F0 Baseline & Register Terpadu | **SELESAI** — baseline `f0-baseline.json`, backlog terpadu 268 temuan, diff 0 regresi baru |
+| F1 Audit Modul 11 & Re-baseline Track B | **SELESAI** — `MODULE_AUDIT_11` (10 file / 9.111 baris) + `TRACK_B_REBASELINE_7_14` (122 temuan) |
+| Audit 16/16 modul | **SELESAI (100% COVERAGE)** — 10 laporan granular A–G + 7 Track B ter-rebaseline |
+| Remediasi F2–F6 | **SIAP DIEKSEKUSI** — menunggu persetujuan per fase |
 
 ---
 
@@ -84,61 +86,52 @@
 
 ## 3. Detail Fase
 
-### F0 — Baseline & Register Terpadu (read-only, docs)
+### F0 — Baseline & Register Terpadu (read-only, docs) — **SELESAI (PASS)**
 
-| ID | Aksi | File/Perintah | Acceptance |
-|---|---|---|---|
-| F0.1 | Catat identitas & gate | `git status`, `git rev-parse HEAD`, `npm run build`, `npm run typecheck`, `npm --prefix packages/admin-dashboard run build`, `npm run security:scan` | exit 0; commit dicatat |
-| F0.2 | Full suite baseline baru | `npx vitest run --reporter=json --outputFile=docs/audit/2026-11-09/f0-baseline.json` | total/fail/skip dicatat |
-| F0.3 | Gabungkan register | Baru: `docs/plans/REMAINING_BACKLOG_2026-11-09.md` — kolom: ID, sumber, modul, severity, file:line aktual, status, fase target | Semua ID Track A + S4 + Track B masuk |
-| F0.4 | Dedupe & prioritas | Tandai `DUPLICATE`/`KNOWN`; petakan P0/P1/P2/P3 | Tidak ada ID ganda tanpa alasan |
-| F0.5 | Baseline diff | `node scripts/audit-baseline-diff.mjs docs/audit/2026-11-09/after-s5-final.json docs/audit/2026-11-09/f0-baseline.json` | 0 failure baru |
+| ID | Aksi | File/Perintah | Acceptance | Status |
+|---|---|---|---|:---:|
+| F0.1 | Catat identitas & gate | `git status`, `git rev-parse HEAD`, `npm run build`, `npm run typecheck`, `npm --prefix packages/admin-dashboard run build`, `npm run security:scan` | exit 0; commit dicatat | **PASS** |
+| F0.2 | Full suite baseline baru | `npx vitest run --reporter=json --outputFile=docs/audit/2026-11-09/f0-baseline.json` | total/fail/skip dicatat (6.774 / 6.744 / 2 fail / 28 skip) | **PASS** |
+| F0.3 | Gabungkan register | Baru: `docs/plans/REMAINING_BACKLOG_2026-11-09.md` — kolom: ID, sumber, modul, severity, file:line aktual, status, fase target | Semua 268 ID Track A (96) + S4 (50) + Track B (122) masuk | **PASS** |
+| F0.4 | Dedupe & prioritas | Tandai `DUPLICATE`/`KNOWN`; petakan P0/P1/P2/P3 | 9 klaster lintas modul dipetakan; prioritas P0..P3 jelas | **PASS** |
+| F0.5 | Baseline diff | `node scripts/audit-baseline-diff.mjs docs/audit/2026-11-09/after-s5-final.json docs/audit/2026-11-09/f0-baseline.json` | 0 failure baru (fixed: 1, new: 0) | **PASS** |
 
-**Gate F0:** hitungan Track A (96) + S4 (50) + Track B (122) terekonsiliasi; tidak ada perubahan kode.
+**Gate F0:** hitungan Track A (96) + S4 (50) + Track B (122) = 268 temuan terekonsiliasi; tidak ada perubahan kode. **STATUS: PASS.**
 
 ---
 
-### F1 — Audit Modul 11 + Re-baseline Track B 7–14 (read-only)
+### F1 — Audit Modul 11 + Re-baseline Track B 7–14 (read-only) — **SELESAI (PASS)**
 
-#### F1.1 Audit Modul 11 — Customer/Catalog/Location (A–G)
+#### F1.1 Audit Modul 11 — Customer/Catalog/Location (A–G) — **SELESAI**
 
-**Scope file (baca penuh):**
+**Scope file (baca penuh 100%):**
 
-| File | Fokus |
-|---|---|
-| `src/services/customer.service.ts` | seam customer, alamat, lokasi, enrichment |
-| `src/repositories/customer.repository.ts` | tenant scoping, update semantics |
-| `src/domain/customer-address.ts` | dedupe, rekonsiliasi, God Object 620 baris |
-| `src/services/location-resolver.service.ts` | URL Maps, geocode, kandidat lokasi |
-| `src/utils/gazetteer.ts`, `gazetteer-zipcode-resolver.ts` | dataset & resolusi |
-| `src/services/treatment-catalog.service.ts` | pasca-S5.2: DB read/fallback/seed |
-| `src/services/delivery.service.ts` | tier DB, fallback, tenant isolation |
-| `src/config/landmarks.ts` | 800 baris data landmark |
-| `src/utils/google-maps-url-resolver.ts` | overlap UTL-04 (SSRF) |
+| File | Baris | Fokus |
+|---|---:|---|
+| `src/services/customer.service.ts` | 3.262 | seam customer, 19 bypass update, alamat, lokasi, enrichment, LTV |
+| `src/repositories/customer.repository.ts` | 172 | tenant scoping, update semantics, Postgres vs InMemory |
+| `src/domain/customer-address.ts` | 621 | dedupe deterministik, rekonsiliasi, Zod schema |
+| `src/services/location-resolver.service.ts` | 116 | URL Maps, geocode, kandidat lokasi |
+| `src/utils/gazetteer.ts`, `gazetteer-zipcode-resolver.ts` | 959 | dataset & resolusi, regex compiling hot-path |
+| `src/services/treatment-catalog.service.ts` | 2.459 | pasca-S5.2: DB read/fallback per tenant |
+| `src/services/delivery.service.ts` | 391 | tier DB, fallback routing ORS/Google, clinic coords tenant |
+| `src/config/landmarks.ts` | 801 | 800 baris data landmark statis |
+| `src/utils/google-maps-url-resolver.ts` | 330 | overlap UTL-04 (SSRF allowlist) |
 
-**Output:** `docs/MODULE_AUDIT_11_CUSTOMER_CATALOG_LOCATION.md`
-**Acceptance:** format A–G; minimal 3 Before/After; katalog reuse; file belum dibaca; FMEA; setiap temuan punya `file:line` terverifikasi.
+**Output:** `docs/MODULE_AUDIT_11_CUSTOMER_CATALOG_LOCATION.md` (12 temuan: CCL-01 s.d. CCL-12; 3 Before/After; FMEA). **STATUS: SELESAI.**
 
-#### F1.2 Re-baseline Track B untuk Modul 7–14
+#### F1.2 Re-baseline Track B untuk Modul 7–14 — **SELESAI**
 
-**Input laporan:**
+**Hasil re-baseline 122 temuan Track B:**
+- **FIXED:** 10 temuan (`S-004`, `S-005`, `Ar-002`, `Ar-006`, `W-002`, `W-003`, `W-005`, `K-011`, `Cfg-006`, `Cfg-016`)
+- **DUPLICATE:** 3 temuan (`S-04` -> API-02; `K-003` -> DEL-07/I-001; `Cfg-005` -> CFG-06/07)
+- **PARTIAL:** 2 temuan (`Ar-001`, `C-009`)
+- **OPEN:** 107 temuan
 
-| Modul 16 | Laporan Track B |
-|---|---|
-| 7 WhatsApp | `docs/audit/2026-11-07/modul-02-09/LAPORAN_MODUL_02_DAN_09.md` |
-| 8 v3 AI agent | `docs/audit/2026-11-07/modul-03/LAPORAN_MODUL_03_PART_A.md` + `PART_B.md` |
-| 9 v3 tools/guardrails | `docs/audit/2026-11-07/modul-03/LAPORAN_MODUL_03_PART_A.md` |
-| 10 Reservation | `docs/audit/2026-11-06/LAPORAN_AUDIT_RESERVASI.md` |
-| 11 Customer/catalog/location | F1.1 + `modul-10`/`modul-02-09` |
-| 12 Live chat/follow-up | `docs/audit/2026-11-06/LAPORAN_AUDIT_LIVECHAT.md` + `MODULE_AUDIT_12` |
-| 13 Meta/CAPI/WABA/staff-auth | `modul-05-07` + `modul-02-09` |
-| 14 Ops queue/cron/backup | `docs/audit/2026-11-07/modul-08/LAPORAN_MODUL_08.md` |
-
-**Aksi per temuan:** verifikasi `file:line` aktual; status `FIXED / PARTIAL / OPEN / DUPLICATE / STALE`; bukti kode/test.
 **Output:** `docs/plans/TRACK_B_REBASELINE_7_14.md`.
 **Acceptance:** 16/16 modul punya status; tidak ada line number basi; tidak ada perubahan kode.
 
-**Gate F1:** review laporan; daftar P1 track B masuk F2/F3.
+**Gate F1:** review laporan; daftar P1 track B masuk F2/F3. **STATUS: PASS.**
 
 ---
 

@@ -14,17 +14,19 @@
 
 Register ini merupakan otoritas tunggal (*single source of truth*) yang mengintegrasikan seluruh temuan audit dari berbagai fase kerja sebelumnya ke dalam satu inventaris terpadu tanpa ada temuan yang hilang atau terlewat.
 
-| Sumber Temuan | Cakupan Modul | Total ID | CLOSED / FIXED | DUPLICATE / KNOWN | PARTIAL | OPEN / TBD |
+| Sumber Temuan | Cakupan Modul | Total ID | CLOSED / FIXED | DUPLICATE / KNOWN | PARTIAL | OPEN |
 |---|---|---:|---:|---:|---:|---:|
 | **Track A** | Modul 01–05 (DataAccess, Config, Utils, Domain, Ingress) | **96** | 10 | 2 | 3 | 81 |
 | **S4 Gap Audit** | Modul 06, 12, 15, 16 (StateMachine, FollowUp, AdminAPI, Delivery) | **50** | 1 (DEL-03) | 2 (API-04, DEL-04) | 0 | 47 |
-| **Track B** | Modul 07–14 (Gateway, V3 AI, Cron, Settings, Web App, Tracking) | **122** | *TBD (F1.2)* | *TBD (F1.2)* | *TBD (F1.2)* | 122 (*audit 2026-11-07*) |
-| **TOTAL KONSOLIDASI** | **16 Modul Lengkap** | **268** | **11** | **4** | **3** | **250** |
+| **Track B** | Modul 07–14 (Gateway, V3 AI, Cron, Settings, Web App, Tracking) | **122** | 10 | 3 | 2 | 107 |
+| **TOTAL KONSOLIDASI** | **16 Modul Lengkap** | **268** | **21** | **7** | **5** | **235** |
 
-*Catatan status awal:*
+*Catatan status terkini (Pasca-F0 & F1):*
 1. **Track A (96 item):** Telah selesai di-rebaseline pada Fase S3 (`docs/plans/TRACK_A_REBASELINE_2026-11-09.md`). Sebanyak 10 FIXED, 2 DUPLICATE (`CFG-06`, `CFG-07`), 3 PARTIAL (`CFG-03`, `UTL-13`, `ING-18`), dan 81 OPEN.
 2. **S4 (50 item):** Telah selesai diaudit pada Fase S4 (`docs/MODULE_AUDIT_06/12/15/16`). Sebanyak 1 FIXED (`DEL-03` via commit `d227c947`), 2 KNOWN by-design (`API-04` super-admin lintas tenant, `DEL-04` external hermes-net #196a), dan 47 OPEN.
-3. **Track B (122 item):** Berasal dari laporan audit deep-dive 2026-11-07 (`docs/audit/2026-11-07/`). Seluruh 122 item tercatat di sini dan akan diverifikasi ulang status aktualnya terhadap kode master terkini pada **Fase F1.2** (`docs/plans/TRACK_B_REBASELINE_7_14.md`).
+3. **Track B (122 item):** Telah selesai di-rebaseline pada Fase F1.2 (`docs/plans/TRACK_B_REBASELINE_7_14.md`). Sebanyak 10 FIXED (`S-004`, `S-005`, `Ar-002`, `Ar-006`, `W-002`, `W-003`, `W-005`, `K-011`, `Cfg-006`, `Cfg-016`), 3 DUPLICATE (`S-04`, `K-003`, `Cfg-005`), 2 PARTIAL (`Ar-001`, `C-009`), dan 107 OPEN.
+4. **Modul 11 (Customer/Catalog/Location):** Telah selesai diaudit mendalam pada Fase F1.1 (`docs/MODULE_AUDIT_11_CUSTOMER_CATALOG_LOCATION.md`, 12 temuan CCL-01 s.d. CCL-12). Sebagian besar telah beririsan dengan Track A (D-02, D-03, CFG-05, UTL-04, dll.).
+5. **Net Remediasi Backlog:** Dari 268 temuan terdaftar, terdapat **235 temuan OPEN** yang siap diremediasi secara terstruktur pada Fase F2 (P0/P1), F3 (Struktural), dan F4 (P2/P3).
 
 ---
 
