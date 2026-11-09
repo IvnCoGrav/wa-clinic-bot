@@ -1,7 +1,7 @@
 # PLAN PENYELESAIAN AUDIT — 2026-11-09
 
 - **Status:** **S0–S5 SELESAI** (S5.1 `LiveChatMonitor` 1.211 baris; S5.2 katalog data-driven + seed eksplisit; **S6 verifikasi lokal PASS**). **Seed/deploy produksi menunggu operator.**
-- **Baseline:** `f3c6a2c4` (`master`); hasil S0–S4 di `6c368452`; koreksi pasca-review S4 terdaftar di `docs/KNOWN_ISSUES.md` #321.
+- **Baseline:** `f3c6a2c4` (`master`); hasil S0–S4 di `6c368452`; S5.2 di `b45f9d46`; koreksi pasca-review S4 terdaftar di `docs/KNOWN_ISSUES.md` #321.
 - **Dasar konsolidasi:** `docs/plans/AUDIT_CONSOLIDATION_2026-11-09.md`.
 - **Sumber audit:** Track B (`docs/audit/2026-11-07/*`, `FIXING_PLAN_AUDIT_2026-11-07.md`) dan Track A (`docs/MODULE_AUDIT_01..05`).
 - **Prinsip wajib:** fondasional (DB/state/tool contract), tenant-aware, TDD (test merah dulu), tanpa dependency runtime baru, tanpa solusi “DILARANG...” di prompt sebagai pengganti gerbang kode, regression gate per fase.
