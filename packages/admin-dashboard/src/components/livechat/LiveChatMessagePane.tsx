@@ -45,7 +45,7 @@ import { MessagePinBanner, PinnedMessageData } from './MessagePinBanner';
 import { LiveChatComposer, LiveChatComposerHandle, ComposerQuickReply } from './LiveChatComposer';
 import { MediaImage, ChatMediaData } from '../common/MediaImage';
 import { VoiceNotePlayer } from '../common/VoiceNotePlayer';
-import { renderHighlightedText } from '../../utils/livechatSearch';
+import { renderFormattedMessageContent } from '../../utils/livechatSearch';
 import {
   formatChatDateSeparator,
   isDifferentDay,
@@ -1418,7 +1418,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                                       />
                                       {videoData.caption && (
                                         <span className="block mt-1 text-[11px] text-ink break-words">
-                                          {(effectiveInChatQuery || searchQuery) ? renderHighlightedText(videoData.caption, effectiveInChatQuery || searchQuery) : videoData.caption}
+                                          {renderFormattedMessageContent(videoData.caption, effectiveInChatQuery || searchQuery)}
                                         </span>
                                       )}
                                     </div>
@@ -1511,7 +1511,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                                     }
                                     return (
                                       <p className="font-sans whitespace-pre-wrap select-text cursor-text">
-                                        {renderHighlightedText(displayText, effectiveInChatQuery || searchQuery)}
+                                        {renderFormattedMessageContent(displayText, effectiveInChatQuery || searchQuery)}
                                       </p>
                                     );
                                   })()}

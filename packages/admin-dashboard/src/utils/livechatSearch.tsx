@@ -1,5 +1,73 @@
 import React from 'react';
+import { ExternalLink } from 'lucide-react';
 import { extractImageCaption } from './mediaExtractor';
+
+/**
+ * Pisahkan tanda baca akhir dari URL agar tautan tidak menyerap titik/koma
+ * kalimat. Kurung tutup hanya dipertahankan bila berpasangan (mis. URL Wikipedia).
+ */
+function trimUrlTrailingPunctuation(raw: string): { url: string; trailing: string } {
+  let url = raw;
+  let trailing = '';
+  const alwaysTrailing = /[.,;:!?'"]$/;
+  while (url && alwaysTrailing.test(url)) {
+    trailing = url.slice(-1) + trailing;
+    url = url.slice(0, -1);
+  }
+  const pairs: Array<[string, string]> = [['(', ')'], ['[', ']']];
+  for (const [open, close] of pairs) {
+    while (
+      url.endsWith(close) &&
+      url.split(open).length < url.split(close).length
+    ) {
+      trailing = close + trailing;
+      url = url.slice(0, -1);
+    }
+  }
+  return { url, trailing };
+}
+
+/**
+ * Render teks pesan LiveChat dengan tautan yang bisa diklik.
+ * - URL http(s) dan www. dirender sebagai <a target="_blank" rel="noopener noreferrer">.
+ * - Segmen non-URL tetap memakai renderHighlightedText agar fitur pencarian aman.
+ */
+export function renderFormattedMessageContent(text: string, query?: string): React.ReactNode {
+  if (!text) return text;
+  const parts = text.split(/((?:https?:\/\/|www\.)[^\s<]+)/gi);
+  if (parts.length <= 1) return renderHighlightedText(text, query || '');
+
+  return parts.map((part, index) => {
+    if (!part) return null;
+    const isUrl = /^(?:https?:\/\/|www\.)/i.test(part);
+    if (!isUrl) {
+      return (
+        <React.Fragment key={`text-${index}`}>
+          {renderHighlightedText(part, query || '')}
+        </React.Fragment>
+      );
+    }
+
+    const { url, trailing } = trimUrlTrailingPunctuation(part);
+    if (!url) return part;
+    const href = /^www\./i.test(url) ? `https://${url}` : url;
+    return (
+      <React.Fragment key={`url-${index}`}>
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-accent underline hover:text-accent-hover break-all inline-flex items-center gap-0.5 cursor-pointer font-medium"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {url}
+          <ExternalLink size={10} className="shrink-0 opacity-70" />
+        </a>
+        {trailing}
+      </React.Fragment>
+    );
+  });
+}
 
 export function renderHighlightedText(text: string, query: string): React.ReactNode {
   if (!query || !query.trim() || !text) return text;

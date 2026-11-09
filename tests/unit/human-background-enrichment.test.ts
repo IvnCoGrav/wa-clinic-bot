@@ -9,6 +9,7 @@ vi.mock('../../src/services/customer.service', () => ({
     updateCustomerLocation: vi.fn(),
     updateCustomer: vi.fn(),
     markShareLocationSent: vi.fn(),
+    updateCustomerZipcodeIfEmpty: vi.fn().mockResolvedValue(true),
   },
 }));
 

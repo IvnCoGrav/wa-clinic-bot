@@ -9,6 +9,7 @@ import { TEMPLATES } from '../../config/persona';
 import { extractGoogleMapsUrls, resolveGoogleMapsUrl } from '../../utils/google-maps-url-resolver';
 import { extractPinCoordinates } from '../../utils/pin-coordinates';
 import { isLocationConfirmationAffirmative } from '../state/location-helpers';
+import { resolveZipcode } from '../../utils/gazetteer-zipcode-resolver';
 
 export interface CartSnapshotItem {
   name: string;
@@ -58,6 +59,8 @@ export interface CalculateDeliveryInput {
     kota?: string;
     lat?: number;
     lng?: number;
+    /** Kode pos kandidat Google (dipakai saat kandidat dikonfirmasi customer). */
+    zipcode?: string;
   };
   /** Teks pesan user turn ini (untuk evaluasi afirmasi kandidat lokasi). */
   incomingText?: string;
@@ -228,6 +231,12 @@ export interface CalculateDeliveryOutput {
   /** Internal-only: jarak km asli bila disembunyikan dari payload LLM. */
   __internalDistanceKm?: number;
   /**
+   * Internal-only: kode pos hasil reverse geocode / gazetteer. Dipakai
+   * tool-pipeline untuk mengisi Customer.zipcode; DILARANG ikut payload LLM
+   * (prefix `__internal` di-strip oleh buildLlmSafeToolPayload).
+   */
+  __internalZipcode?: string;
+  /**
    * Internal-only: kandidat lokasi Google yang menunggu verifikasi customer
    * (insiden Demak 2026-10-03). Dibaca tool-pipeline untuk menulis
    * `session.pendingLocation`, lalu di-STRIP dari payload LLM (prefix
@@ -239,6 +248,7 @@ export interface CalculateDeliveryOutput {
     kota?: string;
     lat?: number;
     lng?: number;
+    zipcode?: string;
   };
 }
 
@@ -267,6 +277,30 @@ export function applyFeeInformationHiding(
     __internalOngkirPromo: output.ongkirPromo,
     __internalDistanceKm: output.distanceKm,
   };
+}
+
+/**
+ * Resolusi kode pos deterministik untuk satu titik/wilayah.
+ * Prioritas: kode pos presisi dari reverse geocode (bila ada), lalu gazetteer
+ * (kelurahan+kecamatan, kecamatan, atau free-text). Tidak pernah melempar error
+ * ke alur chat — kode pos adalah enrichment non-kritis.
+ */
+function resolveZipcodeForLocation(input: {
+  kelurahan?: string | null;
+  kecamatan?: string | null;
+  kota?: string | null;
+  text?: string | null;
+}): string | undefined {
+  try {
+    return resolveZipcode({
+      kelurahan: input.kelurahan || undefined,
+      kecamatan: input.kecamatan || undefined,
+      kota: input.kota || undefined,
+      text: input.text || undefined,
+    }) || undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export const CALCULATE_DELIVERY_TOOL_SCHEMA = {
@@ -480,6 +514,12 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
       isOutOfCoverage,
       suggestedTemplateReply: saTemplateWithRecap,
       message: saRecap ? `${saMessageBase}\n\n${saRecap.block}` : saMessageBase,
+      __internalZipcode: resolveZipcodeForLocation({
+        kelurahan: sa.kelurahan,
+        kecamatan: sa.kecamatan,
+        kota: sa.kota,
+        text: sa.address,
+      }),
     };
     return applyFeeInformationHiding(saOutput, showFeeNominal);
   }
@@ -578,6 +618,12 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
           isOutOfCoverage,
           suggestedTemplateReply: urlTemplate,
           message: urlMessage,
+          __internalZipcode: reversed?.zipcode || resolveZipcodeForLocation({
+            kelurahan: reversed?.kelurahan,
+            kecamatan: reversed?.kecamatan,
+            kota: reversed?.kota,
+            text: compositeQuery,
+          }),
         };
         return applyFeeInformationHiding(urlOutput, urlShowFeeNominal);
       }
@@ -656,6 +702,12 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
         isOutOfCoverage,
         suggestedTemplateReply: pinTemplateWithRecap,
         message: pinMessage,
+        __internalZipcode: reversed?.zipcode || resolveZipcodeForLocation({
+          kelurahan: reversed?.kelurahan,
+          kecamatan: reversed?.kecamatan,
+          kota: reversed?.kota,
+          text: locationText,
+        }),
       };
       return applyFeeInformationHiding(pinOutput, pinShowFeeNominal);
     }
@@ -703,6 +755,7 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
         kota: pendingLoc!.kota,
         lat: pendingLoc!.lat,
         lng: pendingLoc!.lng,
+        zipcode: pendingLoc!.zipcode,
         formattedAddress: `${pendingLoc!.kelurahan}, ${pendingLoc!.kecamatan || ''}, ${pendingLoc!.kota || ''}`.replace(/, \s*$/, ''),
       };
       console.log(JSON.stringify({ event: 'V3_LOCATION_CANDIDATE_CONFIRMED', tenantId, kelurahan: pendingLoc!.kelurahan, timestamp: new Date().toISOString() }));
@@ -740,6 +793,12 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
             kota: resolved.kota,
             lat: resolved.lat,
             lng: resolved.lng,
+            zipcode: resolved.zipcode || resolveZipcodeForLocation({
+              kelurahan: resolved.kelurahan,
+              kecamatan: resolved.kecamatan,
+              kota: resolved.kota,
+              text: compositeQuery,
+            }),
           },
         } as any;
       }
@@ -952,6 +1011,12 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
       isOutOfCoverage,
       suggestedTemplateReply,
       message: cartRecap ? `${textMessageBase}\n\n${cartRecap.block}` : textMessageBase,
+      __internalZipcode: resolved.zipcode || resolveZipcodeForLocation({
+        kelurahan: resolved.kelurahan,
+        kecamatan: resolved.kecamatan,
+        kota: resolved.kota,
+        text: compositeQuery,
+      }),
     };
     return applyFeeInformationHiding(mainOutput, showFeeNominal);
   } catch (error: any) {

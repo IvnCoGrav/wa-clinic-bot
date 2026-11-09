@@ -1,6 +1,5 @@
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { StateHandlerContext } from '../state-machine/types';
-import { extractGoogleMapsUrls, resolveGoogleMapsUrl } from '../utils/google-maps-url-resolver';
 import { parseAdminChatDistanceAndOngkir, parseAdminChatLocation } from '../utils/admin-chat-distance-parser';
 import { resolveZipcode } from '../utils/gazetteer-zipcode-resolver';
 import { buildAddressKey, resolveActiveAddress, parseSavedAddresses } from '../domain/customer-address';
@@ -36,30 +35,12 @@ async function tryEnrichZipcodeViaGazetteer(
   const gazZip = resolveZipcode({ kelurahan: kel, kecamatan: kec, kota, text: combinedText || namePart || addrFromPrefs });
   if (!gazZip) return null;
   try {
-    const { prisma } = await import('../db/client');
-    const existing = await prisma.customer.findUnique({ where: { id: customer.id }, select: { zipcode: true } });
-    if (existing && !existing.zipcode) {
-      await prisma.customer.update({ where: { id: customer.id }, data: { zipcode: gazZip } });
-    } else if (!existing) {
-      // memory fallback
-      const { customerService } = await import('./customer.service');
-      const mem = (customerService as any).getMemoryCustomers?.();
-      if (mem) {
-        for (const [, c] of mem.entries()) {
-          if (c.id === customer.id && !c.zipcode) { c.zipcode = gazZip; break; }
-        }
-      }
-    }
+    // Seam kanonis: DB + fallback memori + guard tenant ditangani customerService.
+    const { customerService } = await import('./customer.service');
+    await customerService.updateCustomerZipcodeIfEmpty(customer.id, gazZip, tenantId);
     console.log(`[HUMAN ENRICH ZIP] Gazetteer fill ${gazZip} for ${customer.phone} (kec=${kec || '-'}, text="${(combinedText || '').slice(0,40)}")`);
   } catch (_) {
-    // best-effort, ignore
-    try {
-      const { customerService } = await import('./customer.service');
-      const mem = (customerService as any).getMemoryCustomers?.();
-      if (mem) {
-        for (const [, c] of mem.entries()) if (c.id === customer.id && !c.zipcode) { c.zipcode = gazZip; break; }
-      }
-    } catch {}
+    // best-effort, ignore — enrichment non-kritis
   }
   // Mutate in-memory customer object agar caller lihat update langsung
   if (!customer.zipcode) customer.zipcode = gazZip;
@@ -320,10 +301,12 @@ export class HumanBackgroundEnrichmentService {
       // 2. DETEKSI LINK GOOGLE MAPS DI DALAM CHAT ATAU ALAMAT (maps.app.goo.gl / goo.gl/maps)
       if (incomingText && incomingText.trim()) {
         try {
-          const { resolveLocationFromUrl } = await import('./location-resolver.service');
+          const { resolveFirstMapsUrlInText } = await import('./location-resolver.service');
           const { customerService } = await import('./customer.service');
-          const res = await resolveLocationFromUrl(incomingText, tid);
-          if (res.success && res.lat != null && res.lng != null) {
+          // Ekstrak URL Maps dari teks bebas (kata pengantar/emoji/tanda baca)
+          // dan coba semua kandidat — bukan melempar teks utuh ke new URL().
+          const res = await resolveFirstMapsUrlInText(incomingText, tid);
+          if (res && res.success && res.lat != null && res.lng != null) {
             // Provenance: koordinat presisi langsung dari URL (`url_coords`) = pin GPS asli
             // (invarian sticky-gps: "shareloc / link Maps" berstatus VERIFIED_GPS) → kunci GPS
             // + tandai share_location_sent. Teks tempat dari URL yang di-geocode

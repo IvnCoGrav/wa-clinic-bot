@@ -44,6 +44,7 @@ export interface ToolExecutionContext {
     kota?: string;
     lat?: number;
     lng?: number;
+    zipcode?: string;
   };
   /** Teks pesan user turn ini (evaluasi afirmasi kandidat lokasi). */
   incomingText?: string;

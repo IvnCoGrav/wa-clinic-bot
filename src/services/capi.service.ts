@@ -1088,38 +1088,67 @@ export class CapiService {
           const prefs = (fullCustomer as any)?.preferences || {};
           const addrText = (prefs.address || prefs.full_address || (fullCustomer as any)?.address || '').trim();
           const nameText = (fullCustomer?.name || '').trim();
+
+          // Fallback historis: `raw_text` reservasi sering memuat "Kec: Waru"
+          // saat kolom kecamatan/address belum terisi. Ambil reservasi yang
+          // dikirim (reservationId) atau reservasi terakhir customer.
+          let reservationText = '';
+          let reservationKec = '';
+          let reservationKota = '';
+          try {
+            const res = reservationId
+              ? await prisma.reservation.findFirst({
+                  where: {
+                    id: reservationId,
+                    ...(tenantId ? { tenant_id: tenantId } : {}),
+                  },
+                  select: { raw_text: true },
+                })
+              : fullCustomer?.id
+                ? await prisma.reservation.findFirst({
+                    where: {
+                      customer_id: fullCustomer.id,
+                      ...(tenantId ? { tenant_id: tenantId } : {}),
+                      status: { not: 'cancelled' },
+                    },
+                    orderBy: { created_at: 'desc' },
+                    select: { raw_text: true },
+                  })
+                : null;
+            if (res?.raw_text) {
+              reservationText = String(res.raw_text);
+              const { parseReservationText } = await import('../utils/reservation-text-parser');
+              const pr = parseReservationText(reservationText);
+              if (pr.success && pr.reservation) {
+                reservationKec = pr.reservation.kec || '';
+                reservationKota = pr.reservation.kota || '';
+              }
+            }
+          } catch {
+            // DB offline / reservasi tidak ada — tetap coba data customer.
+          }
+
           const gazInput = {
             kelurahan: (fullCustomer?.kelurahan || fullCustomer?.pending_kelurahan || '') as string,
-            kecamatan: (fullCustomer?.kecamatan || fullCustomer?.pending_kecamatan || '') as string,
-            kota: (fullCustomer?.kota || fullCustomer?.pending_kota || '') as string,
-            text: `${nameText} ${addrText}`.trim(),
+            kecamatan: (fullCustomer?.kecamatan || fullCustomer?.pending_kecamatan || reservationKec || '') as string,
+            kota: (fullCustomer?.kota || fullCustomer?.pending_kota || reservationKota || '') as string,
+            text: `${nameText} ${addrText} ${reservationText}`.trim(),
           };
           gazetteerZip = resolveZipcode(gazInput);
           if (gazetteerZip) {
             rawZip = gazetteerZip;
-            // Non-blocking async persist (non-destruktif: hanya jika zipcode IS NULL)
             const custId = fullCustomer?.id;
             if (custId) {
+              // Seam kanonis: non-destruktif + fallback memori + tenant guard.
               void (async () => {
                 try {
-                  const { prisma: p } = await import('../db/client');
-                  const existing = await p.customer.findUnique({ where: { id: custId }, select: { zipcode: true } });
-                  if (existing && !existing.zipcode) {
-                    await p.customer.update({ where: { id: custId }, data: { zipcode: gazetteerZip } });
-                    console.log(`[CAPI ZIP ENRICH] Persisted gazetteer zip ${gazetteerZip} for customer ${custId}`);
-                  }
-                } catch (e: any) {
-                  // Fallback memory store when DB offline (tests)
-                  try {
-                    const { customerService } = await import('./customer.service');
-                    const mem = (customerService as any).getMemoryCustomers?.();
-                    if (mem) {
-                      for (const [, c] of mem.entries()) {
-                        if (c.id === custId && !c.zipcode) { c.zipcode = gazetteerZip; break; }
-                      }
-                    }
-                  } catch {}
-                }
+                  const { customerService } = await import('./customer.service');
+                  await customerService.updateCustomerZipcodeIfEmpty(
+                    custId,
+                    gazetteerZip,
+                    tenantId || fullCustomer?.tenant_id || DEFAULT_TENANT_ID
+                  );
+                } catch {}
               })();
             }
             console.log(`[CAPI] zp enriched via Gazetteer: ${gazetteerZip} (kec=${gazInput.kecamatan || '-'}, text="${gazInput.text.slice(0, 40)}")`);

@@ -120,6 +120,23 @@ export class ReservationLifecycleService {
         }
         }
 
+        // Isi zipcode non-destruktif dari wilayah reservasi (kolom + gazetteer).
+        // Ini menutup kasus form yang hanya memuat "Kec: Waru" tanpa kolom zip.
+        try {
+          const { resolveZipcode } = await import('../utils/gazetteer-zipcode-resolver');
+          const zip = resolveZipcode({
+            kelurahan: kelurahan?.trim() || undefined,
+            kecamatan: kecamatan?.trim() || undefined,
+            kota: kota?.trim() || undefined,
+            text: [address, kelurahan, kecamatan, kota].filter(Boolean).join(' '),
+          });
+          if (zip) {
+            await customerService.updateCustomerZipcodeIfEmpty(customerId, zip, tenantId);
+          }
+        } catch (zipErr: any) {
+          console.warn('[RESERVATION LIFECYCLE] zipcode enrichment failed:', zipErr?.message);
+        }
+
         // Background Auto-Distance Calculation jika customer belum memiliki distance_km
         const custForDistance = await customerService.getCustomerById(customerId, tenantId);
         if (custForDistance && (custForDistance.distance_km == null || custForDistance.lat == null)) {
@@ -133,6 +150,7 @@ export class ReservationLifecycleService {
               let resolvedKel = kelurahan?.trim();
               let resolvedKec = kecamatan?.trim();
               let resolvedKota = kota?.trim();
+              let resolvedZip: string | undefined;
 
               if (mapsUrls.length > 0) {
                 const mapsRes = await resolveGoogleMapsUrl(mapsUrls[0]);
@@ -151,6 +169,7 @@ export class ReservationLifecycleService {
                   resolvedKel = resolvedKel || geo.kelurahan;
                   resolvedKec = resolvedKec || geo.kecamatan;
                   resolvedKota = resolvedKota || geo.kota;
+                  resolvedZip = geo.zipcode;
                 }
               }
 
@@ -191,11 +210,23 @@ export class ReservationLifecycleService {
                   resolvedKel = resolvedKel || (kelMentioned ? kelFromGaz : undefined);
                   resolvedKec = resolvedKec || gz.kecamatan;
                   resolvedKota = resolvedKota || gz.kota;
+                  resolvedZip = resolvedZip || gz.zipcode;
                   break;
                 }
               }
 
               if (resolvedLat && resolvedLng) {
+                if (!resolvedZip) {
+                  try {
+                    const { resolveZipcode } = await import('../utils/gazetteer-zipcode-resolver');
+                    resolvedZip = resolveZipcode({
+                      kelurahan: resolvedKel,
+                      kecamatan: resolvedKec,
+                      kota: resolvedKota,
+                      text: fullAddressStr,
+                    }) || undefined;
+                  } catch {}
+                }
                 const { deliveryService } = await import('./delivery.service');
                 const delivery = await deliveryService.calculateDelivery({ lat: resolvedLat, lng: resolvedLng }, undefined, tenantId);
                 await customerService.updateCustomerLocation(customerId, {
@@ -208,6 +239,7 @@ export class ReservationLifecycleService {
                   distanceKm: delivery.distanceKm,
                   ongkir: delivery.ongkir,
                   isOutOfCoverage: delivery.isOutOfCoverage,
+                  zipcode: resolvedZip,
                 }, tenantId);
                 console.log(`[RESERVATION LIFECYCLE] Auto-resolved distance for customer ${customerId}: ${delivery.distanceKm} km, ongkir: ${delivery.ongkir}`);
               }

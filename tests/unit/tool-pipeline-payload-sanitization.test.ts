@@ -23,6 +23,17 @@ describe('Fase 2.1 — buildLlmSafeToolPayload pure structured data', () => {
     expect(safe.message).not.toContain('Format penyampaian');
   });
 
+  it('calculate_delivery: __internalZipcode DILARANG bocor ke payload LLM', () => {
+    const raw = {
+      success: true,
+      kelurahan: 'Sawotratap',
+      __internalZipcode: '61254',
+    };
+    const safe = ToolExecutionPipeline.buildLlmSafeToolPayload('calculate_delivery', raw);
+    expect(safe).not.toHaveProperty('__internalZipcode');
+    expect(JSON.stringify(safe)).not.toContain('61254');
+  });
+
   it('get_catalog: suggestedConsultationReply removed', () => {
     const raw = { suggestedConsultationReply: 'Pilihan yang bagus ...', pricingBreakdown: { promoPrice: 70000 } };
     const safe = ToolExecutionPipeline.buildLlmSafeToolPayload('get_catalog_and_price', raw);

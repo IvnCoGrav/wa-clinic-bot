@@ -694,6 +694,56 @@ export class CustomerService {
   }
 
   /**
+   * Seam kanonis pengisian kode pos (non-destruktif).
+   *
+   * Hanya mengisi `Customer.zipcode` bila masih kosong. DILARANG menimpa kode
+   * pos yang sudah ada. Dipakai oleh pipeline chat, enrichment background,
+   * CAPI, dan lifecycle reservasi agar hanya ada satu jalur tulis kode pos.
+   */
+  public async updateCustomerZipcodeIfEmpty(
+    customerId: string,
+    zipcode: string | null | undefined,
+    tenantId: string = DEFAULT_TENANT_ID
+  ): Promise<boolean> {
+    const zip = String(zipcode ?? '').trim();
+    // Kode pos Indonesia = 5 digit. Tolak nilai kosong/placeholder.
+    if (!customerId || !/^\d{5}$/.test(zip)) return false;
+
+    const applyToMemory = (): boolean => {
+      for (const [, cust] of memoryCustomers.entries()) {
+        if (cust?.id === customerId && cust?.tenant_id === tenantId) {
+          if (cust.zipcode) return false;
+          cust.zipcode = zip;
+          cust.updated_at = new Date();
+          return true;
+        }
+      }
+      return false;
+    };
+
+    try {
+      const updated = await prisma.customer.updateMany({
+        where: {
+          id: customerId,
+          tenant_id: tenantId,
+          OR: [{ zipcode: null }, { zipcode: '' }],
+        },
+        data: { zipcode: zip },
+      });
+      return updated.count > 0;
+    } catch (error) {
+      if (!isTestRuntime()) {
+        console.error(
+          '[CustomerService] updateCustomerZipcodeIfEmpty DB failed (best-effort):',
+          (error as Error)?.message
+        );
+        return false;
+      }
+      return applyToMemory();
+    }
+  }
+
+  /**
    * Best-effort: selaraskan jadwal aktif ke alamat pelanggan terkini setelah
    * lokasi berubah. Delegasi penuh ke seam kanonis reservation-address-sync
    * (single source of truth) — tidak menduplikasi logika di sini.

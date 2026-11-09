@@ -676,6 +676,7 @@ export class ToolExecutionPipeline {
         seenChunkKeys: input.seenChunkKeys,
         retrievedChunks: input.retrievedChunks,
         savedAddressSnapshot: toolContext.savedAddressSnapshot,
+        customerId: input.customerId,
       });
       session = reduced.session;
       if (fnName === 'escalate_to_human') isEscalated = true;
@@ -717,8 +718,10 @@ export class ToolExecutionPipeline {
     retrievedChunks: V3RetrievedChunk[];
     /** Alamat tersimpan terpilih turn ini (dari toolContext; null bila tak dipilih). */
     savedAddressSnapshot?: ToolExecutionContext['savedAddressSnapshot'];
+    /** Customer pemilik percakapan; dipakai untuk persistensi zipcode. */
+    customerId?: string;
   }): Promise<{ session: CustomerGoalSession }> {
-    const { fnName, fnArgs, toolResult, tenantId, conversationId, cleanIncomingText } = args;
+    const { fnName, fnArgs, toolResult, tenantId, conversationId, cleanIncomingText, customerId } = args;
     let { session } = args;
     const savedHit = args.savedAddressSnapshot;
 
@@ -766,6 +769,20 @@ export class ToolExecutionPipeline {
           isOutOfCoverage: toolResult.isOutOfCoverage,
         },
       }, tenantId);
+      // Persistensi zipcode: satu seam kanonis non-destruktif. Kode pos dipakai
+      // Meta CAPI (advanced matching) dan tidak perlu hidup di state prompt.
+      if (toolResult.__internalZipcode && customerId) {
+        try {
+          const { customerService } = await import('../../../services/customer.service');
+          await customerService.updateCustomerZipcodeIfEmpty(
+            customerId,
+            toolResult.__internalZipcode,
+            tenantId
+          );
+        } catch {
+          // Enrichment non-kritis: jangan gagalkan alur chat.
+        }
+      }
       // Buku alamat (Fase 3): pilihan rumah tersimpan DIKUNCI ke sesi agar
       // save_reservation pada giliran berikutnya tahu titik kunjungan mana
       // yang disepakati. Lokasi baru (bukan pilihan tersimpan) → kunci dibuka.

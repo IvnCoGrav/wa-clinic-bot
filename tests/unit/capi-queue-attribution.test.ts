@@ -145,6 +145,47 @@ describe('GET /api/admin/capi-queue — otoritas ordinal & moderasi Lead', () =>
     expect(item.purchase_review_status).toBe('ignored_outlier');
   });
 
+  it('Zipcode preview: fallback dari raw_text "Kec: Waru" tanpa menulis DB', async () => {
+    vi.mocked(prisma.reservation.findMany).mockImplementation(async (args: any) => {
+      if (args?.select?.customer_id) {
+        return [{ id: 'res-zip-preview', customer_id: 'cust-zip-preview', created_at: NOW }] as any;
+      }
+      return [
+        mainRow({
+          id: 'res-zip-preview',
+          customer_id: 'cust-zip-preview',
+          raw_text: 'Kec : Waru\nKota : Sidoarjo\nTreatment : pijat bayi',
+          customer: {
+            id: 'cust-zip-preview',
+            name: 'Bunda Zip Preview',
+            phone: '628123456704',
+            zipcode: null,
+            pending_zipcode: null,
+            kelurahan: null,
+            kecamatan: null,
+            kota: null,
+            distance_km: null,
+            adClick: null,
+            children: [],
+          },
+        }),
+      ] as any;
+    });
+    vi.mocked(prisma.tenant.findUnique).mockResolvedValue(null as any);
+    vi.mocked(prisma.customer.findMany).mockResolvedValue([] as any);
+    (prisma as any).auditLog.findMany.mockResolvedValue([]);
+
+    const res = await app.inject({ method: 'GET', url: '/api/admin/capi-queue', headers: HEADERS });
+    expect(res.statusCode).toBe(200);
+    const item = JSON.parse(res.body).data.find((d: any) => d.id === 'res-zip-preview');
+
+    expect(item.customer.zipcode).toBe('61256');
+    const zipWrites = vi.mocked(prisma.customer.updateMany).mock.calls.filter(
+      ([arg]: any[]) => arg?.data?.zipcode
+    );
+    expect(zipWrites).toHaveLength(0);
+  });
+
   it('Kontrak de-duplikasi: query Lead (unsent & riwayat) mengecualikan customer yang sudah closing', async () => {
     vi.mocked(prisma.reservation.findMany).mockResolvedValue([] as any);
     vi.mocked(prisma.tenant.findUnique).mockResolvedValue(null as any);

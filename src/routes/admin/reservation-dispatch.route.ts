@@ -24,6 +24,7 @@ import {
   mergeNotesIntoRawText,
 } from '../../utils/reservation-text-parser';
 import { parsePaymentSection } from '../../utils/conversation-transaction-extractor';
+import { resolveZipcode } from '../../utils/gazetteer-zipcode-resolver';
 import { isValidChildName } from '../../utils/name-sanitizer';
 import { classifyPatientEntity } from '../../utils/reservation-text-parser';
 import { isPrematureCompletion } from '../../domain/reservation-status';
@@ -2999,6 +3000,41 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
 
           const childName = (r.customer as any)?.children?.[0]?.name || null;
 
+          const customerKota =
+            r.customer?.kota || (r.customer as any)?.pending_kota || null;
+          const customerKecamatan =
+            r.customer?.kecamatan || (r.customer as any)?.pending_kecamatan || null;
+          let customerZipcode =
+            r.customer?.zipcode || (r.customer as any)?.pending_zipcode || null;
+          if (!customerZipcode) {
+            // Pratinjau saja: utamakan kolom wilayah, lalu ekstrak "Kec/Kota"
+            // dari formulir reservasi. TIDAK menulis DB di endpoint GET;
+            // persist terjadi di seam CAPI/reservasi.
+            let previewKecamatan = customerKecamatan;
+            let previewKota = customerKota;
+            const previewKelurahan =
+              r.customer?.kelurahan || (r.customer as any)?.pending_kelurahan || null;
+            if ((!previewKecamatan || !previewKota) && r.raw_text) {
+              try {
+                const parsedPreview = parseReservationText(r.raw_text);
+                if (parsedPreview.success && parsedPreview.reservation) {
+                  previewKecamatan = previewKecamatan || parsedPreview.reservation.kec || null;
+                  previewKota = previewKota || parsedPreview.reservation.kota || null;
+                }
+              } catch {}
+            }
+            try {
+              customerZipcode = resolveZipcode({
+                kelurahan: previewKelurahan || undefined,
+                kecamatan: previewKecamatan || undefined,
+                kota: previewKota || undefined,
+                text: [r.customer?.name, r.raw_text].filter(Boolean).join(' '),
+              }) || null;
+            } catch {
+              customerZipcode = null;
+            }
+          }
+
           return {
             id: r.id,
             status: r.status,
@@ -3026,9 +3062,9 @@ export async function reservationDispatchRoutes(fastify: FastifyInstance) {
               id: r.customer?.id,
               name: r.customer?.name || 'Bunda',
               phone: r.customer?.phone || '',
-              kota: r.customer?.kota || (r.customer as any)?.pending_kota || null,
-              kecamatan: r.customer?.kecamatan || (r.customer as any)?.pending_kecamatan || null,
-              zipcode: r.customer?.zipcode || (r.customer as any)?.pending_zipcode || null,
+              kota: customerKota,
+              kecamatan: customerKecamatan,
+              zipcode: customerZipcode,
             },
             attribution: {
               isPaid: !!r.customer?.adClick,

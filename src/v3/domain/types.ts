@@ -124,6 +124,8 @@ export interface CustomerGoalSession {
     kota?: string;
     lat?: number;
     lng?: number;
+    /** Kode pos kandidat Google; dipakai saat kandidat dikonfirmasi customer. */
+    zipcode?: string;
   };
   /** Subjek layanan: MOMS (ibu), BABY/KIDS (anak), BOTH (Mom & Baby bundle). */
   targetAudience?: TargetAudienceType;

@@ -5,6 +5,7 @@ import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
 import { MediaImage, ChatMediaData } from '../common/MediaImage';
 import { extractMedia, resolveMessageDisplayText } from '../../utils/mediaExtractor';
+import { renderFormattedMessageContent } from '../../utils/livechatSearch';
 import {
   formatChatDateSeparatorWib,
   isDifferentDayWib,
@@ -296,7 +297,11 @@ export const ChatHistoryModal: React.FC<ChatHistoryModalProps> = ({
                         {(() => {
                           const displayText = resolveMessageDisplayText({ content: msg.content, media });
                           if (!displayText) return null;
-                          return <p className="whitespace-pre-wrap break-words">{displayText}</p>;
+                          return (
+                            <p className="whitespace-pre-wrap break-words">
+                              {renderFormattedMessageContent(displayText)}
+                            </p>
+                          );
                         })()}
                       </div>
                     </div>
