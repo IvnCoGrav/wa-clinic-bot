@@ -3,6 +3,19 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 322. [Remediasi F0–F3.1] 2 Regresi Test + 12 Status FIXED Belum Tuntas (2026-11-09, OPEN)
+
+- **Status:** OPEN — temuan audit eksekusi F0–F3.1; perbaikan belum dieksekusi.
+- **Laporan lengkap:** `docs/audit/2026-11-09/AUDIT_EXECUTION_F0_F3_1.md`.
+- **Gate:** full suite **6.834 test / 6.802 lulus / 4 gagal / 28 skip** — 2 pre-existing #287 + **2 regresi baru** `customer-profile-edit-drift` (mock test belum mengikuti `CustomerRepository` seam).
+- **Klaim FIXED yang belum tuntas:**
+  - `SM-03` (memoryConversations masih unbounded), `SM-04` (reset sesi belum transaksional), `SM-07` (kontrak `MessageTransport.sendText` masih boolean; WABA kehilangan `messageId`), `SM-14` (loop `getCustomerById` serial).
+  - `SM-02` parsial (literal form masih di `reservation-text-parser.ts`).
+  - `D-02` (2 `prisma.customer.update` langsung tersisa), `D-03` (`tenantId` masih opsional di repository).
+  - `FN-02` (in-flight tidak dibersihkan saat send gagal), `CFG-04` (`businessName` dihitung tetapi tidak diteruskan ke template), `DEL-01` (CI `npm test` merah pada known failures), `DEL-07` (backup masih `tar.gz` tanpa enkripsi), `UTL-04` (allowlist `google.<tld>` longgar).
+- **Dampak:** angka 235 OPEN di `REMAINING_BACKLOG_2026-11-09.md` understated; minimal +12 item.
+- **Tindakan sebelum F3.2:** perbaiki regresi test, koreksi status backlog, tuntaskan/nyatakan partial, perbaiki CFG-04/FN-02/CI/backup, koreksi plan F3.2 (metrik basi: follow-up 2.898 baris, staff-notification 1.101, `(prisma as any)` 10).
+
 ## 321. [Audit S4] Gap Audit Modul 06/12/15/16 — 50 Temuan (2026-11-09, OPEN — 48 BARU + 2 KNOWN/BY-DESIGN)
 
 - **Status:** OPEN (audit read-only selesai; remediasi belum dieksekusi).
