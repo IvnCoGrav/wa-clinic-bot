@@ -1,4 +1,6 @@
 import { prisma } from '../db/client';
+import type { Customer } from '@prisma/client';
+import { normalizePhoneID } from '../utils/phone-normalizer';
 
 /**
  * customer.repository.ts — Seam persistensi customer (PLAN 8 FASE 5a).
@@ -31,10 +33,10 @@ export interface CustomerCreateData {
 }
 
 export interface CustomerRepository {
-  findByPhone(phone: string, tenantId: string): Promise<any | null>;
-  findById(id: string, tenantId: string): Promise<any | null>;
-  create(data: CustomerCreateData): Promise<any>;
-  update(id: string, patch: Record<string, unknown>, tenantId: string): Promise<any>;
+  findByPhone(phone: string, tenantId: string): Promise<Customer | null>;
+  findById(id: string, tenantId: string): Promise<Customer | null>;
+  create(data: CustomerCreateData): Promise<Customer>;
+  update(id: string, patch: Record<string, unknown>, tenantId: string): Promise<Customer>;
   /**
    * Update SEMUA record dalam SATU tenant dengan nomor ini (tenant-scoped).
    * Semantik setLabelFlags kini per-tenant (skema: @@unique([tenant_id, phone])).
@@ -44,35 +46,48 @@ export interface CustomerRepository {
 
 /** Adapter produksi: fail-closed — error DB dilempar, tanpa objek fiktif. */
 export class PostgresCustomerRepository implements CustomerRepository {
-  async findByPhone(phone: string, tenantId: string): Promise<any | null> {
-    const customer = await prisma.customer.findFirst({ where: { phone, tenant_id: tenantId } });
-    return customer ?? null;
+  async findByPhone(phone: string, tenantId: string): Promise<Customer | null> {
+    // D-08: Normalisasi nomor HP ke format kanonik E.164 (62xx)
+    const targetPhone = normalizePhoneID(phone) || phone;
+    const customer = await prisma.customer.findFirst({
+      where: { phone: targetPhone, tenant_id: tenantId },
+    });
+    if (customer) return customer as Customer;
+    if (targetPhone !== phone) {
+      const rawCustomer = await prisma.customer.findFirst({
+        where: { phone, tenant_id: tenantId },
+      });
+      if (rawCustomer) return rawCustomer as Customer;
+    }
+    return null;
   }
 
-  async findById(id: string, tenantId: string): Promise<any | null> {
+  async findById(id: string, tenantId: string): Promise<Customer | null> {
+    // D-10: Cek via findUnique primary key + isolasi tenant ketat
     const customer = await prisma.customer.findUnique({ where: { id } });
     if (!customer) return null;
     if (tenantId && (customer as any).tenant_id && (customer as any).tenant_id !== tenantId) return null;
-    return customer;
+    return customer as Customer;
   }
 
-  async create(data: CustomerCreateData): Promise<any> {
+  async create(data: CustomerCreateData): Promise<Customer> {
     const created = await prisma.customer.create({
       data: {
         tenant_id: data.tenant_id,
-        phone: data.phone,
+        phone: normalizePhoneID(data.phone) || data.phone,
         name: data.name ?? null,
         name_source: data.name_source ?? null,
         whatsapp_push_name: data.whatsapp_push_name ?? null,
         labels_synced_at: new Date(),
         is_sandbox_test: data.is_sandbox_test ?? false,
+        is_internal_staff: data.is_internal_staff ?? false, // D-09
       },
     });
     if (!created) throw new Error('Database create returned null/undefined');
-    return created;
+    return created as Customer;
   }
 
-  async update(id: string, patch: Record<string, unknown>, tenantId: string): Promise<any> {
+  async update(id: string, patch: Record<string, unknown>, tenantId: string): Promise<Customer> {
     const existing = await prisma.customer.findUnique({ where: { id } });
     if (!existing) throw new Error(`Customer ${id} not found`);
     if ((existing as any).tenant_id && (existing as any).tenant_id !== tenantId) {
@@ -83,11 +98,16 @@ export class PostgresCustomerRepository implements CustomerRepository {
       data: patch as any,
     });
     if (res.count === 0) throw new Error(`Customer ${id} not found for tenant ${tenantId}`);
-    return await prisma.customer.findUnique({ where: { id } });
+    return (await prisma.customer.findUnique({ where: { id } })) as Customer;
   }
 
   async updateManyByPhoneTenant(phone: string, tenantId: string, patch: Record<string, unknown>): Promise<number> {
-    const res = await prisma.customer.updateMany({ where: { phone, tenant_id: tenantId }, data: patch as any });
+    // D-08: Normalisasi nomor HP ke format kanonik E.164
+    const targetPhone = normalizePhoneID(phone) || phone;
+    const res = await prisma.customer.updateMany({
+      where: { phone: targetPhone, tenant_id: tenantId },
+      data: patch as any,
+    });
     return res?.count ?? 0;
   }
 }
@@ -96,21 +116,23 @@ export class PostgresCustomerRepository implements CustomerRepository {
 export class InMemoryCustomerRepository implements CustomerRepository {
   private store = new Map<string, any>();
 
-  async findByPhone(phone: string, tenantId: string): Promise<any | null> {
+  async findByPhone(phone: string, tenantId: string): Promise<Customer | null> {
+    const norm = normalizePhoneID(phone);
     for (const c of this.store.values()) {
-      if (c?.phone === phone && (!tenantId || c?.tenant_id === tenantId)) return c;
+      const matchPhone = c?.phone === phone || (norm && normalizePhoneID(c?.phone) === norm);
+      if (matchPhone && (!tenantId || c?.tenant_id === tenantId)) return c;
     }
     return null;
   }
 
-  async findById(id: string, tenantId: string): Promise<any | null> {
+  async findById(id: string, tenantId: string): Promise<Customer | null> {
     const c = this.store.get(id);
     if (!c) return null;
     if (tenantId && c.tenant_id && c.tenant_id !== tenantId) return null;
     return c;
   }
 
-  async create(data: CustomerCreateData): Promise<any> {
+  async create(data: CustomerCreateData): Promise<Customer> {
     const row = {
       id: `cust_${Date.now()}_${Math.random().toString(36).substring(7)}`,
       tenant_id: data.tenant_id,
@@ -123,15 +145,16 @@ export class InMemoryCustomerRepository implements CustomerRepository {
       is_out_of_coverage: false,
       status: 'active',
       is_sandbox_test: data.is_sandbox_test ?? false,
+      is_internal_staff: data.is_internal_staff ?? false, // D-09
       is_admin_labeled: false, is_hold_labeled: false,
       labels_synced_at: new Date(),
       created_at: new Date(), updated_at: new Date(),
     };
     this.store.set(row.id, row);
-    return row;
+    return row as unknown as Customer;
   }
 
-  async update(id: string, patch: Record<string, unknown>, tenantId: string): Promise<any> {
+  async update(id: string, patch: Record<string, unknown>, tenantId: string): Promise<Customer> {
     const existing = this.store.get(id);
     if (!existing) throw new Error(`InMemoryCustomerRepository: customer ${id} not found`);
     if (existing.tenant_id && existing.tenant_id !== tenantId) {
@@ -139,13 +162,15 @@ export class InMemoryCustomerRepository implements CustomerRepository {
     }
     const updated = { ...existing, ...patch, updated_at: new Date() };
     this.store.set(id, updated);
-    return updated;
+    return updated as unknown as Customer;
   }
 
   async updateManyByPhoneTenant(phone: string, tenantId: string, patch: Record<string, unknown>): Promise<number> {
+    const norm = normalizePhoneID(phone);
     let count = 0;
     for (const [id, c] of this.store.entries()) {
-      if (c?.phone === phone && (!tenantId || c?.tenant_id === tenantId)) {
+      const matchPhone = c?.phone === phone || (norm && normalizePhoneID(c?.phone) === norm);
+      if (matchPhone && (!tenantId || c?.tenant_id === tenantId)) {
         this.store.set(id, { ...c, ...patch, updated_at: new Date() });
         count++;
       }

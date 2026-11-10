@@ -22,12 +22,32 @@ export interface PersistInboundParams {
   payload?: any;
 }
 
-export class TurnRepository {
+export interface ITurnRepository {
+  persistInbound(params: PersistInboundParams): Promise<void>;
+  listReplayable(opts?: { olderThanMs?: number; limit?: number; maxAttempts?: number; resetProcessingOnBoot?: boolean }): Promise<Array<{ tenant_id: string; provider: string; inbound_message_id: string; payload_json: any; status: string; attempts: number }>>;
+  markQueued(params: { tenantId: string; provider: string; inboundMessageId: string }): Promise<void>;
+  cleanupOlderThan(days: number): Promise<number>;
+  claimForProcessing(params: { tenantId: string; provider: string; inboundMessageId: string }): Promise<boolean>;
+  markStatus(params: { tenantId: string; provider: string; inboundMessageId: string; status: InboundTurnStatus; error?: string }): Promise<void>;
+}
+
+export class TurnRepository implements ITurnRepository {
   /** Persist turn inbound (idempoten via unique tenant+provider+message id). */
   public async persistInbound(params: PersistInboundParams): Promise<void> {
-    const { tenantId = DEFAULT_TENANT_ID, provider, inboundMessageId, customerId, conversationId, payload } = params;
+    const { tenantId, provider, inboundMessageId, customerId, conversationId, payload } = params;
     if (!inboundMessageId) return;
     try {
+      // D-16: Bila sebelumnya pernah FAILED, reset status ke RECEIVED agar bisa di-retry.
+      await (prisma as any).inboundTurn.updateMany({
+        where: {
+          tenant_id: tenantId,
+          provider,
+          inbound_message_id: inboundMessageId,
+          status: 'FAILED',
+        },
+        data: { status: 'RECEIVED', attempts: 0, last_error: null },
+      });
+
       await (prisma as any).inboundTurn.upsert({
         where: { tenant_id_provider_inbound_message_id: { tenant_id: tenantId, provider, inbound_message_id: inboundMessageId } },
         create: {
@@ -39,7 +59,7 @@ export class TurnRepository {
           status: 'RECEIVED',
           ...(payload ? { payload_json: payload } : {}),
         },
-        update: {}, // sudah ada → jangan timpa status
+        update: {}, // sudah ada dan bukan FAILED → jangan timpa status
       });
     } catch (err: any) {
       console.warn('[TURN] persistInbound gagal (best-effort):', err?.message);
@@ -77,7 +97,7 @@ export class TurnRepository {
 
   /** Tandai turn menjadi QUEUED (untuk replay) / naikkan attempts. */
   public async markQueued(params: { tenantId: string; provider: string; inboundMessageId: string }): Promise<void> {
-    const { tenantId = DEFAULT_TENANT_ID, provider, inboundMessageId } = params;
+    const { tenantId, provider, inboundMessageId } = params;
     if (!inboundMessageId) return;
     try {
       await (prisma as any).inboundTurn.updateMany({
@@ -96,11 +116,15 @@ export class TurnRepository {
     try {
       const res = await (prisma as any).inboundTurn.deleteMany({ where: { created_at: { lt: cutoff } } });
       total += res?.count ?? 0;
-    } catch {}
+    } catch (err: any) {
+      console.warn('[TURN] cleanupOlderThan inboundTurn gagal:', err?.message);
+    }
     try {
       const res2 = await (prisma as any).outboundAttempt.deleteMany({ where: { created_at: { lt: cutoff } } });
       total += res2?.count ?? 0;
-    } catch {}
+    } catch (err: any) {
+      console.warn('[TURN] cleanupOlderThan outboundAttempt gagal:', err?.message);
+    }
     return total;
   }
 
@@ -110,7 +134,7 @@ export class TurnRepository {
    * karena DB offline — fail-open agar alur utama tetap jalan).
    */
   public async claimForProcessing(params: { tenantId: string; provider: string; inboundMessageId: string }): Promise<boolean> {
-    const { tenantId = DEFAULT_TENANT_ID, provider, inboundMessageId } = params;
+    const { tenantId, provider, inboundMessageId } = params;
     if (!inboundMessageId) return true;
     try {
       const res = await (prisma as any).inboundTurn.updateMany({
@@ -130,7 +154,9 @@ export class TurnRepository {
         select: { status: true },
       });
       if (!existing) return true; // belum ter-track → izinkan (fail-open)
-      return ['RECEIVED', 'QUEUED', 'PROCESSING'].includes(existing.status);
+      // D-06: Jika statusnya bukan RECEIVED/QUEUED (misal sedang PROCESSING atau DELIVERED),
+      // tolak claim (kembalikan false) agar worker paralel tidak memproses turn yang sama.
+      return false;
     } catch (err: any) {
       console.warn('[TURN] claimForProcessing gagal (fail-open):', err?.message);
       return true;
@@ -139,7 +165,7 @@ export class TurnRepository {
 
   /** Tandai status turn (best-effort). */
   public async markStatus(params: { tenantId: string; provider: string; inboundMessageId: string; status: InboundTurnStatus; error?: string }): Promise<void> {
-    const { tenantId = DEFAULT_TENANT_ID, provider, inboundMessageId, status, error } = params;
+    const { tenantId, provider, inboundMessageId, status, error } = params;
     if (!inboundMessageId) return;
     try {
       await (prisma as any).inboundTurn.updateMany({

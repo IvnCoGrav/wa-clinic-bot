@@ -40,12 +40,18 @@ export function getBrandIdentity(): BrandIdentity {
 /**
  * Varian async tenant-aware: overlay `Tenant.settings.brand` di atas default.
  * Best-effort penuh — DB offline / tenant tanpa override → default.
+ * CFG-14: Cache diberi TTL 5 menit agar perubahan di DB terefleksi otomatis.
  */
-const brandCache = new Map<string, BrandIdentity>();
+interface CachedBrand {
+  brand: BrandIdentity;
+  expiresAt: number;
+}
+const brandCache = new Map<string, CachedBrand>();
+const BRAND_CACHE_TTL_MS = 5 * 60 * 1000;
 
 export async function getBrandIdentityAsync(tenantId: string = DEFAULT_TENANT_ID): Promise<BrandIdentity> {
   const cached = brandCache.get(tenantId);
-  if (cached) return cached;
+  if (cached && cached.expiresAt > Date.now()) return cached.brand;
 
   let resolved: BrandIdentity = { ...DEFAULT_BRAND_IDENTITY };
   try {
@@ -82,7 +88,7 @@ export async function getBrandIdentityAsync(tenantId: string = DEFAULT_TENANT_ID
     }
   }
 
-  brandCache.set(tenantId, resolved);
+  brandCache.set(tenantId, { brand: resolved, expiresAt: Date.now() + BRAND_CACHE_TTL_MS });
   return resolved;
 }
 

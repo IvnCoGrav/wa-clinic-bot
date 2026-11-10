@@ -863,11 +863,11 @@ export async function settingsAiRoutes(fastify: FastifyInstance) {
         });
       }
 
+      const tenantId = requireTenantId(request);
       const { AiModelConfigService } = await import('../../config/ai-models.config');
-      const oldConfig = AiModelConfigService.getModelConfig(upperTask as any);
+      const oldConfig = AiModelConfigService.getModelConfig(upperTask as any, tenantId);
 
       try {
-        const tenantId = requireTenantId(request);
         const updated = AiModelConfigService.updateTaskConfig(upperTask as any, request.body || {}, tenantId, { persist: false });
         const persisted = await AiModelConfigService.saveConfigsToDb(tenantId);
 

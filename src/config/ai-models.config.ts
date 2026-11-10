@@ -36,7 +36,7 @@ export const DEEPSEEK_DIRECT_MODEL = 'deepseek-chat';
 /** Label display model default runtime. */
 export const DISPLAY_MODEL_LABEL = 'glm-5.3-flash (SumoPod Utama)';
 
-/** Katalog resmi SumoPod (server utama) — hanya 5 model ini yang valid. */
+/** Katalog resmi SumoPod (server utama) — memuat 7 entri model & alias valid. (CFG-13) */
 export const SUMOPOD_CATALOG = new Set([
   'glm-5.3-flash',
   'MiniMax-M2.7-highspeed',

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { getWibHour, isOutsideOperationalHours, clearOperationalHoursCache } from '../../src/config/operational-hours';
 
 /**
@@ -38,5 +38,20 @@ describe('FASE 4.1 — jam operasional (fleksibel, penandaan saja)', () => {
   it('tanggal null/invalid → tidak ditandai (fail-open, tidak menolak)', () => {
     expect(isOutsideOperationalHours(null, hours)).toBe(false);
     expect(isOutsideOperationalHours(new Date('invalid'), hours)).toBe(false);
+  });
+
+  it('CFG-11: getOperationalHours parses diverse time string formats correctly', async () => {
+    const { getOperationalHours } = await import('../../src/config/operational-hours');
+    const { prisma } = await import('../../src/db/client');
+
+    vi.mocked((prisma as any).tenant.findUnique).mockResolvedValue(null);
+    vi.mocked((prisma as any).clinicPolicy.findUnique).mockResolvedValue({
+      is_active: true,
+      factual_summary: 'Layanan buka jam 09.00 s/d 18.00 WIB setiap hari',
+    });
+
+    const parsed = await getOperationalHours('tenant_sd_format');
+    expect(parsed.startHourWib).toBe(9);
+    expect(parsed.endHourWib).toBe(18);
   });
 });

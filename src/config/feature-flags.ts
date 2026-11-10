@@ -1,7 +1,7 @@
-import dotenv from 'dotenv';
-dotenv.config();
-
 /**
+ * feature-flags.ts
+ * CFG-20: Dotenv diinisialisasi pada entry point aplikasi (app.ts / worker.ts).
+ *
  * Cek apakah Tool-Masking Shadow Mode aktif.
  * Default: false (langsung enforce mode aktif, tanpa shadow mode — sistem
  * belum live ke klien; evaluasi pasif digantikan gate deterministik).

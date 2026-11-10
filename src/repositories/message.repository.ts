@@ -68,15 +68,26 @@ export class PostgresMessageRepository implements MessageRepository {
   }
 
   async existsByWaId(waMessageId: string, shortId: string | null, tenantId: string): Promise<boolean> {
-    const orConditions: any[] = [{ wa_message_id: waMessageId }];
+    // D-07: Pencarian cepat berbasis indeks wa_message_id (menghindari sequential scan).
+    const exactIds = [waMessageId];
     if (shortId && shortId !== waMessageId) {
-      orConditions.push({ wa_message_id: shortId });
-      orConditions.push({ wa_message_id: { endsWith: `_${shortId}` } });
+      exactIds.push(shortId);
     }
-    const existing = await prisma.message.findFirst({
-      where: { tenant_id: tenantId, OR: orConditions },
+    const exactMatch = await prisma.message.findFirst({
+      where: { tenant_id: tenantId, wa_message_id: { in: exactIds } },
+      select: { id: true },
     });
-    return !!existing;
+    if (exactMatch) return true;
+
+    // Fallback: pencocokan suffix _${shortId} hanya dijalankan bila pencarian indeks persis nihil.
+    if (shortId && shortId !== waMessageId) {
+      const suffixMatch = await prisma.message.findFirst({
+        where: { tenant_id: tenantId, wa_message_id: { endsWith: `_${shortId}` } },
+        select: { id: true },
+      });
+      if (suffixMatch) return true;
+    }
+    return false;
   }
 }
 
@@ -109,8 +120,12 @@ export class InMemoryMessageRepository implements MessageRepository {
   async existsByWaId(waMessageId: string, shortId: string | null, tenantId: string): Promise<boolean> {
     if (this.waIds.has(`${tenantId}:${waMessageId}`)) return true;
     if (shortId && shortId !== waMessageId && this.waIds.has(`${tenantId}:${shortId}`)) return true;
+    // D-15: Selaraskan dukungan suffix _${shortId} di InMemoryMessageRepository
     return this.messages.some(
-      (m) => m.tenant_id === tenantId && (m.wa_message_id === waMessageId || (shortId && m.wa_message_id === shortId))
+      (m) =>
+        m.tenant_id === tenantId &&
+        (m.wa_message_id === waMessageId ||
+          (shortId && (m.wa_message_id === shortId || m.wa_message_id?.endsWith(`_${shortId}`))))
     );
   }
 

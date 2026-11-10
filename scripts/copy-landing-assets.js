@@ -23,7 +23,7 @@ const configSrc = path.join(__dirname, '..', 'src', 'config');
 const configDist = path.join(__dirname, '..', 'dist', 'config');
 if (fs.existsSync(configSrc)) {
   fs.mkdirSync(configDist, { recursive: true });
-  for (const filename of ['persona_custom.txt', 'surabaya_sidoarjo_subdistricts.json']) {
+  for (const filename of ['persona_custom.txt', 'surabaya_sidoarjo_subdistricts.json', 'landmarks.data.json', 'kenari-pricing.snapshot.json']) {
     const fileSrc = path.join(configSrc, filename);
     const fileDist = path.join(configDist, filename);
     if (fs.existsSync(fileSrc)) {

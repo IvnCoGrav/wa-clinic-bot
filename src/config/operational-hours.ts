@@ -1,5 +1,6 @@
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { getWibNow } from '../utils/wib-time';
 
 /**
  * Jam operasional klinis per-tenant (data-driven dari ClinicPolicy topik
@@ -59,7 +60,9 @@ export async function getOperationalHours(tenantId: string = DEFAULT_TENANT_ID):
       select: { factual_summary: true, is_active: true },
     });
     if (policy?.is_active && policy?.factual_summary) {
-      const match = String(policy.factual_summary).match(/(\d{1,2})[.:](\d{2})\s*-\s*(\d{1,2})[.:](\d{2})/);
+      // CFG-11: Toleransi format jam operasional (-, s/d, sampai, hingga, titik dua, titik)
+      const summaryText = String(policy.factual_summary);
+      const match = summaryText.match(/(\d{1,2})(?:[.:](\d{2}))?\s*(?:-|–|—|s\/d|sampai|hingga)\s*(\d{1,2})(?:[.:](\d{2}))?/i);
       if (match) {
         const s = parseInt(match[1], 10);
         const e = parseInt(match[3], 10);
@@ -78,8 +81,7 @@ export async function getOperationalHours(tenantId: string = DEFAULT_TENANT_ID):
 
 /** Jam (0–23) pada zona WIB untuk sebuah Date. */
 export function getWibHour(date: Date): number {
-  const wib = new Date(date.getTime() + 7 * 60 * 60 * 1000);
-  return wib.getUTCHours();
+  return getWibNow(date).getUTCHours();
 }
 
 /**

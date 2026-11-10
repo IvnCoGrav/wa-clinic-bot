@@ -50,9 +50,11 @@ COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/clie
 
 # Copy built code from builder stage
 COPY --from=builder /app/dist ./dist
-# CFG-02: Salin persona_custom.txt ke container agar dibaca bot di production
+# CFG-02 & CFG-18: Salin config asset ke container runner
 COPY --from=builder /app/src/config/persona_custom.txt ./src/config/persona_custom.txt
 COPY --from=builder /app/src/config/surabaya_sidoarjo_subdistricts.json ./src/config/surabaya_sidoarjo_subdistricts.json
+COPY --from=builder /app/src/config/landmarks.data.json ./src/config/landmarks.data.json
+COPY --from=builder /app/src/config/kenari-pricing.snapshot.json ./src/config/kenari-pricing.snapshot.json
 # Katalog layanan & tier delivery (runtime dibaca dari file + DB) — wajib ikut
 # agar /api/admin/services dan TreatmentCatalogService tidak fallback ke default lama.
 COPY --from=builder /app/services_custom.json ./services_custom.json

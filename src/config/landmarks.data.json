@@ -1,0 +1,928 @@
+[
+  {
+    "name": "Perumahan Darmo Permai & Puri Darmo",
+    "patterns": [
+      {
+        "source": "\\bdarmo\\s*permai\\s*(selatan|barat|timur|utara)?\\b",
+        "flags": "i"
+      },
+      {
+        "source": "\\bperumahan\\s*puri\\s*darmo\\b",
+        "flags": "i"
+      },
+      {
+        "source": "\\bpuri\\s*darmo\\s*permai\\b",
+        "flags": "i"
+      },
+      {
+        "source": "\\bdarmo\\s*satelit\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Pradah Kalikendal",
+    "kecamatan": "Dukuh Pakis",
+    "kota": "Kota Surabaya",
+    "lat": -7.281389,
+    "lng": 112.684754
+  },
+  {
+    "name": "Perumahan Darmo Indah & Darmo Harapan",
+    "patterns": [
+      {
+        "source": "\\bdarmo\\s*(indah|harapan)\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Tandes",
+    "kecamatan": "Tandes",
+    "kota": "Kota Surabaya",
+    "lat": -7.2662,
+    "lng": 112.6841
+  },
+  {
+    "name": "City of Tomorrow (CITO / Paparazzi)",
+    "patterns": [
+      {
+        "source": "\\b(cto|cito|city\\s*of\\s*tomorrow|paparazzi)\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Dukuh Menanggal",
+    "kecamatan": "Gayungan",
+    "kota": "Kota Surabaya",
+    "lat": -7.345257,
+    "lng": 112.7273
+  },
+  {
+    "name": "Metropolis Apartemen Surabaya",
+    "patterns": [
+      {
+        "source": "\\b(metropolis\\s*apart[a-z]*|apartemen\\s*metropolis)\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Tenggilis Mejoyo",
+    "kecamatan": "Tenggilis Mejoyo",
+    "kota": "Kota Surabaya",
+    "lat": -7.320366,
+    "lng": 112.757987
+  },
+  {
+    "name": "Puncak Marina",
+    "patterns": [
+      {
+        "source": "\\bpuncak\\s*marina\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Margorejo",
+    "kecamatan": "Wonocolo",
+    "kota": "Kota Surabaya",
+    "lat": -7.315546,
+    "lng": 112.749014
+  },
+  {
+    "name": "Gunawangsa MERR",
+    "patterns": [
+      {
+        "source": "\\bgunawangsa\\s*(mer|merr)\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Kedung Baruk",
+    "kecamatan": "Rungkut",
+    "kota": "Kota Surabaya",
+    "lat": -7.31087,
+    "lng": 112.781352
+  },
+  {
+    "name": "Kyo Society",
+    "patterns": [
+      {
+        "source": "\\b(kyo\\s*society|kyo\\s*city|kyo)\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Panjang Jiwo",
+    "kecamatan": "Tenggilis Mejoyo",
+    "kota": "Kota Surabaya",
+    "lat": -7.311488,
+    "lng": 112.767124
+  },
+  {
+    "name": "Klaska Residence",
+    "patterns": [
+      {
+        "source": "\\b(klaska|klaska\\s*residence)\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Jagir",
+    "kecamatan": "Wonokromo",
+    "kota": "Kota Surabaya",
+    "lat": -7.303372,
+    "lng": 112.743517
+  },
+  {
+    "name": "Gunawangsa Manyar",
+    "patterns": [
+      {
+        "source": "\\bgunawangsa\\s*manyar\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Menur Pumpungan",
+    "kecamatan": "Sukolilo",
+    "kota": "Kota Surabaya",
+    "lat": -7.290027,
+    "lng": 112.768651
+  },
+  {
+    "name": "Bale Hinggil MERR",
+    "patterns": [
+      {
+        "source": "\\bbale\\s*hinggil\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Medokan Semampir",
+    "kecamatan": "Sukolilo",
+    "kota": "Kota Surabaya",
+    "lat": -7.309964,
+    "lng": 112.781499
+  },
+  {
+    "name": "Grand Sungkono Lagoon (GSL)",
+    "patterns": [
+      {
+        "source": "\\b(grand\\s*sungkono|sungkono\\s*lagoon|gsl)\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Dukuh Pakis",
+    "kecamatan": "Dukuh Pakis",
+    "kota": "Kota Surabaya",
+    "lat": -7.290146,
+    "lng": 112.706889
+  },
+  {
+    "name": "Apartment Pavilion Permata",
+    "patterns": [
+      {
+        "source": "\\b(pavilion\\s*permata|permata\\s*wahab\\s*siamin)\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Dukuh Pakis",
+    "kecamatan": "Dukuh Pakis",
+    "kota": "Kota Surabaya",
+    "lat": -7.292791,
+    "lng": 112.705321
+  },
+  {
+    "name": "Puncak Kertajaya",
+    "patterns": [
+      {
+        "source": "\\bpuncak\\s*kertajaya\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Kertajaya",
+    "kecamatan": "Gubeng",
+    "kota": "Kota Surabaya",
+    "lat": -7.287879,
+    "lng": 112.785952
+  },
+  {
+    "name": "Anderson Tower (Pakuwon Mall)",
+    "patterns": [
+      {
+        "source": "\\b(anderson|anderson\\s*tower)\\b",
+        "flags": "i"
+      },
+      {
+        "source": "\\bpakuwon\\s*mall\\b",
+        "flags": "i"
+      },
+      {
+        "source": "\\bpakuwon\\s*trade\\s*center\\b",
+        "flags": "i"
+      },
+      {
+        "source": "\\bptc\\s*(sby|surabaya)?\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Babatan",
+    "kecamatan": "Wiyung",
+    "kota": "Kota Surabaya",
+    "lat": -7.290546,
+    "lng": 112.675341
+  },
+  {
+    "name": "CitraLand Vittorio Wiyung",
+    "patterns": [
+      {
+        "source": "\\b(citraland\\s*vittorio|vittorio)\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Babatan",
+    "kecamatan": "Wiyung",
+    "kota": "Kota Surabaya",
+    "lat": -7.311232,
+    "lng": 112.68482
+  },
+  {
+    "name": "Waterplace & Ascott Waterplace",
+    "patterns": [
+      {
+        "source": "\\b(waterplace|ascott\\s*waterplace)\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Babatan",
+    "kecamatan": "Wiyung",
+    "kota": "Kota Surabaya",
+    "lat": -7.291725,
+    "lng": 112.674228
+  },
+  {
+    "name": "Benson, Orchard, Tanglin, La Riz",
+    "patterns": [
+      {
+        "source": "\\b(benson|orchard|tanglin|la\\s*riz|la\\s*mansion)\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Babatan",
+    "kecamatan": "Wiyung",
+    "kota": "Kota Surabaya",
+    "lat": -7.291725,
+    "lng": 112.674228
+  },
+  {
+    "name": "The Rosebay (Graha Famili)",
+    "patterns": [
+      {
+        "source": "\\b(rosebay|the\\s*rosebay|graha\\s*famili)\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Pradah Kalikendal",
+    "kecamatan": "Dukuh Pakis",
+    "kota": "Kota Surabaya",
+    "lat": -7.296637,
+    "lng": 112.680326
+  },
+  {
+    "name": "Apartment Taman Beverly",
+    "patterns": [
+      {
+        "source": "\\b(taman\\s*beverly|beverly)\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Pradah Kalikendal",
+    "kecamatan": "Dukuh Pakis",
+    "kota": "Kota Surabaya",
+    "lat": -7.285575,
+    "lng": 112.696169
+  },
+  {
+    "name": "Puncak Bukit Golf",
+    "patterns": [
+      {
+        "source": "\\bpuncak\\s*bukit\\s*golf\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Pradah Kalikendal",
+    "kecamatan": "Dukuh Pakis",
+    "kota": "Kota Surabaya",
+    "lat": -7.282914,
+    "lng": 112.683218
+  },
+  {
+    "name": "Grand Shamaya & Trillium",
+    "patterns": [
+      {
+        "source": "\\b(grand\\s*shamaya|shamaya|trillium|trillium\\s*residence)\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Embong Kaliasin",
+    "kecamatan": "Genteng",
+    "kota": "Kota Surabaya",
+    "lat": -7.26742,
+    "lng": 112.7414
+  },
+  {
+    "name": "Apartemen Taman Melati (UNAIR)",
+    "patterns": [
+      {
+        "source": "\\btaman\\s*melati(\\s*mulyorejo|\\s*unair)?\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Mulyorejo",
+    "kecamatan": "Mulyorejo",
+    "kota": "Kota Surabaya",
+    "lat": -7.261871,
+    "lng": 112.785798
+  },
+  {
+    "name": "The Galaxy Residences (GM)",
+    "patterns": [
+      {
+        "source": "\\b(galaxy\\s*residences?|galaxy\\s*mall|gm\\s*(1|2|3)?)\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Mulyorejo",
+    "kecamatan": "Mulyorejo",
+    "kota": "Kota Surabaya",
+    "lat": -7.276514,
+    "lng": 112.779155
+  },
+  {
+    "name": "Pakuwon City Mall (PCM / East Coast / Educity / Laguna)",
+    "patterns": [
+      {
+        "source": "\\b(pakuwon\\s*city(\\s*mall)?|pcm|east\\s*coast(\\s*center|\\s*mall|\\s*residence)?|educity(\\s*apartment)?|san\\s*antonio\\s*pakuwon|laguna\\s*pakuwon|grand\\s*island\\s*pakuwon|villa\\s*royal\\s*pakuwon|taman\\s*florence|florence\\s*pakuwon)\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Kalisari",
+    "kecamatan": "Mulyorejo",
+    "kota": "Kota Surabaya",
+    "lat": -7.276389,
+    "lng": 112.805556
+  },
+  {
+    "name": "Grand Dharmahusada Lagoon",
+    "patterns": [
+      {
+        "source": "\\b(grand\\s*dharmahusada|dharmahusada\\s*lagoon|gdl)\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Mulyorejo",
+    "kecamatan": "Mulyorejo",
+    "kota": "Kota Surabaya",
+    "lat": -7.272532,
+    "lng": 112.796826
+  },
+  {
+    "name": "One Icon Residence & The Peak (TP)",
+    "patterns": [
+      {
+        "source": "\\b(one\\s*icon|the\\s*peak|tunjungan\\s*plaza|tp\\s*(1|2|3|4|5|6)?)\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Kedungdoro",
+    "kecamatan": "Tegalsari",
+    "kota": "Kota Surabaya",
+    "lat": -7.261119,
+    "lng": 112.738931
+  },
+  {
+    "name": "Puri Darmo Service Apartment",
+    "patterns": [
+      {
+        "source": "\\bpuri\\s*darmo\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Sonokwijenan",
+    "kecamatan": "Sukomanunggal",
+    "kota": "Kota Surabaya",
+    "lat": -7.277931,
+    "lng": 112.704128
+  },
+  {
+    "name": "Gunawangsa Tidar",
+    "patterns": [
+      {
+        "source": "\\b(gunawangsa\\s*tidar)\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Tembok Dukuh",
+    "kecamatan": "Bubutan",
+    "kota": "Kota Surabaya",
+    "lat": -7.254616,
+    "lng": 112.715254
+  },
+  {
+    "name": "Puncak Dharmahusada",
+    "patterns": [
+      {
+        "source": "\\bpuncak\\s*dharmahusada\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Kalijudan",
+    "kecamatan": "Mulyorejo",
+    "kota": "Kota Surabaya",
+    "lat": -7.256838,
+    "lng": 112.779098
+  },
+  {
+    "name": "Puncak Permai Apartment",
+    "patterns": [
+      {
+        "source": "\\bpuncak\\s*permai\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Tanjungsari",
+    "kecamatan": "Sukomanunggal",
+    "kota": "Kota Surabaya",
+    "lat": -7.279382,
+    "lng": 112.690302
+  },
+  {
+    "name": "Tamansari Prospero Sidoarjo",
+    "patterns": [
+      {
+        "source": "\\b(tamansari\\s*prospero|prospero\\s*sidoarjo)\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Sumput",
+    "kecamatan": "Sidoarjo",
+    "kota": "Kabupaten Sidoarjo",
+    "lat": -7.433399,
+    "lng": 112.69357
+  },
+  {
+    "name": "Ciputra World Surabaya (CW)",
+    "patterns": [
+      {
+        "source": "\\b(ciputra\\s*world|ciworld|cw\\s*sby|voila|skyloft)\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Gunung Sari",
+    "kecamatan": "Dukuh Pakis",
+    "kota": "Kota Surabaya",
+    "lat": -7.308253,
+    "lng": 112.721183
+  },
+  {
+    "name": "Grand City Mall Surabaya",
+    "patterns": [
+      {
+        "source": "\\b(grand\\s*city(\\s*mall)?|gc\\s*mall)\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Ketabang",
+    "kecamatan": "Genteng",
+    "kota": "Kota Surabaya",
+    "lat": -7.260844,
+    "lng": 112.752317
+  },
+  {
+    "name": "The Trans Icon Mall Surabaya",
+    "patterns": [
+      {
+        "source": "\\b(trans\\s*icon(\\s*mall|\\s*apartment)?|the\\s*trans\\s*icon)\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Gayungan",
+    "kecamatan": "Gayungan",
+    "kota": "Kota Surabaya",
+    "lat": -7.339257,
+    "lng": 112.729114
+  },
+  {
+    "name": "Plaza Marina Surabaya",
+    "patterns": [
+      {
+        "source": "\\b(plaza\\s*marina|marina\\s*plaz?a)\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Sidosermo",
+    "kecamatan": "Wonocolo",
+    "kota": "Kota Surabaya",
+    "lat": -7.316086,
+    "lng": 112.748057
+  },
+  {
+    "name": "Lippo Plaza Sidoarjo",
+    "patterns": [
+      {
+        "source": "\\b(lippo\\s*plaza(\\s*sidoarjo)?|lippo\\s*sda)\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Jati",
+    "kecamatan": "Sidoarjo",
+    "kota": "Kabupaten Sidoarjo",
+    "lat": -7.453303,
+    "lng": 112.704253
+  },
+  {
+    "name": "Royal Plaza Surabaya",
+    "patterns": [
+      {
+        "source": "\\b(royal\\s*plaza)\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Wonokromo",
+    "kecamatan": "Wonokromo",
+    "kota": "Kota Surabaya",
+    "lat": -7.300721,
+    "lng": 112.739763
+  },
+  {
+    "name": "Banjarmukti Residence",
+    "patterns": [
+      {
+        "source": "\\bbanjar\\s*mukti(\\s*residence)?\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Banjarkemantren",
+    "kecamatan": "Buduran",
+    "kota": "Kabupaten Sidoarjo",
+    "lat": -7.415538,
+    "lng": 112.719682
+  },
+  {
+    "name": "Safira Garden",
+    "patterns": [
+      {
+        "source": "\\bsafira\\s*garden\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Sepande",
+    "kecamatan": "Candi",
+    "kota": "Kabupaten Sidoarjo",
+    "lat": -7.46225,
+    "lng": 112.695846
+  },
+  {
+    "name": "CitraGarden Sidoarjo",
+    "patterns": [
+      {
+        "source": "\\bcitragarden(\\s*sidoarjo)?\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Entalsewu",
+    "kecamatan": "Buduran",
+    "kota": "Kabupaten Sidoarjo",
+    "lat": -7.431637,
+    "lng": 112.701805
+  },
+  {
+    "name": "Perumahan Pondok Jati",
+    "patterns": [
+      {
+        "source": "\\bpondok\\s*jati\\b",
+        "flags": "i"
+      },
+      {
+        "source": "\\bperum(ahan)?\\s*pondok\\s*jati\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Jati",
+    "kecamatan": "Sidoarjo (Kota)",
+    "kota": "Kabupaten Sidoarjo",
+    "lat": -7.439574,
+    "lng": 112.701114
+  },
+  {
+    "name": "Taman Pinang Indah",
+    "patterns": [
+      {
+        "source": "\\btaman\\s*pinang(\\s*indah)?\\b",
+        "flags": "i"
+      },
+      {
+        "source": "\\btpi\\s*sidoarjo\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Banjarbendo",
+    "kecamatan": "Sidoarjo",
+    "kota": "Kabupaten Sidoarjo",
+    "lat": -7.447545,
+    "lng": 112.697425
+  },
+  {
+    "name": "Tiara Regency / Graha Anggrek Mas",
+    "patterns": [
+      {
+        "source": "\\btiara\\s*regency\\b",
+        "flags": "i"
+      },
+      {
+        "source": "\\bgraha\\s*anggrek\\s*mas\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Pagarwojo",
+    "kecamatan": "Buduran",
+    "kota": "Kabupaten Sidoarjo",
+    "lat": -7.43678,
+    "lng": 112.70564
+  },
+  {
+    "name": "Deltasari Indah & Deltasari Baru",
+    "patterns": [
+      {
+        "source": "\\bdeltasari(\\s*indah|\\s*baru)?\\b",
+        "flags": "i"
+      },
+      {
+        "source": "\\bdelta\\s*sari\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Kureksari",
+    "kecamatan": "Waru",
+    "kota": "Kabupaten Sidoarjo",
+    "lat": -7.359218,
+    "lng": 112.738914
+  },
+  {
+    "name": "Puri Surya Jaya - Cluster Valencia (Spring, Icon, Residence)",
+    "patterns": [
+      {
+        "source": "\\bvalencia\\s*(spring|icon|residence)?\\b",
+        "flags": "i"
+      },
+      {
+        "source": "\\bpuri\\s*surya\\s*jaya\\b.*\\bvalencia\\b",
+        "flags": "i"
+      },
+      {
+        "source": "\\bvalencia\\b.*\\bpuri\\s*surya\\s*jaya\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Punggul",
+    "kecamatan": "Gedangan",
+    "kota": "Kabupaten Sidoarjo",
+    "lat": -7.393858,
+    "lng": 112.745941
+  },
+  {
+    "name": "Puri Surya Jaya - Cluster Sydney & Boston",
+    "patterns": [
+      {
+        "source": "\\b(sydney|boston)\\s*(puri|psj)?\\b",
+        "flags": "i"
+      },
+      {
+        "source": "\\bpuri\\s*surya\\s*jaya\\b.*\\b(sydney|boston)\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Ketajen",
+    "kecamatan": "Gedangan",
+    "kota": "Kabupaten Sidoarjo",
+    "lat": -7.3892,
+    "lng": 112.7415
+  },
+  {
+    "name": "Puri Surya Jaya - Cluster Osaka & Vancouver",
+    "patterns": [
+      {
+        "source": "\\b(osaka|vancouver)\\b",
+        "flags": "i"
+      },
+      {
+        "source": "\\bpuri\\s*surya\\s*jaya\\b.*\\b(osaka|vancouver)\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Ketajen",
+    "kecamatan": "Gedangan",
+    "kota": "Kabupaten Sidoarjo",
+    "lat": -7.3865,
+    "lng": 112.7442
+  },
+  {
+    "name": "Puri Surya Jaya (Gerbang Utama)",
+    "patterns": [
+      {
+        "source": "\\bpuri\\s*surya\\s*jaya\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Ketajen",
+    "kecamatan": "Gedangan",
+    "kota": "Kabupaten Sidoarjo",
+    "lat": -7.385657,
+    "lng": 112.736069
+  },
+  {
+    "name": "Kahuripan Nirwana",
+    "patterns": [
+      {
+        "source": "\\bkahuripan\\s*nirwana\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Sumput",
+    "kecamatan": "Sidoarjo",
+    "kota": "Kabupaten Sidoarjo",
+    "lat": -7.433618,
+    "lng": 112.688397
+  },
+  {
+    "name": "Graha Candi Golf",
+    "patterns": [
+      {
+        "source": "\\bgraha\\s*candi\\s*golf\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Sumokali",
+    "kecamatan": "Candi",
+    "kota": "Kabupaten Sidoarjo",
+    "lat": -7.469825,
+    "lng": 112.695846
+  },
+  {
+    "name": "Perumahan Wiguna & Jl. Wiguna Selatan",
+    "patterns": [
+      {
+        "source": "\\bwiguna\\s*(selatan|timur|indah|asri|regency)?\\b",
+        "flags": "i"
+      },
+      {
+        "source": "\\bperumahan\\s*wiguna\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Gunung Anyar Tambak",
+    "kecamatan": "Gunung Anyar",
+    "kota": "Kota Surabaya",
+    "lat": -7.339397,
+    "lng": 112.8033345
+  },
+  {
+    "name": "Kawasan Jojoran & Jl. Jojoran Baru",
+    "patterns": [
+      {
+        "source": "\\bjojoran(\\s*baru)?(\\s*1|\\s*i)?\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Mojo",
+    "kecamatan": "Gubeng",
+    "kota": "Kota Surabaya",
+    "lat": -7.2769919,
+    "lng": 112.76634
+  },
+  {
+    "name": "Kawasan Bratang Gede",
+    "patterns": [
+      {
+        "source": "\\bbratang\\s*gede\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Ngagelrejo",
+    "kecamatan": "Wonokromo",
+    "kota": "Kota Surabaya",
+    "lat": -7.2978835,
+    "lng": 112.749761
+  },
+  {
+    "name": "Perumahan Kutisari Indah/Asri/Regency",
+    "patterns": [
+      {
+        "source": "\\bkutisari\\s*(indah|asri|regency|selatan|utara)?\\b",
+        "flags": "i"
+      },
+      {
+        "source": "\\bperumahan\\s*kutisari\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Kutisari",
+    "kecamatan": "Tenggilis Mejoyo",
+    "kota": "Kota Surabaya",
+    "lat": -7.334617,
+    "lng": 112.747986
+  },
+  {
+    "name": "Perumahan Kendangsari & Kendangsari YKP",
+    "patterns": [
+      {
+        "source": "\\bkendangsari(\\s*ykp)?\\b",
+        "flags": "i"
+      },
+      {
+        "source": "\\bperumahan\\s*kendangsari\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Kendangsari",
+    "kecamatan": "Tenggilis Mejoyo",
+    "kota": "Kota Surabaya",
+    "lat": -7.325722,
+    "lng": 112.749476
+  },
+  {
+    "name": "Perumahan Rewwin (Rungkut Menanggal Harapan)",
+    "patterns": [
+      {
+        "source": "\\b(rewwin|perumahan\\s*rewwin)\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Wedoro",
+    "kecamatan": "Waru",
+    "kota": "Kabupaten Sidoarjo",
+    "lat": -7.3508,
+    "lng": 112.7402
+  },
+  {
+    "name": "Perumahan Pondok Tjandra/Candra Indah",
+    "patterns": [
+      {
+        "source": "\\bpondok\\s*(tjandra|candra)(\\s*indah)?\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Tambaksumur",
+    "kecamatan": "Waru",
+    "kota": "Kabupaten Sidoarjo",
+    "lat": -7.3485,
+    "lng": 112.775
+  },
+  {
+    "name": "Perumahan Makarya Binangun",
+    "patterns": [
+      {
+        "source": "\\bmakarya(\\s*binangun)?\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Janti",
+    "kecamatan": "Waru",
+    "kota": "Kabupaten Sidoarjo",
+    "lat": -7.358,
+    "lng": 112.731
+  },
+  {
+    "name": "Perumahan Rungkut Mapan (Barat/Timur/Utara)",
+    "patterns": [
+      {
+        "source": "\\brungkut\\s*mapan(\\s*barat|\\s*timur|\\s*utara)?\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Rungkut Tengah",
+    "kecamatan": "Gunung Anyar",
+    "kota": "Kota Surabaya",
+    "lat": -7.3262,
+    "lng": 112.7675
+  },
+  {
+    "name": "The Oso (Tambakoso, Waru)",
+    "patterns": [
+      {
+        "source": "\\bthe\\s*oso\\b",
+        "flags": "i"
+      },
+      {
+        "source": "\\boso\\s*residence\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Tambakoso",
+    "kecamatan": "Waru",
+    "kota": "Kabupaten Sidoarjo",
+    "lat": -7.3553263,
+    "lng": 112.8065525
+  },
+  {
+    "name": "Grand Alana Regency Tambakoso",
+    "patterns": [
+      {
+        "source": "\\b(alana|grand\\s*alana)(\\s*regency)?\\b",
+        "flags": "i"
+      }
+    ],
+    "kelurahan": "Tambakoso",
+    "kecamatan": "Waru",
+    "kota": "Kabupaten Sidoarjo",
+    "lat": -7.3519115,
+    "lng": 112.8120106
+  }
+]

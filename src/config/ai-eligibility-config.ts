@@ -24,14 +24,13 @@ export interface AiEligibilityConfig {
 // kalau di-cache saat boot, cutoff yang beku tidak representatif untuk keputusan
 // fail-closed yang konsisten sepanjang uptime server.
 function buildFailClosedConfig(): AiEligibilityConfig {
-  const envScope = process.env.AI_CUSTOMER_SCOPE === 'ALL' ? AiCustomerScope.ALL : AiCustomerScope.NEW_ONLY;
-  const legacyBypass = process.env.LEGACY_BYPASS_BOT !== 'false';
-  const repeatBypass = process.env.REPEAT_PATIENT_BYPASS_BOT !== 'false';
+  // CFG-15: Fail-closed sejati saat DB offline / cache kosong selalu NEW_ONLY
+  // dan bypass bot aktif untuk mencegah AI aktif ke legacy customer tanpa izin.
   return {
-    ai_customer_scope: envScope,
+    ai_customer_scope: AiCustomerScope.NEW_ONLY,
     ai_scope_cutoff_at: new Date(),
-    legacy_bypass_bot: legacyBypass,
-    repeat_patient_bypass_bot: repeatBypass,
+    legacy_bypass_bot: true,
+    repeat_patient_bypass_bot: true,
   };
 }
 

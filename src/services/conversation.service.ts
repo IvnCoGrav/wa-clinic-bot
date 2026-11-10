@@ -660,17 +660,6 @@ export class ConversationService {
   ): Promise<any> {
     // Fondasional: last_message_at murni milik messageService.logMessage (pesan riil).
     // Mutasi status (unknown count, auto-release, eskalasi, dsb) dilarang menyentuh kronologi.
-    const dataToUpdate: any = {};
-
-    if (updates.currentState !== undefined) dataToUpdate.current_state = updates.currentState;
-    if (updates.previousState !== undefined) dataToUpdate.previous_state = updates.previousState;
-    if (updates.locationAttempts !== undefined) dataToUpdate.location_attempts = updates.locationAttempts;
-    if (updates.isHumanHandling !== undefined) dataToUpdate.is_human_handling = updates.isHumanHandling;
-    if (updates.humanHandlingSince !== undefined) dataToUpdate.human_handling_since = updates.humanHandlingSince;
-    if (updates.escalationReason !== undefined) dataToUpdate.escalation_reason = updates.escalationReason;
-    if (updates.consecutiveUnknownCount !== undefined) dataToUpdate.consecutive_unknown_count = updates.consecutiveUnknownCount;
-    if (updates.lastMessageAt !== undefined) dataToUpdate.last_message_at = updates.lastMessageAt;
-
     // PLAN 8 FASE 5b: tulis via Repository seam (fail-closed di produksi).
     const repo = (await import('../repositories/conversation.repository')).getConversationRepository();
     const updated = await repo.updateState(

@@ -8,6 +8,7 @@
 import fs from 'fs';
 import path from 'path';
 import { getBrandIdentity } from './brand';
+import { DEFAULT_TENANT_ID } from './tenant';
 
 export function resolveCustomPersonaPath(): string {
   const localDistOrSrc = path.join(__dirname, 'persona_custom.txt');
@@ -118,6 +119,20 @@ try {
 
 export let BOT_PERSONA_PROMPT = currentPersona;
 
+// CFG-03: Registry persona in-memory per tenant (mencegah overwriting antar-tenant).
+const personasByTenant = new Map<string, string>();
+
+/**
+ * Akses persona prompt per-tenant (SaaS-ready).
+ * Mengembalikan persona spesifik tenant bila ada, fallback ke default persona.
+ */
+export function getPersonaPrompt(tenantId?: string): string {
+  if (tenantId && personasByTenant.has(tenantId)) {
+    return personasByTenant.get(tenantId)!;
+  }
+  return BOT_PERSONA_PROMPT || currentPersona;
+}
+
 // Cache maksimal karakter per balasan AI, keyed per tenant (SaaS-ready).
 // null = tanpa limit. Terisi saat loadPersonaFromDb / savePersonaToDb.
 const maxCharsByTenant = new Map<string, number | null>();
@@ -180,22 +195,27 @@ export async function loadPersonaFromDb(tenantId: string): Promise<string> {
       where: { tenant_id: tenantId },
     });
     if (record && record.persona && record.persona.trim().length > 0) {
-      BOT_PERSONA_PROMPT = record.persona;
+      personasByTenant.set(tenantId, record.persona);
+      if (tenantId === DEFAULT_TENANT_ID) {
+        BOT_PERSONA_PROMPT = record.persona;
+      }
       maxCharsByTenant.set(tenantId, record.max_chars_per_reply ?? null);
       return record.persona;
     }
     // Tidak ada di DB -> seed dari current (file/default)
-    if (BOT_PERSONA_PROMPT && BOT_PERSONA_PROMPT.trim().length > 0) {
+    const effectivePersona = getPersonaPrompt(tenantId);
+    if (effectivePersona && effectivePersona.trim().length > 0) {
       await prisma.tenantPersona.upsert({
         where: { tenant_id: tenantId },
-        update: { persona: BOT_PERSONA_PROMPT },
-        create: { tenant_id: tenantId, persona: BOT_PERSONA_PROMPT },
+        update: { persona: effectivePersona },
+        create: { tenant_id: tenantId, persona: effectivePersona },
       });
+      personasByTenant.set(tenantId, effectivePersona);
     }
-    return BOT_PERSONA_PROMPT;
+    return effectivePersona;
   } catch (err) {
     console.warn('[PERSONA] DB unavailable, using file/default:', (err as Error).message);
-    return BOT_PERSONA_PROMPT;
+    return getPersonaPrompt(tenantId);
   }
 }
 
@@ -222,7 +242,10 @@ export async function savePersonaToDb(
         max_chars_per_reply: maxCharsPerReply ?? null,
       },
     });
-    updatePersonaInMemoryAndFile(newPersona);
+    personasByTenant.set(tenantId, newPersona);
+    if (tenantId === DEFAULT_TENANT_ID) {
+      updatePersonaInMemoryAndFile(newPersona);
+    }
     if (maxCharsPerReply !== undefined) {
       maxCharsByTenant.set(tenantId, maxCharsPerReply ?? null);
     }
@@ -231,7 +254,10 @@ export async function savePersonaToDb(
     return true;
   } catch (err) {
     console.warn('[PERSONA] DB unavailable, using file fallback:', (err as Error).message);
-    updatePersonaInMemoryAndFile(newPersona);
+    personasByTenant.set(tenantId, newPersona);
+    if (tenantId === DEFAULT_TENANT_ID) {
+      updatePersonaInMemoryAndFile(newPersona);
+    }
     if (maxCharsPerReply !== undefined) {
       maxCharsByTenant.set(tenantId, maxCharsPerReply ?? null);
     }
@@ -589,115 +615,4 @@ Total = ${params.total.toLocaleString("id-ID")}
 Hari H Pagi sebelum treatment akan kami reminder kembali bunda 🥰
 Terimakasih.  ☺️`;
   },
-
-  // DEPRECATED: tidak ada pemanggil aktif di runtime, jangan dipakai
-  morningReminder: (params: { name: string; time?: string }) => {
-    const sapaan = params.name ? `Bunda ${params.name}` : 'Bunda';
-    return `Selamat Pagi ${sapaan}! 😊
-
-Kami ingin mengingatkan untuk hari ini ada jadwal treatment dengan ${getBrandIdentity().businessName} 🤗
-
-Kami akan menuju rumah bunda sesuai jadwal antrean, mohon ditunggu ya bund 🤗`;
-  },
-
-  // Follow-up H+1: versi BAYI/ANAK
-  followUpReviewBaby: (params: { name: string; babyName: string }) => {
-    const sapaan = params.name ? `Bunda ${params.name}` : 'Bunda';
-    const anak = params.babyName && params.babyName !== 'si kecil'
-      ? (params.babyName.startsWith('dek ') ? params.babyName : `Adek ${params.babyName}`)
-      : 'si kecil';
-
-    return `Halo ${sapaan}! 🤍
-
-Mau tanya, gimana tidurnya ${anak} semalam setelah massage kemarin? Semoga mulai nyenyak yaa.. 😊
-
-Banyak bunda yang bilang anaknya jadi lebih rileks tidurnya setelah dipijat — semoga ${anak} juga mulai merasakan hal yang sama ya 🤗✨
-
-Kalau Bunda ada waktu, boleh banget sharing gimana perkembangan setelah dipijat ya Bunda.
-
-Terimakasih 🥰`;
-  },
-
-  // Follow-up H+1: versi MOMS/hamil — beda konten, nanya kontraksi bukan tidur bayi
-  followUpReviewMoms: (params: { name: string }) => {
-    const sapaan = params.name ? `Bunda ${params.name}` : 'Bunda';
-    return `Halo ${sapaan}, Selamat Malam ! 🥰
-
-Sekadar menyapa dan menanyakan kabar Bunda setelah treatment kemarin, bagaimana rasanya hari ini, Bunda? Apakah badan terasa lebih ringan, dan apakah sudah ada kontraksi lebih dari yang sebelumnya yang terasa?
-
-Semoga Bunda dan si Kecil selalu dalam keadaan sehat dan tenang ya🤗
-Apabila membutuhkan jadwal treatment lanjutan atau ada perkembangan lainnya, silakan kabari kami ya, Bunda 😊🙏`;
-  },
-
-  // Follow-up bulan ke-1 untuk treatment lanjutan (array varian)
-  nextTreatmentFollowUp: [
-    (params: { name: string; childrenSummary: string }) => `Halo bunda ${params.name}😊
-
-Gimana kabarnya ${params.childrenSummary}? Semoga makin aktif dan sehat yaa 🤍
-
-Nggak kerasa ya bun, sudah sekitar 1 bulan sejak terakhir massage. Di fase ini bagus banget untuk lanjut lagi supaya tumbuh kembangnya tetap optimal ✨
-
-Kebetulan minggu ini masih ada beberapa jadwal kosong. Kalau bunda mau, saya bisa bantu aturkan jadwal untuk treatment lagi bunda di minggu ini. 🙏😊`,
-    (params: { name: string; childrenSummary: string }) => `Halo Bunda ${params.name} 🤗
-
-Apa kabar ${params.childrenSummary}? Semoga sehat-sehat terus ya 🤍
-
-Sudah cukup lama nih sejak treatment terakhir. Kalau Bunda mau lanjut lagi, kami masih ada slot kosong yang bisa diatur sesuai jadwal Bunda 😊`
-  ],
-
-  paymentFollowUp: (params: { name: string }) =>
-    `Selamat pagi Bunda ${params.name} 🥰
-
-Mohon izin follow up ya bunda. Untuk pembayaran treatment yang kemarin apakah sudah sempat dilakukan?
-
-Apabila sudah transfer, mohon berkenan mengirimkan bukti pembayarannya ya bunda 🙏\n\nTerima kasih banyak bunda 🤗`,
-  // Follow-up BELUM PURCHASE — hari ke-3, 7, 14 sejak kontak terakhir
-  // Array varian: dipilih random tiap broadcast supaya tidak identik semua.
-
-  followUpNoPurchaseDay3: [
-    (params: { name: string }) => `Halo Bunda ${params.name} 😊
-
-Sekadar mau follow up soal treatment yang kemarin sempat ditanyakan. Kalau Bunda masih berminat, kami masih ada slot kosong minggu ini lho 🤗
-
-Kalau ada pertanyaan lain seputar treatmentnya, jangan sungkan tanya ya bund ☺️`,
-    (params: { name: string }) => `Hai Bunda ${params.name} 🤍
-
-Mau nanya, gimana pertimbangannya soal treatment kemarin? Kami masih ada jadwal kosong kalau Bunda mau lanjut booking 😊
-
-Ada yang mau ditanyakan dulu, boleh banget bund, siap bantu jelasin 🙏🏻`,
-    (params: { name: string }) => `Selamat siang Bunda ${params.name} 😊
-
-Ijin follow up soal treatment yang kemarin ya bund. Kalau masih tertarik, kabarin kami aja, nanti dibantu carikan jadwal yang pas 🤗`
-  ],
-
-  followUpNoPurchaseDay7: [
-    (params: { name: string }) => `Halo lagi Bunda ${params.name} 🤍
-
-Masih inget kami nggak nih bund 😊 Kebetulan beberapa hari ini masih ada jadwal kosong, kalau Bunda mau jadwalkan treatment untuk si Kecil atau Bunda sendiri, kami siap bantu kapan aja 🤗
-
-Kalau ada yang mau ditanyakan dulu soal treatment kami, boleh banget bund, saya bantu jelasin 🙏🏻`,
-    (params: { name: string }) => `Halo Bunda ${params.name} 😊
-
-Udah seminggu ya sejak terakhir kita ngobrol soal treatment. Kalau Bunda masih mikir-mikir, nggak masalah bund, kami tetap siap bantu kapanpun Bunda siap 🤗
-
-Ada yang bisa saya bantu jelaskan lagi soal treatmentnya? 🙏🏻`,
-    (params: { name: string }) => `Hai Bunda ${params.name} 🥰
-
-Kami masih inget Bunda lho 😊 Kalau masih berminat sama treatment yang kemarin dibahas, kabarin kami ya, jadwal masih ada kok 🤗`
-  ],
-
-  followUpNoPurchaseDay14: [
-    (params: { name: string }) => `Halo Bunda ${params.name} 😊
-
-Mohon maaf kalau kami kelihatan sering follow up ya bund 🙏🏻 Ini follow up terakhir dari kami dulu, biar nggak mengganggu Bunda.
-
-Kalau nanti Bunda berkenan atau butuh treatment untuk si Kecil / Bunda sendiri, kami dengan senang hati siap bantu kapan pun — tinggal chat kami lagi aja ya bund 🤗🥰
-
-Terima kasih banyak sudah menghubungi ${getBrandIdentity().businessName}, semoga Bunda dan keluarga selalu sehat ☺️`,
-    (params: { name: string }) => `Halo Bunda ${params.name} 🤍
-
-Ini follow up terakhir kami ya bund, biar Bunda nggak merasa terus-terusan dikejar 🙏🏻 Kapanpun Bunda butuh treatment, pintu kami selalu terbuka.
-
-Terima kasih sudah pernah menghubungi ${getBrandIdentity().businessName}, semoga Bunda dan si Kecil sehat selalu 🥰`
-  ],
 };

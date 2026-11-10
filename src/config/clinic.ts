@@ -1,5 +1,7 @@
-import dotenv from 'dotenv';
-dotenv.config();
+/**
+ * clinic.ts
+ * CFG-20: Dotenv diinisialisasi pada entry point aplikasi (app.ts / worker.ts).
+ */
 
 export interface ClinicConfig {
   lat: number;

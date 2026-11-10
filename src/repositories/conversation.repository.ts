@@ -9,8 +9,8 @@ import { ConversationState } from '@prisma/client';
  *  - `PostgresConversationRepository`: fail-closed, tanpa objek fiktif.
  *  - `InMemoryConversationRepository`: test double eksplisit.
  *
- * Cakupan 5b: getOrCreate, getById, updateState, escalate (tulis status),
- * updateLastCustomerMessageAt. Baca agregat (list) tetap di service.
+ * Cakupan: getOrCreate, findById, updateState, flagForReview,
+ * closeConversation, closeActiveConversation.
  */
 
 export interface ConversationStatePatch {
@@ -112,30 +112,36 @@ export class PostgresConversationRepository implements ConversationRepository {
     if (patch.humanHandlingSince !== undefined) data.human_handling_since = patch.humanHandlingSince;
     if (patch.escalationReason !== undefined) data.escalation_reason = patch.escalationReason;
     if (patch.lastMessageAt !== undefined) data.last_message_at = patch.lastMessageAt;
-    // Tenant guard: hanya update milik tenant ini.
+    // D-04: Jalur cepat hemat round-trip (2 query alih-alih 3).
+    // Langsung updateMany dengan tenant guard di WHERE.
+    const res = await prisma.conversation.updateMany({ where: { id, tenant_id: tenantId }, data });
+    if (res.count > 0) {
+      return await prisma.conversation.findUnique({ where: { id } });
+    }
+    // count === 0: periksa apakah conversation tidak ada atau milik tenant lain.
     const existing = await prisma.conversation.findUnique({ where: { id } });
     if (!existing) throw new Error(`Conversation ${id} not found`);
     if (tenantId && (existing as any).tenant_id && (existing as any).tenant_id !== tenantId) {
       throw new Error(`Conversation ${id} bukan milik tenant ${tenantId}`);
     }
-    // AUDIT FASE 3: tenant_id juga masuk WHERE (anti TOCTOU / cross-tenant write).
-    const res = await prisma.conversation.updateMany({ where: { id, tenant_id: tenantId }, data });
-    if (res.count === 0) throw new Error(`Conversation ${id} not found for tenant ${tenantId}`);
-    return await prisma.conversation.findUnique({ where: { id } });
+    throw new Error(`Conversation ${id} not found for tenant ${tenantId}`);
   }
 
   async flagForReview(id: string, reason: string, tenantId: string): Promise<any> {
-    const existing = await prisma.conversation.findUnique({ where: { id } });
-    if (!existing) throw new Error(`Conversation ${id} not found`);
-    if (tenantId && (existing as any).tenant_id && (existing as any).tenant_id !== tenantId) {
-      throw new Error(`Conversation ${id} bukan milik tenant ${tenantId}`);
-    }
+    // D-04: Jalur cepat hemat round-trip (2 query alih-alih 3).
     const res = await prisma.conversation.updateMany({
       where: { id, tenant_id: tenantId },
       data: { review_flagged: true, escalation_reason: reason },
     });
-    if (res.count === 0) throw new Error(`Conversation ${id} not found for tenant ${tenantId}`);
-    return await prisma.conversation.findUnique({ where: { id } });
+    if (res.count > 0) {
+      return await prisma.conversation.findUnique({ where: { id } });
+    }
+    const existing = await prisma.conversation.findUnique({ where: { id } });
+    if (!existing) throw new Error(`Conversation ${id} not found`);
+    if (tenantId && (existing as any).tenant_id && (existing as any).tenant_id !== tenantId) {
+      throw new Error(`Conversation ${id} bukan milik tenant ${tenantId}`);
+    }
+    throw new Error(`Conversation ${id} not found for tenant ${tenantId}`);
   }
 }
 

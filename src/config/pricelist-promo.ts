@@ -93,17 +93,23 @@ export function sanitizePricelistPromoConfig(raw: any): PricelistPromoConfig {
   };
 }
 
-const promoCache = new Map<string, PricelistPromoConfig>();
+interface CachedPromo {
+  config: PricelistPromoConfig;
+  expiresAt: number;
+}
+const promoCache = new Map<string, CachedPromo>();
+const PROMO_CACHE_TTL_MS = 5 * 60 * 1000;
 
 /**
  * Mengambil konfigurasi promo pricelist per-tenant dari database (`Tenant.settings.promo`).
  * Best-effort: jika DB offline atau belum ada config, kembalikan DISABLED_PRICELIST_PROMO.
+ * CFG-14: Cache diberi TTL 5 menit agar update di DB otomatis terefleksi.
  */
 export async function getPricelistPromoConfigAsync(
   tenantId: string = DEFAULT_TENANT_ID
 ): Promise<PricelistPromoConfig> {
   const cached = promoCache.get(tenantId);
-  if (cached) return cached;
+  if (cached && cached.expiresAt > Date.now()) return cached.config;
 
   let resolved: PricelistPromoConfig = { ...DISABLED_PRICELIST_PROMO };
   try {
@@ -121,7 +127,7 @@ export async function getPricelistPromoConfigAsync(
     }
   }
 
-  promoCache.set(tenantId, resolved);
+  promoCache.set(tenantId, { config: resolved, expiresAt: Date.now() + PROMO_CACHE_TTL_MS });
   return resolved;
 }
 
