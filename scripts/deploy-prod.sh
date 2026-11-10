@@ -56,6 +56,12 @@ fi
 
 echo "  OK: ADMIN_API_KEY ✓ WAHA_WEBHOOK_SECRET ✓ WAHA_API_KEY ✓ WAHA_BASE_URL ✓"
 
+# Pastikan Docker network eksternal hermes-net (docker-compose.yml) sudah ada
+if ! docker network inspect hermes-net >/dev/null 2>&1; then
+  echo "  Membuat Docker network eksternal hermes-net ..."
+  docker network create hermes-net || true
+fi
+
 # -----------------------------------------------------------------------------
 # 2. Build image app + worker
 # -----------------------------------------------------------------------------

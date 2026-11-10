@@ -25,6 +25,7 @@ beforeEach(() => {
 // (mis. BURST_COALESCE_MS=5000) yang membuat pesan ter-buffer selama window
 // dan menggagalkan test yang mengharap state/enqueue per-pesan.
 process.env.BURST_COALESCE_MS = '0';
+process.env.DISABLE_REDIS = 'true';
 
 // Force ORS & Google Maps to skip HTTP calls by clearing the API key before any module is loaded.
 // calculateRoute() / calculateDistance() return null immediately when apiKey is falsy,

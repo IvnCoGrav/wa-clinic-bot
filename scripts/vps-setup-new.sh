@@ -64,6 +64,14 @@ fi
 echo "Menambahkan user $USER ke grup docker ..."
 sudo usermod -aG docker "$USER"
 
+echo "Memeriksa dan membuat Docker network eksternal hermes-net jika belum ada..."
+if ! sudo docker network inspect hermes-net &>/dev/null; then
+  sudo docker network create hermes-net || true
+  echo "Docker network hermes-net berhasil dibuat."
+else
+  echo "Docker network hermes-net sudah tersedia."
+fi
+
 echo
 echo "======================================================"
 echo "==> [4/7] Pengaturan Swapiness & Kernel Limits ..."

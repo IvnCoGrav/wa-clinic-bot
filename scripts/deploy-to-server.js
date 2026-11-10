@@ -11,8 +11,6 @@ function resolveSshKey() {
     path.join(os.homedir(), '.ssh', 'id_ed25519_klinik'),
     path.join(os.homedir(), '.ssh', 'id_ed25519'),
     path.join(os.homedir(), '.ssh', 'id_rsa'),
-    'C:/Users/User/.ssh/id_ed25519_klinik',
-    'C:/Users/Ivan/.ssh/id_ed25519_klinik',
   ];
   for (const p of candidates) {
     if (fs.existsSync(p)) return p;
@@ -22,8 +20,11 @@ function resolveSshKey() {
 
 function runSsh(command) {
   const sshKey = resolveSshKey();
+  const sshPort = process.env.SSH_PORT || '1403';
+  const sshUser = process.env.SSH_USER || 'ubuntu';
+  const sshHost = process.env.SSH_HOST || '43.173.11.79';
   const b64 = Buffer.from(command).toString('base64');
-  const sshCmd = `ssh -i "${sshKey}" -p 1403 -o StrictHostKeyChecking=no ubuntu@43.173.11.79 "echo ${b64} | base64 -d | bash"`;
+  const sshCmd = `ssh -i "${sshKey}" -p ${sshPort} -o StrictHostKeyChecking=no ${sshUser}@${sshHost} "echo ${b64} | base64 -d | bash"`;
   return execSync(sshCmd, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 });
 }
 

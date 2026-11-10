@@ -94,7 +94,7 @@ send_telegram() { # $1=judul $2=isi-baris-tambahan
   local text
   text="$title
 Waktu: $now_wib
-Host: wa-clinic-bot (43.157.197.148)
+Host: ${WATCHDOG_HOST_LABEL:-wa-clinic-bot}
 $extra
 Cek manual: $SITE_URL/health"
 

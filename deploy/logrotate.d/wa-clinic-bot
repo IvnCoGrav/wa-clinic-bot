@@ -1,3 +1,5 @@
+/opt/wa-clinic-bot/logs/*.log
+/opt/wa-clinic-bot/logs/*.jsonl
 /var/log/wa-clinic-bot/*.log {
     daily
     rotate 30
@@ -7,5 +9,5 @@
     delaycompress
     copytruncate
     maxsize 50M
-    create 0640 nodejs nodejs
+    create 0640 ubuntu ubuntu
 }

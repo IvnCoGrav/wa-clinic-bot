@@ -1,8 +1,30 @@
 const { execSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
+function resolveSshKey() {
+  if (process.env.SSH_KEY_PATH && fs.existsSync(process.env.SSH_KEY_PATH)) {
+    return process.env.SSH_KEY_PATH;
+  }
+  const candidates = [
+    path.join(os.homedir(), '.ssh', 'id_ed25519_klinik'),
+    path.join(os.homedir(), '.ssh', 'id_ed25519'),
+    path.join(os.homedir(), '.ssh', 'id_rsa'),
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return p;
+  }
+  return candidates[0];
+}
 
 function runSsh(cmd) {
+  const sshKey = resolveSshKey();
+  const sshPort = process.env.SSH_PORT || '1403';
+  const sshUser = process.env.SSH_USER || 'ubuntu';
+  const sshHost = process.env.SSH_HOST || '43.173.11.79';
   const b64 = Buffer.from(cmd).toString('base64');
-  const sshCmd = `ssh -i C:/Users/Ivan/.ssh/id_ed25519_klinik -p 1403 -o StrictHostKeyChecking=no ubuntu@43.173.11.79 "echo ${b64} | base64 -d | bash"`;
+  const sshCmd = `ssh -i "${sshKey}" -p ${sshPort} -o StrictHostKeyChecking=no ${sshUser}@${sshHost} "echo ${b64} | base64 -d | bash"`;
   return execSync(sshCmd, { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 });
 }
 

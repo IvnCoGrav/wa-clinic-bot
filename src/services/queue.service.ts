@@ -149,6 +149,11 @@ export class QueueService {
    * Jika gagal (offline), otomatis beralih ke Fallback In-Memory Queue.
    */
   private initQueueSystem(): void {
+    if (process.env.DISABLE_REDIS === 'true') {
+      this.redisEnabled = false;
+      this.redisInitPromise = Promise.resolve(false);
+      return;
+    }
     const host = process.env.REDIS_HOST || 'localhost';
     const port = parseInt(process.env.REDIS_PORT || '6379', 10);
 
