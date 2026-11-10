@@ -478,7 +478,30 @@ export class MediaService {
   public filePathFromRelativeUrl(relativeUrl: string): string | null {
     const match = relativeUrl.match(/^\/media\/(outbound|inbound)\/([^/]+)\/([^/]+)$/);
     if (!match) return null;
-    return path.join(MEDIA_ROOT, match[1], match[2], match[3]);
+    let tenantSegment = match[2];
+    let fileSegment = match[3];
+    try {
+      tenantSegment = decodeURIComponent(tenantSegment);
+      fileSegment = decodeURIComponent(fileSegment);
+    } catch {
+      return null;
+    }
+    if (
+      tenantSegment.includes('..') ||
+      fileSegment.includes('..') ||
+      tenantSegment.includes('/') ||
+      tenantSegment.includes('\\') ||
+      fileSegment.includes('/') ||
+      fileSegment.includes('\\')
+    ) {
+      return null;
+    }
+    const resolvedMediaRoot = path.resolve(MEDIA_ROOT);
+    const resolvedPath = path.resolve(MEDIA_ROOT, match[1], tenantSegment, fileSegment);
+    if (!resolvedPath.startsWith(resolvedMediaRoot + path.sep)) {
+      return null;
+    }
+    return resolvedPath;
   }
 
   /**

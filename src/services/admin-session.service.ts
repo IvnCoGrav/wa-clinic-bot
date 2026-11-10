@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { prisma } from '../db/client';
+import { trackInterval } from '../lifecycle/interval-registry';
 
 export interface AdminSession {
   id: string;
@@ -277,6 +278,6 @@ export class AdminSessionService {
 }
 
 // Periodically clean up expired sessions every hour
-setInterval(() => {
+trackInterval(() => {
   AdminSessionService.cleanupExpiredSessions().catch(() => {});
 }, 60 * 60 * 1000);

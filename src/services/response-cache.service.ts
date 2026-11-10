@@ -1,3 +1,5 @@
+import { trackInterval } from '../lifecycle/interval-registry';
+
 interface CacheItem<T = any> {
   data: T;
   expiresAt: number;
@@ -15,7 +17,7 @@ export class ResponseCacheService {
 
   constructor() {
     // Periodik cleanup tiap 30 detik untuk membersihkan entry kadaluarsa dari memori
-    this.cleanupTimer = setInterval(() => this.cleanup(), 30000);
+    this.cleanupTimer = trackInterval(() => this.cleanup(), 30000);
     if (this.cleanupTimer && this.cleanupTimer.unref) {
       this.cleanupTimer.unref();
     }

@@ -1,6 +1,7 @@
 import { wahaClient } from '../integrations/waha/client';
 import { AlertService, AlertType, AlertSeverity } from './alert.service';
 import { QueueService, queueService as singletonQueueService } from './queue.service';
+import { trackInterval } from '../lifecycle/interval-registry';
 
 export class WahaMonitorService {
   private static instance: WahaMonitorService | null = null;
@@ -35,7 +36,7 @@ export class WahaMonitorService {
   public start(intervalMs = 30000): void {
     if (this.intervalId) return;
 
-    this.intervalId = setInterval(async () => {
+    this.intervalId = trackInterval(async () => {
       await this.checkStatus();
     }, intervalMs);
   }

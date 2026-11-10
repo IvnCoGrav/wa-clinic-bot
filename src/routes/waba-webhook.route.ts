@@ -154,19 +154,25 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
         continue;
       }
 
-      // Best-effort: resolve URL media WABA (image) & simpan ke storage/media/inbound SEBELUM stale guard
-      // supaya image stale tetap punya media di LiveChat
+      // Best-effort: resolve URL media WABA (image, audio, doc, etc.) & simpan ke storage/media/inbound SEBELUM stale guard
+      // supaya media stale tetap punya media di LiveChat (W-007)
       let mediaUrl: string | undefined;
       let msgMedia: any = undefined;
-      if (msg.type === 'image' && msg.mediaId) {
+      const SUPPORTED_WABA_MEDIA_TYPES = ['image', 'audio', 'voice_note', 'video', 'document', 'sticker'];
+      if (SUPPORTED_WABA_MEDIA_TYPES.includes(msg.type) && msg.mediaId) {
+        let decryptedToken: string | undefined;
         try {
           const { prisma } = await import('../db/client');
           const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
           if (tenant?.waba_access_token) {
             const { decryptSecret } = await import('../utils/encryption');
             const { resolveWabaMediaUrl } = await import('../integrations/whatsapp/media');
-            const resolved = await resolveWabaMediaUrl(msg.mediaId, decryptSecret(tenant.waba_access_token));
+            decryptedToken = decryptSecret(tenant.waba_access_token);
+            const resolved = await resolveWabaMediaUrl(msg.mediaId, decryptedToken);
             mediaUrl = resolved?.url;
+            if (resolved?.mimeType && !msg.mimeType) {
+              msg.mimeType = resolved.mimeType;
+            }
           }
         } catch (mediaErr) {
           console.warn(`[WABA MEDIA] Gagal resolve URL media ${msg.mediaId}:`, (mediaErr as Error).message);
@@ -174,18 +180,29 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
         if (mediaUrl) {
           try {
             const axios = (await import('axios')).default;
-            const response = await axios.get(mediaUrl, { responseType: 'arraybuffer', timeout: 15000 });
+            const headers: Record<string, string> = {
+              'User-Agent': 'WhatsApp-Bot-Media/1.0',
+            };
+            if (decryptedToken) {
+              headers['Authorization'] = `Bearer ${decryptedToken}`;
+            }
+            const response = await axios.get(mediaUrl, {
+              responseType: 'arraybuffer',
+              timeout: 15000,
+              headers,
+            });
             const { mediaService } = await import('../services/media.service');
+            const effectiveMime = msg.mimeType || (msg.type === 'image' ? 'image/jpeg' : (msg.type === 'voice_note' || msg.type === 'audio' ? 'audio/ogg' : 'application/octet-stream'));
             const saved = await mediaService.saveInboundMedia({
               tenantId,
               buffer: Buffer.from(response.data),
-              mimeType: msg.mimeType || 'image/jpeg',
+              mimeType: effectiveMime,
             });
             msgMedia = {
               url: saved.thumbUrl || saved.hdUrl,
               hdUrl: saved.hdUrl,
               thumbUrl: saved.thumbUrl,
-              mimeType: msg.mimeType || 'image/jpeg',
+              mimeType: effectiveMime,
               caption: msg.caption || null,
             };
           } catch (mediaErr: any) {

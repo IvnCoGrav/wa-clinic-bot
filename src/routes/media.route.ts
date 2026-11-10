@@ -106,13 +106,20 @@ function isValidExternalUrl(urlStr: string): boolean {
       hostname === '127.0.0.1' ||
       hostname === '0.0.0.0' ||
       hostname === '::1' ||
+      hostname === '[::1]' ||
       hostname === '169.254.169.254' ||
       hostname.endsWith('.internal') ||
       hostname.endsWith('.local') ||
+      hostname.endsWith('.onion') ||
       /^10\./.test(hostname) ||
       /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname) ||
       /^192\.168\./.test(hostname) ||
-      /^169\.254\./.test(hostname)
+      /^169\.254\./.test(hostname) ||
+      /^127\./.test(hostname) ||
+      /^0\./.test(hostname) ||
+      /^(fe80|fc00|fd00):/i.test(hostname.replace(/^\[|\]$/g, '')) ||
+      /^\d+$/.test(hostname) ||
+      /^0x[0-9a-f]+$/i.test(hostname)
     ) {
       return false;
     }
@@ -371,9 +378,10 @@ export async function mediaRoutes(fastify: FastifyInstance) {
 
     let customer: any = null;
     try {
-      customer = await customerService.getCustomerById(rawId, 'default-tenant');
+      customer = await prisma.customer.findUnique({ where: { id: rawId } });
       if (!customer) {
-        customer = await prisma.customer.findUnique({ where: { id: rawId } });
+        const queryTenant = (request.query as any)?.tenantId;
+        customer = await customerService.getCustomerById(rawId, queryTenant || 'default-tenant');
       }
     } catch {}
 
@@ -466,6 +474,13 @@ export async function mediaRoutes(fastify: FastifyInstance) {
         return reply.status(404).send({ error: 'File bukti pembayaran tidak ditemukan di server' });
       }
     }
+
+    const mediaRoot = path.resolve(process.cwd(), 'storage', 'media');
+    const resolvedFinal = path.resolve(abs);
+    if (resolvedFinal !== mediaRoot && !resolvedFinal.startsWith(mediaRoot + path.sep)) {
+      return reply.status(404).send({ error: 'File bukti pembayaran tidak valid' });
+    }
+    abs = resolvedFinal;
 
     const stat = fs.statSync(abs);
     const ext = (path.extname(abs) || '').replace(/^\./, '').toLowerCase();

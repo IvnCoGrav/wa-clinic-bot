@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../../db/client';
 import { auditService } from '../../services/audit.service';
-import { requireTenantId, resolveTenantId } from './settings-helpers';
+import { requireTenantId, resolveTenantId, updateTenantSettingsSafely } from './settings-helpers';
 
 let cachedWahaHealth = { status: 'WORKING', lastChecked: 0 };
 
@@ -289,37 +289,31 @@ export async function settingsGeneralRoutes(fastify: FastifyInstance) {
         } = await import('../../config/pricelist-promo');
         const { __clearBrandCacheForTest } = await import('../../config/brand');
 
-        const tenant = await (prisma as any).tenant.findUnique({
-          where: { id: tenantId },
-          select: { settings: true },
-        });
+        let updatedPromo: any;
+        let updatedBrand: any;
 
-        const currentSettings = (tenant?.settings as Record<string, any>) || {};
-        const existingBrand = currentSettings.brand || {};
-        const updatedBrand = { ...existingBrand };
+        await updateTenantSettingsSafely(prisma, tenantId, (currentSettings) => {
+          const existingBrand = currentSettings.brand || {};
+          updatedBrand = { ...existingBrand };
 
-        if (brandLogoUrl !== undefined) {
-          if (brandLogoUrl === null || (typeof brandLogoUrl === 'string' && !brandLogoUrl.trim())) {
-            delete updatedBrand.logoUrl;
-          } else {
-            updatedBrand.logoUrl = (brandLogoUrl as string).trim();
+          if (brandLogoUrl !== undefined) {
+            if (brandLogoUrl === null || (typeof brandLogoUrl === 'string' && !brandLogoUrl.trim())) {
+              delete updatedBrand.logoUrl;
+            } else {
+              updatedBrand.logoUrl = (brandLogoUrl as string).trim();
+            }
           }
-        }
 
-        let updatedPromo = currentSettings.promo;
-        if (promo !== undefined) {
-          updatedPromo = sanitizePricelistPromoConfig(promo);
-        }
+          updatedPromo = currentSettings.promo;
+          if (promo !== undefined) {
+            updatedPromo = sanitizePricelistPromoConfig(promo);
+          }
 
-        const updatedSettings = {
-          ...currentSettings,
-          ...(promo !== undefined ? { promo: updatedPromo } : {}),
-          brand: updatedBrand,
-        };
-
-        await (prisma as any).tenant.update({
-          where: { id: tenantId },
-          data: { settings: updatedSettings },
+          return {
+            ...currentSettings,
+            ...(promo !== undefined ? { promo: updatedPromo } : {}),
+            brand: updatedBrand,
+          };
         });
 
         __clearPricelistPromoCacheForTest(tenantId);
@@ -415,27 +409,13 @@ export async function settingsGeneralRoutes(fastify: FastifyInstance) {
           });
         }
 
-        const tenant = await (prisma as any).tenant.findUnique({
-          where: { id: tenantId },
-          select: { settings: true },
-        });
-
-        if (!tenant) {
-          return reply.status(404).send({
-            success: false,
-            error: `Tenant dengan ID ${tenantId} tidak ditemukan.`,
-          });
-        }
-
-        const currentSettings = (tenant.settings as Record<string, any>) || {};
-        const updatedSettings = {
-          ...currentSettings,
-          metaPurchasePolicy: policy,
-        };
-
-        await (prisma as any).tenant.update({
-          where: { id: tenantId },
-          data: { settings: updatedSettings },
+        let previousPolicy = 'DUAL_EVENT';
+        await updateTenantSettingsSafely(prisma, tenantId, (currentSettings) => {
+          previousPolicy = currentSettings.metaPurchasePolicy || 'DUAL_EVENT';
+          return {
+            ...currentSettings,
+            metaPurchasePolicy: policy,
+          };
         });
 
         await auditService.logAdminAction({
@@ -444,7 +424,7 @@ export async function settingsGeneralRoutes(fastify: FastifyInstance) {
           action: 'UPDATE_META_PURCHASE_POLICY',
           targetId: tenantId,
           payload: {
-            previousPolicy: currentSettings.metaPurchasePolicy || 'DUAL_EVENT',
+            previousPolicy,
             newPolicy: policy,
           },
           ipAddress: request.ip,
@@ -522,41 +502,32 @@ export async function settingsGeneralRoutes(fastify: FastifyInstance) {
           finalQrisUrl = typeof qrisImageUrl === 'string' ? qrisImageUrl.trim() || null : null;
         }
 
-        const tenant = await prisma.tenant.findUnique({
-          where: { id: tenantId },
-          select: { settings: true },
-        });
+        let updatedPaymentInfo: any;
+        await updateTenantSettingsSafely(prisma, tenantId, (currentSettings) => {
+          const existingPaymentInfo = currentSettings.paymentInfo || {};
+          updatedPaymentInfo = {
+            qrisImageUrl: finalQrisUrl !== undefined
+              ? finalQrisUrl
+              : existingPaymentInfo.qrisImageUrl || null,
+            bankAccounts: Array.isArray(bankAccounts)
+              ? bankAccounts.map((b) => ({
+                  bank: String(b.bank || '').trim(),
+                  accountNumber: String(b.accountNumber || '').trim(),
+                  accountName: String(b.accountName || '').trim(),
+                })).filter((b) => b.bank && b.accountNumber)
+              : existingPaymentInfo.bankAccounts || [],
+            instructions: instructions !== undefined
+              ? (instructions ? String(instructions).trim() : undefined)
+              : existingPaymentInfo.instructions,
+            customTemplate: customTemplate !== undefined
+              ? (typeof customTemplate === 'string' && customTemplate.trim() ? customTemplate : null)
+              : (existingPaymentInfo.customTemplate ?? null),
+          };
 
-        const currentSettings = (tenant?.settings as any) || {};
-        const existingPaymentInfo = currentSettings.paymentInfo || {};
-
-        const updatedPaymentInfo = {
-          qrisImageUrl: finalQrisUrl !== undefined
-            ? finalQrisUrl
-            : existingPaymentInfo.qrisImageUrl || null,
-          bankAccounts: Array.isArray(bankAccounts)
-            ? bankAccounts.map((b) => ({
-                bank: String(b.bank || '').trim(),
-                accountNumber: String(b.accountNumber || '').trim(),
-                accountName: String(b.accountName || '').trim(),
-              })).filter((b) => b.bank && b.accountNumber)
-            : existingPaymentInfo.bankAccounts || [],
-          instructions: instructions !== undefined
-            ? (instructions ? String(instructions).trim() : undefined)
-            : existingPaymentInfo.instructions,
-          customTemplate: customTemplate !== undefined
-            ? (typeof customTemplate === 'string' && customTemplate.trim() ? customTemplate : null)
-            : (existingPaymentInfo.customTemplate ?? null),
-        };
-
-        const updatedSettings = {
-          ...currentSettings,
-          paymentInfo: updatedPaymentInfo,
-        };
-
-        await prisma.tenant.update({
-          where: { id: tenantId },
-          data: { settings: updatedSettings },
+          return {
+            ...currentSettings,
+            paymentInfo: updatedPaymentInfo,
+          };
         });
 
         await auditService.logAdminAction({

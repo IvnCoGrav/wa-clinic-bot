@@ -1,10 +1,41 @@
-import { trackInterval } from './interval-registry';
+import { trackInterval, trackTimeout } from './interval-registry';
+
+const inFlightCronTasks = new Set<string>();
+
+/**
+ * Membungkus task cron agar tidak berjalan tumpang tindih jika putaran sebelumnya belum selesai (Ar-007).
+ */
+export function createExclusiveCronTask(name: string, fn: () => Promise<void> | void): () => Promise<void> {
+  return async () => {
+    if (inFlightCronTasks.has(name)) {
+      console.warn(`[CRON MUTEX] Task '${name}' masih berjalan dari putaran sebelumnya. Melewatkan putaran ini.`);
+      return;
+    }
+    inFlightCronTasks.add(name);
+    try {
+      await fn();
+    } catch (err: any) {
+      console.error(`[CRON ERROR] Task '${name}' gagal:`, err?.message || err);
+    } finally {
+      inFlightCronTasks.delete(name);
+    }
+  };
+}
+
+/** Helper untuk observability & testing (Ar-007) */
+export function isCronTaskInFlight(name: string): boolean {
+  return inFlightCronTasks.has(name);
+}
+
+export function resetInFlightCronTasks(): void {
+  inFlightCronTasks.clear();
+}
 
 /** Helper: jalankan fn sekali dengan jitter acak 0-30 detik, lalu setInterval normal.
  *  Mencegah semua cron start bareng saat boot (thundering herd). */
 export function trackIntervalStaggered(fn: () => Promise<void>, intervalMs: number): NodeJS.Timeout {
   const jitter = Math.floor(Math.random() * 30_000); // 0-30 detik
-  const starter = setTimeout(() => {
+  const starter = trackTimeout(() => {
     fn().catch(() => {});
     trackInterval(fn, intervalMs);
   }, jitter);
@@ -40,7 +71,10 @@ export function registerCronWorkers(): void {
     const intervalHours = parseInt(process.env.LABEL_RECONCILIATION_INTERVAL_HOURS || '4', 10);
     import('../services/cron.service').then(({ CronService }) => {
       const cron = new CronService();
-      trackInterval(() => cron.runLabelReconciliation(), intervalHours * 60 * 60 * 1000);
+      trackInterval(
+        createExclusiveCronTask('label-reconciliation', () => cron.runLabelReconciliation()),
+        intervalHours * 60 * 60 * 1000
+      );
       console.log(`🏷️ Label reconciliation cron started (every ${intervalHours}h)`);
     }).catch(e => console.error('[LABEL RECONCILIATION START ERROR]', e));
   }
@@ -52,7 +86,10 @@ export function registerCronWorkers(): void {
     import('../services/cron.service').then(({ CronService }) => {
       const cron = new CronService();
       cron.runSheetsSyncWorker().catch(e => console.warn('[SHEETS SYNC BOOT WARNING]', (e as Error).message));
-      trackIntervalStaggered(() => cron.runSheetsSyncWorker(), sheetsIntervalMinutes * 60 * 1000);
+      trackIntervalStaggered(
+        createExclusiveCronTask('sheets-sync', () => cron.runSheetsSyncWorker()),
+        sheetsIntervalMinutes * 60 * 1000
+      );
       console.log(`📊 Google Sheets sync worker started (every ${sheetsIntervalMinutes}m, staggered)`);
     }).catch(e => console.error('[SHEETS SYNC START ERROR]', e));
   }
@@ -63,7 +100,10 @@ export function registerCronWorkers(): void {
     import('../services/cron.service').then(({ CronService }) => {
       const cron = new CronService();
       cron.runMediaCleanup().catch(e => console.warn('[MEDIA CLEANUP BOOT WARNING]', (e as Error).message));
-      trackInterval(() => cron.runMediaCleanup(), intervalHours * 60 * 60 * 1000);
+      trackInterval(
+        createExclusiveCronTask('media-cleanup', () => cron.runMediaCleanup()),
+        intervalHours * 60 * 60 * 1000
+      );
       console.log(`🖼️ Media cleanup cron started (every ${intervalHours}h)`);
     }).catch(e => console.error('[MEDIA CLEANUP START ERROR]', e));
   }
@@ -73,17 +113,22 @@ export function registerCronWorkers(): void {
     const intervalHours = parseInt(process.env.MESSAGE_RETENTION_INTERVAL_HOURS || '24', 10);
     import('../services/cron.service').then(({ CronService }) => {
       const cron = new CronService();
-      trackInterval(() => cron.runMessageRetentionCleanup(), intervalHours * 60 * 60 * 1000);
+      trackInterval(
+        createExclusiveCronTask('message-retention', () => cron.runMessageRetentionCleanup()),
+        intervalHours * 60 * 60 * 1000
+      );
       console.log(`🧾 Message retention cron started (every ${intervalHours}h)`);
     }).catch(e => console.error('[MESSAGE RETENTION START ERROR]', e));
   }
 
   // Staff session housekeeping — hapus sesi kedaluarsa tiap 24 jam (ringan, tanpa gate)
-  trackInterval(() => {
-    import('../services/staff-auth.service').then(({ StaffAuthService }) => {
-      StaffAuthService.cleanExpiredSessions().catch(() => {});
-    }).catch(() => {});
-  }, 24 * 60 * 60 * 1000);
+  trackInterval(
+    createExclusiveCronTask('staff-session-cleanup', async () => {
+      const { StaffAuthService } = await import('../services/staff-auth.service');
+      await StaffAuthService.cleanExpiredSessions().catch(() => {});
+    }),
+    24 * 60 * 60 * 1000
+  );
   console.log('🧹 Staff session cleanup cron registered (every 24h)');
 
   // Fase 5r: Pre-Visit Brief bidan (H-30 menit). Default aktif; env 'false' menonaktifkan.
@@ -91,7 +136,10 @@ export function registerCronWorkers(): void {
     const intervalMinutes = parseInt(process.env.PRE_VISIT_BRIEF_INTERVAL_MINUTES || '10', 10);
     import('../services/cron.service').then(({ CronService }) => {
       const cron = new CronService();
-      trackIntervalStaggered(() => cron.runPreVisitBriefSweep(), intervalMinutes * 60 * 1000);
+      trackIntervalStaggered(
+        createExclusiveCronTask('pre-visit-brief', () => cron.runPreVisitBriefSweep()),
+        intervalMinutes * 60 * 1000
+      );
       console.log(`📋 Pre-Visit Brief cron started (every ${intervalMinutes}m, staggered)`);
     }).catch(e => console.error('[PRE-VISIT BRIEF START ERROR]', e));
   }
@@ -101,7 +149,10 @@ export function registerCronWorkers(): void {
     const intervalHours = parseInt(process.env.EXPIRED_HOLD_SWEEP_INTERVAL_HOURS || '6', 10);
     import('../services/cron.service').then(({ CronService }) => {
       const cron = new CronService();
-      trackInterval(() => cron.runExpiredHoldSweep(), intervalHours * 60 * 60 * 1000);
+      trackInterval(
+        createExclusiveCronTask('expired-hold-sweep', () => cron.runExpiredHoldSweep()),
+        intervalHours * 60 * 60 * 1000
+      );
       console.log(`♻️ Expired hold sweep cron started (every ${intervalHours}h)`);
     }).catch(e => console.error('[EXPIRED HOLD SWEEP START ERROR]', e));
   }
@@ -111,7 +162,10 @@ export function registerCronWorkers(): void {
     const intervalHours = parseInt(process.env.RESERVATION_ARCHIVE_PURGE_INTERVAL_HOURS || '24', 10);
     import('../services/cron.service').then(({ CronService }) => {
       const cron = new CronService();
-      trackInterval(async () => { await cron.runReservationArchivePurge(); }, intervalHours * 60 * 60 * 1000);
+      trackInterval(
+        createExclusiveCronTask('reservation-archive-purge', async () => { await cron.runReservationArchivePurge(); }),
+        intervalHours * 60 * 60 * 1000
+      );
       console.log(`🗄️ Reservation archive purge cron started (every ${intervalHours}h)`);
     }).catch(e => console.error('[RESERVATION ARCHIVE PURGE START ERROR]', e));
   }
@@ -120,7 +174,10 @@ export function registerCronWorkers(): void {
   if (process.env.ENABLE_INVARIANT_MONITOR !== 'false') {
     const intervalHours = parseInt(process.env.INVARIANT_MONITOR_INTERVAL_HOURS || '24', 10);
     import('../services/daily-invariant-monitor.service').then(({ runDailyInvariantMonitor }) => {
-      trackInterval(() => runDailyInvariantMonitor(), intervalHours * 60 * 60 * 1000);
+      trackInterval(
+        createExclusiveCronTask('invariant-monitor', () => runDailyInvariantMonitor()),
+        intervalHours * 60 * 60 * 1000
+      );
       console.log(`🔎 Invariant monitor cron started (every ${intervalHours}h)`);
     }).catch(e => console.error('[INVARIANT MONITOR START ERROR]', e));
   }
@@ -130,7 +187,10 @@ export function registerCronWorkers(): void {
     const intervalMinutes = Math.max(1, Number(process.env.SLOT_OVERLAP_SWEEP_INTERVAL_MINUTES ?? 15) || 15);
     import('../services/cron.service').then(({ CronService }) => {
       const cron = new CronService();
-      trackIntervalStaggered(() => cron.runSlotOverlapSweep(), intervalMinutes * 60 * 1000);
+      trackIntervalStaggered(
+        createExclusiveCronTask('slot-overlap-sweep', () => cron.runSlotOverlapSweep()),
+        intervalMinutes * 60 * 1000
+      );
       console.log(`🔀 Slot overlap sweep cron started (every ${intervalMinutes}m, staggered)`);
     }).catch(e => console.error('[SLOT OVERLAP SWEEP START ERROR]', e));
   }
@@ -140,7 +200,10 @@ export function registerCronWorkers(): void {
     const intervalMinutes = parseInt(process.env.TRIP_AUTOCLOSE_SWEEP_INTERVAL_MINUTES || '15', 10);
     import('../services/cron.service').then(({ CronService }) => {
       const cron = new CronService();
-      trackIntervalStaggered(() => cron.runTripAutoCloseSweep(), intervalMinutes * 60 * 1000);
+      trackIntervalStaggered(
+        createExclusiveCronTask('trip-autoclose-sweep', () => cron.runTripAutoCloseSweep()),
+        intervalMinutes * 60 * 1000
+      );
       console.log(`🛣️ Trip auto-close sweep cron started (every ${intervalMinutes}m, staggered)`);
     }).catch(e => console.error('[TRIP AUTOCLOSE SWEEP START ERROR]', e));
   }
@@ -150,7 +213,10 @@ export function registerCronWorkers(): void {
     const intervalMinutes = parseInt(process.env.ASSIGNMENT_NOTIF_SWEEP_INTERVAL_MINUTES || '2', 10);
     import('../services/cron.service').then(({ CronService }) => {
       const cron = new CronService();
-      trackIntervalStaggered(() => cron.runAssignmentNotificationSweep(), intervalMinutes * 60 * 1000);
+      trackIntervalStaggered(
+        createExclusiveCronTask('assignment-notif-sweep', () => cron.runAssignmentNotificationSweep()),
+        intervalMinutes * 60 * 1000
+      );
       console.log(`🔔 Assignment notification sweep cron started (every ${intervalMinutes}m, staggered)`);
     }).catch(e => console.error('[ASSIGNMENT NOTIF SWEEP START ERROR]', e));
   }
@@ -160,7 +226,10 @@ export function registerCronWorkers(): void {
     const intervalMinutes = parseInt(process.env.FRUSTRATION_SWEEP_INTERVAL_MINUTES || '5', 10);
     import('../services/cron.service').then(({ CronService }) => {
       const cron = new CronService();
-      trackIntervalStaggered(() => cron.runFrustrationSweep(), intervalMinutes * 60 * 1000);
+      trackIntervalStaggered(
+        createExclusiveCronTask('frustration-sweep', () => cron.runFrustrationSweep()),
+        intervalMinutes * 60 * 1000
+      );
       console.log(`🚨 Frustration sweep cron started (every ${intervalMinutes}m, staggered)`);
     }).catch(e => console.error('[FRUSTRATION SWEEP START ERROR]', e));
   }
@@ -170,7 +239,10 @@ export function registerCronWorkers(): void {
     const intervalMinutes = parseInt(process.env.SHARELOC_REMINDER_SWEEP_INTERVAL_MINUTES || '15', 10);
     import('../services/cron.service').then(({ CronService }) => {
       const cron = new CronService();
-      trackIntervalStaggered(() => cron.runSharelocReminderSweep(), intervalMinutes * 60 * 1000);
+      trackIntervalStaggered(
+        createExclusiveCronTask('shareloc-reminder-sweep', () => cron.runSharelocReminderSweep()),
+        intervalMinutes * 60 * 1000
+      );
       console.log(`📍 Shareloc reminder sweep cron started (every ${intervalMinutes}m, staggered)`);
     }).catch(e => console.error('[SHARELOC REMINDER SWEEP START ERROR]', e));
   }
@@ -181,65 +253,69 @@ export function registerCronWorkers(): void {
       import('../services/media.service').then(({ getAllTenantIds }) => {
         import('../db/client').then(({ prisma }) => {
           const lastNightlyRunDate = new Map<string, string>();
-          trackInterval(async () => {
-            try {
-              const nowUtc = new Date();
-              const wib = new Date(nowUtc.getTime() + 7 * 60 * 60 * 1000);
-              const wibHour = wib.getUTCHours();
-              const wibMinute = wib.getUTCMinutes();
-              const todayStr = wib.toISOString().slice(0, 10);
-              const tenantIds = await getAllTenantIds();
-              for (const tId of tenantIds) {
-                const tenant = await prisma.tenant.findUnique({ where: { id: tId } }).catch(() => null);
-                if (!tenant || !tenant.nightly_report_enabled) continue;
-                const targetHour = tenant.nightly_report_hour ?? 21;
-                const targetMinute = tenant.nightly_report_minute ?? 0;
-                const reached = wibHour > targetHour || (wibHour === targetHour && wibMinute >= targetMinute);
-                if (!reached) continue;
-                if (lastNightlyRunDate.get(tId) === todayStr) continue;
-                lastNightlyRunDate.set(tId, todayStr);
+          trackInterval(
+            createExclusiveCronTask('nightly-watchdog', async () => {
+              try {
+                const nowUtc = new Date();
+                const wib = new Date(nowUtc.getTime() + 7 * 60 * 60 * 1000);
+                const wibHour = wib.getUTCHours();
+                const wibMinute = wib.getUTCMinutes();
+                const todayStr = wib.toISOString().slice(0, 10);
+                const tenantIds = await getAllTenantIds();
+                for (const tId of tenantIds) {
+                  const tenant = await prisma.tenant.findUnique({ where: { id: tId } }).catch(() => null);
+                  if (!tenant || !tenant.nightly_report_enabled) continue;
+                  const targetHour = tenant.nightly_report_hour ?? 21;
+                  const targetMinute = tenant.nightly_report_minute ?? 0;
+                  const reached = wibHour > targetHour || (wibHour === targetHour && wibMinute >= targetMinute);
+                  if (!reached) continue;
+                  if (lastNightlyRunDate.get(tId) === todayStr) continue;
+                  lastNightlyRunDate.set(tId, todayStr);
 
-                const data = await nightlyWatchdogService.generate(tId);
-                const dashboardUrl = process.env.ADMIN_DASHBOARD_URL || 'http://localhost:3000';
-                const message = nightlyWatchdogService.formatMessage(tenant.name || tId, data, dashboardUrl);
+                  const data = await nightlyWatchdogService.generate(tId);
+                  const dashboardUrl = process.env.ADMIN_DASHBOARD_URL || 'http://localhost:3000';
+                  const message = nightlyWatchdogService.formatMessage(tenant.name || tId, data, dashboardUrl);
 
-                const channels = (tenant.notification_channels && tenant.notification_channels.length > 0)
-                  ? tenant.notification_channels
-                  : ['TELEGRAM'];
+                  const channels = (tenant.notification_channels && tenant.notification_channels.length > 0)
+                    ? tenant.notification_channels
+                    : ['TELEGRAM'];
 
-                if (channels.includes('TELEGRAM') && tenant.telegram_chat_id) {
-                  await notificationDeliveryService.send({
-                    tenantId: tId,
-                    channel: 'TELEGRAM',
-                    recipient: tenant.telegram_chat_id,
-                    type: 'NIGHTLY_WATCHDOG',
-                    title: 'Laporan Malam Operasional',
-                    messageContent: message,
-                    reportDate: data.reportDateStr,
-                    idempotencyKey: `${tId}:NIGHTLY_WATCHDOG:${data.reportDateStr}`,
-                    metadata: { summary: data.summary },
-                  });
-                }
-
-                if (channels.includes('WHATSAPP')) {
-                  for (const num of tenant.admin_whatsapp_numbers || []) {
+                  if (channels.includes('TELEGRAM') && tenant.telegram_chat_id) {
                     await notificationDeliveryService.send({
                       tenantId: tId,
-                      channel: 'WHATSAPP',
-                      recipient: num,
+                      channel: 'TELEGRAM',
+                      recipient: tenant.telegram_chat_id,
                       type: 'NIGHTLY_WATCHDOG',
                       title: 'Laporan Malam Operasional',
                       messageContent: message,
                       reportDate: data.reportDateStr,
-                      metadata: { summary: data.summary, recipientNumber: num },
+                      idempotencyKey: `${tId}:NIGHTLY_WATCHDOG:${data.reportDateStr}`,
+                      metadata: { summary: data.summary },
                     });
                   }
+
+                  if (channels.includes('WHATSAPP')) {
+                    for (const num of tenant.admin_whatsapp_numbers || []) {
+                      await notificationDeliveryService.send({
+                        tenantId: tId,
+                        channel: 'WHATSAPP',
+                        recipient: num,
+                        type: 'NIGHTLY_WATCHDOG',
+                        title: 'Laporan Malam Operasional',
+                        messageContent: message,
+                        reportDate: data.reportDateStr,
+                        idempotencyKey: `${tId}:NIGHTLY_WATCHDOG:WA:${num}:${data.reportDateStr}`,
+                        metadata: { summary: data.summary, recipientNumber: num },
+                      });
+                    }
+                  }
                 }
+              } catch (err: any) {
+                console.error('[NIGHTLY WATCHDOG CRON ERROR]', err?.message);
               }
-            } catch (err: any) {
-              console.error('[NIGHTLY WATCHDOG CRON ERROR]', err?.message);
-            }
-          }, 15 * 60 * 1000);
+            }),
+            15 * 60 * 1000
+          );
           console.log('🌙 Nightly Watchdog cron registered (checks every 15m, target 21:00 WIB)');
         }).catch(() => {});
       }).catch(() => {});
@@ -251,7 +327,10 @@ export function registerCronWorkers(): void {
     const intervalHours = parseInt(process.env.AI_EVAL_INTERVAL_HOURS || '6', 10);
     import('../services/cron.service').then(({ CronService }) => {
       const cron = new CronService();
-      trackInterval(() => cron.runQualityEvaluation(), intervalHours * 60 * 60 * 1000);
+      trackInterval(
+        createExclusiveCronTask('ai-eval', () => cron.runQualityEvaluation()),
+        intervalHours * 60 * 60 * 1000
+      );
       console.log(`🧪 AI quality evaluation cron started (every ${intervalHours}h)`);
     }).catch(e => console.error('[AI EVAL START ERROR]', e));
   }
@@ -261,7 +340,10 @@ export function registerCronWorkers(): void {
     const intervalHours = parseInt(process.env.CHAT_EXPORT_INTERVAL_HOURS || '6', 10);
     import('../services/cron.service').then(({ CronService }) => {
       const cron = new CronService();
-      trackInterval(() => cron.runDailyChatExport(), intervalHours * 60 * 60 * 1000);
+      trackInterval(
+        createExclusiveCronTask('chat-export', () => cron.runDailyChatExport()),
+        intervalHours * 60 * 60 * 1000
+      );
       console.log(`📤 Daily chat export cron started (every ${intervalHours}h)`);
     }).catch(e => console.error('[CHAT EXPORT START ERROR]', e));
   }
@@ -270,29 +352,32 @@ export function registerCronWorkers(): void {
   import('../services/daily-report.service').then(({ dailyReportService }) => {
     import('../db/client').then(({ prisma }) => {
       import('../services/media.service').then(({ getAllTenantIds }) => {
-        trackInterval(async () => {
-          try {
-            const nowUtc = new Date();
-            const wibTime = new Date(nowUtc.getTime() + (7 * 60 * 60 * 1000));
-            const currentWibHour = wibTime.getUTCHours();
-            
-            const envEnabled = process.env.ENABLE_DAILY_REPORT_CRON === 'true';
-            const envHour = parseInt(process.env.DAILY_REPORT_HOUR || '7', 10);
-            
-            const tenants = await getAllTenantIds();
-            for (const tId of tenants) {
-              const tenant = await prisma.tenant.findUnique({ where: { id: tId } });
-              const isEnabled = tenant ? (tenant.daily_report_enabled || envEnabled) : envEnabled;
-              const targetHour = tenant ? (tenant.daily_report_hour ?? envHour) : envHour;
+        trackInterval(
+          createExclusiveCronTask('daily-report', async () => {
+            try {
+              const nowUtc = new Date();
+              const wibTime = new Date(nowUtc.getTime() + (7 * 60 * 60 * 1000));
+              const currentWibHour = wibTime.getUTCHours();
               
-              if (isEnabled && currentWibHour === targetHour) {
-                await dailyReportService.sendDailyReport(tId);
+              const envEnabled = process.env.ENABLE_DAILY_REPORT_CRON === 'true';
+              const envHour = parseInt(process.env.DAILY_REPORT_HOUR || '7', 10);
+              
+              const tenants = await getAllTenantIds();
+              for (const tId of tenants) {
+                const tenant = await prisma.tenant.findUnique({ where: { id: tId } });
+                const isEnabled = tenant ? (tenant.daily_report_enabled || envEnabled) : envEnabled;
+                const targetHour = tenant ? (tenant.daily_report_hour ?? envHour) : envHour;
+                
+                if (isEnabled && currentWibHour === targetHour) {
+                  await dailyReportService.sendDailyReport(tId);
+                }
               }
+            } catch (err: any) {
+              console.error('[DAILY REPORT CRON ERROR]', err.message);
             }
-          } catch (err: any) {
-            console.error('[DAILY REPORT CRON ERROR]', err.message);
-          }
-        }, 30 * 60 * 1000);
+          }),
+          30 * 60 * 1000
+        );
         console.log(`📈 Daily Ops Report cron background worker started (checking every 30m WIB)`);
       }).catch(() => {});
     }).catch(() => {});
@@ -304,7 +389,10 @@ export function registerCronWorkers(): void {
     
     if (process.env.ENABLE_FOLLOWUP_WORKER === 'true') {
       const followUpIntervalMinutes = parseInt(process.env.FOLLOWUP_WORKER_INTERVAL_MINUTES || '15', 10);
-      trackInterval(() => cron.runFollowUpWorker(), followUpIntervalMinutes * 60 * 1000);
+      trackInterval(
+        createExclusiveCronTask('followup-worker', () => cron.runFollowUpWorker()),
+        followUpIntervalMinutes * 60 * 1000
+      );
       console.log(`⏱️ Follow-Up Queue worker started (every ${followUpIntervalMinutes}m)`);
     } else {
       console.log(`🛑 Follow-Up Worker is DISABLED (ENABLE_FOLLOWUP_WORKER is not 'true')`);
@@ -312,28 +400,31 @@ export function registerCronWorkers(): void {
 
     let lastMorningRunDate = '';
     let lastWeeklyBackupRunDate = '';
-    trackInterval(async () => {
-      try {
-        const nowUtc = new Date();
-        const wibTime = new Date(nowUtc.getTime() + 7 * 60 * 60 * 1000);
-        const wibHour = wibTime.getUTCHours();
-        const wibDay = wibTime.getUTCDay();
-        const todayDateStr = wibTime.toISOString().slice(0, 10);
+    trackInterval(
+      createExclusiveCronTask('morning-jobs-and-backup', async () => {
+        try {
+          const nowUtc = new Date();
+          const wibTime = new Date(nowUtc.getTime() + 7 * 60 * 60 * 1000);
+          const wibHour = wibTime.getUTCHours();
+          const wibDay = wibTime.getUTCDay();
+          const todayDateStr = wibTime.toISOString().slice(0, 10);
 
-        if (wibHour === 6 && lastMorningRunDate !== todayDateStr) {
-          lastMorningRunDate = todayDateStr;
-          await cron.runMorningJobs();
-        }
+          if (wibHour === 6 && lastMorningRunDate !== todayDateStr) {
+            lastMorningRunDate = todayDateStr;
+            await cron.runMorningJobs();
+          }
 
-        if (wibDay === 1 && wibHour === 2 && lastWeeklyBackupRunDate !== todayDateStr) {
-          lastWeeklyBackupRunDate = todayDateStr;
-          await cron.runWeeklyBackup();
-          await cron.runLogRetentionSweep();
+          if (wibDay === 1 && wibHour === 2 && lastWeeklyBackupRunDate !== todayDateStr) {
+            lastWeeklyBackupRunDate = todayDateStr;
+            await cron.runWeeklyBackup();
+            await cron.runLogRetentionSweep();
+          }
+        } catch (err: any) {
+          console.error('[CRON SCHEDULE ERROR]', err.message);
         }
-      } catch (err: any) {
-        console.error('[CRON SCHEDULE ERROR]', err.message);
-      }
-    }, 15 * 60 * 1000);
+      }),
+      15 * 60 * 1000
+    );
     console.log(`🌅 Morning Jobs (06:00 WIB) & Weekly Backup (Senin 02:00 WIB) cron registered`);
   }).catch(e => console.error('[CRON SERVICE START ERROR]', e));
 
@@ -342,19 +433,22 @@ export function registerCronWorkers(): void {
     const watchdogIntervalMinutes = parseInt(process.env.AD_WATCHDOG_INTERVAL_MINUTES || '30', 10);
     import('../services/ad-watchdog.service').then(({ adWatchdogService }) => {
       import('../services/media.service').then(({ getAllTenantIds }) => {
-        trackIntervalStaggered(async () => {
-          try {
-            const tenants = await getAllTenantIds();
-            for (const tId of tenants) {
-              const res = await adWatchdogService.checkAndNotify(tId);
-              if (res.sent) {
-                console.log(`🎯 [AD WATCHDOG] Alert dispatched for tenant ${tId}: ${res.signal}`);
+        trackIntervalStaggered(
+          createExclusiveCronTask('ad-watchdog', async () => {
+            try {
+              const tenants = await getAllTenantIds();
+              for (const tId of tenants) {
+                const res = await adWatchdogService.checkAndNotify(tId);
+                if (res.sent) {
+                  console.log(`🎯 [AD WATCHDOG] Alert dispatched for tenant ${tId}: ${res.signal}`);
+                }
               }
+            } catch (err: any) {
+              console.error('[AD WATCHDOG CRON ERROR]', err?.message || err);
             }
-          } catch (err: any) {
-            console.error('[AD WATCHDOG CRON ERROR]', err?.message || err);
-          }
-        }, watchdogIntervalMinutes * 60 * 1000);
+          }),
+          watchdogIntervalMinutes * 60 * 1000
+        );
         console.log(`🎯 Ad Funnel Watchdog cron started (every ${watchdogIntervalMinutes}m, staggered)`);
       }).catch(e => console.error('[AD WATCHDOG MEDIA SERVICE ERROR]', e));
     }).catch(e => console.error('[AD WATCHDOG START ERROR]', e));
@@ -367,7 +461,10 @@ export function registerCronWorkers(): void {
     const intervalMinutes = parseInt(process.env.TURN_RECOVERY_INTERVAL_MINUTES || '2', 10);
     import('../services/cron.service').then(({ CronService }) => {
       const cron = new CronService();
-      trackIntervalStaggered(async () => { await cron.runTurnRecoverySweep(); }, intervalMinutes * 60 * 1000);
+      trackIntervalStaggered(
+        createExclusiveCronTask('turn-recovery-sweep', async () => { await cron.runTurnRecoverySweep(); }),
+        intervalMinutes * 60 * 1000
+      );
       console.log(`🔄 Turn recovery sweep cron started (every ${intervalMinutes}m, staggered)`);
     }).catch(e => console.error('[TURN RECOVERY START ERROR]', e));
   }
