@@ -44,7 +44,7 @@ export class SharelocReminderService {
     let content: string | null = null;
 
     try {
-      const qr = await (prisma as any).quickReply.findFirst({
+      const qr = await prisma.quickReply.findFirst({
         where: { tenant_id: tenantId, shortcut: { in: ['shareloc', 'shareloct'] } },
         orderBy: { updated_at: 'desc' },
       });
@@ -57,7 +57,7 @@ export class SharelocReminderService {
 
     if (!content) {
       try {
-        const cp = await (prisma as any).clinicPolicy.findFirst({
+        const cp = await prisma.clinicPolicy.findFirst({
           where: { tenant_id: tenantId, topic: 'shareloc_request', is_active: true },
         });
         if (cp?.suggested_reply && cp.suggested_reply.trim()) {
@@ -108,7 +108,7 @@ export class SharelocReminderService {
     const cutoff = activeTreatmentCutoff(now.getTime());
     let reservations: any[] = [];
     try {
-      reservations = await (prisma as any).reservation.findMany({
+      reservations = await prisma.reservation.findMany({
         where: {
           tenant_id: tenantId,
           status: { in: [...CONFIRMED_FAMILY_STATUSES, 'hold'] },
@@ -172,7 +172,7 @@ export class SharelocReminderService {
         }
 
         // Ambil percakapan aktif
-        const conversation = await (prisma as any).conversation
+        const conversation = await prisma.conversation
           .findFirst({
             where: { customer_id: cust.id, tenant_id: tenantId },
             select: { id: true, is_human_handling: true, session_data: true },
@@ -224,7 +224,7 @@ export class SharelocReminderService {
         const wibDate = formatWibDateYYYYMMDD(getWibNow(now));
         const idempotencyKey = `${tenantId}:SHARELOC:${cust.id}:${wibDate}`;
 
-        const existingClaim = await (prisma as any).adminNotificationLog
+        const existingClaim = await prisma.adminNotificationLog
           .findUnique({
             where: { idempotency_key: idempotencyKey },
           })
@@ -236,7 +236,7 @@ export class SharelocReminderService {
         }
 
         try {
-          await (prisma as any).adminNotificationLog.create({
+          await prisma.adminNotificationLog.create({
             data: {
               tenant_id: tenantId,
               channel: 'SYSTEM',
@@ -292,15 +292,17 @@ export class SharelocReminderService {
           }
         }
 
-        // 7. Catat waktu permintaan ke state sesi & preferensi
+        // 7. Catat waktu permintaan ke state sesi & preferensi secara atomik (FN-10 & FN-09)
         const nowIso = now.toISOString();
+        const txUpdates: any[] = [];
+
         if (conversation?.id) {
           const currentSession =
             typeof conversation.session_data === 'object' && conversation.session_data !== null
-              ? conversation.session_data
+              ? (conversation.session_data as Record<string, any>)
               : {};
-          await (prisma as any).conversation
-            .update({
+          txUpdates.push(
+            prisma.conversation.update({
               where: { id: conversation.id },
               data: {
                 session_data: {
@@ -309,13 +311,15 @@ export class SharelocReminderService {
                 },
               },
             })
-            .catch(() => {});
+          );
         }
 
         const currentPref =
-          typeof cust.preferences === 'object' && cust.preferences !== null ? cust.preferences : {};
-        await (prisma as any).customer
-          .update({
+          typeof cust.preferences === 'object' && cust.preferences !== null
+            ? (cust.preferences as Record<string, any>)
+            : {};
+        txUpdates.push(
+          prisma.customer.update({
             where: { id: cust.id },
             data: {
               preferences: {
@@ -324,10 +328,16 @@ export class SharelocReminderService {
               },
             },
           })
-          .catch(() => {});
+        );
+
+        if (txUpdates.length > 0) {
+          await prisma.$transaction(txUpdates).catch((err: any) => {
+            console.warn('[SharelocReminder] Gagal update atomic session & preferences via transaction:', err?.message || err);
+          });
+        }
 
         // 8. Update status log menjadi SENT
-        await (prisma as any).adminNotificationLog
+        await prisma.adminNotificationLog
           .update({
             where: { idempotency_key: idempotencyKey },
             data: { status: 'SENT' },
@@ -350,7 +360,7 @@ export class SharelocReminderService {
 
         // 10. Siarkan perubahan ke SSE Live Chat Hub
         if (conversation?.id) {
-          const updatedConv = await (prisma as any).conversation
+          const updatedConv = await prisma.conversation
             .findUnique({
               where: { id: conversation.id },
               include: { customer: true },

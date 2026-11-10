@@ -36,8 +36,26 @@ export interface SendNotificationResult {
   error?: string;
 }
 
+export interface MemoryNotificationLog {
+  id: string;
+  sent_at: Date;
+  tenant_id: string;
+  channel: NotificationChannel;
+  recipient: string;
+  notification_type: NotificationType;
+  report_date: string;
+  idempotency_key: string | null;
+  title: string;
+  message_content: string;
+  status: string;
+  error_message: string | null;
+  metadata?: Record<string, any>;
+}
+
 // In-memory fallback saat DB offline (pola repo: degradasi senyap, tidak melempar).
-const memoryNotificationLogs: any[] = [];
+// FN-04: Bounded memory maksimal 500 entri (FIFO) agar tidak bocor di memory saat DB offline lama.
+export const MAX_MEMORY_NOTIFICATION_LOGS = 500;
+const memoryNotificationLogs: MemoryNotificationLog[] = [];
 
 /** Tanggal WIB "YYYY-MM-DD" dari sebuah Date (default: sekarang). */
 export function formatReportDateWib(date: Date = new Date()): string {
@@ -249,6 +267,10 @@ export class NotificationDeliveryService {
         return existing?.id || null;
       }
       // DB offline → memory fallback (pola repo), jangan gagalkan pemanggil.
+      // FN-04: Bounded FIFO eviction
+      while (memoryNotificationLogs.length >= MAX_MEMORY_NOTIFICATION_LOGS) {
+        memoryNotificationLogs.shift();
+      }
       const memId = `mem-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       memoryNotificationLogs.push({ id: memId, sent_at: new Date(), ...payload });
       console.warn('[NotificationDelivery] DB offline — log disimpan di memori:', err?.message);
@@ -257,7 +279,7 @@ export class NotificationDeliveryService {
   }
 
   /** Untuk test: akses store memori. */
-  public getMemoryLogs(): any[] {
+  public getMemoryLogs(): MemoryNotificationLog[] {
     return memoryNotificationLogs;
   }
 

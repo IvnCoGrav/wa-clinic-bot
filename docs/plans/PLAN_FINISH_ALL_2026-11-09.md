@@ -191,11 +191,11 @@
 
 #### F3.2 Modul 12 — `MODULE_AUDIT_12` (FN-01..FN-12)
 
-| Sub-fase | Temuan | Fokus | Acceptance |
-|---|---|---|---|
-| F3.2a | `FN-01`, `FN-03` | Pecah `follow-up.service.ts` 2.895 & `staff-notification.service.ts` 1.101 | File utama <1.500; parity test |
-| F3.2b | `FN-02` (jika belum), `FN-05`, `FN-07`, `FN-08` | Outbound log; VAPID; cooldown per tenant; subjek VAPID tenant | Test dua tenant |
-| F3.2c | `FN-04`, `FN-06`, `FN-09`..`FN-12` | Bounded memory; tenant eksplisit; type safety; transaksi; log fallback; pruning | Test memory/tenant |
+| Sub-fase | Temuan | Fokus | Acceptance | Status |
+|---|---|---|---|:---:|
+| F3.2a | `FN-01`, `FN-03` | Pecah `follow-up.service.ts` 2.895 & `staff-notification.service.ts` 1.101 | File utama <1.500; parity test | **FIXED** |
+| F3.2b | `FN-02` (jika belum), `FN-05`, `FN-07`, `FN-08` | Outbound log; VAPID; cooldown per tenant; subjek VAPID tenant | Test dua tenant | **FIXED** |
+| F3.2c | `FN-04`, `FN-06`, `FN-09`..`FN-12` | Bounded memory; tenant eksplisit; type safety; transaksi; log fallback; pruning | Test memory/tenant | **FIXED** |
 
 #### F3.3 Modul 15 — `MODULE_AUDIT_15` (API-01..API-12)
 

@@ -77,10 +77,11 @@ export class AlertService {
    * Generates a throttling key per trigger type & provider (if THIRD_PARTY_OUTAGE)
    */
   private getCooldownKey(payload: AlertPayload): string {
+    const tenantPrefix = payload.tenantId || 'global';
     if (payload.type === AlertType.THIRD_PARTY_OUTAGE && payload.provider) {
-      return `${payload.type}:${payload.provider}`;
+      return `${tenantPrefix}:${payload.type}:${payload.provider}`;
     }
-    return payload.type;
+    return `${tenantPrefix}:${payload.type}`;
   }
 
   /**

@@ -28,11 +28,14 @@ export interface StoredSubscription {
 
 const STORAGE_FILE = path.join(process.cwd(), 'storage', 'vapid_keys.json');
 
+// FN-12: Batasan memori untuk subscription in-memory fallback
+export const MAX_MEMORY_SUBSCRIPTIONS = 1000;
+
 export class WebPushService {
   private static instance: WebPushService | null = null;
   private memorySubscriptions = new Map<string, StoredSubscription>();
   private vapidKeys: { publicKey: string; privateKey: string } | null = null;
-  private vapidSubject = 'mailto:admin@kala-clinic.com';
+  private vapidSubject = process.env.VAPID_SUBJECT || 'mailto:admin@localhost';
 
   private constructor() {
     this.initVapid();
@@ -148,7 +151,13 @@ export class WebPushService {
       user_agent: params.userAgent || null,
     };
 
-    // 1. Simpan ke in-memory map
+    // 1. Simpan ke in-memory map dengan batasan kapasitas (FN-12: FIFO eviction)
+    if (!this.memorySubscriptions.has(params.endpoint) && this.memorySubscriptions.size >= MAX_MEMORY_SUBSCRIPTIONS) {
+      const oldestKey = this.memorySubscriptions.keys().next().value;
+      if (oldestKey) {
+        this.memorySubscriptions.delete(oldestKey);
+      }
+    }
     this.memorySubscriptions.set(params.endpoint, subObj);
 
     // 2. Simpan ke database Prisma jika tersedia

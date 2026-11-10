@@ -8,6 +8,7 @@ import { getStaffNotificationConfig } from '../config/staff-notification-config'
 import { buildMapsUrls, buildEffectiveTaskAddress } from './staff-reservation.service';
 import { getPaymentDisplayStatus } from '../domain/reservation-payment';
 import crypto from 'crypto';
+import { staffNotificationFormatterService } from './staff-notification-formatter.service';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -272,23 +273,22 @@ export class StaffNotificationService {
       // Hanya dikirim bila tenant secara eksplisit mengaktifkan (settings.staffNotification.telegramEnabled).
       const notifConfig = await getStaffNotificationConfig(tenantId);
       if (notifConfig.telegramEnabled && staff.telegram_chat_id) {
-        const messageText = `🔔 *TUGAS RESERVASI BARU DITUGASKAN!*
-Halo *${staff.name}*, Anda memiliki jadwal kunjungan pasien baru:
-
-👤 *Pasien:* ${cust?.name || 'Bunda'}
-👶 *Anak:* ${childrenStr || 'Belum diisi'}
-💆‍♀️ *Layanan:* ${treatmentDetail}
-📅 *Waktu:* ${dateStr} — *Pukul ${timeStr} WIB*
-
-📍 *Alamat:* ${addressText}
-${landmark ? `🏠 *Patokan Rumah:* _${landmark}_\n` : ''}${distanceStr ? `🏍️ *Estimasi Jarak:* ${distanceStr}\n` : ''}🗺️ *Rute Navigasi Motor:* [Buka Google Maps](${navigationUrl})
-
-💰 *Total Biaya:* Rp ${totalFee.toLocaleString('id-ID')} _(${paymentStatusLabel})_
-${notes ? `📝 *Catatan Pasien:* _${notes}_\n` : ''}
-🔒 *Komunikasi & Tugas:*
-👉 [Buka Tugas & Chat Pasien di Portal Terapis](${portalUrl})
-
-_Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
+        const messageText = staffNotificationFormatterService.formatAssignmentTelegramMessage({
+          staffName: staff.name,
+          patientName: cust?.name || 'Bunda',
+          childrenStr,
+          treatmentDetail,
+          dateStr,
+          timeStr,
+          addressText,
+          landmark,
+          distanceStr,
+          navigationUrl,
+          totalFee,
+          paymentStatusLabel,
+          notes,
+          portalUrl,
+        });
 
         try {
           const res = await telegramService.sendMessage({
@@ -339,7 +339,7 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
    * Helper pembersih karakter markdown berbahaya
    */
   private escapeMarkdown(text: string): string {
-    return (text || '').replace(/[*_`\[\]]/g, ' ').trim();
+    return staffNotificationFormatterService.escapeMarkdown(text);
   }
 
   /**
@@ -434,14 +434,17 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
       const areaParts = [effectiveAddrBrief.kelurahan, effectiveAddrBrief.kecamatan].filter(Boolean).map((s: any) => String(s).trim());
       const areaLine = areaParts.join(', ');
 
-      const messageText = `📋 [RINGKASAN PASIEN SEBELUM KUNJUNGAN]
-⏰ Jam: ${timeStr} WIB
-👤 Pasien: ${this.escapeMarkdown(cust?.name || 'Bunda')}${childLine ? `\n👶 Anak: ${this.escapeMarkdown(childLine)}` : ''}
-🔄 ${this.escapeMarkdown(lastVisitLine)}
-🎯 Layanan: ${this.escapeMarkdown(reservation.treatment_detail || reservation.treatment_category || 'Treatment Homecare')}${areaLine ? `\n📍 Area Kunjungan: ${this.escapeMarkdown(areaLine)}` : ''}${adminNotes ? `\n💡 Catatan Khusus:\n${this.escapeMarkdown(adminNotes)}` : ''}
-
-📍 Alamat lengkap & rute tersedia di portal (login):
-👉 [Buka Tugas di Portal Terapis](${portalUrl})`;
+      const messageText = staffNotificationFormatterService.formatPreVisitBriefMessage({
+        staffName: staff.name,
+        timeStr,
+        patientName: cust?.name || 'Bunda',
+        childLine,
+        lastVisitLine,
+        treatmentName: reservation.treatment_detail || reservation.treatment_category || 'Treatment Homecare',
+        areaLine,
+        adminNotes,
+        portalUrl,
+      });
 
       // Distribusi Telegram pribadi (G2=B). Web Push in-system tetap dikirim sebagai kanal cadangan.
       let pushSent = 0;
@@ -696,8 +699,16 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
           : '-';
         const baseUrl = process.env.ADMIN_DASHBOARD_URL || 'http://localhost:3000/admin';
         const portalUrl = `${baseUrl}/staff/today`;
-        const reasonLine = reason ? `Alasan: _${this.escapeMarkdown(reason)}_\n` : '';
-        const messageText = `JADWAL KUNJUNGAN DIBATALKAN\nHalo *${this.escapeMarkdown(staff.name)}*, jadwal kunjungan berikut telah dibatalkan:\n\nPasien: ${custName}\nLayanan: ${treatmentDetail}\nWaktu: ${dateStr} — Pukul ${timeStr} WIB\nAlamat: ${addressText}\n${reasonLine}\nCatatan: Anda tidak perlu menuju ke lokasi pasien untuk jadwal ini.\n\n[Buka Portal Terapis](${portalUrl})`;
+        const messageText = staffNotificationFormatterService.formatCancellationTelegramMessage({
+          staffName: staff.name,
+          patientName: custName,
+          treatmentDetail,
+          dateStr,
+          timeStr,
+          addressText,
+          reason,
+          portalUrl,
+        });
 
         try {
           await telegramService.sendMessage({ chatId: staff.telegram_chat_id, text: messageText, parseMode: 'Markdown' });
@@ -789,7 +800,15 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
         const newStaffLabel = newStaffName ? ` ke *${this.escapeMarkdown(newStaffName)}*` : ' ke rekan terapis lain';
         const baseUrl = process.env.ADMIN_DASHBOARD_URL || 'http://localhost:3000/admin';
         const portalUrl = `${baseUrl}/#staff-today`;
-        const messageText = `JADWAL DIALIHKAN\nHalo *${this.escapeMarkdown(staff.name)}*, jadwal kunjungan berikut telah dialihkan${newStaffLabel} oleh supervisor:\n\nPasien: ${custName}\nLayanan: ${treatmentDetail}\nWaktu: ${dateStr} — Pukul ${timeStr} WIB\n\nAnda tidak perlu menuju ke lokasi untuk jadwal ini. Terima kasih.\n\n[Buka Portal Terapis](${portalUrl})`;
+        const messageText = staffNotificationFormatterService.formatUnassignedTelegramMessage({
+          staffName: staff.name,
+          newStaffLabel,
+          patientName: custName,
+          treatmentDetail,
+          dateStr,
+          timeStr,
+          portalUrl,
+        });
 
         try {
           await telegramService.sendMessage({ chatId: staff.telegram_chat_id, text: messageText, parseMode: 'Markdown' });
@@ -813,130 +832,11 @@ _Semoga lancar dan berikan pelayanan terbaik ya! ✨_`;
     formattedDate: string,
     reservations: any[]
   ): string {
-    const cleanStaffName = this.escapeMarkdown(staffName);
-    const count = reservations.length;
-
-    const emojiNumbers = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
-
-    const itemsText = reservations
-      .map((reservation, idx) => {
-        const numEmoji = emojiNumbers[idx] || `${idx + 1}️⃣`;
-        const cust = reservation.customer;
-        const allChildren = reservation.children?.length ? reservation.children : cust?.children || [];
-
-        // 1. Data Anak / Pasien
-        let patientDetail = '';
-        if (allChildren.length > 0) {
-          const chStr = allChildren
-            .map((ch: any) => {
-              const name = this.escapeMarkdown(ch.name);
-              const age = ch.raw_age_text ? `, ${this.escapeMarkdown(ch.raw_age_text)}` : '';
-              return `${name}${age}`;
-            })
-            .join(', ');
-          patientDetail = `👶 ${chStr}`;
-        } else {
-          const detail = String(reservation.treatment_detail || '').toLowerCase();
-          const structuredStage = String((reservation as any).mom_stage || '').toUpperCase();
-          const weeks = (reservation as any).gestational_weeks;
-          if (structuredStage === 'PREGNANT' || (!structuredStage && (detail.includes('hamil') || detail.includes('prenatal')))) {
-            patientDetail = weeks ? `Ibu Hamil (${weeks} minggu)` : 'Ibu Hamil';
-          } else if (structuredStage === 'POSTPARTUM' || (!structuredStage && detail.includes('postpartum'))) {
-            patientDetail = 'Ibu Nifas / Pasca Salin';
-          } else if (structuredStage === 'LACTATING') {
-            patientDetail = 'Ibu Menyusui / Laktasi';
-          } else {
-            patientDetail = 'Moms';
-          }
-          if ((reservation as any).hpl_date) {
-            const hpl = new Date((reservation as any).hpl_date);
-            if (!isNaN(hpl.getTime())) patientDetail += ` • HPL ${hpl.toISOString().slice(0, 10)}`;
-          }
-        }
-
-        const custName = this.escapeMarkdown(cust?.name || 'Bunda');
-
-        // 2. Format Jam WIB
-        const bookingDate = reservation.booking_date ? new Date(reservation.booking_date) : null;
-        let timeStr = '-';
-        if (bookingDate) {
-          const wibDate = new Date(bookingDate.getTime() + 7 * 60 * 60 * 1000);
-          const hours = String(wibDate.getUTCHours()).padStart(2, '0');
-          const minutes = String(wibDate.getUTCMinutes()).padStart(2, '0');
-          timeStr = `${hours}:${minutes}`;
-        }
-
-        // 3. Layanan
-        const treatmentName = this.escapeMarkdown(
-          reservation.treatment_detail || reservation.treatment_category || 'Treatment Homecare'
-        );
-
-        // 4. Alamat & Google Maps
-        // Fase 4 (A-005): seam kanonis buildEffectiveTaskAddress (sama dgn pembaca lain).
-        const addrEntity = (reservation as any).customer_address;
-        const effectiveAddr2: any = buildEffectiveTaskAddress(addrEntity, cust) || {};
-        const addressParts: string[] = [];
-        if (effectiveAddr2.address) addressParts.push(this.escapeMarkdown(effectiveAddr2.address));
-        if (effectiveAddr2.kelurahan) addressParts.push(`Kel. ${this.escapeMarkdown(effectiveAddr2.kelurahan)}`);
-        if (effectiveAddr2.kecamatan) addressParts.push(`Kec. ${this.escapeMarkdown(effectiveAddr2.kecamatan)}`);
-        if (effectiveAddr2.kota) addressParts.push(this.escapeMarkdown(effectiveAddr2.kota));
-        const addressText = addressParts.join(', ') || 'Alamat tercatat di sistem';
-
-        // REVISI-1 Tahap 3.1: seam kanonis buildMapsUrls (source-aware).
-        const lat = effectiveAddr2.lat ?? cust?.lat;
-        const lng = effectiveAddr2.lng ?? cust?.lng;
-        const hasAddressText2 = !!addressText && addressText !== 'Alamat tercatat di sistem';
-        const { navigationUrl: seamNavUrl2 } = buildMapsUrls(
-          lat, lng,
-          effectiveAddr2.location_source ?? (cust as any)?.location_source ?? null,
-          hasAddressText2 ? addressText : null
-        );
-        const navigationUrl =
-          seamNavUrl2 ||
-          (hasAddressText2
-            ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addressText)}&travelmode=two-wheeler`
-            : `https://maps.google.com/?q=${encodeURIComponent(addressText)}`);
-
-        // 5. Total Biaya
-        const purchaseValue = reservation.purchase_value || 0;
-        const ongkir = reservation.delivery_fee ?? addrEntity?.ongkir ?? cust?.ongkir ?? 0;
-        const totalFee = purchaseValue || (ongkir > 0 ? ongkir : 0);
-        let totalFeeStr = '';
-        if (totalFee > 0) {
-          if (totalFee >= 1000 && totalFee % 1000 === 0) {
-            totalFeeStr = `${totalFee / 1000}k`;
-          } else {
-            totalFeeStr = `Rp ${totalFee.toLocaleString('id-ID')}`;
-          }
-        }
-
-        const lines: string[] = [
-          `${numEmoji} *${timeStr} WIB* — *${custName}* (${patientDetail})`,
-          `• *Layanan:* ${treatmentName}`,
-          `• *Alamat:* ${addressText} ([Buka Maps](${navigationUrl}))`,
-        ];
-
-        if (totalFeeStr) {
-          lines.push(`• *Total :* ${totalFeeStr}`);
-        }
-
-        return lines.join('\n');
-      })
-      .join('\n\n');
-
-    const baseUrl = process.env.ADMIN_DASHBOARD_URL || 'http://localhost:3000/admin';
-    const portalUrl = `${baseUrl}/#staff-today`;
-
-    return `🌅 *BRIEFING JADWAL HARI INI — ${cleanStaffName}*
-📅 *${formattedDate}*
-
-Halo ${cleanStaffName}, hari ini Anda memiliki *${count} Jadwal Kunjungan*:
-
-${itemsText}
-
-🔗 [Buka Detail di Portal Petugas](${portalUrl})
-
-_Semangat melayani Bunda & Buah Hati hari ini! ✨_`;
+    return staffNotificationFormatterService.formatDailyBriefingMessage(
+      staffName,
+      formattedDate,
+      reservations
+    );
   }
 
   /**

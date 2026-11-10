@@ -37,7 +37,7 @@ export async function getStaffChatNotificationConfig(
 
   try {
     // 1. Cek Tenant.settings
-    const tenant = await (prisma as any).tenant.findUnique({
+    const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId },
       select: { settings: true },
     });
@@ -58,7 +58,7 @@ export async function getStaffChatNotificationConfig(
     }
 
     // 2. Cek ClinicPolicy topic 'operational_hours_and_booking'
-    const policy = await (prisma as any).clinicPolicy.findUnique({
+    const policy = await prisma.clinicPolicy.findUnique({
       where: { tenant_id_topic: { tenant_id: tenantId, topic: 'operational_hours_and_booking' } },
       select: { factual_summary: true, is_active: true },
     });
@@ -76,11 +76,17 @@ export async function getStaffChatNotificationConfig(
             startHourWib: Math.max(0, rawStart - 1),
             endHourWib: Math.min(23, rawEnd + 4),
           };
+          configCache.set(tenantId, { config: resolved, expiresAt: Date.now() + CACHE_TTL_MS });
+          return resolved;
         }
       }
     }
+
+    // FN-11: Beri info log penanda saat DB config kosong / tidak ada override
+    console.info(`[StaffChatConfig] Konfigurasi jam operasional staf tenant '${tenantId}' tidak ditemukan di DB; menggunakan fallback default (${resolved.startHourWib}:00 - ${resolved.endHourWib}:00 WIB).`);
   } catch (err: any) {
-    // Database offline / schema lag fallback ke default
+    // FN-11: Database offline / schema lag fallback ke default dengan log peringatan
+    console.warn(`[StaffChatConfig] Gagal memuat konfigurasi jam staf tenant '${tenantId}', menggunakan fallback default (07:00 - 21:00 WIB):`, err?.message || err);
   }
 
   configCache.set(tenantId, { config: resolved, expiresAt: Date.now() + CACHE_TTL_MS });
