@@ -19,9 +19,10 @@ describe('MessageTransport abstractions', () => {
 
     await transport.stopTyping('chat_1'); // noop
 
-    const success = await transport.sendText('chat_1', 'halo');
+    const result = await transport.sendText('chat_1', 'halo');
     expect(mockGateway.sendTextMessage).toHaveBeenCalledWith('chat_1', 'halo');
-    expect(success).toBe(true);
+    expect(result.success).toBe(true);
+    expect(result.messageId).toBe('msg_123');
   });
 
   it('createWahaTransport delegates to WahaClient', async () => {
@@ -42,9 +43,27 @@ describe('MessageTransport abstractions', () => {
     await transport.stopTyping('chat_1');
     expect(mockWaha.stopTyping).toHaveBeenCalledWith('chat_1');
 
-    const success = await transport.sendText('chat_1', 'halo');
+    const result = await transport.sendText('chat_1', 'halo');
     expect(mockWaha.sendText).toHaveBeenCalledWith('chat_1', 'halo');
-    expect(success).toBe(true);
+    expect(result.success).toBe(true);
+    expect(result.messageId).toBeUndefined();
+  });
+
+  it('createWahaTransport memakai sendTextDetailed untuk messageId', async () => {
+    const mockWaha: any = {
+      sendSeen: vi.fn().mockResolvedValue(true),
+      startTyping: vi.fn().mockResolvedValue(true),
+      stopTyping: vi.fn().mockResolvedValue(true),
+      sendText: vi.fn().mockResolvedValue(true),
+      sendTextDetailed: vi.fn().mockResolvedValue({ success: true, messageId: 'wamid_detail_1' }),
+    };
+
+    const transport = createWahaTransport(mockWaha);
+    const result = await transport.sendText('chat_1', 'halo');
+
+    expect(mockWaha.sendTextDetailed).toHaveBeenCalledWith('chat_1', 'halo');
+    expect(mockWaha.sendText).not.toHaveBeenCalled();
+    expect(result).toEqual({ success: true, messageId: 'wamid_detail_1' });
   });
 
   it('TypingService uses resolved transport for tenant', async () => {

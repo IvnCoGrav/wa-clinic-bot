@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll, vi } from 'vitest';
 import { prisma } from '../../src/db/client';
 import { customerService } from '../../src/services/customer.service';
+import { getCustomerRepository } from '../../src/repositories/customer.repository';
 import { geocodingService } from '../../src/integrations/google-maps/geocoding';
 import { deliveryService } from '../../src/services/delivery.service';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
@@ -220,13 +221,14 @@ describe('Fase S-2: Gate Koordinat Benar-Benar Berubah (PUT /:id/location)', () 
  * (read-after-write) karena membuat coordsChanged/kecamatanDrift selalu false.
  */
 describe('Regresi: koreksi drift koordinat saat admin edit wilayah', () => {
+  let updateSpy: any;
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
-    // DB "online" agar blok auto-recalc berjalan; getCustomerById via repo mock.
-    vi.mocked(prisma.customer.update).mockImplementation((async (args: any) => {
-      const mem = customerService.getMemoryCustomers().get(args.where.id);
-      return { ...(mem || {}), ...(args.data || {}) };
+    // DB "online" agar blok auto-recalc berjalan; customer update lewat repository seam.
+    updateSpy = vi.spyOn(getCustomerRepository(), 'update').mockImplementation((async (id: string, patch: any) => {
+      const mem = customerService.getMemoryCustomers().get(id);
+      return { ...(mem || {}), ...(patch || {}) };
     }) as any);
   });
 
@@ -274,9 +276,8 @@ describe('Regresi: koreksi drift koordinat saat admin edit wilayah', () => {
     );
 
     // update kedua (auto-recalc) harus menulis koordinat Waru, bukan Suko
-    const coordUpdates = vi
-      .mocked(prisma.customer.update)
-      .mock.calls.map((call) => call[0]?.data)
+    const coordUpdates = updateSpy.mock.calls
+      .map((call: any[]) => call[1])
       .filter((d: any) => d && d.lat != null);
     expect(coordUpdates.length).toBeGreaterThan(0);
     const last = coordUpdates[coordUpdates.length - 1] as any;
@@ -303,9 +304,8 @@ describe('Regresi: koreksi drift koordinat saat admin edit wilayah', () => {
     await customerService.updateCustomer(c.id, { kelurahan: 'Berbek', kecamatan: 'Waru' }, TENANT);
 
     expect(geoSpy).not.toHaveBeenCalled();
-    const coordUpdates = vi
-      .mocked(prisma.customer.update)
-      .mock.calls.map((call) => call[0]?.data)
+    const coordUpdates = updateSpy.mock.calls
+      .map((call: any[]) => call[1])
       .filter((d: any) => d && d.lat != null);
     expect(coordUpdates.length).toBe(0);
   });
@@ -370,9 +370,8 @@ describe('Regresi: koreksi drift koordinat saat admin edit wilayah', () => {
 
     await customerService.updateCustomer(c.id, { lat: -7.35, lng: 112.75 }, TENANT);
 
-    const coordRecalc = vi
-      .mocked(prisma.customer.update)
-      .mock.calls.map((call) => call[0]?.data)
+    const coordRecalc = updateSpy.mock.calls
+      .map((call: any[]) => call[1])
       .filter((d: any) => d && d.lat != null && d.distance_km != null);
     expect(coordRecalc.length).toBeGreaterThan(0);
     const last = coordRecalc[coordRecalc.length - 1] as any;

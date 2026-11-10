@@ -5,6 +5,8 @@
 - **Baseline uji pembanding:** `docs/audit/2026-11-09/after-s5-final.json` — 6.774 test / 6.743 lulus / 3 gagal known / 28 skip.
 - **Metode:** verifikasi commit, pembacaan diff, hitung baris, grep call-site, targeted test, full suite, security scan.
 
+> **Tindak lanjut 2026-11-10:** T1 (regresi test), T3–T8 sudah diperbaiki; `SM-02` dan `SM-04` tetap PARTIAL. Status lengkap: `docs/KNOWN_ISSUES.md` #322.
+
 ---
 
 ## 1. Gate Hasil Audit

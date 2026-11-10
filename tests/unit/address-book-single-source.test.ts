@@ -55,7 +55,7 @@ async function seedCustomerWithAddresses(addresses: SavedCustomerAddress[], pref
       saved_addresses_updated_at: '2026-11-05T14:21:26.050Z',
       ...(prefsOverride || {}),
     },
-  } as any);
+  } as any, TENANT);
   return customer;
 }
 
@@ -210,7 +210,7 @@ describe('Buku alamat — satu sumber kebenaran (regresi 2026-11-05)', () => {
         kecamatan: 'Tandes',
         kota: 'Surabaya',
         preferences: { ...((current?.preferences as any) || {}), address: 'Gadel, tandes' },
-      } as any);
+      } as any, TENANT);
 
       return { customer, tande, gunungAnyar };
     }

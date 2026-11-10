@@ -104,7 +104,7 @@ async function seedCustomer(saved: SavedCustomerAddress[]): Promise<{ id: string
       saved_addresses: JSON.parse(JSON.stringify(saved)),
       address: saved[0]?.address || null,
     },
-  } as any);
+  } as any, TENANT);
   setCustomerRepository(repo);
   return created;
 }

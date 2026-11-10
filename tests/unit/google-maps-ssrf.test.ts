@@ -40,6 +40,7 @@ describe('UTL-04 / CCL-03: Google Maps URL Resolver SSRF Protection', () => {
       expect(isAllowedGoogleMapsHost('https://evil-google.com/maps')).toBe(false);
       expect(isAllowedGoogleMapsHost('https://maps.google.com.attacker.com')).toBe(false);
       expect(isAllowedGoogleMapsHost('https://goo.gl.attacker.org')).toBe(false);
+      expect(isAllowedGoogleMapsHost('https://google.xyz/maps')).toBe(false);
       expect(isAllowedGoogleMapsHost('ftp://maps.google.com')).toBe(false);
       expect(isAllowedGoogleMapsHost('javascript:alert(1)')).toBe(false);
     });

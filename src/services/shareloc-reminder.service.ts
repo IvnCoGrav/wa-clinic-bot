@@ -270,6 +270,7 @@ export class SharelocReminderService {
         const sendResult = await gateway.sendTextMessage(cust.phone, messageText);
 
         if (!sendResult.success) {
+          messageService.clearInFlightBotOutbound(chatId, tenantId);
           countReason('gateway_send_failed');
           continue;
         }

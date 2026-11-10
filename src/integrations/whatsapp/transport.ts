@@ -5,7 +5,7 @@ export interface MessageTransport {
   sendSeen(chatId: string, messageId?: string): Promise<void | boolean>;
   startTyping(chatId: string): Promise<void | boolean>;
   stopTyping(chatId: string): Promise<void | boolean>;
-  sendText(chatId: string, text: string): Promise<boolean>;
+  sendText(chatId: string, text: string): Promise<{ success: boolean; messageId?: string }>;
 }
 
 export function createWahaTransport(client: IWahaClient = wahaClient): MessageTransport {
@@ -13,7 +13,13 @@ export function createWahaTransport(client: IWahaClient = wahaClient): MessageTr
     sendSeen: (chatId, messageId) => (messageId ? client.sendSeen(chatId, messageId).then(() => {}) : Promise.resolve()),
     startTyping: (chatId) => client.startTyping(chatId).then(() => {}),
     stopTyping: (chatId) => client.stopTyping(chatId).then(() => {}),
-    sendText: (chatId, text) => client.sendText(chatId, text),
+    sendText: async (chatId, text) => {
+      if (typeof client.sendTextDetailed === 'function') {
+        const res = await client.sendTextDetailed(chatId, text);
+        return { success: !!res?.success, messageId: res?.messageId };
+      }
+      return { success: await client.sendText(chatId, text) };
+    },
   };
 }
 
@@ -25,7 +31,7 @@ export function createGatewayTransport(gateway: WhatsAppGateway): MessageTranspo
     stopTyping: async () => {},
     sendText: async (chatId, text) => {
       const res = await gateway.sendTextMessage(chatId, text);
-      return res.success;
+      return { success: !!res.success, messageId: (res as any).messageId };
     },
   };
 }

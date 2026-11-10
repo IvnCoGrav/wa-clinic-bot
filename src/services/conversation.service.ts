@@ -13,6 +13,28 @@ import {
 
 const memoryConversations = new Map<string, any>();
 
+const MAX_MEMORY_CONVERSATIONS = 1000;
+
+/**
+ * SM-03: bounded in-memory conversation store (FIFO eviction) agar proses
+ * long-running tidak mengalami RAM bloat saat DB offline / volume chat tinggi.
+ */
+function setMemoryConversation(id: string, conversation: any): void {
+  if (memoryConversations.has(id)) {
+    memoryConversations.delete(id); // LRU touch: pindahkan ke urutan terbaru
+  } else if (memoryConversations.size >= MAX_MEMORY_CONVERSATIONS) {
+    const oldestKey = memoryConversations.keys().next().value;
+    if (oldestKey !== undefined) memoryConversations.delete(oldestKey);
+  }
+  // Gunakan Map.prototype.set agar tidak ikut ter-replace oleh skrip ini.
+  Map.prototype.set.call(memoryConversations, id, conversation);
+}
+
+export function __seedMemoryConversationForTest(id: string, conversation: any): void {
+  setMemoryConversation(id, conversation);
+}
+
+
 /**
  * Fase C1 (Rencana Perbaikan Opsi C) — SATU definisi "jam aktivitas customer".
  * Sumber kanonis = pesan MASUK terakhir (`last_customer_message_at`), dengan
@@ -92,7 +114,7 @@ export class ConversationService {
     // PLAN 8 FASE 5b: persistensi via Repository seam (fail-closed di produksi).
     const repo = (await import('../repositories/conversation.repository')).getConversationRepository();
     const conversation = await repo.getOrCreate(customerId, tenantId);
-    memoryConversations.set(conversation.id, conversation);
+    setMemoryConversation(conversation.id, conversation);
     return conversation;
   }
 
@@ -162,13 +184,13 @@ export class ConversationService {
         pinned_at: now,
       });
       if (!updated) return null;
-      memoryConversations.set(conversationId, updated);
+      setMemoryConversation(conversationId, updated);
       return updated;
     } catch (error) {
       if (current) {
         current.is_pinned = nextPinned;
         current.pinned_at = now;
-        memoryConversations.set(conversationId, current);
+        setMemoryConversation(conversationId, current);
         return current;
       }
       return null;
@@ -185,12 +207,12 @@ export class ConversationService {
         is_manual_unread: isManualUnread,
       });
       if (!updated) return null;
-      memoryConversations.set(conversationId, updated);
+      setMemoryConversation(conversationId, updated);
       return updated;
     } catch (error) {
       if (current) {
         current.is_manual_unread = isManualUnread;
-        memoryConversations.set(conversationId, current);
+        setMemoryConversation(conversationId, current);
         return current;
       }
       return null;
@@ -218,7 +240,7 @@ export class ConversationService {
       // Fallback memory store saat DB offline: tetap padamkan agar UI konsisten.
       updated = { ...current, is_frustrated: false, frustrated_at: null, frustrated_reason: null };
     }
-    memoryConversations.set(conversationId, updated);
+    setMemoryConversation(conversationId, updated);
     this.publishConversationUpdated(updated, tenantId);
     return updated;
   }
@@ -356,7 +378,7 @@ export class ConversationService {
 
       const hasMore = filteredConvs.length > take;
       const items = filteredConvs.slice(0, take);
-      items.forEach((c) => memoryConversations.set(c.id, c));
+      items.forEach((c) => setMemoryConversation(c.id, c));
       return { items, hasMore, total };
     } catch (error) {
       const { customerService } = await import('./customer.service');
@@ -439,7 +461,7 @@ export class ConversationService {
         for (const c of working) {
           let matched = false;
           try {
-            const cust: any = await customerService.getCustomerById(c.customer_id, tenantId);
+            const cust: any = await getCachedCustomer(c.customer_id);
             const nameMatch = (cust?.name || '').toLowerCase().includes(q);
             const phoneRaw = (cust?.phone || '').toLowerCase();
             const phoneDigits = (cust?.phone || '').replace(/\D/g, '');
@@ -665,7 +687,7 @@ export class ConversationService {
       },
       tenantId
     );
-    memoryConversations.set(conversationId, updated);
+    setMemoryConversation(conversationId, updated);
     this.publishConversationUpdated(updated, tenantId);
     return updated;
   }
@@ -813,7 +835,7 @@ export class ConversationService {
         last_discussed_treatment_at: now,
       });
       if (!updated) return null;
-      memoryConversations.set(conversationId, updated);
+      setMemoryConversation(conversationId, updated);
       this.publishConversationUpdated(updated, tenantId);
       return updated;
     } catch (error) {

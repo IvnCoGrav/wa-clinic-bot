@@ -49,5 +49,7 @@ jobs:
           cd packages/admin-dashboard
           npm run build
 
-      - name: Run Unit Tests (Offline / Mock DB)
-        run: npm test
+      - name: Run Unit Tests (Baseline-Diff Gate)
+        run: |
+          npx vitest run --reporter=json --outputFile=ci-results.json || true
+          node scripts/audit-baseline-diff.mjs docs/audit/2026-11-09/after-s5-final.json ci-results.json

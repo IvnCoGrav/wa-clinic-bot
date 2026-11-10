@@ -155,7 +155,7 @@ export class CustomerService {
       for (const c of candidates) {
         if (normalizePhoneToE164(c?.phone || '') !== target) continue;
         if (c.is_internal_staff) continue;
-        await repo.update(c.id, { is_internal_staff: true } as any);
+        await repo.update(c.id, { is_internal_staff: true } as any, tenantId);
       }
     } catch (err: any) {
       console.warn('[CustomerService] markInternalStaffCustomer error:', err?.message);
@@ -221,7 +221,7 @@ export class CustomerService {
     // saat nomor yang sama mengirim pesan baru (soft-delete, bukan data hilang).
     if (customer && (customer as any).deleted_at) {
       try {
-        customer = await repo.update(customer.id, { deleted_at: null, status: 'active' } as any);
+        customer = await repo.update(customer.id, { deleted_at: null, status: 'active' } as any, tenantId);
       } catch {
         // DB offline → tetap pakai objek yang ada.
       }
@@ -268,7 +268,7 @@ export class CustomerService {
     } else if (!customer.is_sandbox_test && isSandbox) {
       // Otomatis sinkronkan flag jika nomor/nama terdeteksi dummy
       try {
-        customer = await repo.update(customer.id, { is_sandbox_test: true });
+        customer = await repo.update(customer.id, { is_sandbox_test: true }, tenantId);
       } catch (_) {}
     }
 
@@ -1505,7 +1505,7 @@ export class CustomerService {
       // Sinkronkan juga repo InMemory bila ada (test / memory fallback)
       try {
         const repo = (await import('../repositories/customer.repository')).getCustomerRepository();
-        await repo.update(customerId, updateData);
+        await repo.update(customerId, updateData, tenantId);
       } catch (_) {}
 
       // Memory fallback update
@@ -1911,7 +1911,7 @@ export class CustomerService {
     const repo = (await import('../repositories/customer.repository')).getCustomerRepository();
     await repo.update(customerId, {
       preferences: { ...((customer.preferences as any) || {}), ...clean },
-    } as any);
+    } as any, tenantId);
   }
 
   /**
@@ -1967,7 +1967,7 @@ export class CustomerService {
     if (!persistedAtomically) {
       try {
         const repo = (await import('../repositories/customer.repository')).getCustomerRepository();
-        await repo.update(customer.id, { preferences: newPrefs });
+        await repo.update(customer.id, { preferences: newPrefs }, tenantId);
         customer.preferences = newPrefs;
       } catch (error) {
         if (!isTestRuntime()) {
@@ -2150,17 +2150,24 @@ export class CustomerService {
         newlyTriggeredMql = true;
       }
 
-      updatedCustomer = await prisma.customer.update({
-        where: { id: customerId },
-        data: {
+      updatedCustomer = await getCustomerRepository().update(
+        customerId,
+        {
           mql_bubble_count: newCount,
           is_mql: current.is_mql || shouldQualifyMql,
           mql_triggered_at: shouldQualifyMql ? new Date() : current.mql_triggered_at,
         },
-        include: {
-          adClick: true,
-        },
-      });
+        tenantId
+      );
+
+      // Repository update tidak menyertakan relasi adClick; ambil ulang untuk CAPI Lead.
+      try {
+        const withAdClick = await prisma.customer.findUnique({
+          where: { id: customerId },
+          include: { adClick: true },
+        });
+        if (withAdClick) updatedCustomer = withAdClick;
+      } catch {}
 
       // Update memory store fallback if exists
       for (const [phone, cust] of memoryCustomers.entries()) {
@@ -2639,7 +2646,7 @@ export class CustomerService {
   public async recalculateCustomerLtv(customerId: string, tenantId?: string): Promise<number> {
     try {
       const ltv = await computeCustomerLtv(customerId, tenantId);
-      await getCustomerRepository().update(customerId, { ltv_cache: ltv }, tenantId);
+      await getCustomerRepository().update(customerId, { ltv_cache: ltv }, tenantId || DEFAULT_TENANT_ID);
       return ltv;
     } catch (err: any) {
       console.warn('[CUSTOMER] recalculateCustomerLtv failed:', err.message);
@@ -2949,9 +2956,9 @@ export class CustomerService {
 
       // Persist atomically
       try {
-        await prisma.customer.update({
-          where: { id: customerId },
-          data: {
+        await getCustomerRepository().update(
+          customerId,
+          {
             lat: chosen.lat,
             lng: chosen.lng,
             distance_km: delivery.distanceKm,
@@ -2986,7 +2993,8 @@ export class CustomerService {
               location_updated_by_staff_name: performedBy || 'Admin',
             },
           },
-        });
+          tenantId
+        );
       } catch (dbErr) {
         // memory fallback
         const mem = memoryCustomers.get(customer.phone) || memoryCustomers.get(customerId);
@@ -3100,7 +3108,7 @@ export class CustomerService {
           const gateway = await resolveGatewayForTenant(tenantId);
           if (gateway && typeof gateway.getProfilePicture === 'function') {
             const picUrl = await gateway.getProfilePicture(phone);
-            await this.updateProfilePicture(customerId, phone, picUrl);
+            await this.updateProfilePicture(customerId, phone, picUrl, tenantId);
           }
         }
       } catch {
@@ -3115,7 +3123,8 @@ export class CustomerService {
   public async updateProfilePicture(
     customerId: string,
     phone: string,
-    profilePictureUrl: string | null
+    profilePictureUrl: string | null,
+    tenantId: string
   ): Promise<void> {
     const now = new Date();
     try {
@@ -3124,7 +3133,8 @@ export class CustomerService {
         {
           profile_picture_url: profilePictureUrl || null,
           profile_picture_updated_at: now,
-        }
+        },
+        tenantId
       );
     } catch {
       // Memory fallback

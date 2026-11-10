@@ -4,6 +4,7 @@ import { responseCacheService } from '../../src/services/response-cache.service'
 import { trackTimeout, activeTimeoutCount, clearAllTimeouts } from '../../src/lifecycle/interval-registry';
 import { outboundLedger } from '../../src/services/outbound-ledger.service';
 import { messageService } from '../../src/services/message.service';
+import { conversationService, __seedMemoryConversationForTest } from '../../src/services/conversation.service';
 
 const TENANT = 'default-tenant';
 
@@ -43,6 +44,16 @@ describe('Durability & Observability Hardening (SM-03, SM-05, SM-09..SM-14)', ()
         messageService.registerInFlightBotOutbound(`chat_${i}`, `content_${i}`, TENANT, 5000);
       }
       expect(messageService.isInFlightBotOutbound('chat_0', 'content_0', TENANT)).toBe(true);
+    });
+
+    it('memoryConversations dibatasi 1000 entri dengan FIFO eviction', () => {
+      for (let i = 0; i < 1100; i++) {
+        __seedMemoryConversationForTest(`conv-${i}`, { id: `conv-${i}`, tenant_id: TENANT });
+      }
+      const mem = conversationService.getMemoryConversations();
+      expect(mem.length).toBeLessThanOrEqual(1000);
+      expect(mem.some((c) => c.id === 'conv-0')).toBe(false);
+      expect(mem.some((c) => c.id === 'conv-1099')).toBe(true);
     });
   });
 });

@@ -228,5 +228,54 @@ describe('Shareloc Reminder Service — Sweep & Template Resolution', () => {
         })
       );
     });
+
+    it('FN-02: saat gateway gagal, in-flight dibersihkan dan outbound TIDAK dicatat', async () => {
+      process.env.ENABLE_SHARELOC_REMINDER_SWEEP = 'true';
+      vi.spyOn(signalService, 'isFriendlyHoursWib').mockReturnValue(true);
+
+      const now = new Date('2026-10-13T12:00:00+07:00');
+      const createdAt = new Date(now.getTime() - 90 * 60 * 1000);
+
+      vi.mocked((prisma as any).reservation.findMany).mockResolvedValueOnce([
+        {
+          id: 'res-1',
+          status: 'confirmed',
+          booking_date: now,
+          created_at: createdAt,
+          customer: {
+            id: 'c-1',
+            phone: '62812345678',
+            name: 'Ani',
+            location_source: 'estimated_area',
+            share_location_sent: false,
+          },
+        },
+      ]);
+      vi.mocked((prisma as any).conversation.findFirst).mockResolvedValueOnce({
+        id: 'conv-1',
+        is_human_handling: false,
+        session_data: {},
+      });
+      vi.mocked((prisma as any).adminNotificationLog.findUnique).mockResolvedValueOnce(null);
+      vi.mocked((prisma as any).adminNotificationLog.create).mockResolvedValueOnce({ id: 'log-1' });
+      vi.mocked((prisma as any).quickReply.findFirst).mockResolvedValueOnce({
+        content: 'Bunda {name}, mohon shareloc ya',
+      });
+      vi.spyOn(factory, 'resolveGatewayForTenant').mockResolvedValue({
+        sendTextMessage: vi.fn().mockResolvedValue({ success: false }),
+      } as any);
+
+      const logSpy = vi.spyOn(messageService, 'logMessage').mockResolvedValue({ id: 'msg-1' } as any);
+      const inFlightSpy = vi.spyOn(messageService, 'registerInFlightBotOutbound').mockImplementation(() => {});
+      const clearSpy = vi.spyOn(messageService, 'clearInFlightBotOutbound').mockImplementation(() => {});
+
+      const res = await sharelocReminderService.sweep('default-tenant', now);
+
+      expect(res.sent).toBe(0);
+      expect(res.reasons.gateway_send_failed).toBe(1);
+      expect(inFlightSpy).toHaveBeenCalledWith('62812345678@c.us', 'Bunda Ani, mohon shareloc ya', 'default-tenant');
+      expect(clearSpy).toHaveBeenCalledWith('62812345678@c.us', 'default-tenant');
+      expect(logSpy).not.toHaveBeenCalled();
+    });
   });
 });

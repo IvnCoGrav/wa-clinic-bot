@@ -258,6 +258,15 @@ function isValidCoordinate(lat: number, lng: number): boolean {
  * Memastikan URL yang di-fetch secara network benar-benar mengarah ke domain resmi Google Maps,
  * serta secara tegas memblokir private IP, localhost, cloud metadata, dan skema berbahaya.
  */
+const ALLOWED_GOOGLE_BASES = new Set([
+  'google.com', 'google.co.id', 'google.co.uk', 'google.de', 'google.fr', 'google.nl', 'google.ca',
+  'google.com.au', 'google.co.jp', 'google.co.in', 'google.com.br', 'google.com.sg', 'google.com.my',
+  'google.co.th', 'google.com.ph', 'google.com.vn', 'google.co.kr', 'google.com.hk', 'google.com.tw',
+  'google.com.mx', 'google.com.ar', 'google.co.nz', 'google.ie', 'google.be', 'google.ch', 'google.at',
+  'google.se', 'google.no', 'google.dk', 'google.fi', 'google.pl', 'google.pt', 'google.gr', 'google.cz',
+  'google.ro', 'google.hu', 'google.ru', 'google.co.za', 'google.ae', 'google.com.sa', 'google.co.il',
+]);
+
 export function isAllowedGoogleMapsHost(urlOrHost: string): boolean {
   if (!urlOrHost || typeof urlOrHost !== 'string') return false;
   try {
@@ -303,9 +312,10 @@ export function isAllowedGoogleMapsHost(urlOrHost: string): boolean {
       return true;
     }
 
-    // Domain Google resmi dengan TLD standar (mis. .com, .co.id, .co.uk, .de)
-    // Cegah bypass subdomain spoofing seperti maps.google.com.attacker.com
-    if (/^(?:(?:maps|www)\.)?google\.(?:[a-z]{2,4}|[a-z]{2,3}\.[a-z]{2,3})$/.test(hostname)) {
+    // Domain Google resmi dengan allowlist eksplisit (cegah bypass google.<tld> asing
+    // dan spoof subdomain seperti maps.google.com.attacker.com).
+    const baseDomain = hostname.replace(/^(?:maps|www)\./, '');
+    if (ALLOWED_GOOGLE_BASES.has(baseDomain)) {
       return true;
     }
 

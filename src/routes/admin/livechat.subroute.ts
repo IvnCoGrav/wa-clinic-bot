@@ -1188,7 +1188,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
         let profilePictureUrl: string | null = null;
         if (gateway && typeof gateway.getProfilePicture === 'function') {
           profilePictureUrl = await gateway.getProfilePicture(customer.phone);
-          await customerService.updateProfilePicture(customer.id, customer.phone, profilePictureUrl);
+          await customerService.updateProfilePicture(customer.id, customer.phone, profilePictureUrl, tenantId);
         }
 
         return reply.status(200).send({

@@ -56,13 +56,13 @@ describe('FASE 5a — customer repository', () => {
     expect(created.id).toMatch(/^cust_/);
     expect(await repo.findByPhone('6281', 't')).not.toBeNull();
     expect(await repo.findById(created.id, 't')).not.toBeNull();
-    const updated = await repo.update(created.id, { kota: 'Sidoarjo' });
+    const updated = await repo.update(created.id, { kota: 'Sidoarjo' }, 't');
     expect(updated.kota).toBe('Sidoarjo');
   });
 
   it('InMemory: update id tak dikenal → throw (bukan diam)', async () => {
     const repo = new InMemoryCustomerRepository();
-    await expect(repo.update('nope', {})).rejects.toThrow();
+    await expect(repo.update('nope', {}, 't')).rejects.toThrow();
   });
 
   it('set/reset: wiring eksplisit untuk test', () => {

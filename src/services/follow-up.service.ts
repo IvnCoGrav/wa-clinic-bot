@@ -2222,6 +2222,7 @@ export class FollowUpService {
               babyName,
               momStage: (fu as any).mom_stage ?? null,
               time: timeStr,
+              businessName,
               index: rollingVariant - 1,
             });
             messageText = normalizeFollowUpGreeting(text);
@@ -2233,6 +2234,7 @@ export class FollowUpService {
             babyName,
             momStage: (fu as any).mom_stage ?? null,
             time: timeStr,
+            businessName,
             index: rollingVariant - 1,
           });
           messageText = normalizeFollowUpGreeting(text);
@@ -2397,6 +2399,7 @@ export class FollowUpService {
     try {
       const gateway = await resolveGatewayForTenant(tenantId);
       const variant = fu.variant ? Math.min(3, Math.max(1, fu.variant)) : getRollingVariant(fu.customer_id || fu.customer?.id || '', fu.scheduled_at);
+      const tenantBrand = await getBrandIdentityAsync(tenantId).catch(() => null);
       const mapping = await wabaTemplateService.getTemplateMapping(tenantId, templateType, variant);
 
       // 1. Template status: hanya APPROVED + is_active yang layak dikirim
@@ -2463,6 +2466,7 @@ export class FollowUpService {
               babyName: babyName || '',
               momStage: (fu as any).mom_stage ?? null,
               time: timeStr || '',
+              businessName: tenantBrand?.businessName,
               index: Math.max(0, variant - 1),
             });
             renderedContent = text;

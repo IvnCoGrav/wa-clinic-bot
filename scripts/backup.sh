@@ -8,6 +8,8 @@ set -euo pipefail
 BACKUP_DIR="./backups"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 ARCHIVE_NAME="wa_clinic_bot_backup_$TIMESTAMP.tar.gz"
+PLAIN_ARCHIVE="$ARCHIVE_NAME"
+ENCRYPTED_ARCHIVE="$ARCHIVE_NAME.enc"
 
 # Buat folder backup jika belum ada
 mkdir -p "$BACKUP_DIR"
@@ -45,15 +47,28 @@ fi
 # 3. Kompresi Konfigurasi, Aset, dan Dump Database (TANPA plaintext .env)
 echo "[2/3] Mengarsipkan file konfigurasi, aset, dan database (secret-safe)..."
 # DEL-07: DILARANG menyertakan .env plaintext ke arsip publik
-tar -czf "$BACKUP_DIR/$ARCHIVE_NAME" \
+tar -czf "$BACKUP_DIR/$PLAIN_ARCHIVE" \
   "$BACKUP_DIR/db_dump_$TIMESTAMP.sql" \
   ./src/config/surabaya_sidoarjo_subdistricts.json \
   ./assets/pricelist_spa.jpg 2>/dev/null || true
 
-if [ -f "$BACKUP_DIR/$ARCHIVE_NAME" ]; then
-  echo "✅ Arsip cadangan berhasil dibuat: $BACKUP_DIR/$ARCHIVE_NAME"
+if [ -f "$BACKUP_DIR/$PLAIN_ARCHIVE" ]; then
+  echo "✅ Arsip cadangan berhasil dibuat: $BACKUP_DIR/$PLAIN_ARCHIVE"
   # Bersihkan file sql mentah agar hemat disk space
   rm -f "$BACKUP_DIR/db_dump_$TIMESTAMP.sql"
+
+  # DEL-07: Enkripsi AES-256-GCM (format ENC1) — fail-closed bila kunci tidak ada.
+  if [ -z "${BACKUP_ENCRYPTION_KEY:-}" ]; then
+    echo "⚠️ ERROR: BACKUP_ENCRYPTION_KEY tidak diset. Backup plaintext DILARANG disimpan."
+    rm -f "$BACKUP_DIR/$PLAIN_ARCHIVE"
+    exit 1
+  fi
+  npx tsx scripts/encrypt-backup.ts "$BACKUP_DIR/$PLAIN_ARCHIVE" "$BACKUP_DIR/$ENCRYPTED_ARCHIVE"
+  if [ "$(head -c 4 "$BACKUP_DIR/$ENCRYPTED_ARCHIVE")" != "ENC1" ]; then
+    echo "⚠️ ERROR: Magic header ENC1 tidak ditemukan pada arsip terenkripsi."
+    exit 1
+  fi
+  echo "✅ Arsip terenkripsi (AES-256-GCM): $BACKUP_DIR/$ENCRYPTED_ARCHIVE"
 else
   echo "⚠️ Gagal membuat arsip kompresi!"
   exit 1
@@ -67,5 +82,5 @@ else
   echo "  [INFO] npx tidak tersedia di environment ini, melewati restore drill otomatis."
 fi
 
-echo "Lokasi cadangan: $BACKUP_DIR/$ARCHIVE_NAME"
+echo "Lokasi cadangan: $BACKUP_DIR/$ENCRYPTED_ARCHIVE"
 echo "========================================="

@@ -57,6 +57,11 @@ describe('Staff Location Synchronization & GPS Precision Alignment (Fase 2)', ()
       return { ...baseCustomer, ...args.data, id: 'cust-1' } as any;
     });
 
+    vi.spyOn(repo, 'update').mockImplementation(async (_id: string, patch: any) => {
+      lastUpdateData = patch;
+      return { ...baseCustomer, ...patch, id: 'cust-1' } as any;
+    });
+
     vi.mocked(prisma.customer.findUnique).mockResolvedValue({
       ...baseCustomer,
     } as any);

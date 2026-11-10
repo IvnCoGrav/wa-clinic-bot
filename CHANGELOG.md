@@ -4,6 +4,21 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-10 - Fix: Tindak Lanjut Audit F0–F3.1 (D-02/D-03, FN-02, CFG-04, SM-03/07/14, CI, Backup, UTL-04)
+
+- **Latar Belakang**: Audit eksekusi F0–F3.1 menemukan 2 regresi test dan 12 status `FIXED` yang belum tuntas. Perbaikan ini menutup temuan tersebut sebelum F3.2.
+- **Perubahan Utama**:
+  1. **Regresi test `customer-profile-edit-drift`**: test memock `CustomerRepository.update` (bukan `prisma.customer.update`); 11/11 lulus.
+  2. **D-02/D-03**: 0 `prisma.customer.update` langsung di `customer.service.ts`; `CustomerRepository.update` mewajibkan `tenantId`; seluruh call site diperbarui.
+  3. **FN-02**: `clearInFlightBotOutbound` dipanggil saat gateway gagal + test baru.
+  4. **CFG-04**: `businessName` diteruskan ke seluruh call `getRollingFollowUpMessage` di follow-up service (termasuk WABA preview); fallback default dipertahankan untuk pemanggil langsung default-tenant.
+  5. **SM-03**: `memoryConversations` dibatasi 1000 entri FIFO + test. **SM-07**: `MessageTransport.sendText` mengembalikan `{ success, messageId }`; WAHA memakai `sendTextDetailed`. **SM-14**: jalur pencarian juga memakai cache customer.
+  6. **DEL-01**: CI memakai baseline-diff (`audit-baseline-diff.mjs`), bukan `npm test` polos. **DEL-07**: `scripts/backup.sh` mengenkripsi arsip dengan AES-256-GCM (`ENC1`) dan mewajibkan `BACKUP_ENCRYPTION_KEY`; utility baru `scripts/encrypt-backup.ts`.
+  7. **UTL-04**: allowlist Google Maps eksplisit; `google.<tld>` asing ditolak.
+  8. **Docs/register**: `KNOWN_ISSUES` #322, `REMAINING_BACKLOG` (Track B 122 status disinkronkan; total 54 FIXED / 7 PARTIAL / 7 DUPLICATE-KNOWN / 200 OPEN), dan plan F3.2 dikoreksi (2.898/1.101/10 baris).
+- **Verifikasi**: `npm run build` + `npm run typecheck` + dashboard build exit 0; security scan 2.075 file bersih; full suite **6.837 test (6.807 lulus / 2 pre-existing #287 / 28 skip)** — **0 regresi baru**.
+- **Sisa**: `SM-02` (parser literal) dan `SM-04` (reset belum transaksional) tetap PARTIAL; eksekusi F3.2 belum dimulai.
+
 #### 2026-11-09 - Feat: Zipcode Anti-Loss (CAPI/Delivery) & Tautan Interaktif LiveChat
 
 - **Latar Belakang**: Kode pos sering hilang saat form reservasi hanya memuat kecamatan/kota, sehingga advanced matching CAPI (`zp`) kosong. URL di bubble LiveChat juga tidak bisa diklik.

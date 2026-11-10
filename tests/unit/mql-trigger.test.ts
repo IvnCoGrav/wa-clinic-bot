@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { customerService } from '../../src/services/customer.service';
 import { capiService } from '../../src/services/capi.service';
 import { prisma } from '../../src/db/client';
+import { getCustomerRepository } from '../../src/repositories/customer.repository';
 
 describe('MQL Automation & Lead Event Trigger', () => {
   const tenantId = 'default-tenant';
@@ -57,7 +58,7 @@ describe('MQL Automation & Lead Event Trigger', () => {
       mql_bubble_count: 3,
     } as any);
 
-    vi.mocked(prisma.customer.update).mockResolvedValueOnce({
+    vi.spyOn(getCustomerRepository(), 'update').mockResolvedValueOnce({
       id: customerId,
       phone: customerPhone,
       is_mql: false,
@@ -90,7 +91,7 @@ describe('MQL Automation & Lead Event Trigger', () => {
     } as any);
 
     const now = new Date();
-    vi.mocked(prisma.customer.update).mockResolvedValueOnce({
+    vi.spyOn(getCustomerRepository(), 'update').mockResolvedValueOnce({
       id: customerId,
       phone: customerPhone,
       is_mql: true,
@@ -134,7 +135,7 @@ describe('MQL Automation & Lead Event Trigger', () => {
       mql_triggered_at: initialTriggerAt,
     } as any);
 
-    vi.mocked(prisma.customer.update).mockResolvedValueOnce({
+    vi.spyOn(getCustomerRepository(), 'update').mockResolvedValueOnce({
       id: customerId,
       phone: customerPhone,
       is_mql: true,

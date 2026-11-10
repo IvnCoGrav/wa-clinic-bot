@@ -33,13 +33,18 @@ vi.mock('../../src/integrations/google-maps/geocoding', () => ({
 describe('Customer Location Refresh — Hierarchy of Truth', () => {
   let customerService: any;
   let prisma: any;
+  let repoUpdateSpy: any;
 
   beforeEach(async () => {
     vi.resetAllMocks();
     // PLAN 8 FASE 5a: test ini mengendalikan perilaku via mock prisma.customer langsung,
     // sehingga memakai adapter Postgres (dengan Prisma ter-mock), bukan InMemory.
-    const { resetCustomerRepository } = await import('../../src/repositories/customer.repository');
+    const { resetCustomerRepository, getCustomerRepository } = await import('../../src/repositories/customer.repository');
     resetCustomerRepository();
+    repoUpdateSpy = vi.spyOn(getCustomerRepository(), 'update').mockImplementation(async (_id: string, patch: any) => ({
+      ...baseCustomer,
+      ...patch,
+    }));
     prisma = (await import('../../src/db/client')).prisma;
     const mod = await import('../../src/services/customer.service');
     customerService = mod.customerService;
@@ -102,7 +107,11 @@ describe('Customer Location Refresh — Hierarchy of Truth', () => {
     expect(res.success).toBe(true);
     expect(res.data?.source).toBe('bidan_shareloc');
     expect(res.data?.lat).toBeCloseTo(-7.3456);
-    expect(prisma.customer.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'cust-refresh-1' }, data: expect.objectContaining({ lat: -7.3456 }) }));
+    expect(repoUpdateSpy).toHaveBeenCalledWith(
+      'cust-refresh-1',
+      expect.objectContaining({ lat: -7.3456 }),
+      'default-tenant'
+    );
   });
 
   it('Tier2: bila hanya customer shareloc, pilih customer', async () => {
