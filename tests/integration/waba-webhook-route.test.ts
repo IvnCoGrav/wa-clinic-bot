@@ -228,6 +228,50 @@ describe('WABA Webhook Route (raw-body signature + tenant + status + media)', ()
     expect(JSON.parse(res.body).status).toBe('IGNORED');
   });
 
+  it('POST menolak phone_number_id tak dikenal dengan 200 UNKNOWN_TENANT_REJECTED (anti retry storm)', async () => {
+    const body = JSON.stringify({
+      object: 'whatsapp_business_account',
+      entry: [{
+        id: 'e-unknown',
+        changes: [{
+          field: 'messages',
+          value: {
+            messaging_product: 'whatsapp',
+            metadata: { display_phone_number: '6280000', phone_number_id: 'PNID_TIDAK_TERDAFTAR' },
+            contacts: [{ profile: { name: 'Bunda X' }, wa_id: '628000111222' }],
+            messages: [{
+              id: 'wamid.unknown-tenant',
+              from: '628000111222',
+              timestamp: '1691000600',
+              type: 'text',
+              text: { body: 'halo' },
+            }],
+          },
+        }],
+      }],
+    });
+
+    // W-008: phone_number_id tak dikenal harus DITOLAK tanpa error 5xx —
+    // 5xx memicu retry storm Meta. Kontrak: 200 + status eksplisit.
+    vi.spyOn(wabaTenantService, 'resolveTenantByPhoneNumberId').mockRejectedValue(
+      new Error('UNKNOWN_PHONE_NUMBER_ID')
+    );
+    const enqueueSpy = vi.fn().mockResolvedValue(undefined);
+    const queueMod = await import('../../src/services/queue.service');
+    (queueMod.queueService as any).enqueueMessage = enqueueSpy;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/webhook/waba',
+      payload: body,
+      headers: { 'content-type': 'application/json', 'x-hub-signature-256': sign(body) },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).status).toBe('UNKNOWN_TENANT_REJECTED');
+    expect(enqueueSpy).not.toHaveBeenCalled();
+  });
+
   it('POST skips enqueue for duplicate wa_message_id (idempotency)', async () => {
     const body = JSON.stringify({
       object: 'whatsapp_business_account',

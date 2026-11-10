@@ -62,6 +62,19 @@ describe('get_catalog_and_price — AI-First Price Grounding', () => {
   });
 
   // Fase 1.2 — Output tool DILARANG membawa tag storage katalog (CASE-063).
+  // A-004: argumen tool (specificTreatmentName) TIDAK boleh membajak
+  // rekomendasi klinis dari keluhan. Clinical dominance menang.
+  it('specificTreatmentName relaksasi tidak mengeliminasi rekomendasi klinis keluhan', async () => {
+    const out = await executeGetCatalog({
+      symptoms: ['batuk', 'pilek'],
+      specificTreatmentName: 'Pijat Bayi Ceria',
+      inquirePrice: false,
+    });
+    expect(out.success).toBe(true);
+    const hasClinicalRec = out.treatments.some((t) => t.isRecommendedForSymptoms === true);
+    expect(hasClinicalRec).toBe(true);
+  });
+
   it('output katalog & rekomendasi bebas tag [BUNDLE:...] / [ADDON]', async () => {
     const out = await executeGetCatalog({ symptoms: ['batuk', 'pilek'], inquirePrice: true });
     const blob = JSON.stringify(out);

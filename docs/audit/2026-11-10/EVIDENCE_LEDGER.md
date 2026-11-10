@@ -55,7 +55,30 @@ Lima item pertama Fase 2 diperbaiki secara fondasional (gerbang kode/data, bukan
 - **Gerbang bukti:** `npm run verify:backlog` -> `PASS` (11 verified baru, baseline 158/158 tidak tumbuh).
 - **Ditunda dengan justifikasi:** `C-001` (rewrite/rerank RAG, blast radius besar -> butuh Confirmation Gate) dan `Ar-003` (661 referensi `DEFAULT_TENANT_ID` di 133 file -> butuh Confirmation Gate migrasi bertahap).
 
-### 0.3 Gerbang Regresi Fase 1
+### 0.3 Triage Fase 2B — 73 item `UNVERIFIED` (2026-11-10)
+
+Seluruh 73 item `UNVERIFIED` ditriase read-only terhadap kode aktual. Hasil: **22 naik `FIXED`** (kode sudah benar + test relevan), **46 turun `OPEN`** (cacat masih ditemukan di `file:line`), dan **5 tetap `UNVERIFIED`** (butuh artefak runtime/DB atau Confirmation Gate).
+
+**22 FIXED (bukti di `backlog-evidence.json`):** `UTL-11`, `W-008`, `I-001`, `I-005`, `A-002`, `A-004`, `A-005`, `A-010`, `C-004`, `C-005`, `C-009`, `C-011`, `M-01`, `M-08`, `M-09`, `K-001`, `K-002`, `K-004`, `K-012`, `Cfg-001`, `Cfg-002`, `Cfg-003`.
+
+**Test baru yang mengunci item:**
+
+| Test | Item | Sifat |
+|---|---|---|
+| `tests/unit/cron-advisory-lock-lease.test.ts` | `K-001`, `K-002` | lease tunggal, fail-closed produksi, release aman |
+| `tests/integration/knowledge-tenant-isolation.test.ts` | `Cfg-002` | BOLA lintas tenant (PUT/DELETE 404, tanpa mutasi) |
+| `tests/integration/waba-webhook-route.test.ts` | `W-008` | `phone_number_id` tak dikenal 200 `UNKNOWN_TENANT_REJECTED` (anti retry storm) |
+| `tests/unit/get-catalog-tool-grounding.test.ts` | `A-004` | `specificTreatmentName` tidak mengeliminasi rekomendasi klinis |
+
+**5 tetap `UNVERIFIED`:** `SM-02` (inert, 0 pemanggil), `C-001` (Confirmation Gate), `C-002` (butuh dump korpus DB), `C-006` (butuh log RAG runtime), `A-013` (klaim dokumentasi tanpa contoh konkret).
+
+**46 OPEN** dicatat ulang dengan alasan spesifik di register (contoh: `Ar-003` 661 referensi `DEFAULT_TENANT_ID`, `Cfg-012` handler tulis default-tenant, `A-008` template deterministik pasca-sanitizer, `K-006` batas hari UTC).
+
+- **Register:** **191 FIXED / 5 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 63 OPEN** (268 total).
+- **Gerbang bukti:** `npm run verify:backlog` -> `PASS` (33 verified baru, baseline 158/158).
+- **Gerbang regresi:** full suite **6.997 test / 6.966 lulus / 3 gagal**; 2 gagal pre-existing #287, 1 gagal berasal dari WIP pengguna yang belum di-commit (`packages/admin-dashboard/src/lib/dashboard-metrics.ts` re-export ke `utils/money.ts`) — bukan regresi perubahan ini.
+
+### 0.4 Gerbang Regresi Fase 1
 
 | Pemeriksaan | Hasil |
 |---|---|

@@ -544,6 +544,402 @@
       ],
       "verifiedBy": "AI Agent",
       "verifiedAt": "2026-11-10"
+    },
+    "UTL-11": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/utils/time-wib.ts",
+          "line": 8,
+          "contains": "export * from './wib-time'"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/wib-time-consolidation.test.ts",
+          "contains": "facade re-exports exact implementations"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-10"
+    },
+    "W-008": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/routes/waba-webhook.route.ts",
+          "line": 127,
+          "contains": "UNKNOWN_TENANT_REJECTED"
+        },
+        {
+          "type": "test",
+          "path": "tests/integration/waba-webhook-route.test.ts",
+          "contains": "anti retry storm"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-10"
+    },
+    "I-001": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/services/backup.service.ts",
+          "line": 105,
+          "contains": "encryptBufferWithKey(compressed, key)"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/backup-restore-drill.test.ts",
+          "contains": "dump -> encrypt"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-10"
+    },
+    "I-005": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/services/sheets/sheets-sync.service.ts",
+          "line": 199,
+          "contains": "result.deferred++"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/sheets-sync.service.test.ts",
+          "contains": "expect(res.deferred).toBe(1)"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-10"
+    },
+    "A-002": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/v3/tools/tool-masker.ts",
+          "line": 564,
+          "contains": "hasBookingCommitSignal(cleanIncomingText)"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/commitment-user-only.test.ts",
+          "contains": "should NOT allow LLM tool arguments"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-10"
+    },
+    "A-004": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/v3/tools/get-catalog.tool.ts",
+          "line": 452,
+          "contains": "evictsClinical"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/get-catalog-tool-grounding.test.ts",
+          "contains": "tidak mengeliminasi rekomendasi klinis"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-10"
+    },
+    "A-005": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/v3/agent/pipeline/phase-resolver.ts",
+          "line": 142,
+          "contains": "session.booking?.isConfirmed"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/reservation-completed-state.test.ts",
+          "contains": "diturunkan COMPLETED"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-10"
+    },
+    "A-010": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/integrations/llm/llm-gateway.ts",
+          "line": 33,
+          "contains": "getActiveEndpointConfig(tenantId)"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/v3/llm-actual-model-audit.test.ts",
+          "contains": "actualModelUsed"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-10"
+    },
+    "C-004": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/v3/agent/prompt/prompt-composer.ts",
+          "line": 351,
+          "contains": "dbPrompt.personalityTone"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/v3/db-prompt-phase-mask.test.ts",
+          "contains": "prompt DB memuat focus fase"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-10"
+    },
+    "C-005": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/v3/agent/pipeline/medical-signal-detector.ts",
+          "line": 400,
+          "contains": "minimal 48 jam"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/v3/vaccine-safety.test.ts",
+          "contains": "jeda 3 hari"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-10"
+    },
+    "C-009": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/utils/llm-execution-logger.ts",
+          "line": 508,
+          "contains": "pruneOldLlmLogs"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/cg09-pii-redaction.test.ts",
+          "contains": "maskCustomerName menyamarkan"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-10"
+    },
+    "C-011": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/config/medical-keywords.ts",
+          "line": 413,
+          "contains": "maxDays >= 14"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/persistent-cough-rash-redflag.test.ts",
+          "contains": "batuk kronis (>=2 minggu) sendirian"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-10"
+    },
+    "M-01": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/services/ad-attribution.service.ts",
+          "line": 209,
+          "contains": "uniqueTrackingCode"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/ad-attribution-ctwa-catch.test.ts",
+          "contains": "startsWith('ctwa_fuzzy_')"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-10"
+    },
+    "M-08": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/services/ctwa-text-catcher.service.ts",
+          "line": 45,
+          "contains": "anchorCheckPassed"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/ctwa-text-catcher.test.ts",
+          "contains": "kredit anchor"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-10"
+    },
+    "M-09": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/routes/admin/meta-attribution.subroute.ts",
+          "line": 605,
+          "contains": "Audit log perubahan spend"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/meta-performance-analytics.test.ts",
+          "contains": "CAC/ROAS saat spend diisi"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-10"
+    },
+    "K-001": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/lifecycle/cron-advisory-lock.ts",
+          "line": 11,
+          "contains": "cron_leases"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/cron-advisory-lock-lease.test.ts",
+          "contains": "TIDAK menjadi leader (fail-closed)"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-10"
+    },
+    "K-002": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/lifecycle/cron-advisory-lock.ts",
+          "line": 44,
+          "contains": "startHeartbeat"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/cron-advisory-lock-lease.test.ts",
+          "contains": "claim 0 baris"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-10"
+    },
+    "K-004": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/services/sheets/sheets-sync.service.ts",
+          "line": 550,
+          "contains": "Atomic claim"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/sheets-sync.service.test.ts",
+          "contains": "atomic lease"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-10"
+    },
+    "K-012": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/services/media.service.ts",
+          "line": 772,
+          "contains": "Proteksi pricelist"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/media.service.test.ts",
+          "contains": "gambar pricelist dikecualikan"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-10"
+    },
+    "Cfg-001": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/routes/admin/settings-ai.subroute.ts",
+          "line": 1029,
+          "contains": "idle_greeting_enabled"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/settings-conversation-behavior.test.ts",
+          "contains": "no fake 200"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-10"
+    },
+    "Cfg-002": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/routes/admin/knowledge.subroute.ts",
+          "line": 205,
+          "contains": "where: { id, tenant_id: tenantId }"
+        },
+        {
+          "type": "test",
+          "path": "tests/integration/knowledge-tenant-isolation.test.ts",
+          "contains": "isolasi tenant (Cfg-002)"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-10"
+    },
+    "Cfg-003": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/services/staff-reservation.service.ts",
+          "line": 2821,
+          "contains": "belum diatur di Pengaturan Klinik"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/admin-payment-info-settings.test.ts",
+          "contains": "return empty bank accounts"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-10"
     }
   },
   "known": {
