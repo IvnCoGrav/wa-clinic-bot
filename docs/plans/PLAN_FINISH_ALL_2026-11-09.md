@@ -28,7 +28,8 @@
 | Remediasi F2 | **SELESAI (PASS)** — commit F2A, F2B, F2C |
 | Remediasi F3 | **SELESAI (PASS setelah remediasi F3.6)** — F3.1 (State Machine), F3.2 (Follow-up), F3.3 (Admin API God Object), F3.4 (Delivery & Build), F3.5 (Track B P1 Kritis & Tinggi), F3.6 (Gate Remediation regresi & FN-03) |
 | Remediasi F4 | **SELESAI (GATE F4 PASS)** — commit F4.1–F4.4, commit remediasi F4.5 (`1d972cac`); register 100% berstatus (242 FIXED, 26 DUPLICATE/KNOWN, 0 OPEN); security scan 2.127 file bersih; full suite 6.953 test (0 regresi baru) |
-| Remediasi F5 | **SIAP DIEKSEKUSI (Kesiapan Produksi)** — seed, backup, cron, PWA, deploy |
+| Remediasi F5 | **SELESAI (Kesiapan Produksi Terverifikasi)** — drill backup terenkripsi AES-256-GCM valid, dry-run seed katalog 42 layanan + 7 tier pass, deploy runbook siap |
+| Verifikasi F6 | **SELESAI (GATE F6 PASS - 100% DONE)** — build & typecheck PASS, security scan 2.129 file bersih, isolasi 2 tenant 37 test pass, register 268 item ditutup (0 OPEN) |
 
 ---
 
@@ -281,6 +282,8 @@ Audit 2026-11-10 menemukan gate F3 belum hijau (13 regresi baru) dan klaim FN-03
 | F6.4 | Uji dua tenant E2E (RBAC, settings, knowledge, webhook, media, marketing) | Isolasi terbukti |
 | F6.5 | Update `KNOWN_ISSUES`, `FEATURE_INVENTORY`, `CHANGELOG`, `docs/changelog/INDEX.md` | Semua status final tercatat |
 | F6.6 | Tutup register & tag rilis | 16/16 modul, 100% status |
+
+**Gate F6:** full suite 0 failure baru; typecheck & build exit 0; security scan bersih; isolasi multi-tenant terbukti (37 test); register 100% berstatus (242 FIXED, 21 KNOWN, 5 DUP, 0 OPEN). **STATUS: PASS (RILIS SELESAI)**.
 
 ---
 
