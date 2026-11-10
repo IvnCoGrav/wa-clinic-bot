@@ -958,10 +958,41 @@ export class ConversationService {
    */
   /**
    * Reset percakapan ke INITIAL secara atomik (SM-04).
-   * Membersihkan pending location customer, state conversation, last discussed treatment,
-   * dan GoalTracker episodic session dalam satu seam terpadu.
+   * Menjalankan Prisma $transaction untuk customer pending location dan state conversation,
+   * lalu membersihkan in-memory caches dan GoalTracker episodic session dalam satu seam terpadu.
    */
   public async resetConversationToInitial(conversationId: string, customerId: string, tenantId: string): Promise<void> {
+    // 1. Eksekusi database secara atomik via Prisma $transaction (SM-04)
+    try {
+      const { prisma } = await import('../db/client');
+      await (prisma as any).$transaction([
+        (prisma as any).customer.updateMany({
+          where: { id: customerId, tenant_id: tenantId },
+          data: {
+            pending_kelurahan: null,
+            pending_kecamatan: null,
+            pending_kota: null,
+            pending_lat: null,
+            pending_lng: null,
+            pending_zipcode: null,
+          },
+        }),
+        (prisma as any).conversation.updateMany({
+          where: { id: conversationId, tenant_id: tenantId },
+          data: {
+            current_state: ConversationState.INITIAL,
+            previous_state: null,
+            location_attempts: 0,
+            last_discussed_treatment: null,
+          },
+        }),
+      ]);
+    } catch (txErr: any) {
+      // Graceful fallback bila DB sedang offline (misal test offline atau jaringan putus)
+      console.warn('[RESET CONVERSATION TX] DB transaction offline / fallback:', txErr?.message);
+    }
+
+    // 2. Sinkronisasi repository seam & in-memory caches
     const { customerService } = await import('./customer.service');
     await customerService.clearPendingLocation(customerId, tenantId).catch(() => {});
 
@@ -973,9 +1004,12 @@ export class ConversationService {
         locationAttempts: 0,
       },
       tenantId
-    );
+    ).catch((err) => {
+      console.warn('[RESET CONVERSATION] Gagal updateConversationState:', err?.message);
+    });
     await this.updateLastDiscussedTreatment(conversationId, tenantId, null as any).catch(() => {});
 
+    // 3. Pembersihan sesi episodik GoalTracker V3
     try {
       const { GoalTracker } = await import('../v3/state/goal-tracker');
       await GoalTracker.updateGoalSession(

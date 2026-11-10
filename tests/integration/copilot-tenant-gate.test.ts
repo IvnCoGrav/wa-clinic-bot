@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { buildApp } from '../../src/app';
+import { copilotService } from '../../src/services/copilot/copilot.service';
 
 /**
  * ADR-001 gerbang single-tenant di LEVEL ROUTE (end-to-end Fastify inject).
@@ -15,10 +16,18 @@ describe('POST /api/admin/copilot/chat — gerbang single-tenant route', () => {
 
   beforeEach(() => {
     process.env.ADMIN_API_KEY = key;
+    vi.spyOn(copilotService, 'chat').mockResolvedValue({
+      success: true,
+      answer: 'Halo admin!',
+      toolsUsed: [],
+      grounded: true,
+      llmCalls: 0,
+    } as any);
   });
 
   afterEach(() => {
     process.env.COPILOT_ALLOWED_TENANT_IDS = originalAllowlist;
+    vi.restoreAllMocks();
   });
 
   it('tenant yang tidak ada di allowlist → 403 COPILOT_TENANT_DEPRECATED', async () => {

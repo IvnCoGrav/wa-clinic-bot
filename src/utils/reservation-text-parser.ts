@@ -80,33 +80,70 @@ export interface ParseResult {
   missingFields?: string[];
 }
 
+export interface ReservationFormOptions {
+  customHeaders?: string[];
+  tenantId?: string;
+}
+
+export const DEFAULT_FORM_HEADER_SIGNALS: readonly string[] = [
+  'list untuk reservasi',
+  'berikut list untuk reservasi',
+  'format reservasi',
+  'form reservasi',
+  'form booking',
+  'format booking',
+  'list reservasi',
+  'pilihan treatment :',
+  'pilihan treatment (',
+  'pilihan paket :',
+  'jadwal treatment :',
+  'jadwal reservasi :',
+];
+
+const tenantFormHeadersCache = new Map<string, { headers: string[]; expiresAt: number }>();
+
+/**
+ * Mendaftarkan header template form dinamis per-tenant ke dalam cache in-memory (SM-02).
+ */
+export function registerTenantFormHeaders(tenantId: string, headers: string[]): void {
+  if (!tenantId || !Array.isArray(headers)) return;
+  tenantFormHeadersCache.set(tenantId, {
+    headers: headers.map((h) => h.toLowerCase().trim()).filter(Boolean),
+    expiresAt: Date.now() + 300_000,
+  });
+}
+
+/**
+ * Mengambil daftar header template form yang aktif untuk tenant (SM-02).
+ */
+export function getTenantFormHeaders(tenantId?: string): string[] {
+  if (!tenantId) return [...DEFAULT_FORM_HEADER_SIGNALS];
+  const cached = tenantFormHeadersCache.get(tenantId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return [...DEFAULT_FORM_HEADER_SIGNALS, ...cached.headers];
+  }
+  return [...DEFAULT_FORM_HEADER_SIGNALS];
+}
+
 /**
  * Mengecek apakah sebuah pesan WhatsApp merupakan form reservasi / booking layanan
  * secara toleran terhadap berbagai variasi penulisan tanpa false-positive pada chat biasa.
  */
-export function isPotentialReservationForm(rawText: string): boolean {
-  return isReservationFormMessage(rawText);
+export function isPotentialReservationForm(rawText: string, options?: ReservationFormOptions): boolean {
+  return isReservationFormMessage(rawText, options);
 }
 
-export function isReservationFormMessage(rawText: string): boolean {
+export function isReservationFormMessage(rawText: string, options?: ReservationFormOptions): boolean {
   if (!rawText || typeof rawText !== 'string') return false;
   const lower = rawText.toLowerCase().replace(/\s+/g, ' ');
 
-  // 1. Explicit Form Header Signals (Kala Spa official booking format)
-  const hasExplicitFormHeader =
-    lower.includes('list untuk reservasi') ||
-    lower.includes('berikut list untuk reservasi') ||
-    lower.includes('format reservasi') ||
-    lower.includes('form reservasi') ||
-    lower.includes('form booking') ||
-    lower.includes('format booking') ||
-    lower.includes('list reservasi') ||
-    lower.includes('pilihan treatment :') ||
-    lower.includes('pilihan treatment (') ||
-    lower.includes('pilihan paket :') ||
-    lower.includes('jadwal treatment :') ||
-    lower.includes('jadwal reservasi :');
+  // 1. Explicit Form Header Signals (Data-driven: default + tenant-configured headers, SM-02)
+  const formHeaders = [
+    ...getTenantFormHeaders(options?.tenantId),
+    ...(options?.customHeaders || []).map((h) => h.toLowerCase().trim()),
+  ];
 
+  const hasExplicitFormHeader = formHeaders.some((header) => lower.includes(header));
   if (hasExplicitFormHeader) return true;
 
   // 2. Structured Colon-Based Field Signals (minimal 2 explicit structured form field keys with colons)
@@ -141,7 +178,7 @@ export function isReservationFormMessage(rawText: string): boolean {
 }
 
 /**
- * Parser toleran untuk meng-parse format teks list reservasi Bidan Yusi (Kala Moms and Baby Spa)
+ * Parser toleran untuk mengekstrak entitas reservasi layanan klinik/spa dari format teks pengguna.
  * Menggunakan pendekatan baris-per-baris untuk keamanan parsing dan keandalan tinggi.
  */
 
