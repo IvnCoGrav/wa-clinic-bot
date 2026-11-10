@@ -1,5 +1,7 @@
 # PLAN PENYELESAIAN TOTAL — AUDIT 16 MODUL & REMEDIASI
 
+> ⛔ **FREEZE SERTIFIKASI 2026-11-10.** Klaim Gate F4/F6 “PASS / 100% DONE” di dokumen ini **DICABUT**. Audit menemukan **84 item `UNVERIFIED`** (83 mass-flip `e98d4ffe` + `SM-02` inert). Bukti: [`docs/audit/2026-11-10/EVIDENCE_LEDGER.md`](../audit/2026-11-10/EVIDENCE_LEDGER.md). **Jangan deploy produksi** sampai Fase 0–5 selesai. Baris status “SELESAI/PASS” di bawah adalah klaim lama yang belum terverifikasi.
+
 - **Status:** **DRAFT — BELUM DIEKSEKUSI.** Wajib persetujuan eksplisit pengguna per fase.
 - **Baseline:** `0a940b64` (`master`), working tree bersih (2026-11-09).
 - **Baseline uji:** `docs/audit/2026-11-09/after-s5-final.json` — 6.774 test / 6.743 lulus / 3 gagal known / 28 skip.

@@ -38,6 +38,9 @@ jobs:
       - name: Security Scan (Secret Leak Detection)
         run: npm run security:scan
 
+      - name: Backlog Evidence Gate
+        run: npm run verify:backlog
+
       - name: Typecheck Backend
         run: npm run typecheck
 

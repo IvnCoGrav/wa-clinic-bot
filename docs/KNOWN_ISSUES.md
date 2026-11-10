@@ -3,6 +3,35 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 325. [Audit Eksekusi F0–F6] Sertifikasi 242 FIXED Dicabut — 84 Item UNVERIFIED (2026-11-10, OPEN — Fase 0 Freeze + Fase 1 Evidence Gate)
+
+- **Status:** OPEN — sertifikasi lama dicabut; gerbang bukti otomatis sudah terpasang (Fase 1). Kode produksi belum diubah. **Deploy produksi diblokir** sampai Fase 0–5 lulus.
+- **Laporan audit:** `docs/audit/2026-11-10/EVIDENCE_LEDGER.md`.
+- **Apa yang terjadi:** Laporan F0–F6 mengklaim 242 FIXED / 21 KNOWN / 5 DUPLICATE / 0 OPEN dan production-ready. Verifikasi menemukan commit `e98d4ffe` hanya mengubah dua file dokumentasi, tetapi mengubah **82 item `OPEN→FIXED`**, **20 `OPEN→KNOWN`**, dan **1 `PARTIAL→FIXED`**. Skrip `scratch/update_backlog.js:59-75` menjadikan FIXED sebagai **default** untuk item yang tidak masuk dua daftar kecil.
+- **Dampak:** Register tidak dapat dipakai sebagai bukti rilis. Gate F4 **belum terpenuhi**.
+- **Temuan yang terbukti masih bermasalah (7):**
+  - `S-001`: `GUIDE_OPERASIONAL.md:36-40` masih memuat `admin12345` dan `my_waha_api_key_secret`.
+  - `Ar-003`: **661 referensi** `DEFAULT_TENANT_ID` di 133 file; login admin/staf masih default tenant (`src/routes/admin/auth.subroute.ts:130,190,219,285,316,369,386,407`; `src/routes/staff/auth.subroute.ts:42`).
+  - `C-003`: `src/v3/state/goal-tracker.ts:472,493` masih memaksa `MANDAT` di atas *clinical dominance*.
+  - `C-001`: `src/services/knowledge.service.ts:191-253` masih leksikal (`ts_rank`/`plainto_tsquery`/trigram); tanpa query rewriting/rerank.
+  - `A-006`: `src/v3/agent/agent-runner.ts:209-212` mengirim riwayat mentah; hanya pesan saat ini yang di-`wrapCustomerMessage`.
+  - `W-009`: `src/services/waba-tenant.service.ts:8,20,32` cache `Map` tanpa TTL/`expiresAt`.
+  - `K-013`: **22** cron terdaftar di `src/lifecycle/background-crons.ts` vs **23** di `docs/FEATURE_INVENTORY.md:198,271`.
+- **Temuan tambahan:** `SM-02` berstatus FIXED tetapi **inert** — `getTenantFormHeadersAsync`/`registerTenantFormHeaders` **0 pemanggil produksi** (`src/utils/reservation-text-parser.ts:131,162`).
+- **F5/F6 tidak dieksekusi:** Tidak ada artefak `after-f5.json`/`after-f6.json`; `scripts/deploy-prod.sh` tidak memvalidasi `APP_DOMAIN`/`BACKUP_ENCRYPTION_KEY`; `backup:verify` tidak ada di `package.json`. F6.1 menyebut “kelulusan penuh” padahal artefak 6.953 test berisi **6.923 lulus / 2 gagal pre-existing #287 / 28 skip**. Klaim “37 test isolasi 2 tenant” tidak punya suite/script rujukan; yang terverifikasi 5 suite / 23 test isolasi eksplisit lulus.
+- **Tindakan Fase 0 (selesai 2026-11-10):**
+  - **84 item** diturunkan ke `UNVERIFIED` di `docs/plans/REMAINING_BACKLOG_2026-11-09.md` (83 mass-flip + `SM-02`).
+  - Register menjadi **158 FIXED / 26 DUP+KNOWN / 84 UNVERIFIED / 0 OPEN**.
+  - Evidence ledger dibuat: 83 item mass-flip (6 bukti awal, 7 terbukti masih rusak, 70 belum ada bukti), `SM-02`, dan 20 item `OPEN→KNOWN` tanpa justifikasi.
+- **Tindakan Fase 1 (selesai 2026-11-10):**
+  - **6 item `BUKTI AWAL` naik ke `FIXED`** dengan bukti kode + test lulus: `S-002`, `S-003`, `S-013`, `I-010`, `A-001`, `A-003`.
+  - **17 item `KNOWN` dikembalikan ke `OPEN`** (isu keamanan/tenant/privacy/korektness): `CFG-12`, `UTL-15`, `S-008`, `S-011`, `S-012`, `S-015`, `S-016`, `Ar-004`, `Ar-008`, `W-006`, `W-010`, `W-011`, `I-006`, `S-02`, `S-06`, `S-09`, `Cfg-015`.
+  - **4 item tetap `KNOWN`** dengan justifikasi + acceptance: `DOM-02`, `ING-09`, `ING-10`, `API-04` (bersyarat single-tenant).
+  - Register menjadi **164 FIXED / 78 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 17 OPEN**.
+  - **Gerbang bukti otomatis:** `npm run verify:backlog` (`scripts/verify-backlog-evidence.mjs`) + manifest `docs/audit/2026-11-10/backlog-evidence.json`, baseline beku `legacy-fixed-baseline.json` (158, tidak boleh tumbuh), step CI **Backlog Evidence Gate**, dan uji adversarial `tests/unit/backlog-evidence-gate.test.ts` (6 test).
+  - **Gerbang regresi:** full suite **6.964 test / 6.934 lulus / 2 gagal pre-existing #287 / 28 skip**; artefak `docs/audit/2026-11-10/after-fase1.json`; `audit-baseline-diff.mjs` → **0 regresi baru**.
+- **Rencana lanjutan:** Fase 2 perbaiki 7 item terbukti + 78 UNVERIFIED triage; Fase 3 eksekusi F5 nyata + artefak; Fase 4 rekonsiliasi dokumen; Fase 5 deploy gate (2-step verification).
+
 ## 324. [Gate F3.6] Regresi F3.2–F3.5 & Remediasi (2026-11-10, RESOLVED)
 
 - **Status:** RESOLVED — gate F3 hijau setelah remediasi F3.6 (12 regresi baru diperbaiki + 1 flaky).
@@ -29,6 +58,13 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Bukti kunci:** Lighthouse login aksesibilitas 0,88 dengan kegagalan kontras 3,02:1 di tema gelap (110 situs `text-white` tanpa token `on-solid`); 331 `toast(..., 'error')` vs 1 prop `error` inline; 45 overlay modal buatan sendiri, 0 halaman memakai `Modal` bersama; 54 format tanggal tanpa `timeZone`; `npm run check:tokens` dan `check:dark-parity` GAGAL dan tidak dijalankan di CI.
 - **Fakta pendukung:** `packages/admin-dashboard` **tidak punya test UI** (0 file, tanpa konfigurasi vitest/jest), sehingga skor Detection tinggi di hampir semua paket.
 - **Fase 0 SELESAI (2026-11-10):** tiga skrip gerbang ditambahkan (`scripts/check-a11y-strings.mjs`, `check-contrast-pairs.mjs`, `check-catalog-sync.mjs`), baseline a11y dikunci **490 pola di 75 file**, `npm run build` exit 0. `npm run check:a11y` hijau; `check:contrast` melaporkan **102 pelanggaran**; `check:catalog` melaporkan **6 masalah**.
+- **Fase 1 bagian kontras SELESAI (2026-11-10):** 102 pelanggaran menjadi **0** di 41 file (103 insertions / 104 deletions, hanya `.tsx`). `npm run check:contrast` hijau, `npm run build` exit 0, `check:a11y` tetap 490/490. Lighthouse halaman login **0,88 -> 0,96**, kegagalan `color-contrast` hilang (tombol dark: 6,14:1). Sisa kegagalan Lighthouse: `landmark-one-main` (Fase 4) dan `meta-description` (tidak relevan).
+- **Fase 1 bagian kontrak error BELUM:** T-1.4/T-1.5 (pembungkus error + migrasi 6 catch) menunggu persetujuan terpisah karena mengubah perilaku runtime, bukan visual.
+- **Fase 2 SELESAI untuk UI chrome (2026-11-10):** `lang="id"`, judul netral + runtime dari env, em dash UI 118 -> 0 (sisa 2 di dev-only/komentar), emoji 423 -> 151 (sisanya konten pesan/picker/push), `aria-current` pada menu aktif, `BootProgress` role=status. 18 span kosong hasil pembersihan dibersihkan ulang. `npm run build` 0, `check:contrast` OK, `check:a11y` 490/490.
+- **Fase 3 SELESAI kecuali 2 modal (2026-11-10):** skala `--z-*` + `z-dialog`/`z-toast` terpasang; `ui/Modal.tsx` ditulis ulang (focus trap, Escape, `aria-modal`, fokus awal/pengembalian, varian sheet, `headerAction`, `bodyClassName`, `data-modal-active/close`); `UiFeedback` konfirmasi + toast diberi semantik, Escape, dan jeda hover; 43 tombol ikon diberi `aria-label`; **53 komponen** memakai `Modal`. Overlay manual 70 blok/45 file -> 17 blok/12 file. Baseline a11y 490 -> 354. Ditunda karena butuh `variant="full"` + prop `layer`: `CreateReservationModal` dan `InvoiceGeneratorModal`. Drawer, popover, dan lightbox tetap mandiri.
+- **Fase 4 SEBAGIAN (2026-11-10):** `ui/PageHeader.tsx` dan `ui/StateViews.tsx` dibuat; judul `h1` diseragamkan di 17 halaman, setiap halaman produksi tepat 1 `h1`; `LoadingState` di fallback Suspense; `SkeletonRows` di daftar Live Chat; `EmptyState` di Reservations, TodayTreatments, CustomerDatabase. Verifikasi mengoreksi audit awal: `ClinicServices` tidak butuh paginasi (katalog 43 baris), bukan ">200". Sisa: `ErrorState` (butuh state error persisten per halaman) dan pengukuran antrean `MetaCapiQueue`.
+- **Fase 5 SEBAGIAN (2026-11-10):** `Fields.tsx` memakai `useId` + `aria-invalid`/`aria-describedby` + id pesan error; label Login/StaffLogin terhubung + `autoComplete`; modul `lib/validateReservation.ts` mengembalikan semua error sekaligus; 5 unit test lulus; `CreateReservationModal` dan `LandingPage` memakai validator + `FormErrorSummary`. Baseline a11y 354 -> 350. Sisa: AiPersona, Settings, ClinicServices, KnowledgeBase, StaffManagement, QuickReplies, FollowUpTemplates, DeliveryTiers, CustomerService.
+- **Verifikasi harga DB (2026-11-10, read-only):** DB lokal tidak dapat dijangkau (`localhost:5432`). Memakai snapshot `storage/live_clinic_services.sql` (12 Sep 2026, 43 baris), **HTML cocok dengan DB** untuk 4 dari 5 harga sengketa (moms-oksitosin-fullbody 105.000; bundle-laktasi-oksitosin 140.000; add-on-nebulizer 35.000; add-on-nebulizer-obat 50.000), sedangkan `services_custom.json` menyimpang. Jadi **JSON yang basi**, bukan halaman HTML; regenerasi dari JSON justru akan menurunkan harga publik. `baby-massage-pulih-ceria-newborn` tidak ada di snapshot. Snapshot DB 43 layanan vs JSON 38 vs HTML 39, jadi halaman publik kemungkinan melewatkan 4-5 layanan aktif.
 - **Drift katalog TERBUKTI (bukan lagi asumsi):** `services_custom.json` vs `layanan.html` berbeda pada 5 harga (baby-massage-pulih-ceria-newborn 65.000 vs 75.000; moms-oksitosin-fullbody 110.000 vs 105.000; bundle-laktasi-oksitosin 70.000 vs 140.000; add-on-nebulizer 80.000 vs 35.000; add-on-nebulizer-obat 110.000 vs 50.000) dan jumlah layanan 38 vs 39. Sisi yang benar perlu query DB.
 - **Catatan landing publik:** `src/landing/public/layanan.html` memuat 39 layanan + tier ongkir hardcoded dari `scripts/build_landing.js` (membaca snapshot `services_custom.json`, terakhir 2026-10-19). Halaman itu **tidak dirutekan** `src/routes/landing.route.ts` (hanya `/go`, `/pricelist.html`, `/promo/:slug`, `/assets/:filename`), jadi cara distribusinya perlu dipastikan sebelum diperbaiki. Terkait #277.
 - **Rencana:** 10 paket (P1 token/error, P2 modal/z-index, P3 form, P4 header/state, P5 tipografi, P6 motion/navigasi, P7 format data, P8 bahasa/teks, P9 metadata/CI, P10 data bisnis/izin). RPN tertinggi: P10 (336), P2 dan P3 (252).
