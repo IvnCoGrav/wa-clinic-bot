@@ -221,6 +221,11 @@ export async function adminRoutes(fastify: FastifyInstance) {
         '/api/admin/waba-templates',
         // Tahap-B hardening: unduh PII massal (Custom Audience Meta) hanya Super Admin.
         '/api/admin/customers/audience-export',
+        '/api/admin/few-shots',
+        '/api/admin/ai-rollout-scope',
+        '/api/admin/prompt-config',
+        '/api/admin/conversation-behavior',
+        '/api/admin/customer-service',
       ];
 
       if (superAdminOnlyPrefixes.some((prefix) => urlPath.startsWith(prefix))) {
@@ -269,6 +274,15 @@ export async function adminRoutes(fastify: FastifyInstance) {
             code: 'FORBIDDEN_STAFF_MANAGEMENT',
           });
         }
+      }
+
+      // Prohibit knowledge & FAQ modification by non-super-admin
+      if (urlPath.startsWith('/api/admin/knowledge') && request.method !== 'GET') {
+        console.warn(`[RBAC GUARD] Blocked knowledge modification attempt by staff role '${staffRole}' on ${request.method} ${urlPath}`);
+        return reply.status(403).send({
+          error: 'Forbidden: Only Super Admin can modify knowledge base and FAQ staging.',
+          code: 'FORBIDDEN_KNOWLEDGE_MANAGEMENT',
+        });
       }
 
       // Push self-registration didelegasikan ke scope data-driven (tabel

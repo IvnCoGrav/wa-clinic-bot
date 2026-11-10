@@ -12,10 +12,10 @@ import { queueService } from './queue.service';
  */
 export class TurnRecoveryService {
   /** Replay turn yang belum selesai diproses (idempoten via markQueued). */
-  public async replayPendingTurns(limit = 50): Promise<number> {
+  public async replayPendingTurns(limit = 50, opts: { resetProcessingOnBoot?: boolean; olderThanMs?: number } = {}): Promise<number> {
     let replayed = 0;
     try {
-      const pending = await turnRepository.listReplayable({ limit });
+      const pending = await turnRepository.listReplayable({ limit, ...opts });
       if (pending.length >= 10) {
         console.error(`[TURN RECOVERY ALARM] Terdeteksi ${pending.length} turn masuk kondisi STUCK (>2 menit)!`);
         try {

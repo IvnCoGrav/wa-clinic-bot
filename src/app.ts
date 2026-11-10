@@ -360,7 +360,7 @@ if (require.main === module) {
     // + retention ledger. Non-blocking; beri jeda agar queue/Redis siap.
     setTimeout(() => {
       import('./services/turn-recovery.service').then(({ turnRecoveryService }) => {
-        void turnRecoveryService.replayPendingTurns().catch(() => {});
+        void turnRecoveryService.replayPendingTurns(50, { resetProcessingOnBoot: true }).catch(() => {});
         void turnRecoveryService.cleanupOldTurns(60).catch(() => {});
       }).catch(() => {});
     }, 15000);

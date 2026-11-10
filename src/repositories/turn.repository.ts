@@ -51,7 +51,7 @@ export class TurnRepository {
    * belum diproses, ATAU PROCESSING yang macet (worker crash) melewati ambang.
    * Mengembalikan payload untuk di-enqueue ulang.
    */
-  public async listReplayable(opts: { olderThanMs?: number; limit?: number; maxAttempts?: number } = {}): Promise<Array<{ tenant_id: string; provider: string; inbound_message_id: string; payload_json: any; status: string; attempts: number }>> {
+  public async listReplayable(opts: { olderThanMs?: number; limit?: number; maxAttempts?: number; resetProcessingOnBoot?: boolean } = {}): Promise<Array<{ tenant_id: string; provider: string; inbound_message_id: string; payload_json: any; status: string; attempts: number }>> {
     const olderThanMs = opts.olderThanMs ?? 2 * 60 * 1000;
     const limit = opts.limit ?? 50;
     const maxAttempts = opts.maxAttempts ?? 5;
@@ -62,7 +62,7 @@ export class TurnRepository {
           attempts: { lt: maxAttempts },
           OR: [
             { status: { in: ['RECEIVED', 'QUEUED'] }, updated_at: { lt: cutoff } },
-            { status: 'PROCESSING', updated_at: { lt: cutoff } },
+            opts.resetProcessingOnBoot ? { status: 'PROCESSING' } : { status: 'PROCESSING', updated_at: { lt: cutoff } },
           ],
         },
         orderBy: { created_at: 'asc' },

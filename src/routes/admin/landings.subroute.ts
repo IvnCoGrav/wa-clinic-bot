@@ -137,6 +137,14 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       const { id } = request.params;
+      const sessionTenant = (request as any).tenantId;
+      const staffRole = (request as any).staffRole;
+      if (staffRole && staffRole !== 'SUPER_ADMIN' && sessionTenant && sessionTenant !== id) {
+        return reply.status(403).send({
+          error: 'Forbidden: Staf tidak memiliki akses untuk mengubah landing page tenant lain.',
+          code: 'FORBIDDEN_TENANT_ACCESS',
+        });
+      }
       const { rawHtml } = request.body || {};
 
       if (rawHtml === undefined || rawHtml === null || typeof rawHtml !== 'string') {
@@ -148,9 +156,10 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
         return reply.status(413).send({ error: 'Payload Too Large: Raw HTML exceeds maximum size of 500 KB.' });
       }
 
+      let sanitizedHtml = rawHtml;
       try {
         const { TenantHtmlService } = await import('../../services/tenant-html.service');
-        const sanitizedHtml = TenantHtmlService.validateAndSanitize(rawHtml);
+        sanitizedHtml = TenantHtmlService.validateAndSanitize(rawHtml);
 
         const updatedTenant = await prisma.tenant.upsert({
           where: { id },
@@ -199,6 +208,10 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
         ) {
           return reply.status(400).send({ error: err.message });
         }
+        if (process.env.NODE_ENV === 'production') {
+          return reply.status(503).send({ error: 'Database service unavailable. Failed to persist landing page.' });
+        }
+        memoryLandings.set(id, { id, slug: id, raw_html_content: sanitizedHtml, landing_type: 'RAW_HTML' } as any);
         return reply.status(200).send({
           success: true,
           message: 'Raw HTML landing page uploaded (In-Memory Fallback Mode).',

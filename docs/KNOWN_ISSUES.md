@@ -3,6 +3,15 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 323. [Anti-Slop UI/UX] 41 Temuan UI/UX Dashboard & Halaman Publik + Audit Collateral (2026-11-10, OPEN — read-only, belum dieksekusi)
+
+- **Status:** OPEN. Audit read-only, 0 file kode/test/CSS/HTML diubah. Menunggu persetujuan paket perbaikan.
+- **Laporan:** `anti-slop/audit-001-2026-11-10.md` (17 temuan horizontal), `audit-002-2026-11-10-vertikal.md` (12 vertikal), `audit-003-2026-11-10-horizontal.md` (12 lintas area), `audit-004-2026-11-10-konsolidasi-kolateral.md` (register 41 temuan + collateral damage/FMEA + urutan aman).
+- **Bukti kunci:** Lighthouse login aksesibilitas 0,88 dengan kegagalan kontras 3,02:1 di tema gelap (110 situs `text-white` tanpa token `on-solid`); 331 `toast(..., 'error')` vs 1 prop `error` inline; 45 overlay modal buatan sendiri, 0 halaman memakai `Modal` bersama; 54 format tanggal tanpa `timeZone`; `npm run check:tokens` dan `check:dark-parity` GAGAL dan tidak dijalankan di CI.
+- **Fakta pendukung:** `packages/admin-dashboard` **tidak punya test UI** (0 file, tanpa konfigurasi vitest/jest), sehingga skor Detection tinggi di hampir semua paket.
+- **Catatan landing publik:** `src/landing/public/layanan.html` memuat 39 layanan + tier ongkir hardcoded dari `scripts/build_landing.js` (membaca snapshot `services_custom.json`, terakhir 2026-10-19). Halaman itu **tidak dirutekan** `src/routes/landing.route.ts` (hanya `/go`, `/pricelist.html`, `/promo/:slug`, `/assets/:filename`), jadi cara distribusinya perlu dipastikan sebelum diperbaiki. Terkait #277.
+- **Rencana:** 10 paket (P1 token/error, P2 modal/z-index, P3 form, P4 header/state, P5 tipografi, P6 motion/navigasi, P7 format data, P8 bahasa/teks, P9 metadata/CI, P10 data bisnis/izin). RPN tertinggi: P10 (336), P2 dan P3 (252).
+
 ## 322. [Remediasi F0–F3.1] Koreksi Status FIXED & 2 Regresi Test (2026-11-09, PARTIALLY RESOLVED 2026-11-10)
 
 - **Status:** **PARTIALLY RESOLVED** — regresi test dan sebagian besar status FIXED sudah diperbaiki; sisa `SM-02` (parser literal) dan `SM-04` (reset belum transaksional) tetap PARTIAL.

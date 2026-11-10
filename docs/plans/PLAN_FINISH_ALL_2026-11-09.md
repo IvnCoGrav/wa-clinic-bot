@@ -25,7 +25,9 @@
 | F0 Baseline & Register Terpadu | **SELESAI** — baseline `f0-baseline.json`, backlog terpadu 268 temuan, diff 0 regresi baru |
 | F1 Audit Modul 11 & Re-baseline Track B | **SELESAI** — `MODULE_AUDIT_11` (10 file / 9.111 baris) + `TRACK_B_REBASELINE_7_14` (122 temuan) |
 | Audit 16/16 modul | **SELESAI (100% COVERAGE)** — 10 laporan granular A–G + 7 Track B ter-rebaseline |
-| Remediasi F2–F6 | **SIAP DIEKSEKUSI** — menunggu persetujuan per fase |
+| Remediasi F2 | **SELESAI (PASS)** — commit F2A, F2B, F2C |
+| Remediasi F3 | **SELESAI (PASS)** — F3.1 (State Machine), F3.2 (Follow-up), F3.3 (Admin API God Object), F3.4 (Delivery & Build), F3.5 (Track B P1 Kritis & Tinggi) |
+| Remediasi F4–F6 | **SIAP DIEKSEKUSI** — menunggu persetujuan per fase |
 
 ---
 
@@ -197,29 +199,29 @@
 | F3.2b | `FN-02` (jika belum), `FN-05`, `FN-07`, `FN-08` | Outbound log; VAPID; cooldown per tenant; subjek VAPID tenant | Test dua tenant | **FIXED** |
 | F3.2c | `FN-04`, `FN-06`, `FN-09`..`FN-12` | Bounded memory; tenant eksplisit; type safety; transaksi; log fallback; pruning | Test memory/tenant | **FIXED** |
 
-#### F3.3 Modul 15 — `MODULE_AUDIT_15` (API-01..API-12)
+#### F3.3 Modul 15 — `MODULE_AUDIT_15` (API-01..API-12) — **SELESAI (PASS)**
 
-| Sub-fase | Temuan | Fokus | Acceptance |
-|---|---|---|---|
-| F3.3a | `API-01` | Pecah `reservation-dispatch.route.ts` 3.244, `settings.subroute.ts` 2.817, `customers.subroute.ts` 1.997 per domain; rute tetap terdaftar | File <1.500; integration test boot app |
-| F3.3b | `API-05`, `API-07`, `API-08` | Mutasi scoped; schema validation; alias route satu handler | Test IDOR/payload/route |
-| F3.3c | `API-04` (known), `API-09`..`API-12` | Perjelas by-design; tipe Fastify; cache headers; audit alert; rate limit | Test kontrak |
+| Sub-fase | Temuan | Fokus | Acceptance | Status |
+|---|---|---|---|:---:|
+| F3.3a | `API-01` | Pecah `reservation-dispatch.route.ts` 3.244, `settings.subroute.ts` 2.817, `customers.subroute.ts` 1.997 per domain; rute tetap terdaftar | File <1.500; integration test boot app | **FIXED** |
+| F3.3b | `API-05`, `API-07`, `API-08` | Mutasi scoped; schema validation; alias route satu handler | Test IDOR/payload/route | **FIXED** |
+| F3.3c | `API-04` (known), `API-09`..`API-12` | Perjelas by-design; tipe Fastify; cache headers; audit alert; rate limit | Test kontrak | **FIXED** |
 
-#### F3.4 Modul 16 — `MODULE_AUDIT_16` (DEL-01..DEL-12)
+#### F3.4 Modul 16 — `MODULE_AUDIT_16` (DEL-01..DEL-12) — **SELESAI (PASS)**
 
-| Sub-fase | Temuan | Fokus | Acceptance |
-|---|---|---|---|
-| F3.4a | `DEL-01`, `DEL-02`, `DEL-05`, `DEL-06`, `DEL-07` | CI, deploy, prisma runner, env script, backup | CI hijau; shellcheck/bash -n |
-| F3.4b | `DEL-08`, `DEL-09`, `DEL-10` | Caddy CSP/domain; build dashboard; `test:db` | Build dashboard di CI |
-| F3.4c | `DEL-11`, `DEL-12` | Logrotate; bersihkan root file | Repo hygiene |
+| Sub-fase | Temuan | Fokus | Acceptance | Status |
+|---|---|---|---|:---:|
+| F3.4a | `DEL-01`, `DEL-02`, `DEL-05`, `DEL-06`, `DEL-07` | CI, deploy, prisma runner, env script, backup | CI hijau; shellcheck/bash -n | **FIXED** |
+| F3.4b | `DEL-08`, `DEL-09`, `DEL-10` | Caddy CSP/domain; build dashboard; `test:db` | Build dashboard di CI | **FIXED** |
+| F3.4c | `DEL-11`, `DEL-12` | Logrotate; bersihkan root file | Repo hygiene | **FIXED** |
 
-#### F3.5 Track B P1 (dari F1.2)
+#### F3.5 Track B P1 (dari F1.2) — **SELESAI (PASS)**
 
 - Ambil seluruh status `OPEN`/`PARTIAL` severity kritis/tinggi dari `TRACK_B_REBASELINE_7_14.md`.
-- Kelompokkan per modul 7–14; setiap temuan mendapat test + perbaikan fondasional.
-- Gate: build + targeted + full suite.
+- Kelompokkan per modul 7–14; setiap temuan mendapat test + perbaikan fondasional (W-001, W-004, S-006, S-007, S-009, S-010, I-003, I-004, K-001, K-002, A-001, A-002, A-004, C-001, C-002).
+- Gate: build + targeted + full suite. **STATUS: PASS.**
 
-**Gate F3:** file utama God Object <1.500 baris; 0 route duplikat; build backend+dashboard; full suite 0 failure baru.
+**Gate F3:** file utama God Object <1.500 baris; 0 route duplikat; build backend+dashboard; full suite 0 failure baru. **STATUS: PASS.**
 
 ---
 

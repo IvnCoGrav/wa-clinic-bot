@@ -3,6 +3,16 @@ import { prisma } from '../../db/client';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { auditService } from '../../services/audit.service';
 
+function resolveRouteTenantId(request: FastifyRequest<any>): string {
+  const sessionTenant = (request as any).tenantId;
+  const paramTenant = (request.body as any)?.tenantId || (request.query as any)?.tenantId;
+  // Jika ada sesi admin/staf yang terikat pada tenant spesifik (non-default), prioritaskan sessionTenant
+  if (sessionTenant && sessionTenant !== DEFAULT_TENANT_ID) {
+    return sessionTenant;
+  }
+  return sessionTenant || paramTenant || DEFAULT_TENANT_ID;
+}
+
 export async function wabaAdminRoutes(fastify: FastifyInstance) {
   // Pre-handler hook: perlindungan berlapis (defense-in-depth) khusus provider WAHA/WABA.
   // Hanya Super Admin yang berhak membaca status session, QR, maupun mengubah konfigurasi WhatsApp.
@@ -30,9 +40,10 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
   /**
    * GET /api/admin/whatsapp-provider
    */
-  fastify.get('/api/admin/whatsapp-provider', async (_request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/api/admin/whatsapp-provider', async (request: FastifyRequest<{ Querystring: { tenantId?: string } }>, reply: FastifyReply) => {
     try {
-      const tenant = await prisma.tenant.findUnique({ where: { id: DEFAULT_TENANT_ID } });
+      const tenantId = resolveRouteTenantId(request);
+      const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
 
       let wahaStatus = 'UNKNOWN';
       try {
@@ -43,10 +54,10 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
       }
 
       const { wabaTemplateService } = await import('../../services/waba-template.service');
-      const templates = await wabaTemplateService.getAllTemplateMappings(DEFAULT_TENANT_ID);
+      const templates = await wabaTemplateService.getAllTemplateMappings(tenantId);
 
       const { whatsappProviderService } = await import('../../services/whatsapp-provider.service');
-      const wahaOutboundCutoff = await whatsappProviderService.isOutboundCutOff(DEFAULT_TENANT_ID);
+      const wahaOutboundCutoff = await whatsappProviderService.isOutboundCutOff(tenantId);
 
       return reply.status(200).send({
         success: true,
@@ -77,7 +88,7 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/whatsapp-provider/qr',
     async (request: FastifyRequest<{ Querystring: { tenantId?: string } }>, reply: FastifyReply) => {
       try {
-        const tenantId = request.query?.tenantId || DEFAULT_TENANT_ID;
+        const tenantId = resolveRouteTenantId(request);
         const { whatsappProviderService } = await import('../../services/whatsapp-provider.service');
         const data = await whatsappProviderService.getQrForTenant(tenantId);
         return reply.status(200).send({ success: true, data });
@@ -94,7 +105,7 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/whatsapp-provider/session/start',
     async (request: FastifyRequest<{ Body: { tenantId?: string } }>, reply: FastifyReply) => {
       try {
-        const tenantId = request.body?.tenantId || DEFAULT_TENANT_ID;
+        const tenantId = resolveRouteTenantId(request);
         const { whatsappProviderService } = await import('../../services/whatsapp-provider.service');
         const data = await whatsappProviderService.startSessionForTenant(tenantId);
 
@@ -103,7 +114,7 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
           adminIdentity: (request as any).adminIdentity,
           action: 'WAHA_SESSION_START',
           targetId: data.sessionId,
-          payload: { status: data.status },
+          payload: { status: data.status, tenantId },
           ipAddress: request.ip,
         });
 
@@ -121,7 +132,7 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/whatsapp-provider/session/reset',
     async (request: FastifyRequest<{ Body: { tenantId?: string } }>, reply: FastifyReply) => {
       try {
-        const tenantId = request.body?.tenantId || DEFAULT_TENANT_ID;
+        const tenantId = resolveRouteTenantId(request);
         const { whatsappProviderService } = await import('../../services/whatsapp-provider.service');
         const data = await whatsappProviderService.resetSessionForTenant(tenantId);
 
@@ -130,7 +141,7 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
           adminIdentity: (request as any).adminIdentity,
           action: 'WAHA_SESSION_RESET',
           targetId: data.sessionId,
-          payload: { status: data.status },
+          payload: { status: data.status, tenantId },
           ipAddress: request.ip,
         });
 
@@ -148,7 +159,7 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/whatsapp-provider/session/disconnect',
     async (request: FastifyRequest<{ Body: { tenantId?: string } }>, reply: FastifyReply) => {
       try {
-        const tenantId = request.body?.tenantId || DEFAULT_TENANT_ID;
+        const tenantId = resolveRouteTenantId(request);
         const { whatsappProviderService } = await import('../../services/whatsapp-provider.service');
         const data = await whatsappProviderService.disconnectSessionForTenant(tenantId);
 
@@ -157,7 +168,7 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
           adminIdentity: (request as any).adminIdentity,
           action: 'WAHA_SESSION_DISCONNECT',
           targetId: data.sessionId,
-          payload: { status: data.status },
+          payload: { status: data.status, tenantId },
           ipAddress: request.ip,
         });
 
@@ -182,7 +193,8 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const { cutOff, tenantId = DEFAULT_TENANT_ID } = request.body || {};
+      const tenantId = resolveRouteTenantId(request);
+      const { cutOff } = request.body || {};
       if (typeof cutOff !== 'boolean') {
         return reply.status(400).send({ error: 'Body harus berisi field "cutOff" bertipe boolean.' });
       }
@@ -197,7 +209,7 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
           adminIdentity: (request as any).adminIdentity,
           action: 'WAHA_INTERNAL_CUTOFF_TOGGLE',
           targetId: tenantId,
-          payload: { previousState, newState },
+          payload: { previousState, newState, tenantId },
           ipAddress: request.ip,
         });
 
@@ -231,6 +243,7 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
     async (
       request: FastifyRequest<{
         Body: {
+          tenantId?: string;
           provider?: 'WAHA' | 'WABA';
           waha_session_id?: string;
           waba_phone_number_id?: string;
@@ -241,6 +254,7 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
+      const tenantId = resolveRouteTenantId(request);
       const body = request.body || {};
       const {
         provider,
@@ -256,7 +270,7 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
       }
 
       try {
-        const existing = await prisma.tenant.findUnique({ where: { id: DEFAULT_TENANT_ID } });
+        const existing = await prisma.tenant.findUnique({ where: { id: tenantId } });
         const data: any = {};
 
         if (provider) data.whatsapp_provider = provider;
@@ -270,11 +284,11 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
         }
 
         const tenant = existing
-          ? await prisma.tenant.update({ where: { id: DEFAULT_TENANT_ID }, data })
+          ? await prisma.tenant.update({ where: { id: tenantId }, data })
           : await prisma.tenant.create({
               data: {
-                id: DEFAULT_TENANT_ID,
-                slug: DEFAULT_TENANT_ID,
+                id: tenantId,
+                slug: tenantId,
                 name: 'Default Clinic',
                 ...data,
               },
@@ -287,12 +301,13 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
           action: 'UPDATE_WHATSAPP_PROVIDER',
-          targetId: DEFAULT_TENANT_ID,
+          targetId: tenantId,
           payload: {
             provider: tenant.whatsapp_provider,
             waha_session_id: tenant.waha_session_id,
             waba_phone_number_id: tenant.waba_phone_number_id,
             waba_configured: !!(tenant.waba_phone_number_id && tenant.waba_access_token),
+            tenantId,
           },
           ipAddress: request.ip,
         });
@@ -311,10 +326,11 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
   /**
    * GET /api/admin/waba-templates
    */
-  fastify.get('/api/admin/waba-templates', async (_request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/api/admin/waba-templates', async (request: FastifyRequest<{ Querystring: { tenantId?: string } }>, reply: FastifyReply) => {
     try {
+      const tenantId = resolveRouteTenantId(request);
       const { wabaTemplateService } = await import('../../services/waba-template.service');
-      const templates = await wabaTemplateService.getAllTemplateMappings(DEFAULT_TENANT_ID);
+      const templates = await wabaTemplateService.getAllTemplateMappings(tenantId);
       return reply.status(200).send({ success: true, data: templates });
     } catch (err: any) {
       return reply.status(500).send({ error: err.message });
@@ -329,6 +345,7 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
     async (
       request: FastifyRequest<{
         Body: {
+          tenantId?: string;
           type: string;
           variant: number;
           templateName: string;
@@ -340,6 +357,7 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
+      const tenantId = resolveRouteTenantId(request);
       const { type, variant, templateName, category, languageCode, status, isActive } = request.body || {};
       if (!type || !variant || !templateName) {
         return reply.status(400).send({ error: 'type, variant, dan templateName wajib diisi' });
@@ -347,7 +365,7 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
 
       try {
         const { wabaTemplateService } = await import('../../services/waba-template.service');
-        await wabaTemplateService.saveTemplateMapping(DEFAULT_TENANT_ID, type, variant, {
+        await wabaTemplateService.saveTemplateMapping(tenantId, type, variant, {
           templateName,
           category: category || 'UTILITY',
           languageCode: languageCode || 'id',
@@ -359,8 +377,8 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
           action: 'UPDATE_WABA_TEMPLATE',
-          targetId: `${type}#${variant}`,
-          payload: { type, variant, templateName },
+          targetId: `${tenantId}:${type}#${variant}`,
+          payload: { tenantId, type, variant, templateName },
           ipAddress: request.ip,
         });
 

@@ -318,7 +318,7 @@ export async function trackingRoutes(fastify: FastifyInstance) {
       const utmMedium = body.utmMedium || null;
       const utmCampaign = body.utmCampaign || null;
       const phone = body.phone || null;
-      const tenant_id = body.tenantId || body.tenant_id || DEFAULT_TENANT_ID;
+      const tenant_id = await resolveViewTenantId(body.tenantId || body.tenant_id, landingUrl);
 
       // 3. CAPTURE IP & USER-AGENT: Fastify telah dikonfigurasi dengan trustProxy: true
       // sehingga request.ip mengambil IP klien terluar dari header X-Forwarded-For Caddy.
