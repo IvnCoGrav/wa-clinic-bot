@@ -13,6 +13,7 @@ import rateLimit from '@fastify/rate-limit';
 import compress from '@fastify/compress';
 import { initializeConsoleWrapper } from './utils/context';
 import { installLogBuffer } from './utils/log-buffer';
+import { trackTimeout } from './lifecycle/interval-registry';
 import { shouldLogAuthAccess, buildAuthAccessLogEntry, emitAuthAccessLog } from './utils/auth-access-log';
 import { startBackgroundCrons } from './lifecycle/background-crons';
 
@@ -358,7 +359,7 @@ if (require.main === module) {
 
     // Stage 5 Fase 5: recover turn durable yang belum selesai (Redis down / crash)
     // + retention ledger. Non-blocking; beri jeda agar queue/Redis siap.
-    setTimeout(() => {
+    trackTimeout(() => {
       import('./services/turn-recovery.service').then(({ turnRecoveryService }) => {
         void turnRecoveryService.replayPendingTurns(50, { resetProcessingOnBoot: true }).catch(() => {});
         void turnRecoveryService.cleanupOldTurns(60).catch(() => {});

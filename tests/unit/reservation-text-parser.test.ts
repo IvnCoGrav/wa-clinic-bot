@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseReservationText, extractBabyDetails, tryParseIndonesianDate, parseConversationalReservation } from '../../src/utils/reservation-text-parser';
+import { parseReservationText, extractBabyDetails, tryParseIndonesianDate, parseConversationalReservation, isReservationFormMessage, registerTenantFormHeaders, clearTenantFormHeadersCacheForTest } from '../../src/utils/reservation-text-parser';
 import { TreatmentCategory } from '@prisma/client';
 
 describe('Reservation Text Parser Unit Tests', () => {
@@ -497,6 +497,27 @@ Treatment :`;
     expect(res.reservation!.babies.some(b => b.name.includes('Usia Bayi/Anak'))).toBe(false);
     expect(res.reservation!.babies.some(b => b.name.includes('Treatment'))).toBe(false);
   });
+
+  describe('isReservationFormMessage multi-tenant header isolation (SM-02)', () => {
+    it('recognizes tenant-specific custom form headers', () => {
+      clearTenantFormHeadersCacheForTest('tenant_ceria');
+      registerTenantFormHeaders('tenant_ceria', ['format order bidan ceria']);
+
+      const customMsg = 'format order bidan ceria\nsaya mau pesan pijat bayi besok';
+      // Cocok untuk tenant_ceria
+      expect(isReservationFormMessage(customMsg, { tenantId: 'tenant_ceria' })).toBe(true);
+      expect(isReservationFormMessage(customMsg, 'tenant_ceria')).toBe(true);
+
+      // Terisolasi: tenant lain TIDAK mengenali custom header milik tenant_ceria
+      expect(isReservationFormMessage(customMsg, { tenantId: 'tenant_other' })).toBe(false);
+      expect(isReservationFormMessage(customMsg, 'tenant_other')).toBe(false);
+      expect(isReservationFormMessage(customMsg)).toBe(false);
+    });
+
+    it('retains default global signals across all tenants', () => {
+      const defaultMsg = 'berikut list untuk reservasi :\nNama: Bunda Dewi';
+      expect(isReservationFormMessage(defaultMsg, { tenantId: 'tenant_any' })).toBe(true);
+      expect(isReservationFormMessage(defaultMsg)).toBe(true);
+    });
+  });
 });
-
-

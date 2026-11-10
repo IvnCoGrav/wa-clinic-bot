@@ -94,34 +94,86 @@ async function getMediaAuthorizedTenant(request: FastifyRequest): Promise<MediaA
 }
 
 /**
- * SSRF Guard untuk URL eksternal (memblokir internal IPs, private networks, cloud metadata)
+ * Memeriksa apakah sebuah IP address merupakan IP aman (bukan private, loopback, cloud metadata, link-local).
  */
-function isValidExternalUrl(urlStr: string): boolean {
+export function isSafeIpAddress(ip: string): boolean {
+  const clean = ip.toLowerCase().replace(/^\[|\]$/g, '').trim();
+  if (
+    clean === 'localhost' ||
+    clean === '127.0.0.1' ||
+    clean === '0.0.0.0' ||
+    clean === '::1' ||
+    clean === '::' ||
+    clean === '169.254.169.254' ||
+    /^10\./.test(clean) ||
+    /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(clean) ||
+    /^192\.168\./.test(clean) ||
+    /^169\.254\./.test(clean) ||
+    /^127\./.test(clean) ||
+    /^0\./.test(clean) ||
+    /^(fe[89ab]|fc00|fd00):/i.test(clean)
+  ) {
+    return false;
+  }
+
+  // Deteksi IPv4-mapped IPv6 (::ffff:127.0.0.1, ::ffff:10.0.0.1, dsb.)
+  if (clean.includes('::ffff:')) {
+    const parts = clean.split('::ffff:');
+    const suffix = parts[parts.length - 1];
+    if (suffix) {
+      if (suffix.includes('.')) {
+        return isSafeIpAddress(suffix);
+      }
+      return false; // Fail-closed untuk hex-mapped IPv6
+    }
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * SSRF Guard untuk URL eksternal (memblokir internal IPs, private networks, cloud metadata, IPv4-mapped IPv6)
+ */
+export function isValidExternalUrl(urlStr: string): boolean {
   try {
     const parsed = new URL(urlStr);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
     const hostname = parsed.hostname.toLowerCase();
+    const cleanHost = hostname.replace(/^\[|\]$/g, '');
     if (
-      hostname === 'localhost' ||
-      hostname === '127.0.0.1' ||
-      hostname === '0.0.0.0' ||
-      hostname === '::1' ||
-      hostname === '[::1]' ||
-      hostname === '169.254.169.254' ||
-      hostname.endsWith('.internal') ||
-      hostname.endsWith('.local') ||
-      hostname.endsWith('.onion') ||
-      /^10\./.test(hostname) ||
-      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname) ||
-      /^192\.168\./.test(hostname) ||
-      /^169\.254\./.test(hostname) ||
-      /^127\./.test(hostname) ||
-      /^0\./.test(hostname) ||
-      /^(fe80|fc00|fd00):/i.test(hostname.replace(/^\[|\]$/g, '')) ||
-      /^\d+$/.test(hostname) ||
-      /^0x[0-9a-f]+$/i.test(hostname)
+      cleanHost.endsWith('.internal') ||
+      cleanHost.endsWith('.local') ||
+      cleanHost.endsWith('.onion') ||
+      /^\d+$/.test(cleanHost) ||
+      /^0x[0-9a-f]+$/i.test(cleanHost) ||
+      !isSafeIpAddress(cleanHost)
     ) {
       return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Memvalidasi keamanan URL termasuk pemeriksaan DNS rebinding (resolusi IP sebelum fetch).
+ */
+export async function isSafeUrlForFetch(urlStr: string): Promise<boolean> {
+  if (!isValidExternalUrl(urlStr)) return false;
+  try {
+    const parsed = new URL(urlStr);
+    const cleanHost = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    const net = await import('net');
+    if (!net.isIP(cleanHost)) {
+      const dns = await import('dns');
+      const resolved = await dns.promises.lookup(cleanHost, { all: true });
+      for (const entry of resolved) {
+        if (!isSafeIpAddress(entry.address)) {
+          return false;
+        }
+      }
     }
     return true;
   } catch {
@@ -381,7 +433,9 @@ export async function mediaRoutes(fastify: FastifyInstance) {
       customer = await prisma.customer.findUnique({ where: { id: rawId } });
       if (!customer) {
         const queryTenant = (request.query as any)?.tenantId;
-        customer = await customerService.getCustomerById(rawId, queryTenant || 'default-tenant');
+        if (queryTenant && typeof queryTenant === 'string' && queryTenant.trim()) {
+          customer = await customerService.getCustomerById(rawId, queryTenant.trim());
+        }
       }
     } catch {}
 
@@ -401,7 +455,7 @@ export async function mediaRoutes(fastify: FastifyInstance) {
     }
 
     // 2. Unduh dari customer.profile_picture_url jika ada & valid (SSRF Protected)
-    if (customer?.profile_picture_url && isValidExternalUrl(customer.profile_picture_url)) {
+    if (customer?.profile_picture_url && (await isSafeUrlForFetch(customer.profile_picture_url))) {
       try {
         const picRes = await axios.get(customer.profile_picture_url, {
           responseType: 'arraybuffer',

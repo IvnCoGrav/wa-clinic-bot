@@ -114,6 +114,49 @@ export function registerTenantFormHeaders(tenantId: string, headers: string[]): 
 }
 
 /**
+ * Helper pembersih cache form headers untuk unit test.
+ */
+export function clearTenantFormHeadersCacheForTest(tenantId?: string): void {
+  if (tenantId) {
+    tenantFormHeadersCache.delete(tenantId);
+  } else {
+    tenantFormHeadersCache.clear();
+  }
+}
+
+/**
+ * Mengambil daftar header template form yang aktif untuk tenant secara asinkron dari DB (Tenant.settings.formHeaders).
+ * Dilengkapi in-memory cache dengan TTL 5 menit (SM-02).
+ */
+export async function getTenantFormHeadersAsync(tenantId?: string): Promise<string[]> {
+  if (!tenantId) return [...DEFAULT_FORM_HEADER_SIGNALS];
+  const cached = tenantFormHeadersCache.get(tenantId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return [...DEFAULT_FORM_HEADER_SIGNALS, ...cached.headers];
+  }
+
+  let dbHeaders: string[] = [];
+  try {
+    const { prisma } = await import('../db/client');
+    const tenant = await (prisma as any).tenant.findUnique({
+      where: { id: tenantId },
+      select: { settings: true },
+    });
+    const custom = (tenant?.settings as any)?.formHeaders;
+    if (Array.isArray(custom)) {
+      dbHeaders = custom.map((h: unknown) => String(h).toLowerCase().trim()).filter(Boolean);
+    }
+  } catch {}
+
+  tenantFormHeadersCache.set(tenantId, {
+    headers: dbHeaders,
+    expiresAt: Date.now() + 300_000,
+  });
+
+  return [...DEFAULT_FORM_HEADER_SIGNALS, ...dbHeaders];
+}
+
+/**
  * Mengambil daftar header template form yang aktif untuk tenant (SM-02).
  */
 export function getTenantFormHeaders(tenantId?: string): string[] {
@@ -129,18 +172,19 @@ export function getTenantFormHeaders(tenantId?: string): string[] {
  * Mengecek apakah sebuah pesan WhatsApp merupakan form reservasi / booking layanan
  * secara toleran terhadap berbagai variasi penulisan tanpa false-positive pada chat biasa.
  */
-export function isPotentialReservationForm(rawText: string, options?: ReservationFormOptions): boolean {
+export function isPotentialReservationForm(rawText: string, options?: ReservationFormOptions | string): boolean {
   return isReservationFormMessage(rawText, options);
 }
 
-export function isReservationFormMessage(rawText: string, options?: ReservationFormOptions): boolean {
+export function isReservationFormMessage(rawText: string, options?: ReservationFormOptions | string): boolean {
   if (!rawText || typeof rawText !== 'string') return false;
+  const opts: ReservationFormOptions = typeof options === 'string' ? { tenantId: options } : (options || {});
   const lower = rawText.toLowerCase().replace(/\s+/g, ' ');
 
   // 1. Explicit Form Header Signals (Data-driven: default + tenant-configured headers, SM-02)
   const formHeaders = [
-    ...getTenantFormHeaders(options?.tenantId),
-    ...(options?.customHeaders || []).map((h) => h.toLowerCase().trim()),
+    ...getTenantFormHeaders(opts.tenantId),
+    ...(opts.customHeaders || []).map((h) => h.toLowerCase().trim()),
   ];
 
   const hasExplicitFormHeader = formHeaders.some((header) => lower.includes(header));

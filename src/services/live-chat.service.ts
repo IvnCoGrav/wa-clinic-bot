@@ -865,7 +865,7 @@ export class LiveChatService {
     // Auto-capture reservasi & alamat jika pesan admin adalah rincian invoice/reservasi
     try {
       const { isReservationFormMessage, parseReservationText } = await import('../utils/reservation-text-parser');
-      if (isReservationFormMessage(content)) {
+      if (isReservationFormMessage(content, { tenantId })) {
         const parseResult = parseReservationText(content);
         if (parseResult.success && parseResult.reservation) {
           const parsed = parseResult.reservation;

@@ -1,4 +1,5 @@
 import { prisma } from '../db/client';
+import { trackInterval, clearIntervalTracked } from './interval-registry';
 
 /**
  * Stage 5 / K-001 & P0-C — Distributed Lock & Lease untuk Cron Runner.
@@ -70,8 +71,8 @@ export class CronAdvisoryLock {
   }
 
   private startHeartbeat(): void {
-    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
-    this.heartbeatTimer = setInterval(async () => {
+    if (this.heartbeatTimer) { clearIntervalTracked(this.heartbeatTimer); this.heartbeatTimer = null; }
+    this.heartbeatTimer = trackInterval(async () => {
       if (!this.isHeld) return;
       try {
         const now = new Date();
@@ -93,7 +94,7 @@ export class CronAdvisoryLock {
    */
   public async releaseLock(): Promise<void> {
     if (this.heartbeatTimer) {
-      clearInterval(this.heartbeatTimer);
+      clearIntervalTracked(this.heartbeatTimer);
       this.heartbeatTimer = null;
     }
     if (!this.isHeld) return;

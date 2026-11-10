@@ -301,7 +301,7 @@ export class ConversationStateMachine {
     const tenantCheckoutHit =
       checkoutKeyword.length > 0 && lowerFormText.includes(checkoutKeyword.replace(/\s+/g, ' ').trim());
     const isFormSubmission =
-      isReservationFormMessage(incomingText) ||
+      isReservationFormMessage(incomingText, { tenantId }) ||
       tenantCheckoutHit;
 
     if (isFormSubmission) {
@@ -433,7 +433,7 @@ export class ConversationStateMachine {
         };
       } else {
         const hasFormHeaderOrColonFields =
-          isReservationFormMessage(incomingText) ||
+          isReservationFormMessage(incomingText, { tenantId }) ||
           tenantCheckoutHit;
 
         if (hasFormHeaderOrColonFields) {

@@ -617,7 +617,7 @@ export async function tryCaptureReservationFormFromRaw(params: TryCaptureReserva
   if (!raw || !raw.trim()) return { captured: false };
 
   const { isReservationFormMessage, parseReservationText } = await import('../utils/reservation-text-parser');
-  if (!isReservationFormMessage(raw)) return { captured: false };
+  if (!isReservationFormMessage(raw, { tenantId })) return { captured: false };
 
   const pr = parseReservationText(raw);
   if (!pr.success || !pr.reservation) {

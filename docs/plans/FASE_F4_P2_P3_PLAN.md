@@ -5,7 +5,7 @@
 - **Register Terpadu:** `docs/plans/REMAINING_BACKLOG_2026-11-09.md`
 - **Baseline Git:** Commit `9f659cdb` (origin/master)
 - **Baseline Full Suite:** `docs/audit/2026-11-10/after-f3-6.json` (6.875 test, 6.845 pass, 2 fail pre-existing #287, 0 regresi)
-- **Status:** **DRAFT PLAN** — Menunggu konfirmasi eksplisit pengguna sebelum eksekusi.
+- **Status:** **IN REMEDIATION & HARDENING** — Batch F4.1–F4.4 di-commit (`302dc26f`, `3688a3cf`, `f6bbd83f`, `20532445`); Remediasi audit mendalam Cfg-008, SM-02, S-014, dan Batch F4.5 sedang berjalan.
 
 ---
 

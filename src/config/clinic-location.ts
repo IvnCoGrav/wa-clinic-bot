@@ -31,7 +31,12 @@ export const DEFAULT_CLINIC_LOCATION: ClinicLocation = {
   maxCoverageKm: clinicConfig.maxDeliveryDistanceKm,
 };
 
-const clinicLocationCache = new Map<string, ClinicLocation>();
+interface CachedClinicLocation {
+  location: ClinicLocation;
+  expiresAt: number;
+}
+const clinicLocationCache = new Map<string, CachedClinicLocation>();
+const CLINIC_LOCATION_CACHE_TTL_MS = 5 * 60 * 1000;
 
 function toFiniteNumber(value: unknown): number | null {
   const n = typeof value === 'number' ? value : parseFloat(String(value));
@@ -46,7 +51,7 @@ export async function getClinicLocationAsync(
   tenantId: string = DEFAULT_TENANT_ID
 ): Promise<ClinicLocation> {
   const cached = clinicLocationCache.get(tenantId);
-  if (cached) return cached;
+  if (cached && cached.expiresAt > Date.now()) return cached.location;
 
   let resolved: ClinicLocation = { ...DEFAULT_CLINIC_LOCATION };
   try {
@@ -80,7 +85,10 @@ export async function getClinicLocationAsync(
     }
   }
 
-  clinicLocationCache.set(tenantId, resolved);
+  clinicLocationCache.set(tenantId, {
+    location: resolved,
+    expiresAt: Date.now() + CLINIC_LOCATION_CACHE_TTL_MS,
+  });
   return resolved;
 }
 

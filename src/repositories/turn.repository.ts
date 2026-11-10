@@ -158,7 +158,12 @@ export class TurnRepository implements ITurnRepository {
       // tolak claim (kembalikan false) agar worker paralel tidak memproses turn yang sama.
       return false;
     } catch (err: any) {
-      console.warn('[TURN] claimForProcessing gagal (fail-open):', err?.message);
+      console.warn('[TURN] claimForProcessing gagal:', err?.message);
+      // D-06: Fail-closed di production saat terjadi gangguan database nyata
+      if (process.env.NODE_ENV === 'production') {
+        return false;
+      }
+      // Fail-open di test/dev offline agar antrean in-memory tetap berjalan saat DB offline
       return true;
     }
   }

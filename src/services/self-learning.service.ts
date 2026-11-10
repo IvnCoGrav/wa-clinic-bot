@@ -1,6 +1,6 @@
 import { prisma } from '../db/client';
 import { knowledgeBaseService } from './knowledge.service';
-import { BOT_PERSONA_PROMPT } from '../config/persona';
+
 import { getBrandIdentity } from '../config/brand';
 import { getLlmEndpointConfig, callChatWithRetry, extractJsonContent } from '../integrations/llm/llm-gateway';
 

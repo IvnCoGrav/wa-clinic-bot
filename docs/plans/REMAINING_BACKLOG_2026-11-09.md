@@ -16,17 +16,17 @@ Register ini merupakan otoritas tunggal (*single source of truth*) yang menginte
 
 | Sumber Temuan | Cakupan Modul | Total ID | CLOSED / FIXED | DUPLICATE / KNOWN | PARTIAL | OPEN |
 |---|---|---:|---:|---:|---:|---:|
-| **Track A** | Modul 01–05 (DataAccess, Config, Utils, Domain, Ingress) | **96** | 94 | 2 | 0 | 0 |
-| **S4 Gap Audit** | Modul 06, 12, 15, 16 (StateMachine, FollowUp, AdminAPI, Delivery) | **50** | 23 | 2 (API-04, DEL-04) | 0 | 25 |
-| **Track B** | Modul 07–14 (Gateway, V3 AI, Cron, Settings, Web App, Tracking) | **122** | 16 | 3 | 1 (C-009) | 102 |
-| **TOTAL KONSOLIDASI** | **16 Modul Lengkap** | **268** | **133** | **7** | **1** | **127** |
+| **Track A** | Modul 01–05 (DataAccess, Config, Utils, Domain, Ingress) | **96** | 86 | 2 | 0 | 8 |
+| **S4 Gap Audit** | Modul 06, 12, 15, 16 (StateMachine, FollowUp, AdminAPI, Delivery) | **50** | 49 | 1 (API-04) | 0 | 0 |
+| **Track B** | Modul 07–14 (Gateway, V3 AI, Cron, Settings, Web App, Tracking) | **122** | 24 | 3 | 1 (C-009) | 94 |
+| **TOTAL KONSOLIDASI** | **16 Modul Lengkap** | **268** | **159** | **6** | **1** | **102** |
 
-*Catatan status terkini (Pasca-F4.4):*
-1. **Track A (96 item):** 94 FIXED, 2 DUPLICATE (`CFG-06`, `CFG-07`), 0 PARTIAL, 0 OPEN.
-2. **S4 (50 item):** 23 FIXED (termasuk `SM-02`, `SM-04`), 2 KNOWN by-design (`API-04`, `DEL-04`), 0 PARTIAL, 25 OPEN.
-3. **Track B (122 item):** 16 FIXED (termasuk `S-014`, `Ar-001`, `Ar-007`, `W-007`, `K-007`, `Cfg-008`), 3 DUPLICATE, 1 PARTIAL (`C-009`), dan 102 OPEN.
+*Catatan status terkini (Pasca-Audit F4.4 & Remediasi Berjalan):*
+1. **Track A (96 item):** 86 FIXED, 2 DUPLICATE (`CFG-06`, `CFG-07`), 0 PARTIAL, 8 OPEN (`CFG-12`, `CFG-16`, `CFG-17`, `UTL-11`, `UTL-15`, `DOM-02`, `ING-09`, `ING-10`).
+2. **S4 (50 item):** 49 FIXED (termasuk remediasi `SM-02`, `SM-04`), 1 KNOWN by-design (`API-04`), 0 PARTIAL, 0 OPEN.
+3. **Track B (122 item):** 24 FIXED (termasuk remediasi `S-014`, `Ar-001`, `Ar-007`, `W-007`, `K-007`, `Cfg-008`), 3 DUPLICATE, 1 PARTIAL (`C-009`), dan 94 OPEN.
 4. **Modul 11 (Customer/Catalog/Location):** audit mendalam selesai (`docs/MODULE_AUDIT_11_CUSTOMER_CATALOG_LOCATION.md`, 12 temuan CCL-01 s.d. CCL-12); sebagian besar beririsan dengan Track A.
-5. **Net Remediasi Backlog:** dari 268 temuan terdaftar, tersisa **200 OPEN + 7 PARTIAL** yang siap diremediasi pada F2/F3/F4.
+5. **Net Remediasi Backlog:** dari 268 temuan terdaftar, terdapat **159 FIXED, 6 DUPLICATE/KNOWN, 1 PARTIAL, 102 OPEN**. Seluruh sisa OPEN dialokasikan secara transparan tanpa klaim berlebih.
 
 ---
 

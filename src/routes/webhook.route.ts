@@ -646,7 +646,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               // 5. Background Auto-Capture Reservasi dari Konfirmasi Admin
               try {
                 const { isReservationFormMessage, parseReservationText } = await import('../utils/reservation-text-parser');
-                if (isReservationFormMessage(adminReplyText)) {
+                if (isReservationFormMessage(adminReplyText, { tenantId: resolvedTenantId })) {
                   const parseResult = parseReservationText(adminReplyText);
                   if (parseResult.success && parseResult.reservation) {
                     const parsed = parseResult.reservation;

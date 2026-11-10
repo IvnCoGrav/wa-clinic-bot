@@ -65,6 +65,18 @@ export function clearTimeoutTracked(handle?: TimeoutHandle | null): void {
   timeoutHandles.delete(handle);
 }
 
+/** Menghentikan interval terdaftar secara spesifik dan menghapusnya dari registry. */
+export function clearIntervalTracked(handle?: IntervalHandle | null): void {
+  if (!handle) return;
+  try {
+    clearInterval(handle);
+  } catch {}
+  const idx = intervalHandles.indexOf(handle);
+  if (idx !== -1) {
+    intervalHandles.splice(idx, 1);
+  }
+}
+
 /** Menghentikan seluruh timeout terdaftar. */
 export function clearAllTimeouts(): void {
   for (const h of timeoutHandles) {

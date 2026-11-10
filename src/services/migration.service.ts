@@ -99,7 +99,7 @@ export class MigrationService {
           // Cari pesan pertama yang berisi form reservasi
           for (let mIdx = 0; mIdx < textMessages.length; mIdx++) {
             const msg = textMessages[mIdx];
-            const isForm = isReservationFormMessage(msg.content);
+            const isForm = isReservationFormMessage(msg.content, { tenantId });
 
             if (isForm) {
               firstPurchaseAt = msg.created_at;

@@ -336,7 +336,7 @@ export class HumanBackgroundEnrichmentService {
       // 3. DETEKSI FORMULIR RESERVASI WHATSAPP
       if (incomingText && incomingText.trim()) {
         const { isReservationFormMessage, parseReservationText } = await import('../utils/reservation-text-parser');
-        const isForm = isReservationFormMessage(incomingText);
+        const isForm = isReservationFormMessage(incomingText, { tenantId: tid });
         if (isForm) {
           const parsed = parseReservationText(incomingText);
           if (parsed.success && parsed.reservation) {
