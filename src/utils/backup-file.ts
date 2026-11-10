@@ -47,15 +47,19 @@ export function sanitizeBackupFileName(fileName: string): string {
  */
 export function isValidGzipHeader(filePath: string): boolean {
   if (!fs.existsSync(filePath)) return false;
+  let fd = null;
   try {
     const buffer = Buffer.alloc(2);
-    const fd = fs.openSync(filePath, 'r');
+    fd = fs.openSync(filePath, 'r');
     fs.readSync(fd, buffer, 0, 2, 0);
-    fs.closeSync(fd);
     // Gzip magic bytes: 0x1F, 0x8B
     return buffer[0] === 0x1f && buffer[1] === 0x8b;
   } catch {
     return false;
+  } finally {
+    if (fd !== null) {
+      try { fs.closeSync(fd); } catch (_) {}
+    }
   }
 }
 
@@ -64,14 +68,18 @@ export function isValidGzipHeader(filePath: string): boolean {
  */
 export function isValidEncryptedHeader(filePath: string): boolean {
   if (!fs.existsSync(filePath)) return false;
+  let fd = null;
   try {
     const buffer = Buffer.alloc(4);
-    const fd = fs.openSync(filePath, 'r');
+    fd = fs.openSync(filePath, 'r');
     fs.readSync(fd, buffer, 0, 4, 0);
-    fs.closeSync(fd);
     return buffer.toString('ascii') === 'ENC1';
   } catch {
     return false;
+  } finally {
+    if (fd !== null) {
+      try { fs.closeSync(fd); } catch (_) {}
+    }
   }
 }
 

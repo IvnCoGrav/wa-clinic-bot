@@ -167,13 +167,13 @@ export function resolveLocationAdequacy(input: LocationAdequacyInput): LocationA
     return { source: 'gps_pin', isAdequate: true, needsShareloc: false, reason: 'gps_pin' };
   }
 
-  // 2. Verifikasi staf — hanya sah bila titik verifikasi masih di tempat yang sama.
+  // 2. Verifikasi staf — hanya sah bila titik verifikasi fisik valid dan masih di tempat yang sama.
   if (input.staffVerified && coordsOk && candidates.includes('manual_staff')) {
     const verifiedCoords = input.staffVerifiedCoords || null;
     const samePlace =
-      !verifiedCoords || !hasValidCoords(verifiedCoords)
-        ? true
-        : distanceMeters(verifiedCoords, coords) <= SAME_PLACE_TOLERANCE_M;
+      verifiedCoords && hasValidCoords(verifiedCoords)
+        ? distanceMeters(verifiedCoords, coords) <= SAME_PLACE_TOLERANCE_M
+        : (input.columnSource === 'manual_staff' || Boolean(input.housePhotoUrl));
     if (samePlace) {
       return { source: 'manual_staff', isAdequate: true, needsShareloc: false, reason: 'staff_verified' };
     }

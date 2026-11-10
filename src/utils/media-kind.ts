@@ -136,6 +136,13 @@ export function resolveExtForSave(mime: string | null | undefined, buf?: Buffer 
       return 'webp';
     case 'image/gif':
       return 'gif';
+    case 'image/avif':
+      return 'avif';
+    case 'image/heic':
+    case 'image/heif':
+      return 'heic';
+    case 'image/svg+xml':
+      return 'svg';
     case 'audio/ogg':
     case 'audio/opus':
       return 'ogg';
@@ -158,11 +165,19 @@ export function resolveExtForSave(mime: string | null | undefined, buf?: Buffer 
       return 'docx';
     case 'text/plain':
       return 'txt';
-    default:
-      if (clean.startsWith('image/')) return 'jpg';
+    default: {
+      if (clean.startsWith('image/')) {
+        const sub = clean.slice(6);
+        if (/^[a-z0-9_-]+$/.test(sub)) {
+          if (sub === 'jpeg') return 'jpg';
+          return sub;
+        }
+        return 'jpg';
+      }
       if (clean.startsWith('audio/')) return 'ogg';
       if (clean.startsWith('video/')) return 'mp4';
       if (clean.startsWith('text/')) return 'txt';
       return 'bin';
+    }
   }
 }

@@ -45,8 +45,8 @@ export const SavedCustomerAddressSchema = z.object({
     .optional()
     .default(null),
   isPrimary: z.boolean().optional().default(false),
-  createdAt: z.string(),
-  lastUsedAt: z.string(),
+  createdAt: z.string().optional().default(() => new Date().toISOString()),
+  lastUsedAt: z.string().optional().default(() => new Date().toISOString()),
 });
 
 export type SavedCustomerAddress = z.infer<typeof SavedCustomerAddressSchema>;
@@ -148,7 +148,8 @@ function isWilayahSimilar(a?: string | null, b?: string | null): boolean {
   const nb = norm(b);
   if (na === nb) return true;
   // Child-name ⊂ parent-name (misal Morokrembangan ⊃ Krembangan)
-  if (na.includes(nb) || nb.includes(na)) return true;
+  // Cegah over-match pada token pendek (<5 karakter misal "aru", "batu", "barat")
+  if (Math.min(na.length, nb.length) >= 5 && (na.includes(nb) || nb.includes(na))) return true;
   // Typo toponimi wajar (Levenshtein <= 2, panjang minimal 4 karakter)
   if (na.length >= 4 && nb.length >= 4 && levenshtein(na, nb) <= 2) return true;
   return false;
@@ -589,6 +590,7 @@ export function pruneAddressTombstones(
       const tMs = new Date(t.deletedAt).getTime();
       return !Number.isNaN(tMs) && tMs >= cutoffMs;
     })
+    .sort((a, b) => new Date(a.deletedAt).getTime() - new Date(b.deletedAt).getTime())
     .slice(-MAX_ADDRESS_TOMBSTONES);
 }
 

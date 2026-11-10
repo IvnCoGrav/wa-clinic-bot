@@ -43,19 +43,7 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
         const body = request.body as any;
         const phoneNumberId = body?.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id;
         if (phoneNumberId) {
-          const tenantId = await wabaTenantService.resolveTenantByPhoneNumberId(phoneNumberId);
-          if (tenantId) {
-            const { prisma } = await import('../db/client');
-            const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
-            if (tenant?.waba_app_secret) {
-              const { decryptSecret } = await import('../utils/encryption');
-              try {
-                appSecret = decryptSecret(tenant.waba_app_secret) || tenant.waba_app_secret;
-              } catch {
-                appSecret = tenant.waba_app_secret;
-              }
-            }
-          }
+          appSecret = await wabaTenantService.resolveAppSecretByPhoneNumberId(phoneNumberId);
         }
       } catch {}
     }

@@ -42,7 +42,16 @@ export function chunkTextDocument(
   }
 
   if (currentChunk.trim()) {
-    chunks.push(currentChunk.trim());
+    // Jika chunk terakhir terlalu kecil (< minChunkSize) dan bisa digabung
+    if (
+      chunks.length > 0 &&
+      currentChunk.trim().length < minChunkSize &&
+      (chunks[chunks.length - 1].length + 2 + currentChunk.trim().length) <= maxChunkSize
+    ) {
+      chunks[chunks.length - 1] = `${chunks[chunks.length - 1]}\n\n${currentChunk.trim()}`;
+    } else {
+      chunks.push(currentChunk.trim());
+    }
   }
 
   return chunks;

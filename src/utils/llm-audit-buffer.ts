@@ -27,6 +27,7 @@ export interface LlmAuditLogPayload {
 
 const buffer: LlmAuditLogPayload[] = [];
 const BATCH_SIZE = 20;
+const MAX_BUFFER_SIZE = 500;
 const FLUSH_INTERVAL_MS = 10000; // 10 detik
 
 let timerId: NodeJS.Timeout | null = null;
@@ -176,5 +177,10 @@ export async function flushLlmAuditBuffer(): Promise<void> {
     }
   } catch (err: any) {
     console.warn('[LLM AUDIT BUFFER] Failed to batch insert to database (DB offline / schema pending):', err?.message || err);
+    // Masukkan kembali item ke buffer agar tidak hilang permanen saat DB blip
+    const restoreCount = Math.min(itemsToFlush.length, MAX_BUFFER_SIZE - buffer.length);
+    if (restoreCount > 0) {
+      buffer.unshift(...itemsToFlush.slice(0, restoreCount));
+    }
   }
 }

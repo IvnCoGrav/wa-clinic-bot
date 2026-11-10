@@ -45,9 +45,42 @@ export class WabaTenantService {
   }
 
 
+  private secretCache = new Map<string, string>();
+
+  /**
+   * Mengambil waba_app_secret terdekripsi untuk phone_number_id tertentu dengan in-memory cache (ING-15).
+   */
+  public async resolveAppSecretByPhoneNumberId(phoneNumberId: string | undefined | null): Promise<string> {
+    if (!phoneNumberId) return '';
+    const cached = this.secretCache.get(phoneNumberId);
+    if (cached !== undefined) return cached;
+
+    try {
+      const { prisma } = await import('../db/client');
+      const tenant = await prisma.tenant.findFirst({
+        where: { waba_phone_number_id: phoneNumberId },
+        select: { id: true, waba_app_secret: true },
+      });
+      let secret = tenant?.waba_app_secret || '';
+      if (secret) {
+        try {
+          const { decryptSecret } = await import('../utils/encryption');
+          secret = decryptSecret(secret) || secret;
+        } catch {
+          // gunakan plaintext bila decrypt gagal
+        }
+      }
+      this.secretCache.set(phoneNumberId, secret);
+      return secret;
+    } catch {
+      return '';
+    }
+  }
+
   /** Reset cache (dipakai unit test). */
   public resetCache(): void {
     tenantCache.clear();
+    this.secretCache.clear();
   }
 }
 

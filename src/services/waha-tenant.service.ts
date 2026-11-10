@@ -51,8 +51,19 @@ export class WahaTenantService {
       tenantCache.set(session, { tenantId: tenant.id, expiresAt: Date.now() + CACHE_TTL_MS });
       return tenant.id;
     } catch (err) {
-      console.warn('[WAHA TENANT] DB unavailable saat resolusi tenant. Fallback default (availability) + alert:', (err as Error).message);
-      await this.raiseAlert('DB offline — fallback availability', session);
+      const stale = tenantCache.get(session);
+      if (stale?.tenantId) {
+        console.warn(`[WAHA TENANT] DB unavailable, menggunakan stale cache untuk session ${session} -> ${stale.tenantId}`);
+        return stale.tenantId;
+      }
+      const isStrictMultiTenant = process.env.STRICT_MULTI_TENANT === 'true';
+      if (isStrictMultiTenant && session !== 'default' && session !== DEFAULT_TENANT_ID) {
+        console.warn(`[WAHA TENANT] DB unavailable saat resolusi non-default session (${session}) pada mode STRICT_MULTI_TENANT. FAIL-CLOSED demi isolasi tenant:`, (err as Error).message);
+        await this.raiseAlert('DB offline — non-default session rejected (strict)', session);
+        return null;
+      }
+      console.warn('[WAHA TENANT] DB unavailable saat resolusi tenant. Fallback DEFAULT_TENANT_ID (availability):', (err as Error).message);
+      await this.raiseAlert('DB offline — fallback default session', session);
       return DEFAULT_TENANT_ID;
     }
   }

@@ -32,6 +32,7 @@ let initialized = false;
 let kelKecToZip = new Map<string, string>(); // "kelurahan|kecamatan" -> zip
 let kecToZip = new Map<string, string>(); // kecamatanLower -> representative zip
 let kelToZip = new Map<string, string>(); // kelurahanLower -> zip (jika unik, simpan first)
+let kelToZips = new Map<string, Array<{ zip: string; kecLower: string }>>(); // kelurahanLower -> all entries for homonym check
 let kelurahanList: { lower: string; raw: string; zip: string; kecLower: string }[] = [];
 let kecamatanList: { lower: string; raw: string; zip: string }[] = [];
 let kecamatanSet = new Set<string>();
@@ -93,6 +94,8 @@ function ensureInit(): void {
     if (kelLower) {
       kelurahanList.push({ lower: kelLower, raw: row.Kelurahan_Desa.trim(), zip, kecLower });
       if (!kelToZip.has(kelLower)) kelToZip.set(kelLower, zip);
+      if (!kelToZips.has(kelLower)) kelToZips.set(kelLower, []);
+      kelToZips.get(kelLower)!.push({ zip, kecLower });
     }
   }
 
@@ -151,8 +154,14 @@ export function resolveZipcode(input: ResolveZipcodeInput): string | null {
     if (kecZip) return kecZip;
   }
 
-  // Kelurahan-only tanpa kecamatan (jika kelurahan unik)
+  // Kelurahan-only tanpa kecamatan (jika kelurahan unik atau cocok homonim di text)
   if (kel) {
+    const entries = kelToZips.get(kel);
+    if (entries && entries.length > 1 && rawText) {
+      const lowerText = rawText.toLowerCase();
+      const match = entries.find((e) => lowerText.includes(e.kecLower));
+      if (match) return match.zip;
+    }
     const kelDirect = kelToZip.get(kel);
     if (kelDirect) return kelDirect;
   }

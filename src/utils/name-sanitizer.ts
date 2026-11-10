@@ -186,6 +186,18 @@ function escapeLexiconToken(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+const TRAILING_DISTRICT_RE_CACHE = new Map<string, RegExp>();
+function getTrailingDistrictRegex(d: string): RegExp {
+  let re = TRAILING_DISTRICT_RE_CACHE.get(d);
+  if (!re) {
+    re = new RegExp(`\\s+${escapeLexiconToken(d)}$`, 'i');
+    if (TRAILING_DISTRICT_RE_CACHE.size < 1000) {
+      TRAILING_DISTRICT_RE_CACHE.set(d, re);
+    }
+  }
+  return re;
+}
+
 /**
  * Gerbang DETERMINISTIK wilayah — SATU sumber kebenaran untuk membuang noise
  * toponimi dari sebuah nama (dipakai jalur sapaan DAN jalur penyimpanan DB).
@@ -226,7 +238,7 @@ export function stripLocationNoise(rawName?: string | null): string {
     changed = false;
     for (const d of getEffectiveDistrictLexicon()) {
       if (!d) continue;
-      const re = new RegExp(`\\s+${escapeLexiconToken(d)}$`, 'i');
+      const re = getTrailingDistrictRegex(d);
       if (re.test(name)) {
         name = name.replace(re, '').trim();
         changed = true;
@@ -270,7 +282,7 @@ export function stripTrailingLocationTag(rawName?: string | null): {
     }
     for (const d of getEffectiveDistrictLexicon()) {
       if (!d) continue;
-      const re = new RegExp(`\\s+${escapeLexiconToken(d)}$`, 'i');
+      const re = getTrailingDistrictRegex(d);
       const m = name.match(re);
       if (m && m.index !== undefined) {
         tags.push(m[0].trim());

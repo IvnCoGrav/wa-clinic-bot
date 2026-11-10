@@ -176,7 +176,29 @@ export async function rehydrateLogBuffer(): Promise<void> {
 
     const readEntriesFromFile = async (filePath: string) => {
       if (!fs.existsSync(filePath)) return [];
-      const content = await fs.promises.readFile(filePath, 'utf8');
+      let content = '';
+      try {
+        const stat = await fs.promises.stat(filePath);
+        const CHUNK_SIZE = 256 * 1024; // 256KB tail
+        if (stat.size <= CHUNK_SIZE) {
+          content = await fs.promises.readFile(filePath, 'utf8');
+        } else {
+          const handle = await fs.promises.open(filePath, 'r');
+          try {
+            const buf = Buffer.alloc(CHUNK_SIZE);
+            await handle.read(buf, 0, CHUNK_SIZE, stat.size - CHUNK_SIZE);
+            content = buf.toString('utf8');
+            const firstNl = content.indexOf('\n');
+            if (firstNl !== -1) {
+              content = content.slice(firstNl + 1);
+            }
+          } finally {
+            await handle.close();
+          }
+        }
+      } catch {
+        return [];
+      }
       const lines = content.trim().split('\n').filter(Boolean);
       const entries: LogEntry[] = [];
       for (const line of lines) {

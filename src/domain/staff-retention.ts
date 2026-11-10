@@ -302,9 +302,16 @@ export function selectCohort(visits: Visit[], opts: SelectCohortOptions): Cohort
  */
 export function calculateRetention(
   cohort: CohortCustomer[],
-  policy: RetentionPolicyInput
+  policy: RetentionPolicyInput,
+  allStaffIds?: Array<string | null>
 ): StaffRetentionResult[] {
   const staffMap = new Map<string | null, CohortCustomer[]>();
+
+  if (allStaffIds) {
+    for (const sid of allStaffIds) {
+      if (!staffMap.has(sid)) staffMap.set(sid, []);
+    }
+  }
 
   for (const item of cohort) {
     const list = staffMap.get(item.originStaffId);

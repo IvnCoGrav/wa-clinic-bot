@@ -46,10 +46,23 @@ export function pickHealingWinner(
 
   // Kasus 1: kartu GPS tidak ber-teks, tapi ada kartu lama ber-teks.
   // Pemenang WAJIB kartu ber-teks (identitas alamat), korban = kartu GPS.
+  // Invarian: Koordinat presisi GPS dari gpsCard WAJIB disalin ke kartu pemenang (DOM-08).
   if (!gpsHasText && withText.length > 0) {
-    const preferred =
-      withText.find((x) => x.location_source === 'manual_staff') || withText[0];
-    return { winner: preferred, victim: gpsCard };
+    const sorted = [...withText].sort((a, b) => {
+      const aTime = new Date(a.last_used_at || a.lastUsedAt || a.created_at || a.createdAt || 0).getTime();
+      const bTime = new Date(b.last_used_at || b.lastUsedAt || b.created_at || b.createdAt || 0).getTime();
+      return bTime - aTime;
+    });
+    const preferred = sorted.find((x) => x.location_source === 'manual_staff') || sorted[0];
+    const enrichedWinner: HealingCard = {
+      ...preferred,
+      lat: gpsCard.lat ?? preferred.lat,
+      lng: gpsCard.lng ?? preferred.lng,
+      location_source: 'gps_pin',
+      distanceKm: gpsCard.distanceKm ?? preferred.distanceKm,
+      ongkir: gpsCard.ongkir ?? preferred.ongkir,
+    };
+    return { winner: enrichedWinner, victim: gpsCard };
   }
 
   // Kasus 2: kartu GPS ber-teks (atau tidak ada teks sama sekali).

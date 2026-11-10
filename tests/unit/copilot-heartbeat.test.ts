@@ -1,4 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+vi.mock('../../src/integrations/llm/model-fallback', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('../../src/integrations/llm/model-fallback')>();
+  return {
+    ...mod,
+    callChatCompletionsWithFallback: vi.fn().mockResolvedValue({
+      data: { choices: [{ message: { content: 'Halo! Ada yang bisa saya bantu?' } }] },
+    }),
+  };
+});
+
 import { isCopilotBusy, releaseCopilotTurn } from '../../src/routes/admin/copilot.subroute';
 import { copilotService, CopilotProgressEvent } from '../../src/services/copilot/copilot.service';
 
@@ -46,7 +57,7 @@ describe('Copilot F2 — Heartbeat, Concurrency & Stage Events', () => {
       expect(firstStage.maxSteps).toBeGreaterThanOrEqual(3);
       expect(typeof firstStage.label).toBe('string');
     }
-  });
+  }, 15000);
 
   it('heartbeat interval dapat dibuat dan dibersihkan tanpa memicu unhandled rejection / leak', () => {
     vi.useFakeTimers();

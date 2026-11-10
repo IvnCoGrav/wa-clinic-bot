@@ -77,7 +77,7 @@ export function isTreatmentWithinActiveWindow(
  */
 export function activeReservationWhere(nowMs: number = Date.now()): { OR: any[] } {
   const cutoff = activeTreatmentCutoff(nowMs);
-  const scheduledStatuses = ['confirmed', 'en_route', 'pending'];
+  const scheduledStatuses = ACTIVE_RESERVATION_STATUSES.filter((s) => s !== 'hold');
   return {
     OR: [
       { status: { in: scheduledStatuses }, booking_date: null },
@@ -98,10 +98,11 @@ export function isActiveReservation(
   nowMs: number = Date.now()
 ): boolean {
   if (!reservation || !reservation.status) return false;
-  if (reservation.status === 'confirmed' || reservation.status === 'en_route' || reservation.status === 'pending') {
+  const s = String(reservation.status).trim().toLowerCase();
+  if (s === 'confirmed' || s === 'en_route' || s === 'pending') {
     return isTreatmentWithinActiveWindow(reservation.booking_date, nowMs);
   }
-  if (reservation.status === 'hold') return isHoldActive(reservation.booking_date, nowMs);
+  if (s === 'hold') return isHoldActive(reservation.booking_date, nowMs);
   return false;
 }
 

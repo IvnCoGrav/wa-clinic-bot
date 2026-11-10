@@ -71,11 +71,19 @@ export function extractWahaLocation(payload: any): WahaLocationParseResult {
     pAny._data?.type === 'location' ||
     !!locMsg;
 
-  // Koordinat EXIF/WA Web image (0,0) DIBUANG — bukan lokasi riil.
-  const hasValidCoords =
-    !isNaN(rawLat) && !isNaN(rawLng) && rawLat !== 0 && rawLng !== 0;
-  const hasRealLocation =
-    hasValidCoords || (isLocationMsgType && !isNaN(rawLat));
+  // Koordinat valid: rentang sah latitude [-90, 90] & longitude [-180, 180],
+  // bukan NaN, dan koordinat (0,0) EXIF/WA Web image DIBUANG.
+  const isValidCoordRange =
+    !isNaN(rawLat) &&
+    !isNaN(rawLng) &&
+    rawLat >= -90 &&
+    rawLat <= 90 &&
+    rawLng >= -180 &&
+    rawLng <= 180 &&
+    (rawLat !== 0 || rawLng !== 0);
+
+  const hasValidCoords = isValidCoordRange;
+  const hasRealLocation = hasValidCoords;
 
   return { rawLat, rawLng, hasRealLocation, isLocationMsgType };
 }

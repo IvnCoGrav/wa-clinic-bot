@@ -9,7 +9,7 @@
  *  4. Primary mengikuti TABEL (sumber operasional staf/reservasi), fallback JSON,
  *     lalu `lastUsedAt` terbaru. Invarian: tepat 1 primary.
  */
-import { ensureSinglePrimary, type SavedCustomerAddress } from './customer-address';
+import { addressesMatch, ensureSinglePrimary, type SavedCustomerAddress } from './customer-address';
 
 export interface TableAddressRow {
   id: string;
@@ -76,8 +76,9 @@ export function buildReconciliationPlan(
 
   for (const row of tableRows) {
     if (jsonById.has(row.id)) continue;
+    const rowCard = tableRowToSaved(row);
     if (referencedIds.has(row.id)) {
-      next.push(tableRowToSaved(row));
+      next.push(rowCard);
       adoptedIds.push(row.id);
     } else {
       deletedIds.push(row.id);

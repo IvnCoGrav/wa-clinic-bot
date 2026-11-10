@@ -144,7 +144,11 @@ export function encryptSecretIfPossible(plainText: string): string {
   if (!plainText) return '';
   try {
     return encryptSecret(plainText);
-  } catch {
+  } catch (err: any) {
+    if (process.env.NODE_ENV === 'production' && process.env.ALLOW_ADMIN_KEY_ENCRYPTION_FALLBACK !== 'true') {
+      console.error('[SECURITY] Gagal mengenkripsi secret di lingkungan produksi:', err?.message);
+      throw new Error(`Enkripsi secret wajib di lingkungan produksi: ${err?.message}`);
+    }
     return plainText;
   }
 }

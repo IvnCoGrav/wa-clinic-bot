@@ -19,14 +19,16 @@ export interface MonotonicSseSequencer {
 }
 
 export function createMonotonicSseSequencer(seed: number = Date.now()): MonotonicSseSequencer {
+  let lastEmitted: number | null = null;
   let current = Number.isFinite(seed) ? seed : Date.now();
   return {
     next(): string {
       current += 1;
+      lastEmitted = current;
       return String(current);
     },
     peek(): string | null {
-      return current == null ? null : String(current);
+      return lastEmitted == null ? null : String(lastEmitted);
     },
   };
 }

@@ -383,6 +383,8 @@ const SUMOPOD_PRICING: Record<string, ModelPricing> = {
  * (Fungsi ini mempertahankan jendela historis 00:30-12:30 UTC agar kompatibel dgn test lama.)
  */
 export function isDeepSeekPeakHour(date: Date = new Date()): boolean {
+  const day = date.getUTCDay();
+  if (day === 0 || day === 6) return false; // Weekend is off-peak
   const utcMins = date.getUTCHours() * 60 + date.getUTCMinutes();
   return utcMins >= 30 && utcMins < (12 * 60 + 30);
 }

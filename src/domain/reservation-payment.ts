@@ -20,10 +20,12 @@ export function isReservationPaid(r: { purchase_occurred_at?: Date | string | nu
 export type PaymentDisplayStatus = 'LUNAS' | 'SELESAI_BELUM_VERIFIKASI' | 'TAGIH_DI_TEMPAT';
 
 export function getPaymentDisplayStatus(
-  r: { status?: string | null; purchase_occurred_at?: Date | string | null } | null | undefined
+  r: { status?: string | null; payment_status?: string | null; purchase_occurred_at?: Date | string | null } | null | undefined
 ): PaymentDisplayStatus {
   if (isReservationPaid(r)) return 'LUNAS';
-  const status = r?.status ? String(r.status).toLowerCase() : '';
+  const payStatus = r?.payment_status ? String(r.payment_status).trim().toLowerCase() : '';
+  if (payStatus === 'completed' || payStatus === 'paid' || payStatus === 'lunas') return 'LUNAS';
+  const status = r?.status ? String(r.status).trim().toLowerCase() : '';
   if (status === 'completed') return 'SELESAI_BELUM_VERIFIKASI';
   return 'TAGIH_DI_TEMPAT';
 }

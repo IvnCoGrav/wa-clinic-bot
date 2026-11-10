@@ -403,8 +403,20 @@ interface PhraseCandidate {
   end: number;
 }
 
+const BOUNDED_REGEX_CACHE = new Map<string, RegExp>();
+function getBoundedRegex(phrase: string): RegExp {
+  let re = BOUNDED_REGEX_CACHE.get(phrase);
+  if (!re) {
+    re = new RegExp(`\\b${escapeRegex(phrase)}\\b`);
+    if (BOUNDED_REGEX_CACHE.size < 2000) {
+      BOUNDED_REGEX_CACHE.set(phrase, re);
+    }
+  }
+  return re;
+}
+
 function boundedMatchIndex(qNorm: string, phrase: string): { start: number; end: number } | null {
-  const re = new RegExp(`\\b${escapeRegex(phrase)}\\b`);
+  const re = getBoundedRegex(phrase);
   const m = re.exec(qNorm);
   if (!m) return null;
   return { start: m.index, end: m.index + phrase.length };

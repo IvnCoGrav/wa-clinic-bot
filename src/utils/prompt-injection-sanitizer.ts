@@ -58,7 +58,10 @@ export function sanitizeCustomerInput(text: string | undefined): SanitizedCustom
     [/\bprompt\s*(sistem|system|kamu)?\b/i, 'prompt_probe'],
   ];
   for (const [re, label] of INSTRUCTION_PATTERNS) {
-    if (re.test(out)) blocked.add(label);
+    if (re.test(out)) {
+      blocked.add(label);
+      out = out.replace(re, ' ');
+    }
   }
 
   // Rapikan spasi berlebih hasil netralisasi (tanpa mengubah teks normal).

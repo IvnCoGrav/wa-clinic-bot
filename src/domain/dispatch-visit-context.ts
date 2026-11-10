@@ -34,7 +34,11 @@ export function isWithinWibDay(createdAt: unknown, start: Date, end: Date): bool
 
 export function hasFreshSharelocToday(msgs: VisitMessageLike[], s: Date, e: Date): boolean {
   return (msgs || []).some(
-    (m) => isWithinWibDay(m.created_at, s, e) && Boolean((m as any).location || (m.content && LOCATION_TAG_RE.test(m.content)))
+    (m) =>
+      (!m.direction || m.direction.toUpperCase() === 'INBOUND') &&
+      (!m.sender_type || m.sender_type.toLowerCase() === 'customer' || m.sender_type.toLowerCase() === 'user') &&
+      isWithinWibDay(m.created_at, s, e) &&
+      Boolean((m as any).location || (m.content && LOCATION_TAG_RE.test(m.content)))
   );
 }
 

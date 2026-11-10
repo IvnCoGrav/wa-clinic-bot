@@ -2,7 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { WahaWebhookEvent } from '../integrations/waha/types';
 import { customerService } from '../services/customer.service';
 import { conversationService } from '../services/conversation.service';
-import { messageService } from '../services/message.service';
+import { messageService, extractShortMessageId } from '../services/message.service';
 import { queueService } from '../services/queue.service';
 import { burstCoalesceService } from '../services/burst-coalesce.service';
 import { getWahaClientForTenant } from '../integrations/whatsapp/factory';
@@ -13,7 +13,6 @@ import { abuseDetectionService } from '../services/abuse-detection.service';
 import { enforceAiScopeGate } from '../services/ai-scope-gate.service';
 import { contextStorage } from '../utils/context';
 import { stageLog } from '../utils/stage-logger';
-import { memoryAdClicks } from './tracking.route';
 import { prisma } from '../db/client';
 import { matchAdClickAndFireContact } from '../services/ad-attribution.service';
 import crypto from 'crypto';
@@ -35,7 +34,7 @@ dotenv.config();
  * Event dengan payload.label null (mis. baru selesai scan QR) dilewati —
  * LabelReconciliationService tetap menjadi safety-net periodik.
  */
-async function handleLabelChatEvent(event: WahaWebhookEvent, tenantId: string): Promise<void> {
+export async function handleLabelChatEvent(event: WahaWebhookEvent, tenantId: string): Promise<void> {
   try {
     const payload: any = event.payload;
     const chatId: string | undefined = payload?.chatId;
@@ -52,10 +51,20 @@ async function handleLabelChatEvent(event: WahaWebhookEvent, tenantId: string): 
     }
 
     const isAdded = event.event === 'label.chat.added';
-    await customerService.setLabelFlags(phone, {
-      isAdminLabeled: lower === 'admin' ? isAdded : undefined,
-      isHoldLabeled: lower === 'hold' ? isAdded : undefined,
-    }, tenantId);
+    let attempts = 0;
+    while (attempts < 3) {
+      try {
+        await customerService.setLabelFlags(phone, {
+          isAdminLabeled: lower === 'admin' ? isAdded : undefined,
+          isHoldLabeled: lower === 'hold' ? isAdded : undefined,
+        }, tenantId);
+        break;
+      } catch (e: any) {
+        attempts++;
+        if (attempts >= 3) throw e;
+        await new Promise((r) => setTimeout(r, 100 * attempts));
+      }
+    }
     invalidateCachedLabels(chatId);
   } catch (err: any) {
     console.warn(`[LABEL EVENT] Failed to process label event ${event.event}:`, err.message);
@@ -193,7 +202,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           try {
             const { prisma } = await import('../db/client');
             const cleanId = String(targetMsgId);
-            const shortId = cleanId.replace(/^true_|^false_/, '').replace(/^[^_]+_/, '').replace(/@.*$/, '');
+            const shortId = extractShortMessageId(cleanId);
 
             const updated = await prisma.message.updateMany({
               where: {

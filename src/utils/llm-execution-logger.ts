@@ -230,6 +230,12 @@ export function recordLlmExecution(
         customerPhone: entry.customerPhone ? hashPiiPhone(entry.customerPhone) : entry.customerPhone,
         customerName: entry.customerName ? maskCustomerName(entry.customerName) : entry.customerName,
         customerInput: redactPiiText(entry.customerInput),
+        deliveredReply: redactPiiText(entry.deliveredReply),
+        promptPayload: entry.promptPayload
+          ? (typeof entry.promptPayload === 'string'
+              ? redactPiiText(entry.promptPayload)
+              : JSON.parse(redactPiiText(JSON.stringify(entry.promptPayload))))
+          : undefined,
       };
       llmWriteQueue.push(JSON.stringify(persisted));
       if (llmWriteQueue.length >= 10) {

@@ -118,18 +118,28 @@ export function splitWilayahComposite(raw?: string | null): SplitWilayahResult {
     return kecEntries.find((k) => k.lower === sl || k.lower.replace(/\s+/g, '') === sl.replace(/\s+/g, ''));
   };
 
+  // Prioritas 1: Bila terdapat nama KOTA resmi di salah satu komponen
+  const cityIndex = parts.findIndex(isCity);
+  if (cityIndex !== -1) {
+    const kotaPart = parts[cityIndex];
+    const nonCityParts = parts.filter((_, idx) => idx !== cityIndex);
+    if (nonCityParts.length === 1) {
+      const kHit = findKec(nonCityParts[0]);
+      return { kecamatan: kHit ? kHit.orig : nonCityParts[0], kota: kotaPart };
+    }
+    if (nonCityParts.length >= 2) {
+      const kecIdx = nonCityParts.findIndex((p) => !!findKec(p));
+      if (kecIdx !== -1) {
+        const kecHit = findKec(nonCityParts[kecIdx]);
+        const kelPart = nonCityParts.find((_, idx) => idx !== kecIdx);
+        return { kecamatan: kecHit ? kecHit.orig : nonCityParts[kecIdx], kelurahan: kelPart, kota: kotaPart };
+      }
+      return { kecamatan: nonCityParts[1], kelurahan: nonCityParts[0], kota: kotaPart };
+    }
+  }
+
   const p0 = parts[0];
   const p1 = parts[1];
-
-  // Prioritas 1: Bila salah satu bagian adalah nama KOTA resmi (misal "Tambaksari, Surabaya" atau "Waru, Sidoarjo")
-  if (isCity(p1)) {
-    const kHit = findKec(p0);
-    return { kecamatan: kHit ? kHit.orig : p0, kota: p1 };
-  }
-  if (isCity(p0)) {
-    const kHit = findKec(p1);
-    return { kecamatan: kHit ? kHit.orig : p1, kota: p0 };
-  }
 
   // Prioritas 2: Bila bukan kota, cek bagian yang merupakan nama KECAMATAN resmi (misal "pacar Keling, Tambaksari")
   const kecHit1 = findKec(p1);
