@@ -27,8 +27,8 @@
 | Audit 16/16 modul | **SELESAI (100% COVERAGE)** — 10 laporan granular A–G + 7 Track B ter-rebaseline |
 | Remediasi F2 | **SELESAI (PASS)** — commit F2A, F2B, F2C |
 | Remediasi F3 | **SELESAI (PASS setelah remediasi F3.6)** — F3.1 (State Machine), F3.2 (Follow-up), F3.3 (Admin API God Object), F3.4 (Delivery & Build), F3.5 (Track B P1 Kritis & Tinggi), F3.6 (Gate Remediation regresi & FN-03) |
-| Remediasi F4 | **SELESAI BATCH F4.1–F4.4; REMEDIASI AUDIT F4 IN PROGRESS** — commit `302dc26f`, `3688a3cf`, `f6bbd83f`, `20532445`; remediasi audit mendalam Cfg-008, SM-02, config/security, dan adversarial multi-phrasing (F4.5) |
-| Remediasi F5–F6 | **PENDING** — menunggu penyelesaian remediasi audit F4 |
+| Remediasi F4 | **SELESAI (GATE F4 PASS)** — commit F4.1–F4.4, commit remediasi F4.5 (`1d972cac`); register 100% berstatus (242 FIXED, 26 DUPLICATE/KNOWN, 0 OPEN); security scan 2.127 file bersih; full suite 6.953 test (0 regresi baru) |
+| Remediasi F5 | **SIAP DIEKSEKUSI (Kesiapan Produksi)** — seed, backup, cron, PWA, deploy |
 
 ---
 
@@ -249,7 +249,7 @@ Audit 2026-11-10 menemukan gate F3 belum hijau (13 regresi baru) dan klaim FN-03
 | F4.4 | Hardening test | adversarial multi-phrasing, dua tenant, race condition |
 
 **Aturan:** setiap item harus punya status akhir `FIXED`, `KNOWN` (dengan alasan produk), atau `WONTFIX` (dengan persetujuan). Tidak boleh dibiarkan `OPEN` tanpa catatan.
-**Gate F4:** full suite 0 failure baru; security scan; register 100% berstatus.
+**Gate F4:** full suite 0 failure baru; security scan; register 100% berstatus. **STATUS: PASS** — commit `1d972cac`; full suite 6.953 test (0 regresi baru); security scan 2.127 file bersih; register 100% berstatus (242 FIXED, 21 KNOWN, 5 DUP, 0 OPEN).
 
 ---
 
