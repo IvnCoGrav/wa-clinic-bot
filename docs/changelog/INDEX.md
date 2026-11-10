@@ -5,8 +5,9 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 678
+Total entri terindeks: 679
 
+- 2026-11-10 | Release: Penutupan Remediasi 16 Modul (Fase F1–F6) & Kesiapan Produksi (Gate F4 & F5 Pass)
 - 2026-11-10 | Fix: Tindak Lanjut Audit F0–F3.1 (D-02/D-03, FN-02, CFG-04, SM-03/07/14, CI, Backup, UTL-0
 - 2026-11-09 | Feat: Zipcode Anti-Loss (CAPI/Delivery) & Tautan Interaktif LiveChat
 - 2026-11-09 | Feat: S5.2 Katalog Data-Driven + Seed Eksplisit + S6 Verifikasi Lokal

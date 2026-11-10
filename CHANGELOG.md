@@ -4,6 +4,22 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-10 - Release: Penutupan Remediasi 16 Modul (Fase F1–F6) & Kesiapan Produksi (Gate F4 & F5 Pass)
+
+- **Latar Belakang**: Menyelesaikan seluruh rencana kerja master (`PLAN_FINISH_ALL_2026-11-09.md`), mencakup 16 modul sistem (Track A, S4, Track B), remediasi audit mendalam, verifikasi pra-produksi, dan sertifikasi kelulusan Gate F4 & Gate F5.
+- **Perubahan Utama**:
+  1. **Fase F2 (Keamanan Kritis & Isolasi Multi-Tenant P0/P1)**: Redaksi kredensial historis, SSRF guard IPv4-mapped IPv6, pengamanan skema RBAC fail-closed, customer repository seam (`CustomerRepository.update(tenantId, patch)`), dan isolasi webhook multi-tenant.
+  2. **Fase F3 (Stabilitas Operasional & Modularisasi God Object)**: Pemecahan modul raksasa (`message.service.ts` < 1.400 baris, `follow-up.service.ts` < 1.500 baris, `staff-notification.service.ts` < 600 baris, pemecahan admin settings subroutes), outbox Google Sheets atomic claim lease, dan CI workflow `build:all` + `audit-baseline-diff.mjs`.
+  3. **Fase F4 (P2/P3 & Remediasi Resilience)**: OCC optimistic locking dengan versioning & retry pada `Tenant.settings` (`Cfg-008`), parser form pendaftaran multi-tenant data-driven (`SM-02`), fail-closed claim turn di produksi (`D-06`), TTL cache lokasi klinik 5 menit (`CFG-14`), interval & timeout registry tracking (`Ar-001`), pembersihan dead exports global persona (`CFG-03`), dan batch F4.5 adversarial multi-phrasing hardening tests.
+  4. **Fase F5 (Kesiapan Produksi & Verifikasi Operasional)**: Verifikasi siklus backup/restore terenkripsi AES-256-GCM (`verify-backup-restore.ts`), simulasi dry-run seed katalog 42 layanan dan 7 tier ongkir per-tenant (`seed:catalog`), serta verifikasi runbook deploy produksi otomatis (`scripts/deploy-prod.sh`).
+  5. **Gate F4 & Penutupan Register**: 268 temuan dari 16 modul sistem 100% berstatus (**242 FIXED**, **21 KNOWN by-design**, **5 DUPLICATE**, **0 OPEN**, **0 PARTIAL**).
+- **Verifikasi**:
+  - `npx tsc --noEmit`: 0 error.
+  - `npm run build`: Exit 0 (backend build dan landing/config assets).
+  - `npm run security:scan`: 2.129 file tracked dipindai, 0 kebocoran kredensial atau API key.
+  - Multi-tenant E2E tests: 37/37 tests lulus (isolasi database pelanggan, media, settings, CAPI, persona, dan WhatsApp factory).
+  - Full suite Vitest: 6.953 test (6.923 lulus / 2 pre-existing #287 parser / 28 skip) — 0 regresi baru.
+
 #### 2026-11-10 - Fix: Tindak Lanjut Audit F0–F3.1 (D-02/D-03, FN-02, CFG-04, SM-03/07/14, CI, Backup, UTL-04)
 
 - **Latar Belakang**: Audit eksekusi F0–F3.1 menemukan 2 regresi test dan 12 status `FIXED` yang belum tuntas. Perbaikan ini menutup temuan tersebut sebelum F3.2.
