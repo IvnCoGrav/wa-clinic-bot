@@ -2,6 +2,9 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { FinancialAnalyticsService } from '../../services/financial-analytics.service';
 import { tenantOf } from './route-helpers';
 
+const financialExportCooldown = new Map<string, number>();
+const FINANCIAL_EXPORT_COOLDOWN_MS = 2000;
+
 export async function analyticsAdminRoutes(fastify: FastifyInstance) {
   /**
    * GET /api/admin/financial-analytics
@@ -64,6 +67,23 @@ export async function analyticsAdminRoutes(fastify: FastifyInstance) {
 
       try {
         const tenantId = tenantOf(request);
+        const cooldownKey = `${tenantId}:${request.ip}`;
+        const lastCall = financialExportCooldown.get(cooldownKey) || 0;
+        const nowMs = Date.now();
+        if (nowMs - lastCall < FINANCIAL_EXPORT_COOLDOWN_MS) {
+          return reply.status(429).send({
+            success: false,
+            code: 'RATE_LIMITED',
+            error: 'Permintaan ekspor keuangan terlalu sering. Harap tunggu beberapa detik sebelum mencoba lagi.',
+          });
+        }
+        financialExportCooldown.set(cooldownKey, nowMs);
+        if (financialExportCooldown.size > 500) {
+          for (const [k, time] of financialExportCooldown.entries()) {
+            if (nowMs - time > 60000) financialExportCooldown.delete(k);
+          }
+        }
+
         const csvContent = await FinancialAnalyticsService.generateMonthlyTransactionsCsv(
           tenantId,
           year,

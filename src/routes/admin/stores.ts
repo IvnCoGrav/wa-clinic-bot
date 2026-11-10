@@ -1,7 +1,38 @@
 // Shared memory stores and helper utilities for admin routes
 
+export const MAX_MEMORY_RESERVATIONS = 1000;
+export const MAX_MEMORY_LANDINGS = 500;
+
 export const memoryReservations = new Map<string, any>();
 export const memoryLandings = new Map<string, any>();
+
+// Patch memoryReservations.set with FIFO eviction (API-06)
+const origReservationSet = memoryReservations.set.bind(memoryReservations);
+memoryReservations.set = function (key: string, value: any) {
+  if (this.size >= MAX_MEMORY_RESERVATIONS && !this.has(key)) {
+    const oldest = this.keys().next().value;
+    if (oldest !== undefined) this.delete(oldest);
+  }
+  return origReservationSet(key, value);
+};
+
+// Patch memoryLandings.set with FIFO eviction (API-06)
+const origLandingSet = memoryLandings.set.bind(memoryLandings);
+memoryLandings.set = function (key: string, value: any) {
+  if (this.size >= MAX_MEMORY_LANDINGS && !this.has(key)) {
+    const oldest = this.keys().next().value;
+    if (oldest !== undefined) this.delete(oldest);
+  }
+  return origLandingSet(key, value);
+};
+
+export function setMemoryReservation(id: string, record: any): void {
+  memoryReservations.set(id, record);
+}
+
+export function setMemoryLanding(slugOrId: string, record: any): void {
+  memoryLandings.set(slugOrId, record);
+}
 
 /**
  * Isolasi multi-tenant untuk fallback in-memory (saat DB offline): saring
@@ -89,14 +120,12 @@ export function pruneLoginAttempts(
   const now = Date.now();
   let removed = 0;
   for (const [key, entry] of map.entries()) {
-    // resetAt = waktu percobaan terakhir + 60 detik window; TTL dihitung dari percobaan terakhir
     const lastAttemptMs = entry.resetAt - 60 * 1000;
     if (now - lastAttemptMs > ttlMs) {
       map.delete(key);
       removed++;
     }
   }
-  // FIFO hard-cap: hapus tertua hingga di bawah batas
   while (map.size > maxEntries) {
     const oldestKey = map.keys().next().value as string | undefined;
     if (oldestKey === undefined) break;
@@ -106,7 +135,6 @@ export function pruneLoginAttempts(
   return removed;
 }
 
-// Periodic cleanup tiap 5 menit (unref agar tidak menghalangi exit proses / test)
 const loginAttemptsCleanupTimer: NodeJS.Timeout = setInterval(() => {
   try {
     pruneLoginAttempts();
@@ -114,12 +142,10 @@ const loginAttemptsCleanupTimer: NodeJS.Timeout = setInterval(() => {
 }, LOGIN_ATTEMPTS_CLEANUP_INTERVAL_MS);
 if ((loginAttemptsCleanupTimer as any)?.unref) (loginAttemptsCleanupTimer as any).unref();
 
-/** Untuk testing / graceful shutdown: hentikan timer periodik loginAttempts. */
 export function stopLoginAttemptsCleanupTimer(): void {
   clearInterval(loginAttemptsCleanupTimer);
 }
 
-// Re-export account lockout utilities (Task 1.4.4)
 export {
   checkAccountLockout,
   recordAccountFailedAttempt,
