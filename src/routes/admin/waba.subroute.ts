@@ -297,6 +297,12 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
         const { resetGateway } = await import('../../integrations/whatsapp/factory');
         resetGateway();
 
+        // W-009: perubahan nomor/provider WAJIB membuang cache tenant agar
+        // reassignment phone_number_id langsung berlaku (tanpa restart/menunggu TTL).
+        const { invalidateWabaTenantCache } = await import('../../services/waba-tenant.service');
+        invalidateWabaTenantCache(existing?.waba_phone_number_id ?? null);
+        invalidateWabaTenantCache(tenant.waba_phone_number_id ?? null);
+
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,

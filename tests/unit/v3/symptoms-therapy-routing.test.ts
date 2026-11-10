@@ -24,14 +24,18 @@ describe('Symptoms Therapy Routing', () => {
     expect(out.treatments.length).toBeGreaterThan(0);
   });
 
-  it('grounding: gejala tercatat -> mandat anti-relaksasi-murni + rekomendasi terapi', () => {
+  it('grounding: gejala tercatat -> rujukan katalog penanganan keluhan (tanpa mandat koersif)', () => {
     const text = GoalTracker.formatGoalSessionForPrompt({
       genderGreeting: 'Bunda',
       children: [{ roleLabel: 'Si Kecil', ageMonths: 8, symptoms: ['rewel'] }],
       childProfile: { ageMonths: 8, symptoms: ['rewel'] },
     } as any);
-    expect(text).toContain('MANDAT ANTI-RELAKSASI-MURNI');
+    // C-003: grounding tetap mengarahkan ke terapi keluhan, tetapi lewat
+    // rujukan katalog netral (clinical dominance), bukan mandat koersif yang
+    // mengunci AI pada satu paket.
+    expect(text).toContain('Rujukan katalog klinis');
     expect(text).toContain('Pulih Ceria');
+    expect(text).not.toContain('MANDAT ANTI-RELAKSASI-MURNI');
   });
 
   it('persona A.2: mandat anti-relaksasi-murni + pengecualian trauma', () => {

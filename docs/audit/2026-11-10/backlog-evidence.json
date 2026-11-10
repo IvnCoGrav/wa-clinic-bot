@@ -366,7 +366,7 @@
         {
           "type": "file",
           "path": "scripts/scan-secrets.ts",
-          "line": 200,
+          "line": 248,
           "contains": "args.includes('--all')"
         },
         {
@@ -432,6 +432,114 @@
           "type": "test",
           "path": "tests/unit/v3/vaccine-safety.test.ts",
           "contains": "slang imunisasi terdeteksi sinyal vaksin"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-10"
+    },
+    "S-001": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "GUIDE_OPERASIONAL.md",
+          "line": 37,
+          "contains": "<WAHA_DASHBOARD_PASSWORD_DARI_ENV>"
+        },
+        {
+          "type": "file",
+          "path": "scripts/scan-secrets.ts",
+          "line": 143,
+          "contains": "export function scanDocumentationCredential"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/security-doc-credential-scan.test.ts",
+          "contains": "mendeteksi format markdown"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-10"
+    },
+    "W-009": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/utils/ttl-cache.ts",
+          "line": 21,
+          "contains": "export class TtlCache"
+        },
+        {
+          "type": "file",
+          "path": "src/services/waba-tenant.service.ts",
+          "line": 113,
+          "contains": "export function invalidateWabaTenantCache"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/ttl-cache.test.ts",
+          "contains": "menghapus nilai setelah TTL habis"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-10"
+    },
+    "A-006": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/utils/prompt-injection-sanitizer.ts",
+          "line": 95,
+          "contains": "export function buildSanitizedHistory"
+        },
+        {
+          "type": "file",
+          "path": "src/v3/agent/agent-runner.ts",
+          "line": 211,
+          "contains": "buildSanitizedHistory(conversationHistory, 8)"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/v3/prompt-injection-sanitizer.test.ts",
+          "contains": "riwayat tidak dikirim mentah"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-10"
+    },
+    "C-003": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/v3/state/goal-tracker.ts",
+          "line": 472,
+          "contains": "Rujukan katalog klinis"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/v3-pregrounding-catalog.test.ts",
+          "contains": "TANPA mandat koersif"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-10"
+    },
+    "K-013": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "docs/FEATURE_INVENTORY.md",
+          "line": 198,
+          "contains": "22 interval cron"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/cron-registry-consistency.test.ts",
+          "contains": "registrasi runtime tetap 22 interval cron"
         }
       ],
       "verifiedBy": "AI Agent",

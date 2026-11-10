@@ -3,13 +3,13 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
-## 325. [Audit Eksekusi F0–F6] Sertifikasi 242 FIXED Dicabut — 84 Item UNVERIFIED (2026-11-10, OPEN — Fase 0 Freeze + Fase 1 Evidence Gate)
+## 325. [Audit Eksekusi F0–F6] Sertifikasi 242 FIXED Dicabut — 73 Item UNVERIFIED (2026-11-10, OPEN — Fase 0 Freeze + Fase 1 Evidence Gate + Fase 2A)
 
 - **Status:** OPEN — sertifikasi lama dicabut; gerbang bukti otomatis sudah terpasang (Fase 1). Kode produksi belum diubah. **Deploy produksi diblokir** sampai Fase 0–5 lulus.
 - **Laporan audit:** `docs/audit/2026-11-10/EVIDENCE_LEDGER.md`.
 - **Apa yang terjadi:** Laporan F0–F6 mengklaim 242 FIXED / 21 KNOWN / 5 DUPLICATE / 0 OPEN dan production-ready. Verifikasi menemukan commit `e98d4ffe` hanya mengubah dua file dokumentasi, tetapi mengubah **82 item `OPEN→FIXED`**, **20 `OPEN→KNOWN`**, dan **1 `PARTIAL→FIXED`**. Skrip `scratch/update_backlog.js:59-75` menjadikan FIXED sebagai **default** untuk item yang tidak masuk dua daftar kecil.
 - **Dampak:** Register tidak dapat dipakai sebagai bukti rilis. Gate F4 **belum terpenuhi**.
-- **Temuan yang terbukti masih bermasalah (7):**
+- **Temuan yang terbukti masih bermasalah (7 — 5 FIXED Fase 2A, 2 ditunda):**
   - `S-001`: `GUIDE_OPERASIONAL.md:36-40` masih memuat `admin12345` dan `my_waha_api_key_secret`.
   - `Ar-003`: **661 referensi** `DEFAULT_TENANT_ID` di 133 file; login admin/staf masih default tenant (`src/routes/admin/auth.subroute.ts:130,190,219,285,316,369,386,407`; `src/routes/staff/auth.subroute.ts:42`).
   - `C-003`: `src/v3/state/goal-tracker.ts:472,493` masih memaksa `MANDAT` di atas *clinical dominance*.
@@ -17,6 +17,17 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - `A-006`: `src/v3/agent/agent-runner.ts:209-212` mengirim riwayat mentah; hanya pesan saat ini yang di-`wrapCustomerMessage`.
   - `W-009`: `src/services/waba-tenant.service.ts:8,20,32` cache `Map` tanpa TTL/`expiresAt`.
   - `K-013`: **22** cron terdaftar di `src/lifecycle/background-crons.ts` vs **23** di `docs/FEATURE_INVENTORY.md:198,271`.
+- **Tindakan Fase 2A (selesai 2026-11-10):**
+  - **5 item naik ke `FIXED`** dengan bukti kode + test:
+    - `S-001` — kredensial diredaksi ke placeholder env; rule `scanDocumentationCredential` (anchored + filter placeholder/kode) di `scripts/scan-secrets.ts`; `security:scan` LULUS 2.135 file; `tests/unit/security-doc-credential-scan.test.ts` (7).
+    - `W-009` — `src/utils/ttl-cache.ts` + cache ber-TTL `waba-tenant.service.ts` + invalidasi pada PATCH admin WABA; `tests/unit/ttl-cache.test.ts` (6).
+    - `A-006` — `buildSanitizedHistory()` menetralkan seluruh riwayat + membungkus pesan `user` (`agent-runner.ts`); `tests/unit/v3/prompt-injection-sanitizer.test.ts` (+4 adversarial).
+    - `C-003` — mandat koersif pre-grounding dihapus, diganti rujukan katalog netral; `tests/unit/v3-pregrounding-catalog.test.ts`, `tests/unit/v3/symptoms-therapy-routing.test.ts`.
+    - `K-013` — dokumentasi cron diselaraskan 22 interval / 23 pekerja logis; `tests/unit/cron-registry-consistency.test.ts` (3).
+  - **2 item ditunda (butuh Confirmation Gate):** `C-001` (rewrite/rerank RAG, blast radius besar) dan `Ar-003` (661 referensi `DEFAULT_TENANT_ID` di 133 file).
+  - Register menjadi **169 FIXED / 73 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 17 OPEN**; `npm run verify:backlog` → PASS.
+  - **Gerbang regresi:** full suite **6.984 test / 6.954 lulus / 2 gagal pre-existing #287**; artefak `docs/audit/2026-11-10/after-fase2a.json`; `audit-baseline-diff.mjs` → **0 regresi baru**.
+
 - **Temuan tambahan:** `SM-02` berstatus FIXED tetapi **inert** — `getTenantFormHeadersAsync`/`registerTenantFormHeaders` **0 pemanggil produksi** (`src/utils/reservation-text-parser.ts:131,162`).
 - **F5/F6 tidak dieksekusi:** Tidak ada artefak `after-f5.json`/`after-f6.json`; `scripts/deploy-prod.sh` tidak memvalidasi `APP_DOMAIN`/`BACKUP_ENCRYPTION_KEY`; `backup:verify` tidak ada di `package.json`. F6.1 menyebut “kelulusan penuh” padahal artefak 6.953 test berisi **6.923 lulus / 2 gagal pre-existing #287 / 28 skip**. Klaim “37 test isolasi 2 tenant” tidak punya suite/script rujukan; yang terverifikasi 5 suite / 23 test isolasi eksplisit lulus.
 - **Tindakan Fase 0 (selesai 2026-11-10):**
@@ -30,7 +41,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - Register menjadi **164 FIXED / 78 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 17 OPEN**.
   - **Gerbang bukti otomatis:** `npm run verify:backlog` (`scripts/verify-backlog-evidence.mjs`) + manifest `docs/audit/2026-11-10/backlog-evidence.json`, baseline beku `legacy-fixed-baseline.json` (158, tidak boleh tumbuh), step CI **Backlog Evidence Gate**, dan uji adversarial `tests/unit/backlog-evidence-gate.test.ts` (6 test).
   - **Gerbang regresi:** full suite **6.964 test / 6.934 lulus / 2 gagal pre-existing #287 / 28 skip**; artefak `docs/audit/2026-11-10/after-fase1.json`; `audit-baseline-diff.mjs` → **0 regresi baru**.
-- **Rencana lanjutan:** Fase 2 perbaiki 7 item terbukti + 78 UNVERIFIED triage; Fase 3 eksekusi F5 nyata + artefak; Fase 4 rekonsiliasi dokumen; Fase 5 deploy gate (2-step verification).
+- **Rencana lanjutan:** Fase 2B — `C-001` & `Ar-003` (setelah Confirmation Gate) + triage 73 UNVERIFIED; Fase 3 eksekusi F5 nyata + artefak; Fase 4 rekonsiliasi dokumen; Fase 5 deploy gate (2-step verification).
 
 ## 324. [Gate F3.6] Regresi F3.2–F3.5 & Remediasi (2026-11-10, RESOLVED)
 
@@ -63,7 +74,9 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Fase 2 SELESAI untuk UI chrome (2026-11-10):** `lang="id"`, judul netral + runtime dari env, em dash UI 118 -> 0 (sisa 2 di dev-only/komentar), emoji 423 -> 151 (sisanya konten pesan/picker/push), `aria-current` pada menu aktif, `BootProgress` role=status. 18 span kosong hasil pembersihan dibersihkan ulang. `npm run build` 0, `check:contrast` OK, `check:a11y` 490/490.
 - **Fase 3 SELESAI kecuali 2 modal (2026-11-10):** skala `--z-*` + `z-dialog`/`z-toast` terpasang; `ui/Modal.tsx` ditulis ulang (focus trap, Escape, `aria-modal`, fokus awal/pengembalian, varian sheet, `headerAction`, `bodyClassName`, `data-modal-active/close`); `UiFeedback` konfirmasi + toast diberi semantik, Escape, dan jeda hover; 43 tombol ikon diberi `aria-label`; **53 komponen** memakai `Modal`. Overlay manual 70 blok/45 file -> 17 blok/12 file. Baseline a11y 490 -> 354. Ditunda karena butuh `variant="full"` + prop `layer`: `CreateReservationModal` dan `InvoiceGeneratorModal`. Drawer, popover, dan lightbox tetap mandiri.
 - **Fase 4 SEBAGIAN (2026-11-10):** `ui/PageHeader.tsx` dan `ui/StateViews.tsx` dibuat; judul `h1` diseragamkan di 17 halaman, setiap halaman produksi tepat 1 `h1`; `LoadingState` di fallback Suspense; `SkeletonRows` di daftar Live Chat; `EmptyState` di Reservations, TodayTreatments, CustomerDatabase. Verifikasi mengoreksi audit awal: `ClinicServices` tidak butuh paginasi (katalog 43 baris), bukan ">200". Sisa: `ErrorState` (butuh state error persisten per halaman) dan pengukuran antrean `MetaCapiQueue`.
-- **Fase 5 SEBAGIAN (2026-11-10):** `Fields.tsx` memakai `useId` + `aria-invalid`/`aria-describedby` + id pesan error; label Login/StaffLogin terhubung + `autoComplete`; modul `lib/validateReservation.ts` mengembalikan semua error sekaligus; 5 unit test lulus; `CreateReservationModal` dan `LandingPage` memakai validator + `FormErrorSummary`. Baseline a11y 354 -> 350. Sisa: AiPersona, Settings, ClinicServices, KnowledgeBase, StaffManagement, QuickReplies, FollowUpTemplates, DeliveryTiers, CustomerService.
+- **Fase 7 SEBAGIAN (2026-11-10):** kelas CSS mati (gradient-text, glass-panel, glass-card, gradient-btn) dihapus; `ScrollToTop` dipasang (PUSH dari atas, POP memulihkan posisi); `useDirtyGuard` dipakai di AiPersona; blok `prefers-reduced-motion` ditambahkan ke go.html, layanan.html, dan generator landing. Sisa: animasi loop, blur/bayangan, dirty guard 13 panel Settings, useUrlState.
+- **Fase 6 SELESAI (2026-11-10):** stack sistem dipakai di dashboard dan 3 halaman publik; 0 permintaan Google Fonts; deklarasi font mati dihapus; generator landing/pricelist disamakan; minimum teks mikro 11px juga di desktop; target sentuh mobile 44px. Catatan: `pricelist.html` dan generatornya sebelumnya sudah beda keluarga font. `tsc` 0, build 0, `check:a11y` 350/350.
+- **Fase 5 SEBAGIAN (2026-11-10):** `Fields.tsx` memakai `useId` + `aria-invalid`/`aria-describedby` + id pesan error; label Login/StaffLogin terhubung + `autoComplete`; `lib/validateReservation.ts` mengembalikan semua error sekaligus; 5 unit test lulus; **6 form** memakai validator + `FormErrorSummary`; 4 validasi senyap di `KnowledgeBase` diberi pesan. Koreksi cakupan: Settings/FollowUpTemplates/DeliveryTiers/CustomerService tidak punya validasi per field. Baseline a11y 354 -> 350. Sisa: retensi media Settings (1 field), 4-section prompt AiPersona (bukan form).
 - **Verifikasi harga DB (2026-11-10, read-only):** DB lokal tidak dapat dijangkau (`localhost:5432`). Memakai snapshot `storage/live_clinic_services.sql` (12 Sep 2026, 43 baris), **HTML cocok dengan DB** untuk 4 dari 5 harga sengketa (moms-oksitosin-fullbody 105.000; bundle-laktasi-oksitosin 140.000; add-on-nebulizer 35.000; add-on-nebulizer-obat 50.000), sedangkan `services_custom.json` menyimpang. Jadi **JSON yang basi**, bukan halaman HTML; regenerasi dari JSON justru akan menurunkan harga publik. `baby-massage-pulih-ceria-newborn` tidak ada di snapshot. Snapshot DB 43 layanan vs JSON 38 vs HTML 39, jadi halaman publik kemungkinan melewatkan 4-5 layanan aktif.
 - **Drift katalog TERBUKTI (bukan lagi asumsi):** `services_custom.json` vs `layanan.html` berbeda pada 5 harga (baby-massage-pulih-ceria-newborn 65.000 vs 75.000; moms-oksitosin-fullbody 110.000 vs 105.000; bundle-laktasi-oksitosin 70.000 vs 140.000; add-on-nebulizer 80.000 vs 35.000; add-on-nebulizer-obat 110.000 vs 50.000) dan jumlah layanan 38 vs 39. Sisi yang benar perlu query DB.
 - **Catatan landing publik:** `src/landing/public/layanan.html` memuat 39 layanan + tier ongkir hardcoded dari `scripts/build_landing.js` (membaca snapshot `services_custom.json`, terakhir 2026-10-19). Halaman itu **tidak dirutekan** `src/routes/landing.route.ts` (hanya `/go`, `/pricelist.html`, `/promo/:slug`, `/assets/:filename`), jadi cara distribusinya perlu dipastikan sebelum diperbaiki. Terkait #277.

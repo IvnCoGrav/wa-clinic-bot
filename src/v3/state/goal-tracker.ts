@@ -469,7 +469,7 @@ export class GoalTracker {
           const pricePart = (session as any).priceDiscussed === true
             ? ` (Promo ${`Rp ${rec.promoPrice.toLocaleString('id-ID')}`})`
             : '';
-          pregroundedRecommendation = `• Rekomendasi Sesuai Keluhan (${allSymptoms.join(', ')}): *${rec.name}*${pricePart} — ${rec.description}\n  [MANDAT WAJIB: Tawarkan layanan rekomendasi di atas untuk ${subjectLabel} ini. DILARANG mengganti dengan nama paket lain!]\n  [MANDAT ANTI-RELAKSASI-MURNI (audit 337101): si kecil ada keluhan fisik di atas — DILARANG merekomendasikan paket relaksasi murni (untuk bayi sehat tanpa keluhan)! WAJIB paket terapi penanganan keluhan di atas.]`;
+          pregroundedRecommendation = `• Rekomendasi Sesuai Keluhan (${allSymptoms.join(', ')}): *${rec.name}*${pricePart} — ${rec.description}\n  [Rujukan katalog klinis: layanan di atas berasal dari pencocokan keluhan ${subjectLabel} pada katalog tenant. Jadikan rujukan utama; bila keluhan berubah, panggil ulang katalog.]\n  [Catatan klinis: keluhan fisik terdeteksi — katalog di atas adalah paket penanganan keluhan, bukan paket relaksasi untuk kondisi sehat.]`;
         }
       } catch (_) {}
     } else if (allSymptoms.length === 0 && !session.selectedTreatment) {
@@ -490,7 +490,7 @@ export class GoalTracker {
             ? 'Rekomendasi Paket Dasar (Ibu Sehat Relaksasi)'
             : 'Rekomendasi Paket Dasar (Bayi Sehat Tanpa Keluhan)';
           const targetLabel = isMomDefault ? 'Bunda' : 'bayi sehat';
-          pregroundedRecommendation = `• ${headerLabel}: *${def.name}* — ${def.description}\n  [MANDAT: Tawarkan paket dasar di atas untuk ${targetLabel}; DILARANG menyebut paket terapi sakit bila tidak ada keluhan!]\n  [MANDAT: DILARANG memuntahkan harga/promo jika customer belum bertanya harga/biaya!]`;
+          pregroundedRecommendation = `• ${headerLabel}: *${def.name}* — ${def.description}\n  [Rujukan katalog: tidak ada keluhan tercatat — paket dasar di atas sesuai kondisi sehat ${targetLabel}. Bila customer menyebut keluhan baru, perbarui data keluhan sebelum merekomendasikan.]`;
         }
       } catch (_) {}
     }

@@ -195,7 +195,7 @@ Modul pelacakan efektivitas iklan berbayar (Click-to-WhatsApp) hingga ke titik t
 
 ## 8. Otomasi, Background Crons & Pekerja Mandiri
 
-Sistem menjalankan 23 background worker mandiri untuk memastikan integritas data dan kelancaran operasional klinik tanpa intervensi manual.
+Sistem menjalankan **22 interval cron** untuk **23 pekerja logis** mandiri (Morning Jobs & Weekly Backup berbagi satu interval 15 menit) guna memastikan integritas data dan kelancaran operasional klinik tanpa intervensi manual.
 
 | Background Worker / Cron | Frekuensi / Waktu | Deskripsi & Tanggung Jawab Operasional |
 | :--- | :--- | :--- |
@@ -269,7 +269,7 @@ Pusat administrasi sistem di Admin Dashboard (`packages/admin-dashboard`) untuk 
 
 - **Total Endpoint API**: **297 endpoint unik (348 pasangan method+path)** (tersebar di rute Admin, Staff, Webhook, Media, Tracking, Landing, dan Health).
 - **Total Model Database (Prisma Entities)**: **50 model Prisma** dan **16 enum** mencakup domain Customer, Percakapan, Reservasi, Staf, Insentif Retensi, Log Audit, Integrasi Google/Meta, dan Analitik.
-- **Total Background Crons & Workers**: **23 pekerja mandiri** dengan interval berkala mulai dari 2 menit hingga 1 minggu.
+- **Total Background Crons & Workers**: **22 interval cron terdaftar** untuk **23 pekerja logis** (definisi kanonis: `src/lifecycle/background-crons.ts`; Morning Jobs & Weekly Backup berbagi satu interval 15 menit), dengan interval berkala mulai dari 2 menit hingga 1 minggu.
 - **Penyedia Integrasi WhatsApp**: Dual-mode terintegrasi (**WAHA container** + **Meta Cloud API resmi**).
 - **Dasbor Manajemen**: 1 Single Page Application (React 18 + Vite + Tailwind CSS) yang memuat modul Kalender Jadwal, Live Chat CS, Peta Sebaran Pasien, Analitik Meta Ads, Evaluasi AI, Insentif Retensi Bidan, dan Konfigurasi Multi-Tenant.
 

@@ -39,7 +39,23 @@
 
 Uji adversarial gerbang: `tests/unit/backlog-evidence-gate.test.ts` (6 test — lolos pada kondisi sah, dan **gagal** pada: FIXED tanpa bukti, `contains` tidak cocok, baseline tumbuh, KNOWN tanpa acceptance, DUPLICATE tanpa reason).
 
-### 0.2 Gerbang Regresi Fase 1
+### 0.2 Pembaruan Fase 2A (2026-11-10)
+
+Lima item pertama Fase 2 diperbaiki secara fondasional (gerbang kode/data, bukan tambalan prompt) dan naik ke `FIXED`:
+
+| ID | Akar masalah | Perbaikan (fondasional) | Bukti test | Hasil |
+|---|---|---|---|---|
+| **S-001** | Kredensial admin tertulis di dokumentasi ter-track, dan scanner tidak memeriksa pola markdown | `GUIDE_OPERASIONAL.md` diredaksi ke placeholder env; rule `scanDocumentationCredential` di `scripts/scan-secrets.ts` (anchored, filter placeholder & potongan kode) | `tests/unit/security-doc-credential-scan.test.ts` (7, termasuk anti-false-positive baris audit) | Lulus; `security:scan` LULUS 2.135 file |
+| **W-009** | Cache `phone_number_id -> tenant` tanpa TTL: reassignment tidak pernah terbaca | `src/utils/ttl-cache.ts` + cache ber-TTL di `waba-tenant.service.ts` + invalidasi pada PATCH admin WABA | `tests/unit/ttl-cache.test.ts` (6) | Lulus |
+| **A-006** | Riwayat chat dikirim mentah; injeksi di history lolos isolasi | `buildSanitizedHistory()` menetralkan seluruh entri + membungkus pesan `user`, dipakai `agent-runner.ts` | `tests/unit/v3/prompt-injection-sanitizer.test.ts` (+4 adversarial) | Lulus |
+| **C-003** | Pre-grounding katalog memakai mandat koersif yang menimpa *clinical dominance* | `goal-tracker.ts` jadi rujukan netral ("Rujukan katalog klinis"), tanpa larangan penggantian | `tests/unit/v3-pregrounding-catalog.test.ts` (assertion baru) | Lulus |
+| **K-013** | Drift dokumentasi jumlah cron (21/23 vs 22) | `docs/FEATURE_INVENTORY.md` menyatakan 22 interval cron / 23 pekerja logis (definisi kanonis `background-crons.ts`) | `tests/unit/cron-registry-consistency.test.ts` (3) | Lulus |
+
+- **Register:** **169 FIXED / 73 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 17 OPEN** (268 total).
+- **Gerbang bukti:** `npm run verify:backlog` -> `PASS` (11 verified baru, baseline 158/158 tidak tumbuh).
+- **Ditunda dengan justifikasi:** `C-001` (rewrite/rerank RAG, blast radius besar -> butuh Confirmation Gate) dan `Ar-003` (661 referensi `DEFAULT_TENANT_ID` di 133 file -> butuh Confirmation Gate migrasi bertahap).
+
+### 0.3 Gerbang Regresi Fase 1
 
 | Pemeriksaan | Hasil |
 |---|---|

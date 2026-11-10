@@ -22,7 +22,11 @@ describe('V3 pre-grounding katalog (deterministik, Zero-Code)', () => {
     } as any);
     // Tahan rebrand Kala ('Kala Baby – Pijat Lahap'): token Lahap sebagai sinyal lini benar.
     expect(text).toContain('Lahap');
-    expect(text).toContain('MANDAT WAJIB');
+    // C-003: rekomendasi katalog tetap disuntik, tetapi TANPA mandat koersif
+    // yang menimpa clinical dominance ("DILARANG mengganti ...").
+    expect(text).toContain('Rujukan katalog klinis');
+    expect(text).not.toContain('DILARANG mengganti');
+    expect(text).not.toContain('MANDAT WAJIB');
   });
 
   it('Skenario 2: "anak batuk pilek" → grounding terapi bapil (Pulih Ceria atau bundle yang mengandungnya)', () => {

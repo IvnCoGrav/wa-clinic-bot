@@ -116,6 +116,42 @@ function maskSecret(val: string): string {
   return val.slice(0, 4) + '****' + val.slice(-4);
 }
 
+/**
+ * S-001: kredensial yang ditulis inline di dokumentasi (backtick) sering lolos
+ * dari rule assignment karena memakai format markdown (`**Password:** `...``).
+ * Deteksi ini teknis (bukan gatekeeper intent): nilai yang bukan placeholder
+ * dianggap kredensial dan memblokir commit.
+ */
+const DOC_CREDENTIAL_PATTERN = /^\s*[-*]?\s*(?:[A-Za-z0-9_./-]+\s+){0,4}(?:username|password|passphrase|api\s*key|secret|token)\s*:\s*`([^`\n]{6,128})`/i;
+
+const CODE_LIKE_VALUE = /^(?:const|let|var|function|return|import|export|async|await|class|if|for|while)\b/;
+
+function isPlaceholderCredential(value: string): boolean {
+  const v = value.trim();
+  if (!v) return true;
+  return (
+    /^<[^>]+>$/.test(v) ||
+    /^\$\{[^}]+\}$/.test(v) ||
+    /^\[[^\]]*(?:redacted|revoked|placeholder|example|dummy|mock|test|changeme)[^\]]*\]$/i.test(v) ||
+    /^(?:x{3,}|\*{3,}|\.{3,})$/i.test(v) ||
+    /^(?:redacted|revoked|placeholder|example|dummy|mock|changeme)$/i.test(v) ||
+    /^your[-_][A-Za-z0-9_-]+$/i.test(v) ||
+    /^[A-Z][A-Z0-9_]{5,}$/.test(v) // referensi nama env, mis. WAHA_WEBHOOK_SECRET
+  );
+}
+
+export function scanDocumentationCredential(line: string): { matched: string; value: string } | null {
+  const normalized = line.replace(/\*\*/g, '');
+  const m = normalized.match(DOC_CREDENTIAL_PATTERN);
+  if (!m) return null;
+  const value = m[1].trim();
+  if (isPlaceholderCredential(value)) return null;
+  // Nilai yang jelas potongan kode (mis. contoh `token:` diikuti `const ...`)
+  // bukan kredensial dan tidak boleh memblokir commit dokumen audit.
+  if (CODE_LIKE_VALUE.test(value)) return null;
+  return { matched: m[0], value };
+}
+
 export function scanFile(filePath: string): { ruleName: string; line: number; snippet: string }[] {
   const ext = path.extname(filePath).toLowerCase();
   if (IGNORED_EXTENSIONS.has(ext)) return [];
@@ -173,6 +209,18 @@ export function scanFile(filePath: string): { ruleName: string; line: number; sn
             snippet: line.replace(matchedText, maskSecret(matchedText)).trim(),
           });
         }
+      }
+    }
+
+    // S-001: kredensial inline di dokumentasi markdown.
+    if (ext === '.md') {
+      const docFinding = scanDocumentationCredential(line);
+      if (docFinding) {
+        findings.push({
+          ruleName: 'Kredensial Inline di Dokumentasi',
+          line: idx + 1,
+          snippet: line.replace(docFinding.value, maskSecret(docFinding.value)).trim(),
+        });
       }
     }
   });

@@ -13,7 +13,7 @@ import { GuardrailPipeline } from './pipeline/guardrail-pipeline';
 import { evaluatePricelistTrigger } from './pipeline/pricelist-gate';
 import { GenerationStage, TurnState, createTelemetry, persistTurnMessages, reportTurnError } from './pipeline/generation-stage';
 import { telemetryService } from '../../services/telemetry.service';
-import { wrapCustomerMessage } from '../../utils/prompt-injection-sanitizer';
+import { buildSanitizedHistory, wrapCustomerMessage } from '../../utils/prompt-injection-sanitizer';
 
 /**
  * Detektor semantik token-based (sesi 951450): apakah pesan adalah komitmen
@@ -205,8 +205,10 @@ export class V3AgentRunner {
     const fewShotExemplars: any[] = [];
     let preGroundingBlock = '';
 
-    // Jendela 8 pesan terakhir (4 turn).
-    const recentHistory = conversationHistory.slice(-8).map((h) => ({ role: h.role, content: h.content }));
+    // Jendela 8 pesan terakhir (4 turn). A-006: riwayat TIDAK boleh dikirim
+    // mentah — pesan user dibungkus delimiter isolasi dan seluruh riwayat
+    // dinetralkan dari tag peran/delimiter (anti prompt-injection lewat history).
+    const recentHistory = buildSanitizedHistory(conversationHistory, 8);
     const messages: any[] = [
       { role: 'system', content: routerPrompt },
       ...recentHistory,

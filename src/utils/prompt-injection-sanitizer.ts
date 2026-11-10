@@ -78,3 +78,31 @@ export function wrapCustomerMessage(text: string | undefined): string {
   const { clean } = sanitizeCustomerInput(text);
   return `<customer_message>\n${clean}\n</customer_message>`;
 }
+
+export interface ChatHistoryMessage {
+  role: string;
+  content: string;
+}
+
+/**
+ * Menyiapkan jendela riwayat chat untuk dikirim ke LLM.
+ *
+ * A-006: riwayat TIDAK boleh dikirim mentah. Pesan `user` dibungkus delimiter
+ * isolasi (seperti pesan masuk saat ini) dan SELURUH entri dinetralkan dari
+ * tag peran/delimiter. Ini menutup prompt injection yang ditanam di riwayat,
+ * bukan mengandalkan instruksi "DILARANG..." di system prompt.
+ */
+export function buildSanitizedHistory(
+  history: Array<{ role: string; content: string }> | undefined,
+  windowSize = 8
+): ChatHistoryMessage[] {
+  if (!Array.isArray(history) || history.length === 0) return [];
+  const size = Number.isFinite(windowSize) && windowSize > 0 ? windowSize : 8;
+  return history.slice(-size).map((entry) => {
+    const content = sanitizeCustomerInput(entry?.content).clean;
+    if (entry?.role === 'user') {
+      return { role: 'user', content: wrapCustomerMessage(content) };
+    }
+    return { role: entry?.role ?? 'assistant', content };
+  });
+}

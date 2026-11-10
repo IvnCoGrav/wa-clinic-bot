@@ -34,10 +34,10 @@ docker compose up -d waha
 1. Buka browser dan akses: 👉 **`http://localhost:3001/dashboard/`**
 2. **Login Pop-Up (Basic Auth):**
    - **Username:** `admin`
-   - **Password:** `admin12345`
+   - **Password:** `<WAHA_DASHBOARD_PASSWORD_DARI_ENV>` — ganti password default sebelum dashboard diekspos. Jangan pernah menuliskan password asli di dokumentasi/repo.
 3. **Form Isian Session WAHA:**
    - **Name:** `default`
-   - **WAHA API Key:** `my_waha_api_key_secret` (Sesuai dengan parameter `WAHA_API_KEY` saat menjalankan docker).
+   - **WAHA API Key:** `<WAHA_API_KEY_DARI_ENV>` (isi dengan nilai `WAHA_API_KEY` dari file `.env` Anda).
    - **Metadata:** Kosongkan saja (tidak perlu diisi).
     - **Webhook:**
      - **URL:** `http://host.docker.internal:3000/webhook` (Penting: gunakan `host.docker.internal` agar kontainer Docker WAHA dapat menghubungi server Fastify yang berjalan di Windows host Anda).
@@ -67,7 +67,7 @@ Semua antarmuka dashboard admin kini dilayani langsung oleh server Fastify di or
 1. Buka browser Anda dan akses halaman login:
    👉 **`http://localhost:3000/admin/login`** (atau legacy: **`http://localhost:3000/admin/login.html`**)
 2. Masukkan kredensial berikut:
-   - **Email / Username:** `admin@kalamomsspa.com` (Bisa diisi email/username apa saja bebas, karena di fase single-tenant ini backend hanya mencocokkan password).
+   - **Email / Username:** `<EMAIL_ADMIN_DARI_ENV>` (Bisa diisi email/username apa saja bebas, karena di fase single-tenant ini backend hanya mencocokkan password).
    - **Password:** Masukkan nilai `ADMIN_API_KEY` dari file `.env` Anda (contoh placeholder: `<ADMIN_API_KEY_DARI_ENV>`).
 3. Klik **Sign In** (atau isi form di legacy page). Browser Anda akan otomatis mendapatkan cookie `admin_session` yang aman dan Anda akan diarahkan ke dashboard utama.
 
