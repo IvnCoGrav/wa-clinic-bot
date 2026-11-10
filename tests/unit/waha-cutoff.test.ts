@@ -120,4 +120,19 @@ describe('WAHA Internal Outbound Cut-Off Unit Tests', () => {
     expect(res.success).toBe(false);
     expect(res.error?.code).toBe('WABA_INTERNAL_CUTOFF');
   });
+
+  it('9. W-004: tombol darurat langsung berlaku — setOutboundCutOff meng-override cache tanpa menunggu TTL', async () => {
+    // Panaskan cache dengan nilai lama (false) agar perubahan harus menembus cache.
+    await expect(whatsappProviderService.isOutboundCutOff(DEFAULT_TENANT_ID)).resolves.toBe(false);
+    expect(whatsappProviderService.isOutboundCutOffSync(DEFAULT_TENANT_ID)).toBe(false);
+
+    await whatsappProviderService.setOutboundCutOff(DEFAULT_TENANT_ID, true);
+
+    // Nilai cache harus langsung berubah (bukan menunggu CUTOFF_TTL_MS).
+    expect(whatsappProviderService.isOutboundCutOffSync(DEFAULT_TENANT_ID)).toBe(true);
+    const driver = new WahaGatewayDriver(mockWahaClient, DEFAULT_TENANT_ID);
+    const blocked = await driver.sendTextMessage('628123456789', 'Pesan saat darurat');
+    expect(blocked.success).toBe(false);
+    expect(blocked.error?.code).toBe('WAHA_INTERNAL_CUTOFF');
+  });
 });

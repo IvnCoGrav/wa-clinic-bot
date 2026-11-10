@@ -4,7 +4,7 @@
     }
 }
 
-{$APP_DOMAIN:app.kalababyspa.online} {
+{$APP_DOMAIN} {
     encode gzip zstd
 
     header {

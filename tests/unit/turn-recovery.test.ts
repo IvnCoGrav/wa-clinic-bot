@@ -38,4 +38,36 @@ describe('TurnRecoveryService (Stage 5 / RC-04)', () => {
     expect(markStatus).toHaveBeenCalledWith(expect.objectContaining({ status: 'FAILED', inboundMessageId: 'm2' }));
     expect(enqueue).not.toHaveBeenCalled();
   });
+
+  it('W-001: boot replay meneruskan resetProcessingOnBoot agar turn PROCESSING macet ikut dipulihkan', async () => {
+    const list = vi.spyOn(turnRepository, 'listReplayable').mockResolvedValueOnce([]);
+
+    await turnRecoveryService.replayPendingTurns(50, { resetProcessingOnBoot: true });
+
+    expect(list).toHaveBeenCalledWith(
+      expect.objectContaining({ limit: 50, resetProcessingOnBoot: true })
+    );
+  });
+
+  it('W-001: turn PROCESSING macet dengan payload di-replay, bukan dibiarkan menggantung', async () => {
+    vi.spyOn(turnRepository, 'listReplayable').mockResolvedValueOnce([
+      {
+        tenant_id: 'tenant-a',
+        provider: 'WAHA',
+        inbound_message_id: 'm-processing',
+        status: 'PROCESSING',
+        attempts: 1,
+        payload_json: { customerId: 'c9', phone: '628999', incomingMessage: { id: 'm-processing' } },
+      },
+    ] as any);
+    vi.spyOn(turnRepository, 'markQueued').mockResolvedValue(undefined as any);
+    const enqueue = vi.spyOn(queueService, 'enqueueMessage').mockResolvedValue(undefined as any);
+
+    const n = await turnRecoveryService.replayPendingTurns(50, { resetProcessingOnBoot: true });
+
+    expect(n).toBe(1);
+    expect(enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: 'tenant-a', inboundMessageId: 'm-processing' })
+    );
+  });
 });

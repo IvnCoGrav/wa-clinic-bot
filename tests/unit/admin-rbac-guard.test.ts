@@ -123,6 +123,48 @@ describe('Admin RBAC Guard & Security Isolation (SEC-01 Fix)', () => {
       expect(res.json().code).toBe('FORBIDDEN_STAFF_ROLE');
     });
 
+    it('S-009: ADMIN_CS DILARANG mengubah few-shots perilaku AI (Super Admin only)', async () => {
+      vi.spyOn(StaffAuthService, 'validateSession').mockResolvedValue({
+        id: 'sess-admin-cs',
+        token_hash: 'hash-admin-cs',
+        staff_id: 'staff-admin-cs',
+        staff: {
+          id: 'staff-admin-cs',
+          tenant_id: 'tenant-a',
+          name: 'Admin CS',
+          phone: '628111222333',
+          role: 'ADMIN_CS',
+          active: true,
+          created_at: new Date(),
+          updated_at: new Date(),
+          telegram_chat_id: null,
+        },
+        session: {
+          id: 'sess-admin-cs',
+          staff_id: 'staff-admin-cs',
+          token: 'valid_admin_cs_token',
+          expires_at: new Date(Date.now() + 86400000),
+          created_at: new Date(),
+        },
+      } as any);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/few-shots',
+        headers: {
+          cookie: 'staff_session=valid_admin_cs_token',
+          'x-requested-with': 'XMLHttpRequest',
+        },
+        payload: {
+          user_message: 'Halo',
+          assistant_message: 'Halo Bunda',
+        },
+      });
+
+      expect(res.statusCode).toBe(403);
+      expect(res.json().code).toBe('FORBIDDEN_STAFF_ROLE');
+    });
+
     it('strictly blocks staff from creating/deleting other staff accounts', async () => {
       const res = await app.inject({
         method: 'POST',

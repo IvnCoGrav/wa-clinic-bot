@@ -47,6 +47,10 @@ level HOST (cron, bukan container): `scripts/server-watchdog.sh` + installer
 
 ## Safe Redeploy App — Anti-502 /cta (2026-09-26, insiden #135)
 
+Konfigurasi domain: `Caddyfile` memakai `{$APP_DOMAIN}` **tanpa fallback nama brand**.
+Isi `APP_DOMAIN=<domain-publik-tanpa-protokol>` di `.env` server (mis. `app.contoh.id`).
+`docker compose` sengaja gagal cepat bila `APP_DOMAIN` kosong agar tidak salah serve domain.
+
 Recreate container `app` (`up -d --no-deps app`) membuat nama DNS Docker `app`
 hilang sesaat → Caddy 502 (`lookup app ... server misbehaving`) untuk SEMUA
 route termasuk `/cta`, `/assets/*`, `/api/*`. Mitigasi di repo: `healthcheck`
@@ -56,8 +60,8 @@ Prosedur aman tetap berlaku:
 1. Deploy di jam sepi (iklan aktif → setiap 502 = klik terbuang).
 2. `docker compose build app` dulu, baru `docker compose up -d --no-deps app`.
 3. Tunggu `docker compose ps` = `healthy`, lalu verifikasi:
-   `curl -s -o /dev/null -w "%{http_code}\n" https://app.kalababyspa.online/health`
-   `curl -s -o /dev/null -w "%{http_code}\n" "https://app.kalababyspa.online/cta?divisi=iklan-utama"`
+   `curl -s -o /dev/null -w "%{http_code}\n" https://$APP_DOMAIN/health`
+   `curl -s -o /dev/null -w "%{http_code}\n" "https://$APP_DOMAIN/cta?divisi=iklan-utama"`
 4. Bila 502 >30 dtk, cek `docker compose logs app --tail 50` (boot/init tenant)
    dan `docker compose logs caddy --tail 50` (`lookup app` = app belum listen).
 

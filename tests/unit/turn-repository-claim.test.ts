@@ -29,4 +29,28 @@ describe('TurnRepository claim (Stage 5 / RC-04)', () => {
     const ok = await turnRepository.claimForProcessing({ tenantId: 'default-tenant', provider: 'WAHA', inboundMessageId: 'm3' });
     expect(ok).toBe(true);
   });
+
+  it('W-001: listReplayable(resetProcessingOnBoot) menyertakan PROCESSING tanpa menunggu ambang 2 menit', async () => {
+    const findMany = vi.mocked((prisma as any).inboundTurn.findMany);
+    findMany.mockResolvedValueOnce([] as any);
+
+    await turnRepository.listReplayable({ limit: 10, resetProcessingOnBoot: true });
+
+    const arg: any = findMany.mock.calls[0][0];
+    const ors: any[] = arg.where.OR;
+    expect(ors).toContainEqual({ status: 'PROCESSING' });
+    expect(ors.some((c) => c.status === 'PROCESSING' && c.updated_at)).toBe(false);
+  });
+
+  it('tanpa resetProcessingOnBoot, PROCESSING hanya diambil bila sudah macet > ambang', async () => {
+    const findMany = vi.mocked((prisma as any).inboundTurn.findMany);
+    findMany.mockResolvedValueOnce([] as any);
+
+    await turnRepository.listReplayable({ limit: 10 });
+
+    const arg: any = findMany.mock.calls[0][0];
+    const processingClause = (arg.where.OR as any[]).find((c) => c.status === 'PROCESSING');
+    expect(processingClause).toBeDefined();
+    expect(processingClause.updated_at).toBeDefined();
+  });
 });

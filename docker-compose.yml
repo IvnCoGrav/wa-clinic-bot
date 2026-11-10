@@ -151,6 +151,10 @@ services:
   caddy:
     image: caddy:2
     restart: always
+    environment:
+      # Domain publik deployment WAJIB eksplisit (tenant-aware, tanpa brand hardcoded).
+      # Compose gagal cepat bila APP_DOMAIN kosong agar tidak salah serve domain.
+      APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN wajib diisi di .env (domain publik tanpa protokol)}
     ports:
       - "80:80"
       - "443:443"

@@ -3,14 +3,37 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 324. [Gate F3.6] Regresi F3.2–F3.5 & Remediasi (2026-11-10, RESOLVED)
+
+- **Status:** RESOLVED — gate F3 hijau setelah remediasi F3.6 (12 regresi baru diperbaiki + 1 flaky).
+- **Akar masalah yang ditemukan audit:**
+  1. F3.5 memasang guard Super Admin untuk knowledge/few-shots tanpa memperbarui fixture test → 3 test `fase2-rbac-matrix` 403.
+  2. F3.4 menambahkan `DISABLE_REDIS='true'` **global** di `tests/setup.ts` + bypass di `live-chat-hub.service.ts` → 8 test mode Redis gagal.
+  3. F3.2 mengubah arti filter `upcoming` menjadi `gte now` tanpa memperbarui kontrak/test → 1 test gagal.
+  4. `FN-03` diklaim FIXED padahal `staff-notification.service.ts` masih 1.001 baris (target plan <600).
+  5. F3.5 tidak menambahkan test sama sekali untuk 8 perbaikannya.
+- **Perbaikan:**
+  - `DISABLE_REDIS` global dihapus (opt-in per test); 8 test `live-chat-hub` hijau.
+  - `buildScheduledAtRange('upcoming')` kembali `gte startOfTodayUtc` (awal hari WIB).
+  - `staff-notification.service.ts` dipecah ke `staff-notification-previsit.service.ts`, `staff-notification-events.service.ts`, `staff-notification-briefing.service.ts` → file induk **504 baris**; test guard ukuran <600 ditambahkan.
+  - Test baru: W-001 (resetProcessingOnBoot + klausa query), W-004 (cut-off override cache), S-006 (tenant sesi WAHA), S-007 (anti-spoof tenant tracking), S-009 (ADMIN_CS 403 knowledge/few-shots), S-010 (cross-tenant landing 403), I-003/I-004 (atomic lease outbox 5 menit).
+  - CI memakai `npm run build:all`; `Caddyfile` memakai `{$APP_DOMAIN}` tanpa fallback brand.
+- **Catatan operasional (KNOWN):** `APP_DOMAIN` kini **WAJIB** di `.env` server; `docker compose` sengaja gagal cepat bila kosong. Saat deploy, pastikan `.env` produksi sudah berisi domain publik sebelum `docker compose up`.
+- **Flaky:** `tests/unit/production_edge_cases.test.ts` #13 (LOCATION_CONFIRMED) lulus saat diisolasi (≈5 dtk) tetapi bisa timeout di full suite paralel — beban, bukan regresi kode.
+- **Bukti:** `docs/audit/2026-11-10/after-f3-6.json` — **6.875 test (6.845 lulus / 2 gagal pre-existing #287 / 28 skip)**, baseline-diff vs `after-audit-fixes.json` = **0 regresi baru**. CI baseline diarahkan ke artefak ini.
+
 ## 323. [Anti-Slop UI/UX] 41 Temuan UI/UX Dashboard & Halaman Publik + Audit Collateral (2026-11-10, OPEN — read-only, belum dieksekusi)
 
 - **Status:** OPEN. Audit read-only, 0 file kode/test/CSS/HTML diubah. Menunggu persetujuan paket perbaikan.
 - **Laporan:** `anti-slop/audit-001-2026-11-10.md` (17 temuan horizontal), `audit-002-2026-11-10-vertikal.md` (12 vertikal), `audit-003-2026-11-10-horizontal.md` (12 lintas area), `audit-004-2026-11-10-konsolidasi-kolateral.md` (register 41 temuan + collateral damage/FMEA + urutan aman).
 - **Bukti kunci:** Lighthouse login aksesibilitas 0,88 dengan kegagalan kontras 3,02:1 di tema gelap (110 situs `text-white` tanpa token `on-solid`); 331 `toast(..., 'error')` vs 1 prop `error` inline; 45 overlay modal buatan sendiri, 0 halaman memakai `Modal` bersama; 54 format tanggal tanpa `timeZone`; `npm run check:tokens` dan `check:dark-parity` GAGAL dan tidak dijalankan di CI.
 - **Fakta pendukung:** `packages/admin-dashboard` **tidak punya test UI** (0 file, tanpa konfigurasi vitest/jest), sehingga skor Detection tinggi di hampir semua paket.
+- **Fase 0 SELESAI (2026-11-10):** tiga skrip gerbang ditambahkan (`scripts/check-a11y-strings.mjs`, `check-contrast-pairs.mjs`, `check-catalog-sync.mjs`), baseline a11y dikunci **490 pola di 75 file**, `npm run build` exit 0. `npm run check:a11y` hijau; `check:contrast` melaporkan **102 pelanggaran**; `check:catalog` melaporkan **6 masalah**.
+- **Drift katalog TERBUKTI (bukan lagi asumsi):** `services_custom.json` vs `layanan.html` berbeda pada 5 harga (baby-massage-pulih-ceria-newborn 65.000 vs 75.000; moms-oksitosin-fullbody 110.000 vs 105.000; bundle-laktasi-oksitosin 70.000 vs 140.000; add-on-nebulizer 80.000 vs 35.000; add-on-nebulizer-obat 110.000 vs 50.000) dan jumlah layanan 38 vs 39. Sisi yang benar perlu query DB.
 - **Catatan landing publik:** `src/landing/public/layanan.html` memuat 39 layanan + tier ongkir hardcoded dari `scripts/build_landing.js` (membaca snapshot `services_custom.json`, terakhir 2026-10-19). Halaman itu **tidak dirutekan** `src/routes/landing.route.ts` (hanya `/go`, `/pricelist.html`, `/promo/:slug`, `/assets/:filename`), jadi cara distribusinya perlu dipastikan sebelum diperbaiki. Terkait #277.
 - **Rencana:** 10 paket (P1 token/error, P2 modal/z-index, P3 form, P4 header/state, P5 tipografi, P6 motion/navigasi, P7 format data, P8 bahasa/teks, P9 metadata/CI, P10 data bisnis/izin). RPN tertinggi: P10 (336), P2 dan P3 (252).
+- **Plan eksekusi:** `anti-slop/plan-001-2026-11-10-eksekusi-uiux.md` — 11 fase (0-10), 58 tugas mikro (T-0.1 s.d. T-10.3), dengan lokasi file, kode pengganti, perintah, kriteria terima otomatis, gerbang regresi, dan rollback per fase. Belum dieksekusi.
+- **Keputusan pemilik produk (dikunci 2026-11-10):** `layanan.html` dirutekan seperti pricelist dengan data dari DB; tipografi memakai stack sistem tanpa unduh font; glosarium Pasien/Layanan/Terapis/Ongkir disetujui; izin aksi diinventaris dulu lalu dibuat matriks; `StitchShowcase` dikeluarkan dari produksi dan tetap tersedia di mode pengembangan.
 
 ## 322. [Remediasi F0–F3.1] Koreksi Status FIXED & 2 Regresi Test (2026-11-09, PARTIALLY RESOLVED 2026-11-10)
 

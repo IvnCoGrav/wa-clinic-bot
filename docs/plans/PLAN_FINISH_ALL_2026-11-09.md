@@ -26,7 +26,7 @@
 | F1 Audit Modul 11 & Re-baseline Track B | **SELESAI** — `MODULE_AUDIT_11` (10 file / 9.111 baris) + `TRACK_B_REBASELINE_7_14` (122 temuan) |
 | Audit 16/16 modul | **SELESAI (100% COVERAGE)** — 10 laporan granular A–G + 7 Track B ter-rebaseline |
 | Remediasi F2 | **SELESAI (PASS)** — commit F2A, F2B, F2C |
-| Remediasi F3 | **SELESAI (PASS)** — F3.1 (State Machine), F3.2 (Follow-up), F3.3 (Admin API God Object), F3.4 (Delivery & Build), F3.5 (Track B P1 Kritis & Tinggi) |
+| Remediasi F3 | **SELESAI (PASS setelah remediasi F3.6)** — F3.1 (State Machine), F3.2 (Follow-up), F3.3 (Admin API God Object), F3.4 (Delivery & Build), F3.5 (Track B P1 Kritis & Tinggi), F3.6 (Gate Remediation regresi & FN-03) |
 | Remediasi F4–F6 | **SIAP DIEKSEKUSI** — menunggu persetujuan per fase |
 
 ---
@@ -195,7 +195,7 @@
 
 | Sub-fase | Temuan | Fokus | Acceptance | Status |
 |---|---|---|---|:---:|
-| F3.2a | `FN-01`, `FN-03` | Pecah `follow-up.service.ts` 2.895 & `staff-notification.service.ts` 1.101 | File utama <1.500; parity test | **FIXED** |
+| F3.2a | `FN-01`, `FN-03` | Pecah `follow-up.service.ts` 2.895 & `staff-notification.service.ts` 1.101 | File utama <1.500 (follow-up facade 625) dan `staff-notification.service.ts` <600 (aktual 504 setelah F3.6) | **FIXED** |
 | F3.2b | `FN-02` (jika belum), `FN-05`, `FN-07`, `FN-08` | Outbound log; VAPID; cooldown per tenant; subjek VAPID tenant | Test dua tenant | **FIXED** |
 | F3.2c | `FN-04`, `FN-06`, `FN-09`..`FN-12` | Bounded memory; tenant eksplisit; type safety; transaksi; log fallback; pruning | Test memory/tenant | **FIXED** |
 
@@ -221,7 +221,20 @@
 - Kelompokkan per modul 7–14; setiap temuan mendapat test + perbaikan fondasional (W-001, W-004, S-006, S-007, S-009, S-010, I-003, I-004, K-001, K-002, A-001, A-002, A-004, C-001, C-002).
 - Gate: build + targeted + full suite. **STATUS: PASS.**
 
-**Gate F3:** file utama God Object <1.500 baris; 0 route duplikat; build backend+dashboard; full suite 0 failure baru. **STATUS: PASS.**
+#### F3.6 Gate Remediation — audit pasca F3.2–F3.5
+
+Audit 2026-11-10 menemukan gate F3 belum hijau (13 regresi baru) dan klaim FN-03 belum memenuhi target. Perbaikan:
+
+| Fokus | Perbaikan | Bukti |
+|---|---|---|
+| RBAC (S-009) | Fixture isolasi tenant memakai `SUPER_ADMIN`; ditambah test `ADMIN_CS` ditolak 403 pada knowledge/few-shots (dua sisi kontrak) | `tests/unit/fase2-rbac-matrix.test.ts` [2.2.4], `tests/unit/admin-rbac-guard.test.ts` |
+| Redis test isolation (DEL) | `DISABLE_REDIS=true` global dihapus; flag jadi opt-in per test | `tests/setup.ts`, `tests/unit/live-chat-hub.test.ts` 8 test hijau |
+| Kontrak filter `upcoming` (FN) | Dikembalikan ke `gte startOfTodayUtc` (awal hari WIB) sesuai kontrak | `src/services/follow-up.service.ts:65-69`, `tests/unit/follow-up-date-range.test.ts` |
+| FN-03 target baris | `staff-notification.service.ts` 1.001 → 504; ekstraksi `staff-notification-previsit/-events/-briefing.service.ts` | `tests/unit/staff-notification-split.test.ts` (guard <600 baris) |
+| Test F3.5 | Test baru untuk W-001, W-004, S-006, S-007, S-009, S-010, I-003, I-004 | `turn-recovery`, `turn-repository-claim`, `waha-cutoff`, `tracking`, `admin-rbac-guard`, `waba-admin-endpoints`, `landing-admin`, `sheets-sync.service` |
+| CI & domain (DEL) | CI memakai `npm run build:all`; Caddy `{$APP_DOMAIN}` tanpa fallback brand + compose gagal cepat bila kosong | `.github/workflows/ci.yml`, `Caddyfile:7`, `docker-compose.yml` (caddy env), `deploy_config.txt` |
+
+**Gate F3:** file utama God Object <1.500 baris; 0 route duplikat; build backend+dashboard; full suite 0 failure baru. **STATUS: PASS** — `after-f3-6.json`: 6.875 test / 6.845 lulus / 2 gagal pre-existing (#287) / 28 skip; baseline-diff 0 regresi baru; security scan 2.105 file bersih.
 
 ---
 

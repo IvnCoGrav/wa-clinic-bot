@@ -9,6 +9,9 @@ import { buildMapsUrls, buildEffectiveTaskAddress } from './staff-reservation.se
 import { getPaymentDisplayStatus } from '../domain/reservation-payment';
 import crypto from 'crypto';
 import { staffNotificationFormatterService } from './staff-notification-formatter.service';
+import { staffPreVisitBriefService } from './staff-notification-previsit.service';
+import { staffNotificationEventsService } from './staff-notification-events.service';
+import { staffNotificationBriefingService } from './staff-notification-briefing.service';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -312,240 +315,22 @@ export class StaffNotificationService {
     }
   }
 
-  /**
-   * Fase 5r — Trigger same-day: bila reservasi confirmed mulai dalam <=35 menit
-   * (mis. booking dadakan H-15), kirim Pre-Visit Brief segera tanpa menunggu cron.
-   * Idempoten via `pre_visit_brief_sent_at`. Fire-and-forget; tidak memblokir alur.
-   */
+  /** Fase 5r — Trigger same-day Pre-Visit Brief (delegasi ke sub-service). */
   public triggerPreVisitBriefIfImminent(reservationId: string, tenantId: string): void {
-    void (async () => {
-      try {
-        const r = await prisma.reservation.findUnique({
-          where: { id: reservationId },
-          select: { status: true, booking_date: true, pre_visit_brief_sent_at: true, assigned_staff_id: true },
-        });
-        if (!r || r.status !== 'confirmed' || !r.booking_date || r.pre_visit_brief_sent_at || !r.assigned_staff_id) return;
-        const msUntil = new Date(r.booking_date).getTime() - Date.now();
-        if (msUntil > 0 && msUntil <= 35 * 60 * 1000) {
-          await this.sendPreVisitBrief(reservationId, tenantId);
-        }
-      } catch (err: any) {
-        console.warn(`[StaffNotificationService] triggerPreVisitBriefIfImminent error:`, err.message);
-      }
-    })();
+    staffPreVisitBriefService.triggerPreVisitBriefIfImminent(reservationId, tenantId);
   }
 
-  /**
-   * Helper pembersih karakter markdown berbahaya
-   */
-  private escapeMarkdown(text: string): string {
-    return staffNotificationFormatterService.escapeMarkdown(text);
-  }
-
-  /**
-   * Fase 5r — Pre-Visit Brief: kartu ringkasan pasien H-30 menit ke bidan.
-   *
-   * Keputusan G2=B (minimal, privasi): TIDAK menyertakan nomor HP pasien maupun
-   * alamat lengkap di Telegram pribadi — hanya jam, nama pasien + usia anak, layanan,
-   * AREA ringkas (kelurahan/kecamatan atau nama perumahan), terapis sesi lalu, dan
-   * catatan karakter (admin_notes). Alamat/GPS penuh hanya di portal terapis (login).
-   * (Fase 4 / A-008: baris "Area Kunjungan" ditambahkan; tetap hormati privasi.)
-   *
-   * Idempoten: `pre_visit_brief_sent_at` mencegah kirim ganda (cron + trigger same-day).
-   */
+  /** Fase 5r — Kirim Pre-Visit Brief (delegasi ke sub-service). */
   async sendPreVisitBrief(
     reservationId: string,
     tenantId: string
   ): Promise<{ sent: boolean; reason?: string; alreadySent?: boolean }> {
-    try {
-      const reservation = await prisma.reservation.findUnique({
-        where: { id: reservationId },
-        include: {
-          customer: { include: { children: true } },
-          children: true,
-          customer_address: true,
-          assigned_staff: { select: { id: true, name: true, telegram_chat_id: true } },
-        },
-      });
-      if (!reservation) return { sent: false, reason: 'Reservasi tidak ditemukan' };
-      if (reservation.pre_visit_brief_sent_at) {
-        return { sent: false, alreadySent: true, reason: 'Brief sudah pernah dikirim' };
-      }
-      const staff: any = reservation.assigned_staff;
-      if (!staff) return { sent: false, reason: 'Belum ada bidan yang ditugaskan' };
-      const cust: any = reservation.customer;
-      if (cust?.is_sandbox_test || isDummyOrTestContact(cust?.phone, cust?.name, cust?.is_sandbox_test)) {
-        return { sent: false, reason: 'Sandbox test (notifikasi dinonaktifkan)' };
-      }
-
-      // Usia anak riil via childService (reuse, fallback graceful bila birth_date null).
-      const allChildren = reservation.children?.length ? reservation.children : cust?.children || [];
-      const child = allChildren[0];
-      let childLine = '';
-      if (child) {
-        try {
-          const { childService } = await import('./child.service');
-          const enriched = await childService.getChildrenWithCurrentAge(cust?.id);
-          const match = enriched?.find((c: any) => c.id === child.id) || enriched?.[0];
-          const ageText = match?.current_age || child.raw_age_text || 'Usia belum tercatat';
-          childLine = `${child.name} (${ageText})`;
-        } catch {
-          childLine = `${child.name} (${child.raw_age_text || 'Usia belum tercatat'})`;
-        }
-      }
-
-      const bookingDate = reservation.booking_date ? new Date(reservation.booking_date) : null;
-      const timeStr = bookingDate
-        ? bookingDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' })
-        : '-';
-
-      // Kunjungan sebelumnya (reuse, tenant-aware).
-      let lastVisitLine = 'Kunjungan pertama';
-      try {
-        const prev = await prisma.reservation.findFirst({
-          where: {
-            tenant_id: tenantId,
-            customer_id: reservation.customer_id,
-            id: { not: reservation.id },
-            status: { in: ['confirmed', 'en_route', 'completed'] },
-            booking_date: { lt: reservation.booking_date || new Date() },
-          },
-          include: { assigned_staff: { select: { name: true } } },
-          orderBy: { booking_date: 'desc' },
-        });
-        if (prev) {
-          const prevTreatment = prev.treatment_detail || prev.treatment_category || 'Treatment';
-          lastVisitLine = `Sesi lalu: ${prevTreatment}${prev.assigned_staff?.name ? ` (Bidan ${prev.assigned_staff.name})` : ''}`;
-        }
-      } catch {
-        // best-effort
-      }
-
-      const adminNotes = cust?.admin_notes || null;
-      const baseUrl = process.env.ADMIN_DASHBOARD_URL || 'http://localhost:3000';
-      const portalUrl = `${baseUrl}/admin/staff/today`;
-
-      // Fase 4 (A-008): baris AREA ringkas (kelurahan/kecamatan) via seam kanonis.
-      // HANYA ringkas area — DILARANG menaruh alamat lengkap/no HP.
-      // A-012 (audit): fallback alamat jalan (`address.split(',')[0]`) DIHAPUS —
-      // alamat tanpa koma bocorkan jalan + no rumah ke Telegram (kontrak G2=B).
-      // Bila area tak diketahui → baris tidak ditampilkan (bukan diisi teks jalan).
-      const effectiveAddrBrief: any = buildEffectiveTaskAddress((reservation as any).customer_address, cust) || {};
-      const areaParts = [effectiveAddrBrief.kelurahan, effectiveAddrBrief.kecamatan].filter(Boolean).map((s: any) => String(s).trim());
-      const areaLine = areaParts.join(', ');
-
-      const messageText = staffNotificationFormatterService.formatPreVisitBriefMessage({
-        staffName: staff.name,
-        timeStr,
-        patientName: cust?.name || 'Bunda',
-        childLine,
-        lastVisitLine,
-        treatmentName: reservation.treatment_detail || reservation.treatment_category || 'Treatment Homecare',
-        areaLine,
-        adminNotes,
-        portalUrl,
-      });
-
-      // Distribusi Telegram pribadi (G2=B). Web Push in-system tetap dikirim sebagai kanal cadangan.
-      let pushSent = 0;
-      try {
-        const pushRes = await webPushService.sendPushToStaff(staff.id, tenantId, {
-          title: '📋 Ringkasan Pasien Sebelum Kunjungan',
-          body: `${cust?.name || 'Bunda'} — ${timeStr} WIB. Cek detail di portal.`,
-          url: '/admin/staff/today',
-          tag: `pre_visit_brief_${reservation.id}`,
-          icon: '/admin/icon-192.png',
-          badge: '/admin/favicon.ico',
-          data: { reservationId: reservation.id, staffId: staff.id, url: '/admin/staff/today' },
-        });
-        pushSent = pushRes?.sent ?? 0;
-      } catch (pushErr: any) {
-        console.warn(`[StaffNotificationService] Web Push pre-visit brief error:`, pushErr.message);
-      }
-
-      let telegramSent = false;
-      // Mandat In-System PWA Only: Telegram eksternal DEFAULT OFF (tenant-aware).
-      const preVisitNotifConfig = await getStaffNotificationConfig(tenantId);
-      if (preVisitNotifConfig.telegramEnabled && staff.telegram_chat_id) {
-        try {
-          const res = await telegramService.sendMessage({
-            chatId: staff.telegram_chat_id,
-            text: messageText,
-            parseMode: 'Markdown',
-          });
-          telegramSent = res.ok;
-        } catch (tgErr: any) {
-          console.warn(`[StaffNotificationService] Telegram pre-visit brief error:`, tgErr.message);
-        }
-      }
-
-      // Idempotensi HANYA bila minimal satu kanal benar-benar mengirim. Bila tidak ada
-      // kanal aktif (staf belum pairing Telegram & belum subscribe Web Push), JANGAN
-      // tandai terkirim — biarkan sweep retry saat kanal tersedia (mis. staf pairing
-      // Telegram beberapa menit kemudian). Konsekuensi: sweep berulang tiap interval
-      // selama kanal belum aktif (disengaja, dicatat di KNOWN_ISSUES).
-      const deliverySuccess = telegramSent || pushSent > 0;
-      if (deliverySuccess) {
-        await prisma.reservation
-          .update({ where: { id: reservationId }, data: { pre_visit_brief_sent_at: new Date() } })
-          .catch(() => {});
-      } else {
-        // #157f: observabilitas deterministik. Staf tanpa kanal aktif (belum pairing
-        // Telegram & belum subscribe Web Push) TIDAK ditandai terkirim → sweep retry
-        // saat kanal tersedia. Baris terstruktur ini membuat kondisi "no channel"
-        // bisa di-forensik dari log (sebelumnya hanya console.log bebas).
-        console.log(
-          `[PRE_VISIT_BRIEF_NO_CHANNEL] ${JSON.stringify({
-            event: 'PRE_VISIT_BRIEF_NO_CHANNEL',
-            reservationId,
-            tenantId,
-            staffId: staff.id,
-            hasTelegram: Boolean(staff.telegram_chat_id),
-            pushSent,
-            telegramSent,
-            ts: new Date().toISOString(),
-          })}`
-        );
-      }
-
-      return {
-        sent: deliverySuccess,
-        reason: deliverySuccess ? undefined : 'no_channel',
-      };
-    } catch (err: any) {
-      console.error(`[StaffNotificationService] Failed to send pre-visit brief for ${reservationId}:`, err.message);
-      return { sent: false, reason: err.message };
-    }
+    return staffPreVisitBriefService.sendPreVisitBrief(reservationId, tenantId);
   }
 
-  /**
-   * Fase 5r — Sapuan pre-visit brief: reservasi confirmed yang mulai dalam
-   * 20-35 menit ke depan (belum pernah dikirim). Idempoten via pre_visit_brief_sent_at.
-   */
+  /** Fase 5r — Sapuan Pre-Visit Brief (delegasi ke sub-service). */
   async sweepPreVisitBriefs(tenantId: string): Promise<number> {
-    const now = Date.now();
-    const from = new Date(now + 20 * 60 * 1000);
-    const to = new Date(now + 35 * 60 * 1000);
-    let count = 0;
-    try {
-      const rows = await prisma.reservation.findMany({
-        where: {
-          tenant_id: tenantId,
-          status: 'confirmed',
-          pre_visit_brief_sent_at: null,
-          booking_date: { gte: from, lte: to },
-        },
-        select: { id: true },
-        take: 50,
-      });
-      for (const r of rows) {
-        const res = await this.sendPreVisitBrief(r.id, tenantId);
-        if (res.sent) count++;
-      }
-    } catch (err: any) {
-      console.warn(`[StaffNotificationService] sweepPreVisitBriefs error:`, err.message);
-    }
-    return count;
+    return staffPreVisitBriefService.sweepPreVisitBriefs(tenantId);
   }
 
   /**
@@ -625,103 +410,7 @@ export class StaffNotificationService {
     staffId: string,
     reason?: string
   ): Promise<{ sent: boolean; reason?: string }> {
-    try {
-      if (!staffId || !reservationId) return { sent: false, reason: 'staffId/reservationId kosong' };
-      const staff = await prisma.staff.findUnique({
-        where: { id: staffId },
-        select: { id: true, name: true, telegram_chat_id: true, tenant_id: true },
-      });
-      if (!staff) {
-        return { sent: false, reason: 'Staff tidak ditemukan' };
-      }
-      const reservation = await prisma.reservation.findUnique({
-        where: { id: reservationId },
-        include: { customer: { include: { children: true } }, children: true },
-      });
-      if (!reservation) return { sent: false, reason: 'Reservasi tidak ditemukan' };
-      const cust: any = reservation.customer;
-      if (cust?.is_sandbox_test || isDummyOrTestContact(cust?.phone, cust?.name, cust?.is_sandbox_test)) {
-        return { sent: false, reason: 'Sandbox test reservation (notifikasi dinonaktifkan)' };
-      }
-
-      const tenantId = staff.tenant_id || DEFAULT_TENANT_ID;
-      const treatmentDetail = this.escapeMarkdown(reservation.treatment_detail || reservation.treatment_category || 'Treatment Homecare');
-      const custName = this.escapeMarkdown(cust?.name || 'Bunda');
-
-      // 1. In-System Realtime SSE Broadcast
-      try {
-        getLiveChatHub().publish({
-          type: 'staff.task_cancelled',
-          tenantId,
-          payload: {
-            staffId: staff.id,
-            reservationId: reservation.id,
-            reason: reason || 'Reservasi dibatalkan',
-          },
-        });
-      } catch (hubErr: any) {
-        console.warn(`[StaffNotificationService] SSE task_cancelled broadcast error:`, hubErr.message);
-      }
-
-      // 2. In-System Web Push PWA
-      try {
-        await webPushService.sendPushToStaff(staff.id, tenantId, {
-          title: 'Jadwal Kunjungan Dibatalkan ❌',
-          body: `Jadwal ${custName} (${treatmentDetail}) dibatalkan.${reason ? ' Alasan: ' + reason : ''}`,
-          url: '/admin/staff/today',
-          tag: `staff_task_cancel_${reservation.id}`,
-          icon: '/admin/icon-192.png',
-          badge: '/admin/favicon.ico',
-          data: {
-            reservationId: reservation.id,
-            staffId: staff.id,
-            url: '/admin/staff/today',
-          },
-        });
-      } catch (pushErr: any) {
-        console.warn(`[StaffNotificationService] Web Push task_cancelled error:`, pushErr.message);
-      }
-
-      // 3. Optional External Telegram (Mandat In-System PWA Only: DEFAULT OFF, tenant-aware)
-      const cancelNotifConfig = await getStaffNotificationConfig(tenantId);
-      if (cancelNotifConfig.telegramEnabled && staff.telegram_chat_id) {
-        const addressParts: string[] = [];
-        if (cust?.kelurahan) addressParts.push(`Kel. ${this.escapeMarkdown(cust.kelurahan)}`);
-        if (cust?.kecamatan) addressParts.push(`Kec. ${cust.kecamatan}`);
-        if (cust?.kota) addressParts.push(this.escapeMarkdown(cust.kota));
-        const addressText = addressParts.join(', ') || 'Alamat belum tercatat lengkap';
-        const bookingDate = reservation.booking_date ? new Date(reservation.booking_date) : null;
-        const dateStr = bookingDate
-          ? bookingDate.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' })
-          : 'Tanggal belum ditentukan';
-        const timeStr = bookingDate
-          ? bookingDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' })
-          : '-';
-        const baseUrl = process.env.ADMIN_DASHBOARD_URL || 'http://localhost:3000/admin';
-        const portalUrl = `${baseUrl}/staff/today`;
-        const messageText = staffNotificationFormatterService.formatCancellationTelegramMessage({
-          staffName: staff.name,
-          patientName: custName,
-          treatmentDetail,
-          dateStr,
-          timeStr,
-          addressText,
-          reason,
-          portalUrl,
-        });
-
-        try {
-          await telegramService.sendMessage({ chatId: staff.telegram_chat_id, text: messageText, parseMode: 'Markdown' });
-        } catch (tgErr: any) {
-          console.warn(`[StaffNotificationService] Telegram cancel notification error:`, tgErr.message);
-        }
-      }
-
-      return { sent: true };
-    } catch (err: any) {
-      console.error(`[StaffNotificationService] Failed to send cancelled notification to staff ${staffId}:`, err.message);
-      return { sent: false, reason: err.message };
-    }
+    return staffNotificationEventsService.sendReservationCancelledNotification(reservationId, staffId, reason);
   }
 
   async sendTaskUnassignedNotification(
@@ -730,222 +419,35 @@ export class StaffNotificationService {
     newStaffName?: string,
     notifyOldStaff: boolean = true
   ): Promise<{ sent: boolean; reason?: string }> {
-    try {
-      if (!oldStaffId || !reservationId) return { sent: false, reason: 'oldStaffId/reservationId kosong' };
-      const staff = await prisma.staff.findUnique({
-        where: { id: oldStaffId },
-        select: { id: true, name: true, telegram_chat_id: true, tenant_id: true },
-      });
-      if (!staff) {
-        return { sent: false, reason: 'Staff lama tidak ditemukan' };
-      }
-      const reservation = await prisma.reservation.findUnique({
-        where: { id: reservationId },
-        include: { customer: { select: { name: true, phone: true, is_sandbox_test: true } } },
-      });
-      if (!reservation) return { sent: false, reason: 'Reservasi tidak ditemukan' };
-      const cust: any = reservation.customer;
-      if (cust?.is_sandbox_test || isDummyOrTestContact(cust?.phone, cust?.name, cust?.is_sandbox_test)) {
-        return { sent: false, reason: 'Sandbox test reservation (notifikasi dinonaktifkan)' };
-      }
-
-      const tenantId = staff.tenant_id || DEFAULT_TENANT_ID;
-      const treatmentDetail = this.escapeMarkdown(reservation.treatment_detail || reservation.treatment_category || 'Treatment Homecare');
-      const custName = this.escapeMarkdown(cust?.name || 'Bunda');
-
-      // 1. In-System Realtime SSE Broadcast (task_cancelled for old staff so their list refreshes)
-      try {
-        getLiveChatHub().publish({
-          type: 'staff.task_cancelled',
-          tenantId,
-          payload: {
-            staffId: oldStaffId,
-            reservationId: reservation.id,
-            reason: newStaffName ? `Dialihkan ke ${newStaffName}` : 'Dialihkan ke staf lain',
-          },
-        });
-      } catch (hubErr: any) {
-        console.warn(`[StaffNotificationService] SSE task_cancelled broadcast error:`, hubErr.message);
-      }
-
-      // 2. In-System Web Push PWA — HANYA bila staf lama benar-benar sudah menerima
-      // notifikasi penugasan (state-gated). Reassign di dalam jendela buffer (pending
-      // dibatalkan) → senyap total ke staf lama, cukup SSE yang menyegarkan daftar.
-      if (notifyOldStaff) {
-        try {
-          await webPushService.sendPushToStaff(oldStaffId, tenantId, {
-            title: 'Jadwal Dialihkan 🔄',
-            body: `Jadwal kunjungan ${custName} telah dialihkan${newStaffName ? ' ke ' + newStaffName : ''}.`,
-            url: '/admin/staff/today',
-            tag: `staff_task_reassign_${reservation.id}`,
-            icon: '/admin/icon-192.png',
-            badge: '/admin/favicon.ico',
-          });
-        } catch (pushErr: any) {
-          console.warn(`[StaffNotificationService] Web Push task_cancelled error:`, pushErr.message);
-        }
-      }
-
-      // 3. Optional External Telegram — gate yang sama dengan Web Push.
-      // Mandat In-System PWA Only: DEFAULT OFF, tenant-aware.
-      const unassignNotifConfig = await getStaffNotificationConfig(tenantId);
-      if (notifyOldStaff && unassignNotifConfig.telegramEnabled && staff.telegram_chat_id) {
-        const bookingDate = reservation.booking_date ? new Date(reservation.booking_date) : null;
-        const dateStr = bookingDate
-          ? bookingDate.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' })
-          : 'Tanggal belum ditentukan';
-        const timeStr = bookingDate
-          ? bookingDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' })
-          : '-';
-        const newStaffLabel = newStaffName ? ` ke *${this.escapeMarkdown(newStaffName)}*` : ' ke rekan terapis lain';
-        const baseUrl = process.env.ADMIN_DASHBOARD_URL || 'http://localhost:3000/admin';
-        const portalUrl = `${baseUrl}/#staff-today`;
-        const messageText = staffNotificationFormatterService.formatUnassignedTelegramMessage({
-          staffName: staff.name,
-          newStaffLabel,
-          patientName: custName,
-          treatmentDetail,
-          dateStr,
-          timeStr,
-          portalUrl,
-        });
-
-        try {
-          await telegramService.sendMessage({ chatId: staff.telegram_chat_id, text: messageText, parseMode: 'Markdown' });
-        } catch (tgErr: any) {
-          console.warn(`[StaffNotificationService] Telegram unassigned notification error:`, tgErr.message);
-        }
-      }
-
-      return { sent: true };
-    } catch (err: any) {
-      console.error(`[StaffNotificationService] Failed to send unassigned notification to staff ${oldStaffId}:`, err.message);
-      return { sent: false, reason: err.message };
-    }
-  }
-
-  /**
-   * Menyusun pesan Markdown Briefing Jadwal Harian Bidan/Terapis
-   */
-  generateDailyBriefingText(
-    staffName: string,
-    formattedDate: string,
-    reservations: any[]
-  ): string {
-    return staffNotificationFormatterService.formatDailyBriefingMessage(
-      staffName,
-      formattedDate,
-      reservations
+    return staffNotificationEventsService.sendTaskUnassignedNotification(
+      reservationId,
+      oldStaffId,
+      newStaffName,
+      notifyOldStaff
     );
   }
 
-  /**
-   * Menghitung rentang waktu 00:00:00 s/d 23:59:59 dalam zona waktu WIB
-   */
+  /** Menyusun pesan Markdown Briefing Jadwal Harian Bidan/Terapis. */
+  generateDailyBriefingText(staffName: string, formattedDate: string, reservations: any[]): string {
+    return staffNotificationBriefingService.generateDailyBriefingText(staffName, formattedDate, reservations);
+  }
+
+  /** Menghitung rentang waktu 00:00:00 s/d 23:59:59 dalam zona waktu WIB. */
   getWibDayRange(targetDate: Date = new Date()): {
     startOfDay: Date;
     endOfDay: Date;
     dateStr: string;
     formattedDate: string;
   } {
-    const wibMs = targetDate.getTime() + 7 * 60 * 60 * 1000;
-    const wibDate = new Date(wibMs);
-    const year = wibDate.getUTCFullYear();
-    const month = wibDate.getUTCMonth();
-    const day = wibDate.getUTCDate();
-
-    // 00:00:00.000 WIB dinyatakan dalam UTC adalah -7 jam
-    const startOfDay = new Date(Date.UTC(year, month, day, -7, 0, 0, 0));
-    const endOfDay = new Date(Date.UTC(year, month, day, 16, 59, 59, 999));
-
-    const formattedDate = targetDate.toLocaleDateString('id-ID', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-      timeZone: 'Asia/Jakarta',
-    });
-
-    const monthStr = String(month + 1).padStart(2, '0');
-    const dayStr = String(day).padStart(2, '0');
-    const dateStr = `${year}-${monthStr}-${dayStr}`;
-
-    return { startOfDay, endOfDay, dateStr, formattedDate };
+    return staffNotificationBriefingService.getWibDayRange(targetDate);
   }
 
-  /**
-   * Mengirimkan briefing jadwal harian ke 1 staf/bidan spesifik
-   */
+  /** Mengirimkan briefing jadwal harian ke 1 staf/bidan spesifik. */
   async sendStaffDailyBriefing(
     staffId: string,
     targetDate: Date = new Date()
   ): Promise<{ sent: boolean; reason?: string; count?: number }> {
-    try {
-      const staff = await prisma.staff.findUnique({
-        where: { id: staffId },
-        select: { id: true, name: true, telegram_chat_id: true, tenant_id: true, active: true },
-      });
-
-      if (!staff || !staff.telegram_chat_id) {
-        return { sent: false, reason: 'Staff belum menghubungkan akun Telegram pribadi', count: 0 };
-      }
-
-      if (staff.active === false) {
-        return { sent: false, reason: 'Akun staff nonaktif', count: 0 };
-      }
-
-      // Mandat In-System PWA Only: briefing Telegram eksternal DEFAULT OFF (tenant-aware).
-      const briefingNotifConfig = await getStaffNotificationConfig(staff.tenant_id || DEFAULT_TENANT_ID);
-      if (!briefingNotifConfig.telegramEnabled) {
-        return { sent: false, reason: 'External Telegram disabled (In-System PWA Mandate)', count: 0 };
-      }
-
-      const { startOfDay, endOfDay, formattedDate } = this.getWibDayRange(targetDate);
-
-      const reservations = await prisma.reservation.findMany({
-        where: {
-          tenant_id: staff.tenant_id,
-          assigned_staff_id: staff.id,
-          status: { notIn: ['cancelled', 'CANCELLED'] },
-          booking_date: {
-            gte: startOfDay,
-            lte: endOfDay,
-          },
-          customer: {
-            is_sandbox_test: false,
-          },
-        },
-        include: {
-          customer: {
-            include: {
-              children: true,
-            },
-          },
-          children: true,
-          customer_address: true,
-        },
-        orderBy: {
-          booking_date: 'asc',
-        },
-      });
-
-      if (!reservations.length) {
-        return { sent: false, reason: 'Tidak ada jadwal kunjungan untuk tanggal ini', count: 0 };
-      }
-
-      const messageText = this.generateDailyBriefingText(staff.name, formattedDate, reservations);
-
-      const res = await telegramService.sendMessage({
-        chatId: staff.telegram_chat_id,
-        text: messageText,
-        parseMode: 'Markdown',
-      });
-
-      return { sent: res.ok, reason: res.description, count: reservations.length };
-    } catch (err: any) {
-      console.error(`[StaffNotificationService] Error sending daily briefing to staff ${staffId}:`, err.message);
-      return { sent: false, reason: err.message, count: 0 };
-    }
+    return staffNotificationBriefingService.sendStaffDailyBriefing(staffId, targetDate);
   }
 
   /**

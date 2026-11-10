@@ -404,3 +404,60 @@ describe('SheetsSyncService — processOutbox retry/backoff', () => {
     expect(finalRow.lastError).toContain('EXCEEDED_MAX_DEFERRALS');
   });
 });
+
+describe('PrismaSheetsSyncStore atomic lease (I-003/I-004)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('hanya baris yang berhasil di-claim atomik yang diproses; lease 5 menit ditulis', async () => {
+    const now = new Date('2026-11-10T03:00:00.000Z');
+    vi.mocked(prisma.sheetsSyncOutbox.findMany).mockResolvedValueOnce([
+      { id: 'o1', tenant_id: 't1', reservation_id: 'r1', attempts: 0, status: 'pending' },
+      { id: 'o2', tenant_id: 't1', reservation_id: 'r2', attempts: 1, status: 'processing' },
+    ] as any);
+
+    const updateMany = vi
+      .mocked(prisma.sheetsSyncOutbox.updateMany)
+      .mockResolvedValueOnce({ count: 1 } as any)
+      .mockResolvedValueOnce({ count: 0 } as any);
+
+    const store = new PrismaSheetsSyncStore();
+    const claimed = await store.listPending('t1', now, 10);
+
+    // Worker paralel yang kalah balapan (count=0) TIDAK boleh memproses baris yang sama.
+    expect(claimed.map((c) => c.id)).toEqual(['o1']);
+    expect(updateMany).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        where: { id: 'o1', status: 'pending' },
+        data: {
+          status: 'processing',
+          next_retry_at: new Date(now.getTime() + 5 * 60 * 1000),
+        },
+      })
+    );
+    expect(updateMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ where: { id: 'o2', status: 'processing' } })
+    );
+  });
+
+  it('claim memakai status kandidat sebagai guard (cegah double-claim lintas worker)', async () => {
+    const now = new Date('2026-11-10T04:00:00.000Z');
+    vi.mocked(prisma.sheetsSyncOutbox.findMany).mockResolvedValueOnce([
+      { id: 'o9', tenant_id: 't1', reservation_id: 'r9', attempts: 2, status: 'processing' },
+    ] as any);
+    const updateMany = vi
+      .mocked(prisma.sheetsSyncOutbox.updateMany)
+      .mockResolvedValueOnce({ count: 1 } as any);
+
+    const store = new PrismaSheetsSyncStore();
+    const claimed = await store.listPending('t1', now, 5);
+
+    expect(claimed).toHaveLength(1);
+    expect(updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'o9', status: 'processing' } })
+    );
+  });
+});

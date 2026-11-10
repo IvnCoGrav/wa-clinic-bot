@@ -141,14 +141,16 @@ describe('FASE 2: RBAC Matrix & Tenant Isolation Suite (Tasks 2.1 & 2.2)', () =>
 
   describe('2.2 Tenant Isolation: Session vs Body & Cross-Tenant Access', () => {
     beforeEach(() => {
+      // S-009: mutasi knowledge hanya untuk Super Admin. Isolasi tenant tetap
+      // diuji dengan sesi Super Admin tenant-a (bukan melonggarkan guard).
       vi.spyOn(StaffAuthService, 'validateSession').mockResolvedValue({
         id: 'sess-staff-a',
         token_hash: 'hash-staff-a',
         staff_id: 'staff-a',
         staff: {
           id: 'staff-a',
-          name: 'Staff CS Tenant A',
-          role: 'ADMIN_CS',
+          name: 'Super Admin Tenant A',
+          role: 'SUPER_ADMIN',
           tenant_id: 'tenant-a',
           is_active: true,
         },
@@ -251,6 +253,37 @@ describe('FASE 2: RBAC Matrix & Tenant Isolation Suite (Tasks 2.1 & 2.2)', () =>
 
       expect(res.statusCode).toBe(404);
       expect((prisma as any).knowledgeChunk.delete).not.toHaveBeenCalled();
+    });
+
+    it('[2.2.4] ADMIN_CS MUST be blocked (403) from mutating knowledge base (S-009: Super Admin only)', async () => {
+      vi.spyOn(StaffAuthService, 'validateSession').mockResolvedValue({
+        id: 'sess-admin-cs-a',
+        token_hash: 'hash-admin-cs-a',
+        staff_id: 'staff-admin-cs-a',
+        staff: {
+          id: 'staff-admin-cs-a',
+          name: 'Staff CS Tenant A',
+          role: 'ADMIN_CS',
+          tenant_id: 'tenant-a',
+          is_active: true,
+        },
+      } as any);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/knowledge/faq',
+        headers: {
+          cookie: 'staff_session=token-admin-cs-a',
+          'x-requested-with': 'XMLHttpRequest',
+        },
+        payload: {
+          faqs: [{ question: 'Jam buka?', answer: 'Jam 8-17' }],
+        },
+      });
+
+      expect(res.statusCode).toBe(403);
+      const body = JSON.parse(res.body);
+      expect(body.code).toBe('FORBIDDEN_KNOWLEDGE_MANAGEMENT');
     });
   });
 

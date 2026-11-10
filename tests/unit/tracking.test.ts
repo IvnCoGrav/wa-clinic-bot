@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { generateTrackingCode, isBotOrCrawler } from '../../src/routes/tracking.route';
+import { generateTrackingCode, isBotOrCrawler, resolveViewTenantId } from '../../src/routes/tracking.route';
 import { ParamBuilder, PII_DATA_TYPE } from 'capi-param-builder-nodejs';
 
 import { safeCompare } from '../../src/utils/auth';
@@ -378,6 +378,29 @@ describe('Ad Click Attribution & Meta CAPI Unit Tests', () => {
       expect(isBotOrCrawler('Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)')).toBe(true);
       expect(isBotOrCrawler('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Instagram')).toBe(false);
       expect(isBotOrCrawler('Mozilla/5.0 (Linux; Android 14) Chrome/120.0 Mobile Safari/537.36')).toBe(false);
+    });
+  });
+
+  describe('7. S-007: resolveViewTenantId anti-spoof', () => {
+    it('hint tenant tak dikenal TIDAK boleh dipakai apa adanya saat DB tersedia', async () => {
+      vi.mocked(prisma.tenant.findFirst).mockResolvedValueOnce(null as any);
+
+      const tenantId = await resolveViewTenantId('tenant-penyerang', 'https://evil.example.com');
+
+      expect(tenantId).toBe(DEFAULT_TENANT_ID);
+    });
+
+    it('hint slug dikenal dikembalikan sebagai id kanonis dari DB', async () => {
+      vi.mocked(prisma.tenant.findFirst).mockResolvedValueOnce({ id: 'tenant-b' } as any);
+
+      const tenantId = await resolveViewTenantId('klinik-b', null);
+
+      expect(tenantId).toBe('tenant-b');
+    });
+
+    it('tanpa hint & DB offline → DEFAULT_TENANT_ID (tidak menebak tenant)', async () => {
+      const tenantId = await resolveViewTenantId(undefined, 'https://cabang-tak-dikenal.example.com');
+      expect(tenantId).toBe(DEFAULT_TENANT_ID);
     });
   });
 });

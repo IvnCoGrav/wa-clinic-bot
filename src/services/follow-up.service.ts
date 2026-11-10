@@ -63,7 +63,9 @@ export function buildScheduledAtRange(
   const endOfTodayUtc = new Date(Date.UTC(curY, curM, curD, 23, 59, 59, 999) - 7 * 60 * 60 * 1000);
 
   if (dateFilter === 'upcoming') {
-    return { gte: now };
+    // Kontrak filter: seluruh follow-up mulai awal hari ini (WIB), termasuk yang
+    // jamnya sudah lewat, agar daftar "akan datang" tidak berubah sepanjang hari.
+    return { gte: startOfTodayUtc };
   }
   if (dateFilter === 'today') {
     return { gte: startOfTodayUtc, lte: endOfTodayUtc };

@@ -3,6 +3,7 @@ import { buildApp } from '../../src/app';
 import { prisma } from '../../src/db/client';
 import { resetGateway } from '../../src/integrations/whatsapp/factory';
 import { wahaClient } from '../../src/integrations/waha/client';
+import { StaffAuthService } from '../../src/services/staff-auth.service';
 
 vi.mock('../../src/integrations/waha/client', () => ({
   wahaClient: {
@@ -145,5 +146,48 @@ describe('WABA Admin Endpoints (Fase 5)', () => {
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body).success).toBe(true);
     expect(prisma.wabaTemplate.upsert).toHaveBeenCalledTimes(1);
+  });
+
+  it('S-006: tenant operasi sesi WhatsApp diambil dari sesi staf, bukan query/body', async () => {
+    vi.spyOn(StaffAuthService, 'validateSession').mockResolvedValue({
+      id: 'sess-super-a',
+      token_hash: 'hash-super-a',
+      staff_id: 'staff-super-a',
+      staff: {
+        id: 'staff-super-a',
+        name: 'Super Admin Tenant A',
+        role: 'SUPER_ADMIN',
+        tenant_id: 'tenant-a',
+        is_active: true,
+      },
+    } as any);
+
+    vi.mocked(prisma.tenant.findUnique).mockResolvedValueOnce({
+      id: 'tenant-a',
+      slug: 'tenant-a',
+      name: 'Klinik A',
+      whatsapp_provider: 'WAHA',
+      waha_session_id: 'tenant-a',
+      waba_phone_number_id: null,
+      waba_access_token: null,
+    } as any);
+    vi.mocked(prisma.wabaTemplate.findMany).mockResolvedValueOnce([] as any);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/admin/whatsapp-provider?tenantId=tenant-b',
+      headers: {
+        cookie: 'staff_session=token-super-a',
+        'x-requested-with': 'XMLHttpRequest',
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    // Query tenant-b (spoof/curious admin) TIDAK boleh membajak sesi tenant-a.
+    expect(prisma.tenant.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'tenant-a' } })
+    );
+    const body = JSON.parse(res.body);
+    expect(body.success).toBe(true);
   });
 });
