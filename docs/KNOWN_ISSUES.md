@@ -61,6 +61,14 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - **A-012:** fast gate foto tanpa caption hanya aktif bila ada konteks kunjungan; selain itu lanjut triage.
   - **K-008:** invariant monitor default read-only + auto-repair opt-in; error audit/alert tidak lagi ditelan.
   - Register menjadi **203 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 52 OPEN**.
+- **Sisa pekerjaan per 2026-11-11 (setelah Fase 2G): 52 OPEN + 4 UNVERIFIED.**
+  - **Butuh DB/staging (tidak bisa diverifikasi offline):** `Ar-004` (unique constraint `Staff.phone`/`AdClick.trackingCode`/`LandingPage.slug` masih global), `S-015` (satu `WAHA_WEBHOOK_SECRET` global, belum per tenant).
+  - **Butuh artefak runtime/data:** `C-002` (kualitas korpus knowledge butuh dump DB), `C-006` (lisensi jawaban umum butuh log RAG), `A-013` (klaim dokumentasi tanpa contoh konkret).
+  - **Area kerja pengguna (tidak disentuh):** `Cfg-015`, `M-04`, `M-05`, `S-02` (landing/pricelist/dashboard).
+  - **Butuh Confirmation Gate baru:** `Cfg-013` (matriks otorisasi tulis katalog/tier/SOP), `A-011` (timeout tool tidak membatalkan efek samping), `Ar-003` lanjutan (service/worker, masih 459 referensi).
+  - **Batch offline berikutnya:** `S-03`, `S-06`, `S-07`, `S-08`, `S-09`, `S-011`, `S-012`, `S-016`, `M-02`, `M-03`, `M-06`, `M-07` (selesai), `M-10`, `K-005`, `K-009`, `K-010`, `I-006`, `I-007`, `I-011`, `C-008`, `C-010`, `Cfg-007`, `Cfg-009`, `Cfg-010`, `Cfg-011`, `Cfg-017`, `CFG-12`, `CFG-16`, `CFG-17`, `W-006`, `W-010`, `W-011`, `UTL-15`, `S-10`.
+  - **Catatan flaky (bukan regresi):** `media-mime-audio` (2 test, ~9,5 dtk) dan `production_edge_cases` LOCATION_CONFIRMED (~7,5 dtk) time-out saat beban suite penuh; lulus saat dijalankan terisolasi. Perlu naikkan timeout/optimasi fixture.
+  - **Deploy produksi tetap DIBLOKIR** sampai Fase 0–5 selesai.
 - **Temuan tambahan:** `SM-02` berstatus FIXED tetapi **inert** — `getTenantFormHeadersAsync`/`registerTenantFormHeaders` **0 pemanggil produksi** (`src/utils/reservation-text-parser.ts:131,162`).
 - **F5/F6 tidak dieksekusi:** Tidak ada artefak `after-f5.json`/`after-f6.json`; `scripts/deploy-prod.sh` tidak memvalidasi `APP_DOMAIN`/`BACKUP_ENCRYPTION_KEY`; `backup:verify` tidak ada di `package.json`. F6.1 menyebut “kelulusan penuh” padahal artefak 6.953 test berisi **6.923 lulus / 2 gagal pre-existing #287 / 28 skip**. Klaim “37 test isolasi 2 tenant” tidak punya suite/script rujukan; yang terverifikasi 5 suite / 23 test isolasi eksplisit lulus.
 - **Tindakan Fase 0 (selesai 2026-11-10):**
