@@ -5,6 +5,7 @@ import { hashPassword } from '../../utils/bcrypt';
 import { StaffAuthService } from '../../services/staff-auth.service';
 import { auditService } from '../../services/audit.service';
 import { resolveSessionTenantId } from './route-helpers';
+import { BUILTIN_STAFF_ROLES, normalizeStaffRole, validateStaffPassword } from '../../utils/staff-policy';
 
 export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
   /**
@@ -75,7 +76,24 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
       }
 
       const cleanPhone = phone.trim().replace(/^(\+62|62)/, '0');
-      const finalRole = (role ? String(role).trim().toUpperCase() : 'THERAPIST');
+      const finalRole = normalizeStaffRole(role || 'THERAPIST');
+
+      // S-012: kebijakan password + role tidak boleh diisi bebas.
+      const passwordCheck = validateStaffPassword(password);
+      if (!passwordCheck.ok) {
+        return reply.status(400).send({ success: false, error: passwordCheck.error });
+      }
+      if (!BUILTIN_STAFF_ROLES.has(finalRole)) {
+        const customRole = await prisma.customRole
+          .findFirst({ where: { tenant_id: tenantId, key: finalRole.toLowerCase() } })
+          .catch(() => null);
+        if (!customRole) {
+          return reply.status(400).send({
+            success: false,
+            error: `Role '${finalRole}' tidak dikenal. Gunakan role bawaan atau buat custom role terlebih dahulu.`,
+          });
+        }
+      }
 
       try {
         const existing = await prisma.staff.findFirst({
@@ -184,9 +202,27 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
         const updateData: any = {};
         if (name !== undefined) updateData.name = name.trim();
         if (phone !== undefined) updateData.phone = phone.trim().replace(/^(\+62|62)/, '0');
-        if (role !== undefined) updateData.role = String(role).trim().toUpperCase();
+        if (role !== undefined) {
+          updateData.role = normalizeStaffRole(role);
+          if (!BUILTIN_STAFF_ROLES.has(updateData.role)) {
+            const customRole = await prisma.customRole
+              .findFirst({ where: { tenant_id: tenantId, key: updateData.role.toLowerCase() } })
+              .catch(() => null);
+            if (!customRole) {
+              return reply.status(400).send({
+                success: false,
+                error: `Role '${updateData.role}' tidak dikenal. Gunakan role bawaan atau buat custom role terlebih dahulu.`,
+              });
+            }
+          }
+        }
         if (active !== undefined) updateData.active = active;
         if (password && password.trim()) {
+          // S-012: reset password juga wajib memenuhi kebijakan.
+          const passwordCheck = validateStaffPassword(password);
+          if (!passwordCheck.ok) {
+            return reply.status(400).send({ success: false, error: passwordCheck.error });
+          }
           updateData.password_hash = await hashPassword(password);
         }
 

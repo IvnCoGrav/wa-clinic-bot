@@ -9,6 +9,12 @@ services:
     expose:
       - "3000"
     restart: unless-stopped
+    # S-016: container tidak boleh menambah privilege atau memakai capability
+    # root. Dockerfile sudah USER node; ini lapisan kedua di level compose.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     # Liveness probe anti-502-buta: /health tidak menyentuh DB/WAHA (murah & cepat),
     # sehingga recreate/deploy yang lama boot terdeteksi sebagai starting, bukan healthy.
     # Memakai fetch bawaan Node 20 — tanpa dependency baru.
@@ -78,6 +84,11 @@ services:
       dockerfile: Dockerfile
     command: ["node", "dist/worker.js"]
     restart: unless-stopped
+    # S-016: worker juga tanpa privilege tambahan / capability root.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     volumes:
       - ./storage:/app/storage
       - ./logs:/app/logs

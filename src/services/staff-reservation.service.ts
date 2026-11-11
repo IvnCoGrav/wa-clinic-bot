@@ -1704,6 +1704,8 @@ export class StaffReservationService {
               },
             },
           },
+          // S-07: harga item resmi untuk verifikasi nominal dari klien.
+          items: { select: { price: true } },
         },
       });
 
@@ -1723,6 +1725,26 @@ export class StaffReservationService {
       // Kontrak: amount = total tunai di tangan terapis (treatment + ongkir) dari frontend pricing.totalFee
       // KB-6: utamakan snapshot delivery_fee reservasi, fallback Customer.ongkir.
       const deliveryFee = resolveDeliveryFeeSnapshot(reservation as any);
+
+      // S-07: server adalah otoritas nominal. Hitung total resmi dari item
+      // reservasi (atau purchase_value lama) + snapshot ongkir, lalu tolak
+      // nominal klien yang tidak cocok. Tanpa ini staf bisa "mengakali" setoran.
+      const items = Array.isArray((reservation as any).items) ? (reservation as any).items : [];
+      const itemsTotal = items.reduce((sum: number, it: any) => sum + (Number(it?.price) || 0), 0);
+      const discount = Number((reservation as any).discount_amount) || 0;
+      let expectedTreatment: number | null = null;
+      if (itemsTotal > 0) expectedTreatment = Math.max(0, itemsTotal - discount);
+      else if (typeof (reservation as any).purchase_value === 'number') {
+        expectedTreatment = Math.max(0, (reservation as any).purchase_value - discount);
+      }
+      const expectedTotal = expectedTreatment != null ? expectedTreatment + deliveryFee : null;
+      if (expectedTotal != null && amount != null && Math.round(Number(amount)) !== Math.round(expectedTotal)) {
+        return {
+          success: false,
+          error: `Nominal pembayaran tidak sesuai tagihan resmi (diterima: ${Math.round(Number(amount))}, seharusnya: ${Math.round(expectedTotal)}). Muat ulang data reservasi lalu coba lagi.`,
+        };
+      }
+
       const totalCollected = amount != null ? amount : ((reservation as any).purchase_value || 0);
       // Nilai murni layanan yang disimpan di purchase_value agar tidak double-count saat read: totalFee = purchase_value + ongkir
       const pureTreatmentValue = amount != null ? Math.max(0, totalCollected - deliveryFee) : ((reservation as any).purchase_value || 0);

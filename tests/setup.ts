@@ -40,6 +40,8 @@ process.env.GOOGLE_MAPS_API_KEY = '';
 // (deterministic, not dependent on the local .env value). Test files that intentionally
 // verify the secret/401 path (e.g. waha-webhook.test.ts) set their own value explicitly.
 process.env.WAHA_WEBHOOK_SECRET = '';
+// Ar-008: route kini fail-closed tanpa secret; test perlu izin eksplisit.
+process.env.WAHA_ALLOW_UNSIGNED_WEBHOOK = 'true';
 
 // Test environment label mocks
 process.env.ENABLE_WAHA_HOLD_LABEL = 'true';

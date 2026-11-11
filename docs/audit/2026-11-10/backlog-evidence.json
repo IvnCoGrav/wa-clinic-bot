@@ -533,7 +533,7 @@
         {
           "type": "file",
           "path": "docs/FEATURE_INVENTORY.md",
-          "line": 199,
+          "line": 200,
           "contains": "22 interval cron"
         },
         {
@@ -569,7 +569,7 @@
         {
           "type": "file",
           "path": "src/routes/waba-webhook.route.ts",
-          "line": 127,
+          "line": 130,
           "contains": "UNKNOWN_TENANT_REJECTED"
         },
         {
@@ -929,7 +929,7 @@
         {
           "type": "file",
           "path": "src/services/staff-reservation.service.ts",
-          "line": 2815,
+          "line": 2837,
           "contains": "belum diatur di Pengaturan Klinik"
         },
         {
@@ -1158,6 +1158,78 @@
           "type": "test",
           "path": "tests/unit/invariant-monitor-readonly.test.ts",
           "contains": "default (env kosong)"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
+    },
+    "S-07": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/services/staff-reservation.service.ts",
+          "line": 1744,
+          "contains": "Nominal pembayaran tidak sesuai tagihan resmi"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/staff-payment-validation.test.ts",
+          "contains": "nominal kurang dari tagihan"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
+    },
+    "S-012": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/routes/admin/staff-management.subroute.ts",
+          "line": 8,
+          "contains": "validateStaffPassword"
+        },
+        {
+          "type": "test",
+          "path": "tests/integration/staff-policy-enforcement.test.ts",
+          "contains": "password lemah"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
+    },
+    "S-016": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "docker-compose.yml",
+          "line": 15,
+          "contains": "no-new-privileges"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/deploy-hardening.test.ts",
+          "contains": "non-root"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
+    },
+    "Ar-008": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/routes/webhook.route.ts",
+          "line": 100,
+          "contains": "WAHA_ALLOW_UNSIGNED_WEBHOOK"
+        },
+        {
+          "type": "test",
+          "path": "tests/integration/waha-webhook-unsigned-failclosed.test.ts",
+          "contains": "fail-closed tanpa secret"
         }
       ],
       "verifiedBy": "AI Agent",

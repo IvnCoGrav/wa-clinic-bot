@@ -64,7 +64,7 @@ describe('Admin Staff Management & Assignment Integration Tests (/api/admin/staf
         method: 'POST',
         url: '/api/admin/staff',
         headers: adminHeaders,
-        payload: { name: 'Dewi', phone: '08123456789', password: 'secretpassword' },
+        payload: { name: 'Dewi', phone: '08123456789', password: 'Secret12345' },
       });
 
       expect(res.statusCode).toBe(409);
@@ -90,7 +90,7 @@ describe('Admin Staff Management & Assignment Integration Tests (/api/admin/staf
         method: 'POST',
         url: '/api/admin/staff',
         headers: adminHeaders,
-        payload: { name: 'Bidan Dewi', phone: '08123456789', password: 'secretpassword' },
+        payload: { name: 'Bidan Dewi', phone: '08123456789', password: 'Secret12345' },
       });
 
       expect(res.statusCode).toBe(201);

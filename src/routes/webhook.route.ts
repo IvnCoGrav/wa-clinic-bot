@@ -94,6 +94,14 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           console.warn(`[SECURITY WARNING] Unauthorized webhook access attempt from IP: ${request.ip}`);
           return reply.status(401).send({ error: 'Unauthorized: Invalid or missing webhook secret token.' });
         }
+      } else {
+        // Ar-008: tanpa secret hanya boleh bila diizinkan eksplisit (dev lokal).
+        // Jangan bergantung pada string NODE_ENV — staging tanpa secret tetap aman.
+        const allowUnsigned = String(process.env.WAHA_ALLOW_UNSIGNED_WEBHOOK || '').toLowerCase() === 'true';
+        if (!allowUnsigned) {
+          console.warn('[SECURITY WARNING] WAHA webhook secret tidak dikonfigurasi dan unsigned tidak diizinkan — DITOLAK (fail-closed).');
+          return reply.status(401).send({ error: 'Unauthorized: webhook secret is not configured.' });
+        }
       }
 
       const event = request.body;

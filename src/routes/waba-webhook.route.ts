@@ -51,11 +51,14 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
     const rawBody = (request as any).rawBody ?? Buffer.from(JSON.stringify(request.body));
     const signature = request.headers['x-hub-signature-256'] as string | undefined;
 
-    const isStrict = process.env.NODE_ENV === 'production';
+    // Ar-008: strictness TIDAK bergantung pada string NODE_ENV. Webhook tanpa
+    // secret hanya boleh lolos bila diizinkan eksplisit untuk dev lokal.
+    const allowUnsigned = String(process.env.WABA_ALLOW_UNSIGNED_WEBHOOK || '').toLowerCase() === 'true';
+    const isStrict = Boolean(appSecret) || !allowUnsigned;
     if (!appSecret && isStrict) {
-      console.warn(`[WABA SECURITY WARNING] Neither tenant waba_app_secret nor global WABA_APP_SECRET configured. Rejecting request in production mode (fail-closed). [${correlationId}]`);
+      console.warn(`[WABA SECURITY] Secret tidak dikonfigurasi dan unsigned webhook tidak diizinkan — DITOLAK (fail-closed). [${correlationId}]`);
     } else if (!appSecret) {
-      console.warn(`[WABA SECURITY WARNING] Neither tenant waba_app_secret nor global WABA_APP_SECRET configured. Skipping HMAC signature validation (UNSECURE dev mode). [${correlationId}]`);
+      console.warn(`[WABA SECURITY WARNING] Unsigned webhook diizinkan eksplisit (dev). [${correlationId}]`);
     }
 
     if (!verifyMetaSignature(rawBody, signature, appSecret, isStrict)) {

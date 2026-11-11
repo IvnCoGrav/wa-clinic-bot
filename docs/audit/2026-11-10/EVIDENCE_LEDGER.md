@@ -142,7 +142,20 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Register:** **203 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 52 OPEN**.
 - **Gerbang regresi Fase 2G:** 7.092 test / 7.062 lulus / **2 gagal pre-existing #287**; udit-baseline-diff → **0 regresi baru**; erify:backlog PASS; security:scan LULUS 2.161 file.
 
-### 0.8 Gerbang Regresi Fase 1
+### 0.8 Fase 3A — 4 item OPEN (2026-11-11)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **S-07** | Nominal bayar lapangan dihitung ulang server (item + ongkir); klien tidak bisa mengakali setoran | `tests/unit/staff-payment-validation.test.ts` (3) |
+| **S-012** | Password staf minimal 8 (huruf+angka), role divalidasi (bawaan/custom tenant) | `tests/integration/staff-policy-enforcement.test.ts` (3) + `tests/unit/staff-policy.test.ts` (4) |
+| **S-016** | Compose app/worker: `no-new-privileges` + `cap_drop: ALL`; Dockerfile `USER node` | `tests/unit/deploy-hardening.test.ts` (2) |
+| **Ar-008** | Webhook WAHA/WABA fail-closed via secret/flag izin eksplisit (bukan `NODE_ENV`) | `tests/integration/waha-webhook-unsigned-failclosed.test.ts` (2) + `waba-webhook-unsigned-failclosed.test.ts` (2) |
+
+- **W0 (re-triage):** `M-03`/`Cfg-012`/`Ar-003` tetap OPEN karena sisa area landing & service/worker — tidak ada perubahan kode.
+- **Register:** **207 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 48 OPEN**.
+- **Gerbang regresi Fase 3A:** 7.108 test / 7.078 lulus / **2 gagal pre-existing #287**; `audit-baseline-diff` → **0 regresi baru**; `verify:backlog` PASS; `security:scan` LULUS 2.165 file.
+
+### 0.9 Gerbang Regresi Fase 1
 
 | Pemeriksaan | Hasil |
 |---|---|
