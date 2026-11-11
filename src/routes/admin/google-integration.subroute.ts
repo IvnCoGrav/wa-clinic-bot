@@ -3,15 +3,11 @@ import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { googleOAuthClientManager } from '../../integrations/google-contacts/google-oauth.client';
 import { googleContactsService } from '../../services/google-contacts.service';
 import { auditService } from '../../services/audit.service';
+import { resolveSessionTenantId } from './route-helpers';
 
 /** Cfg-012: tenant peminta (sesi/header/query), bukan hardcode default-tenant. */
 function resolveTenant(request: FastifyRequest): string {
-  const raw =
-    (request as any).tenantId ||
-    (request.headers['x-tenant-id'] as string) ||
-    (request.query as any)?.tenant_id;
-  const t = typeof raw === 'string' ? raw.trim() : '';
-  return t || DEFAULT_TENANT_ID;
+  return resolveSessionTenantId(request);
 }
 
 export async function googleIntegrationAdminRoutes(fastify: FastifyInstance) {

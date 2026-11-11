@@ -103,7 +103,10 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - Handler dimigrasi ke tenant peminta (bukan `default-tenant`): `labels.subroute.ts`, `meta-attribution.subroute.ts`, `google-integration.subroute.ts`, `waba.subroute.ts`, `staff/auth.subroute.ts`.
 - `waba.subroute.ts`: body/query tidak lagi bisa menimpa tenant sesi.
 - Test: `tests/unit/tenant-resolution-seam.test.ts` (6), `tests/integration/admin-tenant-failclosed.test.ts` (3), isolasi label di `tests/integration/labels-admin.test.ts`.
-- **Status tetap OPEN**: 133 file dan domain `livechat`/`follow-up`/`migration`/`settings` belum dimigrasi (fase 1.3–1.4).
+- **Fase 1.3–1.4 (2026-11-11):** seluruh handler admin/staff dimigrasi ke seam — referensi route turun **166 → 8**; total referensi `DEFAULT_TENANT_ID` di `src` turun **663 → 459** (132 file). Handler: livechat, follow-up, staff/today, migration, auth, evaluations, knowledge, backup, export, push, quick-replies, staff-management, roles, copilot, ctwa, google, WABA, staff-auth.
+- **Dikecualikan (per persetujuan):** `admin/landings.subroute.ts` (5 referensi, area landing) dan fallback yang disengaja (seed label default, helper single-tenant, staff login single-tenant).
+- **Status tetap OPEN**: `Ar-003` mencakup service/worker + `Ar-004` (unique constraint lintas tenant); `Cfg-012` tinggal area landing.
+- **Gerbang regresi Fase 2E:** 7.064 test / 7.034 lulus / **2 gagal pre-existing #287** — `audit-baseline-diff` → **0 regresi baru**; `verify:backlog` PASS; `security:scan` LULUS 2.155 file.
 
 **Gate 2 (Opsi A, fase 2.1–2.2) — C-001:**
 

@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../../db/client';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
-import { tenantOf } from './route-helpers';
+import { tenantOf, resolveSessionTenantId } from './route-helpers';
 import { auditService } from '../../services/audit.service';
 import { capiService, capiBreaker } from '../../services/capi.service';
 import { memoryAdClicks } from '../tracking.route';
@@ -33,12 +33,7 @@ interface ClickFilters {
 
 /** Cfg-012: tenant peminta (sesi/header/query), bukan hardcode default-tenant. */
 function resolveTenant(request: FastifyRequest): string {
-  const raw =
-    (request as any).tenantId ||
-    (request.headers['x-tenant-id'] as string) ||
-    (request.query as any)?.tenant_id;
-  const t = typeof raw === 'string' ? raw.trim() : '';
-  return t || DEFAULT_TENANT_ID;
+  return resolveSessionTenantId(request);
 }
 
 function parseClickFilters(query: any): ClickFilters {

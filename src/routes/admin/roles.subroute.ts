@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../../db/client';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { auditService } from '../../services/audit.service';
+import { resolveSessionTenantId } from './route-helpers';
 
 export interface CustomRolePayload {
   key: string;
@@ -37,7 +38,7 @@ export async function rolesAdminRoutes(fastify: FastifyInstance) {
    * Mengambil daftar custom role yang tersimpan di database per-tenant.
    */
   fastify.get('/api/admin/roles', async (request: FastifyRequest, reply: FastifyReply) => {
-    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+    const tenantId = resolveSessionTenantId(request);
     try {
       const dbRoles = await prisma.customRole.findMany({
         where: { tenant_id: tenantId },
@@ -90,7 +91,7 @@ export async function rolesAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const { key, label, description, allowedPaths = [], defaultRedirect = '/admin/overview' } =
         request.body || {};
 
@@ -216,7 +217,7 @@ export async function rolesAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const { key } = request.params;
       const cleanKey = key.trim().toLowerCase();
 

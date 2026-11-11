@@ -18,7 +18,7 @@ export function isMultiTenantEnabled(): boolean {
 export function resolveSessionTenantId(request: FastifyRequest): string {
   const raw =
     (request as any).tenantId ||
-    (request.headers['x-tenant-id'] as string) ||
+    (request as any).headers?.['x-tenant-id'] ||
     (request as any).query?.tenant_id;
   const tenantId = typeof raw === 'string' ? raw.trim() : '';
   if (tenantId) return tenantId;

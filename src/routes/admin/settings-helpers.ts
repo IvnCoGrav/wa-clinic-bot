@@ -1,5 +1,5 @@
 import { FastifyRequest } from 'fastify';
-import { DEFAULT_TENANT_ID } from '../../config/tenant';
+import { resolveSessionTenantId } from './route-helpers';
 
 export function requireTenantId(request: FastifyRequest): string {
   const tenantId = (request as any).tenantId;
@@ -13,8 +13,7 @@ export function requireTenantId(request: FastifyRequest): string {
 }
 
 export function resolveTenantId(request: FastifyRequest): string {
-  const tenantId = (request as any).tenantId;
-  return (typeof tenantId === 'string' && tenantId.trim()) ? tenantId.trim() : DEFAULT_TENANT_ID;
+  return resolveSessionTenantId(request);
 }
 
 /**

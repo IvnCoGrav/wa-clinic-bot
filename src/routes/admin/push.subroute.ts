@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { webPushService } from '../../services/web-push.service';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
+import { resolveSessionTenantId } from './route-helpers';
 
 export async function pushSubroutes(fastify: FastifyInstance) {
   /**
@@ -45,7 +46,7 @@ export async function pushSubroutes(fastify: FastifyInstance) {
         }
 
         const userAgent = request.headers['user-agent'] || undefined;
-        const tenantId = (request as any).staffTenantId || (request as any).staffSession?.staff?.tenant_id || (request as any).tenantId || DEFAULT_TENANT_ID;
+        const tenantId = (request as any).staffTenantId || (request as any).staffSession?.staff?.tenant_id || resolveSessionTenantId(request);
 
         // Identitas langganan DIPAKSA dari sesi otentikasi, TIDAK dari body.
         // Mencegah eskalasi/spoofing: staf yang mengirim userType='ADMIN' tetap
@@ -121,7 +122,7 @@ export async function pushSubroutes(fastify: FastifyInstance) {
         }
 
         // Jika endpoint tidak dikirim, broadcast ke seluruh perangkat ADMIN pada tenant default
-        const result = await webPushService.sendPushToRole(DEFAULT_TENANT_ID, 'ADMIN', {
+        const result = await webPushService.sendPushToRole(resolveSessionTenantId(request), 'ADMIN', {
           title: '🔔 Uji Coba Web Push Admin',
           body: 'Notifikasi berhasil terkirim dari server Kala Clinic!',
           url: '/admin/live-chat',
@@ -170,8 +171,7 @@ export async function pushSubroutes(fastify: FastifyInstance) {
 
         const tenantId =
           request.body?.tenantId ||
-          (request as any).tenantId ||
-          DEFAULT_TENANT_ID;
+          resolveSessionTenantId(request);
 
         // Validasi dan ambil nama staf
         let staffName = 'Staff';
@@ -221,7 +221,7 @@ export async function pushSubroutes(fastify: FastifyInstance) {
    */
   fastify.get('/api/admin/push/staff-device-counts', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const counts = await webPushService.getStaffDeviceCounts(tenantId);
       return reply.status(200).send({ success: true, counts });
     } catch (err: any) {

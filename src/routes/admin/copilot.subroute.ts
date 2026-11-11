@@ -3,6 +3,7 @@ import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { isCopilotTenantAllowed, COPILOT_DEPRECATED_ERROR } from '../../config/copilot-tenant';
 import { auditService } from '../../services/audit.service';
 import { copilotService, resolveCopilotConfig } from '../../services/copilot/copilot.service';
+import { resolveSessionTenantId } from './route-helpers';
 
 /**
  * Semaphore konkurensi Copilot per-tenant (in-memory).
@@ -50,7 +51,7 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const { message, history, conversationId, customerId } = request.body || {};
 
       if (!message || !message.trim()) {
@@ -148,7 +149,7 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const { message, history, conversationId, customerId } = request.body || {};
 
       if (!message || !message.trim()) {

@@ -11,6 +11,7 @@ import { responseCacheService } from '../../services/response-cache.service';
 import { ConversationState } from '@prisma/client';
 import { createMonotonicSseSequencer } from '../../utils/sse-sequence';
 import { encodeMessageCursor } from '../../utils/message-cursor';
+import { resolveSessionTenantId } from './route-helpers';
 
 /**
  * Fase 0.4: penomoran event SSE monotonik proses-wide (bukan acak). Klien admin
@@ -104,7 +105,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
    * REST Endpoint untuk melihat daftar percakapan yang aktif diserahkan ke Human Agent.
    */
   fastify.get('/api/admin/human-handling-conversations', async (request, reply) => {
-    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+    const tenantId = resolveSessionTenantId(request);
     try {
       const activeHumanHandling = await prisma.conversation.findMany({
         where: { is_human_handling: true, tenant_id: tenantId },
@@ -146,7 +147,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply
     ) => {
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       try {
         const limit = Math.min(Math.max(parseInt(request.query.limit || '50', 10) || 50, 1), 200);
         const offset = Math.max(parseInt(request.query.offset || '0', 10) || 0, 0);
@@ -196,7 +197,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
    * Endpoint cepat & sangat ringan untuk menghitung total pesan unread badge di sidebar.
    */
   fastify.get('/api/admin/live-chat/unread-count', async (request: FastifyRequest, reply: FastifyReply) => {
-    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+    const tenantId = resolveSessionTenantId(request);
     try {
       const cacheKey = `livechat:unread:${tenantId}`;
       const cached = responseCacheService.get<number>(cacheKey);
@@ -235,7 +236,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       const limit = Math.min(Math.max(parseInt(String(body.limit || '50'), 10) || 50, 1), 200);
       const offset = Math.max(parseInt(String(body.offset || '0'), 10) || 0, 0);
       const messagesPerChat = Math.min(Math.max(parseInt(String(body.messagesPerChat || '100'), 10) || 100, 1), 500);
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
 
       const { wahaHistorySyncService } = await import('../../services/waha-history-sync.service');
       const result = await wahaHistorySyncService.syncChats(limit, offset, messagesPerChat, tenantId);
@@ -271,7 +272,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     ) => {
       const body = request.body || {};
       const messagesPerChat = Math.min(Math.max(parseInt(String(body.messagesPerChat || '100'), 10) || 100, 1), 500);
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
 
       const { wahaHistorySyncService } = await import('../../services/waha-history-sync.service');
       const result = await wahaHistorySyncService.startBackgroundFullSync(messagesPerChat, tenantId);
@@ -295,7 +296,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
    */
   fastify.get('/api/admin/live-chat/sync-status', async (request, reply) => {
     const { wahaHistorySyncService } = await import('../../services/waha-history-sync.service');
-    const status = wahaHistorySyncService.getBackgroundSyncStatus((request as any).tenantId || DEFAULT_TENANT_ID);
+    const status = wahaHistorySyncService.getBackgroundSyncStatus(resolveSessionTenantId(request));
     return reply.status(200).send({ success: true, data: status });
   });
 
@@ -305,7 +306,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
    */
   fastify.post('/api/admin/live-chat/sync-cancel', async (request, reply) => {
     const { wahaHistorySyncService } = await import('../../services/waha-history-sync.service');
-    const cancelled = wahaHistorySyncService.stopBackgroundSync((request as any).tenantId || DEFAULT_TENANT_ID);
+    const cancelled = wahaHistorySyncService.stopBackgroundSync(resolveSessionTenantId(request));
     return reply.status(200).send({ success: true, cancelled });
   });
 
@@ -317,7 +318,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
    */
   fastify.get('/api/admin/live-chat/sync-health', async (request, reply) => {
     const { wahaHistorySyncService } = await import('../../services/waha-history-sync.service');
-    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+    const tenantId = resolveSessionTenantId(request);
     const activeSync = wahaHistorySyncService.getBackgroundSyncStatus(tenantId);
     const checkedAt = new Date().toISOString();
     try {
@@ -377,7 +378,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/live-chat/conversations/:id',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply) => {
       const { id } = request.params;
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       try {
         const item = await liveChatService.getConversationDetail(id, tenantId);
         if (!item) {
@@ -400,7 +401,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/live-chat/conversations/:id/shareloc-requested',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply) => {
       const { id } = request.params;
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       try {
         const conv = await (prisma as any).conversation.findFirst({
           where: { id, tenant_id: tenantId },
@@ -445,7 +446,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       reply
     ) => {
       const { id } = request.params;
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       try {
         const limit = Math.min(Math.max(parseInt(request.query.limit || '50', 10) || 50, 1), 200);
         const before = request.query.before?.trim() || undefined;
@@ -513,7 +514,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
         thumbB64,
         mimeType,
         fileName,
-        tenantId: (request as any).tenantId || DEFAULT_TENANT_ID,
+        tenantId: resolveSessionTenantId(request),
         adminName,
         acknowledgeOutsideWindow,
         replyToMessageId,
@@ -573,7 +574,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
   ) => {
     const { id } = request.params;
     const { isTyping } = request.body || {};
-    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+    const tenantId = resolveSessionTenantId(request);
 
     try {
       const conversation = await conversationService.getConversationById(id, tenantId);
@@ -645,7 +646,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
    * Mengambil informasi provider gateway WhatsApp aktif dan kapabilitasnya (seperti kemampuan revoke/hapus pesan).
    */
   fastify.get('/api/admin/gateway-capability', async (request: FastifyRequest, reply: FastifyReply) => {
-    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+    const tenantId = resolveSessionTenantId(request);
     const capability = await liveChatService.getGatewayCapability(tenantId);
     return reply.status(200).send({ success: true, data: capability });
   });
@@ -663,7 +664,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       const { id, messageId } = request.params;
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const adminName = (request as any).adminIdentity || 'Admin';
 
       const result = await liveChatService.revokeMessage({
@@ -696,7 +697,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     ) => {
       const { id, messageId } = request.params;
       const { text } = request.body || {};
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const adminName = (request as any).adminIdentity || 'Admin';
 
       if (!text || !text.trim()) {
@@ -732,7 +733,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
   ) => {
     const { id, messageId } = request.params;
     const { emoji = '' } = request.body || {};
-    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+    const tenantId = resolveSessionTenantId(request);
     const adminName = (request as any).adminIdentity || 'Admin';
 
     const result = await liveChatService.sendReaction({
@@ -770,7 +771,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
   ) => {
     const { id, messageId } = request.params;
     const { isPinned } = request.body || {};
-    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+    const tenantId = resolveSessionTenantId(request);
     const adminName =
       (request.headers['x-admin-name'] as string) ||
       (request.body as any)?.adminName ||
@@ -821,7 +822,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
   ) => {
     const { id, messageId } = request.params;
     const { isHidden } = request.body || {};
-    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+    const tenantId = resolveSessionTenantId(request);
     const adminName =
       (request.headers['x-admin-name'] as string) ||
       (request.body as any)?.adminName ||
@@ -869,7 +870,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     reply: FastifyReply
   ) => {
     const { id } = request.params;
-    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+    const tenantId = resolveSessionTenantId(request);
     try {
       const pinnedMessage = await messageService.getPinnedMessage(id, tenantId);
       return reply.status(200).send({
@@ -890,7 +891,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
    * Server-Sent Events: stream real-time Live Chat (message.created & conversation.updated).
    */
   fastify.get('/api/admin/live-chat/events', async (request: FastifyRequest, reply: FastifyReply) => {
-    const tenantId = (request as any).adminSession?.tenant_id || (request as any).tenantId || DEFAULT_TENANT_ID;
+    const tenantId = (request as any).adminSession?.tenant_id || resolveSessionTenantId(request);
 
     reply.hijack();
 
@@ -952,7 +953,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/conversation/:id/release',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const { id } = request.params;
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       let restoredState = 'INITIAL';
       try {
         let existing: any = null;
@@ -1065,7 +1066,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
    */
   const handleTakeoverRoute = async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const { id } = request.params;
-    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+    const tenantId = resolveSessionTenantId(request);
     try {
       let existing: any = null;
       try {
@@ -1177,7 +1178,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const { id } = request.params;
       try {
-        const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+        const tenantId = resolveSessionTenantId(request);
         const customer = await customerService.getCustomerById(id, tenantId);
         if (!customer) {
           return reply.status(404).send({ success: false, error: 'Customer tidak ditemukan.' });
@@ -1213,7 +1214,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/live-chat/conversations/:id/suggest-reply',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const { id } = request.params;
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       try {
         const draftText = await liveChatService.generateAiSuggestion(id, tenantId);
 
@@ -1242,7 +1243,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
    * Menandai SEMUA percakapan dari seluruh pelanggan sebagai telah dibaca.
    */
   fastify.post('/api/admin/live-chat/mark-all-read', async (request: FastifyRequest, reply: FastifyReply) => {
-    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+    const tenantId = resolveSessionTenantId(request);
     try {
       const count = await messageService.markAllMessagesAsRead(tenantId);
 
@@ -1287,7 +1288,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/conversations/:id/read',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const { id } = request.params;
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       try {
         await messageService.markConversationMessagesAsRead(id, tenantId);
 
@@ -1332,7 +1333,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/conversations/:id/unread',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const { id } = request.params;
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       try {
         await messageService.markConversationAsUnread(id, tenantId);
 
@@ -1384,7 +1385,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     ) => {
       const { id } = request.params;
       const { isPinned } = request.body || {};
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       try {
         const updated = await conversationService.togglePinConversation(id, tenantId, isPinned);
         if (!updated) {
@@ -1421,7 +1422,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/live-chat/conversations/:id/dismiss-frustration',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const { id } = request.params;
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       try {
         const updated = await conversationService.dismissFrustration(id, tenantId);
         if (!updated) {

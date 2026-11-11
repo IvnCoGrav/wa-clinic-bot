@@ -3,6 +3,7 @@ import { prisma } from '../../db/client';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { knowledgeBaseService } from '../../services/knowledge.service';
 import { auditService } from '../../services/audit.service';
+import { resolveSessionTenantId } from './route-helpers';
 
 export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
   /**
@@ -16,7 +17,7 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
-        const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+        const tenantId = resolveSessionTenantId(request);
         const page = Math.max(1, parseInt(request.query?.page || '1', 10) || 1);
         const pageSize = Math.min(500, Math.max(1, parseInt(request.query?.pageSize || '200', 10) || 200));
         const where = { tenant_id: tenantId };
@@ -71,7 +72,7 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
    */
   fastify.get('/api/admin/knowledge/unanswered', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const unanswered = await prisma.conversation.findMany({
         where: {
           tenant_id: tenantId,
@@ -123,7 +124,7 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const tenantIdResolve = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantIdResolve = resolveSessionTenantId(request);
       const { id } = request.params;
       const { answer, category = 'general' } = request.body || {};
 
@@ -191,7 +192,7 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
       request: FastifyRequest<{ Params: { id: string }; Body: { title: string; content: string; keywords?: string } }>,
       reply: FastifyReply
     ) => {
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const { id } = request.params;
       const { title, content, keywords } = request.body || {};
 
@@ -281,7 +282,7 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
   fastify.delete(
     '/api/admin/knowledge/chunks/:id',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const { id } = request.params;
       try {
         const existing = await prisma.knowledgeChunk.findFirst({
@@ -323,7 +324,7 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
       request: FastifyRequest<{ Body: { faqs: Array<{ question: string; answer: string; keywords?: string }> } }>,
       reply: FastifyReply
     ) => {
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const { faqs } = request.body || {};
       if (!faqs || !Array.isArray(faqs) || faqs.length === 0) {
         return reply.status(400).send({ error: 'Body must contain non-empty faqs array [{question, answer}]' });
@@ -360,7 +361,7 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
       request: FastifyRequest<{ Body: { documentName: string; textContent: string } }>,
       reply: FastifyReply
     ) => {
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const { documentName, textContent } = request.body || {};
       if (!documentName || !textContent) {
         return reply.status(400).send({ error: 'documentName and textContent are required' });

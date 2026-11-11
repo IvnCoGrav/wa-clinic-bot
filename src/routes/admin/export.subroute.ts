@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { auditService } from '../../services/audit.service';
 import { chatExportService, formatLocalDate } from '../../services/chat-export.service';
+import { resolveSessionTenantId } from './route-helpers';
 
 const chatExportCooldown = new Map<string, number>();
 const CHAT_EXPORT_COOLDOWN_MS = 2000;
@@ -19,7 +20,7 @@ export async function exportAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
-        const tenantId = request.query?.tenantId || DEFAULT_TENANT_ID;
+        const tenantId = request.query?.tenantId || resolveSessionTenantId(request);
         const cooldownKey = `${tenantId}:${request.ip}`;
         const lastCall = chatExportCooldown.get(cooldownKey) || 0;
         const now = Date.now();

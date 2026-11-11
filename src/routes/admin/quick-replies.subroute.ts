@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../../db/client';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { auditService } from '../../services/audit.service';
+import { resolveSessionTenantId } from './route-helpers';
 
 /**
  * Catatan kebijakan: template Quick Reply / Balasan Cepat adalah alat bantu
@@ -334,7 +335,7 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
    * List semua quick replies tenant. Auto-seed defaults jika kosong.
    */
   fastify.get('/api/admin/quick-replies', async (request: FastifyRequest, reply: FastifyReply) => {
-    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+    const tenantId = resolveSessionTenantId(request);
     try {
       let rows = await (prisma as any).quickReply.findMany({
         where: { tenant_id: tenantId },
@@ -435,7 +436,7 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const { shortcut: rawShortcut, title, content, category, media_type, image_url, imageB64 } = request.body || {};
       const shortcut = normalizeShortcut(rawShortcut || '');
       const err = isValidShortcut(shortcut);
@@ -559,7 +560,7 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const { id } = request.params;
       const { shortcut: rawShortcut, title, content, category, media_type, image_url, imageB64 } = request.body || {};
 
@@ -698,7 +699,7 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
   fastify.delete(
     '/api/admin/quick-replies/:id',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const { id } = request.params;
       try {
         const existing = await (prisma as any).quickReply.findFirst({ where: { id, tenant_id: tenantId } });
@@ -734,7 +735,7 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
    * POST /api/admin/quick-replies/seed-defaults
    */
   fastify.post('/api/admin/quick-replies/seed-defaults', async (request: FastifyRequest, reply: FastifyReply) => {
-    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+    const tenantId = resolveSessionTenantId(request);
     try {
       for (const item of DEFAULT_QUICK_REPLIES) {
         await (prisma as any).quickReply.upsert({

@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../../db/client';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
+import { resolveSessionTenantId } from '../admin/route-helpers';
 
 /**
  * Balasan cepat versi aplikasi staf (terapis/bidan).
@@ -12,7 +13,7 @@ import { DEFAULT_TENANT_ID } from '../../config/tenant';
  */
 export async function staffQuickRepliesRoutes(fastify: FastifyInstance) {
   fastify.get('/api/staff/quick-replies', async (request: FastifyRequest, reply: FastifyReply) => {
-    const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+    const tenantId = resolveSessionTenantId(request);
     try {
       const rows = await (prisma as any).quickReply.findMany({
         where: { tenant_id: tenantId },

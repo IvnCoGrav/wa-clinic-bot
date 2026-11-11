@@ -16,16 +16,12 @@ export interface MemoryLabel {
 }
 
 import { isSystemLabelName, isBypassLabelName } from '../../utils/customer-bypass';
+import { resolveSessionTenantId } from './route-helpers';
 
 
 /** Cfg-012: tenant peminta (sesi/header/query), bukan hardcode default-tenant. */
 function resolveTenant(request: FastifyRequest): string {
-  const raw =
-    (request as any).tenantId ||
-    (request.headers['x-tenant-id'] as string) ||
-    (request.query as any)?.tenant_id;
-  const t = typeof raw === 'string' ? raw.trim() : '';
-  return t || DEFAULT_TENANT_ID;
+  return resolveSessionTenantId(request);
 }
 export const DEFAULT_SYSTEM_LABELS = [
   { name: 'Hold', color: '#dc2626', description: 'Penanganan khusus / tahan balasan bot otomatis' },

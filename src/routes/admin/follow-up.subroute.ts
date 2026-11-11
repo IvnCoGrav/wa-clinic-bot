@@ -4,6 +4,7 @@ import { followUpService } from '../../services/follow-up.service';
 import { auditService } from '../../services/audit.service';
 import { parsePositiveInt } from '../../utils/env-numeric';
 import { findForbiddenPlaceholders } from '../../utils/followup-placeholder';
+import { resolveSessionTenantId } from './route-helpers';
 
 export async function followUpAdminRoutes(fastify: FastifyInstance) {
   /**
@@ -29,7 +30,7 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
     ) => {
       try {
         const { status, type, search, dateFilter, page, pageSize, sortBy, sortOrder } = request.query || {};
-        const result = await followUpService.listFollowUps(DEFAULT_TENANT_ID, {
+        const result = await followUpService.listFollowUps(resolveSessionTenantId(request), {
           status,
           type,
           search,
@@ -61,7 +62,7 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const { id } = request.params;
       try {
-        const success = await followUpService.queueFollowUp(id, DEFAULT_TENANT_ID);
+        const success = await followUpService.queueFollowUp(id, resolveSessionTenantId(request));
         if (!success) {
           return reply.status(404).send({ error: 'Item follow-up tidak ditemukan atau status bukan PENDING' });
         }
@@ -93,7 +94,7 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/follow-ups/bulk-queue',
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const queuedCount = await followUpService.bulkQueueFollowUps(DEFAULT_TENANT_ID);
+        const queuedCount = await followUpService.bulkQueueFollowUps(resolveSessionTenantId(request));
 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed || 'SYSTEM',
@@ -124,7 +125,7 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const { id } = request.params;
       try {
-        const success = await followUpService.sendNow(id, DEFAULT_TENANT_ID);
+        const success = await followUpService.sendNow(id, resolveSessionTenantId(request));
 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed || 'SYSTEM',
@@ -155,7 +156,7 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const { id } = request.params;
       try {
-        const ok = await followUpService.retryFollowUp(id, DEFAULT_TENANT_ID);
+        const ok = await followUpService.retryFollowUp(id, resolveSessionTenantId(request));
         if (!ok) {
           return reply.status(404).send({ error: 'Tidak ada item FAILED dengan id tersebut.' });
         }
@@ -188,8 +189,8 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
       const reason = (request.body?.reason || '').trim();
       try {
         const success = reason
-          ? await followUpService.cancelFollowUp(id, DEFAULT_TENANT_ID, { reason })
-          : await followUpService.cancelFollowUp(id, DEFAULT_TENANT_ID);
+          ? await followUpService.cancelFollowUp(id, resolveSessionTenantId(request), { reason })
+          : await followUpService.cancelFollowUp(id, resolveSessionTenantId(request));
         if (!success) {
           return reply.status(404).send({ error: 'Item follow-up tidak ditemukan' });
         }
@@ -225,8 +226,8 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
         const targetStatus = request.body?.status || 'PENDING';
         const reason = (request.body?.reason || '').trim();
         const cancelledCount = reason
-          ? await followUpService.bulkCancelFollowUps(DEFAULT_TENANT_ID, targetStatus, { reason })
-          : await followUpService.bulkCancelFollowUps(DEFAULT_TENANT_ID, targetStatus);
+          ? await followUpService.bulkCancelFollowUps(resolveSessionTenantId(request), targetStatus, { reason })
+          : await followUpService.bulkCancelFollowUps(resolveSessionTenantId(request), targetStatus);
 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed || 'SYSTEM',
@@ -276,7 +277,7 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
             stage: stage ? Number(stage) : undefined,
             customText: customText !== undefined ? customText : undefined,
           },
-          DEFAULT_TENANT_ID
+          resolveSessionTenantId(request)
         );
 
         await auditService.logAdminAction({
@@ -310,7 +311,7 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
       if (!scheduledAt) return reply.status(400).send({ error: 'scheduledAt is required' });
 
       try {
-        const updated = await followUpService.rescheduleFollowUp(id, new Date(scheduledAt), DEFAULT_TENANT_ID);
+        const updated = await followUpService.rescheduleFollowUp(id, new Date(scheduledAt), resolveSessionTenantId(request));
 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed || 'SYSTEM',
@@ -350,7 +351,7 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
         const effectiveMaxPerDay = maxPerDay
           ? Number(maxPerDay)
           : parsePositiveInt(process.env.FOLLOWUP_MAX_PER_DAY, 40);
-        const result = await followUpService.rescheduleOverdueFollowUps(DEFAULT_TENANT_ID, {
+        const result = await followUpService.rescheduleOverdueFollowUps(resolveSessionTenantId(request), {
           maxPerDay: effectiveMaxPerDay,
           startDate: parsedStartDate,
         });
@@ -380,7 +381,7 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
    */
   fastify.get('/api/admin/follow-up-templates', async (_request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const templates = await followUpService.getAllTemplates(DEFAULT_TENANT_ID);
+      const templates = await followUpService.getAllTemplates(resolveSessionTenantId(_request));
       return reply.status(200).send({ success: true, data: templates });
     } catch (err: any) {
       return reply.status(500).send({ error: 'Failed to load follow-up templates' });
@@ -407,7 +408,7 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
       });
     }
     try {
-      await followUpService.saveTemplate(type, variant, text, DEFAULT_TENANT_ID);
+      await followUpService.saveTemplate(type, variant, text, resolveSessionTenantId(request));
 
       await auditService.logAdminAction({
         apiKey: (request as any).adminKeyUsed || 'SYSTEM',
@@ -438,7 +439,7 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
     ) => {
       const { type, variant } = request.params;
       try {
-        await followUpService.resetTemplate(type, parseInt(variant, 10), DEFAULT_TENANT_ID);
+        await followUpService.resetTemplate(type, parseInt(variant, 10), resolveSessionTenantId(request));
 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed || 'SYSTEM',

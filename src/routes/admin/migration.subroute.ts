@@ -4,6 +4,7 @@ import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { auditService } from '../../services/audit.service';
 import { knowledgeBaseService } from '../../services/knowledge.service';
 import { migrationService } from '../../services/migration.service';
+import { resolveSessionTenantId } from './route-helpers';
 
 export async function migrationAdminRoutes(fastify: FastifyInstance) {
   /**
@@ -14,7 +15,7 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/migration/extract',
     async (request: FastifyRequest<{ Body: { limit?: number } }>, reply: FastifyReply) => {
       const { wahaHistorySyncService } = await import('../../services/waha-history-sync.service');
-      const syncStatus = wahaHistorySyncService.getBackgroundSyncStatus(DEFAULT_TENANT_ID);
+      const syncStatus = wahaHistorySyncService.getBackgroundSyncStatus(resolveSessionTenantId(request));
 
       if (syncStatus.isSyncing) {
         return reply.status(409).send({
@@ -24,7 +25,7 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const result = await migrationService.extractFromLocalDatabase(DEFAULT_TENANT_ID);
+      const result = await migrationService.extractFromLocalDatabase(resolveSessionTenantId(request));
 
       if (result.emptyDatabase) {
         return reply.status(200).send({
@@ -88,9 +89,9 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
 
       try {
         const { wahaHistorySyncService } = await import('../../services/waha-history-sync.service');
-        const syncStatus = wahaHistorySyncService.getBackgroundSyncStatus(DEFAULT_TENANT_ID);
+        const syncStatus = wahaHistorySyncService.getBackgroundSyncStatus(resolveSessionTenantId(request));
 
-        let where: any = { tenantId: DEFAULT_TENANT_ID, status: status as any };
+        let where: any = { tenantId: resolveSessionTenantId(request), status: status as any };
         if (hasReservation === 'true') {
           where.firstPurchaseAt = { not: null };
         } else if (hasReservation === 'false') {
@@ -140,15 +141,15 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
             take: isLtvSort ? Math.min(1000, limitNum * 20) : limitNum,
           }),
           prisma.legacyStaging.count({ where }),
-          prisma.legacyStaging.count({ where: { tenantId: DEFAULT_TENANT_ID, status: 'PENDING' } }),
-          prisma.legacyStaging.count({ where: { tenantId: DEFAULT_TENANT_ID, status: 'APPROVED' } }),
-          prisma.legacyStaging.count({ where: { tenantId: DEFAULT_TENANT_ID, status: 'COMMITTED' } }),
-          prisma.legacyStaging.count({ where: { tenantId: DEFAULT_TENANT_ID, status: 'REJECTED' } }),
+          prisma.legacyStaging.count({ where: { tenantId: resolveSessionTenantId(request), status: 'PENDING' } }),
+          prisma.legacyStaging.count({ where: { tenantId: resolveSessionTenantId(request), status: 'APPROVED' } }),
+          prisma.legacyStaging.count({ where: { tenantId: resolveSessionTenantId(request), status: 'COMMITTED' } }),
+          prisma.legacyStaging.count({ where: { tenantId: resolveSessionTenantId(request), status: 'REJECTED' } }),
           prisma.legacyStaging.count({
-            where: { tenantId: DEFAULT_TENANT_ID, status: 'PENDING', firstPurchaseAt: { not: null } },
+            where: { tenantId: resolveSessionTenantId(request), status: 'PENDING', firstPurchaseAt: { not: null } },
           }),
-          prisma.conversation.count({ where: { tenant_id: DEFAULT_TENANT_ID } }),
-          prisma.message.count({ where: { tenant_id: DEFAULT_TENANT_ID } }),
+          prisma.conversation.count({ where: { tenant_id: resolveSessionTenantId(request) } }),
+          prisma.message.count({ where: { tenant_id: resolveSessionTenantId(request) } }),
         ]);
 
         // Ambil LTV real dari Customer jika nomor HP sudah tersimpan di database
@@ -228,7 +229,7 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
     try {
       const updated = await prisma.legacyStaging.updateMany({
         where: {
-          tenantId: DEFAULT_TENANT_ID,
+          tenantId: resolveSessionTenantId(request),
           status: 'PENDING',
           firstPurchaseAt: { not: null },
         },
@@ -314,7 +315,7 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
     try {
       const queryStatus = (request.query as any).status || 'PENDING';
       const items = await prisma.legacyStaging.findMany({
-        where: { tenantId: DEFAULT_TENANT_ID, status: queryStatus as any },
+        where: { tenantId: resolveSessionTenantId(request), status: queryStatus as any },
         orderBy: { leadCreatedAt: 'desc' },
       });
       return reply.status(200).send({ success: true, count: items.length, data: items });
@@ -393,7 +394,7 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
       const pageNum = Math.max(1, parseInt(page, 10) || 1);
       const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10) || 50));
 
-      const where: any = { tenant_id: DEFAULT_TENANT_ID, status };
+      const where: any = { tenant_id: resolveSessionTenantId(request), status };
       const [items, total] = await Promise.all([
         prisma.medicalFaqStaging.findMany({
           where,
@@ -464,7 +465,7 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
 
         if (status === 'APPROVED' && generalQuestion && generalAnswer) {
           await knowledgeBaseService.addFaqItem({
-            tenantId: DEFAULT_TENANT_ID,
+            tenantId: resolveSessionTenantId(request),
             category: 'medical',
             question: generalQuestion,
             answer: generalAnswer,
@@ -491,7 +492,7 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
       const pageNum = Math.max(1, parseInt(page, 10) || 1);
       const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10) || 50));
 
-      const where: any = { tenant_id: DEFAULT_TENANT_ID, status };
+      const where: any = { tenant_id: resolveSessionTenantId(request), status };
       const [items, total] = await Promise.all([
         prisma.generalFaqStaging.findMany({
           where,
@@ -564,7 +565,7 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
 
         if (status === 'APPROVED' && generalQuestion && generalAnswer) {
           await knowledgeBaseService.addFaqItem({
-            tenantId: DEFAULT_TENANT_ID,
+            tenantId: resolveSessionTenantId(request),
             category: category || 'general',
             question: generalQuestion,
             answer: generalAnswer,
@@ -596,7 +597,7 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
       const body = request.body || {};
       const { maxChats, maxMessagesPerChat, clearPreviousPending } = body;
       const { wahaHistorySyncService } = await import('../../services/waha-history-sync.service');
-      const syncStatus = wahaHistorySyncService.getBackgroundSyncStatus(DEFAULT_TENANT_ID);
+      const syncStatus = wahaHistorySyncService.getBackgroundSyncStatus(resolveSessionTenantId(request));
 
       if (syncStatus.isSyncing) {
         return reply.status(409).send({
@@ -608,7 +609,7 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
 
       let localConversationCount = 1;
       try {
-        localConversationCount = await prisma.conversation.count({ where: { tenant_id: DEFAULT_TENANT_ID } });
+        localConversationCount = await prisma.conversation.count({ where: { tenant_id: resolveSessionTenantId(request) } });
         if (localConversationCount === 0) {
           return reply.status(200).send({
             success: false,
@@ -623,12 +624,12 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
 
       if (clearPreviousPending) {
         try {
-          await prisma.medicalFaqStaging.deleteMany({ where: { tenant_id: DEFAULT_TENANT_ID, status: 'PENDING' } });
-          await prisma.generalFaqStaging.deleteMany({ where: { tenant_id: DEFAULT_TENANT_ID, status: 'PENDING' } });
+          await prisma.medicalFaqStaging.deleteMany({ where: { tenant_id: resolveSessionTenantId(request), status: 'PENDING' } });
+          await prisma.generalFaqStaging.deleteMany({ where: { tenant_id: resolveSessionTenantId(request), status: 'PENDING' } });
         } catch (e: any) {}
       }
 
-      LegacyHarvestingService.runHarvestingJob(DEFAULT_TENANT_ID, { maxChats, maxMessagesPerChat }).catch((err) =>
+      LegacyHarvestingService.runHarvestingJob(resolveSessionTenantId(request), { maxChats, maxMessagesPerChat }).catch((err) =>
         console.error('[HARVEST JOB ERROR]', err)
       );
 
@@ -647,10 +648,10 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
   fastify.post('/api/admin/harvest/reset-staging', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const medRes = await prisma.medicalFaqStaging.deleteMany({
-        where: { tenant_id: DEFAULT_TENANT_ID, status: 'PENDING' },
+        where: { tenant_id: resolveSessionTenantId(request), status: 'PENDING' },
       });
       const genRes = await prisma.generalFaqStaging.deleteMany({
-        where: { tenant_id: DEFAULT_TENANT_ID, status: 'PENDING' },
+        where: { tenant_id: resolveSessionTenantId(request), status: 'PENDING' },
       });
 
       return reply.status(200).send({
@@ -668,8 +669,8 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
    */
   fastify.delete('/api/admin/harvest/staging/all', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const medRes = await prisma.medicalFaqStaging.deleteMany({ where: { tenant_id: DEFAULT_TENANT_ID } });
-      const genRes = await prisma.generalFaqStaging.deleteMany({ where: { tenant_id: DEFAULT_TENANT_ID } });
+      const medRes = await prisma.medicalFaqStaging.deleteMany({ where: { tenant_id: resolveSessionTenantId(request) } });
+      const genRes = await prisma.generalFaqStaging.deleteMany({ where: { tenant_id: resolveSessionTenantId(request) } });
 
       return reply.status(200).send({
         success: true,
@@ -689,11 +690,11 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
     const { wahaHistorySyncService } = await import('../../services/waha-history-sync.service');
 
     const stats = LegacyHarvestingService.getJobStatus();
-    const syncStatus = wahaHistorySyncService.getBackgroundSyncStatus(DEFAULT_TENANT_ID);
+    const syncStatus = wahaHistorySyncService.getBackgroundSyncStatus(resolveSessionTenantId(request));
 
     let localConversationCount = 0;
     try {
-      localConversationCount = await prisma.conversation.count({ where: { tenant_id: DEFAULT_TENANT_ID } });
+      localConversationCount = await prisma.conversation.count({ where: { tenant_id: resolveSessionTenantId(request) } });
     } catch (_) {}
 
     return reply.status(200).send({

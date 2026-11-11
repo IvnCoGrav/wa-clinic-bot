@@ -6,6 +6,7 @@ import {
   matchInboundText,
   invalidateCtwaCatcherCache,
 } from '../../services/ctwa-text-catcher.service';
+import { resolveSessionTenantId } from './route-helpers';
 
 /**
  * CTWA Greeting Catcher admin API (tenant-scoped).
@@ -33,11 +34,7 @@ interface CatcherPayload {
 }
 
 function resolveTenant(request: FastifyRequest): string {
-  return (
-    (request as any).tenantId ||
-    (request as any).staffTenantId ||
-    DEFAULT_TENANT_ID
-  );
+  return resolveSessionTenantId(request);
 }
 
 function validatePayload(

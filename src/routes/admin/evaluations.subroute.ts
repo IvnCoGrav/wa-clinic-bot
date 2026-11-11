@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../../db/client';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import type { IWahaClient } from '../../integrations/waha/client';
+import { resolveSessionTenantId } from './route-helpers';
 
 const sandboxPhoneLocks = new Map<string, Promise<any>>();
 
@@ -149,7 +150,7 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
 
           const sandboxStateMachine = new ConversationStateMachine(sandboxTypingService);
 
-          const customer = await customerService.getOrCreateCustomer(targetPhone, 'Sandbox Customer', DEFAULT_TENANT_ID);
+          const customer = await customerService.getOrCreateCustomer(targetPhone, 'Sandbox Customer', resolveSessionTenantId(request));
           try {
             await prisma.customer.update({
               where: { id: customer.id },
@@ -157,10 +158,10 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
             });
           } catch (e) {}
 
-          let conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+          let conversation = await conversationService.getOrCreateConversation(customer.id, resolveSessionTenantId(request));
 
           if (combinedRawText.trim().toLowerCase() === '/reset') {
-            await customerService.clearPendingLocation(customer.id, DEFAULT_TENANT_ID);
+            await customerService.clearPendingLocation(customer.id, resolveSessionTenantId(request));
             try {
               await prisma.message.deleteMany({ where: { conversation_id: conversation.id } });
               await prisma.customer.update({
@@ -185,7 +186,7 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
                 humanHandlingSince: null,
                 escalationReason: null,
               },
-              DEFAULT_TENANT_ID
+              resolveSessionTenantId(request)
             );
             return {
               answer:
@@ -241,7 +242,7 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
             }
 
             const v3Result = await V3AgentRunner.processMessage({
-              tenantId: DEFAULT_TENANT_ID,
+              tenantId: resolveSessionTenantId(request),
               customerId: customer.id,
               conversationId: conversation.id,
               phone: customer.phone,
@@ -333,7 +334,7 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
         const days = Math.max(1, Math.min(90, parseInt(request.query?.days || '7', 10) || 7));
         const limit = Math.max(1, Math.min(200, parseInt(request.query?.limit || '100', 10) || 100));
         const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-        const where = { tenant_id: DEFAULT_TENANT_ID, created_at: { gte: since } };
+        const where = { tenant_id: resolveSessionTenantId(request), created_at: { gte: since } };
 
         const [recent, total] = await Promise.all([
           prisma.aiEvaluation.findMany({ where, orderBy: { created_at: 'desc' }, take: limit }),
@@ -376,7 +377,7 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
         const days = Math.max(1, Math.min(90, parseInt(request.query?.days || '7', 10) || 7));
         const limit = Math.max(1, Math.min(200, parseInt(request.query?.limit || '50', 10) || 50));
         const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-        const where = { tenant_id: DEFAULT_TENANT_ID, created_at: { gte: since } };
+        const where = { tenant_id: resolveSessionTenantId(request), created_at: { gte: since } };
 
         const [recent, totalLogs, stats] = await Promise.all([
           prisma.llmAuditLog.findMany({ where, orderBy: { created_at: 'desc' }, take: limit }),

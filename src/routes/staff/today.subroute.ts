@@ -19,6 +19,7 @@ import { ensureStaffSignature } from '../../utils/staff-signature';
 import { EN_ROUTE_STATUS } from '../../domain/reservation-status';
 import { reservationStatusService } from '../../services/reservation-status.service';
 import { createMonotonicSseSequencer } from '../../utils/sse-sequence';
+import { resolveSessionTenantId } from '../admin/route-helpers';
 
 /**
  * Penomoran event SSE monotonik proses-wide (Fase 0.4). Menjamin id selalu naik
@@ -41,7 +42,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
     ) => {
       const staffId = (request as any).staffId;
       const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
-      const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const isSupervisor = isStaffSupervisorRole(role);
       const isAdminImpersonation = !!(request as any).staffSession?.isAdminImpersonation;
       let scope: 'mine' | 'all' = 'mine';
@@ -77,7 +78,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
    * Mengambil daftar staf terapis aktif untuk dropdown delegasi jadwal.
    */
   fastify.get('/api/staff/team-members', async (request: FastifyRequest, reply: FastifyReply) => {
-    const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+    const tenantId = resolveSessionTenantId(request);
     try {
       const members = await prisma.staff.findMany({
         where: { tenant_id: tenantId, active: true },
@@ -105,7 +106,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
     ) => {
       const staffId = (request as any).staffId;
       const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
-      const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const isSupervisor = isStaffSupervisorRole(role);
 
       if (!isSupervisor) {
@@ -138,7 +139,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
    */
   fastify.get('/api/staff/upcoming-schedule', async (request: FastifyRequest, reply: FastifyReply) => {
     const staffId = (request as any).staffId;
-    const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+    const tenantId = resolveSessionTenantId(request);
 
     const schedule = await StaffReservationService.getUpcomingSchedule(staffId, tenantId);
     return reply.status(200).send({ success: true, data: schedule });
@@ -150,7 +151,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
    */
   fastify.get('/api/staff/completed-tasks', async (request: FastifyRequest, reply: FastifyReply) => {
     const staffId = (request as any).staffId;
-    const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+    const tenantId = resolveSessionTenantId(request);
 
     const completed = await StaffReservationService.getCompletedTasks(staffId, tenantId);
     return reply.status(200).send({ success: true, data: completed });
@@ -165,7 +166,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
     '/api/staff/conversations/:id/messages',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const staffId = (request as any).staffId;
-      const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const { id } = request.params;
 
       const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
@@ -207,7 +208,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
     '/api/staff/conversations/:id/read',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const staffId = (request as any).staffId;
-      const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const { id } = request.params;
       const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
       const isSupervisor = isStaffSupervisorRole(role);
@@ -258,7 +259,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
     ) => {
       const staffId = (request as any).staffId;
       const staffName = (request as any).staffSession?.staff?.name || 'Staff Terapis';
-      const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const { id } = request.params;
       const { text, imageB64, thumbB64, mimeType, fileName, replyToMessageId, clientTempId } = request.body || {};
 
@@ -329,7 +330,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       const staffName = (request as any).staffSession?.staff?.name || 'Bidan Terapis';
-      const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const rawPatientName = request.query?.patientName || 'Bunda';
       const patientName = sanitizeCustomerNameForGreeting(rawPatientName) || 'Bunda';
 
@@ -367,7 +368,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       const staffName = (request as any).staffSession?.staff?.name || 'Bidan Terapis';
-      const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const rawPatientName = request.query?.patientName || 'Bunda';
       const patientName = sanitizeCustomerNameForGreeting(rawPatientName) || 'Bunda';
 
@@ -410,7 +411,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
     ) => {
       const staffId = (request as any).staffId;
       const staffName = (request as any).staffSession?.staff?.name || 'Staff Terapis';
-      const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
       const isSupervisor = isStaffSupervisorRole(role);
       const { id } = request.params;
@@ -721,7 +722,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       const staffId = (request as any).staffId;
-      const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
       const isSupervisor = isStaffSupervisorRole(role);
       const { reservationId, lat, lng, speed, heading, accuracy } = request.body || {};
@@ -854,7 +855,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       const staffId = (request as any).staffId;
-      const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
       const isSupervisor = isStaffSupervisorRole(role);
       const { reservationId } = request.body || {};
@@ -885,7 +886,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       const staffId = (request as any).staffId;
       const staffName = (request as any).staffSession?.staff?.name || 'Bidan Terapis';
       const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
-      const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const isSupervisor = isStaffSupervisorRole(role);
       const { id } = request.params;
 
@@ -927,7 +928,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       const staffId = (request as any).staffId;
       const staffName = (request as any).staffSession?.staff?.name || 'Bidan Terapis';
       const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
-      const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const isSupervisor = isStaffSupervisorRole(role);
       const { id } = request.params;
       const forceUnpaid = request.body?.forceUnpaid === true;
@@ -964,7 +965,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
    * secara data-driven dari database.
    */
   fastify.get('/api/staff/payment-info', async (request: FastifyRequest, reply: FastifyReply) => {
-    const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+    const tenantId = resolveSessionTenantId(request);
     const paymentInfo = await StaffReservationService.getPaymentInfo(tenantId);
     return reply.status(200).send({ success: true, data: paymentInfo });
   });
@@ -985,7 +986,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       const staffId = (request as any).staffId;
       const staffName = (request as any).staffSession?.staff?.name || 'Bidan Terapis';
       const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
-      const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const isSupervisor = isStaffSupervisorRole(role);
       const { id } = request.params;
 
@@ -1031,7 +1032,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       const staffId = (request as any).staffId;
       const staffName = (request as any).staffSession?.staff?.name || 'Staff Terapis';
       const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
-      const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const isSupervisor = isStaffSupervisorRole(role);
       const { id } = request.params;
       const { paymentMethod, amount, proofImageB64, notes } = request.body || {};
@@ -1084,7 +1085,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       const staffId = (request as any).staffId;
       const staffName = (request as any).staffSession?.staff?.name || 'Staff Terapis';
       const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
-      const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const isSupervisor = isStaffSupervisorRole(role);
       const { reservationId, lat, lng, accuracyM, housePhotoB64, landmark } = request.body || {};
 
@@ -1118,7 +1119,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
    * Mengambil kapabilitas gateway WhatsApp tenant aktif (apakah mendukung revoke pesan / WAHA vs WABA).
    */
   fastify.get('/api/staff/gateway-capability', async (request: FastifyRequest, reply: FastifyReply) => {
-    const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+    const tenantId = resolveSessionTenantId(request);
     const capability = await liveChatService.getGatewayCapability(tenantId);
     return reply.status(200).send({ success: true, data: capability });
   });
@@ -1139,7 +1140,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       const staffId = (request as any).staffId;
       const staffName = (request as any).staffSession?.staff?.name || 'Bidan Terapis';
       const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
-      const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const isSupervisor = isStaffSupervisorRole(role);
       const { id, messageId } = request.params;
 
@@ -1180,7 +1181,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       const staffId = (request as any).staffId;
       const staffName = (request as any).staffSession?.staff?.name || 'Bidan Terapis';
       const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
-      const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       const isSupervisor = isStaffSupervisorRole(role);
       const { id, messageId } = request.params;
       const { text } = request.body || {};
@@ -1218,7 +1219,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
   fastify.get('/api/staff/live-chat/events', async (request: FastifyRequest, reply: FastifyReply) => {
     const staffId = (request as any).staffId;
     const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
-    const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+    const tenantId = resolveSessionTenantId(request);
     const isSupervisor = isStaffSupervisorRole(role);
 
     reply.hijack();

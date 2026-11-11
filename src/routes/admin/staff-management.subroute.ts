@@ -4,6 +4,7 @@ import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { hashPassword } from '../../utils/bcrypt';
 import { StaffAuthService } from '../../services/staff-auth.service';
 import { auditService } from '../../services/audit.service';
+import { resolveSessionTenantId } from './route-helpers';
 
 export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
   /**
@@ -11,7 +12,7 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
    * Mengambil daftar staff (terapis) untuk keperluan manajemen dan dropdown penugasan.
    */
   fastify.get('/api/admin/staff', async (request: FastifyRequest, reply: FastifyReply) => {
-    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+    const tenantId = resolveSessionTenantId(request);
     try {
       const staffList = await prisma.staff.findMany({
         where: { tenant_id: tenantId },
@@ -64,7 +65,7 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       const { name, phone, password, role = 'THERAPIST' } = request.body || {};
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
 
       if (!name || !phone || !password) {
         return reply.status(400).send({
@@ -169,7 +170,7 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
     ) => {
       const { id } = request.params;
       const { name, phone, password, role, active } = request.body || {};
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
 
       try {
         const existing = await prisma.staff.findFirst({
@@ -240,7 +241,7 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/staff/:id',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const { id } = request.params;
-      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveSessionTenantId(request);
       try {
         const existing = await prisma.staff.findFirst({
           where: { id, tenant_id: tenantId },
@@ -331,7 +332,7 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const tenantId = request.body?.tenant_id || (request as any).tenantId || DEFAULT_TENANT_ID;
+      const tenantId = request.body?.tenant_id || resolveSessionTenantId(request);
       const targetDate = request.body?.date ? new Date(request.body.date) : new Date();
 
       try {

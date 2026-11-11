@@ -9,6 +9,7 @@ import {
   ensureBackupDirectory,
   BACKUP_STORAGE_DIR,
 } from '../../utils/backup-file';
+import { resolveSessionTenantId } from './route-helpers';
 
 export async function backupAdminRoutes(fastify: FastifyInstance) {
   /**
@@ -19,7 +20,7 @@ export async function backupAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/backup/list',
     async (request: FastifyRequest<{ Querystring: { tenantId?: string } }>, reply: FastifyReply) => {
       try {
-        const tenantId = request.query.tenantId || DEFAULT_TENANT_ID;
+        const tenantId = request.query?.tenantId || resolveSessionTenantId(request);
         const backups = await backupService.listAllBackups(tenantId);
         return reply.status(200).send({
           success: true,
@@ -44,7 +45,7 @@ export async function backupAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
-        const tenantId = request.body?.tenantId || DEFAULT_TENANT_ID;
+        const tenantId = request.body?.tenantId || resolveSessionTenantId(request);
         const uploadToDrive = Boolean(request.body?.uploadToDrive);
 
         const dump = await backupService.createDatabaseDump(tenantId);
@@ -127,7 +128,7 @@ export async function backupAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
-        const tenantId = request.body?.tenantId || DEFAULT_TENANT_ID;
+        const tenantId = request.body?.tenantId || resolveSessionTenantId(request);
         const fileName = sanitizeBackupFileName(request.body?.fileName || '');
         const filePath = path.join(BACKUP_STORAGE_DIR, fileName);
 
@@ -167,7 +168,7 @@ export async function backupAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
-        const tenantId = request.body?.tenantId || DEFAULT_TENANT_ID;
+        const tenantId = request.body?.tenantId || resolveSessionTenantId(request);
         const rawFileName = request.body?.fileName || '';
         const base64Data = request.body?.fileBase64 || '';
 
@@ -222,7 +223,7 @@ export async function backupAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
-        const tenantId = request.body?.tenantId || DEFAULT_TENANT_ID;
+        const tenantId = request.body?.tenantId || resolveSessionTenantId(request);
         const force = Boolean(request.body?.force);
         const fileName = sanitizeBackupFileName(request.body?.fileName || '');
         const filePath = path.join(BACKUP_STORAGE_DIR, fileName);
