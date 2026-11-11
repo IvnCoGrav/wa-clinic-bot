@@ -120,6 +120,8 @@ describe('LTV Cache Integrity & Single-Writer Guard', () => {
 
   describe('3. Daily Invariant & Asymmetric Auto-Repair', () => {
     it('detects LTV drift and auto-repairs customer ltv_cache when cache < sum (deficit)', async () => {
+      // K-008: auto-repair WAJIB opt-in.
+      process.env.INVARIANT_MONITOR_AUTOREPAIR = 'true';
       const driftedRows = [
         { id: 'c-drift-1', phone: '6281111111', name: 'Bunda Defisit', ltv_cache: 0, sum_val: 140000 },
       ];
@@ -159,6 +161,7 @@ describe('LTV Cache Integrity & Single-Writer Guard', () => {
     });
 
     it('SAFEGUARD: strictly PREVENTS auto-repair when cache > sum (surplus / data loss evidence), flags manual review and dispatches critical alert', async () => {
+      process.env.INVARIANT_MONITOR_AUTOREPAIR = 'true';
       const driftedExcessRows = [
         { id: 'c-excess-1', phone: '6282222222', name: 'Bunda Riskaamana', ltv_cache: 215000, sum_val: 70000 },
       ];

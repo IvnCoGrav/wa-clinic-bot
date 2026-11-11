@@ -132,7 +132,17 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Test lama disesuaikan:** `fase2-rbac-matrix` memakai `importFaqsDetailed` (kontrak C-012); `ad-watchdog-cooldown` mengharapkan `PENDING` lalu update `SENT` (kontrak M-07).
 - **Gerbang regresi Fase 2F:** 7.075 test / 7.045 lulus / **2 gagal pre-existing #287**; `audit-baseline-diff` → **0 regresi baru**; `verify:backlog` PASS; `security:scan` LULUS 2.156 file.
 
-### 0.7 Gerbang Regresi Fase 1
+### 0.7 Fase 2G — 2 item OPEN (2026-11-11)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **A-012** | Foto tanpa caption hanya di-ack statis bila ada konteks kunjungan; tanpa konteks diserahkan ke triage (tidak mengklaim "tersimpan") | `tests/unit/fast-gate-image-context.test.ts` (2) |
+| **K-008** | Invariant monitor default read-only; auto-repair opt-in `INVARIANT_MONITOR_AUTOREPAIR=true`; kegagalan audit/alert dicatat (bukan `catch {}`) | `tests/unit/invariant-monitor-readonly.test.ts` (2) |
+
+- **Register:** **203 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 52 OPEN**.
+- **Gerbang regresi Fase 2G:** 7.092 test / 7.062 lulus / **2 gagal pre-existing #287**; udit-baseline-diff → **0 regresi baru**; erify:backlog PASS; security:scan LULUS 2.161 file.
+
+### 0.8 Gerbang Regresi Fase 1
 
 | Pemeriksaan | Hasil |
 |---|---|

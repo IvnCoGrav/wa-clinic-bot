@@ -1126,6 +1126,42 @@
       ],
       "verifiedBy": "AI Agent",
       "verifiedAt": "2026-11-11"
+    },
+    "A-012": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/v3/agent/pipeline/fast-response-gate.ts",
+          "line": 189,
+          "contains": "hasVisitContext"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/fast-gate-image-context.test.ts",
+          "contains": "tanpa konteks booking"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
+    },
+    "K-008": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/services/daily-invariant-monitor.service.ts",
+          "line": 110,
+          "contains": "INVARIANT_MONITOR_AUTOREPAIR"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/invariant-monitor-readonly.test.ts",
+          "contains": "default (env kosong)"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
     }
   },
   "known": {

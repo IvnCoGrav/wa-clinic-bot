@@ -181,8 +181,20 @@ export class FastResponseGate {
       };
     }
 
-    // GATE DETERMINISTIK: foto/media murni tanpa caption bermakna (inbound image)
+    // GATE DETERMINISTIK: foto/media murni tanpa caption bermakna (inbound image).
+    // A-012: balasan "sudah disimpan untuk Bidan" HANYA sah bila ada konteks
+    // kunjungan/reservasi. Tanpa itu, gambar bisa berupa pertanyaan produk/
+    // keluhan — wajib diproses triage (bukan diklaim tersimpan).
     if (isPureImageMessage(cleanIncomingText)) {
+      const hasVisitContext = Boolean(
+        session.booking?.reservationId ||
+          session.booking?.isConfirmed ||
+          session.booking?.preferredDate ||
+          (session as any).status === 'SCHEDULED'
+      );
+      if (!hasVisitContext) {
+        return { handled: false, session };
+      }
       const staticPhotoReply = 'Terima kasih fotonya ya Bunda \u{1F3E0}\u2728 Sudah kami terima dan simpan untuk panduan tim Bidan kami saat kunjungan nanti. Ada yang ingin Bunda tanyakan atau konsultasikan lagi? \u{1F917}';
       if (conversationId && !skipDbLogging) {
         try {

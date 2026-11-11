@@ -101,6 +101,13 @@ export interface AutoRepairLtvResult {
   repaired: number;
   flaggedForReview: number;
   excessCustomers: Array<{ id: string; name: string; phone: string; ltv_cache: number; sum_val: number }>;
+  /** K-008: true = mode read-only (default), tidak ada penulisan DB. */
+  readOnly: boolean;
+}
+
+/** K-008: auto-repair WAJIB opt-in; default monitor hanya membaca & melapor. */
+export function isInvariantAutoRepairEnabled(): boolean {
+  return String(process.env.INVARIANT_MONITOR_AUTOREPAIR || '').toLowerCase() === 'true';
 }
 
 /**
@@ -121,14 +128,20 @@ export async function autoRepairLtvDrift(tenantId: string = DEFAULT_TENANT_ID): 
   );
 
   if (!drifted || drifted.length === 0) {
-    return { repaired: 0, flaggedForReview: 0, excessCustomers: [] };
+    return { repaired: 0, flaggedForReview: 0, excessCustomers: [], readOnly: !isInvariantAutoRepairEnabled() };
   }
 
+  const readOnly = !isInvariantAutoRepairEnabled();
   const { customerService } = await import('./customer.service');
   let repaired = 0;
   const excessCustomers: Array<{ id: string; name: string; phone: string; ltv_cache: number; sum_val: number }> = [];
 
   for (const item of drifted) {
+    if (readOnly) {
+      // Mode read-only: laporkan, JANGAN menulis (audit/recalc) apa pun.
+      excessCustomers.push(item);
+      continue;
+    }
     if (item.ltv_cache < item.sum_val) {
       try {
         const newLtv = await customerService.recalculateCustomerLtv(item.id, tenantId);
@@ -174,7 +187,9 @@ export async function autoRepairLtvDrift(tenantId: string = DEFAULT_TENANT_ID): 
             }),
           },
         });
-      } catch {}
+      } catch (auditErr: any) {
+        console.warn('[INVARIANT MONITOR] Gagal menulis audit flag excess LTV:', auditErr?.message || auditErr);
+      }
     }
   }
 
@@ -190,13 +205,16 @@ export async function autoRepairLtvDrift(tenantId: string = DEFAULT_TENANT_ID): 
         tenantId,
         message: `⚠️ PERINGATAN INTEGRITAS: Ditemukan ${excessCustomers.length} customer dengan ltv_cache > ground truth SUM. Auto-repair DITAHAN untuk mencegah penghapusan bukti kehilangan data. Silakan investigasi manual:\n${listText}`,
       });
-    } catch {}
+    } catch (alertErr: any) {
+      console.warn('[INVARIANT MONITOR] Gagal mengirim alert integritas:', alertErr?.message || alertErr);
+    }
   }
 
   return {
     repaired,
     flaggedForReview: excessCustomers.length,
     excessCustomers,
+    readOnly,
   };
 }
 
@@ -215,12 +233,16 @@ export async function runDailyInvariantMonitor(): Promise<void> {
       message: `Audit invariant reservasi menemukan ${report.totalViolations} pelanggaran:\n${summary}`,
     });
 
-    // Auto-repair untuk LTV_CACHE_DRIFT jika ada pelanggaran
+    // K-008: auto-repair hanya berjalan bila diaktifkan eksplisit.
     const ltvViolation = report.violations.find((v) => v.key === 'LTV_CACHE_DRIFT');
     if (ltvViolation && ltvViolation.count > 0) {
       try {
         const result = await autoRepairLtvDrift(tenantId);
-        console.log(`[INVARIANT MONITOR] Auto-repaired ${result.repaired} customer LTV drift(s), flagged ${result.flaggedForReview} for manual review for tenant ${tenantId}.`);
+        console.log(
+          result.readOnly
+            ? `[INVARIANT MONITOR] LTV drift tenant ${tenantId}: ${result.flaggedForReview} customer dilaporkan (read-only, tanpa tulis).`
+            : `[INVARIANT MONITOR] Auto-repaired ${result.repaired} customer LTV drift(s), flagged ${result.flaggedForReview} for manual review for tenant ${tenantId}.`
+        );
       } catch (repErr: any) {
         console.warn('[INVARIANT MONITOR] Error during autoRepairLtvDrift:', repErr?.message);
       }

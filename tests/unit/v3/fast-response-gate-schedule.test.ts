@@ -180,6 +180,8 @@ describe('FastResponseGate — Schedule Verification Handoff (Plan 7)', () => {
     it('FastResponseGate.check: pesan [IMAGE] murni dibalas deterministik 0 token', async () => {
       const session: CustomerGoalSession = {
         genderGreeting: 'Bunda',
+        // A-012: ack foto hanya untuk konteks kunjungan.
+        booking: { reservationId: 'res-photo-1' },
       };
 
       const res = await FastResponseGate.check({
@@ -208,6 +210,7 @@ describe('FastResponseGate — Schedule Verification Handoff (Plan 7)', () => {
     it('FastResponseGate.check: pesan [IMAGE: IMG_xxx.jpg] auto-generated kamera dibalas deterministik 0 token', async () => {
       const session: CustomerGoalSession = {
         genderGreeting: 'Bunda',
+        booking: { reservationId: 'res-photo-2' },
       };
 
       const res = await FastResponseGate.check({
