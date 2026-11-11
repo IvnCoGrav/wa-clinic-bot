@@ -5,6 +5,7 @@ import { CustomerGoalSession, GoalTracker } from '../../state/goal-tracker';
 import { treatmentCatalogService, resolveServiceAudience } from '../../../services/treatment-catalog.service';
 import { maskPhoneNumber, maskToolArgsForLogging } from '../../../utils/pii-masker';
 import { TEMPLATES } from '../../../config/persona';
+import { isSpecificTreatmentNameGrounded } from '../../tools/treatment-name-gate';
 import type { GroundingOutput } from './context-grounder';
 import type { ToolExecutionContext } from '../../tools/tool-registry';
 import type { V3RetrievedChunk } from '../agent-runner';
@@ -433,18 +434,10 @@ export class ToolExecutionPipeline {
         }
       }
       if (fnName === 'get_catalog_and_price') {
-        // P1-3: gate specificTreatmentName (Task 4.5.1) — hanya teruskan bila muncul di pesan user turn ini secara signifikan
+        // P1-3 + C-007: gate specificTreatmentName — hanya teruskan bila nama
+        // muncul di pesan user TURN INI (bukan riwayat).
         if (typeof fnArgs.specificTreatmentName === 'string' && fnArgs.specificTreatmentName.trim()) {
-          const needle = fnArgs.specificTreatmentName.toLowerCase().trim();
-          const hay = (cleanIncomingText || '').toLowerCase();
-          // normalisasi: hilangkan tanda baca, spasi ganda
-          const normHay = hay.replace(/[^a-z0-9]+/g, ' ').trim();
-          const normNeedle = needle.replace(/[^a-z0-9]+/g, ' ').trim();
-          const GENERIC_TREATMENT_WORDS = new Set(['pijat', 'massage', 'spa', 'terapi', 'treatment', 'layanan', 'paket', 'bayi', 'baby', 'anak', 'kids', 'moms', 'ibu', 'bund', 'bunda']);
-          const sigTokens = normNeedle.split(' ').filter((t: string) => t.length >= 3 && !GENERIC_TREATMENT_WORDS.has(t));
-          // Task 4.5.1: Wajib exact substring atau seluruh token signifikan muncul di pesan user
-          const appears = normHay.includes(normNeedle) || (sigTokens.length > 0 && sigTokens.every((tok: string) => normHay.includes(tok)));
-          if (!appears) {
+          if (!isSpecificTreatmentNameGrounded(fnArgs.specificTreatmentName, cleanIncomingText)) {
             delete fnArgs.specificTreatmentName;
           }
         }

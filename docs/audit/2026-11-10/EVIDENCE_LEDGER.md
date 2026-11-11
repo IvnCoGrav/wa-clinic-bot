@@ -215,7 +215,14 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Register:** **218 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 37 OPEN**.
 - **Gerbang regresi Fase 5A:** 7.141 test / 7.111 lulus / **2 gagal pre-existing #287**; `audit-baseline-diff` → **0 regresi baru**; `verify:backlog` PASS; `security:scan` LULUS 2.184 file.
 
-### 0.15 Gerbang Regresi Fase 1
+### 0.15 Fase 5B — gate specificTreatmentName (2026-11-11)
+
+- **C-007:** gate diekstrak ke `src/v3/tools/treatment-name-gate.ts`; nama hanya lolos bila disebut di pesan turn ini; nama generik ditolak. Test adversarial: `tests/unit/v3/treatment-name-gate.test.ts` (4).
+- **A-011 tetap OPEN:** pembatalan efek samping butuh kontrak `AbortSignal` lintas tool-registry & save_reservation (desain/Confirmation Gate).
+- **Register:** **219 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 36 OPEN**.
+- **Gerbang regresi Fase 5B:** 7.145 test / 7.115 lulus / **2 gagal pre-existing #287**; `audit-baseline-diff` → **0 regresi baru**; `verify:backlog` PASS; `security:scan` LULUS 2.188 file.
+
+### 0.16 Gerbang Regresi Fase 1
 
 | Pemeriksaan | Hasil |
 |---|---|
