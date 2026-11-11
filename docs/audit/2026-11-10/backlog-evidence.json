@@ -1306,6 +1306,42 @@
       ],
       "verifiedBy": "AI Agent",
       "verifiedAt": "2026-11-11"
+    },
+    "CFG-12": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/config/ai-models.config.ts",
+          "line": 259,
+          "contains": "isRuntimeLlmProvider"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/ai-provider-runtime-validation.test.ts",
+          "contains": "menolak provider katalog"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
+    },
+    "CFG-16": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/config/followup-templates.ts",
+          "line": 378,
+          "contains": "Post-processing cleanup"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/followup-no-mutilation.test.ts",
+          "contains": "tidak ada mutilasi"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
     }
   },
   "known": {

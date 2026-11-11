@@ -592,9 +592,6 @@ export class FollowUpEngineService {
 
       const normalizeFollowUpGreeting = (text: string): string =>
         text
-          .replace(/Bunda\s+Bunda/gi, 'Bunda')
-          .replace(/dek\s+dek\s+/gi, 'dek ')
-          .replace(/dek\s+si kecil/gi, 'si kecil')
           .replace(/[^\S\r\n]{2,}/g, ' ')
           .replace(/\n{3,}/g, '\n\n')
           .trim();
@@ -611,9 +608,6 @@ export class FollowUpEngineService {
           .replace(/\{name\}/g, cleanName || 'Bunda')
           .replace(/\{time\}/g, timeStr)
           .replace(/\{babyName\}/g, babyName)
-          .replace(/Bunda\s+Bunda/gi, 'Bunda')
-          .replace(/dek\s+dek\s+/gi, 'dek ')
-          .replace(/dek\s+si kecil/gi, 'si kecil')
           .replace(/[^\S\r\n]{2,}/g, ' ')
           .replace(/\n{3,}/g, '\n\n')
           .trim();
@@ -628,9 +622,6 @@ export class FollowUpEngineService {
               .replace(/\{name\}/g, cleanName || 'Bunda')
               .replace(/\{time\}/g, timeStr)
               .replace(/\{babyName\}/g, babyName)
-              .replace(/Bunda\s+Bunda/gi, 'Bunda')
-              .replace(/dek\s+dek\s+/gi, 'dek ')
-              .replace(/dek\s+si kecil/gi, 'si kecil')
               .replace(/[^\S\r\n]{2,}/g, ' ')
               .replace(/\n{3,}/g, '\n\n')
               .trim();

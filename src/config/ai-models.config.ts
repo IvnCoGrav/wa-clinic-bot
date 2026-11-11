@@ -250,6 +250,17 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
 
 export const SUPPORTED_PROVIDERS = ['MiniMax', 'OpenAI', 'DeepSeek', 'Groq', 'Anthropic', 'Alibaba', 'Qwen', 'Kenari', 'SumoPod'];
 
+/**
+ * CFG-12: provider yang BENAR-BENAR diproses runtime (endpoint + adapter ada).
+ * Daftar katalog di atas tidak boleh dipakai sebagai validasi kemampuan.
+ */
+export const RUNTIME_LLM_PROVIDERS = ['KENARI', 'SUMOPOD'] as const;
+
+export function isRuntimeLlmProvider(provider: string | undefined | null): boolean {
+  const p = String(provider || '').trim().toUpperCase();
+  return (RUNTIME_LLM_PROVIDERS as readonly string[]).includes(p);
+}
+
 // === Preset Profiles Standar — Pusat Kendali 1-Klik (User-Centric, Zero-Anxiety) ===
 // Server utama = SumoPod (5 model resmi). Kenari = cadangan (3 model). DeepSeek Direct = last fallback.
 // KENAPA 3 KINERJA (bukan 1 / bukan 7):
@@ -628,8 +639,10 @@ export class AiModelConfigService {
       throw new Error('MEDICAL_CHECK_LOCKED: Deteksi medis bersifat deterministik (Regex/Keywords) dan tidak dapat diubah ke model AI dinamis.');
     }
 
-    if (updates.provider && !SUPPORTED_PROVIDERS.includes(updates.provider)) {
-      throw new Error(`INVALID_PROVIDER: Provider '${updates.provider}' tidak didukung. Provider yang diizinkan: ${SUPPORTED_PROVIDERS.join(', ')}.`);
+    if (updates.provider && !isRuntimeLlmProvider(updates.provider)) {
+      throw new Error(
+        `INVALID_PROVIDER: Provider '${updates.provider}' tidak didukung runtime. Provider yang tersedia: Kenari, SumoPod.`
+      );
     }
 
     if (updates.modelName !== undefined && (!updates.modelName || typeof updates.modelName !== 'string' || !updates.modelName.trim())) {

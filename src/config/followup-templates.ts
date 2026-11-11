@@ -377,11 +377,8 @@ export function getRollingFollowUpMessage(
 
   // Post-processing cleanup for flawless Indonesian phrasing
   const text = rawText
-    .replace(/Bunda\s+Bunda/gi, 'Bunda')
     .replace(/Bunda\s+!/gi, 'Bunda!')
     .replace(/Bunda\s+,/gi, 'Bunda,')
-    .replace(/dek\s+dek\s+/gi, 'dek ')
-    .replace(/dek\s+si kecil/gi, 'si kecil')
     .replace(/[^\S\r\n]{2,}/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim();

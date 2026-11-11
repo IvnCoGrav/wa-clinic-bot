@@ -185,7 +185,18 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Register:** **211 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 44 OPEN**.
 - **Gerbang regresi Fase 4B:** 7.127 test / 7.097 lulus / **2 gagal pre-existing #287**; `audit-baseline-diff` → **0 regresi baru** (+11 failure flaky sebelumnya pulih); `verify:backlog` PASS; `security:scan` LULUS 2.177 file.
 
-### 0.12 Gerbang Regresi Fase 1
+### 0.12 Fase 4C — provider runtime & follow-up tanpa mutilasi (2026-11-11)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **CFG-12** | Validasi provider hanya Kenari/SumoPod (runtime), bukan katalog 9 | `tests/unit/ai-provider-runtime-validation.test.ts` (3) |
+| **CFG-16** | Regex mutilasi kata dihapus dari template & engine; brand tenant async | `tests/unit/followup-no-mutilation.test.ts` (2) |
+
+- **Sisa W2:** `Cfg-009` (audit config), `Cfg-011` (endpoint setelan), `Cfg-017` (dokumen).
+- **Register:** **213 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 42 OPEN**.
+- **Gerbang regresi Fase 4C:** 7.132 test / 7.102 lulus / **2 gagal pre-existing #287**; `audit-baseline-diff` → **0 regresi baru**; `verify:backlog` PASS; `security:scan` LULUS 2.179 file.
+
+### 0.13 Gerbang Regresi Fase 1
 
 | Pemeriksaan | Hasil |
 |---|---|

@@ -234,7 +234,7 @@ describe('AI Model Settings — Endpoints & Preset Registry', () => {
       payload: {
         presetId: 'CUSTOM',
         configs: [
-          { task: 'INTENT_CLASSIFICATION', provider: 'OpenAI', modelName: 'gpt-4o-mini', confidenceThreshold: 0.75 },
+          { task: 'INTENT_CLASSIFICATION', provider: 'Kenari', modelName: 'deepseek-v4-flash', confidenceThreshold: 0.75 },
         ],
       },
     });
@@ -243,8 +243,8 @@ describe('AI Model Settings — Endpoints & Preset Registry', () => {
     expect(body.success).toBe(true);
     const nlu = body.data.find((c: any) => c.task === 'INTENT_CLASSIFICATION');
     expect(nlu).toBeDefined();
-    expect(nlu.provider).toBe('OpenAI');
-    expect(nlu.modelName).toBe('gpt-4o-mini');
+    expect(nlu.provider).toBe('Kenari');
+    expect(String(nlu.modelName)).toContain('deepseek');
     expect(Number(nlu.confidenceThreshold)).toBe(0.75);
   });
 
