@@ -65,4 +65,18 @@ describe('Admin Labels CRUD & Customer Label Assignment (Offline Fallback)', () 
     const body = JSON.parse(res.payload);
     expect(body.success).toBe(true);
   });
+
+  it('4. GET /api/admin/labels terisolasi per tenant (Cfg-012)', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/admin/labels',
+      headers: { 'x-api-key': adminKey, 'x-tenant-id': 'tenant-b' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.payload);
+    expect(body.success).toBe(true);
+    expect(Array.isArray(body.data)).toBe(true);
+    expect(body.data.every((l: any) => l.tenant_id === 'tenant-b')).toBe(true);
+  });
 });

@@ -31,6 +31,16 @@ interface ClickFilters {
   endDate?: string;
 }
 
+/** Cfg-012: tenant peminta (sesi/header/query), bukan hardcode default-tenant. */
+function resolveTenant(request: FastifyRequest): string {
+  const raw =
+    (request as any).tenantId ||
+    (request.headers['x-tenant-id'] as string) ||
+    (request.query as any)?.tenant_id;
+  const t = typeof raw === 'string' ? raw.trim() : '';
+  return t || DEFAULT_TENANT_ID;
+}
+
 function parseClickFilters(query: any): ClickFilters {
   const page = Math.max(1, parseInt(query?.page || '1', 10) || 1);
   const pageSize = Math.min(50, Math.max(1, parseInt(query?.pageSize || '15', 10) || 15));
@@ -126,11 +136,12 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
   fastify.get(
     '/api/admin/debug/meta-clicks',
     async (request: FastifyRequest<{ Querystring: any }>, reply: FastifyReply) => {
+      const tenantId = resolveTenant(request);
       const filters = parseClickFilters(request.query);
       const { page, pageSize } = filters;
 
       try {
-        const where: any = { tenant_id: DEFAULT_TENANT_ID, ...buildDateRange(filters.startDate, filters.endDate), ...BOT_EXCLUDE_CLAUSE };
+        const where: any = { tenant_id: tenantId, ...buildDateRange(filters.startDate, filters.endDate), ...BOT_EXCLUDE_CLAUSE };
         if (filters.search) where.trackingCode = { contains: filters.search, mode: 'insensitive' };
         if (filters.utmCampaign) where.utmCampaign = { contains: filters.utmCampaign, mode: 'insensitive' };
         if (filters.status === 'matched') where.matchedAt = { not: null };
@@ -219,6 +230,7 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
   fastify.get(
     '/api/admin/debug/meta-summary',
     async (request: FastifyRequest<{ Querystring: any }>, reply: FastifyReply) => {
+      const tenantId = resolveTenant(request);
       const query: any = request.query || {};
       const startDate = typeof query.startDate === 'string' && query.startDate ? query.startDate : undefined;
       const endDate = typeof query.endDate === 'string' && query.endDate ? query.endDate : undefined;
@@ -254,18 +266,18 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
       let metaLpvNote: string | null = null;
 
       try {
-        const adClickWhere: any = { tenant_id: DEFAULT_TENANT_ID, ...dateRange, ...BOT_EXCLUDE_CLAUSE };
+        const adClickWhere: any = { tenant_id: tenantId, ...dateRange, ...BOT_EXCLUDE_CLAUSE };
         if (search) adClickWhere.trackingCode = { contains: search, mode: 'insensitive' };
         if (utmCampaign) adClickWhere.utmCampaign = { contains: utmCampaign, mode: 'insensitive' };
 
-        const pageViewWhere: any = { tenant_id: DEFAULT_TENANT_ID, ...dateRange, ...BOT_EXCLUDE_CLAUSE };
+        const pageViewWhere: any = { tenant_id: tenantId, ...dateRange, ...BOT_EXCLUDE_CLAUSE };
         if (utmCampaign) pageViewWhere.utmCampaign = { contains: utmCampaign, mode: 'insensitive' };
 
         // Hitungan BERBASIS EVENT wajib terikat dateRange, bukan all-time.
         // (Bug live: approved all-time → capiEventsDelivered 104 > klik 92.)
-        const mqlWhere: any = { tenant_id: DEFAULT_TENANT_ID, is_mql: true };
+        const mqlWhere: any = { tenant_id: tenantId, is_mql: true };
         if (dateRange.createdAt) mqlWhere.mql_triggered_at = dateRange.createdAt;
-        const approvedWhere: any = { tenant_id: DEFAULT_TENANT_ID, purchase_review_status: 'approved' };
+        const approvedWhere: any = { tenant_id: tenantId, purchase_review_status: 'approved' };
         if (dateRange.createdAt) approvedWhere.purchase_event_sent_at = dateRange.createdAt;
 
         const [
@@ -284,12 +296,12 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
           prisma.adClick.count({ where: adClickWhere }),
           prisma.adClick.count({ where: { ...adClickWhere, matchedAt: { not: null } } }),
           prisma.customer.count({ where: mqlWhere }),
-          prisma.customer.count({ where: { tenant_id: DEFAULT_TENANT_ID, is_mql: true } }),
+          prisma.customer.count({ where: { tenant_id: tenantId, is_mql: true } }),
           prisma.reservation.count({ where: approvedWhere }),
-          prisma.reservation.count({ where: { tenant_id: DEFAULT_TENANT_ID, purchase_review_status: 'approved' } }),
+          prisma.reservation.count({ where: { tenant_id: tenantId, purchase_review_status: 'approved' } }),
           // pending & ignored_outlier = antrian point-in-time (by design tanpa dateRange)
-          prisma.reservation.count({ where: { tenant_id: DEFAULT_TENANT_ID, purchase_review_status: 'pending' } }),
-          prisma.reservation.count({ where: { tenant_id: DEFAULT_TENANT_ID, purchase_review_status: 'ignored_outlier' } }),
+          prisma.reservation.count({ where: { tenant_id: tenantId, purchase_review_status: 'pending' } }),
+          prisma.reservation.count({ where: { tenant_id: tenantId, purchase_review_status: 'ignored_outlier' } }),
           // Rincian sumber: catch-per-query (bukan Promise.all fatal) agar DB live
           // yang BELUM menjalankan migrasi kolom `source` tetap mengembalikan
           // total — UI menyembunyikan rincian bila field absen.
@@ -340,14 +352,14 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
             return t >= gte && t <= lte;
           };
           const pageViewsInMem = Array.from(memoryPageViews.values()).filter((r: any) => {
-            if (r.tenant_id !== DEFAULT_TENANT_ID) return false;
+            if (r.tenant_id !== tenantId) return false;
             if (!isInRange(r.createdAt)) return false;
             if (isBotOrCrawler(r.userAgent)) return false;
             if (utmCampaign && !(r.utmCampaign || '').toLowerCase().includes(utmCampaign.toLowerCase())) return false;
             return true;
           });
           const clicksInMem = Array.from(memoryAdClicks.values()).filter((r: any) => {
-            if (r.tenant_id !== DEFAULT_TENANT_ID) return false;
+            if (r.tenant_id !== tenantId) return false;
             if (!isInRange(r.createdAt)) return false;
             if (isBotOrCrawler(r.userAgent)) return false;
             if (search && !(r.trackingCode || '').toLowerCase().includes(search.toLowerCase())) return false;
@@ -388,7 +400,7 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
       // Kesehatan CAPI (tenant-aware + env fallback), token TIDAK pernah dibocorkan
       let tenant: any = null;
       try {
-        tenant = await prisma.tenant.findUnique({ where: { id: DEFAULT_TENANT_ID } });
+        tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
       } catch {}
       const envPixel = process.env.FB_PIXEL_ID;
       const envToken = process.env.FB_CAPI_ACCESS_TOKEN;
@@ -637,6 +649,7 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
+      const tenantId = resolveTenant(request);
       const body = request.body || {};
       const eventName = body.eventName || 'Contact';
       const allowedEvents = ['Contact', 'Purchase', 'Lead', 'ViewContent', 'InitiateCheckout', 'AddToCart'];
@@ -650,7 +663,7 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
           value: body.value,
           currency: body.currency,
           testEventCode: body.testEventCode,
-          tenantId: DEFAULT_TENANT_ID,
+          tenantId: tenantId,
           ipAddress: request.ip,
           userAgent: request.headers['user-agent'] || 'Admin CAPI Test',
         });
@@ -659,7 +672,7 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
           action: 'TEST_SEND_CAPI_EVENT',
-          targetId: DEFAULT_TENANT_ID,
+          targetId: tenantId,
           payload: { eventName, success: result.success, status: result.status, source: result.source },
           ipAddress: request.ip,
         });
@@ -683,6 +696,7 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
+      const tenantId = resolveTenant(request);
       const body = request.body || ({} as any);
       const { phone, name, treatment, eventName, value, currency, testEventCode } = body;
 

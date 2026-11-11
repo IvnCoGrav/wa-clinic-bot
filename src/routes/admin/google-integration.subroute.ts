@@ -4,6 +4,16 @@ import { googleOAuthClientManager } from '../../integrations/google-contacts/goo
 import { googleContactsService } from '../../services/google-contacts.service';
 import { auditService } from '../../services/audit.service';
 
+/** Cfg-012: tenant peminta (sesi/header/query), bukan hardcode default-tenant. */
+function resolveTenant(request: FastifyRequest): string {
+  const raw =
+    (request as any).tenantId ||
+    (request.headers['x-tenant-id'] as string) ||
+    (request.query as any)?.tenant_id;
+  const t = typeof raw === 'string' ? raw.trim() : '';
+  return t || DEFAULT_TENANT_ID;
+}
+
 export async function googleIntegrationAdminRoutes(fastify: FastifyInstance) {
   /**
    * GET /api/admin/integrations/google/auth-url
@@ -13,7 +23,7 @@ export async function googleIntegrationAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/integrations/google/auth-url',
     async (request: FastifyRequest<{ Querystring: { tenantId?: string } }>, reply: FastifyReply) => {
       try {
-        const tenantId = request.query.tenantId || DEFAULT_TENANT_ID;
+        const tenantId = resolveTenant(request);
         if (!googleOAuthClientManager.isPlatformConfigured()) {
           return reply.status(400).send({
             success: false,
@@ -86,7 +96,7 @@ export async function googleIntegrationAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/integrations/google/status',
     async (request: FastifyRequest<{ Querystring: { tenantId?: string } }>, reply: FastifyReply) => {
       try {
-        const tenantId = request.query.tenantId || DEFAULT_TENANT_ID;
+        const tenantId = resolveTenant(request);
         const status = await googleContactsService.getIntegrationStatus(tenantId);
         return reply.status(200).send({
           success: true,
@@ -118,13 +128,14 @@ export async function googleIntegrationAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       const {
-        tenantId = DEFAULT_TENANT_ID,
+        tenantId: bodyTenantId,
         isEnabled,
         namingTemplate,
         contactLabel,
         autoSyncOnChat,
         autoSyncOnReserve,
       } = request.body || {};
+      const tenantId = bodyTenantId || resolveTenant(request);
 
       try {
         const updated = await googleContactsService.updateSettings(tenantId, {
@@ -166,7 +177,7 @@ export async function googleIntegrationAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const tenantId = request.body?.tenantId || DEFAULT_TENANT_ID;
+      const tenantId = request.body?.tenantId || resolveTenant(request);
 
       try {
         const status = await googleContactsService.getIntegrationStatus(tenantId);
@@ -210,7 +221,7 @@ export async function googleIntegrationAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const tenantId = request.body?.tenantId || DEFAULT_TENANT_ID;
+      const tenantId = request.body?.tenantId || resolveTenant(request);
 
       try {
         const status = await googleContactsService.getIntegrationStatus(tenantId);
@@ -254,7 +265,7 @@ export async function googleIntegrationAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const tenantId = request.body?.tenantId || DEFAULT_TENANT_ID;
+      const tenantId = request.body?.tenantId || resolveTenant(request);
 
       try {
         await googleOAuthClientManager.revokeAndDisconnect(tenantId);
@@ -284,7 +295,7 @@ export async function googleIntegrationAdminRoutes(fastify: FastifyInstance) {
   fastify.get(
     '/api/admin/integrations/google/sheets-config',
     async (request: FastifyRequest<{ Querystring: { tenantId?: string } }>, reply: FastifyReply) => {
-      const tenantId = request.query.tenantId || DEFAULT_TENANT_ID;
+      const tenantId = resolveTenant(request);
       try {
         const { sheetsSyncService } = await import('../../services/sheets/sheets-sync.service');
         const status = await googleContactsService.getIntegrationStatus(tenantId);
@@ -323,7 +334,7 @@ export async function googleIntegrationAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const tenantId = request.body?.tenantId || DEFAULT_TENANT_ID;
+      const tenantId = request.body?.tenantId || resolveTenant(request);
       const body = request.body || {};
       try {
         const { sheetsSyncService } = await import('../../services/sheets/sheets-sync.service');
@@ -357,7 +368,7 @@ export async function googleIntegrationAdminRoutes(fastify: FastifyInstance) {
   fastify.post(
     '/api/admin/integrations/google/sheets-test',
     async (request: FastifyRequest<{ Body: { tenantId?: string } }>, reply: FastifyReply) => {
-      const tenantId = request.body?.tenantId || DEFAULT_TENANT_ID;
+      const tenantId = request.body?.tenantId || resolveTenant(request);
       try {
         const { sheetsSyncService } = await import('../../services/sheets/sheets-sync.service');
         const result = await sheetsSyncService.testConnection(tenantId);

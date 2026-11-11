@@ -330,7 +330,7 @@
         {
           "type": "file",
           "path": "src/routes/admin/waba.subroute.ts",
-          "line": 21,
+          "line": 33,
           "contains": "staffRole !== 'SUPER_ADMIN'"
         },
         {
@@ -366,7 +366,7 @@
         {
           "type": "file",
           "path": "scripts/scan-secrets.ts",
-          "line": 251,
+          "line": 254,
           "contains": "args.includes('--all')"
         },
         {
@@ -449,7 +449,7 @@
         {
           "type": "file",
           "path": "scripts/scan-secrets.ts",
-          "line": 145,
+          "line": 147,
           "contains": "export function scanDocumentationCredential"
         },
         {
@@ -533,7 +533,7 @@
         {
           "type": "file",
           "path": "docs/FEATURE_INVENTORY.md",
-          "line": 198,
+          "line": 199,
           "contains": "22 interval cron"
         },
         {
@@ -803,7 +803,7 @@
         {
           "type": "file",
           "path": "src/routes/admin/meta-attribution.subroute.ts",
-          "line": 605,
+          "line": 617,
           "contains": "Audit log perubahan spend"
         },
         {
@@ -983,7 +983,7 @@
         {
           "type": "file",
           "path": "src/routes/admin.route.ts",
-          "line": 242,
+          "line": 243,
           "contains": "Cfg-004"
         },
         {
@@ -1026,6 +1026,30 @@
           "type": "test",
           "path": "tests/integration/admin-roles-hardening.test.ts",
           "contains": "SYSTEM_ROLE_IMMUTABLE"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
+    },
+    "C-001": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/services/rag-score.ts",
+          "line": 110,
+          "contains": "export function rerankRagCandidates"
+        },
+        {
+          "type": "file",
+          "path": "src/services/knowledge.service.ts",
+          "line": 306,
+          "contains": "rerankRagCandidates(rawResults"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/rag-rerank-integration.test.ts",
+          "contains": "artikel dengan keywords cocok menang"
         }
       ],
       "verifiedBy": "AI Agent",

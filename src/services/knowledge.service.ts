@@ -2,6 +2,7 @@ import { prisma } from '../db/client';
 import { SourceType } from '@prisma/client';
 import { chunkTextDocument } from '../utils/text-chunker';
 import { getStringSimilarity } from '../utils/similarity';
+import { rerankRagCandidates, applyRelativeRagGate } from './rag-score';
 
 const FAQ_SOURCE_TYPE = (SourceType && SourceType.FAQ) ? SourceType.FAQ : ('FAQ' as any);
 const DOC_SOURCE_TYPE = (SourceType && SourceType.DOCUMENT) ? SourceType.DOCUMENT : ('DOCUMENT' as any);
@@ -300,7 +301,10 @@ export class KnowledgeBaseService {
       }
 
       if (rawResults && rawResults.length > 0) {
-        return rawResults.map((r) => ({
+        // C-001 fase 2.2: rerank multi-sinyal (FTS + keywords + similarity)
+        // agar urutan tidak semata-mata bergantung ts_rank mentah.
+        const ranked = rerankRagCandidates(rawResults, userQuery, limit);
+        return ranked.map((r) => ({
           id: r.id,
           tenantId: r.tenantId,
           sourceType: r.sourceType,
@@ -355,7 +359,12 @@ export class KnowledgeBaseService {
         return { ...chunk, similarity: sim, score: sim, rank: sim } as any;
       });
 
-    return matches.slice(0, limit) as any;
+    // C-001 fase 2.2: rerank in-memory (similarity + keywords) + gate relatif.
+    const rankedFallback = rerankRagCandidates(matches, userQuery, limit * 2);
+    return applyRelativeRagGate(rankedFallback, { absoluteFloor: 0.01, relativeFloor: 0.25 }).slice(
+      0,
+      limit
+    ) as any;
   }
 
   /**

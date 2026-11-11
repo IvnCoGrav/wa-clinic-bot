@@ -17,6 +17,16 @@ export interface MemoryLabel {
 
 import { isSystemLabelName, isBypassLabelName } from '../../utils/customer-bypass';
 
+
+/** Cfg-012: tenant peminta (sesi/header/query), bukan hardcode default-tenant. */
+function resolveTenant(request: FastifyRequest): string {
+  const raw =
+    (request as any).tenantId ||
+    (request.headers['x-tenant-id'] as string) ||
+    (request.query as any)?.tenant_id;
+  const t = typeof raw === 'string' ? raw.trim() : '';
+  return t || DEFAULT_TENANT_ID;
+}
 export const DEFAULT_SYSTEM_LABELS = [
   { name: 'Hold', color: '#dc2626', description: 'Penanganan khusus / tahan balasan bot otomatis' },
   { name: 'Admin (CS)', color: '#7c3aed', description: 'Percakapan ditangani manual oleh Admin CS' },
@@ -55,9 +65,10 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
    * Mengambil daftar label untuk tenant (otomatis menginisialisasi default jika kosong).
    */
   fastify.get('/api/admin/labels', async (request: FastifyRequest, reply: FastifyReply) => {
+    const tenantId = resolveTenant(request);
     try {
       let labels = await prisma.label.findMany({
-        where: { tenant_id: DEFAULT_TENANT_ID },
+        where: { tenant_id: tenantId },
         include: {
           _count: {
             select: { customers: true },
@@ -70,10 +81,10 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
       if (labels.length === 0) {
         for (const item of DEFAULT_SYSTEM_LABELS) {
           await prisma.label.upsert({
-            where: { tenant_id_name: { tenant_id: DEFAULT_TENANT_ID, name: item.name } },
+            where: { tenant_id_name: { tenant_id: tenantId, name: item.name } },
             update: { description: item.description },
             create: {
-              tenant_id: DEFAULT_TENANT_ID,
+              tenant_id: tenantId,
               name: item.name,
               color: item.color,
               description: item.description,
@@ -81,7 +92,7 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
           });
         }
         labels = await prisma.label.findMany({
-          where: { tenant_id: DEFAULT_TENANT_ID },
+          where: { tenant_id: tenantId },
           include: {
             _count: {
               select: { customers: true },
@@ -101,7 +112,7 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
       // In-memory fallback
       initMemoryLabels();
       const list = Array.from(memoryLabels.values())
-        .filter((l) => l.tenant_id === DEFAULT_TENANT_ID)
+        .filter((l) => l.tenant_id === tenantId)
         .map((l) => {
           let count = 0;
           for (const key of memoryCustomerLabels) {
@@ -118,13 +129,14 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
    * Memastikan seluruh default system label ter-seed ke DB jika belum ada.
    */
   fastify.post('/api/admin/labels/seed-defaults', async (request: FastifyRequest, reply: FastifyReply) => {
+    const tenantId = resolveTenant(request);
     try {
       for (const item of DEFAULT_SYSTEM_LABELS) {
         await prisma.label.upsert({
-          where: { tenant_id_name: { tenant_id: DEFAULT_TENANT_ID, name: item.name } },
+          where: { tenant_id_name: { tenant_id: tenantId, name: item.name } },
           update: { description: item.description },
           create: {
-            tenant_id: DEFAULT_TENANT_ID,
+            tenant_id: tenantId,
             name: item.name,
             color: item.color,
             description: item.description,
@@ -133,7 +145,7 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
       }
 
       const labels = await prisma.label.findMany({
-        where: { tenant_id: DEFAULT_TENANT_ID },
+        where: { tenant_id: tenantId },
         include: { _count: { select: { customers: true } } },
         orderBy: { name: 'asc' },
       });
@@ -159,6 +171,7 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
+      const tenantId = resolveTenant(request);
       const { name, color = '#008069', description } = request.body || {};
 
       if (!name || !name.trim()) {
@@ -170,7 +183,7 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
       try {
         const existing = await prisma.label.findFirst({
           where: {
-            tenant_id: DEFAULT_TENANT_ID,
+            tenant_id: tenantId,
             name: { equals: trimmedName, mode: 'insensitive' },
           },
         });
@@ -181,7 +194,7 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
 
         const newLabel = await prisma.label.create({
           data: {
-            tenant_id: DEFAULT_TENANT_ID,
+            tenant_id: tenantId,
             name: trimmedName,
             color: color.trim(),
             description: description?.trim() || null,
@@ -195,7 +208,7 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
           targetId: newLabel.id,
           payload: { name: trimmedName, color },
           ipAddress: request.ip,
-          tenantId: DEFAULT_TENANT_ID,
+          tenantId: tenantId,
         });
 
         return reply.status(201).send({ success: true, data: { ...newLabel, is_system: isSystemLabelName(newLabel.name) } });
@@ -204,7 +217,7 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
         const id = `mem_label_${Date.now()}`;
         const newLabel: MemoryLabel = {
           id,
-          tenant_id: DEFAULT_TENANT_ID,
+          tenant_id: tenantId,
           name: trimmedName,
           color: color.trim(),
           description: description?.trim() || null,
@@ -230,12 +243,13 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
+      const tenantId = resolveTenant(request);
       const { id } = request.params;
       const { name, color, description } = request.body || {};
 
       try {
         const existing = await prisma.label.findFirst({
-          where: { id, tenant_id: DEFAULT_TENANT_ID },
+          where: { id, tenant_id: tenantId },
         });
 
         if (!existing) {
@@ -259,7 +273,7 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
           targetId: id,
           payload: data,
           ipAddress: request.ip,
-          tenantId: DEFAULT_TENANT_ID,
+          tenantId: tenantId,
         });
 
         return reply.status(200).send({ success: true, data: { ...updated, is_system: isSystemLabelName(updated.name) } });
@@ -289,11 +303,12 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
+      const tenantId = resolveTenant(request);
       const { id } = request.params;
 
       try {
         const existing = await prisma.label.findFirst({
-          where: { id, tenant_id: DEFAULT_TENANT_ID },
+          where: { id, tenant_id: tenantId },
         });
 
         if (!existing) {
@@ -317,7 +332,7 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
           targetId: id,
           payload: { name: existing.name },
           ipAddress: request.ip,
-          tenantId: DEFAULT_TENANT_ID,
+          tenantId: tenantId,
         });
 
         return reply.status(200).send({ success: true, message: `Label "${existing.name}" berhasil dihapus.` });
@@ -355,6 +370,7 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
+      const tenantId = resolveTenant(request);
       const { id: customerId } = request.params;
       const { labelId, action, labelIds } = request.body || {};
 
@@ -374,7 +390,7 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
         if (Array.isArray(labelIds)) {
           // Resolve all valid label IDs
           const validLabels = await prisma.label.findMany({
-            where: { tenant_id: DEFAULT_TENANT_ID, id: { in: labelIds } },
+            where: { tenant_id: tenantId, id: { in: labelIds } },
           });
           const validLabelIds = validLabels.map((l) => l.id);
 
@@ -404,7 +420,7 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
           if (hasBypass || hasAdmin) {
             try {
               const { followUpService } = await import('../../services/follow-up.service');
-              await followUpService.skipFollowUpsForBypassCustomer(resolvedCustomerId, DEFAULT_TENANT_ID);
+              await followUpService.skipFollowUpsForBypassCustomer(resolvedCustomerId, tenantId);
             } catch {}
           }
 
@@ -433,16 +449,16 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
           const memLbl = memoryLabels.get(labelId);
           const lookupName = memLbl?.name || labelId;
           targetLabel = await prisma.label.findFirst({
-            where: { tenant_id: DEFAULT_TENANT_ID, name: { equals: lookupName, mode: 'insensitive' } },
+            where: { tenant_id: tenantId, name: { equals: lookupName, mode: 'insensitive' } },
           });
           if (!targetLabel) {
             const defItem = DEFAULT_SYSTEM_LABELS.find((d) => d.name.toLowerCase() === lookupName.toLowerCase());
             if (defItem) {
               targetLabel = await prisma.label.upsert({
-                where: { tenant_id_name: { tenant_id: DEFAULT_TENANT_ID, name: defItem.name } },
+                where: { tenant_id_name: { tenant_id: tenantId, name: defItem.name } },
                 update: { description: defItem.description },
                 create: {
-                  tenant_id: DEFAULT_TENANT_ID,
+                  tenant_id: tenantId,
                   name: defItem.name,
                   color: defItem.color,
                   description: defItem.description,
@@ -505,7 +521,7 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
           if (isAssigned && (isBypass || normName.includes('admin'))) {
             try {
               const { followUpService } = await import('../../services/follow-up.service');
-              await followUpService.skipFollowUpsForBypassCustomer(resolvedCustomerId, DEFAULT_TENANT_ID);
+              await followUpService.skipFollowUpsForBypassCustomer(resolvedCustomerId, tenantId);
             } catch {}
           }
         } catch {

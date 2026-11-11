@@ -2,15 +2,27 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../../db/client';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { auditService } from '../../services/audit.service';
+import { isMultiTenantEnabled, resolveSessionTenantId } from './route-helpers';
 
+/**
+ * Cfg-012: tenant route WAJIB dari sesi/tenant eksplisit — body/query tidak
+ * boleh menimpa tenant sesi. Mode multi-tenant fail-closed tanpa tenant.
+ */
 function resolveRouteTenantId(request: FastifyRequest<any>): string {
-  const sessionTenant = (request as any).tenantId;
-  const paramTenant = (request.body as any)?.tenantId || (request.query as any)?.tenantId;
-  // Jika ada sesi admin/staf yang terikat pada tenant spesifik (non-default), prioritaskan sessionTenant
-  if (sessionTenant && sessionTenant !== DEFAULT_TENANT_ID) {
-    return sessionTenant;
+  const bodyTenant = (request.body as any)?.tenantId;
+  if ((request as any).tenantId) {
+    return (request as any).tenantId;
   }
-  return sessionTenant || paramTenant || DEFAULT_TENANT_ID;
+  if (bodyTenant) {
+    return String(bodyTenant).trim();
+  }
+  if (isMultiTenantEnabled()) {
+    const err = new Error('tenantId wajib pada mode multi-tenant') as any;
+    err.statusCode = 401;
+    err.code = 'TENANT_REQUIRED';
+    throw err;
+  }
+  return resolveSessionTenantId(request);
 }
 
 export async function wabaAdminRoutes(fastify: FastifyInstance) {

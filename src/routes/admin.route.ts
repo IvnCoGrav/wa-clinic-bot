@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { safeCompare } from '../utils/auth';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { resolveSessionTenantId } from './admin/route-helpers';
 
 // Re-export stores and helpers for backwards compatibility with tests and external modules
 export {
@@ -112,7 +113,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     if (clientKey && safeCompare(clientKey, adminKey)) {
       isAuthenticated = true;
       identity = (request.headers['x-admin-identity'] || 'API Key Client') as string;
-      (request as any).tenantId = (request.headers['x-tenant-id'] as string) || DEFAULT_TENANT_ID;
+      (request as any).tenantId = resolveSessionTenantId(request);
     } else {
       // PRIORITAS IDENTITAS: sesi STAF divalidasi LEBIH DULU daripada sesi admin.
       // Rasional (bug ghost push live): perangkat yang menyimpan `admin_session`
@@ -155,7 +156,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
           if (validSession) {
             isAuthenticated = true;
             identity = validSession.adminIdentity;
-            (request as any).tenantId = (request.headers['x-tenant-id'] as string) || DEFAULT_TENANT_ID;
+            (request as any).tenantId = resolveSessionTenantId(request);
           }
         } catch (err) {
           if (err instanceof SessionStoreUnavailable) {

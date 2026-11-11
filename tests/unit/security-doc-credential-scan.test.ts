@@ -42,6 +42,12 @@ describe('Secret scanner — kredensial inline dokumentasi (S-001)', () => {
     expect(scanDocumentationCredential('- Skala z memakai token: `z-dialog`, `z-toast`')).toBeNull();
   });
 
+  it('TIDAK menandai nama berkas skrip (bukan kredensial)', () => {
+    expect(
+      scanDocumentationCredential('- **Koreksi penting pada gerbang token:** `check-a11y-strings.mjs` menghitung `#301`')
+    ).toBeNull();
+  });
+
   it('TIDAK menandai placeholder env/template', () => {
     expect(scanDocumentationCredential('- **Password:** `<WAHA_DASHBOARD_PASSWORD_DARI_ENV>`')).toBeNull();
     expect(scanDocumentationCredential('- **Secret:** `WAHA_WEBHOOK_SECRET`')).toBeNull();

@@ -95,7 +95,28 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Gerbang bukti:** `npm run verify:backlog` → `PASS` (38 verified baru, baseline 158/158).
 - **Gerbang regresi:** 7.044 test / 7.011 lulus / 5 gagal: 2 pre-existing #287; 3 time-out flaky saat beban suite penuh (`media-mime-audio` ×2 ~9,5 dtk dan `staff-auth-and-reservation` GPS ×1 ~4 dtk) — ketiganya lulus saat dijalankan terisolasi. Tidak ada regresi kode dari perubahan Fase 2C.
 
-### 0.5 Gerbang Regresi Fase 1
+### 0.5 Fase 2D — Confirmation Gate: tenant seam + RAG rerank (2026-11-11)
+
+**Gate 1 (Opsi A, fase 1.1–1.2) — Ar-003/Cfg-012:**
+
+- Seam `resolveSessionTenantId()` + flag `MULTI_TENANT_ENABLED` di `src/routes/admin/route-helpers.ts`. Default single-tenant tetap; mode multi-tenant **fail-closed 401 TENANT_REQUIRED** bila tenant tidak eksplisit.
+- Handler dimigrasi ke tenant peminta (bukan `default-tenant`): `labels.subroute.ts`, `meta-attribution.subroute.ts`, `google-integration.subroute.ts`, `waba.subroute.ts`, `staff/auth.subroute.ts`.
+- `waba.subroute.ts`: body/query tidak lagi bisa menimpa tenant sesi.
+- Test: `tests/unit/tenant-resolution-seam.test.ts` (6), `tests/integration/admin-tenant-failclosed.test.ts` (3), isolasi label di `tests/integration/labels-admin.test.ts`.
+- **Status tetap OPEN**: 133 file dan domain `livechat`/`follow-up`/`migration`/`settings` belum dimigrasi (fase 1.3–1.4).
+
+**Gate 2 (Opsi A, fase 2.1–2.2) — C-001:**
+
+- Modul murni `src/services/rag-score.ts`: normalisasi `ts_rank`, skor irisan `keywords`, rerank berbobot (FTS 0.5 / similarity 0.35 / keywords 0.15), gate relatif.
+- Terpasang di `knowledge.service.ts` untuk jalur SQL **dan** in-memory fallback.
+- Test: `tests/unit/rag-score.test.ts` (8 adversarial) + `tests/unit/rag-rerank-integration.test.ts` (2, tanpa DB).
+- **C-001 → FIXED** (bukan embedding; tanpa dependency baru).
+
+- **Register:** **197 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 58 OPEN**.
+- **Gerbang bukti:** `npm run verify:backlog` → `PASS` (39 verified baru); `npm run security:scan` → LULUS 2.149 file.
+- **Gerbang regresi:** 7.064 test / 7.033 lulus / 3 gagal: 2 pre-existing #287 + 1 time-out flaky `production_edge_cases` LOCATION_CONFIRMED (7,5 dtk terisolasi, timeout 15 dtk saat beban suite penuh). Tidak ada regresi kode.
+
+### 0.6 Gerbang Regresi Fase 1
 
 | Pemeriksaan | Hasil |
 |---|---|

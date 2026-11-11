@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { StaffAuthService } from '../../services/staff-auth.service';
 import { SessionStoreUnavailable } from '../../services/admin-session.service';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
+import { isMultiTenantEnabled } from '../admin/route-helpers';
 import { verifyPassword } from '../../utils/bcrypt';
 import { checkAccountLockout, recordAccountFailedAttempt, resetAccountLockout } from '../../services/account-lockout.service';
 import { prisma } from '../../db/client';
@@ -39,7 +40,7 @@ export async function staffAuthRoutes(fastify: FastifyInstance) {
       });
     }
 
-    const { phone, password, tenantId = DEFAULT_TENANT_ID } = (request.body || {}) as {
+    const { phone, password, tenantId: bodyTenantId } = (request.body || {}) as {
       phone?: string;
       password?: string;
       tenantId?: string;
@@ -48,6 +49,15 @@ export async function staffAuthRoutes(fastify: FastifyInstance) {
     if (!phone || !password) {
       return reply.status(400).send({ error: 'Nomor HP dan password wajib diisi.' });
     }
+
+    // Cfg-012: multi-tenant wajib menyebut tenant; single-tenant tetap default.
+    if (!bodyTenantId && isMultiTenantEnabled()) {
+      return reply.status(400).send({
+        error: 'tenantId wajib diisi pada mode multi-tenant.',
+        code: 'TENANT_REQUIRED',
+      });
+    }
+    const tenantId = bodyTenantId || DEFAULT_TENANT_ID;
 
     const lockout = checkAccountLockout(phone);
     if (lockout.locked) {

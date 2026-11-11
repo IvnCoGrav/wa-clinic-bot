@@ -127,6 +127,8 @@ const DOC_CREDENTIAL_PATTERN = /^\s*[-*]?\s*(?:[A-Za-z0-9_./-]+\s+){0,4}(?:usern
 const CODE_LIKE_VALUE = /^(?:const|let|var|function|return|import|export|async|await|class|if|for|while)\b/;
 // Token desain/CSS (mis. `z-dialog`, `z-toast`) bukan kredensial.
 const DESIGN_TOKEN_VALUE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)+$/;
+// Nama berkas (mis. `check-a11y-strings.mjs`) bukan kredensial.
+const CODE_FILE_VALUE = /^[\w./-]+\.(?:mjs|cjs|js|ts|tsx|json|ya?ml|md|html|css)$/;
 
 function isPlaceholderCredential(value: string): boolean {
   const v = value.trim();
@@ -152,6 +154,7 @@ export function scanDocumentationCredential(line: string): { matched: string; va
   // bukan kredensial dan tidak boleh memblokir commit dokumen audit.
   if (CODE_LIKE_VALUE.test(value)) return null;
   if (DESIGN_TOKEN_VALUE.test(value)) return null;
+  if (CODE_FILE_VALUE.test(value)) return null;
   return { matched: m[0], value };
 }
 
