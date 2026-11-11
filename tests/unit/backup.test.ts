@@ -192,12 +192,18 @@ describe('Database Backup & Restore Suite', () => {
       // Backup 30 Agu (290 reservasi) vs backup 28 Agu (458 reservasi)
       const aug30Path = path.join(BACKUP_STORAGE_DIR, 'wa_clinic_backup_20260830_191007.sql.gz');
       if (fs.existsSync(aug30Path)) {
+        // I-002: cross-tenant DITOLAK lebih dulu.
         await expect(backupService.restoreDatabaseFromDump(aug30Path, 'test-tenant')).rejects.toThrow(
+          /tidak boleh direstore ke tenant/i
+        );
+
+        // Incomplete guard diuji pada tenant pemilik dump.
+        await expect(backupService.restoreDatabaseFromDump(aug30Path, 'default-tenant')).rejects.toThrow(
           /Validasi kelengkapan backup gagal \(INCOMPLETE\)/i
         );
 
         // Dengan opsi force=true, restore diizinkan
-        const forceResult = await backupService.restoreDatabaseFromDump(aug30Path, 'test-tenant', { force: true });
+        const forceResult = await backupService.restoreDatabaseFromDump(aug30Path, 'default-tenant', { force: true });
         expect(forceResult.success).toBe(true);
 
         const failedWarnings = warnSpy.mock.calls

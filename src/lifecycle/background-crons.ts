@@ -1,6 +1,7 @@
 import { trackInterval, trackTimeout } from './interval-registry';
 
 const inFlightCronTasks = new Set<string>();
+const inFlightCronPromises = new Set<Promise<void>>();
 
 /**
  * Membungkus task cron agar tidak berjalan tumpang tindih jika putaran sebelumnya belum selesai (Ar-007).
@@ -12,11 +13,16 @@ export function createExclusiveCronTask(name: string, fn: () => Promise<void> | 
       return;
     }
     inFlightCronTasks.add(name);
-    try {
+    const run = (async () => {
       await fn();
+    })();
+    inFlightCronPromises.add(run);
+    try {
+      await run;
     } catch (err: any) {
       console.error(`[CRON ERROR] Task '${name}' gagal:`, err?.message || err);
     } finally {
+      inFlightCronPromises.delete(run);
       inFlightCronTasks.delete(name);
     }
   };
@@ -29,6 +35,19 @@ export function isCronTaskInFlight(name: string): boolean {
 
 export function resetInFlightCronTasks(): void {
   inFlightCronTasks.clear();
+  inFlightCronPromises.clear();
+}
+
+/**
+ * K-010: tunggu job cron yang sedang berjalan selesai sebelum proses mati.
+ * Mengembalikan true bila semua selesai dalam batas waktu.
+ */
+export async function drainInFlightCronTasks(timeoutMs = 8000): Promise<boolean> {
+  if (inFlightCronPromises.size === 0) return true;
+  const pending = Array.from(inFlightCronPromises);
+  const timer = new Promise<false>((resolve) => setTimeout(() => resolve(false), Math.max(0, timeoutMs)));
+  const all = Promise.allSettled(pending).then(() => true as const);
+  return Promise.race([all, timer]);
 }
 
 /** Helper: jalankan fn sekali dengan jitter acak 0-30 detik, lalu setInterval normal.

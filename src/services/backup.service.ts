@@ -449,6 +449,25 @@ export class BackupService {
 
     const tables = parsed.tables || {};
 
+    // I-002: dump lintas tenant DILARANG direstore ke tenant lain.
+    const dumpTenantId = parsed?.meta?.tenantId;
+    if (dumpTenantId && dumpTenantId !== tenantId) {
+      throw new Error(
+        `Backup milik tenant '${dumpTenantId}' tidak boleh direstore ke tenant '${tenantId}'.`
+      );
+    }
+    for (const [tableName, rows] of Object.entries(tables)) {
+      if (!Array.isArray(rows)) continue;
+      const foreign = (rows as any[]).find(
+        (row) => row && typeof row === 'object' && row.tenant_id && row.tenant_id !== tenantId
+      );
+      if (foreign) {
+        throw new Error(
+          `Backup terkontaminasi: tabel '${tableName}' memuat baris tenant '${foreign.tenant_id}' (target '${tenantId}'). Restore dibatalkan.`
+        );
+      }
+    }
+
     // 6.3 Validasi kelengkapan data (Completeness Guard)
     // Cek apakah jumlah baris pada backup turun > 20% dibanding data aktif di DB atau backup sebelumnya
     if (!options?.force) {

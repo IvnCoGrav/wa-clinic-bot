@@ -20,15 +20,15 @@ Register ini merupakan otoritas tunggal (*single source of truth*) yang menginte
 |---|---|---:|---:|---:|---:|---:|
 | **Track A** | Modul 01–05 (DataAccess, Config, Utils, Domain, Ingress) | **96** | 89 | 2 DUP / 3 KNOWN | 0 | 2 |
 | **S4 Gap Audit** | Modul 06, 12, 15, 16 (StateMachine, FollowUp, AdminAPI, Delivery) | **50** | 48 | 1 (API-04) | 1 (SM-02) | 0 |
-| **Track B** | Modul 07–14 (Gateway, V3 AI, Cron, Settings, Web App, Tracking) | **122** | 82 | 3 DUP | 3 | 34 |
-| **TOTAL KONSOLIDASI** | **16 Modul Lengkap** | **268** | **219** | **5 DUP / 4 KNOWN** | **4** | **36** |
+| **Track B** | Modul 07–14 (Gateway, V3 AI, Cron, Settings, Web App, Tracking) | **122** | 85 | 3 DUP | 3 | 31 |
+| **TOTAL KONSOLIDASI** | **16 Modul Lengkap** | **268** | **222** | **5 DUP / 4 KNOWN** | **4** | **33** |
 
 *Catatan status final (FREEZE + FASE 1 EVIDENCE GATE + FASE 2A/2B 2026-11-10 — sertifikasi `242 FIXED` dicabut):*
 1. **Track A (96 item):** 87 FIXED terverifikasi (termasuk `S-001`, `UTL-11`), **0 UNVERIFIED**, 2 DUPLICATE (`CFG-06`, `CFG-07`), 3 KNOWN (`DOM-02`, `ING-09`, `ING-10`), **4 OPEN** (`CFG-12`, `UTL-15`, `CFG-16`, `CFG-17`), 0 PARTIAL.
 2. **S4 (50 item):** 48 FIXED terverifikasi, **1 UNVERIFIED** (`SM-02` — terbukti inert), 1 KNOWN (`API-04`), 0 PARTIAL, 0 OPEN.
 3. **Track B (122 item):** 72 FIXED (termasuk **6 re-sertifikasi Fase 1**, **4 Fase 2A**, **22 triage Fase 2B**, **5 Fase 2C**, **1 Fase 2D**, **4 Fase 2F**, **2 Fase 2G**, **4 Fase 3A**), **3 UNVERIFIED** (`SM-02`, `C-002`, `C-006`, `A-013`), 3 DUPLICATE (`S-04`, `K-003`, `Cfg-005`), 0 KNOWN, **44 OPEN**, 0 PARTIAL.
 4. **Modul 11 (Customer/Catalog/Location):** 12 temuan CCL-01 s.d. CCL-12 beririsan dengan Track A; status mengikuti Track A.
-5. **Net Status Register:** 268 temuan — **219 FIXED terverifikasi, 4 UNVERIFIED, 5 DUPLICATE, 4 KNOWN, 36 OPEN**. Gate F4 **BELUM terpenuhi** (36 OPEN + 4 UNVERIFIED); bukti per item di [`EVIDENCE_LEDGER.md`](../audit/2026-11-10/EVIDENCE_LEDGER.md) dan manifest mesin [`backlog-evidence.json`](../audit/2026-11-10/backlog-evidence.json).
+5. **Net Status Register:** 268 temuan — **222 FIXED terverifikasi, 4 UNVERIFIED, 5 DUPLICATE, 4 KNOWN, 33 OPEN**. Gate F4 **BELUM terpenuhi** (33 OPEN + 4 UNVERIFIED); bukti per item di [`EVIDENCE_LEDGER.md`](../audit/2026-11-10/EVIDENCE_LEDGER.md) dan manifest mesin [`backlog-evidence.json`](../audit/2026-11-10/backlog-evidence.json).
 
 ---
 

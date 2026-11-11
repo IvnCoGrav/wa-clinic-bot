@@ -110,13 +110,22 @@ export class WahaGatewayDriver implements WhatsAppGateway {
   }
 
   async sendTemplateMessage(
-    to: string,
+    _to: string,
     _templateName: string,
     _languageCode: string,
-    components: TemplateComponent[]
+    _components: TemplateComponent[]
   ): Promise<SendResult> {
-    const text = this.interpolateTemplate(components);
-    return this.sendTextMessage(to, text);
+    // W-011: WAHA tidak punya API template Meta. Jangan mengirim teks palsu
+    // `Template[...]` ke customer — beri kegagalan eksplisit agar pemanggil
+    // memakai jalur teks biasa.
+    return {
+      success: false,
+      provider: 'WAHA',
+      error: {
+        code: 'WAHA_TEMPLATE_UNSUPPORTED',
+        message: 'WAHA tidak mendukung template Meta; gunakan pesan teks biasa.',
+      },
+    };
   }
 
   async sendImageMessage(to: string, imageUrl: string, caption?: string, options?: { replyToMessageId?: string }): Promise<SendResult> {
@@ -196,14 +205,7 @@ export class WahaGatewayDriver implements WhatsAppGateway {
     return `${phone}@c.us`;
   }
 
-  private interpolateTemplate(components: TemplateComponent[]): string {
-    const body = components.find(c => c.type === 'body');
-    if (!body) return '';
 
-    return body.parameters.reduce<string>((text, param, i) => {
-      return text.replace(`{{${i + 1}}}`, param.value);
-    }, `Template[${body.parameters.map(p => p.value).join(', ')}]`);
-  }
 
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));

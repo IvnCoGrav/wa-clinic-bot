@@ -222,7 +222,18 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Register:** **219 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 36 OPEN**.
 - **Gerbang regresi Fase 5B:** 7.145 test / 7.115 lulus / **2 gagal pre-existing #287**; `audit-baseline-diff` → **0 regresi baru**; `verify:backlog` PASS; `security:scan` LULUS 2.188 file.
 
-### 0.16 Gerbang Regresi Fase 1
+### 0.16 Fase 6A — restore tenant, template WAHA, drain cron (2026-11-11)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **I-002** | Restore menolak dump beda tenant / baris terkontaminasi | `tests/unit/backup-restore-tenant-guard.test.ts` (2) |
+| **W-011** | WAHA `sendTemplateMessage` gagal eksplisit (tidak kirim teks palsu) | `tests/unit/v3/waha-template-unsupported.test.ts` + `whatsapp-gateway.test.ts` |
+| **K-010** | Worker shutdown drain cron in-flight sebelum queue/DB ditutup | `tests/unit/cron-drain-shutdown.test.ts` (3) |
+
+- **Register:** **222 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 33 OPEN**.
+- **Gerbang regresi Fase 6A:** 7.151 test / 7.120 lulus / 3 gagal: 2 pre-existing #287 + 1 `queue.test.ts` FIFO (environment-dependent, Redis lokal; lulus dengan `DISABLE_REDIS=true`) — bukan regresi kode. `verify:backlog` PASS; `security:scan` LULUS 2.191 file.
+
+### 0.17 Gerbang Regresi Fase 1
 
 | Pemeriksaan | Hasil |
 |---|---|

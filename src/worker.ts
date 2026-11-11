@@ -47,6 +47,20 @@ export async function shutdownWorker(signal: string, shouldExit = true): Promise
     console.error('[WORKER SHUTDOWN] clearAllIntervals gagal:', e?.message);
   }
 
+  // K-010: job cron yang sedang berjalan diberi kesempatan selesai (backup/
+  // sheets/export) sebelum queue & DB ditutup.
+  try {
+    const { drainInFlightCronTasks } = await import('./lifecycle/background-crons');
+    const drained = await drainInFlightCronTasks(Math.max(1000, FORCE_EXIT_MS - 2000));
+    console.log(
+      drained
+        ? '[WORKER SHUTDOWN] Seluruh job cron in-flight selesai.'
+        : '[WORKER SHUTDOWN] Batas drain habis — sebagian job cron mungkin terpotong.'
+    );
+  } catch (e: any) {
+    console.error('[WORKER SHUTDOWN] drainInFlightCronTasks gagal:', e?.message);
+  }
+
   // Task S2.5: urutan yang benar — flush burst SEBELUM menutup queue service
   try {
     const { burstCoalesceService } = await import('./services/burst-coalesce.service');

@@ -77,18 +77,16 @@ describe('WhatsAppGateway — WahaGatewayDriver', () => {
   });
 
   describe('sendTemplateMessage', () => {
-    it('should interpolate template params and send as text', async () => {
+    it('should reject template send explicitly (WAHA tidak mendukung template Meta)', async () => {
       const result = await driver.sendTemplateMessage(
         '628123',
         'appointment_reminder',
         'id',
         [{ type: 'body', parameters: [{ type: 'text', value: 'Bidan Yusi' }, { type: 'text', value: '10:00' }] }]
       );
-      expect(result.success).toBe(true);
-      expect(mockClient.sendText).toHaveBeenCalledWith(
-        '628123@c.us',
-        expect.stringContaining('Bidan Yusi')
-      );
+      expect(result.success).toBe(false);
+      expect((result.error as any)?.code).toBe('WAHA_TEMPLATE_UNSUPPORTED');
+      expect(mockClient.sendText).not.toHaveBeenCalled();
     });
   });
 
