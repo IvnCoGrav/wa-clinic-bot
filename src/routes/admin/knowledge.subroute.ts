@@ -61,7 +61,11 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
           totalPages: Math.max(1, Math.ceil(total / pageSize)),
         });
       } catch (err: any) {
-        return reply.status(200).send({ success: true, data: [], total: 0, page: 1, pageSize: 200, totalPages: 1 });
+        // Ar-005: jangan 200 + data kosong saat DB gagal di produksi.
+        if (process.env.NODE_ENV === 'production') {
+          return reply.status(503).send({ success: false, code: 'DATABASE_UNAVAILABLE', error: 'Daftar knowledge tidak dapat dimuat.' });
+        }
+        return reply.status(200).send({ success: true, degraded: true, data: [], total: 0, page: 1, pageSize: 200, totalPages: 1 });
       }
     }
   );
@@ -99,7 +103,10 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
 
       return reply.status(200).send({ success: true, data });
     } catch (err: any) {
-      return reply.status(200).send({ success: true, data: [] });
+      if (process.env.NODE_ENV === 'production') {
+        return reply.status(503).send({ success: false, code: 'DATABASE_UNAVAILABLE', error: 'Daftar pertanyaan belum terjawab tidak dapat dimuat.' });
+      }
+      return reply.status(200).send({ success: true, degraded: true, data: [] });
     }
   });
 

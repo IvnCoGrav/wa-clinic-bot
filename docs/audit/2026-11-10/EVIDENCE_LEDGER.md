@@ -155,7 +155,19 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Register:** **207 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 48 OPEN**.
 - **Gerbang regresi Fase 3A:** 7.108 test / 7.078 lulus / **2 gagal pre-existing #287**; `audit-baseline-diff` → **0 regresi baru**; `verify:backlog` PASS; `security:scan` LULUS 2.165 file.
 
-### 0.9 Gerbang Regresi Fase 1
+### 0.9 Fase 3B — sesi staf & kejujuran DB knowledge (2026-11-11)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **S-01** | Restore sesi staf hanya dari cookie HttpOnly; token body/localStorage ditolak 401 | `tests/integration/staff-routes.test.ts` (29, termasuk 3 kontrak baru) |
+| **S-008 (staf)** | Restore wajib header AJAX (403) + cookie `SameSite=Strict` | idem |
+| **Ar-005 (sebagian)** | GET knowledge chunks/unanswered: produksi 503, non-produksi `degraded` | `tests/integration/knowledge-db-failure-honesty.test.ts` (5) |
+
+- **S-03 tertahan:** butuh penanda persisten (kolom DB) → W6.
+- **Register:** **208 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 47 OPEN**.
+- **Gerbang regresi Fase 3B:** 7.113 test / 7.082 lulus / 3 gagal: 2 pre-existing #287 + **1 environment-dependent** `queue.test.ts` FIFO (gagal hanya saat Redis lokal aktif/BullMQ warm-up; lulus 11/11 dengan `DISABLE_REDIS=true`) — bukan regresi kode. `verify:backlog` PASS; `security:scan` LULUS 2.173 file.
+
+### 0.10 Gerbang Regresi Fase 1
 
 | Pemeriksaan | Hasil |
 |---|---|

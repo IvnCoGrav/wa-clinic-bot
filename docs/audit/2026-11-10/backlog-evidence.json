@@ -911,7 +911,7 @@
         {
           "type": "file",
           "path": "src/routes/admin/knowledge.subroute.ts",
-          "line": 206,
+          "line": 213,
           "contains": "where: { id, tenant_id: tenantId }"
         },
         {
@@ -1079,7 +1079,7 @@
         {
           "type": "file",
           "path": "src/routes/admin/knowledge.subroute.ts",
-          "line": 262,
+          "line": 66,
           "contains": "DATABASE_UNAVAILABLE"
         },
         {
@@ -1230,6 +1230,24 @@
           "type": "test",
           "path": "tests/integration/waha-webhook-unsigned-failclosed.test.ts",
           "contains": "fail-closed tanpa secret"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
+    },
+    "S-01": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/routes/staff/auth.subroute.ts",
+          "line": 150,
+          "contains": "NO_SESSION_COOKIE"
+        },
+        {
+          "type": "test",
+          "path": "tests/integration/staff-routes.test.ts",
+          "contains": "token dari body/localStorage DITOLAK"
         }
       ],
       "verifiedBy": "AI Agent",

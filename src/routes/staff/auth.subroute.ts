@@ -139,19 +139,24 @@ export async function staffAuthRoutes(fastify: FastifyInstance) {
 
   /**
    * POST /api/staff/auth/restore
-   * Mengembalikan cookie staff_session dari token yang disimpan di localStorage (fallback PWA).
-   * Dipakai saat browser kehilangan cookie (mis. PWA Android ditutup) tapi sesi server masih valid.
+   * S-01/S-008: satu sumber sesi = cookie HttpOnly. Token dari body/localStorage
+   * TIDAK diterima (rawan XSS/session fixation). Endpoint hanya memperpanjang
+   * sesi yang cookie-nya masih valid, dengan proteksi CSRF header.
    */
   fastify.post('/api/staff/auth/restore', async (request, reply) => {
-    const body = (request.body || {}) as { token?: string };
-    const token = (body.token || '').trim();
-    if (!token) {
-      return reply.status(400).send({ error: 'Token wajib diisi.' });
+    const cookieHeader = String(request.headers['cookie'] || '');
+    const cookieToken = cookieHeader.match(/staff_session=([^;]+)/)?.[1];
+    if (!cookieToken) {
+      return reply.status(401).send({ error: 'Sesi tidak ditemukan. Silakan login kembali.', code: 'NO_SESSION_COOKIE' });
+    }
+    // S-008: restore adalah POST state-changing → wajib header AJAX (anti CSRF form).
+    if (String(request.headers['x-requested-with'] || '') !== 'XMLHttpRequest') {
+      return reply.status(403).send({ error: 'Permintaan restore wajib melalui AJAX.', code: 'CSRF_HEADER_REQUIRED' });
     }
 
     let session;
     try {
-      session = await StaffAuthService.validateSession(token);
+      session = await StaffAuthService.validateSession(cookieToken);
     } catch (err) {
       if (err instanceof SessionStoreUnavailable) {
         return reply.status(503).send({
@@ -171,7 +176,7 @@ export async function staffAuthRoutes(fastify: FastifyInstance) {
         .split(',')[0]
         .trim() === 'https';
 
-    const cookieValue = `staff_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${
+    const cookieValue = `staff_session=${cookieToken}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000${
       isSecureRequest ? '; Secure' : ''
     }`;
     // Sanitasi sesi silang saat restore sesi staf (cegah sesi ganda).

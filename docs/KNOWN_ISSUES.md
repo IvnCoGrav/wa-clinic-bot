@@ -14,7 +14,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Catatan efisiensi:** belum ada profiling/benchmark di audit ini; klaim efisiensi hanya struktural (cache ber-TTL, bounded map, atomic claim, WIB bounds). Sisa inefisiensi: `UTL-15`/`CFG-17`/`W-006` (cache per proses), `I-011` (tanpa kuota/circuit per tenant), `K-010` (tanpa drain shutdown).
 - **Rencana:** pecah 9 God file per domain (satu PR per file + test pemanggil), ganti `as any` bertahap di jalur transaksional, hapus dead export dengan bukti pencarian, lalu jalankan benchmark ringan (latensi webhook & retrieval).
 
-## 325. [Audit Eksekusi F0–F6] Sertifikasi 242 FIXED Dicabut — 4 Item UNVERIFIED, 48 OPEN (2026-11-11, OPEN — Fase 0/1/2A–3A)
+## 325. [Audit Eksekusi F0–F6] Sertifikasi 242 FIXED Dicabut — 4 Item UNVERIFIED, 47 OPEN (2026-11-11, OPEN — Fase 0/1/2A–3B)
 
 - **Status:** OPEN — sertifikasi lama dicabut; gerbang bukti otomatis sudah terpasang (Fase 1). Kode produksi belum diubah. **Deploy produksi diblokir** sampai Fase 0–5 lulus.
 - **Laporan audit:** `docs/audit/2026-11-10/EVIDENCE_LEDGER.md`.
@@ -78,7 +78,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - **Area kerja pengguna (tidak disentuh):** `Cfg-015`, `M-04`, `M-05`, `S-02` (landing/pricelist/dashboard).
   - **Butuh Confirmation Gate baru:** `Cfg-013` (matriks otorisasi tulis katalog/tier/SOP), `A-011` (timeout tool tidak membatalkan efek samping), `Ar-003` lanjutan (service/worker, masih 459 referensi).
   - **Batch offline berikutnya:** `S-03`, `S-06`, `S-07`, `S-08`, `S-09`, `S-011`, `S-012`, `S-016`, `M-02`, `M-03`, `M-06`, `M-07` (selesai), `M-10`, `K-005`, `K-009`, `K-010`, `I-006`, `I-007`, `I-011`, `C-008`, `C-010`, `Cfg-007`, `Cfg-009`, `Cfg-010`, `Cfg-011`, `Cfg-017`, `CFG-12`, `CFG-16`, `CFG-17`, `W-006`, `W-010`, `W-011`, `UTL-15`, `S-10`.
-  - **Catatan flaky (bukan regresi):** `media-mime-audio` (2 test, ~9,5 dtk) dan `production_edge_cases` LOCATION_CONFIRMED (~7,5 dtk) time-out saat beban suite penuh; lulus saat dijalankan terisolasi. Perlu naikkan timeout/optimasi fixture.
+  - **Catatan flaky (bukan regresi):** `media-mime-audio` (2 test, ~9,5 dtk) dan `production_edge_cases` LOCATION_CONFIRMED (~7,5 dtk) time-out saat beban suite penuh; lulus terisolasi. `queue.test.ts` FIFO (2) gagal bila Redis lokal aktif (BullMQ warm-up >5 dtk); lulus 11/11 dengan `DISABLE_REDIS=true`. Perlu naikkan timeout/optimasi fixture.
   - **Deploy produksi tetap DIBLOKIR** sampai Fase 0–5 selesai.
 - **Tindakan Fase 3A (selesai 2026-11-11):**
   - **S-07:** verifikasi nominal pembayaran di server (item + ongkir); mismatch ditolak.
@@ -86,6 +86,11 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - **S-016:** compose hardening `no-new-privileges` + `cap_drop: ALL` (Dockerfile sudah non-root).
   - **Ar-008:** webhook WAHA/WABA fail-closed tanpa secret (flag izin eksplisit untuk dev).
   - Register menjadi **207 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 48 OPEN**.
+- **Tindakan Fase 3B (selesai 2026-11-11):**
+  - **S-01:** restore sesi staf cookie-only (`HttpOnly`), token body/localStorage ditolak; `SameSite=Strict` + header AJAX (S-008 staf).
+  - **Ar-005 (sebagian):** GET knowledge chunks/unanswered 503 di produksi saat DB gagal; non-produksi `degraded`.
+  - **S-03:** tetap OPEN — butuh kolom DB untuk status trip lintas proses (W6).
+  - Register menjadi **208 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 47 OPEN**.
 - **Temuan tambahan:** `SM-02` berstatus FIXED tetapi **inert** — `getTenantFormHeadersAsync`/`registerTenantFormHeaders` **0 pemanggil produksi** (`src/utils/reservation-text-parser.ts:131,162`).
 - **F5/F6 tidak dieksekusi:** Tidak ada artefak `after-f5.json`/`after-f6.json`; `scripts/deploy-prod.sh` tidak memvalidasi `APP_DOMAIN`/`BACKUP_ENCRYPTION_KEY`; `backup:verify` tidak ada di `package.json`. F6.1 menyebut “kelulusan penuh” padahal artefak 6.953 test berisi **6.923 lulus / 2 gagal pre-existing #287 / 28 skip**. Klaim “37 test isolasi 2 tenant” tidak punya suite/script rujukan; yang terverifikasi 5 suite / 23 test isolasi eksplisit lulus.
 - **Tindakan Fase 0 (selesai 2026-11-10):**
@@ -132,10 +137,21 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Fase 2 SELESAI untuk UI chrome (2026-11-10):** `lang="id"`, judul netral + runtime dari env, em dash UI 118 -> 0 (sisa 2 di dev-only/komentar), emoji 423 -> 151 (sisanya konten pesan/picker/push), `aria-current` pada menu aktif, `BootProgress` role=status. 18 span kosong hasil pembersihan dibersihkan ulang. `npm run build` 0, `check:contrast` OK, `check:a11y` 490/490.
 - **Fase 3 SELESAI kecuali 2 modal (2026-11-10):** skala `--z-*` + `z-dialog`/`z-toast` terpasang; `ui/Modal.tsx` ditulis ulang (focus trap, Escape, `aria-modal`, fokus awal/pengembalian, varian sheet, `headerAction`, `bodyClassName`, `data-modal-active/close`); `UiFeedback` konfirmasi + toast diberi semantik, Escape, dan jeda hover; 43 tombol ikon diberi `aria-label`; **53 komponen** memakai `Modal`. Overlay manual 70 blok/45 file -> 17 blok/12 file. Baseline a11y 490 -> 354. Ditunda karena butuh `variant="full"` + prop `layer`: `CreateReservationModal` dan `InvoiceGeneratorModal`. Drawer, popover, dan lightbox tetap mandiri.
 - **Fase 4 SEBAGIAN (2026-11-10):** `ui/PageHeader.tsx` dan `ui/StateViews.tsx` dibuat; judul `h1` diseragamkan di 17 halaman, setiap halaman produksi tepat 1 `h1`; `LoadingState` di fallback Suspense; `SkeletonRows` di daftar Live Chat; `EmptyState` di Reservations, TodayTreatments, CustomerDatabase. Verifikasi mengoreksi audit awal: `ClinicServices` tidak butuh paginasi (katalog 43 baris), bukan ">200". Sisa: `ErrorState` (butuh state error persisten per halaman) dan pengukuran antrean `MetaCapiQueue`.
+- **Plan 002 — eksekusi Fase 1-3 (2026-11-11):**
+  - **Fase 1 SELESAI (A-003):** `scripts/build_pricelist.js` sekarang **berhenti** (exit 1 + pesan `BERHENTI`) kecuali dijalankan dengan `--force`. Artefak `src/landing/public/pricelist.html` tetap menjadi sumber kebenaran. Terverifikasi: menjalankan skrip tanpa `--force` tidak menyentuh artefak.
+  - **Fase 2 SELESAI (A-002, diperluas):** gerbang `check-date-format.mjs` kini memindai `components/`, `pages/`, **`hooks/`, dan `utils/`**, dan menelusuri **satu pemanggilan penuh** (bukan per baris) sehingga pemanggilan multi-baris tidak lagi dilaporkan palsu.
+    - **Celah baru yang ditemukan & ditutup:** 22 pemakaian `Date.prototype.toLocaleString()` (bukan `toLocaleDateString`) menampilkan tanggal+jam memakai **zona perangkat**. Gerbang sebelumnya tidak memeriksanya sama sekali. Kini gerbang ikut memeriksa `toLocaleString` bila argumennya berisi opsi tanggal (`dateStyle`, `timeStyle`, `day`, `hour`, dst.) atau penerimanya jelas objek tanggal, tanpa menuduh pemakaian angka (mis. ongkir.toLocaleString("id-ID")).
+    - 22 situs dimigrasikan ke `formatWib()`: `CreateReservationModal` (2), `LiveChatCustomerModal`, `DailyReportPanel`, `GoogleIntegrationPanel`, `ReservationDetailModal` tidak berubah, `AiEvaluations` (3), `ChatExport`, `ChatMigration` (2), `CustomerDatabase`, `Debug`, `FinancialAnalytics` (2), `FollowUpQueue`, `KnowledgeBase` (3), `MetaCapiQueue`, `MetaClickCatcher`, `CustomerFollowUpSection`.
+    - `useLiveChatNotification` (jam pada toast pesan masuk) dan `imageWatermark` (timestamp bukti foto) kini memakai `formatWibClock`/`formatWib`, bukan zona perangkat staf.
+  - **Fase 3 SEBAGIAN — Batch 1 & 2 SELESAI:** `catch` kosong 198 → **136** (44 → 42 berkas).
+    - Batch 1: `StaffToday` (22), `AuthContext` (10), `useLiveChatReservations` (13). `fireAndForget`/`retrySilently`/`mustSucceed` dipakai; kegagalan yang memengaruhi keputusan staf (refresh kartu booking) kini memberi pesan.
+    - Batch 2: `CreateReservationModal` (12), `notificationSound` (13), `LiveChatMonitor` (8), `CustomerMapTab` (12). Modul dengan kebijakan seragam diberi catatan kontrak di kepala berkas (audio/notifikasi = senyap; operasi Leaflet = senyap).
+    - Batch 3 (masih tersisa): **136 situs di 42 berkas**, mayoritas sudah tercakup catatan kebijakan modul (`notificationSound`, `CustomerMapTab`, `AiSandbox`, `CustomerDatabase`, `LiveChatComposer`, `QuickReplies`, `ReservationDetailModal`, `useLiveChatNotification`, `useLiveChatActiveThread`, `services/api.ts`, `App.tsx`, `useTripTelemetry`). Sisa yang belum diberi keputusan eksplisit: `StaffToday` (7), `StaffAuthContext` (5), `useLiveChatBotAndLabels` (5 terverifikasi lewat catatan), `useLiveChatComposerHandler` (8, bercatatan), `useLiveChatSse`/`liveChatSse` (3), `QuickReplies` (2), dan berkas kecil lain (1-2 situs).
+    - **Cara menghitung sisa:** skrip hitung sementara di `%TEMP%/opencode/count-catch.mjs` memakai pola `catch` opsional-parameter + `{` kosong, dan rantai `.catch` panah + `{` kosong. Jalankan `node "%TEMP%/opencode/count-catch.mjs"` untuk daftar per berkas.
 - **Audit UI/UX ulang (2026-11-11, baca-saja):** sisa temuan yang belum ditutup —
   - **A-001 Penelan error:** 149 `catch {}` + 49 `.catch(() => {})` (198 situs, 39+22 berkas). Kontrak error baru dipakai di 3 situs. FMEA 5x8x8=320.
-  - **A-002 Tanggal di hooks lolos gerbang:** `check:dates` hanya memindai `components/` dan `pages/`; 22 pemakaian `toLocale*` ada di `hooks/` (mis. `useLiveChatNotification.ts:210` tanpa `timeZone`). FMEA 5x6x7=210.
-  - **A-003 Generator pricelist usang:** artefak sudah lebih baru dari generator; menjalankan generator menghapus perbaikan a11y/kontras dan mengubah halaman. FMEA 7x6x7=294.
+  - **A-002 Tanggal lolos gerbang — SELESAI (Fase 2).** Gerbang kini mencakup `hooks/` + `utils/` dan memeriksa `toLocaleString`, bukan hanya `toLocaleDateString`/`toLocaleTimeString`. 22 situs `toLocaleString` (tanggal+jam zona perangkat) ditemukan dan dimigrasikan. Koreksi audit awal: di `hooks/` hanya 5 pemakaian, dan 4 di antaranya sudah menyebut `timeZone` — yang benar-benar salah hanya 1 (`useLiveChatNotification`), tetapi celah `toLocaleString` jauh lebih besar.
+  - **A-003 Generator pricelist usang — SELESAI (Fase 1).** Guard `--force` terpasang; skrip berhenti sendiri dan tidak menyentuh artefak.
   - **A-004 Modal belum seragam:** `CreateReservationModal` (3.437 baris) masih punya overlay sendiri + 3 `z-[...]` arbitrer; 17 blok `fixed inset-0` tersisa. FMEA 6x4x5=120.
   - **A-005 God object UI:** 12 berkas >1200 baris (StaffToday 6.399, CreateReservationModal 3.437, TodayTreatments 2.376, Reservations 2.273, LiveChatMessagePane 1.779) melampaui batas 1.500 di AGENTS. FMEA 4x7x6=168.
   - **A-006 Nama aksesibel tombol ikon:** ~80 `<button>` hanya memakai `title` tanpa `aria-label`. FMEA 3x6x5=90.

@@ -126,7 +126,7 @@ describe('Staff Routes Integration Tests (/api/staff/*)', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/staff/auth/restore',
-        payload: { token: 'stored_token_abc' },
+        headers: { cookie: 'staff_session=stored_token_abc', 'x-requested-with': 'XMLHttpRequest' },
       });
 
       expect(res.statusCode).toBe(200);
@@ -142,11 +142,49 @@ describe('Staff Routes Integration Tests (/api/staff/*)', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/staff/auth/restore',
-        payload: { token: 'invalid_token' },
+        headers: { cookie: 'staff_session=invalid_token', 'x-requested-with': 'XMLHttpRequest' },
       });
 
       expect(res.statusCode).toBe(401);
     });
+
+    it('S-01: token dari body/localStorage DITOLAK (401) — hanya cookie HttpOnly', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/staff/auth/restore',
+        headers: { 'x-requested-with': 'XMLHttpRequest' },
+        payload: { token: 'stolen_token_from_localstorage' },
+      });
+      expect(res.statusCode).toBe(401);
+      expect(JSON.parse(res.body).code).toBe('NO_SESSION_COOKIE');
+    });
+
+    it('S-008: restore tanpa header AJAX ditolak 403 (anti CSRF)', async () => {
+      vi.spyOn(StaffAuthService, 'validateSession').mockResolvedValue({ staff: { role: 'THERAPIST' } } as any);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/staff/auth/restore',
+        headers: { cookie: 'staff_session=stored_token_abc' },
+      });
+      expect(res.statusCode).toBe(403);
+      expect(JSON.parse(res.body).code).toBe('CSRF_HEADER_REQUIRED');
+    });
+
+    it('S-01/S-008: cookie valid + AJAX → 200 dengan SameSite=Strict', async () => {
+      vi.spyOn(StaffAuthService, 'validateSession').mockResolvedValue({
+        staff: { id: 'staff-1', name: 'Dewi', role: 'THERAPIST', tenant_id: 'default-tenant' },
+      } as any);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/staff/auth/restore',
+        headers: { cookie: 'staff_session=stored_token_abc', 'x-requested-with': 'XMLHttpRequest' },
+      });
+      expect(res.statusCode).toBe(200);
+      const setCookie = ([] as string[]).concat(res.headers['set-cookie'] as any).join(';');
+      expect(setCookie).toContain('staff_session=stored_token_abc');
+      expect(setCookie).toContain('SameSite=Strict');
+    });
+
 
     it('kontrak 503: DB sesi staff tak tersedia → 503 (bukan 401) di restore', async () => {
       vi.spyOn(StaffAuthService, 'validateSession').mockRejectedValue(
@@ -156,7 +194,7 @@ describe('Staff Routes Integration Tests (/api/staff/*)', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/staff/auth/restore',
-        payload: { token: 'stored_token_abc' },
+        headers: { cookie: 'staff_session=stored_token_abc', 'x-requested-with': 'XMLHttpRequest' },
       });
 
       expect(res.statusCode).toBe(503);

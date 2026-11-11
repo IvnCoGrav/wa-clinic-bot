@@ -61,4 +61,19 @@ describe('Knowledge admin — kejujuran DB (C-012)', () => {
     expect(res.statusCode).toBe(503);
     expect(JSON.parse(res.body).code).toBe('DATABASE_UNAVAILABLE');
   });
+
+  it('produksi + GET daftar knowledge gagal → 503 (bukan 200 kosong)', async () => {
+    process.env.NODE_ENV = 'production';
+    vi.spyOn(prisma.knowledgeChunk, 'findMany').mockRejectedValue(new Error('Database offline'));
+    const res = await app.inject({ method: 'GET', url: '/api/admin/knowledge/chunks', headers });
+    expect(res.statusCode).toBe(503);
+  });
+
+  it('non-produksi + GET gagal → 200 degraded', async () => {
+    process.env.NODE_ENV = 'test';
+    vi.spyOn(prisma.knowledgeChunk, 'findMany').mockRejectedValue(new Error('Database offline'));
+    const res = await app.inject({ method: 'GET', url: '/api/admin/knowledge/chunks', headers });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).degraded).toBe(true);
+  });
 });
