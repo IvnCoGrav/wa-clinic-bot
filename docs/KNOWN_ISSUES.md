@@ -3,6 +3,17 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 326. [Code Health] God File, `as any`, dan Dead Export Sisa (2026-11-11, OPEN)
+
+- **Status:** OPEN — belum diperbaiki; hasil pengukuran read-only setelah Fase 2G.
+- **Spaghetti / God file (mandat repo: file route/service <1.500 baris):** **9 file >1.500 baris**, 27 file >1.000, 36 file >800 dari 400 file TS:
+  `customer.service.ts` 3.283, `staff-reservation.service.ts` 2.976, `treatment-catalog.service.ts` 2.489, `copilot-tools.ts` 1.795, `waha/client.ts` 1.767, `capi.service.ts` 1.646, `webhook.route.ts` 1.599, `live-chat.service.ts` 1.562, `meta-performance-analytics.service.ts` 1.538.
+- **Keselamatan tipe:** **1.903 `as any`** di `src` (terburuk: `staff-reservation` 98, `staff/today` 82, `customer.service` 60, `guardrail-pipeline` 48). `@ts-ignore` 0, `eslint-disable` 2 (baik).
+- **Dead code terverifikasi (0 referensi di `src` dan test):** `setBrandIdentity`, `resetBrandIdentity` (`src/config/brand.ts`); `getRollingFollowUpMessageAsync` hanya dipakai test; `isToolMaskingShadowMode` hanya dipakai test. Kandidat lain perlu alat khusus (mis. `ts-prune`/`knip`) — belum dipasang (zero new deps).
+- **Sisa penanda:** 17 `TODO/FIXME/HACK`.
+- **Catatan efisiensi:** belum ada profiling/benchmark di audit ini; klaim efisiensi hanya struktural (cache ber-TTL, bounded map, atomic claim, WIB bounds). Sisa inefisiensi: `UTL-15`/`CFG-17`/`W-006` (cache per proses), `I-011` (tanpa kuota/circuit per tenant), `K-010` (tanpa drain shutdown).
+- **Rencana:** pecah 9 God file per domain (satu PR per file + test pemanggil), ganti `as any` bertahap di jalur transaksional, hapus dead export dengan bukti pencarian, lalu jalankan benchmark ringan (latensi webhook & retrieval).
+
 ## 325. [Audit Eksekusi F0–F6] Sertifikasi 242 FIXED Dicabut — 4 Item UNVERIFIED, 52 OPEN (2026-11-11, OPEN — Fase 0/1/2A–2G)
 
 - **Status:** OPEN — sertifikasi lama dicabut; gerbang bukti otomatis sudah terpasang (Fase 1). Kode produksi belum diubah. **Deploy produksi diblokir** sampai Fase 0–5 lulus.
