@@ -22,28 +22,39 @@ export class AuditService {
     ipAddress?: string;
     tenantId?: string;
   }): Promise<void> {
-    try {
-      const { apiKey, adminIdentity, action, targetId, payload, ipAddress, tenantId = DEFAULT_TENANT_ID } = params;
-      const hashedKey = this.hashApiKey(apiKey);
-      // Simpan hash parsial agar tetap unik dan aman di log/db
-      const shortHashedKey = hashedKey.substring(0, 16);
+    const { apiKey, adminIdentity, action, targetId, payload, ipAddress, tenantId } = params;
+    // Cfg-009: tenant audit yang tidak eksplisit adalah sumber salah catat.
+    if (!tenantId) {
+      console.warn(`[Audit Service] tenantId tidak diberikan untuk action '${action}' — memakai default-tenant.`);
+    }
+    const effectiveTenant = tenantId || DEFAULT_TENANT_ID;
+    const hashedKey = this.hashApiKey(apiKey);
+    const shortHashedKey = hashedKey.substring(0, 16);
+    const payloadStr = payload ? JSON.stringify(payload) : null;
 
-      const payloadStr = payload ? JSON.stringify(payload) : null;
-
-      await prisma.auditLog.create({
-        data: {
-          tenant_id: tenantId,
-          admin_key: shortHashedKey,
-          admin_identity: adminIdentity || 'Unknown Admin',
-          action,
-          target_id: targetId || null,
-          payload: payloadStr,
-          ip_address: ipAddress || null,
-        },
-      });
-      console.log(`[Audit Service] Action '${action}' by '${adminIdentity || 'Unknown'}' logged successfully.`);
-    } catch (err: any) {
-      console.error('[Audit Service] Failed to log admin action:', err.message);
+    // Cfg-009: retry 1x agar kegagalan sesaat tidak menghilangkan jejak audit.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        await prisma.auditLog.create({
+          data: {
+            tenant_id: effectiveTenant,
+            admin_key: shortHashedKey,
+            admin_identity: adminIdentity || 'Unknown Admin',
+            action,
+            target_id: targetId || null,
+            payload: payloadStr,
+            ip_address: ipAddress || null,
+          },
+        });
+        console.log(`[Audit Service] Action '${action}' by '${adminIdentity || 'Unknown'}' logged successfully.`);
+        return;
+      } catch (err: any) {
+        if (attempt === 0) {
+          await new Promise((r) => setTimeout(r, 100));
+          continue;
+        }
+        console.error('[Audit Service] Failed to log admin action after retry:', err.message);
+      }
     }
   }
 }

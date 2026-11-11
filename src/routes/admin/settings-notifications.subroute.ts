@@ -76,6 +76,7 @@ export async function settingsNotificationsRoutes(fastify: FastifyInstance) {
         action: 'REGENERATE_TELEGRAM_PAIRING_TOKEN',
         targetId: tenantId,
         payload: { tenantId },
+        tenantId: resolveTenantId(request),
         ipAddress: request.ip,
       });
 
@@ -159,6 +160,7 @@ export async function settingsNotificationsRoutes(fastify: FastifyInstance) {
             telegramChatIdConfigured: Boolean(updated.telegram_chat_id),
             tenantId,
           },
+          tenantId: resolveTenantId(request),
           ipAddress: request.ip,
         });
 
@@ -423,6 +425,7 @@ export async function settingsNotificationsRoutes(fastify: FastifyInstance) {
             success: result.success,
             channel: result.channel,
           },
+          tenantId: resolveTenantId(request),
           ipAddress: request.ip,
         });
 

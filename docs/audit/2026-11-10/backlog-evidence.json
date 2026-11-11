@@ -893,7 +893,7 @@
         {
           "type": "file",
           "path": "src/routes/admin/settings-ai.subroute.ts",
-          "line": 1029,
+          "line": 1041,
           "contains": "idle_greeting_enabled"
         },
         {
@@ -1338,6 +1338,30 @@
           "type": "test",
           "path": "tests/unit/followup-no-mutilation.test.ts",
           "contains": "tidak ada mutilasi"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
+    },
+    "Cfg-009": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/services/audit.service.ts",
+          "line": 35,
+          "contains": "retry 1x"
+        },
+        {
+          "type": "file",
+          "path": "src/routes/admin/settings-general.subroute.ts",
+          "line": 543,
+          "contains": "audit tidak menyimpan nomor rekening"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/audit-service-resilience.test.ts",
+          "contains": "retry 1x"
         }
       ],
       "verifiedBy": "AI Agent",

@@ -196,7 +196,14 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Register:** **213 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 42 OPEN**.
 - **Gerbang regresi Fase 4C:** 7.132 test / 7.102 lulus / **2 gagal pre-existing #287**; `audit-baseline-diff` → **0 regresi baru**; `verify:backlog` PASS; `security:scan` LULUS 2.179 file.
 
-### 0.13 Gerbang Regresi Fase 1
+### 0.13 Fase 4D — audit config jujur & tenant-aware (2026-11-11)
+
+- 30 pemanggilan `logAdminAction` di settings (general/AI/notifications/catalog/meta) kini menyertakan `tenantId`; audit retry 1x; warning bila tenant kosong; payload rekening dimask.
+- Test: `tests/unit/audit-service-resilience.test.ts` (3).
+- **Register:** **214 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 41 OPEN**.
+- **Gerbang regresi Fase 4D:** 7.135 test / 7.105 lulus / **2 gagal pre-existing #287**; `audit-baseline-diff` → **0 regresi baru**; `verify:backlog` PASS; `security:scan` LULUS 2.182 file.
+
+### 0.14 Gerbang Regresi Fase 1
 
 | Pemeriksaan | Hasil |
 |---|---|

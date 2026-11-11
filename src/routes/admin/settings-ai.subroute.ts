@@ -89,6 +89,7 @@ export async function settingsAiRoutes(fastify: FastifyInstance) {
             }`,
             tenantId,
           },
+        tenantId: resolveTenantId(request),
         });
 
         const savedMaxChars = maxChars === undefined ? getMaxCharsPerReply(tenantId) : maxChars;
@@ -197,6 +198,7 @@ export async function settingsAiRoutes(fastify: FastifyInstance) {
               medicalOverclaimRulesLength: data.medicalOverclaimRules.length,
             },
           },
+        tenantId: resolveTenantId(request),
         });
 
         return reply.status(200).send({
@@ -279,6 +281,7 @@ export async function settingsAiRoutes(fastify: FastifyInstance) {
         action: 'FEW_SHOT_CREATE',
         targetId: created.id,
         payload: { scenario, tags },
+      tenantId: resolveTenantId(request),
       });
 
       return reply.status(201).send({
@@ -315,6 +318,7 @@ export async function settingsAiRoutes(fastify: FastifyInstance) {
         action: 'FEW_SHOT_REORDER',
         targetId: 'ALL',
         payload: { orderedIds },
+      tenantId: resolveTenantId(request),
       });
 
       return reply.status(200).send({
@@ -398,6 +402,7 @@ export async function settingsAiRoutes(fastify: FastifyInstance) {
         action: 'FEW_SHOT_UPDATE',
         targetId: id,
         payload: request.body,
+      tenantId: resolveTenantId(request),
       });
 
       return reply.status(200).send({
@@ -429,6 +434,7 @@ export async function settingsAiRoutes(fastify: FastifyInstance) {
         adminIdentity: (request as any).adminIdentity,
         action: 'FEW_SHOT_DELETE',
         targetId: id,
+      tenantId: resolveTenantId(request),
       });
 
       return reply.status(200).send({
@@ -454,6 +460,7 @@ export async function settingsAiRoutes(fastify: FastifyInstance) {
         adminIdentity: (request as any).adminIdentity,
         action: 'FEW_SHOT_RESET',
         targetId: 'ALL',
+      tenantId: resolveTenantId(request),
       });
 
       return reply.status(200).send({
@@ -608,6 +615,7 @@ export async function settingsAiRoutes(fastify: FastifyInstance) {
             switchedAt: new Date(),
             tenantId,
           },
+          tenantId: resolveTenantId(request),
           ipAddress: request.ip,
         });
 
@@ -786,6 +794,7 @@ export async function settingsAiRoutes(fastify: FastifyInstance) {
           action: 'AI_MODEL_BATCH_UPDATE',
           targetId: 'ALL',
           payload: { presetId: presetId || null, configs: configs || [], persisted },
+          tenantId: resolveTenantId(request),
           ipAddress: request.ip,
         });
 
@@ -828,6 +837,7 @@ export async function settingsAiRoutes(fastify: FastifyInstance) {
         action: 'AI_MODEL_RESET_DEFAULTS',
         targetId: tenantId,
         payload: { resetAt: new Date(), tenantId },
+        tenantId: resolveTenantId(request),
         ipAddress: request.ip,
       });
       return reply.status(200).send({
@@ -883,6 +893,7 @@ export async function settingsAiRoutes(fastify: FastifyInstance) {
             persisted,
             changedAt: new Date(),
           },
+          tenantId: resolveTenantId(request),
           ipAddress: request.ip,
         });
 
@@ -1004,6 +1015,7 @@ export async function settingsAiRoutes(fastify: FastifyInstance) {
           action: 'UPDATE_AI_ROLLOUT_SCOPE',
           targetId: tenantId,
           payload: { ...cfg, tenantId },
+          tenantId: resolveTenantId(request),
           ipAddress: request.ip,
         });
 

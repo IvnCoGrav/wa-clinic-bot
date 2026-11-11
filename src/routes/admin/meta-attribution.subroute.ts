@@ -669,6 +669,7 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
           action: 'TEST_SEND_CAPI_EVENT',
           targetId: tenantId,
           payload: { eventName, success: result.success, status: result.status, source: result.source },
+          tenantId: resolveTenant(request),
           ipAddress: request.ip,
         });
 

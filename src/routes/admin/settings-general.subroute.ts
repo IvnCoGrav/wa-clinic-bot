@@ -47,6 +47,7 @@ export async function settingsGeneralRoutes(fastify: FastifyInstance) {
           adminIdentity: (request as any).adminIdentity,
           action: 'UPDATE_MQL_SETTINGS',
           payload: updated,
+          tenantId: resolveTenantId(request),
           ipAddress: request.ip,
         });
 
@@ -119,6 +120,7 @@ export async function settingsGeneralRoutes(fastify: FastifyInstance) {
           adminIdentity: (request as any).adminIdentity,
           action: 'UPDATE_MEDIA_RETENTION',
           payload: { mediaRetentionDays: updated.media_retention_days },
+          tenantId: resolveTenantId(request),
           ipAddress: request.ip,
         });
 
@@ -205,6 +207,7 @@ export async function settingsGeneralRoutes(fastify: FastifyInstance) {
           action: 'UPDATE_PRICELIST_IMAGE',
           targetId: requireTenantId(request),
           payload: { pricelist_image_url: result.url },
+          tenantId: resolveTenantId(request),
           ipAddress: request.ip,
         });
 
@@ -328,6 +331,7 @@ export async function settingsGeneralRoutes(fastify: FastifyInstance) {
             promo: updatedPromo,
             brandLogoUrl: updatedBrand.logoUrl || null,
           },
+          tenantId: resolveTenantId(request),
           ipAddress: request.ip,
         });
 
@@ -427,6 +431,7 @@ export async function settingsGeneralRoutes(fastify: FastifyInstance) {
             previousPolicy,
             newPolicy: policy,
           },
+          tenantId: resolveTenantId(request),
           ipAddress: request.ip,
         });
 
@@ -535,7 +540,15 @@ export async function settingsGeneralRoutes(fastify: FastifyInstance) {
           adminIdentity: (request as any).adminIdentity,
           action: 'UPDATE_PAYMENT_INFO_SETTINGS',
           targetId: tenantId,
-          payload: updatedPaymentInfo,
+          // Cfg-009: audit tidak menyimpan nomor rekening mentah.
+          payload: {
+            ...updatedPaymentInfo,
+            bankAccounts: (updatedPaymentInfo.bankAccounts || []).map((b: any) => ({
+              ...b,
+              accountNumber: b?.accountNumber ? `***${String(b.accountNumber).slice(-4)}` : null,
+            })),
+          },
+          tenantId: resolveTenantId(request),
           ipAddress: request.ip,
         });
 
@@ -605,6 +618,7 @@ export async function settingsGeneralRoutes(fastify: FastifyInstance) {
         action: 'GLOBAL_BOT_TOGGLE',
         targetId: tenantId,
         payload: { oldVal, newVal: globalBotActive, tenantId },
+        tenantId: resolveTenantId(request),
         ipAddress: request.ip,
       });
 
@@ -712,6 +726,7 @@ export async function settingsGeneralRoutes(fastify: FastifyInstance) {
             capi_token_configured: !!tenant.meta_capi_access_token,
             tenantId,
           },
+          tenantId: resolveTenantId(request),
           ipAddress: request.ip,
         });
 
@@ -836,6 +851,7 @@ export async function settingsGeneralRoutes(fastify: FastifyInstance) {
           action: 'UPDATE_PURCHASE_MODERATION',
           targetId: tenantId,
           payload: { autoSendPurchaseCapi: false, requested: autoSendPurchaseCapi, policy: 'QUEUE_FIRST', tenantId },
+          tenantId: resolveTenantId(request),
           ipAddress: request.ip,
         });
 
@@ -923,6 +939,7 @@ export async function settingsGeneralRoutes(fastify: FastifyInstance) {
           action: 'UPDATE_CLINIC_POLICY',
           targetId: topic,
           payload: data,
+          tenantId: resolveTenantId(request),
           ipAddress: request.ip,
         });
         return reply.status(200).send({ success: true, data: policy });
