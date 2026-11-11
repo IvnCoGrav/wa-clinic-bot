@@ -102,43 +102,72 @@ export class TelegramService {
     messageThreadId?: string | number;
     text: string;
     parseMode?: 'Markdown' | 'HTML';
+    /** I-008: override untuk test (default dari env / 8 dtk). */
+    __testOptions?: { timeoutMs?: number; maxRetries?: number; retryDelayMs?: number };
   }): Promise<{ ok: boolean; description?: string }> {
     const botToken = params.botToken || process.env.TELEGRAM_BOT_TOKEN;
     if (!botToken) {
       return { ok: false, description: 'Telegram Bot Token not configured' };
     }
 
-    try {
-      const body: any = {
-        chat_id: params.chatId,
-        text: params.text,
-        parse_mode: params.parseMode || 'Markdown',
-      };
+    const timeoutMs =
+      params.__testOptions?.timeoutMs ??
+      Number.parseInt(process.env.TELEGRAM_TIMEOUT_MS || '8000', 10);
+    const maxRetries = params.__testOptions?.maxRetries ?? 2;
+    const retryDelayMs = params.__testOptions?.retryDelayMs ?? 500;
 
-      if (params.messageThreadId) {
-        const threadNum = Number(params.messageThreadId);
-        if (!isNaN(threadNum)) {
-          body.message_thread_id = threadNum;
-        }
+    const body: any = {
+      chat_id: params.chatId,
+      text: params.text,
+      parse_mode: params.parseMode || 'Markdown',
+    };
+
+    if (params.messageThreadId) {
+      const threadNum = Number(params.messageThreadId);
+      if (!isNaN(threadNum)) {
+        body.message_thread_id = threadNum;
       }
-
-      const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-
-      const resJson: any = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        console.error(`[TelegramService] Send error (${response.status}):`, resJson);
-        return { ok: false, description: resJson?.description || response.statusText };
-      }
-
-      return { ok: true };
-    } catch (err: any) {
-      console.error(`[TelegramService] Dispatch exception: ${err.message}`);
-      return { ok: false, description: err.message };
     }
+
+    let lastDescription = 'Telegram send failed';
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        // I-008: timeout eksplisit — fetch tanpa batas bisa menggantung worker.
+        const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+
+        const resJson: any = await response.json().catch(() => ({}));
+        if (response.ok) return { ok: true };
+
+        lastDescription = resJson?.description || response.statusText || `HTTP ${response.status}`;
+
+        // 429: hormati retry_after dari Telegram; 5xx: backoff eksponensial.
+        const retryable = response.status === 429 || response.status >= 500;
+        if (!retryable || attempt === maxRetries) {
+          console.error(`[TelegramService] Send error (${response.status}):`, resJson);
+          return { ok: false, description: lastDescription };
+        }
+
+        const retryAfterSec = Number(resJson?.parameters?.retry_after);
+        const waitMs = Number.isFinite(retryAfterSec) && retryAfterSec > 0
+          ? Math.min(retryAfterSec * 1000, 5000)
+          : retryDelayMs * Math.pow(2, attempt);
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+      } catch (err: any) {
+        lastDescription = err?.message || String(err);
+        // Timeout/abort juga layak retry terbatas.
+        if (attempt === maxRetries) break;
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs * Math.pow(2, attempt)));
+      }
+    }
+
+    console.error(`[TelegramService] Dispatch failed: ${lastDescription}`);
+    return { ok: false, description: lastDescription };
   }
 }
 

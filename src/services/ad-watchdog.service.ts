@@ -365,10 +365,12 @@ export async function checkAndNotify(
   const currentHourStr = String(getWibNow(now).getUTCHours()).padStart(2, '0');
   const idempotencyKey = `${tenantId}:AD_FUNNEL_ANOMALY:${evalResult.primarySignal}:${wibDateStr}:${currentHourStr}`;
 
-  // Catat ke AdminNotificationLog (dengan proteksi unique constraint P2002)
+  // M-07: catat klaim idempotensi dulu (PENDING), status SENT hanya setelah
+  // alert BENAR-BENAR terkirim. Sebelumnya SENT ditulis sebelum dispatch.
+  let notifLogId: string | null = null;
   if (notifModel && typeof notifModel.create === 'function') {
     try {
-      await notifModel.create({
+      const created = await notifModel.create({
         data: {
           tenant_id: tenantId,
           channel: 'TELEGRAM',
@@ -378,7 +380,7 @@ export async function checkAndNotify(
           idempotency_key: idempotencyKey,
           title: `[WATCHDOG] ${evalResult.primarySignal}`,
           message_content: finalMessage,
-          status: 'SENT',
+          status: 'PENDING',
           metadata: {
             metrics: evalResult.metrics,
             primarySignal: evalResult.primarySignal,
@@ -386,7 +388,9 @@ export async function checkAndNotify(
             baselineViews: evalResult.baselineViews,
           },
         },
+        select: { id: true },
       });
+      notifLogId = (created as any)?.id ?? null;
     } catch (createErr: any) {
       if (createErr?.code === 'P2002') {
         // Idempotency collision: alert untuk jam/sinyal ini sudah pernah dicatat
@@ -395,12 +399,21 @@ export async function checkAndNotify(
     }
   }
 
+  const updateLogStatus = async (status: 'SENT' | 'FAILED' | 'SKIPPED') => {
+    if (!notifLogId || !notifModel || typeof notifModel.update !== 'function') return;
+    try {
+      await notifModel.update({ where: { id: notifLogId }, data: { status } });
+    } catch (e: any) {
+      console.warn('[AdWatchdog] Gagal memperbarui status notifikasi:', e?.message || e);
+    }
+  };
+
   // Kirim via AlertService
   try {
     const alertService = new AlertService();
     const severity = evalResult.primarySignal === 'TOTAL_SILENCE' ? AlertSeverity.CRITICAL : AlertSeverity.WARNING;
 
-    await alertService.notifyAlert({
+    const delivery = await alertService.notifyAlert({
       type: AlertType.AD_FUNNEL_ANOMALY,
       severity,
       message: finalMessage,
@@ -414,9 +427,20 @@ export async function checkAndNotify(
       },
     });
 
+    if (!delivery?.sent) {
+      await updateLogStatus(delivery?.throttled ? 'SKIPPED' : 'FAILED');
+      return {
+        sent: false,
+        signal: evalResult.primarySignal,
+        reason: delivery?.throttled ? 'THROTTLED' : 'DELIVERY_FAILED',
+      };
+    }
+
+    await updateLogStatus('SENT');
     return { sent: true, signal: evalResult.primarySignal };
   } catch (alertErr: any) {
     console.error('[AdWatchdog] Failed to dispatch alert:', alertErr?.message || alertErr);
+    await updateLogStatus('FAILED');
     return { sent: false, signal: evalResult.primarySignal, reason: 'DELIVERY_FAILED' };
   }
 }

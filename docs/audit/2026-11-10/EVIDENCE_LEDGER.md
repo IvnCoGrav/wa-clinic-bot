@@ -119,7 +119,20 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Gerbang bukti:** `npm run verify:backlog` → `PASS` (39 verified baru); `npm run security:scan` → LULUS 2.149 file.
 - **Gerbang regresi:** 7.064 test / 7.033 lulus / 3 gagal: 2 pre-existing #287 + 1 time-out flaky `production_edge_cases` LOCATION_CONFIRMED (7,5 dtk terisolasi, timeout 15 dtk saat beban suite penuh). Tidak ada regresi kode.
 
-### 0.6 Gerbang Regresi Fase 1
+### 0.6 Fase 2F — 4 item OPEN (2026-11-11)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **S-05** | Payload tugas staf tidak lagi men-select/mengirim `admin_notes`, `ltv_cache`, dan LTV; alamat tetap whitelist | `tests/unit/staff-task-data-minimization.test.ts` |
+| **C-012** | Import/update knowledge di produksi → 503 saat DB gagal; non-produksi eksplisit `degraded: true` | `tests/integration/knowledge-db-failure-honesty.test.ts` (3) |
+| **I-008** | Telegram: timeout 8 dtk (env), retry 429/5xx + `retry_after`, tidak retry 4xx lain | `tests/unit/telegram-timeout-retry.test.ts` (4) |
+| **M-07** | Log alert `PENDING` → `SENT`/`FAILED` sesuai hasil kirim (bukan SENT prematur) | `tests/unit/ad-watchdog-log-status.test.ts` (3) |
+
+- **Register:** **201 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 54 OPEN**.
+- **Test lama disesuaikan:** `fase2-rbac-matrix` memakai `importFaqsDetailed` (kontrak C-012); `ad-watchdog-cooldown` mengharapkan `PENDING` lalu update `SENT` (kontrak M-07).
+- **Gerbang regresi Fase 2F:** 7.075 test / 7.045 lulus / **2 gagal pre-existing #287**; `audit-baseline-diff` → **0 regresi baru**; `verify:backlog` PASS; `security:scan` LULUS 2.156 file.
+
+### 0.7 Gerbang Regresi Fase 1
 
 | Pemeriksaan | Hasil |
 |---|---|

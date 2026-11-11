@@ -76,6 +76,7 @@ describe('AdWatchdog Cooldown & Idempotency', () => {
     const createSpy = vi.spyOn((prisma as any).adminNotificationLog, 'create').mockResolvedValueOnce({
       id: 'log-new',
     });
+    const updateSpy = vi.spyOn((prisma as any).adminNotificationLog, 'update').mockResolvedValue({} as any);
     const notifySpy = vi.spyOn(AlertService.prototype, 'notifyAlert').mockResolvedValueOnce({
       sent: true,
       channel: 'telegram',
@@ -89,10 +90,12 @@ describe('AdWatchdog Cooldown & Idempotency', () => {
         data: expect.objectContaining({
           tenant_id: 'default-tenant',
           notification_type: 'AD_FUNNEL_ANOMALY',
-          status: 'SENT',
+          // M-07: klaim idempotensi dulu (PENDING), SENT hanya setelah terkirim.
+          status: 'PENDING',
         }),
       })
     );
+    expect(updateSpy).toHaveBeenCalledWith({ where: { id: 'log-new' }, data: { status: 'SENT' } });
     expect(notifySpy).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'AD_FUNNEL_ANOMALY',

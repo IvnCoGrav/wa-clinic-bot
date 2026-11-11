@@ -109,7 +109,21 @@ export class KnowledgeBaseService {
    * 1 row per pasangan FAQ.
    */
   public async importFaqs(faqs: Array<{ question: string; answer: string; keywords?: string }>, tenantId: string): Promise<number> {
+    const result = await this.importFaqsDetailed(faqs, tenantId);
+    return result.imported;
+  }
+
+  /**
+   * C-012: hasil import eksplisit — `degraded` menandakan ada baris yang gagal
+   * tulis DB dan hanya masuk memori (data TIDAK durable). Route produksi wajib
+   * menolak "sukses" palsu saat degraded.
+   */
+  public async importFaqsDetailed(
+    faqs: Array<{ question: string; answer: string; keywords?: string }>,
+    tenantId: string
+  ): Promise<{ imported: number; persisted: number; degraded: boolean }> {
     let count = 0;
+    let persisted = 0;
     for (const faq of faqs) {
       const title = faq.question.trim();
       const content = `Pertanyaan: ${faq.question.trim()}\nJawaban: ${faq.answer.trim()}`;
@@ -125,6 +139,7 @@ export class KnowledgeBaseService {
             keywords,
           },
         });
+        persisted++;
       } catch (error) {
         // Fallback memory
         memoryKnowledgeChunks.push({
@@ -142,7 +157,7 @@ export class KnowledgeBaseService {
       const { faqCacheService } = await import('./faq-cache.service');
       await faqCacheService.invalidateAll(tenantId).catch(() => {});
     } catch (_) {}
-    return count;
+    return { imported: count, persisted, degraded: persisted < count };
   }
 
   /**

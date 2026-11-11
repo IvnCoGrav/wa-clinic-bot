@@ -803,7 +803,7 @@
         {
           "type": "file",
           "path": "src/routes/admin/meta-attribution.subroute.ts",
-          "line": 617,
+          "line": 612,
           "contains": "Audit log perubahan spend"
         },
         {
@@ -911,7 +911,7 @@
         {
           "type": "file",
           "path": "src/routes/admin/knowledge.subroute.ts",
-          "line": 205,
+          "line": 206,
           "contains": "where: { id, tenant_id: tenantId }"
         },
         {
@@ -929,7 +929,7 @@
         {
           "type": "file",
           "path": "src/services/staff-reservation.service.ts",
-          "line": 2821,
+          "line": 2815,
           "contains": "belum diatur di Pengaturan Klinik"
         },
         {
@@ -1019,7 +1019,7 @@
         {
           "type": "file",
           "path": "src/routes/admin/roles.subroute.ts",
-          "line": 119,
+          "line": 120,
           "contains": "SYSTEM_ROLE_IMMUTABLE"
         },
         {
@@ -1043,13 +1043,85 @@
         {
           "type": "file",
           "path": "src/services/knowledge.service.ts",
-          "line": 306,
+          "line": 321,
           "contains": "rerankRagCandidates(rawResults"
         },
         {
           "type": "test",
           "path": "tests/unit/rag-rerank-integration.test.ts",
           "contains": "artikel dengan keywords cocok menang"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
+    },
+    "S-05": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/services/staff-reservation.service.ts",
+          "line": 85,
+          "contains": "S-05: LTV TIDAK dikirim"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/staff-task-data-minimization.test.ts",
+          "contains": "tidak men-select admin_notes/ltv_cache"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
+    },
+    "C-012": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/routes/admin/knowledge.subroute.ts",
+          "line": 262,
+          "contains": "DATABASE_UNAVAILABLE"
+        },
+        {
+          "type": "test",
+          "path": "tests/integration/knowledge-db-failure-honesty.test.ts",
+          "contains": "import FAQ 503"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
+    },
+    "I-008": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/services/telegram.service.ts",
+          "line": 141,
+          "contains": "AbortSignal.timeout"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/telegram-timeout-retry.test.ts",
+          "contains": "429 lalu sukses"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
+    },
+    "M-07": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/services/ad-watchdog.service.ts",
+          "line": 383,
+          "contains": "status: 'PENDING'"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/ad-watchdog-log-status.test.ts",
+          "contains": "log dibuat PENDING"
         }
       ],
       "verifiedBy": "AI Agent",

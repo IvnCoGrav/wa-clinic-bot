@@ -82,7 +82,7 @@ export interface StaffTaskItem {
   assignedStaff?: { id: string; name: string; role?: string } | null;
   customerStats?: {
     totalTreatments: number;
-    ltv: number;
+    /** S-05: LTV TIDAK dikirim ke data tugas staf (data bisnis sensitif). */
   };
   /**
    * Status jendela akses chat (server-driven, sumber kebenaran tunggal).
@@ -591,7 +591,6 @@ export class StaffReservationService {
               ongkir: true,
               preferences: true,
               profile_picture_url: true,
-              admin_notes: true,
               children: {
                 select: {
                   name: true,
@@ -602,7 +601,6 @@ export class StaffReservationService {
 },
               },
               // phone: TIDAK di-select dari DB untuk privasi data customer
-              ltv_cache: true,
               conversations: {
                 select: { id: true },
                 orderBy: { updated_at: 'desc' },
@@ -798,7 +796,6 @@ export class StaffReservationService {
             pricing
           ),
           customerProfilePictureUrl: cust?.profile_picture_url || null,
-          adminNotes: (cust as any)?.admin_notes || null,
           assignedStaff: (r as any).assigned_staff
             ? {
                 id: (r as any).assigned_staff.id,
@@ -808,7 +805,6 @@ export class StaffReservationService {
             : null,
           customerStats: {
             totalTreatments: 1,
-            ltv: (cust as any)?.ltv_cache > 0 ? (cust as any).ltv_cache : pricing.totalFee,
           },
           chatWindow: this.buildChatWindowForTask(
             r.booking_date,
@@ -909,7 +905,6 @@ export class StaffReservationService {
               ongkir: true,
               preferences: true,
               profile_picture_url: true,
-              admin_notes: true,
               children: {
                 select: {
                   name: true,
@@ -1169,7 +1164,6 @@ export class StaffReservationService {
               ongkir: true,
               preferences: true,
               profile_picture_url: true,
-              admin_notes: true,
               children: {
                 select: {
                   name: true,

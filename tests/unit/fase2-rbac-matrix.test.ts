@@ -168,9 +168,9 @@ describe('FASE 2: RBAC Matrix & Tenant Isolation Suite (Tasks 2.1 & 2.2)', () =>
     it('[2.2.1] Request body with tenant_id: "tenant-b" MUST be overridden by staffSession tenant_id ("tenant-a")', async () => {
       const { knowledgeBaseService } = await import('../../src/services/knowledge.service');
       let targetTenant: string | undefined;
-      vi.spyOn(knowledgeBaseService, 'importFaqs').mockImplementation(async (_faqs, tenantId) => {
+      vi.spyOn(knowledgeBaseService, 'importFaqsDetailed').mockImplementation(async (_faqs, tenantId) => {
         targetTenant = tenantId;
-        return 1;
+        return { imported: 1, persisted: 1, degraded: false };
       });
 
       const res = await app.inject({

@@ -255,6 +255,14 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
           data: updated,
         });
       } catch (err: any) {
+        // C-012: memori BUKAN penyimpanan durable. Produksi wajib 503.
+        if (process.env.NODE_ENV === 'production') {
+          return reply.status(503).send({
+            success: false,
+            code: 'DATABASE_UNAVAILABLE',
+            error: 'Perubahan tidak tersimpan ke database. Coba lagi.',
+          });
+        }
         const updatedInMemory = knowledgeBaseService.updateInMemoryChunk(id, title, content, cleanKeywords);
 
         if (updatedInMemory) {
@@ -265,6 +273,7 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
 
           return reply.status(200).send({
             success: true,
+            degraded: true,
             message: 'Knowledge chunk updated in memory fallback',
             data: { id, title, content },
           });
@@ -330,7 +339,16 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ error: 'Body must contain non-empty faqs array [{question, answer}]' });
       }
 
-      const importedCount = await knowledgeBaseService.importFaqs(faqs, tenantId);
+      const importResult = await knowledgeBaseService.importFaqsDetailed(faqs, tenantId);
+      // C-012: produksi DILARANG melaporkan sukses bila data tidak durable.
+      if (importResult.degraded && process.env.NODE_ENV === 'production') {
+        return reply.status(503).send({
+          success: false,
+          code: 'DATABASE_UNAVAILABLE',
+          error: 'Import FAQ gagal disimpan ke database. Tidak ada data yang dianggap tersimpan. Coba lagi.',
+        });
+      }
+      const importedCount = importResult.imported;
       try {
         const { faqCacheService } = await import('../../services/faq-cache.service');
         await faqCacheService.invalidateAll(tenantId).catch(() => {});
@@ -346,7 +364,10 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
       });
       return reply.status(200).send({
         success: true,
-        message: `Successfully imported ${importedCount} FAQ pairs into Knowledge Base`,
+        degraded: importResult.degraded,
+        message: importResult.degraded
+          ? `Imported ${importedCount} FAQ (mode memori — TIDAK tersimpan ke database)`
+          : `Successfully imported ${importedCount} FAQ pairs into Knowledge Base`,
       });
     }
   );
