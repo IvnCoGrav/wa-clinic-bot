@@ -522,20 +522,25 @@ export function evaluateToolMasking(
     session.location?.rawText
   );
 
-  // C.1 (audit #199): lokasi PRESISI — kelurahan/kecamatan/kota sah, ATAU
-  // rawText yang BUKAN sekadar nama kota luas (mis. "Surabaya" polos). Kota
-  // luas saja tidak cukup untuk mengunci reservasi (rute bidan tak terverifikasi).
+  // C.1 (audit #199) + A-007: lokasi PRESISI wajib kelurahan/kecamatan, ATAU
+  // rawText yang BUKAN nama kota luas, ATAU jarak+ongkir yang bukan estimasi
+  // centroid. Nama kota saja (atau centroid) TIDAK cukup untuk mengunci
+  // reservasi — rute bidan belum terverifikasi.
   const hasPreciseLocation = Boolean(
     session.location?.kelurahan ||
-    session.location?.kecamatan ||
-    session.location?.kota
+    session.location?.kecamatan
   ) || (() => {
+    if (session.location?.isEstimatedCentroid === true) return false;
     const raw = (session.location?.rawText || '').trim();
-    if (!raw) return false;
-    try {
-      // Data-driven: tolak bila rawText hanyalah nama kota/kabupaten general.
-      return !isBroadRegionText(raw);
-    } catch { return true; }
+    if (raw) {
+      try {
+        if (!isBroadRegionText(raw)) return true;
+      } catch {
+        return true;
+      }
+    }
+    return session.location?.distanceKm != null
+      && session.location?.ongkirNormal != null;
   })();
 
   // 3. Panggil isDateConfirmed dengan signature ASLI: isDateConfirmed(bookingDate, evidence)

@@ -316,9 +316,8 @@ describe('Admin RBAC Guard & Security Isolation (SEC-01 Fix)', () => {
       expect(res.statusCode).not.toBe(403);
     });
 
-    it('ADMIN_CS boleh GET endpoint read Settings (notifikasi/logs/daily-report)', async () => {
+    it('ADMIN_CS boleh GET endpoint read Settings (logs/daily-report)', async () => {
       for (const url of [
-        '/api/admin/settings/notifications',
         '/api/admin/settings/notifications/logs',
         '/api/admin/settings/daily-report',
       ]) {
@@ -329,6 +328,15 @@ describe('Admin RBAC Guard & Security Isolation (SEC-01 Fix)', () => {
         });
         expect(res.statusCode, `GET ${url}`).not.toBe(403);
       }
+    });
+
+    it('Cfg-004: ADMIN_CS TIDAK boleh GET endpoint yang memuat token pairing', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/admin/settings/notifications',
+        headers: { cookie: 'staff_session=valid_cs_token', 'x-requested-with': 'XMLHttpRequest' },
+      });
+      expect(res.statusCode).toBe(403);
     });
 
     it('ADMIN_CS TETAP diblokir untuk WRITE Settings (PUT/POST)', async () => {

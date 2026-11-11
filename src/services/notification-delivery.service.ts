@@ -259,11 +259,28 @@ export class NotificationDeliveryService {
       const created = await prisma.adminNotificationLog.create({ data: payload });
       return created?.id || null;
     } catch (err: any) {
-      // P2002 = idempotency_key duplikat → balapan cron; perlakukan sebagai sudah tercatat.
+      // P2002 = idempotency_key duplikat → baris sudah ada.
       if (err?.code === 'P2002') {
         const existing = data.idempotencyKey
           ? await this.findExistingByIdempotencyKey(data.idempotencyKey)
           : null;
+        // I-009: resend yang BERHASIL wajib memperbarui status baris lama.
+        // Tanpa ini, log tetap FAILED selamanya dan cron mengirim ulang terus.
+        if (existing && (data.status === 'SENT' || data.status === 'SKIPPED') && existing.status !== data.status) {
+          try {
+            await prisma.adminNotificationLog.update({
+              where: { id: existing.id },
+              data: { status: data.status, error_message: payload.error_message },
+            });
+          } catch {
+            // DB offline → sinkronkan memori bila ada.
+          }
+          const mem = memoryNotificationLogs.find((l) => l.idempotency_key === data.idempotencyKey);
+          if (mem) {
+            mem.status = data.status;
+            mem.error_message = payload.error_message;
+          }
+        }
         return existing?.id || null;
       }
       // DB offline → memory fallback (pola repo), jangan gagalkan pemanggil.

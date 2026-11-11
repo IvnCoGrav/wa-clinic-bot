@@ -366,7 +366,7 @@
         {
           "type": "file",
           "path": "scripts/scan-secrets.ts",
-          "line": 248,
+          "line": 251,
           "contains": "args.includes('--all')"
         },
         {
@@ -449,7 +449,7 @@
         {
           "type": "file",
           "path": "scripts/scan-secrets.ts",
-          "line": 143,
+          "line": 145,
           "contains": "export function scanDocumentationCredential"
         },
         {
@@ -623,7 +623,7 @@
         {
           "type": "file",
           "path": "src/v3/tools/tool-masker.ts",
-          "line": 564,
+          "line": 569,
           "contains": "hasBookingCommitSignal(cleanIncomingText)"
         },
         {
@@ -940,6 +940,96 @@
       ],
       "verifiedBy": "AI Agent",
       "verifiedAt": "2026-11-10"
+    },
+    "A-007": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/v3/tools/tool-masker.ts",
+          "line": 533,
+          "contains": "isEstimatedCentroid === true"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/v3/booking-precision-location.test.ts",
+          "contains": "estimasi centroid"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
+    },
+    "K-006": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/services/chat-export.service.ts",
+          "line": 94,
+          "contains": "T00:00:00.000+07:00"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/chat-export.test.ts",
+          "contains": "batas hari WIB"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
+    },
+    "Cfg-004": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/routes/admin.route.ts",
+          "line": 242,
+          "contains": "Cfg-004"
+        },
+        {
+          "type": "test",
+          "path": "tests/integration/admin-settings-secret-allowlist.test.ts",
+          "contains": "token pairing"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
+    },
+    "I-009": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/services/notification-delivery.service.ts",
+          "line": 267,
+          "contains": "memperbarui status baris lama"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/notification-idempotency-resend.test.ts",
+          "contains": "resend sukses memperbarui"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
+    },
+    "Cfg-014": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/routes/admin/roles.subroute.ts",
+          "line": 119,
+          "contains": "SYSTEM_ROLE_IMMUTABLE"
+        },
+        {
+          "type": "test",
+          "path": "tests/integration/admin-roles-hardening.test.ts",
+          "contains": "SYSTEM_ROLE_IMMUTABLE"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
     }
   },
   "known": {

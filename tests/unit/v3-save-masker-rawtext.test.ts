@@ -27,9 +27,10 @@ describe('C.1 — gate lokasi presisi save_reservation', () => {
     expect(res.maskedToolNames).not.toContain('save_reservation');
   });
 
-  it('lokasi presisi kota (dalam coverage) → tetap DIBUKA', () => {
-    const session: CustomerGoalSession = { ...base, location: { kota: 'Kabupaten Sidoarjo' } as any };
+  it('A-007: kota saja (tanpa kelurahan/kecamatan/jarak) → DIBLOK', () => {
+    const session: CustomerGoalSession = { ...base, location: { rawText: 'Kabupaten Sidoarjo', kota: 'Kabupaten Sidoarjo' } as any };
     const res = evaluateToolMasking(ALL_V3_TOOLS, session, 'Oke besok fix ya', []);
-    expect(res.maskedToolNames).not.toContain('save_reservation');
+    expect(res.maskedToolNames).toContain('save_reservation');
+    expect(res.reason).toMatch(/IMPRECISE|LOCATION/);
   });
 });

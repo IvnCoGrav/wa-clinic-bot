@@ -78,7 +78,24 @@ Seluruh 73 item `UNVERIFIED` ditriase read-only terhadap kode aktual. Hasil: **2
 - **Gerbang bukti:** `npm run verify:backlog` -> `PASS` (33 verified baru, baseline 158/158).
 - **Gerbang regresi:** full suite **6.997 test / 6.966 lulus / 3 gagal**; 2 gagal pre-existing #287, 1 gagal berasal dari WIP pengguna yang belum di-commit (`packages/admin-dashboard/src/lib/dashboard-metrics.ts` re-export ke `utils/money.ts`) — bukan regresi perubahan ini.
 
-### 0.4 Gerbang Regresi Fase 1
+### 0.4 Fase 2C — remediasi 5 item OPEN (2026-11-11)
+
+Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tambalan prompt:
+
+| ID | Akar masalah | Perbaikan | Bukti test |
+|---|---|---|---|
+| **A-007** | `kota`/centroid dianggap lokasi presisi sehingga `save_reservation` bisa dikunci tanpa alamat pasti | `LocationState.isEstimatedCentroid` dipersist dari tool; masker menolak kota-only/centroid (butuh kelurahan/kecamatan/rawText presisi/jarak+ongkir non-centroid) | `tests/unit/v3/booking-precision-location.test.ts` (3) |
+| **K-006** | Ekspor chat memakai batas hari UTC sehingga pesan 00:00–06:59 WIB hilang | `parseDateRange()` memakai offset `+07:00` (hari WIB) | `tests/unit/chat-export.test.ts` (batas WIB + pesan 00:30 WIB) |
+| **Cfg-004** | `GET /api/admin/settings/notifications` (memuat `telegramPairingToken`) ada di allowlist baca staf | Endpoint dicabut dari allowlist; log & daily-report tetap boleh dibaca | `tests/integration/admin-settings-secret-allowlist.test.ts` (2) |
+| **I-009** | Resend sukses tidak memperbarui baris log idempotensi → `FAILED` permanen & kirim ulang terus | P2002 branch memperbarui status ke `SENT`/`SKIPPED`; status `SENT` tidak diturunkan | `tests/unit/notification-idempotency-resend.test.ts` (2) |
+| **Cfg-014** | API bisa menimpa `allowedPaths` role sistem; fallback memori global lintas tenant | Role sistem `409 SYSTEM_ROLE_IMMUTABLE`; memori diisolasi per tenant | `tests/integration/admin-roles-hardening.test.ts` (2) |
+
+- **Ar-005 parsial:** `GET /api/admin/roles` kini `503 DATABASE_UNAVAILABLE` saat DB gagal di produksi (bukan 200 kosong); route admin lain masih perlu audit serupa → tetap `OPEN`.
+- **Register:** **196 FIXED / 5 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 58 OPEN** (268 total).
+- **Gerbang bukti:** `npm run verify:backlog` → `PASS` (38 verified baru, baseline 158/158).
+- **Gerbang regresi:** 7.044 test / 7.011 lulus / 5 gagal: 2 pre-existing #287; 3 time-out flaky saat beban suite penuh (`media-mime-audio` ×2 ~9,5 dtk dan `staff-auth-and-reservation` GPS ×1 ~4 dtk) — ketiganya lulus saat dijalankan terisolasi. Tidak ada regresi kode dari perubahan Fase 2C.
+
+### 0.5 Gerbang Regresi Fase 1
 
 | Pemeriksaan | Hasil |
 |---|---|

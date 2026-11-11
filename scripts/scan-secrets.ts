@@ -125,6 +125,8 @@ function maskSecret(val: string): string {
 const DOC_CREDENTIAL_PATTERN = /^\s*[-*]?\s*(?:[A-Za-z0-9_./-]+\s+){0,4}(?:username|password|passphrase|api\s*key|secret|token)\s*:\s*`([^`\n]{6,128})`/i;
 
 const CODE_LIKE_VALUE = /^(?:const|let|var|function|return|import|export|async|await|class|if|for|while)\b/;
+// Token desain/CSS (mis. `z-dialog`, `z-toast`) bukan kredensial.
+const DESIGN_TOKEN_VALUE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)+$/;
 
 function isPlaceholderCredential(value: string): boolean {
   const v = value.trim();
@@ -149,6 +151,7 @@ export function scanDocumentationCredential(line: string): { matched: string; va
   // Nilai yang jelas potongan kode (mis. contoh `token:` diikuti `const ...`)
   // bukan kredensial dan tidak boleh memblokir commit dokumen audit.
   if (CODE_LIKE_VALUE.test(value)) return null;
+  if (DESIGN_TOKEN_VALUE.test(value)) return null;
   return { matched: m[0], value };
 }
 

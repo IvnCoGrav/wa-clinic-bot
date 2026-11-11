@@ -30,6 +30,12 @@ export interface LocationState {
    * gerbang state untuk pruning prompt (bukan tebakan teks).
    */
   locationSource?: string | null;
+  /**
+   * A-007: penanda lokasi hasil estimasi centroid (kota/kecamatan), BUKAN
+   * titik presisi. Dipakai gerbang `save_reservation` agar kota luas tidak
+   * dianggap alamat terkunci.
+   */
+  isEstimatedCentroid?: boolean;
 }
 
 export interface ChildState {

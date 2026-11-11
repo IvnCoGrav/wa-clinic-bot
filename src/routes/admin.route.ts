@@ -239,7 +239,8 @@ export async function adminRoutes(fastify: FastifyInstance) {
         // Daftar final (Task 0.2, enumerasi Settings.tsx + DailyReportPanel.tsx + LiveChatMonitor).
         const settingsReadAllowlist = [
           '/api/admin/settings',
-          '/api/admin/settings/notifications',
+          // Cfg-004: '/api/admin/settings/notifications' SENGAJA tidak masuk —
+          // responsnya memuat telegramPairingToken (rahasia tenant).
           '/api/admin/settings/notifications/logs',
           '/api/admin/settings/daily-report',
         ];

@@ -38,6 +38,10 @@ describe('Secret scanner — kredensial inline dokumentasi (S-001)', () => {
     expect(scanDocumentationCredential(line)).toBeNull();
   });
 
+  it('TIDAK menandai token desain/CSS kebab-case (design.md)', () => {
+    expect(scanDocumentationCredential('- Skala z memakai token: `z-dialog`, `z-toast`')).toBeNull();
+  });
+
   it('TIDAK menandai placeholder env/template', () => {
     expect(scanDocumentationCredential('- **Password:** `<WAHA_DASHBOARD_PASSWORD_DARI_ENV>`')).toBeNull();
     expect(scanDocumentationCredential('- **Secret:** `WAHA_WEBHOOK_SECRET`')).toBeNull();

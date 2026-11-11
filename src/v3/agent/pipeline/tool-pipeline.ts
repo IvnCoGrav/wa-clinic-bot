@@ -767,6 +767,9 @@ export class ToolExecutionPipeline {
           ongkirNormal: toolResult.ongkirNormal ?? toolResult.__internalOngkirNormal,
           ongkirPromo: toolResult.ongkirPromo ?? toolResult.__internalOngkirPromo,
           isOutOfCoverage: toolResult.isOutOfCoverage,
+          // A-007: bawa status centroid ke sesi agar gerbang booking bisa
+          // membedakan titik presisi dari estimasi kota/kecamatan.
+          isEstimatedCentroid: toolResult.isEstimatedCentroid === true,
         },
       }, tenantId);
       // Persistensi zipcode: satu seam kanonis non-destruktif. Kode pos dipakai

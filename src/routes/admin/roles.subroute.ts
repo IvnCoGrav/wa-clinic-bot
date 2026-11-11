@@ -17,7 +17,19 @@ const defaultFallbackRoles = [
   { key: 'admin_cs', label: 'Admin CS', description: 'Akses reservasi, live chat, dan manajemen pelanggan.', isSystem: true, allowedPaths: ['/tenant/reservations', '/tenant/live-chat', '/tenant/customers', '/tenant/today-treatments'], defaultRedirect: '/tenant/reservations' },
   { key: 'spv_cs', label: 'Supervisor CS', description: 'Akses penuh operasional dan laporan.', isSystem: true, allowedPaths: ['*'], defaultRedirect: '/tenant/overview' },
 ];
-const memoryCustomRoles: Map<string, any> = new Map(defaultFallbackRoles.map((r) => [r.key, r]));
+const memoryCustomRolesByTenant: Map<string, Map<string, any>> = new Map();
+
+/** Fallback memori TERISOLASI per tenant (Cfg-014: sebelumnya global → bocor). */
+function getMemoryRoleMap(tenantId: string): Map<string, any> {
+  let map = memoryCustomRolesByTenant.get(tenantId);
+  if (!map) {
+    map = new Map(defaultFallbackRoles.map((r) => [r.key, r]));
+    memoryCustomRolesByTenant.set(tenantId, map);
+  }
+  return map;
+}
+
+const SYSTEM_ROLE_KEYS = new Set(defaultFallbackRoles.map((r) => r.key));
 
 export async function rolesAdminRoutes(fastify: FastifyInstance) {
   /**
@@ -46,10 +58,21 @@ export async function rolesAdminRoutes(fastify: FastifyInstance) {
         data: roles,
       });
     } catch (err: any) {
-      console.warn('[ADMIN ROLES API] Database error, using fallback:', err.message);
-      const fallbackList = Array.from(memoryCustomRoles.values());
+      // Ar-005: jangan "false success" di produksi. Fallback memori hanya untuk
+      // dev/test; produksi wajib jujur bahwa daftar role tidak tersedia.
+      if (process.env.NODE_ENV === 'production') {
+        console.error('[ADMIN ROLES API] Database tidak tersedia:', err.message);
+        return reply.status(503).send({
+          success: false,
+          code: 'DATABASE_UNAVAILABLE',
+          error: 'Daftar role tidak dapat dimuat dari database. Coba lagi.',
+        });
+      }
+      console.warn('[ADMIN ROLES API] Database error, using fallback (non-production):', err.message);
+      const fallbackList = Array.from(getMemoryRoleMap(tenantId).values());
       return reply.status(200).send({
         success: true,
+        degraded: true,
         data: fallbackList,
       });
     }
@@ -86,6 +109,17 @@ export async function rolesAdminRoutes(fastify: FastifyInstance) {
       }
 
       const cleanKey = key.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
+
+      // Cfg-014: role sistem tidak boleh ditimpa lewat API (allowedPaths bisa
+      // dieksploitasi untuk memberi akses penuh). Perubahan role sistem hanya
+      // lewat kode/migrasi.
+      if (SYSTEM_ROLE_KEYS.has(cleanKey)) {
+        return reply.status(409).send({
+          success: false,
+          code: 'SYSTEM_ROLE_IMMUTABLE',
+          error: `Role sistem '${cleanKey}' tidak dapat diubah lewat API.`,
+        });
+      }
 
       // Task 2.1.4: Tolak allowedPaths: ['*'] untuk role non-super-admin
       if (cleanKey !== 'super_admin' && allowedPaths.some((p) => p === '*')) {
@@ -130,7 +164,7 @@ export async function rolesAdminRoutes(fastify: FastifyInstance) {
           },
         });
 
-        memoryCustomRoles.set(cleanKey, {
+        getMemoryRoleMap(tenantId).set(cleanKey, {
           key: roleRecord.key,
           label: roleRecord.label,
           description: roleRecord.description || '',
@@ -195,7 +229,7 @@ export async function rolesAdminRoutes(fastify: FastifyInstance) {
           },
         });
 
-        memoryCustomRoles.delete(cleanKey);
+        memoryCustomRolesByTenant.get(tenantId)?.delete(cleanKey);
 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,

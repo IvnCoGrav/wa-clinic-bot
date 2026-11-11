@@ -3,7 +3,7 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
-## 325. [Audit Eksekusi F0–F6] Sertifikasi 242 FIXED Dicabut — 5 Item UNVERIFIED, 63 OPEN (2026-11-10, OPEN — Fase 0/1/2A/2B)
+## 325. [Audit Eksekusi F0–F6] Sertifikasi 242 FIXED Dicabut — 5 Item UNVERIFIED, 58 OPEN (2026-11-11, OPEN — Fase 0/1/2A/2B/2C)
 
 - **Status:** OPEN — sertifikasi lama dicabut; gerbang bukti otomatis sudah terpasang (Fase 1). Kode produksi belum diubah. **Deploy produksi diblokir** sampai Fase 0–5 lulus.
 - **Laporan audit:** `docs/audit/2026-11-10/EVIDENCE_LEDGER.md`.
@@ -35,6 +35,16 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - **Test baru:** `tests/unit/cron-advisory-lock-lease.test.ts` (K-001/K-002), `tests/integration/knowledge-tenant-isolation.test.ts` (Cfg-002), kasus `W-008` di `tests/integration/waba-webhook-route.test.ts`, kasus `A-004` di `tests/unit/get-catalog-tool-grounding.test.ts`.
   - Register menjadi **191 FIXED / 5 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 63 OPEN**; `npm run verify:backlog` → PASS.
   - **Gerbang regresi:** 6.997 test / 6.966 lulus; 2 gagal pre-existing #287; 1 gagal berasal dari WIP pengguna (`dashboard-metrics.ts` → `utils/money.ts`, belum di-commit) — bukan regresi perubahan ini.
+
+- **Tindakan Fase 2C — remediasi 5 item OPEN (selesai 2026-11-11):**
+  - **A-007**: `kota`/centroid tidak lagi membuka `save_reservation`; status centroid dipersist ke state sesi.
+  - **K-006**: ekspor chat memakai batas hari WIB (pesan 00:00–06:59 WIB tidak hilang).
+  - **Cfg-004**: endpoint `settings/notifications` (token pairing Telegram) dicabut dari allowlist baca staf; log tetap bisa dibaca.
+  - **I-009**: resend sukses memperbarui log idempotensi `FAILED→SENT` (tidak lagi kirim ulang terus-menerus).
+  - **Cfg-014**: role sistem tidak dapat ditimpa via API (`409 SYSTEM_ROLE_IMMUTABLE`); fallback memori diisolasi per tenant.
+  - **Ar-005 parsial**: `GET /api/admin/roles` kini 503 saat DB gagal di produksi; route admin lain belum diaudit → tetap OPEN.
+  - Register menjadi **196 FIXED / 5 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 58 OPEN**; `npm run verify:backlog` → PASS.
+  - **Catatan flaky (bukan regresi):** `tests/unit/media-mime-audio.test.ts` (2 test, ~9,5 dtk) timeout 20 dtk saat beban suite penuh; lulus terisolasi. Juga staff-auth-and-reservation GPS (~4 dtk) time-out saat suite penuh. Perlu naikkan timeout/optimasi fixture.
 
 - **Temuan tambahan:** `SM-02` berstatus FIXED tetapi **inert** — `getTenantFormHeadersAsync`/`registerTenantFormHeaders` **0 pemanggil produksi** (`src/utils/reservation-text-parser.ts:131,162`).
 - **F5/F6 tidak dieksekusi:** Tidak ada artefak `after-f5.json`/`after-f6.json`; `scripts/deploy-prod.sh` tidak memvalidasi `APP_DOMAIN`/`BACKUP_ENCRYPTION_KEY`; `backup:verify` tidak ada di `package.json`. F6.1 menyebut “kelulusan penuh” padahal artefak 6.953 test berisi **6.923 lulus / 2 gagal pre-existing #287 / 28 skip**. Klaim “37 test isolasi 2 tenant” tidak punya suite/script rujukan; yang terverifikasi 5 suite / 23 test isolasi eksplisit lulus.

@@ -57,10 +57,14 @@ describe('formatTime / formatLocalDate / parseDateRange', () => {
     expect(formatLocalDate(d)).toBe('2026-08-13');
   });
 
-  it('parseDateRange memvalidasi & menghitung rentang hari', () => {
+  it('parseDateRange memakai batas hari WIB (K-006), bukan UTC', () => {
     const range = parseDateRange('2026-08-13')!;
-    expect(range.start.toISOString()).toBe('2026-08-13T00:00:00.000Z');
-    expect(range.end.toISOString()).toBe('2026-08-13T23:59:59.999Z');
+    // 2026-08-13 00:00 WIB === 2026-08-12 17:00 UTC
+    expect(range.start.toISOString()).toBe('2026-08-12T17:00:00.000Z');
+    expect(range.end.toISOString()).toBe('2026-08-13T16:59:59.999Z');
+    // Pesan 00:30 WIB (17:30 UTC hari sebelumnya) WAJIB masuk hari itu.
+    const earlyMorningWib = new Date('2026-08-12T17:30:00.000Z');
+    expect(earlyMorningWib >= range.start && earlyMorningWib <= range.end).toBe(true);
   });
 
   it('parseDateRange menolak format salah', () => {

@@ -84,10 +84,14 @@ export function formatLocalDate(value: Date = new Date()): string {
   return `${y}-${m}-${d}`;
 }
 
-/** Parse string tanggal YYYY-MM-DD ke rentang hari (UTC). null jika tidak valid. */
+/**
+ * Parse string tanggal YYYY-MM-DD ke rentang hari WIB (UTC+7).
+ * K-006: file ekspor diberi nama tanggal WIB, jadi batas query WAJIB WIB juga.
+ * Sebelumnya batas UTC membuat pesan 00:00–06:59 WIB hilang dari ekspor.
+ */
 export function parseDateRange(dateStr: string): { start: Date; end: Date } | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
-  const start = new Date(`${dateStr}T00:00:00.000Z`);
+  const start = new Date(`${dateStr}T00:00:00.000+07:00`);
   if (isNaN(start.getTime())) return null;
   const end = new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1);
   return { start, end };
