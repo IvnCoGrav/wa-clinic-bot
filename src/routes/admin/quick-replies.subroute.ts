@@ -3,6 +3,7 @@ import { prisma } from '../../db/client';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { auditService } from '../../services/audit.service';
 import { resolveSessionTenantId } from './route-helpers';
+import { activeDeliveryTiers } from '../../services/delivery.service';
 
 /**
  * Catatan kebijakan: template Quick Reply / Balasan Cepat adalah alat bantu
@@ -50,48 +51,46 @@ export function isDatabaseOfflineError(err: any): boolean {
  * 25 Template Quick Reply Ongkir Cepat (/ongkir1 s/d /ongkir25)
  * Disesuaikan persis dengan tier ongkir resmi klinik (delivery_tiers_custom.json).
  */
-export const ONGKIR_QUICK_REPLIES: Array<{
+/**
+ * Cfg-007: template ongkir dibangun dari data tier resmi (bukan hardcode).
+ * Nominal & batas km selalu mengikuti DeliveryTier tenant.
+ */
+export function buildOngkirQuickReplies(tiers: Array<{ maxDist: number; fee: number; promoDiscount?: number }>): Array<{
   shortcut: string;
   title: string;
   content: string;
   category: string;
   media_type: string;
   image_url: null;
-}> = Array.from({ length: 25 }, (_, idx) => {
-  const km = idx + 1;
-  let title = `Ongkir ${km} km`;
-  let content = '';
-
-  if (km <= 5) {
-    title = `Ongkir ${km} km  Gratis`;
-    content = `Jika kami cek bunda, dilihat dari jaraknya kurang lebih ${km}km. Dari pricelist kami di 0-5 km layanannya GRATIS ongkir (Free Ongkir) tanpa tambahan biaya bunda ☺️ \nMau pilih treatment apa bund? 🤗`;
-  } else if (km <= 7) {
-    title = `Ongkir ${km} km  Rp 5.000`;
-    content = `Jika kami cek bunda, dilihat dari jaraknya kurang lebih ${km}km. Dari pricelist kami di 5-10 km ada tambahan ongkir 15.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi 5.000 saja bunda ☺️ \nMau pilih treatment apa bund? 🤗`;
-  } else if (km <= 10) {
-    title = `Ongkir ${km} km  Rp 10.000`;
-    content = `Jika kami cek bunda, dilihat dari jaraknya kurang lebih ${km}km. Dari pricelist kami di 5-10 km ada tambahan ongkir 15.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi 10.000 saja bunda ☺️ \nMau pilih treatment apa bund? 🤗`;
-  } else if (km <= 15) {
-    title = `Ongkir ${km} km  Rp 15.000`;
-    content = `Jika kami cek bunda, dilihat dari jaraknya kurang lebih ${km}km. Dari pricelist kami di 10-15 km ada tambahan ongkir 25.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi 15.000 saja bunda ☺️ \nMau pilih treatment apa bund? 🤗`;
-  } else if (km <= 20) {
-    title = `Ongkir ${km} km  Rp 20.000`;
-    content = `Jika kami cek bunda, dilihat dari jaraknya kurang lebih ${km}km. Dari pricelist kami di 15-20 km ada tambahan ongkir 25.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi 20.000 saja bunda ☺️ \nMau pilih treatment apa bund? 🤗`;
-  } else {
-    // 21 - 25 km
-    title = `Ongkir ${km} km  Rp 25.000`;
-    content = `Jika kami cek bunda, dilihat dari jaraknya kurang lebih ${km}km. Dari pricelist kami di 20-25 km ada tambahan ongkir 35.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi 25.000 saja bunda ☺️ \nMau pilih treatment apa bund? 🤗`;
+}> {
+  const sorted = [...(tiers || [])]
+    .map((t) => ({ maxDist: Number(t.maxDist), fee: Number(t.fee), promoDiscount: Number(t.promoDiscount || 0) }))
+    .filter((t) => Number.isFinite(t.maxDist) && t.maxDist > 0 && Number.isFinite(t.fee))
+    .sort((a, b) => a.maxDist - b.maxDist);
+  if (sorted.length === 0) return [];
+  const maxKm = Math.min(30, sorted[sorted.length - 1].maxDist);
+  const out = [];
+  for (let km = 1; km <= maxKm; km++) {
+    const tier = sorted.find((t) => km <= t.maxDist) || sorted[sorted.length - 1];
+    const promoFee = Math.max(0, tier.fee - tier.promoDiscount);
+    const feeLabel = promoFee === 0 ? 'Gratis' : `Rp ${promoFee.toLocaleString('id-ID')}`;
+    const promoNote =
+      promoFee < tier.fee
+        ? ` Dari tarif normal Rp ${tier.fee.toLocaleString('id-ID')}, saat ini ada promo menjadi Rp ${promoFee.toLocaleString('id-ID')}.`
+        : '';
+    out.push({
+      shortcut: `ongkir${km}`,
+      title: `Ongkir ${km} km  ${feeLabel}`,
+      content: `Jika kami cek bunda, dilihat dari jaraknya kurang lebih ${km}km. Tarif ongkir untuk area ini ${feeLabel} (maksimal ${tier.maxDist} km).${promoNote} Mau pilih treatment apa bund? 🤗`,
+      category: 'Lokasi',
+      media_type: 'NONE',
+      image_url: null,
+    });
   }
+  return out;
+}
 
-  return {
-    shortcut: `ongkir${km}`,
-    title,
-    content,
-    category: 'Lokasi',
-    media_type: 'NONE',
-    image_url: null,
-  };
-});
+export const ONGKIR_QUICK_REPLIES = buildOngkirQuickReplies(activeDeliveryTiers);
 
 export const DEFAULT_QUICK_REPLIES: Array<{
   shortcut: string;
@@ -131,7 +130,7 @@ export const DEFAULT_QUICK_REPLIES: Array<{
     media_type: 'NONE',
     image_url: null,
     content:
-      'Alamat lengkap klinik kami:\n📍 {address}\nJam operasional: 08.00 - 17.00 WIB.\nDitunggu kedatangannya Bunda {name} 🙏',
+      'Alamat lengkap klinik kami:\n📍 {address}\nJam operasional: {operational_hours}.\nDitunggu kedatangannya Bunda {name} 🙏',
   },
   {
     shortcut: 'ongkir',
@@ -140,7 +139,7 @@ export const DEFAULT_QUICK_REPLIES: Array<{
     media_type: 'NONE',
     image_url: null,
     content:
-      'Tarif transport homecare dihitung berdasarkan jarak dari klinik kami ya Bunda {name}.\nJarak 0-5 km bebas ongkir, selebihnya Rp 3.000/km.\nContoh: jarak 8 km → ongkir Rp 9.000.',
+      'Tarif transport homecare dihitung berdasarkan jarak dari klinik kami ya Bunda {name}.\n{delivery_summary}',
   },
   {
     shortcut: 'jadwal',
@@ -149,7 +148,7 @@ export const DEFAULT_QUICK_REPLIES: Array<{
     media_type: 'NONE',
     image_url: null,
     content:
-      'Layanan kami tersedia setiap hari Senin - Minggu pukul 08.00 - 17.00 WIB.\nTersedia home-treatment dan kunjungan klinik.\nSilakan pilih hari & jam yang nyaman untuk Bunda {name} ya ✨',
+      'Layanan kami tersedia {operational_hours}.\nTersedia home-treatment dan kunjungan klinik.\nSilakan pilih hari & jam yang nyaman untuk Bunda {name} ya ✨',
   },
   {
     shortcut: 'format_reservasi',
@@ -188,6 +187,24 @@ export const DEFAULT_QUICK_REPLIES: Array<{
       'Boleh bantu kirimkan titik lokasi (shareloc WhatsApp) atau seret pin peta di rumah Bunda {name} agar Bidan kami langsung sampai tepat di depan rumah dan tidak tersasar ya Bunda 🙏',
   },
 ];
+
+/**
+ * Cfg-007: seed default per tenant memakai tier ongkir tenant (DB) bila ada,
+ * fallback ke konfigurasi file. Template non-ongkir tetap statis (placeholder).
+ */
+export async function buildDefaultQuickRepliesForTenant(tenantId: string): Promise<typeof DEFAULT_QUICK_REPLIES> {
+  let tiers: any = activeDeliveryTiers;
+  try {
+    const { getDeliveryTiersFromDb } = await import('../../services/delivery.service');
+    const dbTiers = await getDeliveryTiersFromDb(tenantId);
+    if (Array.isArray(dbTiers) && dbTiers.length > 0) tiers = dbTiers;
+  } catch {
+    // DB offline → file tiers
+  }
+  const ongkir = buildOngkirQuickReplies(tiers as any);
+  const rest = DEFAULT_QUICK_REPLIES.filter((i) => !/^ongkir\d+$/.test(i.shortcut));
+  return [...ongkir, ...rest];
+}
 
 export function normalizeShortcut(raw: string): string {
   if (!raw) return '';
@@ -353,7 +370,8 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
         } catch {}
 
         if (!alreadySeeded) {
-          for (const item of DEFAULT_QUICK_REPLIES) {
+          const seedItems = await buildDefaultQuickRepliesForTenant(tenantId);
+          for (const item of seedItems) {
             await (prisma as any).quickReply.upsert({
               where: { tenant_id_shortcut: { tenant_id: tenantId, shortcut: item.shortcut } },
               update: {},
@@ -737,7 +755,8 @@ export async function quickRepliesAdminRoutes(fastify: FastifyInstance) {
   fastify.post('/api/admin/quick-replies/seed-defaults', async (request: FastifyRequest, reply: FastifyReply) => {
     const tenantId = resolveSessionTenantId(request);
     try {
-      for (const item of DEFAULT_QUICK_REPLIES) {
+      const seedItems = await buildDefaultQuickRepliesForTenant(tenantId);
+      for (const item of seedItems) {
         await (prisma as any).quickReply.upsert({
           where: { tenant_id_shortcut: { tenant_id: tenantId, shortcut: item.shortcut } },
           update: {

@@ -167,7 +167,18 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Register:** **208 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 47 OPEN**.
 - **Gerbang regresi Fase 3B:** 7.113 test / 7.082 lulus / 3 gagal: 2 pre-existing #287 + **1 environment-dependent** `queue.test.ts` FIFO (gagal hanya saat Redis lokal aktif/BullMQ warm-up; lulus 11/11 dengan `DISABLE_REDIS=true`) — bukan regresi kode. `verify:backlog` PASS; `security:scan` LULUS 2.173 file.
 
-### 0.10 Gerbang Regresi Fase 1
+### 0.10 Fase 4A — W2 katalog & quick reply (2026-11-11)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **Cfg-010** | Upsert/delete katalog menunggu commit DB + rollback memori; produksi 503; validasi promo≤normal & durasi 15–480 | `tests/unit/settings-catalog-honesty.test.ts` (4) |
+| **Cfg-007** | Template ongkir dari `DeliveryTier` tenant; jam/alamat placeholder; seed pakai tier DB | `tests/unit/quick-replies-data-driven.test.ts` (4) |
+
+- **Cfg-013 tertahan:** butuh Confirmation Gate (otorisasi tulis).
+- **Register:** **210 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 45 OPEN**.
+- **Gerbang regresi Fase 4A:** 7.121 test / 7.080 lulus / 13 gagal: 2 pre-existing #287 + 11 suite media/livechat berat yang **time-out saat beban suite penuh** dan lulus saat dijalankan terisolasi (mis. `live-chat-reply` 14/14, `quick-replies-media`, `media-route-range`, `media.service`) — bukan regresi kode. `verify:backlog` PASS; `security:scan` LULUS 2.174 file.
+
+### 0.11 Gerbang Regresi Fase 1
 
 | Pemeriksaan | Hasil |
 |---|---|

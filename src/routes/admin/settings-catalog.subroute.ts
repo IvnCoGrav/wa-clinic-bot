@@ -52,7 +52,16 @@ export async function settingsCatalogRoutes(fastify: FastifyInstance) {
       serviceData.serviceType === 'ADD_ON' || 
       serviceData.isAddon === true;
 
-    const updated = treatmentCatalogService.upsertService({
+    // Cfg-010: validasi harga/durasi sebelum menulis.
+    if (Number(serviceData.promoPrice) > Number(serviceData.originalPrice)) {
+      return reply.status(400).send({ error: 'promoPrice tidak boleh lebih besar dari originalPrice.' });
+    }
+    const durationCheck = Number(serviceData.durationMinutes);
+    if (Number.isFinite(durationCheck) && (durationCheck < 15 || durationCheck > 480)) {
+      return reply.status(400).send({ error: 'durationMinutes harus 15–480 menit.' });
+    }
+
+    const servicePayload = {
       id: serviceData.id,
       name: serviceData.name,
       category: serviceData.category || 'BABY',
@@ -71,7 +80,19 @@ export async function settingsCatalogRoutes(fastify: FastifyInstance) {
       minGestationalWeeks: serviceData.minGestationalWeeks == null ? null : Number(serviceData.minGestationalWeeks),
       maxGestationalWeeks: serviceData.maxGestationalWeeks == null ? null : Number(serviceData.maxGestationalWeeks),
       clinicalFamily: serviceData.clinicalFamily || null,
-    });
+    };
+
+    // Cfg-010: produksi wajib menunggu commit DB.
+    let updated: any;
+    if (process.env.NODE_ENV === 'production') {
+      try {
+        updated = await treatmentCatalogService.upsertServicePersisted(servicePayload, resolveTenantId(request));
+      } catch {
+        return reply.status(503).send({ success: false, code: 'DATABASE_UNAVAILABLE', error: 'Layanan gagal disimpan ke database.' });
+      }
+    } else {
+      updated = treatmentCatalogService.upsertService(servicePayload, resolveTenantId(request));
+    }
 
     await auditService.logAdminAction({
       apiKey: (request as any).adminKeyUsed,
@@ -80,6 +101,7 @@ export async function settingsCatalogRoutes(fastify: FastifyInstance) {
       targetId: serviceData.id,
       payload: serviceData,
       ipAddress: request.ip,
+      tenantId: resolveTenantId(request),
     });
 
     return reply.status(200).send({ success: true, message: 'Service saved successfully', data: updated });
@@ -131,7 +153,16 @@ export async function settingsCatalogRoutes(fastify: FastifyInstance) {
         merged.serviceType === 'ADD_ON' || 
         merged.isAddon === true;
 
-      const updated = treatmentCatalogService.upsertService({
+      // Cfg-010: validasi harga/durasi.
+      if (Number(merged.promoPrice) > Number(merged.originalPrice)) {
+        return reply.status(400).send({ error: 'promoPrice tidak boleh lebih besar dari originalPrice.' });
+      }
+      const dur = Number(merged.durationMinutes);
+      if (Number.isFinite(dur) && (dur < 15 || dur > 480)) {
+        return reply.status(400).send({ error: 'durationMinutes harus 15–480 menit.' });
+      }
+
+      const servicePayload = {
         ...merged,
         serviceType: isBundle ? 'BUNDLE' : isAddon ? 'ADD_ON' : (merged.serviceType || 'STANDARD'),
         bundleItemIds: isBundle ? merged.bundleItemIds : undefined,
@@ -149,7 +180,18 @@ export async function settingsCatalogRoutes(fastify: FastifyInstance) {
         minGestationalWeeks: merged.minGestationalWeeks == null ? null : Number(merged.minGestationalWeeks),
         maxGestationalWeeks: merged.maxGestationalWeeks == null ? null : Number(merged.maxGestationalWeeks),
         clinicalFamily: merged.clinicalFamily || null,
-      });
+      };
+
+      let updated: any;
+      if (process.env.NODE_ENV === 'production') {
+        try {
+          updated = await treatmentCatalogService.upsertServicePersisted(servicePayload, resolveTenantId(request));
+        } catch {
+          return reply.status(503).send({ success: false, code: 'DATABASE_UNAVAILABLE', error: 'Layanan gagal disimpan ke database.' });
+        }
+      } else {
+        updated = treatmentCatalogService.upsertService(servicePayload, resolveTenantId(request));
+      }
 
       await auditService.logAdminAction({
         apiKey: (request as any).adminKeyUsed,
@@ -158,6 +200,7 @@ export async function settingsCatalogRoutes(fastify: FastifyInstance) {
         targetId: id,
         payload: { name: updated.name },
         ipAddress: request.ip,
+        tenantId: resolveTenantId(request),
       });
       return reply.status(200).send({ success: true, data: updated });
     }
@@ -171,7 +214,16 @@ export async function settingsCatalogRoutes(fastify: FastifyInstance) {
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const { id } = request.params;
       const { treatmentCatalogService } = await import('../../services/treatment-catalog.service');
-      const deleted = treatmentCatalogService.deleteService(id);
+      let deleted: boolean;
+      if (process.env.NODE_ENV === 'production') {
+        try {
+          deleted = await treatmentCatalogService.deleteServicePersisted(id, resolveTenantId(request));
+        } catch {
+          return reply.status(503).send({ success: false, code: 'DATABASE_UNAVAILABLE', error: 'Layanan gagal dihapus dari database.' });
+        }
+      } else {
+        deleted = treatmentCatalogService.deleteService(id);
+      }
       if (!deleted) {
         return reply.status(404).send({ error: 'Service not found' });
       }
@@ -181,6 +233,7 @@ export async function settingsCatalogRoutes(fastify: FastifyInstance) {
         action: 'DELETE_CLINIC_SERVICE',
         targetId: id,
         ipAddress: request.ip,
+        tenantId: resolveTenantId(request),
       });
       return reply.status(200).send({ success: true, message: 'Service deleted successfully' });
     }
@@ -230,6 +283,7 @@ export async function settingsCatalogRoutes(fastify: FastifyInstance) {
         action: 'UPDATE_DELIVERY_TIERS',
         targetId: 'SYSTEM',
         ipAddress: request.ip,
+        tenantId,
       });
       return reply.status(200).send({ success: true, message: 'Delivery tiers updated successfully' });
     }

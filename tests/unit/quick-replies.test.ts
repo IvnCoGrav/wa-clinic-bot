@@ -332,10 +332,9 @@ describe('Quick Replies - Helpers, In-Memory Store & SSOT Media Resolution', () 
     expect(resolvedC.mime_type).toBeUndefined();
   });
 
-  it('ONGKIR_QUICK_REPLIES: defines 25 valid quick replies matching delivery tiers', () => {
-    expect(ONGKIR_QUICK_REPLIES).toHaveLength(25);
+  it('ONGKIR_QUICK_REPLIES: dibangun dari delivery tier tenant (bukan hardcode)', () => {
+    expect(ONGKIR_QUICK_REPLIES.length).toBeGreaterThan(0);
 
-    // Semua shortcut harus valid dan berkategori Lokasi
     for (const qr of ONGKIR_QUICK_REPLIES) {
       expect(isValidShortcut(qr.shortcut)).toBeNull();
       expect(qr.category).toBe('Lokasi');
@@ -343,51 +342,13 @@ describe('Quick Replies - Helpers, In-Memory Store & SSOT Media Resolution', () 
       expect(qr.content).toContain('Mau pilih treatment apa bund?');
     }
 
-    // Cek tier batas 1-5 km: Free ongkir
     const o1 = ONGKIR_QUICK_REPLIES.find((q) => q.shortcut === 'ongkir1');
-    const o5 = ONGKIR_QUICK_REPLIES.find((q) => q.shortcut === 'ongkir5');
-    expect(o1?.content).toContain('GRATIS ongkir (Free Ongkir)');
-    expect(o5?.content).toContain('GRATIS ongkir (Free Ongkir)');
-    expect(o1?.title).toBe('Ongkir 1 km  Gratis');
+    expect(o1?.title).toContain('Gratis');
+    const last = ONGKIR_QUICK_REPLIES[ONGKIR_QUICK_REPLIES.length - 1];
+    expect(last.shortcut).toMatch(/^ongkir\d+$/);
 
-    // Cek tier 6-7 km: Rp 5.000
-    const o6 = ONGKIR_QUICK_REPLIES.find((q) => q.shortcut === 'ongkir6');
-    const o7 = ONGKIR_QUICK_REPLIES.find((q) => q.shortcut === 'ongkir7');
-    expect(o6?.content).toContain('ongkir menjadi 5.000 saja');
-    expect(o7?.content).toContain('ongkir menjadi 5.000 saja');
-    expect(o6?.title).toBe('Ongkir 6 km  Rp 5.000');
-
-    // Cek tier 8-10 km: Rp 10.000
-    const o8 = ONGKIR_QUICK_REPLIES.find((q) => q.shortcut === 'ongkir8');
-    const o10 = ONGKIR_QUICK_REPLIES.find((q) => q.shortcut === 'ongkir10');
-    expect(o8?.content).toContain('ongkir menjadi 10.000 saja');
-    expect(o10?.content).toContain('ongkir menjadi 10.000 saja');
-    expect(o10?.title).toBe('Ongkir 10 km  Rp 10.000');
-
-    // Cek tier 11-15 km: Rp 15.000
-    const o11 = ONGKIR_QUICK_REPLIES.find((q) => q.shortcut === 'ongkir11');
-    const o15 = ONGKIR_QUICK_REPLIES.find((q) => q.shortcut === 'ongkir15');
-    expect(o11?.content).toContain('ongkir menjadi 15.000 saja');
-    expect(o15?.content).toContain('ongkir menjadi 15.000 saja');
-    expect(o15?.title).toBe('Ongkir 15 km  Rp 15.000');
-
-    // Cek tier 16-20 km: Rp 20.000
-    const o16 = ONGKIR_QUICK_REPLIES.find((q) => q.shortcut === 'ongkir16');
-    const o20 = ONGKIR_QUICK_REPLIES.find((q) => q.shortcut === 'ongkir20');
-    expect(o16?.content).toContain('ongkir menjadi 20.000 saja');
-    expect(o20?.content).toContain('ongkir menjadi 20.000 saja');
-    expect(o20?.title).toBe('Ongkir 20 km  Rp 20.000');
-
-    // Cek tier 21-25 km: Rp 25.000
-    const o21 = ONGKIR_QUICK_REPLIES.find((q) => q.shortcut === 'ongkir21');
-    const o25 = ONGKIR_QUICK_REPLIES.find((q) => q.shortcut === 'ongkir25');
-    expect(o21?.content).toContain('ongkir menjadi 25.000 saja');
-    expect(o25?.content).toContain('ongkir menjadi 25.000 saja');
-    expect(o25?.title).toBe('Ongkir 25 km  Rp 25.000');
-
-    // Verifikasi bahwa DEFAULT_QUICK_REPLIES memuat seluruh ONGKIR_QUICK_REPLIES
-    for (let i = 1; i <= 25; i++) {
-      expect(DEFAULT_QUICK_REPLIES.some((d) => d.shortcut === `ongkir${i}`)).toBe(true);
+    for (const qr of ONGKIR_QUICK_REPLIES) {
+      expect(DEFAULT_QUICK_REPLIES.some((d) => d.shortcut === qr.shortcut)).toBe(true);
     }
   });
 

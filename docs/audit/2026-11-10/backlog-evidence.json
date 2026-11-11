@@ -1252,6 +1252,42 @@
       ],
       "verifiedBy": "AI Agent",
       "verifiedAt": "2026-11-11"
+    },
+    "Cfg-010": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/services/treatment-catalog.service.ts",
+          "line": 1754,
+          "contains": "upsertServicePersisted"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/settings-catalog-honesty.test.ts",
+          "contains": "produksi + DB gagal"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
+    },
+    "Cfg-007": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/routes/admin/quick-replies.subroute.ts",
+          "line": 58,
+          "contains": "buildOngkirQuickReplies"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/quick-replies-data-driven.test.ts",
+          "contains": "membangun ongkir dari tier tenant"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
     }
   },
   "known": {

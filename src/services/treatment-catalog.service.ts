@@ -189,6 +189,29 @@ function getTenantCatalog(tenantId: string = DEFAULT_TENANT_ID): Map<string, Cli
   return cat;
 }
 
+/**
+ * Asal katalog per tenant. Dipakai halaman publik untuk **fail closed**:
+ * bila katalog berasal dari seed in-memory (DB error/kosong), harga tidak boleh
+ * disajikan seolah-olah data terkini.
+ */
+export type CatalogSource = 'DB' | 'FALLBACK' | 'UNCONFIGURED' | 'UNKNOWN';
+
+const tenantCatalogSource = new Map<string, CatalogSource>();
+
+function setCatalogSource(tenantId: string, source: CatalogSource): void {
+  tenantCatalogSource.set(tenantId, source);
+}
+
+export function getCatalogSource(tenantId: string = DEFAULT_TENANT_ID): CatalogSource {
+  return tenantCatalogSource.get(tenantId) || 'UNKNOWN';
+}
+
+/** True bila katalog tidak berasal dari database (seed lama / belum termuat). */
+export function isCatalogDegraded(tenantId: string = DEFAULT_TENANT_ID): boolean {
+  const source = getCatalogSource(tenantId);
+  return source === 'FALLBACK' || source === 'UNKNOWN';
+}
+
 // Backwards-compat: alias untuk default tenant (dipakai legacy code tanpa tenantId)
 const serviceCatalog: Map<string, ClinicServiceItem> = getTenantCatalog(DEFAULT_TENANT_ID);
 
@@ -1003,7 +1026,9 @@ export async function loadServicesFromDb(tenantId: string): Promise<void> {
     targetCatalog.clear();
     if (tenantId === DEFAULT_TENANT_ID) {
       loadFallbackCatalog(targetCatalog, tenantId, 'USE_DB_CATALOG=false');
+      setCatalogSource(tenantId, 'FALLBACK');
     } else {
+      setCatalogSource(tenantId, 'UNCONFIGURED');
       console.log(`[TREATMENT CATALOG] USE_DB_CATALOG=false; tenant '${tenantId}' state: unconfigured.`);
     }
     return;
@@ -1073,21 +1098,26 @@ export async function loadServicesFromDb(tenantId: string): Promise<void> {
           clinicalFamily: (s as any).clinical_family ?? null,
         });
       });
+      setCatalogSource(tenantId, 'DB');
       return;
     }
 
     // S5.2: Tidak ada auto-seed. Fallback in-memory hanya untuk tenant default.
     if (tenantId !== DEFAULT_TENANT_ID) {
+      setCatalogSource(tenantId, 'UNCONFIGURED');
       console.log(`[TREATMENT CATALOG] Tenant '${tenantId}' belum memiliki katalog treatment di database. State: unconfigured. Tidak ada auto-seed.`);
       return;
     }
     loadFallbackCatalog(targetCatalog, tenantId, 'Katalog DB kosong');
+    setCatalogSource(tenantId, 'FALLBACK');
   } catch (err) {
     const targetCatalog = getTenantCatalog(tenantId);
     targetCatalog.clear();
     if (tenantId === DEFAULT_TENANT_ID) {
       loadFallbackCatalog(targetCatalog, tenantId, 'DB unavailable');
+      setCatalogSource(tenantId, 'FALLBACK');
     } else {
+      setCatalogSource(tenantId, 'UNCONFIGURED');
       console.warn(`[TREATMENT CATALOG] DB unavailable; tenant '${tenantId}' unconfigured (no cross-tenant fallback).`);
     }
   }
@@ -1147,7 +1177,8 @@ export async function saveServicesToDb(tenantId: string): Promise<boolean> {
     return true;
   } catch (err) {
     console.error('[TREATMENT CATALOG] Failed to save to DB:', (err as Error).message);
-    return saveServices();
+    saveServices();
+    return false;
   }
 }
 
@@ -1714,6 +1745,52 @@ export class TreatmentCatalogService {
     // Fire-and-forget sinkronisasi ke DB (SaaS-ready)
     saveServicesToDb(tenantId).catch((e) => console.warn('[TREATMENT CATALOG] upsert DB sync failed:', (e as Error).message));
     return service;
+  }
+
+  /**
+   * Cfg-010: upsert yang MENUNGGU commit DB. Bila DB gagal, perubahan memori
+   * di-rollback dan error dilempar — route produksi tidak boleh 200 palsu.
+   */
+  public async upsertServicePersisted(
+    service: ClinicServiceItem,
+    tenantId: string = DEFAULT_TENANT_ID
+  ): Promise<ClinicServiceItem> {
+    const catalog = getTenantCatalog(tenantId);
+    const prev = catalog.get(service.id);
+    catalog.set(service.id, service);
+    if (tenantId === DEFAULT_TENANT_ID) serviceCatalog.set(service.id, service);
+
+    const ok = await saveServicesToDb(tenantId).catch(() => false);
+    if (!ok) {
+      if (prev) {
+        catalog.set(service.id, prev);
+        if (tenantId === DEFAULT_TENANT_ID) serviceCatalog.set(service.id, prev);
+      } else {
+        catalog.delete(service.id);
+        if (tenantId === DEFAULT_TENANT_ID) serviceCatalog.delete(service.id);
+      }
+      throw new Error('CATALOG_DB_UNAVAILABLE');
+    }
+    return service;
+  }
+
+  /** Cfg-010: hapus yang menunggu commit DB + rollback memori bila gagal. */
+  public async deleteServicePersisted(id: string, tenantId: string = DEFAULT_TENANT_ID): Promise<boolean> {
+    const catalog = getTenantCatalog(tenantId);
+    const prev = catalog.get(id);
+    const deleted = catalog.delete(id);
+    if (tenantId === DEFAULT_TENANT_ID) serviceCatalog.delete(id);
+    if (!deleted) return false;
+
+    const ok = await saveServicesToDb(tenantId).catch(() => false);
+    if (!ok) {
+      if (prev) {
+        catalog.set(id, prev);
+        if (tenantId === DEFAULT_TENANT_ID) serviceCatalog.set(id, prev);
+      }
+      throw new Error('CATALOG_DB_UNAVAILABLE');
+    }
+    return true;
   }
 
   /**
