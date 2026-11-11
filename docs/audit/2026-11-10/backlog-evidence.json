@@ -1288,6 +1288,24 @@
       ],
       "verifiedBy": "AI Agent",
       "verifiedAt": "2026-11-11"
+    },
+    "Cfg-013": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/routes/admin.route.ts",
+          "line": 261,
+          "contains": "superAdminWritePrefixes"
+        },
+        {
+          "type": "test",
+          "path": "tests/integration/admin-config-write-rbac.test.ts",
+          "contains": "FORBIDDEN_SUPER_ADMIN_ONLY_WRITE"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
     }
   },
   "known": {

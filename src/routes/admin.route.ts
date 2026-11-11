@@ -256,6 +256,24 @@ export async function adminRoutes(fastify: FastifyInstance) {
         }
       }
 
+      // Cfg-013 (Opsi A): endpoint tulis katalog/tier/marketing-spend wajib
+      // Super Admin. GET tetap boleh untuk staf (monitoring), write ditolak.
+      const superAdminWritePrefixes = [
+        '/api/admin/services',
+        '/api/admin/delivery-tiers',
+        '/api/admin/meta-performance',
+      ];
+      if (
+        request.method.toUpperCase() !== 'GET' &&
+        superAdminWritePrefixes.some((prefix) => urlPath.startsWith(prefix))
+      ) {
+        console.warn(`[RBAC GUARD] Blocked write oleh '${staffRole}' pada ${request.method} ${urlPath} (Cfg-013)`);
+        return reply.status(403).send({
+          error: 'Forbidden: Hanya Super Admin yang boleh mengubah konfigurasi ini.',
+          code: 'FORBIDDEN_SUPER_ADMIN_ONLY_WRITE',
+        });
+      }
+
       // Prohibit custom roles modification (creating, updating, deleting custom roles)
       if (urlPath.startsWith('/api/admin/roles') && request.method !== 'GET') {
         console.warn(`[RBAC GUARD] Blocked custom roles modification attempt by staff role '${staffRole}' on ${request.method} ${urlPath}`);

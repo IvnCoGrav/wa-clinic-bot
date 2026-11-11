@@ -178,7 +178,14 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Register:** **210 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 45 OPEN**.
 - **Gerbang regresi Fase 4A:** 7.121 test / 7.080 lulus / 13 gagal: 2 pre-existing #287 + 11 suite media/livechat berat yang **time-out saat beban suite penuh** dan lulus saat dijalankan terisolasi (mis. `live-chat-reply` 14/14, `quick-replies-media`, `media-route-range`, `media.service`) — bukan regresi kode. `verify:backlog` PASS; `security:scan` LULUS 2.174 file.
 
-### 0.11 Gerbang Regresi Fase 1
+### 0.11 Fase 4B — Cfg-013 Opsi A (2026-11-11)
+
+- Endpoint tulis `/api/admin/services`, `/api/admin/delivery-tiers`, `/api/admin/meta-performance` → **Super Admin only** (`403 FORBIDDEN_SUPER_ADMIN_ONLY_WRITE`); GET tetap untuk staf.
+- Test: `tests/integration/admin-config-write-rbac.test.ts` (6).
+- **Register:** **211 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 44 OPEN**.
+- **Gerbang regresi Fase 4B:** 7.127 test / 7.097 lulus / **2 gagal pre-existing #287**; `audit-baseline-diff` → **0 regresi baru** (+11 failure flaky sebelumnya pulih); `verify:backlog` PASS; `security:scan` LULUS 2.177 file.
+
+### 0.12 Gerbang Regresi Fase 1
 
 | Pemeriksaan | Hasil |
 |---|---|

@@ -14,7 +14,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Catatan efisiensi:** belum ada profiling/benchmark di audit ini; klaim efisiensi hanya struktural (cache ber-TTL, bounded map, atomic claim, WIB bounds). Sisa inefisiensi: `UTL-15`/`CFG-17`/`W-006` (cache per proses), `I-011` (tanpa kuota/circuit per tenant), `K-010` (tanpa drain shutdown).
 - **Rencana:** pecah 9 God file per domain (satu PR per file + test pemanggil), ganti `as any` bertahap di jalur transaksional, hapus dead export dengan bukti pencarian, lalu jalankan benchmark ringan (latensi webhook & retrieval).
 
-## 325. [Audit Eksekusi F0–F6] Sertifikasi 242 FIXED Dicabut — 4 Item UNVERIFIED, 45 OPEN (2026-11-11, OPEN — Fase 0/1/2A–4A)
+## 325. [Audit Eksekusi F0–F6] Sertifikasi 242 FIXED Dicabut — 4 Item UNVERIFIED, 44 OPEN (2026-11-11, OPEN — Fase 0/1/2A–4B)
 
 - **Status:** OPEN — sertifikasi lama dicabut; gerbang bukti otomatis sudah terpasang (Fase 1). Kode produksi belum diubah. **Deploy produksi diblokir** sampai Fase 0–5 lulus.
 - **Laporan audit:** `docs/audit/2026-11-10/EVIDENCE_LEDGER.md`.
@@ -96,6 +96,9 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - **Cfg-007:** quick reply ongkir dibangun dari DeliveryTier tenant; jam/alamat placeholder.
   - **Cfg-013:** tertahan menunggu Confirmation Gate otorisasi tulis.
   - Register menjadi **210 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 45 OPEN**.
+- **Tindakan Fase 4B (selesai 2026-11-11):**
+  - **Cfg-013 (Gate Opsi A):** write katalog/tier/meta-performance hanya Super Admin; GET tetap untuk staf.
+  - Register menjadi **211 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 44 OPEN**.
 - **Temuan tambahan:** `SM-02` berstatus FIXED tetapi **inert** — `getTenantFormHeadersAsync`/`registerTenantFormHeaders` **0 pemanggil produksi** (`src/utils/reservation-text-parser.ts:131,162`).
 - **F5/F6 tidak dieksekusi:** Tidak ada artefak `after-f5.json`/`after-f6.json`; `scripts/deploy-prod.sh` tidak memvalidasi `APP_DOMAIN`/`BACKUP_ENCRYPTION_KEY`; `backup:verify` tidak ada di `package.json`. F6.1 menyebut “kelulusan penuh” padahal artefak 6.953 test berisi **6.923 lulus / 2 gagal pre-existing #287 / 28 skip**. Klaim “37 test isolasi 2 tenant” tidak punya suite/script rujukan; yang terverifikasi 5 suite / 23 test isolasi eksplisit lulus.
 - **Tindakan Fase 0 (selesai 2026-11-10):**
@@ -163,6 +166,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
     - `CustomerDatabase.tsx`: kolom cari → `?q=`, dengan efek sinkronisasi saat URL berubah (tombol Back). `?tab=` tetap seperti sebelumnya; pindah tab membersihkan `q` sesuai perilaku lama.
     - **Ditunda secara sadar:** `sortField`/`sortOrder` di Reservations tidak dipindah ke URL — bukan filter yang dilihat pengguna, dan menambah kunci URL pada halaman dengan ±10 efek turunan berisiko regresi tanpa manfaat sepadan.
     - **Belum diverifikasi manual:** refresh, tombol Back, dan perilaku mengetik di kolom cari.
+  - **Bukti regresi (2026-11-11):** `npx vitest run` penuh = 905/913 berkas lulus. 7 berkas gagal, lalu diuji ulang terpisah: 6 di antaranya lulus (timeout 20 dtk saat suite paralel berat, bukan cacat logika) dan 1 memang gagal pre-existing (`tests/unit/hybrid-reservation-parser.test.ts`, 2 tes) — dibuktikan dengan checkout bersih `HEAD` di worktree terpisah: tetap gagal 2 tes yang sama. Kegagalan itu sudah tercatat di butir 301 dokumen ini.
 - **Audit UI/UX ulang (2026-11-11, baca-saja):** sisa temuan yang belum ditutup —
   - **A-001 Penelan error:** 149 `catch {}` + 49 `.catch(() => {})` (198 situs, 39+22 berkas). Kontrak error baru dipakai di 3 situs. FMEA 5x8x8=320.
   - **A-002 Tanggal lolos gerbang — SELESAI (Fase 2).** Gerbang kini mencakup `hooks/` + `utils/` dan memeriksa `toLocaleString`, bukan hanya `toLocaleDateString`/`toLocaleTimeString`. 22 situs `toLocaleString` (tanggal+jam zona perangkat) ditemukan dan dimigrasikan. Koreksi audit awal: di `hooks/` hanya 5 pemakaian, dan 4 di antaranya sudah menyebut `timeZone` — yang benar-benar salah hanya 1 (`useLiveChatNotification`), tetapi celah `toLocaleString` jauh lebih besar.

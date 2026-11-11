@@ -62,7 +62,7 @@ describe('FASE 2: RBAC Matrix & Tenant Isolation Suite (Tasks 2.1 & 2.2)', () =>
 
         expect(res.statusCode).toBe(403);
         const body = JSON.parse(res.body);
-        expect(['FORBIDDEN_STAFF_ROLE', 'FORBIDDEN_ROLE_SCOPE']).toContain(body.code);
+        expect(['FORBIDDEN_STAFF_ROLE', 'FORBIDDEN_ROLE_SCOPE', 'FORBIDDEN_SUPER_ADMIN_ONLY_WRITE']).toContain(body.code);
       });
 
       it(`[2.1.5] Role ${name} MUST be blocked (403) from mutating few-shots`, async () => {
