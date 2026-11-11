@@ -1052,8 +1052,8 @@ export class GuardrailPipeline {
         violationsDetected.push('STATE_AWARE_LOCATION_RECOVERY: lokasi sesi dipakai, bukan fallback buntu');
         console.warn(JSON.stringify({ event: 'STATE_AWARE_LOCATION_RECOVERY_APPLIED', tenantId, conversationId, label, timestamp: new Date().toISOString() }));
       } else {
-        const { getBrandIdentity } = await import('../../../config/brand');
-        const brand = getBrandIdentity();
+        const { getBrandIdentity, getBrandIdentityAsync } = await import('../../../config/brand');
+        const brand = await getBrandIdentityAsync(input.tenantId).catch(() => getBrandIdentity());
         finalReply = buildInvalidReplyFallback(isFollowUp, session.genderGreeting, brand.businessName);
       }
     }
@@ -1086,8 +1086,8 @@ export class GuardrailPipeline {
                 repromptCount++;
               } else {
                 // Masih todong → jatuh ke fallback generik (tanpa tanya hari)
-                const { getBrandIdentity } = await import('../../../config/brand');
-                const brand = getBrandIdentity();
+                const { getBrandIdentity, getBrandIdentityAsync } = await import('../../../config/brand');
+                const brand = await getBrandIdentityAsync(input.tenantId).catch(() => getBrandIdentity());
                 finalReply = buildInvalidReplyFallback(isFollowUp, session.genderGreeting, brand.businessName);
                 console.warn(JSON.stringify({ event: 'FUNNEL_REPROMPT_STILL_TODONG_FALLBACK', tenantId, conversationId, timestamp: new Date().toISOString() }));
               }
@@ -1245,6 +1245,18 @@ export class GuardrailPipeline {
       isEscalated = true;
       violationsDetected.push('TERMINAL_SILENT_DROP_GUARD: finalReply kosong diganti fallback');
       console.warn(JSON.stringify({ event: 'SILENT_DROP_PREVENTED', tenantId, conversationId, phone: maskPhoneNumber(phone), timestamp: new Date().toISOString() }));
+    }
+
+    // A-008: gerbang akhir deterministik. Template/fallback yang disuntikkan
+    // SETELAH sanitizer awal tetap wajib melewati sanitizer sekali lagi agar
+    // kuota sapaan & batas kalimat tidak bocor.
+    if (shouldSendReply && finalReply && finalReply.trim()) {
+      try {
+        const finalCleaned = OutputSanitizer.cleanOutboundReply(finalReply, input.incomingText, input.isFollowUp, sanitizeOpts);
+        if (finalCleaned && finalCleaned.trim()) finalReply = finalCleaned;
+      } catch {
+        // sanitizer gagal tidak boleh membuat balasan kosong
+      }
     }
 
     return {

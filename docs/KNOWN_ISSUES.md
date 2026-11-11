@@ -14,7 +14,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Catatan efisiensi:** belum ada profiling/benchmark di audit ini; klaim efisiensi hanya struktural (cache ber-TTL, bounded map, atomic claim, WIB bounds). Sisa inefisiensi: `UTL-15`/`CFG-17`/`W-006` (cache per proses), `I-011` (tanpa kuota/circuit per tenant), `K-010` (tanpa drain shutdown).
 - **Rencana:** pecah 9 God file per domain (satu PR per file + test pemanggil), ganti `as any` bertahap di jalur transaksional, hapus dead export dengan bukti pencarian, lalu jalankan benchmark ringan (latensi webhook & retrieval).
 
-## 325. [Audit Eksekusi F0–F6] Sertifikasi 242 FIXED Dicabut — 4 Item UNVERIFIED, 41 OPEN (2026-11-11, OPEN — Fase 0/1/2A–4D)
+## 325. [Audit Eksekusi F0–F6] Sertifikasi 242 FIXED Dicabut — 4 Item UNVERIFIED, 37 OPEN (2026-11-11, OPEN — Fase 0/1/2A–5A)
 
 - **Status:** OPEN — sertifikasi lama dicabut; gerbang bukti otomatis sudah terpasang (Fase 1). Kode produksi belum diubah. **Deploy produksi diblokir** sampai Fase 0–5 lulus.
 - **Laporan audit:** `docs/audit/2026-11-10/EVIDENCE_LEDGER.md`.
@@ -107,6 +107,11 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - **Cfg-009:** audit settings tenant-aware (30 call site), retry 1x, warning tenant kosong, mask nomor rekening.
   - **Sisa W2:** Cfg-011 (endpoint setelan), Cfg-017 (dokumen), Cfg-012 (landing/service).
   - Register menjadi **214 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 41 OPEN**.
+- **Tindakan Fase 5A (selesai 2026-11-11):**
+  - **A-008:** sanitizer final setelah fallback deterministik.
+  - **A-009/C-010:** brand tenant async di generation & guardrail.
+  - **C-008:** isolasi konten KB (`<knowledge_chunk>` + sanitasi tag).
+  - Register menjadi **218 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 37 OPEN**.
 - **Temuan tambahan:** `SM-02` berstatus FIXED tetapi **inert** — `getTenantFormHeadersAsync`/`registerTenantFormHeaders` **0 pemanggil produksi** (`src/utils/reservation-text-parser.ts:131,162`).
 - **F5/F6 tidak dieksekusi:** Tidak ada artefak `after-f5.json`/`after-f6.json`; `scripts/deploy-prod.sh` tidak memvalidasi `APP_DOMAIN`/`BACKUP_ENCRYPTION_KEY`; `backup:verify` tidak ada di `package.json`. F6.1 menyebut “kelulusan penuh” padahal artefak 6.953 test berisi **6.923 lulus / 2 gagal pre-existing #287 / 28 skip**. Klaim “37 test isolasi 2 tenant” tidak punya suite/script rujukan; yang terverifikasi 5 suite / 23 test isolasi eksplisit lulus.
 - **Tindakan Fase 0 (selesai 2026-11-10):**
@@ -180,7 +185,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - **A-002 Tanggal lolos gerbang — SELESAI (Fase 2).** Gerbang kini mencakup `hooks/` + `utils/` dan memeriksa `toLocaleString`, bukan hanya `toLocaleDateString`/`toLocaleTimeString`. 22 situs `toLocaleString` (tanggal+jam zona perangkat) ditemukan dan dimigrasikan. Koreksi audit awal: di `hooks/` hanya 5 pemakaian, dan 4 di antaranya sudah menyebut `timeZone` — yang benar-benar salah hanya 1 (`useLiveChatNotification`), tetapi celah `toLocaleString` jauh lebih besar.
   - **A-003 Generator pricelist usang — SELESAI (Fase 1).** Guard `--force` terpasang; skrip berhenti sendiri dan tidak menyentuh artefak.
   - **A-004 Modal belum seragam:** `CreateReservationModal` (3.437 baris) masih punya overlay sendiri + 3 `z-[...]` arbitrer; 17 blok `fixed inset-0` tersisa. FMEA 6x4x5=120.
-  - **A-005 God object UI - SEBAGIAN (Fase 7 irisan 1-3).** `StaffToday.tsx` 6.059 → **5.080** baris (-16%): tipe tugas, badge/chip alamat, pemetaan kategori, modal detail, panel pembayaran, dan panel lokasi dipindah ke `pages/staff/{staffTaskTypes.ts,staffTaskDisplay.tsx,StaffTaskDetailModal.tsx,StaffPaymentModal.tsx,StaffLocationModal.tsx}`. Sisa terbesar: kartu tugas di tiga daftar dan alur chat seluler. Sisa 11 berkas >1.200 baris belum disentuh. FMEA 4x7x6=168.
+  - **A-005 God object UI - SEBAGIAN (Fase 7 irisan 1-4).** `StaffToday.tsx` 6.059 → **4.802** baris (-21%): tipe tugas, badge/chip alamat, pemetaan kategori, modal detail, panel pembayaran, panel lokasi, dan gelembung chat dipindah ke `pages/staff/*`. Sisa terbesar: kartu tugas di tiga daftar dan header/toolbar chat seluler. Sisa 11 berkas >1.200 baris belum disentuh. FMEA 4x7x6=168.
   - **A-006 Nama aksesibel tombol ikon — SELESAI (Fase 5).** Gerbang a11y tidak lagi menerima `title` sebagai nama; 45 tombol ikon diberi `aria-label`. FMEA 3x6x5=90.
   - **A-007 `transition-all` — SELESAI (Fase 5).** 176 pemakaian di 29 berkas → 0; 8 situs diberi properti eksplisit. Gerbang token kini menolak `transition-all` baru. FMEA 2x7x7=98.
   - **A-008 Filter URL — SELESAI (Fase 6).** Reservations (`q`/`category`/`staff`/`status`) dan CustomerDatabase (`q`) kini URL-backed; `sortField`/`sortOrder` sengaja ditinggal di state lokal. Verifikasi manual (refresh/Back) belum dilakukan. FMEA 3x5x4=60.

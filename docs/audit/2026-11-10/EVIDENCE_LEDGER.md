@@ -203,7 +203,19 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Register:** **214 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 41 OPEN**.
 - **Gerbang regresi Fase 4D:** 7.135 test / 7.105 lulus / **2 gagal pre-existing #287**; `audit-baseline-diff` → **0 regresi baru**; `verify:backlog` PASS; `security:scan` LULUS 2.182 file.
 
-### 0.14 Gerbang Regresi Fase 1
+### 0.14 Fase 5A — guardrail final, brand tenant, isolasi KB (2026-11-11)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **A-008** | Sanitizer final setelah semua fallback deterministik | `tests/unit/v3/guardrail-final-sanitize.test.ts` (2) |
+| **A-009** | Brand jalur deterministik/Call 2 memakai tenant async | `tests/unit/v3/brand-tenant-wiring.test.ts` (2) |
+| **C-010** | Fallback guardrail memakai brand tenant | idem |
+| **C-008** | Konten KB disanitasi + dibungkus `<knowledge_chunk>` | `tests/unit/v3/kb-isolation.test.ts` (2) |
+
+- **Register:** **218 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 37 OPEN**.
+- **Gerbang regresi Fase 5A:** 7.141 test / 7.111 lulus / **2 gagal pre-existing #287**; `audit-baseline-diff` → **0 regresi baru**; `verify:backlog` PASS; `security:scan` LULUS 2.184 file.
+
+### 0.15 Gerbang Regresi Fase 1
 
 | Pemeriksaan | Hasil |
 |---|---|

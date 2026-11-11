@@ -1366,6 +1366,78 @@
       ],
       "verifiedBy": "AI Agent",
       "verifiedAt": "2026-11-11"
+    },
+    "A-008": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/v3/agent/pipeline/guardrail-pipeline.ts",
+          "line": 1250,
+          "contains": "A-008: gerbang akhir deterministik"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/v3/guardrail-final-sanitize.test.ts",
+          "contains": "sanitizer final berada setelah"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
+    },
+    "A-009": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/v3/agent/pipeline/generation-stage.ts",
+          "line": 1044,
+          "contains": "getBrandIdentityAsync(turn.tenantId)"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/v3/brand-tenant-wiring.test.ts",
+          "contains": "generation-stage memakai brand tenant"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
+    },
+    "C-010": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/v3/agent/pipeline/guardrail-pipeline.ts",
+          "line": 1056,
+          "contains": "getBrandIdentityAsync(input.tenantId)"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/v3/brand-tenant-wiring.test.ts",
+          "contains": "guardrail pipeline memakai brand tenant"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
+    },
+    "C-008": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/v3/tools/search-knowledge-faq.tool.ts",
+          "line": 63,
+          "contains": "knowledge_chunk"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/v3/kb-isolation.test.ts",
+          "contains": "tag penutup"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
     }
   },
   "known": {

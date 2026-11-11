@@ -1040,8 +1040,8 @@ export class GenerationStage {
       const lower = finalReply.toLowerCase();
       const hasGreeting = lower.includes('bidan yusi') || lower.includes('perkenalkan, saya bidan') || lower.includes('perkenalkan saya bidan');
       if (!hasGreeting) {
-        const { getBrandIdentity } = await import('../../../config/brand');
-        const brand = getBrandIdentity();
+        const { getBrandIdentity, getBrandIdentityAsync } = await import('../../../config/brand');
+        const brand = await getBrandIdentityAsync(turn.tenantId).catch(() => getBrandIdentity());
         const greeting = session.genderGreeting || 'Bunda';
         const greetingPrefix = `Halo ${greeting}! ✨ Perkenalkan, saya Bidan Yusi dari ${brand.businessName}.\n\n`;
         finalReply = greetingPrefix + finalReply.trimStart();
