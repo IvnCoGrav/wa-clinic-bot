@@ -1456,6 +1456,60 @@
       ],
       "verifiedBy": "AI Agent",
       "verifiedAt": "2026-11-11"
+    },
+    "I-002": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/services/backup.service.ts",
+          "line": 456,
+          "contains": "tidak boleh direstore ke tenant"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/backup-restore-tenant-guard.test.ts",
+          "contains": "meta.tenantId-nya berbeda"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
+    },
+    "W-011": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/integrations/whatsapp/waha.driver.ts",
+          "line": 125,
+          "contains": "WAHA_TEMPLATE_UNSUPPORTED"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/v3/waha-template-unsupported.test.ts",
+          "contains": "kegagalan eksplisit"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
+    },
+    "K-010": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/lifecycle/background-crons.ts",
+          "line": 45,
+          "contains": "drainInFlightCronTasks"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/cron-drain-shutdown.test.ts",
+          "contains": "menunggu task selesai"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
     }
   },
   "known": {
