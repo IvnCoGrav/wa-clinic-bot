@@ -1,6 +1,7 @@
 import { prisma } from '../db/client';
 import { wahaClient } from '../integrations/waha/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { buildWahaWebhookHeaders } from '../config/waha-webhook-auth';
 
 export interface ProviderQrData {
   provider: 'WAHA';
@@ -173,7 +174,7 @@ export class WhatsappProviderService {
     try {
       const existing = await wahaClient.getSession(sessionId);
       if (!existing) {
-        const config = this.buildDefaultSessionConfig();
+        const config = this.buildDefaultSessionConfig(tenantId);
         await wahaClient.createSession(sessionId, config);
       }
     } catch (err) {
@@ -206,8 +207,11 @@ export class WhatsappProviderService {
    * Membangun config default untuk session WAHA yang baru dibuat.
    * Webhook URL diambil dari env (per-tenant via env injection / infra), bukan di-hardcode.
    * Tidak dipakai bila session lama masih punya config (webhook dipertahankan).
+   *
+   * S-015: header webhook memakai secret TURUNAN per tenant + `X-Tenant-Id`,
+   * bukan satu `WAHA_WEBHOOK_SECRET` global untuk semua session.
    */
-  private buildDefaultSessionConfig(): any {
+  private buildDefaultSessionConfig(tenantId: string = DEFAULT_TENANT_ID): any {
     const defaultUrl = process.env.NODE_ENV === 'production' ? 'http://app:3000/webhook' : 'http://host.docker.internal:3000/webhook';
     const webhookUrl = process.env.WAHA_WEBHOOK_URL || defaultUrl;
     const secret = process.env.WAHA_WEBHOOK_SECRET || '';
@@ -233,8 +237,11 @@ export class WhatsappProviderService {
     // WAHA_WEBHOOK_SECRET (NODE_ENV=production wajib) → WAHA kirim header ini supaya
     // webhook.route.ts tidak menolak (401) request inbound. WAHA pakai schema
     // `customHeaders: [{ name, value }]` — field `headers` (object) tidak didukung.
-    if (secret) {
-      webhook.customHeaders = [{ name: 'X-Webhook-Secret', value: secret }];
+    // S-015: secret diturunkan per tenant agar kebocoran satu session tidak
+    // membuka tenant lain; `X-Tenant-Id` hanya penanda verifikasi.
+    const customHeaders = buildWahaWebhookHeaders(secret, tenantId);
+    if (customHeaders.length > 0) {
+      webhook.customHeaders = customHeaders;
     }
     return {
       noweb: {
@@ -264,7 +271,7 @@ export class WhatsappProviderService {
     } catch (err: any) {
       existingConfig = undefined;
     }
-    const newConfig = existingConfig && typeof existingConfig === 'object' ? existingConfig : this.buildDefaultSessionConfig();
+    const newConfig = existingConfig && typeof existingConfig === 'object' ? existingConfig : this.buildDefaultSessionConfig(tenantId);
 
     // 1. Hapus session lama (bersihkan kredensial yang korup).
     const deleted = await wahaClient.deleteSession(sessionId);
@@ -295,7 +302,7 @@ export class WhatsappProviderService {
     try {
       const current = await wahaClient.getSession(sessionId);
       if (!current) return false;
-      const desired = this.buildDefaultSessionConfig();
+      const desired = this.buildDefaultSessionConfig(tenantId);
       // Kirim { config: mergedConfig } — schema WAHA PUT /api/sessions/:session mengharuskan wrapper config
       const mergedConfig = { ...(current.config || {}), ...desired, webhooks: desired.webhooks };
       const ok = await wahaClient.updateSessionConfig(sessionId, mergedConfig);

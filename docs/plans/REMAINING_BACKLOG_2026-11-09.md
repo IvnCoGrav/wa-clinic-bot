@@ -20,15 +20,15 @@ Register ini merupakan otoritas tunggal (*single source of truth*) yang menginte
 |---|---|---:|---:|---:|---:|---:|
 | **Track A** | Modul 01–05 (DataAccess, Config, Utils, Domain, Ingress) | **96** | 91 | 2 DUP / 3 KNOWN | 0 | 0 |
 | **S4 Gap Audit** | Modul 06, 12, 15, 16 (StateMachine, FollowUp, AdminAPI, Delivery) | **50** | 48 | 1 (API-04) | 1 (SM-02) | 0 |
-| **Track B** | Modul 07–14 (Gateway, V3 AI, Cron, Settings, Web App, Tracking) | **122** | 98 | 3 DUP | 3 | 18 |
-| **TOTAL KONSOLIDASI** | **16 Modul Lengkap** | **268** | **237** | **5 DUP / 4 KNOWN** | **4** | **18** |
+| **Track B** | Modul 07–14 (Gateway, V3 AI, Cron, Settings, Web App, Tracking) | **122** | 99 | 3 DUP | 3 | 17 |
+| **TOTAL KONSOLIDASI** | **16 Modul Lengkap** | **268** | **238** | **5 DUP / 4 KNOWN** | **4** | **17** |
 
 *Catatan status final (FREEZE + FASE 1 EVIDENCE GATE + FASE 2A/2B 2026-11-10 — sertifikasi `242 FIXED` dicabut):*
 1. **Track A (96 item):** 87 FIXED terverifikasi (termasuk `S-001`, `UTL-11`), **0 UNVERIFIED**, 2 DUPLICATE (`CFG-06`, `CFG-07`), 3 KNOWN (`DOM-02`, `ING-09`, `ING-10`), **4 OPEN** (`CFG-12`, `UTL-15`, `CFG-16`, `CFG-17`), 0 PARTIAL.
 2. **S4 (50 item):** 48 FIXED terverifikasi, **1 UNVERIFIED** (`SM-02` — terbukti inert), 1 KNOWN (`API-04`), 0 PARTIAL, 0 OPEN.
 3. **Track B (122 item):** 72 FIXED (termasuk **6 re-sertifikasi Fase 1**, **4 Fase 2A**, **22 triage Fase 2B**, **5 Fase 2C**, **1 Fase 2D**, **4 Fase 2F**, **2 Fase 2G**, **4 Fase 3A**), **3 UNVERIFIED** (`SM-02`, `C-002`, `C-006`, `A-013`), 3 DUPLICATE (`S-04`, `K-003`, `Cfg-005`), 0 KNOWN, **44 OPEN**, 0 PARTIAL.
 4. **Modul 11 (Customer/Catalog/Location):** 12 temuan CCL-01 s.d. CCL-12 beririsan dengan Track A; status mengikuti Track A.
-5. **Net Status Register:** 268 temuan — **237 FIXED terverifikasi, 4 UNVERIFIED, 5 DUPLICATE, 4 KNOWN, 18 OPEN**. Gate F4 **BELUM terpenuhi** (18 OPEN + 4 UNVERIFIED); bukti per item di [`EVIDENCE_LEDGER.md`](../audit/2026-11-10/EVIDENCE_LEDGER.md) dan manifest mesin [`backlog-evidence.json`](../audit/2026-11-10/backlog-evidence.json).
+5. **Net Status Register:** 268 temuan — **238 FIXED terverifikasi, 4 UNVERIFIED, 5 DUPLICATE, 4 KNOWN, 17 OPEN**. Gate F4 **BELUM terpenuhi** (17 OPEN + 4 UNVERIFIED); bukti per item di [`EVIDENCE_LEDGER.md`](../audit/2026-11-10/EVIDENCE_LEDGER.md) dan manifest mesin [`backlog-evidence.json`](../audit/2026-11-10/backlog-evidence.json).
 
 ---
 
@@ -223,7 +223,7 @@ Register ini merupakan otoritas tunggal (*single source of truth*) yang menginte
 | **S-012** | Modul 01/11 Inti & Keamanan | Tinggi | `src/routes/admin/staff-management.subroute.ts:66-106; src/utils/bcrypt.ts:3; src/routes/admin/auth.subroute.ts:58-72,127-143` | **FIXED** | `F3.5 (Track B P1)` | Tidak ada kebijakan password staf, tidak ada lockout per akun, dan `role` bebas diisi |
 | **S-013** | Modul 01/11 Inti & Keamanan | Sedang | `scripts/scan-secrets.ts:21-70,127-175` | **FIXED** | `F4.3 (Track B P2/P3)` | `security:scan` memberi "PASS" semu: hanya memindai file berubah, tidak memindai seluruh tracked tree, dan tidak mendeteksi key generik |
 | **S-014** | Modul 01/11 Inti & Keamanan | Sedang | `src/routes/media.route.ts:99-123,360-435,442-485; src/services/media.service.ts:478-482` | **FIXED** | `F4.4 (Track B P2/P3)` | Sisa risiko media: avatar publik + tenant hardcode + filter SSRF tidak lengkap + `/proof` tanpa guard MEDIA_ROOT |
-| **S-015** | Modul 01/11 Inti & Keamanan | Tinggi | `src/services/whatsapp-provider.service.ts:208-246; src/routes/webhook.route.ts:72-88; src/app.ts:41-48` | **OPEN** | `F3.5 (Track B P1)` | Satu `WAHA_WEBHOOK_SECRET` global dipakai untuk semua tenant dan disimpan sebagai custom header di konfigurasi WAHA tiap tenant |
+| **S-015** | Modul 01/11 Inti & Keamanan | Tinggi | `src/services/whatsapp-provider.service.ts:208-246; src/routes/webhook.route.ts:72-88; src/app.ts:41-48` | **FIXED** | `F3.5 (Track B P1)` | **W6G:** secret webhook WAHA kini diturunkan per tenant (`HMAC-SHA256(WAHA_WEBHOOK_SECRET, waha-webhook:<tenantId>)`) dan config session memasang `X-Webhook-Secret` turunan + `X-Tenant-Id`; secret tenant A tidak sah untuk tenant B. Verifikasi route menerima turunan tenant ATAU global lama (kompatibilitas session yang belum di-sync ulang). |
 | **S-016** | Modul 01/11 Inti & Keamanan | Sedang | `docker-compose.yml:6-73,101-110,154-166,168-211; Dockerfile (runner stage, tidak ada USER node)` | **FIXED** | `F4.3 (Track B P2/P3)` | Hardening deployment: container app berjalan sebagai root, tanpa `cap_drop`, dan terhubung ke `hermes-net` bersama agen pihak ketiga |
 | **Ar-001** | Modul 01/11 Inti & Keamanan | Sedang | `src/lifecycle/interval-registry.ts:16-32; src/lifecycle/background-crons.ts:5-12; src/services/waha-monitor.service.ts:35-45; src/services/admin-session.service.ts:280-282; src/services/response-cache.service.ts:16-22; src/app.ts:300-302` | **FIXED** | `F4.4 (Track B P2/P3)` | Graceful shutdown belum menyeluruh: 4 `setInterval` liar + timer stagger tidak dibatalkan |
 | **Ar-002** | Modul 01/11 Inti & Keamanan | Sedang | `src/app.ts:229-271; src/worker.ts:90-114` | **FIXED** | `F4.3 (Track B P2/P3)` | Boot tenant data tidak terisolasi per tenant dan server menerima trafik sebelum konfigurasi siap |

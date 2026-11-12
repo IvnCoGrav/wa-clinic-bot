@@ -131,6 +131,11 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - **Ar-009:** gerbang `npm run audit:verify-claims` memindai seluruh rujukan `file:line` laporan audit Fase 1/11 dan gagal bila file hilang atau baris di luar batas; addendum integritas menandai klaim yang hanya bisa diverifikasi di server live sebagai `UNVERIFIABLE (server)`.
   - Register menjadi **226 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 29 OPEN**.
 
+- **Tindakan W6G (selesai 2026-11-12):**
+  - **S-015:** satu `WAHA_WEBHOOK_SECRET` global tidak lagi dipakai mentah di semua session. Config WAHA tiap tenant memasang secret **turunan** (`HMAC-SHA256(global, waha-webhook:<tenantId>)`) + header `X-Tenant-Id`; secret tenant A ditolak untuk tenant B.
+  - Register menjadi **238 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 17 OPEN**.
+  - **Batas yang diketahui:** session WAHA yang sudah ada tetap memakai secret global lama sampai `syncSessionWebhooks(tenantId)` dipanggil (atau session dibuat ulang). Route sengaja masih menerima global untuk kompatibilitas — setelah semua session di-sync, global hanya berfungsi sebagai kunci induk untuk menurunkan secret.
+
 - **Tindakan W6F (selesai 2026-11-12):**
   - **S-011 (sebagian):** TTL sesi admin dipendekkan dari 30 hari ke **7 hari** (override `ADMIN_SESSION_TTL_HOURS`, 1–720 jam) dan header CSP/keamanan kini selalu dikirim untuk `/admin/*` — baik oleh Caddy maupun Fastify. CSP Caddy tidak lagi memakai `unsafe-eval` atau `https:` bebas di `script-src`.
   - **Sisa yang diketahui:** token admin masih berada di `localStorage` (`packages/admin-dashboard/src/contexts/AuthContext.tsx`) — area dashboard pengguna, belum diubah. S-011 tetap OPEN sampai migrasi ke cookie HttpOnly (atau setara) dilakukan pemilik dashboard.

@@ -7,6 +7,7 @@ import { queueService } from '../services/queue.service';
 import { burstCoalesceService } from '../services/burst-coalesce.service';
 import { getWahaClientForTenant } from '../integrations/whatsapp/factory';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { resolveExpectedWebhookSecrets } from '../config/waha-webhook-auth';
 import { wahaTenantService } from '../services/waha-tenant.service';
 import { ConversationState } from '@prisma/client';
 import { abuseDetectionService } from '../services/abuse-detection.service';
@@ -86,11 +87,16 @@ export async function webhookRoutes(fastify: FastifyInstance) {
     const startTime = Date.now();
     const correlationId = crypto.randomUUID();
     return contextStorage.run({ correlationId }, async () => {
-      // --- SECURITY VERIFICATION (X-Webhook-Secret) (SEC-07 Fix) ---
+      // --- SECURITY VERIFICATION (X-Webhook-Secret) (SEC-07 + S-015) ---
+      // Secret yang sah = turunan per tenant (header X-Tenant-Id dari config WAHA)
+      // ATAU global lama (kompatibilitas session yang belum di-sync ulang).
       const webhookSecret = process.env.WAHA_WEBHOOK_SECRET;
-      if (webhookSecret) {
+      const tenantHeader = String(request.headers['x-tenant-id'] || '');
+      const expectedSecrets = resolveExpectedWebhookSecrets(webhookSecret, tenantHeader);
+      if (expectedSecrets.length > 0) {
         const clientSecret = (request.headers['x-webhook-secret'] || request.headers['x-waha-signature'] || '') as string;
-        if (!clientSecret || !safeCompare(clientSecret, webhookSecret)) {
+        const secretValid = Boolean(clientSecret) && expectedSecrets.some((expected) => safeCompare(clientSecret, expected));
+        if (!secretValid) {
           console.warn(`[SECURITY WARNING] Unauthorized webhook access attempt from IP: ${request.ip}`);
           return reply.status(401).send({ error: 'Unauthorized: Invalid or missing webhook secret token.' });
         }

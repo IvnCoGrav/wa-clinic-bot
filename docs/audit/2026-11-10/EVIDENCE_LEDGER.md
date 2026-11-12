@@ -254,6 +254,16 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Catatan konfigurasi baru:** `ADMIN_ALLOWED_ORIGINS` (dipisah koma) wajib diisi bila dashboard dilayani dari origin berbeda dengan API; tanpa itu gerbang CSRF hanya menerima same-origin.
 - **Gerbang regresi Fase 6C:** 7.183 test / 7.153 lulus / 2 gagal pre-existing #287 (0 regresi vs 6B); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (68 item); `audit:verify-claims` PASS (10 rujukan); `security:scan` LULUS.
 
+### 0.31 W6G — secret webhook WAHA per tenant (S-015, 2026-11-12)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **S-015** | Secret webhook diturunkan per tenant (`HMAC-SHA256(WAHA_WEBHOOK_SECRET, waha-webhook:<tenantId>)`); config session WAHA memasang `X-Webhook-Secret` turunan + `X-Tenant-Id`. Route `/webhook` menerima turunan tenant (atau global lama untuk session yang belum di-sync) dan menolak secret tenant lain | `tests/unit/waha-webhook-tenant-secret.test.ts` (12) |
+
+- **Kontrak baru:** `deriveTenantWebhookSecret`, `buildWahaWebhookHeaders`, `resolveExpectedWebhookSecrets` (`src/config/waha-webhook-auth.ts`).
+- **Register:** **238 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 17 OPEN**.
+- **Gerbang regresi W6G:** 7.346 test / 7.316 lulus / 2 gagal pre-existing #287 (0 regresi vs W6F); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (80 item); `security:scan` LULUS 2.237 file.
+
 ### 0.30 W6F — hardening sesi admin & CSP dashboard (S-011, 2026-11-12)
 
 | ID | Perbaikan | Bukti test |

@@ -1223,7 +1223,7 @@
         {
           "type": "file",
           "path": "src/routes/webhook.route.ts",
-          "line": 100,
+          "line": 106,
           "contains": "WAHA_ALLOW_UNSIGNED_WEBHOOK"
         },
         {
@@ -1866,6 +1866,35 @@
           "path": "docs/audit/2026-11-02/fase-10.json",
           "line": 1,
           "contains": "\"numTotalTests\":74"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-12"
+    },
+    "S-015": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/config/waha-webhook-auth.ts",
+          "line": 23,
+          "contains": "export function deriveTenantWebhookSecret"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/waha-webhook-tenant-secret.test.ts",
+          "contains": "anti pemalsuan lintas tenant"
+        },
+        {
+          "type": "file",
+          "path": "src/services/whatsapp-provider.service.ts",
+          "line": 242,
+          "contains": "buildWahaWebhookHeaders(secret, tenantId)"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/waha-webhook-tenant-secret.test.ts",
+          "contains": "session tenant berbeda memakai secret berbeda"
         }
       ],
       "verifiedBy": "AI Agent",
