@@ -1840,6 +1840,36 @@
       ],
       "verifiedBy": "AI Agent",
       "verifiedAt": "2026-11-12"
+    },
+    "Cfg-017": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "docs/audit/2026-11-02/fase-10/LAPORAN_FASE_10.md",
+          "line": 50,
+          "contains": "Catatan Rekonsiliasi Klaim (Cfg-017)"
+        },
+        {
+          "type": "file",
+          "path": "docs/FEATURE_INVENTORY.md",
+          "line": 266,
+          "contains": "superAdminOnlyPrefixes"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/fase10-audit-artifact.test.ts",
+          "contains": "FEATURE_INVENTORY tidak lagi mengklaim RBAC sepenuhnya data-driven"
+        },
+        {
+          "type": "file",
+          "path": "docs/audit/2026-11-02/fase-10.json",
+          "line": 1,
+          "contains": "\"numTotalTests\":74"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-12"
     }
   },
   "known": {

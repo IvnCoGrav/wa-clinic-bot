@@ -131,6 +131,11 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - **Ar-009:** gerbang `npm run audit:verify-claims` memindai seluruh rujukan `file:line` laporan audit Fase 1/11 dan gagal bila file hilang atau baris di luar batas; addendum integritas menandai klaim yang hanya bisa diverifikasi di server live sebagai `UNVERIFIABLE (server)`.
   - Register menjadi **226 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 29 OPEN**.
 
+- **Tindakan W6E (selesai 2026-11-12):**
+  - **Cfg-017:** dokumen tidak lagi mengklaim lebih dari bukti. RBAC ditulis **hibrida** (scope data-driven + daftar prefix sensitif hardcode), laporan Fase 10 memuat catatan rekonsiliasi eksplisit, dan artefak `fase-10.json` diregenerasi dari repo (10 file/74 test).
+  - Register menjadi **237 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 18 OPEN**.
+  - **Batas yang diketahui:** klaim "PASS" pada laporan Fase 10 berlaku untuk API/backend, BUKAN paritas UI — dashboard masih hardcode tenant/brand/rekening/koordinat (Cfg-015, OPEN, area pengguna) dan sub-tab setelan tenant belum dibuat (Cfg-011, UI ditunda).
+
 - **Tindakan W6D (selesai 2026-11-12):**
   - **S-10:** artefak audit Fase 5 (`fase-05.json`) tidak lagi memuat klaim palsu. Artefak lama berisi 1 file/16 test dengan path mesin lain, padahal laporan mengklaim 7 path. Artefak kini diregenerasi dari 15 file/150 test yang benar-benar ada dan lulus, dan laporan dikoreksi.
   - Register menjadi **236 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 19 OPEN**.

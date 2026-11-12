@@ -20,15 +20,15 @@ Register ini merupakan otoritas tunggal (*single source of truth*) yang menginte
 |---|---|---:|---:|---:|---:|---:|
 | **Track A** | Modul 01–05 (DataAccess, Config, Utils, Domain, Ingress) | **96** | 91 | 2 DUP / 3 KNOWN | 0 | 0 |
 | **S4 Gap Audit** | Modul 06, 12, 15, 16 (StateMachine, FollowUp, AdminAPI, Delivery) | **50** | 48 | 1 (API-04) | 1 (SM-02) | 0 |
-| **Track B** | Modul 07–14 (Gateway, V3 AI, Cron, Settings, Web App, Tracking) | **122** | 97 | 3 DUP | 3 | 19 |
-| **TOTAL KONSOLIDASI** | **16 Modul Lengkap** | **268** | **236** | **5 DUP / 4 KNOWN** | **4** | **19** |
+| **Track B** | Modul 07–14 (Gateway, V3 AI, Cron, Settings, Web App, Tracking) | **122** | 98 | 3 DUP | 3 | 18 |
+| **TOTAL KONSOLIDASI** | **16 Modul Lengkap** | **268** | **237** | **5 DUP / 4 KNOWN** | **4** | **18** |
 
 *Catatan status final (FREEZE + FASE 1 EVIDENCE GATE + FASE 2A/2B 2026-11-10 — sertifikasi `242 FIXED` dicabut):*
 1. **Track A (96 item):** 87 FIXED terverifikasi (termasuk `S-001`, `UTL-11`), **0 UNVERIFIED**, 2 DUPLICATE (`CFG-06`, `CFG-07`), 3 KNOWN (`DOM-02`, `ING-09`, `ING-10`), **4 OPEN** (`CFG-12`, `UTL-15`, `CFG-16`, `CFG-17`), 0 PARTIAL.
 2. **S4 (50 item):** 48 FIXED terverifikasi, **1 UNVERIFIED** (`SM-02` — terbukti inert), 1 KNOWN (`API-04`), 0 PARTIAL, 0 OPEN.
 3. **Track B (122 item):** 72 FIXED (termasuk **6 re-sertifikasi Fase 1**, **4 Fase 2A**, **22 triage Fase 2B**, **5 Fase 2C**, **1 Fase 2D**, **4 Fase 2F**, **2 Fase 2G**, **4 Fase 3A**), **3 UNVERIFIED** (`SM-02`, `C-002`, `C-006`, `A-013`), 3 DUPLICATE (`S-04`, `K-003`, `Cfg-005`), 0 KNOWN, **44 OPEN**, 0 PARTIAL.
 4. **Modul 11 (Customer/Catalog/Location):** 12 temuan CCL-01 s.d. CCL-12 beririsan dengan Track A; status mengikuti Track A.
-5. **Net Status Register:** 268 temuan — **236 FIXED terverifikasi, 4 UNVERIFIED, 5 DUPLICATE, 4 KNOWN, 19 OPEN**. Gate F4 **BELUM terpenuhi** (19 OPEN + 4 UNVERIFIED); bukti per item di [`EVIDENCE_LEDGER.md`](../audit/2026-11-10/EVIDENCE_LEDGER.md) dan manifest mesin [`backlog-evidence.json`](../audit/2026-11-10/backlog-evidence.json).
+5. **Net Status Register:** 268 temuan — **237 FIXED terverifikasi, 4 UNVERIFIED, 5 DUPLICATE, 4 KNOWN, 18 OPEN**. Gate F4 **BELUM terpenuhi** (18 OPEN + 4 UNVERIFIED); bukti per item di [`EVIDENCE_LEDGER.md`](../audit/2026-11-10/EVIDENCE_LEDGER.md) dan manifest mesin [`backlog-evidence.json`](../audit/2026-11-10/backlog-evidence.json).
 
 ---
 
@@ -330,7 +330,7 @@ Register ini merupakan otoritas tunggal (*single source of truth*) yang menginte
 | **Cfg-014** | Modul 10 Settings & RBAC | Tinggi | `src/routes/admin/roles.subroute.ts:27-55, 61-144, 150-194; packages/admin-dashboard/src/pages/tenant/StaffManagement.tsx:343-356.` | **FIXED** | `F3.5 (Track B P1)` | `roles.subroute.ts` mengabaikan tenant dan dapat menimpa `allowedPaths` role sistem; `allowedPaths` tidak divalidasi Fase 2C: role sistem tidak dapat ditimpa via API (409), fallback memori diisolasi per tenant. |
 | **Cfg-015** | Modul 10 Settings & RBAC | Tinggi | `Lihat laporan` | **OPEN** | `F3.5 (Track B P1)` | Dashboard hardcode tenant & data bisnis: `x-tenant-id: default-tenant`, brand Kala, rekening placeholder, logo Kala, koordinat/slot klinik |
 | **Cfg-016** | Modul 10 Settings & RBAC | Rendah | `src/routes/admin/settings.subroute.ts:2072-2124.` | **FIXED** | `F4.3 (Track B P2/P3)` | Monitoring `GET /api/admin/health` melaporkan status palsu dan memakai klien WAHA global |
-| **Cfg-017** | Modul 10 Settings & RBAC | Sedang | `docs/FEATURE_INVENTORY.md:249,257; docs/audit/2026-11-02/fase-10/LAPORAN_FASE_10.md:25; tests/integration/admin-staff-authz-matrix.test.ts; tests/unit/admin-rbac-guard.test.ts:234-239.` | **OPEN** | `F4.3 (Track B P2/P3)` | Dokumen & audit claim drift: `FEATURE_INVENTORY` dan Fase 10 menyatakan “data-driven/PASS” padahal kontrol belum ada **Sisa W2:** rekonsiliasi dokumen setelah kontrol lain. |
+| **Cfg-017** | Modul 10 Settings & RBAC | Sedang | `docs/FEATURE_INVENTORY.md:249,257; docs/audit/2026-11-02/fase-10/LAPORAN_FASE_10.md:25; tests/integration/admin-staff-authz-matrix.test.ts; tests/unit/admin-rbac-guard.test.ts:234-239.` | **FIXED** | `F4.3 (Track B P2/P3)` | **W6E:** dokumen direkonsiliasi dengan bukti kode. (1) RBAC dinyatakan **hibrida** — `role_api_scopes` data-driven + daftar prefix sensitif hardcode `superAdminOnlyPrefixes` di `admin.route.ts`; (2) laporan Fase 10 tidak lagi "PASS (LULUS 100%)" tanpa syarat, memuat §4 catatan rekonsiliasi (Cfg-011 endpoint tulis ada, UI dashboard belum; Cfg-015 dashboard hardcode masih OPEN); (3) artefak `fase-10.json` diregenerasi dari repo ini (10 file / 74 test, path bukan mesin lain); (4) gerbang `tests/unit/fase10-audit-artifact.test.ts` mengunci klaim. |
 
 ---
 

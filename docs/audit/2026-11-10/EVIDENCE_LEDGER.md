@@ -254,6 +254,16 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Catatan konfigurasi baru:** `ADMIN_ALLOWED_ORIGINS` (dipisah koma) wajib diisi bila dashboard dilayani dari origin berbeda dengan API; tanpa itu gerbang CSRF hanya menerima same-origin.
 - **Gerbang regresi Fase 6C:** 7.183 test / 7.153 lulus / 2 gagal pre-existing #287 (0 regresi vs 6B); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (68 item); `audit:verify-claims` PASS (10 rujukan); `security:scan` LULUS.
 
+### 0.29 W6E — rekonsiliasi klaim dokumen & audit Fase 10 (Cfg-017, 2026-11-12)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **Cfg-017** | RBAC dinyatakan **hibrida** (`role_api_scopes` + `superAdminOnlyPrefixes` hardcode), laporan Fase 10 diberi §4 catatan rekonsiliasi (Cfg-011 endpoint ada tapi UI belum; Cfg-015 masih OPEN), artefak `fase-10.json` diregenerasi dari repo (10 file / 74 test) | `tests/unit/fase10-audit-artifact.test.ts` (4) |
+
+- **Kontrak baru:** gerbang `tests/unit/fase10-audit-artifact.test.ts` mengunci jumlah/asal path artefak, klaim hibrida, dan keberadaan catatan rekonsiliasi.
+- **Register:** **237 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 18 OPEN**.
+- **Gerbang regresi W6E:** 7.327 test / 7.297 lulus / 2 gagal pre-existing #287 (0 regresi vs W6D); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (79 item); `security:scan` LULUS 2.233 file.
+
 ### 0.28 W6D — artefak audit Fase 5 diregenerasi (S-10, 2026-11-12)
 
 | ID | Perbaikan | Bukti test |
