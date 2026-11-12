@@ -39,3 +39,17 @@ Fase 11 mengaudit aspek keamanan aplikasi, ketahanan serangan, isolasi hak akses
   * New failures: **0**
   * Fixed failures: **31**
   * Status: **✅ GATE PASS (Tidak ada regresi baru)**.
+
+---
+
+## Addendum Integritas Rujukan (Ar-009) — 2026-11-11
+
+Audit ulang menemukan bahwa sebagian klaim PASS pada laporan ini tidak dapat diverifikasi dari repo (rujukan baris bisa basi, dan sebagian bukti bersifat inspeksi server live). Koreksi yang dilakukan:
+
+1. **Gerbang otomatis** `npm run audit:verify-claims` (`scripts/verify-audit-claims.mjs`) memindai seluruh rujukan `file:line` di laporan ini dan gagal bila file hilang atau baris di luar batas. Status saat addendum ditulis: **semua rujukan valid**.
+2. **Reklasifikasi kejujuran status:**
+   - Klaim yang dapat dibuktikan dari repo (file + line + test) tetap **PASS**.
+   - Klaim yang bergantung pada kondisi server live / inspeksi manual ditandai **PASS (repo) / UNVERIFIABLE (server)** dan tidak boleh dipakai sebagai bukti tunggal gerbang deploy.
+   - **11.4 Drift Migrasi:** sudah dinyatakan **GAGAL/PARSIAL (#298)** — dipertahankan, bukan PASS.
+
+3. Rujukan baris pada laporan ini **tidak dijadikan patokan beku**; patokan kebenaran perilaku tetap test otomatis (lihat `tests/` dan `docs/audit/2026-11-10/EVIDENCE_LEDGER.md`).

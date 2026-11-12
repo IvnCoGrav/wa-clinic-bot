@@ -243,6 +243,17 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Register:** **224 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 31 OPEN**.
 - **Gerbang regresi Fase 6B:** 7.169 test / 7.139 lulus / 2 gagal pre-existing #287 (0 regresi); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (66 item terverifikasi); `security:scan` LULUS 2.195 file.
 
+### 0.19 Fase 6C — CSRF restore sesi & integritas klaim audit (2026-11-11)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **S-008** | `POST /api/admin/auth/restore` wajib header AJAX + Origin/Referer sehost (`src/utils/csrf-guard.ts`); token boleh dari cookie sesi (bukan hanya body). Staf sudah cookie-only sejak S-01 | `tests/unit/admin-restore-csrf-guard.test.ts` (11) |
+| **Ar-009** | Gerbang `npm run audit:verify-claims` (`scripts/verify-audit-claims.mjs`) memvalidasi seluruh rujukan `file:line` laporan audit; addendum integritas di laporan Fase 1/11 | `tests/unit/audit-claims-integrity.test.ts` (3) |
+
+- **Register:** **226 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 29 OPEN**.
+- **Catatan konfigurasi baru:** `ADMIN_ALLOWED_ORIGINS` (dipisah koma) wajib diisi bila dashboard dilayani dari origin berbeda dengan API; tanpa itu gerbang CSRF hanya menerima same-origin.
+- **Gerbang regresi Fase 6C:** 7.183 test / 7.153 lulus / 2 gagal pre-existing #287 (0 regresi vs 6B); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (68 item); `audit:verify-claims` PASS (10 rujukan); `security:scan` LULUS.
+
 ### 0.17 Gerbang Regresi Fase 1
 
 | Pemeriksaan | Hasil |

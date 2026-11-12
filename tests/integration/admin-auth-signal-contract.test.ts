@@ -120,6 +120,7 @@ describe('Kontrak HTTP sinyal sesi admin (503 vs 401)', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/admin/auth/restore',
+        headers: { 'x-requested-with': 'XMLHttpRequest' },
         payload: { token: uniqToken() },
       });
 
@@ -136,6 +137,7 @@ describe('Kontrak HTTP sinyal sesi admin (503 vs 401)', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/admin/auth/restore',
+        headers: { 'x-requested-with': 'XMLHttpRequest' },
         payload: { token: uniqToken() },
       });
 
@@ -153,6 +155,7 @@ describe('Kontrak HTTP sinyal sesi admin (503 vs 401)', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/admin/auth/restore',
+        headers: { 'x-requested-with': 'XMLHttpRequest' },
         payload: { token: uniqToken() },
       });
 

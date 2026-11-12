@@ -40,3 +40,17 @@ Fase 1 memverifikasi fondasi arsitektur multi-tenant, pemuatan data boot databas
   * New failures: **0**
   * Fixed failures: **31**
   * Status: **✅ GATE PASS (Tidak ada regresi baru)**.
+
+---
+
+## Addendum Integritas Rujukan (Ar-009) — 2026-11-11
+
+Audit ulang menemukan bahwa sebagian klaim PASS pada laporan ini tidak dapat diverifikasi dari repo (rujukan baris bisa basi, dan sebagian bukti bersifat inspeksi server live). Koreksi yang dilakukan:
+
+1. **Gerbang otomatis** `npm run audit:verify-claims` (`scripts/verify-audit-claims.mjs`) memindai seluruh rujukan `file:line` di laporan ini dan gagal bila file hilang atau baris di luar batas. Status saat addendum ditulis: **semua rujukan valid**.
+2. **Reklasifikasi kejujuran status:**
+   - Klaim yang dapat dibuktikan dari repo (file + line + test) tetap **PASS**.
+   - Klaim yang bergantung pada kondisi server live / inspeksi manual ditandai **PASS (repo) / UNVERIFIABLE (server)** dan tidak boleh dipakai sebagai bukti tunggal gerbang deploy.
+   - **1.3 Pemisahan Worker:** bukti utama adalah `docker inspect` di server live (tidak dapat direproduksi dari repo). Kode yang mendukung (`src/app.ts` flag `SEPARATE_WORKER`, `src/worker.ts`) tetap PASS; status deployment nyata diverifikasi terpisah saat runbook deploy.
+
+3. Rujukan baris pada laporan ini **tidak dijadikan patokan beku**; patokan kebenaran perilaku tetap test otomatis (lihat `tests/` dan `docs/audit/2026-11-10/EVIDENCE_LEDGER.md`).

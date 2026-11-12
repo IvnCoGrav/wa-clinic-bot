@@ -8,6 +8,7 @@ import { prisma } from '../../db/client';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { isCopilotTenantAllowed } from '../../config/copilot-tenant';
 import { resolveSessionTenantId } from './route-helpers';
+import { checkStateChangingCsrf } from '../../utils/csrf-guard';
 
 export async function authAdminRoutes(fastify: FastifyInstance) {
   const { AdminSessionService, SessionStoreUnavailable } = await import(
@@ -246,12 +247,27 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
 
   /**
    * POST /api/admin/auth/restore
-   * Mengembalikan cookie sesi dari token yang disimpan di localStorage (fallback PWA).
-   * Dipakai saat browser kehilangan cookie (mis. PWA Android ditutup) tapi sesi server masih valid.
+   * Memulihkan cookie sesi ketika browser kehilangan cookie (mis. PWA Android
+   * ditutup) tetapi sesi server masih valid.
+   *
+   * S-008: endpoint ini state-changing (menulis cookie) sehingga WAJIB:
+   * - header AJAX `X-Requested-With: XMLHttpRequest` (blokir CSRF form lintas situs),
+   * - Origin/Referer sehost dengan server (blokir session fixation lintas origin).
+   * Token boleh dari body (kompatibilitas dashboard) ATAU cookie sesi yang ada.
    */
   fastify.post('/api/admin/auth/restore', async (request, reply) => {
+    const csrf = checkStateChangingCsrf(request.headers as Record<string, any>);
+    if (!csrf.ok) {
+      return reply.status(403).send({ error: csrf.reason, code: csrf.code });
+    }
+
     const body = (request.body || {}) as { token?: string };
-    const token = (body.token || '').trim();
+    const cookieHeader = String(request.headers['cookie'] || '');
+    const cookieToken =
+      cookieHeader.match(/(?:^|;\s*)admin_session=([^;]+)/)?.[1] ||
+      cookieHeader.match(/(?:^|;\s*)staff_session=([^;]+)/)?.[1] ||
+      '';
+    const token = (body.token || cookieToken || '').trim();
     if (!token) {
       return reply.status(400).send({ error: 'Token wajib diisi.' });
     }

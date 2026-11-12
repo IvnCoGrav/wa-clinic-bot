@@ -1546,6 +1546,42 @@
       ],
       "verifiedBy": "AI Agent",
       "verifiedAt": "2026-11-11"
+    },
+    "S-008": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/routes/admin/auth.subroute.ts",
+          "line": 11,
+          "contains": "checkStateChangingCsrf"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/admin-restore-csrf-guard.test.ts",
+          "contains": "CSRF_ORIGIN_MISMATCH"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
+    },
+    "Ar-009": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "scripts/verify-audit-claims.mjs",
+          "line": 158,
+          "contains": "AUDIT CLAIM GATE"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/audit-claims-integrity.test.ts",
+          "contains": "laporan Fase 1"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
     }
   },
   "known": {
