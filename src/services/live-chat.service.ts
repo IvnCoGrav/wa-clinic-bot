@@ -9,6 +9,7 @@ import { alertService, AlertType, AlertSeverity } from './alert.service';
 import { CONFIRMED_FAMILY_STATUSES, isHoldActive, isTreatmentWithinActiveWindow } from '../domain/reservation-status';
 import { resolveReservationPaymentEvaluation } from './reservation-core.service';
 import { staffOwnershipService, StaffOwnershipView } from './staff-ownership.service';
+import { computeIsAwaitingReply } from './livechat-reply-state';
 import {
   resolveLocationAdequacy,
   extractStaffVerifiedCoords,
@@ -465,7 +466,7 @@ export class LiveChatService {
     const { conversationId, text, imageB64, mediaUrl, thumbB64, mimeType, fileName, tenantId, adminName, acknowledgeOutsideWindow, forceEscalate, replyToMessageId, clientTempId, dispatchOrigin } = params;
 
     // Fase 1.2: idempotensi retry berbasis clientTempId (retry timeout sinyal 1-bar).
-    const prevClientTemp = LiveChatService.recentClientTemps.get(clientTempId);
+    const prevClientTemp = await LiveChatService.recentClientTemps.getAsync(clientTempId);
     if (prevClientTemp) {
       return {
         success: true,
@@ -480,7 +481,7 @@ export class LiveChatService {
     // Idempotency Check: cegah pengiriman ganda dalam 2 detik
     const hash = `${conversationId}:${hasText ? text!.trim() : ''}:${!!imageB64 || !!mediaUrl}:${replyToMessageId || ''}:${clientTempId || ''}`;
     // Store ber-TTL: `get` hanya mengembalikan entri yang belum kedaluwarsa.
-    const lastSent = LiveChatService.recentReplies.get(hash);
+    const lastSent = await LiveChatService.recentReplies.getAsync(hash);
     if (lastSent) {
 
       return { success: false, error: { code: 'DUPLICATE_REPLY', message: 'Pesan yang sama sedang diproses/sudah dikirim dalam 2 detik terakhir.' } };
@@ -721,6 +722,8 @@ export class LiveChatService {
     // Catat idempotency HANYA setelah seluruh validasi lolos — kegagalan validasi
     // (kosong/sandbox/cut-off/window) tidak boleh memblokir percobaan berikutnya.
     LiveChatService.recentReplies.set(hash, {});
+    // UTL-15: hash duplikat 2 detik juga dibagikan lintas proses.
+    void LiveChatService.recentReplies.setAsync(hash, {});
 
     // Skema Retry Lokal (Maksimal 2 Percobaan)
     let attempts = 0;
@@ -947,6 +950,12 @@ export class LiveChatService {
     // Fase 1.2: catat clientTempId SUKSES → retry berikutnya (timeout sinyal) mengembalikan
     // hasil yang sama tanpa mengirim ulang bubble ke pasien.
     LiveChatService.recentClientTemps.set(clientTempId, {
+      messageId: sendResult.messageId,
+      id: logged?.id,
+    });
+    // UTL-15: sebarkan hasil ke KV bersama agar retry dari proses lain juga
+    // mengembalikan hasil yang sama (tanpa menunggu cache lokal).
+    void LiveChatService.recentClientTemps.setAsync(clientTempId, {
       messageId: sendResult.messageId,
       id: logged?.id,
     });
@@ -1299,20 +1308,16 @@ export class LiveChatService {
 
     // Awaiting reply: unread = 0 (sudah dibaca), pesan terakhir dari customer (INBOUND), dan usia pesan <= 24 jam (86.400.000 ms).
     // Catatan internal (INTERNAL_NOTE) DIABAIKAN — bukan balasan ke customer, jadi tidak
-    // boleh memadamkan status "menunggu dibalas".
-    let isAwaitingReply = false;
+    // boleh memadamkan status "menunggu dibalas". Reaksi emot dari staf pada pesan
+    // customer terakhir juga dihitung sebagai balasan (keputusan produk 2026-11-11).
     const lastRealMsg = (c.messages || [])
       .filter((m: any) => m?.sender_type !== 'INTERNAL_NOTE')
       .pop() || null;
-    if (effectiveUnreadCount === 0 && !isManualUnread && lastRealMsg) {
-      const isLastInbound = lastRealMsg.direction === Direction.INBOUND || lastRealMsg.direction === 'INBOUND';
-      if (isLastInbound) {
-        const msgAgeMs = Date.now() - new Date(lastRealMsg.created_at).getTime();
-        if (msgAgeMs <= 24 * 60 * 60 * 1000) {
-          isAwaitingReply = true;
-        }
-      }
-    }
+    const isAwaitingReply = computeIsAwaitingReply(
+      lastRealMsg,
+      effectiveUnreadCount,
+      isManualUnread
+    );
 
     const reservations: any[] = c.customer?.reservations || [];
     // Paritas persis dengan domain: hanya reservasi dalam jendela aktif (hari-H

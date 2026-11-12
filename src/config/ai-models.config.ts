@@ -519,10 +519,26 @@ export class AiModelConfigService {
 
   /**
    * Simpan seluruh task model config ke database per tenant (atomik + serial per-tenant).
+   *
+   * CFG-17: serialisasi lokal saja tidak cukup saat app & worker dua proses —
+   * keduanya bisa deleteMany+createMany bersamaan dan memicu unique violation.
+   * Karena itu penyimpanan dibungkus lease lintas proses di KV bersama
+   * (`lock:ai-config-save:<tenant>`). Bila Redis mati, lock jatuh ke memori
+   * proses ini (perilaku lama) dan transaksi DB tetap atomik.
    */
   static async saveConfigsToDb(tenantId: string): Promise<boolean> {
     const prev = this.saveQueue.get(tenantId) || Promise.resolve(true);
-    const run = prev.catch(() => true).then(() => this.saveConfigsToDbInner(tenantId));
+    const run = prev.catch(() => true).then(async () => {
+      const { distributedKv, KV_LOCK_TTL_MS } = await import('../utils/distributed-kv');
+      const result = await distributedKv.withLock<boolean>(
+        `lock:ai-config-save:${tenantId}`,
+        KV_LOCK_TTL_MS,
+        () => this.saveConfigsToDbInner(tenantId),
+        // Konfigurasi tidak boleh hilang: tunggu lock, lalu fail-open.
+        { waitMs: 10_000 }
+      );
+      return result ?? false;
+    });
     this.saveQueue.set(tenantId, run);
     try {
       return await run;

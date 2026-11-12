@@ -1582,6 +1582,60 @@
       ],
       "verifiedBy": "AI Agent",
       "verifiedAt": "2026-11-11"
+    },
+    "W-006": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/services/burst-coalesce.service.ts",
+          "line": 229,
+          "contains": "flushDistributed"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/burst-coalesce-distributed.test.ts",
+          "contains": "satu job gabungan"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
+    },
+    "UTL-15": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/utils/client-idempotency.ts",
+          "line": 69,
+          "contains": "getAsync"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/client-idempotency-distributed.test.ts",
+          "contains": "terbaca oleh proses B"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
+    },
+    "CFG-17": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/config/ai-models.config.ts",
+          "line": 526,
+          "contains": "lock:ai-config-save"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/ai-config-save-lock.test.ts",
+          "contains": "lease lintas proses"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
     }
   },
   "known": {

@@ -254,6 +254,19 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Catatan konfigurasi baru:** `ADMIN_ALLOWED_ORIGINS` (dipisah koma) wajib diisi bila dashboard dilayani dari origin berbeda dengan API; tanpa itu gerbang CSRF hanya menerima same-origin.
 - **Gerbang regresi Fase 6C:** 7.183 test / 7.153 lulus / 2 gagal pre-existing #287 (0 regresi vs 6B); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (68 item); `audit:verify-claims` PASS (10 rujukan); `security:scan` LULUS.
 
+### 0.20 W5A — koordinasi lintas proses (2026-11-11)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **W-006** | Buffer burst + lock `SET NX PX` di KV bersama; hanya pemegang lock enqueue; urutan pesan pakai counter `INCR`; Redis mati → fallback buffer memori | `tests/unit/burst-coalesce-distributed.test.ts` (5) |
+| **UTL-15** | `ClientIdempotencyStore.getAsync/setAsync` menyebar hasil kirim antar proses (TTL sama, cache lokal tetap L1) | `tests/unit/client-idempotency-distributed.test.ts` (6) |
+| **CFG-17** | `saveConfigsToDb` dibungkus lease `lock:ai-config-save:<tenant>` (wait 10s, fail-open) | `tests/unit/ai-config-save-lock.test.ts` (4) |
+
+- **Modul baru:** `src/utils/distributed-kv.ts` (`get/set/setNx/sadd/smembers/rename/mget/incr/withLock`) di atas `ioredis` yang sudah ada, fallback memori otomatis.
+- **Env baru:** `DISTRIBUTED_KV_DISABLED=true` (paksa memori/rollback), `BURST_COALESCE_NAMESPACE` (isolasi key bila satu Redis dipakai beberapa lingkungan), `REDIS_URL` (sudah ada).
+- **Register:** **229 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 26 OPEN**.
+- **Gerbang regresi W5A:** 7.209 test / 7.179 lulus / 2 gagal pre-existing #287 (0 regresi vs 6C); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (71 item); `security:scan` LULUS 2.205 file.
+
 ### 0.17 Gerbang Regresi Fase 1
 
 | Pemeriksaan | Hasil |

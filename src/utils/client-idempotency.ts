@@ -1,3 +1,5 @@
+import { distributedKv, type DistributedKv } from './distributed-kv';
+
 /**
  * client-idempotency.ts
  *
@@ -22,8 +24,19 @@ export class ClientIdempotencyStore {
 
   constructor(
     private readonly ttlMs: number = 5 * 60 * 1000,
-    private readonly maxEntries: number = 500
+    private readonly maxEntries: number = 500,
+    /**
+     * UTL-15: backend KV bersama. Bila Redis aktif, hasil pengiriman pertama
+     * terlihat oleh proses lain (app vs worker) sehingga retry tidak dobel.
+     * Saat Redis mati, `distributedKv` otomatis memakai memori proses ini.
+     */
+    private readonly kv: DistributedKv = distributedKv,
+    private readonly namespace: string = 'idem'
   ) {}
+
+  private kvKey(key: string): string {
+    return `${this.namespace}:${key}`;
+  }
 
   /** Ambil hasil tersimpan bila masih dalam TTL; selain itu null. */
   get(key: string | null | undefined, now: number = Date.now()): CachedReplyResult | null {
@@ -47,6 +60,42 @@ export class ClientIdempotencyStore {
     if (!key) return;
     this.map.set(key, { ...value, at: now });
     this.prune(now);
+  }
+
+  /**
+   * UTL-15: versi lintas proses. Memeriksa cache lokal dulu (murah), lalu KV
+   * bersama; hasil dari proses lain disalin ke cache lokal.
+   */
+  async getAsync(key: string | null | undefined, now: number = Date.now()): Promise<CachedReplyResult | null> {
+    if (!key) return null;
+    const local = this.get(key, now);
+    if (local) return local;
+    try {
+      const raw = await this.kv.get(this.kvKey(key));
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as CachedReplyResult;
+      if (!parsed || typeof parsed.at !== 'number') return null;
+      if (now - parsed.at >= this.ttlMs) return null;
+      this.map.set(key, parsed);
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
+  /** UTL-15: tulis ke cache lokal + KV bersama (TTL sama). */
+  async setAsync(
+    key: string | null | undefined,
+    value: Omit<CachedReplyResult, 'at'>,
+    now: number = Date.now()
+  ): Promise<void> {
+    if (!key) return;
+    this.set(key, value, now);
+    try {
+      await this.kv.set(this.kvKey(key), JSON.stringify({ ...value, at: now }), this.ttlMs);
+    } catch {
+      // Fallback lokal sudah tersimpan; KV bersama opsional.
+    }
   }
 
   private prune(now: number): void {
