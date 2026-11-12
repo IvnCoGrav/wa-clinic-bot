@@ -1,9 +1,24 @@
 # Rencana Migrasi Ar-004 — Unique Constraint per Tenant
 
-> **Status:** RENCANA — **BELUM DIEKSEKUSI** (menunggu Confirmation Gate + jendela staging)
+> **Status:** **SEBAGIAN DIIMPLEMENTASI (W7)** — schema `Staff.phone` & `AdClick.trackingCode` sudah komposit; **migrasi BELUM diterapkan ke DB mana pun**. `LandingPage.slug` sengaja ditunda.
 > **Tanggal:** 2026-11-12
 > **Temuan register:** `Ar-004` (Modul 01/11, Sedang) — constraint skema masih global
 > **Ketergantungan:** `Ar-003` sisa (service/worker tenant seam) memakai constraint komposit ini agar isolasi tenant benar-benar ditegakkan DB.
+
+---
+
+## 0. Status Implementasi W7 (2026-11-12)
+
+| Bagian | Status | Bukti |
+|---|---|---|
+| `Staff.phone` → `@@unique([tenant_id, phone])` | **Selesai di schema + migration.sql**; belum di-deploy | `prisma/schema.prisma`, `prisma/migrations/20261112130000_ar004_tenant_scoped_unique_staff_adclick/migration.sql` |
+| `AdClick.trackingCode` → `@@unique([tenant_id, trackingCode])` | **Selesai di schema + migration.sql**; belum di-deploy | idem |
+| Kode lookup staf | Sudah tenant-scoped (`StaffAuthService.login(phone, password, tenantId)`); `backup.service.ts` upsert diubah ke `tenant_id_phone` | `tests/unit/staff-auth-and-reservation.test.ts`, `tests/unit/backup*.test.ts` |
+| `LandingPage.slug` | **DITUNDA** — resolusi landing masih slug-global (tanpa host/tenant); melonggarkan slug menimbulkan ambiguitas dan menyentuh area landing pengguna | `tests/unit/ar004-tenant-unique-schema.test.ts` (guard deferral) |
+| SQL delta | Dihasilkan otoritatif via `prisma migrate diff --from-schema-datamodel <HEAD> --to-schema-datamodel <baru>` (tanpa DB) | migration.sql |
+| Terapkan ke DB | **BELUM** — tidak ada staging DB di environment ini; Docker tidak tersedia | — |
+
+**Urutan deploy wajib:** `prisma migrate deploy` (staging → produksi) **SEBELUM** deploy kode yang memuat `backup.service.ts` versi baru, karena Prisma `upsert` memakai `ON CONFLICT (tenant_id, phone)` yang membutuhkan index komposit.
 
 ---
 
@@ -23,6 +38,8 @@ Karena constraint global, **tidak ada patch kode yang bisa mengatasinya** — ha
 
 ## 2. Target Skema
 
+> **Catatan W7:** yang sudah diimplementasikan baru `Staff` dan `AdClick`. `LandingPage` di bawah adalah target JANGKA PANJANG, belum diubah di schema.
+
 ```prisma
 model Staff {
   // ...
@@ -39,7 +56,7 @@ model AdClick {
 model LandingPage {
   // ...
   slug String
-  @@unique([tenant_id, slug])
+  @@unique([tenant_id, slug]) // BELUM diterapkan (butuh routing per-host)
 }
 ```
 
@@ -141,7 +158,9 @@ Rollback hanya berhasil bila belum ada data duplikat lintas tenant yang baru dib
 
 ## 7. Confirmation Gate
 
-Belum ada satu pun langkah DB yang dijalankan. Untuk mengeksekusi, pengguna manusia WAJIB mengetik eksplisit, misalnya:
+Implementasi kode/schema sudah masuk (W7), tetapi **belum ada satu pun langkah DB yang dijalankan** karena environment ini tidak memiliki staging DB (Docker tidak tersedia) dan `.env` menunjuk kredensial live yang tidak boleh dipakai untuk uji migrasi.
+
+Untuk mengeksekusi, pengguna manusia WAJIB mengetik eksplisit, misalnya:
 
 > **"Setuju eksekusi migrasi Ar-004 di staging"**
 
@@ -149,4 +168,4 @@ atau
 
 > **"Setuju eksekusi Ar-004 staging + produksi, jendela <maintenance>."**
 
-Tanpa kalimat itu, status tetap **RENCANA** dan produksi tetap diblokir.
+Tanpa kalimat itu, migrasi tetap **BELUM DITERAPKAN** dan produksi tetap diblokir.

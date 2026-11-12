@@ -136,6 +136,13 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - Register menjadi **239 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 16 OPEN**.
   - **Batas yang diketahui:** bila Redis mati, KV jatuh ke memori per proses sehingga sweep kembali hanya melihat sesi prosesnya sendiri (perilaku lama); TTL record 2 jam, jadi sesi yang berhenti dikirim akan hilang otomatis.
 
+- **Tindakan W7 (kode selesai, migrasi belum diterapkan) — Ar-004:**
+  - `Staff.phone` dan `AdClick.trackingCode` kini komposit `@@unique([tenant_id, ...])`; migration `20261112130000_ar004_tenant_scoped_unique_staff_adclick` disiapkan (SQL dari `prisma migrate diff` offline).
+  - `backup.service.ts` upsert memakai `tenant_id_phone`; login staf sudah tenant-scoped sejak Cfg-012 sehingga tidak ada ambiguitas.
+  - **BELUM diterapkan ke DB**: environment ini tidak punya staging (Docker mati) dan `.env` berisi kredensial live. Urutan deploy wajib: migrasi dulu, baru kode.
+  - **LandingPage.slug tetap global**: resolusi landing masih berbasis slug tanpa host/tenant; melonggarkannya menimbulkan ambiguitas dan menyentuh area landing pengguna.
+  - **Catatan operasional:** `prisma generate` sempat gagal (EPERM engine DLL) karena dev server `tsx watch` berjalan; proses dev dihentikan sementara lalu generate penuh berhasil. Jalankan `npm run dev` lagi bila diperlukan.
+
 - **Tindakan W6I (rencana, belum dieksekusi) — Ar-004:**
   - Rencana migrasi unique constraint per tenant sudah ditulis di `docs/plans/MIGRATION_PLAN_AR004_2026-11-12.md` (SQL, perubahan kode wajib, urutan staging→produksi, rollback, risiko).
   - **Tidak ada perubahan DB/kode yang dijalankan.** Eksekusi menunggu Confirmation Gate eksplisit ("Setuju eksekusi migrasi Ar-004 …") dan jendela staging; produksi tetap diblokir.
@@ -275,7 +282,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - **A-002 Tanggal lolos gerbang — SELESAI (Fase 2).** Gerbang kini mencakup `hooks/` + `utils/` dan memeriksa `toLocaleString`, bukan hanya `toLocaleDateString`/`toLocaleTimeString`. 22 situs `toLocaleString` (tanggal+jam zona perangkat) ditemukan dan dimigrasikan. Koreksi audit awal: di `hooks/` hanya 5 pemakaian, dan 4 di antaranya sudah menyebut `timeZone` — yang benar-benar salah hanya 1 (`useLiveChatNotification`), tetapi celah `toLocaleString` jauh lebih besar.
   - **A-003 Generator pricelist usang — SELESAI (Fase 1).** Guard `--force` terpasang; skrip berhenti sendiri dan tidak menyentuh artefak.
   - **A-004 Modal belum seragam:** `CreateReservationModal` (3.437 baris) masih punya overlay sendiri + 3 `z-[...]` arbitrer; 17 blok `fixed inset-0` tersisa. FMEA 6x4x5=120.
-  - **A-005 God object UI - SEBAGIAN (Fase 7 irisan 1-11).** Angka baris fisik (HEAD ke sekarang): `StaffToday.tsx` **6.480 ke 4.125** (tipe, badge, kategori, 3 modal, gelembung chat, 3 kartu daftar); `TodayTreatments.tsx` **2.482 ke 1.075** (kartu + 7 modal + tipe/logika); `Reservations.tsx` **2.284 ke 1.371** (modal bukti, header, filter, tabel, kartu mobile, modal lokasi admin, helper); `LiveChatMessagePane.tsx` **1.780 ke 1.474** (pencarian, banner, media, kutipan, reaksi, aksi pesan); `StaffManagement.tsx` **1.635 ke 1.350** (modal role). **Masih di atas 1.500:** `StaffToday` (panel chat + state), `CreateReservationModal` 3.462 (Fase 4, butuh login), `CustomerDatabase` 1.719, `FollowUpQueue` 1.544. FMEA 4x7x6=168.
+  - **A-005 God object UI - SEBAGIAN (Fase 7 irisan 1-14).** Angka baris fisik (HEAD ke sekarang): `StaffToday.tsx` **6.480 ke 4.004** (termasuk header chat); `TodayTreatments.tsx` **2.482 ke 1.075**; `Reservations.tsx` **2.284 ke 1.371**; `LiveChatMessagePane.tsx` **1.780 ke 1.474**; `StaffManagement.tsx` **1.635 ke 1.350**; `FollowUpQueue.tsx` **1.635 ke 1.312**; `CustomerDatabase.tsx` **1.719 ke 1.462**. **Masih di atas 1.500:** `StaffToday` (daftar pesan + state), `CreateReservationModal` 3.462 (Fase 4, butuh login). FMEA 4x7x6=168.
   - **A-006 Nama aksesibel tombol ikon — SELESAI (Fase 5).** Gerbang a11y tidak lagi menerima `title` sebagai nama; 45 tombol ikon diberi `aria-label`. FMEA 3x6x5=90.
   - **A-007 `transition-all` — SELESAI (Fase 5).** 176 pemakaian di 29 berkas → 0; 8 situs diberi properti eksplisit. Gerbang token kini menolak `transition-all` baru. FMEA 2x7x7=98.
   - **A-008 Filter URL — SELESAI (Fase 6).** Reservations (`q`/`category`/`staff`/`status`) dan CustomerDatabase (`q`) kini URL-backed; `sortField`/`sortOrder` sengaja ditinggal di state lokal. Verifikasi manual (refresh/Back) belum dilakukan. FMEA 3x5x4=60.

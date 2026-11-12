@@ -254,6 +254,17 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Catatan konfigurasi baru:** `ADMIN_ALLOWED_ORIGINS` (dipisah koma) wajib diisi bila dashboard dilayani dari origin berbeda dengan API; tanpa itu gerbang CSRF hanya menerima same-origin.
 - **Gerbang regresi Fase 6C:** 7.183 test / 7.153 lulus / 2 gagal pre-existing #287 (0 regresi vs 6B); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (68 item); `audit:verify-claims` PASS (10 rujukan); `security:scan` LULUS.
 
+### 0.34 W7 — implementasi Ar-004 untuk Staff & AdClick (2026-11-12, migrasi BELUM diterapkan)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **Ar-004** (sebagian) | Schema: `Staff.phone` → `@@unique([tenant_id, phone])`, `AdClick.trackingCode` → `@@unique([tenant_id, trackingCode])`; migration SQL otoritatif dari `prisma migrate diff` offline; `backup.service.ts` upsert memakai `tenant_id_phone`. `LandingPage.slug` sengaja tetap global (resolusi slug belum per-host, area landing pengguna) | `tests/unit/ar004-tenant-unique-schema.test.ts` (4) + `tests/unit/staff-auth-and-reservation.test.ts` (28) + `tests/unit/backup*.test.ts` (19) |
+
+- **Status register:** Ar-004 tetap **OPEN** — migrasi belum diterapkan ke DB (tidak ada staging di environment ini) dan `LandingPage.slug` ditunda.
+- **Urutan deploy wajib:** `prisma migrate deploy` SEBELUM kode baru (upsert Prisma butuh index komposit).
+- **Register:** **239 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 16 OPEN** (tidak berubah).
+- **Gerbang regresi W7:** 7.358 test / 7.328 lulus / 2 gagal pre-existing #287 (0 regresi vs W6H); `tsc` 0 error; `prisma generate` penuh berhasil (dev server dihentikan sementara karena EPERM engine DLL); `build` exit 0; `verify:backlog` PASS (81 item); `security:scan` LULUS 2.243 file.
+
 ### 0.33 W6I — rencana migrasi Ar-004 (2026-11-12, BELUM DIEKSEKUSI)
 
 - **Ar-004** tetap **OPEN**. Rencana eksekusi lengkap ditulis di `docs/plans/MIGRATION_PLAN_AR004_2026-11-12.md`: target schema (`@@unique([tenant_id, phone])`, `@@unique([tenant_id, trackingCode])`, `@@unique([tenant_id, slug])`), SQL migrasi + rollback, daftar perubahan kode wajib (lookup slug/phone per tenant), urutan M0→M1 staging→M2 produksi, drift check `--from-url`, dan Confirmation Gate.

@@ -693,7 +693,7 @@ model AuditLog {
 
 model AdClick {
   id           String  @id @default(cuid())
-  trackingCode String? @unique
+  trackingCode String?
 
   fbclid      String?
   fbp         String?
@@ -716,6 +716,7 @@ model AdClick {
   @@index([tenant_id])
   @@index([trackingCode])
   @@index([expires_at])
+  @@unique([tenant_id, trackingCode])
   @@map("ad_clicks")
 }
 
@@ -1014,7 +1015,7 @@ model Staff {
   id            String         @id @default(uuid())
   tenant_id     String         @default("default-tenant")
   name          String
-  phone         String         @unique
+  phone         String
   password_hash String
   role                   String         @default("THERAPIST")
   active                 Boolean        @default(true)
@@ -1034,6 +1035,7 @@ model Staff {
   retentionSnapshots     StaffRetentionSnapshot[]
 
   @@index([tenant_id])
+  @@unique([tenant_id, phone])
   @@map("staff")
 }
 
