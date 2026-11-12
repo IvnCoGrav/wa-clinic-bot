@@ -86,6 +86,14 @@ export interface SaveReservationInput {
   feverContraindication?: boolean;
   /** Fase 2: skrining klinis sudah dikonfirmasi bidan/admin. */
   screeningConfirmed?: boolean;
+  /**
+   * A-011: sinyal pembatalan dari pipeline (timeout turn / koneksi putus).
+   * Diperiksa TEPAT SEBELUM penulisan reservasi: bila sudah abort, tidak ada
+   * baris DB yang dibuat. Bila abort datang saat penulisan berjalan, penulisan
+   * dibiarkan selesai (tidak ada rollback paksa) — hasil `committed` yang
+   * dilaporkan, sehingga tidak terjadi "gagal palsu" padahal data masuk.
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -124,6 +132,12 @@ export interface SaveReservationOutput {
    * agar konsumen lama tidak rusak.
    */
   needsInfo?: string[];
+  /**
+   * A-011: true hanya bila baris reservasi benar-benar sudah tersimpan.
+   * Pipeline memakai flag ini untuk membedakan "timeout sebelum tulis" dari
+   * "timeout setelah commit" — yang kedua TIDAK boleh dilaporkan gagal.
+   */
+  committed?: boolean;
 }
 
 /** Penanda alamat jalan detail (data-driven includes, tanpa regex). */
@@ -339,6 +353,7 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
     console.warn(JSON.stringify({ event: 'V3_TOOL_RESERVATION_DAY_GATE_REJECTED', tenantId, bookingDate, timestamp: new Date().toISOString() }));
     return {
       success: false,
+      committed: false,
       summary: 'Hari/tanggal belum ditentukan oleh customer',
       message: dayGateError,
     };
@@ -352,6 +367,7 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
     console.warn(JSON.stringify({ event: 'V3_TOOL_RESERVATION_PAST_DATE_REJECTED', tenantId, bookingDate, timestamp: new Date().toISOString() }));
     return {
       success: false,
+      committed: false,
       summary: 'Tanggal kunjungan sudah terlewat',
       message: `Permintaan jadwal kunjungan pada "${bookingDate}" tidak dapat diproses karena tanggal tersebut sudah berlalu dari kalender hari ini. Mohon tanyakan kembali kepada Bunda tanggal dan bulan yang dimaksud untuk kami bantu cekkan jadwalnya.`,
     };
@@ -397,6 +413,7 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
       }));
       return {
         success: false,
+        committed: false,
         summary: 'Lokasi customer belum diketahui',
         message: 'Lokasi/wilayah Bunda belum diketahui. Untuk layanan homecare, tanyakan terlebih dahulu daerah/kelurahan/kecamatan rumah Bunda dengan ramah agar tim Bidan dapat memastikan jangkauan dan ketersediaan rute.',
       };
@@ -428,6 +445,7 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
       } catch { /* notifikasi best-effort — jangan menggagalkan arah balasan */ }
       return {
         success: false,
+        committed: false,
         summary: 'Lokasi terlalu luas',
         message: `Lokasi "${effectiveAddress}" masih terlalu luas untuk mengunci jadwal homecare. Tanyakan dengan ramah kelurahan/desa atau patokan terdekat agar tim Bidan dapat memastikan rute dan jadwalnya.`,
       };
@@ -487,6 +505,7 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
         }));
         return {
           success: false,
+          committed: false,
           summary: 'Layanan belum diverifikasi atau tidak sesuai kesepakatan',
           message: `Layanan "${treatmentName}" belum disepakati oleh Bunda. Layanan yang tercatat dalam kesepakatan adalah: ${gateSession.verifiedTreatmentNames.join(', ')}. Mohon konfirmasi kembali layanan yang diinginkan Bunda ya.`,
         };
@@ -509,6 +528,7 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
       }));
       return {
         success: false,
+        committed: false,
         summary: 'Layanan add-on memerlukan layanan utama',
         message: `${addonValidation.error || 'Layanan tambahan tidak dapat dipesan sendiri.'} Mohon tanyakan kepada Bunda paket treatment utama yang diinginkan (misal Pijat Bayi Ceria/Pulih Ceria atau Oksitosin) untuk digabungkan dengan layanan tersebut ya.`,
       };
@@ -615,6 +635,7 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
       }));
       return {
         success: false,
+        committed: false,
         summary: 'Layanan belum dapat dipesan sesuai hasil skrining klinis',
         message: eligibility.message || 'Bidan kami perlu memeriksa kesesuaian layanan terlebih dahulu ya Bunda.',
       };
@@ -648,6 +669,25 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
           timestamp: new Date().toISOString(),
         }));
       }
+    }
+
+    // A-011: gerbang abort tepat sebelum penulisan. Bila pipeline sudah
+    // membatalkan turn (timeout), JANGAN menulis reservasi baru — tidak ada
+    // baris DB yang setengah jadi dan tidak ada booking "hantu" yang tidak
+    // pernah dilaporkan ke customer.
+    if (input.signal?.aborted) {
+      console.warn(JSON.stringify({
+        event: 'V3_TOOL_RESERVATION_ABORTED',
+        tenantId,
+        conversationId,
+        timestamp: new Date().toISOString(),
+      }));
+      return {
+        success: false,
+        committed: false,
+        summary: 'Reservasi dibatalkan sebelum disimpan',
+        message: 'Permintaan dibatalkan sebelum sempat disimpan. Tidak ada jadwal yang tercatat.',
+      };
     }
 
     const result = await reservationCoreService.saveReservation({
@@ -692,6 +732,7 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
 
     return {
       success: true,
+      committed: true,
       reservationId: result.reservation?.id,
       summary,
       isSameDay,
@@ -708,12 +749,14 @@ export async function executeSaveReservation(input: SaveReservationInput): Promi
     if (error?.code === 'CAPACITY_EXCEEDED') {
       return {
         success: false,
+        committed: false,
         summary: 'Kapasitas jadwal hari itu penuh',
         message: `Untuk tanggal tersebut, jadwal tim Bidan kami sudah penuh ya Bunda. Mohon tawarkan Bunda tanggal atau hari lain agar kami bantu cekkan ketersediaannya 😊`,
       };
     }
     return {
       success: false,
+      committed: false,
       summary: 'Gagal mencatat reservasi',
       message: `Error mencatat reservasi: ${error.message}`
     };

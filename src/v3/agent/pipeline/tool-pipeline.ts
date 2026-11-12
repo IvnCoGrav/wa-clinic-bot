@@ -54,15 +54,55 @@ export interface ToolExecutionOutput {
 }
 
 /**
- * Bungkus promise dengan batas waktu aman (default 7 detik).
+ * A-011: bungkus eksekusi tool dengan batas waktu yang BENAR-BENAR membatalkan.
+ *
+ * Perbedaan penting dari `Promise.race` lama:
+ * - Timeout memicu `AbortController.abort()`, jadi tool yang punya efek tulis
+ *   (mis. `save_reservation`) bisa menolak menulis setelah turn dibatalkan.
+ * - `awaitSettleMs` dipakai untuk tool tulis: setelah timeout, pipeline masih
+ *   menunggu sebentar hasil final. Bila penulisan ternyata sudah commit, hasil
+ *   sukses dipakai (bukan dilaporkan gagal palsu ke customer).
  */
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
-    ),
-  ]);
+export async function runToolWithAbort<T>(
+  runner: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+  toolName: string,
+  opts: { awaitSettleMs?: number } = {}
+): Promise<T> {
+  const controller = new AbortController();
+  const timeoutError = new Error(`Tool "${toolName}" timeout setelah ${timeoutMs}ms`);
+  let timer: NodeJS.Timeout | undefined;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort(timeoutError);
+      reject(timeoutError);
+    }, timeoutMs);
+  });
+
+  const runPromise = runner(controller.signal);
+  // Jangan biarkan penolakan setelah balapan selesai menjadi unhandled rejection.
+  runPromise.catch(() => undefined);
+
+  try {
+    return await Promise.race([runPromise, timeoutPromise]);
+  } catch (err) {
+    const settleMs = opts.awaitSettleMs ?? 0;
+    if (settleMs > 0) {
+      const settled = await Promise.race([
+        runPromise.then(
+          (value) => ({ ok: true as const, value }),
+          (error) => ({ ok: false as const, error })
+        ),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), settleMs)),
+      ]);
+      if (settled?.ok) return settled.value;
+      if (settled && !settled.ok) throw settled.error;
+    }
+    throw err;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 /**
@@ -231,10 +271,10 @@ export class ToolExecutionPipeline {
       let vResult: any = { error: vValidation.success ? undefined : vValidation.error };
       if (vValidation.success) {
         try {
-          vResult = await withTimeout(
-            executeToolByName('get_clinic_policy_faq', vValidation.data, toolContext),
+          vResult = await runToolWithAbort(
+            (signal) => executeToolByName('get_clinic_policy_faq', vValidation.data, { ...toolContext, signal }),
             7000,
-            'Tool "get_clinic_policy_faq" timeout setelah 7000ms'
+            'get_clinic_policy_faq'
           );
         } catch (vErr: any) {
           vResult = { error: vErr.message };
@@ -603,10 +643,13 @@ export class ToolExecutionPipeline {
               || pipeMomStage || typeof pipeGestWeeks === 'number'
               ? { knownSymptoms: pipeKnownSymptoms, incomingText: cleanIncomingText, ...pipeAudienceCtx }
               : { incomingText: cleanIncomingText } as any);
-          toolResult = await withTimeout(
-            executeToolByName(fnName, validation.data, toolContext),
+          toolResult = await runToolWithAbort(
+            (signal) => executeToolByName(fnName, validation.data, { ...toolContext, signal }),
             TOOL_TIMEOUT_MS,
-            `Tool "${fnName}" timeout setelah ${TOOL_TIMEOUT_MS}ms`
+            fnName,
+            // Tool tulis: beri jendela singkat agar commit yang sudah berjalan
+            // tidak dilaporkan sebagai kegagalan (anti "gagal palsu" A-011).
+            { awaitSettleMs: fnName === 'save_reservation' ? 1500 : 0 }
           );
         } catch (toolErr: any) {
           console.warn(JSON.stringify({ event: 'V3_TOOL_TIMEOUT_ERROR', tenantId, conversationId, phone: maskPhoneNumber(phone), tool: fnName, error: toolErr.message, timestamp: new Date().toISOString() }));

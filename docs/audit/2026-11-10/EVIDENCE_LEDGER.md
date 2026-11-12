@@ -254,6 +254,16 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Catatan konfigurasi baru:** `ADMIN_ALLOWED_ORIGINS` (dipisah koma) wajib diisi bila dashboard dilayani dari origin berbeda dengan API; tanpa itu gerbang CSRF hanya menerima same-origin.
 - **Gerbang regresi Fase 6C:** 7.183 test / 7.153 lulus / 2 gagal pre-existing #287 (0 regresi vs 6B); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (68 item); `audit:verify-claims` PASS (10 rujukan); `security:scan` LULUS.
 
+### 0.21 W5B — AbortSignal end-to-end (2026-11-12)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **A-011** | `runToolWithAbort` meng-abort `AbortSignal` saat timeout (bukan `Promise.race` buta); `ToolExecutionContext.signal` → `SaveReservationInput.signal`; gerbang abort tepat sebelum `reservationCoreService.saveReservation` (=0 baris DB); `committed` membedakan "timeout sebelum tulis" vs "commit sudah terjadi" (jendela settle 1,5 dtk) | `tests/unit/tool-abort-signal.test.ts` (10) |
+
+- **Kontrak baru:** `runToolWithAbort(runner, timeoutMs, toolName, { awaitSettleMs })`; `SaveReservationOutput.committed`.
+- **Register:** **230 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 25 OPEN**.
+- **Gerbang regresi W5B:** 7.219 test / 7.189 lulus / 2 gagal pre-existing #287 (0 regresi vs W5A); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (72 item); `security:scan` LULUS 2.211 file.
+
 ### 0.20 W5A — koordinasi lintas proses (2026-11-11)
 
 | ID | Perbaikan | Bukti test |

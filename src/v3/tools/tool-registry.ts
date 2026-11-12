@@ -65,6 +65,11 @@ export interface ToolExecutionContext {
   deliveryFeeSnapshot?: number;
   /** Daftar nama tool yang diotorisasi untuk dieksekusi turn ini (Task 4.3.1). */
   allowedToolNames?: string[];
+  /**
+   * A-011: sinyal pembatalan turn (timeout pipeline / shutdown). Diteruskan ke
+   * tool yang punya efek tulis agar tidak ada penulisan setelah turn dibatalkan.
+   */
+  signal?: AbortSignal;
 }
 
 export async function executeToolByName(name: string, args: any, ctx: ToolExecutionContext): Promise<any> {
@@ -140,6 +145,8 @@ export async function executeToolByName(name: string, args: any, ctx: ToolExecut
           ? { id: ctx.savedAddressSnapshot.id, label: ctx.savedAddressSnapshot.label }
           : undefined,
         deliveryFee: ctx.deliveryFeeSnapshot,
+        // A-011: teruskan sinyal pembatalan turn ke gerbang tulis reservasi.
+        signal: ctx.signal,
       };
       return await executeSaveReservation(input);
     }

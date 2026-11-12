@@ -402,7 +402,7 @@
         {
           "type": "file",
           "path": "src/v3/agent/pipeline/tool-pipeline.ts",
-          "line": 284,
+          "line": 324,
           "contains": "Otorisasi eksekusi tool"
         },
         {
@@ -1636,6 +1636,35 @@
       ],
       "verifiedBy": "AI Agent",
       "verifiedAt": "2026-11-11"
+    },
+    "A-011": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/v3/agent/pipeline/tool-pipeline.ts",
+          "line": 66,
+          "contains": "runToolWithAbort"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/tool-abort-signal.test.ts",
+          "contains": "timeout meng-abort"
+        },
+        {
+          "type": "file",
+          "path": "src/v3/tools/save-reservation.tool.ts",
+          "line": 680,
+          "contains": "V3_TOOL_RESERVATION_ABORTED"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/tool-abort-signal.test.ts",
+          "contains": "reservasi TIDAK disimpan"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-12"
     }
   },
   "known": {
