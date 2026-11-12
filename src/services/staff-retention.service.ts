@@ -510,6 +510,91 @@ export class StaffRetentionService {
   }
 
   /**
+   * K-009: snapshot retensi bulanan otomatis (dipanggil cron).
+   *
+   * Perilaku:
+   * - Periode default = bulan sebelumnya menurut WIB (dijalankan tgl 1 pagi).
+   * - Idempoten: `persistSnapshot` memakai upsert per (tenant, staf, periode).
+   * - TIDAK menimpa snapshot `FINAL` yang sudah dibekukan admin.
+   * - Kegagalan policy belum dikonfigurasi tidak melempar ke cron; dilaporkan
+   *   sebagai `skipped` agar status cron tetap jujur.
+   */
+  async runScheduledMonthlySnapshot(
+    tenantId: string,
+    opts: { now?: Date; status?: 'PREVIEW' | 'FINAL'; actor?: string } = {}
+  ): Promise<{
+    tenantId: string;
+    periodYear: number;
+    periodMonth: number;
+    skipped: boolean;
+    skipReason?: string;
+    status?: string;
+    itemCount: number;
+  }> {
+    const now = opts.now ?? new Date();
+    const wib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+    const wibMonthIndex = wib.getUTCMonth(); // 0 = Januari
+    const periodYear = wibMonthIndex === 0 ? wib.getUTCFullYear() - 1 : wib.getUTCFullYear();
+    const periodMonth = wibMonthIndex === 0 ? 12 : wibMonthIndex;
+
+    const existingFinal = await this.prisma.staffRetentionSnapshot
+      .findFirst({
+        where: {
+          tenant_id: tenantId,
+          period_year: periodYear,
+          period_month: periodMonth,
+          status: 'FINAL',
+        },
+        select: { id: true },
+      })
+      .catch(() => null);
+
+    if (existingFinal) {
+      return {
+        tenantId,
+        periodYear,
+        periodMonth,
+        skipped: true,
+        skipReason: 'FINAL_ALREADY_FROZEN',
+        itemCount: 0,
+      };
+    }
+
+    const envStatus = String(process.env.STAFF_RETENTION_SNAPSHOT_STATUS || '').toUpperCase();
+    const status: 'PREVIEW' | 'FINAL' =
+      opts.status ?? (envStatus === 'FINAL' ? 'FINAL' : 'PREVIEW');
+
+    try {
+      const { report } = await this.computeForPeriod(tenantId, periodYear, periodMonth, {
+        persist: true,
+        status,
+        actor: opts.actor ?? 'cron',
+      });
+      return {
+        tenantId,
+        periodYear,
+        periodMonth,
+        skipped: false,
+        status,
+        itemCount: report.items.length,
+      };
+    } catch (err: any) {
+      const code = err?.code || '';
+      if (code === 'RETENTION_POLICY_NOT_CONFIGURED') {
+        return {
+          tenantId,
+          periodYear,
+          periodMonth,
+          skipped: true,
+          skipReason: 'POLICY_NOT_CONFIGURED',
+          itemCount: 0,
+        };
+      }
+      throw err;
+    }
+  }
+
+  /**
    * 3.4 Persist snapshot ke tabel staff_retention_snapshots.
    */
   async persistSnapshot(

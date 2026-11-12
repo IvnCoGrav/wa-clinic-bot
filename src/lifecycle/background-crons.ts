@@ -1,4 +1,11 @@
 import { trackInterval, trackTimeout } from './interval-registry';
+import {
+  notifyCronFailureIfNeeded,
+  recordCronFailure,
+  recordCronSkip,
+  recordCronStart,
+  recordCronSuccess,
+} from './cron-health';
 
 const inFlightCronTasks = new Set<string>();
 const inFlightCronPromises = new Set<Promise<void>>();
@@ -9,18 +16,25 @@ const inFlightCronPromises = new Set<Promise<void>>();
 export function createExclusiveCronTask(name: string, fn: () => Promise<void> | void): () => Promise<void> {
   return async () => {
     if (inFlightCronTasks.has(name)) {
+      recordCronSkip(name);
       console.warn(`[CRON MUTEX] Task '${name}' masih berjalan dari putaran sebelumnya. Melewatkan putaran ini.`);
       return;
     }
     inFlightCronTasks.add(name);
+    const startedAt = Date.now();
+    recordCronStart(name);
     const run = (async () => {
       await fn();
     })();
     inFlightCronPromises.add(run);
     try {
       await run;
+      recordCronSuccess(name, Date.now() - startedAt);
     } catch (err: any) {
+      const consecutiveFailures = recordCronFailure(name, Date.now() - startedAt, err);
       console.error(`[CRON ERROR] Task '${name}' gagal:`, err?.message || err);
+      // K-005: kegagalan beruntun menjadi alert, bukan hanya log.
+      await notifyCronFailureIfNeeded(name, consecutiveFailures, err);
     } finally {
       inFlightCronPromises.delete(run);
       inFlightCronTasks.delete(name);
@@ -486,5 +500,64 @@ export function registerCronWorkers(): void {
       );
       console.log(`🔄 Turn recovery sweep cron started (every ${intervalMinutes}m, staggered)`);
     }).catch(e => console.error('[TURN RECOVERY START ERROR]', e));
+  }
+
+  // K-009: pembersihan data sandbox/QA harian. Default aktif; env 'false' mematikan.
+  if (process.env.ENABLE_SANDBOX_CLEANUP_CRON !== 'false') {
+    const intervalHours = parseInt(process.env.SANDBOX_CLEANUP_INTERVAL_HOURS || '24', 10);
+    import('../services/sandbox-cleanup.service').then(({ cleanupSandboxCustomers }) => {
+      trackIntervalStaggered(
+        createExclusiveCronTask('sandbox-cleanup', async () => {
+          const res = await cleanupSandboxCustomers();
+          if (res.deletedCount > 0) {
+            console.log(`[SANDBOX CLEANUP] ${res.deletedCount} data uji sandbox dihapus.`);
+          }
+        }),
+        intervalHours * 60 * 60 * 1000
+      );
+      console.log(`Sandbox cleanup cron started (every ${intervalHours}h, staggered)`);
+    }).catch(e => console.error('[SANDBOX CLEANUP START ERROR]', e));
+  }
+
+  // K-009: snapshot retensi/insentif bulanan otomatis (tgl 1 mulai 03:00 WIB).
+  // Idempoten (upsert) dan tidak menimpa snapshot FINAL yang sudah dibekukan.
+  if (process.env.ENABLE_STAFF_RETENTION_SNAPSHOT_CRON !== 'false') {
+    let lastSnapshotKey = '';
+    import('../services/staff-retention.service').then(({ staffRetentionService }) => {
+      import('../services/media.service').then(({ getAllTenantIds }) => {
+        trackInterval(
+          createExclusiveCronTask('staff-retention-snapshot', async () => {
+            const now = new Date();
+            const wib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+            if (wib.getUTCDate() !== 1 || wib.getUTCHours() < 3) return;
+
+            const monthKey = wib.toISOString().slice(0, 7);
+            if (lastSnapshotKey === monthKey) return;
+
+            const tenantIds = await getAllTenantIds();
+            const failures: string[] = [];
+            for (const tId of tenantIds) {
+              try {
+                const res = await staffRetentionService.runScheduledMonthlySnapshot(tId, { now });
+                console.log(
+                  `[RETENTION SNAPSHOT] tenant ${tId} periode ${res.periodYear}-${res.periodMonth}: ` +
+                    (res.skipped ? `dilewati (${res.skipReason})` : `${res.itemCount} staf, status ${res.status}`)
+                );
+              } catch (err: any) {
+                failures.push(`${tId}: ${err?.message || err}`);
+              }
+            }
+            if (failures.length > 0) {
+              // Biarkan gagal agar status cron + alert K-005 menangkapnya; key
+              // tidak diset sehingga putaran berikutnya mencoba lagi.
+              throw new Error(`Snapshot retensi gagal untuk ${failures.length} tenant — ${failures.join('; ')}`);
+            }
+            lastSnapshotKey = monthKey;
+          }),
+          60 * 60 * 1000
+        );
+        console.log('Staff retention snapshot cron registered (tgl 1, mulai 03:00 WIB)');
+      }).catch(e => console.error('[RETENTION SNAPSHOT MEDIA SERVICE ERROR]', e));
+    }).catch(e => console.error('[RETENTION SNAPSHOT START ERROR]', e));
   }
 }

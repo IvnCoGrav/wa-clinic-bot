@@ -311,16 +311,21 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
    */
   fastify.post('/api/admin/sandbox/cleanup', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const deleted = await prisma.customer.deleteMany({
-        where: {
-          OR: [{ is_sandbox_test: true }, { phone: { startsWith: '6289999' } }],
-        },
-      });
+      // K-009: satu kontrak dengan cron harian (sandbox-cleanup.service).
+      const { cleanupSandboxCustomers } = await import('../../services/sandbox-cleanup.service');
+      const { deletedCount } = await cleanupSandboxCustomers();
       return reply
         .status(200)
-        .send({ success: true, message: `Successfully cleaned up ${deleted.count} sandbox test records.` });
+        .send({ success: true, message: `Successfully cleaned up ${deletedCount} sandbox test records.` });
     } catch (err: any) {
-      return reply.status(200).send({ success: true, message: 'Sandbox cleanup complete.' });
+      // Ar-005: jangan melaporkan sukses palsu saat pembersihan gagal.
+      console.error('[SANDBOX CLEANUP] gagal:', err?.message || err);
+      const isDbOffline = String(err?.message || '').includes('Database offline');
+      return reply.status(isDbOffline ? 503 : 500).send({
+        success: false,
+        code: isDbOffline ? 'DB_OFFLINE' : 'SANDBOX_CLEANUP_FAILED',
+        error: 'Pembersihan data sandbox gagal. Cek log server.',
+      });
     }
   });
 

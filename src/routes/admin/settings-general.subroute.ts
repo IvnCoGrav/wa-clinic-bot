@@ -772,6 +772,10 @@ export async function settingsGeneralRoutes(fastify: FastifyInstance) {
       ? 'ACTIVE'
       : 'IN_MEMORY_FALLBACK_ACTIVE';
 
+    // K-005: status cron (kegagalan beruntun) ikut dilaporkan, bukan hanya uptime.
+    const { getCronHealthSnapshot } = await import('../../lifecycle/cron-health');
+    const cronHealth = getCronHealthSnapshot();
+
     return reply.status(200).send({
       success: true,
       timestamp: new Date().toISOString(),
@@ -780,6 +784,7 @@ export async function settingsGeneralRoutes(fastify: FastifyInstance) {
       haversineLocationEngine: 'ACTIVE_MULTIPLIER_1.25X',
       telegramEmergencyAlerts: 'CONFIGURED',
       systemUptimeSeconds: uptime,
+      cronHealth: cronHealth.status,
       data: {
         wahaStatus,
         redisQueue,
@@ -791,6 +796,7 @@ export async function settingsGeneralRoutes(fastify: FastifyInstance) {
         haversineLocationEngine: 'ACTIVE_MULTIPLIER_1.25X',
         telegramEmergencyAlerts: 'CONFIGURED',
         systemUptimeSeconds: uptime,
+        cronHealth,
       },
     });
   });

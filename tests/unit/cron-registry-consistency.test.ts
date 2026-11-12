@@ -15,9 +15,9 @@ describe('Konsistensi registri cron (K-013)', () => {
 
   const registeredIds = [...source.matchAll(/createExclusiveCronTask\('([^']+)'/g)].map((m) => m[1]);
 
-  it('registrasi runtime tetap 22 interval cron dengan id unik', () => {
-    expect(registeredIds.length).toBe(22);
-    expect(new Set(registeredIds).size).toBe(22);
+  it('registrasi runtime tetap 24 interval cron dengan id unik', () => {
+    expect(registeredIds.length).toBe(24);
+    expect(new Set(registeredIds).size).toBe(24);
   });
 
   it('pekerja logis yang berbagi interval tetap terdaftar', () => {
@@ -25,9 +25,14 @@ describe('Konsistensi registri cron (K-013)', () => {
     expect(registeredIds).toContain('nightly-watchdog');
   });
 
-  it('dokumentasi menyebut 22 interval dan 23 pekerja logis (bukan 23 interval)', () => {
-    expect(docs).toContain('22 interval cron');
-    expect(docs).toContain('23 pekerja logis');
-    expect(docs).not.toContain('23 background worker mandiri');
+  it('K-009: cleanup sandbox & snapshot retensi terdaftar sebagai cron', () => {
+    expect(registeredIds).toContain('sandbox-cleanup');
+    expect(registeredIds).toContain('staff-retention-snapshot');
+  });
+
+  it('dokumentasi menyebut 24 interval dan 25 pekerja logis (bukan 25 interval)', () => {
+    expect(docs).toContain('24 interval cron');
+    expect(docs).toContain('25 pekerja logis');
+    expect(docs).not.toContain('25 background worker mandiri');
   });
 });

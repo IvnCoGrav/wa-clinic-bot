@@ -131,10 +131,26 @@ export async function healthRoutes(fastify: FastifyInstance) {
     }
 
     const statusCode = isHealthy ? 200 : 503;
+
+    // K-005: status cron bersifat informasional di readiness — kegagalan cron
+    // TIDAK boleh memicu restart container (cascade), tetapi wajib terlihat.
+    let cronHealth: any = 'UNKNOWN';
+    try {
+      const { getCronHealthSnapshot } = await import('../lifecycle/cron-health');
+      const snapshot = getCronHealthSnapshot();
+      cronHealth = {
+        status: snapshot.status,
+        alertThreshold: snapshot.alertThreshold,
+        failingJobs: snapshot.failingJobs,
+      };
+    } catch (err: any) {
+      cronHealth = `UNKNOWN: ${err?.message || 'gagal membaca status cron'}`;
+    }
+
     return reply.status(statusCode).send({
       status: isHealthy ? 'READY' : 'NOT_READY',
       timestamp: new Date().toISOString(),
-      checks,
+      checks: { ...checks, cron: cronHealth },
     });
   });
 }

@@ -233,6 +233,16 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Register:** **222 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 33 OPEN**.
 - **Gerbang regresi Fase 6A:** 7.151 test / 7.120 lulus / 3 gagal: 2 pre-existing #287 + 1 `queue.test.ts` FIFO (environment-dependent, Redis lokal; lulus dengan `DISABLE_REDIS=true`) — bukan regresi kode. `verify:backlog` PASS; `security:scan` LULUS 2.191 file.
 
+### 0.18 Fase 6B — status/alert cron & 2 cron hilang (2026-11-11)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **K-005** | `src/lifecycle/cron-health.ts`: status, durasi, kegagalan beruntun per cron; alert `CRON_JOB_FAILED` setelah ambang; diekspos di `/api/admin/health` + `/ready` | `tests/unit/cron-health.test.ts` (8) |
+| **K-009** | `sandbox-cleanup` (harian) + `staff-retention-snapshot` (tgl 1 03:00 WIB) terdaftar; route manual memakai service yang sama; snapshot idempoten & tidak menimpa `FINAL` | `tests/unit/cron-k009-jobs.test.ts` (9) + `cron-registry-consistency.test.ts` |
+
+- **Register:** **224 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 31 OPEN**.
+- **Gerbang regresi Fase 6B:** 7.169 test / 7.139 lulus / 2 gagal pre-existing #287 (0 regresi); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (66 item terverifikasi); `security:scan` LULUS 2.195 file.
+
 ### 0.17 Gerbang Regresi Fase 1
 
 | Pemeriksaan | Hasil |

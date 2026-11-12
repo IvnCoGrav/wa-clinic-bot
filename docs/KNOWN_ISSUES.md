@@ -121,6 +121,11 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - **W-011:** WAHA template mengembalikan error eksplisit.
   - **K-010:** worker drain cron in-flight sebelum shutdown.
   - Register menjadi **222 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 33 OPEN**.
+- **Tindakan Fase 6B (selesai 2026-11-11):**
+  - **K-005:** kegagalan cron kini menjadi status (`/api/admin/health` → `cronHealth`, `/ready` → `checks.cron`) dan memicu alert `CRON_JOB_FAILED` setelah ambang `CRON_FAILURE_ALERT_THRESHOLD` (default 3). Registry in-memory per proses (cron hanya di leader) — riwayat lintas restart belum dipersistensikan (lihat butir tech debt di bawah).
+  - **K-009:** `sandbox-cleanup` (harian) & `staff-retention-snapshot` (tgl 1 03:00 WIB) terdaftar sebagai cron; route `POST /api/admin/sandbox/cleanup` memakai service yang sama dan tidak lagi melaporkan sukses palsu saat gagal.
+  - Register menjadi **224 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 31 OPEN**.
+
 - **Temuan tambahan:** `SM-02` berstatus FIXED tetapi **inert** — `getTenantFormHeadersAsync`/`registerTenantFormHeaders` **0 pemanggil produksi** (`src/utils/reservation-text-parser.ts:131,162`).
 - **F5/F6 tidak dieksekusi:** Tidak ada artefak `after-f5.json`/`after-f6.json`; `scripts/deploy-prod.sh` tidak memvalidasi `APP_DOMAIN`/`BACKUP_ENCRYPTION_KEY`; `backup:verify` tidak ada di `package.json`. F6.1 menyebut “kelulusan penuh” padahal artefak 6.953 test berisi **6.923 lulus / 2 gagal pre-existing #287 / 28 skip**. Klaim “37 test isolasi 2 tenant” tidak punya suite/script rujukan; yang terverifikasi 5 suite / 23 test isolasi eksplisit lulus.
 - **Tindakan Fase 0 (selesai 2026-11-10):**
@@ -194,7 +199,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - **A-002 Tanggal lolos gerbang — SELESAI (Fase 2).** Gerbang kini mencakup `hooks/` + `utils/` dan memeriksa `toLocaleString`, bukan hanya `toLocaleDateString`/`toLocaleTimeString`. 22 situs `toLocaleString` (tanggal+jam zona perangkat) ditemukan dan dimigrasikan. Koreksi audit awal: di `hooks/` hanya 5 pemakaian, dan 4 di antaranya sudah menyebut `timeZone` — yang benar-benar salah hanya 1 (`useLiveChatNotification`), tetapi celah `toLocaleString` jauh lebih besar.
   - **A-003 Generator pricelist usang — SELESAI (Fase 1).** Guard `--force` terpasang; skrip berhenti sendiri dan tidak menyentuh artefak.
   - **A-004 Modal belum seragam:** `CreateReservationModal` (3.437 baris) masih punya overlay sendiri + 3 `z-[...]` arbitrer; 17 blok `fixed inset-0` tersisa. FMEA 6x4x5=120.
-  - **A-005 God object UI - SEBAGIAN (Fase 7 irisan 1-6).** `StaffToday.tsx` 6.059 → **3.856** baris (-36%): tipe tugas, badge/chip alamat, pemetaan kategori, modal detail, panel pembayaran, panel lokasi, gelembung chat, dan ketiga kartu daftar (Hari Ini, Mendatang, Selesai) dipindah ke `pages/staff/*`. Sisa terbesar: panel chat seluler dan state/handler-nya. Sisa 11 berkas >1.200 baris belum disentuh. FMEA 4x7x6=168.
+  - **A-005 God object UI - SEBAGIAN (Fase 7 irisan 1-6).** `StaffToday.tsx` 6.059 → **3.856** baris (-36%): tipe tugas, badge/chip alamat, pemetaan kategori, modal detail, panel pembayaran, panel lokasi, gelembung chat, dan ketiga kartu daftar (Hari Ini, Mendatang, Selesai) dipindah ke `pages/staff/*`. Sisa terbesar: panel chat seluler dan state/handler-nya. `TodayTreatments.tsx` juga turun 2.229 → **1.453** baris (target ≤1.500 tercapai) lewat `TodayTreatmentCard`, lima modal terpisah, dan modul tipe/logika. Sisa 11 berkas >1.200 baris belum disentuh. FMEA 4x7x6=168.
   - **A-006 Nama aksesibel tombol ikon — SELESAI (Fase 5).** Gerbang a11y tidak lagi menerima `title` sebagai nama; 45 tombol ikon diberi `aria-label`. FMEA 3x6x5=90.
   - **A-007 `transition-all` — SELESAI (Fase 5).** 176 pemakaian di 29 berkas → 0; 8 situs diberi properti eksplisit. Gerbang token kini menolak `transition-all` baru. FMEA 2x7x7=98.
   - **A-008 Filter URL — SELESAI (Fase 6).** Reservations (`q`/`category`/`staff`/`status`) dan CustomerDatabase (`q`) kini URL-backed; `sortField`/`sortOrder` sengaja ditinggal di state lokal. Verifikasi manual (refresh/Back) belum dilakukan. FMEA 3x5x4=60.

@@ -139,9 +139,15 @@ describe('Modul 5.8 — Deduplikasi, Filter Staging, Isolasi Sandbox & Overrides
         url: '/api/admin/sandbox/cleanup',
         headers: ADMIN_HEADERS
       });
-      expect(res.statusCode).toBe(200);
+      // DB offline di test: route WAJIB jujur gagal (Ar-005), bukan sukses palsu.
+      expect([200, 503]).toContain(res.statusCode);
       const json = JSON.parse(res.payload);
-      expect(json.success).toBe(true);
+      if (res.statusCode === 200) {
+        expect(json.success).toBe(true);
+      } else {
+        expect(json.success).toBe(false);
+        expect(json.code).toBe('DB_OFFLINE');
+      }
     });
   });
 

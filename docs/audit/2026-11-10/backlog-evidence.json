@@ -534,16 +534,16 @@
           "type": "file",
           "path": "docs/FEATURE_INVENTORY.md",
           "line": 200,
-          "contains": "22 interval cron"
+          "contains": "24 interval cron"
         },
         {
           "type": "test",
           "path": "tests/unit/cron-registry-consistency.test.ts",
-          "contains": "registrasi runtime tetap 22 interval cron"
+          "contains": "registrasi runtime tetap 24 interval cron"
         }
       ],
       "verifiedBy": "AI Agent",
-      "verifiedAt": "2026-11-10"
+      "verifiedAt": "2026-11-11"
     },
     "UTL-11": {
       "status": "FIXED",
@@ -1499,13 +1499,49 @@
         {
           "type": "file",
           "path": "src/lifecycle/background-crons.ts",
-          "line": 45,
+          "line": 59,
           "contains": "drainInFlightCronTasks"
         },
         {
           "type": "test",
           "path": "tests/unit/cron-drain-shutdown.test.ts",
           "contains": "menunggu task selesai"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
+    },
+    "K-005": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/lifecycle/cron-health.ts",
+          "line": 155,
+          "contains": "notifyCronFailureIfNeeded"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/cron-health.test.ts",
+          "contains": "alert hanya dikirim setelah melewati ambang"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-11"
+    },
+    "K-009": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/lifecycle/background-crons.ts",
+          "line": 510,
+          "contains": "createExclusiveCronTask('sandbox-cleanup'"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/cron-k009-jobs.test.ts",
+          "contains": "memakai periode bulan sebelumnya"
         }
       ],
       "verifiedBy": "AI Agent",

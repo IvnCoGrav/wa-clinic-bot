@@ -173,6 +173,7 @@ Pusat kendali percakapan di Admin Dashboard untuk Customer Service manusia menga
 | **Sinkronisasi Riwayat Chat WAHA** | `POST /live-chat/sync-history`, `/sync-full`, `GET /sync-status`, `POST /sync-cancel` | Mengunduh riwayat percakapan lama dari nomor WhatsApp ke database PostgreSQL secara bertahap atau penuh. |
 | **Deteksi Rasa Frustrasi Pelanggan** | `CronService.runFrustrationSweep()`, `src/services/frustration-signal.service.ts` | Deteksi otomatis jika ada chat yang belum direspons melewati batas SLA atau mengandung sinyal ketidakpuasan. |
 | **Pembaruan Foto Profil Customer** | `POST /api/admin/live-chat/customers/:id/refresh-profile-picture` | Mengunduh foto profil WhatsApp terbaru dari customer untuk ditampilkan di dashboard. |
+| **Reaksi Emot = Sudah Dibalas** | `POST /api/admin/live-chat/conversations/:id/messages/:messageId/reaction`, `src/services/livechat-reply-state.ts` | Reaksi emot staf pada pesan customer terakhir membuat percakapan tidak lagi berstatus "menunggu dibalas" (dipakai di kartu chat, laporan malam, dan badge SSE). Reaksi customer sendiri dan reaksi pada pesan lama tidak memadamkan status. |
 
 ---
 
@@ -185,6 +186,7 @@ Modul pelacakan efektivitas iklan berbayar (Click-to-WhatsApp) hingga ke titik t
 | **Dynamic Landing Pages** | `GET /go`, `/cta`, `/promo/:slug`, `/:slug` | Halaman pendaratan multi-tenant dinamis dengan injeksi Meta Pixel dan Google Analytics otomatis. |
 | **Tracking Event CTA & Pageview** | `POST /api/tracking/click`, `POST /api/tracking/pageview` | Merekam jejak klik tombol WhatsApp dan kunjungan halaman menggunakan Beacon API tanpa hambatan preflight. |
 | **Pricelist Cepat In-App Browser** | `GET /pricelist`, `src/landing/public/pricelist.html` | Halaman katalog harga interaktif yang dirender seketika (0 roundtrip) di dalam in-app browser WhatsApp. |
+| **Katalog Layanan Publik** | `GET /layanan` → 301 `/pricelist`, `GET /layanan.html` → 301 `/pricelist` | `/layanan` dipensiunkan 2026-11-11: katalog publik tunggal adalah `/pricelist` (hidrasi DB). Rute lama dipertahankan sebagai redirect permanen agar tautan iklan/chat tidak 404. |
 | **Pelacakan Referral CTWA** | `src/integrations/whatsapp/waha-ctwa-referral.ts`, `AdClick` | Menangkap metadata iklan Meta (ad ID, campaign ID, headline iklan, thumbnail) saat customer pertama kali menyapa. |
 | **CTWA Campaign Catchers** | `GET|POST|PUT|DELETE /api/admin/ctwa-catchers`, `/test` | Aturan penangkap pesan awal iklan untuk memetakan teks pembuka tertentu ke kampanye iklan yang sesuai. |
 | **Meta Conversions API (CAPI)** | `src/services/capi.service.ts`, `GET /api/admin/capi-queue` | Pengiriman event konversi sisi server (`Purchase`, `Schedule`, `Lead`) ke Meta Graph API dengan hashing SHA-256 data PII. Resolusi `zp` non-destruktif dari reverse geocode, gazetteer, dan `raw_text` reservasi; antrean menampilkan hasil resolusi yang sama tanpa menulis DB saat GET. |
@@ -195,7 +197,7 @@ Modul pelacakan efektivitas iklan berbayar (Click-to-WhatsApp) hingga ke titik t
 
 ## 8. Otomasi, Background Crons & Pekerja Mandiri
 
-Sistem menjalankan **22 interval cron** untuk **23 pekerja logis** mandiri (Morning Jobs & Weekly Backup berbagi satu interval 15 menit) guna memastikan integritas data dan kelancaran operasional klinik tanpa intervensi manual.
+Sistem menjalankan **24 interval cron** untuk **25 pekerja logis** mandiri (Morning Jobs & Weekly Backup berbagi satu interval 15 menit) guna memastikan integritas data dan kelancaran operasional klinik tanpa intervensi manual.
 
 | Background Worker / Cron | Frekuensi / Waktu | Deskripsi & Tanggung Jawab Operasional |
 | :--- | :--- | :--- |
@@ -222,6 +224,8 @@ Sistem menjalankan **22 interval cron** untuk **23 pekerja logis** mandiri (Morn
 | **Weekly Database Backup** | Setiap Senin 02:00 WIB | Pembuatan dump cadangan basis data PostgreSQL otomatis dan pengunggahan terenkripsi ke Google Drive. |
 | **Ad Funnel & Delivery Watchdog** | Setiap 30 menit | Memantau anomali delivery iklan Meta Ads (4 sinyal presedensi: gangguan instrumen, hening total, lalu lintas anjlok, CTR rendah) untuk mencegah kebocoran anggaran iklan. |
 | **Turn Recovery & Replay Sweep** | Setiap 2 menit | Mengidentifikasi turn percakapan yang macet di buffer/queue akibat restart proses tak terduga, me-replay pesan secara atomik, dan membunyikan alarm kritis saat akumulasi kegagalan melebihi ambang batas. |
+| **Sandbox Cleanup** | Setiap 24 jam | Menghapus data uji/QA (`is_sandbox_test` atau nomor berawalan `6289999`) agar tidak mengotori metrik dan laporan operasional. (`ENABLE_SANDBOX_CLEANUP_CRON`) |
+| **Staff Retention Snapshot** | Tanggal 1 mulai 03:00 WIB | Membekukan snapshot retensi/insentif bulan sebelumnya untuk seluruh tenant secara idempoten, tanpa menimpa snapshot `FINAL` yang sudah dibekukan admin. (`ENABLE_STAFF_RETENTION_SNAPSHOT_CRON`) |
 
 ---
 
@@ -269,7 +273,7 @@ Pusat administrasi sistem di Admin Dashboard (`packages/admin-dashboard`) untuk 
 
 - **Total Endpoint API**: **297 endpoint unik (348 pasangan method+path)** (tersebar di rute Admin, Staff, Webhook, Media, Tracking, Landing, dan Health).
 - **Total Model Database (Prisma Entities)**: **50 model Prisma** dan **16 enum** mencakup domain Customer, Percakapan, Reservasi, Staf, Insentif Retensi, Log Audit, Integrasi Google/Meta, dan Analitik.
-- **Total Background Crons & Workers**: **22 interval cron terdaftar** untuk **23 pekerja logis** (definisi kanonis: `src/lifecycle/background-crons.ts`; Morning Jobs & Weekly Backup berbagi satu interval 15 menit), dengan interval berkala mulai dari 2 menit hingga 1 minggu.
+- **Total Background Crons & Workers**: **24 interval cron terdaftar** untuk **25 pekerja logis** (definisi kanonis: `src/lifecycle/background-crons.ts`; Morning Jobs & Weekly Backup berbagi satu interval 15 menit), dengan interval berkala mulai dari 2 menit hingga 1 minggu. Setiap kegagalan beruntun dilaporkan sebagai status `GET /api/admin/health` (`cronHealth`) dan memicu alert `CRON_JOB_FAILED` setelah ambang `CRON_FAILURE_ALERT_THRESHOLD` (default 3).
 - **Penyedia Integrasi WhatsApp**: Dual-mode terintegrasi (**WAHA container** + **Meta Cloud API resmi**).
 - **Dasbor Manajemen**: 1 Single Page Application (React 18 + Vite + Tailwind CSS) yang memuat modul Kalender Jadwal, Live Chat CS, Peta Sebaran Pasien, Analitik Meta Ads, Evaluasi AI, Insentif Retensi Bidan, dan Konfigurasi Multi-Tenant.
 
