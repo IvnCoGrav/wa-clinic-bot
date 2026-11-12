@@ -364,9 +364,17 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
           },
         });
       } catch (err: any) {
+        // Ar-005: jangan 200 + angka nol saat DB gagal di produksi.
+        if (process.env.NODE_ENV === 'production') {
+          return reply.status(503).send({
+            success: false,
+            code: 'DATABASE_UNAVAILABLE',
+            error: 'Statistik evaluasi tidak dapat dimuat.',
+          });
+        }
         return reply
           .status(200)
-          .send({ success: true, data: { total: 0, avgScore: 0, minScore: 0, maxScore: 0, recent: [] } });
+          .send({ success: true, degraded: true, data: { total: 0, avgScore: 0, minScore: 0, maxScore: 0, recent: [] } });
       }
     }
   );
@@ -419,8 +427,17 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
           },
         });
       } catch (err: any) {
+        // Ar-005: jangan 200 + angka nol saat DB gagal di produksi.
+        if (process.env.NODE_ENV === 'production') {
+          return reply.status(503).send({
+            success: false,
+            code: 'DATABASE_UNAVAILABLE',
+            error: 'Ringkasan audit AI tidak dapat dimuat.',
+          });
+        }
         return reply.status(200).send({
           success: true,
+          degraded: true,
           data: {
             days: 7,
             totalLogs: 0,

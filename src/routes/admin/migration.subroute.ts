@@ -425,9 +425,17 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
         totalPages: Math.max(1, Math.ceil(total / limitNum)),
       });
     } catch (err) {
+      // Ar-005: jangan 200 + data kosong saat DB gagal di produksi.
+      if (process.env.NODE_ENV === 'production') {
+        return reply.status(503).send({
+          success: false,
+          code: 'DATABASE_UNAVAILABLE',
+          error: 'Daftar staging FAQ tidak dapat dimuat.',
+        });
+      }
       return reply
         .status(200)
-        .send({ success: true, data: [], total: 0, page: 1, limit: 50, totalPages: 1 });
+        .send({ success: true, degraded: true, data: [], total: 0, page: 1, limit: 50, totalPages: 1 });
     }
   });
 
@@ -523,9 +531,17 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
         totalPages: Math.max(1, Math.ceil(total / limitNum)),
       });
     } catch (err) {
+      // Ar-005: jangan 200 + data kosong saat DB gagal di produksi.
+      if (process.env.NODE_ENV === 'production') {
+        return reply.status(503).send({
+          success: false,
+          code: 'DATABASE_UNAVAILABLE',
+          error: 'Daftar staging FAQ umum tidak dapat dimuat.',
+        });
+      }
       return reply
         .status(200)
-        .send({ success: true, data: [], total: 0, page: 1, limit: 50, totalPages: 1 });
+        .send({ success: true, degraded: true, data: [], total: 0, page: 1, limit: 50, totalPages: 1 });
     }
   });
 

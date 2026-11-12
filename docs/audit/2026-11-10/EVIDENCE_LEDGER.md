@@ -254,6 +254,16 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Catatan konfigurasi baru:** `ADMIN_ALLOWED_ORIGINS` (dipisah koma) wajib diisi bila dashboard dilayani dari origin berbeda dengan API; tanpa itu gerbang CSRF hanya menerima same-origin.
 - **Gerbang regresi Fase 6C:** 7.183 test / 7.153 lulus / 2 gagal pre-existing #287 (0 regresi vs 6B); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (68 item); `audit:verify-claims` PASS (10 rujukan); `security:scan` LULUS.
 
+### 0.27 W6C — kejujuran degradasi DB route admin (Ar-005, 2026-11-12)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **Ar-005** (sisa non-landing) | 7 route admin berhenti mengembalikan `200 + data kosong` saat DB gagal: `settings/notifications/logs`, `medical-faq-staging`, `general-faq-staging`, `debug/meta-manual-history`, `ai-evaluations`, `ai-audit-summary`, `customers/flagged` → **503 `DATABASE_UNAVAILABLE`** di produksi; 200 + `degraded:true` hanya di non-produksi | `tests/unit/admin-db-degradation-honesty.test.ts` (14) |
+
+- **Status register:** Ar-005 tetap **OPEN** — sisa route `landings.subroute.ts` berada di area landing pengguna (tercatat sebagai M-03/M-04).
+- **Register:** **235 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 20 OPEN** (tidak berubah).
+- **Gerbang regresi W6C:** 7.320 test / 7.290 lulus / 2 gagal pre-existing #287 (0 regresi vs W6B); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (77 item); `security:scan` LULUS 2.229 file.
+
 ### 0.26 W6B — antrean retry Google Contacts (I-007, 2026-11-12)
 
 | ID | Perbaikan | Bukti test |

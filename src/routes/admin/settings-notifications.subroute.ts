@@ -390,7 +390,15 @@ export async function settingsNotificationsRoutes(fastify: FastifyInstance) {
       });
       return reply.status(200).send({ success: true, data: rows });
     } catch (err: any) {
-      return reply.status(200).send({ success: true, data: [], note: `DB offline: ${err?.message}` });
+      // Ar-005: jangan 200 + data kosong saat DB gagal di produksi.
+      if (process.env.NODE_ENV === 'production') {
+        return reply.status(503).send({
+          success: false,
+          code: 'DATABASE_UNAVAILABLE',
+          error: 'Riwayat notifikasi tidak dapat dimuat.',
+        });
+      }
+      return reply.status(200).send({ success: true, degraded: true, data: [], note: `DB offline: ${err?.message}` });
     }
   });
 

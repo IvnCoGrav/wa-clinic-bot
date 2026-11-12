@@ -575,10 +575,18 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
       });
       return reply.status(200).send({ success: true, count: flaggedConversations.length, data: flaggedConversations });
     } catch (error) {
-      const mockFlagged: any[] = [];
+      // Ar-005: jangan 200 + daftar kosong saat DB gagal di produksi
+      // (admin bisa menyimpulkan "tidak ada percakapan di-flag" padahal DB mati).
+      if (process.env.NODE_ENV === 'production') {
+        return reply.status(503).send({
+          success: false,
+          code: 'DATABASE_UNAVAILABLE',
+          error: 'Daftar percakapan yang di-flag tidak dapat dimuat.',
+        });
+      }
       return reply
         .status(200)
-        .send({ success: true, count: mockFlagged.length, data: mockFlagged, note: 'Fallback in-memory mode' });
+        .send({ success: true, degraded: true, count: 0, data: [], note: 'Fallback in-memory mode' });
     }
   });
 
