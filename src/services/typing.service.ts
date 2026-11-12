@@ -2,6 +2,10 @@ import { IWahaClient, wahaClient } from '../integrations/waha/client';
 import { MessageTransport } from '../integrations/whatsapp/transport';
 import { measure } from '../utils/timer';
 import { stageLog, isSimpleLogMode } from '../utils/stage-logger';
+import {
+  getHumanizerBubbleConfig,
+  type HumanizerBubbleConfig,
+} from '../config/humanizer-bubble.config';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -25,6 +29,84 @@ export interface HumanReplyResult {
   error?: string;
   /** ID WhatsApp resmi bubble terakhir (untuk ACK delivered/read & reaksi). */
   messageId?: string;
+}
+
+/** Pemisah label↔nilai yang selalu aktif; tambahan per tenant via DB settings. */
+const DEFAULT_FIELD_SEPARATORS = [':'];
+
+/**
+ * W-010: apakah satu baris berbentuk field form (`Label : nilai`)?
+ * Murni struktural — tidak mengenal nama label bisnis apa pun.
+ */
+export function isFormFieldLine(line: string, config?: HumanizerBubbleConfig): boolean {
+  const text = line.trim();
+  if (!text || text.length > 200) return false;
+
+  for (const separator of [...DEFAULT_FIELD_SEPARATORS, ...(config?.extraSeparators ?? [])]) {
+    if (!separator) continue;
+    const idx = text.indexOf(separator);
+    if (idx < 2 || idx > 80) continue;
+    const label = text.slice(0, idx).trim();
+    if (!label || label.length > 60) continue;
+    if (/[.!?,;]$/.test(label)) continue; // kalimat, bukan label
+    if (label.split(/\s+/).length > 6) continue;
+    if (/^\d{1,2}$/.test(label)) continue; // "09:00" bukan field
+    if (/^https?$/i.test(label)) continue; // URL bukan field
+    return true;
+  }
+  return false;
+}
+
+interface FormSection {
+  start: number;
+  end: number;
+}
+
+/**
+ * Cari blok form secara struktural: kumpulan paragraf berisi baris `Label : nilai`
+ * (minimal 3 field), boleh diselingi satu paragraf judul bagian. Judul form
+ * pendek tepat di atas blok (mis. "<header form>") ikut dimasukkan ke bubble form.
+ */
+export function findFormSection(
+  paragraphs: string[],
+  config?: HumanizerBubbleConfig
+): FormSection | null {
+  const fieldParagraphs = paragraphs
+    .map((paragraph, idx) => ({
+      idx,
+      count: paragraph
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => isFormFieldLine(line, config)).length,
+    }))
+    .filter((entry) => entry.count > 0);
+
+  const totalFields = fieldParagraphs.reduce((sum, entry) => sum + entry.count, 0);
+  if (totalFields < 3) return null;
+
+  let start = fieldParagraphs[0].idx;
+  let end = fieldParagraphs[0].idx;
+  for (const entry of fieldParagraphs.slice(1)) {
+    // Jeda maksimal 1 paragraf: judul bagian seperti "Pilihan treatment ..." 
+    // boleh berada di antara dua blok field.
+    if (entry.idx - end <= 2) end = entry.idx;
+    else break;
+  }
+
+  const headerCandidate = paragraphs[start - 1];
+  if (headerCandidate) {
+    const headerTrimmed = headerCandidate.trim();
+    const headerHasField = headerTrimmed
+      .split('\n')
+      .some((line) => isFormFieldLine(line, config));
+    const looksLikeHeader =
+      headerTrimmed.length > 0 &&
+      headerTrimmed.length <= 80 &&
+      !/[.!?]\s*$/.test(headerTrimmed);
+    if (!headerHasField && looksLikeHeader) start -= 1;
+  }
+
+  return { start, end };
 }
 
 export class TypingService {
@@ -135,9 +217,14 @@ export class TypingService {
 
   /**
    * Memotong teks balasan panjang menjadi beberapa bubble (maksimal HUMANIZER_BUBBLE_MAX_COUNT = 4).
-   * Melakukan split berdasarkan paragraf dan/atau kalimat tanpa memotong di tengah kalimat (maxChars = 130).
+   *
+   * W-010: pemisahan form reservasi kini STRUKTURAL (blok baris `Label : nilai`,
+   * minimal 3 field, dengan judul pendek di atasnya) — TIDAK ada daftar frasa
+   * bisnis hardcode. Template form tiap tenant bisa berubah tanpa deploy kode;
+   * pemisah non-standar ditambah lewat `Tenant.settings.humanizerBubble`.
+   * Teks non-form tetap dipecah per paragraf/kalimat tanpa memotong kalimat.
    */
-  public splitIntoBubbles(text: string): string[] {
+  public splitIntoBubbles(text: string, config?: HumanizerBubbleConfig): string[] {
     const isEnabled = (process.env.HUMANIZER_BUBBLE_SPLIT_ENABLED ?? 'true') !== 'false';
     if (!isEnabled || !text || !text.trim()) {
       return [text ? text.trim() : ''];
@@ -147,64 +234,23 @@ export class TypingService {
     const singleThreshold = parseInt(process.env.HUMANIZER_BUBBLE_SINGLE_THRESHOLD_CHARS || '350', 10);
     const maxCount = parseInt(process.env.HUMANIZER_BUBBLE_MAX_COUNT || '2', 10);
     const maxChars = parseInt(process.env.HUMANIZER_BUBBLE_MAX_CHARS || '250', 10);
+    const paragraphs = trimmed
+      .split(/\n\s*\n/)
+      .map((p) => p.trim())
+      .filter(Boolean);
 
-    // 0. KHUSUS FORM RESERVASI: Pemisahan Semantik Presisi (3 Bubble)
-    // Bubble 1: Kalimat pengantar / konsultasi / empati ("Tentu bisa Bunda...")
-    // Bubble 2: Format list reservasi (dari "Berikut list untuk reservasi..." sampai akhir field treatment)
-    // Bubble 3: Panduan pengisian & SOP pembatalan ("Mohon bisa diisi Bunda...")
-    const concludingKeywords = [
-      'mohon bisa diisi',
-      'mohon diisi',
-      'mohon untuk mengisi',
-      'harap diisi',
-      'silakan diisi',
-      'silahkan diisi',
-      'mohon diisi ya',
-      'mohon bisa diisi ya',
-    ];
-
-    const isReservationForm =
-      /(berikut\s+(list|format)\s+(untuk\s+)?reservasi|format\s+reservasi|list\s+reservasi|format\s+pendaftaran\s+reservasi)/i.test(trimmed) ||
-      (trimmed.toLowerCase().includes('hari dan tanggal') && trimmed.toLowerCase().includes('alamat & shareloc'));
-
-    if (isReservationForm) {
-      // Normalisasi pemisah sebelum header reservasi dan sebelum footer penutup jika hanya dipisah single \n
-      let normalized = trimmed
-        .replace(/([^\n])\r?\n(berikut\s+(list|format)\s+(untuk\s+)?reservasi|format\s+reservasi|list\s+reservasi)/gi, '$1\n\n$2')
-        .replace(/([^\n])\r?\n(mohon\s+(bisa\s+)?diisi|silakan\s+diisi|silahkan\s+diisi|harap\s+diisi)/gi, '$1\n\n$2');
-
-      const paragraphs = normalized
-        .split(/\n\s*\n/)
-        .map((p) => p.trim())
-        .filter(Boolean);
-
-      const formHeaderIndex = paragraphs.findIndex((p) =>
-        /^(berikut\s+(list|format)\s+(untuk\s+)?reservasi|format\s+reservasi|list\s+reservasi|format\s+pendaftaran\s+reservasi)/i.test(p) ||
-        (p.toLowerCase().includes('hari dan tanggal') && p.toLowerCase().includes('alamat & shareloc'))
-      );
-
-      const formFooterIndex = paragraphs.findIndex((p, idx) =>
-        idx >= (formHeaderIndex >= 0 ? formHeaderIndex : 0) &&
-        concludingKeywords.some((keyword) => p.toLowerCase().startsWith(keyword))
-      );
-
-      if (formHeaderIndex > 0 && formFooterIndex > formHeaderIndex) {
-        // Ada Intro + Form + Footer -> Pisahkan menjadi 3 BUBBLE
-        const firstBubble = paragraphs.slice(0, formHeaderIndex).join('\n\n');
-        const secondBubble = paragraphs.slice(formHeaderIndex, formFooterIndex).join('\n\n');
-        const thirdBubble = paragraphs.slice(formFooterIndex).join('\n\n');
-        return [firstBubble, secondBubble, thirdBubble];
-      } else if (formHeaderIndex === 0 && formFooterIndex > 0) {
-        // Hanya Form + Footer (Tanpa Intro) -> 2 BUBBLE
-        const firstBubble = paragraphs.slice(0, formFooterIndex).join('\n\n');
-        const secondBubble = paragraphs.slice(formFooterIndex).join('\n\n');
-        return [firstBubble, secondBubble];
-      } else if (formHeaderIndex > 0 && formFooterIndex === -1) {
-        // Hanya Intro + Form (Tanpa Footer) -> 2 BUBBLE
-        const firstBubble = paragraphs.slice(0, formHeaderIndex).join('\n\n');
-        const secondBubble = paragraphs.slice(formHeaderIndex).join('\n\n');
-        return [firstBubble, secondBubble];
-      }
+    // 0. FORM (struktural): Intro | Blok form | Footer SOP → maksimal 3 bubble.
+    //    Batas antar-bubble ditentukan oleh struktur baris, bukan kata kunci bisnis.
+    const form = findFormSection(paragraphs, config);
+    if (form) {
+      const bubbles: string[] = [];
+      const intro = paragraphs.slice(0, form.start).join('\n\n');
+      const formBody = paragraphs.slice(form.start, form.end + 1).join('\n\n');
+      const footer = paragraphs.slice(form.end + 1).join('\n\n');
+      if (intro) bubbles.push(intro);
+      if (formBody) bubbles.push(formBody);
+      if (footer) bubbles.push(footer);
+      if (bubbles.length >= 2) return bubbles;
     }
 
     // 1. JIKA singleThreshold > 0 DAN panjang teks di bawah threshold: Kirim sebagai 1 bubble tunggal!
@@ -220,22 +266,6 @@ export class TypingService {
         .filter(Boolean);
 
       if (paragraphs.length >= 2) {
-        let targetSplitIndex = -1;
-        for (let i = 0; i < paragraphs.length; i++) {
-          const lowerP = paragraphs[i].toLowerCase();
-          const match = concludingKeywords.some((keyword) => lowerP.startsWith(keyword));
-          if (match) {
-            targetSplitIndex = i;
-            break;
-          }
-        }
-
-        if (targetSplitIndex > 0) {
-          const firstBubble = paragraphs.slice(0, targetSplitIndex).join('\n\n');
-          const secondBubble = paragraphs.slice(targetSplitIndex).join('\n\n');
-          return [firstBubble, secondBubble];
-        }
-
         if (maxCount === 2) {
           let bestIndex = 0;
           let minDiff = Infinity;
@@ -295,11 +325,6 @@ export class TypingService {
     }
 
     // 3. BACKWARD COMPATIBLE FALLBACK (Jika singleThreshold === 0): Gunakan cara lama (maxChars greedy split)
-    const paragraphs = trimmed
-      .split(/\n\s*\n/)
-      .map((p) => p.trim())
-      .filter(Boolean);
-
     const rawCandidates: string[] = [];
 
     for (const para of paragraphs) {
@@ -400,7 +425,13 @@ export class TypingService {
     let bubblesSent = 0;
     let lastMessageId: string | undefined = undefined;
     let typingStopped = true; // Status awal typing mati/stop
-    const bubbles = params.singleBubble ? [replyText] : this.splitIntoBubbles(replyText);
+    // W-010: konfigurasi pemisah form per tenant (default kosong = struktural murni).
+    const bubbleConfig = params.singleBubble
+      ? undefined
+      : await getHumanizerBubbleConfig(effectiveTenantId);
+    const bubbles = params.singleBubble
+      ? [replyText]
+      : this.splitIntoBubbles(replyText, bubbleConfig);
 
     // Daftarkan semua bubble ke in-flight registry sebelum mulai pengiriman
     // agar echo webhook dari WAHA tidak memicu false positive human takeover

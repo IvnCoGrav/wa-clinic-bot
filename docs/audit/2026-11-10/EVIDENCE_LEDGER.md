@@ -254,6 +254,15 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Catatan konfigurasi baru:** `ADMIN_ALLOWED_ORIGINS` (dipisah koma) wajib diisi bila dashboard dilayani dari origin berbeda dengan API; tanpa itu gerbang CSRF hanya menerima same-origin.
 - **Gerbang regresi Fase 6C:** 7.183 test / 7.153 lulus / 2 gagal pre-existing #287 (0 regresi vs 6B); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (68 item); `audit:verify-claims` PASS (10 rujukan); `security:scan` LULUS.
 
+### 0.22 W5C — humanizer bubble struktural (2026-11-12)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **W-010** | `splitIntoBubbles` mendeteksi form dari struktur baris (`Label : nilai`, ≥3 field) + judul pendek; `concludingKeywords` & label lama "Alamat & Shareloc" dihapus. Pemisah tenant via `Tenant.settings.humanizerBubble.extraSeparators` (modul `src/config/humanizer-bubble.config.ts`) | `tests/unit/typing-bubble-structural.test.ts` (17) + `tests/unit/typing.test.ts` (12) |
+
+- **Register:** **231 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 24 OPEN**.
+- **Gerbang regresi W5C:** 7.236 test / 7.206 lulus / 2 gagal pre-existing #287 (0 regresi vs W5B); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (73 item); `security:scan` LULUS 2.213 file.
+
 ### 0.21 W5B — AbortSignal end-to-end (2026-11-12)
 
 | ID | Perbaikan | Bukti test |

@@ -1665,6 +1665,35 @@
       ],
       "verifiedBy": "AI Agent",
       "verifiedAt": "2026-11-12"
+    },
+    "W-010": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/services/typing.service.ts",
+          "line": 70,
+          "contains": "findFormSection"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/typing-bubble-structural.test.ts",
+          "contains": "memecah form tenant arbitrer"
+        },
+        {
+          "type": "file",
+          "path": "src/config/humanizer-bubble.config.ts",
+          "line": 16,
+          "contains": "extraSeparators"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/typing-bubble-structural.test.ts",
+          "contains": "frasa lama TIDAK lagi memicu split form"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-12"
     }
   },
   "known": {
