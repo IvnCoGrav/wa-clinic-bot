@@ -254,6 +254,16 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Catatan konfigurasi baru:** `ADMIN_ALLOWED_ORIGINS` (dipisah koma) wajib diisi bila dashboard dilayani dari origin berbeda dengan API; tanpa itu gerbang CSRF hanya menerima same-origin.
 - **Gerbang regresi Fase 6C:** 7.183 test / 7.153 lulus / 2 gagal pre-existing #287 (0 regresi vs 6B); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (68 item); `audit:verify-claims` PASS (10 rujukan); `security:scan` LULUS.
 
+### 0.28 W6D — artefak audit Fase 5 diregenerasi (S-10, 2026-11-12)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **S-10** | `docs/audit/2026-11-02/fase-05.json` diregenerasi dari suite yang masih ada (15 file / 150 test, 100% lulus); laporan dikoreksi — klaim lama "7 suites/16 test" dicabut karena 6 dari 7 path-nya sudah tidak ada di repo | `tests/unit/fase05-audit-artifact.test.ts` (3) |
+
+- **Kontrak baru:** gerbang `tests/unit/fase05-audit-artifact.test.ts` (jumlah file ≥7, `numTotalTests=150`, semua path artefak dari repo ini, laporan bebas klaim lama).
+- **Register:** **236 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 19 OPEN**.
+- **Gerbang regresi W6D:** 7.323 test / 7.293 lulus / 2 gagal pre-existing #287 (0 regresi vs W6C); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (78 item); `security:scan` LULUS 2.231 file.
+
 ### 0.27 W6C — kejujuran degradasi DB route admin (Ar-005, 2026-11-12)
 
 | ID | Perbaikan | Bukti test |

@@ -131,6 +131,11 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - **Ar-009:** gerbang `npm run audit:verify-claims` memindai seluruh rujukan `file:line` laporan audit Fase 1/11 dan gagal bila file hilang atau baris di luar batas; addendum integritas menandai klaim yang hanya bisa diverifikasi di server live sebagai `UNVERIFIABLE (server)`.
   - Register menjadi **226 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 29 OPEN**.
 
+- **Tindakan W6D (selesai 2026-11-12):**
+  - **S-10:** artefak audit Fase 5 (`fase-05.json`) tidak lagi memuat klaim palsu. Artefak lama berisi 1 file/16 test dengan path mesin lain, padahal laporan mengklaim 7 path. Artefak kini diregenerasi dari 15 file/150 test yang benar-benar ada dan lulus, dan laporan dikoreksi.
+  - Register menjadi **236 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 19 OPEN**.
+  - **Batas yang diketahui:** 6 test lama (`staff-auth`, `staff-chat-unsend`, `staff-photo-capture`, `staff-today-tasks`, `staff-trip-tracker`, `staff-session`) sudah tidak ada di repo; penggantinya dipilih per area fitur 5.1–5.6. Bila pemilik area menambah suite baru, perbarui artefak + angka laporan bersamaan (dikunci oleh `tests/unit/fase05-audit-artifact.test.ts`).
+
 - **Tindakan W6C (selesai 2026-11-12):**
   - **Ar-005 (sebagian):** route admin non-landing tidak lagi menyamar sukses saat DB mati. `settings/notifications/logs`, `medical-faq-staging`, `general-faq-staging`, `debug/meta-manual-history`, `ai-evaluations`, `ai-audit-summary`, dan `customers/flagged` kini 503 `DATABASE_UNAVAILABLE` di produksi; mode non-produksi tetap 200 dengan penanda `degraded:true`.
   - **Sisa yang diketahui:** route `landings.subroute.ts` masih memakai fallback lama dan TIDAK disentuh karena berada di area landing pengguna (dicatat sebagai M-03/M-04). Ar-005 tetap OPEN sampai area itu dikerjakan pemiliknya.

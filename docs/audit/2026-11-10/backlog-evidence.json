@@ -1816,6 +1816,30 @@
       ],
       "verifiedBy": "AI Agent",
       "verifiedAt": "2026-11-12"
+    },
+    "S-10": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "docs/audit/2026-11-02/fase-05/LAPORAN_FASE_05.md",
+          "line": 35,
+          "contains": "15 file suites, 150 tests passed"
+        },
+        {
+          "type": "file",
+          "path": "docs/audit/2026-11-02/fase-05.json",
+          "line": 1,
+          "contains": "\"numTotalTests\":150"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/fase05-audit-artifact.test.ts",
+          "contains": "semua path artefak berasal dari repo ini"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-12"
     }
   },
   "known": {
