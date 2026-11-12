@@ -254,6 +254,16 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Catatan konfigurasi baru:** `ADMIN_ALLOWED_ORIGINS` (dipisah koma) wajib diisi bila dashboard dilayani dari origin berbeda dengan API; tanpa itu gerbang CSRF hanya menerima same-origin.
 - **Gerbang regresi Fase 6C:** 7.183 test / 7.153 lulus / 2 gagal pre-existing #287 (0 regresi vs 6B); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (68 item); `audit:verify-claims` PASS (10 rujukan); `security:scan` LULUS.
 
+### 0.32 W6H — store trip lintas proses untuk auto-close (S-03, 2026-11-12)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **S-03** | `recordTripPing` di-write-through ke KV bersama (`distributedKv`, TTL 2 jam) + index tenant; `listActiveTripsAcrossProcesses()` menggabungkan memori lokal + KV; cron `runTripAutoCloseSweep` memakai metode itu sehingga sweep di `worker` melihat ping dari `app` | `tests/unit/staff-trip-tracking-persisted.test.ts` (8) |
+
+- **Kontrak baru:** `listActiveTripsAcrossProcesses(tenantId?)`, `clearAllPersisted()`; key `staff:trip:<tenant>:<reservation>`, index `staff:trip:index:<tenant>`, `staff:trip:tenants`.
+- **Register:** **239 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 16 OPEN**.
+- **Gerbang regresi W6H:** 7.354 test / 7.324 lulus / 2 gagal pre-existing #287 (0 regresi vs W6G); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (81 item); `security:scan` LULUS 2.240 file. Catatan: run pertama sempat mencatat timeout `production_edge_cases` (flaky di bawah beban paralel); file itu lulus saat dijalankan sendiri (4,7 dtk) dan lulus pada run ulang penuh — bukan regresi.
+
 ### 0.31 W6G — secret webhook WAHA per tenant (S-015, 2026-11-12)
 
 | ID | Perbaikan | Bukti test |

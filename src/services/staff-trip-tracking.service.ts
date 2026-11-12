@@ -20,6 +20,7 @@
 
 import { haversineKm, findNearestSubdistrict } from '../utils/gazetteer';
 import { POPULAR_LANDMARKS } from '../config/landmarks';
+import { distributedKv, type DistributedKv } from '../utils/distributed-kv';
 
 /**
  * TTL sesi trip (detik). 2 jam (plan 2026-10-02 — sebelumnya 10 menit).
@@ -407,6 +408,34 @@ export function evaluateGeofenceAlert(
 class StaffTripTrackingService {
   private readonly store = new Map<string, { record: TripRecord; timer: ReturnType<typeof setTimeout> }>();
 
+  /**
+   * S-03: store memori tetap sumber baca cepat di proses ini, tetapi setiap
+   * ping juga ditulis ke KV bersama (Redis) sehingga worker sweep melihat sesi
+   * yang dibuat proses `app`. Tanpa Redis, KV jatuh ke memori (perilaku lama).
+   */
+  constructor(private readonly kv: DistributedKv = distributedKv) {}
+
+  private static readonly TENANTS_KEY = 'staff:trip:tenants';
+  private static readonly TTL_MS = TRIP_PING_TTL_SEC * 1000;
+
+  private indexKey(tenantId: string): string {
+    return `staff:trip:index:${tenantId}`;
+  }
+
+  private persistRecord(record: TripRecord): void {
+    const ttl = StaffTripTrackingService.TTL_MS;
+    void this.kv
+      .set(this.redisKey(record.tenantId, record.reservationId), JSON.stringify(record), ttl)
+      .catch(() => {});
+    void this.kv.sadd(this.indexKey(record.tenantId), record.reservationId, ttl).catch(() => {});
+    void this.kv.sadd(StaffTripTrackingService.TENANTS_KEY, record.tenantId, ttl).catch(() => {});
+  }
+
+  private forgetRecord(tenantId: string, reservationId: string): void {
+    void this.kv.del(this.redisKey(tenantId, reservationId)).catch(() => {});
+    void this.kv.srem(this.indexKey(tenantId), reservationId).catch(() => {});
+  }
+
   /** Key Redis masa depan — diekspos agar Fase 2 memakai format identik. */
   public redisKey(tenantId: string, reservationId: string): string {
     assertTenant(tenantId);
@@ -470,6 +499,7 @@ class StaffTripTrackingService {
     }, TRIP_PING_TTL_SEC * 1000);
     if ((timer as any).unref) (timer as any).unref();
     this.store.set(key, { record, timer });
+    this.persistRecord(record);
     return record;
   }
 
@@ -483,6 +513,9 @@ class StaffTripTrackingService {
   /**
    * #162e: daftar sesi trip aktif (untuk sweep auto-close). Tenant-scoped bila
    * `tenantId` diberikan; tanpa argumen mengembalikan seluruh tenant (sweep cron).
+   *
+   * Catatan S-03: ini hanya melihat store proses INI. Sweep lintas proses
+   * (worker terpisah) WAJIB memakai `listActiveTripsAcrossProcesses()`.
    */
   public listActiveTrips(tenantId?: string): TripRecord[] {
     const out: TripRecord[] = [];
@@ -492,11 +525,61 @@ class StaffTripTrackingService {
     return out;
   }
 
+  /**
+   * S-03: gabungkan sesi lokal + sesi yang dipersist ke KV bersama.
+   * Dipakai cron auto-close yang berjalan di proses berbeda dari `app`.
+   * Fail-open: KV bermasalah → sesi lokal tetap dikembalikan.
+   */
+  public async listActiveTripsAcrossProcesses(tenantId?: string): Promise<TripRecord[]> {
+    const merged = new Map<string, TripRecord>();
+    for (const record of this.listActiveTrips(tenantId)) {
+      merged.set(`${record.tenantId}:${record.reservationId}`, record);
+    }
+
+    let tenants: string[];
+    try {
+      tenants = tenantId
+        ? [tenantId]
+        : await this.kv.smembers(StaffTripTrackingService.TENANTS_KEY);
+    } catch {
+      return Array.from(merged.values());
+    }
+
+    for (const tenant of tenants) {
+      let ids: string[];
+      try {
+        ids = await this.kv.smembers(this.indexKey(tenant));
+      } catch {
+        continue;
+      }
+      for (const reservationId of ids) {
+        const composite = `${tenant}:${reservationId}`;
+        if (merged.has(composite)) continue;
+        try {
+          const raw = await this.kv.get(this.redisKey(tenant, reservationId));
+          if (!raw) {
+            await this.kv.srem(this.indexKey(tenant), reservationId).catch(() => {});
+            continue;
+          }
+          const record = JSON.parse(raw) as TripRecord;
+          if (!record || record.tenantId !== tenant) continue;
+          if (Date.now() - Number(record.updatedAt) > StaffTripTrackingService.TTL_MS) continue;
+          merged.set(composite, record);
+        } catch {
+          /* item rusak → lewati */
+        }
+      }
+    }
+
+    return Array.from(merged.values());
+  }
+
   public clearTrip(tenantId: string, reservationId: string): boolean {
     assertTenant(tenantId);
     if (!reservationId || typeof reservationId !== 'string' || !reservationId.trim()) return false;
     const key = tripKey(tenantId, reservationId);
     const hit = this.store.get(key);
+    this.forgetRecord(tenantId, reservationId);
     if (!hit) return false;
     clearTimeout(hit.timer);
     this.store.delete(key);
@@ -507,6 +590,24 @@ class StaffTripTrackingService {
   public clearAll(): void {
     for (const [, v] of this.store) clearTimeout(v.timer);
     this.store.clear();
+  }
+
+  /** Reset store memori + KV bersama (test/maintenance). */
+  public async clearAllPersisted(): Promise<void> {
+    this.clearAll();
+    try {
+      const tenants = await this.kv.smembers(StaffTripTrackingService.TENANTS_KEY);
+      for (const tenant of tenants) {
+        const ids = await this.kv.smembers(this.indexKey(tenant));
+        for (const reservationId of ids) {
+          await this.kv.del(this.redisKey(tenant, reservationId));
+          await this.kv.srem(this.indexKey(tenant), reservationId);
+        }
+        await this.kv.srem(StaffTripTrackingService.TENANTS_KEY, tenant);
+      }
+    } catch {
+      /* KV offline → store memori sudah bersih */
+    }
   }
 }
 

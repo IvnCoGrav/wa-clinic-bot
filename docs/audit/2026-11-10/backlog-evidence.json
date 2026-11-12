@@ -1899,6 +1899,35 @@
       ],
       "verifiedBy": "AI Agent",
       "verifiedAt": "2026-11-12"
+    },
+    "S-03": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/services/staff-trip-tracking.service.ts",
+          "line": 533,
+          "contains": "public async listActiveTripsAcrossProcesses"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/staff-trip-tracking-persisted.test.ts",
+          "contains": "tetap melihat sesi setelah store memori proses dikosongkan"
+        },
+        {
+          "type": "file",
+          "path": "src/services/cron.service.ts",
+          "line": 602,
+          "contains": "listActiveTripsAcrossProcesses()"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/staff-trip-tracking-persisted.test.ts",
+          "contains": "tenant-scoped: tidak membocorkan sesi tenant lain"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-12"
     }
   },
   "known": {

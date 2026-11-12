@@ -597,7 +597,9 @@ export class CronService {
       const { staffTripTrackingService, isTripScheduleExpired } = await import('./staff-trip-tracking.service');
       const { prisma } = await import('../db/client');
       const { getLiveChatHub } = await import('./live-chat-hub.service');
-      const active = staffTripTrackingService.listActiveTrips();
+      // S-03: baca sesi dari store bersama (KV) agar sweep di worker melihat
+      // ping yang ditulis proses `app`, bukan hanya memori proses ini.
+      const active = await staffTripTrackingService.listActiveTripsAcrossProcesses();
       if (active.length === 0) return;
       let closed = 0;
       for (const trip of active) {
