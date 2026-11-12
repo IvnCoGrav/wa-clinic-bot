@@ -343,7 +343,7 @@ class ReservationSeriesService {
           const reservation = await gCalPrisma.reservation.findUnique({ where: { id: r.id } }).catch(() => null);
           const customer = reservation ? await gCalPrisma.customer.findUnique({ where: { id: customerId } }).catch(() => null) : null;
           const name = customer?.name || 'Bunda';
-          if (reservation) (googleCalendarService as any).createEvent?.(reservation, name).catch(() => {});
+          if (reservation) (googleCalendarService as any).createEvent?.(reservation, name, tenantId).catch(() => {});
         }
       }
     } catch {}

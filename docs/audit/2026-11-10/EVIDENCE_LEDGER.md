@@ -254,6 +254,16 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Catatan konfigurasi baru:** `ADMIN_ALLOWED_ORIGINS` (dipisah koma) wajib diisi bila dashboard dilayani dari origin berbeda dengan API; tanpa itu gerbang CSRF hanya menerima same-origin.
 - **Gerbang regresi Fase 6C:** 7.183 test / 7.153 lulus / 2 gagal pre-existing #287 (0 regresi vs 6B); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (68 item); `audit:verify-claims` PASS (10 rujukan); `security:scan` LULUS.
 
+### 0.25 W6A — Google Calendar tenant-aware & idempoten (I-006, 2026-11-12)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **I-006** | Kalender tujuan per tenant (`Tenant.settings.googleCalendar`), ID event deterministik `resv`+hex dari `reservation.id` (409 duplicate = sukses idempoten), durasi dari `Reservation.duration_minutes` (default 60 bila tak sah), brand via `getBrandIdentityAsync(tenantId)`; 9 call-site meneruskan `tenantId` | `tests/unit/google-calendar-tenant.test.ts` (17) + `tests/integration/google-calendar.test.ts` (3) |
+
+- **Kontrak baru:** `getGoogleCalendarConfig(tenantId)`, `resolveEventDurationMinutes`, `buildCalendarEventId`; `createEvent/updateEvent/deleteEvent(..., tenantId?)`.
+- **Register:** **234 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 21 OPEN**.
+- **Gerbang regresi W6A:** 7.285 test / 7.255 lulus / 2 gagal pre-existing #287 (0 regresi vs W5E); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (76 item); `security:scan` LULUS 2.223 file.
+
 ### 0.24 W5E — endpoint setelan tenant (Cfg-011, 2026-11-12)
 
 | ID | Perbaikan | Bukti test |

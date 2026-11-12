@@ -562,7 +562,7 @@ export async function reservationDispatchCrudRoutes(fastify: FastifyInstance) {
           if (!updated.google_calendar_event_id && (parsedBookingDate || existing.booking_date)) {
             try {
               const cName = customerName || existing.customer?.name || 'Bunda';
-              const calEventId = await googleCalendarService.createEvent(updated, cName);
+              const calEventId = await googleCalendarService.createEvent(updated, cName, tenantId);
               if (calEventId) {
                 await prisma.reservation.update({ where: { id }, data: { google_calendar_event_id: calEventId } });
                 (updated as any).google_calendar_event_id = calEventId;
@@ -606,7 +606,7 @@ export async function reservationDispatchCrudRoutes(fastify: FastifyInstance) {
           }
           if (updated.google_calendar_event_id) {
             try {
-              await googleCalendarService.deleteEvent(updated.google_calendar_event_id);
+              await googleCalendarService.deleteEvent(updated.google_calendar_event_id, tenantId);
               await prisma.reservation.update({ where: { id }, data: { google_calendar_event_id: null } }).catch(() => {});
             } catch (gcErr: any) {
               console.warn('[Admin API] Google Calendar delete on cancel failed:', gcErr.message);
@@ -746,7 +746,7 @@ export async function reservationDispatchCrudRoutes(fastify: FastifyInstance) {
         if (updated.google_calendar_event_id && parsedBookingDate) {
           try {
             const cName = customerName || existing.customer?.name || 'Bunda';
-            await googleCalendarService.updateEvent(updated.google_calendar_event_id, updated, cName);
+            await googleCalendarService.updateEvent(updated.google_calendar_event_id, updated, cName, tenantId);
           } catch (gcErr) {
             console.error('[Admin API] Google Calendar Event update failed:', gcErr);
           }
@@ -910,7 +910,7 @@ export async function reservationDispatchCrudRoutes(fastify: FastifyInstance) {
 
         if (existing.google_calendar_event_id) {
           try {
-            await googleCalendarService.deleteEvent(existing.google_calendar_event_id);
+            await googleCalendarService.deleteEvent(existing.google_calendar_event_id, tenantId);
           } catch (err: any) {
             console.error('[Admin API] Google Calendar Event deletion failed (soft-cancel):', err?.message || err);
           }

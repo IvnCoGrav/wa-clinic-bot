@@ -155,7 +155,7 @@ export class ReservationArchiveService {
     // 1. Batalkan event di Google Calendar jika ada (sebelum transaksi)
     if (existing.google_calendar_event_id) {
       try {
-        await googleCalendarService.deleteEvent(existing.google_calendar_event_id);
+        await googleCalendarService.deleteEvent(existing.google_calendar_event_id, tenantId);
       } catch (err: any) {
         console.error('[ArchiveService] Google Calendar Event deletion failed:', err?.message);
       }

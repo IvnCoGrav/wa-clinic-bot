@@ -131,6 +131,11 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - **Ar-009:** gerbang `npm run audit:verify-claims` memindai seluruh rujukan `file:line` laporan audit Fase 1/11 dan gagal bila file hilang atau baris di luar batas; addendum integritas menandai klaim yang hanya bisa diverifikasi di server live sebagai `UNVERIFIABLE (server)`.
   - Register menjadi **226 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 29 OPEN**.
 
+- **Tindakan W6A (selesai 2026-11-12):**
+  - **I-006:** Google Calendar tidak lagi satu kalender global. `Tenant.settings.googleCalendar = { enabled?, calendarId? }` menentukan tujuan; ID event deterministik membuat retry aman; durasi mengikuti `Reservation.duration_minutes`.
+  - Register menjadi **234 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 21 OPEN**.
+  - **Batas yang diketahui:** (a) kredensial service account (client email + private key) tetap dari env, karena menyimpan private key di `Tenant.settings` akan membuka jalur bocor lewat API settings; (b) `updateEvent`/`deleteEvent` hanya memakai kalender tenant yang dikirim pemanggil — bila `calendarId` tenant diubah, event lama di kalender lama tidak dimigrasikan otomatis; (c) perubahan config berlaku setelah TTL cache 5 menit atau `clearGoogleCalendarConfigCache`.
+
 - **Tindakan W5E (selesai 2026-11-12):**
   - **Cfg-011:** 6 setelan tenant yang sebelumnya hanya punya jalur baca kini punya endpoint tulis `GET|PATCH /api/admin/tenant-settings` (Super Admin only): `clinicLocation`, `operationalHours`, `staffNotification`, `deliverySettings.estimateTtlDays`, `copilot.styleTone`, `brand`.
   - Register menjadi **233 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 22 OPEN**.

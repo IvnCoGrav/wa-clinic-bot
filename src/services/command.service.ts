@@ -138,7 +138,7 @@ export class CommandService {
       const { googleCalendarService } = await import('./google-calendar.service');
       for (const r of reservations) {
         if (r.google_calendar_event_id) {
-          googleCalendarService.deleteEvent(r.google_calendar_event_id).catch(() => {});
+          googleCalendarService.deleteEvent(r.google_calendar_event_id, tenantId).catch(() => {});
         }
       }
     } catch (err: any) {

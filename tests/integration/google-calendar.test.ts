@@ -68,7 +68,8 @@ describe('Google Calendar Integration Tests', () => {
     expect(createEventSpy).toHaveBeenCalledTimes(1);
     expect(createEventSpy).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'res-123' }),
-      'Bunda Indah'
+      'Bunda Indah',
+      'default-tenant'
     );
   });
 
@@ -112,7 +113,8 @@ describe('Google Calendar Integration Tests', () => {
     expect(updateEventSpy).toHaveBeenCalledWith(
       'mocked-calendar-id-123',
       expect.objectContaining({ id: 'res-123' }),
-      'Bunda Indah'
+      'Bunda Indah',
+      'default-tenant'
     );
   });
 
@@ -153,6 +155,6 @@ describe('Google Calendar Integration Tests', () => {
 
     // Pastikan deleteEvent terpanggil
     expect(deleteEventSpy).toHaveBeenCalledTimes(1);
-    expect(deleteEventSpy).toHaveBeenCalledWith('mocked-calendar-id-123');
+    expect(deleteEventSpy).toHaveBeenCalledWith('mocked-calendar-id-123', 'default-tenant');
   });
 });

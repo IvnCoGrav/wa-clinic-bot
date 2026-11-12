@@ -247,7 +247,7 @@ export async function reservationDispatchStatusRoutes(fastify: FastifyInstance) 
         let calendarEventId: string | null = null;
         try {
           const customerName = existing.customer?.name || 'Bunda';
-          calendarEventId = await googleCalendarService.createEvent(existing, customerName);
+          calendarEventId = await googleCalendarService.createEvent(existing, customerName, tenantId);
         } catch (err) {
           console.error('[Admin API] Google Calendar Event creation failed:', err);
         }
@@ -749,7 +749,7 @@ export async function reservationDispatchStatusRoutes(fastify: FastifyInstance) 
         if (reservation.google_calendar_event_id) {
           try {
             const customerName = existing.customer?.name || 'Bunda';
-            await googleCalendarService.updateEvent(reservation.google_calendar_event_id, reservation, customerName);
+            await googleCalendarService.updateEvent(reservation.google_calendar_event_id, reservation, customerName, tenantId);
           } catch (err) {
             console.error('[Admin API] Google Calendar Event update failed:', err);
           }

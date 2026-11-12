@@ -296,7 +296,7 @@ describe('Reservation Archive System Adversarial Tests', () => {
       tenantId: DEFAULT_TENANT_ID,
     });
 
-    expect(gcalSpy).toHaveBeenCalledWith('gcal-event-999');
+    expect(gcalSpy).toHaveBeenCalledWith('gcal-event-999', DEFAULT_TENANT_ID);
   });
 
   it('8. Notifikasi staf terkirim sebelum reservasi diarsipkan jika ada assigned_staff_id', async () => {

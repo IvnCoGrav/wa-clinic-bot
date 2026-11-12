@@ -1758,6 +1758,35 @@
       ],
       "verifiedBy": "AI Agent",
       "verifiedAt": "2026-11-12"
+    },
+    "I-006": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/services/google-calendar.service.ts",
+          "line": 57,
+          "contains": "export function buildCalendarEventId"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/google-calendar-tenant.test.ts",
+          "contains": "retry dengan reservasi sama memakai ID event yang sama"
+        },
+        {
+          "type": "file",
+          "path": "src/config/google-calendar.config.ts",
+          "line": 49,
+          "contains": "export async function getGoogleCalendarConfig"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/google-calendar-tenant.test.ts",
+          "contains": "memakai kalender tenant, durasi 90 menit, dan brand tenant"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-12"
     }
   },
   "known": {
