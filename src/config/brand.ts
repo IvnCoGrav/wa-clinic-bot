@@ -106,3 +106,8 @@ export function __clearBrandCacheForTest(tenantId?: string): void {
   if (tenantId) brandCache.delete(tenantId);
   else brandCache.clear();
 }
+
+/** Clear cache setelah admin mengubah `Tenant.settings.brand`. */
+export function clearBrandCache(tenantId?: string): void {
+  __clearBrandCacheForTest(tenantId);
+}

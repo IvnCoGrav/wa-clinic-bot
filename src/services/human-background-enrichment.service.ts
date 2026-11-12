@@ -1,4 +1,5 @@
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { DELIVERY_ESTIMATE_TTL_FALLBACK_DAYS } from '../config/tenant-settings.config';
 import { StateHandlerContext } from '../state-machine/types';
 import { parseAdminChatDistanceAndOngkir, parseAdminChatLocation } from '../utils/admin-chat-distance-parser';
 import { resolveZipcode } from '../utils/gazetteer-zipcode-resolver';
@@ -47,9 +48,7 @@ async function tryEnrichZipcodeViaGazetteer(
   return gazZip;
 }
 
-const DELIVERY_ESTIMATE_TTL_FALLBACK_DAYS = 14;
-
-async function resolveEstimateTtlDays(tenantId: string): Promise<number> {
+const resolveEstimateTtlDays = async (tenantId: string): Promise<number> => {
   try {
     const { prisma } = await import('../db/client');
     const t = await (prisma.tenant as any).findUnique({
@@ -61,7 +60,7 @@ async function resolveEstimateTtlDays(tenantId: string): Promise<number> {
   } catch {
     return DELIVERY_ESTIMATE_TTL_FALLBACK_DAYS;
   }
-}
+};
 
 export class HumanBackgroundEnrichmentService {
   /**

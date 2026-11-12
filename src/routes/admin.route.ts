@@ -206,6 +206,9 @@ export async function adminRoutes(fastify: FastifyInstance) {
       const superAdminOnlyPrefixes = [
         '/api/admin/backup',
         '/api/admin/settings',
+        // Cfg-011: setelan tenant (clinicLocation, jam operasional, brand,
+        // notifikasi staf) hanya Super Admin — baca & tulis.
+        '/api/admin/tenant-settings',
         '/api/admin/ai-models',
         '/api/admin/evaluations',
         '/api/admin/ai-evaluations',

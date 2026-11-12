@@ -102,3 +102,8 @@ export function __clearClinicLocationCacheForTest(tenantId?: string): void {
   if (tenantId) clinicLocationCache.delete(tenantId);
   else clinicLocationCache.clear();
 }
+
+/** Clear cache setelah admin mengubah `Tenant.settings.clinicLocation`. */
+export function clearClinicLocationCache(tenantId?: string): void {
+  __clearClinicLocationCacheForTest(tenantId);
+}

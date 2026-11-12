@@ -983,7 +983,7 @@
         {
           "type": "file",
           "path": "src/routes/admin.route.ts",
-          "line": 243,
+          "line": 246,
           "contains": "Cfg-004"
         },
         {
@@ -1295,7 +1295,7 @@
         {
           "type": "file",
           "path": "src/routes/admin.route.ts",
-          "line": 261,
+          "line": 264,
           "contains": "superAdminWritePrefixes"
         },
         {
@@ -1719,6 +1719,41 @@
           "type": "test",
           "path": "tests/unit/integration-guard-tenant.test.ts",
           "contains": "Google Distance Matrix tidak memanggil axios saat circuit tenant OPEN"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-12"
+    },
+    "Cfg-011": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/routes/admin/settings-tenant.subroute.ts",
+          "line": 56,
+          "contains": "parseTenantSettingsPatch(request.body)"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/tenant-settings-endpoint.test.ts",
+          "contains": "PATCH menyimpan section terkirim"
+        },
+        {
+          "type": "file",
+          "path": "src/config/tenant-settings.config.ts",
+          "line": 113,
+          "contains": "export function parseTenantSettingsPatch"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/tenant-settings-endpoint.test.ts",
+          "contains": "sesi staf THERAPIST ditolak 403"
+        },
+        {
+          "type": "file",
+          "path": "src/routes/admin.route.ts",
+          "line": 211,
+          "contains": "      '/api/admin/tenant-settings',"
         }
       ],
       "verifiedBy": "AI Agent",

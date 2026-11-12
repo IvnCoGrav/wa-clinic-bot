@@ -131,6 +131,11 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - **Ar-009:** gerbang `npm run audit:verify-claims` memindai seluruh rujukan `file:line` laporan audit Fase 1/11 dan gagal bila file hilang atau baris di luar batas; addendum integritas menandai klaim yang hanya bisa diverifikasi di server live sebagai `UNVERIFIABLE (server)`.
   - Register menjadi **226 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 29 OPEN**.
 
+- **Tindakan W5E (selesai 2026-11-12):**
+  - **Cfg-011:** 6 setelan tenant yang sebelumnya hanya punya jalur baca kini punya endpoint tulis `GET|PATCH /api/admin/tenant-settings` (Super Admin only): `clinicLocation`, `operationalHours`, `staffNotification`, `deliverySettings.estimateTtlDays`, `copilot.styleTone`, `brand`.
+  - Register menjadi **233 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 22 OPEN**.
+  - **Batas yang diketahui (UI):** sub-tab editor di dashboard BELUM dibuat karena `packages/admin-dashboard/*` sedang berisi pekerjaan pengguna yang belum di-commit. Backend siap dipakai; sampai UI ada, perubahan setelan dilakukan lewat PATCH API (atau JSON `Tenant.settings`). Ini sengaja ditunda, bukan terlupa.
+
 - **Tindakan W5D (selesai 2026-11-12):**
   - **I-011:** kunci API, kuota harian, dan circuit breaker kini **per tenant** (`Tenant.settings.integrationGuards`), bukan env global bersama. Satu tenant yang boros/gagal tidak lagi memutus layanan tenant lain.
   - Register menjadi **232 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 23 OPEN**.

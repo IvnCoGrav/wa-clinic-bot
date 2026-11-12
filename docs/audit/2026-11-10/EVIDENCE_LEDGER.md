@@ -254,6 +254,16 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Catatan konfigurasi baru:** `ADMIN_ALLOWED_ORIGINS` (dipisah koma) wajib diisi bila dashboard dilayani dari origin berbeda dengan API; tanpa itu gerbang CSRF hanya menerima same-origin.
 - **Gerbang regresi Fase 6C:** 7.183 test / 7.153 lulus / 2 gagal pre-existing #287 (0 regresi vs 6B); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (68 item); `audit:verify-claims` PASS (10 rujukan); `security:scan` LULUS.
 
+### 0.24 W5E — endpoint setelan tenant (Cfg-011, 2026-11-12)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **Cfg-011** | `GET|PATCH /api/admin/tenant-settings` (Super Admin only) untuk `clinicLocation`, `operationalHours`, `staffNotification`, `deliverySettings.estimateTtlDays`, `copilot.styleTone`, `brand`. Validasi ketat per field (`parseTenantSettingsPatch`), menolak kunci tak dikenal, patch hanya menyentuh section terkirim (aiConfig/integrationGuards utuh), `styleTone:null` menghapus override, cache reader dibersihkan setelah simpan | `tests/unit/tenant-settings-endpoint.test.ts` (19) |
+
+- **Kontrak baru:** `parseTenantSettingsPatch`, `applyTenantSettingsPatch`, `getTenantSettingsView`; route `settings-tenant.subroute.ts`; prefix RBAC `/api/admin/tenant-settings`.
+- **Register:** **233 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 22 OPEN**.
+- **Gerbang regresi W5E:** 7.268 test / 7.238 lulus / 2 gagal pre-existing #287 (0 regresi vs W5D); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (75 item); `security:scan` LULUS 2.219 file.
+
 ### 0.23 W5D — kuota/circuit/kunci API per tenant (2026-11-12)
 
 | ID | Perbaikan | Bukti test |
