@@ -254,6 +254,11 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Catatan konfigurasi baru:** `ADMIN_ALLOWED_ORIGINS` (dipisah koma) wajib diisi bila dashboard dilayani dari origin berbeda dengan API; tanpa itu gerbang CSRF hanya menerima same-origin.
 - **Gerbang regresi Fase 6C:** 7.183 test / 7.153 lulus / 2 gagal pre-existing #287 (0 regresi vs 6B); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (68 item); `audit:verify-claims` PASS (10 rujukan); `security:scan` LULUS.
 
+### 0.33 W6I — rencana migrasi Ar-004 (2026-11-12, BELUM DIEKSEKUSI)
+
+- **Ar-004** tetap **OPEN**. Rencana eksekusi lengkap ditulis di `docs/plans/MIGRATION_PLAN_AR004_2026-11-12.md`: target schema (`@@unique([tenant_id, phone])`, `@@unique([tenant_id, trackingCode])`, `@@unique([tenant_id, slug])`), SQL migrasi + rollback, daftar perubahan kode wajib (lookup slug/phone per tenant), urutan M0→M1 staging→M2 produksi, drift check `--from-url`, dan Confirmation Gate.
+- **Tidak ada perubahan DB maupun kode** pada wave ini. Register tidak berubah: **239 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 16 OPEN**.
+
 ### 0.32 W6H — store trip lintas proses untuk auto-close (S-03, 2026-11-12)
 
 | ID | Perbaikan | Bukti test |

@@ -136,6 +136,10 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - Register menjadi **239 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 16 OPEN**.
   - **Batas yang diketahui:** bila Redis mati, KV jatuh ke memori per proses sehingga sweep kembali hanya melihat sesi prosesnya sendiri (perilaku lama); TTL record 2 jam, jadi sesi yang berhenti dikirim akan hilang otomatis.
 
+- **Tindakan W6I (rencana, belum dieksekusi) — Ar-004:**
+  - Rencana migrasi unique constraint per tenant sudah ditulis di `docs/plans/MIGRATION_PLAN_AR004_2026-11-12.md` (SQL, perubahan kode wajib, urutan staging→produksi, rollback, risiko).
+  - **Tidak ada perubahan DB/kode yang dijalankan.** Eksekusi menunggu Confirmation Gate eksplisit ("Setuju eksekusi migrasi Ar-004 …") dan jendela staging; produksi tetap diblokir.
+
 - **Tindakan W6G (selesai 2026-11-12):**
   - **S-015:** satu `WAHA_WEBHOOK_SECRET` global tidak lagi dipakai mentah di semua session. Config WAHA tiap tenant memasang secret **turunan** (`HMAC-SHA256(global, waha-webhook:<tenantId>)`) + header `X-Tenant-Id`; secret tenant A ditolak untuk tenant B.
   - Register menjadi **238 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 17 OPEN**.
