@@ -67,7 +67,7 @@ async function main() {
     const query = [c.kelurahan, c.kecamatan, c.kota].filter(Boolean).join(', ').trim();
     if (!query) continue;
 
-    const geo = await geocodingService.geocodeText(query);
+    const geo = await geocodingService.geocodeText(query, tenantId);
     if (!geo.isPrecise || geo.lat == null || geo.lng == null) {
       console.log(`[SKIP geocode tak presisi] ${c.phone} "${query}"`);
       continue;

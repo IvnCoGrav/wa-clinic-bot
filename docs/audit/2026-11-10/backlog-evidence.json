@@ -1694,6 +1694,35 @@
       ],
       "verifiedBy": "AI Agent",
       "verifiedAt": "2026-11-12"
+    },
+    "I-011": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/services/integration-guard.service.ts",
+          "line": 167,
+          "contains": "async resolveApiKey("
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/integration-guard-tenant.test.ts",
+          "contains": "tenant A yang menghabiskan kuota tidak memblokir tenant B"
+        },
+        {
+          "type": "file",
+          "path": "src/integrations/google-maps/geocoding.ts",
+          "line": 944,
+          "contains": "this.guard.run(tenantId, 'googleGeocode'"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/integration-guard-tenant.test.ts",
+          "contains": "Google Distance Matrix tidak memanggil axios saat circuit tenant OPEN"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-12"
     }
   },
   "known": {

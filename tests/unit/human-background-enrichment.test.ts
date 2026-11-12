@@ -165,7 +165,8 @@ describe('Human Background Enrichment Service', () => {
 
     expect(res.enriched).toBe(true);
     // Geocode dipanggil langsung dengan lokasi rekomendasi Admin (bukan tebak riwayat)
-    expect(geocodingService.geocodeText).toHaveBeenCalledWith('Wiguna Selatan');
+    // I-011: tenant ikut diteruskan agar kunci/kuota/circuit sesuai tenant.
+    expect(geocodingService.geocodeText).toHaveBeenCalledWith('Wiguna Selatan', 'default-tenant');
     expect(customerService.updateCustomerLocation).toHaveBeenCalledWith(
       'cust-4',
       expect.objectContaining({

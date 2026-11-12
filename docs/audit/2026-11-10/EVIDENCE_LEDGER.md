@@ -254,6 +254,16 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Catatan konfigurasi baru:** `ADMIN_ALLOWED_ORIGINS` (dipisah koma) wajib diisi bila dashboard dilayani dari origin berbeda dengan API; tanpa itu gerbang CSRF hanya menerima same-origin.
 - **Gerbang regresi Fase 6C:** 7.183 test / 7.153 lulus / 2 gagal pre-existing #287 (0 regresi vs 6B); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (68 item); `audit:verify-claims` PASS (10 rujukan); `security:scan` LULUS.
 
+### 0.23 W5D — kuota/circuit/kunci API per tenant (2026-11-12)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **I-011** | Modul baru `src/services/integration-guard.service.ts`: kuota harian WIB di KV bersama (`distributedKv.incr`, kunci `quota:<layanan>:<tenant>:<YYYY-MM-DD>`), circuit breaker per tenant, dan kunci API per tenant dari `Tenant.settings.integrationGuards` (cache 5 menit). ORS, Google Distance Matrix, serta geocoding (text/reverse/kandidat) memakai `guard.run` + `resolveApiKey`; saat kuota habis/circuit OPEN klien tidak memanggil axios. DB offline → perilaku lama (env, tanpa batas) agar layanan tidak mati | `tests/unit/integration-guard-tenant.test.ts` (13) |
+
+- **Kontrak baru:** `IntegrationGuard.run(tenantId, service, fn)`, `resolveApiKey(tenantId, service, envKey)`, `consume`, `getCircuitState`, `reset`; config `Tenant.settings.integrationGuards.{ors|googleDistanceMatrix|googleGeocode}`.
+- **Register:** **232 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 23 OPEN**.
+- **Gerbang regresi W5D:** 7.249 test / 7.219 lulus / 2 gagal pre-existing #287 (0 regresi vs W5C); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (74 item); `security:scan` LULUS 2.216 file.
+
 ### 0.22 W5C — humanizer bubble struktural (2026-11-12)
 
 | ID | Perbaikan | Bukti test |

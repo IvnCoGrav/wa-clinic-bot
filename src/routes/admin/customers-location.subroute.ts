@@ -396,7 +396,7 @@ export async function customersLocationRoutes(fastify: FastifyInstance) {
         } else if (text) {
           const { geocodingService } = await import('../../integrations/google-maps/geocoding');
           const { deliveryService } = await import('../../services/delivery.service');
-          const geo = await geocodingService.geocodeText(text);
+          const geo = await geocodingService.geocodeText(text, tenantId);
           if (geo.isPrecise && geo.lat != null && geo.lng != null) {
             const delivery = await deliveryService.calculateDelivery(
               { lat: geo.lat, lng: geo.lng },

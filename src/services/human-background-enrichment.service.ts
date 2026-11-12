@@ -123,7 +123,7 @@ export class HumanBackgroundEnrichmentService {
 
           const adminLoc = parseAdminChatLocation(text);
           if (adminLoc) {
-            const geo = await geocodingService.geocodeText(adminLoc);
+            const geo = await geocodingService.geocodeText(adminLoc, tenantId);
             if (geo.isPrecise && geo.lat != null && geo.lng != null) {
               resolvedLoc = geo;
             }
@@ -146,7 +146,7 @@ export class HumanBackgroundEnrichmentService {
                   const locCandidate = det.locationText;
                   // 2. Validasi kandidat: tolak fragmen tanya yang lolos
                   if (locCandidate && !isClinicLocationQuestion(locCandidate)) {
-                    const geo = await geocodingService.geocodeText(locCandidate);
+                    const geo = await geocodingService.geocodeText(locCandidate, tenantId);
                     if (geo.isPrecise && geo.lat != null && geo.lng != null) {
                       resolvedLoc = geo;
                       break;
@@ -379,7 +379,7 @@ export class HumanBackgroundEnrichmentService {
                   if (customer.share_location_sent || (customer as any).location_source === 'gps_pin') {
                     console.log(`[HUMAN ENRICH] form geocode skipped for ${customer.phone} — GPS pin already exists`);
                   } else {
-                    const resolved = await geocodingService.geocodeText(query);
+                    const resolved = await geocodingService.geocodeText(query, tid);
                     if (resolved.isPrecise && resolved.lat != null && resolved.lng != null) {
                       const delivery = await deliveryService.calculateDelivery({ lat: resolved.lat, lng: resolved.lng }, undefined, tid);
                       // Fallback zip dari Gazetteer jika geocode tidak bawa zip
@@ -506,7 +506,7 @@ export class HumanBackgroundEnrichmentService {
           : extraction.locationText || rawText;
 
       const { geocodingService } = await import('../integrations/google-maps/geocoding');
-      const resolved = await geocodingService.geocodeText(candidateQuery);
+      const resolved = await geocodingService.geocodeText(candidateQuery, tid);
       if (!resolved.isPrecise || resolved.lat == null || resolved.lng == null) {
         console.log(`[HUMAN ENRICH] geocode not precise for ${customer.phone}: "${candidateQuery}" -> isPrecise=${resolved.isPrecise}`);
         if (customer.zipcode) return { enriched: true, reason: 'zipcode_gazetteer' };

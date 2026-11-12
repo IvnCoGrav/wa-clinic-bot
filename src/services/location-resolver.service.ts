@@ -41,7 +41,7 @@ export async function resolveLocationFromUrl(
 
     // Kasus 1: URL sudah bawa koordinat presisi
     if (resolved.success && resolved.lat != null && resolved.lng != null) {
-      const geo = await geocodingService.reverseGeocode(resolved.lat, resolved.lng, hint);
+      const geo = await geocodingService.reverseGeocode(resolved.lat, resolved.lng, hint, tenantId);
       const delivery = await deliveryService.calculateDelivery(
         { lat: resolved.lat, lng: resolved.lng },
         undefined,
@@ -66,7 +66,7 @@ export async function resolveLocationFromUrl(
 
     // Kasus 2: URL bawa teks tempat (?q=...) → geocode teks transparan
     if (resolved.addressQuery) {
-      const geo = await geocodingService.geocodeText(resolved.addressQuery);
+      const geo = await geocodingService.geocodeText(resolved.addressQuery, tenantId);
       if (geo.isPrecise && geo.lat != null && geo.lng != null) {
         const delivery = await deliveryService.calculateDelivery(
           { lat: geo.lat, lng: geo.lng },

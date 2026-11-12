@@ -266,7 +266,8 @@ export class DeliveryService {
       resolvedClinicCoords.lat,
       resolvedClinicCoords.lng,
       customerCoords.lat,
-      customerCoords.lng
+      customerCoords.lng,
+      tenantId
     );
 
     if (orsResult && typeof orsResult.distanceMeters === 'number') {
@@ -295,7 +296,8 @@ export class DeliveryService {
         resolvedClinicCoords.lat,
         resolvedClinicCoords.lng,
         customerCoords.lat,
-        customerCoords.lng
+        customerCoords.lng,
+        tenantId
       );
 
       if (googleResult && typeof googleResult.distanceMeters === 'number') {

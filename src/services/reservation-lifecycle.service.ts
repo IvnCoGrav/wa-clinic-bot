@@ -162,7 +162,7 @@ export class ReservationLifecycleService {
 
               if (!resolvedLat || !resolvedLng) {
                 const { geocodingService } = await import('../integrations/google-maps/geocoding');
-                const geo = await geocodingService.geocodeText(fullAddressStr);
+                const geo = await geocodingService.geocodeText(fullAddressStr, tenantId);
                 if (geo.isPrecise && geo.lat != null && geo.lng != null) {
                   resolvedLat = geo.lat;
                   resolvedLng = geo.lng;

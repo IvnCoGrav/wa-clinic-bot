@@ -147,7 +147,7 @@ export class LocationIngestService {
         preferredKecamatan: customer?.kecamatan,
         addressTextHint: (customer?.preferences as any)?.address || (customer?.preferences as any)?.full_address || '',
       };
-      const resolved = await geocodingService.reverseGeocode(lat, lng, hint);
+      const resolved = await geocodingService.reverseGeocode(lat, lng, hint, tenantId);
       phase = 'calculate_delivery';
       const delivery = await deliveryService.calculateDelivery({ lat, lng }, undefined, tenantId);
       phase = 'update';

@@ -1421,7 +1421,7 @@ export class CustomerService {
             const query = [kel, kec, kot].filter(Boolean).join(', ');
             if (query) {
               const { geocodingService } = await import('../integrations/google-maps/geocoding');
-              const geo = await geocodingService.geocodeText(query);
+              const geo = await geocodingService.geocodeText(query, tenantId);
               if (geo.isPrecise && geo.lat != null && geo.lng != null) {
                 recalcLat = geo.lat;
                 recalcLng = geo.lng;
@@ -2888,7 +2888,7 @@ export class CustomerService {
         if (!query) return { success: false, error: 'Tidak ada koordinat atau alamat untuk direfresh' };
         try {
           const { geocodingService } = await import('../integrations/google-maps/geocoding');
-          const geo = await geocodingService.geocodeText(query);
+          const geo = await geocodingService.geocodeText(query, tenantId);
           if (geo.isPrecise && geo.lat != null && geo.lng != null) {
             chosen = { lat: geo.lat, lng: geo.lng, source: 'geocoding', sourceLabel: '⚪ Estimasi Wilayah', detail: `geocoding ${query}` };
           } else {
@@ -2929,7 +2929,7 @@ export class CustomerService {
             preferredKecamatan: customer.kecamatan,
             addressTextHint: (customer.preferences as any)?.address || (customer.preferences as any)?.full_address || '',
           };
-          resolvedAdmin = await geocodingService.reverseGeocode(chosen.lat, chosen.lng, hint);
+          resolvedAdmin = await geocodingService.reverseGeocode(chosen.lat, chosen.lng, hint, tenantId);
         } catch {}
       }
 

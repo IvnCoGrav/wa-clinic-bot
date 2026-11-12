@@ -1,5 +1,7 @@
 import axios from 'axios';
 import dotenv from 'dotenv';
+import { integrationGuard, type IntegrationGuard } from '../../services/integration-guard.service';
+import { DEFAULT_TENANT_ID } from '../../config/tenant';
 dotenv.config();
 
 export interface DistanceResult {
@@ -12,7 +14,8 @@ export interface IGoogleDistanceClient {
     fromLat: number,
     fromLng: number,
     toLat: number,
-    toLng: number
+    toLng: number,
+    tenantId?: string
   ): Promise<DistanceResult | null>;
 }
 
@@ -24,7 +27,7 @@ export interface IGoogleDistanceClient {
 export class GoogleDistanceMatrixClient implements IGoogleDistanceClient {
   private apiKey: string;
 
-  constructor(apiKey?: string) {
+  constructor(apiKey?: string, private readonly guard: IntegrationGuard = integrationGuard) {
     this.apiKey = apiKey || process.env.GOOGLE_MAPS_API_KEY || '';
   }
 
@@ -39,9 +42,15 @@ export class GoogleDistanceMatrixClient implements IGoogleDistanceClient {
     fromLat: number,
     fromLng: number,
     toLat: number,
-    toLng: number
+    toLng: number,
+    tenantId: string = DEFAULT_TENANT_ID
   ): Promise<DistanceResult | null> {
-    const key = this.apiKey || process.env.GOOGLE_MAPS_API_KEY || '';
+    // I-011: kunci & kuota per tenant (DB), fallback env.
+    const key = await this.guard.resolveApiKey(
+      tenantId,
+      'googleDistanceMatrix',
+      this.apiKey || process.env.GOOGLE_MAPS_API_KEY || ''
+    );
 
     // Graceful degradation: lewati jika API key kosong atau mock
     if (!key || key.startsWith('mock') || key === '<ISI_MANUAL_DI_ENV_JANGAN_HARDCODE>') {
@@ -51,16 +60,19 @@ export class GoogleDistanceMatrixClient implements IGoogleDistanceClient {
     try {
       // Endpoint Google Distance Matrix API (mode driving + avoid tolls untuk motor)
       const url = 'https://maps.googleapis.com/maps/api/distancematrix/json';
-      const response = await axios.get(url, {
-        params: {
-          origins: `${fromLat},${fromLng}`,
-          destinations: `${toLat},${toLng}`,
-          mode: 'driving',
-          avoid: 'tolls', // Khusus motor terapis: hindari jalan tol
-          key,
-        },
-        timeout: this.timeoutMs,
-      });
+      const response = await this.guard.run(tenantId, 'googleDistanceMatrix', () =>
+        axios.get(url, {
+          params: {
+            origins: `${fromLat},${fromLng}`,
+            destinations: `${toLat},${toLng}`,
+            mode: 'driving',
+            avoid: 'tolls', // Khusus motor terapis: hindari jalan tol
+            key,
+          },
+          timeout: this.timeoutMs,
+        })
+      );
+      if (!response) return null;
 
       const data = response.data;
       if (data?.status !== 'OK') {

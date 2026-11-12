@@ -7,7 +7,8 @@ import { callChatCompletionsWithFallback, getFallbackModel } from '../llm/model-
 import { findPopularLandmark } from '../../config/landmarks';
 import { escapeRegex, getGazetteerData, resolvePrefixMatches, findNearestSubdistrict, getGazetteerCanonicalCities, NearestSubdistrictHint } from '../../utils/gazetteer';
 import { normalizeToponymAbbreviations, extractCityScope } from '../../utils/toponym-normalizer';
-import { CircuitBreaker } from '../../utils/circuit-breaker';
+import { integrationGuard, type IntegrationGuard } from '../../services/integration-guard.service';
+import { DEFAULT_TENANT_ID } from '../../config/tenant';
 dotenv.config();
 
 interface AddressComponent {
@@ -103,19 +104,9 @@ interface GoogleGeocodeComponent {
  */
 export class GeocodingService {
   private apiKey: string;
-  /** Circuit breaker tier kandidat Google (rute v2 geocode) — cooldown 30s. */
-  private googleGeocodeBreaker: CircuitBreaker<[string], any>;
 
-  constructor() {
+  constructor(private readonly guard: IntegrationGuard = integrationGuard) {
     this.apiKey = process.env.GOOGLE_MAPS_API_KEY || '';
-    this.googleGeocodeBreaker = new CircuitBreaker<[string], any>(
-      async (url: string) => {
-        const response = await axios.get(url, { timeout: 2500 });
-        return response.data;
-      },
-      async () => null,
-      { name: 'Google Geocoding (kandidat)', cooldownPeriodMs: 30000 }
-    );
   }
 
   /**
@@ -123,17 +114,25 @@ export class GeocodingService {
    * LOCAL-FIRST ARCHITECTURE:
    * Tier 1: Periksa database gazetteer resmi (560 kelurahan/desa Surabaya & Sidoarjo) -> 0ms, 100% akurat.
    * Tier 2: Fallback ke Google Maps Geocoding API jika input berupa nama jalan/perumahan spesifik.
+   *
+   * I-011: `tenantId` menentukan kunci API, kuota harian, dan circuit breaker
+   * milik tenant tersebut (bukan kunci env global bersama).
    */
-  public async geocodeText(locationText: string): Promise<ResolvedLocation> {
+  public async geocodeText(
+    locationText: string,
+    tenantId: string = DEFAULT_TENANT_ID
+  ): Promise<ResolvedLocation> {
+    // Kunci efektif tenant (DB override → env). Dipakai sebagai gerbang tier lokal.
+    const tenantApiKey = await this.guard.resolveApiKey(tenantId, 'googleGeocode', this.apiKey);
     return measure('GEOCODING_TOTAL', async () => {
       try {
         // --- TIER 1: LOCAL GAZETTEER & LANDMARK MATCHER (PRIMARY) ---
         const landmarkMatch = findPopularLandmark(locationText);
-        const localMatch = await this.mockGeocodeText(locationText);
+        const localMatch = await this.mockGeocodeText(locationText, tenantId);
         const hasSpecificStreetOrEstate = /\b(jalan|jl|jln|gang|gg|perum|perumahan|komplek|kompleks|blok|residence|residences|regency|cluster|villa|apartemen|apartment|mansion|estate|graha|griya|taman\s+\w+)\b/i.test(locationText);
 
         // Jika cocok sebagai landmark spesifik atau kelurahan presisi tanpa nama perumahan/jalan spesifik lain, gunakan localMatch
-        if (localMatch.isPrecise && localMatch.lat != null && localMatch.lng != null && (landmarkMatch || !hasSpecificStreetOrEstate || !this.apiKey || this.apiKey.startsWith('mock'))) {
+        if (localMatch.isPrecise && localMatch.lat != null && localMatch.lng != null && (landmarkMatch || !hasSpecificStreetOrEstate || !tenantApiKey || tenantApiKey.startsWith('mock'))) {
           console.log(`[GEOCODING LOCAL HIT] Resolved "${locationText}" via local gazetteer -> ${localMatch.kelurahan || '-'}, ${localMatch.kecamatan || '-'}, ${localMatch.kota || '-'}`);
           return localMatch;
         }
@@ -149,7 +148,7 @@ export class GeocodingService {
         return localMatch;
       } catch (error) {
         console.error('Error in geocodeText, falling back to local database:', error);
-        return this.mockGeocodeText(locationText);
+        return this.mockGeocodeText(locationText, tenantId);
       }
     });
   }
@@ -161,9 +160,10 @@ export class GeocodingService {
   public async reverseGeocode(
     lat: number,
     lng: number,
-    hint?: NearestSubdistrictHint
+    hint?: NearestSubdistrictHint,
+    tenantId: string = DEFAULT_TENANT_ID
   ): Promise<ResolvedLocation> {
-    return this.mockReverseGeocode(lat, lng, hint);
+    return this.mockReverseGeocode(lat, lng, hint, tenantId);
   }
 
   /**
@@ -347,7 +347,10 @@ export class GeocodingService {
   /**
    * Geocode Mock Local Database Fallback untuk testing tanpa API key.
    */
-  private async mockGeocodeText(locationText: string): Promise<ResolvedLocation> {
+  private async mockGeocodeText(
+    locationText: string,
+    tenantId: string = DEFAULT_TENANT_ID
+  ): Promise<ResolvedLocation> {
     // Normalisasi toponimi (gn→gunung, gg→gang, jl→jalan, dst) + scope kota.
     const lower = normalizeToponymAbbreviations(locationText).toLowerCase().trim();
     const cityScope = extractCityScope(lower, getGazetteerCanonicalCities());
@@ -864,7 +867,7 @@ export class GeocodingService {
     // yang tidak ada di gazetteer (mis. "Jl. Demak") diselesaikan Google, lalu
     // DIAHKAN oleh gazetteer (kelurahan+kecamatan wajib eksis) dan tetap
     // berstatus kandidat (isPrecise:false) untuk diverifikasi customer.
-    const googleCandidate = await this.googleResolveCandidate(locationText, cityScope);
+    const googleCandidate = await this.googleResolveCandidate(locationText, cityScope, tenantId);
     if (googleCandidate) {
       return googleCandidate;
     }
@@ -903,9 +906,15 @@ export class GeocodingService {
    */
   private async googleResolveCandidate(
     locationText: string,
-    cityScope?: string | null
+    cityScope?: string | null,
+    tenantId: string = DEFAULT_TENANT_ID
   ): Promise<ResolvedLocation | null> {
-    const key = this.apiKey || process.env.GOOGLE_MAPS_API_KEY || '';
+    // I-011: kunci per tenant (DB override → env), bukan env global bersama.
+    const key = await this.guard.resolveApiKey(
+      tenantId,
+      'googleGeocode',
+      this.apiKey || process.env.GOOGLE_MAPS_API_KEY || ''
+    );
     // Fail-closed: tanpa key/kunci mock → tier mati (bukan mengarang).
     if (!key || key.startsWith('mock') || key === '<ISI_MANUAL_DI_ENV_JANGAN_HARDCODE>') {
       return null;
@@ -932,7 +941,9 @@ export class GeocodingService {
         `?address=${encodeURIComponent(queryText)}` +
         '&language=id&region=id&components=country:ID' +
         `&key=${encodeURIComponent(key)}`;
-      const data: any = await this.googleGeocodeBreaker.execute(url);
+      const data: any = await this.guard.run(tenantId, 'googleGeocode', async () =>
+        (await axios.get(url, { timeout: 2500 })).data
+      );
       if (!data || data.status !== 'OK' || !Array.isArray(data.results) || data.results.length === 0) {
         return null;
       }
@@ -990,21 +1001,30 @@ export class GeocodingService {
   private async mockReverseGeocode(
     lat: number,
     lng: number,
-    hint?: NearestSubdistrictHint
+    hint?: NearestSubdistrictHint,
+    tenantId: string = DEFAULT_TENANT_ID
   ): Promise<ResolvedLocation> {
+    // I-011: kunci + kuota + circuit per tenant untuk tier boundary Google.
+    const tenantApiKey = await this.guard.resolveApiKey(
+      tenantId,
+      'googleGeocode',
+      this.apiKey || process.env.GOOGLE_MAPS_API_KEY || ''
+    );
     // TIER 1: Boundary API (Google Maps) bila API key aktif dan bukan test environment
     if (
       process.env.NODE_ENV !== 'test' &&
-      this.apiKey &&
-      !this.apiKey.startsWith('mock')
+      tenantApiKey &&
+      !tenantApiKey.startsWith('mock')
     ) {
       try {
         const url =
           'https://maps.googleapis.com/maps/api/geocode/json' +
           `?latlng=${lat},${lng}` +
           '&language=id&region=id&components=country:ID' +
-          `&key=${encodeURIComponent(this.apiKey)}`;
-        const data: any = await this.googleGeocodeBreaker.execute(url);
+          `&key=${encodeURIComponent(tenantApiKey)}`;
+        const data: any = await this.guard.run(tenantId, 'googleGeocode', async () =>
+          (await axios.get(url, { timeout: 2500 })).data
+        );
         if (data && data.status === 'OK' && Array.isArray(data.results) && data.results.length > 0) {
           const comps: GoogleGeocodeComponent[] = data.results[0].address_components || [];
           const pick = (...types: string[]): string | null => {

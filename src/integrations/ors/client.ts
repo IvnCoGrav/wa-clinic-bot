@@ -1,5 +1,7 @@
 import axios from 'axios';
 import dotenv from 'dotenv';
+import { integrationGuard, type IntegrationGuard } from '../../services/integration-guard.service';
+import { DEFAULT_TENANT_ID } from '../../config/tenant';
 dotenv.config();
 
 export interface RouteResult {
@@ -12,7 +14,8 @@ export interface IOrsClient {
     fromLat: number,
     fromLng: number,
     toLat: number,
-    toLng: number
+    toLng: number,
+    tenantId?: string
   ): Promise<RouteResult | null>;
 }
 
@@ -38,7 +41,7 @@ export class OrsClient implements IOrsClient {
   private avoidFeatures: string[];
   private preference: string;
 
-  constructor() {
+  constructor(private readonly guard: IntegrationGuard = integrationGuard) {
     let rawBaseUrl = process.env.ORS_BASE_URL || 'https://api.heigit.org/openrouteservice';
     if (rawBaseUrl.includes('api.openrouteservice.org')) {
       rawBaseUrl = rawBaseUrl.replace('api.openrouteservice.org', 'api.heigit.org/openrouteservice');
@@ -71,12 +74,15 @@ export class OrsClient implements IOrsClient {
     fromLat: number,
     fromLng: number,
     toLat: number,
-    toLng: number
+    toLng: number,
+    tenantId: string = DEFAULT_TENANT_ID
   ): Promise<RouteResult | null> {
+    // I-011: kunci & kuota per tenant (DB), fallback env tanpa batas.
+    const apiKey = await this.guard.resolveApiKey(tenantId, 'ors', this.apiKey);
     if (
-      !this.apiKey ||
-      this.apiKey.startsWith('mock') ||
-      this.apiKey === '<ISI_MANUAL_DI_ENV_JANGAN_HARDCODE>'
+      !apiKey ||
+      apiKey.startsWith('mock') ||
+      apiKey === '<ISI_MANUAL_DI_ENV_JANGAN_HARDCODE>'
     ) {
       console.log('[ORS MOCK/SKIP] No valid ORS_API_KEY provided. Triggering fallback.');
       return null;
@@ -100,13 +106,16 @@ export class OrsClient implements IOrsClient {
         };
       }
 
-      const response = await axios.post(url, payload, {
-        headers: {
-          Authorization: this.apiKey,
-          'Content-Type': 'application/json',
-        },
-        timeout: this.timeoutMs,
-      });
+      const response = await this.guard.run(tenantId, 'ors', () =>
+        axios.post(url, payload, {
+          headers: {
+            Authorization: apiKey,
+            'Content-Type': 'application/json',
+          },
+          timeout: this.timeoutMs,
+        })
+      );
+      if (!response) return null;
 
       const summary =
         response.data?.routes?.[0]?.summary ||
