@@ -134,6 +134,34 @@ export function buildApp() {
     });
   });
 
+  // S-011: header keamanan untuk SPA admin yang diserve Fastify (dev/staging).
+  // Di produksi Caddy menambahkan header yang sama; ini defense-in-depth agar
+  // dashboard tidak pernah tampil tanpa CSP saat diakses langsung ke app.
+  // Catatan: `'unsafe-inline'` pada script-src masih diperlukan karena
+  // `packages/admin-dashboard/index.html` memuat skrip anti-flicker tema inline
+  // (area dashboard milik pengguna); `'unsafe-eval'` dan `https:` bebas SUDAH
+  // dihapus karena build Vite tidak membutuhkannya.
+  const ADMIN_CSP =
+    "default-src 'self'; " +
+    "script-src 'self' 'unsafe-inline'; " +
+    "style-src 'self' 'unsafe-inline'; " +
+    "img-src 'self' data: https: blob:; " +
+    "font-src 'self' data: https:; " +
+    "connect-src 'self' https: wss: ws:; " +
+    "media-src 'self' blob: https:; " +
+    "frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none';";
+  app.addHook('onSend', async (request, reply, payload) => {
+    const path = request.url.split('?')[0];
+    if (path === '/admin' || path.startsWith('/admin/')) {
+      reply.header('Content-Security-Policy', ADMIN_CSP);
+      reply.header('X-Content-Type-Options', 'nosniff');
+      reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+      reply.header('X-Frame-Options', 'SAMEORIGIN');
+      reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self)');
+    }
+    return payload;
+  });
+
   // Observabilitas forensik jalur auth (KNOWN_ISSUES #143): catat SATU baris JSON
   // ringkas untuk respons 401/503 pada rute auth/admin/staff. Token penuh tidak
   // pernah masuk log (hanya hash prefix-8). Deterministik, terpusat, tanpa duplikasi.

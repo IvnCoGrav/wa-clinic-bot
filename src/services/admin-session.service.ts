@@ -13,8 +13,26 @@ export interface AdminSession {
   expiresAt: Date;
 }
 
-// 30-day TTL for stable sessions (prevents unexpected logouts)
-const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 Days
+/**
+ * S-011: TTL sesi admin.
+ *
+ * Sebelumnya 30 hari (terlalu panjang untuk token yang disimpan di browser).
+ * Default kini 7 hari dan bisa diatur per-deployment lewat
+ * `ADMIN_SESSION_TTL_HOURS` (1–720 jam). Batas atas 30 hari dipertahankan
+ * sebagai pengaman agar env yang salah tidak menghidupkan sesi selamanya.
+ */
+export const DEFAULT_ADMIN_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+export const MAX_ADMIN_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+export function resolveAdminSessionTtlMs(raw: string | undefined = process.env.ADMIN_SESSION_TTL_HOURS): number {
+  const hours = Number(raw);
+  if (!Number.isFinite(hours) || hours < 1 || hours > 720) return DEFAULT_ADMIN_SESSION_TTL_MS;
+  return Math.round(hours) * 60 * 60 * 1000;
+}
+
+const SESSION_TTL_MS = resolveAdminSessionTtlMs();
+
+export { SESSION_TTL_MS as ADMIN_SESSION_TTL_MS };
 
 // SEC-AUDIT-02: hanya hash yang disimpan (DB `admin_sessions` / fallback memori).
 // Berkas plaintext legacy `storage/admin_sessions.json` tidak lagi dibaca/ditulis.

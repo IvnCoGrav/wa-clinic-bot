@@ -254,6 +254,16 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Catatan konfigurasi baru:** `ADMIN_ALLOWED_ORIGINS` (dipisah koma) wajib diisi bila dashboard dilayani dari origin berbeda dengan API; tanpa itu gerbang CSRF hanya menerima same-origin.
 - **Gerbang regresi Fase 6C:** 7.183 test / 7.153 lulus / 2 gagal pre-existing #287 (0 regresi vs 6B); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (68 item); `audit:verify-claims` PASS (10 rujukan); `security:scan` LULUS.
 
+### 0.30 W6F — hardening sesi admin & CSP dashboard (S-011, 2026-11-12)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **S-011** (sebagian) | TTL sesi default **7 hari** (bisa diatur `ADMIN_SESSION_TTL_HOURS`, batas 1–720 jam; nilai salah → default). `/admin/*` selalu membawa CSP + `X-Content-Type-Options`/`Referrer-Policy`/`X-Frame-Options`/`Permissions-Policy` dari Fastify; CSP Caddy dipertajam: `unsafe-eval` & `https:` bebas dihapus, `object-src 'none'`, `base-uri`, `form-action` ditambah | `tests/unit/admin-session-hardening.test.ts` (7) |
+
+- **Status register:** S-011 tetap **OPEN** — token masih disimpan di `localStorage` pada `packages/admin-dashboard/src/contexts/AuthContext.tsx` (area dashboard pengguna, belum diubah).
+- **Register:** **237 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 18 OPEN** (tidak berubah).
+- **Gerbang regresi W6F:** 7.334 test / 7.304 lulus / 2 gagal pre-existing #287 (0 regresi vs W6E); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (79 item); `security:scan` LULUS 2.235 file.
+
 ### 0.29 W6E — rekonsiliasi klaim dokumen & audit Fase 10 (Cfg-017, 2026-11-12)
 
 | ID | Perbaikan | Bukti test |

@@ -12,7 +12,10 @@
         X-Frame-Options "SAMEORIGIN"
         X-Content-Type-Options "nosniff"
         Referrer-Policy "strict-origin-when-cross-origin"
-        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https: blob:; font-src 'self' data: https:; connect-src 'self' https: wss: ws:; frame-ancestors 'self';"
+        # S-011: script-src tanpa 'unsafe-eval' dan tanpa https: bebas.
+        # 'unsafe-inline' dipertahankan karena index.html dashboard memuat skrip
+        # anti-flicker tema inline (area dashboard milik pengguna).
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data: https:; connect-src 'self' https: wss: ws:; media-src 'self' blob: https:; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none';"
         Permissions-Policy "camera=(), microphone=(), geolocation=(self)"
         -Server
     }

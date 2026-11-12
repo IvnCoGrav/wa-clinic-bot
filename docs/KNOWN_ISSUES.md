@@ -131,6 +131,11 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - **Ar-009:** gerbang `npm run audit:verify-claims` memindai seluruh rujukan `file:line` laporan audit Fase 1/11 dan gagal bila file hilang atau baris di luar batas; addendum integritas menandai klaim yang hanya bisa diverifikasi di server live sebagai `UNVERIFIABLE (server)`.
   - Register menjadi **226 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 29 OPEN**.
 
+- **Tindakan W6F (selesai 2026-11-12):**
+  - **S-011 (sebagian):** TTL sesi admin dipendekkan dari 30 hari ke **7 hari** (override `ADMIN_SESSION_TTL_HOURS`, 1–720 jam) dan header CSP/keamanan kini selalu dikirim untuk `/admin/*` — baik oleh Caddy maupun Fastify. CSP Caddy tidak lagi memakai `unsafe-eval` atau `https:` bebas di `script-src`.
+  - **Sisa yang diketahui:** token admin masih berada di `localStorage` (`packages/admin-dashboard/src/contexts/AuthContext.tsx`) — area dashboard pengguna, belum diubah. S-011 tetap OPEN sampai migrasi ke cookie HttpOnly (atau setara) dilakukan pemilik dashboard.
+  - Catatan operasional: menurunkan TTL membuat sesi lama (yang dibuat saat TTL 30 hari) tetap berlaku sampai kedaluwarsa; sesi baru memakai 7 hari. Bila ingin memaksa logout global, hapus baris `admin_sessions` lama.
+
 - **Tindakan W6E (selesai 2026-11-12):**
   - **Cfg-017:** dokumen tidak lagi mengklaim lebih dari bukti. RBAC ditulis **hibrida** (scope data-driven + daftar prefix sensitif hardcode), laporan Fase 10 memuat catatan rekonsiliasi eksplisit, dan artefak `fase-10.json` diregenerasi dari repo (10 file/74 test).
   - Register menjadi **237 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 18 OPEN**.
