@@ -421,7 +421,7 @@ describe('Google Contacts Integration Suite', () => {
         refresh_token: 'valid_refresh_token',
       });
 
-      findUniqueCustomerMock.mockResolvedValue({
+      findFirstCustomerMock.mockResolvedValue({
         id: 'cust-sandbox-1',
         phone: '081234567890',
         name: 'QA Tester',

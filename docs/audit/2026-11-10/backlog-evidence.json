@@ -534,12 +534,12 @@
           "type": "file",
           "path": "docs/FEATURE_INVENTORY.md",
           "line": 200,
-          "contains": "24 interval cron"
+          "contains": "25 interval cron"
         },
         {
           "type": "test",
           "path": "tests/unit/cron-registry-consistency.test.ts",
-          "contains": "registrasi runtime tetap 24 interval cron"
+          "contains": "registrasi runtime tetap 25 interval cron"
         }
       ],
       "verifiedBy": "AI Agent",
@@ -1535,7 +1535,7 @@
         {
           "type": "file",
           "path": "src/lifecycle/background-crons.ts",
-          "line": 510,
+          "line": 538,
           "contains": "createExclusiveCronTask('sandbox-cleanup'"
         },
         {
@@ -1783,6 +1783,35 @@
           "type": "test",
           "path": "tests/unit/google-calendar-tenant.test.ts",
           "contains": "memakai kalender tenant, durasi 90 menit, dan brand tenant"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-12"
+    },
+    "I-007": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/services/google-contacts-outbox.service.ts",
+          "line": 233,
+          "contains": "async drainAll("
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/google-contacts-outbox.test.ts",
+          "contains": "melewati MAX_OUTBOX_ATTEMPTS"
+        },
+        {
+          "type": "file",
+          "path": "src/services/google-contacts.service.ts",
+          "line": 375,
+          "contains": "!options?.fromOutbox"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/google-contacts-outbox.test.ts",
+          "contains": "lookup customer difilter tenant dan kegagalan API masuk antrean"
         }
       ],
       "verifiedBy": "AI Agent",

@@ -254,6 +254,16 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Catatan konfigurasi baru:** `ADMIN_ALLOWED_ORIGINS` (dipisah koma) wajib diisi bila dashboard dilayani dari origin berbeda dengan API; tanpa itu gerbang CSRF hanya menerima same-origin.
 - **Gerbang regresi Fase 6C:** 7.183 test / 7.153 lulus / 2 gagal pre-existing #287 (0 regresi vs 6B); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (68 item); `audit:verify-claims` PASS (10 rujukan); `security:scan` LULUS.
 
+### 0.26 W6B — antrean retry Google Contacts (I-007, 2026-11-12)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **I-007** | `googleContactsOutbox` (KV bersama, TTL 7 hari, satu item per customer): kegagalan sync otomatis diantrekan, backoff 1m→5m→30m→2j→6j→12j, maksimal 6 percobaan lalu dibuang + log; cron 5 menit `drainAll()`; `syncCustomer` lookup `findFirst({ id, tenant_id })`; status integrasi menampilkan `outboxPending` | `tests/unit/google-contacts-outbox.test.ts` (13) + `tests/unit/google-contacts.test.ts` (32) |
+
+- **Kontrak baru:** `googleContactsOutbox.enqueue/list/drain/drainAll/pendingCount/clear`; `syncCustomer(..., { fromOutbox })`; `GoogleIntegrationStatus.outboxPending`.
+- **Register:** **235 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 20 OPEN**.
+- **Gerbang regresi W6B:** 7.306 test / 7.276 lulus / 2 gagal pre-existing #287 (0 regresi vs W6A); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (77 item); `security:scan` LULUS 2.226 file.
+
 ### 0.25 W6A — Google Calendar tenant-aware & idempoten (I-006, 2026-11-12)
 
 | ID | Perbaikan | Bukti test |

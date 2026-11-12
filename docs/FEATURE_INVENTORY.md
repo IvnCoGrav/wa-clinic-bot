@@ -197,7 +197,7 @@ Modul pelacakan efektivitas iklan berbayar (Click-to-WhatsApp) hingga ke titik t
 
 ## 8. Otomasi, Background Crons & Pekerja Mandiri
 
-Sistem menjalankan **24 interval cron** untuk **25 pekerja logis** mandiri (Morning Jobs & Weekly Backup berbagi satu interval 15 menit) guna memastikan integritas data dan kelancaran operasional klinik tanpa intervensi manual.
+Sistem menjalankan **25 interval cron** untuk **26 pekerja logis** mandiri (Morning Jobs & Weekly Backup berbagi satu interval 15 menit) guna memastikan integritas data dan kelancaran operasional klinik tanpa intervensi manual.
 
 | Background Worker / Cron | Frekuensi / Waktu | Deskripsi & Tanggung Jawab Operasional |
 | :--- | :--- | :--- |
@@ -273,7 +273,7 @@ Pusat administrasi sistem di Admin Dashboard (`packages/admin-dashboard`) untuk 
 
 - **Total Endpoint API**: **297 endpoint unik (348 pasangan method+path)** (tersebar di rute Admin, Staff, Webhook, Media, Tracking, Landing, dan Health).
 - **Total Model Database (Prisma Entities)**: **50 model Prisma** dan **16 enum** mencakup domain Customer, Percakapan, Reservasi, Staf, Insentif Retensi, Log Audit, Integrasi Google/Meta, dan Analitik.
-- **Total Background Crons & Workers**: **24 interval cron terdaftar** untuk **25 pekerja logis** (definisi kanonis: `src/lifecycle/background-crons.ts`; Morning Jobs & Weekly Backup berbagi satu interval 15 menit), dengan interval berkala mulai dari 2 menit hingga 1 minggu. Setiap kegagalan beruntun dilaporkan sebagai status `GET /api/admin/health` (`cronHealth`) dan memicu alert `CRON_JOB_FAILED` setelah ambang `CRON_FAILURE_ALERT_THRESHOLD` (default 3).
+- **Total Background Crons & Workers**: **25 interval cron terdaftar** untuk **26 pekerja logis** (definisi kanonis: `src/lifecycle/background-crons.ts`; Morning Jobs & Weekly Backup berbagi satu interval 15 menit), dengan interval berkala mulai dari 2 menit hingga 1 minggu. Setiap kegagalan beruntun dilaporkan sebagai status `GET /api/admin/health` (`cronHealth`) dan memicu alert `CRON_JOB_FAILED` setelah ambang `CRON_FAILURE_ALERT_THRESHOLD` (default 3).
 - **Penyedia Integrasi WhatsApp**: Dual-mode terintegrasi (**WAHA container** + **Meta Cloud API resmi**).
 - **Dasbor Manajemen**: 1 Single Page Application (React 18 + Vite + Tailwind CSS) yang memuat modul Kalender Jadwal, Live Chat CS, Peta Sebaran Pasien, Analitik Meta Ads, Evaluasi AI, Insentif Retensi Bidan, dan Konfigurasi Multi-Tenant.
 
@@ -283,6 +283,7 @@ Pusat administrasi sistem di Admin Dashboard (`packages/admin-dashboard`) untuk 
 
 | Tanggal | Modul / Komponen | Perubahan / Penambahan Fitur Mikro | Referensi PR/Commit |
 | :--- | :--- | :--- | :--- |
+| **2026-11-12** | Antrean Retry Google Contacts (I-007) | Modul `src/services/google-contacts-outbox.service.ts`: kegagalan `syncCustomer` otomatis masuk antrean KV (satu item per customer, TTL 7 hari), retry backoff 1m→12j maksimal 6 percobaan, cron `drainAll()` tiap 5 menit (env `ENABLE_GOOGLE_CONTACTS_OUTBOX_CRON`, `GOOGLE_CONTACTS_OUTBOX_INTERVAL_MINUTES`). Lookup customer saat sync memakai `findFirst({ id, tenant_id })`; `GoogleIntegrationStatus.outboxPending` menampilkan sisa antrean. | Audit F0–F6 / W6B |
 | **2026-11-12** | Google Calendar per Tenant & Idempoten (I-006) | Kalender tujuan per tenant via `Tenant.settings.googleCalendar` (`enabled`, `calendarId`; fallback `GOOGLE_CALENDAR_ID`). Event memakai ID deterministik `resv`+hex dari `reservation.id` sehingga retry/duplicate tidak membuat event ganda (409 duplicate = ambil event lama). Durasi event mengikuti `Reservation.duration_minutes` (fallback 60 menit), brand dari `getBrandIdentityAsync(tenantId)`. Semua pemanggil (dispatch confirm/set-date/cancel, series, archive, /reset) meneruskan `tenantId`. | Audit F0–F6 / W6A |
 | **2026-11-12** | Endpoint Setelan Tenant (Cfg-011) | `GET|PATCH /api/admin/tenant-settings` (Super Admin only) mengelola 6 setelan yang sebelumnya hanya bisa dibaca: `clinicLocation`, `operationalHours`, `staffNotification`, `deliverySettings.estimateTtlDays`, `copilot.styleTone`, `brand`. Validasi per field (`src/config/tenant-settings.config.ts`), patch parsial aman (kunci `Tenant.settings` lain utuh), dan cache reader (klinik/jam/notifikasi/brand) langsung dibersihkan setelah simpan. **UI sub-tab dashboard belum dibuat** — dicatat di KNOWN_ISSUES. | Audit F0–F6 / W5E |
 | **2026-11-12** | Integration Guard per Tenant (I-011) | Modul `src/services/integration-guard.service.ts`: kuota harian WIB per tenant+layanan (KV bersama), circuit breaker per tenant, kunci API per tenant, tombol `enabled`. Konfigurasi dari `Tenant.settings.integrationGuards` (cache 5 menit, DB offline → env tanpa batas). Dipakai ORS, Google Distance Matrix, dan Google Geocoding (text/reverse/kandidat); kuota habis/circuit OPEN → fallback lokal tanpa panggilan axios. | Audit F0–F6 / W5D |

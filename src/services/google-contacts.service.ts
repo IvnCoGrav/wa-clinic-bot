@@ -61,6 +61,8 @@ export interface GoogleIntegrationStatus {
   contactLabel: string | null;
   lastSyncedAt: Date | null;
   totalSyncedCustomers: number;
+  /** I-007: jumlah customer yang menunggu retry sinkronisasi. */
+  outboxPending: number;
 }
 
 export class GoogleContactsService {
@@ -92,6 +94,14 @@ export class GoogleContactsService {
 
     const isConnected = Boolean(integration && integration.refresh_token);
 
+    let outboxPending = 0;
+    try {
+      const { googleContactsOutbox } = await import('./google-contacts-outbox.service');
+      outboxPending = await googleContactsOutbox.pendingCount(tenantId);
+    } catch {
+      /* KV offline → tampilkan 0, bukan gagal status */
+    }
+
     return {
       isConfiguredOnPlatform,
       isConnected,
@@ -103,6 +113,7 @@ export class GoogleContactsService {
       contactLabel: integration?.contact_label || 'Pasien Klinik',
       lastSyncedAt: integration?.last_synced_at || null,
       totalSyncedCustomers: totalSynced,
+      outboxPending,
     };
   }
 
@@ -344,12 +355,40 @@ export class GoogleContactsService {
   }
 
   /**
-   * Sinkronisasi kontak customer tunggal ke Google Contacts (Non-blocking & Fail-safe)
+   * Sinkronisasi kontak customer tunggal ke Google Contacts (Non-blocking & Fail-safe).
+   *
+   * I-007: bila gagal (OAuth/API/jaringan), customer otomatis masuk antrean
+   * retry (`googleContactsOutbox`) agar tidak hilang diam-diam. Kegagalan
+   * permanen (customer tidak ada) tidak diantrekan.
    */
   public async syncCustomer(
     tenantId: string = DEFAULT_TENANT_ID,
     customerId: string,
-    options?: { trigger?: 'chat' | 'reservation' | 'manual' }
+    options?: {
+      trigger?: 'chat' | 'reservation' | 'manual';
+      /** Diisi `drain()` agar kegagalan saat retry tidak mengantre ulang dirinya. */
+      fromOutbox?: boolean;
+    }
+  ): Promise<{ success: boolean; action?: 'created' | 'updated' | 'skipped'; error?: string }> {
+    const result = await this.syncCustomerInternal(tenantId, customerId, options);
+
+    if (!result.success && !options?.fromOutbox && result.error !== 'Customer tidak ditemukan') {
+      const { googleContactsOutbox } = await import('./google-contacts-outbox.service');
+      await googleContactsOutbox.enqueue(
+        tenantId,
+        customerId,
+        options?.trigger || 'manual',
+        result.error
+      );
+    }
+
+    return result;
+  }
+
+  private async syncCustomerInternal(
+    tenantId: string = DEFAULT_TENANT_ID,
+    customerId: string,
+    options?: { trigger?: 'chat' | 'reservation' | 'manual'; fromOutbox?: boolean }
   ): Promise<{ success: boolean; action?: 'created' | 'updated' | 'skipped'; error?: string }> {
     try {
       // 1. Ambil config integrasi tenant
@@ -369,9 +408,9 @@ export class GoogleContactsService {
         return { success: true, action: 'skipped' };
       }
 
-      // 3. Ambil data customer lengkap
-      const customer = await prisma.customer.findUnique({
-        where: { id: customerId },
+      // 3. Ambil data customer lengkap — WAJIB difilter tenant (I-007).
+      const customer = await prisma.customer.findFirst({
+        where: { id: customerId, tenant_id: tenantId },
         include: {
           children: true,
           reservations: {

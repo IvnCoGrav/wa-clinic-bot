@@ -127,6 +127,34 @@ export function registerCronWorkers(): void {
     }).catch(e => console.error('[SHEETS SYNC START ERROR]', e));
   }
 
+  // I-007: Retry sinkronisasi Google Contacts yang gagal (antrean KV bersama).
+  // Default AKTIF; jalankan sekali saat boot untuk self-healing backlog.
+  if (process.env.ENABLE_GOOGLE_CONTACTS_OUTBOX_CRON !== 'false') {
+    const contactsIntervalMinutes = parseInt(process.env.GOOGLE_CONTACTS_OUTBOX_INTERVAL_MINUTES || '5', 10);
+    import('../services/google-contacts-outbox.service').then(({ googleContactsOutbox }) => {
+      const run = createExclusiveCronTask('google-contacts-outbox', async () => {
+        const summary = await googleContactsOutbox.drainAll();
+        const totals = Object.values(summary).reduce(
+          (acc, r) => {
+            acc.succeeded += r.succeeded;
+            acc.failed += r.failed;
+            acc.dropped += r.dropped;
+            return acc;
+          },
+          { succeeded: 0, failed: 0, dropped: 0 }
+        );
+        if (totals.succeeded || totals.failed || totals.dropped) {
+          console.log(
+            `📇 Google Contacts outbox: sukses=${totals.succeeded} gagal=${totals.failed} dibuang=${totals.dropped}`
+          );
+        }
+      });
+      run().catch((e) => console.warn('[GOOGLE CONTACTS OUTBOX BOOT WARNING]', (e as Error).message));
+      trackIntervalStaggered(run, contactsIntervalMinutes * 60 * 1000);
+      console.log(`📇 Google Contacts outbox worker started (every ${contactsIntervalMinutes}m, staggered)`);
+    }).catch(e => console.error('[GOOGLE CONTACTS OUTBOX START ERROR]', e));
+  }
+
   // Start media cleanup cron (hapus file media Live Chat yang melebihi retensi)
   if (process.env.ENABLE_MEDIA_CLEANUP_CRON !== 'false') {
     const intervalHours = parseInt(process.env.MEDIA_CLEANUP_INTERVAL_HOURS || '24', 10);
