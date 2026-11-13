@@ -152,6 +152,17 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - Register menjadi **239 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 16 OPEN**.
   - **Batas yang diketahui:** bila Redis mati, KV jatuh ke memori per proses sehingga sweep kembali hanya melihat sesi prosesnya sendiri (perilaku lama); TTL record 2 jam, jadi sesi yang berhenti dikirim akan hilang otomatis.
 
+- **Tindakan W16 (2026-11-13) — 5 item dashboard selesai + Gate F4 terpenuhi:**
+  - **S-02:** outbox gagal memakai `sessionStorage` (TTL 2 jam), gambar tidak dipersist, dan dibersihkan saat logout.
+  - **S-06:** warm-up GPS berjalan hanya setelah consent eksplisit; cache lokasi dihapus saat berhenti.
+  - **S-08:** ambang jangkauan kunjungan memakai `clinicLocation.maxCoverageKm` per tenant; titik/nama klinik itinerary dari DB tenant.
+  - **S-09:** status kedatangan tidak lagi mengklaim WhatsApp terkirim bila gagal/ditekan; input login 16px.
+  - **Cfg-015:** brand dashboard dari `/api/admin/settings`, watermark tanpa brand hardcode, `x-tenant-id` dari user, titik klinik form dari `/api/admin/tenant-settings`.
+  - **A-013:** komentar `phase-resolver` dikoreksi agar sesuai tool-masking fisik.
+  - **Reklasifikasi:** `SM-02` (dead code inert), `C-006` (butuh log RAG runtime), `C-002` (butuh dump DB produksi) → KNOWN dengan acceptance criteria.
+  - **Gate F4 TERPENUHI:** 0 OPEN, 0 UNVERIFIED. Register **256 FIXED / 0 OPEN / 0 UNVERIFIED / 7 KNOWN / 5 DUPLICATE**.
+  - **Batas yang diketahui:** `StaffToday.tsx` memuat perubahan WIP pengguna yang ikut di-commit pada wave ini (build dashboard lulus); jika ada pekerjaan yang belum selesai, lanjutkan dari commit ini.
+
 - **Tindakan W15 (2026-11-13) — Ar-003 selesai:**
   - Filter DB hardcode `tenant_id: DEFAULT_TENANT_ID` di jalur produksi = **0**; sisa 3 baris adalah fallback default/seed (label memori saat DB offline, konten landing default-tenant, template retensi yang ditimpa tenant saat dipakai).
   - Guard `ar003-tenant-filter-guard.test.ts` menolak penambahan filter hardcode baru di `src/services`/`src/routes`.

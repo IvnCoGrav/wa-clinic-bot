@@ -281,7 +281,7 @@ export const PricelistPromoPanel: React.FC = () => {
                   type="text"
                   value={instagramAccount}
                   onChange={(e) => setInstagramAccount(e.target.value)}
-                  placeholder="kalababyspa"
+                  placeholder="namaklinik"
                   className="w-full min-h-[44px] px-3 py-2 text-sm bg-fill-1 border border-divider rounded-xl text-ink focus:outline-hidden focus:ring-2 focus:ring-accent"
                 />
               </div>

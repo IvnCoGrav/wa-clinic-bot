@@ -44,11 +44,10 @@ export function deriveConversationPhase(session: CustomerGoalSession, isFollowUp
 
 /**
  * Template directive per fase — disisipkan ke system prompt sebelum Call 1.
- * Semua tool tetap dikirim di tools[] (tidak disembunyikan); LLM diarahkan
- * via instruksi eksplisit — lebih robust untuk model kecil daripada
- * dynamic tool filtering yang rapuh bila ada case tak terduga.
- * Directive tambahan di-stack berdasar session (mis. ongkir quoted +
- * treatment discussed sekaligus) agar tidak kehilangan guard fase lampau.
+ * Tool yang belum memenuhi prasyarat DICABUT secara fisik dari `tools[]` pada
+ * Call 1 (tool-masking enforce, default aktif — `isToolMaskingEnforced()`),
+ * sehingga LLM tidak diberi akses tool yang belum sah. Directive fase tetap
+ * dikirim sebagai panduan perilaku/urutan, bukan pengganti gerbang tools.
  */
 export function buildPhaseDirective(phase: ConversationPhase, session: CustomerGoalSession): string {
   const lines: string[] = [`[FASE PERCAKAPAN: ${phase}]`];

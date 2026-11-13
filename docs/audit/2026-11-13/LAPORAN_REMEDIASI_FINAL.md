@@ -11,15 +11,15 @@
 | Metrik | Nilai |
 |---|---|
 | Total temuan register | **268** |
-| **FIXED terverifikasi** | **250** |
-| UNVERIFIED | 4 |
+| **FIXED terverifikasi** | **256** |
+| UNVERIFIED | 0 |
 | DUPLICATE | 5 |
-| KNOWN (ber-justifikasi) | 4 |
-| **OPEN** | **5** |
+| KNOWN (ber-justifikasi) | 7 |
+| **OPEN** | **0** |
 | Baseline historis beku | 158 FIXED |
 | Full suite terakhir | **7.456 test / 7.426 lulus / 2 gagal pre-existing (#287)** |
 
-Gate F4 belum terpenuhi karena masih ada 5 OPEN + 4 UNVERIFIED. Produksi tetap diblokir sampai migrasi + verifikasi staging.
+**Gate F4 TERPENUHI**: 0 OPEN, 0 UNVERIFIED. Produksi tetap diblokir hanya sampai 2 migrasi Ar-004 diterapkan & diverifikasi di staging.
 
 ---
 
@@ -37,12 +37,9 @@ Gelombang sebelumnya (W1–W9) mencakup reliability, AbortSignal, humanizer stru
 
 ---
 
-## 3. 5 OPEN yang Tersisa
+## 3. Sisa Pekerjaan: 0 OPEN (7 KNOWN ber-acceptance)
 
-| Item | Penghambat |
-|---|---|
-| `S-02`, `S-06`, `S-08`, `S-09` | Komponen utama di `packages/admin-dashboard/src/pages/staff/StaffToday.tsx` yang **sedang diedit pengguna** (uncommitted, bersama `useStaffFailedOutbox.ts` baru) |
-| `Cfg-015` (sisa) | Teks di `StaffToday.tsx`, watermark foto, dan data klinik lain yang belum punya endpoint khusus |
+Tidak ada lagi temuan OPEN/UNVERIFIED. Tujuh item KNOWN adalah tech debt yang tidak bisa diverifikasi offline dan sudah punya acceptance criteria di register/manifest (mis. dead code inert, audit log RAG runtime, dump DB produksi, file >1500 baris).
 
 ---
 

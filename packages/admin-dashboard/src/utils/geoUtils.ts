@@ -456,7 +456,7 @@ export function startDepartGpsWarmup(): void {
   }
 }
 
-/** Hentikan pemanasan GPS pasif & lepas watch (privasi + baterai). */
+/** Hentikan pemanasan GPS pasif, lepas watch, dan hapus cache (privasi + baterai). */
 export function stopDepartGpsWarmup(): void {
   if (departWatchId != null) {
     try {
@@ -466,6 +466,8 @@ export function stopDepartGpsWarmup(): void {
     }
   }
   departWatchId = null;
+  // S-06: cache lokasi terakhir tidak boleh tertinggal setelah warm-up berhenti.
+  departCache = null;
 }
 
 /**

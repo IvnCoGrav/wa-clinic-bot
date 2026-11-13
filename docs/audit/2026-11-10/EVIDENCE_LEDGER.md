@@ -256,6 +256,21 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 
 - **Gerbang regresi W10:** 7.448 test / 7.418 lulus / 2 gagal pre-existing #287 (0 regresi vs W9). Dijalankan dengan `--minWorkers 1 --maxWorkers 2` karena concurrency default memicu flake timeout pada `media-mime-audio`/`live-chat-reply`/`waha-webhook` (semua lulus saat dijalankan sendiri). `tsc` 0 error; `build` root exit 0; `verify:backlog` PASS (89 item); `security:scan` LULUS 2.333 file; **dashboard build (tsc+vite) sukses**.
 
+### 0.43 W16 — penutupan 5 item dashboard + Gate F4 (2026-11-13)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **S-02** | Outbox gagal pindah ke `sessionStorage` (TTL 2 jam, tanpa gambar), dibersihkan saat logout | `tests/unit/staff-dashboard-hardening.test.ts` (9) |
+| **S-06** | Warm-up GPS hanya setelah consent eksplisit; cache dihapus saat stop | idem |
+| **S-08** | Ambang jarak & titik klinik dari tenant (`clinicLocation`); quick reply tetap DB-driven | idem |
+| **S-09** | Toast kedatangan jujur (`waResult`), input login 16px | idem |
+| **Cfg-015** | Brand dashboard dari API, watermark tanpa brand hardcode, `x-tenant-id` dari user, titik klinik dari tenant-settings | idem |
+| **A-013** | Komentar `phase-resolver.ts` yang kontradiktif dikoreksi (tool masking fisik) | `tests/unit/v3/tool-masking-enforce.test.ts` |
+
+- **Reklasifikasi:** `SM-02` → KNOWN (dead code inert), `C-006` → KNOWN (butuh log RAG runtime), `C-002` → KNOWN (butuh dump DB produksi). Semua punya acceptance criteria.
+- **Gate F4:** **TERPENUHI** — 0 OPEN, 0 UNVERIFIED. Register: **256 FIXED / 0 OPEN / 0 UNVERIFIED / 7 KNOWN / 5 DUPLICATE**.
+- **Gerbang regresi W16:** 7.465 test / 7.435 lulus / 2 gagal pre-existing #287 (0 regresi vs W15). `tsc` 0; root build 0; dashboard build 0; `verify:backlog` PASS (98 item); `security:scan` LULUS 2.347 file.
+
 ### 0.42 W15 — penutupan Ar-003 + guard filter tenant (2026-11-13)
 
 | ID | Perbaikan | Bukti test |

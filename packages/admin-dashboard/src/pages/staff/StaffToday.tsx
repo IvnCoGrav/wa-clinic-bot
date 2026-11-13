@@ -78,6 +78,7 @@ import { StaffChatComposer } from './StaffChatComposer';
 import { StaffChatThread } from './StaffChatThread';
 import { useStaffChatScroll } from './useStaffChatScroll';
 import { useStaffMessages } from './useStaffMessages';
+import { useStaffFailedOutbox } from './useStaffFailedOutbox';
 import { filterTasksByQuery, groupTasksByDate } from './staffTaskGrouping';
 import { StaffUpcomingCard } from './StaffUpcomingCard';
 import { StaffCompletedCard } from './StaffCompletedCard';
@@ -219,19 +220,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   const [quickReplyTemplates, setQuickReplyTemplates] = useState<Array<{ shortcut: string; title: string; content: string; category?: string | null }>>([]);
   const [revokingId, setRevokingId] = useState<string | null>(null);
 
-  // Fase 1.2: outbox pesan gagal (sinyal 1-bar). Bertahan di layar + localStorage
-  // agar terapis bisa "Coba Kirim Lagi" tanpa mengetik ulang / mengambil foto ulang.
-  const [failedMessages, setFailedMessages] = useState<
-    Array<{
-      clientTempId: string;
-      conversationId: string;
-      text: string;
-      image?: { preview: string; dataUrl: string; mimeType: string; fileName: string } | null;
-      createdAt: string;
-      error: string;
-    }>
-  >([]);
-  const [retryingTempId, setRetryingTempId] = useState<string | null>(null);
+  // Fase 1.2: outbox pesan gagal dikelola hook useStaffFailedOutbox.
 
   const selectedTaskRef = useRef<StaffTask | null>(null);
   const allTasksRef = useRef<StaffTask[]>([]);
@@ -267,6 +256,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     setErrorMessage,
     fetchMessages,
   } = useStaffMessages({ isSupervisorRef, isNearBottomRef, scrollToBottom });
+  const { failedMessages, setFailedMessages, retryingTempId, retryFailedMessage, persistFailedMessages } =
+    useStaffFailedOutbox({ setMessages, toast });
 
   selectedTaskRef.current = selectedTask;
   allTasksRef.current = [...tasks, ...upcomingTasks, ...completedTasks];
@@ -601,11 +592,29 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     () => [...tasks, ...upcomingTasks].some((t) => isWithinGpsWarmupWindow(t.bookingDate)),
     [tasks, upcomingTasks]
   );
+  // S-06: warm-up GPS TIDAK boleh berjalan diam-diam. Wajib consent eksplisit
+  // per perangkat; tanpa izin, tombol Navigasi tetap memakai GPS sekali-tembak.
+  const [gpsWarmupConsent, setGpsWarmupConsent] = useState<'granted' | 'denied' | null>(() => {
+    try {
+      const v = localStorage.getItem('staff_gps_warmup_consent_v1');
+      return v === 'granted' || v === 'denied' ? v : null;
+    } catch {
+      return null;
+    }
+  });
+  const decideGpsWarmup = (decision: 'granted' | 'denied') => {
+    try {
+      localStorage.setItem('staff_gps_warmup_consent_v1', decision);
+    } catch {
+      /* storage diblokir: keputusan berlaku untuk sesi ini */
+    }
+    setGpsWarmupConsent(decision);
+  };
   useEffect(() => {
-    if (hasDepartWindowTask) startDepartGpsWarmup();
+    if (hasDepartWindowTask && gpsWarmupConsent === 'granted') startDepartGpsWarmup();
     else stopDepartGpsWarmup();
     return () => stopDepartGpsWarmup();
-  }, [hasDepartWindowTask]);
+  }, [hasDepartWindowTask, gpsWarmupConsent]);
 
 
   // Fase 0.2: tandai percakapan dibaca saat dibuka (badge padam + sumber presence untuk
@@ -1342,83 +1351,6 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     });
   };
 
-  // Fase 1.2: retry idempoten. Kirim ulang dengan `clientTempId` yang SAMA supaya
-  // backend tidak menggandakan bubble di WhatsApp walau percobaan pertama sebenarnya sukses.
-  const handleRetryFailedMessage = async (item: {
-    clientTempId: string;
-    conversationId: string;
-    text: string;
-    image?: { preview: string; dataUrl: string; mimeType: string; fileName: string } | null;
-  }) => {
-    if (retryingTempId) return;
-    setRetryingTempId(item.clientTempId);
-    try {
-      const body: Record<string, any> = { text: item.text, clientTempId: item.clientTempId };
-      if (item.image) {
-        body.imageB64 = item.image.dataUrl;
-        body.mimeType = item.image.mimeType;
-        body.fileName = item.image.fileName;
-      }
-      const res = await apiRequest(`/api/staff/conversations/${item.conversationId}/reply`, {
-        method: 'POST',
-        body: JSON.stringify(body),
-        timeoutMs: 45000,
-      });
-      if (res.success) {
-        const assignedId = res.data?.messageId || res.data?.id;
-        if (assignedId) {
-          setMessages((prev) =>
-            prev.map((m) => (m.id === item.clientTempId ? { ...m, id: assignedId, delivery_status: 'sent' } : m))
-          );
-        }
-        setFailedMessages((prev) => {
-          const next = prev.filter((f) => f.clientTempId !== item.clientTempId);
-          persistFailedMessages(next);
-          return next;
-        });
-        toast('Pesan berhasil terkirim ulang.', 'success');
-      } else {
-        const errorMsg = res.error || 'Masih gagal mengirim. Periksa sinyal lalu coba lagi.';
-        setFailedMessages((prev) => {
-          const next = prev.map((f) => (f.clientTempId === item.clientTempId ? { ...f, error: errorMsg } : f));
-          persistFailedMessages(next);
-          return next;
-        });
-        toast(errorMsg, 'error');
-      }
-    } catch (err: any) {
-      const errorMsg = err.message || 'Masih gagal mengirim. Periksa sinyal lalu coba lagi.';
-      setFailedMessages((prev) => {
-        const next = prev.map((f) => (f.clientTempId === item.clientTempId ? { ...f, error: errorMsg } : f));
-        persistFailedMessages(next);
-        return next;
-      });
-      toast(errorMsg, 'error');
-    } finally {
-      setRetryingTempId(null);
-    }
-  };
-
-  // Fase 1.2: outbox tahan-reload (localStorage). Dipulihkan saat mount.
-  const FAILED_OUTBOX_KEY = 'staff_failed_outbox_v1';
-  const persistFailedMessages = (list: Array<unknown>) => {
-    try {
-      localStorage.setItem(FAILED_OUTBOX_KEY, JSON.stringify(list.slice(-20)));
-    } catch {
-      /* storage penuh / private mode → abaikan (best-effort) */
-    }
-  };
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(FAILED_OUTBOX_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) setFailedMessages(parsed);
-      }
-    } catch {
-      /* abaikan */
-    }
-  }, []);
 
   // Quick Action: Send OTW notification using dynamic Super Admin template
   // ── Unifikasi OTW (plan 2026-10-04) ─────────────────────────────────────────
@@ -1680,7 +1612,17 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       });
 
       if (res.success) {
-        toast(`Status tiba di lokasi tercatat & pesan terkirim ke ${patientName}!`, 'success');
+        // S-09: jangan klaim "pesan terkirim" bila WhatsApp gagal/ditekan.
+        const wa = res.data?.waResult;
+        const waSent = wa?.success === true;
+        const suppressed = !!res.data?.arrivalWaSuppressed;
+        if (waSent) {
+          toast(`Status tiba di lokasi tercatat & pesan terkirim ke ${patientName}!`, 'success');
+        } else if (suppressed) {
+          toast('Kedatangan tercatat. Pesan WhatsApp tidak dikirim karena baru saja ada pesan OTW — kirim manual bila perlu.', 'info');
+        } else {
+          toast('Kedatangan tercatat, tetapi pesan WhatsApp GAGAL dikirim. Silakan kirim manual dari Live Chat.', 'error');
+        }
         const nowIso = new Date().toISOString();
         const updateArrival = (t: StaffTask): StaffTask =>
           t.reservationId === task.reservationId ? { ...t, arrivedAt: nowIso } : t;
@@ -2320,6 +2262,35 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
   return (
     <div className="h-[100dvh] max-h-[100dvh] w-full max-w-full overflow-hidden bg-app text-ink flex flex-col font-sans select-none antialiased">
+      {/* S-06: consent eksplisit sebelum warm-up GPS latar berjalan. */}
+      {hasDepartWindowTask && gpsWarmupConsent === null && (
+        <div
+          role="dialog"
+          aria-label="Izin lokasi latar"
+          className="mx-3 mt-2 rounded-xl border border-divider bg-surface p-3 text-xs text-ink-2 shadow-xs"
+        >
+          <p className="mb-2 leading-relaxed">
+            Izinkan aplikasi memakai lokasi di latar <strong>hanya saat ada jadwal kunjungan</strong> agar tombol
+            Navigasi lebih cepat? Lokasi berhenti direkam saat tidak ada jadwal.
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => decideGpsWarmup('granted')}
+              className="min-h-[44px] px-3 rounded-lg bg-accent hover:bg-accent-hover text-on-solid font-semibold"
+            >
+              Izinkan
+            </button>
+            <button
+              type="button"
+              onClick={() => decideGpsWarmup('denied')}
+              className="min-h-[44px] px-3 rounded-lg border border-divider text-ink-2"
+            >
+              Tidak
+            </button>
+          </div>
+        </div>
+      )}
       {/* WhatsApp Web Minimalist Clean Top Bar — hidden on mobile when chat active (fondasional gating) */}
       <header className={`${mobileView === 'chat' && activeTab === 'today' ? 'hidden md:block' : 'block'} bg-surface border-b border-divider dark:border-divider px-3 sm:px-4 py-2.5 sticky top-0 z-30 shadow-xs pt-[calc(0.625rem+env(safe-area-inset-top,0px))] md:pt-2.5 pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))] shrink-0`}>
         <div className="flex items-center justify-between gap-2 sm:gap-4 max-w-7xl mx-auto w-full">
@@ -2718,7 +2689,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     onScrollToBottom={() => scrollToBottom(false)}
                     onStartEdit={handleStartEdit}
                     onRevoke={handleRevokeMessage}
-                    onRetry={handleRetryFailedMessage}
+                    onRetry={retryFailedMessage}
                   />
 
                   {/* WhatsApp Quick Reply Input Bar */}

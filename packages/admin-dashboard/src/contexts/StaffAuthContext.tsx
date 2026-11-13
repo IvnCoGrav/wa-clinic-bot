@@ -212,6 +212,12 @@ export const StaffAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setLoading(true);
     localStorage.removeItem(TOKEN_STORAGE_KEY);
     localStorage.removeItem('staff_failed_outbox_v1');
+    // S-02: outbox v2 disimpan di sessionStorage (tanpa gambar); hapus saat logout.
+    try {
+      sessionStorage.removeItem('staff_failed_outbox_v2');
+    } catch {
+      /* storage diblokir */
+    }
     localStorage.removeItem(LAST_ROLE_KEY);
     // Task 7.2: Bersihkan seluruh outbox chat & draft PII dari localStorage saat logout
     try {

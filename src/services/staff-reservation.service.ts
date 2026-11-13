@@ -7,7 +7,6 @@ import { canTransition, isPrematureCompletion } from '../domain/reservation-stat
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { calculateHaversineDistance, Coordinates } from '../utils/haversine';
-import { clinicConfig } from '../config/clinic';
 import { getClinicLocationAsync } from '../config/clinic-location';
 import { resolveHumanAreaName } from './staff-trip-tracking.service';
 import { resolveTreatmentValue } from './capi.service';
@@ -636,6 +635,9 @@ export class StaffReservationService {
         originName: string | null;
       };
       const itineraryById = new Map<string, ItineraryEntry>();
+      const clinicLoc = await getClinicLocationAsync(tenantId);
+      const clinicCoords = { lat: clinicLoc.lat, lng: clinicLoc.lng };
+      const clinicName = clinicLoc.name || 'Klinik';
       {
         const { deliveryService } = await import('./delivery.service');
         const trackerByStaff = new Map<
@@ -647,8 +649,8 @@ export class StaffReservationService {
           const addr = (r as any).customer_address;
           const staffKey = (r as any).assigned_staff?.id || 'unassigned';
           const tracker = trackerByStaff.get(staffKey) || {
-            coords: { lat: clinicConfig.lat, lng: clinicConfig.lng },
-            originName: clinicConfig.name || 'Klinik',
+            coords: clinicCoords,
+            originName: clinicName,
             isFirst: true,
           };
           const lat = addr?.lat ?? c?.lat;
@@ -659,7 +661,7 @@ export class StaffReservationService {
             itineraryById.set(r.id, {
               distanceKm: addr?.distance_km ?? c?.distance_km ?? null,
               distanceSource: 'CLINIC',
-              originName: clinicConfig.name || 'Klinik',
+              originName: clinicName,
             });
             continue;
           }
@@ -681,7 +683,7 @@ export class StaffReservationService {
             itineraryById.set(r.id, {
               distanceKm: dist,
               distanceSource: 'CLINIC',
-              originName: clinicConfig.name || 'Klinik',
+              originName: clinicName,
             });
           } else {
             const straightKm = calculateHaversineDistance(tracker.coords, currentCoords);
@@ -724,7 +726,7 @@ export class StaffReservationService {
         const itinerary = itineraryById.get(r.id) || {
           distanceKm: cust?.distance_km ?? null,
           distanceSource: 'CLINIC' as const,
-          originName: clinicConfig.name || 'Klinik',
+          originName: clinicName,
         };
         const distanceKm = itinerary.distanceKm;
         const distanceSource = itinerary.distanceSource;
@@ -942,6 +944,9 @@ export class StaffReservationService {
         originName: string | null;
       };
       const itineraryById = new Map<string, ItineraryEntry>();
+      const clinicLoc = await getClinicLocationAsync(tenantId);
+      const clinicCoords = { lat: clinicLoc.lat, lng: clinicLoc.lng };
+      const clinicName = clinicLoc.name || 'Klinik';
       {
         const { deliveryService } = await import('./delivery.service');
         const trackerByKey = new Map<
@@ -955,8 +960,8 @@ export class StaffReservationService {
           const dateKey = r.booking_date ? new Date(r.booking_date).toISOString().split('T')[0] : '';
           const chainKey = `${staffKey}::${dateKey}`;
           const tracker = trackerByKey.get(chainKey) || {
-            coords: { lat: clinicConfig.lat, lng: clinicConfig.lng },
-            originName: clinicConfig.name || 'Klinik',
+            coords: clinicCoords,
+            originName: clinicName,
             isFirst: true,
           };
           const lat = addr?.lat ?? c?.lat;
@@ -966,7 +971,7 @@ export class StaffReservationService {
             itineraryById.set(r.id, {
               distanceKm: addr?.distance_km ?? c?.distance_km ?? null,
               distanceSource: 'CLINIC',
-              originName: clinicConfig.name || 'Klinik',
+              originName: clinicName,
             });
             continue;
           }
@@ -988,7 +993,7 @@ export class StaffReservationService {
             itineraryById.set(r.id, {
               distanceKm: dist,
               distanceSource: 'CLINIC',
-              originName: clinicConfig.name || 'Klinik',
+              originName: clinicName,
             });
           } else {
             const straightKm = calculateHaversineDistance(tracker.coords, currentCoords);
@@ -1031,7 +1036,7 @@ export class StaffReservationService {
         const itinerary = itineraryById.get(r.id) || {
           distanceKm: cust?.distance_km ?? null,
           distanceSource: 'CLINIC' as const,
-          originName: clinicConfig.name || 'Klinik',
+          originName: clinicName,
         };
         const distanceKm = itinerary.distanceKm;
         const distanceSource = itinerary.distanceSource;
@@ -2182,7 +2187,9 @@ export class StaffReservationService {
           return { success: false, error: 'Koordinat GPS di luar wilayah Indonesia atau tidak valid.' };
         }
 
-        const clinicCoords = { lat: clinicConfig.lat, lng: clinicConfig.lng };
+        // S-08: titik & batas jangkauan klinik mengikuti tenant (bukan env global/45 km hardcode).
+        const clinicLoc = await getClinicLocationAsync(tenantId);
+        const clinicCoords = { lat: clinicLoc.lat, lng: clinicLoc.lng };
         const { deliveryService } = await import('./delivery.service');
         const deliveryResult = await deliveryService.calculateDelivery(
           { lat: targetLat, lng: targetLng },
@@ -2192,8 +2199,11 @@ export class StaffReservationService {
         distanceKm = deliveryResult.distanceKm;
         newOngkir = deliveryResult.promoPrice;
 
-        // Skema kroscek 1: Tolak jika jarak dari klinik melenceng > 45 km (di luar area Surabaya-Sidoarjo-Gresik)
-        const MAX_ALLOWED_DISTANCE_KM = 45;
+        // Skema kroscek 1: Tolak jika jarak dari klinik melampaui jangkauan tenant.
+        const MAX_ALLOWED_DISTANCE_KM =
+          Number.isFinite(clinicLoc.maxCoverageKm) && clinicLoc.maxCoverageKm > 0
+            ? clinicLoc.maxCoverageKm
+            : 45;
         if (distanceKm > MAX_ALLOWED_DISTANCE_KM) {
           return {
             success: false,

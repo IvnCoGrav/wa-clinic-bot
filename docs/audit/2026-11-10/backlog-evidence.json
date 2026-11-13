@@ -659,7 +659,7 @@
         {
           "type": "file",
           "path": "src/v3/agent/pipeline/phase-resolver.ts",
-          "line": 142,
+          "line": 141,
           "contains": "session.booking?.isConfirmed"
         },
         {
@@ -929,7 +929,7 @@
         {
           "type": "file",
           "path": "src/services/staff-reservation.service.ts",
-          "line": 2837,
+          "line": 2847,
           "contains": "belum diatur di Pengaturan Klinik"
         },
         {
@@ -1061,7 +1061,7 @@
         {
           "type": "file",
           "path": "src/services/staff-reservation.service.ts",
-          "line": 85,
+          "line": 84,
           "contains": "S-05: LTV TIDAK dikirim"
         },
         {
@@ -1169,7 +1169,7 @@
         {
           "type": "file",
           "path": "src/services/staff-reservation.service.ts",
-          "line": 1744,
+          "line": 1749,
           "contains": "Nominal pembayaran tidak sesuai tagihan resmi"
         },
         {
@@ -2241,6 +2241,162 @@
       ],
       "verifiedBy": "AI Agent",
       "verifiedAt": "2026-11-13"
+    },
+    "S-02": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "test",
+          "path": "tests/unit/staff-dashboard-hardening.test.ts",
+          "contains": "outbox memakai sessionStorage + TTL + tanpa gambar"
+        },
+        {
+          "type": "file",
+          "path": "packages/admin-dashboard/src/pages/staff/useStaffFailedOutbox.ts",
+          "line": 64,
+          "contains": "sessionStorage.setItem"
+        },
+        {
+          "type": "file",
+          "path": "packages/admin-dashboard/src/contexts/StaffAuthContext.tsx",
+          "line": 217,
+          "contains": "staff_failed_outbox_v2"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-13"
+    },
+    "S-06": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "test",
+          "path": "tests/unit/staff-dashboard-hardening.test.ts",
+          "contains": "warm-up hanya berjalan setelah consent eksplisit"
+        },
+        {
+          "type": "file",
+          "path": "packages/admin-dashboard/src/pages/staff/StaffToday.tsx",
+          "line": 599,
+          "contains": "staff_gps_warmup_consent_v1"
+        },
+        {
+          "type": "file",
+          "path": "packages/admin-dashboard/src/utils/geoUtils.ts",
+          "line": 470,
+          "contains": "departCache = null;"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-13"
+    },
+    "S-08": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "test",
+          "path": "tests/unit/staff-dashboard-hardening.test.ts",
+          "contains": "ambang jarak memakai jangkauan tenant"
+        },
+        {
+          "type": "file",
+          "path": "src/services/staff-reservation.service.ts",
+          "line": 2204,
+          "contains": "clinicLoc.maxCoverageKm"
+        },
+        {
+          "type": "file",
+          "path": "src/routes/staff/quick-replies.subroute.ts",
+          "line": 18,
+          "contains": "quickReply.findMany"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-13"
+    },
+    "S-09": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "test",
+          "path": "tests/unit/staff-dashboard-hardening.test.ts",
+          "contains": "kedatangan tidak mengklaim pesan terkirim"
+        },
+        {
+          "type": "file",
+          "path": "packages/admin-dashboard/src/pages/staff/StaffToday.tsx",
+          "line": 1618,
+          "contains": "arrivalWaSuppressed"
+        },
+        {
+          "type": "file",
+          "path": "packages/admin-dashboard/src/pages/staff/StaffLogin.tsx",
+          "line": 76,
+          "contains": "text-base"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-13"
+    },
+    "Cfg-015": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "test",
+          "path": "tests/unit/staff-dashboard-hardening.test.ts",
+          "contains": "Layout memakai brand tenant"
+        },
+        {
+          "type": "file",
+          "path": "packages/admin-dashboard/src/contexts/BrandContext.tsx",
+          "line": 57,
+          "contains": "useBrandIdentity"
+        },
+        {
+          "type": "file",
+          "path": "packages/admin-dashboard/src/components/common/Layout.tsx",
+          "line": 63,
+          "contains": "brandLabel"
+        },
+        {
+          "type": "file",
+          "path": "packages/admin-dashboard/src/utils/imageWatermark.ts",
+          "line": 21,
+          "contains": "brandText"
+        },
+        {
+          "type": "file",
+          "path": "packages/admin-dashboard/src/services/api.ts",
+          "line": 297,
+          "contains": "resolveTenantHeader"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-13"
+    },
+    "A-013": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/v3/agent/pipeline/phase-resolver.ts",
+          "line": 47,
+          "contains": "DICABUT secara fisik"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/v3/tool-masking-enforce.test.ts",
+          "contains": "DICABUT dari tools Call-1"
+        },
+        {
+          "type": "file",
+          "path": "src/config/feature-flags.ts",
+          "line": 18,
+          "contains": "isToolMaskingEnforced"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-13"
     }
   },
   "known": {
@@ -2259,6 +2415,18 @@
     "API-04": {
       "justification": "AdminSession belum punya tenant_id dan bergantung pada header x-tenant-id; diterima sementara untuk deployment single-tenant.",
       "acceptance": "Tambahkan tenant_id + verifikasi kepemilikan sebelum onboarding tenant kedua."
+    },
+    "SM-02": {
+      "justification": "Mekanisme data-driven sudah ada tetapi inert (0 pemanggil produksi), sehingga tidak dapat diverifikasi lewat perilaku.",
+      "acceptance": "Hapus dead code saat file disentuh berikutnya, atau sambungkan ke pemanggil nyata bila header form tenant diaktifkan."
+    },
+    "C-006": {
+      "justification": "Membutuhkan log RAG runtime produksi untuk membuktikan lisensi jawaban umum; tidak dapat diverifikasi offline.",
+      "acceptance": "Audit minimal 50 percakapan staging/produksi dengan RAG-miss; jika jawaban umum muncul untuk klaim klinis, cabut lisensi dan tambah gerbang grounding."
+    },
+    "C-002": {
+      "justification": "Membutuhkan dump DB produksi; kualitas korpus tidak dapat diverifikasi offline.",
+      "acceptance": "Dalam jendela staging: dump `KnowledgeChunk`, dedup & bersihkan cuplikan chat, lalu perbarui metadata jumlah artikel di dokumen."
     }
   },
   "duplicate": {

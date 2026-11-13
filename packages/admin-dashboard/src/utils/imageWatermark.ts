@@ -17,6 +17,8 @@ export interface WatermarkInfo {
   takerName?: string | null;
   staffName?: string | null;
   timestamp?: string;
+  /** Nama brand klinik dari data tenant (opsional; kosong = tanpa stamp brand). */
+  brandText?: string | null;
 }
 
 /**
@@ -117,14 +119,17 @@ export async function stampGpsWatermark(
 
       // Ukur lebar Clinic Brand Stamp terlebih dahulu untuk mencegah tabrakan dengan line1
       ctx.font = `bold ${brandFontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-      const brandText = 'KALA MOMS & BABY';
-      const brandWidth = ctx.measureText(brandText).width;
+      // Cfg-015: brand TIDAK hardcode; hanya dirender bila pemanggil mengirim brand tenant.
+      const brandText = (info.brandText || '').trim().toUpperCase();
+      const brandWidth = brandText ? ctx.measureText(brandText).width : 0;
       const textY1 = bannerY + bannerHeight * 0.36;
 
-      // Render Brand Stamp di kanan atas banner
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(brandText, width - brandWidth - paddingX, textY1);
+      // Render Brand Stamp di kanan atas banner (bila tersedia)
+      if (brandText) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(brandText, width - brandWidth - paddingX, textY1);
+      }
 
       // Line 1: Koordinat & Wilayah (Bold White) dengan Dynamic Clipping agar tidak menimpa brand
       const maxLine1Width = Math.max(100, width - brandWidth - (paddingX * 2.8));
