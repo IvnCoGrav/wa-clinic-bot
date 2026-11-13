@@ -53,12 +53,12 @@ describe('Adversarial & Regression: syncActiveReservationsForCustomer (seam kano
     return { customer, card };
   }
 
-  it('1. Rumah sama dikoreksi saat ada reservasi aktif → relink ke kartu terkoreksi + snapshot ongkir', async () => {
+  it('1. Reservasi TANPA kartu → diisi kartu terkoreksi + snapshot ongkir', async () => {
     const phone = nextPhone();
     const { customer, card } = await makeCustomerWithHouse1(phone);
 
     reservationFindMany.mockResolvedValue([
-      { id: 'res-active-1', tenant_id: TENANT, customer_id: customer.id, status: 'confirmed', booking_date: futureDate(), customer_address_id: 'OLD-ADDR-ID', delivery_fee: 9999 },
+      { id: 'res-active-1', tenant_id: TENANT, customer_id: customer.id, status: 'confirmed', booking_date: futureDate(), customer_address_id: null, delivery_fee: null, customer_address: null },
     ]);
 
     const res = await syncActiveReservationsForCustomer({ tenantId: TENANT, customerId: customer.id });
@@ -71,13 +71,38 @@ describe('Adversarial & Regression: syncActiveReservationsForCustomer (seam kano
     expect(call.data.delivery_fee).toBe(15000);
   });
 
+  it('1b. Reservasi SUDAH punya kartu → tautan tidak diubah; ongkir diselaraskan dari kartu sendiri', async () => {
+    const phone = nextPhone();
+    const { customer, card } = await makeCustomerWithHouse1(phone);
+
+    reservationFindMany.mockResolvedValue([
+      {
+        id: 'res-card-1',
+        tenant_id: TENANT,
+        customer_id: customer.id,
+        status: 'confirmed',
+        booking_date: futureDate(),
+        customer_address_id: card?.id,
+        customer_address: { id: card?.id, ongkir: 15000 },
+        delivery_fee: 9999,
+      },
+    ]);
+
+    const res = await syncActiveReservationsForCustomer({ tenantId: TENANT, customerId: customer.id });
+
+    expect(res.synced).toBe(1);
+    const data = reservationUpdate.mock.calls[0][0].data;
+    expect(data.customer_address_id).toBeUndefined();
+    expect(data.delivery_fee).toBe(15000);
+  });
+
   it('2. Status kanon (hold & pending) dalam jendela aktif ikut tersinkron', async () => {
     const phone = nextPhone();
     const { customer, card } = await makeCustomerWithHouse1(phone);
 
     reservationFindMany.mockResolvedValue([
-      { id: 'res-hold', tenant_id: TENANT, customer_id: customer.id, status: 'hold', booking_date: futureDate(), customer_address_id: 'OLD', delivery_fee: null },
-      { id: 'res-pending', tenant_id: TENANT, customer_id: customer.id, status: 'pending', booking_date: null, customer_address_id: 'OLD2', delivery_fee: null },
+      { id: 'res-hold', tenant_id: TENANT, customer_id: customer.id, status: 'hold', booking_date: futureDate(), customer_address_id: null, delivery_fee: null, customer_address: null },
+      { id: 'res-pending', tenant_id: TENANT, customer_id: customer.id, status: 'pending', booking_date: null, customer_address_id: null, delivery_fee: null, customer_address: null },
     ]);
 
     const res = await syncActiveReservationsForCustomer({ tenantId: TENANT, customerId: customer.id });
@@ -105,7 +130,7 @@ describe('Adversarial & Regression: syncActiveReservationsForCustomer (seam kano
     expect(reservationUpdate).not.toHaveBeenCalled();
   });
 
-  it('4. Dua rumah sah → relink hanya ke kartu yang cocok, TIDAK mencampur koordinat', async () => {
+  it('4. Dua rumah sah → reservasi eksplisit di Rumah 1 TIDAK direlink saat root pindah ke Rumah 2', async () => {
     const phone = nextPhone();
     const created: any = await customerService.getOrCreateCustomer(phone, 'Bunda Dua Rumah', TENANT);
 
@@ -118,7 +143,7 @@ describe('Adversarial & Regression: syncActiveReservationsForCustomer (seam kano
       lat: -7.4255, lng: 112.7214, distanceKm: 18.0, ongkir: 22000,
     }, TENANT);
 
-    // Root pelanggan sekarang = Rumah 2 (Buduran) — tanam ke referensi LIVE repo.
+    // Root pelanggan sekarang = Rumah 2 (Buduran).
     const customer: any = await customerService.getCustomerById(created.id, TENANT);
     Object.assign(customer, {
       address: 'Perum Buduran Indah Blok B-5',
@@ -132,19 +157,71 @@ describe('Adversarial & Regression: syncActiveReservationsForCustomer (seam kano
     });
 
     reservationFindMany.mockResolvedValue([
-      { id: 'res-r2', tenant_id: TENANT, customer_id: customer.id, status: 'confirmed', booking_date: futureDate(), customer_address_id: rumah1?.id, delivery_fee: 15000 },
+      {
+        id: 'res-r2',
+        tenant_id: TENANT,
+        customer_id: customer.id,
+        status: 'confirmed',
+        booking_date: futureDate(),
+        customer_address_id: rumah1?.id,
+        customer_address: { id: rumah1?.id, ongkir: 15000 },
+        delivery_fee: 15000,
+      },
+    ]);
+
+    const res = await syncActiveReservationsForCustomer({ tenantId: TENANT, customerId: customer.id });
+
+    // Fill-only: kartu eksplisit dipertahankan, ongkir tidak diambil dari root Rumah 2.
+    expect(res.synced).toBe(0);
+    expect(reservationUpdate).not.toHaveBeenCalled();
+    const all = await customerService.getSavedAddresses(customer.id, TENANT);
+    expect(all).toHaveLength(2);
+  });
+
+  it('4b. Kartu eksplisit dengan ongkir berbeda dari root → fee dari kartu, bukan root', async () => {
+    const phone = nextPhone();
+    const created: any = await customerService.getOrCreateCustomer(phone, 'Bunda Dua Rumah Fee', TENANT);
+
+    const rumah1 = await customerService.upsertSavedAddress(created.id, {
+      address: 'Jl. Melati No. 12', kelurahan: 'Grogol', kecamatan: 'Tulangan', kota: 'Sidoarjo',
+      lat: -7.4812, lng: 112.6521, distanceKm: 12.5, ongkir: 15000, isPrimary: true,
+    }, TENANT);
+    await customerService.upsertSavedAddress(created.id, {
+      address: 'Perum Buduran Indah Blok B-5', kelurahan: 'Buduran', kecamatan: 'Buduran', kota: 'Sidoarjo',
+      lat: -7.4255, lng: 112.7214, distanceKm: 18.0, ongkir: 22000,
+    }, TENANT);
+
+    const customer: any = await customerService.getCustomerById(created.id, TENANT);
+    Object.assign(customer, {
+      address: 'Perum Buduran Indah Blok B-5',
+      kelurahan: 'Buduran',
+      kecamatan: 'Buduran',
+      kota: 'Sidoarjo',
+      lat: -7.4255,
+      lng: 112.7214,
+      distance_km: 18.0,
+      ongkir: 22000,
+    });
+
+    reservationFindMany.mockResolvedValue([
+      {
+        id: 'res-r2-fee',
+        tenant_id: TENANT,
+        customer_id: customer.id,
+        status: 'confirmed',
+        booking_date: futureDate(),
+        customer_address_id: rumah1?.id,
+        customer_address: { id: rumah1?.id, ongkir: 15000 },
+        delivery_fee: 9999,
+      },
     ]);
 
     const res = await syncActiveReservationsForCustomer({ tenantId: TENANT, customerId: customer.id });
 
     expect(res.synced).toBe(1);
-    const call = reservationUpdate.mock.calls[0][0];
-    expect(call.data.customer_address_id).toBe(rumah2?.id);
-    expect(call.data.customer_address_id).not.toBe(rumah1?.id);
-
-    // Tidak ada Rumah 3 (tidak mencampur)
-    const all = await customerService.getSavedAddresses(customer.id, TENANT);
-    expect(all).toHaveLength(2);
+    const data = reservationUpdate.mock.calls[0][0].data;
+    expect(data.customer_address_id).toBeUndefined();
+    expect(data.delivery_fee).toBe(15000);
   });
 
   it('5. Idempoten: tautan & ongkir sudah benar → tidak ada update', async () => {
@@ -152,7 +229,16 @@ describe('Adversarial & Regression: syncActiveReservationsForCustomer (seam kano
     const { customer, card } = await makeCustomerWithHouse1(phone);
 
     reservationFindMany.mockResolvedValue([
-      { id: 'res-same', tenant_id: TENANT, customer_id: customer.id, status: 'confirmed', booking_date: futureDate(), customer_address_id: card?.id, delivery_fee: 15000 },
+      {
+        id: 'res-same',
+        tenant_id: TENANT,
+        customer_id: customer.id,
+        status: 'confirmed',
+        booking_date: futureDate(),
+        customer_address_id: card?.id,
+        customer_address: { id: card?.id, ongkir: 15000 },
+        delivery_fee: 15000,
+      },
     ]);
 
     const res = await syncActiveReservationsForCustomer({ tenantId: TENANT, customerId: customer.id });
@@ -177,7 +263,7 @@ describe('Adversarial & Regression: syncActiveReservationsForCustomer (seam kano
     const spy = vi.spyOn(auditService, 'logAdminAction').mockResolvedValue(undefined as any);
 
     reservationFindMany.mockResolvedValue([
-      { id: 'res-audit', tenant_id: TENANT, customer_id: customer.id, status: 'confirmed', booking_date: futureDate(), customer_address_id: 'OLD', delivery_fee: 9999 },
+      { id: 'res-audit', tenant_id: TENANT, customer_id: customer.id, status: 'confirmed', booking_date: futureDate(), customer_address_id: null, customer_address: null, delivery_fee: null },
     ]);
 
     await syncActiveReservationsForCustomer({ tenantId: TENANT, customerId: customer.id });

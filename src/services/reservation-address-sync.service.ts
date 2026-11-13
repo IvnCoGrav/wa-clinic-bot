@@ -14,6 +14,13 @@
  *
  * Deterministik & idempoten: hanya mengubah reservasi aktif yang tautannya /
  * snapshot ongkirnya benar-benar berbeda. Tidak pernah menggagalkan pemanggil.
+ *
+ * Kebijakan A-015 (2026-11-13): FILL-ONLY. Reservasi yang SUDAH punya
+ * `customer_address_id` DILARANG direlink otomatis ke alamat root baru —
+ * termasuk saat customer pindah rumah. Tautan eksplisit adalah kesepakatan
+ * booking. Yang boleh diselaraskan hanya `delivery_fee` dari kartu yang sama;
+ * reservasi tanpa kartu boleh diisi kartu root. Relink manual tetap mungkin
+ * lewat aksi admin eksplisit.
  */
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
@@ -45,6 +52,9 @@ export async function syncActiveReservationsForCustomer(params: {
           customer_id: customerId,
           status: { in: ACTIVE_RESERVATION_STATUSES },
         },
+        include: {
+          customer_address: { select: { id: true, ongkir: true } },
+        },
       });
     } catch {
       return { synced: 0 };
@@ -68,21 +78,46 @@ export async function syncActiveReservationsForCustomer(params: {
     };
 
     const targetId = await resolveCustomerAddressId({ tenantId, customerId, candidate });
-    if (!targetId) return { synced: 0 };
-
-    const feeSnapshot = typeof candidate.ongkir === 'number' ? candidate.ongkir : null;
+    const targetFee = typeof candidate.ongkir === 'number' ? candidate.ongkir : null;
 
     let synced = 0;
     for (const r of active) {
-      const linkChanged = (r.customer_address_id || null) !== targetId;
-      const feeChanged = feeSnapshot != null && r.delivery_fee !== feeSnapshot;
-      if (!linkChanged && !feeChanged) continue;
+      // FILL-ONLY: tautan yang sudah ada adalah kesepakatan booking. Jangan
+      // pernah menggantinya ke alamat root baru secara otomatis.
+      if (r.customer_address_id) {
+        const cardFee = typeof (r as any).customer_address?.ongkir === 'number'
+          ? (r as any).customer_address.ongkir
+          : null;
+        const feeChanged = cardFee != null && r.delivery_fee !== cardFee;
+        if (!feeChanged) continue;
+        try {
+          await prisma.reservation.update({
+            where: { id: r.id },
+            data: { delivery_fee: cardFee },
+          });
+          synced++;
+        } catch (e: any) {
+          console.warn(JSON.stringify({
+            event: 'ADDR_SYNC_RESERVATION_FAILED',
+            tenantId,
+            customerId,
+            reservationId: r.id,
+            targetAddressId: r.customer_address_id,
+            mode: 'fee_only_existing_card',
+            error: e?.message || String(e),
+            timestamp: new Date().toISOString(),
+          }));
+        }
+        continue;
+      }
+
+      if (!targetId) continue;
       try {
         await prisma.reservation.update({
           where: { id: r.id },
           data: {
             customer_address_id: targetId,
-            ...(feeSnapshot != null ? { delivery_fee: feeSnapshot } : {}),
+            ...(targetFee != null ? { delivery_fee: targetFee } : {}),
           },
         });
         synced++;
@@ -111,7 +146,7 @@ export async function syncActiveReservationsForCustomer(params: {
             adminIdentity: 'SYSTEM_ADDR_SYNC',
             action: 'ACTIVE_RESERVATION_LOCATION_SYNCED',
             targetId: customerId,
-            payload: { customerId, targetAddressId: targetId, synced },
+            payload: { customerId, targetAddressId: targetId, synced, policy: 'fill_only' },
             tenantId,
           } as any)
           .catch(() => {});
