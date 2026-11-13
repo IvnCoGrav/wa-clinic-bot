@@ -1,7 +1,7 @@
 # Plan 002 — Perbaikan UI/UX Lanjutan (sisa audit 2026-11-11)
 
 Dasar: audit baca-saja 2026-11-11 (`docs/KNOWN_ISSUES.md`, blok "Audit UI/UX ulang").
-Sifat: rencana bertahap. **Fase 1, 2, 3, 5, 6, 8 SELESAI (2026-11-12)**; Fase 7 irisan 1-20 SELESAI (StaffToday 3.622, TodayTreatments 1.075, Reservations 1.371, LiveChatMessagePane 1.474, StaffManagement 1.350, FollowUpQueue 1.312, CustomerDatabase 1.462 baris); Fase 4 SELESAI (shell `ui/Modal`; 2 dialog internal tetap custom, diuji browser); Fase 9 belum dieksekusi.
+Sifat: rencana bertahap. **Fase 1, 2, 3, 5, 6, 8 SELESAI (2026-11-12)**; Fase 7 irisan 1-21 SELESAI (StaffToday 3.498, TodayTreatments 1.075, Reservations 1.371, LiveChatMessagePane 1.474, StaffManagement 1.350, FollowUpQueue 1.312, CustomerDatabase 1.462 baris); Fase 4 SELESAI (shell `ui/Modal`; 2 dialog internal tetap custom, diuji browser); Fase 9 belum dieksekusi.
 Status eksekusi per fase dicatat di akhir tiap bagian (`Status:`).
 
 Aturan main setiap fase:
@@ -433,6 +433,12 @@ Gerbang irisan 1-6: `tsc --noEmit` 0, `npm run build` 0, `check:design` hijau, a
 - `pages/staff/useStaffFailedOutbox.ts` (baru): state outbox, persistensi localStorage, pemulihan saat mount, dan coba kirim ulang.
 - `StaffToday.tsx`: **3.708 → 3.622 baris**.
 - Gerbang: `tsc --noEmit` 0 (diverifikasi di worktree terpisah `plan-002-staff-hooks`), `npm run build` 0, a11y 295.
+
+**Irisan 21: `StaffToday` hook kirim chat (2026-11-13).**
+
+- `pages/staff/useStaffChatSend.ts` (baru): teks balasan, lampiran gambar, kirim optimistis, dan pencatatan outbox gagal.
+- `StaffToday.tsx`: **3.622 → 3.498 baris**.
+- Gerbang: `tsc --noEmit` 0, `npm run build` 0, a11y 295 (worktree `plan-002-staff-hooks`).
 
 **Sisa Fase 7 (belum selesai, jangan diklaim selesai):**
 
