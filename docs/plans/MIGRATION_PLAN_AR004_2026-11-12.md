@@ -199,7 +199,7 @@ Baseline verifikasi = commit `f306d6af^` (tepat sebelum migrasi Ar-004 pertama).
 | 3 | `20261113120000_add_reservation_heatmap_index` | index `reservations(tenant_id, status, booking_date)` | aditif, mempercepat analitik heatmap |
 | 4 | `20261113120000_api04_admin_session_tenant` | kolom `admin_sessions.tenant_id` (NOT NULL, default `default-tenant`) + index | sesi lama otomatis `default-tenant`; tenant jadi otoritas server |
 
-**Bukti verifikasi terpadu:** [`docs/audit/2026-11-13/MIGRATION_VERIFY_W18.log`](../audit/2026-11-13/MIGRATION_VERIFY_W18.log) — Postgres 16 ephemeral, database terpisah `migverify_w18` (dibuat & dihapus dalam run; tidak menyentuh DB dev/produksi).
+**Bukti verifikasi terpadu:** [`docs/audit/2026-11-13/MIGRATION_VERIFY_W18.md`](../audit/2026-11-13/MIGRATION_VERIFY_W18.md) — Postgres 16 ephemeral, database terpisah `migverify_w18` (dibuat & dihapus dalam run; tidak menyentuh DB dev/produksi).
 
 | Uji | Hasil |
 |---|---|

@@ -56,6 +56,6 @@ Semua temuan sudah tertutup. Yang tersisa hanya **penerapan migrasi pending** di
 3. Drift check: `npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script` → harus `-- This is an empty migration.`
 4. Deploy kode **setelah** migrasi (Prisma upsert membutuhkan index komposit; `admin_sessions.tenant_id` dipakai API-04).
 
-Verifikasi terpadu (Postgres 16 ephemeral, deploy 4 migrasi + drift + uji constraint): `docs/audit/2026-11-13/MIGRATION_VERIFY_W18.log` → **PASS**.
+Verifikasi terpadu (Postgres 16 ephemeral, deploy 4 migrasi + drift + uji constraint): `docs/audit/2026-11-13/MIGRATION_VERIFY_W18.md` → **PASS**.
 Dokumen rencana + rollback: `docs/plans/MIGRATION_PLAN_AR004_2026-11-12.md` (§8).
 Batas & tech debt: `docs/KNOWN_ISSUES.md`. Peta fitur: `docs/FEATURE_INVENTORY.md`.
