@@ -5,8 +5,9 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 674
+Total entri terindeks: 675
 
+- 2026-11-14 | Fix: Pembukaan Cakupan Izin Operasional ADMIN_CS & SPV_CS (Katalog Treatment & Form Reserv
 - 2026-11-08 | Dekomposisi Seluruh God Object Backend (Fase 2: Cleanup Plan 2026-11-08)
 - 2026-11-08 | Pembersihan Dead Code & Fitur Deprecated (Fase 1: Cleanup Plan 2026-11-08)
 - 2026-11-08 | AI Copilot: Sesi 2 Hari, Reset, Indikator Status & UX Mobile (Fase 0–5 + Audit Hardening)

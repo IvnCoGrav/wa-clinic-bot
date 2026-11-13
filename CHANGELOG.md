@@ -4,6 +4,16 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-14 - Fix: Pembukaan Cakupan Izin Operasional ADMIN_CS & SPV_CS (Katalog Treatment & Form Reservasi)
+
+- **Masalah**: Staf dengan peran `ADMIN_CS` (seperti Bidan Yusi) mengalami kendala daftar treatment/layanan kosong saat hendak memilih treatment pada form reservasi dan live chat. Server menolak permintaan dengan status 403 Forbidden: `[RBAC SCOPE GUARD] Blocked 'ADMIN_CS' on GET /api/admin/services (no matching role_api_scopes row)`. Hal ini terjadi pasca pengetatan keamanan berbasis data-driven scope (fail-closed) di mana baris izin baca katalog layanan belum diikutsertakan.
+- **Akar Masalah**: Migrasi `20261108000000_seed_system_role_scopes` belum mendaftarkan endpoint `/api/admin/services` dan beberapa dependensi form reservasi lainnya (`/api/admin/staff`, `/api/admin/delivery-tiers`, `/api/admin/geo/areas`, `/api/admin/labels`, `/api/admin/quick-replies`, dll.) untuk peran sistem non-Super Admin (`admin_cs` dan `spv_cs`).
+- **Perubahan Utama**:
+  1. **Migrasi Database (`20261114000000_add_admin_cs_spv_cs_operational_scopes`)**: Menambahkan baris cakupan izin baca (`GET`) untuk peran `admin_cs` dan `spv_cs` pada endpoint katalog treatment (`/api/admin/services`), tarif pengiriman (`/api/admin/delivery-tiers`), daftar staf (`/api/admin/staff`), wilayah (`/api/admin/geo/areas`), antrean CAPI (`/api/admin/capi-queue`), kapabilitas gateway (`/api/admin/gateway-capability`), health status (`/api/admin/health`), artikel knowledge base (`/api/admin/knowledge`), serta izin penuh (`*`) untuk `reservation-series`, `labels`, dan `quick-replies`.
+  2. **Eksekusi Langsung di Live Server**: Menjalankan penambahan izin ke tabel `role_api_scopes` dan mencatat migrasi di database server produksi. Verifikasi langsung dengan sesi autentikasi Bidan Yusi mengembalikan status HTTP 200 dengan 41 katalog layanan aktif.
+  3. **Unit Test Regresi (`tests/unit/rbac-scope-fail-closed.test.ts`)**: Menambahkan pengetesan untuk memastikan peran `admin_cs` diizinkan mengakses resource operasional harian.
+- **Verifikasi**: `npm run build` (`tsc`) lolos (exit 0); pengujian Vitest unit test scope lulus; pengujian langsung endpoint via staff session Bidan Yusi di live server mengembalikan HTTP 200 dan 41 data katalog layanan.
+
 #### 2026-11-08 - Dekomposisi Seluruh God Object Backend (Fase 2: Cleanup Plan 2026-11-08)
 
 - **Latar Belakang**: Eksekusi penuh Fase 2 dari `docs/plans/CLEANUP_PLAN_DEADCODE_SPAGHETTI_2026-11-08.md` untuk mengeliminasi seluruh file raksasa (*God Object*) di backend (`src/**/*.ts`) yang berukuran > 1.500 baris kode menjadi modul domain-driven terisolasi, meningkatkan modularitas dan maintainability tanpa breaking change.

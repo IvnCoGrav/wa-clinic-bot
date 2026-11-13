@@ -36,4 +36,22 @@ describe('RBAC Scope Fail-Closed & Allow-List (Task 0.2)', () => {
     const deniedMethodDecision = await isApiScopeAllowed(tenantId, 'scoped_role', '/api/admin/services', 'POST');
     expect(deniedMethodDecision.allowed).toBe(false);
   });
+
+  it('should allow operational endpoints (services, staff, delivery-tiers) for admin_cs', async () => {
+    (prisma as any).roleApiScope = {
+      findMany: vi.fn().mockResolvedValue([
+        { api_prefix: '/api/admin/services', methods: 'GET' },
+        { api_prefix: '/api/admin/staff', methods: 'GET' },
+        { api_prefix: '/api/admin/delivery-tiers', methods: 'GET' },
+      ]),
+    };
+
+    const s1 = await isApiScopeAllowed(tenantId, 'admin_cs', '/api/admin/services', 'GET');
+    const s2 = await isApiScopeAllowed(tenantId, 'admin_cs', '/api/admin/staff', 'GET');
+    const s3 = await isApiScopeAllowed(tenantId, 'admin_cs', '/api/admin/delivery-tiers', 'GET');
+
+    expect(s1.allowed).toBe(true);
+    expect(s2.allowed).toBe(true);
+    expect(s3.allowed).toBe(true);
+  });
 });
