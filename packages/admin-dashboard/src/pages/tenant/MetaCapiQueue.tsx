@@ -1,6 +1,10 @@
+// Catatan kontrak error: catch kosong di halaman ini adalah pembacaan URL
+// (landing page, fbclid) untuk tampilan pratinjau. URL tidak valid cukup
+// ditampilkan apa adanya; tidak ada data yang dikirim balik ke server.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
+import { Modal } from '../../components/ui/Modal';
 import {
   ShieldAlert,
   Target,
@@ -21,6 +25,8 @@ import {
   Send,
   CheckCircle2,
 } from 'lucide-react';
+import { formatRupiah } from '../../utils/money';
+import { formatWib } from '../../utils/dateWib';
 
 interface QueueItem {
   id: string;
@@ -65,17 +71,12 @@ interface QueueItem {
   metaDropRisk: boolean;
 }
 
-const formatRupiah = (val: number | null | undefined) => {
-  if (val == null || isNaN(val) || val <= 0) return '—';
-  return 'Rp ' + Math.round(val).toLocaleString('id-ID');
-};
-
 const formatDateTime = (iso: string | null | undefined) => {
-  if (!iso) return '—';
+  if (!iso) return '-';
   try {
-    return new Date(iso).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
+    return formatWib(iso, { dateStyle: 'medium', timeStyle: 'short' });
   } catch {
-    return '—';
+    return '-';
   }
 };
 
@@ -84,19 +85,19 @@ const statusBadge = (s: string | null | undefined) => {
     case 'approved':
       return (
         <span className="px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 text-emerald-800 dark:text-accent text-xs font-bold whitespace-nowrap" title="Event terkirim ke Meta CAPI">
-          🟢 Terkirim
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-600 dark:bg-accent mr-1.5" aria-hidden="true" />Terkirim
         </span>
       );
     case 'ignored_outlier':
       return (
         <span className="px-2.5 py-1 rounded-full bg-rose-100 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/40 text-rose-800 dark:text-danger text-xs font-bold whitespace-nowrap" title="Event diabaikan sebagai outlier, tidak dikirim ke Meta">
-          🔴 Outlier
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-rose-600 dark:bg-danger mr-1.5" aria-hidden="true" />Outlier
         </span>
       );
     default:
       return (
         <span className="px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 text-amber-800 dark:text-warning text-xs font-bold whitespace-nowrap" title="Menunggu keputusan admin">
-          🟡 Pending Review
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 dark:bg-warning mr-1.5" aria-hidden="true" />Pending Review
         </span>
       );
   }
@@ -139,7 +140,7 @@ const attributionBadge = (attribution: QueueItem['attribution'], utm?: QueueItem
 
 const utmText = (u: QueueItem['utm']) => {
   const parts = [u.campaign, u.source, u.medium].filter(Boolean);
-  return parts.length ? parts.join(' / ') : '—';
+  return parts.length ? parts.join(' / ') : '-';
 };
 
 const customerTypeBadge = (item: QueueItem) => {
@@ -201,7 +202,7 @@ export function isPlaceholderTreatment(str: string): boolean {
  * Membersihkan format treatment dari durasi [xxm], kurung bayi/anak, dan menyusunnya menjadi daftar bersih bernomor
  */
 export function cleanTreatmentList(detail: string): string[] {
-  if (!detail || detail === '—') return [];
+  if (!detail || detail === '-') return [];
 
   // Hapus tag durasi seperti [90m] dan seluruh isi dalam kurung (Bayi: ..., Usia: ...)
   let cleaned = detail.replace(/\[[^\]]*\]/g, '').replace(/\([^)]*\)/g, '');
@@ -609,7 +610,7 @@ export const MetaCapiQueue: React.FC = () => {
       } else if (res?.skipped) {
         toast(res.note || `Event ${eventName} disetujui (CAPI repeat order difilter untuk melindungi CAC).`, 'info');
       } else if (res?.warning) {
-        toast(`⚠️ ${res.warning}`, 'info');
+        toast(`${res.warning}`, 'info');
       } else {
         toast(`Event ${eventName} disetujui & dikirim ke Meta CAPI.`, 'success');
       }
@@ -709,10 +710,10 @@ export const MetaCapiQueue: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface p-5 rounded-2xl border border-divider shadow-xs">
         <div>
-          <h2 className="text-xl font-bold text-ink flex items-center gap-2">
+          <h1 className="text-xl font-bold text-ink flex items-center gap-2">
             <Target className="text-accent" size={24} />
             <span>Meta CAPI Queue</span>
-          </h2>
+          </h1>
           <p className="text-xs text-ink-3 mt-0.5">
             Review &amp; kirim event Purchase dan Lead ke Meta CAPI sebelum kedaluwarsa (7 hari).
           </p>
@@ -794,8 +795,8 @@ export const MetaCapiQueue: React.FC = () => {
             className="bg-white dark:bg-divider border border-divider rounded-xl px-3 py-2 text-xs text-ink focus:outline-none focus:border-accent shadow-xs"
           >
             <option value="all">Semua Tipe Event</option>
-            <option value="purchase">🛒 Purchase (Transaksi)</option>
-            <option value="lead">🎯 Lead (Prospek MQL)</option>
+            <option value="purchase">Purchase (Transaksi)</option>
+            <option value="lead">Lead (Prospek MQL)</option>
           </select>
           <select
             value={filterCustomerType}
@@ -803,8 +804,8 @@ export const MetaCapiQueue: React.FC = () => {
             className="bg-white dark:bg-divider border border-divider rounded-xl px-3 py-2 text-xs text-ink focus:outline-none focus:border-accent shadow-xs"
           >
             <option value="all">Semua Tipe Order</option>
-            <option value="new">✨ Pasien Baru</option>
-            <option value="repeat">🔁 Repeat Order</option>
+            <option value="new">Pasien Baru</option>
+            <option value="repeat">Repeat Order</option>
           </select>
           <select
             value={filterStatus}
@@ -919,9 +920,9 @@ export const MetaCapiQueue: React.FC = () => {
                       {/* 4. UTM */}
                       <td className="py-3.5 px-4 align-top">
                         <div className="text-xs text-ink max-w-[150px] truncate">{utmText(item.utm)}</div>
-                        {item.attribution.isPaid && !utmText(item.utm).includes('—') && (
+                        {item.attribution.isPaid && utmText(item.utm) !== '-' && (
                           <div className="text-[10px] text-ink-3 mt-0.5 truncate max-w-[150px]">
-                            {item.attribution.landingUrl || '—'}
+                            {item.attribution.landingUrl || '-'}
                           </div>
                         )}
                       </td>
@@ -978,7 +979,7 @@ export const MetaCapiQueue: React.FC = () => {
                             <button
                               onClick={() => handleReject(item)}
                               className="flex items-center justify-center space-x-1 px-3 py-1 rounded-lg bg-white dark:bg-transparent hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-divider hover:border-rose-200 dark:hover:border-rose-800/40 text-ink-2 hover:text-rose-600 dark:hover:text-rose-300 text-xs font-semibold transition shadow-xs whitespace-nowrap cursor-pointer"
-                              title="Tandai sebagai outlier — event TIDAK dikirim ke Meta"
+                              title="Tandai sebagai outlier: event TIDAK dikirim ke Meta"
                             >
                               <X size={12} />
                               <span>Abaikan</span>
@@ -1183,43 +1184,23 @@ export const MetaCapiQueue: React.FC = () => {
         const isPending = selectedJsonItem.purchase_review_status === 'pending';
 
         return (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-            <div className="bg-surface w-full max-w-3xl rounded-t-3xl sm:rounded-2xl shadow-2xl border border-divider overflow-hidden flex flex-col max-h-[90dvh] sm:max-h-[90vh] animate-slideUp sm:animate-modalScaleUp">
-              {/* Mobile Drag Handle */}
-              <div className="pt-2 pb-1 bg-surface-2 dark:bg-surface-2 sm:hidden flex justify-center shrink-0">
-                <div className="w-10 h-1 bg-divider dark:bg-divider rounded-full" />
-              </div>
-
-              {/* Modal Header */}
-              <div className="flex items-center justify-between px-5 py-3.5 border-b border-divider bg-surface-2 dark:bg-surface-2">
-                <div className="flex items-center space-x-2.5">
-                  <div className={`p-2 rounded-xl border ${isEditingJson ? 'bg-warning-soft text-warning border-warning-line' : 'bg-accent-soft text-accent border-divider'}`}>
-                    {isEditingJson ? <Pencil size={18} /> : <Code2 size={18} />}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-bold text-ink">
-                        {isEditingJson ? 'Edit Meta CAPI Payload' : 'Meta Graph API CAPI Payload'}
-                      </h3>
-                      {isCustom && !isEditingJson && (
-                        <span className="px-2 py-0.5 rounded-md bg-warning-soft text-warning border border-warning-line text-[10px] font-bold flex items-center gap-1">
-                          <Pencil size={10} /> Custom Payload
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-ink-3 dark:text-ink-2">
-                      Event: <span className="font-bold text-accent">{selectedJsonItem.eventType || 'Purchase'}</span> • Pasien: <span className="font-bold text-ink">{selectedJsonItem.customer.name}</span>
-                    </p>
-                    {Boolean(selectedJsonItem.attribution.ctwa_clid) && !wabaConfigured && (
-                      <p className="mt-1 text-[10px] font-semibold text-amber-700 dark:text-warning flex items-center gap-1">
-                        <AlertTriangle size={11} />
-                        WABA Business Account ID belum dikonfigurasi — event dikirim sebagai action_source 'chat' (envelope business_messaging tidak lengkap).
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Header Action Buttons */}
+          <Modal
+            open
+            onClose={() => {
+              setSelectedJsonItem(null);
+              setIsEditingJson(false);
+            }}
+            variant="sheet"
+            size="xl"
+            bodyClassName="p-0 overflow-hidden flex-1 flex flex-col min-h-0"
+            title={
+              <span className="flex items-center gap-2">
+                {isEditingJson ? <Pencil size={18} className="text-warning" aria-hidden="true" /> : <Code2 size={18} className="text-accent" aria-hidden="true" />}
+                <span>{isEditingJson ? 'Edit Meta CAPI Payload' : 'Meta Graph API CAPI Payload'}</span>
+              </span>
+            }
+            subtitle={`Event: ${selectedJsonItem.eventType || 'Purchase'} • Pasien: ${selectedJsonItem.customer.name}`}
+            headerAction={
                 <div className="flex items-center space-x-2">
                   {!isEditingJson ? (
                     <button
@@ -1261,28 +1242,17 @@ export const MetaCapiQueue: React.FC = () => {
                       <button
                         onClick={handleSaveEditedJson}
                         disabled={!!jsonParseError}
-                        className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-accent hover:bg-accent disabled:opacity-50 text-white text-xs font-bold transition shadow-xs cursor-pointer"
+                        className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-accent hover:bg-accent disabled:opacity-50 text-on-solid text-xs font-bold transition shadow-xs cursor-pointer"
                       >
                         <Save size={13} />
                         <span>Simpan</span>
                       </button>
                     </>
                   )}
-                  <button
-                    onClick={() => {
-                      setSelectedJsonItem(null);
-                      setIsEditingJson(false);
-                    }}
-                    aria-label="Tutup modal"
-                    className="text-ink-3 hover:text-ink p-1.5 rounded-xl hover:bg-fill-2 transition cursor-pointer ml-1"
-                  >
-                    <X size={18} />
-                  </button>
                 </div>
-              </div>
-
-              {/* Modal Body: JSON Viewer / Editor */}
-              <div className="p-4 flex-1 overflow-y-auto bg-app text-ink-3 font-mono text-xs flex flex-col min-h-[350px]">
+            }
+          >
+                <div className="p-4 flex-1 overflow-y-auto bg-app text-ink-3 font-mono text-xs flex flex-col min-h-[350px]">
                 {isEditingJson ? (
                   <div className="flex flex-col flex-1">
                     <textarea
@@ -1337,6 +1307,7 @@ export const MetaCapiQueue: React.FC = () => {
 
                   {isPending && (
                     <button
+                      aria-label="Setujui dan kirim payload ini ke Meta CAPI"
                       onClick={handleApproveFromModal}
                       className="flex items-center space-x-1.5 px-4 py-2 bg-accent hover:bg-accent-hover text-accent-ink text-xs font-bold rounded-xl transition shadow-xs cursor-pointer"
                       title="Setujui dan kirim payload ini ke Meta CAPI"
@@ -1357,8 +1328,7 @@ export const MetaCapiQueue: React.FC = () => {
                   </button>
                 </div>
               </div>
-            </div>
-          </div>
+            </Modal>
         );
       })()}
 

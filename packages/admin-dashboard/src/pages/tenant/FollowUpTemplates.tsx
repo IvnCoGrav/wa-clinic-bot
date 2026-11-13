@@ -60,82 +60,82 @@ const TYPE_CONFIG: Record<string, { label: string; category: string; description
     description: 'Menanyakan kenyamanan dan kebugaran bunda pasca prenatal / postnatal treatment.',
   },
   NO_PURCHASE_1: {
-    label: 'Follow-Up Belum Reservasi — Hari ke-3',
+    label: 'Follow-Up Belum Reservasi: Hari ke-3',
     category: 'NO_PURCHASE',
     description: 'Sentuhan ramah hari ke-3 bagi pelanggan yang sudah berkonsultasi tapi belum reservasi.',
   },
   NO_PURCHASE_2: {
-    label: 'Follow-Up Belum Reservasi — Hari ke-7',
+    label: 'Follow-Up Belum Reservasi: Hari ke-7',
     category: 'NO_PURCHASE',
     description: 'Edukasi manfaat layanan hari ke-7 untuk menumbuhkan minat reservasi.',
   },
   NO_PURCHASE_3: {
-    label: 'Follow-Up Belum Reservasi — Hari ke-14',
+    label: 'Follow-Up Belum Reservasi: Hari ke-14',
     category: 'NO_PURCHASE',
     description: 'Tawaran penutup ramah hari ke-14 sebelum percakapan diarsipkan.',
   },
   NEXT_TREATMENT_1: {
-    label: 'Treatment Lanjutan — Bulan ke-1',
+    label: 'Treatment Lanjutan: Bulan ke-1',
     category: 'NEXT_TREATMENT',
     description: 'Reminder treatment rutin bulan ke-1 untuk menjaga kesehatan & perkembangan si kecil/bunda.',
   },
   NEXT_TREATMENT_2: {
-    label: 'Treatment Lanjutan — Bulan ke-2',
+    label: 'Treatment Lanjutan: Bulan ke-2',
     category: 'NEXT_TREATMENT',
     description: 'Reminder treatment berkala bulan ke-2 pasca kunjungan sebelumnya.',
   },
   NEXT_TREATMENT_3: {
-    label: 'Treatment Lanjutan — Bulan ke-3',
+    label: 'Treatment Lanjutan: Bulan ke-3',
     category: 'NEXT_TREATMENT',
     description: 'Reminder treatment berkala bulan ke-3 untuk evaluasi kebugaran berkala.',
   },
   NEXT_TREATMENT_MOMS_1: {
-    label: 'Treatment Lanjutan Ibu (MOMS) — Bulan ke-1',
+    label: 'Treatment Lanjutan Ibu (MOMS): Bulan ke-1',
     category: 'NEXT_TREATMENT',
     description: 'Reminder treatment rutin bulan ke-1 khusus kategori MOMS (perawatan ibu). Tanpa variabel nama bayi.',
   },
   NEXT_TREATMENT_MOMS_2: {
-    label: 'Treatment Lanjutan Ibu (MOMS) — Bulan ke-2',
+    label: 'Treatment Lanjutan Ibu (MOMS): Bulan ke-2',
     category: 'NEXT_TREATMENT',
     description: 'Reminder treatment berkala bulan ke-2 khusus kategori MOMS. Tanpa variabel nama bayi.',
   },
   NEXT_TREATMENT_MOMS_3: {
-    label: 'Treatment Lanjutan Ibu (MOMS) — Bulan ke-3',
+    label: 'Treatment Lanjutan Ibu (MOMS): Bulan ke-3',
     category: 'NEXT_TREATMENT',
     description: 'Reminder treatment berkala bulan ke-3 khusus kategori MOMS. Tanpa variabel nama bayi.',
   },
   NO_PURCHASE_MOMS_1: {
-    label: 'Follow-Up Ibu Belum Reservasi — Hari ke-3',
+    label: 'Follow-Up Ibu Belum Reservasi: Hari ke-3',
     category: 'NO_PURCHASE',
     description: 'Sentuhan ramah hari ke-3 untuk prospek perawatan ibu (hamil/nifas/menyusui). Tanpa narasi bayi.',
   },
   NO_PURCHASE_MOMS_2: {
-    label: 'Follow-Up Ibu Belum Reservasi — Hari ke-7',
+    label: 'Follow-Up Ibu Belum Reservasi: Hari ke-7',
     category: 'NO_PURCHASE',
     description: 'Edukasi manfaat perawatan ibu hari ke-7. Tanpa narasi bayi.',
   },
   NO_PURCHASE_MOMS_3: {
-    label: 'Follow-Up Ibu Belum Reservasi — Hari ke-14',
+    label: 'Follow-Up Ibu Belum Reservasi: Hari ke-14',
     category: 'NO_PURCHASE',
     description: 'Tawaran penutup ramah hari ke-14 untuk prospek perawatan ibu. Tanpa narasi bayi.',
   },
   MILESTONE_3M: {
-    label: 'Milestone 3 Bulan — Tummy Time',
+    label: 'Milestone 3 Bulan: Tummy Time',
     category: 'MILESTONE',
     description: 'Edukasi stimulasi tummy time & pijat bayi usia 3 bulan.',
   },
   MILESTONE_6M: {
-    label: 'Milestone 6 Bulan — Duduk & Merangkak',
+    label: 'Milestone 6 Bulan: Duduk & Merangkak',
     category: 'MILESTONE',
     description: 'Edukasi milestone duduk & merangkak usia 6 bulan.',
   },
   MILESTONE_9M: {
-    label: 'Milestone 9 Bulan — Berdiri',
+    label: 'Milestone 9 Bulan: Berdiri',
     category: 'MILESTONE',
     description: 'Edukasi milestone berdiri & merambat usia 9 bulan.',
   },
   MILESTONE_12M: {
-    label: 'Milestone 12 Bulan — Berjalan',
+    label: 'Milestone 12 Bulan: Berjalan',
     category: 'MILESTONE',
     description: 'Edukasi milestone berjalan & MPASI usia 12 bulan.',
   },
@@ -159,7 +159,7 @@ const CATEGORIES = [
 const AVAILABLE_PLACEHOLDERS = [
   { tag: '{name}', label: 'Nama Pelanggan', desc: 'Contoh: Bunda [nama]' },
   { tag: '{time}', label: 'Jam Treatment', desc: 'Contoh: 10:00 WIB' },
-  { tag: '{babyName}', label: 'Nama Bayi / Anak', desc: 'Contoh: dek [nama anak] — tidak berlaku untuk template MOMS' },
+  { tag: '{babyName}', label: 'Nama Bayi / Anak', desc: 'Contoh: dek [nama anak]: tidak berlaku untuk template MOMS' },
 ];
 
 export const FollowUpTemplates: React.FC = () => {
@@ -330,9 +330,9 @@ export const FollowUpTemplates: React.FC = () => {
               <MessageSquareText size={22} />
             </div>
             <div>
-              <h2 className="text-xl font-bold tracking-tight text-ink">
+              <h1 className="text-xl font-bold tracking-tight text-ink">
                 Rolling Template Follow-Up & Reminder
-              </h2>
+              </h1>
               <p className="text-xs text-ink-2 mt-0.5">
                 Kelola variasi pesan otomatis WhatsApp. Tersedia 3 varian dinamis per skenario untuk rotasi anti-bot & personalisasi ramah.
               </p>
@@ -344,7 +344,7 @@ export const FollowUpTemplates: React.FC = () => {
           <button
             onClick={() => loadTemplates(false)}
             disabled={refreshing || loading}
-            className="h-10 px-4 rounded-xl bg-surface hover:bg-fill-1 border border-divider text-ink transition-all duration-150 active:scale-[0.98] flex items-center space-x-2 text-xs font-semibold shadow-xs disabled:opacity-60"
+            className="h-10 px-4 rounded-xl bg-surface hover:bg-fill-1 border border-divider text-ink transition duration-150 active:scale-[0.98] flex items-center space-x-2 text-xs font-semibold shadow-xs disabled:opacity-60"
             title="Muat ulang template dari database"
           >
             <RefreshCw
@@ -384,7 +384,7 @@ export const FollowUpTemplates: React.FC = () => {
             </div>
           </div>
           <div className="text-[11px] text-ink-2 bg-white/70 dark:bg-fill-1 p-2.5 rounded-xl border border-divider/60 dark:border-accent/25 max-w-sm">
-            <span className="font-semibold text-ink">💡 Tips Format WhatsApp:</span> Gunakan <code className="text-accent">*tebal*</code>, <code className="text-accent">_miring_</code>, atau emoji ramah untuk meningkatkan kenyamanan pasien.
+            <span className="font-semibold text-ink">Tips Format WhatsApp:</span> Gunakan <code className="text-accent">*tebal*</code>, <code className="text-accent">_miring_</code>, atau emoji ramah untuk meningkatkan kenyamanan pasien.
           </div>
         </div>
       </div>
@@ -405,7 +405,7 @@ export const FollowUpTemplates: React.FC = () => {
               <button
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat.id)}
-                className={`h-9 px-3.5 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all duration-150 whitespace-nowrap active:scale-[0.98] ${
+                className={`h-9 px-3.5 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition duration-150 whitespace-nowrap active:scale-[0.98] ${
                   isActive
                     ? 'bg-accent text-accent-ink shadow-sm font-bold'
                     : 'bg-surface border border-divider dark:border-divider text-ink-2 hover:bg-fill-1 hover:text-ink dark:hover:text-ink'
@@ -514,7 +514,7 @@ export const FollowUpTemplates: React.FC = () => {
                     return (
                       <div
                         key={key}
-                        className={`flex flex-col justify-between p-4 rounded-xl border transition-all ${
+                        className={`flex flex-col justify-between p-4 rounded-xl border transition ${
                           isDirty
                             ? 'bg-surface dark:bg-surface-2 border-accent/40 ring-1 ring-accent/20 shadow-xs'
                             : 'bg-surface dark:bg-surface-2 border-divider hover:border-divider dark:hover:border-divider'
@@ -544,7 +544,7 @@ export const FollowUpTemplates: React.FC = () => {
                               <button
                                 onClick={() => handleReset(item.type, item.variant)}
                                 disabled={isSaving}
-                                className="h-7 px-2 rounded-lg bg-surface hover:bg-danger-soft border border-divider hover:border-danger-line text-ink-2 hover:text-danger text-[11px] font-semibold transition-all flex items-center space-x-1 active:scale-[0.98] shadow-2xs disabled:opacity-50"
+                                className="h-7 px-2 rounded-lg bg-surface hover:bg-danger-soft border border-divider hover:border-danger-line text-ink-2 hover:text-danger text-[11px] font-semibold transition flex items-center space-x-1 active:scale-[0.98] shadow-2xs disabled:opacity-50"
                                 title="Kembalikan varian ini ke teks default sistem"
                               >
                                 <RotateCcw size={11} />
@@ -600,7 +600,7 @@ export const FollowUpTemplates: React.FC = () => {
                           <button
                             onClick={() => handleSave(item.type, item.variant)}
                             disabled={isSaving}
-                            className={`h-9 px-4 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all duration-150 active:scale-[0.98] shadow-xs ${
+                            className={`h-9 px-4 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition duration-150 active:scale-[0.98] shadow-xs ${
                               isJustSaved
                                 ? 'bg-success text-on-solid font-bold'
                                 : isDirty
@@ -616,7 +616,7 @@ export const FollowUpTemplates: React.FC = () => {
                             ) : isJustSaved ? (
                               <>
                                 <Check size={13} className="text-white stroke-[3]" />
-                                <span>Tersimpan ✓</span>
+                                <span>Tersimpan </span>
                               </>
                             ) : (
                               <>

@@ -68,7 +68,7 @@ export const StitchShowcase: React.FC = () => {
             <div className="flex rounded-xl bg-[#f0f2f5] p-1 text-xs font-medium">
               <button
                 onClick={() => setActiveTierFilter('all')}
-                className={`rounded-lg px-3 py-1.5 transition-all ${
+                className={`rounded-lg px-3 py-1.5 transition ${
                   activeTierFilter === 'all'
                     ? 'bg-surface text-[#008069] shadow-xs font-semibold'
                     : 'text-[#54656f] hover:text-[#111b21]'
@@ -78,7 +78,7 @@ export const StitchShowcase: React.FC = () => {
               </button>
               <button
                 onClick={() => setActiveTierFilter('tier1')}
-                className={`rounded-lg px-3 py-1.5 transition-all ${
+                className={`rounded-lg px-3 py-1.5 transition ${
                   activeTierFilter === 'tier1'
                     ? 'bg-surface text-[#008069] shadow-xs font-semibold'
                     : 'text-[#54656f] hover:text-[#111b21]'
@@ -88,7 +88,7 @@ export const StitchShowcase: React.FC = () => {
               </button>
               <button
                 onClick={() => setActiveTierFilter('tier2')}
-                className={`rounded-lg px-3 py-1.5 transition-all ${
+                className={`rounded-lg px-3 py-1.5 transition ${
                   activeTierFilter === 'tier2'
                     ? 'bg-surface text-[#008069] shadow-xs font-semibold'
                     : 'text-[#54656f] hover:text-[#111b21]'
@@ -98,7 +98,7 @@ export const StitchShowcase: React.FC = () => {
               </button>
               <button
                 onClick={() => setActiveTierFilter('tier3')}
-                className={`rounded-lg px-3 py-1.5 transition-all ${
+                className={`rounded-lg px-3 py-1.5 transition ${
                   activeTierFilter === 'tier3'
                     ? 'bg-surface text-[#008069] shadow-xs font-semibold'
                     : 'text-[#54656f] hover:text-[#111b21]'
@@ -108,7 +108,7 @@ export const StitchShowcase: React.FC = () => {
               </button>
               <button
                 onClick={() => setActiveTierFilter('tier4')}
-                className={`rounded-lg px-3 py-1.5 transition-all ${
+                className={`rounded-lg px-3 py-1.5 transition ${
                   activeTierFilter === 'tier4'
                     ? 'bg-surface text-[#008069] shadow-xs font-semibold'
                     : 'text-[#54656f] hover:text-[#111b21]'
@@ -118,7 +118,7 @@ export const StitchShowcase: React.FC = () => {
               </button>
               <button
                 onClick={() => setActiveTierFilter('tier5')}
-                className={`rounded-lg px-3 py-1.5 transition-all ${
+                className={`rounded-lg px-3 py-1.5 transition ${
                   activeTierFilter === 'tier5'
                     ? 'bg-surface text-[#008069] shadow-xs font-semibold'
                     : 'text-[#54656f] hover:text-[#111b21]'
@@ -149,7 +149,7 @@ export const StitchShowcase: React.FC = () => {
       </header>
 
       {/* Main Container */}
-      <main className={`mx-auto p-4 sm:p-6 lg:p-8 transition-all ${devicePreview === 'mobile' ? 'max-w-md' : 'max-w-7xl'}`}>
+      <main className={`mx-auto p-4 sm:p-6 lg:p-8 transition-[max-width] ${devicePreview === 'mobile' ? 'max-w-md' : 'max-w-7xl'}`}>
         
         {/* ========================================================================= */}
         {/* TIER 1: CORE HARIAN & REAL-TIME (Paling Sering Digunakan) */}

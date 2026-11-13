@@ -5,7 +5,7 @@ export interface ModuleDefinition {
   id: string;
   path: string;
   name: string;
-  category: 'DASHBOARD & PELANGGAN' | 'OPERASIONAL & JADWAL' | 'CRM & KOMUNIKASI' | 'MARKETING & ADS' | 'AI ENGINE & SISTEM' | 'PORTAL LAPANGAN & TERAPIS';
+  category: 'DASHBOARD & PASIEN' | 'OPERASIONAL & JADWAL' | 'CRM & KOMUNIKASI' | 'MARKETING & ADS' | 'AI ENGINE & SISTEM' | 'PORTAL LAPANGAN & TERAPIS';
   description: string;
 }
 
@@ -23,36 +23,36 @@ export const ALL_MODULES: ModuleDefinition[] = [
   {
     id: 'overview',
     path: '/admin/overview',
-    name: 'Dashboard Overview',
-    category: 'DASHBOARD & PELANGGAN',
+    name: 'Ringkasan Dashboard',
+    category: 'DASHBOARD & PASIEN',
     description: 'Ringkasan metrik statistik, omset, grafik performa, dan lead',
   },
   {
     id: 'customers',
     path: '/admin/customers',
-    name: 'Customer Database',
-    category: 'DASHBOARD & PELANGGAN',
+    name: 'Database Pasien',
+    category: 'DASHBOARD & PASIEN',
     description: 'Basis data profil pasien, riwayat alamat, dan rekaman chat',
   },
   {
     id: 'labels',
     path: '/admin/labels',
-    name: 'Customer Labels',
-    category: 'DASHBOARD & PELANGGAN',
+    name: 'Label Pasien',
+    category: 'DASHBOARD & PASIEN',
     description: 'Kelola master label dan penandaan kategori pasien',
   },
   {
     id: 'customer-service',
     path: '/admin/customer-service',
-    name: 'Customer Service & CTA',
-    category: 'DASHBOARD & PELANGGAN',
+    name: 'Admin CS & CTA',
+    category: 'DASHBOARD & PASIEN',
     description: 'Konfigurasi nomor WhatsApp CS, nama CS, dan tombol CTA',
   },
   {
     id: 'chat-migration',
     path: '/admin/chat-migration',
     name: 'Migrasi & Seeding Chat',
-    category: 'DASHBOARD & PELANGGAN',
+    category: 'DASHBOARD & PASIEN',
     description: 'Ekstraksi histori chat WhatsApp dan seeding layanan ke database aktif',
   },
 
@@ -67,14 +67,14 @@ export const ALL_MODULES: ModuleDefinition[] = [
   {
     id: 'today-treatments',
     path: '/admin/today-treatments',
-    name: 'Treatment Hari Ini',
+    name: 'Layanan Hari Ini',
     category: 'OPERASIONAL & JADWAL',
     description: 'Monitoring & pengerjaan tugas kunjungan pasien hari ini, live chat, GPS, dan pencatatan lunas',
   },
   {
     id: 'staff-management',
     path: '/admin/staff-management',
-    name: 'Staff & Akun Pengguna',
+    name: 'Terapis & Akun Pengguna',
     category: 'OPERASIONAL & JADWAL',
     description: 'Kelola akun pengguna klinik, terapis, dan hak akses peran',
   },
@@ -83,21 +83,21 @@ export const ALL_MODULES: ModuleDefinition[] = [
     path: '/admin/services',
     name: 'Katalog Layanan & Harga',
     category: 'OPERASIONAL & JADWAL',
-    description: 'Daftar treatment spa ibu/anak, durasi, harga, dan kategori',
+    description: 'Daftar layanan spa ibu/anak, durasi, harga, dan kategori',
   },
   {
     id: 'delivery',
     path: '/admin/delivery',
     name: 'Tarif Jarak & Ongkir',
     category: 'OPERASIONAL & JADWAL',
-    description: 'Pengaturan tier jarak pengiriman dan tarif ongkos kirim terapis',
+    description: 'Pengaturan tier jarak dan tarif ongkir terapis',
   },
 
   // 3. CRM & Komunikasi
   {
     id: 'follow-ups',
     path: '/admin/follow-ups',
-    name: 'Follow-Up Queue',
+    name: 'Antrean Follow-Up',
     category: 'CRM & KOMUNIKASI',
     description: 'Antrean pesan pengingat & penawaran otomatis ke pasien',
   },
@@ -217,7 +217,7 @@ export const ALL_MODULES: ModuleDefinition[] = [
     path: '/admin/staff/schedule',
     name: 'Jadwal Mendatang Terapis',
     category: 'PORTAL LAPANGAN & TERAPIS',
-    description: 'Kalender jadwal treatment terapis untuk hari-hari berikutnya',
+    description: 'Kalender jadwal layanan terapis untuk hari-hari berikutnya',
   },
 ];
 

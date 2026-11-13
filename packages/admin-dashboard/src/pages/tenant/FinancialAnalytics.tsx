@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
+import { Modal } from '../../components/ui/Modal';
 import {
   TrendingUp,
   DollarSign,
@@ -47,6 +48,8 @@ import { resolveStaffName } from '../../utils/resolveStaffName';
 import { useTheme } from '../../contexts/ThemeContext';
 import { chartTheme } from '../../lib/chartTheme';
 import { RetentionTab } from '../../components/analytics/RetentionTab';
+import { formatRupiah } from '../../utils/money';
+import { formatMonthYearWib, formatWib } from '../../utils/dateWib';
 
 interface MonthlyKpiSummary {
   totalRevenue: number;
@@ -139,10 +142,6 @@ interface MonthlyAnalyticsData {
 const CATEGORY_COLORS = chartTheme.series;
 const PAYMENT_COLORS = [chartTheme.series[0], chartTheme.series[1], chartTheme.series[3], chartTheme.danger];
 
-function formatRupiah(amount: number): string {
-  return 'Rp ' + (amount || 0).toLocaleString('id-ID');
-}
-
 function formatCompactRupiah(amount: number): string {
   if (amount >= 1_000_000_000) {
     return `Rp ${(amount / 1_000_000_000).toFixed(1)}M`;
@@ -158,7 +157,7 @@ function formatCompactRupiah(amount: number): string {
 
 function getLedgerPaymentLabel(status: TransactionLedgerItem['paymentStatus']): string {
   if (status === 'LUNAS') return 'Lunas';
-  if (status === 'SELESAI_BELUM_VERIFIKASI') return 'Selesai — verifikasi bayar';
+  if (status === 'SELESAI_BELUM_VERIFIKASI') return 'Selesai: verifikasi bayar';
   return 'Tagih di Tempat';
 }
 
@@ -319,7 +318,7 @@ export const FinancialAnalytics: React.FC = () => {
           <div className="inline-flex p-1 rounded-xl bg-fill-1 border border-divider">
             <button
               onClick={() => setMonthOffset(0)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                 isCurrentMonth
                   ? 'bg-surface text-accent shadow-xs ring-1 ring-accent/20'
                   : 'text-ink-2 hover:text-ink'
@@ -329,7 +328,7 @@ export const FinancialAnalytics: React.FC = () => {
             </button>
             <button
               onClick={() => setMonthOffset(-1)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                 isLastMonth
                   ? 'bg-surface text-accent shadow-xs ring-1 ring-accent/20'
                   : 'text-ink-2 hover:text-ink'
@@ -356,7 +355,7 @@ export const FinancialAnalytics: React.FC = () => {
                 d.setMonth(d.getMonth() - 11 + i);
                 const y = d.getFullYear();
                 const m = d.getMonth() + 1;
-                const label = d.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+                const label = formatMonthYearWib(y, m - 1);
                 return (
                   <option key={`${y}-${m}`} value={`${y}-${String(m).padStart(2, '0')}`}>
                     {label}
@@ -368,9 +367,10 @@ export const FinancialAnalytics: React.FC = () => {
 
           {/* Export CSV / Excel Button */}
           <button
+            aria-label="Download Spreadsheet Excel / CSV"
             onClick={handleExportCsv}
             disabled={exporting || loading}
-            className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-accent hover:bg-accent disabled:opacity-50 text-white text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer"
+            className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-accent hover:bg-accent disabled:opacity-50 text-on-solid text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer"
             title="Download Spreadsheet Excel / CSV"
           >
             <FileSpreadsheet size={15} />
@@ -379,6 +379,7 @@ export const FinancialAnalytics: React.FC = () => {
 
           {/* Refresh Button */}
           <button
+            aria-label="Muat Ulang Data"
             onClick={fetchAnalytics}
             disabled={loading}
             className="p-2 rounded-xl bg-surface border border-divider text-ink-2 hover:text-ink dark:hover:text-ink hover:bg-fill-1 transition shadow-xs disabled:opacity-50 cursor-pointer"
@@ -393,7 +394,7 @@ export const FinancialAnalytics: React.FC = () => {
       <div className="flex border-b border-divider gap-1 sm:gap-2">
         <button
           onClick={() => setActiveTab('keuangan')}
-          className={`pb-3 px-3 sm:px-4 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+          className={`pb-3 px-3 sm:px-4 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-2 cursor-pointer ${
             activeTab === 'keuangan'
               ? 'border-accent text-accent'
               : 'border-transparent text-ink-2 hover:text-ink'
@@ -404,7 +405,7 @@ export const FinancialAnalytics: React.FC = () => {
         </button>
         <button
           onClick={() => setActiveTab('retensi')}
-          className={`pb-3 px-3 sm:px-4 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+          className={`pb-3 px-3 sm:px-4 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-2 cursor-pointer ${
             activeTab === 'retensi'
               ? 'border-accent text-accent'
               : 'border-transparent text-ink-2 hover:text-ink'
@@ -665,7 +666,7 @@ export const FinancialAnalytics: React.FC = () => {
                 </div>
                 <div className="h-2 w-full bg-fill-1 rounded-full overflow-hidden">
                   <div
-                    className="h-full rounded-full transition-all duration-300"
+                    className="h-full rounded-full transition-[width] duration-300"
                     style={{
                       width: `${pay.percentage}%`,
                       backgroundColor: PAYMENT_COLORS[idx % PAYMENT_COLORS.length],
@@ -766,7 +767,7 @@ export const FinancialAnalytics: React.FC = () => {
           <div className="flex items-center space-x-1.5 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
             <button
               onClick={() => setStatusFilter('ALL')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
                 statusFilter === 'ALL'
                   ? 'bg-accent text-accent-ink shadow-xs'
                   : 'bg-fill-1 text-ink-2 hover:bg-fill-2 dark:hover:bg-fill-2'
@@ -776,7 +777,7 @@ export const FinancialAnalytics: React.FC = () => {
             </button>
             <button
               onClick={() => setStatusFilter('LUNAS')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
                 statusFilter === 'LUNAS'
                   ? 'bg-accent text-accent-ink shadow-xs'
                   : 'bg-fill-1 text-ink-2 hover:bg-fill-2 dark:hover:bg-fill-2'
@@ -786,7 +787,7 @@ export const FinancialAnalytics: React.FC = () => {
             </button>
             <button
               onClick={() => setStatusFilter('TAGIH_DI_TEMPAT')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
                 statusFilter === 'TAGIH_DI_TEMPAT'
                   ? 'bg-accent text-accent-ink shadow-xs'
                   : 'bg-fill-1 text-ink-2 hover:bg-fill-2 dark:hover:bg-fill-2'
@@ -796,13 +797,13 @@ export const FinancialAnalytics: React.FC = () => {
             </button>
             <button
               onClick={() => setStatusFilter('SELESAI_BELUM_VERIFIKASI')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
                 statusFilter === 'SELESAI_BELUM_VERIFIKASI'
                   ? 'bg-accent text-accent-ink shadow-xs'
                   : 'bg-fill-1 text-ink-2 hover:bg-fill-2 dark:hover:bg-fill-2'
               }`}
             >
-              Selesai — Belum Verifikasi
+              Selesai: Belum Verifikasi
             </button>
           </div>
         </div>
@@ -831,7 +832,7 @@ export const FinancialAnalytics: React.FC = () => {
                       <Clock size={11} className="text-accent" />
                       <span>
                         {tx.bookingDate
-                          ? new Date(tx.bookingDate).toLocaleString('id-ID', {
+                          ? formatWib(tx.bookingDate, {
                               day: '2-digit',
                               month: 'short',
                               hour: '2-digit',
@@ -919,7 +920,7 @@ export const FinancialAnalytics: React.FC = () => {
                   >
                     <td className="py-3 px-4 whitespace-nowrap font-mono text-[11px]">
                       {tx.bookingDate
-                        ? new Date(tx.bookingDate).toLocaleString('id-ID', {
+                        ? formatWib(tx.bookingDate, {
                             day: '2-digit',
                             month: 'short',
                             hour: '2-digit',
@@ -988,22 +989,26 @@ export const FinancialAnalytics: React.FC = () => {
 
       {/* Transaction Detail Modal */}
       {selectedTx && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-surface w-full max-w-lg rounded-2xl shadow-2xl border border-divider overflow-hidden animate-scaleIn">
-            <div className="p-4 sm:p-5 border-b border-divider flex items-center justify-between bg-surface-2">
-              <div className="flex items-center space-x-2">
-                <FileSpreadsheet size={18} className="text-accent" />
-                <h3 className="font-bold text-sm text-ink">
-                  Rincian Transaksi
-                </h3>
-              </div>
-              <button
-                onClick={() => setSelectedTx(null)}
-                className="p-1 rounded-full text-ink-3 hover:text-ink hover:bg-surface transition"
-              >
-                <X size={18} />
-              </button>
-            </div>
+        <Modal
+          open
+          onClose={() => setSelectedTx(null)}
+          size="lg"
+          title={
+            <span className="flex items-center gap-2">
+              <FileSpreadsheet size={18} className="text-accent" aria-hidden="true" />
+              <span>Rincian Transaksi</span>
+            </span>
+          }
+          subtitle={selectedTx.id}
+          footer={
+            <button
+              onClick={() => setSelectedTx(null)}
+              className="px-4 py-2 rounded-xl bg-accent text-accent-ink text-xs font-bold hover:bg-accent-hover cursor-pointer"
+            >
+              Tutup
+            </button>
+          }
+        >
 
             <div className="p-5 space-y-4 text-xs">
               <div className="flex justify-between items-center bg-fill-1 dark:bg-surface-2 p-3 rounded-xl">
@@ -1067,16 +1072,7 @@ export const FinancialAnalytics: React.FC = () => {
               </div>
             </div>
 
-            <div className="p-4 bg-surface-2 border-t border-divider flex justify-end">
-              <button
-                onClick={() => setSelectedTx(null)}
-                className="px-4 py-2 rounded-xl bg-accent text-accent-ink text-xs font-bold hover:bg-accent transition"
-              >
-                Tutup
-              </button>
-            </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

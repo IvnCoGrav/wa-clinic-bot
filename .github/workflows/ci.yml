@@ -47,6 +47,14 @@ jobs:
       - name: Build Backend & Admin Dashboard
         run: npm run build:all
 
+      # Gerbang desain & aksesibilitas (Fase 9). Wajib hijau dua kali berturut
+      # sebelum langkah ini diaktifkan. Menjaga token warna, paritas dark mode,
+      # nama aksesibel, kontras, dan format tanggal WIB.
+      - name: Design & A11y Gates
+        run: |
+          cd packages/admin-dashboard
+          npm run check:design
+
       - name: Run Unit Tests (Baseline-Diff Gate)
         run: |
           npx vitest run --reporter=json --outputFile=ci-results.json || true

@@ -11,7 +11,7 @@ export const AiOffStrip: React.FC<{ compact?: boolean }> = ({ compact = true }) 
       <ShieldAlert size={13} className="text-amber-600 dark:text-warning shrink-0" />
       <span className="truncate">
         <span className="font-bold text-amber-700 dark:text-warning">AI NONAKTIF</span>{' '}
-        <span className="text-amber-800 dark:text-amber-200">— CS manual. Nyalakan via sakelar ON/OFF di bilah cari.</span>
+        <span className="text-amber-800 dark:text-amber-200">Mode CS manual. Nyalakan via sakelar ON/OFF di bilah cari.</span>
       </span>
     </div>
   );

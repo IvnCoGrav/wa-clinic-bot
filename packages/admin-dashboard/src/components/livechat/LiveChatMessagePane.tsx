@@ -19,18 +19,13 @@ import {
   Plus,
   Radar,
   Lock,
-  Copy,
-  Trash2,
   Reply,
   Check,
   CheckCheck,
   Clock,
   AlertCircle,
   MapPin,
-  FileText,
-  Download,
   Receipt,
-  Smile,
   Eye,
   EyeOff,
   Ban,
@@ -41,10 +36,13 @@ import {
 } from 'lucide-react';
 import { CustomerAvatar } from '../common/CustomerAvatar';
 import { StaffOwnershipBadge } from '../common/StaffOwnershipBadge';
-import { MessagePinBanner, PinnedMessageData } from './MessagePinBanner';
+import { LiveChatThreadTools } from './LiveChatThreadTools';
+import { LiveChatMessageMedia } from './LiveChatMessageMedia';
+import { LiveChatQuotedPreview } from './LiveChatQuotedPreview';
+import { LiveChatReactionToolbar } from './LiveChatReactionToolbar';
+import { LiveChatMessageActions } from './LiveChatMessageActions';
+import { groupReactions, senderLabel, type MessageReaction } from '../../utils/liveChatReactions';
 import { LiveChatComposer, LiveChatComposerHandle, ComposerQuickReply } from './LiveChatComposer';
-import { MediaImage, ChatMediaData } from '../common/MediaImage';
-import { VoiceNotePlayer } from '../common/VoiceNotePlayer';
 import { renderFormattedMessageContent } from '../../utils/livechatSearch';
 import {
   formatChatDateSeparator,
@@ -53,9 +51,8 @@ import {
   type LiveChatItem,
   type ChatMessage,
   type CustomerLabelData,
-  type QuotedMessageData,
 } from '../../types/livechat';
-import { getGoogleMapsDirectionUrl, getLocationBadgeConfig } from '../../utils/geoUtils';
+import { getLocationBadgeConfig } from '../../utils/geoUtils';
 import { getSharelocCardStatus } from '../../utils/sharelocCardStatus';
 import { resolveChatSenderIndicator } from '../../utils/chatSenderIndicator';
 import { useUiFeedback } from '../common/UiFeedback';
@@ -70,7 +67,6 @@ import {
   extractDocument,
   extractContact,
   extractVideo,
-  extractImageCaption,
   resolveMessageDisplayText,
   type ChatLocationData,
   type ChatAudioData,
@@ -79,15 +75,7 @@ import {
   type ChatVideoData,
 } from '../../utils/mediaExtractor';
 import { formatWibTime } from '../../utils/dateWib';
-
-export const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
-export const EXTRA_REACTIONS = ['🔥', '👏', '🎉', '💯', '✨', '🤝', '🌸', '💐', '👶', '🍼', '🤱', '💪'];
-
-const senderLabel = (m: ChatMessage) => {
-  if (m.direction === 'INBOUND') return 'Customer';
-  const type = (m.sender_type || '').toUpperCase();
-  return type === 'ADMIN' || type === 'HUMAN' || type === 'STAFF' ? m.sender_name || 'Admin' : 'Bot';
-};
+import { formatWib, formatWibClock } from '../../utils/dateWib';
 
 export interface LiveChatMessagePaneProps {
   mobileView: 'list' | 'chat';
@@ -334,7 +322,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                   {selectedChat.isSandboxTest && (
                     <div className="flex items-center space-x-2 px-2 py-0.5 rounded-lg bg-violet-soft border border-violet-line text-violet text-[10px] font-bold uppercase tracking-wider">
                       <FlaskConical size={11} />
-                      <span>QA TEST — chat simulasi</span>
+                      <span>QA TEST: chat simulasi</span>
                     </div>
                   )}
                   <div className="flex justify-between items-center gap-2">
@@ -392,12 +380,12 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                             )}
                             {Boolean((selectedChat as any).hasUpcomingBooking || activeConfirmedReservation) && !activeConfirmedReservation && (
                               <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-600 text-white ring-1 ring-emerald-300 dark:ring-emerald-400/60 shadow-xs">
-                                📅 Terjadwal
+                                Terjadwal
                               </span>
                             )}
                             {Boolean((selectedChat as any).hasPendingBooking || activePendingReservation) && !activePendingReservation && (
                               <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-sky-600 text-white ring-1 ring-sky-300 dark:ring-sky-400/60 shadow-xs">
-                                🕓 Pending
+                                Pending
                               </span>
                             )}
 
@@ -514,7 +502,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                           if (next) setTimeout(() => inChatSearchInputRef.current?.focus(), 60);
                         }}
                         title={inChatSearchOpen ? 'Tutup pencarian dalam chat' : 'Cari dalam chat'}
-                        className={`p-1.5 min-w-[38px] min-h-[38px] rounded-xl border transition shadow-2xs flex items-center justify-center ${inChatSearchOpen ? 'bg-accent text-white border-accent' : 'bg-white dark:bg-fill-2 border-divider dark:border-strong text-ink-2 dark:text-ink-2 hover:text-ink hover:bg-fill-1 dark:hover:bg-strong'}`}
+                        className={`p-1.5 min-w-[38px] min-h-[38px] rounded-xl border transition shadow-2xs flex items-center justify-center ${inChatSearchOpen ? 'bg-accent text-on-solid border-accent' : 'bg-white dark:bg-fill-2 border-divider dark:border-strong text-ink-2 dark:text-ink-2 hover:text-ink hover:bg-fill-1 dark:hover:bg-strong'}`}
                       >
                         <Search size={14} />
                       </button>
@@ -552,7 +540,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                       <button
                         type="button"
                         onClick={expandBanner}
-                        className={`pointer-events-auto h-[26px] px-3 rounded-full text-[11px] font-bold inline-flex items-center gap-1.5 shadow-md backdrop-blur-md cursor-pointer active:scale-95 transition-all border ${
+                        className={`pointer-events-auto h-[26px] px-3 rounded-full text-[11px] font-bold inline-flex items-center gap-1.5 shadow-md backdrop-blur-md cursor-pointer active:scale-95 transition border ${
                           activeHoldReservation
                             ? 'bg-amber-50/95 dark:bg-amber-950/90 border-amber-300/80 text-amber-900 dark:text-amber-200 shadow-amber-500/10'
                             : activeConfirmedReservation
@@ -561,15 +549,15 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                         }`}
                         title="Tampilkan detail banner"
                       >
-                        <span className={`w-1.5 h-1.5 rounded-full animate-pulse shrink-0 ${
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                           activeHoldReservation ? 'bg-warning' : activeConfirmedReservation ? 'bg-success' : 'bg-info'
                         }`} />
                         <span>
                           {(() => {
                             const r = activeHoldReservation || activeConfirmedReservation || activePendingReservation;
                             if (!r?.booking_date) return '';
-                            const d = new Date(r.booking_date).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' });
-                            const t = new Date(r.booking_date).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' });
+                            const d = formatWib(r.booking_date, { weekday: 'short', day: 'numeric', month: 'short' });
+    const t = formatWibClock(r.booking_date);
                             const dur = Number(r.duration_minutes) > 0 ? ` • ${r.duration_minutes} mnt` : '';
                             return `${d} ${t}${dur}`;
                           })()}
@@ -582,26 +570,25 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
 
                 {/* Active Hold Slot Alert Banner */}
                 {activeHoldReservation && (
-                  <div className={`mx-1.5 mb-1.5 px-3 py-1.5 min-h-[40px] rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition-all bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent dark:from-amber-500/10 dark:via-transparent dark:to-transparent border-amber-300/80 dark:border-amber-600/50 text-amber-950 dark:text-amber-100`}>
+                  <div className={`mx-1.5 mb-1.5 px-3 py-1.5 min-h-[40px] rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent dark:from-amber-500/10 dark:via-transparent dark:to-transparent border-amber-300/80 dark:border-amber-600/50 text-amber-950 dark:text-amber-100`}>
                     <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
-                      <span className="w-2 h-2 rounded-full bg-warning animate-pulse shrink-0" />
+                      <span className="w-2 h-2 rounded-full bg-warning shrink-0" />
                       <div className="flex flex-col justify-center leading-tight min-w-0">
                         <span className="font-extrabold text-[9px] uppercase tracking-wider text-amber-800 dark:text-warning">HOLD</span>
                         <span className="flex items-center gap-1 min-w-0 text-amber-950 dark:text-amber-100">
                           <Clock size={11} className="text-amber-700 dark:text-warning shrink-0" />
                           <span className="font-semibold truncate text-[11px]">
                             {activeHoldReservation.booking_date
-                              ? new Date(activeHoldReservation.booking_date).toLocaleDateString('id-ID', {
+                              ? formatWib(activeHoldReservation.booking_date, {
                                   weekday: 'short',
                                   day: 'numeric',
                                   month: 'short',
                                 }) +
                                 ' ' +
-                                new Date(activeHoldReservation.booking_date).toLocaleTimeString('id-ID', {
+                                formatWibClock(activeHoldReservation.booking_date, {
                                   hour: '2-digit',
                                   minute: '2-digit',
-                                  timeZone: 'Asia/Jakarta',
-                                })
+                                                            })
                               : 'Slot belum ditentukan'}
                             {Number(activeHoldReservation.duration_minutes) > 0 ? ` • ${activeHoldReservation.duration_minutes} mnt` : ''}
                           </span>
@@ -612,7 +599,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                       <button
                         type="button"
                         onClick={() => handleConvertHoldToBooking(activeHoldReservation)}
-                        className="inline-flex items-center gap-1.5 h-[30px] px-3 bg-gradient-to-r from-warning to-warning hover:from-warning hover:to-warning active:scale-95 text-white font-bold rounded-full text-xs leading-none transition-all shadow-xs cursor-pointer whitespace-nowrap shrink-0"
+                        className="inline-flex items-center gap-1.5 h-[30px] px-3 bg-gradient-to-r from-warning to-warning hover:from-warning hover:to-warning active:scale-95 text-white font-bold rounded-full text-xs leading-none transition shadow-xs cursor-pointer whitespace-nowrap shrink-0"
                         title="Lengkapi data booking reservasi ini"
                       >
                         <PenLine size={13} className="shrink-0" />
@@ -638,7 +625,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                             toast('Gagal melepas slot hold.', 'error');
                           }
                         }}
-                        className="inline-flex items-center justify-center h-[30px] w-[30px] bg-white/90 dark:bg-amber-950/60 hover:bg-rose-50 dark:hover:bg-rose-950/50 active:scale-95 text-amber-800 hover:text-rose-600 dark:text-amber-200 dark:hover:text-rose-300 border border-amber-300/70 dark:border-amber-700/60 hover:border-rose-300 dark:hover:border-rose-700 rounded-full transition-all shadow-2xs cursor-pointer shrink-0"
+                        className="inline-flex items-center justify-center h-[30px] w-[30px] bg-white/90 dark:bg-amber-950/60 hover:bg-rose-50 dark:hover:bg-rose-950/50 active:scale-95 text-amber-800 hover:text-rose-600 dark:text-amber-200 dark:hover:text-rose-300 border border-amber-300/70 dark:border-amber-700/60 hover:border-rose-300 dark:hover:border-rose-700 rounded-full transition shadow-2xs cursor-pointer shrink-0"
                         title="Lepas slot hold"
                       >
                         <X size={13} strokeWidth={2.5} className="shrink-0" />
@@ -646,7 +633,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                       <button
                         type="button"
                         onClick={() => setIsBannerCollapsed(true)}
-                        className="md:hidden inline-flex items-center justify-center h-[30px] w-[30px] text-amber-700 dark:text-warning hover:bg-amber-500/15 active:scale-95 rounded-full transition-all shrink-0"
+                        className="md:hidden inline-flex items-center justify-center h-[30px] w-[30px] text-amber-700 dark:text-warning hover:bg-amber-500/15 active:scale-95 rounded-full transition shrink-0"
                         title="Ciutkan banner"
                       >
                         <ChevronUp size={14} className="stroke-[2.5]" />
@@ -673,7 +660,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                     : 'text-emerald-900 dark:text-emerald-200';
 
                   return (
-                    <div className={`mx-1.5 mb-1.5 px-3 py-2 rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center justify-between gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition-all ${bannerBg}`}>
+                    <div className={`mx-1.5 mb-1.5 px-3 py-2 rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center justify-between gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition ${bannerBg}`}>
                       <div className="flex items-center gap-2 min-w-0">
                         {isMismatch ? (
                           <AlertTriangle size={16} className={`${iconColor} shrink-0`} />
@@ -748,31 +735,30 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
 
                 {/* Active Confirmed / Terjadwal Alert Banner */}
                  {!activeHoldReservation && activeConfirmedReservation && (
-                   <div className={`mx-1.5 mb-1.5 px-3 py-1.5 min-h-[40px] rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition-all bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent dark:from-emerald-500/10 dark:via-transparent dark:to-transparent border-emerald-300/80 dark:border-emerald-600/50 text-emerald-950 dark:text-emerald-100`}>
+                   <div className={`mx-1.5 mb-1.5 px-3 py-1.5 min-h-[40px] rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent dark:from-emerald-500/10 dark:via-transparent dark:to-transparent border-emerald-300/80 dark:border-emerald-600/50 text-emerald-950 dark:text-emerald-100`}>
                      <button
                        type="button"
                        onClick={() => setSelectedReservation(activeConfirmedReservation)}
                        className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden text-left cursor-pointer hover:opacity-90 transition-opacity"
                        title="Lihat Ringkasan Jadwal & Bukti Bayar Pasien"
                      >
-                       <span className="w-2 h-2 rounded-full bg-success animate-pulse shrink-0" />
+                       <span className="w-2 h-2 rounded-full bg-success shrink-0" />
                        <div className="flex flex-col justify-center leading-tight min-w-0">
                          <span className="font-extrabold text-[9px] uppercase tracking-wider text-emerald-800 dark:text-accent">JADWAL</span>
                          <span className="flex items-center gap-1 min-w-0 text-emerald-950 dark:text-emerald-100">
                            <Clock size={11} className="text-emerald-700 dark:text-accent shrink-0" />
                            <span className="font-semibold truncate text-[11px]">
                              {activeConfirmedReservation.booking_date
-                               ? new Date(activeConfirmedReservation.booking_date).toLocaleDateString('id-ID', {
+                               ? formatWib(activeConfirmedReservation.booking_date, {
                                    weekday: 'short',
                                    day: 'numeric',
                                    month: 'short',
                                  }) +
                                  ' ' +
-                                  new Date(activeConfirmedReservation.booking_date).toLocaleTimeString('id-ID', {
+                                  formatWibClock(activeConfirmedReservation.booking_date, {
                                     hour: '2-digit',
                                     minute: '2-digit',
-                                    timeZone: 'Asia/Jakarta',
-                                  })
+                                                                })
                                : 'Jadwal terkonfirmasi'}
                               {activeConfirmedReservation.treatment_detail ? ` • ${activeConfirmedReservation.treatment_detail}` : ''}
                              {Number(activeConfirmedReservation.duration_minutes) > 0 ? ` • ${activeConfirmedReservation.duration_minutes} mnt` : ''}
@@ -787,7 +773,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                            setActiveEditingConfirmedReservation(activeConfirmedReservation);
                            setShowQuickBookingModal(true);
                          }}
-                         className={`inline-flex items-center justify-center bg-transparent border-transparent active:scale-95 text-emerald-700 dark:text-accent hover:text-emerald-900 dark:hover:text-emerald-100 transition-all cursor-pointer shrink-0 ${chatBotActive ? 'w-7 h-4' : 'h-[30px] w-[30px]'}`}
+                         className={`inline-flex items-center justify-center bg-transparent border-transparent active:scale-95 text-emerald-700 dark:text-accent hover:text-emerald-900 dark:hover:text-emerald-100 transition cursor-pointer shrink-0 ${chatBotActive ? 'w-7 h-4' : 'h-[30px] w-[30px]'}`}
                          title="Ubah Jadwal, Jam, atau Bidan Bertugas"
                        >
                          <PenLine size={chatBotActive ? 12 : 14} className="shrink-0" />
@@ -810,7 +796,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                             toast('Gagal menandai selesai.', 'error');
                           }
                         }}
-                        className={`inline-flex items-center justify-center bg-transparent border-transparent active:scale-95 text-emerald-700 dark:text-accent hover:text-emerald-900 dark:hover:text-emerald-100 transition-all cursor-pointer shrink-0 ${chatBotActive ? 'w-7 h-4' : 'h-[30px] w-[30px]'}`}
+                        className={`inline-flex items-center justify-center bg-transparent border-transparent active:scale-95 text-emerald-700 dark:text-accent hover:text-emerald-900 dark:hover:text-emerald-100 transition cursor-pointer shrink-0 ${chatBotActive ? 'w-7 h-4' : 'h-[30px] w-[30px]'}`}
                         title="Tandai reservasi telah selesai treatment"
                       >
                         <CheckCircle size={chatBotActive ? 12 : 14} className="shrink-0" />
@@ -818,7 +804,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                       <button
                         type="button"
                         onClick={() => setIsBannerCollapsed(true)}
-                        className="md:hidden inline-flex items-center justify-center h-[30px] w-[30px] text-emerald-700 dark:text-accent hover:bg-emerald-500/15 active:scale-95 rounded-full transition-all shrink-0"
+                        className="md:hidden inline-flex items-center justify-center h-[30px] w-[30px] text-emerald-700 dark:text-accent hover:bg-emerald-500/15 active:scale-95 rounded-full transition shrink-0"
                         title="Ciutkan banner"
                       >
                         <ChevronUp size={14} className="stroke-[2.5]" />
@@ -829,26 +815,25 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
 
                 {/* Active Pending Alert Banner */}
                 {!activeHoldReservation && !activeConfirmedReservation && activePendingReservation && (
-                  <div className={`mx-1.5 mb-1.5 px-3 py-1.5 min-h-[40px] rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition-all bg-gradient-to-r from-sky-500/10 via-sky-500/5 to-transparent dark:from-sky-500/20 dark:via-sky-500/10 dark:to-transparent border-sky-300/80 dark:border-sky-600/50 text-sky-950 dark:text-sky-100`}>
+                  <div className={`mx-1.5 mb-1.5 px-3 py-1.5 min-h-[40px] rounded-xl border ${isBannerCollapsed ? 'hidden md:flex' : 'flex'} items-center gap-2.5 text-xs shadow-xs shrink-0 animate-fadeIn overflow-hidden transition bg-gradient-to-r from-sky-500/10 via-sky-500/5 to-transparent dark:from-sky-500/20 dark:via-sky-500/10 dark:to-transparent border-sky-300/80 dark:border-sky-600/50 text-sky-950 dark:text-sky-100`}>
                     <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
-                      <span className="w-2 h-2 rounded-full bg-info animate-pulse shrink-0" />
+                      <span className="w-2 h-2 rounded-full bg-info shrink-0" />
                       <div className="flex flex-col justify-center leading-tight min-w-0">
                         <span className="font-extrabold text-[9px] uppercase tracking-wider text-sky-800 dark:text-info">PENDING</span>
                         <span className="flex items-center gap-1 min-w-0 text-sky-950 dark:text-sky-100">
                           <Clock size={11} className="text-sky-700 dark:text-info shrink-0" />
                           <span className="font-semibold truncate text-[11px]">
                             {activePendingReservation.booking_date
-                              ? new Date(activePendingReservation.booking_date).toLocaleDateString('id-ID', {
+                              ? formatWib(activePendingReservation.booking_date, {
                                   weekday: 'short',
                                   day: 'numeric',
                                   month: 'short',
                                 }) +
                                 ' ' +
-                                new Date(activePendingReservation.booking_date).toLocaleTimeString('id-ID', {
+                                formatWibClock(activePendingReservation.booking_date, {
                                   hour: '2-digit',
                                   minute: '2-digit',
-                                  timeZone: 'Asia/Jakarta',
-                                })
+                                                            })
                               : 'Menunggu konfirmasi jadwal'}
                             {activePendingReservation.treatment_detail ? ` • ${activePendingReservation.treatment_detail}` : ''}
                           </span>
@@ -859,7 +844,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                       <button
                         type="button"
                         onClick={() => handleConfirmPendingBooking(activePendingReservation)}
-                        className="inline-flex items-center gap-1.5 h-[30px] px-3 bg-gradient-to-r from-info to-info hover:from-info hover:to-info active:scale-95 text-white font-bold rounded-full text-xs leading-none transition-all shadow-xs cursor-pointer whitespace-nowrap shrink-0"
+                        className="inline-flex items-center gap-1.5 h-[30px] px-3 bg-gradient-to-r from-info to-info hover:from-info hover:to-info active:scale-95 text-white font-bold rounded-full text-xs leading-none transition shadow-xs cursor-pointer whitespace-nowrap shrink-0"
                         title="Konfirmasi dan jadwalkan booking ini"
                       >
                         <Check size={13} strokeWidth={2.5} className="shrink-0" />
@@ -868,7 +853,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                       <button
                         type="button"
                         onClick={() => setIsBannerCollapsed(true)}
-                        className="md:hidden inline-flex items-center justify-center h-[30px] w-[30px] text-sky-700 dark:text-info hover:bg-sky-500/15 active:scale-95 rounded-full transition-all shrink-0"
+                        className="md:hidden inline-flex items-center justify-center h-[30px] w-[30px] text-sky-700 dark:text-info hover:bg-sky-500/15 active:scale-95 rounded-full transition shrink-0"
                         title="Ciutkan banner"
                       >
                         <ChevronUp size={14} className="stroke-[2.5]" />
@@ -883,7 +868,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                 {showFormReservasiBanner && formBannerExtracted && (
                   <div className="mx-1.5 mb-1.5 px-3 py-2 min-h-[44px] rounded-xl border flex items-center justify-between gap-2 text-xs shadow-xs shrink-0 animate-fadeIn bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-transparent border-emerald-300 dark:border-emerald-700 text-emerald-950 dark:text-emerald-100">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <span className="w-2.5 h-2.5 rounded-full bg-success animate-pulse shrink-0" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-success shrink-0" />
                       <div className="flex flex-col justify-center leading-tight min-w-0">
                         <span className="font-extrabold text-[9px] uppercase tracking-wider text-emerald-800 dark:text-accent">
                           {formBannerExtracted.hasExplicitReservationForm
@@ -891,7 +876,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                             : 'KESEPAKATAN JADWAL TERDETEKSI (CHAT)'}
                         </span>
                         <span className="font-semibold truncate text-[11px]">
-                          📅 {formBannerExtracted.dateDisplay || 'Jadwal'}{formBannerExtracted.timeDisplay ? ` (${formBannerExtracted.timeDisplay})` : ''} • {formatFormBannerAudienceLabel(formBannerExtracted)} • {formBannerExtracted.isTreatmentFromHistory && formBannerExtracted.treatmentName
+                          {formBannerExtracted.dateDisplay || 'Jadwal'}{formBannerExtracted.timeDisplay ? ` (${formBannerExtracted.timeDisplay})` : ''} • {formatFormBannerAudienceLabel(formBannerExtracted)} • {formBannerExtracted.isTreatmentFromHistory && formBannerExtracted.treatmentName
                             ? `Layanan belum dipilih (rekomendasi riwayat: ${formBannerExtracted.treatmentName})`
                             : formBannerExtracted.treatmentName || 'Layanan belum dipilih'}
                         </span>
@@ -901,7 +886,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                       <button
                         type="button"
                         onClick={() => void handleOpenQuickReservation()}
-                        className="inline-flex items-center gap-1.5 h-[34px] px-3.5 bg-accent hover:bg-accent-hover active:scale-95 text-white font-bold rounded-xl text-xs shadow-xs cursor-pointer whitespace-nowrap"
+                        className="inline-flex items-center gap-1.5 h-[34px] px-3.5 bg-accent hover:bg-accent-hover active:scale-95 text-on-solid font-bold rounded-xl text-xs shadow-xs cursor-pointer whitespace-nowrap"
                         title="Buka form reservasi dengan data chat yang sudah terisi"
                       >
                         <CalendarPlus size={14} />
@@ -930,7 +915,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                           RESERVASI SUDAH TERCATAT (OTOMATIS)
                         </span>
                         <span className="font-semibold truncate text-[11px]">
-                          📅 {formBannerExtracted?.dateDisplay || 'Jadwal'}{formBannerExtracted?.timeDisplay ? ` (${formBannerExtracted.timeDisplay})` : ''} • Jadwal untuk chat ini sudah tersimpan di sistem
+                          {formBannerExtracted?.dateDisplay || 'Jadwal'}{formBannerExtracted?.timeDisplay ? ` (${formBannerExtracted.timeDisplay})` : ''} • Jadwal untuk chat ini sudah tersimpan di sistem
                         </span>
                       </div>
                     </div>
@@ -960,13 +945,13 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                 {showUnregisteredVisitBanner && selectedChat && (
                   <div className="mx-1.5 mb-1.5 px-3 py-2 min-h-[44px] rounded-xl border flex items-center justify-between gap-2 text-xs shadow-xs shrink-0 animate-fadeIn bg-gradient-to-r from-amber-500/10 via-orange-500/5 to-transparent border-amber-300 dark:border-amber-700 text-amber-950 dark:text-amber-100">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <span className="w-2.5 h-2.5 rounded-full bg-warning animate-pulse shrink-0" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-warning shrink-0" />
                       <div className="flex flex-col justify-center leading-tight min-w-0">
                         <span className="font-extrabold text-[9px] uppercase tracking-wider text-amber-800 dark:text-warning">
                           PERINGATAN KUNJUNGAN LAPANGAN
                         </span>
                         <span className="font-semibold truncate text-[11px]">
-                          ⚠️ Kunjungan lapangan terdeteksi tetapi belum ada reservasi aktif di kalender.
+                          Kunjungan lapangan terdeteksi tetapi belum ada reservasi aktif di kalender.
                         </span>
                       </div>
                     </div>
@@ -985,53 +970,36 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                 )}
 
                 {/* In-chat search toolbar (terpisah dari pencarian daftar kiri) */}
-                {inChatSearchOpen && (
-                  <div className="mx-1 mb-1 p-1.5 bg-surface-2 dark:bg-surface border border-divider dark:border-divider rounded-xl flex items-center gap-1.5 animate-fadeIn shrink-0">
-                    <Search size={14} className="text-ink-3 shrink-0 ml-1" />
-                    <input
-                      ref={inChatSearchInputRef}
-                      type="text"
-                      value={inChatSearchQuery}
-                      onChange={(e) => setInChatSearchQuery(e.target.value)}
-                      placeholder="Cari dalam percakapan ini… (min. 2 huruf)"
-                      className="flex-1 bg-transparent text-xs text-ink placeholder-ink-3 focus:outline-none min-w-0"
-                    />
-                    {inChatSearchQuery && (
-                      <button type="button" onClick={handleClearInChatSearch} className="p-1 rounded-lg hover:bg-fill-2 dark:hover:bg-strong text-ink-3">
-                        <X size={14} />
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {/* Sticky Pinned Message Banner */}
-                {pinnedBubble && (
-                  <MessagePinBanner
-                    pinnedMessage={pinnedBubble}
-                    onJumpToMessage={handleJumpToPinnedMessage}
-                    onUnpin={(msgId) => {
-                      const target = messages.find((m) => m.id === msgId);
-                      if (target) {
-                        void handleToggleMessagePin(target);
-                      } else if (selectedChat?.conversationId) {
-                        setIsPinningMessageId(msgId);
-                        apiRequest(`/api/admin/live-chat/conversations/${selectedChat.conversationId}/messages/${msgId}/pin`, {
-                          method: 'PATCH',
-                          body: JSON.stringify({ isPinned: false }),
+                <LiveChatThreadTools
+                  searchOpen={inChatSearchOpen}
+                  searchQuery={inChatSearchQuery}
+                  searchInputRef={inChatSearchInputRef}
+                  onQueryChange={setInChatSearchQuery}
+                  onClearSearch={handleClearInChatSearch}
+                  pinnedBubble={pinnedBubble}
+                  onJumpToPinned={handleJumpToPinnedMessage}
+                  onUnpin={(msgId) => {
+                    const target = messages.find((m) => m.id === msgId);
+                    if (target) {
+                      void handleToggleMessagePin(target);
+                    } else if (selectedChat?.conversationId) {
+                      setIsPinningMessageId(msgId);
+                      apiRequest(`/api/admin/live-chat/conversations/${selectedChat.conversationId}/messages/${msgId}/pin`, {
+                        method: 'PATCH',
+                        body: JSON.stringify({ isPinned: false }),
+                      })
+                        .then(() => {
+                          toast('Sematan pesan dilepas.', 'success');
+                          setPinnedBubble(null);
                         })
-                          .then(() => {
-                            toast('Sematan pesan dilepas.', 'success');
-                            setPinnedBubble(null);
-                          })
-                          .catch((err: any) => {
-                            toast(`Gagal melepas sematan: ${err.message}`, 'error');
-                          })
-                          .finally(() => setIsPinningMessageId(null));
-                      }
-                    }}
-                    isUnpinning={isPinningMessageId === pinnedBubble.id}
-                  />
-                )}
+                        .catch((err: any) => {
+                          toast(`Gagal melepas sematan: ${err.message}`, 'error');
+                        })
+                        .finally(() => setIsPinningMessageId(null));
+                    }
+                  }}
+                  isUnpinning={isPinningMessageId === pinnedBubble?.id}
+                />
 
                 {/* Chat Bubbles Container with WhatsApp Wallpaper */}
                 <div 
@@ -1085,13 +1053,14 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                   )}
                   {/* Floating In-Chat Search Navigation Bar — terpisah dari pencarian daftar */}
                   {effectiveInChatQuery && messages.length > 0 && matchingMessageIds.length > 0 && (
-                    <div className="sticky top-1 z-30 mx-auto w-fit max-w-[94%] bg-warning-soft/95 backdrop-blur-md border border-warning-line shadow-md rounded-full px-3 py-1.5 flex items-center gap-2 text-xs text-warning animate-fadeIn select-none">
+                    <div className="sticky top-1 z-30 mx-auto w-fit max-w-[94%] bg-warning-soft/95 border border-warning-line shadow-md rounded-full px-3 py-1.5 flex items-center gap-2 text-xs text-warning animate-fadeIn select-none">
                       <Search size={13} className="text-warning shrink-0" />
                       <span className="truncate">
                         Hasil pencarian: <span className="font-semibold text-warning">"{inChatSearchQuery}"</span> ({currentMatchIndex + 1} dari {matchingMessageIds.length})
                       </span>
                       <div className="flex items-center gap-0.5 border-l border-warning-line pl-1.5 shrink-0">
                         <button
+                          aria-label="Pesan Sebelumnya (Lebih Lama)"
                           type="button"
                           title="Pesan Sebelumnya (Lebih Lama)"
                           onClick={handlePrevMatch}
@@ -1100,6 +1069,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                           <ChevronUp size={14} />
                         </button>
                         <button
+                          aria-label="Pesan Berikutnya (Lebih Baru)"
                           type="button"
                           title="Pesan Berikutnya (Lebih Baru)"
                           onClick={handleNextMatch}
@@ -1108,6 +1078,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                           <ChevronDown size={14} />
                         </button>
                         <button
+                          aria-label="Tutup Navigasi Pencarian"
                           type="button"
                           title="Tutup Navigasi Pencarian"
                           onClick={handleClearInChatSearch}
@@ -1120,7 +1091,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                   )}
 
                   {effectiveInChatQuery && messages.length > 0 && matchingMessageIds.length === 0 && (
-                    <div className="sticky top-1 z-30 mx-auto w-fit max-w-[94%] bg-surface-2/95 backdrop-blur-md border border-strong shadow-sm rounded-full px-3 py-1 flex items-center gap-2 text-xs text-ink-2 animate-fadeIn select-none">
+                    <div className="sticky top-1 z-30 mx-auto w-fit max-w-[94%] bg-surface-2/95 border border-strong shadow-sm rounded-full px-3 py-1 flex items-center gap-2 text-xs text-ink-2 animate-fadeIn select-none">
                       <Info size={13} className="text-ink-2 shrink-0" />
                       <span className="truncate">
                         Tidak ada bubble pesan berisi <span className="font-semibold">"{inChatSearchQuery}"</span> di percakapan ini
@@ -1130,7 +1101,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                           type="button"
                           onClick={handleDeepSearchInHistory}
                           disabled={isDeepSearching}
-                          className="shrink-0 ml-1 px-2 py-0.5 rounded-full bg-accent hover:bg-accent-hover disabled:opacity-50 text-white text-[10px] font-bold transition active:scale-95 cursor-pointer flex items-center gap-1"
+                          className="shrink-0 ml-1 px-2 py-0.5 rounded-full bg-accent hover:bg-accent-hover disabled:opacity-50 text-on-solid text-[10px] font-bold transition active:scale-95 cursor-pointer flex items-center gap-1"
                         >
                           {isDeepSearching ? (
                             <Loader size={11} className="animate-spin" />
@@ -1141,6 +1112,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                         </button>
                       )}
                       <button
+                        aria-label="Tutup"
                         type="button"
                         title="Tutup"
                         onClick={handleClearInChatSearch}
@@ -1164,7 +1136,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                       <button
                         type="button"
                         onClick={() => { if (selectedId) void loadThread(selectedId); }}
-                        className="mt-3 px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-[11px] font-bold transition active:scale-95 cursor-pointer"
+                        className="mt-3 px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-on-solid text-[11px] font-bold transition active:scale-95 cursor-pointer"
                       >
                         Coba Lagi
                       </button>
@@ -1202,19 +1174,10 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                       const hasMediaOnly = hasMedia && !audioData && !docData && !videoData && !resolveMessageDisplayText({ content: msg.content, media: msg.media });
 
                       // Reaksi Pesan (WhatsApp Message Reactions)
-                      const reactions: Array<{ emoji: string; fromMe: boolean; senderName?: string; actorId?: string }> =
+                      const reactions: MessageReaction[] =
                         (msg as any).reactions || (msg as any).payload_raw?.reactions || [];
                       const myReaction = reactions.find((r) => r.fromMe);
-
-                      const groupedReactionsMap = new Map<string, { emoji: string; count: number; senders: string[] }>();
-                      for (const r of reactions) {
-                        if (!r.emoji) continue;
-                        const entry = groupedReactionsMap.get(r.emoji) || { emoji: r.emoji, count: 0, senders: [] };
-                        entry.count += 1;
-                        entry.senders.push(r.fromMe ? 'Anda' : (r.senderName || 'Customer'));
-                        groupedReactionsMap.set(r.emoji, entry);
-                      }
-                      const groupedReactions = Array.from(groupedReactionsMap.values());
+                      const groupedReactions = groupReactions(reactions);
 
                       const isMessagePinned = !!(msg.is_message_pinned || (msg as any).payload_raw?.is_pinned);
                       const isMessageHidden = !!(msg.is_message_hidden || (msg as any).payload_raw?.is_hidden);
@@ -1223,7 +1186,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                         <React.Fragment key={msg.id}>
                           {showDateSeparator && (
                             <div className="flex justify-center my-2 sm:my-2.5">
-                              <div className="bg-white/95 dark:bg-surface-2/95 backdrop-blur-xs px-3 py-1 rounded-lg text-[11px] font-semibold text-ink-2 shadow-2xs border border-black/5 dark:border-white/10 select-none tracking-wide">
+                              <div className="bg-white/95 dark:bg-surface-2/95 px-3 py-1 rounded-lg text-[11px] font-semibold text-ink-2 shadow-2xs border border-black/5 dark:border-white/10 select-none tracking-wide">
                                 {formatChatDateSeparator(msg.created_at)}
                               </div>
                             </div>
@@ -1239,64 +1202,14 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                             }`}
                           >
                             {/* Floating WhatsApp-Style Quick Emoji Reaction Toolbar */}
-                            {activeReactionMsgId === msg.id && (
-                              <div
-                                className={`absolute -top-10 ${isCustomer ? 'left-0' : 'right-0'} z-30 bg-surface border border-divider rounded-full shadow-lg px-2 py-1 flex items-center gap-1 animate-fadeIn select-none`}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {QUICK_REACTIONS.map((em) => {
-                                  const isSelected = myReaction?.emoji === em;
-                                  return (
-                                    <button
-                                      key={em}
-                                      type="button"
-                                      onClick={() => handleToggleReaction(msg, em)}
-                                      className={`w-7 h-7 flex items-center justify-center text-base rounded-full hover:scale-125 transition active:scale-95 ${
-                                        isSelected ? 'bg-bubble-out ring-2 ring-accent' : 'hover:bg-fill-1'
-                                      }`}
-                                      title={`Reaksi ${em}${isSelected ? ' (klik untuk batal)' : ''}`}
-                                    >
-                                      {em}
-                                    </button>
-                                  );
-                                })}
-                                <button
-                                  type="button"
-                                  onClick={() => setCustomEmojiMsgId(customEmojiMsgId === msg.id ? null : msg.id)}
-                                  className={`w-7 h-7 flex items-center justify-center text-xs rounded-full hover:bg-fill-1 transition ${
-                                    customEmojiMsgId === msg.id ? 'bg-accent-soft text-accent' : 'text-ink-2'
-                                  }`}
-                                  title="Pilih emoji lainnya"
-                                >
-                                  ➕
-                                </button>
-                              </div>
-                            )}
-
-                            {/* Extra Emoji Grid Popup */}
-                            {activeReactionMsgId === msg.id && customEmojiMsgId === msg.id && (
-                              <div
-                                className={`absolute -top-28 ${isCustomer ? 'left-0' : 'right-0'} z-40 bg-surface border border-divider rounded-2xl shadow-xl p-2 grid grid-cols-6 gap-1 animate-fadeIn select-none`}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {EXTRA_REACTIONS.map((em) => {
-                                  const isSelected = myReaction?.emoji === em;
-                                  return (
-                                    <button
-                                      key={em}
-                                      type="button"
-                                      onClick={() => handleToggleReaction(msg, em)}
-                                      className={`w-7 h-7 flex items-center justify-center text-base rounded-full hover:scale-125 transition active:scale-95 ${
-                                        isSelected ? 'bg-bubble-out ring-2 ring-accent' : 'hover:bg-fill-1'
-                                      }`}
-                                      title={`Reaksi ${em}`}
-                                    >
-                                      {em}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            )}
+                            <LiveChatReactionToolbar
+                              active={activeReactionMsgId === msg.id}
+                              customOpen={customEmojiMsgId === msg.id}
+                              isCustomer={isCustomer}
+                              selectedEmoji={myReaction?.emoji}
+                              onToggleReaction={(emoji) => handleToggleReaction(msg, emoji)}
+                              onToggleCustom={() => setCustomEmojiMsgId(customEmojiMsgId === msg.id ? null : msg.id)}
+                            />
 
                             <div
                               className={`relative ${hasMediaOnly ? 'max-w-[240px] sm:max-w-[280px] p-1 sm:p-1.5' : 'max-w-[88%] sm:max-w-[75%] md:max-w-[70%] px-2.5 sm:px-3 py-1.5'} rounded-lg text-xs leading-relaxed shadow-2xs select-text cursor-text ${
@@ -1324,7 +1237,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                               {isInternalNote && !isRevoked && (
                                 <span className="flex items-center gap-1 text-[10px] font-bold mb-0.5 text-amber-700 dark:text-warning">
                                   <Lock size={10} />
-                                  <span>Catatan Internal — {msg.sender_name || 'Staf'}</span>
+                                  <span>Catatan Internal: {msg.sender_name || 'Staf'}</span>
                                 </span>
                               )}
                               {(!hasMediaOnly || (!isCustomer && !isAdmin)) && !isRevoked && !isInternalNote && (
@@ -1338,164 +1251,26 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
 
                               {/* Quoted Message / WhatsApp Reply preview inside bubble */}
                               {quotedMsg && !isRevoked && (
-                                <div
-                                  className={`mb-1.5 p-1.5 rounded-md border-l-[3px] text-[11px] leading-snug cursor-pointer transition select-none ${
-                                    isCustomer
-                                      ? 'bg-black/[0.04] hover:bg-black/[0.07] border-accent'
-                                      : 'bg-black/[0.05] hover:bg-black/[0.08] border-accent'
-                                  }`}
-                                  onClick={() => {
-                                    if (quotedMsg.id || quotedMsg.wa_message_id) {
-                                      const targetElem = document.getElementById(`msg-${quotedMsg.id}`) || document.getElementById(`msg-${quotedMsg.wa_message_id}`);
-                                      if (targetElem) {
-                                        targetElem.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                        targetElem.classList.add('ring-2', 'ring-accent');
-                                        setTimeout(() => targetElem.classList.remove('ring-2', 'ring-accent'), 1200);
-                                      }
-                                    }
-                                  }}
-                                  title="Klik untuk melihat pesan asli"
-                                >
-                                  <p className="font-bold text-[10px] text-accent truncate mb-0.5">
-                                    {quotedMsg.sender_name || (quotedMsg.direction === 'INBOUND' ? (selectedChat.customerName || 'Customer') : 'Bidan / CS')}
-                                  </p>
-                                  <p className="text-[11px] text-ink-2 truncate font-sans">
-                                    {quotedMsg.media ? (
-                                      <span className="flex items-center gap-1">
-                                        <span>📷</span>
-                                        <span>Foto</span>
-                                        {quotedMsg.content && !/^\[(IMAGE|MEDIA)/.test(quotedMsg.content) && <span>{quotedMsg.content}</span>}
-                                      </span>
-                                    ) : (
-                                      quotedMsg.content || 'Pesan'
-                                    )}
-                                  </p>
-                                </div>
+                                <LiveChatQuotedPreview
+                                  quotedMsg={quotedMsg}
+                                  customerName={selectedChat?.customerName}
+                                  isCustomer={isCustomer}
+                                />
                               )}
 
                               {!isRevoked && (
                                 <>
-                                  {/* 1. Audio / PTT Voice Note */}
-                                  {audioData && audioData.url && (
-                                    <div className="mb-1.5">
-                                      <VoiceNotePlayer src={audioData.url} />
-                                    </div>
-                                  )}
-
-                                  {/* 2. Document / PDF */}
-                                  {docData && docData.url && (
-                                    <div className="mb-1.5">
-                                      <a
-                                        href={docData.url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        download
-                                        className="flex items-center gap-2.5 p-2.5 rounded-xl bg-fill-1 border border-divider hover:bg-accent-soft transition text-left max-w-[260px]"
-                                      >
-                                        <span className="w-8 h-8 rounded-lg bg-info-soft text-info flex items-center justify-center shrink-0">
-                                          <FileText size={16} />
-                                        </span>
-                                        <span className="flex-1 min-w-0">
-                                          <span className="block text-xs font-bold text-ink truncate">
-                                            {String(docData.fileName || 'Dokumen').slice(0, 48)}
-                                          </span>
-                                          <span className="block text-[10px] text-ink-2">
-                                            {docData.fileSize ? `${Math.round(Number(docData.fileSize) / 1024)} KB • Ketuk untuk unduh` : 'Ketuk untuk unduh'}
-                                          </span>
-                                        </span>
-                                        <Download size={14} className="text-ink-3 shrink-0" />
-                                      </a>
-                                    </div>
-                                  )}
-
-                                  {/* 3. Video */}
-                                  {videoData && videoData.url && (
-                                    <div className="mb-1.5 max-w-[280px]">
-                                      <video
-                                        src={videoData.url}
-                                        controls
-                                        className="rounded-lg max-h-[240px] w-full bg-black"
-                                      />
-                                      {videoData.caption && (
-                                        <span className="block mt-1 text-[11px] text-ink break-words">
-                                          {renderFormattedMessageContent(videoData.caption, effectiveInChatQuery || searchQuery)}
-                                        </span>
-                                      )}
-                                    </div>
-                                  )}
-
-                                  {/* 4. Contact vCard */}
-                                  {contactData && (
-                                    <div className="my-1 p-2 bg-fill-1 hover:bg-accent-soft rounded-xl border border-divider transition flex items-center space-x-2.5 text-left max-w-[260px]">
-                                      <div className="w-8 h-8 rounded-lg bg-success-soft text-success flex items-center justify-center shrink-0">
-                                        <User size={16} />
-                                      </div>
-                                      <div className="flex-1 min-w-0">
-                                        <p className="font-bold text-[12px] text-ink leading-tight truncate">
-                                          {contactData.displayName || 'Kontak WhatsApp'}
-                                        </p>
-                                        {contactData.phoneNumber && (
-                                          <p className="text-[11px] text-ink-2 font-mono truncate mt-0.5">
-                                            {contactData.phoneNumber}
-                                          </p>
-                                        )}
-                                      </div>
-                                      {contactData.phoneNumber && (
-                                        <a
-                                          href={`tel:${contactData.phoneNumber}`}
-                                          className="px-2 py-1 bg-accent hover:bg-accent-hover text-white rounded-lg text-[10px] font-bold transition shrink-0"
-                                          title="Hubungi kontak"
-                                        >
-                                          Telepon
-                                        </a>
-                                      )}
-                                    </div>
-                                  )}
-
-                                  {/* 5. Image / Photo */}
-                                   {hasMedia && !audioData && !docData && !videoData && (
-                                     <div className={hasMediaOnly ? 'mb-0.5' : 'mb-1.5'}>
-                                       <MediaImage
-                                         src={msg.media!.url || msg.media!.hdUrl || msg.media!.thumbUrl}
-                                         downloadSrc={msg.media!.hdUrl || msg.media!.url}
-                                         thumbUrl={msg.media!.thumbUrl}
-                                         caption={msg.media!.caption || extractImageCaption(msg.content) || undefined}
-                                       />
-                                     </div>
-                                   )}
-
-                                  {/* 6. Location (Pin GPS & Live Location) */}
-                                  {locData && (
-                                    <div className="my-1 p-2 bg-fill-1 hover:bg-accent-soft rounded-xl border border-divider transition flex items-center space-x-2.5 text-left">
-                                      <div className="w-8 h-8 rounded-lg bg-danger-soft text-danger flex items-center justify-center shrink-0">
-                                        <MapPin size={17} />
-                                      </div>
-                                      <div className="flex-1 min-w-0">
-                                        <p className="font-bold text-[12px] text-ink leading-tight flex items-center gap-1">
-                                          <span>{locData.isLive ? 'Live Location WhatsApp' : 'Lokasi Pin WhatsApp'}</span>
-                                          {locData.isLive && <span className="inline-block w-2 h-2 rounded-full bg-danger animate-pulse" />}
-                                        </p>
-                                        <p className="text-[10px] text-ink-2 font-mono truncate mt-0.5">
-                                          {locData.latitude}, {locData.longitude}
-                                        </p>
-                                        {(locData.name || locData.address) && (
-                                          <p className="text-[11px] text-ink truncate mt-0.5 font-medium">
-                                            {locData.name || locData.address}
-                                          </p>
-                                        )}
-                                      </div>
-                                      <a
-                                        href={locData.url || getGoogleMapsDirectionUrl(locData.latitude, locData.longitude, locData.name || locData.address || null, 'gps_pin')}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="px-2.5 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-[11px] font-bold transition shadow-xs flex items-center space-x-1 shrink-0 active:scale-95"
-                                        title="Buka lokasi di Google Maps"
-                                      >
-                                        <span>Peta</span>
-                                        <ExternalLink size={12} />
-                                      </a>
-                                    </div>
-                                  )}
+                                  <LiveChatMessageMedia
+                                    content={msg.content}
+                                    media={msg.media}
+                                    audioData={audioData}
+                                    docData={docData}
+                                    videoData={videoData}
+                                    contactData={contactData}
+                                    locData={locData}
+                                    hasMediaOnly={hasMediaOnly}
+                                    renderCaption={(text) => renderFormattedMessageContent(text, effectiveInChatQuery || searchQuery)}
+                                  />
 
                                   {/* 7. Text Content (Anti-Hollow Bubble: teks dirender TEPAT 1x via resolver terpusat) */}
                                   {(() => {
@@ -1576,113 +1351,32 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                                     )}
                                   </span>
                                 )}
-                                {!isRevoked && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      void handleCopyMessageText(resolveMessageDisplayText({ content: msg.content, media: msg.media }) || msg.content || '');
-                                    }}
-                                    className="ml-0.5 p-0.5 rounded text-ink-3 hover:text-accent hover:bg-accent-soft transition active:scale-90"
-                                    title="Salin seluruh teks pesan"
-                                  >
-                                    <Copy size={11} />
-                                  </button>
-                                )}
-                                {!isRevoked && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setActiveReactionMsgId(activeReactionMsgId === msg.id ? null : msg.id);
-                                      setCustomEmojiMsgId(null);
-                                    }}
-                                    className={`ml-0.5 p-0.5 rounded transition active:scale-90 ${
-                                      activeReactionMsgId === msg.id || myReaction
-                                        ? 'text-accent bg-accent-soft'
-                                        : 'text-ink-3 hover:text-accent hover:bg-accent-soft'
-                                    }`}
-                                    title={myReaction ? `Reaksi Anda: ${myReaction.emoji} (klik untuk ubah/batal)` : 'Beri reaksi emotikon'}
-                                  >
-                                    <Smile size={11} />
-                                  </button>
-                                )}
-                                {!isRevoked && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleSelectReply(msg);
-                                    }}
-                                    className="ml-0.5 p-0.5 rounded text-ink-3 hover:text-accent hover:bg-accent-soft transition active:scale-90"
-                                    title="Balas pesan ini"
-                                  >
-                                    <Reply size={11} />
-                                  </button>
-                                )}
-                                {canEdit && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleStartEdit(msg)}
-                                    className="ml-0.5 p-0.5 rounded text-ink-3 hover:text-accent hover:bg-accent-soft transition active:scale-90"
-                                    title="Edit pesan (maksimal 15 menit)"
-                                  >
-                                    <PenLine size={11} />
-                                  </button>
-                                )}
-                                {canRevoke && (
-                                  <button
-                                    type="button"
-                                    disabled={revokingId === msg.id}
-                                    onClick={() => handleRevokeMessage(msg)}
-                                    className="ml-0.5 p-0.5 rounded text-ink-3 hover:text-danger hover:bg-danger-soft transition active:scale-90"
-                                    title="Tarik / Hapus pesan untuk semua orang (Delete for Everyone)"
-                                  >
-                                    {revokingId === msg.id ? (
-                                      <div className="h-2.5 w-2.5 animate-spin rounded-full border border-danger border-t-transparent" />
-                                    ) : (
-                                      <Trash2 size={11} />
-                                    )}
-                                  </button>
-                                )}
-                                {!isRevoked && (
-                                  <button
-                                    type="button"
-                                    disabled={isPinningMessageId === msg.id}
-                                    onClick={() => handleToggleMessagePin(msg, !isMessagePinned)}
-                                    className={`ml-0.5 p-0.5 rounded transition active:scale-90 ${
-                                      isMessagePinned
-                                        ? 'text-amber-600 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 font-bold'
-                                        : 'text-ink-3 hover:text-warning hover:bg-warning-soft'
-                                    }`}
-                                    title={isMessagePinned ? 'Lepas sematan pesan (Unpin)' : 'Sematkan pesan ini (Pin ke atas)'}
-                                  >
-                                    {isPinningMessageId === msg.id ? (
-                                      <div className="h-2.5 w-2.5 animate-spin rounded-full border border-warning border-t-transparent" />
-                                    ) : (
-                                      <Pin size={11} className={isMessagePinned ? 'fill-warning text-warning' : ''} />
-                                    )}
-                                  </button>
-                                )}
-                                {!isRevoked && !isInternalNote && (
-                                  <button
-                                    type="button"
-                                    disabled={isHidingMessageId === msg.id}
-                                    onClick={() => handleToggleMessageHide(msg, !isMessageHidden)}
-                                    className={`ml-0.5 p-0.5 rounded transition active:scale-90 ${
-                                      isMessageHidden
-                                        ? 'text-ink-2 bg-fill-1 hover:bg-fill-2'
-                                        : 'text-ink-3 hover:text-ink hover:bg-fill-2'
-                                    }`}
-                                    title={isMessageHidden ? 'Tampilkan kembali pesan ini (Unhide)' : 'Sembunyikan bubble ini di dashboard (Hide internal)'}
-                                  >
-                                    {isHidingMessageId === msg.id ? (
-                                      <div className="h-2.5 w-2.5 animate-spin rounded-full border border-strong border-t-transparent" />
-                                    ) : (
-                                      <EyeOff size={11} />
-                                    )}
-                                  </button>
-                                )}
+                                <LiveChatMessageActions
+                                  isRevoked={isRevoked}
+                                  isInternalNote={isInternalNote}
+                                  activeReactionMsgId={activeReactionMsgId}
+                                  myReaction={myReaction}
+                                  canEdit={canEdit}
+                                  canRevoke={canRevoke}
+                                  isMessagePinned={isMessagePinned}
+                                  isMessageHidden={isMessageHidden}
+                                  revokingId={revokingId}
+                                  isPinningMessageId={isPinningMessageId}
+                                  isHidingMessageId={isHidingMessageId}
+                                  messageId={msg.id}
+                                  onCopy={() => {
+                                    void handleCopyMessageText(resolveMessageDisplayText({ content: msg.content, media: msg.media }) || msg.content || '');
+                                  }}
+                                  onToggleReactionBar={() => {
+                                    setActiveReactionMsgId(activeReactionMsgId === msg.id ? null : msg.id);
+                                    setCustomEmojiMsgId(null);
+                                  }}
+                                  onReply={() => handleSelectReply(msg)}
+                                  onEdit={() => handleStartEdit(msg)}
+                                  onRevoke={() => handleRevokeMessage(msg)}
+                                  onTogglePin={(next) => handleToggleMessagePin(msg, next)}
+                                  onToggleHide={(next) => handleToggleMessageHide(msg, next)}
+                                />
                               </div>
 
                               {/* Reaction Badges (WhatsApp Style Pill attached to bottom corner of bubble) */}
@@ -1718,7 +1412,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                   {selectedChat.isSandboxTest ? (
                     <div className="flex items-center justify-center space-x-2 px-3 py-2.5 rounded-xl bg-violet-soft border border-violet-line text-violet text-xs font-semibold">
                       <FlaskConical size={13} />
-                      <span>Chat sandbox — balasan admin diblokir otomatis</span>
+                      <span>Chat sandbox: balasan admin diblokir otomatis</span>
                     </div>
                   ) : (
                   <>

@@ -120,7 +120,7 @@ export const CustomerService: React.FC = () => {
           <Headphones size={22} />
         </div>
         <div>
-          <h2 className="text-xl font-bold text-ink">CTA &amp; Greetings WhatsApp</h2>
+          <h1 className="text-xl font-bold text-ink">CTA &amp; Greetings WhatsApp</h1>
           <p className="text-xs text-ink-3 mt-0.5">
             Pusat konfigurasi pesan pembuka WhatsApp, format pelacakan Promo [%ID%], link generator, dan Greeting Catchers CTWA.
           </p>
@@ -255,9 +255,10 @@ export const CustomerService: React.FC = () => {
           </div>
 
           <button
+            aria-label="Simpan"
             onClick={handleSave}
             disabled={isSaving}
-            className="w-full flex items-center justify-center space-x-2 py-2.5 bg-accent hover:bg-accent active:bg-accent-hover font-semibold text-xs text-white rounded-xl shadow-xs transition disabled:opacity-50"
+            className="w-full flex items-center justify-center space-x-2 py-2.5 bg-accent hover:bg-accent active:bg-accent-hover font-semibold text-xs text-on-solid rounded-xl shadow-xs transition disabled:opacity-50"
           >
             <Save size={14} />
             <span>{isSaving ? 'Menyimpan...' : 'Simpan Konfigurasi'}</span>
@@ -300,7 +301,7 @@ export const CustomerService: React.FC = () => {
             {/* Dynamic Clean Link (Recommended) */}
             <div className="space-y-1 bg-success-soft p-3 rounded-xl border border-success-line">
               <div className="flex items-center justify-between">
-                <label className="block text-[11px] font-bold text-success">✨ Link Dinamis Singkat (Rekomendasi)</label>
+                <label className="block text-[11px] font-bold text-success">Link Dinamis Singkat (Rekomendasi)</label>
                 <span className="text-[10px] text-success font-medium">Otomatis Sync No CS & Pesan</span>
               </div>
               <textarea
@@ -310,7 +311,7 @@ export const CustomerService: React.FC = () => {
                 className="w-full bg-surface border border-success-line rounded-lg p-2 text-xs font-mono text-success focus:outline-none resize-none select-all"
               />
               <p className="text-[10px] text-success">
-                💡 Pakai link ini di landing page. Jika Anda ganti Nomor CS / Pesan di admin, semua landing page langsung ter-update otomatis tanpa ubah HTML.
+                Pakai link ini di landing page. Jika Anda ganti Nomor CS / Pesan di admin, semua landing page langsung ter-update otomatis tanpa ubah HTML.
               </p>
             </div>
 
@@ -335,7 +336,7 @@ export const CustomerService: React.FC = () => {
               </button>
               <button
                 onClick={() => handleCopyLink(generatedCtaLink, 'Manual')}
-                className="flex items-center justify-center space-x-1.5 py-2.5 bg-accent hover:bg-accent font-semibold text-xs text-white rounded-xl shadow-xs transition"
+                className="flex items-center justify-center space-x-1.5 py-2.5 bg-accent hover:bg-accent font-semibold text-xs text-on-solid rounded-xl shadow-xs transition"
               >
                 {copied ? <Check size={14} className="text-white" /> : <Copy size={14} />}
                 <span>Salin Link Manual</span>

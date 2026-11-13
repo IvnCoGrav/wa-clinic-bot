@@ -4,6 +4,8 @@
  * Memastikan staf dan admin dapat langsung melihat pratinjau foto ber-watermark di browser sebelum disimpan.
  */
 
+import { formatWib, formatWibClock } from './dateWib';
+
 export interface WatermarkInfo {
   lat?: number | null;
   lng?: number | null;
@@ -46,16 +48,16 @@ export async function stampGpsWatermark(
       ctx.drawImage(img, 0, 0, width, height);
 
       // 2. Format Teks Watermark
+      // Timestamp bukti wajib WIB, bukan zona perangkat staf — bukti foto
+      // dipakai untuk sengketa jadwal, jadi jamnya tidak boleh bergeser.
       const dateObj = new Date();
       const timeStr =
         info.timestamp ||
-        dateObj.toLocaleDateString('id-ID', {
+        `${formatWib(dateObj, {
           day: 'numeric',
           month: 'short',
           year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-        }) + ' WIB';
+        })} ${formatWibClock(dateObj)} WIB`;
 
       const hasCoords = info.lat != null && info.lng != null;
       const latStr = hasCoords ? Number(info.lat).toFixed(6) : '';

@@ -4,11 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>__CLINIC_NAME__ — Layanan Home-Treatment Pijat Bayi & Moms</title>
-  
-  <!-- Premium Modern Typography -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Metadata berbagi: pratinjau tautan di WhatsApp memakai judul & deskripsi ini. -->
+  <meta name="description" content="__OG_DESCRIPTION__">
+  <link rel="canonical" href="__CANONICAL_URL__">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="__OG_TITLE__">
+  <meta property="og:description" content="__OG_DESCRIPTION__">
+  <meta property="og:image" content="__OG_IMAGE__">
+  <meta property="og:url" content="__CANONICAL_URL__">
+  <meta name="twitter:card" content="summary_large_image">
 
   <!-- Meta Pixel Code -->
   <script>
@@ -60,7 +64,7 @@
     })();
   </script>
   <noscript>
-    <img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=__FB_PIXEL_ID__&ev=PageView&noscript=1"/>
+    <img height="1" width="1" alt="" style="display:none" src="https://www.facebook.com/tr?id=__FB_PIXEL_ID__&ev=PageView&noscript=1"/>
   </noscript>
   <!-- End Meta Pixel Code -->
   <script src="/assets/clientParamBuilder.bundle.js"></script>
@@ -84,7 +88,7 @@
     }
 
     body {
-      font-family: 'Outfit', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       background-color: var(--bg-color);
       color: var(--text-primary);
       min-height: 100vh;
@@ -212,11 +216,20 @@
       from { opacity: 0; transform: translateY(15px); }
       to { opacity: 1; transform: translateY(0); }
     }
-  </style>
+  
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+</style>
 </head>
 <body>
 
-  <div class="landing-card">
+  <main class="landing-card">
     <div class="badge">Official Homecare · __CLINIC_NAME__</div>
     <h1 class="brand-title">__HEADLINE__</h1>
     <p class="subheadline">__SUBHEADLINE__</p>
@@ -227,14 +240,14 @@
     </div>
 
     <!-- Single CTA Button with mandatory id="wa-cta" contract -->
-    <a href="#" class="cta-button" id="wa-cta">
-      <span>💬 Chat via WhatsApp</span>
+    <a href="https://wa.me/__DEFAULT_WHATSAPP_PHONE__?text=Halo%2C%20saya%20ingin%20bertanya%20layanan%20homecare" class="cta-button" id="wa-cta">
+      <span>Chat via WhatsApp</span>
     </a>
 
     <div class="footer-note">
       Layanan resmi WhatsApp __CLINIC_NAME__. Terhubung langsung dengan tim kami.
     </div>
-  </div>
+  </main>
 
   <script>
     (function() {

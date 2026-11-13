@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useUiFeedback } from '../common/UiFeedback';
+import { Modal } from '../ui/Modal';
 import { 
   X, 
   Save, 
@@ -196,7 +197,7 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
         lng: loc.lng.toFixed(6),
       }));
       setGpsAccuracy(loc.accuracy);
-      toast(`✓ Titik GPS berhasil dikunci (Akurasi: ±${loc.accuracy}m)! 📍`, 'success');
+      toast(`Titik GPS berhasil dikunci (Akurasi: ±${loc.accuracy}m)!`, 'success');
     } catch (err: any) {
       toast(err.message || 'Gagal mengunci GPS.', 'error');
     } finally {
@@ -219,7 +220,7 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
           kecamatan: d.kecamatan || prev.kecamatan,
           kota: d.kota || prev.kota,
         }));
-        toast(res.message || `Lokasi diperbarui: ${d.sourceLabel} — ${d.distanceKm.toFixed(2)} km`, 'success');
+        toast(res.message || `Lokasi diperbarui: ${d.sourceLabel}: ${d.distanceKm.toFixed(2)} km`, 'success');
       } else {
         toast(res?.error || 'Gagal refresh lokasi', 'error');
       }
@@ -257,7 +258,7 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
           kota: d.kota || prev.kota,
         }));
         setGpsAccuracy(null);
-        toast(`✓ Titik koordinat ditemukan untuk ${formData.kelurahan || formData.kecamatan}! 📍`, 'success');
+        toast(`Titik koordinat ditemukan untuk ${formData.kelurahan || formData.kecamatan}!`, 'success');
       } else {
         toast(res?.error || 'Titik tidak ditemukan untuk alamat ini. Coba tempel link Google Maps.', 'info');
       }
@@ -326,35 +327,15 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fadeIn" onClick={handleCancel}>
-      <div
-        className="bg-surface rounded-t-3xl sm:rounded-3xl border border-divider overflow-hidden w-full max-w-xl max-h-[90dvh] sm:max-h-[92vh] flex flex-col shadow-2xl animate-slideUp sm:animate-modalScaleUp"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Mobile Drag Handle */}
-        <div className="pt-2 pb-1 bg-surface-2 sm:hidden flex justify-center shrink-0">
-          <div className="w-10 h-1 bg-divider rounded-full" />
-        </div>
-
-        {/* Header */}
-        <div className="p-4 border-b border-divider bg-surface-2 flex items-center justify-between shrink-0">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 rounded-xl bg-accent-soft border border-divider dark:border-accent/40 flex items-center justify-center text-accent">
-              <User size={18} />
-            </div>
-            <div>
-              <h3 className="font-bold text-ink text-sm">Edit Data Customer & Anak</h3>
-              <p className="text-[11px] text-ink-3">Perbarui profil bunda, kontak, alamat, dan data anak/pasien</p>
-            </div>
-          </div>
-          <button
-            onClick={handleCancel}
-            disabled={saving || loading}
-            className="p-1.5 rounded-lg text-ink-3 hover:text-ink dark:hover:text-ink hover:bg-fill-2 dark:hover:bg-fill-1 transition disabled:opacity-50"
-          >
-            <X size={18} />
-          </button>
-        </div>
+    <Modal
+      open
+      onClose={handleCancel}
+      variant="sheet"
+      size="lg"
+      bodyClassName="p-0 overflow-hidden flex-1 flex flex-col min-h-0"
+      title="Edit Data Customer & Anak"
+      subtitle="Perbarui profil bunda, kontak, alamat, dan data anak/pasien"
+    >
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-5 overflow-y-auto flex-1 text-xs">
@@ -612,6 +593,7 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
               </button>
             </div>
             <button
+              aria-label="Isi koordinat otomatis dari riwayat chat"
               type="button"
               onClick={handleRefreshFromChat}
               disabled={refreshingChatLoc}
@@ -619,7 +601,7 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
               title="Ambil koordinat paling valid dari riwayat chat (Bidan → Customer → DB → Geocoding) dan isi otomatis"
             >
               {refreshingChatLoc ? <Loader size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-              <span>{refreshingChatLoc ? 'Memperbarui...' : '🔄 Ambil dari Shareloc Chat / Refresh'}</span>
+              <span>{refreshingChatLoc ? 'Memperbarui...' : ' Ambil dari Shareloc Chat / Refresh'}</span>
             </button>
 
             {/* Current Coordinate Badge */}
@@ -711,7 +693,6 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 };

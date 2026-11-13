@@ -1,3 +1,4 @@
+import { Modal } from '../ui/Modal';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   X,
@@ -28,6 +29,8 @@ import { parseTreatmentItemsFromRaw, stripBufferMetadata, isAddonServiceName } f
 import { calculateOngkirFromTiers, DeliveryTierItem } from '../../utils/deliveryTierCalculator';
 import { useFormDraft } from '../../hooks/useFormDraft';
 import { apiRequest } from '../../services/api';
+import { formatRupiah as formatRp } from '../../utils/money';
+import { formatWibClock } from '../../utils/dateWib';
 
 interface InvoiceGeneratorModalProps {
   isOpen: boolean;
@@ -56,10 +59,6 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
   const { toast } = useUiFeedback();
 
   // Safe Helper Formatters
-  const formatRp = (num: any) => {
-    if (num === null || num === undefined || isNaN(Number(num))) return '0';
-    return Number(num).toLocaleString('id-ID');
-  };
 
   const formatKm = (km: any) => {
     if (km === null || km === undefined || isNaN(Number(km))) return '3,0';
@@ -90,7 +89,9 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
           setDeliveryTiers(list);
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        // Tier ongkir opsional; perhitungan manual tetap tersedia.
+      });
   }, []);
 
   // Form State with clean empty defaults
@@ -488,7 +489,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
     try {
       await navigator.clipboard.writeText(generatedInvoiceText);
       setCopied(true);
-      toast('Format invoice WhatsApp berhasil disalin ke clipboard! 📋', 'success');
+      toast('Format invoice WhatsApp berhasil disalin ke clipboard!', 'success');
       setTimeout(() => setCopied(false), 2000);
     } catch {
       toast('Gagal menyalin ke clipboard', 'error');
@@ -509,19 +510,22 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
     }
     discardDraft(true);
     onInsertToChat(generatedInvoiceText);
-    toast('Format rincian invoice WhatsApp berhasil dimasukkan ke box chat! 🐣', 'success');
+    toast('Format rincian invoice WhatsApp berhasil dimasukkan ke box chat!', 'success');
     onClose();
   };
 
   const handleSelectService = (_s: any) => { /* replaced by handleAddServiceInstance matching Buat Reservasi */ };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150 overscroll-contain overflow-hidden" style={{ overscrollBehavior: 'contain', touchAction: 'pan-y', overscrollBehaviorX: 'none' as any }}>
-      <div
-        className="bg-surface text-ink w-full max-w-4xl rounded-none sm:rounded-2xl shadow-2xl border-0 sm:border border-divider flex flex-col h-[100dvh] sm:h-auto sm:max-h-[90vh] overflow-hidden overscroll-contain"
-        style={{ overscrollBehavior: 'contain', touchAction: 'pan-y', overscrollBehaviorX: 'none' as any, maxWidth: 'min(100vw - 24px, 56rem)' }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal
+      open
+      onClose={onClose}
+      size="xl"
+      variant="sheet"
+      chrome="bare"
+      className="max-w-4xl h-[100dvh] sm:h-auto sm:max-h-[90vh] sm:my-auto rounded-none sm:rounded-2xl border-0 sm:border"
+      bodyClassName="flex flex-1 flex-col min-h-0 overflow-hidden p-0"
+    >
         {/* Modal Header — tipis minimalis 36px + safe-area Notch */}
         <div className="px-4 pt-[calc(0.5rem+env(safe-area-inset-top,0px))] pb-2 sm:px-4 sm:py-2.5 bg-accent text-accent-ink flex items-center justify-between shadow-xs shrink-0">
           <h3 className="font-bold text-sm flex items-center gap-2">
@@ -546,14 +550,14 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
               onClick={() => setMobileTab('setting')}
               className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold border transition ${mobileTab === 'setting' ? 'bg-accent text-accent-ink border-accent' : 'bg-surface text-ink-2 border-divider'}`}
             >
-              ⚙️ Pengaturan
+              Pengaturan
             </button>
             <button
               type="button"
               onClick={() => setMobileTab('preview')}
               className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold border transition ${mobileTab === 'preview' ? 'bg-accent text-accent-ink border-accent' : 'bg-surface text-ink-2 border-divider'}`}
             >
-              📱 Live Preview WA
+              Live Preview WA
             </button>
           </div>
 
@@ -733,7 +737,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                           className="w-full pl-8 pr-3 py-1.5 bg-fill-1 border border-divider rounded-lg text-xs text-ink focus:outline-none focus:border-accent"
                           autoFocus
                         />
-                        <span className="absolute left-2.5 top-2 text-ink-3">🔍</span>
+                        
                       </div>
                       <div className="divide-y divide-divider overflow-y-auto flex-1 pr-1">
                         {filteredServices.map((srv) => {
@@ -796,7 +800,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                         })}
                       </div>
                       <div className="pt-2 border-t flex justify-between items-center shrink-0">
-                        <span className="text-[11px] font-semibold text-accent">✓ {selectedTreatments.length} terpilih</span>
+                        <span className="text-[11px] font-semibold text-accent">{selectedTreatments.length} terpilih</span>
                         <button
                           type="button"
                           onClick={() => setIsServiceDropdownOpen(false)}
@@ -919,7 +923,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
               {ongkirOutOfCoverage && (
                 <div className="mt-2 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-warning-soft border border-warning-line text-[10px] font-semibold text-warning">
                   <AlertTriangle size={12} />
-                  <span>Jarak melebihi jangkauan tier ongkir terjauh — ongkir otomatis 0. Mohon konfirmasi manual.</span>
+                  <span>Jarak melebihi jangkauan tier ongkir terjauh: ongkir otomatis 0. Mohon konfirmasi manual.</span>
                 </div>
               )}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
@@ -1035,6 +1039,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                   <span>Live Preview WhatsApp</span>
                 </div>
                 <button
+                  aria-label="Tandai"
                   type="button"
                   onClick={handleCopy}
                   className="px-2.5 py-1 rounded-lg bg-surface border border-divider text-[11px] font-semibold text-ink-2 hover:bg-fill-1 hover:text-ink transition flex items-center space-x-1 shadow-2xs cursor-pointer"
@@ -1058,9 +1063,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                 {generatedInvoiceText}
                 <div className="text-[10px] text-ink-3 text-right mt-2 flex items-center justify-end space-x-1">
                   <span>
-                    {new Date()
-                      .toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-                      .replace(':', '.')}
+                    {formatWibClock(new Date()).replace(':', '.')}
                   </span>
                   <Check size={12} className="text-info" />
                 </div>
@@ -1176,7 +1179,6 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };

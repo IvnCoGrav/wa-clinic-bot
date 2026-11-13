@@ -1,3 +1,7 @@
+// Catatan kontrak error: catch kosong di hook ini adalah penyegaran daftar
+// thread dan jumlah pesan belum dibaca (dipicu SSE). Daftar lama tetap tampil
+// dan penyegaran berikutnya datang dari event/interval; memuat awal punya
+// pesan galat sendiri di halaman.
 import { useState, useRef, useEffect, useCallback, useMemo, startTransition } from 'react';
 import { apiRequest } from '../services/api';
 import { shouldPreserveActiveChat } from '../utils/livechatSourceFilter';

@@ -1,3 +1,6 @@
+// Catatan kontrak error: catch kosong di hook ini adalah langganan push dan
+// cache tampilan mobile — keduanya pelengkap. Notifikasi tetap muncul lewat
+// kanal SSE walau langganan push gagal.
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { hasAccess } from '../config/rolePermissions';
@@ -12,6 +15,7 @@ import {
   requestNotificationPermission,
 } from '../services/notificationSound';
 import { apiRequest } from '../services/api';
+import { formatWibClock } from '../utils/dateWib';
 
 export interface IncomingChatToast {
   id: string;
@@ -207,7 +211,8 @@ export function useLiveChatNotification(currentRole: string) {
               conversationId,
               customerName,
               content,
-              createdAt: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+              // Selalu WIB: notifikasi bisa dibuka dari perangkat di luar zona Jakarta.
+              createdAt: formatWibClock(new Date()),
             });
 
             toastTimeoutRef.current = setTimeout(() => {

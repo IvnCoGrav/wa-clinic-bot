@@ -3,6 +3,9 @@ import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { ExternalIntegrationModal } from '../../components/modals/ExternalIntegrationModal';
 import { ToggleSwitch } from '../../components/common/ToggleSwitch';
+import { Modal } from '../../components/ui/Modal';
+import { FormErrorSummary } from '../../components/ui/FormErrorSummary';
+import type { FieldIssue } from '../../lib/validateReservation';
 import {
   Globe,
   Plus,
@@ -89,6 +92,7 @@ export const LandingPage: React.FC = () => {
   // Form states
   const [formTitle, setFormTitle] = useState('');
   const [formSlug, setFormSlug] = useState('');
+  const [issues, setIssues] = useState<FieldIssue[]>([]);
   const [formUseCustomHtml, setFormUseCustomHtml] = useState(false);
   const [formHtml, setFormHtml] = useState('');
   const [formMetaPixelId, setFormMetaPixelId] = useState('');
@@ -189,25 +193,25 @@ export const LandingPage: React.FC = () => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formTitle.trim()) {
-      toast('Judul wajib diisi.', 'error');
-      return;
-    }
-    if (!formSlug.trim()) {
-      toast('Slug wajib diisi.', 'error');
-      return;
-    }
+    const nextIssues: FieldIssue[] = [];
+    if (!formTitle.trim()) nextIssues.push({ field: 'title', message: 'Judul wajib diisi.' });
+    if (!formSlug.trim()) nextIssues.push({ field: 'slug', message: 'Slug wajib diisi.' });
     if (formUseCustomHtml) {
       const sizeBytes = byteLength(formHtml);
-      if (sizeBytes > MAX_HTML_BYTES) {
-        toast(`HTML terlalu besar (${(sizeBytes / 1024).toFixed(1)} KB, maksimal 500 KB).`, 'error');
-        return;
-      }
       if (!formHtml.trim()) {
-        toast('HTML tidak boleh kosong saat memilih template kustom.', 'error');
-        return;
+        nextIssues.push({ field: 'html', message: 'HTML tidak boleh kosong saat memilih template kustom.' });
+      } else if (sizeBytes > MAX_HTML_BYTES) {
+        nextIssues.push({
+          field: 'html',
+          message: `HTML terlalu besar (${(sizeBytes / 1024).toFixed(1)} KB, maksimal 500 KB).`,
+        });
       }
     }
+    if (nextIssues.length > 0) {
+      setIssues(nextIssues);
+      return;
+    }
+    setIssues([]);
 
     const payload = {
       title: formTitle,
@@ -296,16 +300,17 @@ export const LandingPage: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-divider">
         <div>
-          <h2 className="text-xl font-bold text-ink flex items-center gap-2">
+          <h1 className="text-xl font-bold text-ink flex items-center gap-2">
             <Globe className="text-accent" size={22} />
             <span>Landing Page</span>
-          </h2>
+          </h1>
           <p className="text-xs text-ink-3 mt-0.5">
             Kelola banyak landing page per tenant. Upload file HTML mentah atau gunakan template sistem bawaan.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
+            aria-label="Refresh"
             onClick={load}
             disabled={loading}
             className="p-2 rounded-xl bg-surface hover:bg-fill-1 border border-divider text-ink-2 hover:text-ink transition shadow-xs disabled:opacity-50"
@@ -355,6 +360,7 @@ export const LandingPage: React.FC = () => {
             />
           </div>
           <button
+            aria-label="Tandai"
             onClick={handleCopyScript}
             className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs border ${
               copiedScript
@@ -492,24 +498,16 @@ export const LandingPage: React.FC = () => {
 
       {/* Modal Editor */}
       {isModalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn"
-          onClick={() => setIsModalOpen(false)}
+        <Modal
+          open
+          onClose={() => setIsModalOpen(false)}
+          size="xl"
+          bodyClassName="p-0 overflow-hidden flex-1 flex flex-col min-h-0"
+          title={editing ? `Edit Landing: ${editing.title}` : 'Tambah Landing Page Baru'}
         >
-          <div
-            className="bg-surface border border-divider rounded-2xl w-full max-w-2xl overflow-hidden flex flex-col shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="px-6 py-4 border-b border-divider flex justify-between items-center bg-surface-2">
-              <h3 className="font-bold text-ink text-sm">
-                {editing ? `Edit Landing: ${editing.title}` : 'Tambah Landing Page Baru'}
-              </h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-ink-3 hover:text-ink">
-                <X size={18} />
-              </button>
-            </div>
 
             <form onSubmit={handleSave} className="p-6 space-y-4 max-h-[560px] overflow-y-auto">
+        <FormErrorSummary issues={issues} />
               {fileError && (
                 <div className="flex items-center gap-2 text-xs text-danger bg-danger-soft border border-danger-line rounded-xl px-3 py-2">
                   <AlertTriangle size={14} className="text-danger" />
@@ -578,7 +576,7 @@ export const LandingPage: React.FC = () => {
                     }`}
                   >
                     <span
-                      className={`absolute top-0.5 w-4 h-4 rounded-full bg-surface transition-all ${
+                      className={`absolute top-0.5 w-4 h-4 rounded-full bg-surface transition ${
                         formUseCustomHtml ? 'left-4.5 right-0.5' : 'left-0.5'
                       }`}
                       style={{ left: formUseCustomHtml ? '1.125rem' : '0.125rem' }}
@@ -703,17 +701,17 @@ export const LandingPage: React.FC = () => {
                   <span>Batal</span>
                 </button>
                 <button
+                  aria-label="Muat ulang"
                   type="submit"
                   disabled={saving}
-                  className="px-4 py-2 bg-accent hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-xs font-semibold transition flex items-center space-x-1 shadow-xs"
+                  className="px-4 py-2 bg-accent hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed text-on-solid rounded-xl text-xs font-semibold transition flex items-center space-x-1 shadow-xs"
                 >
                   {saving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
                   <span>{saving ? 'Menyimpan...' : editing ? 'Simpan Perubahan' : 'Buat Landing Page'}</span>
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* Aturan upload */}
@@ -729,7 +727,7 @@ export const LandingPage: React.FC = () => {
           </li>
           <li className="flex items-start gap-2">
             <MousePointerClick size={13} className="flex-shrink-0 mt-0.5 text-accent" />
-            <span>Wajib ada elemen <code className="text-accent font-mono font-bold">&lt;a id="wa-cta"&gt;</code> — tombol chat WhatsApp yang ditangani otomatis.</span>
+            <span>Wajib ada elemen <code className="text-accent font-mono font-bold">&lt;a id="wa-cta"&gt;</code>: tombol chat WhatsApp yang ditangani otomatis.</span>
           </li>
           <li className="flex items-start gap-2">
             <ShieldCheck size={13} className="flex-shrink-0 mt-0.5 text-accent" />
@@ -741,7 +739,7 @@ export const LandingPage: React.FC = () => {
           </li>
           <li className="flex items-start gap-2">
             <Info size={13} className="flex-shrink-0 mt-0.5 text-accent" />
-            <span>Perubahan tampil di preview hingga cache klik (TTL 5 menit) — atau instan via purge.</span>
+            <span>Perubahan tampil di preview hingga cache klik (TTL 5 menit): atau instan via purge.</span>
           </li>
         </ul>
       </div>
@@ -753,4 +751,3 @@ export const LandingPage: React.FC = () => {
     </div>
   );
 };
-

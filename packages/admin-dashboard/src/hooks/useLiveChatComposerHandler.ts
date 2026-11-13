@@ -1,3 +1,6 @@
+// Catatan kontrak error: catch kosong di hook ini menangani penyimpanan draf
+// lokal, clipboard, dan audio — semuanya pelengkap. Gagal menyimpan draf tidak
+// menghentikan pengiriman pesan; pengiriman itu sendiri tetap memberi toast.
 import React, { useState, useEffect, useCallback, startTransition } from 'react';
 import { apiRequest } from '../services/api';
 import { BRAND } from '../config/brand';

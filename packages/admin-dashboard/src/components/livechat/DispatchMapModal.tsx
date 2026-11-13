@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { X, ExternalLink, Navigation, RefreshCw, AlertTriangle, Copy, Check } from 'lucide-react';
+import { ExternalLink, Navigation, RefreshCw, AlertTriangle, Copy, Check } from 'lucide-react';
+import { Modal } from '../ui/Modal';
 import { computeMapView, tileUrl, shouldPulseTherapistMarker, type LatLng } from '../../utils/dispatchMap';
 
 /**
@@ -82,32 +83,14 @@ export const DispatchMapModal: React.FC<DispatchMapModalProps> = ({
           : '#';
 
   return (
-    <div
-      data-modal-active="true"
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
-      onClick={onClose}
+    <Modal
+      open
+      onClose={onClose}
+      size="xl"
+      bodyClassName="p-0 overflow-hidden flex-1 flex flex-col min-h-0"
+      title="Peta Perjalanan Bidan"
+      subtitle={`${staffName ? `${staffName} · ` : ''}${areaName || 'Lokasi terkini'}`}
     >
-      <div
-        className="bg-surface rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden border border-divider"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-4 py-3 border-b border-divider">
-          <div className="min-w-0">
-            <h3 className="text-sm font-bold text-ink">Peta Perjalanan Bidan</h3>
-            <p className="text-[11px] text-ink-2 truncate">
-              {staffName ? `${staffName} · ` : ''}
-              {areaName || 'Lokasi terkini'}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-fill-1 text-ink-2"
-            aria-label="Tutup"
-          >
-            <X size={18} />
-          </button>
-        </div>
 
         {!therapist && customer && (
           <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 text-[11px] text-amber-700 dark:text-amber-300">
@@ -197,6 +180,7 @@ export const DispatchMapModal: React.FC<DispatchMapModalProps> = ({
         <div className="px-4 py-3 border-t border-divider bg-surface flex items-center justify-between gap-2">
           {customer ? (
             <button
+              aria-label="Salin koordinat GPS pasien"
               type="button"
               onClick={handleCopyCoord}
               className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border border-divider hover:bg-fill-1 text-ink transition active:scale-95 cursor-pointer shadow-2xs"
@@ -222,8 +206,7 @@ export const DispatchMapModal: React.FC<DispatchMapModalProps> = ({
             <ExternalLink size={12} />
           </a>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

@@ -130,10 +130,11 @@ export const VoiceNotePlayer: React.FC<VoiceNotePlayerProps> = ({ src }) => {
   return (
     <div className="flex items-center gap-2.5 py-1 min-w-[180px] max-w-[260px]">
       <button
+        aria-label="Muat ulang"
         type="button"
         onClick={toggle}
         disabled={isLoading}
-        className="w-8 h-8 rounded-full bg-accent text-white flex items-center justify-center shrink-0 shadow-xs active:scale-95 transition disabled:opacity-50"
+        className="w-8 h-8 rounded-full bg-accent text-on-solid flex items-center justify-center shrink-0 shadow-xs active:scale-95 transition disabled:opacity-50"
       >
         {isLoading ? (
           <RefreshCw size={13} className="animate-spin text-white" />

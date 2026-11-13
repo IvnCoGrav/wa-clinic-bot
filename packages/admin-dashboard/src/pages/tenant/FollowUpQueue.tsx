@@ -2,9 +2,18 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import { apiRequest } from '../../services/api';
+import { useUrlState } from '../../hooks/useUrlState';
 import { Pagination } from '../../components/common/Pagination';
+import { Modal } from '../../components/ui/Modal';
 import { ChatHistoryModal } from '../../components/modals/ChatHistoryModal';
 import { FollowUpTemplates } from './FollowUpTemplates';
+import { FollowUpEditModal } from './FollowUpEditModal';
+import {
+  FollowUpCustomer as Customer,
+  FollowUpEditModalState,
+  FollowUpItem,
+  FollowUpTemplateItem as TemplateItem,
+} from './followUpTypes';
 import {
   Clock,
   Send,
@@ -36,60 +45,16 @@ import {
   MapPin,
   ChevronRight,
 } from 'lucide-react';
-
-interface Customer {
-  id: string;
-  name: string | null;
-  phone: string;
-  kelurahan: string | null;
-  kecamatan: string | null;
-  kota: string | null;
-  status: string;
-  conversations?: Array<{
-    id?: string;
-    last_message_at: string;
-    is_human_handling: boolean;
-  }>;
-}
-
-interface FollowUpItem {
-  id: string;
-  customer_id?: string;
-  variant?: number; // 1..3 — dihitung backend via getRollingVariant (WIB)
-  type: string; // NO_PURCHASE | NEXT_TREATMENT | REMINDER_H1 | REVIEW_H1_BABY | REVIEW_H1_MOMS
-  stage: number;
-  // Fase 2: kategori treatment yang menentukan keluarga template (MOMS vs ANAK).
-  treatment_category?: string | null;
-  custom_text?: string | null;
-  scheduled_at: string;
-  sent_at: string | null;
-  status: string; // PENDING | QUEUED | SENT | CANCELLED | FAILED | SKIPPED
-  cancel_reason?: string | null;
-  customer: Customer | null;
-  reservation?: {
-    id: string;
-    booking_date: string | null;
-    treatment_category: string;
-    treatment_detail: string | null;
-  } | null;
-}
-
-interface TemplateItem {
-  id: string | null;
-  type: string;
-  variant: number;
-  text: string;
-  isDefault: boolean;
-}
+import { formatWib, formatWibClock } from '../../utils/dateWib';
 
 export const FollowUpQueue: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeMainTab = (searchParams.get('tab') === 'templates' ? 'TEMPLATES' : 'QUEUE') as 'QUEUE' | 'TEMPLATES';
   const [followUps, setFollowUps] = useState<FollowUpItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
-  const [dateFilter, setDateFilter] = useState('upcoming'); // Default: Hari ini & ke depan
+  const [statusFilter, setStatusFilter] = useUrlState('status');
+  const [typeFilter, setTypeFilter] = useUrlState('type');
+  const [dateFilter, setDateFilter] = useUrlState('dateFilter', 'upcoming'); // Default: Hari ini & ke depan
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<string>('scheduled_at');
@@ -185,7 +150,9 @@ export const FollowUpQueue: React.FC = () => {
           setAvailableTemplates(res.data);
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        // Template pesan opsional; staf tetap bisa menulis manual.
+      });
   }, []);
 
   const loadFollowUps = useCallback(async () => {
@@ -457,8 +424,8 @@ export const FollowUpQueue: React.FC = () => {
   const formatDateTime = (isoStr: string) => {
     const d = new Date(isoStr);
     if (isNaN(d.getTime())) return { date: '-', time: '-' };
-    const date = d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
-    const time = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB';
+    const date = formatWib(d, { day: '2-digit', month: 'short', year: 'numeric' });
+    const time = formatWibClock(d) + ' WIB';
     return { date, time };
   };
 
@@ -711,12 +678,12 @@ export const FollowUpQueue: React.FC = () => {
             }}
             className="p-2.5 bg-surface border border-divider hover:border-accent rounded-xl text-xs text-ink font-semibold focus:outline-none focus:border-accent shadow-xs transition"
           >
-            <option value="upcoming">📅 Hari Ini & Ke Depan (Upcoming)</option>
-            <option value="all">📅 Semua Tanggal</option>
-            <option value="today">📅 Hari Ini Saja</option>
-            <option value="this_week">📅 Minggu Ini</option>
-            <option value="this_month">📅 Bulan Ini</option>
-            <option value="overdue">⚠️ Lewat Jadwal (Overdue)</option>
+            <option value="upcoming">Hari Ini & Ke Depan (Upcoming)</option>
+            <option value="all">Semua Tanggal</option>
+            <option value="today">Hari Ini Saja</option>
+            <option value="this_week">Minggu Ini</option>
+            <option value="this_month">Bulan Ini</option>
+            <option value="overdue">Lewat Jadwal (Overdue)</option>
           </select>
 
           {/* Status Filter Dropdown */}
@@ -845,7 +812,7 @@ export const FollowUpQueue: React.FC = () => {
                     </div>
                     {fu.reservation?.treatment_detail && (
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-1 pl-5">
-                        📋 {fu.reservation.treatment_detail}
+                        {fu.reservation.treatment_detail}
                       </p>
                     )}
                   </div>
@@ -1060,7 +1027,7 @@ export const FollowUpQueue: React.FC = () => {
                                   ? 'bg-success-soft text-success font-bold border border-success-line'
                                   : 'text-ink-3'
                               }`}
-                              title={`Chat terakhir: ${new Date(c.conversations[0].last_message_at).toLocaleString('id-ID')}`}
+                              title={`Chat terakhir: ${formatWib(c.conversations[0].last_message_at, { dateStyle: 'short', timeStyle: 'short' })}`}
                             >
                               <MessageSquare size={9} />
                               <span>{formatLastChat(c.conversations[0].last_message_at)}</span>
@@ -1072,7 +1039,7 @@ export const FollowUpQueue: React.FC = () => {
                             className="text-[10px] text-ink-2 truncate max-w-[220px] ml-4 mt-0.5"
                             title={fu.reservation.treatment_detail}
                           >
-                            📋 {fu.reservation.treatment_detail}
+                            {fu.reservation.treatment_detail}
                           </div>
                         )}
                       </td>
@@ -1184,233 +1151,22 @@ export const FollowUpQueue: React.FC = () => {
       {/* ========================================================================= */}
       {/* PORTAL MODAL 1: Edit Follow-Up Modal (Date, Variant & Text Editor)       */}
       {/* ========================================================================= */}
-      {editModal.open &&
-        editModal.item &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-black/60 backdrop-blur-xs animate-fadeIn"
-            onClick={() => setEditModal({ open: false, newDate: '', stage: 1, variant: 1, customText: '' })}
-          >
-            <div
-              className="bg-surface border border-divider rounded-2xl w-full max-w-xl shadow-2xl flex flex-col my-auto max-h-[88vh] overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Modal Header */}
-              <div className="p-4 sm:p-5 border-b border-divider flex justify-between items-center bg-surface-2 shrink-0">
-                <div className="flex items-center space-x-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-accent-soft text-accent flex items-center justify-center">
-                    <Edit2 size={16} />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold text-ink tracking-tight">Edit Follow-Up</h3>
-                    <p className="text-[11px] text-ink-2">Atur jadwal pengiriman, varian pesan, atau sesuaikan teks khusus.</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setEditModal({ open: false, newDate: '', stage: 1, variant: 1, customText: '' })}
-                  className="p-1.5 rounded-lg text-ink-3 hover:text-ink hover:bg-fill-2 transition"
-                  title="Tutup (Esc)"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              {/* Modal Body */}
-              <div className="p-4 sm:p-5 overflow-y-auto flex-1 space-y-4">
-                {/* Customer Banner */}
-                <div className="bg-surface-2 p-3 rounded-xl border border-divider flex items-center justify-between text-xs">
-                  <div>
-                    <span className="text-ink-3 block text-[10px]">Pelanggan</span>
-                    <strong className="text-ink font-bold text-sm">
-                      {editModal.item.customer?.name || 'Tanpa Nama'}
-                    </strong>
-                    <span className="text-ink-3 block font-mono text-[11px]">{editModal.item.customer?.phone}</span>
-                  </div>
-                  <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-accent-soft text-accent border border-divider">
-                    {getTypeLabel(editModal.item.type, editModal.stage).label}
-                  </span>
-                </div>
-
-                {/* Field 1: Jadwal Kirim */}
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-ink flex items-center space-x-1.5">
-                    <Calendar size={14} className="text-accent" />
-                    <span>Jadwal Kirim</span>
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={editModal.newDate}
-                    onChange={(e) => setEditModal({ ...editModal, newDate: e.target.value })}
-                    className="w-full p-2.5 bg-surface border border-divider hover:border-accent focus:border-accent rounded-xl text-xs text-ink focus:outline-none shadow-xs transition font-medium"
-                  />
-                </div>
-
-                {/* Field 2a: Tahap Jadwal (Stage) */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-ink flex items-center space-x-1.5">
-                    <Calendar size={14} className="text-accent" />
-                    <span>Tahap Jadwal</span>
-                    <span className="text-[10px] font-normal text-ink-3">(kapan dikirim)</span>
-                  </label>
-                  <select
-                    value={editModal.stage}
-                    onChange={(e) => {
-                      const newStage = parseInt(e.target.value, 10);
-                      const templateText = getTemplateTextForTypeAndVariant(editModal.item!.type, newStage, editModal.variant, resolveCategory(editModal.item));
-                      setEditModal((prev) => ({ ...prev, stage: newStage, customText: templateText }));
-                    }}
-                    className="w-full p-2.5 bg-surface border border-divider hover:border-accent focus:border-accent rounded-xl text-xs text-ink focus:outline-none shadow-xs font-medium"
-                  >
-                    {editModal.item?.type === 'NO_PURCHASE' ? (
-                      <>
-                        <option value={1}>Hari ke-3</option>
-                        <option value={2}>Hari ke-7</option>
-                        <option value={3}>Hari ke-14</option>
-                      </>
-                    ) : editModal.item?.type === 'NEXT_TREATMENT' ? (
-                      <>
-                        <option value={1}>Bulan ke-1</option>
-                        <option value={2}>Bulan ke-2</option>
-                        <option value={3}>Bulan ke-3</option>
-                      </>
-                    ) : editModal.item?.type === 'WINBACK_60D' ? (
-                      <option value={1}>Re-engagement (Sekali)</option>
-                    ) : (
-                      <>
-                        <option value={1}>Tahap 1</option>
-                        <option value={2}>Tahap 2</option>
-                        <option value={3}>Tahap 3</option>
-                      </>
-                    )}
-                  </select>
-                  <p className="text-[10px] text-ink-3">Mengganti tahap akan mengubah jadwal, varian tetap di tahap yang dipilih.</p>
-                </div>
-
-                {/* Field 2b: Varian Pesan (gaya bahasa) */}
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-center">
-                    <label className="text-xs font-bold text-ink flex items-center space-x-1.5">
-                      <MessageSquare size={14} className="text-accent" />
-                      <span>Varian Pesan</span>
-                      <span className="text-[10px] font-normal text-ink-3">(gaya bahasa)</span>
-                    </label>
-                    <span className="text-[10px] text-ink-3">Klik varian untuk ganti teks tanpa ubah jadwal</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[1, 2, 3].map((v) => (
-                      <button
-                        key={v}
-                        type="button"
-                        onClick={() => handleVariantSelect(v)}
-                        className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center space-x-1.5 active:scale-95 ${
-                          editModal.variant === v
-                            ? 'bg-accent-soft border-accent text-accent shadow-xs'
-                            : 'bg-surface border-divider text-ink-2 hover:bg-surface-2'
-                        }`}
-                      >
-                        <span>Varian #{v}</span>
-                        {editModal.variant === v && <CheckCircle size={12} className="text-accent" />}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-[10px] text-ink-3">Varian 1=Ramah/Hangat, 2=Promo/Direct, 3=Edukatif.</p>
-                </div>
-
-                {/* Field 3: Teks Pesan Follow-Up */}
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-center">
-                    <label className="text-xs font-bold text-ink flex items-center space-x-1.5">
-                      <FileText size={14} className="text-accent" />
-                      <span>Teks Pesan Follow-Up</span>
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (editModal.item) {
-                          const defaultText = getTemplateTextForTypeAndVariant(editModal.item.type, editModal.stage, editModal.variant, resolveCategory(editModal.item));
-                          setEditModal((prev) => ({ ...prev, customText: defaultText }));
-                        }
-                      }}
-                      className="text-[11px] text-accent hover:underline flex items-center space-x-1 font-semibold"
-                    >
-                      <RotateCcw size={11} />
-                      <span>Reset ke Template Default</span>
-                    </button>
-                  </div>
-
-                  <textarea
-                    rows={5}
-                    value={editModal.customText}
-                    onChange={(e) => setEditModal({ ...editModal, customText: e.target.value })}
-                    placeholder="Tulis pesan follow-up kustom untuk pelanggan ini..."
-                    className="w-full p-3 bg-surface border border-divider hover:border-accent focus:border-accent rounded-xl text-xs text-ink focus:outline-none shadow-xs leading-relaxed transition font-sans"
-                  />
-
-                  {/* Tag Helpers */}
-                  <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                    <span className="text-[10px] text-ink-3 flex items-center gap-1">
-                      <Tag size={10} /> Sisipkan Variabel:
-                    </span>
-                    {['{name}', ...(editCategory === 'MOMS' ? [] : ['{babyName}']), '{time}'].map((tag) => (
-                      <button
-                        key={tag}
-                        type="button"
-                        onClick={() =>
-                          setEditModal((prev) => ({
-                            ...prev,
-                            customText: `${prev.customText} ${tag}`,
-                          }))
-                        }
-                        className="px-2 py-0.5 rounded-lg bg-fill-1 hover:bg-fill-2 text-[10px] font-mono text-ink-2 border border-divider transition active:scale-95"
-                      >
-                        + {tag}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-[10px] text-ink-3 leading-tight">
-                    * Variabel <code>{'{name}'}</code> akan otomatis disanitasi menjadi sapaan bersih (misal: "Bunda [nama]").{editCategory === 'MOMS' ? ' Variabel {babyName} tidak tersedia untuk kategori MOMS.' : ''}
-                  </p>
-                  {/* Live Preview */}
-                  <div className="bg-success-soft border border-success-line rounded-xl p-3 space-y-1">
-                    <p className="text-[10px] font-bold text-success flex items-center gap-1"><Eye size={10} /> Preview WhatsApp ({editHonorific} {editFirstName}{editCategory === 'MOMS' ? '' : `, ${editBabyLabel}`}):</p>
-                    <p className="text-xs text-ink leading-relaxed whitespace-pre-wrap bg-surface p-2 rounded-lg border border-success-line">
-                      {editModal.customText
-                        .replace(/Bunda\s*\{name\}/gi, `${editHonorific} ${editFirstName}`)
-                        .replace(/\{name\}/g, editFirstName)
-                        .replace(/\{babyName\}/g, editCategory === 'MOMS' ? '[variabel bayi tidak berlaku]' : editBabyLabel)
-                        .replace(/\{time\}/g, '10:00 WIB') || '—'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Modal Footer */}
-              <div className="p-4 border-t border-divider bg-surface-2 flex justify-end space-x-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setEditModal({ open: false, newDate: '', stage: 1, variant: 1, customText: '' })}
-                  className="px-4 py-2 bg-surface hover:bg-fill-1 active:scale-95 border border-divider text-ink-2 rounded-xl text-xs font-semibold transition"
-                >
-                  Batal
-                </button>
-                <button
-                  type="button"
-                  onClick={handleEditSave}
-                  disabled={actionLoading === editModal.item.id}
-                  className="px-5 py-2 bg-accent hover:bg-accent active:scale-95 text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center space-x-1.5"
-                >
-                  {actionLoading === editModal.item.id ? (
-                    <Loader2 size={13} className="animate-spin" />
-                  ) : (
-                    <CheckCircle size={13} />
-                  )}
-                  <span>Simpan Perubahan</span>
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
+      {editModal.open && editModal.item && (
+        <FollowUpEditModal
+          state={editModal}
+          actionLoading={actionLoading}
+          onChange={setEditModal}
+          onSave={handleEditSave}
+          onVariantSelect={handleVariantSelect}
+          getTypeLabel={getTypeLabel}
+          getTemplateText={getTemplateTextForTypeAndVariant}
+          resolveCategory={resolveCategory}
+          editCategory={editCategory}
+          editHonorific={editHonorific}
+          editFirstName={editFirstName}
+          editBabyLabel={editBabyLabel}
+        />
+      )}
 
       {/* ========================================================================= */}
       {/* PORTAL MODAL 2: Chat History Modal (terpusat — Anti-Bloat) */}
@@ -1427,48 +1183,24 @@ export const FollowUpQueue: React.FC = () => {
       {/* PORTAL MODAL 3: Confirm Action Modal                                     */}
       {/* ========================================================================= */}
       {confirmAction &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-black/60 backdrop-blur-xs animate-fadeIn"
-            onClick={closeConfirmModal}
-          >
-            <div
-              className="bg-surface border border-divider rounded-2xl p-6 w-full max-w-sm space-y-4 shadow-2xl my-auto"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h3 className="text-base font-bold text-ink flex items-center space-x-2">
-                {confirmAction.type === 'reschedule-overdue' ? (
-                  <>
-                    <FastForward className="text-warning" size={18} />
-                    <span>Majukan & Rapikan Jadwal Overdue?</span>
-                  </>
-                ) : confirmAction.type === 'bulk-cancel' ? (
-                  <>
-                    <Trash2 className="text-danger" size={18} />
-                    <span>Batalkan Semua Antrian Pending?</span>
-                  </>
-                ) : confirmAction.type === 'bulk-queue' ? (
-                  <>
-                    <CalendarCheck className="text-info" size={18} />
-                    <span>Jadwalkan Semua Antrian Pending?</span>
-                  </>
-                ) : confirmAction.type === 'cancel' ? (
-                  <>
-                    <XCircle className="text-danger" size={18} />
-                    <span>Batalkan Follow-Up?</span>
-                  </>
-                ) : confirmAction.type === 'queue' ? (
-                  <>
-                    <CalendarCheck className="text-info" size={18} />
-                    <span>Jadwalkan Follow-Up?</span>
-                  </>
-                ) : (
-                  <>
-                    <Send className="text-accent" size={18} />
-                    <span>Setujui & Kirim Sekarang?</span>
-                  </>
-                )}
-              </h3>
+        <Modal
+          open
+          onClose={closeConfirmModal}
+          size="sm"
+          title={
+            confirmAction.type === 'reschedule-overdue'
+              ? 'Majukan & Rapikan Jadwal Overdue?'
+              : confirmAction.type === 'bulk-cancel'
+              ? 'Batalkan Semua Antrian Pending?'
+              : confirmAction.type === 'bulk-queue'
+              ? 'Jadwalkan Semua Antrian Pending?'
+              : confirmAction.type === 'cancel'
+              ? 'Batalkan Follow-Up?'
+              : confirmAction.type === 'queue'
+              ? 'Jadwalkan Follow-Up?'
+              : 'Setujui & Kirim Sekarang?'
+          }
+        >
               <p className="text-xs text-ink-2 leading-relaxed">
                 {confirmAction.type === 'reschedule-overdue'
                   ? 'Seluruh follow-up berstatus PENDING yang jadwalnya sebelum hari ini akan dimajukan mulai dari hari ini/besok, dan dibagi merata maksimal 40 blast per hari pada jam kerja (09:00 - 16:00 WIB).'
@@ -1548,10 +1280,8 @@ export const FollowUpQueue: React.FC = () => {
                     : 'Ya, Kirim'}
                 </button>
               </div>
-            </div>
-          </div>,
-          document.body
-        )}
+        </Modal>
+      }
 
       {/* Toast Notification */}
       {toastMsg && (

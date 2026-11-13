@@ -186,7 +186,7 @@ export const MetaPerformancePanel: React.FC<Props> = ({ startDate, endDate }) =>
       {report?.meta?.revenueBasis?.truncated && (
         <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-warning bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 rounded-xl px-3 py-2">
           <AlertTriangle size={14} className="text-warning mt-0.5 shrink-0" />
-          <span>Data melebihi batas 5.000 baris per kategori — angka ditampilkan sebagian (truncated).</span>
+          <span>Data melebihi batas 5.000 baris per kategori: angka ditampilkan sebagian (truncated).</span>
         </div>
       )}
 

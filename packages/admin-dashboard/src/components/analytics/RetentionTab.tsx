@@ -283,6 +283,7 @@ export const RetentionTab: React.FC<RetentionTabProps> = ({ year, month }) => {
           </button>
 
           <button
+            aria-label="Unduh Rekap CSV"
             onClick={handleExportCsv}
             disabled={loading || !report?.items.length}
             className="p-2 rounded-xl bg-surface border border-divider text-ink-2 hover:text-ink hover:bg-fill-1 transition shadow-xs cursor-pointer disabled:opacity-50"
@@ -292,6 +293,7 @@ export const RetentionTab: React.FC<RetentionTabProps> = ({ year, month }) => {
           </button>
 
           <button
+            aria-label="Muat Ulang"
             onClick={fetchReport}
             disabled={loading}
             className="p-2 rounded-xl bg-surface border border-divider text-ink-2 hover:text-ink hover:bg-fill-1 transition shadow-xs cursor-pointer disabled:opacity-50"
@@ -509,7 +511,7 @@ export const RetentionTab: React.FC<RetentionTabProps> = ({ year, month }) => {
 
       {/* 4. Drawer Drilldown Pasien Kohort */}
       {selectedStaff && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs transition-opacity animate-fadeIn">
+        <div className="modal-backdrop fixed inset-0 z-50 flex justify-end bg-black/40 transition-opacity animate-fadeIn">
           <div className="w-full max-w-2xl bg-surface h-full shadow-2xl flex flex-col border-l border-divider animate-slideLeft">
             {/* Drawer Header */}
             <div className="p-5 border-b border-divider flex items-center justify-between">

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Smartphone, Share2, X } from 'lucide-react';
+import { Smartphone, Share2 } from 'lucide-react';
+import { Modal } from '../ui/Modal';
 
 export const InstallAppPanel: React.FC = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -51,55 +52,43 @@ export const InstallAppPanel: React.FC = () => {
 
       {/* PWA Install Guide Modal */}
       {showInstallModal && (
-        <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 flex items-center justify-center p-4"
-          onClick={() => setShowInstallModal(false)}
-        >
-          <div
-            className="w-full max-w-md bg-surface border border-divider rounded-2xl p-6 space-y-5 shadow-2xl relative"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <Modal
+          open
+          onClose={() => setShowInstallModal(false)}
+          size="md"
+          title={
+            <span className="flex items-center gap-2">
+              <Smartphone size={18} className="text-accent" aria-hidden="true" />
+              <span>Install Admin App ke Layar Utama</span>
+            </span>
+          }
+          subtitle="Akses cepat dashboard langsung seperti aplikasi HP/Desktop"
+          footer={
             <button
               onClick={() => setShowInstallModal(false)}
-              className="absolute top-4 right-4 text-ink-3 hover:text-ink"
+              className="w-full py-2 bg-accent hover:bg-accent-hover text-accent-ink font-semibold text-xs rounded-xl transition shadow-xs cursor-pointer"
             >
-              <X size={20} />
+              Saya Mengerti
             </button>
-
-            <div>
-              <h3 className="text-base font-bold text-ink flex items-center space-x-2">
-                <Smartphone size={18} className="text-accent" />
-                <span>Install Admin App ke Layar Utama</span>
-              </h3>
-              <p className="text-xs text-ink-3 mt-0.5">Akses cepat dashboard langsung seperti aplikasi HP/Desktop</p>
-            </div>
+          }
+        >
 
             <div className="space-y-3 text-xs text-ink">
               <div className="p-3 bg-surface-2 rounded-xl border border-divider space-y-1">
-                <p className="font-bold text-accent">📱 Android / Chrome / Edge:</p>
+                <p className="font-bold text-accent">Android / Chrome / Edge:</p>
                 <p className="text-xs text-ink-3 leading-relaxed">
                   Buka menu browser titik tiga (⋮) di pojok atas, lalu pilih <strong className="text-ink">"Tambahkan ke Layar Utama"</strong> atau <strong className="text-ink">"Install Aplikasi"</strong>.
                 </p>
               </div>
 
               <div className="p-3 bg-surface-2 rounded-xl border border-divider space-y-1">
-                <p className="font-bold text-accent">🍎 iPhone / Safari:</p>
+                <p className="font-bold text-accent">iPhone / Safari:</p>
                 <p className="text-xs text-ink-3 leading-relaxed">
                   Tekan tombol Bagikan (<Share2 size={12} className="inline text-ink-3" />) di navigasi bawah Safari, lalu pilih <strong className="text-ink">"Tambah ke Layar Utama"</strong>.
                 </p>
               </div>
             </div>
-
-            <div className="pt-2 flex justify-end">
-              <button
-                onClick={() => setShowInstallModal(false)}
-                className="w-full py-2 bg-accent hover:bg-accent-hover text-accent-ink font-semibold text-xs rounded-xl transition shadow-xs"
-              >
-                Saya Mengerti
-              </button>
-            </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

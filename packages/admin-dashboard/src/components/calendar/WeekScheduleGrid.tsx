@@ -38,6 +38,7 @@ import {
   formatHourLabel as formatHourLabelUtil,
   formatHourLabelLong,
 } from '../../utils/calendarHourLabel';
+import { formatWib, formatWibClock } from '../../utils/dateWib';
 
 interface PositionedEvent {
   res: Reservation;
@@ -263,6 +264,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
       if (!dragMovedRef.current) {
         dragMovedRef.current = true;
         try {
+          // Pointer capture opsional; seret jadwal tetap jalan tanpa itu.
           container.setPointerCapture?.(e.pointerId);
         } catch (_) {}
       }
@@ -277,6 +279,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
     const container = containerRef.current;
     if (container) {
       try {
+        // Pelepasan capture opsional; pointer bisa sudah lepas sendiri.
         container.releasePointerCapture?.(e.pointerId);
       } catch (_) {}
     }
@@ -365,7 +368,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
               prev.setDate(prev.getDate() - 1);
               onSelectDate(prev);
             }}
-            className="p-1.5 rounded-lg hover:bg-fill-1 border border-transparent hover:border-divider text-ink-2 transition-all cursor-pointer"
+            className="p-1.5 rounded-lg hover:bg-fill-1 border border-transparent hover:border-divider text-ink-2 transition cursor-pointer"
             title="Hari Sebelumnya"
           >
             <ChevronLeft size={16} />
@@ -386,7 +389,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
           {weekDays.map((d, i) => {
             const isSel = isSameDay(d, selectedDate);
             const isTod = isToday(d);
-            const dayName = d.toLocaleDateString('id-ID', { weekday: 'short' });
+            const dayName = formatWib(d, { weekday: 'short' });
             const dayNum = d.getDate();
 
             return (
@@ -398,7 +401,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                 onClick={() => {
                   onSelectDate(d);
                 }}
-                className={`px-2.5 py-1 rounded-xl text-xs font-semibold flex items-center space-x-1 transition-all cursor-pointer shrink-0 ${
+                className={`px-2.5 py-1 rounded-xl text-xs font-semibold flex items-center space-x-1 transition cursor-pointer shrink-0 ${
                   isSel
                     ? 'bg-accent text-accent-ink shadow-xs'
                     : isTod
@@ -420,7 +423,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
             next.setDate(next.getDate() + 1);
             onSelectDate(next);
           }}
-          className="p-1.5 rounded-lg hover:bg-fill-1 border border-transparent hover:border-divider text-ink-2 transition-all cursor-pointer"
+          className="p-1.5 rounded-lg hover:bg-fill-1 border border-transparent hover:border-divider text-ink-2 transition cursor-pointer"
           title="Hari Berikutnya"
         >
           <ChevronRight size={16} />
@@ -481,7 +484,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
 
             {/* 7 Days Header Columns */}
             {weekDays.map((day, i) => {
-              const dayName = day.toLocaleDateString('id-ID', { weekday: 'short' });
+              const dayName = formatWib(day, { weekday: 'short' });
               const dayNum = day.getDate();
               const isSelected = isSameDay(day, selectedDate);
               const currentDay = isToday(day);
@@ -497,7 +500,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                     if (dragMovedRef.current) return;
                     onSelectDate(day);
                   }}
-                  className={`p-2 sm:p-2.5 text-center flex flex-col items-center justify-center transition-all cursor-pointer ${
+                  className={`p-2 sm:p-2.5 text-center flex flex-col items-center justify-center transition cursor-pointer ${
                     isSelected
                       ? 'bg-ink text-surface shadow-sm ring-1 ring-divider'
                       : currentDay
@@ -565,8 +568,8 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                           }
                           onQuickAdd({ date: day, hour });
                         }}
-                        className="w-full h-full absolute inset-0 z-0 border border-transparent hover:border-dashed hover:border-accent hover:bg-accent-soft/40 text-transparent hover:text-accent flex items-center justify-center transition-all opacity-0 group-hover/slot:opacity-100 cursor-pointer"
-                        title={`Tambah Jadwal pada ${day.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' })} jam ${formatHourLabelLong(hour)}`}
+                        className="w-full h-full absolute inset-0 z-0 border border-transparent hover:border-dashed hover:border-accent hover:bg-accent-soft/40 text-transparent hover:text-accent flex items-center justify-center transition opacity-0 group-hover/slot:opacity-100 cursor-pointer"
+                        title={`Tambah Jadwal pada ${formatWib(day, { weekday: 'short', day: 'numeric', month: 'short' })} jam ${formatHourLabelLong(hour)}`}
                       >
                         <Plus size={14} className="transform scale-90 group-hover/slot:scale-110 transition-transform" />
                       </button>
@@ -577,9 +580,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                   {positionedEvents.map((pos) => {
                     const res = pos.res;
                     const bDate = new Date(res.booking_date!);
-                    const startTimeStr = bDate
-                      .toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })
-                      .replace('.', ':');
+                    const startTimeStr = formatWibClock(bDate).replace('.', ':');
                     const isHold = res.status === 'hold';
                     const staffColor = getStaffColor(resolveStaffId(res), staffList);
                     const categoryStyles = isHold
@@ -614,7 +615,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                           left: evLeft,
                           width: evWidth,
                         }}
-                        className={`absolute z-10 p-1.5 sm:p-2 rounded-xl transition-all cursor-pointer shadow-md hover:shadow-lg hover:z-20 ring-1 ring-black/5 dark:ring-white/10 flex flex-col justify-between overflow-hidden ${categoryStyles}`}
+                        className={`absolute z-10 p-1.5 sm:p-2 rounded-xl transition cursor-pointer shadow-md hover:shadow-lg hover:z-20 ring-1 ring-black/5 dark:ring-white/10 flex flex-col justify-between overflow-hidden ${categoryStyles}`}
                       >
                         {zoomLevel === 'compact' ? (
                           /* COMPACT VIEW LOD (<65px) */

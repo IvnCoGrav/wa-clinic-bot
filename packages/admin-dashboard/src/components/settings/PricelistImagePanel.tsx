@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { ImageIcon, Upload, Save, Trash2, Eye, X } from 'lucide-react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
+import { Modal } from '../../components/ui/Modal';
 
 interface Props {
   initialImageUrl: string | null;
@@ -134,6 +135,7 @@ export const PricelistImagePanel: React.FC<Props> = ({ initialImageUrl, onSaved 
           <span>Reset Default</span>
         </button>
         <button
+          aria-label="Simpan"
           onClick={handleSave}
           disabled={saving || !selectedImage}
           className="px-4 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 disabled:opacity-50 shadow-xs"
@@ -144,40 +146,24 @@ export const PricelistImagePanel: React.FC<Props> = ({ initialImageUrl, onSaved 
       </div>
 
       {viewOpen && initialImageUrl && (
-        <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 flex items-center justify-center p-4"
-          onClick={() => setViewOpen(false)}
+        <Modal
+          open
+          onClose={() => setViewOpen(false)}
+          size="xl"
+          bodyClassName="p-4 overflow-auto flex-1 flex items-center justify-center bg-fill-1 dark:bg-app"
+          title="Gambar Pricelist (HD)"
+          subtitle="Tampilan resolusi penuh yang diterima pelanggan di WhatsApp"
+          footer={
+            <button
+              onClick={() => setViewOpen(false)}
+              className="px-4 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-semibold transition shadow-xs cursor-pointer"
+            >
+              Tutup Preview
+            </button>
+          }
         >
-          <div
-            className="bg-surface rounded-2xl sm:rounded-3xl border border-divider shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden animate-fadeIn"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-4 border-b border-divider flex items-center justify-between bg-surface-2">
-              <div>
-                <h4 className="text-sm font-bold text-ink">Gambar Pricelist (HD)</h4>
-                <p className="text-[11px] text-ink-3">Tampilan resolusi penuh yang diterima pelanggan di WhatsApp</p>
-              </div>
-              <button
-                onClick={() => setViewOpen(false)}
-                className="text-ink-2 hover:text-ink p-1.5 rounded-lg hover:bg-fill-1 transition"
-                title="Tutup Modal"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="overflow-auto flex-1 p-4 flex items-center justify-center bg-fill-1 dark:bg-app">
-              <img src={initialImageUrl} alt="Gambar pricelist" className="max-h-[65vh] object-contain rounded-xl shadow-xs border border-divider" />
-            </div>
-            <div className="p-3 border-t border-divider flex justify-end bg-surface">
-              <button
-                onClick={() => setViewOpen(false)}
-                className="px-4 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-semibold transition shadow-xs"
-              >
-                Tutup Preview
-              </button>
-            </div>
-          </div>
-        </div>
+          <img src={initialImageUrl} alt="Gambar pricelist" className="max-h-[65vh] object-contain rounded-xl shadow-xs border border-divider" />
+        </Modal>
       )}
     </div>
   );

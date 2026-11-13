@@ -1,5 +1,5 @@
-// Service Worker for Kala Clinic Admin PWA with Web Push VAPID Support & Offline Caching
-const CACHE_NAME = 'kala-admin-v12';
+// Service Worker for Admin PWA with Web Push VAPID Support & Offline Caching
+const CACHE_NAME = 'admin-dashboard-v13';
 const PRECACHE_ASSETS = [
   '/admin/',
   '/admin/manifest.json',
@@ -98,7 +98,7 @@ self.addEventListener('push', (event) => {
     return origin + (url.startsWith('/') ? '' : '/') + url;
   };
 
-  const title = data.title || 'Kala Clinic';
+  const title = data.title || 'Admin Dashboard';
   const options = {
     body: data.body || 'Pesan baru dari pelanggan',
     icon: resolveUrl(data.icon) || resolveUrl('/admin/pwa-192x192.png'),

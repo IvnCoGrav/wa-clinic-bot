@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { createPortal } from 'react-dom';
-import { X, MessageSquare, Send, Loader2, ExternalLink, Clock } from 'lucide-react';
+import { MessageSquare, Send, Loader2, ExternalLink, Clock } from 'lucide-react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
 import { MediaImage, ChatMediaData } from '../common/MediaImage';
+import { Modal } from '../ui/Modal';
 import { extractMedia, resolveMessageDisplayText } from '../../utils/mediaExtractor';
 import { renderFormattedMessageContent } from '../../utils/livechatSearch';
 import {
@@ -127,6 +127,7 @@ export const ChatHistoryModal: React.FC<ChatHistoryModalProps> = ({
     if (!isOpen) return;
     const closeTop = (e: Event) => {
       e.stopPropagation();
+      // Listener pasif bisa menolak preventDefault; modal tetap ditutup.
       try { e.preventDefault(); } catch {}
       onCloseRef.current();
     };
@@ -179,58 +180,58 @@ export const ChatHistoryModal: React.FC<ChatHistoryModalProps> = ({
     ? `/admin/live-chat?conversationId=${encodeURIComponent(conversationId)}`
     : '/admin/live-chat';
 
-  return createPortal(
-    <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fadeIn"
-      style={{ zIndex }}
-      onClick={onClose}
-    >
-      <div
-        className="bg-surface border border-divider rounded-t-3xl sm:rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90dvh] sm:max-h-[85vh] overflow-hidden animate-slideUp sm:animate-modalScaleUp"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Mobile Drag Handle */}
-        <div className="pt-2 pb-1 bg-surface-2 sm:hidden flex justify-center shrink-0">
-          <div className="w-10 h-1 bg-divider rounded-full" />
-        </div>
-
-        {/* Header */}
-        <div className="p-4 border-b border-divider flex justify-between items-center bg-surface-2 shrink-0">
-          <div className="flex items-center space-x-3 min-w-0">
-            <div className="w-10 h-10 rounded-full bg-accent text-accent-ink flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
-              {(customer.name ? customer.name.slice(0, 2).toUpperCase() : 'CU')}
-            </div>
-            <div className="min-w-0">
-              <h3 className="font-bold text-ink text-sm flex items-center space-x-1.5 truncate">
-                <MessageSquare size={14} className="text-accent shrink-0" />
-                <span className="truncate">{customer.name || 'Customer'}</span>
-              </h3>
-              <p className="text-[11px] text-ink-3 truncate">
-                <span className="font-mono">{customer.phone || '-'}</span>
-                {customer.trackingCode ? <span> • Tracking: {customer.trackingCode}</span> : null}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center space-x-2 shrink-0">
-            <a
-              href={liveChatUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="px-2.5 py-1.5 rounded-xl bg-surface hover:bg-fill-1 active:scale-95 border border-divider text-ink-2 text-xs font-semibold transition flex items-center space-x-1"
-              title="Buka di Live Chat Penuh"
-            >
-              <ExternalLink size={12} />
-              <span className="hidden sm:inline">Buka di Live Chat Penuh ↗</span>
-            </a>
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      size="lg"
+      variant="sheet"
+      bodyClassName="p-0 overflow-hidden flex-1 flex flex-col min-h-0"
+      title={
+        <span className="flex items-center gap-2 min-w-0">
+          <MessageSquare size={14} className="text-accent shrink-0" aria-hidden="true" />
+          <span className="truncate">{customer.name || 'Customer'}</span>
+        </span>
+      }
+      subtitle={`${customer.phone || '-'}${customer.trackingCode ? ` • Tracking: ${customer.trackingCode}` : ''}`}
+      headerAction={
+        <a
+          href={liveChatUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="px-2.5 py-1.5 rounded-xl bg-surface hover:bg-fill-1 active:scale-95 border border-divider text-ink-2 text-xs font-semibold transition flex items-center space-x-1"
+          title="Buka di Live Chat Penuh"
+        >
+          <ExternalLink size={12} aria-hidden="true" />
+          <span className="hidden sm:inline">Buka Live Chat</span>
+        </a>
+      }
+      footer={
+        canReply ? (
+          <form onSubmit={handleSendReply} className="w-full flex items-center space-x-2">
+            <label htmlFor="chat-history-reply" className="sr-only">
+              Balasan WhatsApp
+            </label>
+            <input
+              id="chat-history-reply"
+              type="text"
+              value={replyText}
+              onChange={(e) => setReplyText(e.target.value)}
+              placeholder="Ketik balasan WhatsApp langsung ke nomor ini..."
+              className="flex-1 px-3.5 py-2.5 bg-surface border border-divider hover:border-accent focus:border-accent rounded-xl text-xs text-ink placeholder:text-ink-3 focus:outline-none shadow-xs transition"
+            />
             <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg text-ink-3 hover:text-ink hover:bg-fill-1 transition"
-              title="Tutup (Esc)"
+              type="submit"
+              disabled={sending || !replyText.trim()}
+              className="px-4 py-2.5 bg-accent hover:bg-accent-hover active:scale-95 disabled:opacity-50 text-accent-ink rounded-xl text-xs font-bold transition shadow-xs flex items-center space-x-1.5 shrink-0"
             >
-              <X size={18} />
+              {sending ? <Loader2 size={13} className="animate-spin" aria-hidden="true" /> : <Send size={13} aria-hidden="true" />}
+              <span>Kirim</span>
             </button>
-          </div>
-        </div>
+          </form>
+        ) : undefined
+      }
+    >
 
         {/* Body */}
         <div
@@ -312,33 +313,7 @@ export const ChatHistoryModal: React.FC<ChatHistoryModalProps> = ({
             </>
           )}
         </div>
-
-        {/* Footer: quick reply hanya bila conversation valid */}
-        {canReply && (
-          <form
-            onSubmit={handleSendReply}
-            className="p-3 border-t border-divider bg-surface-2 flex items-center space-x-2 shrink-0"
-          >
-            <input
-              type="text"
-              value={replyText}
-              onChange={(e) => setReplyText(e.target.value)}
-              placeholder="Ketik balasan WhatsApp langsung ke nomor ini..."
-              className="flex-1 px-3.5 py-2.5 bg-surface border border-divider hover:border-accent focus:border-accent rounded-xl text-xs text-ink placeholder:text-ink-3 focus:outline-none shadow-xs transition"
-            />
-            <button
-              type="submit"
-              disabled={sending || !replyText.trim()}
-              className="px-4 py-2.5 bg-accent hover:bg-accent-hover active:scale-95 disabled:opacity-50 text-accent-ink rounded-xl text-xs font-bold transition shadow-xs flex items-center space-x-1.5 shrink-0"
-            >
-              {sending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-              <span>Kirim</span>
-            </button>
-          </form>
-        )}
-      </div>
-    </div>,
-    document.body
+    </Modal>
   );
 };
 

@@ -45,6 +45,7 @@
     "sync:history": "tsx scripts/sync-waha-history.ts",
     "backfill:labels": "tsx scripts/backfill-customer-labels.ts",
     "security:scan": "tsx scripts/scan-secrets.ts --all",
+    "sync:from-live": "node scripts/sync-from-live.mjs",
     "security:scan:staged": "tsx scripts/scan-secrets.ts --staged",
     "verify:backlog": "node scripts/verify-backlog-evidence.mjs",
     "audit:verify-claims": "node scripts/verify-audit-claims.mjs --all",

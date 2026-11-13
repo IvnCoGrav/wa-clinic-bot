@@ -1,3 +1,6 @@
+// Catatan kontrak error: catch kosong di komponen ini adalah draf lokal,
+// emoji favorit, dan pemilihan teks — semuanya pelengkap. Pengiriman pesan
+// tetap memberi toast galat sendiri di pemanggilnya.
 import React, {
   useState,
   useRef,
@@ -616,6 +619,7 @@ const LiveChatComposerInner = (
             </p>
           </div>
           <button
+            aria-label="Batal membalas"
             type="button"
             onClick={onCancelReply}
             className="p-1 text-ink-3 hover:text-danger hover:bg-danger-soft rounded-full transition active:scale-90"
@@ -657,7 +661,7 @@ const LiveChatComposerInner = (
                 onMouseEnter={() => setQuickReplyActiveIdx(idx)}
                 className={`w-full text-left px-3 py-3 sm:py-2 flex items-start gap-2.5 transition cursor-pointer active:scale-[0.99] min-h-[48px] sm:min-h-0 ${idx === quickReplyActiveIdx ? 'bg-accent-soft border-l-4 border-accent' : 'hover:bg-fill-1 border-l-4 border-transparent active:bg-accent-soft'}`}
               >
-                <span className={`shrink-0 px-1.5 py-0.5 rounded-md text-[11px] font-mono font-bold border ${idx === quickReplyActiveIdx ? 'bg-accent text-white border-accent' : 'bg-fill-1 text-accent border-accent/30'}`}>/{qr.shortcut}</span>
+                <span className={`shrink-0 px-1.5 py-0.5 rounded-md text-[11px] font-mono font-bold border ${idx === quickReplyActiveIdx ? 'bg-accent text-on-solid border-accent' : 'bg-fill-1 text-accent border-accent/30'}`}>/{qr.shortcut}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-[12px] font-bold text-ink truncate flex items-center gap-1.5">
                     {qr.media_type === 'QRIS' ? (
@@ -835,7 +839,7 @@ const LiveChatComposerInner = (
                 }`}
                 title={hasActiveReservation
                   ? 'Salin format invoice dari reservasi yang sudah tercatat di kalender'
-                  : 'Belum ada jadwal aktif — akan membuka form reservasi agar invoice tercatat di kalender'}
+                  : 'Belum ada jadwal aktif: akan membuka form reservasi agar invoice tercatat di kalender'}
               >
                 <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform ${
                   hasActiveReservation ? 'bg-info-soft/80 text-info' : 'bg-accent-soft text-accent'
@@ -844,7 +848,7 @@ const LiveChatComposerInner = (
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-[12px] truncate">{hasActiveReservation ? 'Salin Invoice Jadwal' : 'Generate Invoice'}</p>
-                  <p className="text-[10px] text-ink-2 truncate">{hasActiveReservation ? 'Dari jadwal aktif tercatat' : 'Belum ada jadwal — buat dulu'}</p>
+                  <p className="text-[10px] text-ink-2 truncate">{hasActiveReservation ? 'Dari jadwal aktif tercatat' : 'Belum ada jadwal: buat dulu'}</p>
                 </div>
               </button>
 
@@ -990,16 +994,17 @@ const LiveChatComposerInner = (
               ? 'bg-warning hover:bg-warning-hover text-on-solid'
               : 'bg-surface border border-divider hover:border-warning text-ink-2 hover:text-warning'
           }`}
-          title={isInternalMode ? 'Mode Catatan Internal AKTIF — tidak dikirim ke WhatsApp' : 'Aktifkan mode catatan internal (hanya staf)'}
+          title={isInternalMode ? 'Mode Catatan Internal AKTIF: tidak dikirim ke WhatsApp' : 'Aktifkan mode catatan internal (hanya staf)'}
           aria-pressed={isInternalMode}
         >
           {isInternalMode ? <Lock size={15} /> : <LockOpen size={15} />}
           <span className="hidden sm:inline">{isInternalMode ? 'Catatan' : 'Internal'}</span>
         </button>
         <button
+          aria-label="Kirim Balasan"
           onClick={handleSend}
           disabled={sendDisabled}
-          className="w-10 h-10 sm:w-auto sm:px-4 min-w-[40px] min-h-[40px] sm:min-h-[38px] p-0 sm:py-2.5 bg-accent hover:bg-accent-hover disabled:opacity-40 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs shrink-0 active:scale-95 touch-manipulation cursor-pointer"
+          className="w-10 h-10 sm:w-auto sm:px-4 min-w-[40px] min-h-[40px] sm:min-h-[38px] p-0 sm:py-2.5 bg-accent hover:bg-accent-hover disabled:opacity-40 text-on-solid rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs shrink-0 active:scale-95 touch-manipulation cursor-pointer"
           title="Kirim Balasan"
         >
           <Send size={15} />

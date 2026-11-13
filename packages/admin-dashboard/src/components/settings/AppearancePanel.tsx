@@ -43,14 +43,14 @@ export const AppearancePanel: React.FC = () => {
               role="radio"
               aria-checked={active}
               onClick={() => setPreference(opt.value)}
-              className={`relative flex flex-col items-center gap-1.5 p-3.5 rounded-2xl border-2 transition-all duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 cursor-pointer min-h-[104px] justify-center ${
+              className={`relative flex flex-col items-center gap-1.5 p-3.5 rounded-2xl border-2 transition duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 cursor-pointer min-h-[104px] justify-center ${
                 active
                   ? 'border-accent dark:border-accent bg-accent-soft shadow-xs'
                   : 'border-divider bg-surface hover:border-divider dark:hover:border-accent/40 hover:bg-surface-2 dark:hover:bg-fill-2'
               }`}
             >
               {active && (
-                <span className="absolute top-2 right-2 h-5 w-5 rounded-full bg-accent text-white flex items-center justify-center">
+                <span className="absolute top-2 right-2 h-5 w-5 rounded-full bg-accent text-on-solid flex items-center justify-center">
                   <Check size={12} strokeWidth={3} />
                 </span>
               )}

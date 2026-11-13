@@ -1,4 +1,5 @@
 import React from 'react';
+import { Modal } from '../ui/Modal';
 import {
   Tag,
   Loader,
@@ -17,13 +18,8 @@ import {
   getLocationBadgeConfig,
   getGoogleMapsDirectionUrl,
 } from '../../utils/geoUtils';
-
-const formatRpShort = (val: number) => {
-  if (!val || val === 0) return 'Rp 0';
-  if (val >= 1_000_000) return `Rp ${(val / 1_000_000).toFixed(1).replace('.0', '')}jt`;
-  if (val >= 1_000) return `Rp ${Math.round(val / 1000)}rb`;
-  return `Rp ${val}`;
-};
+import { formatRupiahRingkas as formatRpShort } from '../../utils/money';
+import { formatWib } from '../../utils/dateWib';
 
 export interface LiveChatCustomerModalProps {
   isOpen: boolean;
@@ -55,38 +51,24 @@ export const LiveChatCustomerModal: React.FC<LiveChatCustomerModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div
-      data-modal-active="true"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150"
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      size="lg"
+      bodyClassName="p-0 overflow-hidden flex-1 flex flex-col min-h-0"
+      title={
+        <span className="flex items-center gap-3 min-w-0">
+          <CustomerAvatar
+            src={customerDetailData?.profile_picture_url || selectedChat?.customerProfilePictureUrl}
+            name={customerDetailData?.name || selectedChat?.customerName}
+            phone={customerDetailData?.phone || selectedChat?.customerPhone}
+            size="md"
+          />
+          <span className="truncate">{customerDetailData?.name || selectedChat?.customerName || 'Customer'}</span>
+        </span>
+      }
+      subtitle={customerDetailData?.phone || selectedChat?.customerPhone || '-'}
     >
-      <div className="bg-surface border border-divider rounded-2xl w-full max-w-xl max-h-[90dvh] flex flex-col shadow-2xl overflow-hidden">
-        {/* Modal Header */}
-        <div className="flex justify-between items-center px-5 py-4 border-b border-divider bg-surface-2">
-          <div className="flex items-center space-x-3">
-            <CustomerAvatar
-              src={customerDetailData?.profile_picture_url || selectedChat?.customerProfilePictureUrl}
-              name={customerDetailData?.name || selectedChat?.customerName}
-              phone={customerDetailData?.phone || selectedChat?.customerPhone}
-              size="md"
-            />
-            <div>
-              <h3 className="text-base font-bold text-ink">
-                {customerDetailData?.name || selectedChat?.customerName || 'Customer'}
-              </h3>
-              <p className="text-xs text-ink-2 font-mono">
-                {customerDetailData?.phone || selectedChat?.customerPhone || '-'}
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            data-modal-close="true"
-            onClick={onClose}
-            className="p-2 rounded-xl text-ink-3 hover:text-ink hover:bg-fill-2 transition text-sm font-bold cursor-pointer"
-          >
-            ✕
-          </button>
-        </div>
 
         {/* Modal Body */}
         <div className="p-5 space-y-5 overflow-y-auto flex-1 text-xs text-ink">
@@ -165,7 +147,7 @@ export const LiveChatCustomerModal: React.FC<LiveChatCustomerModalProps> = ({
                         <span>{badge.label}</span>
                         {customerDetailData?.preferences?.location_refreshed_at ? (
                           <span className="opacity-75 font-normal ml-0.5" title="Terakhir diperbarui via shareloc">
-                            • {new Date(customerDetailData.preferences.location_refreshed_at).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })}
+                            • {formatWib(customerDetailData.preferences.location_refreshed_at, { dateStyle: 'short', timeStyle: 'short' })}
                           </span>
                         ) : null}
                       </span>
@@ -190,7 +172,7 @@ export const LiveChatCustomerModal: React.FC<LiveChatCustomerModalProps> = ({
                       </button>
                     </div>
                     {(customerDetailData?.preferences?.landmark || customerDetailData?.preferences?.address_notes) && (
-                      <p className="text-[11px] text-accent mt-0.5 font-medium">📍 Patokan: {customerDetailData?.preferences?.landmark || customerDetailData?.preferences?.address_notes}</p>
+                      <p className="text-[11px] text-accent mt-0.5 font-medium">Patokan: {customerDetailData?.preferences?.landmark || customerDetailData?.preferences?.address_notes}</p>
                     )}
                     {customerDetailData?.kelurahan && (
                       <p className="text-[10px] text-ink-3 mt-0.5">Kel. {customerDetailData.kelurahan}</p>
@@ -249,7 +231,7 @@ export const LiveChatCustomerModal: React.FC<LiveChatCustomerModalProps> = ({
                         <div>
                           <p className="font-bold text-ink">{ch.name}</p>
                           <p className="text-[10px] text-ink-2">
-                            {ch.current_age ? `Usia: ${ch.current_age}` : formatClinicalAge(ch.birth_date) ? `Usia: ${formatClinicalAge(ch.birth_date)}` : ch.age_months ? `Usia: ${ch.age_months} bulan` : ch.birth_date ? `Lahir: ${new Date(ch.birth_date).toLocaleDateString('id-ID')}` : ch.raw_age_text ? `Usia: ${ch.raw_age_text}` : '-'}
+                            {ch.current_age ? `Usia: ${ch.current_age}` : formatClinicalAge(ch.birth_date) ? `Usia: ${formatClinicalAge(ch.birth_date)}` : ch.age_months ? `Usia: ${ch.age_months} bulan` : ch.birth_date ? `Lahir: ${formatWib(ch.birth_date, { day: '2-digit', month: 'short', year: 'numeric' })}` : ch.raw_age_text ? `Usia: ${ch.raw_age_text}` : '-'}
                             {ch.gender ? ` • ${ch.gender}` : ''}
                           </p>
                         </div>
@@ -286,7 +268,7 @@ export const LiveChatCustomerModal: React.FC<LiveChatCustomerModalProps> = ({
                             </p>
                             <p className="text-[10px] text-ink-2 flex items-center space-x-1">
                               <Calendar size={10} />
-                              <span>{new Date(r.booking_date).toLocaleDateString('id-ID', { dateStyle: 'medium' })} • {r.booking_time}</span>
+                              <span>{formatWib(r.booking_date, { dateStyle: 'medium' })} • {r.booking_time}</span>
                             </p>
                           </div>
                           <div className="flex items-center space-x-2">
@@ -365,7 +347,6 @@ export const LiveChatCustomerModal: React.FC<LiveChatCustomerModalProps> = ({
             Tutup
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };

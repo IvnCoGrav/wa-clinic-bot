@@ -1,6 +1,7 @@
 import { prisma } from '../db/client';
 import { Direction } from '@prisma/client';
 import { formatReportDateWib } from './notification-delivery.service';
+import { hasStaffReaction } from './livechat-reply-state';
 
 /**
  * NightlyWatchdogService (Fase 2r) — laporan pengawasan malam 21:00 WIB.
@@ -95,7 +96,13 @@ export class NightlyWatchdogService {
             orderBy: { created_at: 'desc' },
           })
           .catch(() => null);
-        if (lastReal && (lastReal.direction as any) === Direction.INBOUND) {
+        if (
+          lastReal &&
+          (lastReal.direction as any) === Direction.INBOUND &&
+          // Reaksi emot dari staf pada pesan terakhir = sudah dibalas
+          // (keputusan produk 2026-11-11), jadi tidak masuk daftar belum dibalas.
+          !hasStaffReaction(lastReal.payload_raw)
+        ) {
           const waitingMinutes = Math.floor((Date.now() - new Date(lastReal.created_at).getTime()) / 60000);
           unreplied.push({
             name: c.customer?.name || 'Bunda',

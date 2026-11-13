@@ -46,6 +46,7 @@ export const MediaRetentionPanel: React.FC<Props> = ({
 
         <div className="flex justify-end pt-1">
           <button
+            aria-label="Simpan"
             type="button"
             onClick={handleSaveMediaRetention}
             disabled={savingMediaRetention}

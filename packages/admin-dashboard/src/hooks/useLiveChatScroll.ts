@@ -25,5 +25,7 @@ export function saveConversationScroll(convId: string, scrollTop: number, isNear
     const map = raw ? JSON.parse(raw) : {};
     map[convId] = { scrollTop, isNearBottom, updatedAt: Date.now() };
     sessionStorage.setItem(SCROLL_POS_STORAGE_KEY, JSON.stringify(map));
-  } catch (_) {}
+  } catch (_) {
+    // Cache posisi scroll opsional; posisi awal hanya kurang nyaman.
+  }
 }

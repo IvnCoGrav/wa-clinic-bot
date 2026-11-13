@@ -1,3 +1,6 @@
+// Catatan kontrak error: catch kosong di hook ini adalah indikator mengetik,
+// riwayat/URL browser, dan cache percakapan terpilih. Semua pelengkap; memuat
+// thread tetap memberi pesan galat lewat state halaman.
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { apiRequest } from '../services/api';
 import { isSameConversation } from '../utils/livechatSourceFilter';

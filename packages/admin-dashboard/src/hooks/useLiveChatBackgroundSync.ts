@@ -1,3 +1,6 @@
+// Catatan kontrak error: catch kosong di hook ini adalah polling progres
+// sinkronisasi latar. Sinkronisasi berjalan di server; kegagalan membaca
+// progres hanya membuat indikator tidak bergerak, bukan menggagalkan proses.
 import { useState, useEffect } from 'react';
 import { apiRequest } from '../services/api';
 

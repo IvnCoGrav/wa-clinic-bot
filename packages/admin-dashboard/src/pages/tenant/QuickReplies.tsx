@@ -1,6 +1,12 @@
+// Catatan kontrak error: catch kosong di halaman ini adalah pemuatan info
+// pembayaran, gambar pricelist, dan nama brand untuk pratinjau. Data utama
+// (daftar quick reply) punya penanganan galat sendiri.
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
+import { Modal } from '../../components/ui/Modal';
+import { FormErrorSummary } from '../../components/ui/FormErrorSummary';
+import type { FieldIssue } from '../../lib/validateReservation';
 import { BRAND } from '../../config/brand';
 import {
   Zap,
@@ -105,6 +111,7 @@ export const QuickReplies: React.FC = () => {
   const [clinicBrandName, setClinicBrandName] = useState<string>(BRAND.businessName);
 
   const [saving, setSaving] = useState(false);
+  const [formIssues, setFormIssues] = useState<FieldIssue[]>([]);
   const [seeding, setSeeding] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -206,14 +213,18 @@ export const QuickReplies: React.FC = () => {
 
   const handleSave = async () => {
     const shortcutRaw = formShortcut.trim().replace(/^\//, '').toLowerCase();
-    if (!shortcutRaw || !formTitle.trim() || !formContent.trim()) {
-      toast('Shortcut, judul, dan isi wajib diisi.', 'error');
-      return;
-    }
+    const nextIssues: FieldIssue[] = [];
+    if (!shortcutRaw) nextIssues.push({ field: 'shortcut', message: 'Shortcut wajib diisi.' });
+    if (!formTitle.trim()) nextIssues.push({ field: 'title', message: 'Judul wajib diisi.' });
+    if (!formContent.trim()) nextIssues.push({ field: 'content', message: 'Isi balasan wajib diisi.' });
     if (formMediaType === 'CUSTOM_IMAGE' && !customImageFile && !customImagePreview) {
-      toast('Pilih atau unggah berkas gambar kustom terlebih dahulu.', 'error');
+      nextIssues.push({ field: 'image', message: 'Pilih atau unggah berkas gambar kustom terlebih dahulu.' });
+    }
+    if (nextIssues.length > 0) {
+      setFormIssues(nextIssues);
       return;
     }
+    setFormIssues([]);
     setSaving(true);
     try {
       let imageB64: string | undefined = undefined;
@@ -315,7 +326,7 @@ export const QuickReplies: React.FC = () => {
             <Zap size={22} />
           </div>
           <div>
-            <h2 className="text-xl font-bold tracking-tight text-ink">Balasan Cepat (Quick Chat)</h2>
+            <h1 className="text-xl font-bold tracking-tight text-ink">Balasan Cepat (Quick Chat)</h1>
             <p className="text-xs text-ink-2 mt-0.5">Ketik <code className="bg-fill-1 px-1 rounded text-accent">/shortcut</code> di Live Chat untuk balasan instan dengan variabel & media dinamis.</p>
           </div>
         </div>
@@ -323,7 +334,7 @@ export const QuickReplies: React.FC = () => {
           <button onClick={load} disabled={loading} className="h-9 px-3 rounded-xl bg-surface border border-divider text-xs font-semibold text-ink hover:bg-fill-1 flex items-center gap-1.5 disabled:opacity-50">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
           </button>
-          <button onClick={handleSeed} disabled={seeding} className="h-9 px-3 rounded-xl bg-surface border border-warning-line text-xs font-semibold text-warning hover:bg-warning-soft flex items-center gap-1.5 disabled:opacity-50">
+          <button aria-label="Basis data" onClick={handleSeed} disabled={seeding} className="h-9 px-3 rounded-xl bg-surface border border-warning-line text-xs font-semibold text-warning hover:bg-warning-soft flex items-center gap-1.5 disabled:opacity-50">
             <Database size={14} /> {seeding ? 'Seeding...' : 'Seed Default'}
           </button>
           <button onClick={openCreate} className="h-9 px-4 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink text-xs font-bold flex items-center gap-1.5 shadow-xs">
@@ -339,7 +350,7 @@ export const QuickReplies: React.FC = () => {
           {PLACEHOLDERS.map((p) => (
             <span key={p.tag} className="inline-flex items-center bg-surface px-2 py-1 rounded-xl border border-divider text-xs shadow-xs">
               <code className="text-accent font-mono font-bold mr-1">{p.tag}</code>
-              <span className="text-[11px] text-ink-2">— {p.label}</span>
+              <span className="text-[11px] text-ink-2">{p.label}</span>
             </span>
           ))}
         </div>
@@ -441,13 +452,26 @@ export const QuickReplies: React.FC = () => {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-          <div className="bg-surface rounded-2xl w-full max-w-lg shadow-2xl border border-divider max-h-[90vh] flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-divider bg-surface-2">
-              <h3 className="text-sm font-bold text-ink flex items-center gap-2"><Zap size={16} className="text-accent" /> {editing ? 'Edit Balasan Cepat' : 'Tambah Balasan Cepat'}</h3>
-              <button onClick={() => setShowModal(false)} className="p-1.5 rounded-xl hover:bg-fill-1 text-ink-3"><X size={16} /></button>
-            </div>
+        <Modal
+          open
+          onClose={() => setShowModal(false)}
+          size="xl"
+          bodyClassName="p-0 overflow-hidden flex-1 flex flex-col min-h-0"
+          title={
+            <span className="flex items-center gap-2">
+              <Zap size={16} className="text-accent" aria-hidden="true" />
+              <span>{editing ? 'Edit Balasan Cepat' : 'Tambah Balasan Cepat'}</span>
+            </span>
+          }
+          footer={
+            <>
+              <button onClick={() => setShowModal(false)} className="h-9 px-4 rounded-xl bg-surface border border-divider text-xs font-semibold text-ink-2 hover:bg-fill-1 cursor-pointer">Batal</button>
+              <button aria-label="Simpan template" onClick={handleSave} disabled={saving} className="h-9 px-4 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"><Save size={14} aria-hidden="true" /> {saving ? 'Menyimpan...' : 'Simpan Template'}</button>
+            </>
+          }
+        >
             <div className="p-5 space-y-4 overflow-y-auto flex-1">
+              <FormErrorSummary issues={formIssues} />
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-semibold text-ink">Shortcut <span className="text-danger">*</span></label>
@@ -710,12 +734,7 @@ export const QuickReplies: React.FC = () => {
                 <p className="text-xs text-ink whitespace-pre-wrap leading-relaxed mt-1">{formContent ? interpolatePreview(formContent, paymentInfo, clinicBrandName) : <span className="text-ink-3 italic">Preview akan muncul di sini...</span> as any}</p>
               </div>
             </div>
-            <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-divider bg-surface-2">
-              <button onClick={() => setShowModal(false)} className="h-9 px-4 rounded-xl bg-surface border border-divider text-xs font-semibold text-ink-2 hover:bg-fill-1">Batal</button>
-              <button onClick={handleSave} disabled={saving} className="h-9 px-4 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink text-xs font-bold flex items-center gap-1.5 disabled:opacity-50"><Save size={14} /> {saving ? 'Menyimpan...' : 'Simpan Template'}</button>
-            </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

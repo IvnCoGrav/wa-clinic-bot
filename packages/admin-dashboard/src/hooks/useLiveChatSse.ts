@@ -102,7 +102,8 @@ export function useLiveChatSse({
           const active = (payload as any)?.globalBotActive;
           if (typeof active === 'boolean') {
             setChatBotActive(active);
-            try { localStorage.setItem('wa_chatbot_active_state', String(active)); } catch {}
+            // Cache lokal opsional: status bot tetap benar dari payload SSE.
+        try { localStorage.setItem('wa_chatbot_active_state', String(active)); } catch {}
           }
           return;
         }
@@ -377,6 +378,17 @@ export function useLiveChatSse({
               })
             );
           }
+      // Reaksi staf pada pesan customer terakhir = sudah dibalas (keputusan
+      // produk 2026-11-11). Padamkan badge tanpa menunggu polling.
+      const hasStaffReactionInPayload =
+        Array.isArray(reactions) && reactions.some((r: any) => r?.fromMe === true && r?.emoji);
+      if (hasStaffReactionInPayload && conversationId) {
+        setChats((prev) =>
+          prev.map((c) =>
+            c.conversationId === conversationId ? { ...c, isAwaitingReply: false } : c
+          )
+        );
+      }
         } else if (type === 'message.status_updated' && (payload?.messageId || payload?.waMessageId)) {
           const { messageId, waMessageId, conversationId, status, deliveredAt, readAt } = payload;
           if (!conversationId || selectedIdRef.current === conversationId) {

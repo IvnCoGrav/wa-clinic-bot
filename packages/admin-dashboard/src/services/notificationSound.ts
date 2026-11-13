@@ -2,6 +2,11 @@
  * Notification Sound & Web Notification Service
  * Menggunakan Web Audio API sintetis (WhatsApp-style chime) + Haptic Vibration + Pre-blessed HTML5 Audio + Web Notifications
  * 100% Offline, Anti-blocking AudioContext auto-unlock khusus untuk iOS Safari & Android Chrome.
+ *
+ * Catatan kontrak error: seluruh catch di modul ini SENGAJA senyap. Suara dan
+ * notifikasi adalah pelengkap; browser boleh memblokir audio/izin kapan saja dan
+ * staf tidak boleh menerima toast karena itu. Kegagalan di sini tidak pernah
+ * mengubah data.
  */
 
 let audioCtxInstance: AudioContext | null = null;
@@ -108,6 +113,7 @@ export function unlockAudioContext(): void {
   const ctx = getAudioContext();
   if (ctx) {
     if (ctx.state === 'suspended') {
+      // Resume audio best-effort: browser bisa menolak sebelum ada gestur.
       ctx.resume().catch(() => {});
     }
     try {
@@ -209,6 +215,7 @@ export function playIncomingMessageSound(force = false): void {
     const ctx = getAudioContext();
     if (ctx) {
       if (ctx.state === 'suspended') {
+        // Resume audio best-effort sebelum memutar nada.
         ctx.resume().catch(() => {});
       }
 
@@ -247,6 +254,7 @@ export function playIncomingMessageSound(force = false): void {
     const audio = getSingletonAudio();
     if (audio) {
       audio.currentTime = 0;
+      // Autoplay bisa diblokir; bunyi dilewati, alur tetap jalan.
       audio.play().catch(() => {});
     }
   } catch (_) {}

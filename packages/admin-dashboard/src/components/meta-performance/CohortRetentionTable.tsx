@@ -268,10 +268,12 @@ export const CohortRetentionTable: React.FC<CohortRetentionTableProps> = ({ repo
 
       {/* ── Tabel Kohort ────────────────────────────────────────── */}
       <div className="overflow-x-auto">
-        <table className="w-full text-xs min-w-[1240px]">
+        <table className="w-full text-xs min-w-[860px] md:min-w-[1240px]">
           <thead>
             <tr className="text-left uppercase font-bold text-ink-2 border-b border-divider bg-surface-2">
-              <th className="py-2.5 px-3">Kohort</th>
+              {/* Kolom kohort menempel di kiri supaya identitas baris tetap
+                  terlihat saat tabel 18 kolom digulir horizontal di HP. */}
+              <th className="sticky left-0 z-20 py-2.5 px-3 bg-surface-2">Kohort</th>
               <th className="py-2.5 px-3 text-right">Pasien Baru</th>
               <th className="py-2.5 px-3 text-right" title="Pasien unik yang pernah melakukan kunjungan kedua atau lebih">Retensi Kumulatif</th>
               <th className="py-2.5 px-3 text-right" title="Rata-rata hari dari kunjungan pertama ke kunjungan kedua">Jeda Kunjungan #2</th>
@@ -316,7 +318,7 @@ export const CohortRetentionTable: React.FC<CohortRetentionTableProps> = ({ repo
                     }`}
                   >
                     {/* Kohort */}
-                    <td className="py-2.5 px-3 font-semibold text-ink whitespace-nowrap">
+                    <td className="sticky left-0 z-10 py-2.5 px-3 font-semibold text-ink whitespace-nowrap bg-inherit">
                       <div className="flex items-center gap-1.5">
                         <Calendar size={13} className="text-accent shrink-0" />
                         <span>{r.cohortMonth}</span>

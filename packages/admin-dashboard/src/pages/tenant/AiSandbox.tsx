@@ -1,3 +1,7 @@
+// Catatan kontrak error: catch kosong di halaman ini adalah penyimpanan sesi
+// sandbox ke sessionStorage dan pembersihan state percobaan. Sandbox adalah alat
+// uji internal; kehilangan cache tidak memengaruhi data produksi. Aksi yang
+// mengubah data (reset) tetap memberi umpan balik lewat mustSucceed.
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
@@ -18,6 +22,9 @@ import {
   RotateCcw,
   MessageSquare,
 } from 'lucide-react';
+import { formatRupiah as fmtRpId } from '../../utils/money';
+import { formatWibClock } from '../../utils/dateWib';
+import { mustSucceed } from '../../services/errorPolicy';
 
 interface ChatMessage {
   sender: 'user' | 'bot';
@@ -43,11 +50,6 @@ interface ChatMessage {
     provider?: string | null;
   } | null;
 }
-
-const fmtRpId = (n: any): string => {
-  const v = Number(n);
-  return Number.isFinite(v) ? `Rp ${v.toLocaleString('id-ID')}` : '-';
-};
 
 function parseContextSummary(summary?: string | null): { done: string[]; banned: string[]; focus: string[] } {
   const out: { done: string[]; banned: string[]; focus: string[] } = { done: [], banned: [], focus: [] };
@@ -266,10 +268,14 @@ export const AiSandbox: React.FC = () => {
     sessionStorage.setItem('sandbox_inspector', JSON.stringify(emptyInspector));
 
     // Reset state percakapan di backend agar bersih dari HUMAN_HANDLING atau state lama
-    apiRequest('/api/admin/sandbox/chat', {
-      method: 'POST',
-      body: JSON.stringify({ text: '/reset', sandboxPhone: newPhone })
-    }).catch(() => {});
+    void mustSucceed(
+      () =>
+        apiRequest('/api/admin/sandbox/chat', {
+          method: 'POST',
+          body: JSON.stringify({ text: '/reset', sandboxPhone: newPhone }),
+        }),
+      'Reset sandbox'
+    ).catch(() => {});
   };
 
   const handleStartEdit = (chunk: any) => {
@@ -480,10 +486,10 @@ export const AiSandbox: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-ink flex items-center space-x-2">
+          <h1 className="text-xl font-bold tracking-tight text-ink flex items-center space-x-2">
             <Terminal className="text-accent" size={22} />
             <span>AI Sandbox Simulator</span>
-          </h2>
+          </h1>
           <p className="text-xs text-ink-3 mt-0.5">Test respons AI WhatsApp, inspeksi hasil vector retrieval FAQ, dan simulasi kondisi error</p>
         </div>
 
@@ -502,9 +508,9 @@ export const AiSandbox: React.FC = () => {
             <span className="text-xs font-semibold text-ink-2">Simulasi Outage LLM</span>
             <button
               onClick={() => setSumoPodOutage(!sumoPodOutage)}
-              className={`w-9 h-5 rounded-full transition-all relative ${sumoPodOutage ? 'bg-danger' : 'bg-divider'}`}
+              className={`w-9 h-5 rounded-full transition relative ${sumoPodOutage ? 'bg-danger' : 'bg-divider'}`}
             >
-              <div className={`absolute top-0.5 left-0.5 bg-surface h-4 w-4 rounded-full transition-all ${sumoPodOutage ? 'translate-x-4' : ''}`}></div>
+              <div className={`absolute top-0.5 left-0.5 bg-surface h-4 w-4 rounded-full transition ${sumoPodOutage ? 'translate-x-4' : ''}`}></div>
             </button>
           </div>
         </div>
@@ -554,7 +560,7 @@ export const AiSandbox: React.FC = () => {
               </button>
 
               {sumoPodOutage ? (
-                <span className="px-2 py-0.5 rounded-full bg-danger-soft border border-danger-line text-danger text-[10px] font-bold animate-pulse flex items-center space-x-1">
+                <span className="px-2 py-0.5 rounded-full bg-danger-soft border border-danger-line text-danger text-[10px] font-bold flex items-center space-x-1">
                   <AlertOctagon size={10} />
                   <span>LLM API OUTAGE</span>
                 </span>
@@ -591,7 +597,7 @@ export const AiSandbox: React.FC = () => {
                   }`}>
                   <div className="whitespace-pre-wrap break-words font-sans">{msg.content}</div>
                   <span className="block text-[9px] text-ink-3 mt-1 text-right">
-                    {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {formatWibClock(msg.timestamp)}
                   </span>
                 </div>
               </div>
@@ -614,7 +620,7 @@ export const AiSandbox: React.FC = () => {
             {pendingBurst.length > 0 && (
               <div className="bg-warning-soft border border-warning-line rounded-lg px-2.5 py-1.5 flex items-center justify-between text-xs animate-fadeIn">
                 <div className="flex items-center space-x-1.5 text-warning font-semibold text-[11px] truncate">
-                  <Zap size={13} className="text-warning fill-warning animate-pulse shrink-0" />
+                  <Zap size={13} className="text-warning fill-warning shrink-0" />
                   <span className="truncate">
                     <span className="font-bold">{pendingBurst.length} pesan burst</span> terkumpul • Kirim dlm{' '}
                     <span className="font-mono font-bold text-warning">{(burstTimeLeft / 1000).toFixed(1)}s</span>
@@ -653,9 +659,10 @@ export const AiSandbox: React.FC = () => {
                     : 'Tekan Enter atau klik Kirim'}
               </span>
               <button
+                aria-label="Muat ulang"
                 type="submit"
                 disabled={!inputText.trim()}
-                className="px-3.5 py-1.5 bg-accent hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-lg text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs shrink-0 cursor-pointer"
+                className="px-3.5 py-1.5 bg-accent hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed text-on-solid rounded-lg text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs shrink-0 cursor-pointer"
               >
                 {loading ? <RefreshCw size={12} className="animate-spin" /> : <Send size={12} />}
                 <span>{pendingBurst.length > 0 ? 'Tambah Burst' : 'Kirim'}</span>
@@ -749,7 +756,7 @@ export const AiSandbox: React.FC = () => {
 
                       {/* Card 1: Lokasi & Ongkir */}
                       <div className="p-3.5 rounded-xl bg-surface border border-divider space-y-1.5">
-                        <span className="text-[11px] font-bold text-ink-3 block uppercase">📍 Lokasi & Status Ongkir</span>
+                        <span className="text-[11px] font-bold text-ink-3 block uppercase">Lokasi & Status Ongkir</span>
                         <div className="text-xs text-ink font-semibold">
                           {[loc.kelurahan, loc.kecamatan, loc.kota].filter(Boolean).join(', ') || 'Belum diketahui'}
                         </div>
@@ -762,7 +769,7 @@ export const AiSandbox: React.FC = () => {
 
                       {/* Card 2: Keranjang */}
                       <div className="p-3.5 rounded-xl bg-surface border border-divider space-y-2">
-                        <span className="text-[11px] font-bold text-ink-3 block uppercase">🛒 Keranjang Layanan ({cart.length})</span>
+                        <span className="text-[11px] font-bold text-ink-3 block uppercase">Keranjang Layanan ({cart.length})</span>
                         {cart.length === 0 ? (
                           <div className="text-[11px] text-ink-3 italic">Keranjang masih kosong.</div>
                         ) : (
@@ -801,7 +808,7 @@ export const AiSandbox: React.FC = () => {
                       {/* Card 3: Pasien adaptif multi-audience (Bunda / Si Kecil / Keduanya) & Jadwal */}
                       {((gs.momProfile?.gestationalWeeks != null || gs.momProfile?.stage || (gs.momProfile?.complaints || []).length > 0 || gs.targetAudience === 'MOMS' || gs.targetAudience === 'BOTH') && (
                       <div className="p-3.5 rounded-xl bg-surface border border-divider space-y-1.5">
-                        <span className="text-[11px] font-bold text-ink-3 block uppercase">🤰 Data Kehamilan & Jadwal</span>
+                        <span className="text-[11px] font-bold text-ink-3 block uppercase">Data Kehamilan & Jadwal</span>
                         <div className="text-xs text-ink">
                           Usia Kehamilan: <b>{gs.momProfile?.gestationalWeeks != null ? `${gs.momProfile.gestationalWeeks} minggu` : '-'}</b>
                         </div>
@@ -820,7 +827,7 @@ export const AiSandbox: React.FC = () => {
                       ))}
                       {((gs.children && gs.children.length > 0) || gs.childProfile || gs.targetAudience === 'BABY' || gs.targetAudience === 'KIDS' || gs.targetAudience === 'BOTH') && (
                       <div className="p-3.5 rounded-xl bg-surface border border-divider space-y-1.5">
-                        <span className="text-[11px] font-bold text-ink-3 block uppercase">👶 Data Si Kecil & Jadwal</span>
+                        <span className="text-[11px] font-bold text-ink-3 block uppercase">Data Si Kecil & Jadwal</span>
                         {(gs.children && gs.children.length > 1) ? (
                           <div className="space-y-1">
                             {gs.children.map((k: any, ki: number) => (
@@ -853,7 +860,7 @@ export const AiSandbox: React.FC = () => {
                       )}
                       {(!gs.momProfile && !gs.childProfile && (!gs.children || gs.children.length === 0) && !gs.targetAudience && (
                       <div className="p-3.5 rounded-xl bg-surface border border-divider space-y-1.5">
-                        <span className="text-[11px] font-bold text-ink-3 block uppercase">👶 Data Si Kecil & Jadwal</span>
+                        <span className="text-[11px] font-bold text-ink-3 block uppercase">Data Si Kecil & Jadwal</span>
                         <div className="text-xs text-ink">
                           Jadwal: <b>{gs.booking?.preferredDate ? `${gs.booking.preferredDate}${gs.booking.preferredTime ? ` • ${gs.booking.preferredTime}` : ''}` : '-'}</b>
                         </div>
@@ -867,14 +874,14 @@ export const AiSandbox: React.FC = () => {
 
                       {/* Card 4: Memori Anti-Amnesia */}
                       <div className="p-3.5 rounded-xl bg-surface border border-divider space-y-2">
-                        <span className="text-[11px] font-bold text-ink-3 block uppercase">🧠 Memori Konteks (Anti-Amnesia)</span>
+                        <span className="text-[11px] font-bold text-ink-3 block uppercase">Memori Konteks (Anti-Amnesia)</span>
                         {(!inspectorData.contextSummary) ? (
                           <div className="text-[11px] text-ink-3 italic">Belum ada ringkasan konteks untuk turn ini.</div>
                         ) : (
                           <>
                             {summary.done.length > 0 && (
                               <div>
-                                <div className="text-[10px] font-bold text-emerald-700 dark:text-accent uppercase mb-1">✅ Sudah Dibahas & Tuntas</div>
+                                <div className="text-[10px] font-bold text-emerald-700 dark:text-accent uppercase mb-1">Sudah Dibahas & Tuntas</div>
                                 <ul className="space-y-0.5 text-[11px] text-ink">
                                   {summary.done.map((s, i) => <li key={i}>• {s}</li>)}
                                 </ul>
@@ -882,7 +889,7 @@ export const AiSandbox: React.FC = () => {
                             )}
                             {summary.banned.length > 0 && (
                               <div>
-                                <div className="text-[10px] font-bold text-rose-600 dark:text-danger uppercase mb-1">🚫 Dilarang Diulang</div>
+                                <div className="text-[10px] font-bold text-rose-600 dark:text-danger uppercase mb-1">Dilarang Diulang</div>
                                 <ul className="space-y-0.5 text-[11px] text-ink">
                                   {summary.banned.map((s, i) => <li key={i}>• {s}</li>)}
                                 </ul>
@@ -890,7 +897,7 @@ export const AiSandbox: React.FC = () => {
                             )}
                             {summary.focus.length > 0 && (
                               <div>
-                                <div className="text-[10px] font-bold text-sky-700 dark:text-info uppercase mb-1">🎯 Topik Fokus Saat Ini</div>
+                                <div className="text-[10px] font-bold text-sky-700 dark:text-info uppercase mb-1">Topik Fokus Saat Ini</div>
                                 <ul className="space-y-0.5 text-[11px] text-ink">
                                   {summary.focus.map((s, i) => <li key={i}>• {s}</li>)}
                                 </ul>
@@ -908,7 +915,7 @@ export const AiSandbox: React.FC = () => {
               {/* Reference Chunks section */}
               {inspectorTab === 'chunks' && (
               <div className="space-y-2">
-                <span className="text-[11px] font-bold text-ink-3 block uppercase">Vector Chunks Retrieved ({inspectorData.chunks?.length || 0}) — SOP/FAQ + Katalog</span>
+                <span className="text-[11px] font-bold text-ink-3 block uppercase">Vector Chunks Retrieved ({inspectorData.chunks?.length || 0}): SOP/FAQ + Katalog</span>
                 <span className="text-[10px] text-ink-3 block">Ground truth terpadu: artikel SOP/FAQ medis (pre-retrieval deterministik + tool) dan spesifikasi katalog layanan resmi yang dipakai LLM turn ini.</span>
                 <div className="space-y-2.5">
                   {inspectorData.chunks?.map((chunk: any, i: number) => {
@@ -1026,7 +1033,7 @@ export const AiSandbox: React.FC = () => {
                   ))}
                   {(!inspectorData.exemplars || inspectorData.exemplars.length === 0) && (
                     <div className="text-xs text-ink-3 py-2 italic">
-                      Tidak ada exemplar dinamis spesifik yang disuntikkan — AI menggunakan persona dasar dan contoh percakapan SOP standar.
+                      Tidak ada exemplar dinamis spesifik yang disuntikkan: AI menggunakan persona dasar dan contoh percakapan SOP standar.
                     </div>
                   )}
                 </div>
@@ -1054,7 +1061,7 @@ export const AiSandbox: React.FC = () => {
                   ))}
                   {(!inspectorData.executedTools || inspectorData.executedTools.length === 0) && (
                     <div className="text-xs text-ink-3 py-2 italic">
-                      Tidak ada tool yang dipanggil — jawaban langsung dari LLM (mis. sapaan statis Turn-0).
+                      Tidak ada tool yang dipanggil: jawaban langsung dari LLM (mis. sapaan statis Turn-0).
                     </div>
                   )}
                 </div>
@@ -1091,6 +1098,7 @@ export const AiSandbox: React.FC = () => {
                         Batal
                       </button>
                       <button
+                        aria-label="Simpan"
                         type="button"
                         onClick={handleSavePersona}
                         disabled={personaLoading}
@@ -1118,7 +1126,7 @@ export const AiSandbox: React.FC = () => {
 
                 {/* Model reasoning */}
                 <div className="space-y-1">
-                  <span className="text-[11px] font-bold text-ink-3 block uppercase">🧠 Reasoning Model</span>
+                  <span className="text-[11px] font-bold text-ink-3 block uppercase">Reasoning Model</span>
                   {inspectorData.reasoning ? (
                     <pre className="p-3 bg-violet-soft/80 border border-violet-line rounded-xl text-[10px] text-violet font-mono overflow-auto max-h-40 whitespace-pre-wrap leading-relaxed">
                       {inspectorData.reasoning}

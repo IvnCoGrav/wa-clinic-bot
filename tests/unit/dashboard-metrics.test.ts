@@ -37,10 +37,10 @@ describe('dashboard-metrics helper (audit anti-slop)', () => {
       expect(res).toContain('3.600.000');
     });
 
-    it('returns em-dash for null, undefined, or NaN', () => {
-      expect(formatRupiah(null)).toBe('—');
-      expect(formatRupiah(undefined)).toBe('—');
-      expect(formatRupiah(NaN)).toBe('—');
+    it('memakai tanda hubung untuk null, undefined, atau NaN', () => {
+      expect(formatRupiah(null)).toBe('-');
+      expect(formatRupiah(undefined)).toBe('-');
+      expect(formatRupiah(NaN)).toBe('-');
     });
   });
 });

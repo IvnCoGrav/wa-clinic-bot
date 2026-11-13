@@ -9,7 +9,10 @@
     "preview": "vite preview",
     "check:tokens": "node scripts/check-design-tokens.mjs",
     "check:dark-parity": "node scripts/check-dark-parity.mjs",
-    "check:design": "npm run check:tokens && npm run check:dark-parity"
+    "check:a11y": "node scripts/check-a11y-strings.mjs",
+    "check:contrast": "node scripts/check-contrast-pairs.mjs",
+    "check:dates": "node scripts/check-date-format.mjs",
+    "check:design": "npm run check:tokens && npm run check:dark-parity && npm run check:a11y && npm run check:contrast && npm run check:dates"
   },
   "dependencies": {
     "lucide-react": "^0.435.0",

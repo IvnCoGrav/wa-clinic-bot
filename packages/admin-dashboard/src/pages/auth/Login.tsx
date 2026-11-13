@@ -38,12 +38,12 @@ export const Login: React.FC = () => {
       <div className="w-full max-w-md bg-surface rounded-2xl p-8 border border-divider relative z-10 shadow-sm">
         {/* Brand Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex h-14 w-14 rounded-2xl bg-accent items-center justify-center font-black text-2xl text-white shadow-xs mb-3.5">
+          <div className="inline-flex h-14 w-14 rounded-2xl bg-accent items-center justify-center font-black text-2xl text-on-solid shadow-xs mb-3.5">
             {BRAND.initial}
           </div>
-          <h2 className="text-xl font-bold tracking-tight text-ink mb-1">
+          <h1 className="text-xl font-bold tracking-tight text-ink mb-1">
             {BRAND.businessName}
-          </h2>
+          </h1>
           <p className="text-xs text-ink-2">
             Masuk ke portal sistem & layanan klinik
           </p>
@@ -61,38 +61,42 @@ export const Login: React.FC = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Identifier input (Email / No HP WhatsApp) */}
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-ink">
+            <label htmlFor="login-identifier" className="text-xs font-semibold text-ink">
               Email Admin / No. WhatsApp Staff
             </label>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-ink-3">
-                <User size={16} />
+                <User size={16} aria-hidden="true" />
               </span>
               <input
+                id="login-identifier"
                 type="text"
                 required
+                autoComplete="username"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 placeholder="admin@email.com atau 08123456789"
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-surface border border-divider text-ink placeholder-ink-3 text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/15 transition-all"
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-surface border border-divider text-ink placeholder-ink-3 text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/15 transition"
               />
             </div>
           </div>
 
           {/* Password input */}
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-ink">Password</label>
+            <label htmlFor="login-password" className="text-xs font-semibold text-ink">Password</label>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-ink-3">
-                <Lock size={16} />
+                <Lock size={16} aria-hidden="true" />
               </span>
               <input
+                id="login-password"
                 type="password"
                 required
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-surface border border-divider text-ink placeholder-ink-3 text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/15 transition-all"
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-surface border border-divider text-ink placeholder-ink-3 text-sm focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/15 transition"
               />
             </div>
           </div>
@@ -101,7 +105,7 @@ export const Login: React.FC = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 px-4 rounded-xl text-white font-semibold text-sm bg-accent hover:bg-accent-hover shadow-xs flex items-center justify-center space-x-2 disabled:opacity-50 transition-colors mt-2"
+            className="w-full py-3 px-4 rounded-xl text-on-solid font-semibold text-sm bg-accent hover:bg-accent-hover shadow-xs flex items-center justify-center space-x-2 disabled:opacity-50 transition-colors mt-2"
           >
             {loading ? (
               <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent"></div>

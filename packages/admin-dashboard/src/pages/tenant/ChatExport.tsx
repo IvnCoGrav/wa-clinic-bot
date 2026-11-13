@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { Download, FileText, RefreshCw, CalendarDays, HelpCircle } from 'lucide-react';
-import { getWibDateKey } from '../../utils/dateWib';
+import { formatWib, getWibDateKey } from '../../utils/dateWib';
 
 interface ExportFile {
   fileName: string;
@@ -130,12 +130,12 @@ export const ChatExport: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-divider">
         <div>
-          <h2 className="text-xl font-bold text-ink flex items-center gap-2">
+          <h1 className="text-xl font-bold text-ink flex items-center gap-2">
             <FileText className="text-accent" size={22} />
             <span>Daily Chat Export (Analisa AI)</span>
-          </h2>
+          </h1>
           <p className="text-xs text-ink-3 mt-0.5">
-            Ekspor percakapan harian ke file Markdown terstruktur — mudah dibaca AI untuk menilai kualitas balasan bot vs balasan staf manusia.
+            Ekspor percakapan harian ke file Markdown terstruktur: mudah dibaca AI untuk menilai kualitas balasan bot vs balasan staf manusia.
           </p>
         </div>
         <button
@@ -181,14 +181,14 @@ export const ChatExport: React.FC = () => {
               Semua pesan (pelanggan, BOT, dan staf) pada rentang tersebut akan diekspor dalam satu file
               Markdown, maksimal 31 hari.{' '}
               <span className="text-warning font-medium">
-                Hanya customer asli — data QA/sandbox tidak ikut diekspor.
+                Hanya customer asli: data QA/sandbox tidak ikut diekspor.
               </span>
             </p>
           </div>
           <button
             onClick={() => generate()}
             disabled={loading}
-            className="flex items-center justify-center gap-1.5 px-5 py-2.5 bg-accent hover:bg-accent disabled:opacity-50 rounded-xl text-xs font-semibold text-white transition shadow-xs"
+            className="flex items-center justify-center gap-1.5 px-5 py-2.5 bg-accent hover:bg-accent disabled:opacity-50 rounded-xl text-xs font-semibold text-on-solid transition shadow-xs"
           >
             <Download size={13} className={loading ? 'animate-pulse' : ''} />
             <span>{loading ? 'Memproses...' : 'Generate & Download .md'}</span>
@@ -244,7 +244,7 @@ export const ChatExport: React.FC = () => {
                     <td className="px-5 py-3 text-xs text-ink-3 font-mono">{f.fileName}</td>
                     <td className="px-5 py-3 text-right text-xs text-ink-3">{formatBytes(f.sizeBytes)}</td>
                     <td className="px-5 py-3 text-right text-xs text-ink-3 whitespace-nowrap">
-                      {new Date(f.updatedAt).toLocaleString('id-ID')}
+                      {formatWib(f.updatedAt, { dateStyle: 'short', timeStyle: 'short' })}
                     </td>
                     <td className="px-5 py-3 text-right">
                       <button

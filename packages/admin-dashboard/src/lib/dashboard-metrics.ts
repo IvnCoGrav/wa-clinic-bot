@@ -15,12 +15,9 @@ export function hasChartData(data: Array<{ revenue?: number; bookings?: number }
   return data.some((item) => (item.revenue && item.revenue > 0) || (item.bookings && item.bookings > 0));
 }
 
-export function formatRupiah(value: number | null | undefined): string {
-  if (value === null || value === undefined || isNaN(value)) return '—';
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value);
-}
+/**
+ * Dipertahankan sebagai re-export agar pemanggil lama tidak rusak. Implementasi
+ * tunggal ada di `utils/money.ts` supaya nominal di dashboard, invoice, dan chat
+ * tidak lagi berbeda format.
+ */
+export { formatRupiah } from '../utils/money';

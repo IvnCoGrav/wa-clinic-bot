@@ -47,6 +47,7 @@ export class AppErrorBoundary extends React.Component<Props, State> {
 
   handleReload = () => {
     try {
+      // Penanda percobaan reload bersifat opsional; reload tetap dijalankan.
       sessionStorage.removeItem('chunk_reload_attempt');
     } catch {}
     window.location.reload();
@@ -54,6 +55,7 @@ export class AppErrorBoundary extends React.Component<Props, State> {
 
   handleGoDashboard = () => {
     try {
+      // Penanda percobaan reload bersifat opsional; reload tetap dijalankan.
       sessionStorage.removeItem('chunk_reload_attempt');
     } catch {}
     window.location.href = '/admin/overview';
@@ -83,7 +85,7 @@ export class AppErrorBoundary extends React.Component<Props, State> {
           <div className="flex flex-wrap items-center justify-center gap-2 w-full">
             <button
               onClick={this.handleReload}
-              className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-xl text-xs font-bold text-white transition shadow-xs"
+              className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-xl text-xs font-bold text-on-solid transition shadow-xs"
             >
               Muat Ulang Halaman
             </button>

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
+import { Modal } from '../../components/ui/Modal';
 import { Tag, Plus, Edit2, Trash2, Loader, RefreshCw, Users, Check } from 'lucide-react';
 
 interface LabelItem {
@@ -185,6 +186,7 @@ export const CustomerLabels: React.FC = () => {
         </div>
         <div className="flex items-center space-x-2 flex-wrap gap-y-2">
           <button
+            aria-label="Refresh Label"
             onClick={loadLabels}
             disabled={loading}
             className="p-2 rounded-xl bg-surface border border-divider hover:bg-fill-1 text-ink-2 transition shadow-xs disabled:opacity-50"
@@ -316,20 +318,17 @@ export const CustomerLabels: React.FC = () => {
 
       {/* Create / Edit Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fade-in">
-          <div className="bg-surface border border-divider text-ink rounded-2xl w-full max-w-md p-6 shadow-xl space-y-4">
-            <div className="flex justify-between items-center pb-2 border-b border-divider">
-              <h3 className="text-sm font-bold text-ink flex items-center space-x-2">
-                <Tag size={16} className="text-accent" />
-                <span>{editingLabel ? 'Edit Label Customer' : 'Tambah Label Baru'}</span>
-              </h3>
-              <button
-                onClick={() => setModalOpen(false)}
-                className="text-ink-3 hover:text-ink text-xs font-semibold p-1"
-              >
-                ✕
-              </button>
-            </div>
+        <Modal
+          open
+          onClose={() => setModalOpen(false)}
+          size="md"
+          title={
+            <span className="flex items-center gap-2">
+              <Tag size={16} className="text-accent" aria-hidden="true" />
+              <span>{editingLabel ? 'Edit Label Customer' : 'Tambah Label Baru'}</span>
+            </span>
+          }
+        >
 
             <form onSubmit={handleSave} className="space-y-4">
               <div>
@@ -425,15 +424,14 @@ export const CustomerLabels: React.FC = () => {
                 <button
                   type="submit"
                   disabled={saving || !name.trim()}
-                  className="px-4 py-2 bg-accent hover:bg-accent disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs"
+                  className="px-4 py-2 bg-accent hover:bg-accent disabled:opacity-50 text-on-solid rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs"
                 >
                   {saving && <Loader size={13} className="animate-spin" />}
                   <span>{saving ? 'Menyimpan...' : editingLabel ? 'Simpan Perubahan' : 'Tambah Label'}</span>
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

@@ -1,3 +1,6 @@
+// Catatan kontrak error: pemanggilan `unsubscribe` di modul ini best-effort.
+// Bila browser atau server menolak, langganan lama akan dibersihkan backend saat
+// endpoint-nya tidak lagi valid; logout tidak boleh terhenti karenanya.
 import { apiRequest } from './api';
 
 /**

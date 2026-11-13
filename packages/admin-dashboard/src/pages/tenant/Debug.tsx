@@ -33,6 +33,7 @@ import {
   CheckCheck,
   type LucideIcon,
 } from 'lucide-react';
+import { formatWib, formatWibClock } from '../../utils/dateWib';
 
 type TabId = 'system' | 'llm' | 'logs' | 'messages' | 'conversations';
 
@@ -47,7 +48,7 @@ const TABS: Array<{ id: TabId; label: string; icon: LucideIcon }> = [
 const fmtTime = (iso?: string | null) => {
   if (!iso) return '-';
   const d = new Date(iso);
-  return d.toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'medium' });
+  return formatWib(d, { dateStyle: 'short', timeStyle: 'medium' });
 };
 
 function StatCard({ label, value, tone = 'default', sub }: { label: string; value: React.ReactNode; tone?: 'ok' | 'warn' | 'err' | 'default'; sub?: string }) {
@@ -69,6 +70,7 @@ function SectionHeader({ title, onRefresh, loading, auto }: { title: string; onR
       <div className="flex items-center gap-3">
         {auto && <span className="text-xs text-ink-3">auto-refresh 5s</span>}
         <button
+          aria-label="Refresh"
           onClick={onRefresh}
           disabled={loading}
           className="p-2 rounded-xl bg-surface hover:bg-fill-1 border border-divider text-ink-2 hover:text-ink transition shadow-xs disabled:opacity-50"
@@ -256,7 +258,7 @@ function LogsSection() {
   return (
     <div className="space-y-4">
       <SectionHeader title="Log Buffer (in-memory)" onRefresh={load} loading={loading} auto />
-      {!installed && <ErrNote note="Log buffer belum terpasang — restart server agar console log tertangkap." />}
+      {!installed && <ErrNote note="Log buffer belum terpasang: restart server agar console log tertangkap." />}
       <div className="flex flex-wrap items-center gap-1.5 bg-surface border border-divider rounded-xl p-1 w-fit shadow-xs">
         {(['all', 'error', 'warn', 'info', 'log'] as const).map((l) => (
           <button
@@ -274,7 +276,7 @@ function LogsSection() {
         {entries.length === 0 && <p className="text-ink-3">Belum ada log.</p>}
         {entries.map((e) => (
           <div key={e.id} className="flex gap-3 border-b border-divider py-1.5 last:border-0">
-            <span className="text-ink-3 whitespace-nowrap">{new Date(e.ts).toLocaleTimeString('id-ID')}</span>
+            <span className="text-ink-3 whitespace-nowrap">{formatWibClock(e.ts)}</span>
             <span className={`w-12 shrink-0 uppercase ${levelColor(e.level)}`}>{e.level}</span>
             <span className="text-ink whitespace-pre-wrap break-all">{e.msg}</span>
           </div>
@@ -766,17 +768,17 @@ function LlmLogsSection() {
         <div>
           <div className="flex items-center gap-2">
             <h3 className="text-base font-extrabold text-ink flex items-center gap-2">
-              <span>🧠 Dedicated LLM Execution Tracing</span>
+              <span>Dedicated LLM Execution Tracing</span>
             </h3>
             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
               autoSync ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-accent border border-emerald-200 dark:border-emerald-800/40' : 'bg-slate-100 dark:bg-divider text-slate-600 dark:text-ink-2'
             }`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${autoSync ? 'bg-success animate-pulse' : 'bg-fill-2'}`} />
+              <span className={`w-1.5 h-1.5 rounded-full ${autoSync ? 'bg-success' : 'bg-fill-2'}`} />
               {autoSync ? 'Auto-Sync 6s' : 'Jeda'}
             </span>
           </div>
           <p className="text-xs text-ink-3 mt-0.5">
-            Observability V3 Agent Pipeline: <span className="font-semibold text-ink">NLU Extractor ➔ Tool Routing (Call 1) ➔ Tools Executed ➔ Reply Generation (Call 2)</span>.
+            Observability V3 Agent Pipeline: <span className="font-semibold text-ink">NLU Extractor Tool Routing (Call 1) Tools Executed Reply Generation (Call 2)</span>.
           </p>
         </div>
 
@@ -903,9 +905,9 @@ function LlmLogsSection() {
             className="px-2.5 py-1.5 rounded-xl bg-surface border border-divider text-xs font-semibold text-ink focus:outline-none focus:border-accent shadow-2xs"
           >
             <option value="all">Semua Status</option>
-            <option value="SUCCESS">✅ SUCCESS</option>
-            <option value="FALLBACK">⚠️ FALLBACK</option>
-            <option value="ERROR">❌ ERROR</option>
+            <option value="SUCCESS">SUCCESS</option>
+            <option value="FALLBACK">FALLBACK</option>
+            <option value="ERROR">ERROR</option>
           </select>
 
           {/* Search Box */}
@@ -1154,7 +1156,7 @@ function LlmLogsSection() {
                                       {call.status === 'ERROR' && (
                                         <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800/60 rounded-xl p-3 space-y-1">
                                           <span className="text-[10px] font-bold text-rose-800 dark:text-danger uppercase tracking-wider block">
-                                            ⛔ Error Eksekusi LLM
+                                            Error Eksekusi LLM
                                           </span>
                                           <p className="text-rose-950 dark:text-rose-200 font-mono text-[11px] font-semibold whitespace-pre-wrap break-words">
                                             {call.errorMessage || 'Terjadi kesalahan pada eksekusi LLM'}
@@ -1168,13 +1170,13 @@ function LlmLogsSection() {
                                           <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                                             <div className="bg-violet-50/70 dark:bg-fill-1 border border-violet-200 dark:border-divider rounded-xl p-3 space-y-1">
                                               <span className="text-[10px] font-bold text-violet-800 dark:text-ink-2 uppercase tracking-wider block">
-                                                🎰 Input Pasien / Slot State
+                                                Input Pasien / Slot State
                                               </span>
                                               <p className="text-violet-950 dark:text-violet-200 font-medium whitespace-pre-wrap">{call.customerInput || '-'}</p>
                                             </div>
                                             <div className="bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 rounded-xl p-3 space-y-1">
                                               <span className="text-[10px] font-bold text-emerald-800 dark:text-accent uppercase tracking-wider block">
-                                                🎯 Output Keputusan Slot / Balasan
+                                                Output Keputusan Slot / Balasan
                                               </span>
                                               <p className="text-emerald-950 dark:text-emerald-200 font-medium whitespace-pre-wrap">{call.finalReply || '-'}</p>
                                             </div>
@@ -1184,7 +1186,7 @@ function LlmLogsSection() {
                                           {(call.reasoning || call.rawReasoning) && (
                                             <div className="bg-purple-50/80 dark:bg-fill-1 border border-purple-200 dark:border-divider rounded-xl p-3 space-y-1">
                                               <span className="text-[10px] font-bold text-purple-900 dark:text-ink-2 uppercase tracking-wider block">
-                                                🧠 AI Reasoning & Context Analysis
+                                                AI Reasoning & Context Analysis
                                               </span>
                                               <p className="text-purple-950 dark:text-purple-200 font-medium text-xs whitespace-pre-wrap">{call.reasoning || call.rawReasoning}</p>
                                             </div>
@@ -1194,16 +1196,16 @@ function LlmLogsSection() {
                                           {((call as any).promptTokens !== undefined || (call as any).completionTokens !== undefined || (call as any).costIdr !== undefined || (call as any).cachedPromptTokens !== undefined || (call as any).reasoningTokens !== undefined) && (
                                             <div className="bg-sky-50/70 dark:bg-fill-1 border border-sky-200 dark:border-sky-800/40 rounded-xl p-3 space-y-1">
                                               <span className="text-[10px] font-bold text-sky-900 dark:text-info uppercase tracking-wider block">
-                                                📊 Token & Biaya
+                                                Token & Biaya
                                               </span>
                                               <p className="text-sky-950 dark:text-sky-200 font-mono text-[11px] font-semibold">
-                                                📥 {(call as any).promptTokens ?? '-'} tokens | 📤 {(call as any).completionTokens ?? '-'} tokens{(call as any).totalTokens !== undefined ? ` | Σ ${(call as any).totalTokens}` : ''}{(call as any).costIdr !== undefined ? ` | Rp ${Number((call as any).costIdr).toLocaleString('id-ID')}` : ''}
+                                                {(call as any).promptTokens ?? '-'} tokens | 📤 {(call as any).completionTokens ?? '-'} tokens{(call as any).totalTokens !== undefined ? ` | Σ ${(call as any).totalTokens}` : ''}{(call as any).costIdr !== undefined ? ` | Rp ${Number((call as any).costIdr).toLocaleString('id-ID')}` : ''}
                                               </p>
                                               {((call as any).cachedPromptTokens !== undefined || (call as any).reasoningTokens !== undefined) && (
                                                 <p className="text-sky-800 dark:text-info font-mono text-[10px]">
-                                                  {((call as any).cachedPromptTokens !== undefined) && <>💾 Cache Hit: {(call as any).cachedPromptTokens} tokens</>}
+                                                  {((call as any).cachedPromptTokens !== undefined) && <>Cache Hit: {(call as any).cachedPromptTokens} tokens</>}
                                                   {((call as any).cachedPromptTokens !== undefined && (call as any).reasoningTokens !== undefined) && ' | '}
-                                                  {((call as any).reasoningTokens !== undefined) && <>🧠 Thinking: {(call as any).reasoningTokens} tokens</>}
+                                                  {((call as any).reasoningTokens !== undefined) && <>Thinking: {(call as any).reasoningTokens} tokens</>}
                                                 </p>
                                               )}
                                             </div>
@@ -1213,7 +1215,7 @@ function LlmLogsSection() {
                                           {Array.isArray((call as any).toolsCalled) && (call as any).toolsCalled.length > 0 && (
                                             <div className="bg-teal-50/70 dark:bg-fill-1 border border-teal-200 dark:border-teal-800/40 rounded-xl p-3 space-y-1.5">
                                               <span className="text-[10px] font-bold text-teal-900 dark:text-accent uppercase tracking-wider block">
-                                                🛠️ Tools Called ({(call as any).toolsCalled.length})
+                                                Tools Called ({(call as any).toolsCalled.length})
                                               </span>
                                               {(call as any).toolsCalled.map((t: any, ti: number) => (
                                                 <div key={ti} className="bg-white dark:bg-app/30 border border-teal-200 dark:border-teal-800/40 rounded-lg p-2">
@@ -1228,7 +1230,7 @@ function LlmLogsSection() {
                                           {call.groundTruthUsed && Object.keys(call.groundTruthUsed).length > 0 && (
                                             <div className="bg-slate-50 dark:bg-surface-2 border border-slate-200 dark:border-divider rounded-xl p-3 space-y-1">
                                               <span className="text-[10px] font-bold text-slate-700 dark:text-ink-2 uppercase tracking-wider block">
-                                                📊 Ground Truth / Fakta DB Terinjeksi
+                                                Ground Truth / Fakta DB Terinjeksi
                                               </span>
                                               <pre className="text-slate-800 dark:text-ink-2 font-mono text-[10px] whitespace-pre-wrap overflow-x-auto max-h-36">
                                                 {typeof call.groundTruthUsed === 'string'
@@ -1262,7 +1264,7 @@ function LlmLogsSection() {
                                             <div className="bg-fill-2 text-ink-3 rounded-xl p-3 space-y-1.5 shadow-inner">
                                               <div className="flex items-center justify-between border-b border-strong pb-1.5">
                                                 <span className="text-[10px] font-bold text-success uppercase tracking-wider font-mono">
-                                                  🔍 Raw LLM Output (JSON / Text)
+                                                  Raw LLM Output (JSON / Text)
                                                 </span>
                                                 <button
                                                   type="button"
@@ -1294,13 +1296,13 @@ function LlmLogsSection() {
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                                               <div className="bg-slate-50 dark:bg-surface-2 border border-slate-200 dark:border-divider rounded-xl p-3 space-y-1">
                                                 <span className="text-[10px] font-bold text-slate-700 dark:text-ink-2 uppercase tracking-wider block">
-                                                  📥 Input
+                                                  Input
                                                 </span>
                                                 <p className="text-slate-900 dark:text-ink font-medium whitespace-pre-wrap">{call.customerInput || '-'}</p>
                                               </div>
                                               <div className="bg-slate-50 dark:bg-surface-2 border border-slate-200 dark:border-divider rounded-xl p-3 space-y-1">
                                                 <span className="text-[10px] font-bold text-slate-700 dark:text-ink-2 uppercase tracking-wider block">
-                                                  📤 Output
+                                                  Output
                                                 </span>
                                                 <p className="text-slate-900 dark:text-ink font-medium whitespace-pre-wrap">{call.finalReply || '-'}</p>
                                               </div>
@@ -1424,10 +1426,10 @@ export const Debug: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-divider">
         <div>
-          <h2 className="text-xl font-bold text-ink flex items-center gap-2">
+          <h1 className="text-xl font-bold text-ink flex items-center gap-2">
             <Bug size={22} className="text-accent" /> <span>System Debug</span>
-          </h2>
-          <p className="text-xs text-ink-3 mt-0.5">Observability, tracing &amp; maintenance — semua read-only.</p>
+          </h1>
+          <p className="text-xs text-ink-3 mt-0.5">Observability, tracing &amp; maintenance: semua read-only.</p>
         </div>
       </div>
 
@@ -1460,7 +1462,7 @@ export const Debug: React.FC = () => {
 
       <p className="text-xs text-ink-3">
         <Clock size={11} className="inline mr-1" />
-        Debug page data diambil langsung dari server via /api/admin/debug/* — read-only, tidak ada mutasi.
+        Debug page data diambil langsung dari server via /api/admin/debug/*: read-only, tidak ada mutasi.
       </p>
     </div>
   );

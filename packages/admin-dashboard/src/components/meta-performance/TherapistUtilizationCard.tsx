@@ -4,8 +4,8 @@ import { MetaPerformanceReport, fmtNum, fmtPct } from './types';
 
 const BAND: Record<string, { label: string; cls: string }> = {
   AMAN: { label: 'Aman untuk scale iklan', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-accent dark:border-emerald-800' },
-  OPTIMAL: { label: 'Optimal — pertahankan budget', cls: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-warning dark:border-amber-800' },
-  PENUH: { label: 'Penuh — tambah terapis sebelum scale', cls: 'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-danger dark:border-rose-800' },
+  OPTIMAL: { label: 'Optimal: pertahankan budget', cls: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-warning dark:border-amber-800' },
+  PENUH: { label: 'Penuh: tambah terapis sebelum scale', cls: 'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-danger dark:border-rose-800' },
   UNKNOWN: { label: 'Data kapasitas belum tersedia', cls: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700' },
 };
 
@@ -31,7 +31,7 @@ export const TherapistUtilizationCard: React.FC<{ report: MetaPerformanceReport 
         <div className="rounded-xl border border-divider bg-surface-2 px-3 py-2">
           <p className="text-[10px] uppercase font-bold text-ink-3">Kapasitas Slot</p>
           <p className="text-sm font-extrabold text-ink">
-            {cap.totalSlotsCapacity === null || cap.totalSlotsCapacity === undefined ? '—' : fmtNum(cap.totalSlotsCapacity)} <span className="text-[10px] font-normal text-ink-2 dark:text-ink-3">slot</span>
+            {cap.totalSlotsCapacity === null || cap.totalSlotsCapacity === undefined ? '-' : fmtNum(cap.totalSlotsCapacity)} <span className="text-[10px] font-normal text-ink-2 dark:text-ink-3">slot</span>
           </p>
           <p className="text-[9px] text-ink-3">{cap.dailySlotsPerTherapist !== null && cap.dailySlotsPerTherapist !== undefined ? `@${cap.dailySlotsPerTherapist} slot/terapis/hari` : 'Kapasitas belum dikonfigurasi admin'}</p>
         </div>

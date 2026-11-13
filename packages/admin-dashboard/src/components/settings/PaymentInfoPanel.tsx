@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { QrCode, Upload, Save, Trash2, Eye, Plus, X, CreditCard, Building2, HelpCircle } from 'lucide-react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
+import { useSnapshotDirty } from '../../hooks/useDirtyGuard';
+import { useReportDirty } from './settingsDirtyStore';
 
 interface BankAccount {
   bank: string;
@@ -18,14 +20,14 @@ interface PaymentInfoData {
 
 const STANDARD_PAYMENT_TEMPLATE = `Halo Bunda {nama_pasien}, berikut informasi pembayaran resmi klinik:
 
-💰 *Total Tagihan:* {total_tagihan}
+*Total Tagihan:* {total_tagihan}
 _{rincian_biaya}_
-📋 *Layanan:* {daftar_layanan}
+*Layanan:* {daftar_layanan}
 
-🏦 *Transfer Bank Resmi Klinik:*
+*Transfer Bank Resmi Klinik:*
 {daftar_rekening}
 
-📱 _{keterangan_qris}_
+_{keterangan_qris}_
 
 ℹ️ _{petunjuk}_
 
@@ -181,6 +183,12 @@ export const PaymentInfoPanel: React.FC = () => {
     for (const [k, v] of Object.entries(vars)) out = out.split(k).join(v);
     return out.replace(/\{[a-z_]+\}/gi, '');
   };
+
+  const { dirty: unsavedDraft } = useSnapshotDirty(
+    [bankAccounts, instructions, customTemplate],
+    !loading
+  );
+  useReportDirty(unsavedDraft);
 
   const handleSave = async () => {
     setSaving(true);
@@ -452,11 +460,11 @@ export const PaymentInfoPanel: React.FC = () => {
       <div className="space-y-3 pt-2 border-t border-divider">
         <div className="space-y-1">
           <label className="text-xs font-bold text-ink flex items-center gap-1.5">
-            <span className="text-accent">📝</span>
+            
             <span>Template Pesan WhatsApp (Kustomisasi Copywriting)</span>
           </label>
           <p className="text-[11px] text-ink-3 leading-relaxed">
-            Kosongkan untuk memakai template standar sistem. Gunakan placeholder di bawah — akan diganti otomatis saat kirim ke pasien. Klik chip untuk sisipkan di posisi kursor.
+            Kosongkan untuk memakai template standar sistem. Gunakan placeholder di bawah: akan diganti otomatis saat kirim ke pasien. Klik chip untuk sisipkan di posisi kursor.
           </p>
         </div>
         <div className="flex flex-wrap gap-1.5">
@@ -507,6 +515,7 @@ export const PaymentInfoPanel: React.FC = () => {
       {/* Submit Button */}
       <div className="pt-2 flex justify-end">
         <button
+          aria-label="Simpan"
           type="button"
           disabled={saving}
           onClick={handleSave}
@@ -529,7 +538,7 @@ export const PaymentInfoPanel: React.FC = () => {
       {/* Lightbox Modal */}
       {lightboxOpen && activeQrisDisplay && (
         <div
-          className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-fadeIn"
+          className="modal-backdrop fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 animate-fadeIn"
           onClick={() => setLightboxOpen(false)}
         >
           <div

@@ -23,7 +23,7 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({ size = 15, className =
       title={isDark ? 'Beralih ke Mode Terang (Light)' : 'Beralih ke Mode Gelap (Dark)'}
       aria-label={isDark ? 'Beralih ke mode terang' : 'Beralih ke mode gelap'}
       aria-pressed={isDark}
-      className={`w-9 h-9 sm:w-8 sm:h-8 min-w-[36px] min-h-[36px] rounded-full border transition-all duration-150 active:scale-90 touch-manipulation flex items-center justify-center cursor-pointer shadow-2xs aspect-square overflow-hidden ${
+      className={`w-9 h-9 sm:w-8 sm:h-8 min-w-[36px] min-h-[36px] rounded-full border transition duration-150 active:scale-90 touch-manipulation flex items-center justify-center cursor-pointer shadow-2xs aspect-square overflow-hidden ${
         isDark
           ? 'bg-fill-2 border-strong text-warning hover:bg-strong'
           : 'bg-warning-soft border-warning-line text-warning hover:bg-warning-line'

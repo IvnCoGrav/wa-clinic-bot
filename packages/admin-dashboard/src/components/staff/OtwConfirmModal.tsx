@@ -1,5 +1,6 @@
 import React from 'react';
-import { Navigation, X, MapPin, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Navigation, MapPin, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Modal } from '../ui/Modal';
 
 /**
  * Modal konfirmasi OTW terpadu (plan 2026-10-04, unifikasi 1-tap).
@@ -40,34 +41,43 @@ export const OtwConfirmModal: React.FC<OtwConfirmModalProps> = ({
   const hasGps = !!depart;
 
   return (
-    <div
-      className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-xs animate-fadeIn"
-      onClick={sending ? undefined : onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Konfirmasi berangkat OTW"
-    >
-      <div
-        className="bg-surface rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 w-full max-w-md shadow-2xl border border-divider space-y-4 text-left animate-modalScaleUp max-h-[90dvh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="w-12 h-1.5 bg-strong rounded-full mx-auto -mt-2 mb-1 sm:hidden" />
-
-        <div className="flex items-start justify-between">
-          <h3 className="text-base font-bold text-ink flex items-center space-x-2">
-            <Navigation className="text-accent flex-shrink-0" size={20} />
-            <span>Mulai Jalan (OTW)</span>
-          </h3>
+    <Modal
+      open={open}
+      onClose={onClose}
+      variant="sheet"
+      size="md"
+      title={
+        <span className="flex items-center gap-2">
+          <Navigation className="text-accent shrink-0" size={20} aria-hidden="true" />
+          <span>Mulai Jalan (OTW)</span>
+        </span>
+      }
+      footer={
+        <div className="w-full space-y-2">
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={sending}
+            className="w-full min-h-[48px] flex items-center justify-center space-x-2 py-3 px-4 bg-accent hover:bg-accent-hover text-on-solid rounded-2xl text-sm font-bold transition active:scale-[0.98] shadow-xs disabled:opacity-50"
+          >
+            {sending ? (
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden="true" />
+            ) : (
+              <Navigation size={16} aria-hidden="true" />
+            )}
+            <span>{sending ? 'Mengirim...' : 'Kirim OTW & Buka Peta'}</span>
+          </button>
           <button
             type="button"
             onClick={onClose}
             disabled={sending}
-            className="text-ink-2 hover:text-ink p-1 rounded-full hover:bg-fill-1 disabled:opacity-40"
-            aria-label="Tutup"
+            className="w-full min-h-[44px] py-2.5 px-4 bg-surface hover:bg-fill-1 border border-divider text-ink-2 dark:text-ink rounded-2xl text-xs font-bold transition active:scale-[0.98] disabled:opacity-40"
           >
-            <X size={18} />
+            Batal
           </button>
         </div>
+      }
+    >
 
         {/* Status titik awal (GPS) */}
         <div
@@ -89,7 +99,7 @@ export const OtwConfirmModal: React.FC<OtwConfirmModalProps> = ({
               </span>
             ) : (
               <span>
-                GPS belum terdeteksi — pesan tetap dikirim, namun titik awal tidak terekam.
+                GPS belum terdeteksi: pesan tetap dikirim, namun titik awal tidak terekam.
               </span>
             )}
           </div>
@@ -116,31 +126,7 @@ export const OtwConfirmModal: React.FC<OtwConfirmModalProps> = ({
           </p>
         </div>
 
-        <div className="space-y-2 pt-1">
-          <button
-            type="button"
-            onClick={onConfirm}
-            disabled={sending}
-            className="w-full min-h-[48px] flex items-center justify-center space-x-2 py-3 px-4 bg-accent hover:bg-accent-hover text-white rounded-2xl text-sm font-bold transition active:scale-[0.98] shadow-xs disabled:opacity-50"
-          >
-            {sending ? (
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-            ) : (
-              <Navigation size={16} />
-            )}
-            <span>{sending ? 'Mengirim...' : 'Kirim OTW & Buka Peta'}</span>
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={sending}
-            className="w-full min-h-[44px] py-2.5 px-4 bg-surface hover:bg-fill-1 border border-divider text-ink-2 dark:text-ink rounded-2xl text-xs font-bold transition active:scale-[0.98] disabled:opacity-40"
-          >
-            Batal
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

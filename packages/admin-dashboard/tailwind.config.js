@@ -47,12 +47,21 @@ export default {
         'bubble-out': c('bubble-out'),
       },
       fontFamily: {
-        sans: ['-apple-system', 'BlinkMacSystemFont', 'SF Pro Text', 'Inter', 'Segoe UI', 'Roboto', 'sans-serif'],
+        sans: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      zIndex: {
+        sticky: 'var(--z-sticky)',
+        sidebar: 'var(--z-sidebar)',
+        overlay: 'var(--z-overlay)',
+        dialog: 'var(--z-dialog)',
+        'dialog-top': 'var(--z-dialog-top)',
+        popover: 'var(--z-popover)',
+        toast: 'var(--z-toast)',
       },
       boxShadow: {
         '2xs': '0 1px 2px 0 rgba(0, 0, 0, 0.05)',

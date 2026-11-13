@@ -1,54 +1,106 @@
-# DESIGN.md — Clinic Bot & Admin Dashboard Design System
+# DESIGN.md — Sistem Desain Dashboard Klinik
 
-This file defines the visual language, interaction patterns, and craft standards for the WhatsApp Clinic Bot admin dashboard and customer-facing interfaces.
+Dokumen ini menetapkan bahasa visual dan standar interaksi dashboard admin serta
+halaman publik. Isinya sengaja memakai **nama token**, bukan hex mentah, karena
+hex mentah dilarang di kode UI (`npm run check:tokens`).
 
 ---
 
-## 1. Brand Identity & Color Tokens
+## 1. Prinsip
 
-| Token Name | Hex Code / Tailwind | Usage |
+1. **Satu fokus per layar.** Satu angka atau satu aksi boleh paling menonjol.
+   Sisanya mendukung, bukan bersaing. Contoh: kartu "Reservasi Masuk Hari Ini"
+   di Overview memakai ukuran angka lebih besar; tiga kartu lain lebih kecil.
+2. **Tenang, bukan ramai.** Gerak dipakai untuk menjelaskan perubahan status,
+   bukan hiasan. Tidak ada denyut tanpa akhir.
+3. **Bahasa manusia.** Istilah kanonik: Pasien, Layanan, Terapis, Ongkir
+   (`src/config/glossary.ts`). Nama produk teknis (WAHA, CAPI, CTA) tetap.
+4. **Data bisnis dari database.** Harga, tarif ongkir, nomor WhatsApp, dan nama
+   klinik tidak boleh ditulis di kode atau template statis.
+
+## 2. Token Warna
+
+Sumber tunggal: `packages/admin-dashboard/src/index.css` (light & dark) plus
+`chartTheme`. Jangan menulis hex di komponen.
+
+| Peran | Token | Dipakai untuk |
 | :--- | :--- | :--- |
-| **Brand Primary** | `#008069` (`text-emerald-700`) | Main CTA buttons, active tabs, header icons, brand accents |
-| **Brand Hover** | `#00a884` | Hover state for primary buttons and interactive links |
-| **Brand Mint / Soft** | `#e8f5f2` / `bg-emerald-50` | Active selection backgrounds, subtle pill badges |
-| **Text Primary** | `#111b21` | High-contrast body text, headings, table contents |
-| **Text Secondary** | `#54656f` | Muted labels, table headers, descriptions, timestamps |
-| **Text Subtle** | `#8696a0` | Placeholders, inactive icons, helper text |
-| **Border Neutral** | `#e9edef` / `#d1d7db` | Card borders, table dividers, input borders |
-| **App Canvas** | `#f0f2f5` | Page background canvas (WhatsApp web background style) |
-| **Surface Card** | `#ffffff` | Elevated cards, popovers, dropdowns, modal windows |
+| Aksen utama | `accent`, `accent-hover`, `accent-ink` | CTA, tab aktif, ikon utama |
+| Permukaan | `surface`, `surface-2`, `fill-1`, `fill-2` | Kartu, panel, latar baris |
+| Teks | `ink`, `ink-2`, `ink-3` | Judul, label, metadata |
+| Garis | `divider`, `strong` | Pemisah, border input |
+| Status | `success`, `warning`, `danger`, `info` + `*-soft`, `*-line` | Badge, alert, status |
+| Teks di atas warna | `accent-ink`, `on-solid` | Tombol dan badge solid |
 
----
+Aturan kontras: teks putih hanya di atas permukaan solid yang punya token
+`on-solid`/`*-ink`. Dijaga otomatis oleh `npm run check:contrast`.
 
-## 2. Status Color Matrix
+## 3. Tiga Dial
 
-| Status | Badge Background | Text Color | Border | Usage |
-| :--- | :--- | :--- | :--- | :--- |
-| **Success / Connected** | `bg-emerald-50` | `text-emerald-800` | `border-emerald-200` | Terhubung, Selesai, Confirmed |
-| **Pending / Warning** | `bg-amber-50` | `text-amber-800` | `border-amber-200` | Belum Terhubung, Pending, Follow-Up |
-| **Info / Scheduled** | `bg-sky-50` | `text-sky-800` | `border-sky-200` | Jadwal Booking, AI Active |
-| **Danger / Canceled** | `bg-rose-50` | `text-rose-800` | `border-rose-200` | Gagal, Batal, Emergency Alert |
+Dial dipakai untuk menyetel intensitas, bukan menambah token baru.
 
----
+| Dial | Dashboard admin | Halaman publik |
+| :--- | :--- | :--- |
+| **ENERGY** (keberanian warna & kontras) | 1 — tenang, banyak ruang kosong | 2 — lebih persuasif, tetap sopan |
+| **RHYTHM** (kepadatan & ritme jarak) | 1 — padat terukur untuk kerja harian | 2 — lebih lapang untuk dibaca sekali jalan |
+| **MOTION** (jumlah gerak) | 1 — hanya transisi fungsional | 1 — masuk halus, tanpa loop |
 
-## 3. Component Architecture Guidelines
+## 4. Tipografi
 
-### Modals & Dialogs
-- **Backdrop**: `fixed inset-0 bg-black/40 backdrop-blur-xs z-50 flex items-center justify-center p-4`
-- **Container**: `bg-white rounded-2xl sm:rounded-3xl border border-[#e9edef] shadow-2xl w-full max-w-lg overflow-hidden animate-fadeIn`
-- **Header**: Clean flex header with title, subtitle, and prominent close button (`X` icon, `text-[#54656f] hover:text-[#111b21]`).
-- **Footer**: Distinct actions with primary on right (`bg-[#008069] hover:bg-[#00a884] text-white`) and cancel/secondary on left (`border border-[#d1d7db] text-[#54656f]`).
+- Stack sistem: `-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+  'Helvetica Neue', Arial, sans-serif`. Tidak ada unduhan font, tidak ada
+  permintaan ke Google Fonts.
+- Minimum teks efektif 11px. Kelas `text-[9px]`/`text-[10px]` dinaikkan ke 11px
+  oleh aturan CSS global; jangan menambah pemakaian baru.
+- Angka memakai `tabular-nums` (`num`) agar kolom nominal tidak bergoyang.
 
-### Form Inputs & Dropdowns
-- **Height & Spacing**: Minimum height `38px` (desktop) / `42px` (mobile).
-- **Styling**: `w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs sm:text-sm text-[#111b21] placeholder-[#8696a0] focus:outline-hidden focus:border-[#008069] focus:ring-1 focus:ring-[#008069]`
-- **Labels**: `text-xs font-semibold text-[#111b21] mb-1.5 flex items-center justify-between`
+## 5. Gerak
 
----
+- Durasi transisi 150–220ms, easing `cubic-bezier(0.23, 1, 0.32, 1)`.
+- `animate-action-pulse` maksimal 6 putaran lalu berhenti.
+- Denyut permanen hanya untuk status yang benar-benar live (mis. lokasi live di
+  peta). Status lain memakai warna + label.
+- `prefers-reduced-motion` wajib dihormati di dashboard dan halaman publik.
 
-## 4. Impeccable Quality Checklist
-- [x] No generic AI purple gradients or cliché card nesting.
-- [x] High-contrast typography (WCAG AA compliant).
-- [x] Clear hover, active, focus, and loading states for every clickable element.
-- [x] Consistent rounded corner hierarchy (`rounded-xl` for controls, `rounded-2xl` for containers).
-- [x] In-app toast feedback instead of native browser `alert()` or `confirm()`.
+## 6. Komponen & Overlay
+
+- Modal memakai `components/ui/Modal.tsx` (focus trap, Escape, scroll lock,
+  `data-modal-active`/`data-modal-close` untuk gestur swipe). Drawer, popover,
+  dan lightbox tetap berdiri sendiri karena perilakunya berbeda.
+- Setiap scrim layar penuh wajib memakai kelas `modal-backdrop` agar scroll di
+  belakang overlay tidak ikut bergerak.
+- Skala z memakai token: `z-dialog`, `z-toast`, dan nilai terdokumentasi di
+  `index.css`. Jangan menulis `z-[99999]` baru.
+
+## 7. Format Data
+
+- Uang: `utils/money.ts` (`formatRupiah`, `formatRupiahPresisi`,
+  `formatRupiahRingkas`, `formatGratis`).
+- Tanggal & jam: `utils/dateWib.ts` (`formatWib`, `formatWibClock`,
+  `formatWibDate`, `formatMonthYearWib`). Dilarang memanggil
+  `toLocaleDateString`/`toLocaleTimeString` langsung di komponen/halaman;
+  dijaga oleh `npm run check:dates`.
+
+## 8. Aksesibilitas
+
+- Setiap input punya label atau `aria-label`.
+- Tombol ikon punya `aria-label`; status dinamis memakai `aria-live` bila perlu.
+- Target sentuh minimum 44px di layar kecil (tabel dan chip dikecualikan).
+- Jangan memakai `window.confirm`/`alert`; gunakan `useUiFeedback`.
+
+## 9. Gerbang Otomatis
+
+`npm run check:design` menjalankan:
+
+| Gerbang | Menjaga |
+| :--- | :--- |
+| `check:tokens` | tidak ada hex mentah baru |
+| `check:dark-parity` | kelas palet selalu punya pasangan `dark:` |
+| `check:a11y` | tombol/label tanpa nama aksesibel |
+| `check:contrast` | teks putih di atas solid tanpa token |
+| `check:dates` | tanggal selalu lewat `dateWib.ts` |
+| `check:catalog` | katalog landing tidak menyimpang dari DB |
+
+Klaim "WCAG compliant" tidak dipakai lagi. Yang berlaku: **dijaga oleh
+`check:contrast` dan `check:a11y`**, dengan pengujian Lighthouse manual untuk
+halaman publik.

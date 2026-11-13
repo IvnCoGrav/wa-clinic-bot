@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { X, MapPin, Navigation, Search, Camera, Image as ImageIcon, Loader } from 'lucide-react';
+import { Modal } from '../ui/Modal';
 import { getCurrentDeviceLocation, geocodeAddressWithNominatim } from '../../utils/geoUtils';
 import { useMapsShortlinkResolver } from '../../hooks/useMapsShortlinkResolver';
 import { compressImageFile, resolveCompressProfile } from '../../utils/imageCompressor';
@@ -162,18 +162,39 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
     onClose();
   };
 
-  return createPortal(
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn" style={{ zIndex }} onClick={onClose}>
-      <div className="bg-surface rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto shadow-2xl border border-divider p-4 space-y-4" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between border-b border-divider pb-3">
-          <h3 className="text-sm font-bold text-ink flex items-center gap-2"><MapPin size={16} className="text-accent" /> Pilih Lokasi & Foto Rumah</h3>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-ink-3 hover:text-ink hover:bg-fill-1"><X size={16} /></button>
-        </div>
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      size="lg"
+      title={
+        <span className="flex items-center gap-2">
+          <MapPin size={16} className="text-accent" aria-hidden="true" />
+          <span>Pilih Lokasi & Foto Rumah</span>
+        </span>
+      }
+      footer={
+        <>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-surface border border-strong text-ink rounded-xl text-xs font-semibold cursor-pointer"
+          >
+            Batal
+          </button>
+          <button
+            onClick={handleSave}
+            className="px-5 py-2 bg-accent text-accent-ink rounded-xl text-xs font-bold hover:bg-accent-hover cursor-pointer"
+          >
+            Simpan Lokasi
+          </button>
+        </>
+      }
+    >
 
         <div className="space-y-3">
-          <label className="text-xs font-bold text-ink">Link Google Maps (tempel shareloc)</label>
+          <label htmlFor="loc-maps-url" className="text-xs font-bold text-ink">Link Google Maps (tempel shareloc)</label>
           <div className="flex gap-2">
-            <input value={mapsUrl} onChange={(e) => handlePasteMapsUrl(e.target.value)} placeholder="https://maps.google.com/..." className="flex-1 px-3 py-2 bg-surface border border-strong text-ink rounded-xl text-xs" />
+            <input id="loc-maps-url" value={mapsUrl} onChange={(e) => handlePasteMapsUrl(e.target.value)} placeholder="https://maps.google.com/..." className="flex-1 px-3 py-2 bg-surface border border-strong text-ink rounded-xl text-xs" />
             <button type="button" onClick={() => handlePasteMapsUrl(mapsUrl)} disabled={resolvingShortlink || !mapsUrl.trim()} className="px-3 py-2 bg-surface border border-strong text-ink rounded-xl text-xs font-semibold hover:bg-fill-1 flex items-center gap-1 disabled:opacity-50">
               {resolvingShortlink ? <Loader size={12} className="animate-spin" /> : <Search size={12} />} Cek Link
             </button>
@@ -190,12 +211,12 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
 
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="text-[11px] text-ink-3 font-bold">Latitude</label>
-              <input value={value.lat ?? ''} onChange={(e) => onChange({ ...value, lat: e.target.value ? parseFloat(e.target.value) : null })} placeholder="-7.34" className="w-full px-3 py-2 bg-surface border border-strong text-ink rounded-xl text-xs" />
+              <label htmlFor="loc-lat" className="text-[11px] text-ink-3 font-bold">Latitude</label>
+              <input id="loc-lat" value={value.lat ?? ''} onChange={(e) => onChange({ ...value, lat: e.target.value ? parseFloat(e.target.value) : null })} placeholder="-7.34" className="w-full px-3 py-2 bg-surface border border-strong text-ink rounded-xl text-xs" />
             </div>
             <div>
-              <label className="text-[11px] text-ink-3 font-bold">Longitude</label>
-              <input value={value.lng ?? ''} onChange={(e) => onChange({ ...value, lng: e.target.value ? parseFloat(e.target.value) : null })} placeholder="112.75" className="w-full px-3 py-2 bg-surface border border-strong text-ink rounded-xl text-xs" />
+              <label htmlFor="loc-lng" className="text-[11px] text-ink-3 font-bold">Longitude</label>
+              <input id="loc-lng" value={value.lng ?? ''} onChange={(e) => onChange({ ...value, lng: e.target.value ? parseFloat(e.target.value) : null })} placeholder="112.75" className="w-full px-3 py-2 bg-surface border border-strong text-ink rounded-xl text-xs" />
             </div>
           </div>
 
@@ -220,14 +241,7 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
             )}
           </div>
         </div>
-
-        <div className="flex justify-end gap-2 pt-3 border-t border-divider">
-          <button onClick={onClose} className="px-4 py-2 bg-surface border border-strong text-ink rounded-xl text-xs font-semibold">Batal</button>
-          <button onClick={handleSave} className="px-5 py-2 bg-accent text-accent-ink rounded-xl text-xs font-bold hover:bg-accent-hover">Simpan Lokasi</button>
-        </div>
-      </div>
-    </div>,
-    document.body
+    </Modal>
   );
 };
 

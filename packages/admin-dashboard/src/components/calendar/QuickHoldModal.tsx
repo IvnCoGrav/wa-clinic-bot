@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { createPortal } from 'react-dom';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
-import { X, Calendar as CalendarIcon, Clock, Zap, AlertCircle, Loader2, MapPin, User, Phone, AlertTriangle } from 'lucide-react';
+import { Modal } from '../ui/Modal';
+import { Calendar as CalendarIcon, Clock, Zap, AlertCircle, Loader2, MapPin, User, Phone, AlertTriangle } from 'lucide-react';
 import { buildWibIso, getWibDateKey, getTodayWibDateKey, getTodayWibDate } from '../../utils/dateWib';
 import { resolveStaffName } from '../../utils/resolveStaffName';
 
@@ -98,7 +98,9 @@ export const QuickHoldModal: React.FC<QuickHoldModalProps> = ({
           setDailySlotsData(res.slots);
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        // Status slot hanya penanda visual; form hold tetap bisa diisi.
+      });
   }, [isOpen, bookingDate]);
 
   const overlappingBookings = useMemo(() => {
@@ -183,45 +185,21 @@ export const QuickHoldModal: React.FC<QuickHoldModalProps> = ({
     : null;
   const initials = (customerName || 'B').trim().charAt(0).toUpperCase() || 'B';
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 dark:bg-black/80 backdrop-blur-xs animate-fadeIn"
-      onClick={onClose}
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      variant="sheet"
+      size="lg"
+      bodyClassName="p-0 overflow-hidden flex-1 flex flex-col min-h-0"
+      title={
+        <span className="flex items-center gap-2">
+          <Zap size={16} className="text-warning" aria-hidden="true" />
+          <span>Tahan Slot (Quick Hold)</span>
+        </span>
+      }
+      subtitle="Kunci jadwal kilat saat negosiasi di WhatsApp"
     >
-      <div
-        className="bg-surface rounded-t-3xl sm:rounded-3xl shadow-2xl border border-divider w-full max-w-lg overflow-hidden flex flex-col max-h-[90dvh] sm:max-h-[92vh] animate-slideUp sm:animate-modalScaleUp"
-        role="dialog"
-        aria-modal="true"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Mobile Drag Handle */}
-        <div className="pt-2 pb-1 bg-surface-2 sm:hidden flex justify-center shrink-0">
-          <div className="w-10 h-1 bg-divider rounded-full" />
-        </div>
-
-        <div className="px-5 py-4 border-b border-divider bg-surface-2 flex items-center justify-between">
-          <div className="flex items-center space-x-2.5">
-            <div className="w-9 h-9 rounded-2xl bg-warning text-surface flex items-center justify-center shadow-md shadow-warning/20">
-              <Zap size={18} className="fill-current" />
-            </div>
-            <div>
-              <h3 className="font-extrabold text-ink text-base leading-tight flex items-center gap-1.5">
-                <span>Tahan Slot (Quick Hold)</span>
-                <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-warning-soft text-warning border border-warning-line">
-                  Ditawarkan
-                </span>
-              </h3>
-              <p className="text-xs text-ink-3 mt-0.5">Kunci jadwal kilat saat negosiasi di WhatsApp</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-8 h-8 rounded-full text-ink-3 hover:text-ink hover:bg-fill-1 flex items-center justify-center transition"
-          >
-            <X size={18} />
-          </button>
-        </div>
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
           <div className="p-3 rounded-2xl bg-warning-soft border border-warning-line text-warning flex items-start space-x-2.5 leading-relaxed">
@@ -304,7 +282,7 @@ export const QuickHoldModal: React.FC<QuickHoldModalProps> = ({
             <div className="p-3 rounded-2xl bg-warning-soft border border-warning-line text-warning text-xs">
               <div className="flex items-center gap-2 font-bold mb-1.5">
                 <AlertTriangle size={14} className="shrink-0" />
-                <span>⚠️ Peringatan Jadwal Tumpang Tindih</span>
+                <span>Peringatan Jadwal Tumpang Tindih</span>
               </div>
               <p className="text-[11px] mb-1.5">Jam ini beririsan dengan jadwal pasien lain:</p>
               <ul className="space-y-1">
@@ -375,15 +353,19 @@ export const QuickHoldModal: React.FC<QuickHoldModalProps> = ({
         <div className="p-4 border-t border-divider bg-surface-2 flex items-center justify-between safe-bottom-padding shrink-0">
           <button type="button" onClick={onClose} disabled={submitting} className="px-4 py-2 bg-surface hover:bg-fill-1 text-ink-2 border border-divider text-xs font-bold rounded-xl transition">Batal</button>
           <button type="button" onClick={handleSubmit} disabled={submitting} className="px-5 py-2.5 bg-warning hover:bg-warning-hover text-surface text-xs font-bold rounded-xl transition shadow-md shadow-warning/25 flex items-center space-x-2 active:scale-95 disabled:opacity-50">
-            {submitting ? (<><Loader2 size={14} className="animate-spin" /><span>Menyimpan...</span></>) : (<><Zap size={14} className="fill-current" /><span>⚡ Simpan & Tahan Slot</span></>)}
+            {submitting ? (<><Loader2 size={14} className="animate-spin" /><span>Menyimpan...</span></>) : (<><Zap size={14} className="fill-current" /><span>Simpan & Tahan Slot</span></>)}
           </button>
         </div>
-      </div>
       {pendingOverlapSubmit && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/50 backdrop-blur-xs">
-          <div className="bg-surface rounded-2xl shadow-xl border border-divider p-6 max-w-sm mx-4 space-y-4">
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/50">
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-label="Konfirmasi jadwal tumpang tindih"
+            className="bg-surface rounded-2xl shadow-xl border border-divider p-6 max-w-sm mx-4 space-y-4"
+          >
             <div className="flex items-center gap-2 text-warning font-bold text-sm">
-              <AlertTriangle size={20} />
+              <AlertTriangle size={20} aria-hidden="true" />
               <span>Jadwal Tumpang Tindih</span>
             </div>
             <p className="text-xs text-ink-2">
@@ -392,14 +374,13 @@ export const QuickHoldModal: React.FC<QuickHoldModalProps> = ({
             <div className="flex items-center justify-end gap-2">
               <button type="button" onClick={() => setPendingOverlapSubmit(null)} className="px-4 py-2 bg-surface hover:bg-fill-1 text-ink-2 border border-divider text-xs font-bold rounded-xl transition">Batal</button>
               <button type="button" onClick={() => pendingOverlapSubmit()} className="px-4 py-2 bg-warning hover:bg-warning-hover text-surface text-xs font-bold rounded-xl transition shadow-md shadow-warning/25 flex items-center space-x-2">
-                <Zap size={14} className="fill-current" />
+                <Zap size={14} className="fill-current" aria-hidden="true" />
                 <span>Yakin & Tahan</span>
               </button>
             </div>
           </div>
         </div>
       )}
-    </div>,
-    document.body
+    </Modal>
   );
 };

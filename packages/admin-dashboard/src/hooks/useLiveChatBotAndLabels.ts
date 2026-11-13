@@ -1,3 +1,6 @@
+// Catatan kontrak error: catch kosong di hook ini adalah pembacaan penanda bot
+// dan label internal (best-effort). Kegagalan hanya membuat penanda tidak
+// tampil; tidak mengubah data percakapan.
 import { useState, useRef, useEffect } from 'react';
 import { apiRequest } from '../services/api';
 import { BRAND } from '../config/brand';

@@ -2,7 +2,9 @@ import React, { useEffect, useState, useCallback, Suspense } from 'react';
 import { Link } from 'react-router-dom';
 import { apiRequest, fetchMetaClicks, fetchMetaSummary, testCapiEvent, sendManualCapiEvent, fetchManualCapiHistory } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
+import { formatWib } from '../../utils/dateWib';
 import { Pagination } from '../../components/common/Pagination';
+import { Modal } from '../../components/ui/Modal';
 
 // Panel performa dimuat lazy agar chunk halaman observability tetap ringan.
 const MetaPerformancePanel = React.lazy(() => import('../../components/meta-performance/MetaPerformancePanel'));
@@ -113,7 +115,7 @@ interface CapiTestResult {
 const fmtTime = (iso?: string | null) => {
   if (!iso) return '-';
   const d = new Date(iso);
-  return d.toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
+  return formatWib(d, { dateStyle: 'medium', timeStyle: 'short' });
 };
 
 const toDateInput = (d: Date) => {
@@ -408,7 +410,7 @@ export const MetaClickCatcher: React.FC = () => {
       });
       setTestResult(res?.data || null);
       if (res?.success) {
-        toast(`Event test '${testEvent}' dikirim — kredensial valid.`, 'success');
+        toast(`Event test '${testEvent}' dikirim: kredensial valid.`, 'success');
       } else {
         toast(`Test CAPI gagal: ${res?.data?.message || 'Meta menolak event test.'}`, 'error');
       }
@@ -453,9 +455,9 @@ export const MetaClickCatcher: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-divider">
         <div>
-          <h2 className="text-xl font-bold text-ink flex items-center gap-2">
+          <h1 className="text-xl font-bold text-ink flex items-center gap-2">
             <MousePointerClick size={22} className="text-accent" /> Meta Click Catcher &amp; CAPI Debug
-          </h2>
+          </h1>
           <p className="text-xs text-ink-3 mt-0.5">Pantau performa iklan Meta Ads, atribusi chat WhatsApp, dan kesehatan Conversion API.</p>
         </div>
         <button
@@ -478,7 +480,7 @@ export const MetaClickCatcher: React.FC = () => {
               : 'text-ink-3 hover:text-ink hover:bg-fill-1'
           }`}
         >
-          📊 Performa Iklan &amp; Penjualan (CAC &amp; ROI)
+          Performa Iklan &amp; Penjualan (CAC &amp; ROI)
         </button>
         <button
           type="button"
@@ -489,7 +491,7 @@ export const MetaClickCatcher: React.FC = () => {
               : 'text-ink-3 hover:text-ink hover:bg-fill-1'
           }`}
         >
-          🛠️ Log Klik &amp; Observability CAPI
+          Log Klik &amp; Observability CAPI
         </button>
         <button
           type="button"
@@ -500,7 +502,7 @@ export const MetaClickCatcher: React.FC = () => {
               : 'text-ink-3 hover:text-ink hover:bg-fill-1'
           }`}
         >
-          🎯 Greeting Catchers CTWA
+          Greeting Catchers CTWA
         </button>
       </div>
 
@@ -509,7 +511,7 @@ export const MetaClickCatcher: React.FC = () => {
       {summary?.dbNote && (
         <div className="flex items-center gap-2 text-xs text-warning bg-warning-soft border border-warning-line rounded-xl px-3 py-2">
           <AlertTriangle size={14} className="text-warning" />
-          <span>{summary.dbNote} — menampilkan data fallback.</span>
+          <span>{summary.dbNote}: menampilkan data fallback.</span>
         </div>
       )}
 
@@ -542,7 +544,7 @@ export const MetaClickCatcher: React.FC = () => {
           value={summary?.totalClicks ?? '-'}
           sub={
             summary?.isTrackingCodeFiltered
-              ? 'Filter kode tracking aktif — CTR disembunyikan'
+              ? 'Filter kode tracking aktif: CTR disembunyikan'
               : summary && summary.metaLpvOfficial && summary.metaLpvOfficial > 0
                 ? `${fmtPct((summary.totalClicks / summary.metaLpvOfficial) * 100)} CTR dari Meta LPV`
                 : summary && summary.totalPageViews && summary.totalPageViews > 0 && summary.totalPageViews >= summary.totalClicks
@@ -587,7 +589,7 @@ export const MetaClickCatcher: React.FC = () => {
             <div className="rounded-xl border border-divider bg-surface-2 px-3 py-2.5 space-y-1">
               <p className="font-bold text-ink">Kolom Web-side (browser → Meta)</p>
               <p className="text-ink-2">
-                Angka di Meta Ads Manager / Events Manager: <span className="font-semibold">superset</span> —
+                Angka di Meta Ads Manager / Events Manager: <span className="font-semibold">superset</span>,
                 setiap kunjungan menembak Pixel langsung, termasuk yang tracker server lewatkan.
                 Tidak pernah 1:1 dengan angka server tanpa rekonsiliasi.
               </p>
@@ -761,7 +763,7 @@ export const MetaClickCatcher: React.FC = () => {
                           className="text-accent hover:underline text-[11px] font-semibold inline-flex items-center gap-1 mt-0.5"
                           title="Buka di Panel Live Chat"
                         >
-                          <span>💬</span> Buka Live Chat
+                          Buka Live Chat
                         </a>
                       </div>
                     ) : e.phone ? (
@@ -1084,7 +1086,7 @@ export const MetaClickCatcher: React.FC = () => {
 
         {capi?.circuitFallbackUsed && (
           <p className="text-xs text-warning flex items-center gap-1">
-            <AlertTriangle size={13} className="text-warning" /> Fallback Circuit Breaker aktif — beberapa request CAPI terakhir difallback (jaringan / rate-limit / server Meta).
+            <AlertTriangle size={13} className="text-warning" /> Fallback Circuit Breaker aktif: beberapa request CAPI terakhir difallback (jaringan / rate-limit / server Meta).
           </p>
         )}
 
@@ -1193,32 +1195,32 @@ export const MetaClickCatcher: React.FC = () => {
 
       {/* ---------------- 5. Human-Friendly Detail Modal Inspector ---------------- */}
       {selectedItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-          <div className="bg-surface rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-5 max-h-[90vh] flex flex-col border border-divider">
-            {/* Modal Header */}
-            <div className="flex items-start justify-between border-b border-divider pb-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-success-soft flex items-center justify-center text-accent">
-                    <ShieldCheck size={20} />
-                  </div>
-                  <div>
-                    <h4 className="text-base font-bold text-ink">
-                      Detail Koneksi Meta CAPI &amp; Atribusi
-                    </h4>
-                    <p className="text-xs text-ink-3">
-                      Verifikasi data terhubung antara WhatsApp, Layanan / Treatment, dan Pixel Meta
-                    </p>
-                  </div>
-                </div>
-              </div>
+        <Modal
+          open
+          onClose={() => { setSelectedItem(null); setShowRawJson(false); }}
+          size="xl"
+          bodyClassName="p-0 overflow-hidden flex-1 flex flex-col min-h-0"
+          title={
+            <span className="flex items-center gap-2">
+              <ShieldCheck size={20} className="text-accent" aria-hidden="true" />
+              <span>Detail Koneksi Meta CAPI & Atribusi</span>
+            </span>
+          }
+          subtitle="Verifikasi data terhubung antara WhatsApp, Layanan / Treatment, dan Pixel Meta"
+          footer={
+            <>
+              <span className="text-xs text-ink-3 flex items-center gap-1 mr-auto">
+                <ShieldCheck size={13} className="text-accent" aria-hidden="true" /> Terverifikasi terkirim ke Meta Conversions API
+              </span>
               <button
                 onClick={() => { setSelectedItem(null); setShowRawJson(false); }}
-                className="w-8 h-8 rounded-xl bg-fill-1 hover:bg-fill-2 text-ink-3 hover:text-ink flex items-center justify-center text-sm font-bold transition"
+                className="px-5 py-2 rounded-xl bg-accent hover:bg-accent-hover text-on-solid text-xs font-bold transition shadow-xs cursor-pointer"
               >
-                ✕
+                Tutup
               </button>
-            </div>
+            </>
+          }
+        >
 
             {/* Modal Content / Cards */}
             <div className="overflow-y-auto flex-1 space-y-4 pr-1">
@@ -1388,20 +1390,7 @@ export const MetaClickCatcher: React.FC = () => {
               </div>
             </div>
 
-            {/* Modal Footer */}
-            <div className="flex items-center justify-between pt-3 border-t border-divider">
-              <span className="text-xs text-ink-3 flex items-center gap-1">
-                <ShieldCheck size={13} className="text-accent" /> Terverifikasi terkirim ke Meta Conversions API
-              </span>
-              <button
-                onClick={() => { setSelectedItem(null); setShowRawJson(false); }}
-                className="px-5 py-2 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-bold transition shadow-xs"
-              >
-                Tutup
-              </button>
-            </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

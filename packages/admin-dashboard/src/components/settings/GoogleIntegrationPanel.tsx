@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
 import { ToggleSwitch } from '../common/ToggleSwitch';
+import { useSnapshotDirty } from '../../hooks/useDirtyGuard';
+import { useReportDirty } from './settingsDirtyStore';
+import { formatWib } from '../../utils/dateWib';
 import {
   Contact,
   Cloud,
@@ -147,6 +150,22 @@ export const GoogleIntegrationPanel: React.FC = () => {
     return m ? m[1] : trimmed;
   };
 
+  const { dirty: unsavedDraft, resetBaseline } = useSnapshotDirty(
+    [
+      namingTemplate,
+      contactLabel,
+      autoSyncOnChat,
+      autoSyncOnReserve,
+      isEnabled,
+      sheetsEnabled,
+      sheetsMasterId,
+      sheetsFileBaseName,
+      sheetsTemplateName,
+    ],
+    !loading
+  );
+  useReportDirty(unsavedDraft);
+
   const handleSaveSheetsConfig = async () => {
     const cleanId = normalizeSpreadsheetId(sheetsMasterId);
     setSavingSheets(true);
@@ -169,6 +188,7 @@ export const GoogleIntegrationPanel: React.FC = () => {
         toast('Konfigurasi rekapan Sheets tersimpan.', 'success');
         setSheetsMasterId(cleanId);
         fetchSheetsConfig();
+        resetBaseline();
       } else {
         toast(res.message || 'Gagal menyimpan konfigurasi Sheets.', 'error');
       }
@@ -280,6 +300,7 @@ export const GoogleIntegrationPanel: React.FC = () => {
       if (res.success) {
         toast('Pengaturan Google Contacts berhasil disimpan.', 'success');
         fetchStatus();
+        resetBaseline();
       } else {
         toast(res.message || 'Gagal menyimpan pengaturan.', 'error');
       }
@@ -552,8 +573,7 @@ export const GoogleIntegrationPanel: React.FC = () => {
 
   const formatDate = (dateStr: string) => {
     try {
-      const d = new Date(dateStr);
-      return d.toLocaleString('id-ID', {
+      return formatWib(dateStr, {
         day: '2-digit',
         month: 'short',
         year: 'numeric',
@@ -614,7 +634,7 @@ export const GoogleIntegrationPanel: React.FC = () => {
             <button
               onClick={handleConnectGoogle}
               disabled={fetchingAuthUrl}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-semibold shadow-xs transition-all disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-semibold shadow-xs transition disabled:opacity-50"
             >
               {fetchingAuthUrl ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Calendar className="w-3.5 h-3.5" />}
               <span>Hubungkan Akun Google</span>
@@ -630,6 +650,7 @@ export const GoogleIntegrationPanel: React.FC = () => {
             </button>
           )}
           <button
+            aria-label="Refresh Data"
             onClick={loadAllData}
             disabled={loading}
             className="p-2 text-ink-2 hover:text-ink hover:bg-fill-1 rounded-xl transition-colors border border-divider shadow-xs"
@@ -723,7 +744,7 @@ export const GoogleIntegrationPanel: React.FC = () => {
                   <button
                     onClick={handleConnectGoogle}
                     disabled={fetchingAuthUrl}
-                    className="inline-flex items-center gap-2 px-6 py-2.5 bg-accent hover:bg-accent-hover text-accent-ink text-xs sm:text-sm font-semibold rounded-xl shadow-xs transition-all disabled:opacity-50"
+                    className="inline-flex items-center gap-2 px-6 py-2.5 bg-accent hover:bg-accent-hover text-accent-ink text-xs sm:text-sm font-semibold rounded-xl shadow-xs transition disabled:opacity-50"
                   >
                     {fetchingAuthUrl ? (
                       <RefreshCw className="w-4 h-4 animate-spin" />
@@ -881,7 +902,7 @@ export const GoogleIntegrationPanel: React.FC = () => {
                   <p className="font-bold">Akun Google belum terhubung</p>
                   <p>
                     Rekapan otomatis membutuhkan izin <strong>Google Sheets</strong>. Hubungkan akun
-                    Google (tab Contacts) — jika sebelumnya sudah terhubung, sambungkan ulang sekali
+                    Google (tab Contacts): jika sebelumnya sudah terhubung, sambungkan ulang sekali
                     untuk menambah izin Sheets.
                   </p>
                 </div>
@@ -1003,7 +1024,7 @@ export const GoogleIntegrationPanel: React.FC = () => {
                   </h4>
                   <p className="text-[11px] text-ink-3 mt-0.5 leading-relaxed">
                     {status?.isConnected ? (
-                      <>Database otomatis di-backup ke Google Drive setiap <strong>Senin pukul 02:00 WIB</strong> ke folder <code>📁 Kala Clinic Bot Backups</code>.</>
+                      <>Database otomatis di-backup ke Google Drive setiap <strong>Senin pukul 02:00 WIB</strong> ke folder <code>Kala Clinic Bot Backups</code>.</>
                     ) : (
                       <>Anda dapat membuat backup baru, mengunduh file <code>.sql.gz</code>, atau mengunggah file backup lama dari komputer untuk <strong>langsung di-restore</strong>.</>
                     )}

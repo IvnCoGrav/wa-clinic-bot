@@ -1,6 +1,7 @@
 import React from 'react';
 import { Zap, Calendar, Check, Loader2, Clock } from 'lucide-react';
 import { ToggleSwitch } from '../common/ToggleSwitch';
+import { formatWib } from '../../utils/dateWib';
 
 interface Props {
   aiScope: 'NEW_ONLY' | 'ALL';
@@ -38,11 +39,11 @@ export const AiRouterPanel: React.FC<Props> = ({
       const parts = dateStr.split('-');
       if (parts.length === 3) {
         const dt = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-        return dt.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+        return formatWib(dt, { day: 'numeric', month: 'long', year: 'numeric' });
       }
       const dt = new Date(dateStr);
       if (isNaN(dt.getTime())) return dateStr;
-      return dt.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+      return formatWib(dt, { day: 'numeric', month: 'long', year: 'numeric' });
     } catch {
       return dateStr;
     }

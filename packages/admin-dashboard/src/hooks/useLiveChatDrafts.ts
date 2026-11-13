@@ -1,3 +1,7 @@
+// Catatan kontrak error: catch kosong di modul ini adalah baca/tulis/hapus
+// draf di localStorage. Draf adalah kenyamanan; bila penyimpanan diblokir,
+// pesan tetap bisa dikirim. Pengiriman pesan memberi galat lewat pemanggilnya.
+
 const DRAFT_KEY_PREFIX = 'liveChat:draft:';
 
 export function saveConversationDraft(convId: string, text: string): void {

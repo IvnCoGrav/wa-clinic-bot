@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { X, MapPin, ExternalLink, Copy, Check } from 'lucide-react';
+import { MapPin, ExternalLink, Copy, Check } from 'lucide-react';
+import { Modal } from '../ui/Modal';
 import { computeFleetView, tileUrl, type LatLng } from '../../utils/dispatchMap';
 
 /**
@@ -87,31 +88,14 @@ export const FleetMapModal: React.FC<FleetMapModalProps> = ({ open, onClose, tas
   if (!open) return null;
 
   return (
-    <div
-      data-modal-active="true"
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4"
-      onClick={onClose}
+    <Modal
+      open={open}
+      onClose={onClose}
+      size="xl"
+      bodyClassName="p-0 overflow-hidden flex-1 flex flex-col min-h-0"
+      title="Peta Sebaran Hari Ini"
+      subtitle={`${validTasks.length} dari ${tasks.length} titik pasien memiliki koordinat.`}
     >
-      <div
-        className="bg-surface rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden border border-divider"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-4 py-3 border-b border-divider">
-          <div className="min-w-0">
-            <h3 className="text-sm font-bold text-ink">Peta Sebaran Hari Ini</h3>
-            <p className="text-[11px] text-ink-2">
-              {validTasks.length} dari {tasks.length} titik pasien memiliki koordinat.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-fill-1 text-ink-2"
-            aria-label="Tutup"
-          >
-            <X size={18} />
-          </button>
-        </div>
 
         <div className="flex items-center gap-3 px-4 py-2 text-[11px] text-ink-2 border-b border-divider bg-surface-2 flex-wrap">
           {(['completed', 'en_route', 'waiting'] as FleetBucket[]).map((b) => (
@@ -212,8 +196,7 @@ export const FleetMapModal: React.FC<FleetMapModalProps> = ({ open, onClose, tas
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

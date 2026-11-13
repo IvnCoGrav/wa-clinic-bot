@@ -1,14 +1,14 @@
 {
-  "name": "Kala Clinic",
-  "short_name": "Kala Clinic",
+  "name": "Admin Dashboard",
+  "short_name": "Admin",
   "id": "/admin/",
   "start_url": "/admin/",
   "scope": "/admin/",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#020617",
+  "background_color": "#f0f2f5",
   "theme_color": "#008069",
-  "description": "Dashboard Operasional & Monitor WhatsApp Kala Moms & Baby Spa",
+  "description": "Dashboard operasional klinik: jadwal, pasien, layanan, dan monitor WhatsApp.",
   "categories": ["business", "medical", "productivity"],
   "icons": [
     {

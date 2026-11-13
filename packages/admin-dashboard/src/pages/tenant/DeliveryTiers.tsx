@@ -14,6 +14,7 @@ import {
   Coins,
   Percent
 } from 'lucide-react';
+import { formatRupiah as formatRp } from '../../utils/money';
 
 interface DeliveryTier {
   id: number;
@@ -114,17 +115,17 @@ export const DeliveryTiers: React.FC = () => {
   const previewPromo = previewTier ? Number(previewTier.promoDiscount) || 0 : null;
   const previewNet = previewTier ? Math.max(0, (Number(previewTier.fee) || 0) - (Number(previewTier.promoDiscount) || 0)) : null;
 
-  const formatRp = (n: number) => 'Rp ' + n.toLocaleString('id-ID');
+  
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-ink flex items-center space-x-2">
+          <h1 className="text-xl font-bold tracking-tight text-ink flex items-center space-x-2">
             <Truck className="text-accent" size={22} />
             <span>Delivery Fee Tiering</span>
-          </h2>
+          </h1>
           <p className="text-xs text-ink-3 mt-0.5">Kelola tarif ongkir homecare berdasarkan jarak dari klinik ke lokasi customer</p>
         </div>
         <button
@@ -263,7 +264,7 @@ export const DeliveryTiers: React.FC = () => {
             <button
               onClick={handleSave}
               disabled={saving || validationIssues.length > 0}
-              className="px-4 py-2 bg-accent hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs"
+              className="px-4 py-2 bg-accent hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed text-on-solid rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs"
             >
               {saving ? <RefreshCw size={13} className="animate-spin" /> : <Save size={13} />}
               <span>{saving ? 'Menyimpan...' : 'Simpan Tier'}</span>

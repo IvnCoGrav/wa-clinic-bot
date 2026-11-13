@@ -1,33 +1,57 @@
+// LEGACY — sumber kebenaran halaman pricelist adalah src/landing/public/pricelist.html.
+// Menjalankan skrip ini tanpa --force akan berhenti.
 import fs from 'fs';
 import path from 'path';
+
+// Artefak src/landing/public/pricelist.html sudah lebih baru daripada generator ini
+// (perbaikan a11y, kontras, metadata, dan struktur ongkir dikerjakan langsung di
+// artefak). Menjalankan generator akan menimpa semuanya dengan versi lama.
+// Rekonsiliasi generator secara manual dulu sebelum memakai --force.
+if (!process.argv.includes('--force')) {
+  console.error(
+    'BERHENTI: generator pricelist usang dibanding src/landing/public/pricelist.html.\n' +
+      'Pakai --force hanya setelah generator direkonsiliasi manual.'
+  );
+  process.exit(1);
+}
 
 const html = `<!DOCTYPE html>
 <html lang="id" class="scroll-smooth">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
-  <title>Pricelist Resmi — Kala Moms and Baby Spa Homecare</title>
-  <meta name="description" content="Pricelist resmi layanan homecare Kala Moms and Baby Spa. Cek tarif asli & promo untuk pijat bayi, anak, ibu hamil, nifas, dan paket bundle. Dilayani Bidan resmi ber-STR.">
+  <title>__OG_TITLE__</title>
+  <meta name="description" content="__OG_DESCRIPTION__">
+  <!-- Metadata berbagi (diisi rute saat request). -->
+  <link rel="canonical" href="__CANONICAL_URL__">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="__OG_TITLE__">
+  <meta property="og:description" content="__OG_DESCRIPTION__">
+  <meta property="og:image" content="__OG_IMAGE__">
+  <meta property="og:url" content="__CANONICAL_URL__">
+  <meta name="twitter:card" content="summary_large_image">
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"MedicalClinic","name":"__CLINIC_NAME_SAFE__","url":"__CANONICAL_URL__","areaServed":["Surabaya","Sidoarjo"],"openingHours":"Mo-Su 08:00-17:00"}
+  </script>
   
   <!-- Tailwind CSS via allowlisted gstatic -->
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
 
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Quicksand:wght@500;600;700;800&display=swap');
 
     * {
       -webkit-tap-highlight-color: transparent;
     }
 
     body {
-      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       background-color: #fffaf5;
       color: #292524;
       overflow-x: hidden;
     }
 
     .font-brand {
-      font-family: 'Quicksand', 'Plus Jakarta Sans', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     }
 
     /* Soft scrollbar */
@@ -62,7 +86,16 @@ const html = `<!DOCTYPE html>
     .text-balance {
       text-wrap: balance;
     }
-  </style>
+  
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+</style>
 </head>
 <body class="antialiased min-h-screen flex flex-col bg-[#fffaf5] pb-24 sm:pb-20 selection:bg-orange-100 selection:text-orange-900">
 
@@ -97,10 +130,10 @@ const html = `<!DOCTYPE html>
         </div>
 
         <h1 class="text-3xl sm:text-4xl font-extrabold text-[#ea583a] font-brand tracking-tight leading-none">
-          Kala
+          __CLINIC_NAME__
         </h1>
         <p class="text-xs sm:text-sm font-bold text-stone-600 tracking-wider uppercase mt-1 font-brand">
-          Moms and Baby Spa
+          Homecare
         </p>
       </div>
 
@@ -982,14 +1015,14 @@ const html = `<!DOCTYPE html>
   <div class="fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-md border-t border-orange-200 px-3 sm:px-4 py-2.5 sm:py-3 shadow-lg">
     <div class="max-w-4xl mx-auto flex items-center justify-between gap-3">
       <div class="hidden sm:block">
-        <div class="text-xs font-bold text-stone-800 font-brand">Kala Moms and Baby Spa</div>
+        <div class="text-xs font-bold text-stone-800 font-brand">__CLINIC_NAME_SAFE__</div>
         <div class="text-[11px] text-stone-500">Reservasi Homecare Cepat Area Surabaya & Sidoarjo</div>
       </div>
       
       <div class="flex-1 sm:flex-initial flex items-center gap-2">
         <a 
           id="mainWaBtn" 
-          href="#" 
+          href="https://wa.me/?text=Halo%2C%20saya%20ingin%20reservasi%20homecare" 
           onclick="openGeneralWa()" 
           class="pulse-btn w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-[#008069] hover:bg-[#00a884] text-white px-5 py-3 sm:py-2.5 rounded-full font-bold text-xs sm:text-sm shadow-sm transition-all active:scale-[0.98]"
         >
@@ -1014,7 +1047,7 @@ const html = `<!DOCTYPE html>
       if (origPrice && origPrice !== promoPrice) {
         priceText = promoPrice + ' (Harga Promo, normal ' + origPrice + ')';
       }
-      const msg = 'Halo Bidan Yusi, saya melihat pricelist Kala Moms and Baby Spa dan ingin reservasi:\\n\\n' +
+      const msg = 'Halo, saya melihat pricelist dan ingin reservasi:\\n\\n' +
                   '• *Layanan:* ' + name + '\\n' +
                   '• *Sasaran/Usia:* ' + target + '\\n' +
                   '• *Durasi:* ' + duration + '\\n' +
@@ -1024,7 +1057,7 @@ const html = `<!DOCTYPE html>
     }
 
     function openGeneralWa() {
-      const msg = 'Halo Bidan Yusi, saya melihat pricelist Kala Moms and Baby Spa dan ingin konsultasi jadwal treatment homecare ke rumah Bunda. Boleh dibantu info slot kosong ya? Terima kasih 😊';
+      const msg = 'Halo, saya melihat pricelist dan ingin konsultasi jadwal layanan homecare ke rumah. Boleh dibantu info slot kosong ya? Terima kasih 😊';
       window.open(buildWaLink(msg), '_blank');
     }
 
@@ -1067,11 +1100,13 @@ const html = `<!DOCTYPE html>
 </html>
 `;
 
-// Tulis ke target artifact
-const targetDir = 'C:\\\\Users\\\\Ivan\\\\.gemini\\\\antigravity\\\\brain\\\\99eb895a-b37f-4e15-b8a8-d1bfbc974d9f';
-const artifactPath = path.join(targetDir, 'pricelist.html');
-fs.writeFileSync(artifactPath, html, 'utf8');
-console.log('Successfully updated pricelist artifact to:', artifactPath);
+// Tulis ke target artifact (opsional: hanya bila direktori di-set dan ada)
+const targetDir = (process.env.LANDING_ARTIFACT_DIR || '').trim();
+if (targetDir && fs.existsSync(targetDir)) {
+  const artifactPath = path.join(targetDir, 'pricelist.html');
+  fs.writeFileSync(artifactPath, html, 'utf8');
+  console.log('Successfully updated pricelist artifact to:', artifactPath);
+}
 
 // Tulis juga copy ke src/landing/public/pricelist.html
 const publicPath = path.join(process.cwd(), 'src', 'landing', 'public', 'pricelist.html');

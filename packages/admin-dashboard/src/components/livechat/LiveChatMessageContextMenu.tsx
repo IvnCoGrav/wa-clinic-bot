@@ -40,7 +40,7 @@ export const LiveChatMessageContextMenu: React.FC<LiveChatMessageContextMenuProp
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-start sm:justify-start p-0 bg-black/40 backdrop-blur-2xs sm:bg-transparent sm:backdrop-blur-none animate-in fade-in duration-150"
+      className="modal-backdrop fixed inset-0 z-50 flex items-end sm:items-start sm:justify-start p-0 bg-black/40 sm:bg-transparent sm:backdrop-blur-none animate-in fade-in duration-150"
       onClick={onClose}
     >
       {/* Mobile Bottom Action Sheet (sm:hidden) */}

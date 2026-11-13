@@ -141,6 +141,59 @@ export function formatWibDate(dateStr?: string | Date | null, options?: Intl.Dat
   }
 }
 
+/**
+ * Label bulan-tahun yang deterministik.
+ * Dibangun dari tanggal 15 UTC supaya pergeseran zona tidak pernah memindahkan
+ * bulan (tanggal 1 bisa mundur ke bulan sebelumnya di sebagian zona waktu).
+ */
+export function formatMonthYearWib(year: number, monthIndex: number): string {
+  try {
+    return new Date(Date.UTC(year, monthIndex, 15)).toLocaleDateString('id-ID', {
+      month: 'long',
+      year: 'numeric',
+      timeZone: WIB_TZ,
+    });
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Pintu tunggal untuk format tanggal di komponen/halaman.
+ * Selalu WIB, apa pun zona waktu perangkat pengguna.
+ */
+export function formatWib(
+  value?: string | Date | null,
+  options?: Intl.DateTimeFormatOptions
+): string {
+  return formatWibDate(value, options);
+}
+
+/**
+ * Pintu tunggal untuk format jam di komponen/halaman (selalu WIB).
+ * Pemisah mengikuti locale id-ID (titik), jadi pemanggil yang butuh titik dua
+ * tetap boleh memakai `.replace('.', ':')` seperti sebelumnya.
+ */
+export function formatWibClock(
+  value?: string | Date | null,
+  options?: Intl.DateTimeFormatOptions
+): string {
+  if (value == null || (typeof value === 'string' && value.trim() === '')) return '';
+  const d = typeof value === 'string' ? new Date(value) : value;
+  if (!(d instanceof Date) || isNaN(d.getTime())) return '';
+  try {
+    return d.toLocaleTimeString('id-ID', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZone: WIB_TZ,
+      ...(options || {}),
+    });
+  } catch {
+    return '';
+  }
+}
+
 /** Rakit ISO WIB dari date-key + jam (tanpa zona browser). Murni. */
 export function buildWibIso(dateKey?: string | null, timeHHMM?: string | null): string {
   const d = String(dateKey || '').trim();

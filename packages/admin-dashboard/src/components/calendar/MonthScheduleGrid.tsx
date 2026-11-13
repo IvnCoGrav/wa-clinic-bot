@@ -6,6 +6,7 @@ import { getWibDateKey, getTodayWibDateKey } from '../../utils/dateWib';
 import { resolveStaffId } from '../../utils/resolveStaffName';
 import { getStaffColor } from '../../utils/staffColors';
 import { stripHonorific } from '../../utils/patientName';
+import { formatWibClock } from '../../utils/dateWib';
 
 interface MonthScheduleGridProps {
   selectedDate: Date;
@@ -149,12 +150,8 @@ export const MonthScheduleGrid: React.FC<MonthScheduleGridProps> = ({
                   const bDate = new Date(res.booking_date!);
                   const duration = resolveReservationDuration(res);
                   const endDate = new Date(bDate.getTime() + duration * 60000);
-                  const startTimeStr = bDate
-                    .toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })
-                    .replace('.', ':');
-                  const endTimeStr = endDate
-                    .toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })
-                    .replace('.', ':');
+                  const startTimeStr = formatWibClock(bDate).replace('.', ':');
+                  const endTimeStr = formatWibClock(endDate).replace('.', ':');
                   const isHold = res.status === 'hold';
                   // Warna pill = bidan penanggung jawab.
                   const staffPillColor = isHold

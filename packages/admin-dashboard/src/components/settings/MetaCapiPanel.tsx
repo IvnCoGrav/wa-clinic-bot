@@ -121,7 +121,7 @@ export const MetaCapiPanel: React.FC<Props> = ({
           </Link>
         </div>
         <p className="text-xs text-ink-3 leading-relaxed mb-3">
-          Jika OFF, transaksi pembayaran ditahan di queue moderasi (Pending Review) sampai disetujui admin —
+          Jika OFF, transaksi pembayaran ditahan di queue moderasi (Pending Review) sampai disetujui admin,
           mencegah data outlier terkirim ke Meta.
         </p>
         <div className="flex items-center justify-between p-3.5 rounded-xl bg-surface-2 border border-divider opacity-90">
@@ -178,7 +178,7 @@ export const MetaCapiPanel: React.FC<Props> = ({
               id: 'ALL_WITH_TAG',
               title: 'Kirim Semua + opt_out=true',
               badge: 'Atribusi saja',
-              desc: 'Semua order dikirim sebagai Purchase, repeat order ditandai opt_out=true. Catatan: opt_out hanya mengeluarkan event dari optimasi delivery — event tetap dihitung di laporan atribusi.',
+              desc: 'Semua order dikirim sebagai Purchase, repeat order ditandai opt_out=true. Catatan: opt_out hanya mengeluarkan event dari optimasi delivery: event tetap dihitung di laporan atribusi.',
             },
           ].map((opt) => (
             <label

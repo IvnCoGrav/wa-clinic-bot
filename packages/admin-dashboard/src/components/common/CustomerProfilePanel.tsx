@@ -1,6 +1,7 @@
 import React from 'react';
 import { Phone, MapPin, Baby, Calendar, Tag, ShoppingBag, DollarSign } from 'lucide-react';
 import { formatClinicalAge } from '../../utils/clinicalAge';
+import { formatWib } from '../../utils/dateWib';
 
 export interface CustomerProfileChild {
   name?: string | null;
@@ -126,7 +127,7 @@ export const CustomerProfilePanel: React.FC<CustomerProfilePanelProps> = ({ cust
           {reservations.slice(0, 5).map((r) => (
             <div key={r.id} className="flex items-center justify-between text-xs bg-surface border border-divider rounded-xl px-3 py-2">
               <span className="truncate text-ink">{r.treatment_detail || 'Treatment'}</span>
-              <span className="text-[10px] text-ink-3 ml-2 shrink-0">{r.booking_date ? new Date(r.booking_date).toLocaleDateString('id-ID') : r.status || '-'}</span>
+              <span className="text-[10px] text-ink-3 ml-2 shrink-0">{r.booking_date ? formatWib(r.booking_date, { day: '2-digit', month: 'short', year: 'numeric' }) : r.status || '-'}</span>
             </div>
           ))}
         </div>

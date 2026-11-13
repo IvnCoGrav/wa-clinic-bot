@@ -8,8 +8,6 @@ import {
   Clock,
   MapPin,
   Baby,
-  CreditCard,
-  Navigation,
   RefreshCw,
   Search,
   CheckCircle2,
@@ -18,15 +16,11 @@ import {
   Navigation2,
   Camera,
   Crosshair,
-  UserCheck,
   User,
-  Heart,
-  Smile,
   X,
   MessageSquare,
   Users,
   CheckCheck,
-  Download,
   Image as ImageIcon,
   Maximize2,
   BarChart3,
@@ -49,82 +43,24 @@ import { useMapsShortlinkResolver } from '../../hooks/useMapsShortlinkResolver';
 import { compressImageFile, compressDataUrl, resolveCompressProfile } from '../../utils/imageCompressor';
 import { stampGpsWatermark } from '../../utils/imageWatermark';
 import {
-  parseTreatmentItems as parseNumberedTreatments,
 } from '../../utils/durationCalculator';
-import { formatPatientName, formatChildAgeText } from '../../utils/staffDisplayFormat';
 import { isEnRouteStatus } from '../../utils/reservationStatus';
 import { FleetMapModal, type FleetMapTask } from '../../components/maps/FleetMapModal';
 import { getTodayWibDateKey } from '../../utils/dateWib';
 import { needsHousePhoto, resolveLocModalMode } from '../staff/housePhotoGuard';
 import { StatusChip } from '../../components/ui/StatusChip';
-
-interface TaskChild {
-  name: string;
-  rawAgeText: string | null;
-  birthDate: string | null;
-  currentAge?: string | null;
-}
-
-interface TaskAddress {
-  kelurahan: string | null;
-  kecamatan: string | null;
-  kota: string | null;
-  lat?: number | null;
-  lng?: number | null;
-  distanceKm: number | null;
-  estimatedMinutes?: number | null;
-  distanceSource?: 'CLINIC' | 'PREVIOUS_PATIENT' | null;
-  originName?: string | null;
-  fullText: string;
-  landmark?: string | null;
-  housePhotoUrl?: string | null;
-}
-
-interface TaskPricing {
-  treatmentFee: number;
-  deliveryFee: number;
-  totalFee: number;
-  paymentStatus: 'LUNAS' | 'TAGIH_DI_TEMPAT';
-  paymentStatusLabel: string;
-}
-
-interface TreatmentTask {
-  reservationId: string;
-  customerName: string | null;
-  treatmentDetail: string | null;
-  treatmentCategory: string | null;
-  bookingDate: string | null;
-  status: string;
-  conversationId: string | null;
-  mapsUrl: string | null;
-  navigationUrl: string | null;
-  address: TaskAddress;
-  children: TaskChild[];
-  pricing: TaskPricing;
-  shareLocationText?: string | null;
-  customerProfilePictureUrl?: string | null;
-  assignedStaff?: {
-    id: string;
-    name: string;
-    phone: string;
-    role?: string;
-  } | null;
-  customerStats?: {
-    totalTreatments: number;
-    ltv: number;
-  };
-}
-
-interface DateMeta {
-  dateStr: string;
-  formattedDate: string;
-  isToday: boolean;
-  isTomorrow: boolean;
-}
-
-function formatRupiah(amount: number): string {
-  return 'Rp ' + (amount || 0).toLocaleString('id-ID');
-}
+import { Modal } from '../../components/ui/Modal';
+import { EmptyState } from '../../components/ui/StateViews';
+import { TreatmentTask, DateMeta } from './todayTreatmentsTypes';
+import { formatTime, getCategoryIcon } from './todayTreatmentsLogic';
+import { TodayTreatmentCard } from './TodayTreatmentCard';
+import { TodayTreatmentDetailModal } from './TodayTreatmentDetailModal';
+import { TodayMetricsModal } from './TodayMetricsModal';
+import { ReassignStaffModal } from './ReassignStaffModal';
+import { TodayPaymentModal } from './TodayPaymentModal';
+import { TodayLocationModal } from './TodayLocationModal';
+import { TodayQuickChatModal } from './TodayQuickChatModal';
+import { ImageZoomModal } from '../../components/common/ImageZoomModal';
 
 export const TodayTreatments: React.FC = () => {
   const { user } = useAuth();
@@ -238,41 +174,6 @@ export const TodayTreatments: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [zoomImageUrl, detailModalTask, showMetricsModal, reassignTask, paymentTask, locationTask, chatModalTask]);
 
-  // Category Icon & Accent Helper
-  const getCategoryIcon = (category: string | null) => {
-    const cat = (category || '').toUpperCase();
-    if (cat === 'BABY') {
-      return {
-        icon: <Baby size={15} className="text-info" />,
-        badge: 'bg-info-soft border-info-line text-info',
-        borderAccent: 'border-l-4 border-l-sky-500',
-        label: 'Baby Spa',
-      };
-    }
-    if (cat === 'MOMS') {
-      return {
-        icon: <Heart size={15} className="text-violet" />,
-        badge: 'bg-violet-soft border-violet-line text-violet',
-        borderAccent: 'border-l-4 border-l-purple-500',
-        label: 'Moms Spa',
-      };
-    }
-    if (cat === 'BOTH' || cat === 'KIDS') {
-      return {
-        icon: <Smile size={15} className="text-success" />,
-        badge: 'bg-success-soft border-success-line text-success',
-        borderAccent: 'border-l-4 border-l-emerald-500',
-        label: 'Moms & Baby',
-      };
-    }
-    return {
-      icon: <User size={15} className="text-success" />,
-      badge: 'bg-success-soft border-success-line text-success',
-      borderAccent: 'border-l-4 border-l-teal-500',
-      label: 'Treatment',
-    };
-  };
-
   // OTW Safety Gate: Kirim OTW hanya aktif pada hari-H dan maksimal 2 jam sebelum jam kunjungan
   const isOtwAllowed = (task: TreatmentTask) => {
     if (dateTab !== 'today') return false;
@@ -312,7 +213,9 @@ export const TodayTreatments: React.FC = () => {
       if (res.success && Array.isArray(res.data)) {
         setTeamMembers(res.data);
       }
-    } catch (_) {}
+    } catch (_) {
+      // Daftar tim hanya untuk filter; daftar treatment tetap tampil.
+    }
   }, []);
 
   useEffect(() => {
@@ -333,41 +236,7 @@ export const TodayTreatments: React.FC = () => {
     };
   }, [fetchTasks, fetchTeamMembers]);
 
-  // Format jam:menit dan rentang jam mulai - jam selesai
-  const formatTime = (isoString: string | null) => {
-    if (!isoString) return '--:--';
-    try {
-      const d = new Date(isoString);
-      return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false });
-    } catch {
-      return '--:--';
-    }
-  };
 
-  const formatTimeRange = (isoString: string | null, totalDurationMinutes?: number) => {
-    if (!isoString) return '--:--';
-    try {
-      const start = new Date(isoString);
-      const startStr = start.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false });
-      const duration = (totalDurationMinutes && totalDurationMinutes > 0) ? totalDurationMinutes : 60;
-      const end = new Date(start.getTime() + duration * 60 * 1000);
-      const endStr = end.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false });
-      return `${startStr} - ${endStr}`;
-    } catch {
-      return '--:--';
-    }
-  };
-
-  // Helper untuk menentukan apakah waktu treatment sudah selesai (Jam Booking + Total Durasi Layanan Murni, tanpa buffer)
-  const isTaskPastTime = (t: TreatmentTask) => {
-    if (!t.bookingDate) return false;
-    const startTime = new Date(t.bookingDate).getTime();
-    if (isNaN(startTime)) return false;
-    const parsed = parseNumberedTreatments(t.treatmentDetail);
-    const durationMinutes = parsed.totalMinutes > 0 ? parsed.totalMinutes : 60;
-    const endTime = startTime + durationMinutes * 60 * 1000;
-    return Date.now() >= endTime;
-  };
 
   const isDbCompleted = (t: TreatmentTask) => {
     return t.status.toLowerCase() === 'completed';
@@ -440,7 +309,7 @@ export const TodayTreatments: React.FC = () => {
       const res = await apiRequest(`/api/staff/reservations/${task.reservationId}/otw`, { method: 'POST' });
       if (res.success) {
         if (res?.data?.alreadySent) {
-          toast('Info OTW sudah pernah dikirim sebelumnya — tidak dikirim ulang.', 'info');
+          toast('Info OTW sudah pernah dikirim sebelumnya: tidak dikirim ulang.', 'info');
         } else {
           toast('Notifikasi OTW berhasil dikirim ke WhatsApp pasien!', 'success');
         }
@@ -575,7 +444,7 @@ export const TodayTreatments: React.FC = () => {
       const compressed = await compressImageFile(file, { maxWidth: hp.maxWidth, maxHeight: hp.maxHeight, quality: hp.quality });
       setLocRawHousePhotoB64(compressed.dataUrl);
       setLocHousePhotoB64(compressed.dataUrl);
-      toast('Foto rumah berhasil dimuat! 📸', 'success');
+      toast('Foto rumah berhasil dimuat!', 'success');
 
       // 2. Auto-fetch GPS di background jika koordinat belum terkunci
       if (!locCoords && 'geolocation' in navigator && !locGettingGps) {
@@ -599,7 +468,7 @@ export const TodayTreatments: React.FC = () => {
         accuracy: loc.accuracy,
       };
       setLocCoords(newCoords);
-      toast(`✓ GPS terkunci (Akurasi: ±${loc.accuracy}m)! 📍`, 'success');
+      toast(`GPS terkunci (Akurasi: ±${loc.accuracy}m)!`, 'success');
     } catch (err: any) {
       setLocGpsError(err.message || 'Gagal membaca GPS.');
       toast(err.message || 'Gagal membaca GPS.', 'error');
@@ -637,7 +506,7 @@ export const TodayTreatments: React.FC = () => {
         const foundLat = parseFloat(data[0].lat);
         const foundLng = parseFloat(data[0].lon);
         setLocCoords({ lat: foundLat, lng: foundLng });
-        toast(`✓ Titik area ${kelurahan || kecamatan} ditemukan! 📍`, 'success');
+        toast(`Titik area ${kelurahan || kecamatan} ditemukan!`, 'success');
       } else {
         toast('Alamat area tidak ditemukan di peta. Gunakan Kunci GPS atau tempel Link Maps.', 'error');
       }
@@ -704,7 +573,7 @@ export const TodayTreatments: React.FC = () => {
     // Langsung tutup modal & tampilkan feedback sukses instan
     setLocationTask(null);
     setLocRawHousePhotoB64(null);
-    toast('✅ Lokasi & panduan berhasil disimpan! ⚡', 'success');
+    toast('Lokasi & panduan berhasil disimpan!', 'success');
 
     // 2. SINKRONISASI SERVER DI BACKGROUND
     try {
@@ -739,7 +608,7 @@ export const TodayTreatments: React.FC = () => {
         );
       }
       if (res && res.data?.coordsUpdated === false) {
-        toast('Catatan lokasi tersimpan (tanpa perubahan titik GPS) — foto tersimpan tapi koordinat tidak diperbarui.', 'error');
+        toast('Catatan lokasi tersimpan (tanpa perubahan titik GPS): foto tersimpan tapi koordinat tidak diperbarui.', 'error');
       }
     } catch (err: any) {
       console.warn('[TODAY] Background sync location error:', err?.message || err);
@@ -851,24 +720,24 @@ export const TodayTreatments: React.FC = () => {
             <button
               type="button"
               onClick={() => setDateTab('today')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition duration-150 cursor-pointer ${
                 dateTab === 'today'
                   ? 'bg-surface text-accent shadow-xs ring-1 ring-accent/20'
                   : 'text-ink-2 hover:text-ink dark:hover:text-ink'
               }`}
             >
-              📅 Hari Ini
+              Hari Ini
             </button>
             <button
               type="button"
               onClick={() => setDateTab('tomorrow')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition duration-150 cursor-pointer ${
                 dateTab === 'tomorrow'
                   ? 'bg-surface text-purple-700 dark:text-ink-2 shadow-xs ring-1 ring-purple-500/20'
                   : 'text-ink-2 hover:text-ink dark:hover:text-ink'
               }`}
             >
-              ✨ Besok
+              Besok
             </button>
             <div className="relative inline-flex items-center">
               <input
@@ -897,13 +766,13 @@ export const TodayTreatments: React.FC = () => {
               onChange={(e) => setScopeFilter(e.target.value)}
               className="bg-surface border border-divider text-ink text-xs font-bold rounded-xl px-3 py-2 pr-8 focus:outline-none focus:border-accent shadow-xs cursor-pointer appearance-none min-h-[38px]"
             >
-              <option value="mine">🛵 Tugas Saya</option>
-              {isSupervisor && <option value="all">👥 Semua Terapis</option>}
+              <option value="mine">Tugas Saya</option>
+              {isSupervisor && <option value="all">Semua Terapis</option>}
               {teamMembers.length > 0 && (
                 <optgroup label="Terapis Spesifik">
                   {teamMembers.map((m) => (
                     <option key={m.id} value={`staff:${m.id}`}>
-                      👤 {m.name}
+                      {m.name}
                     </option>
                   ))}
                 </optgroup>
@@ -986,7 +855,7 @@ export const TodayTreatments: React.FC = () => {
         <div className="flex items-center space-x-1.5 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
           <button
             onClick={() => setStatusFilter('UPCOMING')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
               statusFilter === 'UPCOMING'
                 ? 'bg-accent text-accent-ink shadow-xs'
                 : 'bg-fill-1 text-ink-2 hover:bg-fill-2 dark:hover:bg-fill-2'
@@ -996,7 +865,7 @@ export const TodayTreatments: React.FC = () => {
           </button>
           <button
             onClick={() => setStatusFilter('COMPLETED')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
               statusFilter === 'COMPLETED'
                 ? 'bg-accent text-accent-ink shadow-xs'
                 : 'bg-fill-1 text-ink-2 hover:bg-fill-2 dark:hover:bg-fill-2'
@@ -1006,7 +875,7 @@ export const TodayTreatments: React.FC = () => {
           </button>
           <button
             onClick={() => setStatusFilter('OTW')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
               statusFilter === 'OTW'
                 ? 'bg-accent text-accent-ink shadow-xs'
                 : 'bg-fill-1 text-ink-2 hover:bg-fill-2 dark:hover:bg-fill-2'
@@ -1016,7 +885,7 @@ export const TodayTreatments: React.FC = () => {
           </button>
           <button
             onClick={() => setStatusFilter('ALL')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
               statusFilter === 'ALL'
                 ? 'bg-accent text-accent-ink shadow-xs'
                 : 'bg-fill-1 text-ink-2 hover:bg-fill-2 dark:hover:bg-fill-2'
@@ -1034,337 +903,47 @@ export const TodayTreatments: React.FC = () => {
           <p className="text-xs font-bold text-ink">Memuat daftar tugas treatment...</p>
         </div>
       ) : filteredTasks.length === 0 ? (
-        <div className="bg-surface rounded-2xl border border-divider p-12 text-center text-ink-3 dark:text-ink-2 shadow-xs space-y-3">
-          <Calendar size={40} className="mx-auto text-ink-3" />
-          <h3 className="font-bold text-sm text-ink">
-            {dateTab === 'tomorrow'
-              ? 'Belum ada reservasi treatment terjadwal untuk besok'
-              : 'Tidak ada jadwal treatment yang cocok'}
-          </h3>
-          <p className="text-xs text-ink-3 max-w-md mx-auto">
-            {searchQuery
-              ? 'Coba ganti kata kunci pencarian.'
-              : dateTab === 'tomorrow'
-              ? 'Reservasi yang masuk dan telah dikonfirmasi untuk besok akan otomatis muncul di sini.'
-              : 'Belum ada reservasi treatment pada filter ini.'}
-          </p>
+        <div className="bg-surface rounded-2xl border border-divider shadow-xs">
+          <EmptyState
+            icon={<Calendar size={20} aria-hidden="true" />}
+            title={
+              dateTab === 'tomorrow'
+                ? 'Belum ada reservasi treatment terjadwal untuk besok'
+                : 'Tidak ada jadwal treatment yang cocok'
+            }
+            description={
+              searchQuery
+                ? 'Coba ganti kata kunci pencarian.'
+                : dateTab === 'tomorrow'
+                ? 'Reservasi yang masuk dan sudah dikonfirmasi untuk besok akan muncul di sini.'
+                : 'Belum ada reservasi treatment pada filter ini.'
+            }
+          />
         </div>
       ) : (
         <div className="flex flex-col gap-4 max-w-4xl mx-auto w-full">
-          {filteredTasks.map((task, index) => {
-            const isPast = isTaskPastTime(task);
-            const isCompleted = task.status.toLowerCase() === 'completed';
-            const isOverdue = !isCompleted && isPast;
-            const isOtw = !isCompleted && isEnRouteStatus(task.status);
-            const isLunas = task.pricing.paymentStatus === 'LUNAS';
-            const catCfg = getCategoryIcon(task.treatmentCategory);
-            const otwReady = isOtwAllowed(task);
-            const parsedTreatments = parseNumberedTreatments(task.treatmentDetail);
-
-            return (
-              <div
-                key={task.reservationId}
-                onClick={() => setDetailModalTask(task)}
-                className={`bg-surface rounded-2xl border dark:border-divider p-5 shadow-xs transition-all space-y-4 relative cursor-pointer group hover:shadow-md ${catCfg.borderAccent} ${
-                  isCompleted
-                    ? 'border-emerald-200 dark:border-emerald-800/40 bg-emerald-50/10 dark:bg-emerald-950/20'
-                    : isOtw
-                    ? 'border-sky-300 dark:border-sky-800/40 bg-sky-50/15 dark:bg-sky-950/20 ring-1 ring-sky-300 dark:ring-sky-800/30'
-                    : isOverdue
-                    ? 'border-amber-300 dark:border-amber-800/40 bg-amber-50/15 dark:bg-amber-950/20 ring-1 ring-amber-300/40'
-                    : 'border-divider hover:border-accent'
-                }`}
-              >
-                {/* Card Top: Sequence Number, Time, Avatar, Status, Assigned Staff */}
-                <div className="flex items-start justify-between gap-3 border-b border-divider dark:border-divider pb-3">
-                  <div className="flex items-center space-x-3.5">
-                    {/* Sequence Badge */}
-                    <div
-                      className="h-9 w-9 rounded-xl bg-fill-1 group-hover:bg-accent-soft dark:group-hover:bg-accent/15 border border-divider group-hover:border-divider text-ink group-hover:text-accent flex flex-col items-center justify-center shrink-0 transition-colors shadow-2xs"
-                      title={`Urutan Kunjungan #${index + 1}`}
-                    >
-                      <span className="text-[9px] font-bold uppercase leading-none opacity-60">No</span>
-                      <span className="text-sm font-black leading-none">{index + 1}</span>
-                    </div>
-
-                    <div className="relative shrink-0">
-                      {task.customerProfilePictureUrl ? (
-                        <img
-                          src={task.customerProfilePictureUrl}
-                          alt={task.customerName || 'Pasien'}
-                          className="h-11 w-11 rounded-2xl object-cover border border-divider shadow-xs"
-                          onError={(e) => {
-                            (e.target as HTMLElement).style.display = 'none';
-                          }}
-                        />
-                      ) : (
-                        <div className="h-11 w-11 rounded-2xl bg-accent-soft border border-divider text-accent flex items-center justify-center font-extrabold text-sm shadow-xs">
-                          {(task.customerName || 'P').charAt(0).toUpperCase()}
-                        </div>
-                      )}
-                      {/* Waktu Mulai Saja di Foto/Avatar */}
-                      <span className="absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded-md bg-ink text-surface text-[9px] font-mono font-bold shadow-xs whitespace-nowrap">
-                        {formatTime(task.bookingDate)}
-                      </span>
-                    </div>
-
-                    <div>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <h3 className="font-bold text-sm text-ink group-hover:text-accent transition">
-                          {formatPatientName(task.customerName)}
-                        </h3>
-                        <span
-                          className={`p-1 rounded-md border ${catCfg.badge} inline-flex items-center justify-center shadow-2xs`}
-                          title={catCfg.label}
-                        >
-                          {catCfg.icon}
-                        </span>
-                        <span className="text-xs font-semibold text-ink-2 hidden sm:inline">
-                          ({formatTimeRange(task.bookingDate, parsedTreatments.totalMinutes)})
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-1 text-[11px] text-ink-2 mt-0.5 font-mono" title="Terapis Penanggung Jawab">
-                        <UserCheck size={13} className="text-accent shrink-0" />
-                        <span className="font-bold text-accent truncate">{task.assignedStaff?.name || 'Belum Ditugaskan'}</span>
-                      </div>
-
-                      {task.customerStats && (
-                        <div className="flex items-center gap-1.5 mt-1 text-[10px]">
-                          <span className="inline-flex items-center px-1.5 py-0.2 rounded-md bg-accent-soft text-accent font-bold">
-                            {task.customerStats.totalTreatments > 1 ? `${task.customerStats.totalTreatments}x Treatment` : 'Pasien Baru (1x)'}
-                          </span>
-                          <span className="text-ink-3 font-mono">
-                            LTV: {formatRupiah(task.customerStats.ltv)}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col items-end gap-1">
-                      {isCompleted ? (
-                        <StatusChip tone="success" label="Selesai" icon={<CheckCircle2 size={12} />} />
-                      ) : isOtw ? (
-                        <StatusChip tone="info" label="Sedang OTW" icon={<Navigation2 size={12} />} />
-                      ) : isOverdue ? (
-                        <StatusChip tone="warning" label="Jam Terlewat" icon={<AlertTriangle size={12} />} />
-                      ) : (
-                        <StatusChip tone="neutral" label="Akan Datang" icon={<Clock size={12} />} />
-                      )}
-
-                    {isLunas ? (
-                      <span className="text-[10px] font-bold text-accent">✓ Lunas</span>
-                    ) : (
-                      <span className="text-[10px] font-bold text-warning">Tagih: {formatRupiah(task.pricing.totalFee)}</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Treatment List Numbering Bersih + Total Waktu Terpadu */}
-                <div className="space-y-2 text-xs">
-                  <div className="space-y-1">
-                    {parsedTreatments.items.map((treatmentName, idx) => (
-                        <div key={idx} className="font-semibold text-ink flex items-start gap-2">
-                        <span className="h-5 w-5 rounded-full bg-accent-soft text-accent flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">
-                          {idx + 1}
-                        </span>
-                        <span className="leading-tight pt-0.5">{treatmentName}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Total Estimasi Waktu Layanan & Data Anak */}
-                  <div className="flex flex-wrap items-center gap-2 pt-1">
-                    {parsedTreatments.totalMinutes > 0 && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-warning border border-amber-200 dark:border-amber-800/40 text-[11px] font-bold">
-                        <Timer size={12} className="text-warning" />
-                        <span>Total Durasi: {parsedTreatments.totalMinutes} Menit</span>
-                      </span>
-                    )}
-
-                    {task.children && task.children.length > 0 && (
-                      task.children.map((c, idx) => (
-                        <span
-                          key={idx}
-                          className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-lg bg-sky-50 dark:bg-sky-950/30 text-sky-800 dark:text-info border border-sky-200 dark:border-sky-800/40 text-[11px]"
-                        >
-                          <Baby size={11} />
-                          <span>{formatPatientName(c.name)} {c.currentAge ? `(${c.currentAge})` : c.rawAgeText ? `(${formatChildAgeText(c.rawAgeText)})` : ''}</span>
-                        </span>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                {/* Address, Chain Route & Landmark */}
-                <div className="p-3 bg-surface-2 dark:bg-surface-2 rounded-xl border border-divider space-y-1.5 text-xs">
-                  <div className="flex items-start gap-1.5 text-ink">
-                    <MapPin size={14} className="text-accent mt-0.5 shrink-0" />
-                    <span className="line-clamp-2">{task.address.fullText || 'Alamat belum tercatat lengkap'}</span>
-                  </div>
-                  
-                  {task.address.landmark && (
-                    <p className="text-[11px] text-ink-2 pl-5">
-                      <span className="font-bold text-ink">Patokan:</span> {task.address.landmark}
-                    </p>
-                  )}
-
-                  {/* Chain Route Smart Indicator */}
-                  {task.address.distanceKm !== null && (
-                    <div className="pl-5 pt-0.5 flex flex-wrap items-center gap-2 text-[11px]">
-                      <span className="font-bold text-accent font-mono">
-                        📍 ±{task.address.distanceKm.toFixed(1)} km
-                      </span>
-                      {task.address.distanceSource === 'PREVIOUS_PATIENT' ? (
-                          <span className="px-2 py-0.2 rounded-md bg-purple-50 dark:bg-fill-1 text-purple-700 dark:text-ink-2 border border-purple-200 dark:border-divider font-medium text-[10px]">
-                          Rute Berantai dari {task.address.originName || 'Pasien Sebelumnya'}
-                        </span>
-                      ) : (
-                          <span className="px-2 py-0.2 rounded-md bg-gray-100 dark:bg-divider text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-divider font-medium text-[10px]">
-                          Dari Klinik
-                        </span>
-                      )}
-                      {task.address.estimatedMinutes && (
-                        <span className="text-ink-3 text-[10px] font-mono">
-                          (Est. {task.address.estimatedMinutes} menit)
-                        </span>
-                      )}
-                    </div>
-                  )}
-
-                  {/* House Photo Thumbnail */}
-                  {task.address.housePhotoUrl && (
-                    <div className="pl-5 pt-1.5">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setZoomImageUrl(task.address.housePhotoUrl || null);
-                        }}
-                        className="group relative inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-surface border border-divider text-[11px] font-bold text-ink-2 hover:text-accent hover:border-accent transition shadow-2xs cursor-pointer"
-                      >
-                        <ImageIcon size={13} className="text-accent" />
-                        <span>Lihat Foto Depan Rumah Pasien</span>
-                        <Maximize2 size={11} className="text-ink-3 group-hover:scale-110 transition" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Mobile-First Impeccable Action Toolbar */}
-                {(() => {
-                  const mapsDirectionUrl = task.navigationUrl || task.mapsUrl || getGoogleMapsDirectionUrl(task.address.lat, task.address.lng, task.address.fullText || task.address.kelurahan);
-                  return (
-                    <div
-                      className="pt-3 border-t border-divider space-y-2.5"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {/* Primary Actions Row: OTW & Catat Lunas (Full-width prominent cards on mobile) */}
-                      {((!isCompleted && !isOtw) || !isLunas) && (
-                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                          {!isCompleted && !isOtw && (
-                            <button
-                              onClick={() => handleSendOtw(task)}
-                              disabled={sendingOtwId === task.reservationId || !otwReady}
-                              className={`flex-1 py-3 px-4 rounded-xl text-white text-xs font-bold transition flex items-center justify-center gap-2 shadow-xs active:scale-[0.98] touch-manipulation cursor-pointer ${
-                                dateTab !== 'today'
-                                  ? 'bg-fill-2 text-ink-2 border border-strong cursor-not-allowed opacity-80'
-                                  : otwReady
-                                  ? 'bg-accent hover:bg-accent'
-                                  : 'bg-fill-2 cursor-not-allowed opacity-70'
-                              }`}
-                              title={
-                                dateTab !== 'today'
-                                  ? 'Tombol Kirim OTW hanya aktif pada hari-H kunjungan'
-                                  : otwReady
-                                  ? 'Kirim notifikasi OTW ke pasien'
-                                  : 'Tombol OTW aktif 2 jam sebelum jam treatment'
-                              }
-                            >
-                              <Send size={14} />
-                              <span>
-                                {dateTab !== 'today'
-                                  ? 'Jadwal Besok (OTW Hari-H)'
-                                  : otwReady
-                                  ? 'Kirim Info OTW'
-                                  : 'OTW (Aktif H-2 Jam)'}
-                              </span>
-                            </button>
-                          )}
-
-                          {!isLunas && (
-                            <button
-                              onClick={() => {
-                                setPaymentTask(task);
-                                setPaymentMethod('CASH');
-                                setProofImageB64(null);
-                              }}
-                              className="flex-1 py-3 px-4 rounded-xl bg-warning hover:bg-warning-hover text-on-solid text-xs font-bold transition flex items-center justify-center gap-2 shadow-xs active:scale-[0.98] touch-manipulation cursor-pointer"
-                            >
-                              <CreditCard size={14} />
-                              <span>Catat Lunas ({formatRupiah(task.pricing.totalFee)})</span>
-                            </button>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Secondary Quick Action Chips Row: Maps, Lokasi, Chat, Delegasi */}
-                      <div className="grid grid-cols-3 sm:flex sm:items-center gap-2">
-                        {/* Buka Google Maps Navigasi (Selalu Tersedia untuk Setiap Pasien) */}
-                        <a
-                          href={mapsDirectionUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="py-2.5 px-3 rounded-xl bg-surface border border-divider text-ink hover:bg-accent-soft dark:hover:bg-accent/15 hover:border-accent/40 text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition active:scale-95 touch-manipulation cursor-pointer"
-                          title="Buka Peta Navigasi Google Maps"
-                        >
-                          <Navigation size={14} className="text-accent" />
-                          <span>Maps</span>
-                        </a>
-
-                        {/* Update GPS & Foto Rumah */}
-                        <button
-                          onClick={() => handleOpenLocationModal(task)}
-                          className={`py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition active:scale-95 touch-manipulation cursor-pointer ${
-                            needsHousePhoto(task)
-                              ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:border-amber-700/60 dark:text-warning'
-                              : 'bg-surface border-divider text-ink-2 hover:text-ink dark:hover:text-ink hover:bg-fill-1'
-                          }`}
-                          title={needsHousePhoto(task) ? 'Foto rumah belum ada • Klik untuk unggah' : 'Update Titik GPS & Foto Rumah Pasien'}
-                        >
-                          <Camera size={14} className={needsHousePhoto(task) ? 'text-amber-600 dark:text-warning' : ''} />
-                          <span>{needsHousePhoto(task) ? 'Butuh Foto' : 'Lokasi'}</span>
-                        </button>
-
-                        {/* Chat WhatsApp Pasien */}
-                        <button
-                          onClick={() => handleOpenChat(task)}
-                          className="py-2.5 px-3 rounded-xl bg-surface border border-divider text-ink-2 hover:text-accent hover:bg-accent-soft dark:hover:bg-accent/15 text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition active:scale-95 touch-manipulation cursor-pointer"
-                          title="Buka Live Chat WhatsApp Pasien"
-                        >
-                          <MessageSquare size={14} className="text-accent" />
-                          <span>Chat</span>
-                        </button>
-
-                        {/* Delegasikan Terapis (Supervisor Only) */}
-                        {isSupervisor && (
-                          <button
-                            onClick={() => handleOpenReassign(task)}
-                            className="col-span-3 sm:col-span-1 py-2.5 px-3 rounded-xl bg-purple-50 dark:bg-fill-1 hover:bg-purple-100 dark:hover:bg-purple-500/20 text-purple-700 dark:text-ink-2 border border-purple-200 dark:border-divider text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 touch-manipulation cursor-pointer"
-                            title={task.assignedStaff ? 'Ganti Terapis yang Ditugaskan' : 'Delegasikan Jadwal ke Terapis Lain'}
-                          >
-                            <UserCheck size={14} />
-                            <span>{task.assignedStaff ? 'Ganti Terapis' : 'Delegasi'}</span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-            );
-          })}
+          {filteredTasks.map((task, index) => (
+            <TodayTreatmentCard
+              key={task.reservationId}
+              task={task}
+              index={index}
+              isSupervisor={isSupervisor}
+              isSendingOtw={sendingOtwId === task.reservationId}
+              otwReady={isOtwAllowed(task)}
+              dateTab={dateTab}
+              onOpenDetail={setDetailModalTask}
+              onOpenPayment={(t) => {
+                setPaymentTask(t);
+                setPaymentMethod('CASH');
+                setProofImageB64(null);
+              }}
+              onOpenChat={handleOpenChat}
+              onOpenLocation={handleOpenLocationModal}
+              onReassign={handleOpenReassign}
+              onSendOtw={handleSendOtw}
+              onShowImage={setZoomImageUrl}
+            />
+          ))}
         </div>
       )}
 
@@ -1372,1109 +951,123 @@ export const TodayTreatments: React.FC = () => {
       {/* MODAL DETAIL LENGKAP CUSTOMER & TREATMENT */}
       {/* ========================================================================= */}
       <FleetMapModal open={showFleetMap} onClose={() => setShowFleetMap(false)} tasks={fleetTasks} />
-      {detailModalTask &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn h-[100dvh] w-[100dvw]"
-            onClick={() => setDetailModalTask(null)}
-          >
-            <div
-              className="bg-surface dark:text-ink rounded-2xl sm:rounded-3xl p-5 sm:p-6 w-full max-w-lg shadow-2xl border border-divider space-y-4 text-left relative max-h-[85dvh] sm:max-h-[80dvh] overflow-y-auto overscroll-contain animate-modalScaleUp"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Header Detail */}
-              <div className="flex items-start justify-between border-b border-divider pb-3">
-                <div className="flex items-center space-x-3">
-                  {detailModalTask.customerProfilePictureUrl ? (
-                    <img
-                      src={detailModalTask.customerProfilePictureUrl}
-                      alt={detailModalTask.customerName || 'Pasien'}
-                      className="h-12 w-12 rounded-2xl object-cover border border-divider shadow-xs"
-                    />
-                  ) : (
-                    <div className="h-12 w-12 rounded-2xl bg-accent-soft border border-divider text-accent flex items-center justify-center font-extrabold text-base shadow-xs">
-                      {(detailModalTask.customerName || 'P').charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                  <div>
-                    <h3 className="font-bold text-base text-ink flex items-center gap-1.5">
-                      <span>{formatPatientName(detailModalTask.customerName)}</span>
-                      <span
-                        className={`p-1 rounded-md border ${getCategoryIcon(detailModalTask.treatmentCategory).badge} inline-flex items-center justify-center`}
-                        title={getCategoryIcon(detailModalTask.treatmentCategory).label}
-                      >
-                        {getCategoryIcon(detailModalTask.treatmentCategory).icon}
-                      </span>
-                    </h3>
-                    <p className="text-xs text-ink-2 mt-0.5">
-                      Jam Kunjungan:{' '}
-                      <span className="font-bold text-ink">
-                        {formatTimeRange(
-                          detailModalTask.bookingDate,
-                          parseNumberedTreatments(detailModalTask.treatmentDetail).totalMinutes
-                        )}
-                      </span>
-                    </p>
-                    {detailModalTask.customerStats && (
-                      <div className="flex items-center gap-2 mt-1 text-[11px]">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-accent-soft text-accent font-bold">
-                          {detailModalTask.customerStats.totalTreatments > 1
-                            ? `${detailModalTask.customerStats.totalTreatments}x Treatment`
-                            : 'Pasien Baru (1x)'}
-                        </span>
-                        <span className="text-ink-2 font-mono">
-                          LTV: <strong className="text-ink">{formatRupiah(detailModalTask.customerStats.ltv)}</strong>
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => setDetailModalTask(null)}
-                  className="p-1.5 rounded-full text-ink-3 hover:text-ink dark:hover:text-ink hover:bg-fill-1 transition cursor-pointer"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              {/* Treatment & Layanan */}
-              <div className="p-3.5 bg-surface-2 rounded-2xl border border-divider space-y-2">
-                <span className="text-[10px] font-bold text-ink-2 uppercase tracking-wider block">
-                  Layanan Treatment Dipesan
-                </span>
-                <div className="space-y-1 text-xs">
-                  {parseNumberedTreatments(detailModalTask.treatmentDetail).items.map((it, idx) => (
-                    <div key={idx} className="font-semibold text-ink flex items-start gap-2">
-                      <span className="h-5 w-5 rounded-full bg-accent-soft text-accent flex items-center justify-center font-bold text-[10px] shrink-0">
-                        {idx + 1}
-                      </span>
-                      <span>{it}</span>
-                    </div>
-                  ))}
-                </div>
-
-                {parseNumberedTreatments(detailModalTask.treatmentDetail).totalMinutes > 0 && (
-                  <div className="pt-1">
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-warning-soft text-warning border border-warning-line text-xs font-bold">
-                      <Timer size={12} className="text-warning" />
-                      <span>Total Estimasi Waktu: {parseNumberedTreatments(detailModalTask.treatmentDetail).totalMinutes} Menit</span>
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* Data Pasien Anak */}
-              {detailModalTask.children && detailModalTask.children.length > 0 && (
-                <div className="p-3.5 bg-surface-2 rounded-2xl border border-divider space-y-1.5">
-                  <span className="text-[10px] font-bold text-ink-2 uppercase tracking-wider block">
-                    Data Pasien Anak
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {detailModalTask.children.map((c, idx) => (
-                      <span
-                        key={idx}
-                        className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-xl bg-info-soft text-info border border-info-line text-xs font-semibold"
-                      >
-                        <Baby size={13} />
-                        <span>{formatPatientName(c.name)} {c.currentAge ? `(${c.currentAge})` : c.rawAgeText ? `(${formatChildAgeText(c.rawAgeText)})` : ''}</span>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Alamat & Lokasi */}
-              <div className="p-3.5 bg-surface-2 dark:bg-surface-2 rounded-2xl border border-divider space-y-2">
-                <span className="text-[10px] font-bold text-ink-2 uppercase tracking-wider block">
-                  Alamat & Titik Lokasi
-                </span>
-                <p className="text-xs text-ink leading-relaxed">{detailModalTask.address.fullText}</p>
-                
-                {detailModalTask.address.landmark && (
-                  <p className="text-xs text-ink-2">
-                    <span className="font-bold text-ink">Patokan:</span> {detailModalTask.address.landmark}
-                  </p>
-                )}
-
-                {detailModalTask.address.housePhotoUrl && (
-                  <div className="pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setZoomImageUrl(detailModalTask.address.housePhotoUrl || null)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface border border-divider text-xs font-bold text-accent shadow-2xs hover:bg-accent-soft cursor-pointer"
-                    >
-                      <ImageIcon size={14} />
-                      <span>Lihat Foto Depan Rumah (Zoom)</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Rincian Finansial */}
-              <div className="p-3.5 bg-surface-2 dark:bg-surface-2 rounded-2xl border border-divider space-y-2 text-xs">
-                <span className="text-[10px] font-bold text-ink-2 uppercase tracking-wider block">
-                  Rincian Biaya & Status Pembayaran
-                </span>
-                <div className="space-y-1">
-                  <div className="flex justify-between text-ink-2">
-                    <span>Biaya Layanan:</span>
-                    <span>{formatRupiah(detailModalTask.pricing.treatmentFee)}</span>
-                  </div>
-                  <div className="flex justify-between text-ink-2">
-                    <span>Ongkos Kirim:</span>
-                    <span>{formatRupiah(detailModalTask.pricing.deliveryFee)}</span>
-                  </div>
-                  <div className="flex justify-between font-bold text-ink pt-1 border-t border-divider">
-                    <span>Total Tagihan:</span>
-                    <span className="text-accent text-sm">{formatRupiah(detailModalTask.pricing.totalFee)}</span>
-                  </div>
-                </div>
-
-                <div className="pt-2 flex items-center justify-between">
-                  <span className="text-xs text-ink-2">Status Pembayaran:</span>
-                  {detailModalTask.pricing.paymentStatus === 'LUNAS' ? (
-                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-bubble-out text-accent border border-accent/30 flex items-center space-x-1">
-                      <CheckCircle2 size={12} />
-                      <span>LUNAS</span>
-                    </span>
-                  ) : (
-                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 dark:bg-amber-950/40 text-amber-900 dark:text-warning border border-amber-300 dark:border-amber-800/40 flex items-center space-x-1">
-                      <CreditCard size={12} />
-                      <span>TAGIH DI TEMPAT</span>
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Action Buttons di Modal */}
-              <div className="pt-2 flex space-x-2">
-                {(() => {
-                  const detailMapsUrl = detailModalTask.navigationUrl || detailModalTask.mapsUrl || getGoogleMapsDirectionUrl(detailModalTask.address.lat, detailModalTask.address.lng, detailModalTask.address.fullText || detailModalTask.address.kelurahan);
-                  return (
-                    <a
-                      href={detailMapsUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex-1 py-2.5 px-4 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs cursor-pointer active:scale-[0.98]"
-                    >
-                      <Navigation size={14} />
-                      <span>Buka Google Maps</span>
-                    </a>
-                  );
-                })()}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const t = detailModalTask;
-                    setDetailModalTask(null);
-                    handleOpenChat(t);
-                  }}
-                  className="py-2.5 px-4 bg-surface hover:bg-fill-1 border border-divider text-ink rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer"
-                >
-                  <MessageSquare size={14} className="text-accent" />
-                  <span>Chat WA</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDetailModalTask(null)}
-                  className="py-2.5 px-4 bg-surface hover:bg-fill-1 border border-divider text-ink-2 rounded-xl text-xs font-bold transition cursor-pointer"
-                >
-                  Tutup
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
+      {detailModalTask && (
+        <TodayTreatmentDetailModal
+          task={detailModalTask}
+          onClose={() => setDetailModalTask(null)}
+          onOpenChat={handleOpenChat}
+          onShowImage={setZoomImageUrl}
+        />
+      )}
 
       {/* ========================================================================= */}
       {/* MODAL DETAIL REKAP RESERVASI */}
       {/* ========================================================================= */}
-      {showMetricsModal &&
-        createPortal(          <div
-            className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn h-[100dvh] w-[100dvw]"
-            onClick={() => setShowMetricsModal(false)}
-          >
-            <div
-              className="bg-surface dark:text-ink rounded-3xl p-6 w-full max-w-lg shadow-2xl border border-divider space-y-4 text-left relative max-h-[85dvh] sm:max-h-[80dvh] overflow-y-auto overscroll-contain animate-modalScaleUp"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-start justify-between border-b border-divider pb-3">
-                <div className="flex items-center space-x-2.5">
-                  <div className="h-10 w-10 rounded-2xl bg-accent-soft text-accent flex items-center justify-center border border-divider shadow-xs">
-                    <BarChart3 size={20} />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-base text-ink">
-                      Rekap Metrik Treatment {dateTab === 'today' ? 'Hari Ini' : dateTab === 'tomorrow' ? 'Besok' : displayDateText}
-                    </h3>
-                    <p className="text-xs text-ink-2">{displayDateText}</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowMetricsModal(false)}
-                  className="p-1.5 rounded-full text-ink-3 hover:text-ink dark:hover:text-ink hover:bg-fill-1 transition cursor-pointer"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 pt-1">
-                <div className="bg-surface-2 dark:bg-surface-2 rounded-2xl border border-divider p-4">
-                  <span className="text-[11px] font-bold text-ink-2 uppercase tracking-wider block">Total Treatment</span>
-                  <p className="text-2xl font-black text-ink mt-1">{totalCount}</p>
-                  <span className="text-[11px] text-ink-3">Kunjungan terjadwal</span>
-                </div>
-
-                <div className="bg-emerald-50/40 dark:bg-emerald-950/30 rounded-2xl border border-emerald-200 dark:border-emerald-800/40 p-4">
-                  <span className="text-[11px] font-bold text-emerald-700 dark:text-accent uppercase tracking-wider block">Selesai</span>
-                  <p className="text-2xl font-black text-emerald-700 dark:text-ink mt-1">{completedCount}</p>
-                  <span className="text-[11px] text-emerald-600 dark:text-ink-3">Pasien telah ditangani</span>
-                </div>
-
-                <div className="bg-sky-50/40 dark:bg-sky-950/30 rounded-2xl border border-sky-200 dark:border-sky-800/40 p-4">
-                  <span className="text-[11px] font-bold text-sky-700 dark:text-info uppercase tracking-wider block">Sedang OTW</span>
-                  <p className="text-2xl font-black text-sky-700 dark:text-ink mt-1">{otwCount}</p>
-                  <span className="text-[11px] text-sky-600 dark:text-ink-3">Dalam perjalanan</span>
-                </div>
-
-                <div className="bg-amber-50/40 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-800/40 p-4">
-                  <span className="text-[11px] font-bold text-amber-700 dark:text-warning uppercase tracking-wider block">Status Lunas</span>
-                  <p className="text-2xl font-black text-amber-700 dark:text-ink mt-1">{lunasCount} / {totalCount}</p>
-                  <span className="text-[11px] text-amber-600 dark:text-ink-3">{totalCount - lunasCount} Tagih di tempat</span>
-                </div>
-              </div>
-
-              <div className="p-4 bg-surface-2 dark:bg-surface-2 rounded-2xl border border-divider flex items-center justify-between text-xs">
-                <span className="font-bold text-ink-2">Total Nilai Transaksi:</span>
-                <span className="font-black text-sm text-accent">{formatRupiah(totalRevenue)}</span>
-              </div>
-
-              <div className="flex justify-end pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowMetricsModal(false)}
-                  className="px-5 py-2.5 rounded-xl bg-accent text-accent-ink text-xs font-bold hover:bg-accent transition cursor-pointer shadow-xs"
-                >
-                  Tutup Rekap
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
+      {showMetricsModal && (
+        <TodayMetricsModal
+          dateLabel={dateTab === 'today' ? 'Hari Ini' : dateTab === 'tomorrow' ? 'Besok' : displayDateText}
+          totalCount={totalCount}
+          completedCount={completedCount}
+          otwCount={otwCount}
+          lunasCount={lunasCount}
+          totalRevenue={totalRevenue}
+          onClose={() => setShowMetricsModal(false)}
+        />
+      )}
 
       {/* ========================================================================= */}
       {/* MODAL FULL SCREEN ZOOM IMAGE */}
       {/* ========================================================================= */}
-      {zoomImageUrl &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn h-[100dvh] w-[100dvw]"
-            onClick={() => setZoomImageUrl(null)}
-          >
-            <div className="relative max-w-3xl w-full max-h-[90dvh] flex flex-col items-center justify-center p-2" onClick={(e) => e.stopPropagation()}>
-              <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
-                <a
-                  href={zoomImageUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  download
-                  className="p-2 rounded-full bg-white/20 hover:bg-white/40 text-white backdrop-blur-md transition"
-                  title="Buka / Download Foto Asli"
-                >
-                  <Download size={18} />
-                </a>
-                <button
-                  onClick={() => setZoomImageUrl(null)}
-                  className="p-2 rounded-full bg-white/20 hover:bg-white/40 text-white backdrop-blur-md transition cursor-pointer"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-              <img src={zoomImageUrl} alt="Zoom" className="max-w-full max-h-[85dvh] object-contain rounded-2xl shadow-2xl" />
-            </div>
-          </div>,
-          document.body
-        )}
+      {zoomImageUrl && (
+        <ImageZoomModal url={zoomImageUrl} onClose={() => setZoomImageUrl(null)} />
+      )}
 
       {/* ========================================================================= */}
       {/* MODAL DELEGASI & GANTI TERAPIS */}
       {/* ========================================================================= */}
-      {reassignTask &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn h-[100dvh] w-[100dvw]"
-            onClick={() => setReassignTask(null)}
-          >
-            <div
-              className="bg-surface dark:text-ink rounded-2xl sm:rounded-3xl w-full max-w-md max-h-[85dvh] sm:max-h-[80dvh] flex flex-col shadow-2xl border border-divider overflow-hidden animate-modalScaleUp relative"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="px-5 py-4 border-b border-divider bg-surface-2 dark:bg-surface-2 flex items-start justify-between shrink-0">
-                <div className="flex items-center space-x-2.5">
-                  <div className="h-10 w-10 rounded-2xl bg-purple-100 dark:bg-fill-1 text-purple-700 dark:text-ink-2 flex items-center justify-center border border-purple-200 dark:border-divider shadow-xs">
-                    <UserCheck size={20} />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-base text-ink">
-                      {reassignTask.assignedStaff ? 'Ganti Terapis Jadwal' : 'Delegasikan Jadwal'}
-                    </h3>
-                    <p className="text-xs text-ink-2 truncate max-w-[220px]">
-                      {reassignTask.customerName || 'Pasien'}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setReassignTask(null)}
-                  className="p-1.5 rounded-full text-ink-3 hover:text-ink dark:hover:text-ink hover:bg-fill-1 transition cursor-pointer"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              <form onSubmit={handleSaveReassign} className="flex-1 overflow-y-auto p-5 space-y-4 text-left overscroll-contain">
-                <div className="p-3.5 bg-surface-2 dark:bg-surface-2 rounded-2xl border border-divider space-y-1.5 text-xs">
-                  <p className="text-ink-2">
-                    Jam Kunjungan: <span className="font-bold text-ink">{formatTime(reassignTask.bookingDate)}</span>
-                  </p>
-                  <p className="text-ink-2">
-                    Treatment: <span className="font-bold text-ink">{reassignTask.treatmentDetail}</span>
-                  </p>
-                  <p className="text-ink-2">
-                    Terapis Saat Ini: <span className="font-bold text-purple-700 dark:text-ink-2">{reassignTask.assignedStaff?.name || 'Belum Ditugaskan'}</span>
-                  </p>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-ink">Pilih Terapis Pengganti:</label>
-                  <select
-                    value={reassignStaffId}
-                    onChange={(e) => setReassignStaffId(e.target.value)}
-                    className="w-full bg-surface border border-divider rounded-xl p-3 text-xs text-ink font-semibold focus:outline-none focus:border-accent shadow-xs"
-                  >
-                    <option value="">-- Pilih Staf Terapis --</option>
-                    {teamMembers.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name} ({m.role || 'Staff'})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="flex items-center justify-end space-x-2 pt-3 border-t border-divider">
-                  <button
-                    type="button"
-                    onClick={() => setReassignTask(null)}
-                    className="px-4 py-2.5 rounded-xl border border-divider text-xs font-semibold text-ink-2 hover:bg-fill-1 transition cursor-pointer"
-                  >
-                    Batal
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={submittingReassign || !reassignStaffId}
-                    className="px-5 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50 cursor-pointer"
-                  >
-                    {submittingReassign ? <span>Menyimpan...</span> : <span>{reassignTask.assignedStaff ? 'Simpan Ganti Terapis' : 'Simpan Delegasi'}</span>}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>,
-          document.body
-        )}
+      {reassignTask && (
+        <ReassignStaffModal
+          task={reassignTask}
+          staffId={reassignStaffId}
+          teamMembers={teamMembers}
+          submitting={submittingReassign}
+          onClose={() => setReassignTask(null)}
+          onStaffChange={setReassignStaffId}
+          onSubmit={handleSaveReassign}
+        />
+      )}
 
       {/* ========================================================================= */}
       {/* MODAL PENCATATAN PEMBAYARAN */}
       {/* ========================================================================= */}
-      {paymentTask &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn h-[100dvh] w-[100dvw]"
-            onClick={() => setPaymentTask(null)}
-          >
-            <div
-              className="bg-surface dark:text-ink rounded-2xl sm:rounded-3xl w-full max-w-md max-h-[85dvh] sm:max-h-[80dvh] flex flex-col shadow-2xl border border-divider overflow-hidden animate-modalScaleUp relative"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="px-5 py-4 border-b border-divider bg-surface-2 dark:bg-surface-2 flex items-start justify-between shrink-0">
-                <div className="flex items-center space-x-2.5">
-                  <div className="h-10 w-10 rounded-2xl bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-warning flex items-center justify-center border border-amber-200 dark:border-amber-800/40 shadow-xs">
-                    <CreditCard size={20} />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-base text-ink">Catat Pembayaran Lunas</h3>
-                    <p className="text-xs text-ink-2 truncate max-w-[220px]">
-                      {paymentTask.customerName || 'Pasien'}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setPaymentTask(null)}
-                  className="p-1.5 rounded-full text-ink-3 hover:text-ink dark:hover:text-ink hover:bg-fill-1 transition cursor-pointer"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              <form onSubmit={handleSavePayment} className="flex-1 overflow-y-auto p-5 space-y-4 text-left overscroll-contain">
-                <div className="p-3.5 bg-amber-50/50 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-800/40 text-xs space-y-1">
-                  <div className="flex justify-between text-ink-2">
-                    <span>Biaya Layanan:</span>
-                    <span>{formatRupiah(paymentTask.pricing.treatmentFee)}</span>
-                  </div>
-                  <div className="flex justify-between text-ink-2">
-                    <span>Ongkos Kirim:</span>
-                    <span>{formatRupiah(paymentTask.pricing.deliveryFee)}</span>
-                  </div>
-                  <div className="flex justify-between font-bold text-ink pt-1 border-t border-amber-200 dark:border-amber-800/40">
-                    <span>Total Tagihan:</span>
-                    <span className="text-accent text-sm">{formatRupiah(paymentTask.pricing.totalFee)}</span>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-ink">Metode Pembayaran:</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(['CASH', 'TRANSFER', 'QRIS'] as const).map((m) => (
-                      <button
-                        key={m}
-                        type="button"
-                        onClick={() => setPaymentMethod(m)}
-                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition cursor-pointer ${
-                          paymentMethod === m
-                            ? 'bg-accent text-accent-ink border-accent shadow-xs'
-                            : 'bg-surface text-ink-2 border-divider hover:bg-fill-1'
-                        }`}
-                      >
-                        {m === 'CASH' ? '💵 Tunai' : m === 'TRANSFER' ? '🏦 Transfer' : '📱 QRIS'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {paymentMethod !== 'CASH' && (
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-ink">Upload Bukti Transfer:</label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onloadend = () => setProofImageB64(reader.result as string);
-                          reader.readAsDataURL(file);
-                        }
-                      }}
-                      className="w-full text-xs text-ink-2 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-accent-soft file:text-accent hover:file:bg-accent-soft/80 cursor-pointer"
-                    />
-                    {proofImageB64 && (
-                      <div className="relative mt-2 rounded-xl overflow-hidden border">
-                        <img src={proofImageB64} alt="Bukti" className="h-28 w-auto object-contain" />
-                        <button
-                          type="button"
-                          onClick={() => setZoomImageUrl(proofImageB64)}
-                          className="absolute bottom-1 right-1 p-1 bg-black/60 text-white rounded-md text-[10px] flex items-center gap-1 cursor-pointer"
-                        >
-                          <Maximize2 size={10} />
-                          <span>Zoom</span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <div className="flex items-center justify-end space-x-2 pt-3 border-t border-divider">
-                  <button
-                    type="button"
-                    onClick={() => setPaymentTask(null)}
-                    className="px-4 py-2.5 rounded-xl border border-divider text-xs font-semibold text-ink-2 hover:bg-fill-1 transition cursor-pointer"
-                  >
-                    Batal
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={submittingPayment}
-                    className="px-5 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50 cursor-pointer"
-                  >
-                    {submittingPayment ? <span>Menyimpan...</span> : <span>Simpan Status Lunas</span>}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>,
-          document.body
-        )}
+      {paymentTask && (
+        <TodayPaymentModal
+          task={paymentTask}
+          method={paymentMethod}
+          proofImageB64={proofImageB64}
+          submitting={submittingPayment}
+          onClose={() => setPaymentTask(null)}
+          onMethodChange={setPaymentMethod}
+          onProofChange={setProofImageB64}
+          onSave={handleSavePayment}
+          onShowImage={setZoomImageUrl}
+        />
+      )}
 
       {/* ========================================================================= */}
       {/* MODAL UPDATE LOKASI & FOTO RUMAH */}
       {/* ========================================================================= */}
-      {locationTask &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn h-[100dvh] w-[100dvw]"
-            onClick={() => setLocationTask(null)}
-          >
-            <div
-              className="bg-surface dark:text-ink rounded-2xl sm:rounded-3xl w-full max-w-md max-h-[85dvh] sm:max-h-[80dvh] flex flex-col shadow-2xl border border-divider overflow-hidden animate-modalScaleUp relative"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="px-5 py-4 border-b border-divider bg-surface-2 dark:bg-surface-2 flex items-start justify-between shrink-0">
-                <div className="flex items-center space-x-2.5">
-                  <div className="h-10 w-10 rounded-2xl bg-accent-soft text-accent flex items-center justify-center border border-divider dark:border-accent/30 shadow-xs">
-                    <MapPin size={20} />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-base text-ink">
-                      {locModalMode === 'view' ? 'Panduan Lokasi Tersimpan' : 'Update Lokasi & Foto Rumah'}
-                    </h3>
-                    <p className="text-xs text-ink-2 truncate max-w-[220px]">
-                      {locationTask.customerName || 'Pasien'}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setLocationTask(null)}
-                  className="p-1.5 rounded-full text-ink-3 hover:text-ink dark:hover:text-ink hover:bg-fill-1 transition cursor-pointer"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              {locModalMode === 'view' ? (
-                <div className="flex-1 overflow-y-auto p-5 space-y-4 text-left overscroll-contain">
-                  {/* Foto Rumah Tersimpan */}
-                  {locationTask.address.housePhotoUrl ? (
-                    <div className="relative rounded-2xl overflow-hidden border border-divider bg-black/5 flex items-center justify-center max-h-56 group">
-                      <img
-                        src={locationTask.address.housePhotoUrl}
-                        alt="Foto Rumah"
-                        className="object-contain max-h-56 w-auto rounded-xl"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setZoomImageUrl(locationTask.address.housePhotoUrl!)}
-                        className="absolute bottom-2.5 right-2.5 px-3 py-1.5 rounded-xl bg-black/70 text-white text-xs font-semibold hover:bg-black/90 transition shadow-md flex items-center gap-1.5 cursor-pointer backdrop-blur-xs"
-                      >
-                        <Maximize2 size={13} />
-                        <span>Lihat Penuh</span>
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="p-5 rounded-2xl border-2 border-dashed border-divider bg-surface-2 text-center text-xs text-ink-3 space-y-1">
-                      <ImageIcon size={24} className="mx-auto text-ink-3" />
-                      <p>Belum ada foto tampak depan rumah</p>
-                    </div>
-                  )}
-
-                  {/* Info Titik GPS */}
-                  {locationTask.address.lat && locationTask.address.lng ? (
-                    <div className="p-3.5 bg-bubble-out/70 border border-accent/40 rounded-2xl space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-1.5 text-xs font-bold text-accent dark:text-ink">
-                          <CheckCircle2 size={15} className="text-accent" />
-                          <span>Titik GPS Terkunci</span>
-                        </div>
-                        <a
-                          href={getGoogleMapsDirectionUrl(locationTask.address.lat, locationTask.address.lng, locationTask.address.fullText || locationTask.address.kelurahan || null)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-2.5 py-1 rounded-lg bg-accent text-accent-ink text-[11px] font-bold hover:bg-accent transition inline-flex items-center gap-1 shadow-2xs"
-                        >
-                          <span>Buka Maps</span>
-                          <ExternalLink size={11} />
-                        </a>
-                      </div>
-                      <p className="text-xs font-mono text-ink bg-white/80 dark:bg-black/30 px-2.5 py-1.5 rounded-xl border border-accent/20">
-                        📍 {locationTask.address.lat.toFixed(6)}, {locationTask.address.lng.toFixed(6)}
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-xl text-xs text-amber-800 dark:text-amber-200 flex items-center gap-2">
-                      <AlertTriangle size={15} className="shrink-0 text-warning" />
-                      <span>Belum ada titik GPS presisi untuk pasien ini.</span>
-                    </div>
-                  )}
-
-                  {/* Info Patokan */}
-                  {locationTask.address.landmark && (
-                    <div className="p-3.5 bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800/40 rounded-2xl space-y-1">
-                      <span className="text-[10px] font-bold text-sky-800 dark:text-info uppercase tracking-wider block">
-                        🏷️ Patokan / Ciri Rumah:
-                      </span>
-                      <p className="text-xs font-medium text-ink">
-                        {locationTask.address.landmark}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Info Alamat Tercatat */}
-                  <div className="p-3 rounded-xl bg-surface-2 dark:bg-surface-2 border border-divider text-xs text-ink-2 space-y-1">
-                    <span className="text-[10px] font-bold text-ink-3 uppercase tracking-wider block">
-                      Alamat Tercatat:
-                    </span>
-                    <p className="text-xs text-ink font-medium leading-snug">
-                      {locationTask.address.fullText || `${locationTask.address.kelurahan || ''}, ${locationTask.address.kecamatan || ''}`}
-                    </p>
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="flex items-center justify-end space-x-2 pt-3 border-t border-divider">
-                    <button
-                      type="button"
-                      onClick={() => setLocationTask(null)}
-                      className="px-4 py-2.5 rounded-xl border border-divider text-xs font-semibold text-ink-2 hover:bg-fill-1 transition cursor-pointer"
-                    >
-                      Tutup
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setLocModalMode('edit')}
-                      className="px-5 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink text-xs font-bold transition flex items-center space-x-1.5 shadow-xs cursor-pointer active:scale-95"
-                    >
-                      <Pencil size={13} />
-                      <span>Edit / Perbarui Data</span>
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <form onSubmit={handleSaveLocation} className="flex-1 overflow-y-auto p-5 space-y-4 text-left overscroll-contain">
-                  {hasSavedLocData && (
-                    <button
-                      type="button"
-                      onClick={() => setLocModalMode('view')}
-                      className="text-xs font-bold text-accent hover:underline flex items-center gap-1 cursor-pointer mb-1"
-                    >
-                      <ArrowLeft size={13} />
-                      <span>Kembali ke Panduan Tersimpan</span>
-                    </button>
-                  )}
-
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-ink">Patokan Rumah (Landmark):</label>
-                    <input
-                      type="text"
-                      value={locLandmark}
-                      onChange={(e) => setLocLandmark(e.target.value)}
-                      placeholder="Contoh: Pagar hitam, depan pos satpam blok C..."
-                      className="w-full bg-surface border border-divider rounded-xl p-3 text-xs text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent shadow-xs"
-                    />
-                  </div>
-
-                  {/* Smart GPS & Maps Link Section */}
-                  <div className="space-y-3 bg-surface-2 dark:bg-surface-2 -mx-5 p-5 rounded-2xl border border-divider">
-                    <div className="flex items-center justify-between">
-                      <label className="block text-xs font-bold text-ink flex items-center space-x-1.5">
-                        <Crosshair size={13} className="text-accent" />
-                        <span>Kunci Titik GPS Pasien:</span>
-                      </label>
-                      {locCoords && (
-                        <a
-                          href={getGoogleMapsDirectionUrl(locCoords.lat, locCoords.lng, locLandmark || locationTask?.address?.fullText || null)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[11px] font-bold text-accent hover:underline inline-flex items-center gap-1"
-                        >
-                          <span>Lihat Maps</span>
-                          <ExternalLink size={11} />
-                        </a>
-                      )}
-                    </div>
-
-                    {/* Assistant 1: Tempel Link Maps */}
-                    <div className="space-y-1">
-                      <label className="block text-[10px] font-semibold text-ink-2 flex items-center gap-1">
-                        <Link2 size={11} className="text-accent" />
-                        <span>Tempel Link Shareloc / Google Maps Pasien:</span>
-                      </label>
-                      <div className="flex space-x-1.5">
-                        <input
-                          type="text"
-                          value={locMapsUrlInput}
-                          onChange={(e) => handlePasteLocMapsUrl(e.target.value)}
-                          placeholder="Paste link Google Maps / shareloc di sini..."
-                          className="flex-1 px-3 py-2 bg-surface border border-divider rounded-xl text-xs text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent shadow-2xs"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handlePasteLocMapsUrl(locMapsUrlInput)}
-                          disabled={locMapsResolving || !locMapsUrlInput.trim()}
-                          className="px-3 py-2 bg-surface hover:bg-accent-soft dark:hover:bg-fill-2 border border-divider text-accent rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-2xs disabled:opacity-50 cursor-pointer"
-                          title="Cari koordinat dari tautan"
-                        >
-                          {locMapsResolving ? <Loader size={12} className="animate-spin" /> : <Search size={12} />}
-                          <span>Cek</span>
-                        </button>
-                      </div>
-                      {locMapsResolving && (
-                        <p className="text-[11px] text-accent flex items-center gap-1.5 animate-pulse mt-1">
-                          <Loader size={12} className="animate-spin" />
-                          <span>Sedang mengurai tautan Google Maps...</span>
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Assistant 2: Tombol Cepat GPS & Geocode */}
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleGetGps()}
-                        disabled={locGettingGps}
-                        className="py-2.5 px-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-950/50 text-accent border border-emerald-300 dark:border-emerald-800/40 text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer shadow-2xs active:scale-[0.98]"
-                      >
-                        <Crosshair size={13} className={locGettingGps ? 'animate-spin' : ''} />
-                        <span>{locGettingGps ? 'Mengunci...' : '📍 Kunci GPS Saya'}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handleGeocodeLocAddress}
-                        disabled={locGeocoding}
-                        className="py-2.5 px-3 rounded-xl bg-sky-50 dark:bg-sky-950/30 hover:bg-sky-100 dark:hover:bg-sky-950/50 text-sky-800 dark:text-info border border-sky-300 dark:border-sky-800/40 text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer shadow-2xs active:scale-[0.98]"
-                      >
-                        <Search size={13} className={locGeocoding ? 'animate-spin' : ''} />
-                        <span>{locGeocoding ? 'Mencari...' : '🔍 Cari dari Alamat'}</span>
-                      </button>
-                    </div>
-
-                    {/* Coordinate Status Badge */}
-                    {locCoords ? (
-                      <div className="p-2.5 bg-bubble-out/70 border border-accent/40 rounded-xl flex items-center justify-between text-xs text-accent">
-                        <div className="flex items-center space-x-1.5 font-mono font-bold">
-                          <CheckCircle2 size={14} className="text-accent shrink-0" />
-                          <span>Titik: {locCoords.lat.toFixed(6)}, {locCoords.lng.toFixed(6)}</span>
-                          {locCoords.accuracy && <span className="text-[10px] text-ink-2">(±{locCoords.accuracy}m)</span>}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setLocCoords(null)}
-                          className="text-[10px] text-rose-600 dark:text-danger hover:underline font-semibold"
-                        >
-                          Hapus
-                        </button>
-                      </div>
-                    ) : (
-                      <p className="text-[11px] text-ink-3 italic">
-                        Belum ada titik koordinat. Gunakan tombol di atas atau tempel link Maps.
-                      </p>
-                    )}
-
-                    {locGpsError && (
-                      <p className="text-[11px] text-rose-600 dark:text-danger bg-rose-50 dark:bg-rose-950/30 p-2 rounded-lg border border-rose-200 dark:border-rose-800/40">
-                        {locGpsError}
-                      </p>
-                    )}
-
-                    {/* Collapsible Manual Coordinates */}
-                    <div>
-                      <button
-                        type="button"
-                        onClick={() => setLocShowManualCoords(!locShowManualCoords)}
-                        className="text-[11px] text-ink-2 hover:text-ink dark:hover:text-ink font-semibold flex items-center gap-1 transition"
-                      >
-                        <span>{locShowManualCoords ? 'Sembunyikan Input Manual' : 'Input Koordinat Manual (Angka)'}</span>
-                        {locShowManualCoords ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                      </button>
-
-                      {locShowManualCoords && (
-                        <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-divider">
-                          <div className="space-y-1">
-                            <label className="block text-[10px] text-ink-3">Latitude</label>
-                            <input
-                              type="text"
-                              value={locCoords?.lat ?? ''}
-                              onChange={(e) => {
-                                const val = e.target.value ? parseFloat(e.target.value) : 0;
-                                setLocCoords((prev) => ({ lat: val, lng: prev?.lng || 0 }));
-                              }}
-                              placeholder="-7.3488"
-                              className="w-full px-3 py-2 bg-surface border border-divider rounded-xl text-xs text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent transition"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="block text-[10px] text-ink-3">Longitude</label>
-                            <input
-                              type="text"
-                              value={locCoords?.lng ?? ''}
-                              onChange={(e) => {
-                                const val = e.target.value ? parseFloat(e.target.value) : 0;
-                                setLocCoords((prev) => ({ lat: prev?.lat || 0, lng: val }));
-                              }}
-                              placeholder="112.7516"
-                              className="w-full px-3 py-2 bg-surface border border-divider rounded-xl text-xs text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent transition"
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Foto Rumah dengan Pilihan Eksplisit Kamera / Galeri */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="block text-xs font-bold text-ink">Foto Tampak Depan Rumah:</label>
-                      {locProcessingPhoto && (
-                        <span className="text-[11px] text-accent font-medium animate-pulse">
-                          Mengompres foto...
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Dual Hidden Inputs: 1 for Direct Camera, 1 for Gallery File */}
-                    <input
-                      type="file"
-                      ref={locHouseCameraInputRef}
-                      accept="image/*"
-                      capture="environment"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) handleProcessHousePhoto(file);
-                      }}
-                      className="hidden"
-                    />
-                    <input
-                      type="file"
-                      ref={locHouseGalleryInputRef}
-                      accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) handleProcessHousePhoto(file);
-                      }}
-                      className="hidden"
-                    />
-
-                    {locHousePhotoB64 ? (
-                      <div className="relative rounded-2xl overflow-hidden border border-divider bg-black/5 flex items-center justify-center max-h-48">
-                        <img src={locHousePhotoB64} alt="Rumah" className="object-contain max-h-48 w-auto rounded-xl" />
-                        <div className="absolute top-2 right-2 flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setZoomImageUrl(locHousePhotoB64)}
-                            className="p-1.5 rounded-full bg-black/60 text-white hover:bg-black/80 transition shadow-md cursor-pointer"
-                            title="Zoom Foto"
-                          >
-                            <Maximize2 size={13} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setLocHousePhotoB64(null)}
-                            className="p-1.5 rounded-full bg-danger text-on-solid hover:bg-danger-hover transition shadow-md cursor-pointer"
-                            title="Hapus Foto"
-                          >
-                            <X size={13} />
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => locHouseCameraInputRef.current?.click()}
-                          disabled={locProcessingPhoto}
-                          className="py-3.5 px-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-950/50 border-2 border-dashed border-emerald-300 dark:border-emerald-800/40 text-accent text-xs font-bold transition flex flex-col items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-[0.98]"
-                        >
-                          <Camera size={20} className="text-accent" />
-                          <span>📸 Ambil Kamera</span>
-                          <span className="text-[10px] text-ink-2 font-normal">Buka kamera HP langsung</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => locHouseGalleryInputRef.current?.click()}
-                          disabled={locProcessingPhoto}
-                          className="py-3.5 px-3 rounded-2xl bg-slate-50 dark:bg-surface-2 hover:bg-slate-100 dark:hover:bg-fill-2 border-2 border-dashed border-slate-300 dark:border-divider text-slate-700 dark:text-ink-2 text-xs font-bold transition flex flex-col items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-[0.98]"
-                        >
-                          <ImageIcon size={20} className="text-ink-2" />
-                          <span>🖼️ Pilih Galeri</span>
-                          <span className="text-[10px] text-ink-3 font-normal">Dari album foto / file</span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-end space-x-2 pt-3 border-t border-divider">
-                    <button
-                      type="button"
-                      onClick={() => (hasSavedLocData ? setLocModalMode('view') : setLocationTask(null))}
-                      className="px-4 py-2.5 rounded-xl border border-divider text-xs font-semibold text-ink-2 hover:bg-fill-1 transition cursor-pointer"
-                    >
-                      Batal
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={locSaving}
-                      className="px-5 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50 cursor-pointer active:scale-95"
-                    >
-                      {locSaving ? <span>Menyimpan...</span> : <span>Simpan Lokasi</span>}
-                    </button>
-                  </div>
-                </form>
-              )}
-            </div>
-          </div>,
-          document.body
-        )}
+      {locationTask && (
+        <TodayLocationModal
+          task={locationTask}
+          mode={locModalMode}
+          hasSavedLocData={hasSavedLocData}
+          coords={locCoords}
+          gettingGps={locGettingGps}
+          gpsError={locGpsError}
+          geocoding={locGeocoding}
+          mapsResolving={locMapsResolving}
+          mapsUrlInput={locMapsUrlInput}
+          showManualCoords={locShowManualCoords}
+          housePhotoB64={locHousePhotoB64}
+          landmark={locLandmark}
+          processingPhoto={locProcessingPhoto}
+          saving={locSaving}
+          onClose={() => setLocationTask(null)}
+          onModeChange={setLocModalMode}
+          onGetGps={handleGetGps}
+          onPasteMapsUrl={handlePasteLocMapsUrl}
+          onGeocodeAddress={handleGeocodeLocAddress}
+          onProcessPhoto={handleProcessHousePhoto}
+          onCoordsChange={setLocCoords}
+          onToggleManual={() => setLocShowManualCoords((v) => !v)}
+          onRemoveHousePhoto={() => setLocHousePhotoB64(null)}
+          onLandmarkChange={setLocLandmark}
+          onShowImage={setZoomImageUrl}
+          onSave={handleSaveLocation}
+        />
+      )}
 
       {/* ========================================================================= */}
       {/* MODAL QUICK LIVE CHAT */}
       {/* ========================================================================= */}
-      {chatModalTask &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn h-[100dvh] w-[100dvw]"
-            onClick={() => setChatModalTask(null)}
-          >
-            <div
-              className="bg-surface dark:text-ink rounded-2xl sm:rounded-3xl w-full max-w-lg max-h-[85dvh] sm:max-h-[80dvh] flex flex-col shadow-2xl border border-divider overflow-hidden animate-modalScaleUp relative"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Header */}
-              <div className="px-5 py-3.5 border-b border-divider bg-surface-2 dark:bg-surface-2 flex items-center justify-between shrink-0">
-                <div className="flex items-center space-x-2.5">
-                  <div className="h-9 w-9 rounded-full bg-accent text-accent-ink flex items-center justify-center font-bold text-xs shadow-xs">
-                    {chatModalTask.customerName?.charAt(0) || 'P'}
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-sm text-ink">{chatModalTask.customerName || 'Pasien'}</h3>
-                    <p className="text-[10px] text-accent font-medium">WhatsApp Pasien</p>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <a
-                    href="/admin/live-chat"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-2.5 py-1 rounded-lg bg-accent-soft text-accent hover:bg-accent-soft text-xs font-bold transition flex items-center gap-1 border border-divider"
-                    title="Buka Halaman Live Chat Lengkap di Tab Baru"
-                  >
-                    <span>Live Chat Penuh ↗</span>
-                  </a>
-                  <button
-                    onClick={() => setChatModalTask(null)}
-                    className="p-1.5 rounded-full text-ink-3 hover:text-ink dark:hover:text-ink hover:bg-fill-2 dark:hover:bg-fill-2 transition cursor-pointer"
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Quick Replies Templates Bar */}
-              <div className="p-2 border-b border-divider bg-fill-1 dark:bg-surface flex items-center gap-1.5 overflow-x-auto shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setReplyText(`Halo Bunda ${chatModalTask.customerName || ''}, saya dari Kala Moms & Baby Spa. Mau konfirmasi jadwal treatment ya Bun 🙏`)}
-                  className="px-2.5 py-1 rounded-lg bg-surface border border-divider text-[11px] font-bold text-ink-2 hover:text-accent hover:border-accent transition shrink-0 cursor-pointer"
-                >
-                  👋 Sapa Pasien
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setReplyText(`Bunda ${chatModalTask.customerName || ''}, saya sudah meluncur OTW ke lokasi Bunda ya 🛵 Estimasi sampai sekitar 15-20 menit.`)}
-                  className="px-2.5 py-1 rounded-lg bg-surface border border-divider text-[11px] font-bold text-ink-2 hover:text-accent hover:border-accent transition shrink-0 cursor-pointer"
-                >
-                  🛵 Meluncur OTW
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setReplyText(`Halo Bunda, saya sudah sampai di depan rumah/lokasi Bunda ya 🏠`)}
-                  className="px-2.5 py-1 rounded-lg bg-surface border border-divider text-[11px] font-bold text-ink-2 hover:text-accent hover:border-accent transition shrink-0 cursor-pointer"
-                >
-                  🏠 Sudah Sampai
-                </button>
-              </div>
-
-              {/* Message History */}
-              <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-2 bg-content/30 dark:bg-app overscroll-contain">
-                {loadingChat ? (
-                  <div className="text-center py-10 text-xs text-ink-2">Memuat riwayat chat...</div>
-                ) : chatMessages.length === 0 ? (
-                  <div className="text-center py-10 text-xs text-ink-3">Belum ada pesan tercatat.</div>
-                ) : (
-                  <>
-                    {chatMessages.map((m: any) => {
-                      const isOut = m.direction === 'OUTBOUND';
-                      return (
-                        <div key={m.id} className={`flex ${isOut ? 'justify-end' : 'justify-start'}`}>
-                          <div
-                            className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-xs shadow-xs ${
-                              isOut ? 'bg-bubble-out text-ink rounded-tr-xs' : 'bg-surface text-ink rounded-tl-xs'
-                            }`}
-                          >
-                            <p className="whitespace-pre-wrap break-words">{m.content}</p>
-                            <span className="block text-[9px] text-ink-3 text-right mt-1 font-mono">
-                              {formatTime(m.created_at)}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                    <div ref={chatMessagesEndRef} className="h-0 w-0 pointer-events-none" />
-                  </>
-                )}
-              </div>
-
-              {/* Selected Image Attachment Preview */}
-              {selectedChatImage && (
-                <div className="p-2 border-t border-divider bg-surface flex items-center justify-between shrink-0">
-                  <div className="flex items-center space-x-2">
-                    <img src={selectedChatImage.preview} alt="Lampiran" className="h-10 w-10 object-cover rounded-lg border" />
-                    <span className="text-xs text-ink-2 font-medium">{selectedChatImage.file.name}</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedChatImage(null)}
-                    className="p-1 text-danger hover:text-danger cursor-pointer"
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
-              )}
-
-              {/* Input Reply */}
-              <form onSubmit={handleSendReply} className="p-3 border-t border-divider bg-surface flex items-center gap-2 shrink-0">
-                <input
-                  type="file"
-                  ref={chatFileInputRef}
-                  accept="image/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      setSelectedChatImage({ file, preview: URL.createObjectURL(file) });
-                    }
-                  }}
-                  className="hidden"
-                />
-                <button
-                  type="button"
-                  onClick={() => chatFileInputRef.current?.click()}
-                  className="p-2 text-ink-2 hover:text-accent hover:bg-fill-1 rounded-xl transition cursor-pointer"
-                  title="Lampirkan Gambar"
-                >
-                  <Camera size={18} />
-                </button>
-
-                <input
-                  type="text"
-                  value={replyText}
-                  onChange={(e) => setReplyText(e.target.value)}
-                  placeholder="Ketik pesan balasan ke pasien..."
-                  className="flex-1 px-3.5 py-2 rounded-xl bg-fill-1 dark:bg-divider border-0 text-xs text-ink placeholder:text-ink-3 focus:outline-none focus:ring-2 focus:ring-accent"
-                />
-                <button
-                  type="submit"
-                  disabled={sendingChat || (!replyText.trim() && !selectedChatImage)}
-                  className="px-4 py-2 bg-accent hover:bg-accent disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-xs cursor-pointer"
-                >
-                  <Send size={13} />
-                  <span>Kirim</span>
-                </button>
-              </form>
-            </div>
-          </div>,
-          document.body
-        )}
+      {chatModalTask && (
+        <TodayQuickChatModal
+          task={chatModalTask}
+          messages={chatMessages}
+          loading={loadingChat}
+          replyText={replyText}
+          selectedImage={selectedChatImage}
+          sending={sendingChat}
+          chatContainerRef={chatContainerRef}
+          chatMessagesEndRef={chatMessagesEndRef}
+          chatFileInputRef={chatFileInputRef}
+          onClose={() => setChatModalTask(null)}
+          onReplyChange={setReplyText}
+          onImageChange={setSelectedChatImage}
+          onSend={handleSendReply}
+        />
+      )}
     </div>
   );
 };

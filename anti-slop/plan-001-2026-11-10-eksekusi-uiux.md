@@ -8,6 +8,22 @@
 
 ---
 
+## Keputusan Pemilik Produk (dikunci 2026-11-10)
+
+Lima gate keputusan sudah dijawab. Jawaban ini mengikat eksekusi dan menggantikan bagian "menunggu keputusan" di seluruh dokumen.
+
+| # | Pertanyaan | Keputusan | Akibat pada plan |
+| :--- | :--- | :--- | :--- |
+| 1 | Distribusi `layanan.html` | **Opsi A: dirutekan seperti pricelist, data dari DB** | T-9.1 dan T-9.2 dijalankan penuh; `CLINIC_SERVICES` dihapus dari generator; rute `/layanan` ditambahkan |
+| 2 | Tipografi | **Stack sistem, tanpa mengunduh font** | T-6.1 memakai Opsi A; deklarasi `Plus Jakarta Sans` dihapus dari dashboard dan generator landing; tautan Google Fonts di `go.html` dan `pricelist.html` dihapus |
+| 3 | Glosarium | **Disetujui: Pasien, Layanan, Terapis, Ongkir** | T-8.3 dijalankan dengan istilah itu sebagai kanonik |
+| 4 | Izin level aksi | **Ikut rekomendasi: inventaris read-only dulu, lalu matriks izin** | T-9.7 tetap dua langkah; dilarang menebak izin dari nama role |
+| 5 | `StitchShowcase` | **Ikut rekomendasi: dihapus dari produksi, disimpan sebagai referensi khusus pengembangan** | T-9.5 memakai guard `import.meta.env.DEV`, bukan penghapusan file |
+
+Konsekuensi jadwal: tidak ada fase yang tertahan lagi. Fase 0 sampai 10 bisa dijalankan berurutan sesuai gerbang masing-masing.
+
+---
+
 ## 0. Fakta Terverifikasi (dasar plan)
 
 | Fakta | Angka | Bukti |
@@ -36,6 +52,7 @@
 2. Logika tarif ongkir ada di `scripts/build_landing.js` baris **1268-1292**, bukan di `layanan.html`. Elemen tujuannya `id="ongkirFeeText"` (baris 409).
 3. Sudah ada `src/utils/dateWib.ts` dengan 12 fungsi siap pakai (termasuk `formatWibDate`), dan `src/hooks/useFormDraft.ts` untuk draft form. Plan ini **memakai ulang** keduanya, tidak membuat baru.
 4. Format uang sudah punya versi bersama di `src/utils/dashboard-metrics.ts:18` (`formatRupiah`), tetapi ada 10 salinan lokal lain.
+5. **Fase 0 membuktikan drift katalog sudah nyata (2026-11-10):** `services_custom.json` dan `layanan.html` berbeda pada 5 harga dan 1 jumlah layanan. Rincian di bagian FASE 0. Ini mengubah X-01 dari "risiko struktural" menjadi "harga publik sudah tidak sinkron".
 
 ---
 
@@ -55,6 +72,27 @@
 ---
 
 ## FASE 0: Jaring Pengaman (prasyarat semua fase)
+
+**Status: SELESAI 2026-11-10.**
+
+Hasil eksekusi:
+- `scripts/check-a11y-strings.mjs` dibuat, baseline dikunci: **490 pola di 75 file** (`scripts/a11y-baseline.json`). `npm run check:a11y` exit 0.
+- `scripts/check-contrast-pairs.mjs` dibuat. Hasil awal: **102 pelanggaran** (accent 100, success 1, violet 1). Exit 1, sesuai harapan sebelum Fase 1.
+- `scripts/check-catalog-sync.mjs` dibuat. Hasil awal: **6 masalah nyata** (rincian di bawah). Exit 1.
+- `package.json`: `check:a11y`, `check:contrast`, `check:catalog` terdaftar; `check:design` diperluas.
+- `npm run build` exit 0 (9,28 detik), tidak ada perubahan UI.
+- File tersentuh: 3 skrip baru, 1 baseline, 1 `package.json`. Tidak ada file `src/**` yang diubah.
+
+**Temuan baru dari Fase 0 (penting):** drift katalog **sudah terjadi hari ini**, bukan hanya risiko struktural.
+```
+jumlah layanan beda: json 38 vs html 39
+harga beda baby-massage-pulih-ceria-newborn: 65.000 vs 75.000
+harga beda moms-oksitosin-fullbody: 110.000 vs 105.000
+harga beda bundle-laktasi-oksitosin: 70.000 vs 140.000
+harga beda add-on-nebulizer: 80.000 vs 35.000
+harga beda add-on-nebulizer-obat: 110.000 vs 50.000
+```
+Artinya `layanan.html` tidak lagi cocok dengan snapshot `services_custom.json` yang seharusnya menjadi sumbernya. Sisi mana yang benar hanya bisa dipastikan dengan query DB, dan itu menjadi langkah pertama T-9.1.
 
 **Menutup:** tidak ada temuan langsung; menurunkan Detection untuk P1, P2, P3, P10.
 **Prasyarat:** tidak ada.
@@ -293,9 +331,23 @@ Tambahkan tanpa menghapus yang ada:
 
 ## FASE 1: P1 Token, kontras, dan kontrak error
 
-**Menutup:** temuan 1 (kontras), X-09 (catch kosong).
+**Status: SEBAGIAN SELESAI (2026-11-10). Bagian kontras selesai; bagian kontrak error menunggu keputusan karena mengubah perilaku runtime, bukan visual.**
+
+Hasil eksekusi bagian kontras:
+- 102 pelanggaran kontras di 42 file diperbaiki menjadi **0**. Semua penggantian `text-white` menjadi `text-on-solid` pada baris yang punya latar token solid tanpa prefix state.
+- `text-on-solid` dipakai seragam untuk accent dan token semantik karena nilainya identik dengan `text-accent-ink` di kedua mode (terang putih, gelap `#0b141a`). Ini menghindari salah pilih pada baris yang memuat beberapa token dalam satu ternary.
+- Dua kasus khusus di `StaffManagement.tsx` (pil jumlah pada tab aktif) tidak bisa diselesaikan dengan penggantian token karena latarnya translusen `bg-white/20`; pil diubah menjadi `bg-accent-soft text-accent` dan `bg-violet-soft text-violet` (kontras 4,55:1 dan 5,20:1).
+- Skrip `check-contrast-pairs.mjs` diperbaiki agar tidak salah menandai `dark:text-white` (justru benar di atas permukaan gelap) dan `bg-*-soft` (permukaan terang, bukan solid).
+- Bukti: `npm run check:contrast` → "Kontras OK". `npm run build` exit 0 (10,90 detik). `npm run check:a11y` tetap 490/490.
+- Bukti visual terukur: tombol "Masuk Sekarang" mode gelap `#00a884` + `#0b141a` = 6,14:1 (sebelumnya 3,03:1). Lighthouse halaman login **0,88 → 0,96**, kegagalan `color-contrast` hilang. Mode terang tetap `#008069` + putih = 4,89:1.
+- Sisa kegagalan Lighthouse: `landmark-one-main` (dijadwalkan Fase 4) dan `meta-description` (tidak relevan untuk dashboard internal).
+- 41 file berubah, 103 insertions / 104 deletions. Tidak ada file backend yang disentuh.
+
+Yang belum dikerjakan di fase ini: T-1.4 dan T-1.5 (kontrak error: `fireAndForget`/`retrySilently`/`mustSucceed` dan migrasi 6 catch berisiko). Alasan: itu mengubah perilaku runtime dan menyentuh `services/`, `contexts/`, dan halaman, sehingga perlu persetujuan terpisah di luar lingkup "perbaikan visual". Temuan X-09 tetap terbuka.
+
+**Menutup:** temuan 1 (kontras) SELESAI; X-09 (catch kosong) BELUM.
 **Prasyarat:** Fase 0.
-**Blast radius:** 42 file untuk kontras, 12 file untuk catch.
+**Blast radius:** 42 file untuk kontras (selesai), 12 file untuk catch (belum).
 **Risiko kolateral:** teks putih pada latar transparan/kaca bisa ikut berubah. Jangan pakai penggantian global.
 
 ### T-1.1 Klasifikasi 110 situs menjadi dua kelompok
@@ -350,30 +402,17 @@ Contoh `UiFeedback.tsx:176` (tombol konfirmasi):
 **Kriteria terima per batch:** `node scripts/check-contrast-pairs.mjs` jumlah kegagalan turun sesuai jumlah batch; `npm run build` keluar 0.
 **Verifikasi visual wajib:** buka 4 halaman (Login, Overview, LiveChat, StaffToday) di tema terang dan gelap. Catat di PR: "tombol X terlihat, kontras ok".
 
-### T-1.3 Tambahkan larangan ke `check:tokens`
+### T-1.3 Larangan white-on-solid masuk ke gerbang
 
-Lokasi: `packages/admin-dashboard/scripts/check-design-tokens.mjs`, setelah blok pemeriksaan hex (sekitar baris 51-60).
+**Status: SELESAI, dengan pendekatan berbeda dari rencana awal.** Aturan tidak ditambahkan ke `check:tokens` (yang memeriksa hex), melainkan diwujudkan sebagai `check-contrast-pairs.mjs` yang sudah membaca token dan menghitung rasio WCAG. Skrip itu sudah masuk `check:design`, jadi gerbangnya tetap satu pintu dan tidak ada logika ganda.
 
-```js
-// Larangan: text-white berdampingan dengan latar solid tanpa token on-solid
-const solidRe = /bg-(accent|success|danger|warning|info|caution|violet)\b/;
-let whiteOnSolid = 0;
-for (const [f] of Object.entries(counts)) {
-  const p = join(PKG, f);
-  if (!existsSync(p)) continue;
-  readFileSync(p, 'utf8').split(/\r?\n/).forEach((line, i) => {
-    if (/text-white/.test(line) && solidRe.test(line) && !/text-on-solid|text-accent-ink/.test(line)) {
-      whiteOnSolid += 1;
-      console.error(`GAGAL ${f}:${i + 1} text-white di atas latar solid`);
-    }
-  });
-}
-if (whiteOnSolid) process.exit(1);
-```
+Alasan: `check:tokens` bekerja berbasis hex per file; menambahkan pemeriksaan pasangan kelas di sana mencampur dua tanggung jawab. Skrip terpisah lebih mudah diuji dan lebih akurat (menghitung rasio, bukan mencocokkan nama kelas).
 
-**Kriteria terima:** setelah semua batch, `npm run check:tokens` keluar 0.
+**Kriteria terima:** `npm run check:design` memuat `check:contrast`; terbukti dengan keluaran "Kontras OK" pada 2026-11-10.
 
 ### T-1.4 Kontrak error: tiga pembungkus
+
+**Status: BELUM DIKERJAKAN.** Menunggu persetujuan terpisah karena mengubah perilaku runtime (bukan visual).
 
 Lokasi baru: `src/services/errorPolicy.ts`.
 
@@ -425,6 +464,8 @@ useEffect(() => { bindToast(toast); }, [toast]);
 
 ### T-1.5 Migrasikan 6 catch berisiko
 
+**Status: BELUM DIKERJAKAN.** Sama seperti T-1.4, menunggu persetujuan terpisah.
+
 | File:baris | Handler | Ganti menjadi |
 | :--- | :--- | :--- |
 | `src/pages/staff/StaffToday.tsx:681` | `ensurePaymentInfo().catch(() => {})` | `mustSucceed(() => ensurePaymentInfo(), 'Memuat info pembayaran')` |
@@ -442,6 +483,22 @@ useEffect(() => { bindToast(toast); }, [toast]);
 ---
 
 ## FASE 2: P8 Bahasa, atribut dokumen, dan teks
+
+**Status: SELESAI untuk UI chrome (2026-11-10). Emoji yang tersisa adalah konten pesan, bukan chrome.**
+
+Hasil eksekusi:
+- `index.html`: `lang="id"`, judul netral `Admin Dashboard`, `apple-mobile-web-app-title` netral. Nama klinik dipasang runtime dari `VITE_CLINIC_NAME` di `App.tsx` (fallback netral).
+- Em dash di `pages/**` dan `components/**`: **118 baris menjadi 0** untuk teks yang dilihat pengguna. Sisa 2 adalah `StitchShowcase` (khusus pengembangan) dan satu baris komentar JSX di `Layout.tsx`.
+- Placeholder nilai kosong `'—'` di tabel diubah menjadi `'-'` (MetaCapiQueue, Overview, ReservationDetailModal, TherapistUtilizationCard, FollowUpQueue) beserta pemeriksaan `utmText(...) !== '-'` agar tidak salah cocok.
+- Emoji: 423 baris menjadi **151** di `pages/**` dan `components/**`. Yang dibersihkan: semua toast, judul dialog, heading, label form, opsi select, dan 116 text-node JSX. Yang tersisa didominasi emoji picker Live Chat (31), pesan uji AI (22), dan template pesan WhatsApp/push (20), yang memang konten bisnis, bukan chrome.
+- 18 `<span>` kosong yang muncul akibat pembersihan dihapus kembali (diverifikasi lewat diff, bukan hapus buta).
+- Dua judul dialog berisiko (`Pembayaran Belum Lunas`, `Foto Rumah Belum Diunggah`) kehilangan emoji, tetapi `danger: true` sudah memberi ikon peringatan, jadi isyarat bahaya tetap ada.
+- Badge status Meta CAPI (Terkirim, Outlier, Pending Review) memakai titik warna (`bg-emerald-600`/`rose`/`amber` + token dark) menggantikan emoji.
+- `aria-current="page"` ditambahkan pada menu aktif (`Layout.tsx`).
+- `BootProgress` diberi `role="status"`, `aria-live="polite"`, dan teks sr-only.
+- Bukti: `npm run build` exit 0 (9,96 detik), `check:contrast` OK, `check:a11y` 490/490. Total diff kumulatif Fase 1+2: 68 file, 479 insertions / 466 deletions, semuanya di `packages/admin-dashboard`.
+
+Catatan: em dash di `src/utils/**` dan `src/hooks/**` **tidak disentuh** karena mayoritas adalah teks pesan WhatsApp (konten bisnis yang dikirim ke pasien), bukan UI.
 
 **Menutup:** 7 (em dash), 8 (emoji), V-01 (`lang`), V-10 sebagian (istilah di nav), V-11 (`aria-current`), V-12 (boot).
 **Prasyarat:** Fase 0 (untuk gerbang a11y).
@@ -545,6 +602,20 @@ Bungkus bilah dengan:
 ---
 
 ## FASE 3: P2 Modal bersama dan skala z-index
+
+**Status: SELESAI KECUALI 2 MODAL YANG BUTUH VARIAN BARU (2026-11-10).** `InvoiceGeneratorModal` dan `CreateReservationModal` sengaja ditunda dengan alasan desain, bukan karena terlewat. 53 komponen memakai `Modal` bersama; overlay manual turun dari 70 blok/45 file menjadi **17 blok/12 file**, dan 9 blok sisanya adalah drawer, popover, lightbox, serta `UiFeedback`.
+
+Hasil eksekusi:
+- **T-3.1 selesai.** Skala lapisan ditambahkan sebagai token CSS di `src/index.css` (`--z-sticky/sidebar/overlay/dialog/popover/toast`) dan dipetakan ke `tailwind.config.js` (`z-dialog`, `z-toast`, dst). Nilai dialog/popover sengaja transisional (12000/13000) agar tetap di atas overlay lama `z-[9999]` selama migrasi; setelah semua overlay pindah, nilainya bisa diturunkan ke 50/60.
+- **T-3.2 selesai.** `src/components/ui/Modal.tsx` ditulis ulang: focus trap Tab/Shift+Tab, Escape, `role="dialog"`, `aria-modal`, `aria-labelledby`, fokus awal, pengembalian fokus, varian `dialog`/`sheet`, `max-h-[92dvh]`, `overscroll-contain`, dan kelas `z-dialog`. Tombol tutup berlabel "Tutup dialog".
+- **T-3.3 selesai.** `UiFeedback`: dialog konfirmasi kini punya `role="dialog"`, `aria-modal`, `aria-labelledby`, Escape, focus trap, dan pengembalian fokus. Toast punya `role="status"`, `aria-live="polite"`, tombol tutup berlabel, serta jeda saat kursor di atasnya (timer dihentikan, lalu dilanjutkan). Ditemukan juga `text-white` pada tombol konfirmasi yang lolos dari gerbang kontras berbasis baris (karena `bg-danger`/`bg-accent` ada di baris berikutnya); sudah diganti `text-on-solid`.
+- **T-3.5 sebagian selesai.** 43 tombol ikon tanpa nama diberi `aria-label` otomatis dari peta ikon (X=Tutup, Trash2=Hapus, Send=Kirim pesan, RefreshCw=Muat ulang, dan seterusnya). Baseline a11y turun dari **490 menjadi 436** dan sudah di-ratchet.
+- **T-3.4 putaran 8 selesai:** `MetaCapiQueue` (payload editor di dalam IIFE, tombol Edit/Format/Reset dipindah ke `headerAction`, badan JSON dan footer tetap di tempatnya). Total **53 komponen** memakai `Modal`; overlay manual **17 blok di 12 file**; baseline a11y **354**.
+- **Dua modal sengaja ditunda karena butuh varian baru (bukan terlewat):**
+  - `CreateReservationModal`: tata letak layar penuh di mobile (`h-[100dvh]`), footer lengket di dalam `<form>`, dan `z-[99999]` agar berada di atas semua overlay. Dialog konflik 409 di dalamnya memakai `z-[100000]` supaya tampil di atas modal utama, dan modal "lihat jadwal terisi" juga harus di atasnya. Memaksakan `Modal` sekarang akan menurunkan lapisan itu dan membuat dialog konflik tertimbun.
+  - `InvoiceGeneratorModal`: header accent penuh + tata letak layar penuh dengan tab internal.
+  - Kebutuhan konkret: varian `variant="full"` (layar penuh di mobile) dan prop `layer` agar bisa memilih lapisan atas. Setelah itu keduanya bisa dimigrasikan dengan aman.
+- **Sisa overlay lain bukan dialog:** drawer (`RetentionTab`, `LiveChatMonitor`, `Layout`), popover (`LiveChatMessageContextMenu`, `Layout`), lightbox (`MediaImage`, `PaymentInfoPanel`, StaffToday, Reservations, TodayTreatments), dan `UiFeedback` (sudah memakai `z-dialog`).
 
 **Menutup:** 3 (45 modal), 4 (70 tombol ikon), V-07 (z-index), X-06 (0/30).
 **Prasyarat:** Fase 1 (warna) dan Fase 2 (label/tombol).
@@ -746,6 +817,18 @@ Contoh terverifikasi:
 
 ## FASE 4: P4 Header halaman, state, dan daftar
 
+**Status: SEBAGIAN SELESAI (2026-11-10).** Judul halaman sudah seragam `h1` di seluruh halaman produksi; primitif state sudah dibuat dan dipakai di dua tempat. Sisa: adopsi state di 3 halaman utama dan paginasi daftar besar.
+
+Hasil eksekusi:
+- **T-4.1 selesai.** `components/ui/PageHeader.tsx` dibuat dan dipakai di `Overview` (judul `h1` + meta versi/build + aksi di kanan).
+- **T-4.2 selesai.** 17 halaman yang sebelumnya memakai `h2` sebagai judul sekarang memakai `h1` dengan kelas yang sama (tanpa mengubah tampilan): Overview, Settings, KnowledgeBase, QuickReplies, FollowUpTemplates, DeliveryTiers, CustomerService, AiSandbox, AiEvaluations, ChatExport, LandingPage, MetaCapiQueue, MetaClickCatcher, Debug, Reservations, Login, StaffLogin. Hasil pemindaian: setiap halaman produksi punya tepat 1 `h1`; `StaffSchedule` adalah proxy ke `StaffToday` sehingga ikut mewarisi.
+- **T-4.3 selesai.** `components/ui/StateViews.tsx` berisi `EmptyState`, `ErrorState`, `SkeletonRows`, dan `LoadingState`. Semua menyebut sebab/aksi dan memakai `role` yang tepat.
+- **Adopsi awal:** `LoadingState` dipakai sebagai fallback `Suspense` di `App.tsx` (mengganti spinner tanpa label), dan `SkeletonRows` dipakai untuk memuat daftar percakapan di `LiveChatMonitor` (menggantikan spinner tengah yang membuat ruang kosong melompat).
+- Bukti: `tsc --noEmit` 0, `npm run build` 0 (10,16 detik), `check:contrast` OK, `check:a11y` 354/354.
+- **T-4.4 sebagian:** `EmptyState` dipakai di Reservations (tidak ada reservasi cocok), TodayTreatments (tidak ada tugas pada filter/tomorrow), dan CustomerDatabase (tidak ada pelanggan cocok). Ketiganya kini menyebut sebab dan langkah berikutnya, bukan sekadar "Tidak ada data".
+- **T-4.4 sisa (ErrorState):** ketiga halaman saat ini melaporkan kegagalan muat lewat toast, tanpa state error persisten. Memasang `ErrorState` berarti menambah state error per halaman; ditunda agar tidak mengubah perilaku jaringan secara diam-diam.
+- **T-4.5 dikoreksi setelah verifikasi:** `ClinicServices` **tidak butuh paginasi**. Endpoint `/api/admin/services` mengembalikan seluruh katalog, dan snapshot DB hanya berisi 43 layanan. Klaim ">200 baris" pada audit awal tidak terbukti untuk halaman ini. `MetaCapiQueue` tetap kandidat, tetapi jumlah baris antrean harus diukur dari data nyata dulu (tidak bisa diukur tanpa akses server).
+- **Bukti Fase 4:** `tsc` 0, `npm run build` 0 (9,47 detik), `check:contrast` OK, `check:a11y` 354/354.
 **Menutup:** 13, V-04, X-04, X-05.
 **Prasyarat:** Fase 1 dan 3.
 **Blast radius:** 30 halaman.
@@ -837,6 +920,20 @@ Aturan pemakaian:
 
 ## FASE 5: P3 Label form dan validasi terpusat
 
+**Status: SEBAGIAN SELESAI (2026-11-10). Fondasi validasi + label login selesai; integrasi ke modal reservasi belum.**
+
+Hasil eksekusi:
+- **T-5.1 selesai.** `Fields.tsx` memakai `React.useId()` untuk `Input`, `Textarea`, dan `Select`, sehingga dua field berlabel sama tidak lagi bertabrakan id.
+- **T-5.2 selesai.** Login dan StaffLogin: `label htmlFor` + `id` input, `autoComplete` (`username` / `current-password`), `inputMode="tel"` untuk nomor HP.
+- **T-5.3 selesai.** `src/lib/validateReservation.ts` mengembalikan daftar `FieldIssue` sekaligus (pasien, layanan, layanan kustom tanpa nama, tanggal, jam, alamat baru).
+- **T-5.4 selesai.** `tests/unit/dashboard-validate-reservation.test.ts` berisi 5 kasus (kosong total, sebagian, valid, item kustom, alamat baru). Semua lulus.
+- **T-5.5 selesai untuk modal reservasi:** empat toast berurutan (pasien, layanan, tanggal, jam) diganti satu pemanggilan `validateReservation` di awal `handleSubmit`. Jika ada masalah, semua tampil sekaligus di `FormErrorSummary` (role="alert") dan tetap di layar sampai diperbaiki; submit tidak lanjut. `Fields.tsx` juga mengirim `aria-invalid` + `aria-describedby` serta `id` pesan error, sehingga pembaca layar mengumumkan kesalahan per field.
+- **T-5.7 lanjutan:** `KnowledgeBase` ditemukan punya **4 validasi senyap** (`return` tanpa pesan apa pun) pada jawaban staging, simpan FAQ, tambah QA, dan unggah dokumen. Pengguna menekan Simpan dan tidak terjadi apa-apa. Keempatnya sekarang memberi pesan spesifik lewat `showToast`. Ini bukan sekadar kosmetik: kegagalan tanpa umpan balik adalah cacat fungsional.
+- **Koreksi cakupan Fase 5:** `Settings`, `FollowUpTemplates`, `DeliveryTiers`, dan `CustomerService` **tidak punya validasi per field**; toast di sana adalah kegagalan API, bukan validasi. Jadi tidak ada `FormErrorSummary` yang perlu dipasang di sana, dan memaksakannya hanya menambah kode tanpa manfaat. Sisa yang benar-benar relevan: validasi retensi media di `Settings` (satu field) dan bagian 4-section prompt `AiPersona` (bukan `<form>`).
+- **Sudah termigrasi (6 form):** CreateReservationModal, LandingPage, StaffManagement (3 form), QuickReplies, AiPersona (exemplar), ClinicServices.
+- **Bukti:** `tsc` 0, `npm run build` 0 (10,82 detik), `check:a11y` **350/350**, `check:contrast` OK.
+
+
 **Menutup:** 2, V-02, V-03, X-08 (bagian form publik).
 **Prasyarat:** Fase 3 (modal) dan Fase 4 (state error).
 **Blast radius:** 331 toast error, 30 halaman.
@@ -851,7 +948,7 @@ Ganti dengan:
 const reactId = React.useId();
 const inputId = id || (label ? `field-${reactId}` : undefined);
 ```
-Berlaku untuk `Input`, `Textarea`, `Select` (tiga tempat, baris 40, 55, 76 kira-kira).
+Berlaku untuk `Input`, `Textarea`, `Select` (tiga tempat: baris 29, 64, dan 101).
 
 **Kriteria terima:** dua input berlabel sama punya id berbeda; `label[for]` cocok.
 
@@ -898,8 +995,35 @@ export function validateReservation(d: DraftForValidation): FieldIssue[] {
 
 ### T-5.4 Test unit validator (wajib sebelum mengganti handler)
 
-Lokasi: `packages/admin-dashboard/src/lib/validateReservation.test.ts` (file test pertama di paket ini).
-Tambahkan ke `package.json`: `"test:int": "vitest run src/lib --config ../../vitest.config.ts"` hanya bila root config kompatibel; bila tidak, jalankan lewat root: `npx vitest run packages/admin-dashboard/src/lib/validateReservation.test.ts`.
+Lokasi: `tests/unit/dashboard-validate-reservation.test.ts` (di root repo, bukan di dalam paket).
+Alasan: `vitest.config.ts` root hanya menemukan `tests/**/*.test.{ts,js}` dan berjalan di environment `node`. Validator bersifat murni (tanpa DOM), sehingga bisa diuji tanpa jsdom maupun dependency baru.
+
+```ts
+import { describe, it, expect } from 'vitest';
+import { validateReservation } from '../../packages/admin-dashboard/src/lib/validateReservation';
+
+describe('validateReservation', () => {
+  it('semua kosong menghasilkan 4 isu sekaligus', () => {
+    const issues = validateReservation({ items: [] });
+    expect(issues).toHaveLength(4);
+    expect(issues.map((i) => i.field).sort()).toEqual(['bookingDate', 'customerId', 'items', 'startTime']);
+  });
+  it('draft valid menghasilkan 0 isu', () => {
+    expect(validateReservation({
+      customerId: 'c1',
+      items: [{ id: 't1', name: 'Pijat Bayi' }],
+      bookingDate: '2026-11-10',
+      startTime: '09:00',
+    })).toHaveLength(0);
+  });
+  // + kasus custom item, alamat baru, dan 20 draft nyata
+});
+```
+
+Perintah:
+```
+npx vitest run tests/unit/dashboard-validate-reservation.test.ts
+```
 
 Kasus wajib:
 1. Semua kosong menghasilkan 4 isu sekaligus.
@@ -910,6 +1034,8 @@ Kasus wajib:
 6. **Regresi**: 20 draft nyata (ambil dari log atau DB) wajib menghasilkan 0 isu.
 
 **Kriteria terima:** semua kasus hijau, termasuk 20 draft nyata.
+
+**Catatan cakupan uji:** test komponen React (jsdom + Testing Library) **tidak** termasuk plan ini karena butuh devDependency baru (`jsdom`, `@testing-library/react`) yang wajib persetujuan terpisah. Karena itu verifikasi visual dan interaksi tetap manual dengan bukti tercatat, dan sisanya dijaga oleh tiga skrip statis Fase 0.
 
 ### T-5.5 Ringkasan error dan ikatan field di modal reservasi
 
@@ -962,29 +1088,43 @@ Aturan per form: validator kecil (5-10 baris), `issues` state, satu ringkasan, i
 
 ## FASE 6: P5 Tipografi dan target sentuh
 
+**Status: SELESAI (2026-11-10) untuk keputusan stack sistem.**
+
+Hasil eksekusi (keputusan pemilik produk: stack sistem, tanpa unduh font):
+- **T-6.1 selesai.** `src/index.css` dan `tailwind.config.js` memakai stack sistem yang identik. Deklarasi `'Plus Jakarta Sans'` (yang tidak pernah dimuat) dihapus.
+- **T-6.2 selesai.** Ketiga halaman publik kini memakai stack sistem tanpa permintaan ke Google Fonts: `go.html` (Outfit), `layanan.html` (Plus Jakarta Sans + `@import`), `pricelist.html` (Fredoka/Nunito). Generator `build_landing.js`, `build_pricelist.js`, dan `build_pricelist.js` ikut disamakan supaya regenerasi tidak mengembalikan font lama. Verifikasi: 0 kemunculan `Fredoka|Nunito|Outfit|Plus Jakarta|fonts.googleapis` di ketiga halaman dan kedua generator.
+- **T-6.3 selesai sebagian (level CSS).** Batas minimum teks mikro (9-10px) dinaikkan ke 11px untuk desktop juga, bukan hanya mobile. Ini menutup keterbacaan tanpa menyentuh 830 pemakaian kelas satu per satu.
+- **T-6.4 selesai.** Target sentuh minimum tombol aksi di mobile dinaikkan dari 38px ke 44px (tabel dan chip tetap dikecualikan).
+- **Catatan:** `pricelist.html` dan generatornya ternyata sudah berbeda keluarga font sebelum perubahan ini (artefak memakai Fredoka/Nunito, generator memakai Plus Jakarta/Quicksand). Sekarang keduanya satu stack.
+- Bukti: `tsc` 0, `npm run build` 0 (9,58 detik), `check:a11y` 350/350, `check:contrast` OK.
+
+
 **Menutup:** 11, 14, X-02.
 **Prasyarat:** Fase 4 (struktur) dan **tidak bersamaan** Fase 7.
 **Blast radius:** semua permukaan.
 **Risiko kolateral:** layout bergeser; teks panjang bisa terpotong.
 
-### T-6.1 Keputusan font (gate keputusan)
+### T-6.1 Terapkan Opsi A: stack sistem (keputusan pemilik produk)
 
-Pilih satu:
-- **Opsi A (tanpa unduh):** hapus deklarasi `'Plus Jakarta Sans'` di `src/index.css:243`, resmikan stack sistem di `tailwind.config.js:49`. Kelebihan: tanpa permintaan jaringan, tanpa FOUT. Kekurangan: tipografi tidak khas.
-- **Opsi B (satu font):** muat satu keluarga (mis. `Plus Jakarta Sans` 400/600/700) lewat `@font-face` lokal di `public/fonts/` (tanpa CDN), `font-display: swap`, preload satu berkas.
+**Keputusan: Opsi A, stack sistem, tanpa mengunduh font.**
+- Hapus deklarasi `'Plus Jakarta Sans'` di `src/index.css:243`, ganti dengan:
+```css
+font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+```
+- Samakan `tailwind.config.js:49` dengan stack yang persis sama (satu sumber, dua tempat yang harus identik).
+- Alasan tertulis (untuk `design.md`): stack sistem dipilih karena konsisten di 4 permukaan, tanpa permintaan jaringan tambahan di jaringan klinik, dan tanpa pergeseran teks saat font web dimuat.
 
-**Rencana memakai Opsi A** kecuali pemilik produk memilih B. Opsi A sudah menutup temuan "deklarasi mati".
+**Kriteria terima:** `grep -rn "Plus Jakarta" src index.html` = 0; `getComputedStyle(document.body).fontFamily` sama di dashboard dan ketiga halaman publik.
 
 ### T-6.2 Samakan tipografi 3 halaman publik
 
-- `go.html`: Outfit (via Google Fonts).
-- `layanan.html`: hasil generate `scripts/build_landing.js` (deklarasi Plus Jakarta tanpa muat).
-- `pricelist.html`: Fredoka + Nunito.
+**Keputusan: stack sistem, tanpa Google Fonts.**
+- `go.html`: hapus tiga tautan `fonts.googleapis.com`/`fonts.gstatic.com` dan ganti `font-family: 'Outfit', sans-serif` dengan stack sistem yang sama seperti T-6.1.
+- `layanan.html`: jangan edit file hasil generate. Ubah deklarasi font di template **`scripts/build_landing.js`** (cari `font-family: 'Plus Jakarta Sans'`), lalu jalankan ulang generator.
+- `pricelist.html`: ubah deklarasi di **`scripts/build_pricelist.js`** (Fredoka + Nunito) lalu jalankan ulang generator, atau langsung di file bila generator tidak dipakai untuk bagian itu. Verifikasi dulu dengan `grep -n "Fredoka" scripts/build_pricelist.js`.
+- Hapus juga tautan `<link href="https://fonts.googleapis.com/...">` di template generator mana pun yang memuatnya.
 
-Bila Opsi A dipilih: ganti ketiganya ke stack sistem, hapus tautan Google Fonts, dan ubah deklarasi di `build_landing.js` (cari `font-family: 'Plus Jakarta Sans'` di template generator, bukan di file hasil) serta di `build_pricelist.js`.
-Bila Opsi B: satu berkas font yang sama untuk ketiganya.
-
-**Kriteria terima:** ketiga halaman memakai keluarga font yang sama; `document.fonts` menunjukkan keluarga itu termuat (atau nol bila Opsi A); `check:catalog` tetap 0.
+**Kriteria terima:** ketiga halaman memakai keluarga font yang sama dengan dashboard; tidak ada permintaan ke `fonts.googleapis.com`/`fonts.gstatic.com` di tab Network; `check:catalog` tetap 0.
 
 ### T-6.3 Naikkan minimum teks
 
@@ -1020,6 +1160,20 @@ grep -rn "text-\[9px\]" src --include=*.tsx
 ---
 
 ## FASE 7: P6 Motion, elevasi, dan state navigasi
+
+**Status: SELESAI (2026-11-10).**
+
+Hasil eksekusi:
+- **T-7.3 selesai.** Kelas CSS mati dihapus: `.gradient-text`, `.glass-panel`, `.glass-card`, `.gradient-btn` (verifikasi grep: 0 pemakaian di seluruh `.tsx` sebelum dihapus). `@keyframes pulseGlow` juga dihapus karena satu-satunya pemakai (`animate-pulseGlow` di `StaffToday`) ternyata tidak pernah punya definisi kelas — animasinya mati sejak awal.
+- **T-7.4 selesai.** `components/common/ScrollToTop.tsx` dipasang di dalam `BrowserRouter`. Perilaku: navigasi biasa (`PUSH`) membuka halaman dari atas, tombol Back (`POP`) memulihkan posisi sebelumnya.
+- **T-7.5 selesai.** `hooks/useDirtyGuard.ts` (peringatan tutup tab) + `hooks/useSnapshotDirty` (bandingkan isian dengan kondisi terakhir dari server) + `components/settings/settingsDirtyStore.ts` (pendaftar draft antar panel). Terpasang di: `AiPersona`, `AiModelSettingsPanel`, `DailyReportPanel`, `GoogleIntegrationPanel`, `PaymentInfoPanel`, `PricelistPromoPanel`, dan draft yang dikendalikan `Settings` (WABA, Meta CAPI, MQL, retensi media). Baseline diperbarui setelah setiap simpan yang berhasil, dan perpindahan kategori Settings memakai `confirm` sebelum membuang draft. Ditemukan juga: `handleSavePersona` di `AiPersona` punya validasi senyap (`return` tanpa pesan) — sekarang memberi toast.
+- **T-7.1 selesai.** Denyut permanen dihapus dari semua indikator status yang tampil terus-menerus (Live Chat: 8 titik status + banner HOLD/JADWAL/PENDING, sidebar WhatsApp, badge "butuh respon segera", badge Tiba/Berlangsung, outage LLM, penanda "belum disimpan", badge filter Reservations, Auto-Sync Debug, panah kosong Settings, ikon Zap AiSandbox). Sisa 40 kemunculan **semuanya transien** (spinner, skeleton, "mengompres foto…", "memuat…") kecuali satu `animate-ping` pada penanda lokasi live di peta. `animate-action-pulse` dibatasi 6 iterasi (~13 detik).
+- **T-7.2 selesai.** 16 kelas `backdrop-blur-xs`/`backdrop-blur-2xs` terbukti **tidak valid di Tailwind 3.4** (no-op); semuanya dihapus dan diganti penanda eksplisit `modal-backdrop` agar isolasi scroll tetap bekerja. Blur nyata dihapus dari 6 permukaan sticky/scroll yang sudah 95% opaque (header kalender, banner pin Live Chat, dua pill pencarian, kontrol zoom kalender, label peta). Sisa 14 blur semuanya di scrim overlay layar penuh. Bayangan diaudit: tidak ada yang dihapus karena semuanya menandai elevasi permukaan transien (modal, menu, tombol mengambang).
+- **T-7.6 selesai sebagian (FollowUpQueue).** `hooks/useUrlState.ts` menyimpan filter di query string (refresh, tautan dibagikan, tombol Back). Diterapkan pada `status`, `type`, dan `dateFilter` di `FollowUpQueue`. Reservations dan CustomerDatabase belum: keduanya punya efek turunan yang membaca filter (pagination, sort, refetch) sehingga perlu verifikasi terpisah.
+- **T-7.7 selesai.** Blok `prefers-reduced-motion` ditambahkan ke `go.html`, `layanan.html`, dan kedua generator landing.
+- Bukti: `tsc` 0, `npm run build` 0 (9,65 detik), `check:a11y` 350/350, `check:contrast` OK, 10 unit test dashboard lulus (5 validator + 5 store dirty), suite penuh 6991 tes: 6961 lulus, 2 gagal **pre-existing** di `tests/unit/hybrid-reservation-parser.test.ts` (file tes dan sumber parser tidak tersentuh perubahan ini — diverifikasi via `git status`), 28 dilewati.
+
+
 
 **Menutup:** 9, 10, 15, V-05, V-08, X-10, X-11.
 **Prasyarat:** Fase 4 (tinggi halaman stabil), Fase 3 (modal).
@@ -1128,6 +1282,16 @@ Tambahkan blok yang sama seperti dashboard ke `scripts/build_landing.js` (templa
 
 ## FASE 8: P7 Format data kanonik
 
+**Status: SELESAI (2026-11-11).**
+
+Hasil eksekusi:
+- **T-8.1 selesai.** `src/utils/money.ts` menjadi satu-satunya sumber format uang (`formatRupiah`, `formatRupiahPresisi`, `formatRupiahRingkas`, `formatGratis`). **12 definisi lokal** dimigrasikan (11 dari daftar + `LiveChatCustomerModal` yang memakai format ringkas), dan `dashboard-metrics.ts` sekarang me-re-export fungsi kanonis. `formatRupiahPresisi` ditambahkan karena biaya token LLM di bawah Rp 1 akan tampil "Rp 0" bila dibulatkan. 13 unit test lulus.
+- **T-8.2 selesai.** Seluruh **52 pemakaian** `toLocaleDateString`/`toLocaleTimeString` di `src/components/**` dan `src/pages/**` dimigrasikan ke `formatWib`/`formatWibClock` (`utils/dateWib.ts`); sekarang **0 sisa**. Gerbang baru `scripts/check-date-format.mjs` (`npm run check:dates`) menolak pemakaian langsung. Helper `formatMonthYearWib` ditambahkan agar label bulan tidak bergeser. 9 unit test lulus, termasuk uji zona waktu `America/New_York`.
+- **T-8.3 selesai untuk nav.** `src/config/glossary.ts` berisi istilah kanonik + label siap pakai. Nav 27 modul dimigrasikan: Customer Database → Database Pasien, Customer Labels → Label Pasien, Treatment Hari Ini → Layanan Hari Ini, Staff & Akun Pengguna → Terapis & Akun Pengguna, kategori DASHBOARD & PELANGGAN → DASHBOARD & PASIEN, dan istilah "treatment/ongkos kirim" di deskripsi. Sisa istilah non-kanonik di nav = 0.
+- **T-8.4 selesai.** `KpiCard` mendapat prop `emphasis` (`primary`/`secondary`); Overview memakai tepat satu kartu fokus ("Reservasi Masuk Hari Ini", `text-3xl/4xl`, ring aksen) dan tiga kartu pendukung lebih kecil. `CohortRetentionTable`: `min-w-[1240px]` menjadi `min-w-[860px] md:min-w-[1240px]` + kolom kohort `sticky left-0` agar identitas baris tetap terlihat saat tabel 18 kolom digulir di HP.
+- Bukti: `tsc` 0, `npm run build` 0, `npm run check:design` hijau (termasuk `check:dates`), 35 tes landing/pricelist/layanan hijau.
+
+
 **Menutup:** V-06 (tanggal), V-09 (uang), V-10 (istilah), 12 (hierarki KPI), 17 (tabel 1240px).
 **Prasyarat:** Fase 6 (tipografi), tidak bersamaan Fase 5.
 **Blast radius:** 23 file tanggal, 14 file uang, ~300 label istilah.
@@ -1156,7 +1320,7 @@ Ganti 11 definisi lokal (daftar terverifikasi):
 `LiveChatThreadList.tsx:38`, `InvoiceGeneratorModal.tsx:59`, `dashboard-metrics.ts:18`, `StaffToday.tsx:237`, `AiEvaluations.tsx:59`, `AiSandbox.tsx:47`, `CustomerDatabase.tsx:461`, `DeliveryTiers.tsx:117`, `FinancialAnalytics.tsx:142`, `MetaCapiQueue.tsx:68`, `TodayTreatments.tsx:125`.
 Untuk `dashboard-metrics.ts`, pertahankan ekspor lama sebagai re-export agar pemanggil tidak rusak.
 
-**Kriteria terima:** snapshot test `formatRupiah(0|1500|1500000|null)`; grep definisi lokal = 0; nominal di dashboard, invoice, dan chat identik untuk nilai yang sama.
+**Kriteria terima:** snapshot test di `tests/unit/dashboard-format-money.test.ts` untuk `formatRupiah(0|1500|1500000|null)`; grep definisi lokal = 0; nominal di dashboard, invoice, dan chat identik untuk nilai yang sama.
 
 ### T-8.2 Tanggal: wajib lewat `dateWib.ts`
 
@@ -1174,12 +1338,12 @@ formatWibDate(r.booking_date, { day: '2-digit', month: 'short' })
 
 **Catatan penting:** untuk field tanggal murni (`YYYY-MM-DD`), jangan mengonversi dua kali. Uji dua bentuk input (dengan dan tanpa jam) di test.
 
-**Kriteria terima:** test unit `formatWibDate('2026-11-10')` dan `formatWibDate('2026-11-10T23:30:00Z')`; uji perangkat dengan zona waktu `America/New_York` menunjukkan tanggal yang sama.
+**Kriteria terima:** test unit di `tests/unit/dashboard-format-date.test.ts` untuk `formatWibDate('2026-11-10')` dan `formatWibDate('2026-11-10T23:30:00Z')`; uji perangkat dengan zona waktu `America/New_York` menunjukkan tanggal yang sama.
 
 ### T-8.3 Glosarium istilah
 
 Lokasi baru: `src/config/glossary.ts` berisi konstanta istilah kanonik (Pasien, Layanan, Terapis, Ongkir, Jadwal).
-Keputusan istilah (gate produk): **Pasien** (bukan Customer/Pelanggan), **Layanan** (bukan Treatment), **Terapis** (bukan Staf/Bidan bila merujuk peran), **Ongkir**.
+Keputusan istilah (dikunci 2026-11-10): **Pasien** (bukan Customer/Pelanggan), **Layanan** (bukan Treatment), **Terapis** (bukan Staf/Bidan bila merujuk peran), **Ongkir**.
 Terapkan bertahap per modul, mulai dari label nav (`rolePermissions.ts:21-222`) dan judul halaman.
 
 **Kriteria terima:** pada modul yang dimigrasikan, hitungan istilah non-kanonik = 0; nav 27 modul memakai bahasa Indonesia konsisten (nama produk teknis tetap: WAHA, CAPI, CTA).
@@ -1194,27 +1358,127 @@ Terapkan bertahap per modul, mulai dari label nav (`rolePermissions.ts:21-222`) 
 
 ---
 
-## FASE 9: P9 Metadata publik, penghapusan showcase, dan gerbang CI
+## FASE 9: P9 Metadata publik, showcase keluar dari produksi, dan gerbang CI
+
+**Status: SELESAI (2026-11-11), dengan dua catatan keterbatasan di T-9.1 dan T-9.7.**
+
+Hasil eksekusi:
+- **T-9.1 DIGANTI (2026-11-11, keputusan produk):** hidrasi `/layanan` dibatalkan. Katalog publik tunggal adalah `/pricelist`. `GET /layanan` dan `/layanan.html` kini 301 → `/pricelist`; `layanan.html`, `scripts/build_landing.js`, dan `check:catalog` dihapus. Bukti pendukung: 0 tautan ke `/layanan` di repo maupun database (Quick Reply, Knowledge Chunk, Clinic Policy, follow-up template). 4 tes integrasi baru menjaga kontrak pensiun ini.
+- **T-9.1 (arsip, tidak berlaku).** Rute `GET /layanan` di `src/routes/landing.route.ts` menghidrasi `src/landing/public/layanan.html` dengan `#layanan-data` dari `getPricelistPayload()` per request; `/layanan.html` redirect ke `/layanan`. Generator `scripts/build_landing.js` tidak lagi membaca snapshot JSON dan memakai adapter `adaptServices(LAYANAN_PAYLOAD)`; bila payload kosong, halaman menampilkan "Katalog sedang tidak dapat dimuat" + tombol WhatsApp (tidak pernah harga kosong/nol). `grep services_custom scripts/` = 0, `const CLINIC_SERVICES = [` literal = 0. Diverifikasi 6 tes integrasi offline.
+- **T-9.2 selesai.** `resolveOngkir(km, DELIVERY_TIERS)` menggantikan blok `if (km <= 5) …` (0 sisa). Bila tier kosong, muncul catatan "konfirmasi manual", bukan angka tebakan.
+- **T-9.3 selesai.** Canonical, OG, dan Twitter card ditambahkan ke `go.html` (langsung), generator `layanan`, serta generator + artefak `pricelist`. JSON-LD `MedicalClinic` ada di layanan dan pricelist. Nilai placeholder diisi rute (`resolvePublicBaseUrl` + `applyPublicMetadata`), memakai `PUBLIC_BASE_URL` bila ada. **Catatan:** `go.html` sengaja tanpa JSON-LD karena rute `/go` memakai CSP nonce yang akan memblokir script inline tanpa nonce.
+- **T-9.4 selesai sebagian besar.** 5 input layanan punya `aria-label`, 5 tombol ikon tanpa teks diberi `aria-label`, semua `href="#"` di tiga halaman publik menjadi tautan `wa.me` (0 sisa), dan gambar pelacakan Meta diberi `alt=""`. **Lighthouse `/pricelist`: aksesibilitas 87 → 100** setelah perbaikan `inert`, `aria-label` badge promo, penghapusan `aria-label` baris, dan penggelapan token kontras (`--accent`, `--wa`, wordmark). `/go` belum terukur (`NO_FCP` di headless).
+- **T-9.5 selesai.** `StitchShowcase` hanya dimuat saat `import.meta.env.DEV`; keempat rutenya diblokir di produksi. Verifikasi: `dist/assets` tidak memuat chunk showcase setelah `npm run build`.
+- **T-9.6 selesai.** `manifest.json` netral ("Admin Dashboard", latar `#f0f2f5`), `brand.ts` fallback `'Klinik'` dengan catatan bahwa nama tenant idealnya dari API, dan judul/subtitle halaman statis di `public/` dinetralkan. `grep "\bKala\b"` di `public/` + `index.html` = 0.
+- **T-9.7 sebagian (inventaris + 1 penerapan).** `src/config/actionPermissions.ts` dibuat **hanya** dari batasan yang benar-benar ditegakkan backend, dengan sumber `file:line` per aksi: snapshot retensi (SUPER_ADMIN/TENANT_ADMIN), policy retensi (SUPER_ADMIN), export audience (SUPER_ADMIN), konfigurasi WhatsApp (SUPER_ADMIN), edit landing (batasnya tenant, bukan role → `roles: '*'`). Diterapkan pada tombol Export Audience di `CustomerDatabase`; sebelumnya `tenant_admin` melihat tombol lalu menabrak 403. **Aksi lain (hapus reservasi, tandai lunas, hapus pasien, kirim follow-up, ubah harga, hapus template/staf, reset sesi WA) tidak punya pemeriksaan role di backend**, jadi sengaja tidak disembunyikan: menyembunyikan tanpa penegakan server hanya menyesatkan. 6 unit test lulus.
+- **T-9.8 selesai.** `design.md` ditulis ulang: token (bukan hex), 3 dial, alasan tipografi, aturan satu fokus, format data kanonik, dan tabel gerbang. Klaim "WCAG compliant" diganti "dijaga `check:contrast` + `check:a11y`".
+- **T-9.9 selesai.** Langkah `Design & A11y Gates` ditambahkan di `.github/workflows/ci.yml` setelah build, setelah `check:design` hijau **dua kali berturut-turut**.
+- **Koreksi penting pada gerbang token:** `check-design-tokens.mjs` menghitung `#301`/`#316` di komentar sebagai hex (5 file `utils` gagal padahal cuma nomor audit). Sekarang komentar blok dan komentar baris di awal baris dibuang, dan `<meta name="theme-color">` dikecualikan dengan alasan platform. Total turun 282 → 275 dan baseline diperbarui.
+- **Jebakan artefak vs generator (ditemukan saat eksekusi):** artefak `pricelist.html` ternyata lebih baru daripada generatornya. Regenerasi menghapus `#sec-ongkir` dan memecahkan 4 tes. Tindakan: artefak dikembalikan dari git, generator **dan** artefak diperbaiki terpisah tanpa regenerasi. Untuk `layanan.html` generator tetap otoritatif.
+- Bukti: `npm run typecheck` 0, `npm run build` 0, `npm run check:design` hijau 2×, suite penuh **7014 lulus / 2 gagal pre-existing** (`hybrid-reservation-parser`, sumber tidak tersentuh), 28 dilewati.
+
 
 **Menutup:** 5 (StitchShowcase), 6 (design.md + gerbang), X-03 (metadata), X-08 (publik), 16 (brand), X-01 (katalog), X-07 (izin).
-**Prasyarat:** Fase 1, 5, 6, dan **keputusan pemilik produk** untuk dua hal di T-9.1 dan T-9.2.
+**Prasyarat:** Fase 1, 5, 6 (keputusan produk untuk T-9.1, T-6.1, T-8.3, T-9.5, dan T-9.7 sudah dikunci 2026-11-10).
 **Blast radius:** halaman publik (dilihat pelanggan) dan pipeline deploy.
 
-### T-9.1 Gate keputusan: distribusi `layanan.html`
+### T-9.1 Implementasi Opsi A: rute `/layanan` yang dihidrasi dari DB
 
-Fakta: `layanan.html` tidak dirutekan bot. Pilih satu:
-- **Opsi A (dirutekan seperti pricelist):** tambahkan rute `/layanan` di `src/routes/landing.route.ts` yang menyuntik `<script id="layanan-data" type="application/json">` dari DB ke `</head>` (meniru `pricelist.route.ts:56-97`), lalu hapus `const CLINIC_SERVICES = [...]` dari template generator dan ganti dengan pembacaan `window.__LAYANAN_DATA__`. Ikuti pola nonce (`replace(/<script>/g, ...)`) yang sudah ada.
-- **Opsi B (tetap statis + gerbang regenerasi):** tambahkan `npm run build:landing` yang menjalankan `node scripts/build_landing.js`, jalankan di CI sebagai pemeriksaan "artefak harus sama dengan hasil generate", dan wajibkan memperbarui `services_custom.json` dari DB sebelum generate.
+**Keputusan: Opsi A terpilih.** Rincian teknis terverifikasi:
 
-**Keputusan ini wajib diambil manusia sebelum tugas berikutnya dijalankan.**
+1. Service yang dipakai sudah ada dan sudah mengembalikan semua yang dibutuhkan: `src/services/pricelist.service.ts:344` `getPricelistPayload()` mengembalikan `sections[]` (berisi `items` dengan varian harga) dan `deliveryTiers`. Serializer aman sudah ada: `serializePayloadForHtml()` (baris 383) yang meng-escape `<`, `>`, `&`, U+2028, U+2029 agar tidak bisa keluar dari tag `<script>`.
+
+2. Tambahkan rute di `src/routes/landing.route.ts` (pola sama dengan pricelist, baris 46-97):
+```ts
+fastify.get('/layanan', async (request: FastifyRequest, reply: FastifyReply) => {
+  let html = await getLayananTemplate();   // baca + cache landing/public/layanan.html
+  try {
+    const payload = await getPricelistPayload(DEFAULT_TENANT_ID, {
+      slug: '',
+      whatsappFallback: process.env.DEFAULT_WHATSAPP_PHONE,
+    });
+    const data = serializePayloadForHtml(payload);
+    html = html.replace('</head>', `<script id="layanan-data" type="application/json">${data}</script>\n</head>`);
+    html = html.replace(/<title>[\s\S]*?<\/title>/, `<title>Layanan - ${payload.brand.businessName}</title>`);
+  } catch (err) {
+    request.log.error(err, 'Failed to hydrate layanan template');
+  }
+  if (nonce) {
+    html = html
+      .replace(/<script>/g, `<script nonce="${nonce}">`)
+      .replace(/<script src=/g, `<script nonce="${nonce}" src=`);
+  }
+  return reply.type('text/html; charset=utf-8').status(200).send(html);
+});
+```
+`nonce` adalah variabel lokal yang sudah dipakai rute `/go` di handler yang sama (dipakai pada baris 189-190). Jangan membuat mekanisme nonce baru; pakai yang ada. Bila rute `/layanan` berada di luar cakupan nonce (mis. tidak memakai CSP ketat), lewati blok `if (nonce)` dan catat alasannya di komentar.
+
+3. Di template generator `scripts/build_landing.js`: hapus injeksi `const CLINIC_SERVICES = ${JSON.stringify(activeServices, null, 2)};` (baris 861) dan ganti dengan pembacaan payload:
+```js
+const payloadEl = document.getElementById('layanan-data');
+const payload = payloadEl ? JSON.parse(payloadEl.textContent || '{}') : null;
+const CLINIC_SERVICES = payload ? adapterServices(payload) : [];
+function adapterServices(p) {
+  return (p.sections || []).flatMap((sec) => (sec.items || []).map((it) => ({
+    id: it.id,
+    name: it.n,
+    category: sec.id.toUpperCase(),
+    serviceType: 'STANDARD',
+    ageLabel: (it.v && it.v[0] && it.v[0][0]) || '',
+    durationMinutes: it.t,
+    originalPrice: Number(it.v?.[0]?.[2] ?? 0),
+    promoPrice: Number(it.v?.[0]?.[1] ?? 0),
+    price: Number(it.v?.[0]?.[1] ?? it.v?.[0]?.[2] ?? 0),
+    description: it.d || '',
+    bundleItemIds: [],
+    bundledNames: [],
+  })));
+}
+```
+Adapter ini menjaga bentuk data lama sehingga kartu, keranjang, dan filter di template tidak perlu ditulis ulang.
+
+4. Hapus `scripts/build_landing.js:5` (baca `services_custom.json`) setelah adapter berjalan, lalu jalankan ulang generator untuk menghasilkan `layanan.html` baru. Setelah itu `services_custom.json` tidak lagi menjadi sumber harga.
+
+5. Tambahkan fallback yang jujur: bila `payload` kosong (DB gagal), tampilkan `EmptyState` berisi "Katalog sedang tidak dapat dimuat, hubungi kami lewat WhatsApp" dengan tautan `wa.me`. Dilarang menampilkan harga kosong atau harga nol.
+
+**Verifikasi DB yang sudah dilakukan (2026-11-10, read-only):**
+- Database lokal **tidak dapat dijangkau** (`localhost:5432` menolak koneksi), jadi harga tidak bisa diverifikasi langsung dari DB hidup di mesin ini.
+- Bukti terbaru yang tersedia adalah snapshot SQL `storage/live_clinic_services.sql` (12 September 2026, 43 baris untuk `default-tenant`). Hasil perbandingan:
+  - `moms-oksitosin-fullbody`: DB promo **105.000** = HTML 105.000, JSON 110.000 (JSON salah).
+  - `bundle-laktasi-oksitosin`: DB promo **140.000** = HTML 140.000, JSON 70.000 (JSON salah).
+  - `add-on-nebulizer`: DB promo **35.000** = HTML 35.000, JSON 80.000 (JSON salah).
+  - `add-on-nebulizer-obat`: DB promo **50.000** = HTML 50.000, JSON 110.000 (JSON salah).
+  - `baby-massage-pulih-ceria-newborn`: tidak ada di snapshot (kemungkinan layanan baru setelah 12 Sep).
+- Kesimpulan: **`services_custom.json` adalah sisi yang basi, bukan `layanan.html`.** Regenerasi dari JSON saat ini justru akan menurunkan harga publik. Ini menguatkan keputusan Opsi A: harga harus dibaca dari DB saat runtime, bukan dari snapshot.
+- Konsekuensi tambahan: snapshot DB berisi 43 layanan, sementara JSON 38 dan HTML 39. Artinya halaman publik kemungkinan **melewatkan 4-5 layanan aktif**. Perlu konfirmasi dengan DB hidup sebelum menyimpulkan.
+
+**Kriteria terima:** ubah satu harga di dashboard, buka `/layanan`, harga berubah tanpa deploy. Tidak ada `const CLINIC_SERVICES = [...]` literal di artefak. `grep -n "services_custom.json" scripts/` = 0.
 
 ### T-9.2 Hapus duplikasi tarif ongkir dari generator
 
-Lokasi: `scripts/build_landing.js:1268-1292` (fungsi tarif manual).
-- Ganti dengan pembacaan data tier dari payload yang sama dengan katalog (Opsi A) atau dari `services_custom.json` + `delivery_tiers` yang diekspor (Opsi B).
-- Jangan mengedit `src/landing/public/layanan.html` langsung.
+Lokasi: `scripts/build_landing.js:1268-1292` (fungsi tarif manual `if (km <= 5) ...`).
 
-**Kriteria terima:** ubah satu tier di dashboard, regenerasi (atau muat ulang rute), angka di halaman ikut berubah. Tidak ada `if (km <= 5)` di generator.
+**Fakta penyeimbang:** nilai hardcoded itu saat ini **sama** dengan `DEFAULT_TIERS` di `src/services/delivery.service.ts` (5 km gratis, 7 km 15.000 potong 10.000, dan seterusnya). Jadi risikonya belum terwujud hari ini; yang rusak adalah **mekanismenya**, dan akan terasa begitu tarif diubah dari dashboard.
+
+Ganti fungsi manual dengan pembacaan `payload.deliveryTiers` (bentuknya `{ id, maxDist, fee, promoDiscount }`):
+```js
+function resolveOngkir(km, tiers) {
+  const sorted = [...tiers].sort((a, b) => a.maxDist - b.maxDist);
+  const tier = sorted.find((t) => km <= t.maxDist) || sorted[sorted.length - 1];
+  if (!tier) return { fee: 0, note: 'Tarif ongkir belum tersedia, mohon konfirmasi manual.' };
+  const fee = Math.max(0, Number(tier.fee) - Number(tier.promoDiscount || 0));
+  const note = tier.fee === 0
+    ? 'Jarak ini bebas ongkir homecare.'
+    : Number(tier.promoDiscount)
+      ? `Tarif normal Rp ${Number(tier.fee).toLocaleString('id-ID')} dengan potongan promo Rp ${Number(tier.promoDiscount).toLocaleString('id-ID')}.`
+      : `Tarif Rp ${Number(tier.fee).toLocaleString('id-ID')}.`;
+  return { fee, note };
+}
+```
+- Jangan mengedit `src/landing/public/layanan.html` langsung.
+- Bila `deliveryTiers` kosong, tampilkan catatan "konfirmasi manual", jangan menebak angka.
+
+**Kriteria terima:** ubah satu tier di dashboard, muat ulang `/layanan`, angka berubah. `grep -n "km <= 5" scripts/build_landing.js` = 0. Uji km 3, 7, 12, 22, 27 dan bandingkan dengan hasil bot.
 
 ### T-9.3 Metadata berbagi di 3 halaman publik
 
@@ -1229,7 +1493,7 @@ Tambahkan di template masing-masing (`go.html` langsung; `layanan.html` lewat `s
 <meta name="twitter:card" content="summary_large_image" />
 ```
 `pricelist.html` sudah punya penyuntikan runtime; tambahkan placeholder yang sama ke jalur penyuntikan di `landing.route.ts`.
-Untuk `layanan.html`, placeholder baru harus ikut diproses generator (Opsi B) atau rute (Opsi A).
+Untuk `layanan.html`, placeholder baru diproses oleh rute `/layanan` (Opsi A), bukan oleh generator.
 
 Tambahkan JSON-LD di `pricelist.html` (sudah punya penyuntikan) dan template lain:
 ```html
@@ -1249,15 +1513,37 @@ Tambahkan JSON-LD di `pricelist.html` (sudah punya penyuntikan) dan template lai
 
 **Kriteria terima:** Lighthouse aksesibilitas ≥0,95 di ketiga halaman; dengan JavaScript dimatikan, CTA `go.html` tetap membuka WhatsApp.
 
-### T-9.5 Hapus `StitchShowcase`
+### T-9.5 Keluarkan `StitchShowcase` dari produksi (simpan sebagai referensi pengembangan)
 
+**Keputusan: dihapus dari produksi, file tetap ada untuk referensi desain.**
 Lokasi: `src/pages/StitchShowcase.tsx` (795 baris) dan `src/App.tsx:47, 114-117`.
-- Hapus 4 rute (`/stitch-preview`, `/admin/stitch-preview`, `/stitch`, `/admin/stitch`) dan import lazy.
-- Hapus file halaman.
-- Hapus pengecualian di `scripts/check-dark-parity.mjs` (`EXCLUDED_FILES`).
-- Catat keputusan pembalikan D-5 di `docs/KNOWN_ISSUES.md` (sudah ada entri #323, tambahkan catatan).
 
-**Kriteria terima:** keempat URL mengembalikan halaman 404 yang ada (`*` route), `check:dark-parity` tidak lagi mengecualikan file.
+1. Ubah import lazy di `App.tsx:47` menjadi bersyarat:
+```tsx
+const StitchShowcase = import.meta.env.DEV
+  ? lazy(() => import('./pages/StitchShowcase').then((m) => ({ default: m.StitchShowcase })))
+  : null;
+```
+2. Bungkus 4 rute (baris 114-117) dengan guard yang sama:
+```tsx
+{import.meta.env.DEV && StitchShowcase && (
+  <>
+    <Route path="/stitch-preview" element={<StitchShowcase />} />
+    <Route path="/admin/stitch-preview" element={<StitchShowcase />} />
+    <Route path="/stitch" element={<Navigate to="/admin/stitch-preview" replace />} />
+    <Route path="/admin/stitch" element={<Navigate to="/admin/stitch-preview" replace />} />
+  </>
+)}
+```
+3. **Jangan** hapus file dan jangan hapus pengecualian di `scripts/check-dark-parity.mjs`; beri komentar di dekat pengecualian: "dev-only, tidak ikut bundle produksi".
+4. Tambahkan catatan di `docs/KNOWN_ISSUES.md` #323 bahwa halaman ini kini hanya tersedia di mode pengembangan.
+
+**Kriteria terima:** pada build produksi, keempat URL jatuh ke rute `*` (404 halaman), dan `dist/assets` tidak memuat chunk `StitchShowcase`. Verifikasi:
+```
+cd packages/admin-dashboard && npm run build
+grep -rl "StitchShowcase" dist/assets || echo "tidak ada chunk showcase di produksi"
+```
+Di `npm run dev`, halaman tetap bisa dibuka.
 
 ### T-9.6 Brand dari konfigurasi, bukan build
 
@@ -1267,10 +1553,10 @@ Lokasi: `src/pages/StitchShowcase.tsx` (795 baris) dan `src/App.tsx:47, 114-117`
 
 **Kriteria terima:** `grep -rn "Kala" packages/admin-dashboard/public packages/admin-dashboard/index.html` = 0.
 
-### T-9.7 Izin level aksi (butuh matriks backend)
+### T-9.7 Izin level aksi (metode dipilih: inventaris dulu)
 
-Langkah:
-1. Inventaris read-only: daftar aksi mutasi per rute admin dan role yang diizinkan backend.
+**Keputusan: ikut rekomendasi, dilarang menebak izin dari nama role.** Urutan kerja:
+1. Inventaris read-only: daftar aksi mutasi per rute admin dan role yang diizinkan backend (baca handler di `src/routes/admin/**`, jangan menyimpulkan dari nama tombol).
 2. Buat `src/config/actionPermissions.ts` berisi `canDo(role, action)` berdasarkan hasil langkah 1 (bukan tebakan).
 3. Terapkan pada 10 aksi paling berisiko (hapus reservasi, tandai lunas, hapus pelanggan, publish landing, reset sesi WhatsApp, kirim follow-up, hapus layanan, ubah harga, hapus template, hapus staf): sembunyikan tombol bila tidak berhak, atau nonaktifkan dengan tooltip alasan.
 4. Hapus prop `allowedRoles` yang tidak terpakai, atau pakai di minimal satu rute.
@@ -1384,15 +1670,19 @@ Total perkiraan 20-22 hari kerja satu orang, atau 9-11 hari kalender bila Fase 1
 
 ---
 
-## 14. Keputusan yang Harus Diambil Manusia Sebelum Eksekusi
+## 14. Status Gate Keputusan
 
-1. **`layanan.html`:** Opsi A (dirutekan seperti pricelist) atau Opsi B (tetap statis + gerbang regenerasi)?
-2. **Tipografi:** Opsi A (stack sistem, tanpa unduh) atau Opsi B (satu font dimuat lokal)?
-3. **Glosarium:** setuju Pasien, Layanan, Terapis, Ongkir?
-4. **Izin aksi:** ada matriks izin backend yang bisa dijadikan acuan, atau perlu diinventaris dulu?
-5. **Showcase:** `StitchShowcase` dihapus permanen atau dipindah ke environment pengembangan?
+Kelima keputusan sudah dikunci pada 2026-11-10 dan tidak ada lagi yang menahan eksekusi.
 
-Tanpa lima jawaban ini, Fase 6, 8, dan 9 tidak boleh dimulai. Fase 0-5, 7, dan 10 sudah bisa dijalankan karena tidak bergantung pada keputusan tersebut.
+| # | Keputusan | Status |
+| :--- | :--- | :--- |
+| 1 | `layanan.html` dirutekan seperti pricelist, data dari DB | DIKUNCI |
+| 2 | Tipografi memakai stack sistem, tanpa unduh font | DIKUNCI |
+| 3 | Glosarium: Pasien, Layanan, Terapis, Ongkir | DIKUNCI |
+| 4 | Izin aksi: inventaris read-only dulu, lalu matriks izin | DIKUNCI |
+| 5 | `StitchShowcase` keluar dari produksi, tetap ada untuk mode pengembangan | DIKUNCI |
+
+Yang masih dibutuhkan sebelum eksekusi: **persetujuan tertulis manusia per fase** (misalnya "Setuju, eksekusi Fase 0"). Jawaban atas gate keputusan bukan izin eksekusi.
 
 ---
 

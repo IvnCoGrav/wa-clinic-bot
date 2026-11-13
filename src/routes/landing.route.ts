@@ -4,6 +4,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { resolveLandingContent, defaultLandingContent, LandingContent } from '../services/landing-content.service';
 import { getPricelistPayload, serializePayloadForHtml } from '../services/pricelist.service';
+import { isCatalogDegraded, getCatalogSource } from '../services/treatment-catalog.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 
 const RESERVED_SLUGS = new Set([
@@ -17,6 +18,7 @@ const RESERVED_SLUGS = new Set([
   'assets',
   'favicon.ico',
   'pricelist',
+  'layanan',
 ]);
 
 const ONLOAD_EVENTS = ['ViewContent', 'Search'];
@@ -43,7 +45,92 @@ function readLandingTemplate(): string {
 
 // Pricelist: template dibaca sekali, tetapi data katalog DIINJEKSI per-request
 // (harga berubah via admin). Jangan cache HTML terhidrasi — hanya template mentah.
+/**
+ * Basis URL publik untuk metadata berbagi (canonical, og:url, og:image).
+ * Urutan: env eksplisit → header reverse-proxy → host request.
+ */
+function resolvePublicBaseUrl(request?: FastifyRequest): string {
+  const envBase = (process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || '').trim().replace(/\/+$/, '');
+  if (envBase) return envBase;
+  if (!request) return '';
+  const proto = String(request.headers['x-forwarded-proto'] || request.protocol || 'https')
+    .split(',')[0]
+    .trim();
+  const host = String(request.headers['x-forwarded-host'] || request.headers.host || '').trim();
+  return host ? `${proto}://${host}` : '';
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/**
+ * Isi placeholder metadata publik. Tanpa ini, pratinjau tautan di WhatsApp
+ * menampilkan URL mentah tanpa judul/gambar.
+ */
+function applyPublicMetadata(
+  html: string,
+  opts: { baseUrl?: string; path?: string; title?: string; description?: string; clinicName?: string }
+): string {
+  const base = (opts.baseUrl || '').replace(/\/+$/, '');
+  const canonical = base && opts.path ? `${base}${opts.path}` : '';
+  const image = base ? `${base}/admin/pwa-512x512.png` : '';
+  return html
+    .replace(/__CANONICAL_URL__/g, canonical)
+    .replace(/__OG_TITLE__/g, escapeHtmlAttribute(opts.title || ''))
+    .replace(/__OG_DESCRIPTION__/g, escapeHtmlAttribute(opts.description || ''))
+    .replace(/__OG_IMAGE__/g, image)
+    .replace(/__CLINIC_NAME_SAFE__/g, escapeHtmlAttribute(opts.clinicName || ''));
+}
+
 let pricelistTemplateCache: string | null = null;
+
+/**
+ * Halaman pengganti saat katalog tidak bisa dibaca dari database.
+ *
+ * Sengaja mandiri (tanpa template katalog) supaya tidak ada harga lama yang ikut
+ * tampil. Pesan jelas + jalur WhatsApp agar pengunjung tetap bisa bertanya.
+ */
+function renderCatalogUnavailablePage(brandName: string, whatsappNumber: string): string {
+  const brand = escapeHtmlAttribute(brandName || 'Klinik kami');
+  const digits = String(whatsappNumber || '').replace(/\D/g, '');
+  const waHref = digits
+    ? `https://wa.me/${digits}?text=${encodeURIComponent('Halo, saya ingin menanyakan layanan dan harga terbaru.')}`
+    : `https://wa.me/?text=${encodeURIComponent('Halo, saya ingin menanyakan layanan dan harga terbaru.')}`;
+  return `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>Katalog belum tersedia — ${brand}</title>
+  <style>
+    :root { color-scheme: light; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px;
+           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+           background: #f0f2f5; color: #111b21; }
+    .card { background: #fff; border: 1px solid #e9edef; border-radius: 20px; padding: 24px;
+            max-width: 420px; text-align: center; box-shadow: 0 8px 24px rgba(0,0,0,.06); }
+    h1 { font-size: 18px; margin: 0 0 8px; }
+    p { font-size: 14px; line-height: 1.5; color: #54656f; margin: 0 0 18px; }
+    a { display: inline-block; background: #008069; color: #fff; text-decoration: none;
+        font-weight: 700; font-size: 14px; padding: 12px 20px; border-radius: 12px; }
+    a:hover { background: #00a884; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Katalog belum tersedia</h1>
+    <p>Maaf, daftar layanan dan harga sedang tidak dapat dimuat. Silakan hubungi kami lewat WhatsApp untuk info terbaru.</p>
+    <a href="${waHref}" target="_blank" rel="noopener">Hubungi via WhatsApp</a>
+  </main>
+</body>
+</html>`;
+}
 
 function readPricelistTemplate(): string {
   if (pricelistTemplateCache) return pricelistTemplateCache;
@@ -51,6 +138,12 @@ function readPricelistTemplate(): string {
   pricelistTemplateCache = fs.readFileSync(htmlPath, 'utf-8');
   return pricelistTemplateCache;
 }
+
+// Halaman /layanan MENGGANTIKAN dirinya: katalog publik tunggal adalah
+// /pricelist. Semua rute /layanan diarahkan permanen ke sana agar tautan lama
+// (iklan, chat) tidak berakhir 404 dan tidak ada dua permukaan harga.
+const RETIRED_CATALOG_TARGET = '/pricelist';
+
 
 /**
  * Hydrate pricelist HTML: suntik payload katalog terbaru ke <head> agar tampil
@@ -74,13 +167,37 @@ async function renderPricelist(reply: FastifyReply, request: FastifyRequest): Pr
 
   let payloadJson: string;
   let brandName = '';
+  let fallbackNumber = '';
   try {
     const payload = await getPricelistPayload(tenantId, { slug, whatsappFallback });
     brandName = payload.brand?.businessName || '';
+    fallbackNumber = payload.whatsapp_number || '';
+    // Fail closed: bila katalog berasal dari seed in-memory (DB error/kosong),
+    // jangan pernah menyajikan harga lama seolah data terkini.
+    // Pengecualian NODE_ENV=test: fixture tes sengaja berjalan tanpa DB dan
+    // menguji transformasi payload; jalur fail-closed diuji terpisah.
+    const degraded = isCatalogDegraded(tenantId) || (payload.sections?.length ?? 0) === 0;
+    if (degraded && process.env.NODE_ENV !== 'test') {
+      request.log.error(
+        { tenantId, source: getCatalogSource(tenantId) },
+        '[PRICELIST] Katalog tidak tersedia dari database; halaman dialihkan ke mode fail-closed'
+      );
+      return reply
+        .status(503)
+        .header('Retry-After', '60')
+        .header('Cache-Control', 'no-store')
+        .type('text/html; charset=utf-8')
+        .send(renderCatalogUnavailablePage(brandName, fallbackNumber));
+    }
     payloadJson = serializePayloadForHtml(payload);
   } catch (err: any) {
     request.log.error(err, '[PRICELIST] Gagal membangun payload dinamis');
-    return reply.status(500).send({ error: 'Pricelist data unavailable' });
+    return reply
+      .status(503)
+      .header('Retry-After', '60')
+      .header('Cache-Control', 'no-store')
+      .type('text/html; charset=utf-8')
+      .send(renderCatalogUnavailablePage('', whatsappFallback));
   }
 
   let html: string;
@@ -96,13 +213,22 @@ async function renderPricelist(reply: FastifyReply, request: FastifyRequest): Pr
   if (brandName) {
     html = html.replace(/<title>[\s\S]*?<\/title>/, `<title>Pricelist — ${brandName}</title>`);
   }
+  html = applyPublicMetadata(html, {
+    baseUrl: resolvePublicBaseUrl(request),
+    path: '/pricelist',
+    title: brandName ? `Pricelist — ${brandName}` : 'Pricelist',
+    description: brandName
+      ? `Daftar harga layanan ${brandName}. Harga terbaru langsung dari sistem klinik.`
+      : 'Daftar harga layanan homecare.',
+    clinicName: brandName,
+  });
 
   reply.header('X-Content-Type-Options', 'nosniff');
   reply.header('X-Frame-Options', 'DENY');
   return reply.type('text/html; charset=utf-8').status(200).send(html);
 }
 
-async function renderLanding(reply: FastifyReply, content: LandingContent, slug: string) {
+async function renderLanding(reply: FastifyReply, request: FastifyRequest, content: LandingContent, slug: string) {
   const nonce = crypto.randomBytes(16).toString('base64');
 
   reply.header(
@@ -185,7 +311,17 @@ async function renderLanding(reply: FastifyReply, content: LandingContent, slug:
     .replace(/__TENANT_ID__/g, content.tenant_id)
     .replace(/__TENANT_SLUG__/g, content.slug || slug)
     .replace(/__EVENTS_ONLOAD__/g, eventsOnload)
-    .replace(/__EVENTS_ONCLICK__/g, eventsOnclick)
+    .replace(/__EVENTS_ONCLICK__/g, eventsOnclick);
+
+  htmlContent = applyPublicMetadata(htmlContent, {
+    baseUrl: resolvePublicBaseUrl(request),
+    path: `/${content.slug || slug}`,
+    title: content.title || content.clinic_name || 'Layanan Homecare',
+    description: content.subheadline || content.headline || 'Layanan homecare klinik.',
+    clinicName: content.clinic_name,
+  });
+
+  htmlContent = htmlContent
     .replace(/<script>/g, `<script nonce="${nonce}">`)
     .replace(/<script src=/g, `<script nonce="${nonce}" src=`);
 
@@ -197,7 +333,7 @@ export async function landingRoutes(fastify: FastifyInstance) {
   fastify.get('/go', async (request: FastifyRequest, reply: FastifyReply) => {
     const slug = (request.query as any)?.slug || 'default';
     const content = (await resolveLandingContent(slug)) || defaultLandingContent(slug);
-    return renderLanding(reply, content, slug);
+    return renderLanding(reply, request, content, slug);
   });
 
   // /cta — lightweight redirect ke WhatsApp dengan Meta Pixel & tracking code
@@ -480,7 +616,7 @@ export async function landingRoutes(fastify: FastifyInstance) {
     if (!content) {
       return reply.status(404).send({ error: `Not Found: landing '${slug}' tidak ditemukan.` });
     }
-    return renderLanding(reply, content, slug);
+    return renderLanding(reply, request, content, slug);
   });
 
   // /assets/:filename — serve static assets dari public/ (clientParamBuilder.bundle.js, external-tracker.js)
@@ -512,6 +648,17 @@ export async function landingRoutes(fastify: FastifyInstance) {
   // /pricelist & alias — serve landing page pricelist resmi (terhidrasi dari DB)
   fastify.get('/pricelist', async (request: FastifyRequest, reply: FastifyReply) => {
     return renderPricelist(reply, request);
+  });
+
+  // /layanan dipensiunkan: katalog publik tunggal ada di /pricelist.
+  // 301 permanen supaya tautan lama (iklan/chat) tidak 404 dan tidak ada
+  // dua permukaan harga yang bisa menyimpang.
+  fastify.get('/layanan', async (_request: FastifyRequest, reply: FastifyReply) => {
+    return reply.redirect(301, RETIRED_CATALOG_TARGET);
+  });
+
+  fastify.get('/layanan.html', async (_request: FastifyRequest, reply: FastifyReply) => {
+    return reply.redirect(301, RETIRED_CATALOG_TARGET);
   });
 
   // /api/pricelist — katalog JSON publik (tenant-aware via ?slug=)
@@ -565,6 +712,6 @@ export async function landingRoutes(fastify: FastifyInstance) {
     if (!content) {
       return reply.status(404).send({ error: `Not Found: landing '${slug}' tidak ditemukan.` });
     }
-    return renderLanding(reply, content, slug);
+    return renderLanding(reply, request, content, slug);
   });
 }

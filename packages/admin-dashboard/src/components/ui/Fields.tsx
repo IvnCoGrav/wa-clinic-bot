@@ -26,7 +26,8 @@ export interface InputProps
 
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
   ({ label, hint, error, invalid, variant = 'surface-2', className = '', id, ...props }, ref) => {
-    const inputId = id || (label ? label.toLowerCase().replace(/\s+/g, '-') : undefined);
+    const reactId = React.useId();
+    const inputId = id || (label ? `field-${reactId}` : undefined);
     const hasError = invalid || !!error;
     const bgClass = variant === 'surface' ? 'bg-surface' : 'bg-surface-2';
 
@@ -41,14 +42,16 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           id={inputId}
           ref={ref}
           {...props}
+          aria-invalid={hasError || undefined}
+          aria-describedby={hasError ? `${inputId}-error` : hint ? `${inputId}-hint` : undefined}
           className={`w-full ${bgClass} border text-ink placeholder:text-ink-3 rounded-xl text-xs px-3 py-2 transition duration-150 focus:outline-none focus:ring-1 ${
             hasError
               ? 'border-danger focus:border-danger focus:ring-danger/30'
               : 'border-divider focus:border-strong focus:ring-accent/40'
           } ${className}`}
         />
-        {error && <p className="text-[11px] font-medium text-danger">{error}</p>}
-        {hint && !error && <p className="text-[11px] text-ink-3">{hint}</p>}
+        {error && <p id={`${inputId}-error`} className="text-[11px] font-medium text-danger">{error}</p>}
+        {hint && !error && <p id={`${inputId}-hint`} className="text-[11px] text-ink-3">{hint}</p>}
       </div>
     );
   }
@@ -61,7 +64,8 @@ export interface TextareaProps
 
 export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
   ({ label, hint, error, invalid, variant = 'surface-2', className = '', id, ...props }, ref) => {
-    const inputId = id || (label ? label.toLowerCase().replace(/\s+/g, '-') : undefined);
+    const reactId = React.useId();
+    const inputId = id || (label ? `field-${reactId}` : undefined);
     const hasError = invalid || !!error;
     const bgClass = variant === 'surface' ? 'bg-surface' : 'bg-surface-2';
 
@@ -76,14 +80,16 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
           id={inputId}
           ref={ref}
           {...props}
+          aria-invalid={hasError || undefined}
+          aria-describedby={hasError ? `${inputId}-error` : hint ? `${inputId}-hint` : undefined}
           className={`w-full ${bgClass} border text-ink placeholder:text-ink-3 rounded-xl text-xs px-3 py-2 transition duration-150 focus:outline-none focus:ring-1 resize-none ${
             hasError
               ? 'border-danger focus:border-danger focus:ring-danger/30'
               : 'border-divider focus:border-strong focus:ring-accent/40'
           } ${className}`}
         />
-        {error && <p className="text-[11px] font-medium text-danger">{error}</p>}
-        {hint && !error && <p className="text-[11px] text-ink-3">{hint}</p>}
+        {error && <p id={`${inputId}-error`} className="text-[11px] font-medium text-danger">{error}</p>}
+        {hint && !error && <p id={`${inputId}-hint`} className="text-[11px] text-ink-3">{hint}</p>}
       </div>
     );
   }
@@ -98,7 +104,8 @@ export interface SelectProps
 
 export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
   ({ label, hint, error, invalid, variant = 'surface-2', className = '', id, options, children, ...props }, ref) => {
-    const inputId = id || (label ? label.toLowerCase().replace(/\s+/g, '-') : undefined);
+    const reactId = React.useId();
+    const inputId = id || (label ? `field-${reactId}` : undefined);
     const hasError = invalid || !!error;
     const bgClass = variant === 'surface' ? 'bg-surface' : 'bg-surface-2';
 
@@ -113,6 +120,8 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
           id={inputId}
           ref={ref}
           {...props}
+          aria-invalid={hasError || undefined}
+          aria-describedby={hasError ? `${inputId}-error` : hint ? `${inputId}-hint` : undefined}
           className={`w-full ${bgClass} border text-ink rounded-xl text-xs px-3 py-2 transition duration-150 focus:outline-none focus:ring-1 cursor-pointer ${
             hasError
               ? 'border-danger focus:border-danger focus:ring-danger/30'
@@ -127,8 +136,8 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
               ))
             : children}
         </select>
-        {error && <p className="text-[11px] font-medium text-danger">{error}</p>}
-        {hint && !error && <p className="text-[11px] text-ink-3">{hint}</p>}
+        {error && <p id={`${inputId}-error`} className="text-[11px] font-medium text-danger">{error}</p>}
+        {hint && !error && <p id={`${inputId}-hint`} className="text-[11px] text-ink-3">{hint}</p>}
       </div>
     );
   }

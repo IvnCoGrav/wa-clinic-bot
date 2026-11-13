@@ -133,9 +133,6 @@ export function useLiveChatMessageOperations({
   const [activeReactionMsgId, setActiveReactionMsgId] = useState<string | null>(null);
   const [customEmojiMsgId, setCustomEmojiMsgId] = useState<string | null>(null);
 
-  const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
-  const EXTRA_REACTIONS = ['🔥', '👏', '🎉', '💯', '✨', '🤝', '🌸', '💐', '👶', '🍼', '🤱', '💪'];
-
   /**
    * Salin teks dengan fallback aman: Clipboard API bisa ditolak di luar user-gesture
    * (mis. setelah setTimeout hold), jadi fallback ke execCommand('copy') legacy.
@@ -237,6 +234,9 @@ export function useLiveChatMessageOperations({
             })
           );
         }
+        // Reaksi staf pada pesan customer terakhir dihitung sebagai balasan,
+        // jadi badge "menunggu dibalas" padam tanpa menunggu polling.
+        void refreshChatItem(selectedChat.conversationId);
       } else {
         toast(`Gagal mengirim reaksi: ${res?.error || 'Terjadi kesalahan'}`, 'error');
         // Rollback: muat ulang dari server agar emoji optimistis tidak "nyangkut".

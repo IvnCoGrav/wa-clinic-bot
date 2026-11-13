@@ -181,7 +181,7 @@ export const WhatsAppProviderPanel: React.FC<Props> = ({
                   {wahaStatus}
                 </span>
               </div>
-              <p className="text-xs text-ink-2 mt-1">{wahaStatus === 'WORKING' ? 'Session terhubung' : 'Cek dashboard WAHA — mungkin butuh re-scan QR'}</p>
+              <p className="text-xs text-ink-2 mt-1">{wahaStatus === 'WORKING' ? 'Session terhubung' : 'Cek dashboard WAHA: mungkin butuh re-scan QR'}</p>
             </div>
             <div className="p-3 rounded-xl bg-surface border border-divider shadow-xs">
               <div className="flex items-center justify-between">
@@ -251,6 +251,7 @@ export const WhatsAppProviderPanel: React.FC<Props> = ({
                 </button>
 
                 <button
+                  aria-label="Putuskan koneksi WAHA (Logout / Stop Session)"
                   onClick={handleDisconnectSession}
                   disabled={disconnectingSession || resettingSession || startingSession}
                   className="px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-900/40 border border-rose-200 dark:border-rose-900/50 text-rose-700 dark:text-danger text-xs font-semibold flex items-center space-x-1 disabled:opacity-50 shadow-xs"
@@ -261,6 +262,7 @@ export const WhatsAppProviderPanel: React.FC<Props> = ({
                 </button>
                 {canStartSession && (
                   <button
+                    aria-label="Putar"
                     onClick={canResetSession ? handleResetSession : handleStartSession}
                     disabled={resettingSession || startingSession}
                     className={`px-2.5 py-1 rounded-lg text-white text-xs font-semibold flex items-center space-x-1 disabled:opacity-50 shadow-xs ${
@@ -302,7 +304,7 @@ export const WhatsAppProviderPanel: React.FC<Props> = ({
             ) : qrStatus === 'WORKING' ? (
               <div className="flex items-center gap-2 p-3 rounded-xl bg-success-soft border border-success-line text-success text-xs">
                 <Check size={14} className="text-success" />
-                <span>Session terhubung — WhatsApp aktif. QR tidak diperlukan.</span>
+                <span>Session terhubung: WhatsApp aktif. QR tidak diperlukan.</span>
               </div>
             ) : (
               <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-200 text-xs leading-relaxed">

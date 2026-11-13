@@ -33,6 +33,7 @@ import {
   formatHourLabel as formatHourLabelUtil,
   formatHourLabelLong,
 } from '../../utils/calendarHourLabel';
+import { formatWib, formatWibClock } from '../../utils/dateWib';
 
 const HOURS = Array.from({ length: 16 }, (_, i) => i + 6); // 6am - 9pm
 
@@ -106,6 +107,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
     const container = containerRef.current;
     if (container) {
       try {
+        // Pelepasan capture opsional; pointer bisa sudah lepas sendiri.
         container.releasePointerCapture?.(e.pointerId);
       } catch (_) {}
     }
@@ -117,7 +119,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
 
   const formatHourLabel = formatHourLabelUtil;
 
-  const dayDateFormatted = selectedDate.toLocaleDateString('id-ID', {
+  const dayDateFormatted = formatWib(selectedDate, {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
@@ -237,12 +239,12 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
     <div className={`${hideHeader ? 'flex-1 min-h-0' : 'bg-surface rounded-none border-y border-x-0 border-divider shadow-xs sm:rounded-2xl sm:border-x'} overflow-visible sm:overflow-hidden flex flex-col relative group/calendar`}>
       {/* Sticky Day Header Banner: Tanggal (Kiri) & View Hari Itu (Kanan) */}
       {!hideHeader && (
-        <div className="sticky top-[calc(3rem+env(safe-area-inset-top,0px))] md:top-[calc(3.25rem+env(safe-area-inset-top,0px))] z-30 px-3 py-2 sm:px-4 sm:py-2.5 border-b border-divider bg-surface/95 dark:bg-surface/95 backdrop-blur-md flex items-center justify-between gap-2 shrink-0 shadow-xs">
+        <div className="sticky top-[calc(3rem+env(safe-area-inset-top,0px))] md:top-[calc(3.25rem+env(safe-area-inset-top,0px))] z-30 px-3 py-2 sm:px-4 sm:py-2.5 border-b border-divider bg-surface/95 dark:bg-surface/95 flex items-center justify-between gap-2 shrink-0 shadow-xs">
           {/* Sisi Kiri: Tanggal */}
           <div className="min-w-0 pr-1">
             <h3 className="font-extrabold text-xs sm:text-base text-ink capitalize tracking-tight truncate">
               <span className="sm:hidden">
-                {selectedDate.toLocaleDateString('id-ID', {
+                {formatWib(selectedDate, {
                   weekday: 'short',
                   day: 'numeric',
                   month: 'short',
@@ -367,7 +369,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                 >
                   <button
                     onClick={() => onQuickAdd({ date: selectedDate, hour })}
-                    className={`w-full h-full absolute inset-0 z-0 border border-transparent text-xs font-semibold flex items-center justify-center space-x-1.5 transition-all opacity-0 group-hover/slot:opacity-100 cursor-pointer ${
+                    className={`w-full h-full absolute inset-0 z-0 border border-transparent text-xs font-semibold flex items-center justify-center space-x-1.5 transition opacity-0 group-hover/slot:opacity-100 cursor-pointer ${
                       isOp
                         ? 'hover:border-dashed hover:border-accent hover:bg-accent-soft/40 hover:text-accent'
                         : 'hover:border-dashed hover:border-divider hover:bg-fill-1 hover:text-ink-2 text-ink-3'
@@ -400,9 +402,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
               // Warna kartu = bidan penanggung jawab (bukan kategori treatment).
               const staffColor = getStaffColor(resolveStaffId(res), staffList);
               const bDate = new Date(res.booking_date!);
-              const startTimeStr = bDate
-                .toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })
-                .replace('.', ':');
+              const startTimeStr = formatWibClock(bDate).replace('.', ':');
               const categoryMeta = getTreatmentCategoryMeta(res.treatment_category);
               const CategoryIcon = categoryMeta?.Icon;
               // `undefined` (bukan `false`) saat kolom kosong: absennya `purchase_occurred_at`
@@ -444,7 +444,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                     left: evLeft,
                     width: evWidth,
                   }}
-                  className={`absolute z-10 p-1.5 sm:p-2.5 rounded-xl transition-all cursor-pointer shadow-md hover:shadow-lg hover:z-20 ring-1 ring-black/5 dark:ring-white/10 flex flex-col overflow-hidden ${effectiveCardStyle}`}
+                  className={`absolute z-10 p-1.5 sm:p-2.5 rounded-xl transition cursor-pointer shadow-md hover:shadow-lg hover:z-20 ring-1 ring-black/5 dark:ring-white/10 flex flex-col overflow-hidden ${effectiveCardStyle}`}
                 >
                   {zoomLevel === 'compact' ? (
                     /* COMPACT DAY LOD (<65px) */

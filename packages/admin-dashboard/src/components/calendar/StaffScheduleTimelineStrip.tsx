@@ -197,7 +197,7 @@ export const StaffScheduleTimelineStrip: React.FC<StaffScheduleTimelineStripProp
                 key={s.id}
                 type="button"
                 onClick={() => onSelectStaff?.(s.id)}
-                className="px-2 py-0.5 rounded-lg bg-surface border border-divider text-[11px] font-bold text-ink hover:border-accent hover:text-accent hover:bg-accent-soft transition-all cursor-pointer active:scale-95"
+                className="px-2 py-0.5 rounded-lg bg-surface border border-divider text-[11px] font-bold text-ink hover:border-accent hover:text-accent hover:bg-accent-soft transition cursor-pointer active:scale-95"
               >
                 {s.name}
               </button>
@@ -256,7 +256,7 @@ export const StaffScheduleTimelineStrip: React.FC<StaffScheduleTimelineStripProp
           {/* Selected Booking Highlight Block */}
           {selectedTimeMinutes !== null && (
             <div
-              className={`absolute top-0.5 bottom-0.5 rounded-md border-2 shadow-md transition-all duration-200 pointer-events-none flex items-center justify-center text-[10px] font-extrabold ${
+              className={`absolute top-0.5 bottom-0.5 rounded-md border-2 shadow-md transition duration-200 pointer-events-none flex items-center justify-center text-[10px] font-extrabold ${
                 collisionState?.hasCollision
                   ? 'bg-danger-soft/50 border-danger text-danger'
                   : 'bg-success-soft/50 border-success text-success'
@@ -299,7 +299,7 @@ export const StaffScheduleTimelineStrip: React.FC<StaffScheduleTimelineStripProp
                   key={time}
                   type="button"
                   onClick={() => onSelectTimeSlot(time)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all duration-150 active:scale-95 cursor-pointer border ${
+                  className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition duration-150 active:scale-95 cursor-pointer border ${
                     isSelected
                       ? 'bg-accent text-accent-ink border-accent shadow-sm ring-2 ring-accent/40 font-extrabold scale-105'
                       : 'bg-surface text-ink border-divider hover:border-accent hover:text-accent hover:bg-accent-soft'

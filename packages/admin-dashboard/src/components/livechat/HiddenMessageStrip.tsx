@@ -60,7 +60,7 @@ export const HiddenMessageStrip: React.FC<HiddenMessageStripProps> = ({
   // Tampilan collapsed (tertutup) default
   return (
     <div className="flex justify-center my-1 select-none animate-fadeIn">
-      <div className="flex items-center gap-2 px-3 py-1 bg-slate-100/90 dark:bg-slate-800/80 backdrop-blur-xs border border-dashed border-slate-300 dark:border-slate-700 rounded-lg text-[11px] text-ink-2 dark:text-slate-400 shadow-2xs">
+      <div className="flex items-center gap-2 px-3 py-1 bg-slate-100/90 dark:bg-slate-800/80 border border-dashed border-slate-300 dark:border-slate-700 rounded-lg text-[11px] text-ink-2 dark:text-slate-400 shadow-2xs">
         <EyeOff size={13} className="shrink-0 text-ink-3" />
         <span className="truncate">
           Pesan disembunyikan internal{hiddenBy ? ` • oleh ${hiddenBy}` : ''}

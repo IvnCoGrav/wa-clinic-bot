@@ -34,9 +34,7 @@ import type { SourceFilter } from '../../utils/livechatSourceFilter';
 import { getSharelocCardStatus } from '../../utils/sharelocCardStatus';
 import { resolveChatSenderIndicator } from '../../utils/chatSenderIndicator';
 import { loadConversationDraft } from '../../hooks/useLiveChatDrafts';
-
-const formatRp = (val: number) =>
-  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val);
+import { formatRupiah } from '../../utils/money';
 
 const formatLastChat = (dateStr: string | null) => {
   return formatLastChatWib(dateStr);
@@ -244,7 +242,7 @@ export const LiveChatThreadList: React.FC<LiveChatThreadListProps> = ({
               {filteredChats.length} total
             </span>
             <div className="flex items-center space-x-1 px-1.5 py-0.5 bg-fill-1 border border-divider rounded-full text-[10px] font-semibold text-ink-2">
-              <span className={`h-1.5 w-1.5 rounded-full ${sseConnected ? 'bg-success animate-pulse' : 'bg-warning animate-pulse'}`} />
+              <span className={`h-1.5 w-1.5 rounded-full ${sseConnected ? 'bg-success' : 'bg-warning'}`} />
               <span>{sseConnected ? 'Live' : 'Offline'}</span>
             </div>
             {delayAlert && (
@@ -284,7 +282,7 @@ export const LiveChatThreadList: React.FC<LiveChatThreadListProps> = ({
             <button
               onClick={() => setShowSyncInfoModal(true)}
               disabled={bgSyncProgress.isSyncing}
-              className="p-1.5 min-w-[38px] min-h-[38px] rounded-lg bg-accent text-white shadow-2xs transition flex items-center justify-center disabled:opacity-50 cursor-pointer"
+              className="p-1.5 min-w-[38px] min-h-[38px] rounded-lg bg-accent text-on-solid shadow-2xs transition flex items-center justify-center disabled:opacity-50 cursor-pointer"
               title="Sinkronisasi Seluruh Chat WhatsApp"
             >
               <RefreshCw size={13} className={bgSyncProgress.isSyncing ? 'animate-spin' : ''} />
@@ -400,7 +398,7 @@ export const LiveChatThreadList: React.FC<LiveChatThreadListProps> = ({
                   title="Filter bidan yang bertugas"
                 >
                   <option value="all">Semua Bidan</option>
-                  <option value="unassigned">⚠️ Belum Ada Bidan</option>
+                  <option value="unassigned">Belum Ada Bidan</option>
                   {reservationStaffList
                     .filter((s: any) => s.role === 'THERAPIST' && s.active !== false)
                     .map((s: any) => (
@@ -427,6 +425,7 @@ export const LiveChatThreadList: React.FC<LiveChatThreadListProps> = ({
               )}
 
               <button
+                aria-label="Tandai semua percakapan sebagai telah dibaca"
                 type="button"
                 onClick={handleMarkAllAsRead}
                 tabIndex={mobileView === 'chat' ? -1 : 0}
@@ -465,7 +464,7 @@ export const LiveChatThreadList: React.FC<LiveChatThreadListProps> = ({
                     }
                   }}
                   placeholder="Cari nama, no. HP, atau keyword chat..."
-                  className="w-full pl-8 pr-7 py-1.5 bg-fill-1 hover:bg-fill-2 focus:bg-surface border border-divider focus:border-accent rounded-lg text-xs text-ink placeholder-ink-3 focus:outline-none focus:ring-1 focus:ring-accent/20 transition-all shadow-2xs"
+                  className="w-full pl-8 pr-7 py-1.5 bg-fill-1 hover:bg-fill-2 focus:bg-surface border border-divider focus:border-accent rounded-lg text-xs text-ink placeholder-ink-3 focus:outline-none focus:ring-1 focus:ring-accent/20 transition shadow-2xs"
                 />
                 {searchQuery && (
                   <button
@@ -537,7 +536,7 @@ export const LiveChatThreadList: React.FC<LiveChatThreadListProps> = ({
             ) : sourceFilter === 'unread' ? (
               <>
                 <CheckCircle className="mx-auto text-accent mb-2" size={24} />
-                <p className="font-bold text-ink">Semua pesan sudah dibaca! 🎉</p>
+                <p className="font-bold text-ink">Semua pesan sudah dibaca! </p>
                 <p className="text-ink-2 text-[10px] mt-0.5">
                   Tidak ada percakapan yang menunggu dibalas saat ini.
                 </p>
@@ -565,7 +564,7 @@ export const LiveChatThreadList: React.FC<LiveChatThreadListProps> = ({
                   <button
                     type="button"
                     onClick={() => setLabelFilter('all')}
-                    className="mt-2.5 px-2.5 py-1 rounded-lg bg-accent hover:bg-accent-hover text-white text-[11px] font-semibold transition cursor-pointer shadow-xs"
+                    className="mt-2.5 px-2.5 py-1 rounded-lg bg-accent hover:bg-accent-hover text-on-solid text-[11px] font-semibold transition cursor-pointer shadow-xs"
                   >
                     Reset Filter Label
                   </button>
@@ -680,7 +679,7 @@ export const LiveChatThreadList: React.FC<LiveChatThreadListProps> = ({
                     userSelect: 'none',
                     WebkitTouchCallout: 'none',
                   }}
-                  className={`bg-white dark:bg-surface rounded-xl px-2 pt-1.5 border transition-all duration-150 active:scale-[0.985] cursor-pointer text-left flex flex-col justify-between space-y-1 shadow-2xs relative select-none touch-manipulation ${
+                  className={`bg-white dark:bg-surface rounded-xl px-2 pt-1.5 border transition duration-150 active:scale-[0.985] cursor-pointer text-left flex flex-col justify-between space-y-1 shadow-2xs relative select-none touch-manipulation ${
                     chat.isFrustrated
                       ? 'border-rose-400 dark:border-rose-600/70 border-l-4 border-l-rose-500 bg-rose-50/40 dark:bg-rose-950/20 hover:bg-rose-100/60 dark:hover:bg-rose-950/30'
                       : isSelected
@@ -741,7 +740,7 @@ export const LiveChatThreadList: React.FC<LiveChatThreadListProps> = ({
                               className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-danger ring-1 ring-rose-300 dark:ring-rose-800/40 shadow-2xs shrink-0 cursor-help"
                             >
                               <span className="relative flex h-2 w-2">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-danger opacity-75"></span>
+                                
                                 <span className="relative inline-flex rounded-full h-2 w-2 bg-danger"></span>
                               </span>
                               <AlertTriangle size={11} className="text-rose-600 dark:text-danger shrink-0" />
@@ -765,12 +764,12 @@ export const LiveChatThreadList: React.FC<LiveChatThreadListProps> = ({
                           )}
                           {(chat as any).hasUpcomingBooking && (
                             <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-600 text-white ring-1 ring-emerald-300 dark:ring-emerald-400/60 shadow-xs">
-                              📅 Terjadwal
+                              Terjadwal
                             </span>
                           )}
                           {(chat as any).hasPendingBooking && (
                             <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-sky-600 text-white ring-1 ring-sky-300 dark:ring-sky-400/60 shadow-xs">
-                              🕓 Pending
+                              Pending
                             </span>
                           )}
                           {sharelocCard.needed && (
@@ -798,7 +797,7 @@ export const LiveChatThreadList: React.FC<LiveChatThreadListProps> = ({
                               if (ar && !ar.assigned_staff_id) {
                                 return (
                                   <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-warning ring-1 ring-amber-300 dark:ring-amber-800/40 shadow-2xs">
-                                    ⚠️ Belum Ada Bidan
+                                    Belum Ada Bidan
                                   </span>
                                 );
                               }
@@ -948,7 +947,7 @@ export const LiveChatThreadList: React.FC<LiveChatThreadListProps> = ({
                       {isMedical && (
                         <span
                           className="inline-flex items-center p-1 rounded text-[9px] font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-danger border border-rose-200 dark:border-rose-800/40"
-                          title="Medical Concern / Emergency — Butuh respon medis"
+                          title="Medical Concern / Emergency: Butuh respon medis"
                         >
                           <AlertTriangle size={8} />
                         </span>
@@ -969,8 +968,8 @@ export const LiveChatThreadList: React.FC<LiveChatThreadListProps> = ({
                         <span
                           title={
                             chat.purchaseCount === 1
-                              ? `Purchase 1x (LTV: ${formatRp(chat.ltv || 0)})`
-                              : `Repeat Order ${chat.purchaseCount}x (LTV: ${formatRp(chat.ltv || 0)})`
+                              ? `Purchase 1x (LTV: ${formatRupiah(chat.ltv || 0)})`
+                              : `Repeat Order ${chat.purchaseCount}x (LTV: ${formatRupiah(chat.ltv || 0)})`
                           }
                           className={`inline-flex items-center space-x-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold border ${
                             chat.purchaseCount === 1

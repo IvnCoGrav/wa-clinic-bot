@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { Pagination } from '../../components/common/Pagination';
+import { Modal } from '../../components/ui/Modal';
 import {
   Database,
   RefreshCw,
@@ -19,6 +20,7 @@ import {
   ArrowUp,
   ArrowDown,
 } from 'lucide-react';
+import { formatWib, formatWibClock } from '../../utils/dateWib';
 
 interface StagingItem {
   id: string;
@@ -45,10 +47,10 @@ const formatSafeTimestamp = (ts: any): string => {
       num = num * 1000;
     }
     const d = new Date(num);
-    return isNaN(d.getTime()) ? '-' : d.toLocaleString('id-ID');
+    return isNaN(d.getTime()) ? '-' : formatWib(d, { dateStyle: 'short', timeStyle: 'short' });
   }
   const d = new Date(ts);
-  return isNaN(d.getTime()) ? '-' : d.toLocaleString('id-ID');
+  return isNaN(d.getTime()) ? '-' : formatWib(d, { dateStyle: 'short', timeStyle: 'short' });
 };
 
 export const ChatMigration: React.FC = () => {
@@ -326,6 +328,7 @@ export const ChatMigration: React.FC = () => {
 
         <div className="flex items-center space-x-2">
           <button
+            aria-label="Refresh antrean staging"
             onClick={loadStagingData}
             disabled={loading}
             className="p-2 rounded-xl bg-surface border border-divider text-ink-2 hover:bg-fill-1 hover:text-ink transition shadow-xs disabled:opacity-50"
@@ -382,7 +385,7 @@ export const ChatMigration: React.FC = () => {
 
           {/* Right action controls */}
           <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-start lg:justify-end">
-            <button
+            <button aria-label={syncStatus.isSyncing ? 'Sinkronisasi sedang berjalan di latar belakang' : localStats.conversationCount === 0 ? 'Database lokal masih kosong' : 'Mulai ekstraksi instan dari database lokal'}
               onClick={handleRunExtraction}
               disabled={extracting || syncStatus.isSyncing || localStats.conversationCount === 0}
               className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
@@ -515,15 +518,15 @@ export const ChatMigration: React.FC = () => {
               }}
               className="px-2.5 py-1.5 bg-fill-1 border border-transparent focus:border-accent rounded-xl text-xs font-medium text-ink outline-none cursor-pointer"
             >
-              <option value="leadCreatedAt-desc">🕒 Chat Pertama: Terkini</option>
-              <option value="leadCreatedAt-asc">🕒 Chat Pertama: Terlama</option>
-              <option value="ltv-desc">💰 LTV: Tertinggi</option>
-              <option value="ltv-asc">💰 LTV: Terendah</option>
-              <option value="name-asc">🔤 Nama: A → Z</option>
-              <option value="name-desc">🔤 Nama: Z → A</option>
-              <option value="rawMessagesCount-desc">💬 Pesan: Terbanyak</option>
-              <option value="rawMessagesCount-asc">💬 Pesan: Tersedikit</option>
-              <option value="firstPurchaseAt-desc">🎯 Reservasi: Terkini</option>
+              <option value="leadCreatedAt-desc">Chat Pertama: Terkini</option>
+              <option value="leadCreatedAt-asc">Chat Pertama: Terlama</option>
+              <option value="ltv-desc">LTV: Tertinggi</option>
+              <option value="ltv-asc">LTV: Terendah</option>
+              <option value="name-asc">Nama: A → Z</option>
+              <option value="name-desc">Nama: Z → A</option>
+              <option value="rawMessagesCount-desc">Pesan: Terbanyak</option>
+              <option value="rawMessagesCount-asc">Pesan: Tersedikit</option>
+              <option value="firstPurchaseAt-desc">Reservasi: Terkini</option>
             </select>
           </div>
         </div>
@@ -669,7 +672,7 @@ export const ChatMigration: React.FC = () => {
                       <td className="py-3.5 px-4 whitespace-nowrap text-ink-2">
                         <p className="font-semibold text-ink">
                           {item.leadCreatedAt
-                            ? new Date(item.leadCreatedAt).toLocaleDateString('id-ID', {
+                            ? formatWib(item.leadCreatedAt, {
                                 day: '2-digit',
                                 month: 'short',
                                 year: 'numeric',
@@ -678,7 +681,7 @@ export const ChatMigration: React.FC = () => {
                         </p>
                         <p className="text-[10px] text-ink-3">
                           {item.leadCreatedAt
-                            ? new Date(item.leadCreatedAt).toLocaleTimeString('id-ID', {
+                            ? formatWibClock(item.leadCreatedAt, {
                                 hour: '2-digit',
                                 minute: '2-digit',
                               })
@@ -701,7 +704,7 @@ export const ChatMigration: React.FC = () => {
                             {res.bookingDate && (
                               <p className="text-[10px] text-ink-3 flex items-center space-x-1">
                                 <Calendar size={10} />
-                                <span>Jadwal: {new Date(res.bookingDate).toLocaleDateString('id-ID')}</span>
+                                <span>Jadwal: {formatWib(res.bookingDate, { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                               </p>
                             )}
                             {res.address && (
@@ -797,28 +800,21 @@ export const ChatMigration: React.FC = () => {
 
       {/* Raw Messages Viewer Modal */}
       {selectedRawItem && (
-        <div
-          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4"
-          onClick={() => setSelectedRawItem(null)}
+        <Modal
+          open
+          onClose={() => setSelectedRawItem(null)}
+          size="xl"
+          title={`Riwayat Pesan: ${selectedRawItem.name || selectedRawItem.phoneNumber}`}
+          subtitle={selectedRawItem.phoneNumber || '-'}
+          footer={
+            <button
+              onClick={() => setSelectedRawItem(null)}
+              className="px-4 py-2 bg-surface hover:bg-fill-2 border border-divider text-ink rounded-xl text-xs font-semibold transition shadow-xs cursor-pointer"
+            >
+              Tutup
+            </button>
+          }
         >
-          <div
-            className="bg-surface border border-divider rounded-2xl w-full max-w-xl max-h-[85vh] flex flex-col shadow-xl overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-4 border-b border-divider bg-surface-2 flex justify-between items-center">
-              <div>
-                <h3 className="font-bold text-sm text-ink">
-                  Riwayat Pesan: {selectedRawItem.name || selectedRawItem.phoneNumber}
-                </h3>
-                <p className="text-[11px] text-ink-3">{selectedRawItem.phoneNumber}</p>
-              </div>
-              <button
-                onClick={() => setSelectedRawItem(null)}
-                className="p-1.5 rounded-lg text-ink-3 hover:text-ink hover:bg-fill-2 transition"
-              >
-                <X size={16} />
-              </button>
-            </div>
 
             <div className="p-4 overflow-y-auto space-y-2.5 bg-surface-2 flex-1">
               {!selectedRawItem.rawMessagesJson || selectedRawItem.rawMessagesJson.length === 0 ? (
@@ -845,16 +841,7 @@ export const ChatMigration: React.FC = () => {
               )}
             </div>
 
-            <div className="p-3 border-t border-divider bg-surface-2 flex justify-end">
-              <button
-                onClick={() => setSelectedRawItem(null)}
-                className="px-4 py-2 bg-surface hover:bg-fill-2 border border-divider text-ink rounded-xl text-xs font-semibold transition shadow-xs"
-              >
-                Tutup
-              </button>
-            </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

@@ -50,7 +50,7 @@ export const FunnelBars: React.FC<{ report: MetaPerformanceReport }> = ({ report
               </span>
             </div>
             <div className="h-2.5 bg-fill-1 rounded-full overflow-hidden">
-              <div className="h-full bg-accent rounded-full transition-all" style={{ width: `${s.widthPct}%` }} />
+              <div className="h-full bg-accent rounded-full transition-[width]" style={{ width: `${s.widthPct}%` }} />
             </div>
           </div>
         ))}

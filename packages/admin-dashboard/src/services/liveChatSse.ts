@@ -1,4 +1,9 @@
 // SSE client Singleton untuk Live Chat Monitor & Notification Header.
+//
+// Catatan kontrak error: catch kosong di modul ini SENGAJA senyap. Satu
+// subscriber yang error tidak boleh memutus subscriber lain, dan payload SSE
+// yang rusak cukup dilewati karena event berikutnya tetap datang lewat koneksi
+// yang sama.
 // Memastikan hanya 1 koneksi EventSource aktif per tab browser agar tidak memakan kuota HTTP koneksi browser (6 connection limit).
 
 export interface LiveChatSseOptions {

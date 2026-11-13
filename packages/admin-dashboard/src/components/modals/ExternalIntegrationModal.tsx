@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useUiFeedback } from '../common/UiFeedback';
+import { Modal } from '../ui/Modal';
 import {
   X,
   Copy,
@@ -55,6 +56,7 @@ function SnippetBlock({ title, code }: { title: string; code: string }) {
           {title}
         </span>
         <button
+          aria-label="Tandai"
           onClick={handleCopy}
           className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg border transition shadow-xs ${
             copied
@@ -105,30 +107,28 @@ export const ExternalIntegrationModal: React.FC<ExternalIntegrationModalProps> =
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn"
-      onClick={onClose}
+    <Modal
+      open
+      onClose={onClose}
+      size="xl"
+      title={
+        <span className="flex items-center gap-2">
+          <Link2 className="text-accent" size={16} aria-hidden="true" />
+          <span>Integrasi Landing Page Eksternal</span>
+        </span>
+      }
+      subtitle="Skema 2 (URL Redirect): hubungkan Landing Page luar ke atribusi & WhatsApp bot."
+      footer={
+        <button
+          onClick={onClose}
+          className="px-4 py-2 bg-surface hover:bg-fill-1 border border-divider text-ink rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+        >
+          <X size={14} aria-hidden="true" />
+          <span>Tutup</span>
+        </button>
+      }
     >
-      <div
-        className="bg-surface border border-divider rounded-2xl w-full max-w-3xl overflow-hidden flex flex-col shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="px-6 py-4 border-b border-divider flex justify-between items-center bg-surface-2">
-          <div>
-            <h3 className="font-bold text-ink text-sm flex items-center gap-2">
-              <Link2 className="text-accent" size={16} />
-              <span>Integrasi Landing Page Eksternal</span>
-            </h3>
-            <p className="text-xs text-ink-3 mt-0.5">
-              Skema 2 (URL Redirect) — hubungkan Landing Page luar ke atribusi &amp; WhatsApp bot.
-            </p>
-          </div>
-          <button onClick={onClose} className="text-ink-3 hover:text-ink transition" aria-label="Tutup">
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto">
+        <div className="space-y-5">
           {/* Alur singkat */}
           <div className="space-y-2">
             <p className="text-[11px] uppercase font-bold text-ink tracking-wider">Cara kerja</p>
@@ -161,6 +161,7 @@ export const ExternalIntegrationModal: React.FC<ExternalIntegrationModalProps> =
                   <span>Pasang di <b>&lt;/body&gt;</b> Landing Page Eksternal</span>
                 </span>
                 <button
+                  aria-label="Tandai"
                   onClick={handleCopyMain}
                   className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg border transition shadow-xs ${
                     copiedMain
@@ -251,7 +252,7 @@ export const ExternalIntegrationModal: React.FC<ExternalIntegrationModalProps> =
               <AlertTriangle size={12} className="text-warning flex-shrink-0 mt-0.5" />
               <span>
                 Param sistem bot (<b>slug</b>, p, phone, msg, greetings) sengaja TIDAK ikut disalin dan tidak pernah ditimpa.
-                Cookie <code className="text-ink font-mono">_fbp/_fbc</code> bersifat per-domain — jika ingin dedup penuh, sertakan
+                Cookie <code className="text-ink font-mono">_fbp/_fbc</code> bersifat per-domain: jika ingin dedup penuh, sertakan
                 <code className="text-ink font-mono"> ?fbp=&amp;fbc=</code> di URL LP.
               </span>
             </p>
@@ -276,23 +277,12 @@ export const ExternalIntegrationModal: React.FC<ExternalIntegrationModalProps> =
                 </li>
                 <li className="flex items-start gap-1.5">
                   <Info size={12} className="text-warning flex-shrink-0 mt-0.5" />
-                  <span>Nomor WhatsApp selalu diambil dari pengaturan Tenant — param <code className="font-mono font-bold">phone</code> di URL di-ignore untuk mencegah penyalahgunaan.</span>
+                  <span>Nomor WhatsApp selalu diambil dari pengaturan Tenant: param <code className="font-mono font-bold">phone</code> di URL di-ignore untuk mencegah penyalahgunaan.</span>
                 </li>
               </ul>
             </div>
           </div>
         </div>
-
-        <div className="px-6 py-4 border-t border-divider flex justify-end bg-surface-2">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-surface hover:bg-fill-1 border border-divider text-ink rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs"
-          >
-            <X size={14} />
-            <span>Tutup</span>
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 };

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Modal } from '../ui/Modal';
 import {
   Target,
   Plus,
@@ -82,6 +83,7 @@ const TagInput: React.FC<{
           />
         )}
         <button
+          aria-label="Tambah"
           type="button"
           onClick={add}
           className="px-3 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-lg text-xs font-semibold transition"
@@ -250,7 +252,7 @@ export const CtwaCatchersTab: React.FC = () => {
           </h3>
           <p className="text-xs text-ink-2 mt-0.5 max-w-2xl">
             Petakan kalimat pembuka iklan Click-to-WhatsApp ke nama kampanye. Berguna saat metadata
-            referral Meta hilang di jalan — pencocokan tahan typo &amp; slang, dengan guard kata kunci jangkar.
+            referral Meta hilang di jalan: pencocokan tahan typo &amp; slang, dengan guard kata kunci jangkar.
           </p>
         </div>
         <div className="flex gap-2">
@@ -425,19 +427,29 @@ export const CtwaCatchersTab: React.FC = () => {
 
       {/* Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
-          <div className="bg-surface rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto border border-divider">
-            <div className="flex items-start justify-between border-b border-divider pb-3">
-              <h4 className="text-base font-bold text-ink">
-                {editingId ? 'Edit Kampanye Catcher' : 'Tambah Kampanye Catcher'}
-              </h4>
+        <Modal
+          open
+          onClose={() => setModalOpen(false)}
+          size="xl"
+          title={editingId ? 'Edit Kampanye Catcher' : 'Tambah Kampanye Catcher'}
+          footer={
+            <>
               <button
                 onClick={() => setModalOpen(false)}
-                className="w-8 h-8 rounded-xl bg-fill-1 hover:bg-fill-2 text-ink-2 flex items-center justify-center"
+                className="px-4 py-2 border border-divider rounded-xl text-xs font-semibold text-ink-2 hover:bg-fill-1 cursor-pointer"
               >
-                <X size={15} />
+                Batal
               </button>
-            </div>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="px-4 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-semibold disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+              >
+                {saving && <Loader size={13} className="animate-spin" aria-hidden="true" />} Simpan
+              </button>
+            </>
+          }
+        >
 
             <div className="space-y-1">
               <label className="text-xs font-bold text-ink">Nama Kampanye</label>
@@ -509,23 +521,7 @@ export const CtwaCatchersTab: React.FC = () => {
               Aktif
             </label>
 
-            <div className="flex justify-end gap-2 border-t border-divider pt-3">
-              <button
-                onClick={() => setModalOpen(false)}
-                className="px-4 py-2 border border-divider rounded-xl text-xs font-semibold text-ink-2 hover:bg-fill-1"
-              >
-                Batal
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="px-4 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-semibold disabled:opacity-50 flex items-center gap-1.5"
-              >
-                {saving && <Loader size={13} className="animate-spin" />} Simpan
-              </button>
-            </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

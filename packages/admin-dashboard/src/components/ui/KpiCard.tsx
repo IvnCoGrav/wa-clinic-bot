@@ -18,6 +18,12 @@ export interface KpiCardProps {
   sparkline?: React.ReactNode;
   className?: string;
   hoverable?: boolean;
+  /**
+   * Satu layar hanya boleh punya satu angka fokus. `primary` dipakai untuk
+   * kartu yang paling menentukan tindakan hari ini; sisanya `secondary` agar
+   * mata tidak berebut perhatian.
+   */
+  emphasis?: 'primary' | 'secondary';
 }
 
 export const KpiCard: React.FC<KpiCardProps> = ({
@@ -30,6 +36,7 @@ export const KpiCard: React.FC<KpiCardProps> = ({
   sparkline,
   className = '',
   hoverable = false,
+  emphasis = 'secondary',
 }) => {
   const resolveDeltaStyle = () => {
     if (!delta || delta.direction === 'flat' || polarity === 'neutral') {
@@ -58,15 +65,28 @@ export const KpiCard: React.FC<KpiCardProps> = ({
 
   const deltaStyle = resolveDeltaStyle();
 
+  const isPrimary = emphasis === 'primary';
+
   return (
-    <Card hoverable={hoverable} className={`p-4 sm:p-5 flex flex-col justify-between ${className}`}>
+    <Card
+      hoverable={hoverable}
+      className={`p-4 sm:p-5 flex flex-col justify-between ${isPrimary ? 'ring-1 ring-accent/25' : ''} ${className}`}
+    >
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-semibold text-ink-2 truncate">{label}</span>
+        <span
+          className={`font-semibold text-ink-2 truncate ${isPrimary ? 'text-[11px] uppercase tracking-wide' : 'text-xs'}`}
+        >
+          {label}
+        </span>
         {icon && <span className="text-ink-3 shrink-0">{icon}</span>}
       </div>
 
       <div className="my-2.5">
-        <div className="text-2xl sm:text-3xl font-extrabold text-ink num tracking-tight">
+        <div
+          className={`font-extrabold text-ink num tracking-tight ${
+            isPrimary ? 'text-3xl sm:text-4xl' : 'text-xl sm:text-2xl'
+          }`}
+        >
           {value}
         </div>
       </div>

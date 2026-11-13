@@ -79,7 +79,7 @@ function resolveStatusVisual(status?: string | null, paid?: boolean): StatusVisu
 
   switch (norm) {
     case 'hold':
-      return { label: 'HOLD — slot ditahan sementara', icon: null };
+      return { label: 'HOLD: slot ditahan sementara', icon: null };
     case 'en_route':
     case 'on_the_way':
     case 'otw':
@@ -97,7 +97,7 @@ function resolveStatusVisual(status?: string | null, paid?: boolean): StatusVisu
     case 'rejected':
       return { label: 'Ditolak', icon: <XCircle size={11} aria-hidden="true" /> };
     case 'pending':
-      return { label: 'Pending — menunggu konfirmasi', icon: <AlertCircle size={11} aria-hidden="true" /> };
+      return { label: 'Pending: menunggu konfirmasi', icon: <AlertCircle size={11} aria-hidden="true" /> };
     default:
       return norm ? { label: status ?? norm, icon: <AlertCircle size={11} aria-hidden="true" /> } : null;
   }

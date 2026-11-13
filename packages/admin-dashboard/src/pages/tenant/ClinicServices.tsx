@@ -4,6 +4,9 @@ import { apiRequest } from '../../services/api';
 import { DeliveryTiers } from './DeliveryTiers';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { ToggleSwitch } from '../../components/common/ToggleSwitch';
+import { Modal } from '../../components/ui/Modal';
+import { FormErrorSummary } from '../../components/ui/FormErrorSummary';
+import type { FieldIssue } from '../../lib/validateReservation';
 import { 
   Activity, 
   Plus, 
@@ -70,6 +73,7 @@ export const ClinicServices: React.FC = () => {
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingService, setEditingService] = useState<ClinicServiceItem | null>(null);
+  const [formIssues, setFormIssues] = useState<FieldIssue[]>([]);
   
   // Form states
   const [formServiceType, setFormServiceType] = useState<ClinicServiceType>('STANDARD');
@@ -268,19 +272,30 @@ export const ClinicServices: React.FC = () => {
 
     // VALIDATION: Bundle must have at least 2 items and price must be cheaper
     if (isBundle) {
+      const nextIssues: FieldIssue[] = [];
       if (formBundleItemIds.length < 2) {
-        toast('Paket Bundle wajib menggabungkan minimal 2 layanan eksisting.', 'error');
-        return;
+        nextIssues.push({
+          field: 'bundleItems',
+          message: 'Paket bundle wajib menggabungkan minimal 2 layanan eksisting.',
+        });
       }
 
       const totalNormalPrice = bundleComponentDetails.totalOriginalPrice || Number(formOriginalPrice);
       const effectiveBundlePrice = Number(formPromoPrice);
 
       if (effectiveBundlePrice >= totalNormalPrice) {
-        toast(`Harga Bundle (Rp ${effectiveBundlePrice.toLocaleString('id-ID')}) harus lebih murah dari total harga normal layanan penyusunnya (Rp ${totalNormalPrice.toLocaleString('id-ID')}).`, 'error');
+        nextIssues.push({
+          field: 'promoPrice',
+          message: `Harga bundle (Rp ${effectiveBundlePrice.toLocaleString('id-ID')}) harus lebih murah dari total harga normal layanan penyusunnya (Rp ${totalNormalPrice.toLocaleString('id-ID')}).`,
+        });
+      }
+
+      if (nextIssues.length > 0) {
+        setFormIssues(nextIssues);
         return;
       }
     }
+    setFormIssues([]);
 
     const payload = {
       id: finalId,
@@ -883,37 +898,24 @@ export const ClinicServices: React.FC = () => {
 
       {/* Modal Form */}
       {isModalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40 backdrop-blur-xs animate-fadeIn"
-          onClick={() => setIsModalOpen(false)}
+        <Modal
+          open
+          onClose={() => setIsModalOpen(false)}
+          variant="sheet"
+          size="xl"
+          bodyClassName="p-0 overflow-hidden flex-1 flex flex-col min-h-0"
+          title={
+            <span className="flex items-center gap-2">
+              <Activity className="text-accent" size={16} aria-hidden="true" />
+              <span>{editingService ? `Edit Layanan: ${editingService.name}` : 'Tambah Layanan Baru'}</span>
+            </span>
+          }
+          subtitle="Tentukan tipe layanan, komponen gabungan (bundle), durasi, dan harga khusus."
         >
-          <div
-            className="bg-surface dark:text-ink border border-divider rounded-t-3xl sm:rounded-2xl w-full max-w-xl overflow-hidden flex flex-col shadow-xl animate-in fade-in zoom-in-95 duration-150 max-h-[88dvh] sm:max-h-[85vh]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="w-12 h-1.5 bg-divider dark:bg-divider rounded-full mx-auto mt-2.5 sm:hidden shrink-0" />
-            
-            {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-divider flex justify-between items-center bg-surface-2 dark:bg-surface-2">
-              <div>
-                <h3 className="font-bold text-ink text-sm flex items-center space-x-2">
-                  <Activity className="text-accent" size={16} />
-                  <span>{editingService ? `Edit Layanan: ${editingService.name}` : 'Tambah Layanan Baru'}</span>
-                </h3>
-                <p className="text-[11px] text-ink-3 mt-0.5">
-                  Tentukan tipe layanan, komponen gabungan (bundle), durasi, dan harga khusus.
-                </p>
-              </div>
-              <button 
-                onClick={() => setIsModalOpen(false)}
-                className="p-2 rounded-xl text-ink-3 hover:text-ink hover:bg-fill-1 active:scale-95 transition"
-              >
-                <X size={18} />
-              </button>
-            </div>
 
             {/* Modal Body */}
             <form onSubmit={handleSave} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto text-xs">
+              <FormErrorSummary issues={formIssues} />
               
               {/* Service Type Switcher */}
               <div className="space-y-1.5">
@@ -1359,8 +1361,7 @@ export const ClinicServices: React.FC = () => {
               </div>
 
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
 
       </>

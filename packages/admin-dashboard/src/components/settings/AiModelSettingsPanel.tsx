@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Bot, Save, RefreshCw, Activity, Check, ChevronDown, ChevronUp, Beaker, RotateCcw, Zap, Compass, MessageSquare } from 'lucide-react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
+import { useReportDirty } from './settingsDirtyStore';
 
 export interface AiTaskModelConfig {
   task: string;
@@ -178,6 +179,10 @@ export const AiModelSettingsPanel: React.FC = () => {
     fetchConfigs();
   }, []);
 
+  // Panel ini sudah punya penanda dirty sendiri (snapshot model per tugas);
+  // cukup dilaporkan ke halaman induk agar perpindahan kategori tidak memotong draft.
+  useReportDirty(dirty);
+
   const markDirty = () => setDirty(true);
 
   const handleSwitchProvider = (target: 'KENARI' | 'SUMOPOD') => {
@@ -266,7 +271,7 @@ export const AiModelSettingsPanel: React.FC = () => {
         // persisted:false = DB gagal tulis (mis. DB down) — JANGAN timpa edit lokal, biarkan admin coba lagi.
         if (res.persisted === false) {
           setDirty(true);
-          toast(res.warning || res.message || 'GAGAL tersimpan ke database — perubahan hanya di memori. Coba lagi.', 'error');
+          toast(res.warning || res.message || 'GAGAL tersimpan ke database: perubahan hanya di memori. Coba lagi.', 'error');
         } else {
           const filtered = Array.isArray(res.data) ? res.data.filter((c: AiTaskModelConfig) => c.task !== 'MEDICAL_CHECK') : configs;
           if (filtered.length) setConfigs(filtered);
@@ -274,7 +279,7 @@ export const AiModelSettingsPanel: React.FC = () => {
           const snapConfigs = Array.isArray(res.data) ? (res.data as AiTaskModelConfig[]).filter((c: AiTaskModelConfig) => c.task !== 'MEDICAL_CHECK') : configs;
           setInitialSnapshot(JSON.stringify({ configs: snapConfigs, provider: res.activeProvider || activeProvider }));
           setDirty(false);
-          toast(res.message || 'Konfigurasi AI berhasil disimpan! ✨', 'success');
+          toast(res.message || 'Konfigurasi AI berhasil disimpan!', 'success');
         }
       } else {
         toast(res.error || 'Gagal menyimpan konfigurasi', 'error');
@@ -355,11 +360,12 @@ export const AiModelSettingsPanel: React.FC = () => {
             <Bot size={22} />
           </div>
           <div>
-            <h2 className="text-sm sm:text-base font-bold text-ink dark:text-white">🤖 Pusat Kendali Model AI Bot (WhatsApp Response)</h2>
-            <p className="text-xs text-ink-3">Kelola karakter & kecepatan Bidan Yusi dengan 1 klik — tanpa istilah teknis membingungkan.</p>
+            <h2 className="text-sm sm:text-base font-bold text-ink dark:text-white">Pusat Kendali Model AI Bot (WhatsApp Response)</h2>
+            <p className="text-xs text-ink-3">Kelola karakter & kecepatan Bidan Yusi dengan 1 klik: tanpa istilah teknis membingungkan.</p>
           </div>
         </div>
         <button
+          aria-label="Segarkan data"
           onClick={fetchConfigs}
           disabled={loading}
           className="p-2.5 text-ink-3 hover:text-ink dark:hover:text-white hover:bg-fill-1 rounded-xl transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
@@ -373,7 +379,7 @@ export const AiModelSettingsPanel: React.FC = () => {
       <div className="px-4 sm:px-6 py-4 bg-surface-2 border-b border-divider">
         <div className="flex items-center gap-2 mb-3">
           <Activity size={14} className="text-accent" />
-          <span className="text-xs font-bold text-ink dark:text-white tracking-wide">🩺 STATUS SERVER</span>
+          <span className="text-xs font-bold text-ink dark:text-white tracking-wide">STATUS SERVER</span>
           {switchingProvider && (
             <span className="ml-auto inline-flex items-center gap-1 text-xs text-accent font-medium">
               <RefreshCw size={12} className="animate-spin" /> Mengganti provider...
@@ -392,7 +398,7 @@ export const AiModelSettingsPanel: React.FC = () => {
           >
             <div className="flex items-start justify-between gap-2 mb-1">
               <div className="flex items-center gap-2">
-                <span className="text-base">⚡</span>
+                
                 <div>
                   <span className="text-xs font-bold text-ink dark:text-white block">Server Utama (SumoPod)</span>
                   <span className="text-[10px] text-ink-3 font-mono">https://ai.sumopod.com/v1</span>
@@ -422,7 +428,7 @@ export const AiModelSettingsPanel: React.FC = () => {
           >
             <div className="flex items-start justify-between gap-2 mb-1">
               <div className="flex items-center gap-2">
-                <span className="text-base">🦜</span>
+                
                 <div>
                   <span className="text-xs font-bold text-ink dark:text-white block">Server Cadangan (Kenari)</span>
                   <span className="text-[10px] text-ink-3 font-mono">https://kenari.id/v1</span>
@@ -485,10 +491,10 @@ export const AiModelSettingsPanel: React.FC = () => {
                               {preset.icon} {preset.speed}
                             </span>
                             <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white dark:bg-app border border-divider text-ink dark:text-white">
-                              💬 {preset.charm}
+                              {preset.charm}
                             </span>
                             <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white dark:bg-app border border-divider text-ink dark:text-white">
-                              💰 {preset.cost}
+                              {preset.cost}
                             </span>
                           </div>
                           <div className="text-[11px] text-ink-3 dark:text-ink-3 mt-1">{preset.note}</div>
@@ -528,10 +534,10 @@ export const AiModelSettingsPanel: React.FC = () => {
                               {preset.icon} {preset.speed}
                             </span>
                             <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white dark:bg-app border border-divider text-ink dark:text-white">
-                              💬 {preset.charm}
+                              {preset.charm}
                             </span>
                             <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white dark:bg-app border border-divider text-ink dark:text-white">
-                              💰 {preset.cost}
+                              {preset.cost}
                             </span>
                           </div>
                           <div className="text-[11px] text-ink-3 dark:text-ink-3 mt-1">{preset.note}</div>
@@ -545,7 +551,7 @@ export const AiModelSettingsPanel: React.FC = () => {
               {selectedPreset === 'CUSTOM' && (
                 <div className="w-full text-left p-4 rounded-xl border-2 border-dashed border-divider bg-surface min-h-[48px]">
                   <div className="text-sm font-bold text-ink dark:text-white flex items-center gap-1">
-                    🎛️ Mode Kustom (Manual)
+                    Mode Kustom (Manual)
                   </div>
                   <div className="text-xs text-ink-3 mt-0.5">
                     Model dan parameter disesuaikan secara manual di luar preset standar klinik. Pilihan ini tidak akan ditimpa saat menyimpan.
@@ -559,7 +565,7 @@ export const AiModelSettingsPanel: React.FC = () => {
           <div className="px-4 sm:px-6 py-5 border-t border-divider bg-surface-2">
             <div className="flex items-center justify-between gap-2 mb-3">
               <div className="flex items-center gap-2">
-                <span className="text-base">⚡🔀</span>
+                
                 <div>
                   <h3 className="text-sm font-bold text-ink dark:text-white">Arsitektur Dual-Model Pipeline (V3 Agent)</h3>
                   <p className="text-xs text-ink-3">
@@ -585,7 +591,7 @@ export const AiModelSettingsPanel: React.FC = () => {
                           <Compass size={14} className="text-info" /> Call 1: Tool Routing & Slot Extractor
                         </span>
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 dark:bg-info-soft text-sky-800 dark:text-info">
-                          🎰 Extractor
+                          Extractor
                         </span>
                       </div>
                       <p className="text-xs text-ink-3 mb-3 leading-relaxed">
@@ -599,7 +605,7 @@ export const AiModelSettingsPanel: React.FC = () => {
                           {behavior.thinking}
                         </span>
                         <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-50 dark:bg-warning-soft text-amber-700 dark:text-warning font-medium">
-                          💰 Hemat Token
+                          Hemat Token
                         </span>
                       </div>
                     </div>
@@ -640,7 +646,7 @@ export const AiModelSettingsPanel: React.FC = () => {
                           <MessageSquare size={14} className="text-accent" /> Call 2: Balasan Persona Bidan Yusi
                         </span>
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-accent-soft text-emerald-800 dark:text-accent">
-                          💬 Generator
+                          Generator
                         </span>
                       </div>
                       <p className="text-xs text-ink-3 mb-3 leading-relaxed">
@@ -648,13 +654,13 @@ export const AiModelSettingsPanel: React.FC = () => {
                       </p>
                       <div className="flex flex-wrap gap-1.5 mb-3">
                         <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-accent-soft text-emerald-700 dark:text-accent font-medium">
-                          🩺 Persona Bidan Yusi
+                          Persona Bidan Yusi
                         </span>
                         <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-blue-50 dark:bg-info-soft text-blue-700 dark:text-ink-2 font-medium">
-                          🛡️ Guardrails Aktif
+                          Guardrails Aktif
                         </span>
                         <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-purple-50 dark:bg-surface-2 text-purple-700 dark:text-ink-2 font-medium">
-                          ✨ Bahasa Alami
+                          Bahasa Alami
                         </span>
                       </div>
                     </div>
@@ -687,9 +693,9 @@ export const AiModelSettingsPanel: React.FC = () => {
           <div className="px-4 sm:px-6 py-4 border-t border-divider bg-surface-2">
             <div className="flex items-center gap-2 mb-3">
               <Beaker size={16} className="text-accent" />
-              <h3 className="text-xs font-bold text-ink dark:text-white tracking-wide">🧪 Uji Konektivitas Model (Smoke-Test 1 Detik — tanpa RAG/katalog)</h3>
+              <h3 className="text-xs font-bold text-ink dark:text-white tracking-wide">Uji Konektivitas Model (Smoke-Test 1 Detik: tanpa RAG/katalog)</h3>
             </div>
-            <p className="text-xs text-ink-3 mb-3">Smoke-test konektivitas SumoPod/Kenari: tanpa data RAG klinik/katalog/tarif. “Tanya Harga” bisa berhalusinasi — bukan indikasi bot rusak. Latensi nyata ~1–2s.</p>
+            <p className="text-xs text-ink-3 mb-3">Smoke-test konektivitas SumoPod/Kenari: tanpa data RAG klinik/katalog/tarif. “Tanya Harga” bisa berhalusinasi: bukan indikasi bot rusak. Latensi nyata ~1–2s.</p>
             <div className="flex flex-wrap gap-2 mb-3">
               {(['flu','price','schedule'] as TestScenario[]).map((sc) => {
                 const labels: Record<TestScenario,string> = { flu: '🤧 Tanya Bapil', price: '💰 Tanya Harga', schedule: '📅 Tanya Jadwal' };
@@ -718,16 +724,16 @@ export const AiModelSettingsPanel: React.FC = () => {
               </div>
             )}
             {testResult && !testingScenario && (
-              <div className={`p-3 rounded-xl border text-xs transition-all duration-200 ease-out ${testResult.success ? 'bg-emerald-50 dark:bg-accent-soft border-emerald-200 dark:border-emerald-900/40 text-ink dark:text-white' : 'bg-red-50 dark:bg-danger-soft border-red-200 dark:border-red-900/40 text-red-800 dark:text-red-200'}`} style={{ animation: 'fadeInScale 200ms ease-out' }}>
+              <div className={`p-3 rounded-xl border text-xs transition duration-200 ease-out ${testResult.success ? 'bg-emerald-50 dark:bg-accent-soft border-emerald-200 dark:border-emerald-900/40 text-ink dark:text-white' : 'bg-red-50 dark:bg-danger-soft border-red-200 dark:border-red-900/40 text-red-800 dark:text-red-200'}`} style={{ animation: 'fadeInScale 200ms ease-out' }}>
                 {testResult.success ? (
                   <>
-                    <div className="font-semibold flex items-center gap-1 mb-1">✅ Model Berfungsi Normal {testResult.latencyMs !== undefined && <span className="ml-1 px-1.5 py-0.5 rounded bg-white dark:bg-app border text-[11px] font-mono">Latensi: {(testResult.latencyMs!/1000).toFixed(2)} detik • Token: {testResult.tokenEstimate ?? '-'} • {testResult.modelUsed} ({testResult.providerUsed})</span>}</div>
+                    <div className="font-semibold flex items-center gap-1 mb-1">Model Berfungsi Normal {testResult.latencyMs !== undefined && <span className="ml-1 px-1.5 py-0.5 rounded bg-white dark:bg-app border text-[11px] font-mono">Latensi: {(testResult.latencyMs!/1000).toFixed(2)} detik • Token: {testResult.tokenEstimate ?? '-'} • {testResult.modelUsed} ({testResult.providerUsed})</span>}</div>
                     <div className="bg-white dark:bg-app rounded-lg p-2.5 border border-divider text-ink dark:text-white leading-relaxed">
                       Bidan Yusi: &quot;{testResult.replySnippet}&quot;
                     </div>
                   </>
                 ) : (
-                  <><span className="font-semibold">❌ Gagal:</span> {testResult.error}</>
+                  <><span className="font-semibold">Gagal:</span> {testResult.error}</>
                 )}
               </div>
             )}
@@ -745,7 +751,7 @@ export const AiModelSettingsPanel: React.FC = () => {
               onClick={() => setShowAdvanced(!showAdvanced)}
               className="w-full flex items-center justify-between gap-2 px-3 py-3 rounded-xl bg-surface border border-divider text-xs font-semibold text-ink dark:text-white hover:bg-surface-2 dark:hover:bg-fill-1 transition-colors min-h-[48px]"
             >
-              <span className="flex items-center gap-2">{showAdvanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />} ⚙️ Pengaturan Teknis Lanjutan (NLU Extractor, QC Verifier, Summarizer)</span>
+              <span className="flex items-center gap-2">{showAdvanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />} Pengaturan Teknis Lanjutan (NLU Extractor, QC Verifier, Summarizer)</span>
               <span className="text-[11px] text-ink-3">{showAdvanced ? 'Tutup' : 'Buka'}</span>
             </button>
             {showAdvanced && (
@@ -753,13 +759,13 @@ export const AiModelSettingsPanel: React.FC = () => {
                 {/* Sugesti katalog resmi — cegah typo nama model, tetap fleksibel untuk kustom */}
                 <datalist id="ai-model-suggestions">
                   {SUMOPOD_MODELS.map((m) => (
-                    <option key={`sumopod-${m}`} value={m}>SumoPod (Utama) — {m}</option>
+                    <option key={`sumopod-${m}`} value={m}>SumoPod (Utama): {m}</option>
                   ))}
                   {KENARI_MODELS.map((m) => (
-                    <option key={`kenari-${m}`} value={m}>Kenari (Cadangan) — {m}</option>
+                    <option key={`kenari-${m}`} value={m}>Kenari (Cadangan): {m}</option>
                   ))}
-                  <option value="gpt-4o-mini">OpenAI (NLU) — gpt-4o-mini</option>
-                  <option value="deepseek-chat">DeepSeek Direct — deepseek-chat</option>
+                  <option value="gpt-4o-mini">OpenAI (NLU): gpt-4o-mini</option>
+                  <option value="deepseek-chat">DeepSeek Direct: deepseek-chat</option>
                 </datalist>
                 {configs.map((cfg) => {
                   const meta = TASK_LABELS[cfg.task] || { label: cfg.task, badge: cfg.task };
@@ -767,13 +773,13 @@ export const AiModelSettingsPanel: React.FC = () => {
                   const isNlu = cfg.task === 'INTENT_CLASSIFICATION';
                   const nluOffRec = isNlu && cfg.provider !== 'SumoPod';
                   return (
-                    <div key={cfg.task} className={`p-3 rounded-xl border ${isChatHero ? 'border-accent/30 bg-emerald-50/30 dark:bg-accent-soft/50' : 'border-divider bg-surface-2'} transition-all`}>
+                    <div key={cfg.task} className={`p-3 rounded-xl border ${isChatHero ? 'border-accent/30 bg-emerald-50/30 dark:bg-accent-soft/50' : 'border-divider bg-surface-2'} transition`}>
                       <div className="flex items-center gap-2 mb-2 flex-wrap">
                         <span className="text-xs font-bold text-ink dark:text-white">{meta.label}</span>
                         <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-accent-soft text-emerald-800 dark:text-accent">{meta.badge}</span>
-                        {isChatHero && <span className="text-[10px] text-accent font-semibold">— Hero (disinkron preset)</span>}
-                        {isNlu && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 dark:bg-info-soft text-sky-700 dark:text-info border border-sky-200 dark:border-sky-700/40">Rekomendasi: SumoPod netra — P50 1.8s</span>}
-                        {isNlu && nluOffRec && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-warning-soft text-amber-800 dark:text-warning border border-amber-200 dark:border-amber-700/50">⚠️ Di luar SumoPod berisiko latensi &gt;1.8s</span>}
+                        {isChatHero && <span className="text-[10px] text-accent font-semibold">Hero (disinkron preset)</span>}
+                        {isNlu && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 dark:bg-info-soft text-sky-700 dark:text-info border border-sky-200 dark:border-sky-700/40">Rekomendasi: SumoPod netra: P50 1.8s</span>}
+                        {isNlu && nluOffRec && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-warning-soft text-amber-800 dark:text-warning border border-amber-200 dark:border-amber-700/50">Di luar SumoPod berisiko latensi &gt;1.8s</span>}
                       </div>
                       <p className="text-[11px] text-ink-3 mb-2">{cfg.description}</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
@@ -851,8 +857,8 @@ export const AiModelSettingsPanel: React.FC = () => {
           {/* Sticky Floating Save Bar — anti lupa simpan (dirty) */}
           {dirty && !loading && (
             <div className="fixed bottom-0 inset-x-0 z-40 px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-2 pointer-events-none">
-              <div className="mx-auto max-w-3xl bg-surface border border-divider rounded-2xl shadow-xl shadow-black/10 dark:shadow-none px-4 py-3 flex items-center gap-3 pointer-events-auto transition-all duration-200 ease-out" style={{ animation: 'slideUp 200ms cubic-bezier(0.23, 1, 0.32, 1)' }}>
-                <span className="flex-1 text-xs font-semibold text-ink dark:text-white flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" /> Ada perubahan belum disimpan</span>
+              <div className="mx-auto max-w-3xl bg-surface border border-divider rounded-2xl shadow-xl shadow-black/10 dark:shadow-none px-4 py-3 flex items-center gap-3 pointer-events-auto transition duration-200 ease-out" style={{ animation: 'slideUp 200ms cubic-bezier(0.23, 1, 0.32, 1)' }}>
+                <span className="flex-1 text-xs font-semibold text-ink dark:text-white flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-500" /> Ada perubahan belum disimpan</span>
                 <button
                   type="button"
                   onClick={fetchConfigs}
@@ -862,6 +868,7 @@ export const AiModelSettingsPanel: React.FC = () => {
                   Batal
                 </button>
                 <button
+                  aria-label="Muat ulang"
                   type="button"
                   onClick={handleSaveAll}
                   disabled={savingAll}
@@ -887,6 +894,7 @@ export const AiModelSettingsPanel: React.FC = () => {
             </div>
             <div className="flex flex-col items-stretch sm:items-end gap-1.5 flex-1">
               <button
+                aria-label="Muat ulang"
                 type="button"
                 onClick={handleSaveAll}
                 disabled={savingAll || resetting || !dirty}
@@ -894,10 +902,10 @@ export const AiModelSettingsPanel: React.FC = () => {
                   dirty ? 'bg-accent hover:bg-accent-hover text-accent-ink shadow-emerald-200 dark:shadow-none' : 'bg-slate-200 dark:bg-divider text-ink-3 cursor-not-allowed'
                 } disabled:opacity-60`}
               >
-                {savingAll ? (<><RefreshCw size={14} className="animate-spin" /> Menyimpan...</>) : (<><Save size={14} /> 💾 Simpan Semua Perubahan</>)}
+                {savingAll ? (<><RefreshCw size={14} className="animate-spin" /> Menyimpan...</>) : (<><Save size={14} /> Simpan Semua Perubahan</>)}
               </button>
               <span className="text-[11px] text-ink-3 text-center sm:text-right">
-                ✨ Perubahan langsung aktif pada pesan WhatsApp berikutnya tanpa perlu restart {dirty && <span className="text-amber-600 dark:text-warning font-semibold">• Ada perubahan belum disimpan</span>}
+                Perubahan langsung aktif pada pesan WhatsApp berikutnya tanpa perlu restart {dirty && <span className="text-amber-600 dark:text-warning font-semibold">• Ada perubahan belum disimpan</span>}
               </span>
             </div>
           </div>

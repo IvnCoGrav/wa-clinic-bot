@@ -24,9 +24,10 @@ export const CalendarZoomControls: React.FC<CalendarZoomControlsProps> = ({
   if (variant === 'floating') {
     return (
       <div
-        className={`inline-flex items-center gap-1 p-1 bg-surface/95 backdrop-blur-md rounded-2xl border border-divider shadow-md text-ink select-none z-20 ${className}`}
+        className={`inline-flex items-center gap-1 p-1 bg-surface/95 rounded-2xl border border-divider shadow-md text-ink select-none z-20 ${className}`}
       >
         <button
+          aria-label="Perkecil jam (Zoom Out)"
           type="button"
           onClick={zoomOut}
           className="p-1.5 rounded-xl hover:bg-fill-1 active:bg-fill-2 text-ink-2 hover:text-ink transition cursor-pointer"
@@ -44,7 +45,7 @@ export const CalendarZoomControls: React.FC<CalendarZoomControlsProps> = ({
                 key={p.id}
                 type="button"
                 onClick={() => setPreset(p.id)}
-                className={`px-2 py-1 rounded-lg text-[10.5px] font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                className={`px-2 py-1 rounded-lg text-[10.5px] font-bold transition flex items-center gap-1 cursor-pointer ${
                   isActive
                     ? 'bg-surface text-accent shadow-2xs'
                     : 'text-ink-2 hover:text-ink'
@@ -58,6 +59,7 @@ export const CalendarZoomControls: React.FC<CalendarZoomControlsProps> = ({
         </div>
 
         <button
+          aria-label="Perbesar jam (Zoom In)"
           type="button"
           onClick={zoomIn}
           className="p-1.5 rounded-xl hover:bg-fill-1 active:bg-fill-2 text-ink-2 hover:text-ink transition cursor-pointer"
@@ -68,6 +70,7 @@ export const CalendarZoomControls: React.FC<CalendarZoomControlsProps> = ({
 
         {hourHeight !== 90 && (
           <button
+            aria-label="Reset ke 100%"
             type="button"
             onClick={resetZoom}
             className="p-1.5 rounded-xl hover:bg-fill-1 active:bg-fill-2 text-ink-3 hover:text-accent transition cursor-pointer"
@@ -85,6 +88,7 @@ export const CalendarZoomControls: React.FC<CalendarZoomControlsProps> = ({
     <div className={`flex items-center gap-1.5 select-none ${className}`}>
       <div className="flex items-center gap-0.5 bg-surface border border-divider rounded-xl p-0.5 shadow-2xs">
         <button
+          aria-label="Zoom Out (Perkecil Kerapatan Jam)"
           type="button"
           onClick={zoomOut}
           className="p-1.5 rounded-lg hover:bg-fill-1 text-ink-2 hover:text-ink transition cursor-pointer"
@@ -101,7 +105,7 @@ export const CalendarZoomControls: React.FC<CalendarZoomControlsProps> = ({
                 key={p.id}
                 type="button"
                 onClick={() => setPreset(p.id)}
-                className={`p-1.5 rounded-lg transition-all flex items-center justify-center cursor-pointer ${
+                className={`p-1.5 rounded-lg transition flex items-center justify-center cursor-pointer ${
                   isActive
                     ? 'bg-accent-soft text-accent border border-accent/30 shadow-2xs'
                     : 'text-ink-2 hover:bg-fill-1 hover:text-ink'
@@ -115,6 +119,7 @@ export const CalendarZoomControls: React.FC<CalendarZoomControlsProps> = ({
         </div>
 
         <button
+          aria-label="Zoom In (Perbesar Kerapatan Jam)"
           type="button"
           onClick={zoomIn}
           className="p-1.5 rounded-lg hover:bg-fill-1 text-ink-2 hover:text-ink transition cursor-pointer"
@@ -126,6 +131,7 @@ export const CalendarZoomControls: React.FC<CalendarZoomControlsProps> = ({
 
       {hourHeight !== 90 && (
         <button
+          aria-label="Reset Zoom ke 100%"
           type="button"
           onClick={resetZoom}
           className="p-1.5 rounded-xl bg-surface border border-divider hover:bg-fill-1 text-ink-3 hover:text-accent transition shadow-2xs cursor-pointer"

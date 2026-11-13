@@ -231,12 +231,13 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
         <div className="flex items-center gap-1">
           {!isStandby && (
             <span
-              className={`w-2 h-2 rounded-full ${isFresh ? 'bg-success animate-pulse' : 'bg-warning'}`}
+              className={`w-2 h-2 rounded-full ${isFresh ? 'bg-success' : 'bg-warning'}`}
               title={isFresh ? 'Data terupdate < 1 menit' : 'Data mungkin tertunda'}
             />
           )}
           {onRefresh && (
             <button
+              aria-label="Muat ulang"
               type="button"
               onClick={onRefresh}
               className="p-1 rounded-md hover:bg-fill-2 text-ink-2"
@@ -251,7 +252,7 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
       {isStandby ? (
         <div className="space-y-2">
           <p className="text-[11px] text-ink-2 leading-relaxed">
-            🛵 Bidan{staffName ? ` ${staffName}` : ''} belum memulai navigasi / mengirim pesan OTW.
+            Bidan{staffName ? ` ${staffName}` : ''} belum memulai navigasi / mengirim pesan OTW.
             Jadwal hari ini sudah tercatat &mdash; pemantauan akan aktif otomatis begitu Bidan menekan tombol
             <span className="font-semibold text-ink"> Navigasi</span>.
           </p>
@@ -276,7 +277,7 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
           <p className="text-[10px] text-ink-2">Update {formatStale(trip.lastUpdateSec)}</p>
           {trip.originSource && trip.originSource !== 'gps' && (
             <p className="text-[10px] text-warning bg-warning-soft border border-warning-line rounded-md px-1.5 py-0.5 inline-block">
-              📍 Titik awal estimasi (dari kunjungan sebelumnya) — bukan GPS presisi
+              Titik awal estimasi (dari kunjungan sebelumnya): bukan GPS presisi
             </p>
           )}
           <div className="grid grid-cols-3 gap-2 pt-1">
@@ -331,7 +332,7 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
             <button
               type="button"
               onClick={() => onInsertText((data?.readyText || '').trim())}
-              className="w-full inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold text-white bg-accent hover:bg-accent-hover rounded-lg px-2 py-2"
+              className="w-full inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold text-on-solid bg-accent hover:bg-accent-hover rounded-lg px-2 py-2"
               title="Sisipkan draf posisi Bidan ke kotak pesan (perlu tekan Kirim)"
             >
               <Send size={13} /> Sisipkan ke Kotak Pesan

@@ -4,6 +4,7 @@ import { apiRequest } from '../services/api';
 import { restoreSessionToken } from '../services/sessionRestore';
 import { getDefaultRedirect, fetchRolesFromApi } from '../config/rolePermissions';
 import { emitBootPhase, setBootMessage } from '../lib/bootProgress';
+import { fireAndForget, retrySilently } from '../services/errorPolicy';
 
 interface LoginResult {
   success: boolean;
@@ -32,6 +33,7 @@ function getInitialUser(): User | null {
     if (!raw) return null;
     return JSON.parse(raw);
   } catch {
+    // Cache sesi lokal rusak/terpotong: mulai tanpa user, bukan kegagalan fatal.
     return null;
   }
 }
@@ -46,9 +48,8 @@ function preloadLikelyPage(): void {
   const load = lastRole === 'therapist'
     ? () => import('../pages/staff/StaffToday')
     : () => import('../pages/tenant/Overview');
-  load()
-    .then(() => emitBootPhase('chunk'))
-    .catch(() => {});
+  // Preload hanya optimisasi; chunk gagal tidak boleh menghalangi boot.
+  fireAndForget(load().then(() => emitBootPhase('chunk')), 'preload halaman tujuan');
 }
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -139,13 +140,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           try {
             localStorage.setItem(LAST_USER_KEY, JSON.stringify(freshUser));
             if (freshUser.role) localStorage.setItem(LAST_ROLE_KEY, freshUser.role);
-          } catch {}
-          fetchRolesFromApi().catch(() => {});
+          } catch {
+            // Penyimpanan lokal penuh/diblokir: sesi server tetap sah untuk sesi ini.
+          }
+          void retrySilently(fetchRolesFromApi, 'muat daftar peran');
         } else {
           setUser(null);
           try {
             localStorage.removeItem(LAST_USER_KEY);
-          } catch {}
+          } catch {
+            // Tidak ada tindakan lanjut bila penyimpanan lokal menolak hapus.
+          }
         }
         setLoading(false);
         emitBootPhase('auth');
@@ -223,7 +228,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
       if (data.success && data.user) {
         if (data.token) localStorage.setItem(TOKEN_STORAGE_KEY, data.token);
-        await fetchRolesFromApi().catch(() => {});
+        await retrySilently(fetchRolesFromApi, 'muat daftar peran setelah login');
         const authUser: User = {
           id: data.user.id,
           email: data.user.email || '',
@@ -238,7 +243,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           localStorage.setItem(LAST_USER_KEY, JSON.stringify(authUser));
           localStorage.setItem(LAST_ROLE_KEY, role);
-        } catch {}
+        } catch {
+          // Cache lokal opsional; login tetap sah tanpa cache.
+        }
         const redirectTo = data.redirectTo || getDefaultRedirect(role);
         return { success: true, role, redirectTo };
       }
@@ -247,7 +254,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(null);
       try {
         localStorage.removeItem(LAST_USER_KEY);
-      } catch {}
+      } catch {
+        // Cache lokal opsional; kegagalan login tetap diteruskan ke pemanggil.
+      }
       throw err;
     } finally {
       setLoading(false);
@@ -263,12 +272,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // notifikasi role lama setelah user berganti akun/portal).
     try {
       const { unsubscribeFromPushNotifications } = await import('../services/pushNotification');
-      await unsubscribeFromPushNotifications().catch(() => {});
-    } catch {}
+      // Disosiasi push best-effort: logout tidak boleh gagal karenanya.
+      fireAndForget(unsubscribeFromPushNotifications(), 'lepas langganan push');
+    } catch {
+      // Modul push tidak tersedia (browser lama/diblokir): logout tetap jalan.
+    }
     try {
-      const serverLogout = apiRequest('/api/admin/auth/logout', { method: 'POST' }).catch(() => {});
+      // Logout server best-effort: klien tetap keluar walau jaringan bermasalah.
+      const serverLogout = apiRequest('/api/admin/auth/logout', { method: 'POST' });
+      fireAndForget(serverLogout, 'logout server');
       await Promise.race([
-        serverLogout,
+        serverLogout.catch(() => null),
         new Promise((resolve) => setTimeout(resolve, 1500)),
       ]);
     } catch (err) {

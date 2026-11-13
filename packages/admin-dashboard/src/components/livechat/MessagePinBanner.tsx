@@ -47,7 +47,7 @@ export const MessagePinBanner: React.FC<MessagePinBannerProps> = ({
     .trim() || 'Pesan yang disematkan';
 
   return (
-    <div className="sticky top-0 z-20 w-full px-3 py-1.5 bg-gradient-to-r from-emerald-50/95 via-teal-50/95 to-slate-50/95 dark:from-emerald-950/80 dark:via-teal-950/80 dark:to-slate-900/80 backdrop-blur-md border-b border-emerald-200/60 dark:border-emerald-800/60 shadow-xs animate-fadeIn select-none">
+    <div className="sticky top-0 z-20 w-full px-3 py-1.5 bg-gradient-to-r from-emerald-50/95 via-teal-50/95 to-slate-50/95 dark:from-emerald-950/80 dark:via-teal-950/80 dark:to-slate-900/80 border-b border-emerald-200/60 dark:border-emerald-800/60 shadow-xs animate-fadeIn select-none">
       <div className="max-w-4xl mx-auto flex items-center justify-between gap-2.5">
         {/* Tombol Klik Banner untuk Direct Jump ke Pesan */}
         <button

@@ -22,6 +22,7 @@ import {
   Trash2,
   Cpu
 } from 'lucide-react';
+import { formatWib } from '../../utils/dateWib';
 
 export const KnowledgeBase: React.FC = () => {
   const { confirm } = useUiFeedback();
@@ -348,7 +349,10 @@ export const KnowledgeBase: React.FC = () => {
   };
 
   const handleResolveUnanswered = async (id: string) => {
-    if (!unansweredAnswer.trim()) return;
+    if (!unansweredAnswer.trim()) {
+      showToast('Jawaban wajib diisi sebelum menyimpan.', 'error');
+      return;
+    }
     try {
       await apiRequest(`/api/admin/knowledge/unanswered/${id}/resolve`, {
         method: 'POST',
@@ -365,7 +369,11 @@ export const KnowledgeBase: React.FC = () => {
   };
 
   const handleSaveChunkEditFromMatch = async (chunkId: string) => {
-    if (!editingChunkTitle.trim() || !editingChunkContent.trim() || chunkSaveLoading) return;
+    if (chunkSaveLoading) return;
+    if (!editingChunkTitle.trim() || !editingChunkContent.trim()) {
+      showToast('Judul dan isi FAQ wajib diisi.', 'error');
+      return;
+    }
     setChunkSaveLoading(true);
     try {
       await apiRequest(`/api/admin/knowledge/chunks/${chunkId}`, {
@@ -404,7 +412,10 @@ export const KnowledgeBase: React.FC = () => {
 
   const handleAddFaq = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!question.trim() || !answer.trim()) return;
+    if (!question.trim() || !answer.trim()) {
+      showToast('Pertanyaan dan jawaban wajib diisi.', 'error');
+      return;
+    }
 
     setFormSubmitting(true);
     try {
@@ -429,7 +440,10 @@ export const KnowledgeBase: React.FC = () => {
 
   const handleUploadDoc = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!docName.trim() || !docContent.trim()) return;
+    if (!docName.trim() || !docContent.trim()) {
+      showToast('Nama dokumen dan isi wajib diisi.', 'error');
+      return;
+    }
 
     setUploadSubmitting(true);
     try {
@@ -455,10 +469,10 @@ export const KnowledgeBase: React.FC = () => {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-xl font-bold tracking-tight text-ink flex items-center space-x-2">
+        <h1 className="text-xl font-bold tracking-tight text-ink flex items-center space-x-2">
           <BookOpen className="text-accent" size={22} />
           <span>Knowledge Base Manager</span>
-        </h2>
+        </h1>
         <p className="text-xs text-ink-3 mt-0.5">Kelola data FAQ, SOP klinik, dan AI RAG references untuk respons otomatis WhatsApp</p>
       </div>
 
@@ -466,37 +480,37 @@ export const KnowledgeBase: React.FC = () => {
       <div className="flex flex-wrap gap-1 p-1 bg-surface border border-divider rounded-xl max-w-4xl shadow-xs">
         <button 
           onClick={() => setActiveTab('chunks')}
-          className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${activeTab === 'chunks' ? 'bg-accent text-accent-ink shadow-xs' : 'text-ink-2 hover:text-ink'}`}
+          className={`py-1.5 px-3 rounded-lg text-xs font-bold transition ${activeTab === 'chunks' ? 'bg-accent text-accent-ink shadow-xs' : 'text-ink-2 hover:text-ink'}`}
         >
           Reference Chunks ({chunks.length})
         </button>
         <button 
           onClick={() => setActiveTab('upload')}
-          className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${activeTab === 'upload' ? 'bg-accent text-accent-ink shadow-xs' : 'text-ink-2 hover:text-ink'}`}
+          className={`py-1.5 px-3 rounded-lg text-xs font-bold transition ${activeTab === 'upload' ? 'bg-accent text-accent-ink shadow-xs' : 'text-ink-2 hover:text-ink'}`}
         >
           Add FAQ & Documents
         </button>
         <button 
           onClick={() => setActiveTab('harvesting')}
-          className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${activeTab === 'harvesting' ? 'bg-accent text-accent-ink shadow-xs' : 'text-ink-2 hover:text-ink'}`}
+          className={`py-1.5 px-3 rounded-lg text-xs font-bold transition ${activeTab === 'harvesting' ? 'bg-accent text-accent-ink shadow-xs' : 'text-ink-2 hover:text-ink'}`}
         >
           AI Chat Scraper
         </button>
         <button 
           onClick={() => setActiveTab('staging')}
-          className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${activeTab === 'staging' ? 'bg-accent text-accent-ink shadow-xs' : 'text-ink-2 hover:text-ink'}`}
+          className={`py-1.5 px-3 rounded-lg text-xs font-bold transition ${activeTab === 'staging' ? 'bg-accent text-accent-ink shadow-xs' : 'text-ink-2 hover:text-ink'}`}
         >
           Staging Reviewer ({medicalStaging.length + generalStaging.length})
         </button>
         <button 
           onClick={() => setActiveTab('existing_use_case')}
-          className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${activeTab === 'existing_use_case' ? 'bg-accent text-accent-ink shadow-xs' : 'text-ink-2 hover:text-ink'}`}
+          className={`py-1.5 px-3 rounded-lg text-xs font-bold transition ${activeTab === 'existing_use_case' ? 'bg-accent text-accent-ink shadow-xs' : 'text-ink-2 hover:text-ink'}`}
         >
           Sudah Ada Use Case ({existingMatches.length})
         </button>
         <button 
           onClick={() => setActiveTab('unanswered')}
-          className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${activeTab === 'unanswered' ? 'bg-accent text-accent-ink shadow-xs' : 'text-ink-2 hover:text-ink'}`}
+          className={`py-1.5 px-3 rounded-lg text-xs font-bold transition ${activeTab === 'unanswered' ? 'bg-accent text-accent-ink shadow-xs' : 'text-ink-2 hover:text-ink'}`}
         >
           Unanswered Log ({unansweredList.length})
         </button>
@@ -589,7 +603,7 @@ export const KnowledgeBase: React.FC = () => {
                           </span>
                           <div className="flex items-center space-x-1.5">
                             <span className="text-[10px] text-ink-3 mr-1">
-                              {new Date(chunk.created_at).toLocaleDateString()}
+                              {formatWib(chunk.created_at, { day: '2-digit', month: 'short', year: 'numeric' })}
                             </span>
                             <button
                               type="button"
@@ -683,9 +697,10 @@ export const KnowledgeBase: React.FC = () => {
               </div>
 
               <button
+                aria-label="Tambah"
                 type="submit"
                 disabled={formSubmitting}
-                className="px-4 py-2 bg-accent hover:bg-accent disabled:opacity-50 text-white rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
+                className="px-4 py-2 bg-accent hover:bg-accent disabled:opacity-50 text-on-solid rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
               >
                 <Plus size={13} />
                 <span>{formSubmitting ? 'Menyimpan...' : 'Tambah FAQ Chunk'}</span>
@@ -726,9 +741,10 @@ export const KnowledgeBase: React.FC = () => {
               </div>
 
               <button
+                aria-label="Unggah"
                 type="submit"
                 disabled={uploadSubmitting}
-                className="px-4 py-2 bg-accent hover:bg-accent disabled:opacity-50 text-white rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
+                className="px-4 py-2 bg-accent hover:bg-accent disabled:opacity-50 text-on-solid rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
               >
                 <UploadCloud size={13} />
                 <span>{uploadSubmitting ? 'Memproses Chunks...' : 'Parse & Import Dokumen'}</span>
@@ -798,10 +814,10 @@ export const KnowledgeBase: React.FC = () => {
                   <Trash2 size={13} />
                   <span>Reset Staging Terbalik</span>
                 </button>
-                <button
+                <button aria-label={syncStatus.isSyncing ? 'Sinkronisasi WhatsApp sedang berjalan' : localStats.conversationCount === 0 ? 'Database percakapan lokal masih kosong' : 'Mulai panen FAQ dari database lokal'}
                   onClick={handleStartHarvest}
                   disabled={harvestJob?.status === 'PROCESSING' || harvestLoading || syncStatus.isSyncing || localStats.conversationCount === 0}
-                  className="px-3.5 py-2 bg-accent hover:bg-accent disabled:opacity-50 text-white rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
+                  className="px-3.5 py-2 bg-accent hover:bg-accent disabled:opacity-50 text-on-solid rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
                   title={
                     syncStatus.isSyncing
                       ? 'Sinkronisasi WhatsApp sedang berjalan'
@@ -837,7 +853,7 @@ export const KnowledgeBase: React.FC = () => {
                   </div>
                   <div className="w-full h-2 rounded-full bg-fill-1 overflow-hidden border border-divider">
                     <div 
-                      className="h-full bg-accent transition-all duration-500 rounded-full"
+                      className="h-full bg-accent transition-[width] duration-500 rounded-full"
                       style={{ width: `${harvestJob.progressPercent}%` }}
                     ></div>
                   </div>
@@ -897,14 +913,14 @@ export const KnowledgeBase: React.FC = () => {
             <div className="flex space-x-4">
               <button
                 onClick={() => setStagingTab('medical')}
-                className={`pb-2 text-xs font-bold transition-all relative ${stagingTab === 'medical' ? 'text-accent font-extrabold' : 'text-ink-2 hover:text-ink'}`}
+                className={`pb-2 text-xs font-bold transition relative ${stagingTab === 'medical' ? 'text-accent font-extrabold' : 'text-ink-2 hover:text-ink'}`}
               >
                 Medical Staging ({medicalStaging.length})
                 {stagingTab === 'medical' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent rounded-full"></div>}
               </button>
               <button
                 onClick={() => setStagingTab('general')}
-                className={`pb-2 text-xs font-bold transition-all relative ${stagingTab === 'general' ? 'text-accent font-extrabold' : 'text-ink-2 hover:text-ink'}`}
+                className={`pb-2 text-xs font-bold transition relative ${stagingTab === 'general' ? 'text-accent font-extrabold' : 'text-ink-2 hover:text-ink'}`}
               >
                 General Staging ({generalStaging.length})
                 {stagingTab === 'general' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent rounded-full"></div>}
@@ -914,6 +930,7 @@ export const KnowledgeBase: React.FC = () => {
             {(medicalStaging.length > 0 || generalStaging.length > 0) && (
               <div className="flex items-center space-x-1.5">
                 <button
+                  aria-label="Olah dan rapikan seluruh draf staging dengan AI"
                   onClick={handleAnalyzeStagingAI}
                   disabled={analyzingStaging}
                   className="px-2.5 py-1.5 bg-accent-soft hover:bg-accent-soft border border-divider text-accent rounded-xl text-xs font-semibold transition flex items-center space-x-1 disabled:opacity-50 shadow-xs"
@@ -958,7 +975,7 @@ export const KnowledgeBase: React.FC = () => {
                     <div className="flex items-center space-x-2 text-[10px] font-bold text-ink-3">
                       <span className="text-accent">PHONE: {item.customer_phone || item.phone || 'N/A'}</span>
                       <span>•</span>
-                      <span>STAGED: {new Date(item.created_at).toLocaleString()}</span>
+                      <span>STAGED: {formatWib(item.created_at, { dateStyle: 'short', timeStyle: 'short' })}</span>
                     </div>
                     <div className="flex space-x-1.5">
                       <button
@@ -1034,7 +1051,7 @@ export const KnowledgeBase: React.FC = () => {
           <div className="bg-surface border border-divider rounded-2xl p-5 space-y-4 shadow-xs">
             <div className="flex justify-between items-center pb-3 border-b border-divider">
               <span className="text-xs font-bold text-ink uppercase">Daftar Pertanyaan Duplicate & Use Case Existing</span>
-              <button 
+              <button aria-label="Refresh Queue" 
                 onClick={loadExistingMatches}
                 className="p-1.5 text-ink-3 hover:text-ink rounded-lg hover:bg-fill-1"
                 title="Refresh Queue"
@@ -1059,7 +1076,7 @@ export const KnowledgeBase: React.FC = () => {
                       <div className="flex items-center space-x-2 text-[10px] font-bold text-ink-3">
                         <span className="text-accent">CUSTOMER: {item.customer_phone || item.phone || 'N/A'}</span>
                         <span>•</span>
-                        <span>DETERMINED: {new Date(item.created_at).toLocaleString()}</span>
+                        <span>DETERMINED: {formatWib(item.created_at, { dateStyle: 'short', timeStyle: 'short' })}</span>
                       </div>
                       <div className="px-2 py-0.5 rounded-full bg-accent-soft border border-divider text-accent text-[10px] font-bold">
                         SIMILARITY: {Math.round((item.matched_similarity || 0.75) * 100)}%
@@ -1166,7 +1183,7 @@ export const KnowledgeBase: React.FC = () => {
           <div className="bg-surface border border-divider rounded-2xl p-5 space-y-4 shadow-xs">
             <div className="flex justify-between items-center pb-3 border-b border-divider">
               <span className="text-xs font-bold text-ink uppercase">Log Pertanyaan Tertunda (Real-time Queue)</span>
-              <button 
+              <button aria-label="Refresh Queue" 
                 onClick={loadUnansweredData}
                 className="p-1.5 text-ink-3 hover:text-ink rounded-lg hover:bg-fill-1"
                 title="Refresh Queue"
@@ -1190,7 +1207,7 @@ export const KnowledgeBase: React.FC = () => {
                     <div className="flex justify-between items-start md:items-center flex-col md:flex-row gap-2 border-b border-divider pb-2">
                       <div>
                         <span className="text-xs text-accent font-bold block mb-0.5">Bunda {item.name} ({item.phone})</span>
-                        <span className="text-[10px] text-ink-3">Diajukan: {new Date(item.createdAt).toLocaleString()}</span>
+                        <span className="text-[10px] text-ink-3">Diajukan: {formatWib(item.createdAt, { dateStyle: 'short', timeStyle: 'short' })}</span>
                       </div>
                       {activeUnansweredId !== item.id && (
                         <button
@@ -1252,7 +1269,7 @@ export const KnowledgeBase: React.FC = () => {
         {toasts.map(t => (
           <div
             key={t.id}
-            className={`px-4 py-3 rounded-xl shadow-lg border text-xs font-bold pointer-events-auto transition-all ${
+            className={`px-4 py-3 rounded-xl shadow-lg border text-xs font-bold pointer-events-auto transition ${
               t.type === 'success' 
                 ? 'bg-success-soft text-success border-success-line' 
                 : t.type === 'error' 

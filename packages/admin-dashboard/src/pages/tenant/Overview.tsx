@@ -28,6 +28,7 @@ import { pickNumber, hasChartData, formatRupiah } from '../../lib/dashboard-metr
 import { Card } from '../../components/ui/Card';
 import { KpiCard } from '../../components/ui/KpiCard';
 import { Button } from '../../components/ui/Button';
+import { PageHeader } from '../../components/ui/PageHeader';
 
 export const Overview: React.FC = () => {
   const gridStroke = 'rgb(var(--c-divider))';
@@ -143,14 +144,9 @@ export const Overview: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold tracking-tight text-ink">Overview</h2>
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-accent-soft text-accent border border-accent/30">
-              {APP_VERSION}
-            </span>
-          </div>
+      <PageHeader
+        title="Overview"
+        meta={
           <p className="text-xs text-ink-3 mt-0.5 flex items-center gap-1.5 flex-wrap">
             <span>Statistik operasional riil & metrik konektivitas</span>
             <span className="text-divider">·</span>
@@ -158,26 +154,31 @@ export const Overview: React.FC = () => {
               Update: {BUILD_DATE}, {BUILD_TIME}
             </span>
           </p>
-        </div>
-        <div className="flex items-center space-x-2">
-          <Link
-            to="/admin/financial-analytics"
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-bold shadow-xs transition duration-150 active:scale-[0.98]"
-          >
-            <TrendingUp size={14} />
-            <span>Dashboard Transaksi & Omset →</span>
-          </Link>
-          <Button 
-            variant="neutral"
-            size="sm"
-            onClick={() => { setLoading(true); fetchStatus(); }}
-            loading={loading}
-            icon={<RefreshCw size={13} className={loading ? 'animate-spin' : ''} />}
-          >
-            Refresh Metrics
-          </Button>
-        </div>
-      </div>
+        }
+        actions={
+          <>
+            <Link
+              to="/admin/financial-analytics"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-bold shadow-xs transition duration-150 active:scale-[0.98]"
+            >
+              <TrendingUp size={14} aria-hidden="true" />
+              <span>Dashboard Transaksi & Omset</span>
+            </Link>
+            <Button
+              variant="neutral"
+              size="sm"
+              onClick={() => { setLoading(true); fetchStatus(); }}
+              loading={loading}
+              icon={<RefreshCw size={13} className={loading ? 'animate-spin' : ''} aria-hidden="true" />}
+            >
+              Refresh Metrics
+            </Button>
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-accent-soft text-accent border border-accent/30">
+              {APP_VERSION}
+            </span>
+          </>
+        }
+      />
 
       {/* Error Banner */}
       {error && (
@@ -192,7 +193,7 @@ export const Overview: React.FC = () => {
         <Link to="/admin/live-chat" className="block group">
           <KpiCard
             label="Total Percakapan"
-            value={chats !== null ? chats : '—'}
+            value={chats !== null ? chats : '-'}
             hint="Seluruh percakapan tercatat"
             icon={<MessageSquare size={18} className="text-accent" />}
             hoverable
@@ -202,10 +203,11 @@ export const Overview: React.FC = () => {
         <Link to="/admin/reservations" className="block group">
           <KpiCard
             label="Reservasi Masuk Hari Ini"
-            value={reservationsToday !== null ? reservationsToday : '—'}
+            value={reservationsToday !== null ? reservationsToday : '-'}
             hint="Dihitung dari waktu masuk (WIB)"
             icon={<Calendar size={18} className="text-info" />}
             hoverable
+            emphasis="primary"
           />
         </Link>
 

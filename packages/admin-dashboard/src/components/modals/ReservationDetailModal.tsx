@@ -1,8 +1,11 @@
+// Catatan kontrak error: catch kosong di modal ini adalah pengayaan detail
+// reservasi (data lengkap setelah data ringkas tampil) dan riwayat browser.
+// Detail ringkas sudah terlihat, jadi kegagalan tidak mengosongkan modal.
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { createPortal } from 'react-dom';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
 import { useAuth } from '../../contexts/AuthContext';
+import { Modal } from '../ui/Modal';
 import { calculateHaversineKm, getGoogleMapsDirectionUrl, getLocationBadgeConfig } from '../../utils/geoUtils';
 import {
   X,
@@ -39,6 +42,7 @@ import { CreateReservationModal } from '../calendar/CreateReservationModal';
 import { AddressBookDrawer } from '../customer/AddressBookDrawer';
 import { extractDurationMinutes } from '../../utils/durationCalculator';
 import { getCleanTreatmentName, getTotalDurationLabel } from '../../utils/treatmentFormatter';
+import { formatWib, formatWibClock } from '../../utils/dateWib';
 
 interface StaffOption {
   id: string;
@@ -95,11 +99,11 @@ const formatBookingDate = (dateStr: string | null | undefined, detail?: string |
   if (!dateStr) return '';
   try {
     const d = new Date(dateStr);
-    const dayMonth = d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
-    const startTime = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false }).replace('.', ':');
+    const dayMonth = formatWib(d, { day: 'numeric', month: 'short' });
+    const startTime = formatWibClock(d).replace('.', ':');
     const duration = extractDurationMinutes(detail);
     const endD = new Date(d.getTime() + duration * 60 * 1000);
-    const endTime = endD.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false }).replace('.', ':');
+    const endTime = formatWibClock(endD).replace('.', ':');
     return `${dayMonth} ${startTime} - ${endTime}`;
   } catch {
     return '';
@@ -293,7 +297,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
   const handleConfirmClick = async () => {
     if (!onConfirm) return;
     await onConfirm(displayReservation.id);
-    toast('Reservasi terkonfirmasi & terjadwal — disinkronkan ke Google Calendar', 'success');
+    toast('Reservasi terkonfirmasi & terjadwal: disinkronkan ke Google Calendar', 'success');
     onUpdate();
   };
 
@@ -446,49 +450,31 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
 
   return (
     <>
-      {createPortal(
-    <div
-      data-modal-active="true"
-      className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[9999] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fadeIn h-[100dvh] w-[100dvw]"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-2xl bg-surface border border-divider rounded-t-3xl sm:rounded-3xl p-4 sm:p-6 space-y-4 sm:space-y-5 shadow-2xl relative max-h-[88dvh] sm:max-h-[90vh] overflow-y-auto animate-modalScaleUp"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Mobile drag handle */}
-        <div className="w-12 h-1.5 bg-divider dark:bg-divider rounded-full mx-auto -mt-1 mb-2 sm:hidden shrink-0" />
-
-        <button
-          data-modal-close="true"
-          onClick={onClose}
-          className="absolute top-[max(1rem,env(safe-area-inset-top))] right-[max(1rem,env(safe-area-inset-right))] p-2 rounded-full text-ink-3 hover:text-ink dark:hover:text-ink hover:bg-fill-1 active:scale-95 transition-colors cursor-pointer"
-        >
-          <X size={18} />
-        </button>
-
-        {/* Modal Header */}
-        <div className="flex items-start justify-between pr-8 flex-wrap gap-2">
-          <div>
-            <h3 className="text-base sm:text-lg font-bold text-ink flex items-center space-x-2">
-              <Info size={18} className="text-accent flex-shrink-0" />
-              <span>Detail Reservasi</span>
-            </h3>
-            <p className="text-xs text-ink-3 mt-0.5">
-              Kelola penugasan terapis, tanggal jadwal, dan status pembayaran
-            </p>
-          </div>
-
+      <Modal
+        open
+        onClose={onClose}
+        size="lg"
+        variant="sheet"
+        bodyClassName="p-4 sm:p-6 overflow-y-auto overscroll-contain touch-scroll-y flex-1"
+        title={
+          <span className="flex items-center gap-2">
+            <Info size={18} className="text-accent shrink-0" aria-hidden="true" />
+            <span>Detail Reservasi</span>
+          </span>
+        }
+        subtitle="Kelola penugasan terapis, tanggal jadwal, dan status pembayaran"
+        headerAction={
           <button
             type="button"
             onClick={() => setIsEditing(true)}
             className="px-3 py-1.5 rounded-xl bg-surface hover:bg-emerald-50 dark:hover:bg-fill-2 text-accent border border-emerald-300 dark:border-emerald-700 text-xs font-bold transition flex items-center space-x-1.5 shadow-2xs cursor-pointer"
             title="Buka Form Ubah Jadwal/Data Reservasi"
           >
-            <PenLine size={13} />
-            <span>Edit Reservasi</span>
+            <PenLine size={13} aria-hidden="true" />
+            <span>Edit</span>
           </button>
-        </div>
+        }
+      >
 
         {/* ========================================================= */}
         {/* STANDARD DETAIL VIEW */}
@@ -561,7 +547,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                   <div className="flex justify-between text-xs">
                     <span className="text-ink-3">Jarak dari Cabang</span>
                     <span className="text-ink font-bold">
-                      {resolvedDistanceKm !== null ? `${resolvedDistanceKm.toFixed(1)} km` : '—'}
+                      {resolvedDistanceKm !== null ? `${resolvedDistanceKm.toFixed(1)} km` : '-'}
                     </span>
                   </div>
                   <div className="flex justify-between text-xs">
@@ -676,7 +662,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                             </div>
                             <div className="flex-1 min-w-0">
                               <span className="text-[10px] font-bold text-accent uppercase tracking-wider block">
-                                🏠 Foto Tampak Depan Rumah
+                                Foto Tampak Depan Rumah
                               </span>
                               {effectiveLandmark ? (
                                 <p className="text-xs text-ink font-semibold mt-0.5 leading-snug">
@@ -697,7 +683,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                         {!housePhoto && effectiveLandmark && (
                           <div className="p-2 rounded-xl bg-surface border border-divider text-xs">
                             <span className="text-[10px] font-bold text-accent uppercase tracking-wider block">
-                              📍 Patokan Rumah
+                              Patokan Rumah
                             </span>
                             <p className="text-xs text-ink font-semibold mt-0.5">{effectiveLandmark}</p>
                           </div>
@@ -750,6 +736,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                         <Eye size={15} />
                       </button>
                       <button
+                        aria-label="Hapus Bukti Bayar"
                         onClick={handleProofRemoveClick}
                         disabled={proofUploading}
                         className="p-2 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-950/50 text-rose-600 dark:text-danger border border-rose-200 dark:border-rose-900/40 transition flex items-center justify-center disabled:opacity-50"
@@ -841,7 +828,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                         disabled={assigningStaff}
                         className="text-[10px] text-accent font-bold hover:underline flex items-center gap-1 cursor-pointer bg-success-soft px-2 py-0.5 rounded-md border border-success-line"
                       >
-                        <span>⚡ Tugaskan ke Saya</span>
+                        <span>Tugaskan ke Saya</span>
                       </button>
                     )}
                   </div>
@@ -898,7 +885,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
               <span className="text-[10px] font-bold text-ink-3 uppercase tracking-wider">Meta CAPI:</span>
               {(reservation as any).purchase_event_sent_at ? (
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-success-soft border border-success-line text-success font-semibold">
-                  ✓ Purchase Terkirim {new Date((reservation as any).purchase_event_sent_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  ✓ Purchase Terkirim {formatWib((reservation as any).purchase_event_sent_at, { day: '2-digit', month: 'short', year: 'numeric' })}
                 </span>
               ) : (reservation as any).purchase_review_status === 'ignored_outlier' ? (
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-fill-1 border border-divider text-ink-2 font-semibold">
@@ -969,6 +956,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                 )}
 
                 <button
+                  aria-label="Salin rincian format reservasi & payment untuk WhatsApp"
                   onClick={handleCopyInvoice}
                   className={`flex-1 sm:flex-initial justify-center px-3.5 py-2 rounded-xl border text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer ${
                     copiedInvoice
@@ -1019,10 +1007,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
               </div>
             </div>
         </div>
-      </div>
-    </div>,
-        document.body
-      )}
+      </Modal>
       {addressBookOpen && addressBookCustomerId && (
         <AddressBookDrawer
           customer={{ id: addressBookCustomerId, name: displayReservation?.customer?.name }}

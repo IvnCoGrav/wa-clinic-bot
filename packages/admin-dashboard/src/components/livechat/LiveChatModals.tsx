@@ -1,5 +1,9 @@
+// Catatan kontrak error: catch kosong di kumpulan modal ini adalah pengayaan
+// data (detail pelanggan, jumlah alamat tersimpan). Data ringkas dari daftar
+// chat sudah tampil, jadi kegagalan pengayaan tidak boleh mengosongkan modal.
 import React from 'react';
 import { PenLine, Info, Check, X } from 'lucide-react';
+import { Modal } from '../ui/Modal';
 import { LiveChatCustomerModal } from './LiveChatCustomerModal';
 import { CustomerEditForm } from '../modals/CustomerEditForm';
 import { AddressBookDrawer } from '../customer/AddressBookDrawer';
@@ -366,7 +370,7 @@ export const LiveChatModals: React.FC<LiveChatModalsProps> = ({
               discount: Number(newRes?.discount || 0),
             });
             handleInsertInvoiceToChat(invoiceText);
-            toast('Reservasi berhasil disimpan & format invoice langsung dimasukkan ke chat WhatsApp! ✨', 'success');
+            toast('Reservasi berhasil disimpan & format invoice langsung dimasukkan ke chat WhatsApp!', 'success');
           }}
         />
       )}
@@ -466,91 +470,88 @@ export const LiveChatModals: React.FC<LiveChatModalsProps> = ({
 
       {/* Edit Message Modal */}
       {editingMsg && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-surface border border-divider rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
-            <div className="flex justify-between items-center px-5 py-3.5 border-b border-divider bg-surface-2">
-              <div className="flex items-center space-x-2">
-                <div className="p-1.5 rounded-lg bg-accent-soft text-accent">
-                  <PenLine size={16} />
-                </div>
-                <h3 className="text-sm font-bold text-ink">Edit Pesan WhatsApp</h3>
-              </div>
+        <Modal
+          open
+          onClose={() => setEditingMsg(null)}
+          size="md"
+          title={
+            <span className="flex items-center gap-2">
+              <PenLine size={16} className="text-accent" aria-hidden="true" />
+              <span>Edit Pesan WhatsApp</span>
+            </span>
+          }
+          footer={
+            <>
               <button
                 type="button"
                 onClick={() => setEditingMsg(null)}
                 disabled={isEditingSaving}
-                className="p-1.5 rounded-lg text-ink-3 hover:text-ink hover:bg-fill-2 transition text-xs font-bold"
+                className="px-4 py-2 bg-surface hover:bg-fill-1 border border-divider text-ink rounded-xl text-xs font-semibold transition cursor-pointer"
               >
-                ✕
+                Batal
               </button>
-            </div>
-
-            <div className="p-5 space-y-3.5">
-              <div className="p-3 bg-warning-soft border border-warning-line rounded-xl text-[11px] text-warning space-y-1">
-                <p className="font-bold flex items-center gap-1.5">
-                  <Info size={13} className="text-warning shrink-0" />
-                  Batas Waktu Edit WhatsApp: 15 Menit
-                </p>
-                <p className="text-warning leading-relaxed">
-                  WhatsApp hanya mengizinkan pengeditan pesan dalam 15 menit pertama. Pesan yang diedit akan otomatis memiliki label <i>(Diedit)</i> di HP penerima.
-                </p>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="block text-[11px] font-bold text-ink">Isi Pesan Baru</label>
-                <textarea
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  rows={4}
-                  placeholder="Ketik perbaikan teks pesan..."
-                  className="w-full bg-surface border border-divider rounded-xl p-3 text-xs text-ink placeholder-ink-3 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition shadow-xs leading-relaxed"
-                />
-              </div>
-
-              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-divider">
-                <button
-                  type="button"
-                  onClick={() => setEditingMsg(null)}
-                  disabled={isEditingSaving}
-                  className="px-4 py-2 bg-surface hover:bg-fill-1 border border-divider text-ink rounded-xl text-xs font-semibold transition"
-                >
-                  Batal
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveEdit}
-                  disabled={isEditingSaving || !editContent.trim()}
-                  className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs"
-                >
-                  {isEditingSaving ? (
-                    <>
-                      <div className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                      <span>Menyimpan...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Check size={14} />
-                      <span>Simpan Perubahan</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
+              <button
+                type="button"
+                onClick={handleSaveEdit}
+                disabled={isEditingSaving || !editContent.trim()}
+                className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 text-on-solid rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs cursor-pointer"
+              >
+                {isEditingSaving ? (
+                  <>
+                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden="true" />
+                    <span>Menyimpan...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check size={14} aria-hidden="true" />
+                    <span>Simpan Perubahan</span>
+                  </>
+                )}
+              </button>
+            </>
+          }
+        >
+          <div className="p-3 bg-warning-soft border border-warning-line rounded-xl text-[11px] text-warning space-y-1">
+            <p className="font-bold flex items-center gap-1.5">
+              <Info size={13} className="text-warning shrink-0" aria-hidden="true" />
+              Batas Waktu Edit WhatsApp: 15 Menit
+            </p>
+            <p className="text-warning leading-relaxed">
+              WhatsApp hanya mengizinkan pengeditan pesan dalam 15 menit pertama. Pesan yang diedit akan otomatis memiliki label <i>(Diedit)</i> di HP penerima.
+            </p>
           </div>
-        </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="edit-message-content" className="block text-[11px] font-bold text-ink">
+              Isi Pesan Baru
+            </label>
+            <textarea
+              id="edit-message-content"
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              rows={4}
+              placeholder="Ketik perbaikan teks pesan..."
+              className="w-full bg-surface border border-divider rounded-xl p-3 text-xs text-ink placeholder-ink-3 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition shadow-xs leading-relaxed"
+            />
+          </div>
+        </Modal>
       )}
 
       {/* Chat Export Modal (konsolidasi dari page ChatExport — via ?action=export) */}
       {(searchParams.get('action') === 'export' || searchParams.get('export') === '1') && (
-        <div className="fixed inset-0 z-[10000] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn" onClick={() => { const p = new URLSearchParams(searchParams.toString()); p.delete('action'); p.delete('export'); setSearchParams(p, { replace: true }); }}>
-          <div className="bg-surface rounded-2xl w-full max-w-3xl max-h-[85dvh] overflow-y-auto shadow-2xl border border-divider p-4 sm:p-5" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold text-ink">Ekspor Chat</h3>
-              <button onClick={() => { const p = new URLSearchParams(searchParams.toString()); p.delete('action'); p.delete('export'); setSearchParams(p, { replace: true }); }} className="p-1.5 rounded-lg text-ink-3 hover:text-ink hover:bg-fill-1"><X size={16} /></button>
-            </div>
-            <ChatExport />
-          </div>
-        </div>
+        <Modal
+          open
+          onClose={() => {
+            const p = new URLSearchParams(searchParams.toString());
+            p.delete('action');
+            p.delete('export');
+            setSearchParams(p, { replace: true });
+          }}
+          size="xl"
+          title="Ekspor Chat"
+        >
+          <ChatExport />
+        </Modal>
       )}
 
       {/* 📋 Modal Informasi & Konfirmasi Sinkronisasi WhatsApp */}

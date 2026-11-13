@@ -184,7 +184,9 @@ export function useFormDraft<T>(
           try {
             localStorage.removeItem(storageKey);
             setHasDraft(false);
-          } catch {}
+          } catch {
+            // Penyimpanan diblokir: draf lama mungkin tertinggal, form tetap jalan.
+          }
         }
         return;
       }

@@ -3,6 +3,8 @@ import { Gift, Save, Plus, Trash2, Image as ImageIcon, Loader2 } from 'lucide-re
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
 import { ToggleSwitch } from '../common/ToggleSwitch';
+import { useSnapshotDirty } from '../../hooks/useDirtyGuard';
+import { useReportDirty } from './settingsDirtyStore';
 
 interface PromoRule {
   title: string;
@@ -85,6 +87,24 @@ export const PricelistPromoPanel: React.FC = () => {
     setRules(rules.filter((_, i) => i !== index));
   };
 
+  const { dirty: unsavedDraft } = useSnapshotDirty(
+    [
+      brandLogoUrl,
+      enabled,
+      delaySeconds,
+      discountPercent,
+      instagramAccount,
+      badgeTitle,
+      badgeSubtitle,
+      modalTitle,
+      modalDescription,
+      rules,
+      claimMessageTemplate,
+    ],
+    !loading
+  );
+  useReportDirty(unsavedDraft);
+
   const handleSave = async () => {
     if (brandLogoUrl.trim()) {
       const isValid = /^https?:\/\//i.test(brandLogoUrl.trim()) || /^\/assets\/[a-zA-Z0-9._-]+$/i.test(brandLogoUrl.trim());
@@ -159,7 +179,7 @@ export const PricelistPromoPanel: React.FC = () => {
           type="button"
           onClick={handleSave}
           disabled={saving}
-          className="inline-flex items-center justify-center px-4 py-2.5 min-h-[44px] bg-accent hover:bg-accent-hover text-white text-sm font-semibold rounded-xl shadow-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed space-x-2"
+          className="inline-flex items-center justify-center px-4 py-2.5 min-h-[44px] bg-accent hover:bg-accent-hover text-on-solid text-sm font-semibold rounded-xl shadow-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed space-x-2"
         >
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save size={16} />}
           <span>{saving ? 'Menyimpan...' : 'Simpan Perubahan'}</span>

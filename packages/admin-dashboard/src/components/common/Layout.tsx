@@ -484,16 +484,16 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       {/* ⬅️ Mobile Edge Swipe-Back Floating Indicator (Max 100px with resistance physics) */}
       {swipeBackDistance > 0 && (
         <div
-          className="fixed left-2 top-1/2 -translate-y-1/2 z-[99999] pointer-events-none transition-all duration-75 ease-out flex items-center justify-center"
+          className="fixed left-2 top-1/2 -translate-y-1/2 z-[99999] pointer-events-none transition duration-75 ease-out flex items-center justify-center"
           style={{
             transform: `translate(${swipeBackDistance}px, -50%) scale(${0.8 + (swipeBackDistance / 100) * 0.35})`,
             opacity: Math.min(swipeBackDistance / 20, 1),
           }}
         >
           <div
-            className={`p-3 rounded-full shadow-2xl backdrop-blur-md border transition-all flex items-center justify-center ${
+            className={`p-3 rounded-full shadow-2xl backdrop-blur-md border transition flex items-center justify-center ${
               swipeBackDistance >= 50
-                ? 'bg-accent text-white border-white/40 ring-4 ring-accent/25 shadow-accent/30'
+                ? 'bg-accent text-on-solid border-white/40 ring-4 ring-accent/25 shadow-accent/30'
                 : 'bg-surface/95 text-accent border-accent/30 shadow-lg'
             }`}
           >
@@ -509,7 +509,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       {incomingToast && (
         <div
           onClick={() => openChatFromToast(incomingToast.conversationId)}
-          className="fixed top-3 left-3 right-3 sm:left-auto sm:right-6 z-[9999] max-w-sm sm:max-w-md bg-surface-2 border border-accent/40 rounded-2xl shadow-2xl p-3 flex items-start space-x-3 cursor-pointer hover:bg-fill-1 transition-all transform animate-in slide-in-from-top-4 fade-in duration-200 select-none backdrop-blur-md mt-[env(safe-area-inset-top,0px)] ml-[env(safe-area-inset-left,0px)] mr-[env(safe-area-inset-right,0px)]"
+          className="fixed top-3 left-3 right-3 sm:left-auto sm:right-6 z-[9999] max-w-sm sm:max-w-md bg-surface-2 border border-accent/40 rounded-2xl shadow-2xl p-3 flex items-start space-x-3 cursor-pointer hover:bg-fill-1 transition transform animate-in slide-in-from-top-4 fade-in duration-200 select-none backdrop-blur-md mt-[env(safe-area-inset-top,0px)] ml-[env(safe-area-inset-left,0px)] mr-[env(safe-area-inset-right,0px)]"
         >
           <div className="h-10 w-10 rounded-full bg-accent text-accent-ink flex items-center justify-center shrink-0 font-bold shadow-xs">
             <MessageSquare size={20} />
@@ -528,7 +528,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             </p>
             <div className="flex items-center space-x-2 mt-1.5">
               <span className="text-[10px] font-bold text-accent bg-accent-soft px-2 py-0.5 rounded-md">
-                💬 Ketuk untuk Balas
+                Ketuk untuk Balas
               </span>
             </div>
           </div>
@@ -561,7 +561,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           if (justSwipedRef.current) return;
           dismissMobileMenu();
         }}
-        className={`fixed inset-0 bg-black/40 z-40 md:hidden backdrop-blur-xs transition-opacity duration-300 ${
+        className={`modal-backdrop fixed inset-0 bg-black/40 z-40 md:hidden transition-opacity duration-300 ${
           mobileMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
       />
@@ -573,7 +573,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         mobileMenuOpen
           ? 'translate-x-0 opacity-100 visible pointer-events-auto'
           : 'translate-x-full opacity-0 invisible pointer-events-none md:opacity-100 md:visible md:pointer-events-auto md:translate-x-0'
-      } transition-all duration-300 ease-out shadow-2xl md:shadow-xs`}>
+      } transition-[width,transform,opacity] duration-300 ease-out shadow-2xl md:shadow-xs`}>
         {/* Brand/Header */}
         <div className={`h-16 border-b border-divider bg-surface flex items-center ${
           desktopCollapsed ? 'md:justify-center md:px-0' : 'justify-between px-5'
@@ -642,7 +642,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                       to={item.path}
                       onClick={handleNavClick}
                       title={desktopCollapsed ? item.name : undefined}
-                      className={`flex items-center ${desktopCollapsed ? 'md:justify-center md:px-0 md:space-x-0' : 'space-x-3 px-3'} py-2.5 rounded-xl transition-all duration-150 text-xs relative group ${
+                      aria-current={isActive ? 'page' : undefined}
+                      className={`flex items-center ${desktopCollapsed ? 'md:justify-center md:px-0 md:space-x-0' : 'space-x-3 px-3'} py-2.5 rounded-xl transition-[padding,margin] duration-150 text-xs relative group ${
                         isActive 
                           ? 'bg-accent-soft border-l-4 border-accent text-accent font-bold shadow-xs'
                           : 'text-ink-2 hover:bg-fill-1 hover:text-ink font-medium'
@@ -689,7 +690,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           >
             <span className={`flex items-center ${desktopCollapsed ? 'md:gap-0' : 'gap-2'}`}>
               <span className="relative flex h-2 w-2">
-                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                <span className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${
                   wahaStatus === 'WORKING' ? 'bg-success' : 'bg-danger'
                 }`} />
                 <span className={`relative inline-flex rounded-full h-2 w-2 ${
@@ -711,15 +712,17 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 onClick={async () => {
                   toggleSound();
                   if (!soundActive) {
-                    toast('🔊 Suara notifikasi aktif!', 'info');
+                    toast('Suara notifikasi aktif!', 'info');
                     try {
                       const perm = await requestPushPermission();
                       if (perm === 'granted') {
-                        toast('🔔 Web Push Background Aktif!', 'success');
+                        toast('Web Push Background Aktif!', 'success');
                       }
-                    } catch (_) {}
+                    } catch (_) {
+                      // Permintaan izin bisa ditolak browser; suara in-app tetap aktif.
+                    }
                   } else {
-                    toast('🔇 Suara notifikasi dimatikan (Mute).', 'info');
+                    toast('Suara notifikasi dimatikan (Mute).', 'info');
                   }
                 }}
                 className={`flex-1 min-h-[38px] ${desktopCollapsed ? 'md:w-full md:px-0' : 'px-2.5'} flex items-center justify-center gap-1.5 py-1.5 rounded-xl border text-xs font-semibold transition active:scale-95 cursor-pointer shadow-2xs ${
@@ -772,7 +775,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       {/* Main Content Area */}
       <div
         style={{ height: isLiveChat ? 'var(--vvh, 100dvh)' : undefined, maxHeight: isLiveChat ? 'var(--vvh, 100dvh)' : undefined }}
-        className={`flex-1 ${desktopCollapsed ? 'md:pl-20' : 'md:pl-64'} transition-all duration-300 flex flex-col ${isLiveChat ? 'h-[100dvh] max-h-[100dvh] overflow-hidden min-h-0' : 'min-h-screen'}`}
+        className={`flex-1 ${desktopCollapsed ? 'md:pl-20' : 'md:pl-64'} transition-[padding-left] duration-300 flex flex-col ${isLiveChat ? 'h-[100dvh] max-h-[100dvh] overflow-hidden min-h-0' : 'min-h-screen'}`}
       >
         
         {/* Top Header — iPhone safe-area: notch/Dynamic Island.
@@ -879,19 +882,19 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 onClick={async () => {
                   toggleSound();
                   if (!soundActive) {
-                    toast('🔊 Suara notifikasi aktif! Memeriksa izin push background...', 'info');
+                    toast('Suara notifikasi aktif! Memeriksa izin push background...', 'info');
                     try {
                       const perm = await requestPushPermission();
                       if (perm === 'granted') {
-                        toast('🔔 Web Push Background Aktif! Notifikasi akan muncul saat aplikasi tertutup.', 'success');
+                        toast('Web Push Background Aktif! Notifikasi akan muncul saat aplikasi tertutup.', 'success');
                       } else {
-                        toast('⚠️ Izin notifikasi browser belum diberikan. Silakan izinkan notifikasi di browser/HP Anda.', 'info');
+                        toast('Izin notifikasi browser belum diberikan. Silakan izinkan notifikasi di browser/HP Anda.', 'info');
                       }
                     } catch (e: any) {
-                      toast(`⚠️ Gagal mendaftarkan push: ${e.message}`, 'error');
+                      toast(`Gagal mendaftarkan push: ${e.message}`, 'error');
                     }
                   } else {
-                    toast('🔇 Suara notifikasi chat dimatikan (Mute).', 'info');
+                    toast('Suara notifikasi chat dimatikan (Mute).', 'info');
                   }
                 }}
                 title={soundActive ? 'Suara & Push Notifikasi: Aktif (Klik untuk Mute)' : 'Suara & Push Notifikasi: Mati (Klik untuk Aktifkan)'}
@@ -948,7 +951,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         {showStatusPopover && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                 <div
-                  className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity duration-200"
+                  className="modal-backdrop fixed inset-0 bg-black/40 transition-opacity duration-200"
                   onClick={() => setShowStatusPopover(false)}
                 />
                 <div className="relative w-full max-w-sm bg-surface rounded-2xl shadow-2xl border border-divider p-4 text-xs z-10 space-y-3 animate-in fade-in zoom-in-95 duration-150">
@@ -1019,12 +1022,12 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                           await subscribeToPushNotifications(currentRole);
                           const res = await sendTestPush();
                           if (res.success) {
-                            toast('✅ Notifikasi uji coba berhasil dikirim dari server!', 'success');
+                            toast('Notifikasi uji coba berhasil dikirim dari server!', 'success');
                           } else {
-                            toast('⚠️ Gagal mengirim notifikasi uji coba.', 'error');
+                            toast('Gagal mengirim notifikasi uji coba.', 'error');
                           }
                         } catch (err: any) {
-                          toast(`⚠️ Error: ${err.message}`, 'error');
+                          toast(`Error: ${err.message}`, 'error');
                         }
                       }}
                       className="w-full text-center py-2 px-3 rounded-xl bg-success-soft hover:bg-success-line text-success font-semibold text-xs transition border border-success-line flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"

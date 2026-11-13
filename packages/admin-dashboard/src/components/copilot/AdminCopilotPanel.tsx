@@ -71,7 +71,7 @@ const RichMessage: React.FC<{ content: string; onNavigate: (url: string) => void
             key={`link-${m.index}`}
             type="button"
             onClick={() => onNavigate(url)}
-            className="inline-flex items-center gap-1 align-middle mx-0.5 px-1.5 py-0.5 rounded-md bg-accent hover:bg-accent-hover text-white text-[10px] font-semibold active:scale-[0.97] transition-colors"
+            className="inline-flex items-center gap-1 align-middle mx-0.5 px-1.5 py-0.5 rounded-md bg-accent hover:bg-accent-hover text-on-solid text-[10px] font-semibold active:scale-[0.97] transition-colors"
           >
             <MessageCircle size={10} /> {label}
           </button>
@@ -340,7 +340,7 @@ export const AdminCopilotPanel: React.FC<{ conversationId?: string | null; custo
     <>
       {open && (
         <div id="copilot-panel" className="fixed bottom-24 right-4 z-40 w-[min(92vw,380px)] h-[min(70vh,520px)] bg-surface border border-divider rounded-2xl shadow-lg flex flex-col overflow-hidden">
-          <div className="px-3.5 py-2.5 bg-accent text-white flex items-center justify-between shrink-0">
+          <div className="px-3.5 py-2.5 bg-accent text-on-solid flex items-center justify-between shrink-0">
             <span className="text-xs font-bold flex items-center gap-1.5">
               <Bot size={14} /> AI Clinic Copilot
             </span>
@@ -380,7 +380,7 @@ export const AdminCopilotPanel: React.FC<{ conversationId?: string | null; custo
                 <div
                   className={`max-w-[85%] rounded-xl px-3 py-2 text-[12px] leading-relaxed whitespace-pre-wrap ${
                     m.role === 'user'
-                      ? 'bg-accent text-white rounded-tr-none'
+                      ? 'bg-accent text-on-solid rounded-tr-none'
                       : 'bg-surface-2 text-ink border border-divider rounded-tl-none'
                   }`}
                 >
@@ -426,7 +426,7 @@ export const AdminCopilotPanel: React.FC<{ conversationId?: string | null; custo
                       <button
                         type="button"
                         onClick={cancelTurn}
-                        className="text-[10px] font-semibold text-rose-500 hover:text-rose-600 hover:underline px-1 py-0.5 rounded transition"
+                        className="text-[10px] font-semibold text-danger hover:opacity-80 hover:underline px-1 py-0.5 rounded transition"
                       >
                         Batal
                       </button>
@@ -461,7 +461,7 @@ export const AdminCopilotPanel: React.FC<{ conversationId?: string | null; custo
               type="button"
               onClick={() => send(input)}
               disabled={loading || !input.trim()}
-              className="w-9 h-9 rounded-xl bg-accent hover:bg-accent-hover disabled:opacity-40 text-white flex items-center justify-center shrink-0 active:scale-95 transition"
+              className="w-9 h-9 rounded-xl bg-accent hover:bg-accent-hover disabled:opacity-40 text-on-solid flex items-center justify-center shrink-0 active:scale-95 transition"
               aria-label="Kirim pertanyaan"
             >
               <Send size={14} />

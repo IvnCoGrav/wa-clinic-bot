@@ -181,9 +181,10 @@ export const TelegramIntegration: React.FC = () => {
         {/* Global Action */}
         {activeTab === 'STAFF_DISPATCH' && (
           <button
+            aria-label="Muat ulang"
             onClick={handleBroadcastAll}
             disabled={broadcastingBriefing}
-            className="inline-flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink text-xs font-semibold shadow-sm transition-all disabled:opacity-50"
+            className="inline-flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink text-xs font-semibold shadow-sm transition disabled:opacity-50"
           >
             {broadcastingBriefing ? (
               <>
@@ -204,7 +205,7 @@ export const TelegramIntegration: React.FC = () => {
       <div className="flex items-center space-x-2 border-b border-divider">
         <button
           onClick={() => setActiveTab('STAFF_DISPATCH')}
-          className={`flex items-center space-x-2 px-4 py-3 text-xs font-semibold border-b-2 transition-all ${
+          className={`flex items-center space-x-2 px-4 py-3 text-xs font-semibold border-b-2 transition ${
             activeTab === 'STAFF_DISPATCH'
               ? 'border-accent text-accent'
               : 'border-transparent text-ink-2 hover:text-ink dark:hover:text-ink'
@@ -219,7 +220,7 @@ export const TelegramIntegration: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('CLINIC_REPORTS')}
-          className={`flex items-center space-x-2 px-4 py-3 text-xs font-semibold border-b-2 transition-all ${
+          className={`flex items-center space-x-2 px-4 py-3 text-xs font-semibold border-b-2 transition ${
             activeTab === 'CLINIC_REPORTS'
               ? 'border-accent text-accent'
               : 'border-transparent text-ink-2 hover:text-ink dark:hover:text-ink'
@@ -372,7 +373,7 @@ export const TelegramIntegration: React.FC = () => {
                               <button
                                 onClick={() => handleCopyPairingLink(staff)}
                                 disabled={isLoadingThis}
-                                className={`inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl border text-[11px] font-semibold transition-all ${
+                                className={`inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl border text-[11px] font-semibold transition ${
                                   isCopied
                                     ? 'bg-success-soft text-success border-success-line'
                                     : 'bg-white dark:bg-transparent hover:bg-fill-1 text-ink border-divider shadow-2xs'
@@ -397,7 +398,7 @@ export const TelegramIntegration: React.FC = () => {
                                 <button
                                   onClick={() => handleTestBriefing(staff)}
                                   disabled={isBriefingThis}
-                                  className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-sky-50 dark:bg-fill-1/10 hover:bg-sky-100 dark:hover:bg-sky-500/20 text-sky-700 dark:text-info border border-sky-200 dark:border-sky-800/40 text-[11px] font-semibold transition-all"
+                                  className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-sky-50 dark:bg-fill-1/10 hover:bg-sky-100 dark:hover:bg-sky-500/20 text-sky-700 dark:text-info border border-sky-200 dark:border-sky-800/40 text-[11px] font-semibold transition"
                                   title="Test kirim briefing jadwal hari ini ke Telegram Bidan"
                                 >
                                   {isBriefingThis ? (

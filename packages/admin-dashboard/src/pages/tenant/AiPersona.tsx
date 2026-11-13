@@ -1,7 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { apiRequest } from '../../services/api';
 import { BRAND } from '../../config/brand';
 import { useUiFeedback } from '../../components/common/UiFeedback';
+import { useDirtyGuard } from '../../hooks/useDirtyGuard';
+import { Modal } from '../../components/ui/Modal';
+import { FormErrorSummary } from '../../components/ui/FormErrorSummary';
+import type { FieldIssue } from '../../lib/validateReservation';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 import { 
   Volume2, 
@@ -57,6 +61,12 @@ export const AiPersona: React.FC = () => {
   const [persona, setPersona] = useState('');
   const [maxCharsPerReply, setMaxCharsPerReply] = useState('');
   const [loading, setLoading] = useState(true);
+  const personaBaselineRef = useRef<{ persona: string; maxCharsPerReply: string } | null>(null);
+  const personaDirty =
+    personaBaselineRef.current !== null &&
+    (persona !== personaBaselineRef.current.persona ||
+      maxCharsPerReply !== personaBaselineRef.current.maxCharsPerReply);
+  useDirtyGuard(personaDirty, 'Prompt AI Persona belum disimpan');
   const [isSaving, setIsSaving] = useState(false);
 
   // Few-Shot Exemplar States
@@ -67,6 +77,7 @@ export const AiPersona: React.FC = () => {
 
   // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [formIssues, setFormIssues] = useState<FieldIssue[]>([]);
   const [editingExemplar, setEditingExemplar] = useState<FewShotExemplarItem | null>(null);
   const [formScenario, setFormScenario] = useState('');
   const [formCustomerMessage, setFormCustomerMessage] = useState('');
@@ -105,6 +116,10 @@ export const AiPersona: React.FC = () => {
       const res = await apiRequest('/api/admin/persona');
       setPersona(res.persona || '');
       setMaxCharsPerReply(res.maxCharsPerReply != null ? String(res.maxCharsPerReply) : '');
+      personaBaselineRef.current = {
+        persona: res.persona || '',
+        maxCharsPerReply: res.maxCharsPerReply != null ? String(res.maxCharsPerReply) : '',
+      };
     } catch (err: any) {
       console.error('Failed to load persona:', err);
       toast('Gagal memuat prompt AI Persona: ' + err.message, 'error');
@@ -204,7 +219,11 @@ export const AiPersona: React.FC = () => {
 
   // Save Persona Prompt
   const handleSavePersona = async () => {
-    if (!persona.trim() || isSaving) return;
+    if (isSaving) return;
+    if (!persona.trim()) {
+      toast('Prompt AI Persona tidak boleh kosong.', 'error');
+      return;
+    }
     setIsSaving(true);
     try {
       await apiRequest('/api/admin/persona', {
@@ -214,6 +233,9 @@ export const AiPersona: React.FC = () => {
           maxCharsPerReply: maxCharsPerReply.trim() === '' ? null : Number(maxCharsPerReply),
         }),
       });
+      // Setelah tersimpan, jadikan isi saat ini sebagai kondisi bersih supaya
+      // peringatan "belum disimpan" tidak menyala palsu.
+      personaBaselineRef.current = { persona, maxCharsPerReply };
       toast('Prompt AI Persona berhasil disimpan!', 'success');
     } catch (err: any) {
       toast('Gagal menyimpan persona: ' + err.message, 'error');
@@ -251,10 +273,15 @@ export const AiPersona: React.FC = () => {
   // Save/Submit Modal
   const handleSaveModal = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formScenario.trim() || !formCustomerMessage.trim() || !formIdealResponse.trim()) {
-      toast('Skenario, Pesan Pasien, dan Respon Ideal wajib diisi!', 'error');
+    const nextIssues: FieldIssue[] = [];
+    if (!formScenario.trim()) nextIssues.push({ field: 'scenario', message: 'Skenario wajib diisi.' });
+    if (!formCustomerMessage.trim()) nextIssues.push({ field: 'customerMessage', message: 'Pesan pasien wajib diisi.' });
+    if (!formIdealResponse.trim()) nextIssues.push({ field: 'idealResponse', message: 'Respon ideal wajib diisi.' });
+    if (nextIssues.length > 0) {
+      setFormIssues(nextIssues);
       return;
     }
+    setFormIssues([]);
 
     setIsSubmittingModal(true);
     const parsedTags = parseTagsFromDraft(formTags);
@@ -435,6 +462,7 @@ export const AiPersona: React.FC = () => {
 
         {activeTab === 'prompt' && (
           <button
+            aria-label="Simpan"
             onClick={handleSavePersona}
             disabled={loading || isSaving || !persona.trim()}
             className="px-4 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
@@ -456,6 +484,7 @@ export const AiPersona: React.FC = () => {
               <span>Muat Ulang</span>
             </button>
             <button
+              aria-label="Simpan"
               onClick={handleSavePromptConfig}
               disabled={promptConfigLoading || isSavingPromptConfig}
               className="px-4 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
@@ -764,6 +793,7 @@ export const AiPersona: React.FC = () => {
                     <span>Muat Ulang</span>
                   </button>
                   <button
+                    aria-label="Simpan"
                     onClick={handleSavePromptConfig}
                     disabled={promptConfigLoading || isSavingPromptConfig}
                     className="px-5 py-2.5 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
@@ -814,7 +844,7 @@ export const AiPersona: React.FC = () => {
                   onClick={() => setStatusFilter('all')}
                   className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition border ${
                     statusFilter === 'all'
-                      ? 'bg-accent border-accent text-white'
+                      ? 'bg-accent border-accent text-on-solid'
                       : 'bg-surface border-divider text-ink-2 hover:bg-fill-1'
                   }`}
                 >
@@ -824,7 +854,7 @@ export const AiPersona: React.FC = () => {
                   onClick={() => setStatusFilter('active')}
                   className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition border ${
                     statusFilter === 'active'
-                      ? 'bg-accent border-accent text-white'
+                      ? 'bg-accent border-accent text-on-solid'
                       : 'bg-surface border-divider text-ink-2 hover:bg-fill-1'
                   }`}
                 >
@@ -834,7 +864,7 @@ export const AiPersona: React.FC = () => {
                   onClick={() => setStatusFilter('inactive')}
                   className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition border ${
                     statusFilter === 'inactive'
-                      ? 'bg-accent border-accent text-white'
+                      ? 'bg-accent border-accent text-on-solid'
                       : 'bg-surface border-divider text-ink-2 hover:bg-fill-1'
                   }`}
                 >
@@ -994,33 +1024,18 @@ export const AiPersona: React.FC = () => {
       {/* MODAL FORM: TAMBAH / EDIT CONTOH PERCAKAPAN                               */}
       {/* ========================================================================= */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-surface rounded-3xl border border-divider shadow-2xl max-w-xl w-full max-h-[90vh] flex flex-col overflow-hidden">
-            {/* Modal Header */}
-            <div className="p-5 border-b border-divider flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/40 text-accent">
-                  <MessageSquare size={18} />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-ink dark:text-white">
-                    {editingExemplar ? 'Edit Contoh Percakapan' : 'Tambah Contoh Percakapan Ideal'}
-                  </h3>
-                  <p className="text-[11px] text-ink-3">
-                    Contoh dialog ini akan dipelajari oleh AI untuk merespons pertanyaan sejenis.
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={handleCloseModal}
-                className="p-2 text-ink-3 hover:text-ink dark:hover:text-white hover:bg-fill-1 rounded-xl transition"
-              >
-                <X size={16} />
-              </button>
-            </div>
+        <Modal
+          open
+          onClose={handleCloseModal}
+          size="xl"
+          bodyClassName="p-0 overflow-hidden flex-1 flex flex-col min-h-0"
+          title={editingExemplar ? 'Edit Contoh Percakapan' : 'Tambah Contoh Percakapan Ideal'}
+          subtitle="Contoh dialog ini akan dipelajari oleh AI untuk merespons pertanyaan sejenis."
+        >
 
             {/* Modal Body / Form */}
             <form onSubmit={handleSaveModal} className="p-5 space-y-4 overflow-y-auto flex-1 text-xs">
+          <FormErrorSummary issues={formIssues} />
               {/* Field 1: Skenario */}
               <div className="space-y-1.5">
                 <label className="block font-bold text-ink dark:text-white">
@@ -1074,7 +1089,7 @@ export const AiPersona: React.FC = () => {
                         ? 'text-amber-600 dark:text-warning'
                         : 'text-ink-3'
                     }`}
-                    title={formIdealResponse.length > 500 ? 'Respon terlalu panjang — contoh ini ikut masuk prompt AI setiap kali relevan, usahakan ringkas.' : ''}
+                    title={formIdealResponse.length > 500 ? 'Respon terlalu panjang: contoh ini ikut masuk prompt AI setiap kali relevan, usahakan ringkas.' : ''}
                   >
                     {formIdealResponse.length} / 500 karakter
                   </span>
@@ -1142,7 +1157,7 @@ export const AiPersona: React.FC = () => {
                         onClick={() => (active ? removeFormTag(q) : addFormTag(q))}
                         className={`px-2 py-1 rounded-md text-[10px] font-semibold border transition ${
                           active
-                            ? 'bg-accent border-accent text-white'
+                            ? 'bg-accent border-accent text-on-solid'
                             : 'bg-fill-1 border-divider dark:border-divider text-ink-2 hover:bg-fill-2 dark:hover:bg-fill-2'
                         }`}
                       >
@@ -1178,6 +1193,7 @@ export const AiPersona: React.FC = () => {
                   Batal
                 </button>
                 <button
+                  aria-label="Simpan"
                   type="submit"
                   disabled={isSubmittingModal}
                   className="px-5 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
@@ -1187,8 +1203,7 @@ export const AiPersona: React.FC = () => {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

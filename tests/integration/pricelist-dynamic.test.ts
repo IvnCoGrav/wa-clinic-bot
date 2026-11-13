@@ -208,14 +208,31 @@ describe('Pricelist dinamis — route & API (offline DB)', () => {
       expect(res.statusCode).toBe(200);
       expect(res.body).not.toContain('</script><script>alert(1)');
       expect(res.body).toContain('\\u003c/script');
-      // Hanya ada 2 penutup script sah: script aplikasi + penutup tag data.
-      expect((res.body.match(/<\/script>/g) || []).length).toBe(2);
+      // Penutup script sah: blok JSON-LD, blok data katalog, dan script aplikasi.
+      expect((res.body.match(/<\/script>/g) || []).length).toBe(3);
       // Payload tetap valid & terbaca
       const payload = extractInjectedPayload(res.body);
       const probe = payload.sections.flatMap((s: any) => s.items).find((i: any) => i.id === '__xss_test__');
       expect(probe).toBeTruthy();
     } finally {
       treatmentCatalogService.deleteService('__xss_test__', DEFAULT_TENANT_ID);
+    }
+  });
+
+  it('fail-closed: katalog dari seed tidak boleh disajikan sebagai harga publik', async () => {
+    const previous = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      const res = await app.inject({ method: 'GET', url: '/pricelist' });
+      expect(res.statusCode).toBe(503);
+      expect(res.headers['cache-control']).toContain('no-store');
+      expect(res.body).toContain('Katalog belum tersedia');
+      // Inti keputusan: tidak ada payload harga yang ikut terkirim.
+      expect(res.body).not.toContain('pricelist-data');
+      expect(res.body).not.toContain('add-on-nebulizer');
+    } finally {
+      if (previous === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previous;
     }
   });
 

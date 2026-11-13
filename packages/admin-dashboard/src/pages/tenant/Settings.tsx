@@ -4,6 +4,9 @@ import { TelegramIntegration } from './TelegramIntegration';
 import { MediaRetentionPanel } from '../../components/settings/MediaRetentionPanel';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
+import { ErrorState } from '../../components/ui/StateViews';
+import { useAnySettingsDirty, useReportDirty } from '../../components/settings/settingsDirtyStore';
+import { useDirtyGuard, useSnapshotDirty } from '../../hooks/useDirtyGuard';
 import { BRAND } from '../../config/brand';
 import { WhatsAppProviderPanel } from '../../components/settings/WhatsAppProviderPanel';
 import { AiModelSettingsPanel } from '../../components/settings/AiModelSettingsPanel';
@@ -55,14 +58,37 @@ export const Settings: React.FC = () => {
   const { toast, confirm } = useUiFeedback();
   const [searchParams, setSearchParams] = useSearchParams();
   const subTab = searchParams.get('tab');
+  const settingsDirty = useAnySettingsDirty();
+  useDirtyGuard(settingsDirty, 'Pengaturan belum disimpan');
   const [globalBotActive, setGlobalBotActive] = useState(true);
+  const [settingsLoadError, setSettingsLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState<'ALL' | 'CHANNEL_AI' | 'META_MARKETING' | 'INTEGRATION_REPORTS' | 'APP_OPS'>('ALL');
+
+  /**
+   * Panel Settings di-render bersyarat per kategori. Tanpa konfirmasi ini,
+   * menekan kategori lain membuang draft yang belum disimpan tanpa jejak.
+   */
+  const requestCategoryChange = async (next: typeof activeCategory) => {
+    if (next === activeCategory) return;
+    if (settingsDirty) {
+      const ok = await confirm({
+        title: 'Perubahan belum disimpan',
+        message: 'Pindah kategori menutup panel yang sedang diubah, dan draft di dalamnya hilang.',
+        confirmText: 'Buang & pindah',
+        cancelText: 'Tetap di sini',
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    setActiveCategory(next);
+  };
+
   
   // Coordinates & branch picker (persisted locally)
   const [lat, setLat] = useState(-7.2758);
   const [lng, setLng] = useState(112.7913);
-  const [branchName, setBranchName] = useState(`${BRAND.businessName} — Mulyosari`);
+  const [branchName, setBranchName] = useState(`${BRAND.businessName}: Mulyosari`);
 
   // Tiering Ongkir (persisted locally)
   const [ongkirTiers, setOngkirTiers] = useState<Array<{ id: number; maxDist: number; fee: number; promoDiscount: number }>>([
@@ -140,6 +166,26 @@ export const Settings: React.FC = () => {
   // Gambar Pricelist (per-tenant)
   const [pricelistImageUrl, setPricelistImageUrl] = useState<string>('');
 
+  /**
+   * Panel yang dikendalikan dari halaman ini (WABA, Meta CAPI, MQL, retensi media)
+   * menyimpan draft di state Settings, bukan di dalam panelnya. Karena itu draft
+   * tersebut ikut dilaporkan agar perpindahan kategori tidak membuang isian.
+   * Nilai bertopeng (token) dikecualikan supaya tidak memicu peringatan palsu.
+   */
+  const { dirty: inlineDraftDirty, resetBaseline: resetInlineDraftBaseline } = useSnapshotDirty(
+    [
+      wabaPhoneNumberId,
+      wabaBusinessAccountId,
+      wabaWebhookVerifyToken,
+      metaPixelId,
+      mqlThresholdBubbles,
+      mqlAutoLeadEnabled,
+      mediaRetentionDays,
+    ],
+    !loading
+  );
+  useReportDirty(inlineDraftDirty);
+
   const loadMediaRetention = async () => {
     try {
       const res = await apiRequest('/api/admin/settings/media');
@@ -170,6 +216,7 @@ export const Settings: React.FC = () => {
       if (res && res.success) {
         toast(res.message || 'Retensi media Live Chat tersimpan.', 'success');
         await loadMediaRetention();
+        resetInlineDraftBaseline();
       }
     } catch (err: any) {
       toast(`Gagal menyimpan retensi media: ${err.message}`, 'error');
@@ -216,6 +263,7 @@ export const Settings: React.FC = () => {
       });
       if (res && res.success) {
         toast('Pengaturan MQL & Trigger Event Lead berhasil disimpan.', 'success');
+        resetInlineDraftBaseline();
       }
     } catch (err: any) {
       toast(`Gagal menyimpan MQL settings: ${err.message}`, 'error');
@@ -336,6 +384,9 @@ export const Settings: React.FC = () => {
         }
       } catch (err) {
         console.warn('Failed to load global chatbot settings:', err);
+        setSettingsLoadError(
+          err instanceof Error ? err.message : 'Gagal memuat pengaturan dari server.'
+        );
       } finally {
         setLoading(false);
       }
@@ -411,7 +462,7 @@ export const Settings: React.FC = () => {
       if (res?.summary) setAiScopeSummary(res.summary);
       toast(res?.message || 'Pengaturan Target Pelanggan AI tersimpan.', 'success');
       if (targetScope === 'ALL' && newScope === 'ALL') {
-        toast('Semua customer kini eligible AI. Conversation legacy yang tersenyap tetap di HUMAN_HANDLING — release manual via panel per-customer.', 'info');
+        toast('Semua customer kini eligible AI. Conversation legacy yang tersenyap tetap di HUMAN_HANDLING: release manual via panel per-customer.', 'info');
       }
     } catch (err: any) {
       toast(`Gagal menyimpan Target Pelanggan AI: ${err.message}`, 'error');
@@ -447,6 +498,7 @@ export const Settings: React.FC = () => {
       setCapiAccessToken(CAPI_TOKEN_MASK);
       setCapiSource('db');
       toast(res?.message || 'Konfigurasi Meta Pixel & CAPI tersimpan.', 'success');
+      resetInlineDraftBaseline();
     } catch (err: any) {
       toast(`Gagal menyimpan config Meta Pixel & CAPI: ${err.message}`, 'error');
     } finally {
@@ -682,6 +734,7 @@ export const Settings: React.FC = () => {
       setWabaAccessToken('');
       toast('WABA credentials saved securely (AES-256 encrypted)', 'success');
       await loadWhatsAppProvider();
+      resetInlineDraftBaseline();
     } catch (err: any) {
       toast(`Failed to save WABA config: ${err.message}`, 'error');
     } finally {
@@ -752,20 +805,33 @@ export const Settings: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {settingsLoadError && (
+        <div className="bg-surface border border-divider rounded-2xl shadow-xs">
+          <ErrorState
+            title="Sebagian pengaturan gagal dimuat"
+            description={settingsLoadError}
+            // Retry memuat ulang halaman karena loader awal berjalan di dalam
+            // useEffect; menariknya keluar akan mengubah urutan inisialisasi
+            // seluruh 13 panel.
+            onRetry={() => window.location.reload()}
+            retryLabel="Muat ulang"
+          />
+        </div>
+      )}
       {/* Header & Category Navigation Tabs */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-divider pb-4">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-ink flex items-center space-x-2">
+          <h1 className="text-xl font-bold tracking-tight text-ink flex items-center space-x-2">
             <SettingsIcon className="text-accent" size={22} />
             <span>Operational Settings</span>
-          </h2>
+          </h1>
           <p className="text-xs text-ink-3 mt-0.5">Konfigurasi WhatsApp provider, AI router, Meta Pixel/CAPI, dan operasional bot</p>
         </div>
 
         {/* Category Filter Tabs */}
         <div className="flex flex-wrap gap-1.5 p-1 bg-fill-1 dark:bg-surface border border-divider rounded-2xl w-full md:w-auto">
           <button
-            onClick={() => setActiveCategory('ALL')}
+            onClick={() => requestCategoryChange('ALL')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 ${
               activeCategory === 'ALL'
                 ? 'bg-accent text-accent-ink shadow-xs'
@@ -776,7 +842,7 @@ export const Settings: React.FC = () => {
             <span>Semua</span>
           </button>
           <button
-            onClick={() => setActiveCategory('CHANNEL_AI')}
+            onClick={() => requestCategoryChange('CHANNEL_AI')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 ${
               activeCategory === 'CHANNEL_AI'
                 ? 'bg-accent text-accent-ink shadow-xs'
@@ -787,7 +853,7 @@ export const Settings: React.FC = () => {
             <span>Channel &amp; AI</span>
           </button>
           <button
-            onClick={() => setActiveCategory('META_MARKETING')}
+            onClick={() => requestCategoryChange('META_MARKETING')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 ${
               activeCategory === 'META_MARKETING'
                 ? 'bg-accent text-accent-ink shadow-xs'
@@ -798,7 +864,7 @@ export const Settings: React.FC = () => {
             <span>Meta &amp; Marketing</span>
           </button>
           <button
-            onClick={() => setActiveCategory('INTEGRATION_REPORTS')}
+            onClick={() => requestCategoryChange('INTEGRATION_REPORTS')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 ${
               activeCategory === 'INTEGRATION_REPORTS'
                 ? 'bg-accent text-accent-ink shadow-xs'
@@ -809,7 +875,7 @@ export const Settings: React.FC = () => {
             <span>Integrasi &amp; Laporan</span>
           </button>
           <button
-            onClick={() => setActiveCategory('APP_OPS')}
+            onClick={() => requestCategoryChange('APP_OPS')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 ${
               activeCategory === 'APP_OPS'
                 ? 'bg-accent text-accent-ink shadow-xs'
@@ -1028,7 +1094,7 @@ export const Settings: React.FC = () => {
               </div>
               <Link
                 to="/admin/customer-service"
-                className="min-h-[36px] px-4 py-2 rounded-xl bg-accent hover:bg-accent active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-accent/40 transition-all text-xs font-bold text-white shadow-xs flex items-center gap-1.5 shrink-0"
+                className="min-h-[36px] px-4 py-2 rounded-xl bg-accent hover:bg-accent active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-accent/40 transition text-xs font-bold text-on-solid shadow-xs flex items-center gap-1.5 shrink-0"
               >
                 <span>Buka Pengaturan Greetings &amp; CTA</span>
                 <ArrowRight size={14} />
@@ -1133,7 +1199,7 @@ export const Settings: React.FC = () => {
                 <div className="h-36 rounded-xl bg-surface-2 border border-divider relative overflow-hidden flex items-center justify-center">
                   <Map className="absolute text-strong w-full h-full opacity-30" />
                   <div className="relative text-center space-y-0.5">
-                    <MapPin className="mx-auto text-accent animate-bounce" size={22} />
+                    <MapPin className="mx-auto text-accent" size={22} />
                     <p className="text-xs text-ink font-semibold">{branchName}</p>
                     <p className="text-[10px] text-ink-3">[{lat}, {lng}]</p>
                   </div>

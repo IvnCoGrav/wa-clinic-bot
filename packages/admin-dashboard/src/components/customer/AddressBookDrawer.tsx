@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { Modal } from '../ui/Modal';
 import {
   X,
   MapPin,
@@ -122,7 +122,9 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
           setDeliveryTiers(list);
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        // Tier ongkir opsional; perhitungan manual tetap tersedia.
+      });
   }, []);
 
   const load = useCallback(async () => {
@@ -465,45 +467,29 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
     }
   };
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4"
-      onClick={close}
+  return (
+    <Modal
+      open
+      onClose={close}
+      variant="sheet"
+      size="lg"
+      bodyClassName="p-0 overflow-hidden flex-1 flex flex-col min-h-0"
+      title="Buku Alamat"
+      subtitle={`${customer.name || 'Pelanggan'}: alamat multi-rumah tersimpan`}
+      headerAction={
+        <button
+          onClick={() => {
+            setEditingAddress(null);
+            setShowAddForm((prev) => !prev);
+          }}
+          className="min-h-[44px] inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-accent-soft text-accent hover:bg-accent-soft/80 dark:bg-accent/20 dark:text-accent text-xs font-semibold focus-visible:ring-2 focus-visible:ring-accent active:scale-[0.98] transition"
+          aria-label="Tambah alamat baru"
+        >
+          <Plus size={15} aria-hidden="true" />
+          <span>Tambah</span>
+        </button>
+      }
     >
-      <div
-        className="w-full sm:max-w-lg max-h-[90dvh] flex flex-col bg-surface border border-divider rounded-t-2xl sm:rounded-2xl shadow-xl overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-label="Buku Alamat Pelanggan"
-      >
-        <div className="p-4 border-b border-divider flex items-center justify-between shrink-0">
-          <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-ink">Buku Alamat</h3>
-            <p className="text-[11px] text-ink-3 truncate">
-              {customer.name || 'Pelanggan'} — alamat multi-rumah tersimpan
-            </p>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <button
-              onClick={() => {
-                setEditingAddress(null);
-                setShowAddForm((prev) => !prev);
-              }}
-              className="min-h-[44px] inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-accent-soft text-accent hover:bg-accent-soft/80 dark:bg-accent/20 dark:text-accent text-xs font-semibold focus-visible:ring-2 focus-visible:ring-accent active:scale-[0.98] transition"
-              aria-label="Tambah alamat baru"
-            >
-              <Plus size={15} />
-              <span>Tambah</span>
-            </button>
-            <button
-              onClick={close}
-              className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl hover:bg-fill-1 text-ink-2 focus-visible:ring-2 focus-visible:ring-accent active:scale-[0.98] transition"
-              aria-label="Tutup buku alamat"
-            >
-              <X size={18} />
-            </button>
-          </div>
-        </div>
 
         {/* Form Edit Alamat Lengkap (Fase 2) */}
         {editingAddress && (
@@ -652,7 +638,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
               <button
                 type="submit"
                 disabled={isUpdating}
-                className="min-h-[44px] inline-flex items-center gap-1.5 px-4 py-1.5 bg-accent hover:bg-accent-hover text-white text-xs font-semibold rounded-lg shadow-sm transition disabled:opacity-50"
+                className="min-h-[44px] inline-flex items-center gap-1.5 px-4 py-1.5 bg-accent hover:bg-accent-hover text-on-solid text-xs font-semibold rounded-lg shadow-sm transition disabled:opacity-50"
               >
                 {isUpdating ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
                 <span>Perbarui Alamat</span>
@@ -814,7 +800,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
               <button
                 type="submit"
                 disabled={isAdding}
-                className="min-h-[44px] inline-flex items-center gap-1.5 px-4 py-1.5 bg-accent hover:bg-accent-hover text-white text-xs font-semibold rounded-lg shadow-sm transition disabled:opacity-50"
+                className="min-h-[44px] inline-flex items-center gap-1.5 px-4 py-1.5 bg-accent hover:bg-accent-hover text-on-solid text-xs font-semibold rounded-lg shadow-sm transition disabled:opacity-50"
               >
                 {isAdding ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
                 <span>Simpan Alamat</span>
@@ -908,8 +894,6 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
             Perubahan koordinat kartu akan otomatis memperbarui ongkir dan jadwal kunjungan aktif yang terhubung.
           </p>
         </div>
-      </div>
-    </div>,
-    document.body
+    </Modal>
   );
 };

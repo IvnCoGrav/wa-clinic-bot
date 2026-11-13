@@ -22,11 +22,17 @@ import {
 } from 'lucide-react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
+import { useSnapshotDirty } from '../../hooks/useDirtyGuard';
+import { useReportDirty } from './settingsDirtyStore';
 import { ToggleSwitch } from '../common/ToggleSwitch';
+import { formatWib } from '../../utils/dateWib';
 
 export const DailyReportPanel: React.FC = () => {
   const { toast } = useUiFeedback();
   const [loading, setLoading] = useState(true);
+  // Penanda terpisah: nightly dimuat oleh request lain, jadi `loading` saja
+  // tidak cukup untuk menyatakan seluruh isian panel sudah siap dibandingkan.
+  const [nightlyLoaded, setNightlyLoaded] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [reportHour, setReportHour] = useState(7);
   const [telegramBotToken, setTelegramBotToken] = useState('');
@@ -64,8 +70,7 @@ export const DailyReportPanel: React.FC = () => {
   }, []);
 
   const fetchNightlySettings = async () => {
-    try {
-      const res = await apiRequest<{
+    try {      const res = await apiRequest<{
         success: boolean;
         data: {
           nightlyReportEnabled: boolean;
@@ -84,6 +89,8 @@ export const DailyReportPanel: React.FC = () => {
       }
     } catch (err: any) {
       // senyap — panel nightly bersifat pelengkap
+    } finally {
+      setNightlyLoaded(true);
     }
   };
 
@@ -109,6 +116,23 @@ export const DailyReportPanel: React.FC = () => {
     setAdminNumbers((prev) => prev.filter((n) => n !== num));
   };
 
+  const { dirty: unsavedDraft, resetBaseline } = useSnapshotDirty(
+    [
+      enabled,
+      reportHour,
+      telegramChatId,
+      telegramTopicDailyReport,
+      telegramTopicSystemErrors,
+      telegramTopicMedicalAlerts,
+      nightlyEnabled,
+      nightlyHour,
+      adminNumbers,
+      channels,
+    ],
+    !loading && nightlyLoaded
+  );
+  useReportDirty(unsavedDraft);
+
   const toggleChannel = (ch: string) => {
     setChannels((prev) => (prev.includes(ch) ? prev.filter((c) => c !== ch) : [...prev, ch]));
   };
@@ -128,6 +152,7 @@ export const DailyReportPanel: React.FC = () => {
       if (res.success) {
         toast(res.message || 'Pengaturan notifikasi disimpan', 'success');
         fetchNightlySettings();
+        resetBaseline();
       }
     } catch (err: any) {
       toast(err.message || 'Gagal menyimpan pengaturan notifikasi', 'error');
@@ -477,7 +502,7 @@ export const DailyReportPanel: React.FC = () => {
                     type="password"
                     value={telegramBotToken}
                     onChange={(e) => setTelegramBotToken(e.target.value)}
-                    placeholder={telegramBotTokenConfigured ? '•••••• tersimpan — biarkan kosong untuk mempertahankan' : '123456789:ABCdefGHIjklMNOpqrsTUVwxyZ...'}
+                    placeholder={telegramBotTokenConfigured ? '•••••• tersimpan: biarkan kosong untuk mempertahankan' : '123456789:ABCdefGHIjklMNOpqrsTUVwxyZ...'}
                     className="w-full bg-surface border border-divider rounded-xl px-3 py-2 text-xs text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs"
                   />
                   <span className="text-[10px] text-ink-3 block">
@@ -541,6 +566,7 @@ export const DailyReportPanel: React.FC = () => {
           {/* Action Buttons */}
           <div className="flex items-center justify-between pt-2">
             <button
+              aria-label="Kirim notifikasi simulasi Telegram"
               onClick={handleTestSend}
               disabled={testing}
               title="Kirim notifikasi simulasi berisi data dummy untuk menguji integrasi Telegram tanpa mempengaruhi riwayat laporan harian"
@@ -551,6 +577,7 @@ export const DailyReportPanel: React.FC = () => {
             </button>
 
             <button
+              aria-label="Simpan"
               onClick={handleSave}
               disabled={saving}
               className="px-4 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 disabled:opacity-50 shadow-xs"
@@ -567,9 +594,10 @@ export const DailyReportPanel: React.FC = () => {
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-ink flex items-center space-x-2">
             <Moon className="text-info" size={16} />
-            <span>Laporan Malam (Nightly Watchdog) — 21:00 WIB</span>
+            <span>Laporan Malam (Nightly Watchdog): 21:00 WIB</span>
           </h3>
           <button
+            aria-label="Riwayat"
             type="button"
             onClick={toggleLogs}
             className="text-[11px] text-accent hover:text-accent flex items-center space-x-1 font-semibold"
@@ -681,15 +709,17 @@ export const DailyReportPanel: React.FC = () => {
 
         <div className="flex items-center justify-between pt-1">
           <button
+            aria-label="Kirim pesan"
             type="button"
             onClick={handleTestNightly}
             disabled={testingNightly}
             className="px-3.5 py-2 bg-surface hover:bg-fill-1 text-ink rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 disabled:opacity-50 border border-divider"
           >
             <Send size={12} className="text-info" />
-            <span>{testingNightly ? 'Mengirim...' : '🧪 Kirim Uji Coba'}</span>
+            <span>{testingNightly ? 'Mengirim...' : ' Kirim Uji Coba'}</span>
           </button>
           <button
+            aria-label="Simpan"
             type="button"
             onClick={handleSaveNightly}
             disabled={savingNightly}
@@ -728,7 +758,7 @@ export const DailyReportPanel: React.FC = () => {
                     {logs.map((l) => (
                       <tr key={l.id}>
                         <td className="px-2.5 py-1.5 whitespace-nowrap text-ink-2">
-                          {new Date(l.sent_at).toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })}
+                          {formatWib(l.sent_at, { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })}
                         </td>
                         <td className="px-2.5 py-1.5 font-semibold text-ink">{l.channel}</td>
                         <td className="px-2.5 py-1.5 font-mono text-ink-2">{l.recipient}</td>

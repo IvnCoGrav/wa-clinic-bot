@@ -7,6 +7,12 @@ import {
   ClinicMapMeta,
 } from '../../services/api';
 import { loadLeaflet } from '../../utils/leafletLoader';
+
+// Kontrak error modul peta: seluruh `catch` kosong di berkas ini SENGAJA senyap.
+// Semua operasi Leaflet (invalidateSize, removeLayer, flyTo, zoom) bersifat
+// kosmetik dan rutin gagal setelah peta/layer dilepas saat tab berpindah atau
+// komponen dibongkar. Tidak ada data bisnis yang berubah, jadi menampilkan toast
+// justru mengganggu. Kegagalan pemuatan data peta tetap diberi pesan sendiri.
 // REVISI-1 Tahap 3.2: hapus fungsi lokal bayangan — satu seam kanonis.
 import { getGoogleMapsDirectionUrl } from '../../utils/geoUtils';
 import {
@@ -492,10 +498,10 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
       const accuracy = loc.label;
       const distanceText =
         typeof p.distance_km === 'number'
-          ? `<div style="color:rgb(var(--c-ink-2))">📏 Jarak: ${p.distance_km} km dari Basecamp</div>`
+          ? `<div style="color:rgb(var(--c-ink-2))">Jarak: ${p.distance_km} km dari Basecamp</div>`
           : '';
       const staffBadge = isManualStaff
-        ? `<div style="display:inline-block;margin-top:4px;padding:2px 8px;border-radius:6px;background:rgb(var(--c-accent-soft));color:rgb(var(--c-accent));font-weight:700">🛠️ Diedit Bidan/Staf</div>`
+        ? `<div style="display:inline-block;margin-top:4px;padding:2px 8px;border-radius:6px;background:rgb(var(--c-accent-soft));color:rgb(var(--c-accent));font-weight:700">Diedit Bidan/Staf</div>`
         : '';
 
       const detailBtn =
@@ -655,7 +661,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
               type="button"
               onClick={() => setMapMode('streets')}
               className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${
-                mapMode === 'streets' ? 'bg-accent text-white shadow-xs' : 'text-ink-2 hover:text-ink'
+                mapMode === 'streets' ? 'bg-accent text-on-solid shadow-xs' : 'text-ink-2 hover:text-ink'
               }`}
               title="Tampilkan peta jalan CartoDB"
             >
@@ -665,7 +671,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
               type="button"
               onClick={() => setMapMode('area')}
               className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${
-                mapMode === 'area' ? 'bg-accent text-white shadow-xs' : 'text-ink-2 hover:text-ink'
+                mapMode === 'area' ? 'bg-accent text-on-solid shadow-xs' : 'text-ink-2 hover:text-ink'
               }`}
               title="Tampilkan siluet area batas wilayah Surabaya & Sidoarjo tanpa jalan"
             >
@@ -782,14 +788,14 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
             className="w-2.5 h-2.5 rounded-full"
             style={{ border: '2px solid rgb(var(--c-surface))', background: 'rgb(var(--c-accent))', boxShadow: '0 0 0 1px rgb(var(--c-divider))', display: 'inline-block' }}
           />
-          📍 GPS Akurat
+          GPS Akurat
         </span>
         <span className="flex items-center gap-1.5 px-2.5 py-1">
           <span
             className="w-2.5 h-2.5 rounded-full"
             style={{ border: '2px dashed rgb(var(--c-ink-2))', display: 'inline-block' }}
           />
-          ⚪ Estimasi Wilayah
+          Estimasi Wilayah
         </span>
         <button
           type="button"
@@ -803,7 +809,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
             className="w-2.5 h-2.5 rounded-full"
             style={{ background: 'rgb(var(--c-d3))', border: '1px solid rgb(var(--c-surface))', display: 'inline-block' }}
           />
-          🛠️ {onlyStaffFilter ? 'Menampilkan Hanya Diedit Staf' : 'Diedit Bidan/Staf'}
+          {onlyStaffFilter ? 'Menampilkan Hanya Diedit Staf' : 'Diedit Bidan/Staf'}
         </button>
         {clinic && (
           <span className="flex items-center gap-1.5 px-2.5 py-1">
@@ -864,7 +870,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
                 className="px-2.5 py-1.5 text-[11px] font-semibold text-ink hover:bg-fill-1 border-b border-divider flex items-center gap-1.5"
                 title="Fokus ke Basecamp Klinik"
               >
-                <span>🎯</span> Fokus Basecamp
+                Fokus Basecamp
               </button>
               <button
                 type="button"
@@ -879,7 +885,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
                 className="px-2.5 py-1.5 text-[11px] font-semibold text-ink hover:bg-fill-1 flex items-center gap-1.5"
                 title="Pas-kan semua titik terlihat"
               >
-                <span>🗺️</span> Pas-kan Semua
+                Pas-kan Semua
               </button>
             </div>
             <div className="flex bg-surface rounded-xl shadow-md border border-divider overflow-hidden">
@@ -900,7 +906,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
                 −
               </button>
             </div>
-            <div className="px-2 py-1 bg-surface/90 backdrop-blur rounded-full text-[10px] font-semibold text-ink-2 border border-divider shadow-sm">
+            <div className="px-2 py-1 bg-surface/95 rounded-full text-[10px] font-semibold text-ink-2 border border-divider shadow-sm">
               Zoom {currentZoom}x
             </div>
           </div>
@@ -934,7 +940,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
               <p className="text-sm font-semibold text-ink">{error}</p>
               <button
                 onClick={() => loadPoints(showAllCities, true)}
-                className="mt-3 px-3 py-1.5 rounded-xl bg-accent text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                className="mt-3 px-3 py-1.5 rounded-xl bg-accent text-on-solid text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
               >
                 <RefreshCw size={13} /> Coba lagi
               </button>

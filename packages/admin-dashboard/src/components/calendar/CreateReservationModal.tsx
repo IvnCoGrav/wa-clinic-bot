@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { apiRequest } from '../../services/api';
+import { validateReservation, type FieldIssue } from '../../lib/validateReservation';
+import { FormErrorSummary } from '../ui/FormErrorSummary';
+import { Modal } from '../ui/Modal';
 import { useUiFeedback } from '../common/UiFeedback';
+import { fireAndForget } from '../../services/errorPolicy';
 import { ToggleSwitch } from '../common/ToggleSwitch';
 import { 
   X, 
@@ -44,7 +47,7 @@ import {
 } from '../../utils/treatmentParser';
 import { StaffScheduleTimelineStrip } from './StaffScheduleTimelineStrip';
 import { matchCatalogService } from '../../utils/treatmentStringParser';
-import { getWibDateKey, getTodayWibDateKey, getTodayWibDate, getWibHoursAndMinutes, buildWibIso } from '../../utils/dateWib';
+import { formatWib, formatWibClock, getWibDateKey, getTodayWibDateKey, getTodayWibDate, getWibHoursAndMinutes, buildWibIso } from '../../utils/dateWib';
 import { resolveStreetAddress } from '../../utils/reservationAddress';
 import { addressesMatch as addressesMatchMirror, parseSavedAddresses, resolveActiveAddress, buildAddressKey } from '../../utils/addressMatch';
 import { resolveStaffName } from '../../utils/resolveStaffName';
@@ -187,6 +190,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   const { user } = useAuth();
   const { toast, confirm } = useUiFeedback();
   const [submitting, setSubmitting] = useState(false);
+  const [issues, setIssues] = useState<FieldIssue[]>([]);
   const submitRequestIdRef = useRef<string>('');
 
   // Form State
@@ -368,7 +372,9 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           const list = res?.data || (Array.isArray(res) ? res : []);
           if (Array.isArray(list) && list.length > 0) setInternalStaffList(list);
         })
-        .catch(() => {});
+        .catch(() => {
+          // Dropdown staf opsional; daftar dari props tetap dipakai.
+        });
     }
   }, [staffList, isOpen]);
   const effectiveStaffList = useMemo(() => {
@@ -400,7 +406,9 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           setDeliveryTiers(list);
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        // Tier ongkir opsional; perhitungan manual tetap tersedia.
+      });
   }, []);
 
   // Live Reservations Synchronizer
@@ -486,9 +494,11 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         const todayKey = getWibDateKey(new Date());
         if (sanitizedDate < todayKey) {
           sanitizedDate = todayKey;
-          toast(`Tanggal draf sudah lewat — disesuaikan ke hari ini (${todayKey}).`, 'info');
+          toast(`Tanggal draf sudah lewat: disesuaikan ke hari ini (${todayKey}).`, 'info');
         }
-      } catch {}
+      } catch {
+        // Format draf lama tidak terbaca: biarkan tanggal apa adanya.
+      }
     }
     // Re-sinkronisasi harga dengan katalog aktif (hindari tarif usang) — hanya bila katalog tersedia
     let sanitizedTreatments = restored.selectedTreatments;
@@ -817,7 +827,9 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           const c = res?.customer || res?.data || res;
           if (c?.id) handleSelectCustomer(c);
         })
-        .catch(() => {});
+        .catch(() => {
+          // Pra-isi pelanggan opsional; staf tetap bisa mencari manual.
+        });
     }
   }, [isOpen, initialCustomer, initialCustomerId, mode]);
 
@@ -839,7 +851,9 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
             const rawBabies = initialReservation.customer?.children || (initialReservation as any).children || (initialReservation as any).baby_details || [];
             const parsed = parseTreatmentsFromDetail(initialReservation.treatment_detail, services, initialReservation.purchase_value, rawBabies as any);
             if (parsed.length > 0) setSelectedTreatments(parsed);
-          } catch {}
+          } catch {
+            // Detail treatment lama tidak terbaca: form diisi manual.
+          }
         }
         return;
       }
@@ -904,7 +918,9 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
             const fullLandmark = c?.preferences?.landmark || c?.preferences?.address_notes || (data?.customer as any)?.preferences?.landmark || '';
             if (fullLandmark) setLandmark(fullLandmark);
           })
-          .catch(() => {});
+          .catch(() => {
+            // Detail tambahan opsional; alamat dari reservasi tetap dipakai.
+          });
       }
 
       if (res.treatment_category) {
@@ -920,7 +936,9 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
             const { timeFormatted } = getWibHoursAndMinutes(d);
             setBookingTime(timeFormatted);
           }
-        } catch {}
+        } catch {
+          // Tanggal tidak valid: biarkan nilai form sebelumnya.
+        }
       }
 
       // Selalu tetapkan nilai pasti, jangan biarkan stale state dari modal sebelumnya
@@ -972,7 +990,9 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           if (parsed.length > 0) {
             setSelectedTreatments(parsed);
           }
-        } catch {}
+        } catch {
+          // Detail treatment lama tidak terbaca: form diisi manual.
+        }
       }
     } else if (!isOpen) {
       initializedEditIdRef.current = null;
@@ -1621,26 +1641,22 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent, withInvoice = false) => {
     e.preventDefault();
-    if (!customerId) {
-      toast('Pilih customer terlebih dahulu', 'error');
+
+    const validation = validateReservation({
+      customerId,
+      items: selectedTreatments.map((t) => ({ id: t.serviceId, name: t.name })),
+      bookingDate,
+      startTime: bookingTime,
+    });
+    if (validation.length > 0) {
+      setIssues(validation);
       return;
     }
-    if (selectedTreatments.length === 0) {
-      toast('Pilih minimal 1 layanan treatment', 'error');
-      return;
-    }
-    if (!bookingDate) {
-      toast('Pilih tanggal reservasi terlebih dahulu', 'error');
-      return;
-    }
-    if (!bookingTime || !bookingTime.trim()) {
-      toast('Pilih jam mulai reservasi terlebih dahulu', 'error');
-      return;
-    }
+    setIssues([]);
 
     // 🛑 Gerbang submit deterministik bila teks alamat admin belum dikomit (Micro-Task 4.2)
     if (selectedCard && address.trim() && mismatchActive) {
-      toast('Teks alamat berbeda dgn kartu — pilih: Simpan sebagai Rumah Baru / Perbarui Kartu Terpilih.', 'error');
+      toast('Teks alamat berbeda dgn kartu: pilih: Simpan sebagai Rumah Baru / Perbarui Kartu Terpilih.', 'error');
       return;
     }
 
@@ -1663,7 +1679,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         .map((c) => `• Pasien Ny. ${c.customerName} (Pukul ${c.time} WIB - ${c.treatment})`)
         .join('\n');
       const isConfirmed = await confirm({
-        title: '⚠️ Konfirmasi Jadwal Bentrok',
+        title: 'Konfirmasi Jadwal Bentrok',
         message: `Bidan ${staffName} sudah memiliki jadwal lain di jam ini:\n${details}\n\nApakah Anda yakin ingin tetap menjadwalkan (Force Override)?`,
         confirmText: 'Ya, Simpan Paksa (Force)',
         cancelText: 'Batal & Ubah Jam',
@@ -1790,7 +1806,9 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
     try {
       window.history.pushState({ modal: 'create-reservation' }, '');
-    } catch (_) {}
+    } catch (_) {
+      // Riwayat browser bisa dibatasi; modal tetap terbuka.
+    }
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -1832,18 +1850,16 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
   if (!isOpen) return null;
 
-  return createPortal(
-    <div
-      data-modal-active="true"
-      className="fixed inset-0 bg-black/75 backdrop-blur-sm z-[99999] flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto overflow-x-hidden touch-pan-y overscroll-contain animate-fadeIn h-[100dvh] w-[100dvw]"
-      onClick={() => void handleSafeClose()}
-      style={{ touchAction: 'pan-y' }}
+  return (
+    <Modal
+      open
+      onClose={() => void handleSafeClose()}
+      size="full"
+      fullScreen
+      chrome="bare"
+      closeOnBackdrop={false}
+      bodyClassName="flex flex-1 flex-col min-h-0 p-3.5 sm:p-6 overflow-x-hidden touch-pan-y overscroll-contain"
     >
-      <div
-        className="w-full max-w-2xl bg-surface border border-divider dark:text-ink rounded-none sm:rounded-3xl p-3.5 sm:p-6 shadow-2xl relative my-auto h-[100dvh] sm:h-auto sm:max-h-[90vh] flex flex-col mx-auto overflow-x-hidden touch-pan-y overscroll-contain animate-modalScaleUp"
-        onClick={(e) => e.stopPropagation()}
-        style={{ touchAction: 'pan-y' }}
-      >
         {/* Close button */}
         <button
           data-modal-close="true"
@@ -1858,7 +1874,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           <div>
             <h3 className="text-base sm:text-lg font-bold text-ink flex items-center space-x-2">
               <CalendarIcon size={18} className="text-accent flex-shrink-0" />
-              <span>{mode === 'edit' ? '✏️ Edit Data Reservasi' : isMultiSession ? `📅 Buat Paket ${multiSessionTotal} Sesi` : 'Buat Jadwal Reservasi Baru'}</span>
+              <span>{mode === 'edit' ? ' Edit Data Reservasi' : isMultiSession ? ` Buat Paket ${multiSessionTotal} Sesi` : 'Buat Jadwal Reservasi Baru'}</span>
             </h3>
             <p className="text-xs text-ink-3 mt-0.5">
               {mode === 'edit'
@@ -1873,17 +1889,19 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         {mode !== 'edit' && customerConflictsForDate.length > 0 && (
           <div className="mb-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800/50 rounded-xl text-xs text-amber-900 dark:text-amber-200">
             <p className="font-bold flex items-center space-x-1.5">
-              <span>⚠️ {(selectedCustomerInfo?.name || 'Customer')} sudah memiliki {customerConflictsForDate.length} reservasi aktif pada tanggal ini</span>
+              <span>{(selectedCustomerInfo?.name || 'Customer')} sudah memiliki {customerConflictsForDate.length} reservasi aktif pada tanggal ini</span>
             </p>
             <ul className="mt-1.5 space-y-1">
               {customerConflictsForDate.slice(0, 3).map((r: any) => {
                 let timeLabel = '-';
                 try {
                   timeLabel = `${getWibHoursAndMinutes(r.booking_date!).timeFormatted} WIB`;
-                } catch {}
+                } catch {
+                  // Tanggal bentrok tidak terbaca: tampilkan '-'.
+                }
                 return (
                   <li key={r.id} className="flex items-center justify-between gap-2">
-                    <span className="truncate">• Pukul {timeLabel} — {r.treatment_detail || r.status}</span>
+                    <span className="truncate">• Pukul {timeLabel}: {r.treatment_detail || r.status}</span>
                   </li>
                 );
               })}
@@ -1893,9 +1911,12 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         )}
 
         {/* Scrollable Form Body — footer aksi dipisah KE LUAR area gulir tetapi tetap
-            DI DALAM <form> (type="submit" & dirty-tracking tetap hidup — anti tombol mati) */}
+            DI DALAM <form> (type="submit" & dirty-tracking tetap hidup: anti tombol mati) */}
         <form ref={formDirtyContainerRef} onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 w-full">
           <div className="space-y-4 overflow-y-auto overflow-x-hidden pr-1 flex-1 min-h-0 w-full max-w-full touch-pan-y overscroll-contain scroll-pb-32 sm:scroll-pb-8" style={{ WebkitOverflowScrolling: 'touch' as any }}>
+          {/* Ringkasan validasi: semua kesalahan tampil sekaligus */}
+          <FormErrorSummary issues={issues} className="mb-2" />
+
           {/* Draft Restore Banner — di dalam scroll agar ikut tergulir (non-sticky), tidak di mode edit */}
           {mode !== 'edit' && hasDraft && (
             <div className="p-2 sm:p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-xl flex items-center justify-between text-[11px] sm:text-xs text-amber-900 dark:text-amber-200 animate-in fade-in">
@@ -2071,7 +2092,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                             if (!calc.isOutOfCoverage) setOngkir(calc.netOngkir);
                           }
                         }}
-                        className={`text-left p-2.5 rounded-lg border text-xs min-h-[44px] transition-all cursor-pointer active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none ${
+                        className={`text-left p-2.5 rounded-lg border text-xs min-h-[44px] transition cursor-pointer active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none ${
                           isSelected
                             ? 'bg-accent-soft border-accent text-accent font-medium shadow-sm'
                             : 'bg-surface border-divider dark:border-divider text-ink-2 hover:bg-fill-1'
@@ -2120,7 +2141,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                     <div className="mt-1 flex flex-wrap items-center gap-2">
                       {mismatchActive && (
                         <span className="text-[11px] font-semibold text-amber-700 dark:text-warning bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded px-2 py-1">
-                          ⚠️ Teks alamat berbeda dengan kartu terpilih
+                          Teks alamat berbeda dengan kartu terpilih
                         </span>
                       )}
                       {savedAsNewHouse && (
@@ -2191,9 +2212,9 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 </div>
                 <ul className="mt-1.5 space-y-1">
                   {activeReservations.slice(0, 3).map((item: any) => {
-                    let label = '—';
+                    let label = '-';
                     try {
-                      label = new Date(item.booking_date).toLocaleString('id-ID', {
+                      label = formatWib(item.booking_date, {
                         weekday: 'short',
                         day: 'numeric',
                         month: 'short',
@@ -2201,7 +2222,9 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                         hour: '2-digit',
                         minute: '2-digit',
                       });
-                    } catch {}
+                    } catch {
+                      // Tanggal tidak terbaca: label tetap '-'.
+                    }
                     return (
                       <li key={item.id} className="text-xs text-amber-800 dark:text-warning">
                         Jadwal: <b>{item.treatment_detail || 'Treatment'}</b> pada <b>{label}</b>{' '}
@@ -2217,7 +2240,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                       onClick={() => onEditReservation(activeReservations[0])}
                       className="px-3 py-1.5 bg-warning text-on-solid rounded-lg text-xs font-semibold hover:bg-warning-hover transition-colors cursor-pointer"
                     >
-                      ✏️ Edit Reservasi Eksisting
+                      Edit Reservasi Eksisting
                     </button>
                   )}
                   <span className="text-xs text-amber-700 dark:text-warning">
@@ -2305,7 +2328,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
                   {babies.length > 1 && selectedTreatments.length === 1 && (
                     <div className="p-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-lg text-[11px] text-amber-800 dark:text-amber-200 flex items-center justify-between">
-                      <span>💡 Anda mengisi 2 anak. Ingin menambah treatment untuk anak ke-2?</span>
+                      <span>Anda mengisi 2 anak. Ingin menambah treatment untuk anak ke-2?</span>
                       <button
                         type="button"
                         onClick={() => handleDuplicateTreatment(selectedTreatments[0])}
@@ -2461,7 +2484,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                                 if (!ageLabel) return null;
                                 return (
                                   <span className="px-1.5 py-0.2 rounded text-[9px] font-bold shrink-0 bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/40 dark:text-accent dark:border-emerald-800">
-                                    🎯 {ageLabel}
+                                    {ageLabel}
                                   </span>
                                 );
                               })()}
@@ -2643,10 +2666,10 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                             >
                               {babies.map((b, bIdx) => (
                                 <option key={bIdx} value={bIdx}>
-                                  👶 Anak #{bIdx + 1}: {b.name || `Anak ${bIdx + 1}`} {b.ageText ? `(${b.ageText})` : ''}
+                                  Anak #{bIdx + 1}: {b.name || `Anak ${bIdx + 1}`} {b.ageText ? `(${b.ageText})` : ''}
                                 </option>
                               ))}
-                              <option value={-1}>👩 Bunda / Umum</option>
+                              <option value={-1}>Bunda / Umum</option>
                             </select>
                           </div>
                         )}
@@ -2658,16 +2681,16 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 {/* Duration & Buffer Breakdown */}
                 <div className="pt-2 border-t border-divider flex flex-wrap items-center gap-2 text-xs">
                   <span className="px-2.5 py-1 rounded-lg bg-surface border border-divider text-ink-2 font-medium">
-                    🕒 Durasi Layanan: <strong className="text-ink">{pureDurationMinutes} mnt</strong>
+                    Durasi Layanan: <strong className="text-ink">{pureDurationMinutes} mnt</strong>
                   </span>
                   <span className="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 text-amber-800 dark:text-amber-200 font-medium">
-                    ☕ Buffer Jeda: <strong>+{totalBufferMinutes} mnt</strong> ({mainTreatmentsCount} Utama @20m{addonTreatmentsCount > 0 ? `, ${addonTreatmentsCount} Add-on @0m` : ''})
+                    Buffer Jeda: <strong>+{totalBufferMinutes} mnt</strong> ({mainTreatmentsCount} Utama @20m{addonTreatmentsCount > 0 ? `, ${addonTreatmentsCount} Add-on @0m` : ''})
                   </span>
                   <span className="px-2.5 py-1 rounded-lg bg-accent-soft border border-divider dark:border-accent/30 text-accent font-bold">
                     ⏱️ Total Waktu: {totalScheduledDurationMinutes} mnt
                   </span>
                   <span className="px-2.5 py-1 rounded-lg bg-accent text-accent-ink font-bold">
-                    🏁 Selesai: {calculateEndTime()} WIB
+                    Selesai: {calculateEndTime()} WIB
                   </span>
                 </div>
               </div>
@@ -2691,7 +2714,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                       onClick={() => setAssignedStaffId(user.id)}
                       className="text-[10px] text-accent font-bold hover:underline flex items-center gap-0.5 cursor-pointer bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800/50 active:scale-95"
                     >
-                      <span>⚡ Saya</span>
+                      <span>Saya</span>
                     </button>
                   )}
                 </div>
@@ -2811,7 +2834,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
             {realtimeCollisions.staffCollisions.length > 0 && (
               <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded-xl text-xs text-amber-900 dark:text-amber-200 space-y-1.5 animate-fadeIn">
                 <p className="font-bold flex items-center gap-1.5 text-amber-800 dark:text-warning">
-                  <span>⚠️ Jadwal Bentrok dengan Bidan Terpilih ({realtimeCollisions.staffCollisions[0].staffName})</span>
+                  <span>Jadwal Bentrok dengan Bidan Terpilih ({realtimeCollisions.staffCollisions[0].staffName})</span>
                 </p>
                 <ul className="space-y-1 text-[11px]">
                   {realtimeCollisions.staffCollisions.map((b) => (
@@ -2851,7 +2874,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                       key={idx}
                       type="button"
                       onClick={() => handleApplyRecommendation(rec)}
-                      className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer space-y-2 ${
+                      className={`p-2.5 rounded-xl border text-left transition flex flex-col justify-between cursor-pointer space-y-2 ${
                         bookingTime === rec.startTime && assignedStaffId === rec.staffId
                           ? 'bg-accent text-accent-ink border-accent shadow-sm'
                           : 'bg-surface border-divider hover:bg-surface/90 text-ink'
@@ -3161,7 +3184,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="w-full min-h-[46px] px-4 py-2.5 rounded-xl bg-accent hover:bg-accent-hover active:scale-95 disabled:opacity-50 text-white text-xs font-bold flex items-center justify-center space-x-2 shadow-sm transition cursor-pointer"
+                  className="w-full min-h-[46px] px-4 py-2.5 rounded-xl bg-accent hover:bg-accent-hover active:scale-95 disabled:opacity-50 text-on-solid text-xs font-bold flex items-center justify-center space-x-2 shadow-sm transition cursor-pointer"
                 >
                   <Check size={16} />
                   <span className="truncate">{submitting ? 'Menyimpan...' : (mode === 'edit' ? 'Simpan Perubahan Reservasi' : isMultiSession ? `Buat Paket ${multiSessionTotal} Sesi` : 'Simpan & Buat Jadwal')}</span>
@@ -3179,7 +3202,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="flex-[2] min-h-[42px] px-3 py-2 rounded-xl bg-accent hover:bg-accent-hover active:scale-95 disabled:opacity-50 text-white text-xs font-semibold flex items-center justify-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
+                    className="flex-[2] min-h-[42px] px-3 py-2 rounded-xl bg-accent hover:bg-accent-hover active:scale-95 disabled:opacity-50 text-on-solid text-xs font-semibold flex items-center justify-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
                   >
                     <Check size={14} />
                     <span className="truncate">{submitting ? 'Menyimpan...' : (mode === 'edit' ? 'Simpan Perubahan' : isMultiSession ? `Paket ${multiSessionTotal} Sesi` : 'Simpan Jadwal Saja')}</span>
@@ -3187,6 +3210,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 )}
                 {mode !== 'edit' && (
                   <button
+                    aria-label="Simpan draf lokal"
                     type="button"
                     onClick={saveDraftManually}
                     className="min-h-[42px] w-[42px] shrink-0 rounded-xl bg-surface border border-divider text-ink-2 hover:bg-warning-soft hover:text-warning transition flex items-center justify-center cursor-pointer shadow-2xs active:scale-95"
@@ -3236,7 +3260,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-5 py-2 rounded-xl bg-accent hover:bg-accent-hover active:scale-95 disabled:opacity-50 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-accent hover:bg-accent-hover active:scale-95 disabled:opacity-50 text-on-solid text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
                 >
                   <Check size={14} />
                   <span>{submitting ? 'Menyimpan...' : (mode === 'edit' ? 'Simpan Perubahan Reservasi' : isMultiSession ? `Buat Paket ${multiSessionTotal} Sesi` : 'Simpan & Buat Jadwal')}</span>
@@ -3251,7 +3275,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         {/* ========================================================================= */}
         {showBookedSlotsModal && (
           <div
-            className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn overflow-y-auto overflow-x-hidden touch-pan-y overscroll-contain"
+            className="modal-backdrop fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-4 bg-black/60 animate-fadeIn overflow-y-auto overflow-x-hidden touch-pan-y overscroll-contain"
             onClick={() => setShowBookedSlotsModal(false)}
             style={{ touchAction: 'pan-y' }}
           >
@@ -3306,7 +3330,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span className={`px-2 py-0.5 rounded-lg text-xs font-bold font-mono border ${isHold ? 'bg-warning-soft text-warning border-warning-line' : 'bg-success-soft text-success border-success-line'}`}>
-                            {isHold ? '🟡' : '🟢'} {startTimeStr} WIB {isHold ? '— Hold Ditawarkan' : '— Terjadwal Resmi'}
+                            {isHold ? <span className="inline-block w-1.5 h-1.5 rounded-full bg-warning" aria-hidden="true" /> : <span className="inline-block w-1.5 h-1.5 rounded-full bg-success" aria-hidden="true" />} {startTimeStr} WIB {isHold ? 'Hold Ditawarkan' : 'Terjadwal Resmi'}
                           </span>
                           <div className="flex items-center gap-1.5">
                             {isEditingThis && (
@@ -3353,7 +3377,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
         {/* 409 Conflict resolution dialog */}
         {showConflictModal && conflictInfo && (
-          <div className="fixed inset-0 bg-black/70 z-[100000] flex items-center justify-center p-4" onClick={() => setShowConflictModal(false)}>
+          <div className="modal-backdrop fixed inset-0 bg-black/70 z-dialog-top flex items-center justify-center p-4" onClick={() => setShowConflictModal(false)}>
             <div className="w-full max-w-md bg-surface rounded-2xl p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
               <h4 className="text-sm font-bold text-ink">
                 {conflictInfo.code === 'STAFF_COLLISION' ? '⛔ Jadwal Terapis Bentrok' : '⛔ Duplikat Booking Terdeteksi'}
@@ -3361,7 +3385,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
               <p className="text-xs text-ink-3 mt-1.5">
                 {conflictInfo.message}
                 {conflictInfo.existingReservation?.booking_date && (
-                  <span> Jadwal existing: {new Date(conflictInfo.existingReservation.booking_date).toLocaleString('id-ID')}.</span>
+                  <span> Jadwal existing: {formatWib(conflictInfo.existingReservation.booking_date, { dateStyle: 'short', timeStyle: 'short' })}.</span>
                 )}
               </p>
               <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -3371,7 +3395,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                     const existingRes = conflictInfo.existingReservation;
                     setShowConflictModal(false);
                     setConflictInfo(null);
-                    toast('Batalkan duplikat — membuka jadwal yang sudah ada.', 'info');
+                    toast('Batalkan duplikat: membuka jadwal yang sudah ada.', 'info');
                     onClose();
                     if (existingRes && onEditReservation) {
                       onEditReservation(existingRes);
@@ -3420,15 +3444,15 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                     }
                   }
                 }
-              } catch {}
+              } catch {
+                // Koreksi kartu alamat gagal; alamat lama tetap dipakai.
+              }
             }
             setShowAddressDrawer(false);
             setCorrectingCardId(null);
           }}
         />
       )}
-      </div>
-    </div>,
-    document.body
+    </Modal>
   );
 };

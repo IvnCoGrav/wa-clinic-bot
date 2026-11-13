@@ -121,7 +121,9 @@ export const MediaImage: React.FC<{
     try {
       window.history.pushState({ modal: 'media-viewer' }, '');
       isHistoryPushedRef.current = true;
-    } catch (_) {}
+    } catch (_) {
+      // Riwayat browser bisa dibatasi; penampil media tetap terbuka.
+    }
   };
 
   // Muat gambar HD hanya saat tombol HD ditekan
@@ -251,7 +253,7 @@ export const MediaImage: React.FC<{
       {/* Full-Screen Lightbox Modal with Mobile Header & HD On-Demand rendered via React Portal directly to document.body */}
       {isViewerOpen && typeof document !== 'undefined' && createPortal(
         <div
-          className="fixed inset-0 z-[999999] bg-black/95 sm:bg-black/90 backdrop-blur-md flex flex-col justify-between select-none animate-in fade-in duration-150"
+          className="modal-backdrop fixed inset-0 z-[999999] bg-black/95 sm:bg-black/90 backdrop-blur-md flex flex-col justify-between select-none animate-in fade-in duration-150"
           style={{
             paddingTop: 'env(safe-area-inset-top, 0px)',
             paddingBottom: 'env(safe-area-inset-bottom, 0px)',
@@ -332,6 +334,7 @@ export const MediaImage: React.FC<{
 
               {/* Close Button */}
               <button
+                aria-label="Tutup (Esc)"
                 type="button"
                 onClick={closeViewer}
                 title="Tutup (Esc)"
@@ -350,7 +353,7 @@ export const MediaImage: React.FC<{
             onTouchEnd={handleTouchEnd}
           >
             <div
-              className={`relative max-w-full max-h-full flex flex-col items-center justify-center transition-all ${
+              className={`relative max-w-full max-h-full flex flex-col items-center justify-center transition ${
                 isDragging ? 'duration-0' : 'duration-200'
               }`}
               style={{

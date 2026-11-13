@@ -1,3 +1,7 @@
+// Catatan kontrak error: catch kosong di halaman ini adalah pengayaan data
+// opsional (daftar staf untuk dropdown, detail tambahan, deret reservasi).
+// Tabel utama tetap menampilkan hasil pencarian; kegagalan pengayaan tidak
+// boleh mengosongkan layar. Pencarian utama sudah punya pesan galat sendiri.
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
@@ -7,7 +11,10 @@ import { CustomerMapTab } from '../../components/customer/CustomerMapTab';
 import { AddressBookDrawer } from '../../components/customer/AddressBookDrawer';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { useAuth } from '../../contexts/AuthContext';
+import { canDo } from '../../config/actionPermissions';
 import { Pagination } from '../../components/common/Pagination';
+import { Modal } from '../../components/ui/Modal';
+import { EmptyState } from '../../components/ui/StateViews';
 import { CustomerEditForm } from '../../components/modals/CustomerEditForm';
 import { ChatHistoryModal } from '../../components/modals/ChatHistoryModal';
 import { CustomerFollowUpSection } from '../../components/customer/CustomerFollowUpSection';
@@ -16,6 +23,8 @@ import { getCleanTreatmentName } from '../../utils/treatmentFormatter';
 import { resolveStaffName } from '../../utils/resolveStaffName';
 import { formatClinicalAge } from '../../utils/clinicalAge';
 import { StaffOwnershipBadge } from '../../components/common/StaffOwnershipBadge';
+import { CustomerMobileList, CustomerTable } from './CustomerListViews';
+import type { CustomerItem } from './customerTypes';
 import type { StaffOwnership } from '../../utils/staffOwnershipBadge';
 import { getLocationBadgeConfig, getGoogleMapsDirectionUrl, resolveEffectiveLocationSource } from '../../utils/geoUtils';
 import {
@@ -50,36 +59,13 @@ import {
   FileText,
   Navigation,
   PenLine,
-  ChevronRight,
   Package,
   CheckCircle2,
   Pause,
   Download,
 } from 'lucide-react';
-
-interface CustomerItem {
-  id: string;
-  phone: string;
-  name: string | null;
-  status: string;
-  isMql: boolean;
-  mqlBubbleCount: number;
-  mqlTriggeredAt: string | null;
-  trackingCode?: string;
-  adClick?: any;
-  ltv: number;
-  reservationCount: number;
-  createdAt: string;
-  updatedAt: string;
-  isAdminLabeled?: boolean;
-  isHoldLabeled?: boolean;
-  kecamatan?: string | null;
-  kota?: string | null;
-  kelurahan?: string | null;
-  distanceKm?: number | null;
-  ongkir?: number | null;
-  staffOwnership?: StaffOwnership | null;
-}
+import { formatRupiah as formatCurrency } from '../../utils/money';
+import { formatWib } from '../../utils/dateWib';
 
 interface ChatMessage {
   id: string;
@@ -93,8 +79,10 @@ interface ChatMessage {
 export const CustomerDatabase: React.FC = () => {
   const { toast, confirm } = useUiFeedback();
   const { user } = useAuth();
-  // Export Audience = unduh PII massal → hanya super/tenant admin (backend fail-closed, ini lapis UI).
-  const canExportAudience = !user || ['super_admin', 'tenant_admin'].includes(String(user.role || '').toLowerCase());
+  // Export Audience = unduh PII massal. Backend hanya mengizinkan SUPER_ADMIN
+  // (customers-export.subroute.ts:46), jadi UI memakai peta izin yang sama —
+  // bukan daftar role tebakan yang membuat tenant_admin menabrak 403.
+  const canExportAudience = canDo(String(user?.role || '').toLowerCase(), 'export_customer_audience');
   const [searchParams, setSearchParams] = useSearchParams();
   const rawTab = searchParams.get('tab') || 'customers';
   const activeMainTab = (
@@ -104,7 +92,28 @@ export const CustomerDatabase: React.FC = () => {
   const initialCustomers = Array.isArray(cachedCustRes) ? cachedCustRes : (cachedCustRes?.data || []);
   const [loading, setLoading] = useState(initialCustomers.length === 0);
   const [customers, setCustomers] = useState<CustomerItem[]>(() => initialCustomers);
-  const [search, setSearch] = useState('');
+  // Kolom cari disimpan di URL (`?q=`) supaya refresh dan tombol Back
+  // mempertahankan pencarian. Penulisan memakai `replace` agar mengetik tidak
+  // menumpuk riwayat per karakter.
+  const [search, setSearchState] = useState(() => searchParams.get('q') ?? '');
+  const setSearch = useCallback(
+    (next: string) => {
+      setSearchState(next);
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev);
+          if (!next) params.delete('q');
+          else params.set('q', next);
+          return params;
+        },
+        { replace: true }
+      );
+    },
+    [setSearchParams]
+  );
+  useEffect(() => {
+    setSearchState(searchParams.get('q') ?? '');
+  }, [searchParams]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
@@ -458,10 +467,6 @@ export const CustomerDatabase: React.FC = () => {
     }
   };
 
-  const formatCurrency = (val: number) => {
-    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val);
-  };
-
   const handleExportAudience = async () => {
     setExportingAudience(true);
     try {
@@ -576,7 +581,7 @@ export const CustomerDatabase: React.FC = () => {
               title="Export Custom Audience Meta terakhir (dari Tenant.settings)"
             >
               Terakhir export:{' '}
-              {new Date(audienceMeta.lastExportAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+              {formatWib(audienceMeta.lastExportAt, { day: 'numeric', month: 'short', year: 'numeric' })}
               {typeof audienceMeta.lastExportCount === 'number' ? ` • ${audienceMeta.lastExportCount} kontak` : ''}
             </span>
           )}
@@ -663,7 +668,7 @@ export const CustomerDatabase: React.FC = () => {
             }`}
           >
             <ShoppingBag size={12} />
-            <span>🎯 Pembeli / Ada Reservasi ({stats.totalPurchasers})</span>
+            <span>Pembeli / Ada Reservasi ({stats.totalPurchasers})</span>
           </button>
           <button
             onClick={() => {
@@ -677,7 +682,7 @@ export const CustomerDatabase: React.FC = () => {
             }`}
           >
             <Zap size={12} className={segment === 'mql' ? 'fill-white' : ''} />
-            <span>⚡ MQL Aktif ({stats.totalMql})</span>
+            <span>MQL Aktif ({stats.totalMql})</span>
           </button>
           <button
             onClick={() => {
@@ -691,7 +696,7 @@ export const CustomerDatabase: React.FC = () => {
             }`}
           >
             <MessageSquare size={12} />
-            <span>💬 Prospek Saja ({stats.totalProspects})</span>
+            <span>Prospek Saja ({stats.totalProspects})</span>
           </button>
         </div>
 
@@ -707,10 +712,10 @@ export const CustomerDatabase: React.FC = () => {
               }}
               className="w-full bg-surface border border-divider rounded-xl px-3 py-2 text-xs font-semibold text-ink focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent dark:focus:ring-accent shadow-xs cursor-pointer appearance-none pr-7 truncate"
             >
-              <option value="all">👥 Semua ({stats.totalCustomers || totalCount})</option>
-              <option value="purchased">🎯 Pembeli ({stats.totalPurchasers})</option>
-              <option value="mql">⚡ MQL Aktif ({stats.totalMql})</option>
-              <option value="prospect">💬 Prospek ({stats.totalProspects})</option>
+              <option value="all">Semua ({stats.totalCustomers || totalCount})</option>
+              <option value="purchased">Pembeli ({stats.totalPurchasers})</option>
+              <option value="mql">MQL Aktif ({stats.totalMql})</option>
+              <option value="prospect">Prospek ({stats.totalProspects})</option>
             </select>
             <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-ink-3">
               <ArrowUpDown size={12} />
@@ -817,258 +822,24 @@ export const CustomerDatabase: React.FC = () => {
             </div>
           </>
         ) : customers.length === 0 ? (
-          <div className="text-center py-16 text-ink-3 text-xs">
-            <AlertCircle className="mx-auto text-ink-3 mb-2" size={32} />
-            <p className="font-bold text-ink">Tidak ada customer ditemukan</p>
-          </div>
+          <EmptyState
+            title="Tidak ada pelanggan yang cocok"
+            description="Ubah kata kunci pencarian atau filter, lalu coba lagi."
+          />
         ) : (
           <>
             {/* Mobile Card List (< md) */}
-            <div className="md:hidden divide-y divide-divider">
-              {customers.map((customer) => (
-                <div
-                  key={customer.id}
-                  onClick={() => handleOpenDetail(customer)}
-                  className="p-4 space-y-2.5 bg-surface hover:bg-surface-2 active:bg-fill-1 transition cursor-pointer"
-                >
-                  {/* Top row: Name/Phone/Location & LTV */}
-                  <div className="flex justify-between items-start gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center space-x-1.5">
-                        <span className="font-bold text-sm text-ink truncate">
-                          {customer.name || 'Bunda Customer'}
-                        </span>
-                        {customer.isMql && (
-                          <span
-                            title={`MQL (${customer.mqlBubbleCount ?? 0} Bubble)`}
-                            className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-success-soft text-success border border-success-line shrink-0"
-                          >
-                            <Zap size={8} className="mr-0.5" />
-                            MQL
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center space-x-1.5 text-xs text-ink-2 mt-0.5">
-                        <Phone size={12} className="text-ink-3 shrink-0" />
-                        <span className="font-mono">{customer.phone}</span>
-                      </div>
-                      {(customer.kecamatan || customer.kota) && (
-                        <div className="flex items-center space-x-1.5 text-xs text-ink-2 mt-1">
-                          <MapPin size={12} className="text-accent shrink-0" />
-                          <span className="truncate">
-                            {[customer.kecamatan, customer.kota].filter(Boolean).join(', ')}
-                          </span>
-                        </div>
-                      )}
-                      <div className="mt-1">
-                        <StaffOwnershipBadge ownership={customer.staffOwnership} />
-                      </div>
-                    </div>
-
-                    <div className="flex items-center space-x-2 shrink-0">
-                      <div className="text-right">
-                        {customer.ltv > 0 ? (
-                          <>
-                            <div className="font-bold text-success text-sm">
-                              {formatCurrency(customer.ltv)}
-                            </div>
-                            <span className="text-[10px] text-success font-medium">
-                              {customer.reservationCount}x transaksi
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            <div className="font-semibold text-ink-2 text-xs bg-fill-1 px-1.5 py-0.5 rounded">
-                              Rp 0
-                            </div>
-                            <span className="text-[10px] text-ink-3">
-                              Prospek
-                            </span>
-                          </>
-                        )}
-                      </div>
-                      <ChevronRight size={16} className="text-ink-3" />
-                    </div>
-                  </div>
-
-                  {/* Ad Campaign (if any) */}
-                  {customer.adClick?.utmCampaign && (
-                    <div className="flex items-center space-x-1 text-[11px] text-ink-3 truncate">
-                      <span className="text-ink-3">Campaign:</span>
-                      <span className="text-ink font-medium truncate">{customer.adClick.utmCampaign}</span>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+            <CustomerMobileList customers={customers} onOpenDetail={handleOpenDetail} />
 
             {/* Desktop Table (>= md) */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-divider bg-surface-2 dark:bg-surface-2 text-ink-3 font-bold uppercase text-[10px] tracking-wider select-none">
-                    <th
-                      className="py-3 px-4 cursor-pointer hover:text-ink group transition"
-                      onClick={() => handleSort('name')}
-                    >
-                      <div className="flex items-center space-x-1.5">
-                        <span>No HP / Nama</span>
-                        {renderSortIcon('name')}
-                      </div>
-                    </th>
-                    <th
-                      className="py-3 px-4 cursor-pointer hover:text-ink group transition"
-                      onClick={() => handleSort('kecamatan')}
-                    >
-                      <div className="flex items-center space-x-1.5">
-                        <span>Wilayah (Kecamatan & Kota)</span>
-                        {renderSortIcon('kecamatan')}
-                      </div>
-                    </th>
-                    <th
-                      className="py-3 px-4 cursor-pointer hover:text-ink group transition"
-                      onClick={() => handleSort('ltv')}
-                    >
-                      <div className="flex items-center space-x-1.5">
-                        <span>LTV (Lifetime Value)</span>
-                        {renderSortIcon('ltv')}
-                      </div>
-                    </th>
-                    <th
-                      className="py-3 px-4 cursor-pointer hover:text-ink group transition"
-                      onClick={() => handleSort('created_at')}
-                    >
-                      <div className="flex items-center space-x-1.5">
-                        <span>Terdaftar</span>
-                        {renderSortIcon('created_at')}
-                      </div>
-                    </th>
-                    <th className="py-3 px-4 text-right">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-divider">
-                  {customers.map((customer) => (
-                    <tr key={customer.id} className="hover:bg-surface-2 transition text-ink">
-                      {/* Customer Phone & Name with MQL icon */}
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center space-x-2.5">
-                          <div className="w-8 h-8 rounded-full bg-accent-soft text-accent flex items-center justify-center font-bold text-xs shrink-0">
-                            {(customer.name || customer.phone || 'B').charAt(0).toUpperCase()}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center space-x-1.5">
-                              <span className="font-bold text-ink truncate">
-                                {customer.name || 'Bunda Customer'}
-                              </span>
-                              {customer.isMql && (
-                                <span
-                                  title={`MQL (${customer.mqlBubbleCount ?? 0} Bubble)`}
-                                  className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-success-soft text-success border border-success-line shrink-0"
-                                >
-                                  <Zap size={8} className="mr-0.5" />
-                                  MQL
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center space-x-1 text-[11px] text-ink-3 font-mono mt-0.5">
-                              <Phone size={11} className="text-ink-3 shrink-0" />
-                              <span>{customer.phone}</span>
-                            </div>
-                            <div className="mt-1">
-                              <StaffOwnershipBadge ownership={customer.staffOwnership} />
-                            </div>
-                            {customer.adClick?.utmCampaign && (
-                              <p className="text-[10px] text-ink-3 truncate max-w-[170px] mt-0.5">
-                                Ad: {customer.adClick.utmCampaign}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Wilayah (Kecamatan & Kota) */}
-                      <td className="py-3.5 px-4">
-                        {customer.kecamatan || customer.kota ? (
-                          <div className="flex items-start space-x-1.5">
-                            <MapPin size={13} className="text-accent shrink-0 mt-0.5" />
-                            <div className="min-w-0">
-                              <span className="font-bold text-ink block truncate text-xs">
-                                {customer.kecamatan || '-'}
-                              </span>
-                              <span className="text-[11px] text-ink-3 block truncate">
-                                {customer.kota || '-'}
-                              </span>
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-ink-3 text-xs italic">-</span>
-                        )}
-                      </td>
-
-                      {/* LTV */}
-                      <td className="py-3.5 px-4">
-                        {customer.ltv > 0 ? (
-                          <div>
-                            <span className="font-bold text-success bg-success-soft border border-success-line px-2 py-0.5 rounded text-[11px] inline-block">
-                              {formatCurrency(customer.ltv)}
-                            </span>
-                            <span className="text-[10px] text-success block mt-0.5 font-medium">
-                              {customer.reservationCount}x Transaksi
-                            </span>
-                          </div>
-                        ) : (
-                          <div>
-                            <span className="font-semibold text-ink-3 bg-fill-1 border border-divider px-2 py-0.5 rounded text-[10px] inline-block">
-                              Rp 0
-                            </span>
-                            <span className="text-[10px] text-ink-3 block mt-0.5">
-                              Prospek
-                            </span>
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Terdaftar */}
-                      <td className="py-3.5 px-4 text-ink-2 text-[11px] whitespace-nowrap">
-                        {customer.createdAt ? new Date(customer.createdAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end space-x-1.5">
-                          <button
-                            onClick={() => handleOpenDetail(customer)}
-                            className="px-2.5 py-1.5 rounded-xl bg-accent-soft hover:bg-accent-soft text-accent border border-divider text-xs font-semibold transition flex items-center space-x-1 shadow-xs cursor-pointer"
-                            title="Lihat Detail Lengkap Pasien"
-                          >
-                            <Eye size={12} />
-                            <span>Detail</span>
-                          </button>
-
-                          <button
-                            onClick={() => handleOpenHistory(customer)}
-                            className="px-2.5 py-1.5 rounded-xl bg-info-soft hover:bg-info-line text-info border border-info-line text-xs font-semibold transition flex items-center space-x-1 shadow-xs cursor-pointer"
-                            title="Buka Riwayat Chat"
-                          >
-                            <MessageSquare size={12} />
-                            <span>History</span>
-                          </button>
-
-                          <button
-                            onClick={() => setActiveEventCustomer(customer)}
-                            className="px-2.5 py-1.5 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink text-xs font-semibold transition flex items-center space-x-1 shadow-xs cursor-pointer"
-                            title="Kirim Event Meta CAPI"
-                          >
-                            <Send size={12} />
-                            <span>Event</span>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <CustomerTable
+              customers={customers}
+              renderSortIcon={renderSortIcon}
+              onSort={handleSort}
+              onOpenDetail={handleOpenDetail}
+              onOpenHistory={handleOpenHistory}
+              onOpenEvent={setActiveEventCustomer}
+            />
           </>
         )}
 
@@ -1096,34 +867,20 @@ export const CustomerDatabase: React.FC = () => {
 
       {/* Modal 2: Send Meta Event Modal */}
       {activeEventCustomer && (
-        <div
-          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4"
-          onClick={() => setActiveEventCustomer(null)}
+        <Modal
+          open
+          onClose={() => setActiveEventCustomer(null)}
+          size="md"
+          bodyClassName="p-0 overflow-hidden flex-1 flex flex-col min-h-0"
+          title={
+            <span className="flex items-center gap-2">
+              <Send size={15} className="text-accent" aria-hidden="true" />
+              <span>Send Event ke Meta Pixel / CAPI</span>
+            </span>
+          }
+          subtitle={`Customer: ${activeEventCustomer.phone} (${activeEventCustomer.trackingCode || '-'})`}
         >
-          <div
-            className="bg-surface border border-divider rounded-2xl w-full max-w-md shadow-xl overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <form onSubmit={handleSendMetaEvent}>
-              {/* Modal Header */}
-              <div className="p-4 border-b border-divider flex justify-between items-center bg-surface-2 dark:bg-surface-2">
-                <div>
-                  <h3 className="font-bold text-ink text-sm flex items-center space-x-2">
-                    <Send size={15} className="text-accent" />
-                    <span>Send Event ke Meta Pixel / CAPI</span>
-                  </h3>
-                  <p className="text-[11px] text-ink-3">
-                    Customer: {activeEventCustomer.phone} ({activeEventCustomer.trackingCode})
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveEventCustomer(null)}
-                  className="p-1.5 rounded-lg text-ink-3 hover:text-ink hover:bg-fill-1 transition"
-                >
-                  <X size={16} />
-                </button>
-              </div>
+            <form onSubmit={handleSendMetaEvent} className="flex-1 overflow-y-auto">
 
               {/* Modal Form Content */}
               <div className="p-5 space-y-4 text-xs">
@@ -1182,6 +939,7 @@ export const CustomerDatabase: React.FC = () => {
                   Batal
                 </button>
                 <button
+                  aria-label="Kirim pesan"
                   type="submit"
                   disabled={sendingEvent}
                   className="px-4 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-bold transition flex items-center space-x-1.5 disabled:opacity-50 shadow-xs"
@@ -1191,65 +949,35 @@ export const CustomerDatabase: React.FC = () => {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* Modal 3: Complete Customer Details Modal */}
       {activeDetailCustomer && (
-        <div
-          className="fixed inset-0 z-[1050] bg-black/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fadeIn"
-          onClick={() => setActiveDetailCustomer(null)}
+        <Modal
+          open
+          onClose={() => setActiveDetailCustomer(null)}
+          size="xl"
+          bodyClassName="p-0 overflow-hidden flex-1 flex flex-col min-h-0"
+          title={detailData?.name || activeDetailCustomer.name || 'Bunda Customer'}
+          subtitle={detailData?.phone || activeDetailCustomer.phone || '-'}
         >
-          <div
-            className="bg-surface border border-divider rounded-3xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="p-4 sm:p-5 border-b border-divider bg-surface-2 dark:bg-surface-2 flex justify-between items-start">
-              <div className="flex items-center space-x-3">
-                <div className="h-12 w-12 rounded-2xl bg-accent-soft border border-divider text-accent flex items-center justify-center font-bold text-lg shadow-xs flex-shrink-0">
-                  {(detailData?.name || activeDetailCustomer.name || 'B')[0].toUpperCase()}
-                </div>
-                <div>
-                  <div className="flex items-center space-x-2">
-                    <h3 className="font-bold text-base text-ink">
-                      {detailData?.name || activeDetailCustomer.name || 'Bunda Customer'}
-                    </h3>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                      (detailData?.status || activeDetailCustomer.status) === 'legacy'
-                        ? 'bg-violet-soft text-violet border border-violet-line'
-                        : (detailData?.status || activeDetailCustomer.status) === 'blocked'
-                        ? 'bg-danger-soft text-danger border border-danger-line'
-                        : 'bg-success-soft text-success border border-success-line'
-                    }`}>
-                      {detailData?.status || activeDetailCustomer.status || 'Active'}
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-ink-2 mt-0.5">
-                    <span className="font-mono flex items-center space-x-1">
-                      <Phone size={12} className="text-ink-3" />
-                      <span>{detailData?.phone || activeDetailCustomer.phone}</span>
-                    </span>
-                    {(detailData?.kecamatan || activeDetailCustomer.kecamatan || detailData?.kota || activeDetailCustomer.kota) && (
-                      <>
-                        <span>•</span>
-                        <span className="flex items-center space-x-1 text-accent font-medium">
-                          <MapPin size={12} className="text-accent" />
-                          <span>{[detailData?.kecamatan || activeDetailCustomer.kecamatan, detailData?.kota || activeDetailCustomer.kota].filter(Boolean).join(', ')}</span>
-                        </span>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setActiveDetailCustomer(null)}
-                className="p-1.5 rounded-xl text-ink-3 hover:text-ink hover:bg-fill-2 transition"
-              >
-                <X size={18} />
-              </button>
+            <div className="px-4 sm:px-6 pt-4 flex flex-wrap items-center gap-2 text-xs">
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                (detailData?.status || activeDetailCustomer.status) === 'legacy'
+                  ? 'bg-violet-soft text-violet border border-violet-line'
+                  : (detailData?.status || activeDetailCustomer.status) === 'blocked'
+                  ? 'bg-danger-soft text-danger border border-danger-line'
+                  : 'bg-success-soft text-success border border-success-line'
+              }`}>
+                {detailData?.status || activeDetailCustomer.status || 'Active'}
+              </span>
+              {(detailData?.kecamatan || activeDetailCustomer.kecamatan || detailData?.kota || activeDetailCustomer.kota) && (
+                <span className="flex items-center space-x-1 text-accent font-medium">
+                  <MapPin size={12} className="text-accent" aria-hidden="true" />
+                  <span>{[detailData?.kecamatan || activeDetailCustomer.kecamatan, detailData?.kota || activeDetailCustomer.kota].filter(Boolean).join(', ')}</span>
+                </span>
+              )}
             </div>
 
             {/* Modal Body */}
@@ -1302,7 +1030,7 @@ export const CustomerDatabase: React.FC = () => {
                       <span className="text-[10px] uppercase font-bold text-ink-3 block">Terdaftar Sejak</span>
                       <p className="font-semibold text-xs text-ink-2 mt-0.5 truncate">
                         {activeDetailCustomer.createdAt
-                          ? new Date(activeDetailCustomer.createdAt).toLocaleDateString('id-ID', {
+                          ? formatWib(activeDetailCustomer.createdAt, {
                               day: 'numeric',
                               month: 'short',
                               year: 'numeric',
@@ -1320,13 +1048,14 @@ export const CustomerDatabase: React.FC = () => {
                         <span>Alamat Lengkap & Logistik Kunjungan</span>
                       </h4>
                       <button
+                        aria-label="Muat ulang"
                         type="button"
                         onClick={handleRefreshLocationDb}
                         disabled={refreshingLocationDb}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border bg-surface border-divider hover:bg-fill-1 text-accent hover:border-accent transition disabled:opacity-50"
                       >
                         <RefreshCw size={11} className={refreshingLocationDb ? 'animate-spin' : ''} />
-                        <span>{refreshingLocationDb ? 'Memperbarui...' : '🔄 Refresh & Hitung Ulang'}</span>
+                        <span>{refreshingLocationDb ? 'Memperbarui...' : ' Refresh & Hitung Ulang'}</span>
                       </button>
                     </div>
                     {(() => {
@@ -1348,7 +1077,7 @@ export const CustomerDatabase: React.FC = () => {
                           </span>
                           {detailData?.preferences?.location_refreshed_at ? (
                             <span className="text-[10px] text-ink-3">
-                              {new Date(detailData.preferences.location_refreshed_at).toLocaleString('id-ID')}
+                              {formatWib(detailData.preferences.location_refreshed_at, { dateStyle: 'short', timeStyle: 'short' })}
                             </span>
                           ) : null}
                         </div>
@@ -1428,7 +1157,7 @@ export const CustomerDatabase: React.FC = () => {
                             </div>
                             {child.birth_date && (
                               <span className="text-[10px] text-ink-3 font-mono">
-                                Lahir: {new Date(child.birth_date).toLocaleDateString('id-ID')}
+                                Lahir: {formatWib(child.birth_date, { day: '2-digit', month: 'short', year: 'numeric' })}
                               </span>
                             )}
                           </div>
@@ -1471,7 +1200,7 @@ export const CustomerDatabase: React.FC = () => {
                               >
                                 <td className="py-2.5 px-3 whitespace-nowrap text-[11px] font-semibold text-ink">
                                   {res.booking_date
-                                    ? new Date(res.booking_date).toLocaleDateString('id-ID', {
+                                    ? formatWib(res.booking_date, {
                                         day: '2-digit',
                                         month: 'short',
                                         year: 'numeric',
@@ -1547,7 +1276,7 @@ export const CustomerDatabase: React.FC = () => {
                               {/* Progress bar */}
                               <div className="w-full h-1.5 bg-fill-2 rounded-full overflow-hidden">
                                 <div
-                                  className="h-full bg-accent rounded-full transition-all duration-300"
+                                  className="h-full bg-accent rounded-full transition-[width] duration-300"
                                   style={{ width: `${progress}%` }}
                                 />
                               </div>
@@ -1661,9 +1390,8 @@ export const CustomerDatabase: React.FC = () => {
               Tutup
             </button>
           </div>
-          </div>
-      </div>
-    )}
+        </Modal>
+      )}
 
       {/* Buku Alamat Drawer — multi-rumah pelanggan (Fase R1) */}
       <AddressBookDrawer

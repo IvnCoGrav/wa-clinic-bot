@@ -331,7 +331,9 @@ export function extractLocation(msg: any): ChatLocationData | null {
             }
           }
         }
-      } catch {}
+      } catch {
+        // URL tidak bisa diurai; lanjut ke pola berikutnya.
+      }
     }
   }
 

@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
-import { Calendar, Clock, Send, XCircle, Pencil, Rocket, ChevronDown, ChevronUp, Eye, EyeOff, AlertCircle, CheckCircle2, X } from 'lucide-react';
+import { Modal } from '../ui/Modal';
+import { Calendar, Clock, Send, XCircle, Pencil, Rocket, ChevronDown, ChevronUp, Eye, EyeOff, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { formatWib } from '../../utils/dateWib';
 
 export interface FollowUpItem {
   id: string;
@@ -77,7 +79,7 @@ function formatWibRelative(dateStr: string, status: string): string {
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayKey = yesterday.toISOString().slice(0, 10);
   const time = dWib.toISOString().slice(11, 16);
-  const datePart = dWib.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+  const datePart = formatWib(dateStr, { day: '2-digit', month: 'short', year: 'numeric' });
   const overdue = d.getTime() < now.getTime() && (status === 'PENDING' || status === 'QUEUED');
   if (overdue) return `Terlewat • ${datePart}, ${time} WIB`;
   if (dKey === nowKey) return `Hari ini, ${time} WIB`;
@@ -269,7 +271,7 @@ export const CustomerFollowUpSection: React.FC<Props> = ({ customerId, followUps
                     {fu.reservation && (
                       <p className="text-[11px] text-ink-2 mt-1 truncate">
                         Terkait reservasi: {fu.reservation.treatment_detail || fu.reservation.treatment_category || fu.reservation.id.slice(0, 8)} •{' '}
-                        {fu.reservation.booking_date ? new Date(fu.reservation.booking_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : ''}
+                        {fu.reservation.booking_date ? formatWib(fu.reservation.booking_date, { day: '2-digit', month: 'short', year: 'numeric' }) : ''}
                       </p>
                     )}
                   </div>
@@ -288,7 +290,7 @@ export const CustomerFollowUpSection: React.FC<Props> = ({ customerId, followUps
                     {fu.custom_text ? (
                       <p className="text-ink">{fu.custom_text}</p>
                     ) : (
-                      <p className="text-ink-2 italic">Pratinjau template default: {humanizeType(fu.type, fu.stage)} — teks akan dirender saat pengiriman (varian rolling 1..3).</p>
+                      <p className="text-ink-2 italic">Pratinjau template default: {humanizeType(fu.type, fu.stage)}: teks akan dirender saat pengiriman (varian rolling 1..3).</p>
                     )}
                   </div>
                 )}
@@ -309,7 +311,7 @@ export const CustomerFollowUpSection: React.FC<Props> = ({ customerId, followUps
                     type="button"
                     onClick={() => handleSendNow(fu.id)}
                     disabled={sendingId === fu.id}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-xs font-bold transition disabled:opacity-50 shadow-xs"
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-on-solid text-xs font-bold transition disabled:opacity-50 shadow-xs"
                   >
                     <Rocket size={12} />
                     {sendingId === fu.id ? 'Mengirim...' : 'Kirim Sekarang'}
@@ -352,7 +354,7 @@ export const CustomerFollowUpSection: React.FC<Props> = ({ customerId, followUps
                     <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold border ${STATUS_STYLES[fu.status] || ''}`}>{fu.status}</span>
                   </div>
                   <p className="text-[11px] text-ink-2 mt-0.5">
-                    {fu.status === 'SENT' && fu.sent_at ? `Terkirim ${new Date(fu.sent_at).toLocaleString('id-ID')}` : `Jadwal ${formatWibRelative(fu.scheduled_at, fu.status)}`}
+                    {fu.status === 'SENT' && fu.sent_at ? `Terkirim ${formatWib(fu.sent_at, { dateStyle: 'short', timeStyle: 'short' })}` : `Jadwal ${formatWibRelative(fu.scheduled_at, fu.status)}`}
                   </p>
                   {fu.cancel_reason && <p className="text-[11px] text-danger mt-0.5">Alasan: {fu.cancel_reason}</p>}
                 </div>
@@ -363,84 +365,97 @@ export const CustomerFollowUpSection: React.FC<Props> = ({ customerId, followUps
         </div>
       )}
 
-      {/* Cancel reason modal inline */}
-      {cancellingId && (
-        <div className="fixed inset-0 z-[70] bg-black/40 backdrop-blur-xs flex items-center justify-center p-4" onClick={() => setCancellingId(null)}>
-          <div className="bg-surface rounded-2xl w-full max-w-md p-4 space-y-3 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
-              <h5 className="font-bold text-sm text-ink flex items-center gap-1.5"><AlertCircle size={16} className="text-danger" /> Batalkan Follow-Up</h5>
-              <button onClick={() => setCancellingId(null)} className="p-1 rounded-lg hover:bg-fill-1"><X size={16} /></button>
-            </div>
-            <p className="text-xs text-ink-2">Alasan pembatalan (opsional) akan disimpan di <code>cancel_reason</code>:</p>
-            <textarea
-              value={cancelReason}
-              onChange={(e) => setCancelReason(e.target.value)}
-              placeholder="Mis. Customer sudah reservasi manual, salah jadwal, dll."
-              className="w-full p-2.5 border border-strong rounded-xl text-xs focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
-              rows={3}
-            />
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setCancellingId(null)} className="px-4 py-2 bg-surface border border-strong rounded-xl text-xs font-semibold">Batal</button>
-              <button onClick={submitCancel} disabled={saving} className="px-4 py-2 bg-danger hover:bg-danger-hover text-on-solid rounded-xl text-xs font-bold disabled:opacity-50">
-                {saving ? 'Membatalkan...' : 'Ya, Batalkan'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Cancel reason modal */}
+      <Modal
+        open={!!cancellingId}
+        onClose={() => setCancellingId(null)}
+        size="md"
+        title={
+          <span className="flex items-center gap-1.5">
+            <AlertCircle size={16} className="text-danger" aria-hidden="true" />
+            <span>Batalkan Follow-Up</span>
+          </span>
+        }
+        footer={
+          <>
+            <button onClick={() => setCancellingId(null)} className="px-4 py-2 bg-surface border border-strong rounded-xl text-xs font-semibold cursor-pointer">Batal</button>
+            <button onClick={submitCancel} disabled={saving} className="px-4 py-2 bg-danger hover:bg-danger-hover text-on-solid rounded-xl text-xs font-bold disabled:opacity-50 cursor-pointer">
+              {saving ? 'Membatalkan...' : 'Ya, Batalkan'}
+            </button>
+          </>
+        }
+      >
+        <label htmlFor="cancel-reason" className="block text-xs font-semibold text-ink-2">
+          Alasan pembatalan (opsional), disimpan di cancel_reason
+        </label>
+        <textarea
+          id="cancel-reason"
+          value={cancelReason}
+          onChange={(e) => setCancelReason(e.target.value)}
+          placeholder="Mis. Customer sudah reservasi manual, salah jadwal, dll."
+          className="w-full p-2.5 border border-strong rounded-xl text-xs focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+          rows={3}
+        />
+      </Modal>
 
       {/* Edit / Reschedule modal */}
-      {editing && (
-        <div className="fixed inset-0 z-[70] bg-black/40 backdrop-blur-xs flex items-center justify-center p-4" onClick={() => setEditing(null)}>
-          <div className="bg-surface rounded-2xl w-full max-w-md p-4 space-y-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
-              <h5 className="font-bold text-sm text-ink flex items-center gap-1.5"><Pencil size={16} className="text-accent" /> Edit Follow-Up</h5>
-              <button onClick={() => setEditing(null)} className="p-1 rounded-lg hover:bg-fill-1"><X size={16} /></button>
-            </div>
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="font-semibold text-ink block mb-1">Tipe</label>
-                <p className="p-2.5 bg-surface-2 border border-divider rounded-xl text-ink-2">{humanizeType(editing.type, editing.stage)}</p>
-              </div>
-              <div>
-                <label className="font-semibold text-ink block mb-1">Tahap (Stage 1..3)</label>
-                <select value={editStage} onChange={(e) => setEditStage(Number(e.target.value))} className="w-full p-2.5 bg-surface border border-strong rounded-xl text-xs focus:outline-none focus:border-accent">
-                  <option value={1}>Tahap 1</option>
-                  <option value={2}>Tahap 2</option>
-                  <option value={3}>Tahap 3</option>
-                </select>
-              </div>
-              <div>
-                <label className="font-semibold text-ink block mb-1">Jadwal Kirim (WIB)</label>
-                <input
-                  type="datetime-local"
-                  value={editScheduledAt}
-                  onChange={(e) => setEditScheduledAt(e.target.value)}
-                  className="w-full p-2.5 bg-surface border border-strong rounded-xl text-xs focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
-                />
-                <p className="text-[11px] text-ink-3 mt-1">Disimpan sebagai UTC, ditampilkan WIB.</p>
-              </div>
-              <div>
-                <label className="font-semibold text-ink block mb-1">Custom Text (opsional)</label>
-                <textarea
-                  value={editCustomText}
-                  onChange={(e) => setEditCustomText(e.target.value)}
-                  placeholder="Kosongkan untuk pakai template default rolling"
-                  className="w-full p-2.5 bg-surface border border-strong rounded-xl text-xs focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
-                  rows={4}
-                />
-              </div>
-            </div>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setEditing(null)} className="px-4 py-2 bg-surface border border-strong rounded-xl text-xs font-semibold">Batal</button>
-              <button onClick={submitEdit} disabled={saving} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-xl text-xs font-bold disabled:opacity-50 flex items-center gap-1.5">
-                <Send size={12} />
-                {saving ? 'Menyimpan...' : 'Simpan Perubahan'}
-              </button>
-            </div>
+      <Modal
+        open={!!editing}
+        onClose={() => setEditing(null)}
+        size="md"
+        title={
+          <span className="flex items-center gap-1.5">
+            <Pencil size={16} className="text-accent" aria-hidden="true" />
+            <span>Edit Follow-Up</span>
+          </span>
+        }
+        footer={
+          <>
+            <button onClick={() => setEditing(null)} className="px-4 py-2 bg-surface border border-strong rounded-xl text-xs font-semibold cursor-pointer">Batal</button>
+            <button onClick={submitEdit} disabled={saving} className="px-4 py-2 bg-accent hover:bg-accent-hover text-on-solid rounded-xl text-xs font-bold disabled:opacity-50 flex items-center gap-1.5 cursor-pointer">
+              <Send size={12} aria-hidden="true" />
+              {saving ? 'Menyimpan...' : 'Simpan Perubahan'}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-3 text-xs">
+          <div>
+            <p className="font-semibold text-ink block mb-1">Tipe</p>
+            <p className="p-2.5 bg-surface-2 border border-divider rounded-xl text-ink-2">{humanizeType(editing?.type ?? '', editing?.stage ?? 0)}</p>
+          </div>
+          <div>
+            <label htmlFor="fu-edit-stage" className="font-semibold text-ink block mb-1">Tahap (Stage 1..3)</label>
+            <select id="fu-edit-stage" value={editStage} onChange={(e) => setEditStage(Number(e.target.value))} className="w-full p-2.5 bg-surface border border-strong rounded-xl text-xs focus:outline-none focus:border-accent cursor-pointer">
+              <option value={1}>Tahap 1</option>
+              <option value={2}>Tahap 2</option>
+              <option value={3}>Tahap 3</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="fu-edit-schedule" className="font-semibold text-ink block mb-1">Jadwal Kirim (WIB)</label>
+            <input
+              id="fu-edit-schedule"
+              type="datetime-local"
+              value={editScheduledAt}
+              onChange={(e) => setEditScheduledAt(e.target.value)}
+              className="w-full p-2.5 bg-surface border border-strong rounded-xl text-xs focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+            />
+            <p className="text-[11px] text-ink-3 mt-1">Disimpan sebagai UTC, ditampilkan WIB.</p>
+          </div>
+          <div>
+            <label htmlFor="fu-edit-text" className="font-semibold text-ink block mb-1">Custom Text (opsional)</label>
+            <textarea
+              id="fu-edit-text"
+              value={editCustomText}
+              onChange={(e) => setEditCustomText(e.target.value)}
+              placeholder="Kosongkan untuk pakai template default rolling"
+              className="w-full p-2.5 bg-surface border border-strong rounded-xl text-xs focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+              rows={4}
+            />
           </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 };

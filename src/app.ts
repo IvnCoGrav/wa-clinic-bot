@@ -148,7 +148,7 @@ export function buildApp() {
     "img-src 'self' data: https: blob:; " +
     "font-src 'self' data: https:; " +
     "connect-src 'self' https: wss: ws:; " +
-    "media-src 'self' blob: https:; " +
+    "media-src 'self' data: blob: https:; " +
     "frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none';";
   app.addHook('onSend', async (request, reply, payload) => {
     const path = request.url.split('?')[0];

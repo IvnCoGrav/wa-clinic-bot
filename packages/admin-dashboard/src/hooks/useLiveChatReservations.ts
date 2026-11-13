@@ -8,9 +8,11 @@ import {
   WilayahReference,
 } from '../utils/chatScheduleExtractor';
 import {
+  formatWib,
   getWibDateKey,
   getWibHoursAndMinutes,
 } from '../utils/dateWib';
+import { fireAndForget } from '../services/errorPolicy';
 import { resolveEffectiveLocationSource } from '../utils/geoUtils';
 
 // Cache referensi wilayah (backend gazetteer) — diambil sekali per sesi invoice
@@ -27,7 +29,9 @@ async function getWilayahRef(): Promise<WilayahReference | null> {
           cachedWilayahRef = { kecamatan: data.kecamatan || [], kota: data.kota || [] };
           return cachedWilayahRef;
         }
-      } catch {}
+      } catch {
+        // Referensi wilayah hanya untuk pra-isi otomatis; boleh kosong.
+      }
       return null;
     })().finally(() => { wilayahRefInflight = null; });
   }
@@ -79,6 +83,7 @@ export function useLiveChatReservations({
           setSavedAddressCount(res.addresses.length);
         }
       })
+      // Gagal memuat alamat = anggap belum punya alamat tersimpan.
       .catch(() => setSavedAddressCount(0));
   }, [customerDetailData?.id, selectedChat?.customerId]);
 
@@ -104,12 +109,14 @@ export function useLiveChatReservations({
   // Prefetch staff list on mount agar modal edit tidak kosong saat diklik
   useEffect(() => {
     if (reservationStaffList.length === 0) {
-      apiRequest('/api/admin/staff')
-        .then((res: any) => {
+      // Hanya prefetch dropdown; gagal tidak boleh muncul sebagai error ke staf.
+      fireAndForget(
+        apiRequest('/api/admin/staff').then((res: any) => {
           const list = res?.data || (Array.isArray(res) ? res : []);
           if (Array.isArray(list) && list.length > 0) setReservationStaffList(list);
-        })
-        .catch(() => {});
+        }),
+        'prefetch daftar staf'
+      );
     }
   }, []);
 
@@ -142,7 +149,9 @@ export function useLiveChatReservations({
       if (typeof window !== 'undefined' && window.history.state?.view !== 'live-chat-modal') {
         window.history.pushState({ view: 'live-chat-modal', modal: modalName }, '');
       }
-    } catch (_) {}
+    } catch (_) {
+      // Riwayat browser bisa dibatasi (mode privasi); modal tetap terbuka.
+    }
   };
 
   // AUDIT FASE 2 (T-08): konsumsi entri history modal saat modal ditutup lewat
@@ -156,7 +165,9 @@ export function useLiveChatReservations({
         if (typeof window !== 'undefined' && window.history.state?.view === 'live-chat-modal') {
           window.history.back();
         }
-      } catch {}
+      } catch {
+        // Riwayat browser tidak tersedia; penutupan modal tetap berjalan.
+      }
     }
     prevTrackedModalOpenRef.current = anyTrackedModalOpen;
   }, [customerDetailModalOpen, showQuickBookingModal, showInvoiceModal]);
@@ -281,7 +292,9 @@ export function useLiveChatReservations({
             const staffRes = await apiRequest('/api/admin/staff');
             if (staffRes?.success && Array.isArray(staffRes.data)) setReservationStaffList(staffRes.data);
             else if (Array.isArray(staffRes)) setReservationStaffList(staffRes);
-          } catch {}
+          } catch {
+            // Dropdown staf opsional; detail reservasi tetap tampil.
+          }
         }
       }
     } catch (err: any) {
@@ -334,7 +347,11 @@ export function useLiveChatReservations({
             return updated;
           });
         }
-      } catch {}
+      } catch {
+        // Kartu chat bisa menampilkan status booking lama bila ini gagal, jadi
+        // staf harus tahu — bukan kegagalan senyap.
+        toast('Status booking di kartu chat belum tersegarkan. Muat ulang bila ragu.', 'error');
+      }
     }
     if (deletedReservationId) {
       setSelectedReservation(null);
@@ -345,7 +362,9 @@ export function useLiveChatReservations({
         const res = await apiRequest(`/api/admin/reservation/${selectedReservation.id}`);
         const data = res?.data || res;
         if (data) setSelectedReservation(data);
-      } catch {}
+      } catch {
+        // Detail lama tetap tampil; tindakan berikutnya akan memuat ulang.
+      }
     }
   };
 
@@ -433,14 +452,18 @@ export function useLiveChatReservations({
         const staffRes = await apiRequest('/api/admin/staff');
         if (staffRes?.success && Array.isArray(staffRes.data)) setReservationStaffList(staffRes.data);
         else if (Array.isArray(staffRes)) setReservationStaffList(staffRes);
-      } catch {}
+      } catch {
+        // Dropdown staf opsional; form tetap bisa dibuka.
+      }
     }
     // Pastikan customer detail terbaru termuat
     if (selectedChat.customerId && (!customerDetailData || customerDetailData.id !== selectedChat.customerId)) {
       try {
         const res = await apiRequest(`/api/admin/customers/${selectedChat.customerId}`);
         if (res?.data) setCustomerDetailData(res.data);
-      } catch {}
+      } catch {
+        // Data chat yang sudah ada tetap dipakai untuk pra-isi.
+      }
     }
     // Fase 2R: Pre-fill cerdas tanggal & jam dari chat (data-driven, tanpa hardcode jam)
     try {
@@ -455,10 +478,14 @@ export function useLiveChatReservations({
             currentServices = sRes;
             setClinicServices(sRes);
           }
-        } catch {}
+        } catch {
+          // Layanan opsional untuk pra-isi; form tetap bisa diisi manual.
+        }
       }
       let wilayahRef: WilayahReference | null = null;
-      try { wilayahRef = await getWilayahRef(); } catch {}
+      try { wilayahRef = await getWilayahRef(); } catch {
+        // Wilayah opsional untuk normalisasi nama area.
+      }
       const custData = customerDetailData || (selectedChat ? {
         id: (selectedChat as any).customerId,
         name: (selectedChat as any).customerName,
@@ -489,6 +516,7 @@ export function useLiveChatReservations({
         setQuickBookingTargetSlot(null);
       }
     } catch {
+      // Ekstraksi jadwal dari chat bersifat bantuan; kosongkan target slot saja.
       setQuickBookingTargetSlot(null);
     }
     setShowQuickBookingModal(true);
@@ -505,14 +533,18 @@ export function useLiveChatReservations({
         const staffRes = await apiRequest('/api/admin/staff');
         if (staffRes?.success && Array.isArray(staffRes.data)) setReservationStaffList(staffRes.data);
         else if (Array.isArray(staffRes)) setReservationStaffList(staffRes);
-      } catch {}
+      } catch {
+        // Dropdown staf opsional; form hold tetap bisa dibuka.
+      }
     }
     // Pastikan customer detail terbaru termuat
     if (selectedChat.customerId && (!customerDetailData || customerDetailData.id !== selectedChat.customerId)) {
       try {
         const res = await apiRequest(`/api/admin/customers/${selectedChat.customerId}`);
         if (res?.data) setCustomerDetailData(res.data);
-      } catch {}
+      } catch {
+        // Data chat yang sudah ada tetap dipakai untuk pra-isi.
+      }
     }
     setQuickHoldInitialDate(null);
     setQuickHoldInitialTime(null);
@@ -521,7 +553,7 @@ export function useLiveChatReservations({
 
   const handleConfirmPendingBooking = async (pendingRes: any) => {
     const dateStr = pendingRes.booking_date
-      ? new Date(pendingRes.booking_date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' })
+      ? formatWib(pendingRes.booking_date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
       : 'jadwal terpilih';
     const ok = await confirm({
       title: 'Konfirmasi Jadwal?',
@@ -578,6 +610,7 @@ export function useLiveChatReservations({
         setDispatchTrip(data || null);
       }
     } catch {
+      // Perjalanan belum tersedia / gagal dimuat: sembunyikan widget OTW.
       if (dispatchReservationIdRef.current === reservationId) setDispatchTrip(null);
     } finally {
       setDispatchLoading(false);

@@ -1,3 +1,6 @@
+// Catatan kontrak error: catch kosong di halaman ini adalah indikator mengetik,
+// cache tampilan mobile di sessionStorage, dan riwayat/URL browser. Semuanya
+// pelengkap; memuat percakapan tetap memberi pesan galat lewat state halaman.
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { apiRequest } from '../../services/api';
@@ -14,6 +17,7 @@ import {
   Radar,
 } from 'lucide-react';
 import { ToggleSwitch } from '../../components/common/ToggleSwitch';
+import { SkeletonRows } from '../../components/ui/StateViews';
 import { LiveChatComposerHandle } from '../../components/livechat/LiveChatComposer';
 import { AdminCopilotPanel } from '../../components/copilot/AdminCopilotPanel';
 import { LiveChatDispatchWidget } from '../../components/livechat/LiveChatDispatchWidget';
@@ -48,7 +52,9 @@ export const LiveChatMonitor: React.FC = () => {
     try {
       const cached = sessionStorage.getItem('liveChat:mobileView');
       if (cached === 'list' || cached === 'chat') return cached;
-    } catch {}
+    } catch {
+      // sessionStorage diblokir: pakai tampilan bawaan berdasarkan URL.
+    }
     const hasConvInUrl =
       typeof window !== 'undefined' &&
       (new URLSearchParams(window.location.search).has('conversationId') ||
@@ -66,7 +72,9 @@ export const LiveChatMonitor: React.FC = () => {
       if (fromUrl) return fromUrl;
       const cached = sessionStorage.getItem('liveChat:selectedId');
       if (cached) return cached;
-    } catch {}
+    } catch {
+      // sessionStorage diblokir: mulai tanpa percakapan terpilih.
+    }
     return null;
   });
   const selectedIdRef = useRef<string | null>(selectedId);
@@ -156,6 +164,7 @@ export const LiveChatMonitor: React.FC = () => {
     if (isTypingActiveRef.current === isTyping && isTyping) return;
     isTypingActiveRef.current = isTyping;
 
+    // Indikator mengetik hanya kosmetik untuk lawan bicara; gagal = diabaikan.
     apiRequest(`/api/admin/live-chat/conversations/${selectedIdRef.current}/typing`, {
       method: 'POST',
       body: JSON.stringify({ isTyping }),
@@ -511,6 +520,7 @@ export const LiveChatMonitor: React.FC = () => {
 
   const handleBackToList = () => {
     if (isTypingActiveRef.current) {
+      // Hentikan indikator mengetik; kegagalan tidak memengaruhi navigasi.
       try { notifyTyping(false); } catch {}
     }
     isTypingActiveRef.current = false;
@@ -520,7 +530,9 @@ export const LiveChatMonitor: React.FC = () => {
     try {
       sessionStorage.removeItem('liveChat:selectedId');
       sessionStorage.setItem('liveChat:mobileView', 'list');
-    } catch {}
+    } catch {
+      // Cache tampilan opsional; navigasi tetap berjalan.
+    }
 
     const hasConvInUrl =
       typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('conversationId');
@@ -531,7 +543,9 @@ export const LiveChatMonitor: React.FC = () => {
       try {
         window.history.replaceState({}, '', '/admin/live-chat');
         setSearchParams({}, { replace: true });
-      } catch {}
+      } catch {
+        // Riwayat/URL bisa dibatasi; daftar chat tetap terbuka.
+      }
     }
     setTimeout(() => setMobileView('list'), 60);
   };
@@ -540,7 +554,11 @@ export const LiveChatMonitor: React.FC = () => {
   const searchInputFocusedRef = useRef(false);
 
   useEffect(() => {
-    try { sessionStorage.setItem('liveChat:mobileView', mobileView); } catch {}
+    try {
+      sessionStorage.setItem('liveChat:mobileView', mobileView);
+    } catch {
+      // Cache tampilan opsional.
+    }
   }, [mobileView]);
 
   useEffect(() => {
@@ -656,7 +674,11 @@ export const LiveChatMonitor: React.FC = () => {
       isChatHistoryPushedRef.current = false;
       if (mobileView === 'chat') {
         setMobileView('list');
-        try { sessionStorage.setItem('liveChat:mobileView', 'list'); } catch {}
+        try {
+          sessionStorage.setItem('liveChat:mobileView', 'list');
+        } catch {
+          // Cache tampilan opsional.
+        }
       }
     };
 
@@ -767,7 +789,10 @@ export const LiveChatMonitor: React.FC = () => {
             className="flex items-center space-x-1 px-2 py-0.5 bg-fill-1 border border-divider rounded-full text-[10px] font-semibold text-ink-2"
             title={sseConnected ? 'Status: Real-time Terhubung (SSE Aktif)' : 'Status: Menyambungkan kembali ke server...'}
           >
-            <span className={`h-2 w-2 rounded-full ${sseConnected ? 'bg-success animate-pulse' : 'bg-warning animate-pulse'}`} />
+            <span
+              className={`h-2 w-2 rounded-full ${sseConnected ? 'bg-success' : 'bg-warning'}`}
+              aria-hidden="true"
+            />
             <span>{sseConnected ? 'Live' : 'Reconnecting'}</span>
           </div>
           {delayAlert && (
@@ -821,7 +846,7 @@ export const LiveChatMonitor: React.FC = () => {
           <button
             onClick={() => setShowSyncInfoModal(true)}
             disabled={bgSyncProgress.isSyncing}
-            className="p-1.5 rounded-lg bg-accent hover:bg-accent-hover text-white shadow-2xs transition flex items-center justify-center disabled:opacity-50 cursor-pointer"
+            className="p-1.5 rounded-lg bg-accent hover:bg-accent-hover text-on-solid shadow-2xs transition flex items-center justify-center disabled:opacity-50 cursor-pointer"
             title="Sinkronisasi Seluruh Chat WhatsApp (Background)"
           >
             <RefreshCw size={14} className={bgSyncProgress.isSyncing ? 'animate-spin' : ''} />
@@ -888,9 +913,7 @@ export const LiveChatMonitor: React.FC = () => {
       {loading && chats.length === 0 ? (
         <div className="flex-1 flex flex-col min-h-0 overflow-y-auto overscroll-contain px-1.5 sm:px-2.5 pt-1.5 pb-2" style={{ overscrollBehavior: 'contain' }}>
           {!chatBotActive && <AiOffStrip />}
-          <div className="flex-1 flex justify-center items-center py-20">
-            <Loader className="animate-spin text-accent" size={32} />
-          </div>
+          <SkeletonRows rows={8} className="px-1 py-1.5" />
         </div>
       ) : (
         <div data-no-swipe-menu="true" className="flex-1 min-h-0 flex flex-col lg:flex-row gap-0 lg:gap-2 overflow-hidden">
@@ -1090,7 +1113,7 @@ export const LiveChatMonitor: React.FC = () => {
       {dispatchDrawerOpen && dispatchTrip && (
         <div
           data-modal-active="true"
-          className="fixed inset-0 z-50 flex justify-end bg-black/40 xl:hidden"
+          className="modal-backdrop fixed inset-0 z-50 flex justify-end bg-black/40 xl:hidden"
           onClick={() => setDispatchDrawerOpen(false)}
         >
           <div

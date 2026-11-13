@@ -1,3 +1,6 @@
+// Catatan kontrak error: catch kosong di hook ini hanya menyangkut preferensi
+// tampilan kalender di localStorage (baca/tulis tinggi baris per jam). Nilai
+// rusak atau penyimpanan diblokir jatuh ke tinggi bawaan.
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 export type CalendarZoomPreset = 'compact' | 'normal' | 'detailed';

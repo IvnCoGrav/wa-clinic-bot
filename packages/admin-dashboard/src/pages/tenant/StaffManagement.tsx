@@ -1,6 +1,10 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
+import { Modal } from '../../components/ui/Modal';
+import { FormErrorSummary } from '../../components/ui/FormErrorSummary';
+import { StaffRoleModal } from './StaffRoleModal';
+import type { FieldIssue } from '../../lib/validateReservation';
 import { ToggleSwitch } from '../../components/common/ToggleSwitch';
 import {
   Users,
@@ -20,10 +24,6 @@ import {
   ChevronRight,
   Info,
   CheckCircle2,
-  Compass,
-  ListOrdered,
-  ArrowUp,
-  ArrowDown,
   Bell,
 } from 'lucide-react';
 import {
@@ -73,6 +73,7 @@ export const StaffManagement: React.FC = () => {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<string>('THERAPIST');
   const [creating, setCreating] = useState(false);
+  const [formIssues, setFormIssues] = useState<FieldIssue[]>([]);
 
   // Modal Edit Staff State
   const [selectedStaffForEdit, setSelectedStaffForEdit] = useState<StaffItem | null>(null);
@@ -125,14 +126,14 @@ export const StaffManagement: React.FC = () => {
         body: JSON.stringify({ staffId: staff.id }),
       });
       if (res?.success) {
-        toast(`✅ Notifikasi uji coba berhasil dikirim ke perangkat ${staff.name}!`, 'success');
+        toast(`Notifikasi uji coba berhasil dikirim ke perangkat ${staff.name}!`, 'success');
         const countsRes = await apiRequest('/api/admin/push/staff-device-counts').catch(() => null);
         if (countsRes?.success && countsRes.counts) setStaffDeviceCounts(countsRes.counts);
       } else {
-        toast(res?.message || `⚠️ Belum ada perangkat terdaftar untuk ${staff.name}.`, 'info');
+        toast(res?.message || `Belum ada perangkat terdaftar untuk ${staff.name}.`, 'info');
       }
     } catch (err: any) {
-      toast(`⚠️ Gagal: ${err.message}`, 'error');
+      toast(`Gagal: ${err.message}`, 'error');
     } finally {
       setTestingPushStaffId(null);
     }
@@ -191,10 +192,15 @@ export const StaffManagement: React.FC = () => {
   // ==========================================
   const handleCreateStaff = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !phone.trim() || !password.trim()) {
-      toast('Nama, nomor HP, dan password wajib diisi.', 'error');
+    const nextIssues: FieldIssue[] = [];
+    if (!name.trim()) nextIssues.push({ field: 'name', message: 'Nama lengkap wajib diisi.' });
+    if (!phone.trim()) nextIssues.push({ field: 'phone', message: 'Nomor WhatsApp/HP wajib diisi.' });
+    if (!password.trim()) nextIssues.push({ field: 'password', message: 'Password wajib diisi.' });
+    if (nextIssues.length > 0) {
+      setFormIssues(nextIssues);
       return;
     }
+    setFormIssues([]);
 
     setCreating(true);
     try {
@@ -226,6 +232,7 @@ export const StaffManagement: React.FC = () => {
 
   const handleOpenEdit = (staff: StaffItem) => {
     setSelectedStaffForEdit(staff);
+    setFormIssues([]);
     setEditName(staff.name);
     setEditPhone(staff.phone);
     setEditRole(staff.role);
@@ -236,10 +243,14 @@ export const StaffManagement: React.FC = () => {
   const handleSaveEditStaff = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedStaffForEdit) return;
-    if (!editName.trim() || !editPhone.trim()) {
-      toast('Nama dan nomor HP staff wajib diisi.', 'error');
+    const nextIssues: FieldIssue[] = [];
+    if (!editName.trim()) nextIssues.push({ field: 'editName', message: 'Nama lengkap wajib diisi.' });
+    if (!editPhone.trim()) nextIssues.push({ field: 'editPhone', message: 'Nomor WhatsApp wajib diisi.' });
+    if (nextIssues.length > 0) {
+      setFormIssues(nextIssues);
       return;
     }
+    setFormIssues([]);
 
     setSavingEdit(true);
     try {
@@ -309,6 +320,7 @@ export const StaffManagement: React.FC = () => {
       '/admin/reservations',
     ]);
     setRoleDefaultRedirect('/admin/overview');
+    setFormIssues([]);
     setShowRoleModal(true);
   };
 
@@ -319,15 +331,14 @@ export const StaffManagement: React.FC = () => {
     setRoleDescription(cfg.description);
     setRoleAllowedPaths([...cfg.allowedPaths]);
     setRoleDefaultRedirect(cfg.defaultRedirect || '/admin/overview');
+    setFormIssues([]);
     setShowRoleModal(true);
   };
 
   const handleSaveRole = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!roleLabel.trim()) {
-      toast('Nama role wajib diisi.', 'error');
-      return;
-    }
+    const nextIssues: FieldIssue[] = [];
+    if (!roleLabel.trim()) nextIssues.push({ field: 'roleLabel', message: 'Nama role wajib diisi.' });
 
     const key =
       roleModalMode === 'CREATE'
@@ -335,10 +346,13 @@ export const StaffManagement: React.FC = () => {
           roleLabel.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_')
         : roleKey;
 
-    if (!key) {
-      toast('Key identifier role tidak valid.', 'error');
+    if (!key) nextIssues.push({ field: 'roleKey', message: 'Key identifier role tidak valid.' });
+
+    if (nextIssues.length > 0) {
+      setFormIssues(nextIssues);
       return;
     }
+    setFormIssues([]);
 
     const existingConfig = rolesMap[key];
     const isSystem = existingConfig ? existingConfig.isSystem : false;
@@ -520,7 +534,7 @@ export const StaffManagement: React.FC = () => {
               setActiveTab('ROLES');
               handleOpenCreateRole();
             }}
-            className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-surface hover:bg-fill-1 text-accent font-bold text-xs border border-accent/30 hover:border-accent shadow-xs transition-all"
+            className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-surface hover:bg-fill-1 text-accent font-bold text-xs border border-accent/30 hover:border-accent shadow-xs transition"
           >
             <ShieldCheck size={15} />
             <span>+ Setup Role & Hak Akses</span>
@@ -530,8 +544,9 @@ export const StaffManagement: React.FC = () => {
             onClick={() => {
               setActiveTab('STAFF');
               setShowCreateModal(true);
+    setFormIssues([]);
             }}
-            className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink font-bold text-xs shadow-xs transition-all active:scale-95"
+            className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink font-bold text-xs shadow-xs transition active:scale-95"
           >
             <UserPlus size={15} />
             <span>+ Tambah Staff Baru</span>
@@ -543,7 +558,7 @@ export const StaffManagement: React.FC = () => {
       <div className="flex items-center space-x-2 border-b border-divider pb-2">
         <button
           onClick={() => setActiveTab('STAFF')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
             activeTab === 'STAFF'
               ? 'bg-accent text-accent-ink shadow-xs'
               : 'bg-surface text-ink-2 border border-divider hover:bg-fill-1'
@@ -552,9 +567,7 @@ export const StaffManagement: React.FC = () => {
           <Users size={15} />
           <span>Daftar Akun Pengguna</span>
           <span
-            className={`ml-1.5 px-2 py-0.2 rounded-full text-[10px] font-bold ${
-              activeTab === 'STAFF' ? 'bg-white/20 text-white' : 'bg-accent-soft text-accent'
-            }`}
+            className="ml-1.5 px-2 py-0.2 rounded-full text-[10px] font-bold bg-accent-soft text-accent"
           >
             {staffList.length}
           </span>
@@ -562,7 +575,7 @@ export const StaffManagement: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('ROLES')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
             activeTab === 'ROLES'
               ? 'bg-accent text-accent-ink shadow-xs'
               : 'bg-surface text-ink-2 border border-divider hover:bg-fill-1'
@@ -571,9 +584,7 @@ export const StaffManagement: React.FC = () => {
           <ShieldCheck size={15} />
           <span>Setup Hak Akses & Role (RBAC)</span>
           <span
-            className={`ml-1.5 px-2 py-0.2 rounded-full text-[10px] font-bold ${
-              activeTab === 'ROLES' ? 'bg-white/20 text-white' : 'bg-violet-soft text-violet'
-            }`}
+            className="ml-1.5 px-2 py-0.2 rounded-full text-[10px] font-bold bg-violet-soft text-violet"
           >
             {roleEntries.length} Role
           </span>
@@ -944,7 +955,7 @@ export const StaffManagement: React.FC = () => {
             {/* Card Add Role Shortcut */}
             <button
               onClick={handleOpenCreateRole}
-              className="rounded-2xl border-2 border-dashed border-divider hover:border-accent p-5 text-center flex flex-col items-center justify-center space-y-2 text-ink-3 hover:text-accent transition-all bg-surface-2 hover:bg-accent-soft/40 group"
+              className="rounded-2xl border-2 border-dashed border-divider hover:border-accent p-5 text-center flex flex-col items-center justify-center space-y-2 text-ink-3 hover:text-accent transition bg-surface-2 hover:bg-accent-soft/40 group"
             >
               <div className="p-3 rounded-full bg-surface shadow-xs group-hover:scale-110 transition-transform">
                 <Plus size={20} className="text-accent" />
@@ -1049,7 +1060,7 @@ export const StaffManagement: React.FC = () => {
                                     type="button"
                                     disabled={isSuper}
                                     onClick={() => handleToggleMatrixPermission(r.key, mod.path)}
-                                    className={`p-1.5 rounded-lg transition-all ${
+                                    className={`p-1.5 rounded-lg transition ${
                                       isSuper
                                         ? 'cursor-not-allowed text-accent opacity-80'
                                         : isAllowed
@@ -1086,333 +1097,47 @@ export const StaffManagement: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
+      {/* ========================================================================= */}
       {/* MODAL: TAMBAH / EDIT ROLE & HAK AKSES */}
       {/* ========================================================================= */}
       {showRoleModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn"
-          onClick={() => setShowRoleModal(false)}
-        >
-          <div
-            className="w-full max-w-2xl bg-surface border border-divider rounded-2xl p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-divider pb-3 flex-shrink-0">
-              <h3 className="text-base font-bold text-ink flex items-center space-x-2">
-                <ShieldCheck className="text-accent" size={19} />
-                <span>
-                  {roleModalMode === 'CREATE'
-                    ? 'Tambah Role & Setup Hak Akses Baru'
-                    : `Edit Hak Akses Role: ${roleLabel}`}
-                </span>
-              </h3>
-              <button
-                onClick={() => setShowRoleModal(false)}
-                className="p-1.5 rounded-lg text-ink-3 hover:text-ink hover:bg-fill-1"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveRole} className="space-y-4 overflow-y-auto flex-1 pr-1">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-ink">Nama Role</label>
-                  <input
-                    type="text"
-                    required
-                    value={roleLabel}
-                    onChange={(e) => {
-                      setRoleLabel(e.target.value);
-                      if (roleModalMode === 'CREATE') {
-                        setRoleKey(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'));
-                      }
-                    }}
-                    placeholder="Contoh: Supervisor Cabang / Finance"
-                    className="w-full px-3.5 py-2 rounded-xl bg-surface border border-divider text-ink text-xs focus:outline-none focus:border-accent shadow-xs"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-ink">
-                    Key Identifier (Slug Sistem)
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    disabled={roleModalMode === 'EDIT'}
-                    value={roleKey}
-                    onChange={(e) => setRoleKey(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))}
-                    placeholder="supervisor_cabang"
-                    className="w-full px-3.5 py-2 rounded-xl bg-fill-1 border border-divider font-mono text-ink text-xs focus:outline-none focus:border-accent disabled:opacity-70 shadow-xs"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-ink">Deskripsi Singkat Tanggung Jawab</label>
-                <input
-                  type="text"
-                  value={roleDescription}
-                  onChange={(e) => setRoleDescription(e.target.value)}
-                  placeholder="Contoh: Mengawasi operasional harian, reservasi kalender, dan laporan CS"
-                  className="w-full px-3.5 py-2 rounded-xl bg-surface border border-divider text-ink text-xs focus:outline-none focus:border-accent shadow-xs"
-                />
-              </div>
-
-              {/* Module Checkbox Selector */}
-              <div className="space-y-2 pt-2 border-t border-divider">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-ink flex items-center space-x-1.5">
-                    <CheckSquare size={14} className="text-accent" />
-                    <span>Pilih Izin Modul & Menu Dashboard ({roleAllowedPaths.length} Terpilih)</span>
-                  </label>
-
-                  <div className="flex items-center space-x-2">
-                    <button
-                      type="button"
-                      onClick={() => setRoleAllowedPaths(ALL_MODULES.map((m) => m.path))}
-                      className="text-[11px] text-accent hover:underline font-bold"
-                    >
-                      Pilih Semua (19)
-                    </button>
-                    <span className="text-strong">|</span>
-                    <button
-                      type="button"
-                      onClick={() => setRoleAllowedPaths([])}
-                      className="text-[11px] text-danger hover:underline font-bold"
-                    >
-                      Hapus Semua
-                    </button>
-                  </div>
-                </div>
-
-                <div className="space-y-3 max-h-72 overflow-y-auto p-3 bg-surface-2 rounded-xl border border-divider">
-                  {moduleCategories.map((group) => (
-                    <div key={group.category} className="space-y-1.5">
-                      <div className="text-[11px] font-bold text-accent uppercase tracking-wider border-b border-divider pb-1 flex items-center justify-between">
-                        <span>{group.category}</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const groupPaths = group.modules.map((m) => m.path);
-                            const allIn = groupPaths.every((p) => roleAllowedPaths.includes(p));
-                            if (allIn) {
-                              setRoleAllowedPaths(roleAllowedPaths.filter((p) => !groupPaths.includes(p)));
-                            } else {
-                              const set = new Set([...roleAllowedPaths, ...groupPaths]);
-                              setRoleAllowedPaths(Array.from(set));
-                            }
-                          }}
-                          className="text-[10px] text-ink-3 hover:text-accent normal-case"
-                        >
-                          Toggle Kategori
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                        {group.modules.map((mod) => {
-                          const isChecked = roleAllowedPaths.includes(mod.path);
-                          return (
-                            <label
-                              key={mod.id}
-                              className={`flex items-start space-x-2.5 p-2 rounded-xl border cursor-pointer transition-all ${
-                                isChecked
-                                  ? 'bg-accent-soft border-accent/30 text-ink'
-                                  : 'bg-surface border-divider text-ink-2 hover:bg-fill-1'
-                              }`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setRoleAllowedPaths([...roleAllowedPaths, mod.path]);
-                                  } else {
-                                    setRoleAllowedPaths(
-                                      roleAllowedPaths.filter((p) => p !== mod.path)
-                                    );
-                                  }
-                                }}
-                                className="mt-0.5 h-4 w-4 rounded text-accent focus:ring-accent"
-                              />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs font-bold leading-tight">{mod.name}</p>
-                                <p className="text-[10px] text-ink-3 truncate">{mod.description}</p>
-                              </div>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Landing Page Selector */}
-              <div className="space-y-1.5 pt-2 border-t border-divider">
-                <label className="text-xs font-bold text-ink flex items-center space-x-1.5">
-                  <Compass size={14} className="text-accent" />
-                  <span>Halaman Awal Masuk Setelah Login (Landing Page)</span>
-                </label>
-                <p className="text-[11px] text-ink-3">
-                  Pilih menu utama yang langsung dibuka otomatis ketika staf dengan peran ini masuk ke dashboard.
-                </p>
-                <select
-                  value={roleDefaultRedirect}
-                  onChange={(e) => setRoleDefaultRedirect(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface border border-divider text-ink text-xs focus:outline-none focus:border-accent shadow-xs font-medium"
-                >
-                  {roleAllowedPaths.map((p) => {
-                    const mod = ALL_MODULES.find((m) => m.path === p);
-                    return (
-                      <option key={p} value={p}>
-                        {mod ? `${mod.name} (${p})` : p}
-                      </option>
-                    );
-                  })}
-                  {!roleAllowedPaths.includes(roleDefaultRedirect) && (
-                    <option value={roleDefaultRedirect}>
-                      {roleDefaultRedirect} (Kustom)
-                    </option>
-                  )}
-                </select>
-              </div>
-
-              {/* Sidebar Menu Sequence / Order Selector */}
-              {roleAllowedPaths.length > 0 && (
-                <div className="space-y-2 pt-2 border-t border-divider">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-ink flex items-center space-x-1.5">
-                      <ListOrdered size={14} className="text-accent" />
-                      <span>Urutan Menu di Sidebar ({roleAllowedPaths.length} Menu)</span>
-                    </label>
-                    <span className="text-[10px] text-ink-3">
-                      Klik ▲ atau ▼ untuk memindahkan urutan
-                    </span>
-                  </div>
-
-                  <div className="space-y-1 max-h-48 overflow-y-auto p-2 bg-surface-2 rounded-xl border border-divider">
-                    {roleAllowedPaths.map((p, idx) => {
-                      const mod = ALL_MODULES.find((m) => m.path === p);
-                      const isLanding = roleDefaultRedirect === p;
-
-                      const moveUp = (e: React.MouseEvent) => {
-                        e.preventDefault();
-                        if (idx === 0) return;
-                        const copy = [...roleAllowedPaths];
-                        const temp = copy[idx - 1];
-                        copy[idx - 1] = copy[idx];
-                        copy[idx] = temp;
-                        setRoleAllowedPaths(copy);
-                      };
-
-                      const moveDown = (e: React.MouseEvent) => {
-                        e.preventDefault();
-                        if (idx === roleAllowedPaths.length - 1) return;
-                        const copy = [...roleAllowedPaths];
-                        const temp = copy[idx + 1];
-                        copy[idx + 1] = copy[idx];
-                        copy[idx] = temp;
-                        setRoleAllowedPaths(copy);
-                      };
-
-                      return (
-                        <div
-                          key={p}
-                          className={`flex items-center justify-between px-3 py-1.5 rounded-lg border transition-colors ${
-                            isLanding
-                              ? 'bg-accent-soft border-accent/40 text-ink'
-                              : 'bg-surface border-divider text-ink-2'
-                          }`}
-                        >
-                          <div className="flex items-center space-x-2 min-w-0">
-                            <span className="h-5 w-5 rounded-md bg-fill-1 text-ink flex items-center justify-center text-[10px] font-bold">
-                              #{idx + 1}
-                            </span>
-                            <span className="text-xs font-semibold truncate">
-                              {mod?.name || p}
-                            </span>
-                            {isLanding && (
-                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-accent text-accent-ink">
-                                Landing Page
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="flex items-center space-x-1">
-                            <button
-                              type="button"
-                              disabled={idx === 0}
-                              onClick={moveUp}
-                              title="Pindah ke Atas"
-                              className="p-1 rounded-md text-ink-2 hover:bg-fill-2 hover:text-ink disabled:opacity-30"
-                            >
-                              <ArrowUp size={13} />
-                            </button>
-                            <button
-                              type="button"
-                              disabled={idx === roleAllowedPaths.length - 1}
-                              onClick={moveDown}
-                              title="Pindah ke Bawah"
-                              className="p-1 rounded-md text-ink-2 hover:bg-fill-2 hover:text-ink disabled:opacity-30"
-                            >
-                              <ArrowDown size={13} />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              <div className="pt-3 border-t border-divider flex items-center justify-end space-x-2 flex-shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setShowRoleModal(false)}
-                  className="px-4 py-2 rounded-xl text-ink-2 hover:bg-fill-1 text-xs font-semibold transition-colors"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink font-bold text-xs shadow-xs transition-all active:scale-95"
-                >
-                  Simpan Konfigurasi Role
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <StaffRoleModal
+          mode={roleModalMode}
+          roleKey={roleKey}
+          label={roleLabel}
+          description={roleDescription}
+          defaultRedirect={roleDefaultRedirect}
+          allowedPaths={roleAllowedPaths}
+          formIssues={formIssues}
+          moduleCategories={moduleCategories}
+          onClose={() => setShowRoleModal(false)}
+          onSave={handleSaveRole}
+          onKeyChange={setRoleKey}
+          onLabelChange={setRoleLabel}
+          onDescriptionChange={setRoleDescription}
+          onDefaultRedirectChange={setRoleDefaultRedirect}
+          onAllowedPathsChange={setRoleAllowedPaths}
+        />
       )}
 
       {/* ========================================================================= */}
       {/* MODAL: TAMBAH STAFF BARU */}
       {/* ========================================================================= */}
       {showCreateModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn"
-          onClick={() => setShowCreateModal(false)}
+        <Modal
+          open
+          onClose={() => setShowCreateModal(false)}
+          size="md"
+          title={
+            <span className="flex items-center gap-2">
+              <UserPlus className="text-accent" size={18} aria-hidden="true" />
+              <span>Tambah Staff / Pengguna Baru</span>
+            </span>
+          }
         >
-          <div
-            className="w-full max-w-md bg-surface border border-divider rounded-2xl p-6 shadow-xl space-y-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-divider pb-3">
-              <h3 className="text-base font-bold text-ink flex items-center space-x-2">
-                <UserPlus className="text-accent" size={18} />
-                <span>Tambah Staff / Pengguna Baru</span>
-              </h3>
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="p-1.5 rounded-lg text-ink-3 hover:text-ink hover:bg-fill-1"
-              >
-                ✕
-              </button>
-            </div>
 
             <form onSubmit={handleCreateStaff} className="space-y-3.5">
+              <FormErrorSummary issues={formIssues} />
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-ink">Nama Lengkap Staff</label>
                 <input
@@ -1498,42 +1223,33 @@ export const StaffManagement: React.FC = () => {
                 <button
                   type="submit"
                   disabled={creating}
-                  className="px-4 py-2 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink font-bold text-xs shadow-xs disabled:opacity-50 transition-all active:scale-95"
+                  className="px-4 py-2 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink font-bold text-xs shadow-xs disabled:opacity-50 transition active:scale-95"
                 >
                   {creating ? 'Menyimpan...' : 'Simpan Akun Staff'}
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* ========================================================================= */}
       {/* MODAL: EDIT STAFF */}
       {/* ========================================================================= */}
       {selectedStaffForEdit && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn"
-          onClick={() => setSelectedStaffForEdit(null)}
+        <Modal
+          open
+          onClose={() => setSelectedStaffForEdit(null)}
+          size="md"
+          title={
+            <span className="flex items-center gap-2">
+              <Pencil className="text-accent" size={16} aria-hidden="true" />
+              <span>Edit Akun Staff</span>
+            </span>
+          }
         >
-          <div
-            className="w-full max-w-md bg-surface border border-divider rounded-2xl p-6 shadow-xl space-y-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-divider pb-3">
-              <h3 className="text-base font-bold text-ink flex items-center space-x-2">
-                <Pencil className="text-accent" size={16} />
-                <span>Edit Akun Staff</span>
-              </h3>
-              <button
-                onClick={() => setSelectedStaffForEdit(null)}
-                className="p-1.5 rounded-lg text-ink-3 hover:text-ink hover:bg-fill-1"
-              >
-                ✕
-              </button>
-            </div>
 
             <form onSubmit={handleSaveEditStaff} className="space-y-3.5">
+              <FormErrorSummary issues={formIssues} />
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-ink">Nama Lengkap</label>
                 <input
@@ -1621,14 +1337,13 @@ export const StaffManagement: React.FC = () => {
                 <button
                   type="submit"
                   disabled={savingEdit}
-                  className="px-4 py-2 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink font-bold text-xs shadow-xs disabled:opacity-50 transition-all active:scale-95"
+                  className="px-4 py-2 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink font-bold text-xs shadow-xs disabled:opacity-50 transition active:scale-95"
                 >
                   {savingEdit ? 'Menyimpan...' : 'Simpan Perubahan'}
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

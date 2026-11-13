@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../../services/api';
 import { RefreshCw, Star, MessageSquare, DollarSign, Zap, Activity, Cpu } from 'lucide-react';
+import { formatRupiahPresisi as formatRupiah } from '../../utils/money';
+import { formatWib } from '../../utils/dateWib';
 
 interface AiEvaluationEntry {
   id: string;
@@ -54,11 +56,6 @@ const scoreColor = (s: number) => {
 
 const getModelProvider = (log: LlmAuditLogEntry) => {
   return log.provider || 'LLM Provider';
-};
-
-const formatRupiah = (val: number) => {
-  if (val == null || isNaN(val)) return 'Rp 0';
-  return 'Rp ' + val.toLocaleString('id-ID', { maximumFractionDigits: 2 });
 };
 
 /**
@@ -128,10 +125,10 @@ export const AiEvaluations: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-ink flex items-center gap-2">
+          <h1 className="text-xl font-bold text-ink flex items-center gap-2">
             <Cpu className="text-accent" size={22} />
             <span>AI Monitoring &amp; Usage Dashboard</span>
-          </h2>
+          </h1>
           <p className="text-xs text-ink-3 mt-0.5">
             Pantau pemakaian token, estimasi biaya (Rupiah), dan kualitas balasan AI secara real-time.
           </p>
@@ -269,7 +266,7 @@ export const AiEvaluations: React.FC = () => {
                     {auditSummary.recent.map((log) => (
                       <tr key={log.id} className="hover:bg-surface-2 transition-colors">
                         <td className="px-4 py-2.5 text-ink-3 whitespace-nowrap">
-                          {new Date(log.created_at).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'medium' })}
+                          {formatWib(log.created_at, { dateStyle: 'short', timeStyle: 'medium' })}
                         </td>
                         <td className="px-4 py-2.5">
                           <span className="px-2 py-0.5 rounded-full bg-accent-soft border border-divider text-accent text-[10px] font-mono font-bold">
@@ -292,7 +289,7 @@ export const AiEvaluations: React.FC = () => {
                                 className="flex items-center gap-1 text-[10px] text-success bg-success-soft border border-success-line px-1.5 py-0.5 rounded-full"
                                 title={`Cache Hit (${log.cached_prompt_tokens} tokens)`}
                               >
-                                <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+                                <span className="w-1.5 h-1.5 rounded-full bg-success" />
                                 <span>Hit</span>
                               </span>
                             ) : (
@@ -322,10 +319,10 @@ export const AiEvaluations: React.FC = () => {
                       <span className="px-2 py-0.5 rounded-full bg-accent-soft border border-divider text-accent text-[10px] font-mono font-bold">
                         {log.task_type}
                       </span>
-                      <span className="text-[10px] text-ink-3">{new Date(log.created_at).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                      <span className="text-[10px] text-ink-3">{formatWib(log.created_at, { dateStyle: 'short', timeStyle: 'short' })}</span>
                     </div>
                     <div className="text-xs font-mono text-ink">
-                      <span className="text-[10px] text-ink-3 font-sans font-semibold">{getModelProvider(log)} — </span>
+                      <span className="text-[10px] text-ink-3 font-sans font-semibold">{getModelProvider(log)}: </span>
                       {log.model_name}
                     </div>
                     <div className="flex items-center justify-between text-[11px]">
@@ -334,7 +331,7 @@ export const AiEvaluations: React.FC = () => {
                     </div>
                     <div className="flex items-center gap-1.5 text-[11px] font-mono text-ink-2">
                       {log.cached_prompt_tokens && log.cached_prompt_tokens > 0 ? (
-                        <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-success" />
                       ) : (
                         <span className="w-1.5 h-1.5 rounded-full bg-danger" />
                       )}
@@ -455,7 +452,7 @@ export const AiEvaluations: React.FC = () => {
                           )}
                         </td>
                         <td className="px-4 py-2.5 text-right text-ink-3 whitespace-nowrap">
-                          {new Date(e.created_at).toLocaleString('id-ID')}
+                          {formatWib(e.created_at, { dateStyle: 'short', timeStyle: 'short' })}
                         </td>
                       </tr>
                     ))}

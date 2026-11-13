@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { X, Calendar, ChevronLeft, ChevronRight, Users } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Users } from 'lucide-react';
 import { apiRequest } from '../../services/api';
 import { DayScheduleGrid } from './DayScheduleGrid';
 import { Reservation } from '../../types';
+import { Modal } from '../ui/Modal';
 import { getWibDateKey, getTodayWibDate, formatWibDate } from '../../utils/dateWib';
 
 function formatDateLabel(iso: string): string {
@@ -56,7 +56,9 @@ export const DailyScheduleModal: React.FC<Props> = ({
         const list = Array.isArray(res) ? res : res?.data || [];
         setStaffList(list.filter((s: any) => s.active !== false).map((s: any) => ({ id: s.id, name: s.name })));
       })
-      .catch(() => {});
+      .catch(() => {
+        // Daftar staf hanya untuk kolom penugasan; jadwal tetap tampil.
+      });
   }, [isOpen]);
 
   useEffect(() => {
@@ -99,28 +101,28 @@ export const DailyScheduleModal: React.FC<Props> = ({
       ? reservations
       : reservations.filter((r: any) => (r.assigned_staff?.id || (r as any).assigned_staff_id) === selectedStaffId);
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn"
-      onClick={onClose}
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      variant="sheet"
+      size="xl"
+      title={
+        <span className="flex items-center gap-2">
+          <Calendar size={16} className="text-accent" aria-hidden="true" />
+          <span>Jadwal kalender harian</span>
+        </span>
+      }
+      footer={
+        <button
+          onClick={onClose}
+          className="w-full py-2.5 rounded-xl bg-fill-1 hover:bg-fill-2 text-ink-2 text-xs font-bold cursor-pointer"
+        >
+          Tutup
+        </button>
+      }
     >
-      <div
-        className="bg-surface rounded-t-3xl sm:rounded-3xl rounded-b-none sm:rounded-b-3xl shadow-2xl border border-divider w-full max-w-4xl max-h-[92vh] sm:max-h-[88vh] flex flex-col overflow-hidden self-end sm:self-center"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="px-4 py-3 border-b border-divider bg-surface-2 flex items-center justify-between shrink-0">
-          <h3 className="font-extrabold text-accent text-sm flex items-center gap-2">
-            <Calendar size={16} className="text-accent" /> JADWAL KALENDER HARIAN
-          </h3>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-full hover:bg-fill-1 border border-divider flex items-center justify-center text-accent"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="px-4 py-2 border-b border-divider bg-surface-2 shrink-0 space-y-2">
+        <div className="border-b border-divider pb-2 space-y-2 -mt-2">
           <div className="flex items-center justify-between">
             <button
               onClick={() => shiftDate(-1)}
@@ -193,17 +195,6 @@ export const DailyScheduleModal: React.FC<Props> = ({
             />
           )}
         </div>
-
-        <div className="p-3 border-t border-divider bg-surface shrink-0">
-          <button
-            onClick={onClose}
-            className="w-full py-2.5 rounded-xl bg-fill-1 hover:bg-fill-2 text-ink-2 text-xs font-bold cursor-pointer"
-          >
-            Tutup
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body
+    </Modal>
   );
 };

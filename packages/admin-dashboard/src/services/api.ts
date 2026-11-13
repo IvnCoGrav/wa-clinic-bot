@@ -1,4 +1,10 @@
 // API Client wrapper for sending requests to Fastify admin routes
+//
+// Catatan kontrak error: setiap `catch` kosong di modul ini adalah operasi cache
+// sessionStorage (baca/tulis/bersihkan). Cache hanya mempercepat, tidak pernah
+// menjadi sumber kebenaran; browser boleh memblokir penyimpanan dan permintaan
+// jaringan tetap berjalan normal. Kegagalan cache tidak boleh muncul sebagai
+// pesan ke staf.
 
 /** Query params untuk log atribusi klik iklan Meta (GET /api/admin/debug/meta-clicks). */
 export interface MetaClicksParams {

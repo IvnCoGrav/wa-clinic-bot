@@ -1,9 +1,12 @@
 import React, { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { fireAndForget } from './services/errorPolicy';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { CopilotProvider } from './contexts/CopilotContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { LoadingState } from './components/ui/StateViews';
+import { ScrollToTop } from './components/common/ScrollToTop';
 import { Layout } from './components/common/Layout';
 import { UiFeedbackProvider } from './components/common/UiFeedback';
 import { StaffAuthProvider } from './contexts/StaffAuthContext';
@@ -44,7 +47,9 @@ const StaffSchedule = lazy(() => import('./pages/staff/StaffSchedule').then(m =>
 const StaffManagement = lazy(() => import('./pages/tenant/StaffManagement').then(m => ({ default: m.StaffManagement })));
 const TelegramIntegration = lazy(() => import('./pages/tenant/TelegramIntegration').then(m => ({ default: m.TelegramIntegration })));
 const QuickReplies = lazy(() => import('./pages/tenant/QuickReplies').then(m => ({ default: m.QuickReplies })));
-const StitchShowcase = lazy(() => import('./pages/StitchShowcase').then(m => ({ default: m.StitchShowcase })));
+const StitchShowcase = import.meta.env.DEV
+  ? lazy(() => import('./pages/StitchShowcase').then(m => ({ default: m.StitchShowcase })))
+  : null;
 
 /** Redirect awal berbasis role: terapis → portal staff, lainnya → overview admin. Mendukung resolusi URL legacy berbasis hash. */
 const IndexRedirect: React.FC = () => {
@@ -76,12 +81,13 @@ const IndexRedirect: React.FC = () => {
 const preloadCoreRouteBundles = () => {
   if (typeof window === 'undefined') return;
   const load = () => {
-    import('./pages/tenant/LiveChatMonitor').catch(() => {});
-    import('./pages/tenant/Reservations').catch(() => {});
-    import('./pages/tenant/CustomerDatabase').catch(() => {});
-    import('./pages/tenant/TodayTreatments').catch(() => {});
-    import('./pages/tenant/Settings').catch(() => {});
-    import('./pages/staff/StaffToday').catch(() => {});
+    // Prefetch chunk: murni optimisasi kecepatan, gagal = diabaikan.
+    fireAndForget(import('./pages/tenant/LiveChatMonitor'), 'prefetch Live Chat');
+    fireAndForget(import('./pages/tenant/Reservations'), 'prefetch Reservasi');
+    fireAndForget(import('./pages/tenant/CustomerDatabase'), 'prefetch Database Pasien');
+    fireAndForget(import('./pages/tenant/TodayTreatments'), 'prefetch Treatment Hari Ini');
+    fireAndForget(import('./pages/tenant/Settings'), 'prefetch Pengaturan');
+    fireAndForget(import('./pages/staff/StaffToday'), 'prefetch Tugas Staf');
   };
   if ('requestIdleCallback' in window) {
     (window as any).requestIdleCallback(load, { timeout: 3000 });
@@ -95,8 +101,16 @@ export const App: React.FC = () => {
     preloadCoreRouteBundles();
   }, []);
 
+  // Judul dokumen tidak lagi ditanam di index.html (de-hardcode brand).
+  // Nama klinik diambil dari env build bila ada; bila tidak, judul netral.
+  useEffect(() => {
+    const name = (import.meta.env.VITE_CLINIC_NAME as string | undefined)?.trim();
+    document.title = name ? `${name} | Admin` : 'Admin Dashboard';
+  }, []);
+
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <ThemeProvider>
       <AuthProvider>
         <UiFeedbackProvider>
@@ -105,16 +119,22 @@ export const App: React.FC = () => {
         <AppErrorBoundary scopeLabel="global">
         <Suspense fallback={
           <div className="flex h-[100dvh] min-h-[100dvh] items-center justify-center bg-app">
-            <div className="h-10 w-10 animate-spin rounded-full border-4 border-accent border-t-transparent"></div>
+            <LoadingState label="Memuat halaman..." />
           </div>
         }>
           <Routes>
             {/* Public routes */}
             <Route path="/admin/login" element={<Login />} />
-            <Route path="/stitch-preview" element={<StitchShowcase />} />
-            <Route path="/admin/stitch-preview" element={<StitchShowcase />} />
-            <Route path="/stitch" element={<Navigate to="/admin/stitch-preview" replace />} />
-            <Route path="/admin/stitch" element={<Navigate to="/admin/stitch-preview" replace />} />
+            {/* Showcase desain hanya untuk pengembangan: tidak ikut bundle produksi
+                dan keempat URL jatuh ke rute catch-all saat build produksi. */}
+            {import.meta.env.DEV && StitchShowcase && (
+              <>
+                <Route path="/stitch-preview" element={<StitchShowcase />} />
+                <Route path="/admin/stitch-preview" element={<StitchShowcase />} />
+                <Route path="/stitch" element={<Navigate to="/admin/stitch-preview" replace />} />
+                <Route path="/admin/stitch" element={<Navigate to="/admin/stitch-preview" replace />} />
+              </>
+            )}
             
             {/* Protected tenant admin dashboard routes */}
             <Route path="/admin/overview" element={
@@ -307,7 +327,7 @@ export const App: React.FC = () => {
                   </p>
                   <button
                     onClick={() => window.location.href = '/admin/login'}
-                    className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-xl text-xs font-semibold text-white transition shadow-xs"
+                    className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-xl text-xs font-semibold text-on-solid transition shadow-xs"
                   >
                     Kembali ke Halaman Login
                   </button>

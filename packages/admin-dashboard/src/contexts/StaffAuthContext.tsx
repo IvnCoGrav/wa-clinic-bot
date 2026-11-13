@@ -34,6 +34,7 @@ export const StaffAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   async function restoreSession(): Promise<'ok' | 'invalid' | 'network'> {
     // Pola sama dengan AuthContext admin: hanya 401/403/400 tegas yang menghapus
     // token cadangan; timeout & 5xx → 'network' (token dipertahankan + retry).
+    // Token memang tidak sah; bila penyimpanan menolak hapus, sesi tetap ditolak.
     try { localStorage.removeItem(TOKEN_STORAGE_KEY); } catch {}
     return 'invalid';
   }
@@ -194,7 +195,9 @@ export const StaffAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             subscribeToPushNotifications('STAFF', data.staff.id).catch((pushErr) => {
               console.warn('[StaffAuth] Auto-rebind push subscription failed:', pushErr);
             });
-          }).catch(() => {});
+          }).catch(() => {
+            // Auto-rebind push bersifat pelengkap; login staf tetap sah.
+          });
         }
       }
     } catch (err) {
@@ -218,14 +221,20 @@ export const StaffAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           localStorage.removeItem(k);
         }
       }
-    } catch {}
+    } catch {
+      // Penyimpanan lokal diblokir/penuh: PII lokal mungkin tertinggal, tetapi
+      // logout tidak boleh gagal karenanya (sesi server tetap dimusnahkan).
+    }
     // Disosiasi perangkat SEBELUM sesi dimusnahkan: batalkan langganan push browser
     // + hapus baris di DB. Mencegah ghost subscription yang membocorkan notifikasi
     // ke perangkat terapis setelah logout.
     try {
       const { unsubscribeFromPushNotifications } = await import('../services/pushNotification');
+      // Disosiasi push best-effort; kegagalan tidak menghalangi logout.
       await unsubscribeFromPushNotifications().catch(() => {});
-    } catch {}
+    } catch {
+      // Modul push tidak tersedia (browser lama/diblokir).
+    }
     try {
       await apiRequest('/api/staff/auth/logout', { method: 'POST' });
     } catch (err) {
