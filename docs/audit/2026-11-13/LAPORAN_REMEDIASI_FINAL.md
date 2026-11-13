@@ -17,7 +17,7 @@
 | KNOWN (ber-justifikasi) | 4 |
 | **OPEN** | **0** |
 | Baseline historis beku | 158 FIXED |
-| Full suite terakhir | **7.465 test / 7.435 lulus / 2 gagal pre-existing (#287)** |
+| Full suite terakhir | **7.472 test / 7.442 lulus / 2 gagal pre-existing (#287)** |
 
 **Gate F4 TERPENUHI**: 0 OPEN, 0 UNVERIFIED. Produksi tetap diblokir hanya sampai 2 migrasi Ar-004 diterapkan & diverifikasi di staging.
 
