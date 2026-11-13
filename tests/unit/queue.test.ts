@@ -339,18 +339,26 @@ describe('Message Queue Service Unit Tests', () => {
 
   // Insiden kebocoran worker 12/10/2026 — dedicated worker dilarang menjadi
   // konsumen chat (hanya produsen enqueue); selain itu tetap konsumen.
-  it('F1.1. shouldRunChatConsumers: worker bukan konsumen, app/monolith ya', () => {
-    const prev = process.env.SEPARATE_WORKER;
+  it('F1.1. shouldRunChatConsumers: SEPARATE_WORKER tidak mematikan konsumen; CHAT_CONSUMER_ENABLED=false mematikan', () => {
+    const prevSw = process.env.SEPARATE_WORKER;
+    const prevConsumer = process.env.CHAT_CONSUMER_ENABLED;
     try {
       delete process.env.SEPARATE_WORKER;
+      delete process.env.CHAT_CONSUMER_ENABLED;
       expect(shouldRunChatConsumers()).toBe(true);
-      process.env.SEPARATE_WORKER = 'false';
-      expect(shouldRunChatConsumers()).toBe(true);
+      // Container app: cron di-skip (SEPARATE_WORKER=true) tetapi TETAP konsumen chat.
       process.env.SEPARATE_WORKER = 'true';
+      expect(shouldRunChatConsumers()).toBe(true);
+      // Container worker: produsen cron, bukan konsumen chat.
+      process.env.CHAT_CONSUMER_ENABLED = 'false';
       expect(shouldRunChatConsumers()).toBe(false);
+      process.env.CHAT_CONSUMER_ENABLED = 'true';
+      expect(shouldRunChatConsumers()).toBe(true);
     } finally {
-      if (prev === undefined) delete process.env.SEPARATE_WORKER;
-      else process.env.SEPARATE_WORKER = prev;
+      if (prevSw === undefined) delete process.env.SEPARATE_WORKER;
+      else process.env.SEPARATE_WORKER = prevSw;
+      if (prevConsumer === undefined) delete process.env.CHAT_CONSUMER_ENABLED;
+      else process.env.CHAT_CONSUMER_ENABLED = prevConsumer;
     }
   });
 });

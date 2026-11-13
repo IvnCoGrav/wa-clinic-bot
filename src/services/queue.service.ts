@@ -27,13 +27,19 @@ export interface QueuePayload {
 }
 
 /**
- * FONDASIONAL (insiden kebocoran worker 12/10/2026): hanya proses app yang
- * boleh menjalankan KONSUMEN chat WhatsApp. Dedicated background worker
- * (SEPARATE_WORKER=true) hanya menjadi PRODUSEN (enqueue cron terjadwal) —
- * tidak membuat BullMQ Worker. Diekstrak agar kontraknya terkunci unit test.
+ * FONDASIONAL (insiden kebocoran worker 12/10/2026 + insiden antrean mati
+ * 2026-11-13): `SEPARATE_WORKER` HANYA mengatur background cron/sweep.
+ * Konsumen chat dikendalikan flag terpisah `CHAT_CONSUMER_ENABLED` agar
+ * container app (yang skip cron) tetap mengonsumsi antrean chat, sedangkan
+ * container worker (produsen cron) tidak ikut mengonsumsi.
+ *
+ * Aturan:
+ *  - `CHAT_CONSUMER_ENABLED=false` → proses ini TIDAK membuat BullMQ Worker
+ *    (dipakai container `worker`).
+ *  - selain itu (unset/true) → konsumen aktif (container `app` & dev monolith).
  */
 export function shouldRunChatConsumers(): boolean {
-  return process.env.SEPARATE_WORKER !== 'true';
+  return process.env.CHAT_CONSUMER_ENABLED !== 'false';
 }
 
 /**
@@ -354,8 +360,8 @@ export class QueueService {
 
       this.bullWorkers.set(queueName, worker);
     }
-    if (process.env.SEPARATE_WORKER === 'true') {
-      console.log('[QUEUE] Shard queues initialized (PRODUSEN SAJA - Worker konsumen di-skip, chat diproses kontainer app).');
+    if (process.env.SEPARATE_WORKER === 'true' && !shouldRunChatConsumers()) {
+      console.log('[QUEUE] Shard queues initialized (PRODUSEN SAJA - konsumen chat di container app).');
     } else {
       console.log('[QUEUE] BullMQ shards initialized successfully.');
     }

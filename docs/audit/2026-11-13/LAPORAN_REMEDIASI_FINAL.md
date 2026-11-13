@@ -48,15 +48,13 @@ Tidak ada temuan OPEN/UNVERIFIED. Dua item KNOWN tersisa sama-sama menunggu arte
 
 ---
 
-## 4. Satu Langkah Operasional Tersisa (bukan temuan audit)
+## 4. Deploy Live (SELESAI 2026-11-13)
 
-Semua temuan sudah tertutup. Yang tersisa hanya **penerapan migrasi pending** di staging/produksi. Sejak baseline `f306d6af^` ada **4 migrasi** yang wajib masuk berurutan (Ar-004 staff/adclick, Ar-004 landing slug, heatmap index, API-04):
+**Status: sudah live.** Branch `deploy/2026-11-13-merged`, commit `a5793f51` (merge W10–W19 + perbaikan alamat), 7 migrasi diterapkan (termasuk DDL manual `add_ad_click_expires_at`), `migrate status` up to date, `/health` OK, `/ready` DB+WAHA OK, konsumen chat aktif.
 
-1. Backup: `pg_dump "$env:DATABASE_URL" > backup_pre_ar004.sql`
-2. `npx prisma migrate deploy` (staging → produksi)
-3. Drift check: `npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script` → harus `-- This is an empty migration.`
-4. Deploy kode **setelah** migrasi (Prisma upsert membutuhkan index komposit; `admin_sessions.tenant_id` dipakai API-04).
+- Catatan lengkap, backup, dan rollback: `docs/audit/2026-11-13/DEPLOY_LIVE_2026-11-13.md`.
+- Dua insiden deploy yang sudah diperbaiki (VAPID env & `SEPARATE_WORKER` mematikan konsumen): `docs/KNOWN_ISSUES.md` #330/#331.
+- Verifikasi migrasi pra-deploy: `docs/audit/2026-11-13/MIGRATION_VERIFY_W18.md`; rencana & rollback: `docs/plans/MIGRATION_PLAN_AR004_2026-11-12.md` (§8).
+- **Monitoring pasca-deploy:** pantau `/ready`, antrean (`wait` per shard), dan log `[QUEUE]`/`[TURN RECOVERY]` selama 24 jam.
 
-Verifikasi terpadu (Postgres 16 ephemeral, deploy 4 migrasi + drift + uji constraint): `docs/audit/2026-11-13/MIGRATION_VERIFY_W18.md` → **PASS**.
-Dokumen rencana + rollback: `docs/plans/MIGRATION_PLAN_AR004_2026-11-12.md` (§8).
 Batas & tech debt: `docs/KNOWN_ISSUES.md`. Peta fitur: `docs/FEATURE_INVENTORY.md`.
