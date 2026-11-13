@@ -78,6 +78,7 @@ import { StaffChatComposer } from './StaffChatComposer';
 import { StaffChatThread } from './StaffChatThread';
 import { useStaffChatScroll } from './useStaffChatScroll';
 import { useStaffMessages } from './useStaffMessages';
+import { useStaffFailedOutbox } from './useStaffFailedOutbox';
 import { filterTasksByQuery, groupTasksByDate } from './staffTaskGrouping';
 import { StaffUpcomingCard } from './StaffUpcomingCard';
 import { StaffCompletedCard } from './StaffCompletedCard';
@@ -219,19 +220,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   const [quickReplyTemplates, setQuickReplyTemplates] = useState<Array<{ shortcut: string; title: string; content: string; category?: string | null }>>([]);
   const [revokingId, setRevokingId] = useState<string | null>(null);
 
-  // Fase 1.2: outbox pesan gagal (sinyal 1-bar). Bertahan di layar + localStorage
-  // agar terapis bisa "Coba Kirim Lagi" tanpa mengetik ulang / mengambil foto ulang.
-  const [failedMessages, setFailedMessages] = useState<
-    Array<{
-      clientTempId: string;
-      conversationId: string;
-      text: string;
-      image?: { preview: string; dataUrl: string; mimeType: string; fileName: string } | null;
-      createdAt: string;
-      error: string;
-    }>
-  >([]);
-  const [retryingTempId, setRetryingTempId] = useState<string | null>(null);
+  // Fase 1.2: outbox pesan gagal dikelola hook useStaffFailedOutbox.
 
   const selectedTaskRef = useRef<StaffTask | null>(null);
   const allTasksRef = useRef<StaffTask[]>([]);
@@ -267,6 +256,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     setErrorMessage,
     fetchMessages,
   } = useStaffMessages({ isSupervisorRef, isNearBottomRef, scrollToBottom });
+  const { failedMessages, setFailedMessages, retryingTempId, retryFailedMessage, persistFailedMessages } =
+    useStaffFailedOutbox({ setMessages, toast });
 
   selectedTaskRef.current = selectedTask;
   allTasksRef.current = [...tasks, ...upcomingTasks, ...completedTasks];
@@ -1342,83 +1333,6 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     });
   };
 
-  // Fase 1.2: retry idempoten. Kirim ulang dengan `clientTempId` yang SAMA supaya
-  // backend tidak menggandakan bubble di WhatsApp walau percobaan pertama sebenarnya sukses.
-  const handleRetryFailedMessage = async (item: {
-    clientTempId: string;
-    conversationId: string;
-    text: string;
-    image?: { preview: string; dataUrl: string; mimeType: string; fileName: string } | null;
-  }) => {
-    if (retryingTempId) return;
-    setRetryingTempId(item.clientTempId);
-    try {
-      const body: Record<string, any> = { text: item.text, clientTempId: item.clientTempId };
-      if (item.image) {
-        body.imageB64 = item.image.dataUrl;
-        body.mimeType = item.image.mimeType;
-        body.fileName = item.image.fileName;
-      }
-      const res = await apiRequest(`/api/staff/conversations/${item.conversationId}/reply`, {
-        method: 'POST',
-        body: JSON.stringify(body),
-        timeoutMs: 45000,
-      });
-      if (res.success) {
-        const assignedId = res.data?.messageId || res.data?.id;
-        if (assignedId) {
-          setMessages((prev) =>
-            prev.map((m) => (m.id === item.clientTempId ? { ...m, id: assignedId, delivery_status: 'sent' } : m))
-          );
-        }
-        setFailedMessages((prev) => {
-          const next = prev.filter((f) => f.clientTempId !== item.clientTempId);
-          persistFailedMessages(next);
-          return next;
-        });
-        toast('Pesan berhasil terkirim ulang.', 'success');
-      } else {
-        const errorMsg = res.error || 'Masih gagal mengirim. Periksa sinyal lalu coba lagi.';
-        setFailedMessages((prev) => {
-          const next = prev.map((f) => (f.clientTempId === item.clientTempId ? { ...f, error: errorMsg } : f));
-          persistFailedMessages(next);
-          return next;
-        });
-        toast(errorMsg, 'error');
-      }
-    } catch (err: any) {
-      const errorMsg = err.message || 'Masih gagal mengirim. Periksa sinyal lalu coba lagi.';
-      setFailedMessages((prev) => {
-        const next = prev.map((f) => (f.clientTempId === item.clientTempId ? { ...f, error: errorMsg } : f));
-        persistFailedMessages(next);
-        return next;
-      });
-      toast(errorMsg, 'error');
-    } finally {
-      setRetryingTempId(null);
-    }
-  };
-
-  // Fase 1.2: outbox tahan-reload (localStorage). Dipulihkan saat mount.
-  const FAILED_OUTBOX_KEY = 'staff_failed_outbox_v1';
-  const persistFailedMessages = (list: Array<unknown>) => {
-    try {
-      localStorage.setItem(FAILED_OUTBOX_KEY, JSON.stringify(list.slice(-20)));
-    } catch {
-      /* storage penuh / private mode → abaikan (best-effort) */
-    }
-  };
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(FAILED_OUTBOX_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) setFailedMessages(parsed);
-      }
-    } catch {
-      /* abaikan */
-    }
-  }, []);
 
   // Quick Action: Send OTW notification using dynamic Super Admin template
   // ── Unifikasi OTW (plan 2026-10-04) ─────────────────────────────────────────
@@ -2718,7 +2632,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     onScrollToBottom={() => scrollToBottom(false)}
                     onStartEdit={handleStartEdit}
                     onRevoke={handleRevokeMessage}
-                    onRetry={handleRetryFailedMessage}
+                    onRetry={retryFailedMessage}
                   />
 
                   {/* WhatsApp Quick Reply Input Bar */}
