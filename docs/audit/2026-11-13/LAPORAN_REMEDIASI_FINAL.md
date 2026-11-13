@@ -35,7 +35,7 @@
 | W15 | `febbc4fd` | `Ar-003` | Filter tenant hardcode produksi = 0; guard regresi ditambahkan |
 | W16 | `4655bab4` | `S-02`, `S-06`, `S-08`, `S-09`, `Cfg-015`, `A-013` | Outbox PII, consent GPS, ambang tenant, status jujur, brand dashboard; reklasifikasi 3 item ke KNOWN |
 | W17 | `71bc1d03` | `SM-02`, `ING-09`, `API-04` | Header form tenant data-driven, retry log outbound, tenant sesi admin (migrasi) |
-| W18 | `menyusul` | `DOM-02` | Modul buku alamat 620 baris dipecah per tanggung jawab (barrel kompatibel) |
+| W18 | `25cc26f7` | `DOM-02` | Modul buku alamat 620 baris dipecah per tanggung jawab (barrel kompatibel) |
 
 Gelombang sebelumnya (W1–W9) mencakup reliability, AbortSignal, humanizer struktural, kuota/circuit per tenant, endpoint setelan tenant, Google Calendar/Contacts, degradasi DB jujur, artefak audit, rekonsiliasi dokumen, secret WAHA per tenant, trip lintas proses, dan tenant seam worker/debug.
 
