@@ -60,23 +60,27 @@ export class ReservationLifecycleService {
         }
       }
 
+      // Baca SEKALI status kartu reservasi. Jika kartu sudah ada, seluruh
+      // penulisan root + auto-distance DILARANG berjalan: kartu adalah
+      // kesepakatan booking, root bukan sumber alamat jadwal ini.
+      let reservationHasAddressCard = false;
+      if (reservationId) {
+        try {
+          const existingRes = await prisma.reservation.findUnique({
+            where: { id: reservationId },
+            select: {
+              customer_address_id: true,
+              customer_address: { select: { id: true, lat: true, lng: true } },
+            },
+          });
+          reservationHasAddressCard = Boolean(existingRes?.customer_address_id);
+        } catch (_) {}
+      }
+
       if (kecamatan || kota || kelurahan || address) {
         // Jika reservasi sudah memiliki customer_address_id yang valid (diselesaikan oleh reservationCoreService),
         // hindari sequential double-write yang memanggil ulang upsert dengan parameter parsial (anti split-brain).
-        let alreadyHasAddressCard = false;
-        if (reservationId) {
-          try {
-            const existingRes = await prisma.reservation.findUnique({
-              where: { id: reservationId },
-              select: { customer_address_id: true },
-            });
-            if (existingRes?.customer_address_id) {
-              alreadyHasAddressCard = true;
-            }
-          } catch (_) {}
-        }
-
-        if (!alreadyHasAddressCard) {
+        if (!reservationHasAddressCard) {
           const currentCust = await customerService.getCustomerById(customerId, tenantId);
         const hasExistingPrimary = Boolean(
           currentCust &&
@@ -120,8 +124,11 @@ export class ReservationLifecycleService {
         }
         }
 
-        // Background Auto-Distance Calculation jika customer belum memiliki distance_km
-        const custForDistance = await customerService.getCustomerById(customerId, tenantId);
+        // Background Auto-Distance Calculation HANYA untuk reservasi tanpa kartu.
+        // Reservasi ber-kartu tidak boleh menulis root (anti ghost card + relink A-015).
+        const custForDistance = reservationHasAddressCard
+          ? null
+          : await customerService.getCustomerById(customerId, tenantId);
         if (custForDistance && (custForDistance.distance_km == null || custForDistance.lat == null)) {
           void (async () => {
             try {
