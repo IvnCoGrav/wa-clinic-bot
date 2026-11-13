@@ -16,9 +16,23 @@
 | Kode lookup staf | Sudah tenant-scoped (`StaffAuthService.login(phone, password, tenantId)`); `backup.service.ts` upsert diubah ke `tenant_id_phone` | `tests/unit/staff-auth-and-reservation.test.ts`, `tests/unit/backup*.test.ts` |
 | `LandingPage.slug` | **DITUNDA** — resolusi landing masih slug-global (tanpa host/tenant); melonggarkan slug menimbulkan ambiguitas dan menyentuh area landing pengguna | `tests/unit/ar004-tenant-unique-schema.test.ts` (guard deferral) |
 | SQL delta | Dihasilkan otoritatif via `prisma migrate diff --from-schema-datamodel <HEAD> --to-schema-datamodel <baru>` (tanpa DB) | migration.sql |
-| Terapkan ke DB | **BELUM** — tidak ada staging DB di environment ini; Docker tidak tersedia | — |
+| Terapkan ke DB | **TERVERIFIKASI** di Postgres 16 ephemeral (Docker, 2026-11-13): `migrate deploy` sukses, drift check *empty*, uji duplikat lintas/sama tenant sesuai harapan, dan Prisma `upsert` compound berjalan. **Belum** diterapkan ke staging/produksi milik Anda | — |
 
 **Urutan deploy wajib:** `prisma migrate deploy` (staging → produksi) **SEBELUM** deploy kode yang memuat `backup.service.ts` versi baru, karena Prisma `upsert` memakai `ON CONFLICT (tenant_id, phone)` yang membutuhkan index komposit.
+
+### Hasil verifikasi ephemeral (Postgres 16, Docker, 2026-11-13)
+
+| Uji | Perintah | Hasil |
+|---|---|---|
+| Migrasi baru | `npx prisma migrate deploy` | `All migrations have been successfully applied.` |
+| Drift | `npx prisma migrate diff --from-url … --to-schema-datamodel prisma/schema.prisma --script` | `-- This is an empty migration.` |
+| Staf, nomor sama dua tenant | INSERT tenant-a & tenant-b | **diterima** (2 baris) |
+| Staf, nomor sama tenant yang sama | INSERT tenant-a kedua | **ditolak** `staff_tenant_id_phone_key` |
+| AdClick, trackingCode sama dua tenant | INSERT tenant-a & tenant-b | **diterima** (2 baris) |
+| AdClick, trackingCode sama tenant yang sama | INSERT tenant-a kedua | **ditolak** `ad_clicks_tenant_id_trackingCode_key` |
+| Prisma upsert compound | `staff.upsert({ where: { tenant_id_phone } })` 2× | **sukses**, 1 baris, nama ter-update |
+
+> **Temuan baru (dicatat di KNOWN_ISSUES):** pada DB **kosong**, replay seluruh migrasi gagal di `20260801000000_add_failed_followup_status` (`type "FollowUpStatus" does not exist`) karena tidak ada migrasi yang membuat enum tersebut — riwayat migrasi mengasumsikan DB baseline yang sudah ada (pola yang sama dengan trap tabel `children`). Verifikasi di atas menggunakan bootstrap: `db push` schema lama → tandai 109 migrasi lama `--applied` → `migrate deploy` migrasi baru.
 
 ---
 
@@ -158,9 +172,9 @@ Rollback hanya berhasil bila belum ada data duplikat lintas tenant yang baru dib
 
 ## 7. Confirmation Gate
 
-Implementasi kode/schema sudah masuk (W7), tetapi **belum ada satu pun langkah DB yang dijalankan** karena environment ini tidak memiliki staging DB (Docker tidak tersedia) dan `.env` menunjuk kredensial live yang tidak boleh dipakai untuk uji migrasi.
+Implementasi kode/schema sudah masuk (W7) dan SQL-nya sudah **diverifikasi di Postgres 16 ephemeral** (W8, Docker, 2026-11-13). Yang belum: penerapan ke **staging/produksi milik Anda** (environment ini tidak punya akses ke staging Anda; `.env` berisi kredensial live yang tidak boleh dipakai untuk uji).
 
-Untuk mengeksekusi, pengguna manusia WAJIB mengetik eksplisit, misalnya:
+Untuk mengeksekusi di lingkungan Anda, pengguna manusia WAJIB mengetik eksplisit, misalnya:
 
 > **"Setuju eksekusi migrasi Ar-004 di staging"**
 
@@ -168,4 +182,4 @@ atau
 
 > **"Setuju eksekusi Ar-004 staging + produksi, jendela <maintenance>."**
 
-Tanpa kalimat itu, migrasi tetap **BELUM DITERAPKAN** dan produksi tetap diblokir.
+Tanpa kalimat itu, migrasi tetap **BELUM DITERAPKAN** di lingkungan Anda dan produksi tetap diblokir.

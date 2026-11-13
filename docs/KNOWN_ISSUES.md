@@ -136,6 +136,13 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - Register menjadi **239 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 16 OPEN**.
   - **Batas yang diketahui:** bila Redis mati, KV jatuh ke memori per proses sehingga sweep kembali hanya melihat sesi prosesnya sendiri (perilaku lama); TTL record 2 jam, jadi sesi yang berhenti dikirim akan hilang otomatis.
 
+- **Tindakan W8 (2026-11-13) — verifikasi migrasi di Postgres ephemeral + temuan bootstrap:**
+  - Migrasi `20261112130000_ar004_tenant_scoped_unique_staff_adclick` **berhasil** diterapkan ke Postgres 16 sekali-pakai (Docker lokal). Drift check `migrate diff --from-url` → `-- This is an empty migration.`
+  - Uji perilaku: nomor staf sama di **dua tenant** diterima, di tenant yang sama ditolak (`staff_tenant_id_phone_key`); `trackingCode` sama di dua tenant diterima, di tenant yang sama ditolak (`ad_clicks_tenant_id_trackingCode_key`); Prisma `upsert` dengan compound `tenant_id_phone` sukses (create → update, 1 baris).
+  - **Temuan baru (fresh-environment trap):** `npx prisma migrate deploy` dari DB **kosong** gagal di `20260801000000_add_failed_followup_status` dengan `type "FollowUpStatus" does not exist`. Tidak ada satu pun migrasi yang membuat enum tersebut — riwayat mengasumsikan DB baseline yang sudah ada (sama pola dengan trap tabel `children`).
+  - **Workaround verifikasi (jangan dipakai di produksi tanpa backup):** `prisma db push` memakai schema lama → `prisma migrate resolve --applied` untuk 109 migrasi lama → `prisma migrate deploy` untuk migrasi baru.
+  - **Batas yang diketahui:** migrasi tetap **belum** diterapkan ke staging/produksi milik pengguna; environment ini tidak punya akses staging. Container & volume sementara sudah dihapus.
+
 - **Tindakan W7 (kode selesai, migrasi belum diterapkan) — Ar-004:**
   - `Staff.phone` dan `AdClick.trackingCode` kini komposit `@@unique([tenant_id, ...])`; migration `20261112130000_ar004_tenant_scoped_unique_staff_adclick` disiapkan (SQL dari `prisma migrate diff` offline).
   - `backup.service.ts` upsert memakai `tenant_id_phone`; login staf sudah tenant-scoped sejak Cfg-012 sehingga tidak ada ambiguitas.
@@ -277,12 +284,14 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
     - **Ditunda secara sadar:** `sortField`/`sortOrder` di Reservations tidak dipindah ke URL — bukan filter yang dilihat pengguna, dan menambah kunci URL pada halaman dengan ±10 efek turunan berisiko regresi tanpa manfaat sepadan.
     - **Belum diverifikasi manual:** refresh, tombol Back, dan perilaku mengetik di kolom cari.
   - **Bukti regresi (2026-11-11):** `npx vitest run` penuh = 905/913 berkas lulus. 7 berkas gagal, lalu diuji ulang terpisah: 6 di antaranya lulus (timeout 20 dtk saat suite paralel berat, bukan cacat logika) dan 1 memang gagal pre-existing (`tests/unit/hybrid-reservation-parser.test.ts`, 2 tes) — dibuktikan dengan checkout bersih `HEAD` di worktree terpisah: tetap gagal 2 tes yang sama. Kegagalan itu sudah tercatat di butir 301 dokumen ini.
+   - **Suite penuh final (2026-11-12):** 944/946 berkas lulus, 1 gagal (2 tes `hybrid-reservation-parser`, pre-existing), 1 skipped. Tidak ada timeout/regresi baru.
+   - **Kesiapan deploy (2026-11-12): BELUM SIAP.** Runbook lengkap, daftar verifikasi manual, dan blocker ada di `docs/DEPLOY_READINESS_PLAN_002.md`. Blocker kode: `StaffToday` 3.822 baris (state/handler), `CreateReservationModal` 3.462 baris (Fase 4, butuh login/uji booking). Deploy butuh persetujuan eksplisit + verifikasi 2 langkah.
 - **Audit UI/UX ulang (2026-11-11, baca-saja):** sisa temuan yang belum ditutup —
   - **A-001 Penelan error:** 149 `catch {}` + 49 `.catch(() => {})` (198 situs, 39+22 berkas). Kontrak error baru dipakai di 3 situs. FMEA 5x8x8=320.
   - **A-002 Tanggal lolos gerbang — SELESAI (Fase 2).** Gerbang kini mencakup `hooks/` + `utils/` dan memeriksa `toLocaleString`, bukan hanya `toLocaleDateString`/`toLocaleTimeString`. 22 situs `toLocaleString` (tanggal+jam zona perangkat) ditemukan dan dimigrasikan. Koreksi audit awal: di `hooks/` hanya 5 pemakaian, dan 4 di antaranya sudah menyebut `timeZone` — yang benar-benar salah hanya 1 (`useLiveChatNotification`), tetapi celah `toLocaleString` jauh lebih besar.
   - **A-003 Generator pricelist usang — SELESAI (Fase 1).** Guard `--force` terpasang; skrip berhenti sendiri dan tidak menyentuh artefak.
-  - **A-004 Modal belum seragam:** `CreateReservationModal` (3.437 baris) masih punya overlay sendiri + 3 `z-[...]` arbitrer; 17 blok `fixed inset-0` tersisa. FMEA 6x4x5=120.
-  - **A-005 God object UI - SEBAGIAN (Fase 7 irisan 1-14).** Angka baris fisik (HEAD ke sekarang): `StaffToday.tsx` **6.480 ke 4.004** (termasuk header chat); `TodayTreatments.tsx` **2.482 ke 1.075**; `Reservations.tsx` **2.284 ke 1.371**; `LiveChatMessagePane.tsx` **1.780 ke 1.474**; `StaffManagement.tsx` **1.635 ke 1.350**; `FollowUpQueue.tsx` **1.635 ke 1.312**; `CustomerDatabase.tsx` **1.719 ke 1.462**. **Masih di atas 1.500:** `StaffToday` (daftar pesan + state), `CreateReservationModal` 3.462 (Fase 4, butuh login). FMEA 4x7x6=168.
+  - **A-004 Modal belum seragam - SELESAI (Fase 4, 2026-11-12).** `CreateReservationModal` kini memakai `ui/Modal` dengan prop baru `fullScreen` (layar penuh mobile, kartu desktop), `chrome="bare"`, dan `closeOnBackdrop={false}`; `createPortal` dihapus. Dua dialog internal (pemilih lokasi, lightbox) sengaja tetap custom karena sudah di dalam stacking context Modal. Diverifikasi browser: buka form, scroll, Esc, dan booking end-to-end berhasil; reservasi uji dibatalkan. FMEA 6x4x5=120.
+  - **A-005 God object UI - SEBAGIAN (Fase 7 irisan 1-18).** Angka baris fisik (HEAD ke sekarang): `StaffToday.tsx` **6.480 ke 3.763** (hook scroll); `TodayTreatments.tsx` **2.482 ke 1.075**; `Reservations.tsx` **2.284 ke 1.371**; `LiveChatMessagePane.tsx` **1.780 ke 1.474**; `StaffManagement.tsx` **1.635 ke 1.350**; `FollowUpQueue.tsx` **1.635 ke 1.312**; `CustomerDatabase.tsx` **1.719 ke 1.462**. **Masih di atas 1.500:** `StaffToday` (state/handler). `CreateReservationModal` 3.462 sudah dimigrasikan shell-nya (Fase 4) tetapi ukuran belum turun. FMEA 4x7x6=168.
   - **A-006 Nama aksesibel tombol ikon — SELESAI (Fase 5).** Gerbang a11y tidak lagi menerima `title` sebagai nama; 45 tombol ikon diberi `aria-label`. FMEA 3x6x5=90.
   - **A-007 `transition-all` — SELESAI (Fase 5).** 176 pemakaian di 29 berkas → 0; 8 situs diberi properti eksplisit. Gerbang token kini menolak `transition-all` baru. FMEA 2x7x7=98.
   - **A-008 Filter URL — SELESAI (Fase 6).** Reservations (`q`/`category`/`staff`/`status`) dan CustomerDatabase (`q`) kini URL-backed; `sortField`/`sortOrder` sengaja ditinggal di state lokal. Verifikasi manual (refresh/Back) belum dilakukan. FMEA 3x5x4=60.
@@ -7792,3 +7801,12 @@ px prisma db push + generate penuh (kill dev server dulu, EPERM DLL lock trap) �
   relatif-waktu agar tidak lapuk.
 
 
+
+## 312. [Dashboard] CSP memblokir audio notifikasi berbasis data: URI (2026-11-12, RESOLVED)
+
+- **Gejala:** saat membuka halaman Reservasi di dashboard lokal, console mencatat error:
+  `Loading media from 'data:audio/wav;base64,...' violates the following Content Security Policy directive: "media-src 'self' blob: https:"`.
+- **Dampak:** bunyi notifikasi pesan/chat yang disimpan sebagai data URI tidak diputar. Staf bisa melewatkan notifikasi masuk saat dashboard terbuka.
+- **Bukti:** Chrome DevTools console pada `http://localhost:3000/admin/reservations`, 2026-11-12. Sumber: `src/services/notificationSound.ts`.
+- **Status:** RESOLVED 2026-11-12. `media-src` di `src/app.ts` kini mengizinkan `data:`. Diverifikasi di browser: console bersih setelah reload halaman Reservasi. Bukan regresi Plan 002 (ditemukan saat uji booking manual).
+- **Usulan perbaikan (fondasional):** sajikan file audio sebagai aset statis (`/assets/...`) dan rujuk URL tersebut, bukan data URI. Alternatif cepat: tambahkan `data:` ke direktif `media-src`, tetapi itu memperluas CSP dan tidak disarankan sebelum ada kebutuhan lain.

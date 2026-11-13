@@ -254,6 +254,19 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Catatan konfigurasi baru:** `ADMIN_ALLOWED_ORIGINS` (dipisah koma) wajib diisi bila dashboard dilayani dari origin berbeda dengan API; tanpa itu gerbang CSRF hanya menerima same-origin.
 - **Gerbang regresi Fase 6C:** 7.183 test / 7.153 lulus / 2 gagal pre-existing #287 (0 regresi vs 6B); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (68 item); `audit:verify-claims` PASS (10 rujukan); `security:scan` LULUS.
 
+### 0.35 W8 — verifikasi migrasi Ar-004 di Postgres ephemeral (2026-11-13)
+
+- **Lingkungan:** container `postgres:16-alpine` sekali-pakai (port 55432) + bootstrap schema lama → 109 migrasi lama ditandai `--applied` → `prisma migrate deploy` migrasi Ar-004.
+- **Hasil:**
+  - `migrate deploy` → `All migrations have been successfully applied.`
+  - Drift `migrate diff --from-url` → `-- This is an empty migration.`
+  - Staf: nomor sama dua tenant **diterima**; tenant sama **ditolak** `staff_tenant_id_phone_key`.
+  - AdClick: `trackingCode` sama dua tenant **diterima**; tenant sama **ditolak** `ad_clicks_tenant_id_trackingCode_key`.
+  - Prisma `upsert({ where: { tenant_id_phone } })` 2× → 1 baris, nama ter-update (runtime compound OK).
+- **Temuan baru:** fresh DB tidak bisa replay seluruh migrasi (`20260801000000_add_failed_followup_status`: `type "FollowUpStatus" does not exist`) — enum tidak pernah dibuat oleh migrasi; dicatat di KNOWN_ISSUES.
+- Container & volume sementara sudah dihapus. **Migrasi belum diterapkan** ke staging/produksi pengguna.
+- **Register tidak berubah:** **239 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 16 OPEN** (Ar-004 tetap OPEN untuk LandingPage.slug + deploy staging/produksi).
+
 ### 0.34 W7 — implementasi Ar-004 untuk Staff & AdClick (2026-11-12, migrasi BELUM diterapkan)
 
 | ID | Perbaikan | Bukti test |
