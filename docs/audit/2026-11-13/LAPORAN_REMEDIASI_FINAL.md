@@ -11,15 +11,15 @@
 | Metrik | Nilai |
 |---|---|
 | Total temuan register | **268** |
-| **FIXED terverifikasi** | **249** |
+| **FIXED terverifikasi** | **250** |
 | UNVERIFIED | 4 |
 | DUPLICATE | 5 |
 | KNOWN (ber-justifikasi) | 4 |
-| **OPEN** | **6** |
+| **OPEN** | **5** |
 | Baseline historis beku | 158 FIXED |
-| Full suite terakhir | **7.452 test / 7.422 lulus / 2 gagal pre-existing (#287)** |
+| Full suite terakhir | **7.456 test / 7.426 lulus / 2 gagal pre-existing (#287)** |
 
-Gate F4 belum terpenuhi karena masih ada 6 OPEN + 4 UNVERIFIED. Produksi tetap diblokir sampai migrasi + verifikasi staging.
+Gate F4 belum terpenuhi karena masih ada 5 OPEN + 4 UNVERIFIED. Produksi tetap diblokir sampai migrasi + verifikasi staging.
 
 ---
 
@@ -37,20 +37,18 @@ Gelombang sebelumnya (W1–W9) mencakup reliability, AbortSignal, humanizer stru
 
 ---
 
-## 3. 6 OPEN yang Tersisa
+## 3. 5 OPEN yang Tersisa
 
 | Item | Penghambat |
 |---|---|
 | `S-02`, `S-06`, `S-08`, `S-09` | Komponen utama di `packages/admin-dashboard/src/pages/staff/StaffToday.tsx` yang **sedang diedit pengguna** (uncommitted, bersama `useStaffFailedOutbox.ts` baru) |
 | `Cfg-015` (sisa) | Teks di `StaffToday.tsx`, watermark foto, dan data klinik lain yang belum punya endpoint khusus |
-| `Ar-003` | 497 referensi `DEFAULT_TENANT_ID` (140 file); mayoritas default parameter sah, butuh audit pemanggil per domain (2–4 hari) + keputusan fail-closed vs fallback |
 
 ---
 
 ## 4. Yang Dibutuhkan untuk Menuntaskan
 
 1. **Commit/push** `StaffToday.tsx`, `useStaffFailedOutbox.ts`, dan perubahan `reservation-address-sync.*` → saya lanjut `S-02`/`S-06`/`S-08`/`S-09` + sisa `Cfg-015`.
-2. **Keputusan Ar-003:** worker tanpa tenant **tolak (fail-closed)** atau **fallback default**?
 3. **Deploy migrasi** (2 migrasi Ar-004) di staging/produksi: `prisma migrate deploy` **sebelum** kode, lalu drift check `--from-url` harus *empty*.
 
 Dokumen rencana migrasi: `docs/plans/MIGRATION_PLAN_AR004_2026-11-12.md`.
