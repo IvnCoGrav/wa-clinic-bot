@@ -72,6 +72,36 @@ export function wibDayRangeToUtc(dayStr: string): { start: Date; end: Date } | n
 }
 
 /**
+ * Pure: rentang 1 bulan penuh WIB (00:00 tanggal 1 s.d. 23:59:59.999 tanggal
+ * terakhir) sebagai Date UTC absolut, plus `daysInMonth`.
+ *
+ * `month` 1-indexed (1 = Januari). Input tidak valid → `null` (pola sama dengan
+ * `wibDayRangeToUtc`) agar pemanggil bisa membalas 400, bukan menghasilkan
+ * rentang sampah.
+ */
+export function wibMonthBoundsUtc(
+  year: number,
+  month: number
+): { start: Date; end: Date; daysInMonth: number } | null {
+  if (!Number.isInteger(year) || year < 1970 || year > 2999) return null;
+  if (!Number.isInteger(month) || month < 1 || month > 12) return null;
+
+  // Date.UTC(year, monthIndex, 0) = hari terakhir bulan monthIndex-1 (1-indexed).
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return {
+    start: new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0) - WIB_OFFSET_MS),
+    end: new Date(Date.UTC(year, month - 1, daysInMonth, 23, 59, 59, 999) - WIB_OFFSET_MS),
+    daysInMonth,
+  };
+}
+
+/** Geser bulan 1-indexed sebanyak `delta` bulan (boleh negatif). */
+export function shiftWibMonth(year: number, month: number, delta: number): { year: number; month: number } {
+  const zeroBased = year * 12 + (month - 1) + delta;
+  return { year: Math.floor(zeroBased / 12), month: (zeroBased % 12) + 1 };
+}
+
+/**
  * Helper waktu WIB untuk kecerdasan AI.
  * Memberikan info jam presisi dan label waktu (pagi, siang, sore, malam)
  * agar sapaan AI 100% akurat sesuai waktu lokal.

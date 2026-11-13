@@ -27,6 +27,7 @@ import {
   BarChart2,
   X,
   ExternalLink,
+  Grid3X3,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -48,6 +49,7 @@ import { resolveStaffName } from '../../utils/resolveStaffName';
 import { useTheme } from '../../contexts/ThemeContext';
 import { chartTheme } from '../../lib/chartTheme';
 import { RetentionTab } from '../../components/analytics/RetentionTab';
+import { TreatmentHeatmapTab } from '../../components/analytics/TreatmentHeatmapTab';
 import { formatRupiah } from '../../utils/money';
 import { formatMonthYearWib, formatWib } from '../../utils/dateWib';
 
@@ -188,7 +190,7 @@ export const FinancialAnalytics: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'LUNAS' | 'SELESAI_BELUM_VERIFIKASI' | 'TAGIH_DI_TEMPAT'>('ALL');
   const [selectedTx, setSelectedTx] = useState<TransactionLedgerItem | null>(null);
-  const [activeTab, setActiveTab] = useState<'keuangan' | 'retensi'>('keuangan');
+  const [activeTab, setActiveTab] = useState<'keuangan' | 'retensi' | 'heatmap'>('keuangan');
 
   // Fetch monthly analytics data
   const fetchAnalytics = useCallback(async () => {
@@ -414,10 +416,23 @@ export const FinancialAnalytics: React.FC = () => {
           <UserCheck size={16} />
           <span>Insentif Retensi Bidan</span>
         </button>
+        <button
+          onClick={() => setActiveTab('heatmap')}
+          className={`pb-3 px-3 sm:px-4 text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-2 cursor-pointer ${
+            activeTab === 'heatmap'
+              ? 'border-accent text-accent'
+              : 'border-transparent text-ink-2 hover:text-ink'
+          }`}
+        >
+          <Grid3X3 size={16} />
+          <span>Heatmap Treatment</span>
+        </button>
       </div>
 
       {activeTab === 'retensi' ? (
         <RetentionTab year={selectedYear} month={selectedMonth} />
+      ) : activeTab === 'heatmap' ? (
+        <TreatmentHeatmapTab year={selectedYear} month={selectedMonth} />
       ) : (
         <>
           {/* 4 Top KPI Cards */}

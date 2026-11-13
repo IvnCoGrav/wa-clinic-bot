@@ -1,5 +1,6 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { FinancialAnalyticsService } from '../../services/financial-analytics.service';
+import { TreatmentHeatmapService } from '../../services/treatment-heatmap.service';
 import { tenantOf } from './route-helpers';
 
 const financialExportCooldown = new Map<string, number>();
@@ -41,6 +42,70 @@ export async function analyticsAdminRoutes(fastify: FastifyInstance) {
         return reply.status(statusCode).send({
           success: false,
           error: err.message || 'Gagal memuat data analitik transaksi.',
+        });
+      }
+    }
+  );
+
+  /**
+   * GET /api/admin/financial-analytics/heatmap
+   * Heatmap kepadatan treatment: jumlah reservasi `completed` per tanggal/jam
+   * (scope weekly | monthly | multi). Metrik warna = count, bukan omzet.
+   */
+  fastify.get(
+    '/api/admin/financial-analytics/heatmap',
+    async (
+      request: FastifyRequest<{
+        Querystring: {
+          year?: string;
+          month?: string;
+          scope?: string;
+          months?: string;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const rawYear = request.query.year;
+      const rawMonth = request.query.month;
+      const rawScope = (request.query.scope || 'weekly').toLowerCase();
+      const rawMonths = request.query.months;
+
+      const year = rawYear === undefined ? undefined : parseInt(rawYear, 10);
+      const month = rawMonth === undefined ? undefined : parseInt(rawMonth, 10);
+      const months = rawMonths === undefined ? undefined : parseInt(rawMonths, 10);
+
+      if (year !== undefined && (!Number.isInteger(year) || year < 1970 || year > 2999)) {
+        return reply.status(400).send({ success: false, error: 'Parameter year tidak valid.' });
+      }
+      if (month !== undefined && (!Number.isInteger(month) || month < 1 || month > 12)) {
+        return reply.status(400).send({ success: false, error: 'Parameter month harus 1–12.' });
+      }
+      if (!['weekly', 'monthly', 'multi'].includes(rawScope)) {
+        return reply.status(400).send({ success: false, error: 'Parameter scope harus weekly, monthly, atau multi.' });
+      }
+      if (months !== undefined && (!Number.isInteger(months) || months < 1 || months > 12)) {
+        return reply.status(400).send({ success: false, error: 'Parameter months harus 1–12.' });
+      }
+
+      try {
+        const tenantId = tenantOf(request);
+        const data = await TreatmentHeatmapService.getHeatmap(
+          tenantId,
+          year,
+          month,
+          rawScope as 'weekly' | 'monthly' | 'multi',
+          months
+        );
+
+        return reply
+          .header('Cache-Control', 'private, max-age=5, stale-while-revalidate=30')
+          .status(200)
+          .send({ success: true, data });
+      } catch (err: any) {
+        const statusCode = err.statusCode || 500;
+        return reply.status(statusCode).send({
+          success: false,
+          error: err.message || 'Gagal memuat heatmap treatment.',
         });
       }
     }

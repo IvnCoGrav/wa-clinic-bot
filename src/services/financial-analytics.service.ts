@@ -1,8 +1,8 @@
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { responseCacheService } from './response-cache.service';
-import { resolveTreatmentValue } from './capi.service';
-import { resolveDeliveryFeeSnapshot } from './reservation-core.service';
+import { resolveReservationBilling, type CatalogPriceCache } from './reservation-billing.service';
+import { wibMonthBoundsUtc } from '../utils/wib-time';
 import { getPaymentDisplayStatus, type PaymentDisplayStatus } from '../domain/reservation-payment';
 
 /**
@@ -112,18 +112,17 @@ export class FinancialAnalyticsService {
    * Hitung rentang waktu 1 bulan penuh dalam zona waktu WIB (UTC+7)
    */
   private static getMonthDateRange(year: number, month: number) {
-    // month is 1-indexed (1 = January, 12 = December)
-    const daysInMonth = new Date(year, month, 0).getDate();
-    
-    // 00:00:00.000 WIB pada tanggal 1 dinyatakan dalam UTC adalah -7 jam
-    const startOfMonth = new Date(Date.UTC(year, month - 1, 1, -7, 0, 0, 0));
-    // 23:59:59.999 WIB pada hari terakhir dinyatakan dalam UTC adalah 16:59:59.999
-    const endOfMonth = new Date(Date.UTC(year, month - 1, daysInMonth, 16, 59, 59, 999));
+    // CFG-10: batas bulan WIB kini satu sumber dengan modul lain.
+    const bounds = wibMonthBoundsUtc(year, month);
+    if (!bounds) {
+      throw Object.assign(new Error(`Periode tidak valid: ${year}-${month}`), { statusCode: 400 });
+    }
+    const { start, end, daysInMonth } = bounds;
 
     const dateObj = new Date(Date.UTC(year, month - 1, 1));
     const monthName = dateObj.toLocaleDateString('id-ID', { month: 'long', timeZone: 'UTC' });
 
-    return { startOfMonth, endOfMonth, daysInMonth, monthName };
+    return { startOfMonth: start, endOfMonth: end, daysInMonth, monthName };
   }
 
   /**
@@ -135,8 +134,14 @@ export class FinancialAnalyticsService {
     targetMonth?: number
   ): Promise<MonthlyAnalyticsResponse> {
     const nowWib = new Date(Date.now() + 7 * 3600 * 1000);
-    const year = targetYear || nowWib.getUTCFullYear();
-    const month = targetMonth || nowWib.getUTCMonth() + 1;
+    const fallbackYear = nowWib.getUTCFullYear();
+    const fallbackMonth = nowWib.getUTCMonth() + 1;
+    // Input tahun/bulan parsial atau di luar rentang jangan menghasilkan rentang sampah.
+    const yearInput = Number(targetYear);
+    const monthInput = Number(targetMonth);
+    const year = Number.isInteger(yearInput) && yearInput >= 1970 && yearInput <= 2999 ? yearInput : fallbackYear;
+    const month =
+      Number.isInteger(monthInput) && monthInput >= 1 && monthInput <= 12 ? monthInput : fallbackMonth;
 
     const cacheKey = `analytics:monthly:${tenantId}:${year}:${month}`;
     const cached = responseCacheService.get<MonthlyAnalyticsResponse>(cacheKey);
@@ -212,21 +217,15 @@ export class FinancialAnalyticsService {
     const transactions: TransactionLedgerItem[] = [];
 
     const nowMs = Date.now();
+    // Satu cache per-batch: treatment_detail berulang tidak resolve katalog berkali-kali.
+    const catalogPriceCache: CatalogPriceCache = new Map();
 
     for (const r of rows) {
-      let treatmentFee = r.purchase_value || 0;
-      if (treatmentFee <= 0 && Array.isArray(r.items) && r.items.length > 0) {
-        treatmentFee = r.items.reduce((acc: number, it: any) => acc + (it.price || 0), 0);
-      }
-      if (treatmentFee <= 0 && r.treatment_detail) {
-        const resolved = await resolveTreatmentValue(r.treatment_detail);
-        if (resolved && resolved > 0) {
-          treatmentFee = resolved;
-        }
-      }
-      // KB-6: utamakan snapshot delivery_fee reservasi, fallback Customer.ongkir.
-      const deliveryFee = resolveDeliveryFeeSnapshot(r as any);
-      const totalFee = treatmentFee + deliveryFee;
+      const { treatmentFee, deliveryFee, totalFee } = await resolveReservationBilling(
+        r,
+        tenantId,
+        catalogPriceCache
+      );
 
       const isCompleted = (r.status || '').toLowerCase() === 'completed';
       const isCancelled = (r.status || '').toLowerCase() === 'cancelled';

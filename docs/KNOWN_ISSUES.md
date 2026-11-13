@@ -3,6 +3,13 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 327. [Data Quality] Booking Tanpa Jam Eksplisit Disimpan sebagai 09:00 WIB (2026-11-13, OPEN)
+
+- **Status:** OPEN — keterbatasan data, bukan bug fitur. Heatmap Treatment menampilkannya sebagai peringatan kualitas data (`quality.defaultedHourCount`) alih-alih menyembunyikannya.
+- **Fakta:** `src/utils/reservation-date-parser.ts` dan `src/utils/indonesian-date-parser.ts` memakai **09:00 WIB** sebagai jam default saat pesan customer tidak menyebut jam. `Reservation` tidak punya kolom penanda jam eksplisit; `hasExplicitTime` hanya hidup di parser teks dan tidak dipersistensikan.
+- **Dampak:** Heatmap pola hari × jam dapat menumpuk kunjungan lama di kolom 09:00 sehingga terlihat seperti jam tersibuk, padahal jam sebenarnya tidak diketahui. Reservasi `completed` tanpa `booking_date` tidak dapat dipetakan dan dihitung terpisah (`quality.missingBookingDate`).
+- **Rencana fondasional (belum dieksekusi):** tambah kolom nullable `booking_time_source` / boolean `booking_time_explicit` di `Reservation`, isi saat create/reschedule dari `hasExplicitTime`, lalu beri tanda sel 09:00 untuk baris lama. Perlu migrasi + backfill terbatas; belum dilakukan agar tidak mengubah skema di luar scope fitur analitik.
+
 ## 326. [Code Health] God File, `as any`, dan Dead Export Sisa (2026-11-11, OPEN)
 
 - **Status:** OPEN — belum diperbaiki; hasil pengukuran read-only setelah Fase 2G.

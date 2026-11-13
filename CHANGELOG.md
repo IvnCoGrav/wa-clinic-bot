@@ -4,6 +4,18 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-13 - Fitur: Heatmap Kepadatan Treatment (Analitik Keuangan Tab 3)
+
+- **Latar Belakang**: Manajemen klinik butuh melihat pola kepadatan kunjungan (hari × jam), kalender harian, dan tren multi-bulan untuk mengatur kapasitas bidan. Data mentah reservasi tersedia, tetapi belum ada visualisasi yang membedakan kunjungan *selesai* dari jadwal mendatang.
+- **Perubahan Utama**:
+  1. **Domain murni** `src/domain/treatment-heatmap.ts`: agregasi scope `weekly` (pola Senin–Minggu × jam operasional), `monthly` (kalender), dan `multi` (3/6/12 bulan). Metrik warna = jumlah reservasi `completed`; omzet & jumlah item hanya di tooltip. Seluruh batas hari/bulan memakai WIB.
+  2. **Service** `src/services/treatment-heatmap.service.ts`: satu query `findMany` (status `completed`, index baru `(tenant_id, status, booking_date)`) + hitung reservasi non-completed yang dikecualikan, jam operasional dari `getOperationalHours(tenantId)`, cache 30 detik per tenant/periode/scope, dan fallback aman saat DB offline.
+  3. **Seam tagihan bersama** `src/services/reservation-billing.service.ts`: formula `purchase_value → items[].price → katalog` + ongkir (`delivery_fee` snapshot → `Customer.ongkir`) kini dipakai bersama oleh analitik bulanan dan heatmap (resolve katalog ikut tenant-aware).
+  4. **Endpoint** `GET /api/admin/financial-analytics/heatmap` (`year`, `month`, `scope`, `months`) dengan validasi 400 dan isolasi tenant header.
+  5. **UI** `TreatmentHeatmapTab.tsx` sebagai tab ke-3 `FinancialAnalytics.tsx`: ringkasan KPI, heatmap jam, kalender bulanan, grid multi-bulan, legenda intensitas, tombol muat ulang, serta peringatan kualitas data (jam default 09:00 / tanggal kosong).
+- **Verifikasi**: `npm run build` backend + dashboard hijau; 60 test pada 5 file terkait hijau (`wib-month-bounds`, `treatment-heatmap`, `reservation-billing`, route & service heatmap).
+- **Catatan**: Index baru perlu diterapkan via `npx prisma migrate deploy` (migration `20261113120000_add_reservation_heatmap_index`). Keterbatasan jam default 09:00 dicatat di `docs/KNOWN_ISSUES.md` #327.
+
 #### 2026-11-10 - Release: Penutupan Remediasi 16 Modul (Fase F1–F6) & Kesiapan Produksi (Gate F4 & F5 Pass)
 
 - **Latar Belakang**: Menyelesaikan seluruh rencana kerja master (`PLAN_FINISH_ALL_2026-11-09.md`), mencakup 16 modul sistem (Track A, S4, Track B), remediasi audit mendalam, verifikasi pra-produksi, dan sertifikasi kelulusan Gate F4 & Gate F5.

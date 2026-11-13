@@ -365,6 +365,8 @@ model Reservation {
 
   @@index([tenant_id])
   @@index([tenant_id, created_at])
+  // Analitik heatmap (Treatment Heatmap): filter tenant + status + rentang tanggal.
+  @@index([tenant_id, status, booking_date])
   @@index([customer_id])
   @@index([customer_id, status])
   @@index([tenant_id, hpl_date])
