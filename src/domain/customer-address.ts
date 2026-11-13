@@ -167,7 +167,14 @@ export function addressesMatch(
   b: UpsertSavedAddressInput,
   maxMeters = SAME_POINT_MAX_METERS
 ): boolean {
-  if (bothCoords(a, b) && haversineMeters(a as any, b as any) <= maxMeters) return true;
+  if (bothCoords(a, b) && haversineMeters(a as any, b as any) <= maxMeters) {
+    // Titik sangat dekat = bukti fisik, TETAPI lintas kota/kabupaten tidak boleh
+    // disatukan hanya karena sentroid/geocoder meleset. Salah satu sisi kosong
+    // tetap kompatibel (data lama).
+    const aKota = normCity(a.kota);
+    const bKota = normCity(b.kota);
+    return !hasText(a.kota) || !hasText(b.kota) || aKota === bKota;
+  }
 
   const aAddr = hasText(a.address);
   const bAddr = hasText(b.address);
@@ -210,7 +217,14 @@ export function addressesMatch(
       // kecamatan. Nama perumahan tanpa nomor TIDAK cukup (anti-over-merge rumah-2).
       const streetText = `${a.address || ''} ${b.address || ''}`;
       const hasHouseNumber = /\b(?:no|nomor|blok|gang|gg|rt|rw|cluster|perum|perumahan)\b.*?\d+/i.test(streetText);
-      if (hasHouseNumber && norm(a.address).length >= 8) return true;
+      // Jalan + nomor identik boleh merge lintas kecamatan HANYA bila wilayahnya
+      // masih kompatibel (typo/toponimi). Dua kecamatan berbeda yang jelas
+      // (mis. Karang Pilang vs Buduran) DILARANG dianggap rumah sama.
+      const regionOk =
+        isRegionCompatible(a, b) ||
+        !hasText(a.kecamatan) ||
+        !hasText(b.kecamatan);
+      if (hasHouseNumber && norm(a.address).length >= 8 && regionOk) return true;
     }
   }
 
@@ -476,8 +490,17 @@ export function upsertAddressIntoList(
 
   if (idx >= 0) {
     const prev = list[idx];
-    const nextLat = typeof input.lat === 'number' && Number.isFinite(input.lat) ? input.lat : prev.lat;
-    const nextLng = typeof input.lng === 'number' && Number.isFinite(input.lng) ? input.lng : prev.lng;
+    // ANTI-DOWNGRADE: kartu gps_pin tidak boleh kehilangan koordinat presisi
+    // karena input teks/manual/estimasi. Koordinat hanya boleh berubah bila
+    // input benar-benar pin GPS baru.
+    const preservePreciseCoords =
+      prev.locationSource === 'gps_pin' && input.locationSource !== 'gps_pin';
+    const nextLat = preservePreciseCoords
+      ? prev.lat
+      : typeof input.lat === 'number' && Number.isFinite(input.lat) ? input.lat : prev.lat;
+    const nextLng = preservePreciseCoords
+      ? prev.lng
+      : typeof input.lng === 'number' && Number.isFinite(input.lng) ? input.lng : prev.lng;
     const nextDistanceKm = typeof input.distanceKm === 'number' && Number.isFinite(input.distanceKm) ? input.distanceKm : prev.distanceKm;
     const nextOngkir = typeof input.ongkir === 'number' && Number.isFinite(input.ongkir) ? input.ongkir : prev.ongkir;
     const nextLandmark = hasText(input.landmark) ? input.landmark : prev.landmark;
