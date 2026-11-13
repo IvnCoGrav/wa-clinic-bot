@@ -31,6 +31,7 @@ Gate F4 belum terpenuhi karena masih ada 6 OPEN + 4 UNVERIFIED. Produksi tetap d
 | W11 | `5478b40f` | `Cfg-015` (sebagian) | Brand dashboard data-driven (`/api/admin/settings`); `x-tenant-id` dari user; hardcode Kala dihapus |
 | W12 | `9dc84a50` | `Ar-004` | `LandingPage.slug` per tenant + resolusi landing via host/`?tenant=`; migrasi diverifikasi di Postgres ephemeral |
 | W13 | `9337b671` | `S-011` | Token admin keluar dari `localStorage`; cookie HttpOnly + TTL 7 hari; CSP diperketat |
+| W14 | `d0bcee2e` | `Ar-003` (sebagian) | Ekspor chat harian untuk semua tenant; kegagalan satu tenant tidak menghentikan tenant lain |
 
 Gelombang sebelumnya (W1–W9) mencakup reliability, AbortSignal, humanizer struktural, kuota/circuit per tenant, endpoint setelan tenant, Google Calendar/Contacts, degradasi DB jujur, artefak audit, rekonsiliasi dokumen, secret WAHA per tenant, trip lintas proses, dan tenant seam worker/debug.
 
