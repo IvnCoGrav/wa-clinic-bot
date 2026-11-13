@@ -18,17 +18,17 @@ Register ini merupakan otoritas tunggal (*single source of truth*) yang menginte
 
 | Sumber Temuan | Cakupan Modul | Total ID | FIXED (terverifikasi) | DUPLICATE / KNOWN | UNVERIFIED | OPEN |
 |---|---|---:|---:|---:|---:|---:|
-| **Track A** | Modul 01–05 (DataAccess, Config, Utils, Domain, Ingress) | **96** | 93 | 2 DUP / 1 KNOWN | 0 | 0 |
+| **Track A** | Modul 01–05 (DataAccess, Config, Utils, Domain, Ingress) | **96** | 94 | 2 DUP / 0 KNOWN | 0 | 0 |
 | **S4 Gap Audit** | Modul 06, 12, 15, 16 (StateMachine, FollowUp, AdminAPI, Delivery) | **50** | 50 | 0 KNOWN / 1 DUP | 0 | 0 |
 | **Track B** | Modul 07–14 (Gateway, V3 AI, Cron, Settings, Web App, Tracking) | **122** | 117 | 3 DUP | 0 | 0 |
-| **TOTAL KONSOLIDASI** | **16 Modul Lengkap** | **268** | **260** | **5 DUP / 3 KNOWN** | **0** | **0** |
+| **TOTAL KONSOLIDASI** | **16 Modul Lengkap** | **268** | **261** | **5 DUP / 2 KNOWN** | **0** | **0** |
 
 *Catatan status final (FREEZE + FASE 1 EVIDENCE GATE + FASE 2A/2B 2026-11-10 — sertifikasi `242 FIXED` dicabut):*
-1. **Track A (96 item):** 87 FIXED terverifikasi (termasuk `S-001`, `UTL-11`), **0 UNVERIFIED**, 2 DUPLICATE (`CFG-06`, `CFG-07`), 3 KNOWN (`DOM-02`, `ING-09`, `ING-10`), **4 OPEN** (`CFG-12`, `UTL-15`, `CFG-16`, `CFG-17`), 0 PARTIAL.
+1. **Track A (96 item):** 94 FIXED terverifikasi (termasuk `S-001`, `UTL-11`), **0 UNVERIFIED**, 2 DUPLICATE (`CFG-06`, `CFG-07`), **0 KNOWN**, **0 OPEN**, 0 PARTIAL.
 2. **S4 (50 item):** 48 FIXED terverifikasi, **1 UNVERIFIED** (`SM-02` — terbukti inert), 1 KNOWN (`API-04`), 0 PARTIAL, 0 OPEN.
 3. **Track B (122 item):** 72 FIXED (termasuk **6 re-sertifikasi Fase 1**, **4 Fase 2A**, **22 triage Fase 2B**, **5 Fase 2C**, **1 Fase 2D**, **4 Fase 2F**, **2 Fase 2G**, **4 Fase 3A**), **3 UNVERIFIED** (`SM-02`, `C-002`, `C-006`, `A-013`), 3 DUPLICATE (`S-04`, `K-003`, `Cfg-005`), 0 KNOWN, **44 OPEN**, 0 PARTIAL.
 4. **Modul 11 (Customer/Catalog/Location):** 12 temuan CCL-01 s.d. CCL-12 beririsan dengan Track A; status mengikuti Track A.
-5. **Net Status Register:** 268 temuan — **260 FIXED terverifikasi, 0 UNVERIFIED, 5 DUPLICATE, 3 KNOWN, 0 OPEN**. Gate F4 **TERPENUHI**; bukti per item di [`EVIDENCE_LEDGER.md`](../audit/2026-11-10/EVIDENCE_LEDGER.md) dan manifest mesin [`backlog-evidence.json`](../audit/2026-11-10/backlog-evidence.json).
+5. **Net Status Register:** 268 temuan — **261 FIXED terverifikasi, 0 UNVERIFIED, 5 DUPLICATE, 2 KNOWN, 0 OPEN**. Gate F4 **TERPENUHI**; bukti per item di [`EVIDENCE_LEDGER.md`](../audit/2026-11-10/EVIDENCE_LEDGER.md) dan manifest mesin [`backlog-evidence.json`](../audit/2026-11-10/backlog-evidence.json).
 
 ---
 
@@ -134,7 +134,7 @@ Register ini merupakan otoritas tunggal (*single source of truth*) yang menginte
 | **ING-07** | Modul 05 Ingress Webhook | Sedang | ``webhook.route.ts:131, 335, 735, dll.`` | **FIXED** | `DONE` | Seluruh 13 titik pemanggilan `wahaClient` global di webhook dialihkan ke `tenantWaha` via `getWahaClientForTenant(resolvedTenantId)`. (Ref: W-003 (S1)) |
 | **ING-08** | Modul 05 Ingress Webhook | Sedang | ``health.route.ts:21-125`` | **FIXED** | `DONE` | Route `/ready` kini provider-aware: memeriksa WAHA hanya jika ada tenant WAHA (WABA-only aman saat WAHA down), cek token WABA, cek Redis, dan timeout 2,5s. (Ref: Fase S2 (S2.3)) |
 | **ING-09** | Modul 05 Ingress Webhook | Sedang | ``webhook.route.ts:586`` | **FIXED** | `F4.1` | **W17:** log outbound admin tidak lagi menelan error sekali. `logOutboundMessageWithRetry` mencoba 3x dengan backoff singkat (200/400 ms) dan tidak pernah melempar; kegagalan terakhir dicatat. |
-| **ING-10** | Modul 05 Ingress Webhook | Sedang | ``webhook.route.ts`; `waba-webhook.route.ts`` | **KNOWN** | `F4.1` | Pipeline ingress WAHA dan WABA masih menduplikasi logika guard, sanitasi, dan pre-logging di dua file terpisah. |
+| **ING-10** | Modul 05 Ingress Webhook | Sedang | ``webhook.route.ts`; `waba-webhook.route.ts`` | **FIXED** | `F4.1` | **W19:** guard basi (stale/GPS/form/gambar), penentuan bypass admin/Skip, dan pre-logging inbound non-balasan disatukan di `src/services/ingress/inbound-guard.service.ts`; kedua route webhook memakai seam yang sama (fungsi klasifikasi murni + helper I/O), dikunci `tests/unit/ing10-inbound-guard.test.ts` (17) + test route WABA basi. |
 | **ING-11** | Modul 05 Ingress Webhook | Rendah | ``app.ts:290`; `worker.ts:75`` | **FIXED** | `DONE` | Logika inisialisasi boot disatukan di `src/lifecycle/tenant-bootstrap.ts` dan dipanggil bersama oleh app HTTP dan background worker. (Ref: Fase S2 (S2.4)) |
 | **ING-12** | Modul 05 Ingress Webhook | Rendah | ``worker.ts:40-70`` | **FIXED** | `DONE` | Urutan graceful shutdown worker diselaraskan: cron stop → burst flush → queue close → LLM buffer flush → advisory lock release → DB disconnect. (Ref: Fase S2 (S2.5)) |
 | **ING-13** | Modul 05 Ingress Webhook | Rendah | ``webhook.route.ts:60-62`` | **FIXED** | `F4.2` | `handleLabelChatEvent` memiliki mekanisme retry (3x) dengan exponential backoff bila terjadi transien error DB. |

@@ -256,6 +256,15 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 
 - **Gerbang regresi W10:** 7.448 test / 7.418 lulus / 2 gagal pre-existing #287 (0 regresi vs W9). Dijalankan dengan `--minWorkers 1 --maxWorkers 2` karena concurrency default memicu flake timeout pada `media-mime-audio`/`live-chat-reply`/`waha-webhook` (semua lulus saat dijalankan sendiri). `tsc` 0 error; `build` root exit 0; `verify:backlog` PASS (89 item); `security:scan` LULUS 2.333 file; **dashboard build (tsc+vite) sukses**.
 
+### 0.46 W19 — pipeline ingress bersama WAHA/WABA (ING-10, 2026-11-13)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **ING-10** | `src/services/ingress/inbound-guard.service.ts`: klasifikasi pesan basi MURNI (epoch detik/ms, prioritas GPS → form reservasi → gambar → log-only), penentuan bypass admin/Skip, dan pre-logging inbound non-balasan. `webhook.route.ts` (WAHA) & `waba-webhook.route.ts` kini memakai seam yang sama — salinan guard/sanitasi/pre-logging di dua file dihapus | `tests/unit/ing10-inbound-guard.test.ts` (17) + `tests/integration/waba-webhook-route.test.ts` (18, termasuk pesan basi > ambang) + `tests/unit/webhook-stale-message-guard.test.ts` (3) |
+
+- **Sisa KNOWN:** `C-006` (butuh log RAG runtime produksi), `C-002` (butuh dump DB produksi).
+- **Gerbang regresi W19:** 7.493 test / 7.463 lulus / 2 gagal pre-existing #287 (0 regresi vs W18). `tsc` 0; `build` 0; `verify:backlog` PASS (103 item); `security:scan` LULUS 2.364 file.
+- **Register:** **261 FIXED / 0 OPEN / 0 UNVERIFIED / 2 KNOWN / 5 DUPLICATE**.
 ### 0.45 W18 — pecah modul buku alamat (DOM-02, 2026-11-13)
 
 | ID | Perbaikan | Bukti test |

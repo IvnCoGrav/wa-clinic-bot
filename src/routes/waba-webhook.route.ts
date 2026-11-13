@@ -10,7 +10,12 @@ import { wabaTenantService } from '../services/waba-tenant.service';
 import { enforceAiScopeGate } from '../services/ai-scope-gate.service';
 import { matchAdClickAndFireContact } from '../services/ad-attribution.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
-import { hasBypassLabel, checkCustomerBypass } from '../utils/customer-bypass';
+import {
+  classifyStaleInbound,
+  logInboundWithoutReply,
+  resolveInboundBypass,
+  resolveMaxInboundAgeSeconds,
+} from '../services/ingress/inbound-guard.service';
 import { contextStorage } from '../utils/context';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
@@ -237,49 +242,44 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
         (msg.caption ? `[IMAGE: ${msg.caption}]` : '[IMAGE]');
 
       // --- FAST-PATH GUARD: STALE / CATCH-UP MESSAGE FOR WABA ---
-      const maxAgeSeconds = parseInt(process.env.MAX_INBOUND_MESSAGE_AGE_SECONDS || '300', 10);
-      if (maxAgeSeconds > 0 && msg.timestamp) {
-        const rawTs = Number(msg.timestamp);
-        if (!isNaN(rawTs) && rawTs > 0) {
-          const msgTimeMs = rawTs > 10000000000 ? rawTs : rawTs * 1000;
-          const ageSeconds = Math.floor((Date.now() - msgTimeMs) / 1000);
-          if (ageSeconds > maxAgeSeconds) {
-            if (msg.location) {
-              // Mirip [STALE GUARD BYPASS] di webhook WAHA: sinyal GPS shareloc
-              // tidak boleh hilang karenakan timestamp telat — jatuh ke choke
-              // point ingest GPS di bawah (KNOWN_ISSUES #138).
-              console.log(`[WABA STALE GUARD BYPASS] GPS Shareloc dari ${msg.fromNumber} terdeteksi meski age ${ageSeconds}s (> ${maxAgeSeconds}s) — lanjut ke ingest GPS choke point.`);
-            } else {
-              console.log(`[WABA STALE MESSAGE GUARD] Message ${msg.messageId} from ${msg.fromNumber} is ${ageSeconds}s old (threshold: ${maxAgeSeconds}s). Fast-tracking to DB only and dropping auto-reply/CAPI.`);
-              const staleCustomer = await customerService.getOrCreateCustomer(
-                msg.fromNumber,
-                msg.contactName,
-                tenantId
-              );
-              const staleConversation = await conversationService.getOrCreateConversation(staleCustomer.id, tenantId);
-              await messageService.logMessage({
-                tenantId,
-                conversationId: staleConversation.id,
-                direction: 'INBOUND',
-                content: wabaCanonicalContent,
-                waMessageId: msg.messageId,
-                payloadRaw: mergeWabaMedia(msg.rawPayload),
-                isHistorical: true,
-              });
-              processed++;
-              continue;
-            }
-          }
+      // ING-10: keputusan basi dipusatkan di `inbound-guard.service` (seam bersama WAHA).
+      const maxAgeSeconds = resolveMaxInboundAgeSeconds();
+      const staleDecision = classifyStaleInbound({
+        timestamp: msg.timestamp,
+        maxAgeSeconds,
+        isGpsShare: Boolean(msg.location),
+      });
+      if (staleDecision.stale) {
+        if (staleDecision.action === 'proceed') {
+          // Mirip [STALE GUARD BYPASS] di webhook WAHA: sinyal GPS shareloc
+          // tidak boleh hilang karenakan timestamp telat — jatuh ke choke
+          // point ingest GPS di bawah (KNOWN_ISSUES #138).
+          console.log(`[WABA STALE GUARD BYPASS] GPS Shareloc dari ${msg.fromNumber} terdeteksi meski age ${staleDecision.ageSeconds}s (> ${maxAgeSeconds}s) — lanjut ke ingest GPS choke point.`);
+        } else {
+          console.log(`[WABA STALE MESSAGE GUARD] Message ${msg.messageId} from ${msg.fromNumber} is ${staleDecision.ageSeconds}s old (threshold: ${maxAgeSeconds}s). Fast-tracking to DB only and dropping auto-reply/CAPI.`);
+          await logInboundWithoutReply({
+            tenantId,
+            phone: msg.fromNumber,
+            contactName: msg.contactName,
+            content: wabaCanonicalContent,
+            waMessageId: msg.messageId,
+            payloadRaw: mergeWabaMedia(msg.rawPayload),
+            isHistorical: true,
+          });
+          processed++;
+          continue;
         }
       }
 
       const existingCustomer = await customerService.getCustomerByPhone(msg.fromNumber, tenantId);
       const isNewCustomerRecord = !existingCustomer;
 
-      const isBypass =
-        existingCustomer?.is_admin_labeled === true ||
-        hasBypassLabel(existingCustomer) ||
-        (await checkCustomerBypass({ customerId: existingCustomer?.id, phone: msg.fromNumber, tenantId }));
+      // ING-10: bypass admin/Skip memakai seam bersama WAHA.
+      const isBypass = await resolveInboundBypass({
+        customer: existingCustomer,
+        phone: msg.fromNumber,
+        tenantId,
+      });
 
       // --- CHOKE POINT GPS PIN TUNGGAL (mirror WAHA — KNOWN_ISSUES #138) ---
       // WABA sebelumnya TIDAK punya sinkron GPS sama sekali: bypass, blocked,
@@ -320,10 +320,12 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
           { skipFollowUpScheduling: true }
         );
         const bypassConversation = await conversationService.getOrCreateConversation(bypassCustomer.id, tenantId);
-        await messageService.logMessage({
+        await logInboundWithoutReply({
           tenantId,
-          conversationId: bypassConversation.id,
-          direction: 'INBOUND',
+          phone: msg.fromNumber,
+          contactName: msg.contactName,
+          customer: bypassCustomer,
+          conversation: bypassConversation,
           content: wabaCanonicalContent,
           waMessageId: msg.messageId,
           payloadRaw: mergeWabaMedia(msg.rawPayload),
@@ -370,10 +372,12 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
       }
 
       if (customer.status === 'blocked') {
-        await messageService.logMessage({
+        await logInboundWithoutReply({
           tenantId,
-          conversationId: conversation.id,
-          direction: 'INBOUND',
+          phone: msg.fromNumber,
+          contactName: msg.contactName,
+          customer,
+          conversation,
           content: wabaCanonicalContent,
           waMessageId: msg.messageId,
           payloadRaw: mergeWabaMedia(msg.rawPayload),
@@ -421,10 +425,12 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
             tenantId
           );
         } catch {}
-        await messageService.logMessage({
+        await logInboundWithoutReply({
           tenantId,
-          conversationId: conversation.id,
-          direction: 'INBOUND',
+          phone: msg.fromNumber,
+          contactName: msg.contactName,
+          customer,
+          conversation,
           content: wabaCanonicalContent,
           waMessageId: msg.messageId,
           payloadRaw: mergeWabaMedia(msg.rawPayload),

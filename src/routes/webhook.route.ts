@@ -24,7 +24,13 @@ import { parseCanonicalInboundMessage } from '../utils/canonical-message-normali
 import { extractWahaAdReferral } from '../integrations/whatsapp/waha-ctwa-referral';
 import { invalidateCachedLabels } from '../integrations/waha/label-cache';
 import { safeCompare } from '../utils/auth';
-import { hasBypassLabel, isBypassLabelName, checkCustomerBypass } from '../utils/customer-bypass';
+import { isBypassLabelName } from '../utils/customer-bypass';
+import {
+  classifyStaleInbound,
+  logInboundWithoutReply,
+  resolveInboundBypass,
+  resolveMaxInboundAgeSeconds,
+} from '../services/ingress/inbound-guard.service';
 dotenv.config();
 
 /**
@@ -943,74 +949,69 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       // --- FAST-PATH GUARD: STALE / CATCH-UP MESSAGE (Mencegah banjir sync saat QR scan / reconnect) ---
       // Pesan lama tetap dicatat ke database (audit trail & Live Chat) dengan media jika ada,
       // tetapi dilewati dari bot auto-reply & API eksternal.
-      const maxAgeSeconds = parseInt(process.env.MAX_INBOUND_MESSAGE_AGE_SECONDS || '300', 10);
-      if (maxAgeSeconds > 0 && payload.timestamp) {
-        const rawTs = Number(payload.timestamp);
-        if (!isNaN(rawTs) && rawTs > 0) {
-          const msgTimeMs = rawTs > 10000000000 ? rawTs : rawTs * 1000;
-          const ageSeconds = Math.floor((Date.now() - msgTimeMs) / 1000);
-          if (ageSeconds > maxAgeSeconds) {
-            const rawBodyForStale = payload.body || msgObj?.conversation || msgObj?.extendedTextMessage?.text || imageCaption || '';
-            let isStaleForm = false;
-            try {
-              const { isReservationFormMessage: _isFormStale } = await import('../utils/reservation-text-parser');
-              isStaleForm = _isFormStale(rawBodyForStale);
-            } catch {}
-            if (hasRealLocation) {
-              console.log(`[STALE GUARD BYPASS] GPS Shareloc dari ${phone} terdeteksi meski age ${ageSeconds}s (> ${maxAgeSeconds}s) — lanjut ke jalur GPS sync prioritas.`);
-            } else if (isStaleForm) {
-              console.log(`[STALE GUARD BYPASS] Reservation form dari ${phone} terdeteksi meski age ${ageSeconds}s (> ${maxAgeSeconds}s) — lanjut ke jalur capture (Siska #777).`);
-            } else if (isInboundImage) {
-              // Image stale tetap simpan dengan media, jangan hilangkan gambar
-              console.log(`[STALE IMAGE] Message ${waMessageId} from ${phone} is ${ageSeconds}s old — tetap simpan image ke LiveChat.`);
-              const staleCustomer = await customerService.getOrCreateCustomer(phone, contactName, resolvedTenantId);
-              const staleConversation = await conversationService.getOrCreateConversation(staleCustomer.id, resolvedTenantId);
-              await messageService.logMessage({
-                tenantId: resolvedTenantId,
-                conversationId: staleConversation.id,
-                direction: 'INBOUND',
-                content: inboundContent,
-                waMessageId,
-                payloadRaw: mergeMediaIntoPayload(payload),
-                skipMqlEvaluation: true,
-                isHistorical: true,
-              });
-              return reply.status(200).send({ status: 'IGNORED_STALE_MESSAGE' });
-            } else {
-              console.log(`[STALE MESSAGE GUARD] Message ${waMessageId} from ${phone} is ${ageSeconds}s old (threshold: ${maxAgeSeconds}s). Fast-tracking to DB only and dropping auto-reply/side-effects.`);
-              const staleCustomer = await customerService.getOrCreateCustomer(phone, contactName, resolvedTenantId);
-              const staleConversation = await conversationService.getOrCreateConversation(staleCustomer.id, resolvedTenantId);
-              await messageService.logMessage({
-                tenantId: resolvedTenantId,
-                conversationId: staleConversation.id,
-                direction: 'INBOUND',
-                content: inboundContent,
-                waMessageId,
-                payloadRaw: mergeMediaIntoPayload(payload),
-                skipMqlEvaluation: true,
-                isHistorical: true,
-              });
-              return reply.status(200).send({ status: 'IGNORED_STALE_MESSAGE' });
-            }
+      // ING-10: keputusan basi dipusatkan di `inbound-guard.service` (seam bersama WABA).
+      const maxAgeSeconds = resolveMaxInboundAgeSeconds();
+      let staleDecision = classifyStaleInbound({
+        timestamp: payload.timestamp,
+        maxAgeSeconds,
+        isGpsShare: hasRealLocation,
+        isImage: isInboundImage,
+      });
+      if (staleDecision.stale) {
+        // Form reservasi basi tetap di-capture (Siska #777). Cek hanya saat pesan
+        // benar-benar basi agar import parser tetap lazy seperti sebelumnya.
+        if (staleDecision.action === 'log_only') {
+          const rawBodyForStale = payload.body || msgObj?.conversation || msgObj?.extendedTextMessage?.text || imageCaption || '';
+          let isStaleForm = false;
+          try {
+            const { isReservationFormMessage: _isFormStale } = await import('../utils/reservation-text-parser');
+            isStaleForm = _isFormStale(rawBodyForStale);
+          } catch {}
+          staleDecision = classifyStaleInbound({
+            timestamp: payload.timestamp,
+            maxAgeSeconds,
+            isGpsShare: hasRealLocation,
+            isReservationForm: isStaleForm,
+            isImage: isInboundImage,
+          });
+        }
+
+        if (staleDecision.action === 'proceed') {
+          if (staleDecision.reason === 'gps_share') {
+            console.log(`[STALE GUARD BYPASS] GPS Shareloc dari ${phone} terdeteksi meski age ${staleDecision.ageSeconds}s (> ${maxAgeSeconds}s) — lanjut ke jalur GPS sync prioritas.`);
+          } else {
+            console.log(`[STALE GUARD BYPASS] Reservation form dari ${phone} terdeteksi meski age ${staleDecision.ageSeconds}s (> ${maxAgeSeconds}s) — lanjut ke jalur capture (Siska #777).`);
           }
+        } else {
+          if (staleDecision.reason === 'image') {
+            // Image stale tetap simpan dengan media, jangan hilangkan gambar
+            console.log(`[STALE IMAGE] Message ${waMessageId} from ${phone} is ${staleDecision.ageSeconds}s old — tetap simpan image ke LiveChat.`);
+          } else {
+            console.log(`[STALE MESSAGE GUARD] Message ${waMessageId} from ${phone} is ${staleDecision.ageSeconds}s old (threshold: ${maxAgeSeconds}s). Fast-tracking to DB only and dropping auto-reply/side-effects.`);
+          }
+          await logInboundWithoutReply({
+            tenantId: resolvedTenantId,
+            phone,
+            contactName,
+            waMessageId,
+            content: inboundContent,
+            payloadRaw: mergeMediaIntoPayload(payload),
+            isHistorical: true,
+            skipMqlEvaluation: true,
+          });
+          return reply.status(200).send({ status: 'IGNORED_STALE_MESSAGE' });
         }
       }
 
       const existingCustomer = await customerService.getCustomerByPhone(phone, resolvedTenantId);
       let labels: string[] | null = null;
-      let isBypassChat = false;
 
-      // 1. Cek dari flag customer atau relasi label di database
-      if (existingCustomer) {
-        if (existingCustomer.is_admin_labeled === true || hasBypassLabel(existingCustomer)) {
-          isBypassChat = true;
-        } else {
-          const dbBypass = await checkCustomerBypass({ customerId: existingCustomer.id, phone, tenantId: resolvedTenantId });
-          if (dbBypass) {
-            isBypassChat = true;
-          }
-        }
-      }
+      // 1. Cek flag customer / relasi label di database (seam bersama ING-10)
+      let isBypassChat = await resolveInboundBypass({
+        customer: existingCustomer,
+        phone,
+        tenantId: resolvedTenantId,
+      });
 
       // 2. Fallback jika customer baru atau belum tersinkronisasi labels_synced_at
       if (!isBypassChat && (!existingCustomer || existingCustomer.labels_synced_at === null)) {
@@ -1166,10 +1167,12 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           console.warn('[BYPASS CTWA INGEST ERROR]', ctwaErr.message);
         }
 
-        await messageService.logMessage({
+        await logInboundWithoutReply({
           tenantId: resolvedTenantId,
-          conversationId: adminConversation.id,
-          direction: 'INBOUND',
+          phone,
+          contactName,
+          customer: adminCustomer,
+          conversation: adminConversation,
           content: inboundContent,
           waMessageId,
           payloadRaw: mergeMediaIntoPayload(payload),
@@ -1202,12 +1205,10 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           if (existingCustomer && !existingCustomer.legacy_scraped_at) {
             console.log(`[LEGACY SCRAPE TRIGGER] Chat ${chatId} labeled 'legacy', customer not yet scraped. Triggering.`);
             // Log inbound message ke audit trail
-            const customer = await customerService.getOrCreateCustomer(phone, contactName, resolvedTenantId);
-            const conversation = await conversationService.getOrCreateConversation(customer.id, resolvedTenantId);
-            await messageService.logMessage({
+            await logInboundWithoutReply({
               tenantId: resolvedTenantId,
-              conversationId: conversation.id,
-              direction: 'INBOUND',
+              phone,
+              contactName,
               content: inboundContent,
               waMessageId,
               payloadRaw: mergeMediaIntoPayload(payload),
@@ -1242,10 +1243,12 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       // --- GUARD CLAUSE: BLOCKED CUSTOMER (Tergolong di awal pemrosesan, setelah Idempotency Check) ---
       if (customer.status === 'blocked') {
         console.warn(`[BLOCKED ACCESS] Blocked customer ${phone} attempted to send a message. Logging to audit and dropping response.`);
-        await messageService.logMessage({
+        await logInboundWithoutReply({
           tenantId: resolvedTenantId,
-          conversationId: conversation.id,
-          direction: 'INBOUND',
+          phone,
+          contactName,
+          customer,
+          conversation,
           content: inboundContent,
           waMessageId,
           payloadRaw: mergeMediaIntoPayload(payload),
@@ -1313,6 +1316,23 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         contact: canonical.contact,
         canonicalType: canonical.type,
       };
+
+      // ING-10: pre-logging inbound non-balasan — seam bersama WABA.
+      const logInboundSilent = () =>
+        logInboundWithoutReply({
+          tenantId: resolvedTenantId,
+          phone,
+          contactName,
+          customer,
+          conversation,
+          content:
+            (incomingMessage as any).originalText ||
+            inboundContent ||
+            incomingMessage.text?.body ||
+            '[PESAN]',
+          waMessageId,
+          payloadRaw: mergeMediaIntoPayload(payload),
+        });
 
       // --- PURCHASE EVENT DETECTION (sebelum state machine / HUMAN HANDLING guard,
       //     agar tetap berjalan walau bot silent). Pesan berisi keyword format_purchase
@@ -1400,14 +1420,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             }
           } catch (e: any) { console.warn('[HUMAN GRACE GPS SYNC ERROR]', e.message); }
           // Log pesan ke DB Audit Trail
-          await messageService.logMessage({
-            tenantId: resolvedTenantId,
-            conversationId: conversation.id,
-            direction: 'INBOUND',
-            content: (incomingMessage as any).originalText || inboundContent || incomingMessage.text?.body || '[PESAN]',
-            waMessageId: waMessageId,
-            payloadRaw: mergeMediaIntoPayload(payload),
-          });
+          await logInboundSilent();
 
           return reply.status(200).send({ status: 'HUMAN_HANDLING_ACTIVE_SILENT' });
         }
@@ -1447,14 +1460,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               }
             }
           } catch (e: any) { console.warn('[HUMAN HOLD-DISABLED GPS SYNC ERROR]', e.message); }
-          await messageService.logMessage({
-            tenantId: resolvedTenantId,
-            conversationId: conversation.id,
-            direction: 'INBOUND',
-            content: (incomingMessage as any).originalText || inboundContent || incomingMessage.text?.body || '[PESAN]',
-            waMessageId: waMessageId,
-            payloadRaw: mergeMediaIntoPayload(payload),
-          });
+          await logInboundSilent();
 
           return reply.status(200).send({ status: 'HUMAN_HANDLING_ACTIVE_SILENT' });
         }
@@ -1528,14 +1534,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           }
 
           // Log pesan ke DB Audit Trail
-          await messageService.logMessage({
-            tenantId: resolvedTenantId,
-            conversationId: conversation.id,
-            direction: 'INBOUND',
-            content: (incomingMessage as any).originalText || inboundContent || incomingMessage.text?.body || '[PESAN]',
-            waMessageId: waMessageId,
-            payloadRaw: mergeMediaIntoPayload(payload),
-          });
+          await logInboundSilent();
 
 
           // Kembalikan 200 OK tanpa memanggil state machine atau LLM!
@@ -1553,14 +1552,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
 
       if (abuseResult.blocked) {
         // Log pesan pemicu blokir ke audit trail
-        await messageService.logMessage({
-          tenantId: resolvedTenantId,
-          conversationId: conversation.id,
-          direction: 'INBOUND',
-          content: (incomingMessage as any).originalText || inboundContent || incomingMessage.text?.body || '[PESAN]',
-          waMessageId,
-          payloadRaw: mergeMediaIntoPayload(payload),
-        });
+        await logInboundSilent();
         return reply.status(200).send({ status: 'BLOCKED' });
       }
 
@@ -1612,14 +1604,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         // 3. Pre-logging inbound ke LiveChat HANYA SETELAH enqueue durable sukses
         if (!(incomingMessage as any)._preLogged) {
           try {
-            await messageService.logMessage({
-              tenantId: resolvedTenantId,
-              conversationId: conversation.id,
-              direction: 'INBOUND' as any,
-              content: (incomingMessage as any).originalText || inboundContent || incomingMessage.text?.body || '[PESAN]',
-              waMessageId,
-              payloadRaw: mergeMediaIntoPayload(payload),
-            });
+            await logInboundSilent();
             (incomingMessage as any)._preLogged = true;
           } catch (preLogErr: any) {
             console.warn('[PRE-LOG INBOUND WARN]', preLogErr?.message || preLogErr);

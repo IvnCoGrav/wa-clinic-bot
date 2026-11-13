@@ -533,7 +533,7 @@
         {
           "type": "file",
           "path": "docs/FEATURE_INVENTORY.md",
-          "line": 201,
+          "line": 202,
           "contains": "25 interval cron"
         },
         {
@@ -569,7 +569,7 @@
         {
           "type": "file",
           "path": "src/routes/waba-webhook.route.ts",
-          "line": 130,
+          "line": 135,
           "contains": "UNKNOWN_TENANT_REJECTED"
         },
         {
@@ -1223,7 +1223,7 @@
         {
           "type": "file",
           "path": "src/routes/webhook.route.ts",
-          "line": 132,
+          "line": 138,
           "contains": "WAHA_ALLOW_UNSIGNED_WEBHOOK"
         },
         {
@@ -1853,7 +1853,7 @@
         {
           "type": "file",
           "path": "docs/FEATURE_INVENTORY.md",
-          "line": 267,
+          "line": 268,
           "contains": "superAdminOnlyPrefixes"
         },
         {
@@ -2433,13 +2433,13 @@
         {
           "type": "file",
           "path": "src/routes/webhook.route.ts",
-          "line": 81,
+          "line": 87,
           "contains": "export async function logOutboundMessageWithRetry"
         },
         {
           "type": "file",
           "path": "src/routes/webhook.route.ts",
-          "line": 625,
+          "line": 631,
           "contains": "void logOutboundMessageWithRetry({"
         }
       ],
@@ -2505,13 +2505,45 @@
       ],
       "verifiedBy": "AI Agent",
       "verifiedAt": "2026-11-13"
+    },
+    "ING-10": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "test",
+          "path": "tests/unit/ing10-inbound-guard.test.ts",
+          "contains": "ING-10 — guard ingress bersama"
+        },
+        {
+          "type": "file",
+          "path": "src/services/ingress/inbound-guard.service.ts",
+          "line": 92,
+          "contains": "export function classifyStaleInbound"
+        },
+        {
+          "type": "file",
+          "path": "src/services/ingress/inbound-guard.service.ts",
+          "line": 153,
+          "contains": "export async function logInboundWithoutReply"
+        },
+        {
+          "type": "file",
+          "path": "src/routes/webhook.route.ts",
+          "line": 954,
+          "contains": "let staleDecision = classifyStaleInbound"
+        },
+        {
+          "type": "file",
+          "path": "src/routes/waba-webhook.route.ts",
+          "line": 247,
+          "contains": "const staleDecision = classifyStaleInbound"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-13"
     }
   },
   "known": {
-    "ING-10": {
-      "justification": "Duplikasi pipeline WAHA/WABA adalah tech debt; kedua jalur sudah punya guard dan test sendiri.",
-      "acceptance": "Satukan sebelum menambah channel ketiga."
-    },
     "C-006": {
       "justification": "Membutuhkan log RAG runtime produksi untuk membuktikan lisensi jawaban umum; tidak dapat diverifikasi offline.",
       "acceptance": "Audit minimal 50 percakapan staging/produksi dengan RAG-miss; jika jawaban umum muncul untuk klaim klinis, cabut lisensi dan tambah gerbang grounding."

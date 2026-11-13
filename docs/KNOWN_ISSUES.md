@@ -152,6 +152,10 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - Register menjadi **239 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 16 OPEN**.
   - **Batas yang diketahui:** bila Redis mati, KV jatuh ke memori per proses sehingga sweep kembali hanya melihat sesi prosesnya sendiri (perilaku lama); TTL record 2 jam, jadi sesi yang berhenti dikirim akan hilang otomatis.
 
+- **Tindakan W19 (2026-11-13) — ING-10 selesai:**
+  - Guard pesan basi (prioritas GPS → form reservasi → gambar → log-only), deteksi bypass admin/Skip, dan pre-logging inbound non-balasan dipindahkan ke `src/services/ingress/inbound-guard.service.ts`; route WAHA & WABA memakai seam yang sama.
+  - Dikunci 17 test unit adversarial (`tests/unit/ing10-inbound-guard.test.ts`) + test route WABA untuk pesan basi; tidak ada perubahan perilaku yang disengaja.
+  - Register menjadi **261 FIXED / 0 OPEN / 0 UNVERIFIED / 2 KNOWN / 5 DUPLICATE**. **Sisa KNOWN:** `C-006`, `C-002`.
 - **Tindakan W18 (2026-11-13) — DOM-02 selesai:**
   - `customer-address.ts` dipecah per tanggung jawab (types/internal/matching/list/tombstones) dan file lama menjadi barrel re-export tipis; API publik tetap sama sehingga pemanggil tidak berubah.
   - Test guard struktur + 13 suite address (142 test) lulus.

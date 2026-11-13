@@ -672,4 +672,65 @@ describe('WABA Webhook Route (raw-body signature + tenant + status + media)', ()
       })
     );
   });
+
+  // ING-10: guard basi WABA memakai seam bersama (sebelumnya tidak ada test route).
+  it('POST pesan basi (> ambang) hanya dicatat ke DB, tidak di-enqueue', async () => {
+    const prevMax = process.env.MAX_INBOUND_MESSAGE_AGE_SECONDS;
+    process.env.MAX_INBOUND_MESSAGE_AGE_SECONDS = '180';
+    try {
+      const waMessageId = `wamid.stale_${Date.now()}`;
+      const body = JSON.stringify({
+        object: 'whatsapp_business_account',
+        entry: [{
+          id: 'e-stale',
+          changes: [{
+            field: 'messages',
+            value: {
+              messaging_product: 'whatsapp',
+              metadata: { display_phone_number: '6281234', phone_number_id: 'PNID_TENANT_A' },
+              contacts: [{ profile: { name: 'Bunda Stale' }, wa_id: '628777000111' }],
+              messages: [{
+                id: waMessageId,
+                from: '628777000111',
+                // 2023 — jauh melewati ambang 180 detik.
+                timestamp: '1691000500',
+                type: 'text',
+                text: { body: 'pesan lama saat reconnect' },
+              }],
+            },
+          }],
+        }],
+      });
+
+      vi.spyOn(wabaTenantService, 'resolveTenantByPhoneNumberId').mockResolvedValue('tenant-waba-a');
+      vi.spyOn(messageService, 'isDuplicateMessage').mockResolvedValue(false);
+      const logSpy = vi.spyOn(messageService, 'logMessage').mockResolvedValue(undefined as any);
+      const enqueueSpy = vi.fn().mockResolvedValue(undefined);
+      const queueMod = await import('../../src/services/queue.service');
+      (queueMod.queueService as any).enqueueMessage = enqueueSpy;
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/webhook/waba',
+        payload: body,
+        headers: { 'content-type': 'application/json', 'x-hub-signature-256': sign(body) },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body)).toEqual({ status: 'PROCESSED', count: 1 });
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenantId: 'tenant-waba-a',
+          waMessageId,
+          direction: 'INBOUND',
+          content: 'pesan lama saat reconnect',
+          isHistorical: true,
+        })
+      );
+      expect(enqueueSpy).not.toHaveBeenCalled();
+    } finally {
+      if (prevMax === undefined) delete process.env.MAX_INBOUND_MESSAGE_AGE_SECONDS;
+      else process.env.MAX_INBOUND_MESSAGE_AGE_SECONDS = prevMax;
+    }
+  });
 });
