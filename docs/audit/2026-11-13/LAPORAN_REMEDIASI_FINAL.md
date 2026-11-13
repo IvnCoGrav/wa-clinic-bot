@@ -36,7 +36,7 @@
 | W16 | `4655bab4` | `S-02`, `S-06`, `S-08`, `S-09`, `Cfg-015`, `A-013` | Outbox PII, consent GPS, ambang tenant, status jujur, brand dashboard; reklasifikasi 3 item ke KNOWN |
 | W17 | `71bc1d03` | `SM-02`, `ING-09`, `API-04` | Header form tenant data-driven, retry log outbound, tenant sesi admin (migrasi) |
 | W18 | `25cc26f7` | `DOM-02` | Modul buku alamat 620 baris dipecah per tanggung jawab (barrel kompatibel) |
-| W19 | `menyusul` | `ING-10` | Guard basi + bypass + pre-logging WAHA/WABA disatukan di seam `inbound-guard.service.ts` |
+| W19 | `0f200abb` | `ING-10` | Guard basi + bypass + pre-logging WAHA/WABA disatukan di seam `inbound-guard.service.ts` |
 
 Gelombang sebelumnya (W1–W9) mencakup reliability, AbortSignal, humanizer struktural, kuota/circuit per tenant, endpoint setelan tenant, Google Calendar/Contacts, degradasi DB jujur, artefak audit, rekonsiliasi dokumen, secret WAHA per tenant, trip lintas proses, dan tenant seam worker/debug.
 
