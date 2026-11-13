@@ -2,8 +2,8 @@
 
 > **Server:** `klinik-server-baru` (`43.173.11.79`, `/opt/wa-clinic-bot`)
 > **Branch live:** `deploy/2026-11-13-merged`
-> **Commit live:** `a5793f51` (merge W10–W19 + perbaikan alamat)
-> **Waktu:** 14:20–15:00 WIB
+> **Commit live:** `3925f30e` (merge W10–W19 + perbaikan alamat + pemisahan flag konsumen chat)
+> **Waktu:** 14:20–15:10 WIB
 
 ---
 
@@ -48,6 +48,20 @@ Kode baru menolak `storage/vapid_keys.json` di produksi (fail-closed) → app cr
 - Perbaikan fondasional: flag dipisah — `SEPARATE_WORKER` hanya cron; `CHAT_CONSUMER_ENABLED=false` hanya di worker. Gerbang test: `tests/unit/deploy-queue-consumer-config.test.ts`.
 - Pemulihan: 421 job diarsipkan ke `messages` (INBOUND, `isHistorical`, tanpa balasan otomatis) lalu dihapus; 426 `inbound_turns` pending → `FAILED` (`STALE_BACKLOG_ARCHIVED_20261113`) agar recovery tidak me-replay.
 - Backup tambahan: `backups/pre_backlog_archive_20261113_145627.dump`.
+
+### 3c. `APP_DOMAIN` wajib untuk compose baru
+Compose W10+ meneruskan `APP_DOMAIN` ke Caddy dan gagal cepat bila kosong; `.env` server hanya punya `ADMIN_DOMAIN`.
+
+- Perbaikan: `APP_DOMAIN=app.kalababyspa.online` ditambahkan ke `.env` (backup `.env.bak-20261113-appdomain`). Container `caddy` **tidak** di-recreate.
+
+### 3d. Verifikasi akhir konsumen chat
+```
+[APP] BullMQ shards initialized successfully.
+[APP] SEPARATE_WORKER=true terdeteksi: melewati background crons & sweeps
+[WORKER] Shard queues initialized (PRODUSEN SAJA - konsumen chat di container app)
+/ready: database CONNECTED, waha WORKING, queue CONNECTED, cron NO_JOBS
+antrean: shard_0..4 wait=0
+```
 
 ## 4. Rollback
 
