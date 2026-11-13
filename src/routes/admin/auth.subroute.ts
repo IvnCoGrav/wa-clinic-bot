@@ -10,6 +10,13 @@ import { isCopilotTenantAllowed } from '../../config/copilot-tenant';
 import { resolveSessionTenantId } from './route-helpers';
 import { checkStateChangingCsrf } from '../../utils/csrf-guard';
 
+/** S-011: umur cookie admin mengikuti TTL sesi (default 7 hari). */
+function adminCookieMaxAgeSec(): number {
+  const raw = Number(process.env.ADMIN_SESSION_TTL_HOURS);
+  const hours = Number.isFinite(raw) && raw >= 1 && raw <= 720 ? Math.round(raw) : 168;
+  return hours * 60 * 60;
+}
+
 export async function authAdminRoutes(fastify: FastifyInstance) {
   const { AdminSessionService, SessionStoreUnavailable } = await import(
     '../../services/admin-session.service'
@@ -109,7 +116,7 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
       if (identifier) resetAccountLockout(identifier);
 
       const session = await AdminSessionService.createSession(body.adminIdentity || identifier || 'Super Admin');
-      const cookieValue = `admin_session=${session.token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${
+      const cookieValue = `admin_session=${session.token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${adminCookieMaxAgeSec()}${
         isSecureRequest ? '; Secure' : ''
       }`;
       // Sanitasi sesi silang: login admin memusnahkan sisa cookie staff_session.
@@ -283,7 +290,7 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
     if (adminOutcome.status === 'unavailable') return sendSessionUnavailable(reply);
     if (adminOutcome.status === 'valid') {
       const adminSession = adminOutcome.session;
-      const cookieValue = `admin_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${
+      const cookieValue = `admin_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${adminCookieMaxAgeSec()}${
         isSecureRequest ? '; Secure' : ''
       }`;
       reply.header('Set-Cookie', [

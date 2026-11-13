@@ -55,7 +55,9 @@ function preloadLikelyPage(): void {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(getInitialUser);
   const [loading, setLoading] = useState<boolean>(() => {
-    return !getInitialUser() && !localStorage.getItem(TOKEN_STORAGE_KEY);
+    // S-011: sesi berbasis cookie HttpOnly; tidak ada token localStorage yang
+    // perlu dicek. Loading hanya bila belum ada user tersimpan.
+    return !getInitialUser();
   });
 
   async function restoreSession(): Promise<'ok' | 'invalid' | 'network'> {
@@ -227,7 +229,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         body: JSON.stringify({ identifier, password }),
       });
       if (data.success && data.user) {
-        if (data.token) localStorage.setItem(TOKEN_STORAGE_KEY, data.token);
+        // S-011: token TIDAK disimpan di browser. Sesi memakai cookie HttpOnly
+        // yang dipasang server; token legacy dibersihkan bila masih ada.
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
         await retrySilently(fetchRolesFromApi, 'muat daftar peran setelah login');
         const authUser: User = {
           id: data.user.id,
