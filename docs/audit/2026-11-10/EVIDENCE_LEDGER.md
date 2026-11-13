@@ -256,6 +256,16 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 
 - **Gerbang regresi W10:** 7.448 test / 7.418 lulus / 2 gagal pre-existing #287 (0 regresi vs W9). Dijalankan dengan `--minWorkers 1 --maxWorkers 2` karena concurrency default memicu flake timeout pada `media-mime-audio`/`live-chat-reply`/`waha-webhook` (semua lulus saat dijalankan sendiri). `tsc` 0 error; `build` root exit 0; `verify:backlog` PASS (89 item); `security:scan` LULUS 2.333 file; **dashboard build (tsc+vite) sukses**.
 
+### 0.41 W14 — ekspor chat harian semua tenant (Ar-003, 2026-11-13)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **Ar-003** (sebagian) | `runDailyChatExport` memproses **semua tenant** (`getAllTenantIds`), bukan hanya `default-tenant`; kegagalan satu tenant dicatat dan tidak menghentikan tenant lain; log merangkum total percakapan/pesan | `tests/unit/cron-daily-chat-export-tenant.test.ts` (2) |
+
+- **Status register:** Ar-003 tetap **OPEN** — 264 referensi default parameter masih perlu audit pemanggil per domain + keputusan fail-closed.
+- **Register:** **249 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 6 OPEN** (tidak berubah).
+- **Gerbang regresi W14:** 7.454 test / 7.424 lulus / 2 gagal pre-existing #287 (0 regresi vs W12; `--minWorkers 1 --maxWorkers 2`). Catatan: run pertama mencatat flake `broadcast-queue` (spy 2x) yang lulus saat dijalankan sendiri dan lulus pada rerun penuh. `tsc` 0 error; `build` 0; `verify:backlog` PASS; `security:scan` LULUS 2.343 file.
+
 ### 0.40 W13 — token admin keluar dari localStorage (S-011 selesai, 2026-11-13)
 
 | ID | Perbaikan | Bukti test |

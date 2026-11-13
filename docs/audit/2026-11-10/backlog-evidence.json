@@ -1917,7 +1917,7 @@
         {
           "type": "file",
           "path": "src/services/cron.service.ts",
-          "line": 602,
+          "line": 619,
           "contains": "listActiveTripsAcrossProcesses()"
         },
         {

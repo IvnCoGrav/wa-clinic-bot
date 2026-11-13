@@ -230,14 +230,31 @@ export class CronService {
   public async runDailyChatExport(): Promise<void> {
     try {
       const { chatExportService, formatLocalDate } = await import('./chat-export.service');
+      const { getAllTenantIds } = await import('./media.service');
       const today = formatLocalDate();
-      const result = await chatExportService.saveDayExport(DEFAULT_TENANT_ID, today);
-      if (result.success) {
+      const tenants = await getAllTenantIds();
+      let exported = 0;
+      let totalConversations = 0;
+      let totalMessages = 0;
+
+      // Ar-003: ekspor harian untuk SEMUA tenant, bukan hanya default.
+      for (const tenantId of tenants) {
+        const result = await chatExportService.saveDayExport(tenantId, today);
+        if (result.success) {
+          exported++;
+          totalConversations += result.stats.totalConversations;
+          totalMessages += result.stats.totalMessages;
+        } else {
+          console.warn(`[Cron Service] Daily chat export gagal (${tenantId}, ${today}): ${result.error}`);
+        }
+      }
+
+      if (exported > 0) {
         console.log(
-          `[Cron Service] Daily chat export selesai (${today}): ${result.stats.totalConversations} percakapan, ${result.stats.totalMessages} pesan → ${result.fileName}`
+          `[Cron Service] Daily chat export selesai (${today}) untuk ${exported}/${tenants.length} tenant: ${totalConversations} percakapan, ${totalMessages} pesan.`
         );
       } else {
-        console.warn(`[Cron Service] Daily chat export gagal (${today}): ${result.error}`);
+        console.warn(`[Cron Service] Daily chat export tidak menghasilkan file untuk tenant mana pun (${today}).`);
       }
     } catch (err) {
       console.error('[Cron Service] Error running daily chat export:', (err as Error).message);
