@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { prisma } from '../db/client';
+import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { trackInterval } from '../lifecycle/interval-registry';
 
 export interface AdminSession {
@@ -9,6 +10,8 @@ export interface AdminSession {
   /** Token mentah — hanya diisi saat create/validate, TIDAK PERNAH dipersist. */
   token: string;
   adminIdentity: string;
+  /** API-04: tenant pemilik sesi (otoritas server, bukan header klien). */
+  tenantId: string;
   createdAt: Date;
   expiresAt: Date;
 }
@@ -61,6 +64,7 @@ export function hashAdminToken(token: string): string {
 interface MemoryEntry {
   id: string;
   adminIdentity: string;
+  tenantId: string;
   createdAt: Date;
   expiresAt: Date;
 }
@@ -97,6 +101,7 @@ try {
 interface SessionCacheEntry {
   id: string;
   adminIdentity: string;
+  tenantId: string;
   createdAt: Date;
   expiresAt: Date;
   cachedAt: number;
@@ -164,30 +169,42 @@ export class AdminSessionService {
    * Generates a cryptographically secure random session token (32 bytes = 64 hex chars).
    * Hanya SHA-256 hash yang dipersist ke database; token mentah hanya dikembalikan sekali ke caller.
    */
-  static async createSession(adminIdentity = 'System Admin'): Promise<AdminSession> {
+  static async createSession(
+    adminIdentity = 'System Admin',
+    tenantId: string = DEFAULT_TENANT_ID
+  ): Promise<AdminSession> {
     const token = crypto.randomBytes(32).toString('hex');
     const now = new Date();
     const expiresAt = new Date(now.getTime() + SESSION_TTL_MS);
+    const effectiveTenant = (tenantId || DEFAULT_TENANT_ID).trim() || DEFAULT_TENANT_ID;
 
     try {
       const created = await prisma.adminSession.create({
         data: {
           token_hash: hashAdminToken(token),
           admin_identity: adminIdentity,
+          tenant_id: effectiveTenant,
           expires_at: expiresAt,
         },
       });
-      console.log(`[ADMIN SESSION CREATED] Session issued for ${adminIdentity}. Expires: ${expiresAt.toISOString()}`);
+      console.log(`[ADMIN SESSION CREATED] Session issued for ${adminIdentity} (tenant=${effectiveTenant}). Expires: ${expiresAt.toISOString()}`);
       return {
         id: created.id,
         token,
         adminIdentity: created.admin_identity,
+        tenantId: (created as any).tenant_id || effectiveTenant,
         createdAt: created.created_at,
         expiresAt: created.expires_at,
       };
     } catch (err) {
       // DB offline (dev/test) → sesi ephemeral di memori, tetap tanpa jejak plaintext di disk.
-      const entry: MemoryEntry = { id: crypto.randomUUID(), adminIdentity, createdAt: now, expiresAt };
+      const entry: MemoryEntry = {
+        id: crypto.randomUUID(),
+        adminIdentity,
+        tenantId: effectiveTenant,
+        createdAt: now,
+        expiresAt,
+      };
       memoryFallback.set(hashAdminToken(token), entry);
       console.log(`[ADMIN SESSION CREATED] (memory fallback, DB offline) Session issued for ${adminIdentity}.`);
       return { ...entry, token };
@@ -217,12 +234,14 @@ export class AdminSessionService {
           id: session.id,
           token,
           adminIdentity: session.admin_identity,
+          tenantId: (session as any).tenant_id || DEFAULT_TENANT_ID,
           createdAt: session.created_at,
           expiresAt: session.expires_at,
         };
         writeSessionCache(hash, {
           id: valid.id,
           adminIdentity: valid.adminIdentity,
+          tenantId: valid.tenantId,
           createdAt: valid.createdAt,
           expiresAt: valid.expiresAt,
         });

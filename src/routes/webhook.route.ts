@@ -73,6 +73,32 @@ export async function handleLabelChatEvent(event: WahaWebhookEvent, tenantId: st
 }
 
 
+/**
+ * ING-09: log pesan outbound dengan retry singkat (3x backoff) agar balasan
+ * admin tidak hilang dari tabel Messages/SSE saat DB sesaat sibuk.
+ * Tidak pernah melempar; kegagalan terakhir dicatat.
+ */
+export async function logOutboundMessageWithRetry(
+  payload: Parameters<typeof messageService.logMessage>[0],
+  attempts = 3
+): Promise<void> {
+  for (let attempt = 1; attempt <= Math.max(1, attempts); attempt++) {
+    try {
+      await messageService.logMessage(payload);
+      return;
+    } catch (err: any) {
+      if (attempt >= attempts) {
+        console.error(
+          `[MESSAGE LOG ERROR] Gagal mencatat outbound setelah ${attempts} percobaan:`,
+          err?.message || err
+        );
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 200 * attempt));
+    }
+  }
+}
+
 export async function webhookRoutes(fastify: FastifyInstance) {
   /**
    * POST /webhook
@@ -596,7 +622,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 }
               }
 
-              await messageService.logMessage({
+              void logOutboundMessageWithRetry({
                 tenantId: resolvedTenantId,
                 conversationId: conversation.id,
                 direction: 'OUTBOUND',
@@ -606,7 +632,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 senderName: isBotAutoReply ? `Bot (${tenantName || 'Klinik'})` : 'Admin (WhatsApp HP)',
                 createdAt: msgDate,
                 payloadRaw: outboundMedia ? { ...payload, media: outboundMedia } : payload,
-              }).catch((err) => console.error('[MESSAGE LOG ERROR] Failed to log outbound reply:', err));
+              });
 
               const outTypeLabel = (outCanonical.type || (isOutboundImage ? 'GAMBAR' : 'TEKS')).toUpperCase();
               console.log(`[LIVE CHAT OUTBOUND] Balasan WhatsApp ke ${phone} (${outTypeLabel}) (${isBotAutoReply ? 'BOT' : 'ADMIN'}) tercatat & disiarkan ke Live Chat.`);

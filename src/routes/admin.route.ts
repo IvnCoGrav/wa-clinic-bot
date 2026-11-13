@@ -156,7 +156,9 @@ export async function adminRoutes(fastify: FastifyInstance) {
           if (validSession) {
             isAuthenticated = true;
             identity = validSession.adminIdentity;
-            (request as any).tenantId = resolveSessionTenantId(request);
+            // API-04: tenant sesi adalah otoritas server; header klien tidak
+            // boleh memindahkan sesi ini ke tenant lain.
+            (request as any).tenantId = validSession.tenantId || resolveSessionTenantId(request);
           }
         } catch (err) {
           if (err instanceof SessionStoreUnavailable) {

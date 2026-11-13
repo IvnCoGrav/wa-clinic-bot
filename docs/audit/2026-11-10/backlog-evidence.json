@@ -983,7 +983,7 @@
         {
           "type": "file",
           "path": "src/routes/admin.route.ts",
-          "line": 246,
+          "line": 248,
           "contains": "Cfg-004"
         },
         {
@@ -1223,7 +1223,7 @@
         {
           "type": "file",
           "path": "src/routes/webhook.route.ts",
-          "line": 106,
+          "line": 132,
           "contains": "WAHA_ALLOW_UNSIGNED_WEBHOOK"
         },
         {
@@ -1295,7 +1295,7 @@
         {
           "type": "file",
           "path": "src/routes/admin.route.ts",
-          "line": 264,
+          "line": 266,
           "contains": "superAdminWritePrefixes"
         },
         {
@@ -1752,7 +1752,7 @@
         {
           "type": "file",
           "path": "src/routes/admin.route.ts",
-          "line": 211,
+          "line": 213,
           "contains": "      '/api/admin/tenant-settings',"
         }
       ],
@@ -2170,7 +2170,7 @@
         {
           "type": "file",
           "path": "src/services/admin-session.service.ts",
-          "line": 24,
+          "line": 27,
           "contains": "DEFAULT_ADMIN_SESSION_TTL_MS"
         },
         {
@@ -2397,6 +2397,78 @@
       ],
       "verifiedBy": "AI Agent",
       "verifiedAt": "2026-11-13"
+    },
+    "SM-02": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "test",
+          "path": "tests/unit/sm02-tenant-form-headers.test.ts",
+          "contains": "memuat formHeaders tenant dari DB"
+        },
+        {
+          "type": "file",
+          "path": "src/utils/reservation-text-parser.ts",
+          "line": 104,
+          "contains": "tenantFormHeadersWarmInFlight"
+        },
+        {
+          "type": "file",
+          "path": "src/utils/reservation-text-parser.ts",
+          "line": 129,
+          "contains": "Tenant.settings.formHeaders"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-13"
+    },
+    "ING-09": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "test",
+          "path": "tests/unit/ing09-outbound-log-retry.test.ts",
+          "contains": "berhasil pada percobaan ketiga"
+        },
+        {
+          "type": "file",
+          "path": "src/routes/webhook.route.ts",
+          "line": 81,
+          "contains": "export async function logOutboundMessageWithRetry"
+        },
+        {
+          "type": "file",
+          "path": "src/routes/webhook.route.ts",
+          "line": 625,
+          "contains": "void logOutboundMessageWithRetry({"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-13"
+    },
+    "API-04": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "test",
+          "path": "tests/unit/api04-admin-session-tenant.test.ts",
+          "contains": "cookie session tenant-b mengalahkan header tenant-a"
+        },
+        {
+          "type": "file",
+          "path": "src/services/admin-session.service.ts",
+          "line": 244,
+          "contains": "tenantId: valid.tenantId"
+        },
+        {
+          "type": "file",
+          "path": "src/routes/admin.route.ts",
+          "line": 161,
+          "contains": "(request as any).tenantId = validSession.tenantId || resolveSessionTenantId(request);"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-13"
     }
   },
   "known": {
@@ -2404,21 +2476,9 @@
       "justification": "Tech debt struktural (620 baris), bukan bug fungsional; tidak ada risiko data/keamanan langsung.",
       "acceptance": "Pecah saat file disentuh untuk perubahan berikutnya, atau jika melewati 800 baris."
     },
-    "ING-09": {
-      "justification": "Kegagalan logging pesan outbound admin hanya mengurangi jejak audit; pengiriman pesan tidak bergantung pada log ini.",
-      "acceptance": "Pindahkan ke outbox saat audit trail admin menjadi kebutuhan compliance."
-    },
     "ING-10": {
       "justification": "Duplikasi pipeline WAHA/WABA adalah tech debt; kedua jalur sudah punya guard dan test sendiri.",
       "acceptance": "Satukan sebelum menambah channel ketiga."
-    },
-    "API-04": {
-      "justification": "AdminSession belum punya tenant_id dan bergantung pada header x-tenant-id; diterima sementara untuk deployment single-tenant.",
-      "acceptance": "Tambahkan tenant_id + verifikasi kepemilikan sebelum onboarding tenant kedua."
-    },
-    "SM-02": {
-      "justification": "Mekanisme data-driven sudah ada tetapi inert (0 pemanggil produksi), sehingga tidak dapat diverifikasi lewat perilaku.",
-      "acceptance": "Hapus dead code saat file disentuh berikutnya, atau sambungkan ke pemanggil nyata bila header form tenant diaktifkan."
     },
     "C-006": {
       "justification": "Membutuhkan log RAG runtime produksi untuk membuktikan lisensi jawaban umum; tidak dapat diverifikasi offline.",

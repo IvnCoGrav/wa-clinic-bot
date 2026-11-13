@@ -256,6 +256,18 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 
 - **Gerbang regresi W10:** 7.448 test / 7.418 lulus / 2 gagal pre-existing #287 (0 regresi vs W9). Dijalankan dengan `--minWorkers 1 --maxWorkers 2` karena concurrency default memicu flake timeout pada `media-mime-audio`/`live-chat-reply`/`waha-webhook` (semua lulus saat dijalankan sendiri). `tsc` 0 error; `build` root exit 0; `verify:backlog` PASS (89 item); `security:scan` LULUS 2.333 file; **dashboard build (tsc+vite) sukses**.
 
+### 0.44 W17 — tutup 3 KNOWN yang bisa dikerjakan (2026-11-13)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **SM-02** | Header form tenant benar-benar data-driven: cache-miss memicu warm-up DB `Tenant.settings.formHeaders` (sekali per tenant, fail-open) | `tests/unit/sm02-tenant-form-headers.test.ts` (3) |
+| **ING-09** | Log outbound admin retry 3x (backoff 200/400 ms), tidak menelan error sekali | `tests/unit/ing09-outbound-log-retry.test.ts` (2) |
+| **API-04** | `AdminSession.tenant_id` + migrasi `20261113120000_api04_admin_session_tenant`; tenant sesi jadi otoritas (header klien tidak bisa memindahkan tenant). Diverifikasi di Postgres 16 ephemeral (drift *empty*) | `tests/unit/api04-admin-session-tenant.test.ts` (2) |
+
+- **Sisa KNOWN:** `DOM-02` (file 620 baris), `ING-10` (duplikasi pipeline ingress WAHA/WABA), `C-006` (butuh log RAG runtime), `C-002` (butuh dump DB produksi).
+- **Register:** **259 FIXED / 0 OPEN / 0 UNVERIFIED / 4 KNOWN / 5 DUPLICATE**.
+- **Gerbang regresi W17:** 7.472 test / 7.442 lulus / 2 gagal pre-existing #287 (0 regresi vs W16). `tsc` 0; `build` 0; `verify:backlog` PASS (101 item); `security:scan` LULUS 2.350 file; migrasi API-04 diverifikasi di Postgres ephemeral (drift *empty*).
+
 ### 0.43 W16 — penutupan 5 item dashboard + Gate F4 (2026-11-13)
 
 | ID | Perbaikan | Bukti test |

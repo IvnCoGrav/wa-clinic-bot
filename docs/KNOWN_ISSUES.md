@@ -152,6 +152,13 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - Register menjadi **239 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 16 OPEN**.
   - **Batas yang diketahui:** bila Redis mati, KV jatuh ke memori per proses sehingga sweep kembali hanya melihat sesi prosesnya sendiri (perilaku lama); TTL record 2 jam, jadi sesi yang berhenti dikirim akan hilang otomatis.
 
+- **Tindakan W17 (2026-11-13) — 3 KNOWN ditutup:**
+  - **SM-02:** header form tenant dimuat dari DB saat cache-miss (warm-up latar sekali per tenant), sehingga `isReservationFormMessage` mengenali template kustom tenant.
+  - **ING-09:** log outbound admin dicoba ulang 3x dengan backoff singkat; kegagalan terakhir dicatat, tidak pernah melempar.
+  - **API-04:** `admin_sessions.tenant_id` ditambahkan (migrasi `20261113120000_api04_admin_session_tenant`); preHandler memakai tenant sesi sehingga header `x-tenant-id` klien tidak bisa memindahkan sesi ke tenant lain.
+  - **Sisa KNOWN:** `DOM-02`, `ING-10`, `C-006`, `C-002` (acceptance criteria tetap berlaku).
+  - Register menjadi **259 FIXED / 0 OPEN / 0 UNVERIFIED / 4 KNOWN / 5 DUPLICATE**.
+
 - **Tindakan W16 (2026-11-13) — 5 item dashboard selesai + Gate F4 terpenuhi:**
   - **S-02:** outbox gagal memakai `sessionStorage` (TTL 2 jam), gambar tidak dipersist, dan dibersihkan saat logout.
   - **S-06:** warm-up GPS berjalan hanya setelah consent eksplisit; cache lokasi dihapus saat berhenti.

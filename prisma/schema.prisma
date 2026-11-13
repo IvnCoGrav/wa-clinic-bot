@@ -1062,11 +1062,14 @@ model AdminSession {
   id             String    @id @default(uuid())
   token_hash     String    @unique
   admin_identity String    @default("System Admin")
+  /// API-04: tenant pemilik sesi; otoritas server, bukan header klien.
+  tenant_id      String    @default("default-tenant")
   created_at     DateTime  @default(now())
   expires_at     DateTime
   revoked_at     DateTime?
 
   @@index([token_hash])
+  @@index([tenant_id])
   @@map("admin_sessions")
 }
 

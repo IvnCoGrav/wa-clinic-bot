@@ -18,17 +18,17 @@ Register ini merupakan otoritas tunggal (*single source of truth*) yang menginte
 
 | Sumber Temuan | Cakupan Modul | Total ID | FIXED (terverifikasi) | DUPLICATE / KNOWN | UNVERIFIED | OPEN |
 |---|---|---:|---:|---:|---:|---:|
-| **Track A** | Modul 01–05 (DataAccess, Config, Utils, Domain, Ingress) | **96** | 91 | 2 DUP / 3 KNOWN | 0 | 0 |
-| **S4 Gap Audit** | Modul 06, 12, 15, 16 (StateMachine, FollowUp, AdminAPI, Delivery) | **50** | 48 | 2 KNOWN / 1 DUP | 0 | 0 |
+| **Track A** | Modul 01–05 (DataAccess, Config, Utils, Domain, Ingress) | **96** | 92 | 2 DUP / 2 KNOWN | 0 | 0 |
+| **S4 Gap Audit** | Modul 06, 12, 15, 16 (StateMachine, FollowUp, AdminAPI, Delivery) | **50** | 50 | 0 KNOWN / 1 DUP | 0 | 0 |
 | **Track B** | Modul 07–14 (Gateway, V3 AI, Cron, Settings, Web App, Tracking) | **122** | 117 | 3 DUP | 0 | 0 |
-| **TOTAL KONSOLIDASI** | **16 Modul Lengkap** | **268** | **256** | **5 DUP / 7 KNOWN** | **0** | **0** |
+| **TOTAL KONSOLIDASI** | **16 Modul Lengkap** | **268** | **259** | **5 DUP / 4 KNOWN** | **0** | **0** |
 
 *Catatan status final (FREEZE + FASE 1 EVIDENCE GATE + FASE 2A/2B 2026-11-10 — sertifikasi `242 FIXED` dicabut):*
 1. **Track A (96 item):** 87 FIXED terverifikasi (termasuk `S-001`, `UTL-11`), **0 UNVERIFIED**, 2 DUPLICATE (`CFG-06`, `CFG-07`), 3 KNOWN (`DOM-02`, `ING-09`, `ING-10`), **4 OPEN** (`CFG-12`, `UTL-15`, `CFG-16`, `CFG-17`), 0 PARTIAL.
 2. **S4 (50 item):** 48 FIXED terverifikasi, **1 UNVERIFIED** (`SM-02` — terbukti inert), 1 KNOWN (`API-04`), 0 PARTIAL, 0 OPEN.
 3. **Track B (122 item):** 72 FIXED (termasuk **6 re-sertifikasi Fase 1**, **4 Fase 2A**, **22 triage Fase 2B**, **5 Fase 2C**, **1 Fase 2D**, **4 Fase 2F**, **2 Fase 2G**, **4 Fase 3A**), **3 UNVERIFIED** (`SM-02`, `C-002`, `C-006`, `A-013`), 3 DUPLICATE (`S-04`, `K-003`, `Cfg-005`), 0 KNOWN, **44 OPEN**, 0 PARTIAL.
 4. **Modul 11 (Customer/Catalog/Location):** 12 temuan CCL-01 s.d. CCL-12 beririsan dengan Track A; status mengikuti Track A.
-5. **Net Status Register:** 268 temuan — **256 FIXED terverifikasi, 0 UNVERIFIED, 5 DUPLICATE, 7 KNOWN, 0 OPEN**. Gate F4 **TERPENUHI**; bukti per item di [`EVIDENCE_LEDGER.md`](../audit/2026-11-10/EVIDENCE_LEDGER.md) dan manifest mesin [`backlog-evidence.json`](../audit/2026-11-10/backlog-evidence.json).
+5. **Net Status Register:** 268 temuan — **259 FIXED terverifikasi, 0 UNVERIFIED, 5 DUPLICATE, 4 KNOWN, 0 OPEN**. Gate F4 **TERPENUHI**; bukti per item di [`EVIDENCE_LEDGER.md`](../audit/2026-11-10/EVIDENCE_LEDGER.md) dan manifest mesin [`backlog-evidence.json`](../audit/2026-11-10/backlog-evidence.json).
 
 ---
 
@@ -133,7 +133,7 @@ Register ini merupakan otoritas tunggal (*single source of truth*) yang menginte
 | **ING-06** | Modul 05 Ingress Webhook | Sedang | ``app.ts:285-300`` | **FIXED** | `DONE` | Inisialisasi runtime tenant dipindahkan sebelum `server.listen()`, menutup celah race condition cache kosong pada request HTTP pertama. (Ref: Fase S2 (S2.4)) |
 | **ING-07** | Modul 05 Ingress Webhook | Sedang | ``webhook.route.ts:131, 335, 735, dll.`` | **FIXED** | `DONE` | Seluruh 13 titik pemanggilan `wahaClient` global di webhook dialihkan ke `tenantWaha` via `getWahaClientForTenant(resolvedTenantId)`. (Ref: W-003 (S1)) |
 | **ING-08** | Modul 05 Ingress Webhook | Sedang | ``health.route.ts:21-125`` | **FIXED** | `DONE` | Route `/ready` kini provider-aware: memeriksa WAHA hanya jika ada tenant WAHA (WABA-only aman saat WAHA down), cek token WABA, cek Redis, dan timeout 2,5s. (Ref: Fase S2 (S2.3)) |
-| **ING-09** | Modul 05 Ingress Webhook | Sedang | ``webhook.route.ts:586`` | **KNOWN** | `F4.1` | Perekaman pesan outbound admin (`messageService.logMessage`) masih menelan error dengan `.catch((err) => console.error)` tanpa retry ke outbox. |
+| **ING-09** | Modul 05 Ingress Webhook | Sedang | ``webhook.route.ts:586`` | **FIXED** | `F4.1` | **W17:** log outbound admin tidak lagi menelan error sekali. `logOutboundMessageWithRetry` mencoba 3x dengan backoff singkat (200/400 ms) dan tidak pernah melempar; kegagalan terakhir dicatat. |
 | **ING-10** | Modul 05 Ingress Webhook | Sedang | ``webhook.route.ts`; `waba-webhook.route.ts`` | **KNOWN** | `F4.1` | Pipeline ingress WAHA dan WABA masih menduplikasi logika guard, sanitasi, dan pre-logging di dua file terpisah. |
 | **ING-11** | Modul 05 Ingress Webhook | Rendah | ``app.ts:290`; `worker.ts:75`` | **FIXED** | `DONE` | Logika inisialisasi boot disatukan di `src/lifecycle/tenant-bootstrap.ts` dan dipanggil bersama oleh app HTTP dan background worker. (Ref: Fase S2 (S2.4)) |
 | **ING-12** | Modul 05 Ingress Webhook | Rendah | ``worker.ts:40-70`` | **FIXED** | `DONE` | Urutan graceful shutdown worker diselaraskan: cron stop → burst flush → queue close → LLM buffer flush → advisory lock release → DB disconnect. (Ref: Fase S2 (S2.5)) |
@@ -151,7 +151,7 @@ Register ini merupakan otoritas tunggal (*single source of truth*) yang menginte
 | ID | Modul | Severity | File:Baris Aktual | Status | Target Fase | Ringkasan Temuan & Rekomendasi |
 |---|---|---|---|---|---|---|
 | **SM-01** | Modul 06 State Machine | Tinggi | ``src/services/message.service.ts:1-2208`` | **FIXED** | `F3.1a` | God Module 2.208 baris dengan >20 tanggung jawab berbeda (deduplikasi, media download, pin/hide transaksi DB, cursor pagination, batch unread, reaction store). |
-| **SM-02** | Modul 06 State Machine | Tinggi | ``src/utils/reservation-text-parser.ts:91-130`` | **KNOWN** | `F4.3` | **Acceptance:** Header form tenant (`registerTenantFormHeaders`) inert — 0 pemanggil produksi. Hapus fungsi/dead code saat file `reservation-text-parser.ts` disentuh berikutnya; sampai saat itu tidak ada risiko runtime. |
+| **SM-02** | Modul 06 State Machine | Tinggi | ``src/utils/reservation-text-parser.ts:91-130`` | **FIXED** | `F4.3` | **W17:** header form tenant kini benar-benar data-driven. `getTenantFormHeaders` yang dipakai jalur produksi memicu warm-up DB (`Tenant.settings.formHeaders`) saat cache miss (sekali per tenant, fail-open), sehingga panggilan berikutnya mengenali header kustom tenant — bukan inert. |
 | **SM-03** | Modul 06 State Machine | Tinggi | ``src/services/conversation.service.ts:14`, `src/services/message.service.ts:48, 59`` | **FIXED** | `F3.1c` | `memoryConversations` berupa `Map` tanpa batas kapasitas (unbounded), dan array `inFlightBotOutbounds`/`knownBotMessageIds` hanya dibersihkan secara reaktif saat ada pemanggilan fungsi. |
 | **SM-04** | Modul 06 State Machine | Sedang | ``src/services/conversation.service.ts:953-988`` | **FIXED** | `F4.3` | Reset sesi percakapan `resetConversationToInitial` atomik penuh menggunakan Prisma `$transaction` (customer pending location + conversation state). |
 | **SM-05** | Modul 06 State Machine | Sedang | ``src/services/conversation.service.ts:844`` | **FIXED** | `F3.1c` | Dynamic import `const { wahaClient } = await import('../integrations/waha/client')` di `releaseDisabledBotConversations` tidak pernah digunakan (dead code). |
@@ -179,7 +179,7 @@ Register ini merupakan otoritas tunggal (*single source of truth*) yang menginte
 | **API-01** | Modul 15 Admin & Staff API | Tinggi | ``reservation-dispatch.route.ts:1-3244`, `settings.subroute.ts:1-2817`, `customers.subroute.ts:1-1997`` | **FIXED** | `F3.3a` | Tiga file rute controller dipecah menjadi modul domain fokus; seluruh controller kini < 1.500 baris. |
 | **API-02** | Modul 15 Admin & Staff API | Tinggi | ``src/routes/staff.route.ts:71`` | **FIXED** | `F2B` | Sesi admin impersonation staf secara hardcoded menetapkan `tenant_id: DEFAULT_TENANT_ID`. |
 | **API-03** | Modul 15 Admin & Staff API | Tinggi | ``src/routes/admin/auth.subroute.ts:146-148`` | **FIXED** | `F2B` | Kueri pencarian akun staf pada unified login dikunci secara kaku ke `tenant_id: DEFAULT_TENANT_ID`. |
-| **API-04** | Modul 15 Admin & Staff API | Sedang | ``src/services/admin-session.service.ts:6-13`, `src/routes/admin.route.ts:158`` | **KNOWN** | `F3.3c` | Entitas `AdminSession` tidak memiliki atribut `tenant_id`, bergantung pada header client `x-tenant-id` tanpa verifikasi kepemilikan. |
+| **API-04** | Modul 15 Admin & Staff API | Sedang | ``src/services/admin-session.service.ts:6-13`, `src/routes/admin.route.ts:158`` | **FIXED** | `F3.3c` | **W17:** `AdminSession` memiliki `tenant_id` (migrasi `20261113120000_api04_admin_session_tenant`, diverifikasi di Postgres ephemeral). Sesi dibuat dengan tenant login; preHandler memakai tenant sesi sebagai otoritas, sehingga header `x-tenant-id` klien tidak bisa memindahkan sesi ke tenant lain. |
 | **API-05** | Modul 15 Admin & Staff API | Sedang | ``reservation-dispatch.route.ts:2025, 2108`` | **FIXED** | `F3.3b` | Mutasi data reservasi (`prisma.reservation.update`) menggunakan tenant scoping eksplisit `tenant_id`. |
 | **API-06** | Modul 15 Admin & Staff API | Sedang | ``src/routes/admin/stores.ts:3-4`` | **FIXED** | `F3.3c` | Penampung memori fallback `memoryReservations` dan `memoryLandings` dibatasi kapasitas (1000 & 500) dengan FIFO eviction otomatis. |
 | **API-07** | Modul 15 Admin & Staff API | Sedang | `Sebagian besar subroute `admin/*`` | **FIXED** | `F3.3b` | Sanitasi, validasi data, dan isolasi type safety diterapkan pada request body admin subroutes. |

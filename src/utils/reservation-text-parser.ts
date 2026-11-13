@@ -101,6 +101,7 @@ export const DEFAULT_FORM_HEADER_SIGNALS: readonly string[] = [
 ];
 
 const tenantFormHeadersCache = new Map<string, { headers: string[]; expiresAt: number }>();
+const tenantFormHeadersWarmInFlight = new Set<string>();
 
 /**
  * Mendaftarkan header template form dinamis per-tenant ke dalam cache in-memory (SM-02).
@@ -164,6 +165,16 @@ export function getTenantFormHeaders(tenantId?: string): string[] {
   const cached = tenantFormHeadersCache.get(tenantId);
   if (cached && cached.expiresAt > Date.now()) {
     return [...DEFAULT_FORM_HEADER_SIGNALS, ...cached.headers];
+  }
+  // SM-02: cache miss → muat header tenant dari DB di latar (sekali per tenant).
+  // Panggilan saat ini memakai default; panggilan berikutnya sudah data-driven.
+  if (!tenantFormHeadersWarmInFlight.has(tenantId)) {
+    tenantFormHeadersWarmInFlight.add(tenantId);
+    void getTenantFormHeadersAsync(tenantId)
+      .catch(() => {
+        /* DB offline → default tetap berlaku */
+      })
+      .finally(() => tenantFormHeadersWarmInFlight.delete(tenantId));
   }
   return [...DEFAULT_FORM_HEADER_SIGNALS];
 }

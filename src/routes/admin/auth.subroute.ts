@@ -115,7 +115,10 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
       loginAttemptsMap.delete(ip);
       if (identifier) resetAccountLockout(identifier);
 
-      const session = await AdminSessionService.createSession(body.adminIdentity || identifier || 'Super Admin');
+      const session = await AdminSessionService.createSession(
+        body.adminIdentity || identifier || 'Super Admin',
+        resolveSessionTenantId(request)
+      );
       const cookieValue = `admin_session=${session.token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${adminCookieMaxAgeSec()}${
         isSecureRequest ? '; Secure' : ''
       }`;
@@ -305,8 +308,8 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
           email: getAdminEmail(),
           name: adminSession.adminIdentity,
           role: 'super_admin',
-          tenantId: resolveSessionTenantId(request),
-          copilotEnabled: isCopilotTenantAllowed(resolveSessionTenantId(request)),
+          tenantId: adminSession.tenantId || resolveSessionTenantId(request),
+          copilotEnabled: isCopilotTenantAllowed(adminSession.tenantId || resolveSessionTenantId(request)),
         },
       });
     }
