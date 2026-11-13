@@ -19,7 +19,7 @@
 | Baseline historis beku | 158 FIXED |
 | Full suite terakhir | **7.475 test / 7.445 lulus / 2 gagal pre-existing (#287)** |
 
-**Gate F4 TERPENUHI**: 0 OPEN, 0 UNVERIFIED. Produksi tetap diblokir hanya sampai 2 migrasi Ar-004 diterapkan & diverifikasi di staging.
+**Gate F4 TERPENUHI**: 0 OPEN, 0 UNVERIFIED. Produksi tetap diblokir hanya sampai migrasi pending (4 di atas baseline `f306d6af^`) diterapkan & diverifikasi di staging.
 
 ---
 
@@ -49,12 +49,13 @@ Tidak ada temuan OPEN/UNVERIFIED. Tiga item KNOWN tersisa adalah tech debt yang 
 
 ## 4. Satu Langkah Operasional Tersisa (bukan temuan audit)
 
-Semua temuan sudah tertutup. Yang tersisa hanya **penerapan 3 migrasi** (2 Ar-004 + API-04) di staging/produksi:
+Semua temuan sudah tertutup. Yang tersisa hanya **penerapan migrasi pending** di staging/produksi. Sejak baseline `f306d6af^` ada **4 migrasi** yang wajib masuk berurutan (Ar-004 staff/adclick, Ar-004 landing slug, heatmap index, API-04):
 
 1. Backup: `pg_dump "$env:DATABASE_URL" > backup_pre_ar004.sql`
 2. `npx prisma migrate deploy` (staging → produksi)
 3. Drift check: `npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script` → harus `-- This is an empty migration.`
 4. Deploy kode **setelah** migrasi (Prisma upsert membutuhkan index komposit; `admin_sessions.tenant_id` dipakai API-04).
 
-Dokumen rencana migrasi: `docs/plans/MIGRATION_PLAN_AR004_2026-11-12.md`.
+Verifikasi terpadu (Postgres 16 ephemeral, deploy 4 migrasi + drift + uji constraint): `docs/audit/2026-11-13/MIGRATION_VERIFY_W18.log` → **PASS**.
+Dokumen rencana + rollback: `docs/plans/MIGRATION_PLAN_AR004_2026-11-12.md` (§8).
 Batas & tech debt: `docs/KNOWN_ISSUES.md`. Peta fitur: `docs/FEATURE_INVENTORY.md`.

@@ -266,6 +266,7 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Register:** **260 FIXED / 0 OPEN / 0 UNVERIFIED / 3 KNOWN / 5 DUPLICATE**.
 - **Perbaikan hermetik test (bukan regresi W18):** `tests/unit/queue.test.ts` FIFO gagal karena Redis lokal aktif menyimpan jobId deterministik lama (`job_628123456789_msg_1..5`, dibuat 2026-09-09, tanpa `finishedOn`) sehingga `queue.add()` menjadi no-op (dedup BullMQ) → `processMessage` 0 panggilan. Terbukti: 11/11 lulus saat Redis tidak terjangkau (`REDIS_PORT=6399`). Test kini memaksa jalur in-memory di `beforeAll` (kontrak `forceDisconnectRedis` + `close`) dan memakai `vi.waitFor` (bukan timer 600/300 ms); 11/11 lulus berulang dengan Redis lokal aktif.
 - **Gerbang regresi W18:** 7.475 test / 7.445 lulus / 2 gagal pre-existing #287 (0 regresi vs W17). `tsc` 0; `build` 0; `verify:backlog` PASS (102 item); `security:scan` LULUS.
+- **Verifikasi migrasi terpadu (W18, Postgres 16 ephemeral):** keempat migrasi di atas baseline `f306d6af^` (`20261112130000_ar004_*`, `20261113100000_ar004_landing_slug_per_tenant`, `20261113120000_add_reservation_heatmap_index`, `20261113120000_api04_admin_session_tenant`) diterapkan berurutan via `migrate deploy` → sukses; drift `--from-url` → *empty migration*; 11 assertion skema OK; uji adversarial unique lintas/sama tenant & default `admin_sessions.tenant_id` sesuai harapan. Artefak: [`MIGRATION_VERIFY_W18.log`](../2026-11-13/MIGRATION_VERIFY_W18.log).
 
 ### 0.44 W17 — tutup 3 KNOWN yang bisa dikerjakan (2026-11-13)
 

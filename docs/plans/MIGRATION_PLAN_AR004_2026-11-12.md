@@ -185,3 +185,49 @@ atau
 > **"Setuju eksekusi Ar-004 staging + produksi, jendela <maintenance>."**
 
 Tanpa kalimat itu, migrasi tetap **BELUM DITERAPKAN** di lingkungan Anda dan produksi tetap diblokir.
+
+---
+
+## 8. Paket Deploy Penuh — 4 Migrasi di Atas Baseline (W18, 2026-11-13)
+
+Baseline verifikasi = commit `f306d6af^` (tepat sebelum migrasi Ar-004 pertama). Empat migrasi berikut wajib diterapkan berurutan (urutan folder) — `prisma migrate deploy` otomatis memilih yang masih pending di environment Anda:
+
+| # | Migrasi | Isi | Dampak data |
+|---|---|---|---|
+| 1 | `20261112130000_ar004_tenant_scoped_unique_staff_adclick` | unique `staff(tenant_id, phone)` + `ad_clicks(tenant_id, trackingCode)`; drop unique global | melonggarkan (global ⊃ komposit) → data lama pasti lolos |
+| 2 | `20261113100000_ar004_landing_slug_per_tenant` | unique `landing_pages(tenant_id, slug)` | idem |
+| 3 | `20261113120000_add_reservation_heatmap_index` | index `reservations(tenant_id, status, booking_date)` | aditif, mempercepat analitik heatmap |
+| 4 | `20261113120000_api04_admin_session_tenant` | kolom `admin_sessions.tenant_id` (NOT NULL, default `default-tenant`) + index | sesi lama otomatis `default-tenant`; tenant jadi otoritas server |
+
+**Bukti verifikasi terpadu:** [`docs/audit/2026-11-13/MIGRATION_VERIFY_W18.log`](../audit/2026-11-13/MIGRATION_VERIFY_W18.log) — Postgres 16 ephemeral, database terpisah `migverify_w18` (dibuat & dihapus dalam run; tidak menyentuh DB dev/produksi).
+
+| Uji | Hasil |
+|---|---|
+| `npx prisma migrate deploy` | **sukses**, 4 migrasi diterapkan berurutan |
+| Drift `--from-url` vs `schema.prisma` | `-- This is an empty migration.` |
+| 11 assertion skema (index/kolom/default) | **semua OK** (unique komposit ada, unique global hilang, kolom `admin_sessions.tenant_id` NOT NULL default `default-tenant`) |
+| Staf: nomor sama di dua tenant | diterima (2 baris) |
+| Staf: nomor sama di tenant yang sama | ditolak `staff_tenant_id_phone_key` |
+| Landing: slug sama di dua tenant | diterima (2 baris) |
+| Landing: slug sama di tenant yang sama | ditolak `landing_pages_tenant_id_slug_key` |
+| `admin_sessions` insert tanpa `tenant_id` | otomatis `default-tenant` |
+
+### Rollback (urutan terbalik)
+
+```sql
+-- 4) API-04 (kembalikan kode lama LEBIH DULU agar API tidak membaca kolom yang hilang)
+DROP INDEX IF EXISTS "admin_sessions_tenant_id_idx";
+ALTER TABLE "admin_sessions" DROP COLUMN IF EXISTS "tenant_id";
+-- 3) heatmap
+DROP INDEX IF EXISTS "reservations_tenant_id_status_booking_date_idx";
+-- 2) landing slug
+DROP INDEX IF EXISTS "landing_pages_tenant_id_slug_key";
+CREATE UNIQUE INDEX "landing_pages_slug_key" ON "landing_pages"("slug");
+-- 1) staff & adclick
+DROP INDEX IF EXISTS "staff_tenant_id_phone_key";
+DROP INDEX IF EXISTS "ad_clicks_tenant_id_trackingCode_key";
+CREATE UNIQUE INDEX "staff_phone_key" ON "staff"("phone");
+CREATE UNIQUE INDEX "ad_clicks_trackingCode_key" ON "ad_clicks"("trackingCode");
+```
+
+> Rollback unique global akan **gagal** bila sudah ada data duplikat lintas tenant yang baru dibuat setelah migrasi. Dalam kondisi itu, pulihkan dari backup pra-migrasi (langkah M0).
