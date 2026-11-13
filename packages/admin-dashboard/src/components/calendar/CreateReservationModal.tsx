@@ -1722,6 +1722,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
             purchaseValue: Math.max(0, subtotalTreatments - (Number(discount) || 0)),
             assignedStaffId: assignedStaffId || undefined,
             notes: notes.trim() || undefined,
+            customerAddressId: customerAddressId || undefined,
             babies: formBabies,
             sessions: multiSessionSchedule.map((s) => ({
               sessionNumber: s.sessionNumber,
