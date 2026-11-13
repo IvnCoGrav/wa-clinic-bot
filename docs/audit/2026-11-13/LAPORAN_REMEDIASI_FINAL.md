@@ -2,7 +2,7 @@
 
 > **Tanggal:** 2026-11-13
 > **Sumber kebenaran status:** `docs/plans/REMAINING_BACKLOG_2026-11-09.md` + `docs/audit/2026-11-10/backlog-evidence.json`
-> **Gerbang bukti:** `npm run verify:backlog` → **PASS** (91 item FIXED baru ber-bukti)
+> **Gerbang bukti:** `npm run verify:backlog` → **PASS** (98 item FIXED baru ber-bukti)
 
 ---
 
@@ -17,7 +17,7 @@
 | KNOWN (ber-justifikasi) | 7 |
 | **OPEN** | **0** |
 | Baseline historis beku | 158 FIXED |
-| Full suite terakhir | **7.456 test / 7.426 lulus / 2 gagal pre-existing (#287)** |
+| Full suite terakhir | **7.465 test / 7.435 lulus / 2 gagal pre-existing (#287)** |
 
 **Gate F4 TERPENUHI**: 0 OPEN, 0 UNVERIFIED. Produksi tetap diblokir hanya sampai 2 migrasi Ar-004 diterapkan & diverifikasi di staging.
 
@@ -32,6 +32,8 @@
 | W12 | `9dc84a50` | `Ar-004` | `LandingPage.slug` per tenant + resolusi landing via host/`?tenant=`; migrasi diverifikasi di Postgres ephemeral |
 | W13 | `9337b671` | `S-011` | Token admin keluar dari `localStorage`; cookie HttpOnly + TTL 7 hari; CSP diperketat |
 | W14 | `d0bcee2e` | `Ar-003` (sebagian) | Ekspor chat harian untuk semua tenant; kegagalan satu tenant tidak menghentikan tenant lain |
+| W15 | `febbc4fd` | `Ar-003` | Filter tenant hardcode produksi = 0; guard regresi ditambahkan |
+| W16 | `4655bab4` | `S-02`, `S-06`, `S-08`, `S-09`, `Cfg-015`, `A-013` | Outbox PII, consent GPS, ambang tenant, status jujur, brand dashboard; reklasifikasi 3 item ke KNOWN |
 
 Gelombang sebelumnya (W1–W9) mencakup reliability, AbortSignal, humanizer struktural, kuota/circuit per tenant, endpoint setelan tenant, Google Calendar/Contacts, degradasi DB jujur, artefak audit, rekonsiliasi dokumen, secret WAHA per tenant, trip lintas proses, dan tenant seam worker/debug.
 
@@ -43,10 +45,14 @@ Tidak ada lagi temuan OPEN/UNVERIFIED. Tujuh item KNOWN adalah tech debt yang ti
 
 ---
 
-## 4. Yang Dibutuhkan untuk Menuntaskan
+## 4. Satu Langkah Operasional Tersisa (bukan temuan audit)
 
-1. **Commit/push** `StaffToday.tsx`, `useStaffFailedOutbox.ts`, dan perubahan `reservation-address-sync.*` → saya lanjut `S-02`/`S-06`/`S-08`/`S-09` + sisa `Cfg-015`.
-3. **Deploy migrasi** (2 migrasi Ar-004) di staging/produksi: `prisma migrate deploy` **sebelum** kode, lalu drift check `--from-url` harus *empty*.
+Semua temuan sudah tertutup. Yang tersisa hanya **penerapan 2 migrasi Ar-004** di staging/produksi:
+
+1. Backup: `pg_dump "$env:DATABASE_URL" > backup_pre_ar004.sql`
+2. `npx prisma migrate deploy` (staging → produksi)
+3. Drift check: `npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script` → harus `-- This is an empty migration.`
+4. Deploy kode **setelah** migrasi (Prisma upsert membutuhkan index komposit).
 
 Dokumen rencana migrasi: `docs/plans/MIGRATION_PLAN_AR004_2026-11-12.md`.
 Batas & tech debt: `docs/KNOWN_ISSUES.md`. Peta fitur: `docs/FEATURE_INVENTORY.md`.
