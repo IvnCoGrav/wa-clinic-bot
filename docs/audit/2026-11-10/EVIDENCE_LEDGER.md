@@ -256,6 +256,16 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 
 - **Gerbang regresi W10:** 7.448 test / 7.418 lulus / 2 gagal pre-existing #287 (0 regresi vs W9). Dijalankan dengan `--minWorkers 1 --maxWorkers 2` karena concurrency default memicu flake timeout pada `media-mime-audio`/`live-chat-reply`/`waha-webhook` (semua lulus saat dijalankan sendiri). `tsc` 0 error; `build` root exit 0; `verify:backlog` PASS (89 item); `security:scan` LULUS 2.333 file; **dashboard build (tsc+vite) sukses**.
 
+### 0.42 W15 — penutupan Ar-003 + guard filter tenant (2026-11-13)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **Ar-003** | Jalur produksi bebas filter `tenant_id: DEFAULT_TENANT_ID` (sisa 3 baris = fallback default/seed: labels memori, konten landing default, template retensi). Handler admin/staff memakai seam tenant sesi; worker sweep memproses semua tenant. Guard baru menolak filter hardcode tambahan | `tests/unit/ar003-tenant-filter-guard.test.ts` (2) |
+
+- **Keputusan desain:** default parameter `tenantId = DEFAULT_TENANT_ID` dipertahankan untuk single-tenant/CLI; pemanggil produksi WAJIB mengirim tenant eksplisit (dijaga guard + test per domain W1–W15).
+- **Register:** **250 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 5 OPEN**.
+- **Gerbang regresi W15:** 7.456 test / 7.426 lulus / 2 gagal pre-existing #287 (0 regresi vs W14). `tsc` 0; `build` 0; `verify:backlog` PASS (92 item); `security:scan` LULUS 2.345 file.
+
 ### 0.41 W14 — ekspor chat harian semua tenant (Ar-003, 2026-11-13)
 
 | ID | Perbaikan | Bukti test |

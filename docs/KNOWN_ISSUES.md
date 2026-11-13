@@ -152,6 +152,12 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - Register menjadi **239 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 16 OPEN**.
   - **Batas yang diketahui:** bila Redis mati, KV jatuh ke memori per proses sehingga sweep kembali hanya melihat sesi prosesnya sendiri (perilaku lama); TTL record 2 jam, jadi sesi yang berhenti dikirim akan hilang otomatis.
 
+- **Tindakan W15 (2026-11-13) — Ar-003 selesai:**
+  - Filter DB hardcode `tenant_id: DEFAULT_TENANT_ID` di jalur produksi = **0**; sisa 3 baris adalah fallback default/seed (label memori saat DB offline, konten landing default-tenant, template retensi yang ditimpa tenant saat dipakai).
+  - Guard `ar003-tenant-filter-guard.test.ts` menolak penambahan filter hardcode baru di `src/services`/`src/routes`.
+  - **Keputusan produk:** default parameter tetap ada untuk single-tenant/CLI, tetapi pemanggil produksi wajib mengirim tenant eksplisit. Bila nanti multi-tenant penuh diaktifkan, audit pemanggil per domain tetap disarankan.
+  - Register menjadi **250 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 5 OPEN**.
+
 - **Tindakan W14 (2026-11-13) — Ar-003 sebagian (ekspor chat harian):**
   - `runDailyChatExport` kini mengekspor percakapan untuk **semua tenant**; kegagalan satu tenant dicatat tanpa menghentikan tenant lain.
   - **Sisa Ar-003:** 264 referensi `DEFAULT_TENANT_ID` berupa default parameter yang sah, tetapi pemanggil per domain belum diaudit; keputusan fail-closed vs fallback masih diperlukan.

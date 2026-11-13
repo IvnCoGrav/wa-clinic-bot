@@ -2205,6 +2205,42 @@
       ],
       "verifiedBy": "AI Agent",
       "verifiedAt": "2026-11-13"
+    },
+    "Ar-003": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "test",
+          "path": "tests/unit/ar003-tenant-filter-guard.test.ts",
+          "contains": "filter tenant hardcode hanya ada di allowlist"
+        },
+        {
+          "type": "file",
+          "path": "src/routes/admin/route-helpers.ts",
+          "line": 18,
+          "contains": "export function resolveSessionTenantId"
+        },
+        {
+          "type": "file",
+          "path": "src/services/broadcast-queue.service.ts",
+          "line": 101,
+          "contains": "const { getAllTenantIds } = await import"
+        },
+        {
+          "type": "file",
+          "path": "src/services/cron.service.ts",
+          "line": 13,
+          "contains": "const { getAllTenantIds } = await import"
+        },
+        {
+          "type": "file",
+          "path": "docs/audit/2026-11-13/AR003_TENANT_INVENTORY.md",
+          "line": 16,
+          "contains": "Klasifikasi Bahaya"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-13"
     }
   },
   "known": {
