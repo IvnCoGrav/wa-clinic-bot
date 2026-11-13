@@ -65,6 +65,8 @@ services:
       # cron/sweep SELALU dijalankan container worker → app wajib skip agar
       # tidak eksekusi ganda. Dev lokal tanpa compose (npm run dev) tidak
       # terpengaruh karena memakai default kode (monolith).
+      # CATATAN (insiden antrean mati 2026-11-13): flag ini TIDAK mematikan
+      # konsumen chat; konsumen dikendalikan CHAT_CONSUMER_ENABLED (lihat worker).
       - SEPARATE_WORKER=true
     depends_on:
       postgres:
@@ -99,6 +101,9 @@ services:
       - NODE_ENV=production
       - NODE_OPTIONS=--max-old-space-size=512
       - SEPARATE_WORKER=true
+      # Insiden 2026-11-13: worker hanya produsen cron, BUKAN konsumen chat.
+      # App tetap konsumen walau SEPARATE_WORKER=true (flag dipisah).
+      - CHAT_CONSUMER_ENABLED=false
       - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/wa_clinic_db?schema=public&connection_limit=8&pool_timeout=15
       - ADMIN_API_KEY=${ADMIN_API_KEY}
       - WAHA_BASE_URL=${WAHA_BASE_URL:-http://waha:3000}

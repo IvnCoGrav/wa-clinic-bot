@@ -12,6 +12,24 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Rencana fondasional (belum dieksekusi):** tambahkan `delivery_fee` dan `discount_amount` ke `select` semua pembaca tugas staf (`getTodayTasks`, `getUpcomingSchedule`, `getCompletedTasks`, detail/briefing terkait), lalu tambahkan test yang mengunci “snapshot reservasi menang atas `Customer.ongkir`”. Jangan menambal di formatter.
 - **Bukti:** query produksi `delivery_fee=15000`; payload `getTodayTasks` menunjukkan `pricing.deliveryFee=10000`; `customer.ongkir=10000`; `customer_address.ongkir=10000`.
 
+## 330. [Queue] `SEPARATE_WORKER=true` Mematikan Konsumen Chat → Antrean Menumpuk (2026-11-13, RESOLVED)
+
+- **Status:** RESOLVED — deploy live 2026-11-13 ±15:00 WIB.
+- **Gejala:** container `app`/`worker` `Up` dan `/health` OK, tetapi tidak ada balasan bot; tabel `messages` terakhir 13:32 WIB; antrean BullMQ menumpuk **421 job** (32 >30 hari, 317 7–30 hari, 60 1–7 hari, 12 2 jam–1 hari).
+- **Akar masalah:** `shouldRunChatConsumers()` memakai `SEPARATE_WORKER !== 'true'`. Compose memasang `SEPARATE_WORKER=true` pada **app** (untuk melewati cron) **dan** worker → keduanya tidak membuat BullMQ Worker. Satu flag dipakai untuk dua tanggung jawab berbeda.
+- **Perbaikan fondasional:** flag dipisah — `SEPARATE_WORKER` hanya mengatur cron/sweep; konsumen chat dikendalikan `CHAT_CONSUMER_ENABLED` (default aktif, `false` hanya di container worker). Gerbang: `tests/unit/deploy-queue-consumer-config.test.ts` + kasus F1.1 di `tests/unit/queue.test.ts`.
+- **Pemulihan data:** 421 job lama diarsipkan ke `messages` (INBOUND, `isHistorical`, tanpa balasan otomatis) lalu dihapus dari antrean; 426 `inbound_turns` pending ditandai `FAILED` (`STALE_BACKLOG_ARCHIVED_20261113`) agar recovery tidak me-replay. Backup: `backups/pre_backlog_archive_20261113_145627.dump`.
+- **Catatan operasional:** pesan lama TIDAK dibalas otomatis (mencegah balasan berhari-hari terlambat); staf dapat melihatnya di Live Chat dan membalas manual bila perlu.
+- **Bukti deploy:** `docs/audit/2026-11-13/DEPLOY_LIVE_2026-11-13.md`.
+
+## 331. [Deploy] Web Push VAPID Wajib di Environment (2026-11-13, RESOLVED)
+
+- **Status:** RESOLVED — konfigurasi live dimigrasikan.
+- **Gejala:** app crash-loop `[WEB PUSH] VAPID_PUBLIC_KEY dan VAPID_PRIVATE_KEY wajib dikonfigurasi ... (fail-closed, plaintext storage file dilarang)`.
+- **Akar masalah:** kode baru di W10–W19 menolak `storage/vapid_keys.json` di produksi; `.env` live belum punya `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`.
+- **Perbaikan:** kunci dipindah dari `storage/vapid_keys.json` ke `.env` (backup `.env.bak-20261113-vapid`, chmod 600); container app/worker di-recreate. Downtime app ±7 menit.
+- **Pencegahan:** saat deploy baru, pastikan `.env` memuat `VAPID_PUBLIC_KEY` (87 char) & `VAPID_PRIVATE_KEY` (43 char).
+
 ## 327. [Data Quality] Booking Tanpa Jam Eksplisit Disimpan sebagai 09:00 WIB (2026-11-13, OPEN)
 
 - **Status:** OPEN — keterbatasan data, bukan bug fitur. Heatmap Treatment menampilkannya sebagai peringatan kualitas data (`quality.defaultedHourCount`) alih-alih menyembunyikannya.
