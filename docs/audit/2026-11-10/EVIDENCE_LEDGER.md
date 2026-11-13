@@ -256,6 +256,25 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 
 - **Gerbang regresi W10:** 7.448 test / 7.418 lulus / 2 gagal pre-existing #287 (0 regresi vs W9). Dijalankan dengan `--minWorkers 1 --maxWorkers 2` karena concurrency default memicu flake timeout pada `media-mime-audio`/`live-chat-reply`/`waha-webhook` (semua lulus saat dijalankan sendiri). `tsc` 0 error; `build` root exit 0; `verify:backlog` PASS (89 item); `security:scan` LULUS 2.333 file; **dashboard build (tsc+vite) sukses**.
 
+### 0.40 W13 — token admin keluar dari localStorage (S-011 selesai, 2026-11-13)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **S-011** | Login admin tidak lagi menulis token ke localStorage; sesi hanya cookie `HttpOnly admin_session`. `restoreSessionToken` memulihkan dari cookie (token body hanya untuk perangkat legacy). Umur cookie mengikuti `ADMIN_SESSION_TTL_HOURS` (default 7 hari). CSP `/admin/*` + Caddy: tanpa `unsafe-eval`, `object-src 'none'`, `base-uri`, `form-action` | `tests/unit/admin-session-hardening.test.ts` (7) + auth signal/manifest tests |
+
+- **Verifikasi:** `npm run build` dashboard (tsc+vite) sukses; auth tests 30 lulus.
+- **Register:** **249 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 6 OPEN**.
+
+### 0.39 W12 — LandingPage.slug per tenant & resolusi landing tenant-aware (Ar-004 selesai, 2026-11-13)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **Ar-004** | `LandingPage.slug` → `@@unique([tenant_id, slug])`; resolusi landing memakai `?tenant=` (terverifikasi DB) atau host `Tenant.landing_domain`; tanpa hint tetap slug-global. Migrasi `20261113100000_...` diverifikasi di Postgres 16 ephemeral (deploy sukses, drift *empty*, slug sama dua tenant diterima, duplikat satu tenant ditolak) | `tests/unit/landing-tenant-resolution.test.ts` (4) + `tests/unit/ar004-tenant-unique-schema.test.ts` (4) |
+
+- **Status register:** Ar-004 **FIXED** (kode + migrasi tervalidasi). **Deploy:** jalankan `prisma migrate deploy` SEBELUM kode di staging/produksi pengguna.
+- **Register:** **248 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 7 OPEN**.
+- **Gerbang regresi W12/W13:** 7.452 test / 7.422 lulus / 2 gagal pre-existing #287 (0 regresi vs W10, `--minWorkers 1 --maxWorkers 2`); `tsc` 0 error; root+dashboard build exit 0; `verify:backlog` PASS (91 item); `security:scan` LULUS 2.340 file.
+
 ### 0.38 W11 — brand dashboard data-driven & tenant header (Cfg-015 sebagian, 2026-11-13)
 
 - **Cfg-015 (sebagian):** `BrandContext` baru mengambil `businessName`/`botDisplayName` dari `GET /api/admin/settings` (sumber `Tenant.settings.brand`/kolom tenant) dengan fallback netral "Klinik". Layout (sidebar + header mobile), quick-chat template, MetaCapiQueue (origin), nama file ekspor, label/placeholder pengaturan tidak lagi memakai "Kala". `x-tenant-id` di `api.ts` diambil dari `last_auth_user` (user terautentikasi), bukan hardcode `default-tenant`.

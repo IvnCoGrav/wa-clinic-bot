@@ -66,13 +66,21 @@ export function purgeLandingContentCache(_slug?: string): void {
   // no-op
 }
 
-export async function resolveLandingContent(slug: string): Promise<LandingContent | null> {
+export async function resolveLandingContent(
+  slug: string,
+  tenantId?: string | null
+): Promise<LandingContent | null> {
   const normalized = (slug || '').toLowerCase();
+  const scopedTenantId = typeof tenantId === 'string' && tenantId.trim() ? tenantId.trim() : null;
 
   let landing: any = null;
   try {
     landing = await prisma.landingPage.findFirst({
-      where: { slug: normalized, is_active: true },
+      where: {
+        slug: normalized,
+        is_active: true,
+        ...(scopedTenantId ? { tenant_id: scopedTenantId } : {}),
+      },
     });
   } catch (err: any) {
     console.warn(`[LANDING SLUG RESOLVE] LandingPage lookup gagal: ${err.message}`);
@@ -117,7 +125,7 @@ export async function resolveLandingContent(slug: string): Promise<LandingConten
   let tenant: any = null;
   try {
     tenant = await prisma.tenant.findFirst({
-      where: { OR: [{ slug: normalized }, { id: normalized }] },
+      where: scopedTenantId ? { id: scopedTenantId } : { OR: [{ slug: normalized }, { id: normalized }] },
       select: {
         id: true,
         slug: true,

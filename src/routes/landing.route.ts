@@ -355,11 +355,47 @@ async function resolveExternalTrackerPixel(rawTenant?: string): Promise<string> 
   return isValidPixel(envPixel) ? envPixel : '';
 }
 
+/**
+ * Ar-004/Cfg-012: tenant landing ditentukan dari (1) `?tenant=<id|slug>` yang
+ * diverifikasi DB, atau (2) host yang terdaftar di `Tenant.landing_domain`.
+ * Tanpa keduanya → `null` (mode slug-global lama, aman untuk single-tenant).
+ */
+async function resolveLandingTenantId(request: FastifyRequest): Promise<string | null> {
+  const q = (request.query as any)?.tenant;
+  const hint = typeof q === 'string' ? q.trim() : '';
+  const rawHost = String(request.headers['x-forwarded-host'] || request.headers.host || '')
+    .split(',')[0]
+    .trim()
+    .toLowerCase();
+  const host = rawHost.replace(/:\d+$/, '').replace(/\/+$/, '');
+  try {
+    const { prisma } = await import('../db/client');
+    if (hint) {
+      const t = await prisma.tenant.findFirst({
+        where: { OR: [{ id: hint }, { slug: hint }] },
+        select: { id: true },
+      });
+      if (t?.id) return t.id;
+    }
+    if (host) {
+      const t = await prisma.tenant.findFirst({
+        where: { landing_domain: host },
+        select: { id: true },
+      });
+      if (t?.id) return t.id;
+    }
+  } catch {
+    /* DB offline → mode slug-global */
+  }
+  return null;
+}
+
 export async function landingRoutes(fastify: FastifyInstance) {
   // /go — pintu masuk kampanye iklan (selalu tersedia, fail-open generik)
   fastify.get('/go', async (request: FastifyRequest, reply: FastifyReply) => {
     const slug = (request.query as any)?.slug || 'default';
-    const content = (await resolveLandingContent(slug)) || defaultLandingContent(slug);
+    const tenantId = await resolveLandingTenantId(request);
+    const content = (await resolveLandingContent(slug, tenantId)) || defaultLandingContent(slug);
     return renderLanding(reply, request, content, slug);
   });
 
@@ -641,7 +677,8 @@ export async function landingRoutes(fastify: FastifyInstance) {
   // /promo/:slug — landing per-slug (strict 404)
   fastify.get('/promo/:slug', async (request: FastifyRequest<{ Params: { slug: string } }>, reply: FastifyReply) => {
     const slug = (request.params.slug || '').toLowerCase();
-    const content = await resolveLandingContent(slug);
+    const tenantId = await resolveLandingTenantId(request);
+    const content = await resolveLandingContent(slug, tenantId);
     if (!content) {
       return reply.status(404).send({ error: `Not Found: landing '${slug}' tidak ditemukan.` });
     }
@@ -727,7 +764,8 @@ export async function landingRoutes(fastify: FastifyInstance) {
       let tenantId = DEFAULT_TENANT_ID;
       let whatsappFallback = '';
       try {
-        const content = await resolveLandingContent(slug);
+        const scopedTenantId = await resolveLandingTenantId(request);
+        const content = await resolveLandingContent(slug, scopedTenantId);
         if (content) {
           tenantId = content.tenant_id || DEFAULT_TENANT_ID;
           whatsappFallback = content.whatsapp_number || '';
@@ -755,7 +793,8 @@ export async function landingRoutes(fastify: FastifyInstance) {
     if (RESERVED_SLUGS.has(slug)) {
       return reply.status(404).send({ error: `Not Found: '${slug}' is a reserved system keyword.` });
     }
-    const content = await resolveLandingContent(slug);
+    const tenantId = await resolveLandingTenantId(request);
+    const content = await resolveLandingContent(slug, tenantId);
     if (!content) {
       return reply.status(404).send({ error: `Not Found: landing '${slug}' tidak ditemukan.` });
     }

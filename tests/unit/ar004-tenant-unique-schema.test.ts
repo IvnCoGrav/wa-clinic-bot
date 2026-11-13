@@ -22,6 +22,13 @@ const migration = fs.readFileSync(
   ),
   'utf8'
 );
+const landingMigration = fs.readFileSync(
+  path.join(
+    root,
+    'prisma/migrations/20261113100000_ar004_landing_slug_per_tenant/migration.sql'
+  ),
+  'utf8'
+);
 
 function modelBlock(name: string): string {
   const match = schema.match(new RegExp(`model ${name} \\{([\\s\\S]*?)\\n\\}`));
@@ -54,10 +61,13 @@ describe('Ar-004 schema: unique per tenant', () => {
     expect(migration).not.toMatch(/CREATE UNIQUE INDEX "(staff_phone_key|ad_clicks_trackingCode_key)"/);
   });
 
-  it('LandingPage.slug tetap global (deferral terdokumentasi, bukan terlupa)', () => {
+  it('LandingPage.slug kini unik per tenant (bukan global)', () => {
     const landing = modelBlock('LandingPage');
-    expect(landing).toMatch(/slug\s+String\s+@unique/);
-    expect(landing).not.toContain('@@unique([tenant_id, slug])');
-    expect(migration.toLowerCase()).not.toContain('landing_pages');
+    expect(landing).not.toMatch(/slug\s+String\s+@unique/);
+    expect(landing).toContain('@@unique([tenant_id, slug])');
+    expect(landingMigration).toContain('DROP INDEX "landing_pages_slug_key"');
+    expect(landingMigration).toContain(
+      'CREATE UNIQUE INDEX "landing_pages_tenant_id_slug_key" ON "landing_pages"("tenant_id", "slug")'
+    );
   });
 });

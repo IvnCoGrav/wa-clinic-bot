@@ -810,7 +810,7 @@ enum LandingType {
 model LandingPage {
   id                 String      @id @default(uuid())
   tenant_id          String      @default("default-tenant")
-  slug               String      @unique
+  slug               String
   title              String
   landing_type       LandingType @default(RAW_HTML)
   html_content       String?     @db.Text
@@ -823,6 +823,7 @@ model LandingPage {
   updated_at         DateTime    @updatedAt
 
   @@index([tenant_id])
+  @@unique([tenant_id, slug])
   @@map("landing_pages")
 }
 

@@ -152,6 +152,18 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - Register menjadi **239 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 16 OPEN**.
   - **Batas yang diketahui:** bila Redis mati, KV jatuh ke memori per proses sehingga sweep kembali hanya melihat sesi prosesnya sendiri (perilaku lama); TTL record 2 jam, jadi sesi yang berhenti dikirim akan hilang otomatis.
 
+- **Tindakan W13 (2026-11-13) — S-011 selesai (sesi admin cookie-only):**
+  - Dashboard admin tidak lagi menyimpan token sesi di `localStorage`; login mengandalkan cookie `HttpOnly admin_session`, dan `restoreSessionToken` memulihkan sesi dari cookie tanpa token body. Token legacy dibersihkan saat login berikutnya.
+  - Umur cookie admin mengikuti `ADMIN_SESSION_TTL_HOURS` (default 7 hari) sehingga tidak lagi 30 hari.
+  - Register menjadi **249 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 6 OPEN**.
+  - **Batas yang diketahui:** perangkat yang sebelumnya menyimpan token legacy tetap memakai jalur token sampai login ulang; `staff_session` (aplikasi staf) memiliki TTL/cookie sendiri dan tidak diubah di wave ini.
+
+- **Tindakan W12 (2026-11-13) — Ar-004 selesai (landing slug per tenant):**
+  - `LandingPage.slug` kini `@@unique([tenant_id, slug])`; migrasi `20261113100000_ar004_landing_slug_per_tenant` diverifikasi di Postgres 16 ephemeral (drift *empty*, slug sama dua tenant diterima, duplikat satu tenant ditolak).
+  - Resolusi landing tenant-aware: `?tenant=<id|slug>` (diverifikasi DB) atau host `Tenant.landing_domain`; tanpa hint/host tetap mode slug-global agar single-tenant tidak berubah.
+  - **Deploy:** `prisma migrate deploy` wajib SEBELUM deploy kode (index komposit dipakai Prisma). Kolom `Tenant.landing_domain` harus diisi untuk domain landing tiap tenant.
+  - Register menjadi **248 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 7 OPEN**.
+
 - **Tindakan W11 (2026-11-13) — Cfg-015 sebagian (brand dashboard):**
   - Brand dashboard kini data-driven: `BrandContext` memuat `brand.businessName`/`botDisplayName` dari `/api/admin/settings`; Layout, quick-chat, MetaCapiQueue, nama file ekspor, dan label/placeholder pengaturan tidak lagi menyebut "Kala". Fallback hanya "Klinik"/"Admin".
   - `x-tenant-id` pada `api.ts` diambil dari user terautentikasi (`last_auth_user.tenantId`), bukan hardcode `default-tenant`.

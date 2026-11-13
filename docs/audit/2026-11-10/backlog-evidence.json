@@ -2000,7 +2000,7 @@
         {
           "type": "file",
           "path": "src/routes/landing.route.ts",
-          "line": 427,
+          "line": 463,
           "contains": "const ip = request.ip || '';"
         },
         {
@@ -2029,7 +2029,7 @@
         {
           "type": "file",
           "path": "src/services/landing-content.service.ts",
-          "line": 134,
+          "line": 142,
           "contains": "M-05: JANGAN fallback ke tenant pertama"
         },
         {
@@ -2124,6 +2124,83 @@
           "type": "test",
           "path": "tests/unit/landing-admin-tenant-honesty.test.ts",
           "contains": "POST create gagal → 503"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-13"
+    },
+    "Ar-004": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "prisma/schema.prisma",
+          "line": 826,
+          "contains": "@@unique([tenant_id, slug])"
+        },
+        {
+          "type": "file",
+          "path": "prisma/migrations/20261113100000_ar004_landing_slug_per_tenant/migration.sql",
+          "line": 14,
+          "contains": "landing_pages_tenant_id_slug_key"
+        },
+        {
+          "type": "file",
+          "path": "src/routes/landing.route.ts",
+          "line": 363,
+          "contains": "async function resolveLandingTenantId"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/landing-tenant-resolution.test.ts",
+          "contains": "host landing_domain → filter tenant_id"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/ar004-tenant-unique-schema.test.ts",
+          "contains": "LandingPage.slug kini unik per tenant"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-13"
+    },
+    "S-011": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/services/admin-session.service.ts",
+          "line": 24,
+          "contains": "DEFAULT_ADMIN_SESSION_TTL_MS"
+        },
+        {
+          "type": "file",
+          "path": "src/routes/admin/auth.subroute.ts",
+          "line": 14,
+          "contains": "function adminCookieMaxAgeSec"
+        },
+        {
+          "type": "file",
+          "path": "packages/admin-dashboard/src/contexts/AuthContext.tsx",
+          "line": 232,
+          "contains": "S-011: token TIDAK disimpan"
+        },
+        {
+          "type": "file",
+          "path": "packages/admin-dashboard/src/services/sessionRestore.ts",
+          "line": 16,
+          "contains": "legacyToken"
+        },
+        {
+          "type": "file",
+          "path": "Caddyfile",
+          "line": 18,
+          "contains": "object-src 'none'"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/admin-session-hardening.test.ts",
+          "contains": "default 7 hari"
         }
       ],
       "verifiedBy": "AI Agent",

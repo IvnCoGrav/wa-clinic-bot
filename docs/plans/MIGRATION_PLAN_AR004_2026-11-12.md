@@ -1,6 +1,6 @@
 # Rencana Migrasi Ar-004 — Unique Constraint per Tenant
 
-> **Status:** **SEBAGIAN DIIMPLEMENTASI (W7)** — schema `Staff.phone` & `AdClick.trackingCode` sudah komposit; **migrasi BELUM diterapkan ke DB mana pun**. `LandingPage.slug` sengaja ditunda.
+> **Status:** **DIIMPLEMENTASI PENUH (W7 + W12)** — ketiga constraint sudah komposit; **migrasi BELUM diterapkan ke DB pengguna** (sudah diverifikasi di Postgres 16 ephemeral).
 > **Tanggal:** 2026-11-12
 > **Temuan register:** `Ar-004` (Modul 01/11, Sedang) — constraint skema masih global
 > **Ketergantungan:** `Ar-003` sisa (service/worker tenant seam) memakai constraint komposit ini agar isolasi tenant benar-benar ditegakkan DB.
@@ -14,7 +14,7 @@
 | `Staff.phone` → `@@unique([tenant_id, phone])` | **Selesai di schema + migration.sql**; belum di-deploy | `prisma/schema.prisma`, `prisma/migrations/20261112130000_ar004_tenant_scoped_unique_staff_adclick/migration.sql` |
 | `AdClick.trackingCode` → `@@unique([tenant_id, trackingCode])` | **Selesai di schema + migration.sql**; belum di-deploy | idem |
 | Kode lookup staf | Sudah tenant-scoped (`StaffAuthService.login(phone, password, tenantId)`); `backup.service.ts` upsert diubah ke `tenant_id_phone` | `tests/unit/staff-auth-and-reservation.test.ts`, `tests/unit/backup*.test.ts` |
-| `LandingPage.slug` | **DITUNDA** — resolusi landing masih slug-global (tanpa host/tenant); melonggarkan slug menimbulkan ambiguitas dan menyentuh area landing pengguna | `tests/unit/ar004-tenant-unique-schema.test.ts` (guard deferral) |
+| `LandingPage.slug` → `@@unique([tenant_id, slug])` | **Selesai (W12)** di schema + migration `20261113100000_ar004_landing_slug_per_tenant`; resolusi landing tenant-aware (`?tenant=` / host `landing_domain`); diverifikasi di Postgres ephemeral | `tests/unit/landing-tenant-resolution.test.ts` |
 | SQL delta | Dihasilkan otoritatif via `prisma migrate diff --from-schema-datamodel <HEAD> --to-schema-datamodel <baru>` (tanpa DB) | migration.sql |
 | Terapkan ke DB | **TERVERIFIKASI** di Postgres 16 ephemeral (Docker, 2026-11-13): `migrate deploy` sukses, drift check *empty*, uji duplikat lintas/sama tenant sesuai harapan, dan Prisma `upsert` compound berjalan. **Belum** diterapkan ke staging/produksi milik Anda | — |
 
@@ -30,6 +30,8 @@
 | Staf, nomor sama tenant yang sama | INSERT tenant-a kedua | **ditolak** `staff_tenant_id_phone_key` |
 | AdClick, trackingCode sama dua tenant | INSERT tenant-a & tenant-b | **diterima** (2 baris) |
 | AdClick, trackingCode sama tenant yang sama | INSERT tenant-a kedua | **ditolak** `ad_clicks_tenant_id_trackingCode_key` |
+| Landing, slug sama dua tenant | INSERT tenant-a & tenant-b | **diterima** (2 baris) |
+| Landing, slug sama tenant yang sama | INSERT tenant-a kedua | **ditolak** `landing_pages_tenant_id_slug_key` |
 | Prisma upsert compound | `staff.upsert({ where: { tenant_id_phone } })` 2× | **sukses**, 1 baris, nama ter-update |
 
 > **Temuan baru (dicatat di KNOWN_ISSUES):** pada DB **kosong**, replay seluruh migrasi gagal di `20260801000000_add_failed_followup_status` (`type "FollowUpStatus" does not exist`) karena tidak ada migrasi yang membuat enum tersebut — riwayat migrasi mengasumsikan DB baseline yang sudah ada (pola yang sama dengan trap tabel `children`). Verifikasi di atas menggunakan bootstrap: `db push` schema lama → tandai 109 migrasi lama `--applied` → `migrate deploy` migrasi baru.
