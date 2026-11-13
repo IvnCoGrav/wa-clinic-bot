@@ -2469,13 +2469,45 @@
       ],
       "verifiedBy": "AI Agent",
       "verifiedAt": "2026-11-13"
+    },
+    "DOM-02": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "test",
+          "path": "tests/unit/dom02-address-modules.test.ts",
+          "contains": "customer-address.ts menjadi barrel tipis"
+        },
+        {
+          "type": "file",
+          "path": "src/domain/customer-address.ts",
+          "line": 14,
+          "contains": "export * from './customer-address/index';"
+        },
+        {
+          "type": "file",
+          "path": "src/domain/customer-address/matching.ts",
+          "line": 61,
+          "contains": "export function addressesMatch"
+        },
+        {
+          "type": "file",
+          "path": "src/domain/customer-address/list.ts",
+          "line": 114,
+          "contains": "export function upsertAddressIntoList"
+        },
+        {
+          "type": "file",
+          "path": "src/domain/customer-address/tombstones.ts",
+          "line": 36,
+          "contains": "export function pruneAddressTombstones"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-13"
     }
   },
   "known": {
-    "DOM-02": {
-      "justification": "Tech debt struktural (620 baris), bukan bug fungsional; tidak ada risiko data/keamanan langsung.",
-      "acceptance": "Pecah saat file disentuh untuk perubahan berikutnya, atau jika melewati 800 baris."
-    },
     "ING-10": {
       "justification": "Duplikasi pipeline WAHA/WABA adalah tech debt; kedua jalur sudah punya guard dan test sendiri.",
       "acceptance": "Satukan sebelum menambah channel ketiga."

@@ -90,7 +90,8 @@ describe('Backlog Evidence Gate (Fase 1)', () => {
 
   it('gagal bila KNOWN tidak punya acceptance criteria', () => {
     const m = cloneManifest();
-    delete m.known['DOM-02'].acceptance;
+    const knownId = Object.keys(m.known)[0];
+    delete m.known[knownId].acceptance;
     const result = runGate({ manifest: m });
     expect(result.status).toBe(1);
     expect(result.output).toContain('KNOWN wajib punya "acceptance"');

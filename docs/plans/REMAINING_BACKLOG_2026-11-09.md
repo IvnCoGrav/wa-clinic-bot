@@ -18,17 +18,17 @@ Register ini merupakan otoritas tunggal (*single source of truth*) yang menginte
 
 | Sumber Temuan | Cakupan Modul | Total ID | FIXED (terverifikasi) | DUPLICATE / KNOWN | UNVERIFIED | OPEN |
 |---|---|---:|---:|---:|---:|---:|
-| **Track A** | Modul 01–05 (DataAccess, Config, Utils, Domain, Ingress) | **96** | 92 | 2 DUP / 2 KNOWN | 0 | 0 |
+| **Track A** | Modul 01–05 (DataAccess, Config, Utils, Domain, Ingress) | **96** | 93 | 2 DUP / 1 KNOWN | 0 | 0 |
 | **S4 Gap Audit** | Modul 06, 12, 15, 16 (StateMachine, FollowUp, AdminAPI, Delivery) | **50** | 50 | 0 KNOWN / 1 DUP | 0 | 0 |
 | **Track B** | Modul 07–14 (Gateway, V3 AI, Cron, Settings, Web App, Tracking) | **122** | 117 | 3 DUP | 0 | 0 |
-| **TOTAL KONSOLIDASI** | **16 Modul Lengkap** | **268** | **259** | **5 DUP / 4 KNOWN** | **0** | **0** |
+| **TOTAL KONSOLIDASI** | **16 Modul Lengkap** | **268** | **260** | **5 DUP / 3 KNOWN** | **0** | **0** |
 
 *Catatan status final (FREEZE + FASE 1 EVIDENCE GATE + FASE 2A/2B 2026-11-10 — sertifikasi `242 FIXED` dicabut):*
 1. **Track A (96 item):** 87 FIXED terverifikasi (termasuk `S-001`, `UTL-11`), **0 UNVERIFIED**, 2 DUPLICATE (`CFG-06`, `CFG-07`), 3 KNOWN (`DOM-02`, `ING-09`, `ING-10`), **4 OPEN** (`CFG-12`, `UTL-15`, `CFG-16`, `CFG-17`), 0 PARTIAL.
 2. **S4 (50 item):** 48 FIXED terverifikasi, **1 UNVERIFIED** (`SM-02` — terbukti inert), 1 KNOWN (`API-04`), 0 PARTIAL, 0 OPEN.
 3. **Track B (122 item):** 72 FIXED (termasuk **6 re-sertifikasi Fase 1**, **4 Fase 2A**, **22 triage Fase 2B**, **5 Fase 2C**, **1 Fase 2D**, **4 Fase 2F**, **2 Fase 2G**, **4 Fase 3A**), **3 UNVERIFIED** (`SM-02`, `C-002`, `C-006`, `A-013`), 3 DUPLICATE (`S-04`, `K-003`, `Cfg-005`), 0 KNOWN, **44 OPEN**, 0 PARTIAL.
 4. **Modul 11 (Customer/Catalog/Location):** 12 temuan CCL-01 s.d. CCL-12 beririsan dengan Track A; status mengikuti Track A.
-5. **Net Status Register:** 268 temuan — **259 FIXED terverifikasi, 0 UNVERIFIED, 5 DUPLICATE, 4 KNOWN, 0 OPEN**. Gate F4 **TERPENUHI**; bukti per item di [`EVIDENCE_LEDGER.md`](../audit/2026-11-10/EVIDENCE_LEDGER.md) dan manifest mesin [`backlog-evidence.json`](../audit/2026-11-10/backlog-evidence.json).
+5. **Net Status Register:** 268 temuan — **260 FIXED terverifikasi, 0 UNVERIFIED, 5 DUPLICATE, 3 KNOWN, 0 OPEN**. Gate F4 **TERPENUHI**; bukti per item di [`EVIDENCE_LEDGER.md`](../audit/2026-11-10/EVIDENCE_LEDGER.md) dan manifest mesin [`backlog-evidence.json`](../audit/2026-11-10/backlog-evidence.json).
 
 ---
 
@@ -111,7 +111,7 @@ Register ini merupakan otoritas tunggal (*single source of truth*) yang menginte
 | **UTL-24** | Modul 03 Utilities | Rendah | ``phone-normalizer.ts:2-9`` | **FIXED** | `F4.2` | Normalisasi E.164 membersihkan sufiks WA (`@c.us`, `@s.whatsapp.net`, `:device`). |
 | **UTL-25** | Modul 03 Utilities | Rendah | ``tests/`` | **FIXED** | `F4.2` | Unit test komprehensif untuk helpers parsing dan keamanan telah ditambahkan (`security-and-parsing-helpers.test.ts`). |
 | **DOM-01** | Modul 04 Domain Logic | Sedang | ``reservation-status.ts:11-27`` | **FIXED** | `F4.2` | Normalisasi status reservasi case-insensitive dan konsisten. |
-| **DOM-02** | Modul 04 Domain Logic | Sedang | ``customer-address.ts:1-620`` | **KNOWN** | `F4.1` | Modul 620 baris menangani validasi Zod, deduplikasi, koordinat, rekonsiliasi, dan manipulasi tombstone dalam satu file. |
+| **DOM-02** | Modul 04 Domain Logic | Sedang | ``customer-address.ts:1-620`` | **FIXED** | `F4.1` | **W18:** modul 620 baris dipecah menjadi `src/domain/customer-address/{types,internal,matching,list,tombstones}.ts` + barrel. `customer-address.ts` menjadi re-export tipis (<40 baris) sehingga 21 pemanggil tetap kompatibel; API lama dikunci test struktural. |
 | **DOM-03** | Modul 04 Domain Logic | Sedang | ``customer-address.ts:145-232`` | **FIXED** | `F4.2` | Pencocokan token wilayah mensyaratkan panjang token minimum 5 karakter untuk menghindari false-positive berlebihan. |
 | **DOM-04** | Modul 04 Domain Logic | Sedang | ``customer-address.ts:83-119`` | **FIXED** | `F4.2` | Deduplikasi logika haversine dan levenshtein selaras dengan utilitas bersama. |
 | **DOM-05** | Modul 04 Domain Logic | Sedang | ``location-adequacy.ts:170-180`` | **FIXED** | `F4.2` | Verifikasi staf membutuhkan koordinat verifikasi valid dan kedekatan lokasi atau bukti foto rumah. |

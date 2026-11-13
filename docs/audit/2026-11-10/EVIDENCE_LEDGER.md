@@ -256,6 +256,17 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 
 - **Gerbang regresi W10:** 7.448 test / 7.418 lulus / 2 gagal pre-existing #287 (0 regresi vs W9). Dijalankan dengan `--minWorkers 1 --maxWorkers 2` karena concurrency default memicu flake timeout pada `media-mime-audio`/`live-chat-reply`/`waha-webhook` (semua lulus saat dijalankan sendiri). `tsc` 0 error; `build` root exit 0; `verify:backlog` PASS (89 item); `security:scan` LULUS 2.333 file; **dashboard build (tsc+vite) sukses**.
 
+### 0.45 W18 — pecah modul buku alamat (DOM-02, 2026-11-13)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **DOM-02** | `src/domain/customer-address.ts` (620 baris) dipecah ke `customer-address/{types,internal,matching,list,tombstones}.ts` + barrel; file lama jadi re-export tipis (<40 baris) sehingga 21 pemanggil tetap kompatibel | `tests/unit/dom02-address-modules.test.ts` (3) + 13 suite address (142 test) |
+
+- **Sisa KNOWN:** `ING-10` (duplikasi pipeline ingress WAHA/WABA), `C-006` (butuh log RAG runtime), `C-002` (butuh dump DB produksi).
+- **Register:** **260 FIXED / 0 OPEN / 0 UNVERIFIED / 3 KNOWN / 5 DUPLICATE**.
+- **Perbaikan hermetik test (bukan regresi W18):** `tests/unit/queue.test.ts` FIFO gagal karena Redis lokal aktif menyimpan jobId deterministik lama (`job_628123456789_msg_1..5`, dibuat 2026-09-09, tanpa `finishedOn`) sehingga `queue.add()` menjadi no-op (dedup BullMQ) → `processMessage` 0 panggilan. Terbukti: 11/11 lulus saat Redis tidak terjangkau (`REDIS_PORT=6399`). Test kini memaksa jalur in-memory di `beforeAll` (kontrak `forceDisconnectRedis` + `close`) dan memakai `vi.waitFor` (bukan timer 600/300 ms); 11/11 lulus berulang dengan Redis lokal aktif.
+- **Gerbang regresi W18:** 7.475 test / 7.445 lulus / 2 gagal pre-existing #287 (0 regresi vs W17). `tsc` 0; `build` 0; `verify:backlog` PASS (102 item); `security:scan` LULUS.
+
 ### 0.44 W17 — tutup 3 KNOWN yang bisa dikerjakan (2026-11-13)
 
 | ID | Perbaikan | Bukti test |

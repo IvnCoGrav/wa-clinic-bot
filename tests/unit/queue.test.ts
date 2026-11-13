@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 import { queueService, QueuePayload, resolveQueueJobId, shouldRunChatConsumers } from '../../src/services/queue.service';
 import { stateMachine } from '../../src/state-machine/machine';
 import { customerService } from '../../src/services/customer.service';
@@ -6,9 +6,28 @@ import { conversationService } from '../../src/services/conversation.service';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 import { turnRepository } from '../../src/repositories/turn.repository';
 
+/**
+ * HERMETIK (bukan regresi W18): suite ini menguji KONTRAK antrean (FIFO,
+ * dedup, lock) — bukan infrastruktur Redis. Bila Redis lokal aktif, jobId
+ * deterministik (`job_<phone>_<msgId>`) bisa sudah tersimpan dari run lama
+ * sehingga `queue.add()` menjadi no-op (dedup BullMQ) dan pesan uji tidak
+ * pernah diproses. Paksa jalur fallback in-memory resmi agar hasil
+ * deterministik dan tidak butuh Redis (sejalan AGENTS.md: test offline).
+ */
+const queueInternals = queueService as any;
+
+beforeAll(async () => {
+  await queueService.forceDisconnectRedis();
+  await queueService.close();
+  queueInternals.memoryQueues.clear();
+  queueInternals.memoryProcessing.clear();
+  queueInternals.bullProcessing.clear();
+});
+
 describe('Message Queue Service Unit Tests', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    expect(queueService.isRedisEnabled()).toBe(false);
   });
 
   afterAll(async () => {
@@ -63,8 +82,12 @@ describe('Message Queue Service Unit Tests', () => {
     const promises = payloads.map(p => queueService.enqueueMessage(p));
     await Promise.all(promises);
 
-    // Wait a brief moment to let the loop execute
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    // Tunggu deterministik (bukan durasi tetap): antrean in-memory memproses
+    // 5 job berurutan, masing-masing ~50ms + overhead dynamic import.
+    await vi.waitFor(() => {
+      expect(processSpy).toHaveBeenCalledTimes(5);
+      expect(processedIds).toHaveLength(5);
+    }, { timeout: 10000, interval: 20 });
 
     expect(processSpy).toHaveBeenCalledTimes(5);
     // Verify FIFO processing order: msg_1, msg_2, msg_3, msg_4, msg_5
@@ -155,7 +178,10 @@ describe('Message Queue Service Unit Tests', () => {
     await Promise.all([enqueueMsg('stale_msg_1', 'betul bund'), enqueueMsg('stale_msg_2', 'betul bund')]);
 
     // Beri kesempatan worker in-memory menyelesaikan kedua job.
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await vi.waitFor(() => {
+      expect(processSpy).toHaveBeenCalledTimes(2);
+      expect(statesSeen).toHaveLength(2);
+    }, { timeout: 10000, interval: 20 });
 
     expect(processSpy).toHaveBeenCalledTimes(2);
     // Job kedua harus melihat current_state yang sudah berubah dari pesan pertama.
