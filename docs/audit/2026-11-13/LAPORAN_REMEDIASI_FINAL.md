@@ -17,7 +17,7 @@
 | KNOWN (ber-justifikasi) | 4 |
 | **OPEN** | **16** |
 | Baseline historis beku | 158 FIXED |
-| Full suite terakhir | **7.358 test / 7.328 lulus / 2 gagal pre-existing (#287)** |
+| Full suite terakhir | **7.367 test / 7.337 lulus / 2 gagal pre-existing (#287)** |
 
 Gate F4 belum terpenuhi karena masih ada 16 OPEN + 4 UNVERIFIED.
 
