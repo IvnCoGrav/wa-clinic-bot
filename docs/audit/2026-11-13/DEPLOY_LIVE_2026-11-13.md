@@ -73,3 +73,9 @@ antrean: shard_0..4 wait=0
 
 - `docker-compose.yml` server menghapus `hermes-net` dari app/worker (kustomisasi server).
 - Fix `SEPARATE_WORKER` di server disamakan dengan repo: app `true` (skip cron), worker `true` + `CHAT_CONSUMER_ENABLED=false`.
+- `.env` server ditambah `APP_DOMAIN=app.kalababyspa.online` (diambil dari `ADMIN_DOMAIN`).
+
+## 6. Monitoring pasca-deploy
+
+- Saat verifikasi, **belum ada pesan inbound baru** setelah perbaikan (WAHA tetap `WORKING`; event `message.any` terakhir yang terlihat adalah echo/outbound). Antrean 0 dan konsumen aktif, sehingga pesan customer berikutnya akan diproses normal.
+- Pantau 24 jam: `/ready`, `llen bull:message_queue_shard_*:wait`, log `[QUEUE]`, `[TURN RECOVERY]`, dan tabel `messages`/`inbound_turns`.
