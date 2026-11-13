@@ -14,6 +14,8 @@ export interface CreateSeriesParams {
   purchaseValue?: number;
   assignedStaffId?: string;
   notes?: string;
+  /** Kartu alamat level series (satu rumah untuk semua sesi). */
+  customerAddressId?: string;
   sessions: Array<{
     sessionNumber: number;
     bookingDate: Date | string;
@@ -91,6 +93,7 @@ class ReservationSeriesService {
       purchaseValue,
       assignedStaffId,
       notes,
+      customerAddressId,
       sessions,
     } = params;
 
@@ -108,12 +111,43 @@ class ReservationSeriesService {
       resolveCustomerAddressId,
     } = await import('./reservation-core.service');
 
-    const resolvedAddressId = await resolveCustomerAddressId({
-      tenantId,
-      customerId,
-      explicitAddressId: sessions.find((s) => s.customerAddressId)?.customerAddressId ?? null,
-      candidate: undefined,
-    });
+    // Satu kartu level series (rekomendasi D2). Jika API lama mengirim kartu
+    // per-sesi, semua sesi WAJIB sama — DILARANG menebak salah satu.
+    const sessionCardIds = [
+      ...new Set(
+        sessions
+          .map((s) => (typeof s.customerAddressId === 'string' ? s.customerAddressId.trim() : ''))
+          .filter((id) => id.length > 0)
+      ),
+    ];
+    if (sessionCardIds.length > 1) {
+      const err: any = new Error('Series hanya boleh memakai satu kartu alamat untuk semua sesi.');
+      err.code = 'SERIES_MULTIPLE_ADDRESS_NOT_SUPPORTED';
+      throw err;
+    }
+
+    const requestedCardId = customerAddressId?.trim() || sessionCardIds[0] || null;
+    let resolvedAddressCard: Awaited<ReturnType<typeof customerService.resolveOwnedAddressCard>> = null;
+    let resolvedAddressId: string | null = null;
+
+    if (requestedCardId) {
+      resolvedAddressCard = await customerService.resolveOwnedAddressCard(customerId, requestedCardId, tenantId);
+      if (!resolvedAddressCard) {
+        const err: any = new Error('Kartu alamat yang dipilih tidak ada di buku alamat customer ini.');
+        err.code = 'CUSTOMER_ADDRESS_NOT_FOUND';
+        throw err;
+      }
+      resolvedAddressId = resolvedAddressCard.id;
+    } else {
+      resolvedAddressId = await resolveCustomerAddressId({
+        tenantId,
+        customerId,
+        candidate: undefined,
+      });
+    }
+
+    const resolvedDeliveryFee =
+      typeof resolvedAddressCard?.ongkir === 'number' ? resolvedAddressCard.ongkir : null;
 
     const result = await prisma.$transaction(async (tx: any) => {
       if (typeof tx.$executeRawUnsafe === 'function') {
@@ -200,6 +234,8 @@ class ReservationSeriesService {
               session_number: s.sessionNumber,
               total_sessions: totalSessions,
               customer_address_id: resolvedAddressId,
+              // KB-6: snapshot ongkir dari kartu level series (bukan root).
+              delivery_fee: resolvedDeliveryFee,
               raw_text: `[Admin Series] ${treatmentName} - Sesi ${s.sessionNumber}/${totalSessions}`,
             },
           });

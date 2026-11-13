@@ -1721,6 +1721,22 @@ export class CustomerService {
   }
 
   /**
+   * Resolusi kartu alamat yang dipilih admin dengan pagar kepemilikan.
+   * `null` berarti kartu tidak ada / bukan milik customer ini / beda tenant.
+   * Semua route yang menerima `customerAddressId` WAJIB memakai seam ini.
+   */
+  public async resolveOwnedAddressCard(
+    customerId: string,
+    addressId: string,
+    tenantId: string
+  ): Promise<SavedCustomerAddress | null> {
+    const id = String(addressId ?? '').trim();
+    if (!customerId || !id) return null;
+    const list = await this.getSavedAddresses(customerId, tenantId);
+    return list.find((card) => card.id === id) ?? null;
+  }
+
+  /**
    * Tambah/perbarui satu alamat tersimpan. Dedup & label otomatis deterministik.
    * Mengembalikan entri yang tersimpan (atau null bila customer tak ditemukan).
    */

@@ -981,17 +981,32 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
       }
 
       // Wilayah kandidat & kartu kanonis (anti pencemaran wilayah root):
-      //  - ID kartu eksplisit → otoritas admin, dipakai apa adanya.
+      //  - ID kartu eksplisit → WAJIB milik customer ini (tenant-scoped).
       //  - Teks alamat sama dengan salah satu kartu → tautkan kartu itu.
       //  - Teks alamat sama dengan alamat profil root → wilayah root sah.
       //  - Rumah BARU tanpa ID → JANGAN warisi wilayah root; biarkan null
       //    sampai diverifikasi (insiden "Gunung Anyar dicap Tandes" 2026-11-05).
-      let resolvedCustomerAddressId = customerAddressId;
+      let resolvedCustomerAddressId: string | null = null;
       let candidateKecamatan: string | undefined = customer.kecamatan || undefined;
       let candidateKota: string | undefined = customer.kota || undefined;
       let candidateKelurahan: string | undefined = customer.kelurahan || undefined;
 
-      if (!resolvedCustomerAddressId && address?.trim()) {
+      if (customerAddressId) {
+        const chosen = await customerService.resolveOwnedAddressCard(customerId, customerAddressId, tenantId);
+        if (!chosen) {
+          return reply.status(400).send({
+            success: false,
+            code: 'CUSTOMER_ADDRESS_NOT_FOUND',
+            error: 'Kartu alamat yang dipilih tidak ada di buku alamat customer ini.',
+          });
+        }
+        resolvedCustomerAddressId = chosen.id;
+        candidateKecamatan = chosen.kecamatan || undefined;
+        candidateKota = chosen.kota || undefined;
+        candidateKelurahan = chosen.kelurahan || undefined;
+        // Kartu adalah otoritas ongkir; body/last-fee hanya fallback bila kartu kosong.
+        if (typeof chosen.ongkir === 'number') parsedOngkir = chosen.ongkir;
+      } else if (address?.trim()) {
         const street = normalizeAddressText(address);
         let matchedCard: any = null;
         try {
@@ -1005,6 +1020,7 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
           candidateKecamatan = matchedCard.kecamatan || undefined;
           candidateKota = matchedCard.kota || undefined;
           candidateKelurahan = matchedCard.kelurahan || undefined;
+          if (typeof matchedCard.ongkir === 'number') parsedOngkir = matchedCard.ongkir;
         } else if (street && street === rootStreet) {
           // Rumah utama customer — wilayah profil tetap sumber sah.
         } else {

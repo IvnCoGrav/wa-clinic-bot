@@ -4,6 +4,7 @@ import { prisma } from '../../src/db/client';
 import { auditService } from '../../src/services/audit.service';
 import { customerService } from '../../src/services/customer.service';
 import { deliveryService } from '../../src/services/delivery.service';
+import { reservationCoreService } from '../../src/services/reservation-core.service';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 
 /**
@@ -227,6 +228,138 @@ describe('PATCH /api/admin/reservation/:id — pilih kartu alamat rumah', () => 
       expect(data.kecamatan).toBeUndefined();
       expect(data.kota).toBeUndefined();
     }
+  });
+});
+
+describe('POST /api/admin/reservation — pilih kartu alamat rumah', () => {
+  const CARD_BUDURAN = {
+    id: 'card-buduran',
+    label: 'Rumah Buduran',
+    address: 'Perum Buduran Indah Blok B-5',
+    kelurahan: 'Buduran',
+    kecamatan: 'Buduran',
+    kota: 'Sidoarjo',
+    lat: -7.4255,
+    lng: 112.7214,
+    distanceKm: 18.0,
+    ongkir: 22000,
+    landmark: null,
+    locationSource: 'manual_staff',
+    isPrimary: false,
+  };
+
+  beforeEach(() => {
+    process.env.ADMIN_API_KEY = ADMIN_KEY;
+    vi.restoreAllMocks();
+    vi.spyOn(auditService, 'logAdminAction').mockResolvedValue(undefined as any);
+  });
+
+  function mockPostBase(cardResult: any | null) {
+    const customer = makeExisting().customer;
+    vi.spyOn(customerService, 'getCustomerById').mockResolvedValue(customer as any);
+    const resolveSpy = vi
+      .spyOn(customerService, 'resolveOwnedAddressCard')
+      .mockResolvedValue(cardResult as any);
+    const saveSpy = vi.spyOn(reservationCoreService, 'saveReservation').mockResolvedValue({
+      reservation: {
+        id: 'res-post-card',
+        customer_id: CUSTOMER_ID,
+        customer_address_id: cardResult?.id ?? null,
+        treatment_category: 'BABY',
+        treatment_detail: 'Pijat Bayi Ceria',
+        status: 'confirmed',
+        booking_date: null,
+        delivery_fee: cardResult?.ongkir ?? null,
+      },
+    } as any);
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
+      id: 'res-post-card',
+      customer_id: CUSTOMER_ID,
+      customer_address_id: cardResult?.id ?? null,
+      treatment_category: 'BABY',
+      treatment_detail: 'Pijat Bayi Ceria',
+      status: 'confirmed',
+      booking_date: null,
+      delivery_fee: cardResult?.ongkir ?? null,
+      customer,
+      assigned_staff: null,
+    } as any);
+    vi.mocked(prisma.customer.update).mockResolvedValue({} as any);
+    return { customer, resolveSpy, saveSpy };
+  }
+
+  it('kartu valid → customerAddressId, wilayah, dan deliveryFee dari kartu (bukan body)', async () => {
+    const { resolveSpy, saveSpy } = mockPostBase(CARD_BUDURAN);
+
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/reservation',
+      headers: { 'x-api-key': ADMIN_KEY },
+      payload: {
+        customerId: CUSTOMER_ID,
+        treatmentCategory: 'BABY',
+        treatmentDetail: 'Pijat Bayi Ceria',
+        customerAddressId: CARD_BUDURAN.id,
+        ongkir: 9999,
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(resolveSpy).toHaveBeenCalledWith(CUSTOMER_ID, CARD_BUDURAN.id, TENANT);
+    expect(saveSpy).toHaveBeenCalledWith(expect.objectContaining({
+      customerAddressId: CARD_BUDURAN.id,
+      kecamatan: 'Buduran',
+      kelurahan: 'Buduran',
+      kota: 'Sidoarjo',
+      deliveryFee: CARD_BUDURAN.ongkir,
+    }));
+  });
+
+  it('kartu tidak ada / bukan milik customer → 400 dan save tidak dipanggil', async () => {
+    const { saveSpy } = mockPostBase(null);
+
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/reservation',
+      headers: { 'x-api-key': ADMIN_KEY },
+      payload: {
+        customerId: CUSTOMER_ID,
+        treatmentCategory: 'BABY',
+        treatmentDetail: 'Pijat Bayi Ceria',
+        customerAddressId: 'card-punya-orang-lain',
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).code).toBe('CUSTOMER_ADDRESS_NOT_FOUND');
+    expect(saveSpy).not.toHaveBeenCalled();
+  });
+
+  it('teks alamat cocok dengan kartu → ongkir dari kartu, bukan last-fee root', async () => {
+    const { saveSpy } = mockPostBase(null);
+    vi.spyOn(customerService, 'getSavedAddresses').mockResolvedValue([CARD_TANDES, CARD_GUNUNG_ANYAR] as any);
+    vi.spyOn(customerService, 'getLastDeliveryFee').mockResolvedValue(15000 as any);
+
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/reservation',
+      headers: { 'x-api-key': ADMIN_KEY },
+      payload: {
+        customerId: CUSTOMER_ID,
+        treatmentCategory: 'BABY',
+        treatmentDetail: 'Pijat Bayi Ceria',
+        address: CARD_GUNUNG_ANYAR.address,
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(saveSpy).toHaveBeenCalledWith(expect.objectContaining({
+      customerAddressId: CARD_GUNUNG_ANYAR.id,
+      deliveryFee: CARD_GUNUNG_ANYAR.ongkir,
+    }));
   });
 });
 

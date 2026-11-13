@@ -24,6 +24,7 @@ export async function reservationSeriesRoutes(fastify: FastifyInstance) {
           purchaseValue?: number;
           assignedStaffId?: string;
           notes?: string;
+          customerAddressId?: string;
           sessions: Array<{
             sessionNumber: number;
             bookingDate: string;
@@ -35,7 +36,7 @@ export async function reservationSeriesRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       const tenantId = tenantOf(request);
-      const { customerId, treatmentName, treatmentCategory, totalSessions, purchaseValue, assignedStaffId, notes, sessions, babies } =
+      const { customerId, treatmentName, treatmentCategory, totalSessions, purchaseValue, assignedStaffId, notes, customerAddressId, sessions, babies } =
         request.body || {};
 
       if (!customerId || !treatmentName || !totalSessions || !sessions?.length) {
@@ -45,7 +46,7 @@ export async function reservationSeriesRoutes(fastify: FastifyInstance) {
       try {
         const { reservationSeriesService } = await import('../../services/reservation-series.service');
         const series = await reservationSeriesService.createSeries(
-          { customerId, treatmentName, treatmentCategory, totalSessions, purchaseValue, assignedStaffId, notes, sessions, babies },
+          { customerId, treatmentName, treatmentCategory, totalSessions, purchaseValue, assignedStaffId, notes, customerAddressId, sessions, babies },
           tenantId
         );
 
@@ -54,12 +55,26 @@ export async function reservationSeriesRoutes(fastify: FastifyInstance) {
           adminIdentity: (request as any).adminIdentity,
           action: 'CREATE_RESERVATION_SERIES',
           targetId: series.id,
-          payload: { customerId, treatmentName, treatmentCategory, totalSessions, purchaseValue, sessionCount: sessions.length },
+          payload: { customerId, treatmentName, treatmentCategory, totalSessions, purchaseValue, customerAddressId: customerAddressId || null, sessionCount: sessions.length },
           ipAddress: request.ip,
         });
 
         return reply.status(201).send({ success: true, data: series });
       } catch (err: any) {
+        if (err?.code === 'CUSTOMER_ADDRESS_NOT_FOUND') {
+          return reply.status(400).send({
+            success: false,
+            code: 'CUSTOMER_ADDRESS_NOT_FOUND',
+            error: 'Kartu alamat yang dipilih tidak ada di buku alamat customer ini.',
+          });
+        }
+        if (err?.code === 'SERIES_MULTIPLE_ADDRESS_NOT_SUPPORTED') {
+          return reply.status(400).send({
+            success: false,
+            code: 'SERIES_MULTIPLE_ADDRESS_NOT_SUPPORTED',
+            error: 'Series hanya boleh memakai satu kartu alamat untuk semua sesi.',
+          });
+        }
         // Fase 3.3: collision per sesi ΓåÆ 409 dengan info sesi bentrok.
         if (err?.code === 'STAFF_COLLISION') {
           return reply.status(409).send({
