@@ -131,18 +131,9 @@ export async function resolveLandingContent(slug: string): Promise<LandingConten
     });
 
     if (!tenant) {
-      tenant = await prisma.tenant.findFirst({
-        select: {
-          id: true,
-          slug: true,
-          name: true,
-          whatsapp_number: true,
-          meta_pixel_id: true,
-          landing_type: true,
-          landing_content: true,
-          raw_html_content: true,
-        },
-      });
+      // M-05: JANGAN fallback ke tenant pertama — slug tak dikenal harus 404,
+      // bukan menyajikan landing milik tenant lain.
+      return null;
     }
   } catch (err: any) {
     console.warn(`[LANDING SLUG RESOLVE] Tenant legacy lookup gagal: ${err.message}`);

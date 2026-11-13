@@ -1239,7 +1239,7 @@ export const MetaClickCatcher: React.FC = () => {
                 </div>
                 <div className="text-xs text-ink-3">
                   <span className="font-semibold text-ink">Target Pixel:</span>{' '}
-                  <span className="font-mono font-bold text-accent">{selectedItem.metaPixelId || '1465457801784141'}</span>
+                  <span className="font-mono font-bold text-accent">{selectedItem.metaPixelId || 'Belum diset'}</span>
                 </div>
               </div>
 

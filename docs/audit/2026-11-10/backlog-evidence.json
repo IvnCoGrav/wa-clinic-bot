@@ -533,7 +533,7 @@
         {
           "type": "file",
           "path": "docs/FEATURE_INVENTORY.md",
-          "line": 200,
+          "line": 201,
           "contains": "25 interval cron"
         },
         {
@@ -1853,7 +1853,7 @@
         {
           "type": "file",
           "path": "docs/FEATURE_INVENTORY.md",
-          "line": 266,
+          "line": 267,
           "contains": "superAdminOnlyPrefixes"
         },
         {
@@ -1928,6 +1928,206 @@
       ],
       "verifiedBy": "AI Agent",
       "verifiedAt": "2026-11-12"
+    },
+    "M-03": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/routes/admin/landings.subroute.ts",
+          "line": 336,
+          "contains": "const tenantId = resolveSessionTenantId(request);"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/landing-admin-tenant-honesty.test.ts",
+          "contains": "duplikat slug diperiksa per tenant"
+        },
+        {
+          "type": "file",
+          "path": "src/routes/admin/meta-attribution.subroute.ts",
+          "line": 134,
+          "contains": "const tenantId = resolveTenant(request);"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-13"
+    },
+    "M-04": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/routes/admin/landings.subroute.ts",
+          "line": 404,
+          "contains": "error: 'Landing page gagal disimpan.'"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/landing-admin-tenant-honesty.test.ts",
+          "contains": "POST create gagal → 503"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/landing-admin-tenant-honesty.test.ts",
+          "contains": "reset landing gagal → 503"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-13"
+    },
+    "Cfg-012": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/routes/admin/landings.subroute.ts",
+          "line": 369,
+          "contains": "tenant_id: tenantId,"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/landing-admin-tenant-honesty.test.ts",
+          "contains": "GET daftar landing memakai tenant peminta"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-13"
+    },
+    "M-06": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/routes/landing.route.ts",
+          "line": 427,
+          "contains": "const ip = request.ip || '';"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/landing-cta-ip-spoof.test.ts",
+          "contains": "X-Forwarded-For palsu tidak dipakai sebagai IP pelanggan"
+        },
+        {
+          "type": "file",
+          "path": "src/routes/tracking.route.ts",
+          "line": 408,
+          "contains": "SEC-AUDIT-15: XFF dapat dispoof klien; socket peer (request.ip) otoritatif."
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/landing-cta-ip-spoof.test.ts",
+          "contains": "anti-spoof"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-13"
+    },
+    "M-05": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/services/landing-content.service.ts",
+          "line": 134,
+          "contains": "M-05: JANGAN fallback ke tenant pertama"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/landing-content-unknown-slug.test.ts",
+          "contains": "tidak fallback ke tenant pertama saat slug tidak cocok"
+        },
+        {
+          "type": "test",
+          "path": "tests/integration/landing-serving.test.ts",
+          "contains": "tak dikenal → 404 ketat"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-13"
+    },
+    "M-10": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "docs/META_CAPI_SETUP.md",
+          "line": 40,
+          "contains": "<SERVER_HOST>"
+        },
+        {
+          "type": "file",
+          "path": "docs/INTEGRASI_LANDING_EXTERNAL.md",
+          "line": 245,
+          "contains": "bukan read-only"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/capi-docs-accuracy.test.ts",
+          "contains": "panduan CAPI memakai placeholder"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-13"
+    },
+    "M-02": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/landing/public/external-tracker.js",
+          "line": 19,
+          "contains": "var DEFAULT_PIXEL_ID = '__DEFAULT_PIXEL_ID__';"
+        },
+        {
+          "type": "file",
+          "path": "src/routes/landing.route.ts",
+          "line": 332,
+          "contains": "async function resolveExternalTrackerPixel"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/external-tracker-pixel.test.ts",
+          "contains": "mengisi pixel dari DB tenant"
+        },
+        {
+          "type": "file",
+          "path": "packages/admin-dashboard/src/pages/tenant/MetaClickCatcher.tsx",
+          "line": 1242,
+          "contains": "'Belum diset'"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-13"
+    },
+    "Ar-005": {
+      "status": "FIXED",
+      "evidence": [
+        {
+          "type": "file",
+          "path": "src/routes/admin/settings-notifications.subroute.ts",
+          "line": 397,
+          "contains": "code: 'DATABASE_UNAVAILABLE',"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/admin-db-degradation-honesty.test.ts",
+          "contains": "notifications/logs"
+        },
+        {
+          "type": "file",
+          "path": "src/routes/admin/landings.subroute.ts",
+          "line": 404,
+          "contains": "error: 'Landing page gagal disimpan.'"
+        },
+        {
+          "type": "test",
+          "path": "tests/unit/landing-admin-tenant-honesty.test.ts",
+          "contains": "POST create gagal → 503"
+        }
+      ],
+      "verifiedBy": "AI Agent",
+      "verifiedAt": "2026-11-13"
     }
   },
   "known": {

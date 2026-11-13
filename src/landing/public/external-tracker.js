@@ -12,8 +12,11 @@
 (function () {
   'use strict';
 
-  // Default Pixel ID Klinik (Kala Baby Spa)
-  var DEFAULT_PIXEL_ID = '1465457801784141';
+  // Pixel default di-inject oleh server dari DB tenant saat menyajikan file ini
+  // (lihat /assets/external-tracker.js?tenant=<id|slug>). Placeholder ini TIDAK
+  // boleh diganti dengan angka hardcode — kalau kosong, pixel klien dimatikan
+  // dan atribusi server (/cta) tetap berjalan.
+  var DEFAULT_PIXEL_ID = '__DEFAULT_PIXEL_ID__';
 
   // Whitelist parameter atribusi yang disalin dari address bar ke link CTA
   var TRACKED_PARAMS = [

@@ -254,6 +254,30 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Catatan konfigurasi baru:** `ADMIN_ALLOWED_ORIGINS` (dipisah koma) wajib diisi bila dashboard dilayani dari origin berbeda dengan API; tanpa itu gerbang CSRF hanya menerima same-origin.
 - **Gerbang regresi Fase 6C:** 7.183 test / 7.153 lulus / 2 gagal pre-existing #287 (0 regresi vs 6B); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (68 item); `audit:verify-claims` PASS (10 rujukan); `security:scan` LULUS.
 
+- **Gerbang regresi W10:** 7.448 test / 7.418 lulus / 2 gagal pre-existing #287 (0 regresi vs W9). Dijalankan dengan `--minWorkers 1 --maxWorkers 2` karena concurrency default memicu flake timeout pada `media-mime-audio`/`live-chat-reply`/`waha-webhook` (semua lulus saat dijalankan sendiri). `tsc` 0 error; `build` root exit 0; `verify:backlog` PASS (89 item); `security:scan` LULUS 2.333 file; **dashboard build (tsc+vite) sukses**.
+
+### 0.38 W11 — brand dashboard data-driven & tenant header (Cfg-015 sebagian, 2026-11-13)
+
+- **Cfg-015 (sebagian):** `BrandContext` baru mengambil `businessName`/`botDisplayName` dari `GET /api/admin/settings` (sumber `Tenant.settings.brand`/kolom tenant) dengan fallback netral "Klinik". Layout (sidebar + header mobile), quick-chat template, MetaCapiQueue (origin), nama file ekspor, label/placeholder pengaturan tidak lagi memakai "Kala". `x-tenant-id` di `api.ts` diambil dari `last_auth_user` (user terautentikasi), bukan hardcode `default-tenant`.
+- **Verifikasi:** `npm run build` di `packages/admin-dashboard` (tsc + vite) **sukses**.
+- **Status register:** Cfg-015 tetap **OPEN** — sisa teks di `StaffToday.tsx` (sedang diedit pengguna), watermark foto, nama klinik di `slotRecommendations`/`CreateReservationModal`, dan koordinat/slot yang butuh endpoint khusus.
+- **Register:** **247 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 8 OPEN** (tidak berubah).
+
+### 0.37 W10 — landing admin tenant-aware, jujur, & pixel data-driven (2026-11-13)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **M-03** | Landing create/list/duplikat slug memakai tenant peminta (`resolveSessionTenantId`); meta-attribution tetap `resolveTenant(request)` | `tests/unit/landing-admin-tenant-honesty.test.ts` (8) |
+| **M-04** | create/update/delete/reset landing → **503 `DATABASE_UNAVAILABLE`** saat DB gagal di produksi (fallback memori hanya non-produksi) | idem |
+| **Cfg-012** | Sisa `DEFAULT_TENANT_ID` di `admin/landings` ditutup (tenant peminta); dua ref tersisa hanya pixel env default-tenant | idem |
+| **M-06** | `/cta` memakai `request.ip` (trustProxy), bukan XFF kiri yang bisa dipalsukan | `tests/unit/landing-cta-ip-spoof.test.ts` (1) |
+| **M-05** | `resolveLandingContent` tidak fallback ke tenant pertama; slug tak dikenal → `null`/404 | `tests/unit/landing-content-unknown-slug.test.ts` (2) |
+| **M-02** | `external-tracker.js` tanpa pixel hardcode: `/assets/external-tracker.js?tenant=` mengisi `__DEFAULT_PIXEL_ID__` dari DB (validasi digit); dashboard menampilkan "Belum diset" | `tests/unit/external-tracker-pixel.test.ts` (5) |
+| **M-10** | Dokumentasi CAPI/landing direkonsiliasi (placeholder, tracker bukan read-only, wajib `?pixel=`/`?tenant=`, sisa M-02 dicatat) | `tests/unit/capi-docs-accuracy.test.ts` (3) |
+| **Ar-005** | Sisa route admin false-success ditutup (landing + route W6C) | `tests/unit/admin-db-degradation-honesty.test.ts` + landing tests |
+
+- **Register:** **247 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 8 OPEN**.
+
 ### 0.36 W9 — tenant seam untuk worker broadcast & debug (Ar-003, 2026-11-13)
 
 | ID | Perbaikan | Bukti test |

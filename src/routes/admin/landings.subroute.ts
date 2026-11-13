@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../../db/client';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { auditService } from '../../services/audit.service';
+import { resolveSessionTenantId } from './route-helpers';
 import {
   memoryLandings,
   validateLandingSlug,
@@ -262,6 +263,14 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
           data: { tenantId: updatedTenant.id, landingType: updatedTenant.landing_type },
         });
       } catch (err: any) {
+        // M-04: jangan 200 "sukses" saat DB gagal di produksi.
+        if (process.env.NODE_ENV === 'production') {
+          return reply.status(503).send({
+            success: false,
+            code: 'DATABASE_UNAVAILABLE',
+            error: 'Landing page gagal di-reset.',
+          });
+        }
         return reply.status(200).send({
           success: true,
           message: 'Landing page dikembalikan ke template default (In-Memory Fallback Mode).',
@@ -275,7 +284,7 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
    * GET /api/admin/landings?tenantId=
    */
   fastify.get('/api/admin/landings', async (request: FastifyRequest, reply: FastifyReply) => {
-    const tenantId = (request.query as any)?.tenantId || DEFAULT_TENANT_ID;
+    const tenantId = (request.query as any)?.tenantId || resolveSessionTenantId(request);
     try {
       const landings = await prisma.landingPage.findMany({
         where: { tenant_id: tenantId },
@@ -324,6 +333,7 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
    */
   fastify.post('/api/admin/landings', async (request: FastifyRequest<{ Body: any }>, reply: FastifyReply) => {
     const body = (request.body || {}) as any;
+    const tenantId = resolveSessionTenantId(request);
     const title = typeof body.title === 'string' ? body.title.trim() : '';
     const slug = typeof body.slug === 'string' ? body.slug.trim().toLowerCase() : '';
     const html = typeof body.html === 'string' ? body.html : '';
@@ -345,7 +355,7 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
     }
 
     try {
-      const existing = await prisma.landingPage.findFirst({ where: { slug } });
+      const existing = await prisma.landingPage.findFirst({ where: { slug, tenant_id: tenantId } });
       if (existing) return reply.status(409).send({ error: `Slug '${slug}' sudah dipakai landing page lain.` });
     } catch (err: any) {
       console.warn(`[LANDING CREATE] Unique check skipped (DB offline?):`, err.message);
@@ -356,7 +366,7 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
     try {
       const created = await prisma.landingPage.create({
         data: {
-          tenant_id: DEFAULT_TENANT_ID,
+          tenant_id: tenantId,
           slug,
           title,
           landing_type: landingType,
@@ -382,10 +392,22 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
         .status(200)
         .send({ success: true, message: 'Landing page berhasil dibuat.', data: toLandingListItem(created) });
     } catch (err: any) {
+      // DB masih bisa punya unique global (sebelum migrasi Ar-004) → 409, bukan 503.
+      if (err?.code === 'P2002') {
+        return reply.status(409).send({ error: `Slug '${slug}' sudah dipakai landing page lain.` });
+      }
+      // M-04: jangan 200 "sukses" saat DB gagal di produksi.
+      if (process.env.NODE_ENV === 'production') {
+        return reply.status(503).send({
+          success: false,
+          code: 'DATABASE_UNAVAILABLE',
+          error: 'Landing page gagal disimpan.',
+        });
+      }
       const id = `lp_${Date.now()}_${Math.random().toString(36).substring(4)}`;
       const record = {
         id,
-        tenant_id: DEFAULT_TENANT_ID,
+        tenant_id: tenantId,
         slug,
         title,
         landing_type: landingType,
@@ -428,7 +450,9 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
         if (!title) return reply.status(400).send({ error: 'Field title wajib diisi.' });
 
         if (slug !== existing.slug) {
-          const dup = await prisma.landingPage.findFirst({ where: { slug, id: { not: id } } });
+          const dup = await prisma.landingPage.findFirst({
+            where: { slug, tenant_id: existing.tenant_id, id: { not: id } },
+          });
           if (dup) return reply.status(409).send({ error: `Slug '${slug}' sudah dipakai landing page lain.` });
         }
 
@@ -478,6 +502,21 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
           data: toLandingListItem(updated),
         });
       } catch (err: any) {
+        // DB masih bisa punya unique global (sebelum migrasi Ar-004) → 409, bukan 503.
+        if (err?.code === 'P2002') {
+          const slugInput = typeof body.slug === 'string' ? body.slug.trim().toLowerCase() : '';
+          return reply
+            .status(409)
+            .send({ error: `Slug '${slugInput}' sudah dipakai landing page lain.` });
+        }
+        // M-04: jangan 200 "sukses" saat DB gagal di produksi.
+        if (process.env.NODE_ENV === 'production') {
+          return reply.status(503).send({
+            success: false,
+            code: 'DATABASE_UNAVAILABLE',
+            error: 'Landing page gagal diperbarui.',
+          });
+        }
         const rec = memoryLandings.get(id);
         if (!rec) return reply.status(404).send({ error: `Landing page '${id}' tidak ditemukan.` });
 
@@ -542,6 +581,14 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
 
         return reply.status(200).send({ success: true, message: 'Landing page berhasil dihapus.' });
       } catch (err: any) {
+        // M-04: jangan 200 "sukses" saat DB gagal di produksi.
+        if (process.env.NODE_ENV === 'production') {
+          return reply.status(503).send({
+            success: false,
+            code: 'DATABASE_UNAVAILABLE',
+            error: 'Landing page gagal dihapus.',
+          });
+        }
         const rec = memoryLandings.get(id);
         if (!rec) return reply.status(404).send({ error: `Landing page '${id}' tidak ditemukan.` });
         memoryLandings.delete(id);

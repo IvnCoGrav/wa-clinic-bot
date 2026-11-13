@@ -1,7 +1,9 @@
 # Panduan Setup Meta Conversions API (CAPI) & Kunci Enkripsi Token
 
 Panduan ini adalah versi **terverifikasi untuk repo & server ini** (bukan panduan generik).
-Semua langkah sudah dicek terhadap kondisi server produksi (`43.157.197.148`).
+Nilai environment (host/IP, port SSH, folder, pixel) **spesifik per deployment** dan
+sengaja tidak ditulis di repo ini — ambil dari `.env`/dashboard server yang sedang dipakai.
+Status di bawah diverifikasi terakhir 2026-08-16.
 
 ## Ringkasan Arsitektur
 
@@ -21,7 +23,7 @@ Semua langkah sudah dicek terhadap kondisi server produksi (`43.157.197.148`).
 | Item | Status |
 |---|---|
 | `WABA_TOKEN_ENCRYPTION_KEY` di `.env` server | **SUDAH ADA** |
-| Pixel ID di DB tenant (`meta_pixel_id`) | `1382300863013984` |
+| Pixel ID di DB tenant (`meta_pixel_id`) | **terisi** (nilai aktual per tenant — cek dashboard, jangan disalin ke dokumen) |
 | CAPI Access Token di DB tenant (terenkripsi) | **SUDAH TERISI** |
 | `MAX_INBOUND_MESSAGE_AGE_SECONDS` di `.env` | belum ada (default kode 180s — opsional) |
 
@@ -35,15 +37,14 @@ Semua langkah sudah dicek terhadap kondisi server produksi (`43.157.197.148`).
 > Server ini TIDAK pakai `ssh root@IP`. Akses yang benar:
 
 ```bash
-ssh -p 1403 ubuntu@43.157.197.148
-# atau pakai alias yang sudah dipasang:
-ssh klinik-server
+ssh -p <SSH_PORT> <SSH_USER>@<SERVER_HOST>
+# atau pakai alias yang sudah dipasang: ssh <ALIAS>
 ```
 
-Folder proyek di server: `/opt/wa-clinic-bot` (bukan `~/wa-clinic-bot`):
+Folder proyek di server: `<APP_DIR>` (default runbook ini: `/opt/wa-clinic-bot`):
 
 ```bash
-cd /opt/wa-clinic-bot
+cd <APP_DIR>
 ```
 
 ## Langkah 2 — Verifikasi Status (read-only, aman)
@@ -100,7 +101,7 @@ docker compose up -d --no-deps app
    `http://<IP>:3000/admin` saat tanpa domain).
 2. Buka **Operational Settings** → panel **Meta Pixel & CAPI**.
 3. Isi:
-   - **Meta Pixel ID**: `1382300863013984`
+   - **Meta Pixel ID**: ambil dari `tenants.meta_pixel_id` tenant aktif (atau env `FB_PIXEL_ID` untuk default-tenant)
    - **CAPI Access Token**: token `EAAR...` (tampilan UI di-mask
      `••••••••••••`; kosongkan field jika token tidak diubah).
 4. Klik **Simpan Kredensial CAPI** → notifikasi hijau "Konfigurasi Meta Pixel &
@@ -132,6 +133,13 @@ Token disimpan terenkripsi AES-256-GCM ke kolom `tenants.meta_capi_access_token`
 
 - `.env` server berisi kredensial asli dan **gitignored** — jangan pernah
   commit ke git, jangan tempel nilai asli di dokumen/chat yang bisa terekspos.
+- Panduan ini sengaja memakai placeholder (`<SERVER_HOST>`, `<APP_DIR>`, pixel
+  "cek dashboard") agar tidak menyimpan data infrastruktur live di repo.
+- **Pixel di landing eksternal:** `src/landing/public/external-tracker.js`
+  memuat Meta Pixel di sisi klien. Bila script dipasang tanpa `?pixel=`, ia
+  memakai **default legacy** yang di-hardcode. Pastikan `?pixel=<id>` sama
+  dengan pixel tenant; sisa risiko hardcode ini dicatat sebagai **M-02** di
+  `docs/KNOWN_ISSUES.md`/register.
 - Rotasi token Meta CAPI aman kapan saja (simpan ulang dari dashboard).
 - Rotasi `WABA_TOKEN_ENCRYPTION_KEY` TIDAK aman kecuali re-input semua token
   (lihat Langkah 3).

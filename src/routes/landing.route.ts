@@ -6,6 +6,7 @@ import { resolveLandingContent, defaultLandingContent, LandingContent } from '..
 import { getPricelistPayload, serializePayloadForHtml } from '../services/pricelist.service';
 import { isCatalogDegraded, getCatalogSource } from '../services/treatment-catalog.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { prisma } from '../db/client';
 
 const RESERVED_SLUGS = new Set([
   'go',
@@ -328,6 +329,32 @@ async function renderLanding(reply: FastifyReply, request: FastifyRequest, conte
   return reply.type('text/html').status(200).send(htmlContent);
 }
 
+async function resolveExternalTrackerPixel(rawTenant?: string): Promise<string> {
+  const isValidPixel = (v: unknown): v is string => typeof v === 'string' && /^\d{5,20}$/.test(v);
+  const hint = typeof rawTenant === 'string' && rawTenant.trim() ? rawTenant.trim() : null;
+  const isDefaultRequest = !hint;
+
+  let dbReachable = true;
+  let pixel: string | null = null;
+  try {
+    const { prisma } = await import('../db/client');
+    const tenant = await prisma.tenant.findFirst({
+      where: hint ? { OR: [{ id: hint }, { slug: hint }] } : { id: DEFAULT_TENANT_ID },
+      select: { meta_pixel_id: true },
+    });
+    pixel = tenant?.meta_pixel_id ?? null;
+  } catch {
+    dbReachable = false;
+  }
+
+  if (isValidPixel(pixel)) return pixel;
+  // Tenant non-default tanpa pixel: JANGAN pinjam pixel env milik default-tenant.
+  if (dbReachable && !isDefaultRequest) return '';
+  // Tanpa hint / DB offline: fallback env hanya untuk default-tenant (perilaku lama).
+  const envPixel = process.env.FB_PIXEL_ID;
+  return isValidPixel(envPixel) ? envPixel : '';
+}
+
 export async function landingRoutes(fastify: FastifyInstance) {
   // /go — pintu masuk kampanye iklan (selalu tersedia, fail-open generik)
   fastify.get('/go', async (request: FastifyRequest, reply: FastifyReply) => {
@@ -395,7 +422,9 @@ export async function landingRoutes(fastify: FastifyInstance) {
       const isBot = !isTest && isBotOrCrawler(ua);
 
       if (!isBot) {
-        const ip = (request.headers['x-forwarded-for'] as string) || request.ip || '';
+        // SEC-AUDIT-15 / M-06: XFF kiri bisa dipalsukan klien; `request.ip`
+        // mengikuti trustProxy (hop proxy tepercaya) sehingga otoritatif.
+        const ip = request.ip || '';
         const host = (request.headers['x-forwarded-host'] as string) || request.headers.host || '';
         const proto = (request.headers['x-forwarded-proto'] as string) || 'https';
 
@@ -449,7 +478,7 @@ export async function landingRoutes(fastify: FastifyInstance) {
           fbclid: query.fbclid || null,
           fbp: query.fbp || null,
           fbc: query.fbc || null,
-          ipAddress: ip.split(',')[0].trim(),
+          ipAddress: ip.trim(),
           userAgent: ua,
           landingUrl: fullLandingUrl,
           utmSource: isTest ? (query.utm_source || 'test') : (query.utm_source || query.divisi || null),
@@ -620,14 +649,19 @@ export async function landingRoutes(fastify: FastifyInstance) {
   });
 
   // /assets/:filename — serve static assets dari public/ (clientParamBuilder.bundle.js, external-tracker.js)
-  fastify.get('/assets/:filename', async (request: FastifyRequest<{ Params: { filename: string } }>, reply: FastifyReply) => {
+  fastify.get(
+    '/assets/:filename',
+    async (
+      request: FastifyRequest<{ Params: { filename: string }; Querystring: { tenant?: string } }>,
+      reply: FastifyReply
+    ) => {
     const { filename } = request.params;
     if (!/^[a-zA-Z0-9._-]+$/.test(filename)) {
       return reply.status(400).send({ error: 'Invalid filename' });
     }
     try {
       const filePath = path.join(__dirname, '../landing/public', filename);
-      const content = await fs.promises.readFile(filePath);
+      let content: Buffer = await fs.promises.readFile(filePath);
       if (filename.endsWith('.js')) {
         reply.type('application/javascript');
       } else if (filename.endsWith('.css')) {
@@ -639,11 +673,24 @@ export async function landingRoutes(fastify: FastifyInstance) {
       } else if (filename.endsWith('.webp')) {
         reply.type('image/webp');
       }
+
+      // M-02: pixel default tracker diambil dari DB tenant (bukan hardcode).
+      // `?tenant=<id|slug>` diverifikasi ke DB; tanpa itu → default-tenant.
+      if (filename === 'external-tracker.js') {
+        const pixelId = await resolveExternalTrackerPixel(request.query?.tenant);
+        content = Buffer.from(
+          content.toString('utf8').replace('__DEFAULT_PIXEL_ID__', pixelId),
+          'utf8'
+        );
+        reply.header('Cache-Control', 'public, max-age=300');
+      }
+
       return reply.send(content);
     } catch {
       return reply.status(404).send({ error: 'Not Found' });
     }
-  });
+  }
+  );
 
   // /pricelist & alias — serve landing page pricelist resmi (terhidrasi dari DB)
   fastify.get('/pricelist', async (request: FastifyRequest, reply: FastifyReply) => {

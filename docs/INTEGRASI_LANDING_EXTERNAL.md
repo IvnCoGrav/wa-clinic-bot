@@ -29,7 +29,12 @@ Iklan Meta ──klik──> Landing Page Eksternal
 
 Karena `external-tracker.js` disajikan langsung oleh bot
 (`GET /assets/external-tracker.js`), Anda **tidak perlu meng-upload** script ini
-ke LP eksternal — cukup memanggilnya via `<script src="...">`.
+ke LP eksternal — cukup memanggilnya via `<script>`. Sertakan `?tenant=` dan
+`?pixel=` agar atribusi & pixel sesuai tenant:
+
+```html
+<script src="https://<domain-bot>/assets/external-tracker.js?tenant=<id-atau-slug>&pixel=<pixel-id>" defer></script>
+```
 
 ---
 
@@ -237,12 +242,20 @@ path-nya persis `/cta`.
 
 ## 9. Keamanan & Batasan
 
-- Script **read-only & fail-open**: tidak memodifikasi DOM selain query string
-  link `/cta`, tidak menambah/mengganti event handler, tidak melanggar
-  aturan sandbox; error apa pun di-swallow.
-- Seluruh logika atribusi & pixel tetap ditangani server-side oleh `/cta`
-  (token/credential Meta tidak pernah terpapar).
+- Script **fail-open & idempoten**, tetapi **bukan read-only**: ia (a) memuat
+  Meta Pixel `fbevents.js` dan menembakkan `PageView` di domain eksternal,
+  (b) menulis cookie atribusi `_fbp`/`_fbc` bila tersedia, dan (c) menulis ulang
+  `href` link CTA agar membawa parameter atribusi. Ia TIDAK menambah/mengganti
+  event handler lain dan semua error di-swallow agar halaman tetap jalan.
+- **Pixel tidak sepenuhnya server-side.** Tracker menembakkan PageView di klien;
+  server `/cta` menembakkan `AddToCart` dan CAPI. Pixel ID diambil dari
+  `?pixel=` pada tag script; tanpa itu dipakai default legacy yang di-hardcode
+  (temuan **M-02**, masih OPEN). Selalu sertakan `?pixel=<id-tenant>`.
+- Credential Meta (access token) tetap **tidak pernah** dikirim ke browser —
+  hanya pixel ID publik yang dipakai.
 - Link CTA dari LP jangan diberi `?phone=...` — endpoint `/cta` mengabaikannya
   untuk tujuan redirect dan selalu memakai nomor Tenant.
+- Parameter `?tenant=<id|slug>` pada tag script hanyalah hint; server
+  memverifikasinya ke DB (hint tak dikenal → default-tenant).
 
 Referensi: `docs/META_FUNNEL.md`, `docs/SAAS_READINESS_AUDIT.md`.
