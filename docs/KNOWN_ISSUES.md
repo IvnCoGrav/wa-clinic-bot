@@ -136,6 +136,12 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - Register menjadi **239 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 16 OPEN**.
   - **Batas yang diketahui:** bila Redis mati, KV jatuh ke memori per proses sehingga sweep kembali hanya melihat sesi prosesnya sendiri (perilaku lama); TTL record 2 jam, jadi sesi yang berhenti dikirim akan hilang otomatis.
 
+- **Tindakan W9 (2026-11-13) — Ar-003 sebagian (worker broadcast & debug):**
+  - Enqueue follow-up broadcast tidak lagi hardcode `tenant_id: DEFAULT_TENANT_ID`; kini memproses semua tenant dari DB dan `updateMany` ikut difilter tenant (mencegah penandaan QUEUED lintas tenant).
+  - Endpoint debug (`/api/admin/debug/system`, `/messages`, `/conversations`) kini memakai tenant pemanggil, bukan `default-tenant`.
+  - Inventaris 497 referensi `DEFAULT_TENANT_ID` + klasifikasi A–E ada di `docs/audit/2026-11-13/AR003_TENANT_INVENTORY.md`.
+  - **Sisa:** 264 referensi di services mayoritas default parameter yang sah, tetapi perlu audit pemanggil per domain; landing (area pengguna) belum disentuh.
+
 - **Tindakan W8 (2026-11-13) — verifikasi migrasi di Postgres ephemeral + temuan bootstrap:**
   - Migrasi `20261112130000_ar004_tenant_scoped_unique_staff_adclick` **berhasil** diterapkan ke Postgres 16 sekali-pakai (Docker lokal). Drift check `migrate diff --from-url` → `-- This is an empty migration.`
   - Uji perilaku: nomor staf sama di **dua tenant** diterima, di tenant yang sama ditolak (`staff_tenant_id_phone_key`); `trackingCode` sama di dua tenant diterima, di tenant yang sama ditolak (`ad_clicks_tenant_id_trackingCode_key`); Prisma `upsert` dengan compound `tenant_id_phone` sukses (create → update, 1 baris).

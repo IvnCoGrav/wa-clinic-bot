@@ -160,7 +160,7 @@ describe('Broadcast Throttling & Queue Constraint Tests', () => {
     expect(updateManySpy).toHaveBeenCalledTimes(1);
     expect(updateManySpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: { in: ['f-p1'] } },
+        where: { id: { in: ['f-p1'] }, tenant_id: DEFAULT_TENANT_ID },
         data: { status: 'QUEUED' }
       })
     );

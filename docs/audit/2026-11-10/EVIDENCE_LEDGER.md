@@ -254,6 +254,16 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 - **Catatan konfigurasi baru:** `ADMIN_ALLOWED_ORIGINS` (dipisah koma) wajib diisi bila dashboard dilayani dari origin berbeda dengan API; tanpa itu gerbang CSRF hanya menerima same-origin.
 - **Gerbang regresi Fase 6C:** 7.183 test / 7.153 lulus / 2 gagal pre-existing #287 (0 regresi vs 6B); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (68 item); `audit:verify-claims` PASS (10 rujukan); `security:scan` LULUS.
 
+### 0.36 W9 — tenant seam untuk worker broadcast & debug (Ar-003, 2026-11-13)
+
+| ID | Perbaikan | Bukti test |
+|---|---|---|
+| **Ar-003** (sebagian) | `enqueuePendingFollowUps` memproses **semua tenant** (`getAllTenantIds`) dan `updateMany` ikut difilter `tenant_id`; `collectSystemInfo`, `collectRecentMessages`, `collectConversationTrace` menerima `tenantId` dan route debug meneruskannya. Inventaris 497 referensi + klasifikasi ditulis di `docs/audit/2026-11-13/AR003_TENANT_INVENTORY.md` | `tests/unit/ar003-tenant-worker-sweeps.test.ts` (5) + `tests/integration/broadcast-queue.test.ts` |
+
+- **Status register:** Ar-003 tetap **OPEN** — sisa default parameter service (264 ref), landing (area pengguna), dan kendala skema.
+- **Register:** **239 FIXED / 4 UNVERIFIED / 5 DUPLICATE / 4 KNOWN / 16 OPEN** (tidak berubah).
+- **Gerbang regresi W9:** 7.367 test / 7.337 lulus / 2 gagal pre-existing #287 (0 regresi vs W7); `tsc` 0 error; `build` exit 0; `verify:backlog` PASS (81 item); `security:scan` LULUS 2.320 file.
+
 ### 0.35 W8 — verifikasi migrasi Ar-004 di Postgres ephemeral (2026-11-13)
 
 - **Lingkungan:** container `postgres:16-alpine` sekali-pakai (port 55432) + bootstrap schema lama → 109 migrasi lama ditandai `--applied` → `prisma migrate deploy` migrasi Ar-004.

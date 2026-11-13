@@ -458,7 +458,8 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
   fastify.get('/api/admin/debug/system', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { collectSystemInfo } = await import('../../services/system-debug.service');
-      const info = await collectSystemInfo();
+      const { resolveTenantId } = await import('./settings-helpers');
+      const info = await collectSystemInfo(resolveTenantId(request));
       return reply.status(200).send({ success: true, data: info });
     } catch (err: any) {
       return reply.status(500).send({ success: false, message: err?.message });
@@ -499,8 +500,9 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
     async (request: FastifyRequest<{ Querystring: { limit?: string } }>, reply: FastifyReply) => {
       try {
         const { collectRecentMessages } = await import('../../services/system-debug.service');
+        const { resolveTenantId } = await import('./settings-helpers');
         const limit = parseInt(request.query?.limit || '50', 10) || 50;
-        const data = await collectRecentMessages(limit);
+        const data = await collectRecentMessages(limit, resolveTenantId(request));
         return reply.status(200).send({ success: true, data });
       } catch (err: any) {
         return reply.status(500).send({ success: false, message: err?.message });
@@ -516,8 +518,9 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
     async (request: FastifyRequest<{ Querystring: { limit?: string } }>, reply: FastifyReply) => {
       try {
         const { collectConversationTrace } = await import('../../services/system-debug.service');
+        const { resolveTenantId } = await import('./settings-helpers');
         const limit = parseInt(request.query?.limit || '50', 10) || 50;
-        const data = await collectConversationTrace(limit);
+        const data = await collectConversationTrace(limit, resolveTenantId(request));
         return reply.status(200).send({ success: true, data });
       } catch (err: any) {
         return reply.status(500).send({ success: false, message: err?.message });

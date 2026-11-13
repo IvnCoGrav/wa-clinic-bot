@@ -78,7 +78,7 @@ export function humanUptime(seconds: number): string {
   return `${d}d ${h}h ${m}m ${s}s`;
 }
 
-export async function collectSystemInfo(): Promise<SystemInfo> {
+export async function collectSystemInfo(tenantId: string = DEFAULT_TENANT_ID): Promise<SystemInfo> {
   const memory = process.memoryUsage();
 
   let dbStatus: SystemInfo['database'] = { status: 'UNKNOWN' };
@@ -98,11 +98,11 @@ export async function collectSystemInfo(): Promise<SystemInfo> {
   }
 
   const [customers, conversations, messages, reservations, followUps] = await Promise.all([
-    safeCount(() => prisma.customer.count({ where: { tenant_id: DEFAULT_TENANT_ID } })),
-    safeCount(() => prisma.conversation.count({ where: { tenant_id: DEFAULT_TENANT_ID } })),
-    safeCount(() => prisma.message.count({ where: { tenant_id: DEFAULT_TENANT_ID } })),
-    safeCount(() => prisma.reservation.count({ where: { tenant_id: DEFAULT_TENANT_ID } })),
-    safeCount(() => prisma.followUp.count({ where: { tenant_id: DEFAULT_TENANT_ID } })),
+    safeCount(() => prisma.customer.count({ where: { tenant_id: tenantId } })),
+    safeCount(() => prisma.conversation.count({ where: { tenant_id: tenantId } })),
+    safeCount(() => prisma.message.count({ where: { tenant_id: tenantId } })),
+    safeCount(() => prisma.reservation.count({ where: { tenant_id: tenantId } })),
+    safeCount(() => prisma.followUp.count({ where: { tenant_id: tenantId } })),
   ]);
 
   return {
@@ -140,10 +140,13 @@ export interface MessageTraceEntry {
   customerName: string | null;
 }
 
-export async function collectRecentMessages(limit = 50): Promise<{ entries: MessageTraceEntry[]; dbNote?: string }> {
+export async function collectRecentMessages(
+  limit = 50,
+  tenantId: string = DEFAULT_TENANT_ID
+): Promise<{ entries: MessageTraceEntry[]; dbNote?: string }> {
   try {
     const rows = await prisma.message.findMany({
-      where: { tenant_id: DEFAULT_TENANT_ID },
+      where: { tenant_id: tenantId },
       include: { conversation: { include: { customer: true } } },
       orderBy: { created_at: 'desc' },
       take: Math.min(200, Math.max(1, limit)),
@@ -203,10 +206,13 @@ export interface ConversationTraceEntry {
   customerName: string | null;
 }
 
-export async function collectConversationTrace(limit = 50): Promise<{ entries: ConversationTraceEntry[]; dbNote?: string }> {
+export async function collectConversationTrace(
+  limit = 50,
+  tenantId: string = DEFAULT_TENANT_ID
+): Promise<{ entries: ConversationTraceEntry[]; dbNote?: string }> {
   try {
     const rows = await prisma.conversation.findMany({
-      where: { tenant_id: DEFAULT_TENANT_ID },
+      where: { tenant_id: tenantId },
       include: { customer: true },
       orderBy: { last_message_at: 'desc' },
       take: Math.min(200, Math.max(1, limit)),

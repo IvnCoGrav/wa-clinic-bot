@@ -85,7 +85,10 @@ export class BroadcastQueueService {
   }
 
   /**
-   * Cron job harian (jam 08:30) memasukkan semua follow_ups pending yang jatuh tempo
+   * Cron job harian (jam 08:30) memasukkan semua follow_ups pending yang jatuh tempo.
+   *
+   * Ar-003: sebelumnya hanya tenant default yang diproses. Sekarang semua tenant
+   * diambil dari DB (best-effort) agar follow-up tenant lain tidak menggantung.
    */
   public async enqueuePendingFollowUps(): Promise<void> {
     if (process.env.ENABLE_FOLLOWUP_WORKER !== 'true') {
@@ -94,48 +97,55 @@ export class BroadcastQueueService {
     try {
       const now = new Date();
       const today0900 = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 9, 0, 0, 0);
-      // Ambil follow-up yang status PENDING dan waktu scheduled_at <= jam 9 hari ini
-      const pendingFollowUps = await prisma.followUp.findMany({
-        where: {
-          status: 'PENDING',
-          scheduled_at: { lte: today0900 },
-          tenant_id: DEFAULT_TENANT_ID,
-        },
-      });
+      const delayMs = Math.max(0, today0900.getTime() - now.getTime());
+      const { getAllTenantIds } = await import('./media.service');
+      const tenants = await getAllTenantIds();
+      let enqueued = 0;
 
-      if (pendingFollowUps.length === 0) {
+      for (const tenantId of tenants) {
+        // Ambil follow-up yang status PENDING dan waktu scheduled_at <= jam 9 hari ini
+        const pendingFollowUps = await prisma.followUp.findMany({
+          where: {
+            status: 'PENDING',
+            scheduled_at: { lte: today0900 },
+            tenant_id: tenantId,
+          },
+        });
+        if (pendingFollowUps.length === 0) continue;
+
+        // LANGSUNG update status ke QUEUED untuk menghindari double-enqueuing
+        await prisma.followUp.updateMany({
+          where: {
+            id: { in: pendingFollowUps.map((f) => f.id) },
+            tenant_id: tenantId,
+          },
+          data: { status: 'QUEUED' },
+        });
+
+        for (const f of pendingFollowUps) {
+          const payload: BroadcastJobData = {
+            followUpId: f.id,
+            customerId: f.customer_id,
+            tenantId: f.tenant_id,
+          };
+
+          if (this.redisEnabled && this.queue) {
+            await this.queue.add('send_broadcast', payload, {
+              jobId: `broadcast_${f.id}`,
+              delay: delayMs,
+            });
+          } else {
+            this.memoryQueue.push(payload);
+          }
+          enqueued++;
+        }
+      }
+
+      if (enqueued === 0) {
         console.log('[Broadcast Queue] No pending follow-ups to enqueue.');
         return;
       }
-
-      console.log(`[Broadcast Queue] Enqueuing ${pendingFollowUps.length} pending follow-ups...`);
-
-      // LANGSUNG update status ke QUEUED untuk menghindari double-enqueuing
-      await prisma.followUp.updateMany({
-        where: {
-          id: { in: pendingFollowUps.map(f => f.id) },
-        },
-        data: { status: 'QUEUED' },
-      });
-
-      const delayMs = Math.max(0, today0900.getTime() - now.getTime());
-
-      for (const f of pendingFollowUps) {
-        const payload: BroadcastJobData = {
-          followUpId: f.id,
-          customerId: f.customer_id,
-          tenantId: f.tenant_id,
-        };
-
-        if (this.redisEnabled && this.queue) {
-          await this.queue.add('send_broadcast', payload, {
-            jobId: `broadcast_${f.id}`,
-            delay: delayMs,
-          });
-        } else {
-          this.memoryQueue.push(payload);
-        }
-      }
+      console.log(`[Broadcast Queue] Enqueued ${enqueued} pending follow-ups (${tenants.length} tenant).`);
 
       if (!this.redisEnabled) {
         if (delayMs > 0) {
