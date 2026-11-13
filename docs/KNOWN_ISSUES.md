@@ -3,6 +3,78 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 326. [AI Bot / Operasional CS] Pasien Lama (Legacy/Existing) Terkunci Permanen ke CS Tanpa Auto-Release AI Bot (2026-11-14, OPEN — MONITORING OPERASIONAL)
+
+- **Status:** OPEN — BY DESIGN / MONITORING OPERASIONAL.
+- **Gejala:** Log background cron berkala mencatat: `[AUTO-RELEASE SCOPE-LOCK] ... (LEGACY_CUSTOMER_MANUAL) pasien lama/legacy — KUNCI PERMANEN ke CS, no auto-release.`
+- **Dampak:** Bot AI secara sengaja tidak membalas chat masuk dari nomor pasien lama agar penanganan dilakukan secara personal oleh tim Bidan/CS. Jika tim CS tidak aktif membuka tab Live Chat, pesan pasien lama bisa tampak "tidak direspon bot".
+- **Rencana Tindak Lanjut:** SOP operasional memastikan tim CS rutin memantau tab Live Chat, serta verifikasi Web Push / notifikasi Telegram untuk pesan pasien lama tetap berjalan normal.
+
+## 325. [RBAC / Staf Dashboard] Pemanggilan `GET /api/admin/roles` Memicu 403 di Log Saat Staf Login atau Refresh Dashboard (2026-11-14, OPEN)
+
+- **Status:** OPEN (belum didaftarkan di `role_api_scopes` untuk `admin_cs` dan `therapist`).
+- **Gejala:** Setiap kali staf/terapis membuka atau me-refresh dashboard, `AuthContext.tsx` mengeksekusi `fetchRolesFromApi()`. Karena endpoint belum terdaftar di `role_api_scopes` untuk peran non-Super Admin, server mencatat penolakan di log: `[RBAC SCOPE GUARD] Blocked 'ADMIN_CS' on GET /api/admin/roles` dan `[RBAC SCOPE GUARD] Blocked 'THERAPIST' on GET /api/admin/roles`.
+- **Dampak:** Di frontend error ditangkap `.catch(() => {})` dan aplikasi menggunakan fallback lokal (`DEFAULT_ROLE_CONFIGS`). Namun staf tidak dapat menerima pembaruan jika ada perubahan hak akses/role custom baru, serta mengotori log produksi.
+- **Rencana Tindak Lanjut:** Daftarkan izin baca (`GET /api/admin/roles`) ke `role_api_scopes` untuk peran `admin_cs`, `spv_cs`, dan `therapist`.
+
+## 324. [RBAC / Reservasi] Titik Lokasi Klinik di Form Reservasi Terblokir 403 untuk ADMIN_CS/SPV_CS (`GET /api/admin/tenant-settings`) & Fallback Darurat Aktif (2026-11-14, OPEN)
+
+- **Status:** OPEN (belum dibuka izin bacanya untuk peran staf non-Super Admin).
+- **Gejala:** Saat `CreateReservationModal` dibuka oleh staf CS/Bidan (`ADMIN_CS`), frontend memanggil `GET /api/admin/tenant-settings` untuk menarik `clinicLocation` (`lat`, `lng`, `name`). Server merespons `403 Forbidden: [RBAC GUARD] Blocked unauthorized access attempt by staff role 'ADMIN_CS' on GET /api/admin/tenant-settings` karena prefix `/api/admin/tenant-settings` dikunci di `admin.route.ts:213` untuk Super Admin saja.
+- **Dampak:** Form reservasi jatuh ke koordinat darurat `FALLBACK_CLINIC_COORDS` (`{ lat: -7.3787, lng: 112.7538 }`). Jika tenant memiliki titik markas/klinik yang berbeda, kalkulasi jarak dan ongkir otomatis di modal bisa menggunakan titik fallback bukan titik aktual klinik.
+- **Rencana Tindak Lanjut:** Masukkan `GET /api/admin/tenant-settings` ke dalam `settingsReadAllowlist` di `src/routes/admin.route.ts` atau buatkan DTO pembacaan publik/staf aman (lokasi & jam operasional tanpa rahasia) dan daftarkan ke `role_api_scopes`.
+
+## 323. [RBAC / Operasional] Peran ADMIN_CS & SPV_CS Terblokir 403 Saat Mengambil Katalog Treatment (`GET /api/admin/services`) & Form Reservasi (2026-11-14, RESOLVED — KEPUTUSAN BISNIS KB-RBAC-01)
+
+- **Status:** RESOLVED (Keputusan Bisnis KB-RBAC-01, 14 Nov 2026).
+- **Gejala:** Bidan Yusi (peran `ADMIN_CS`) mendapati opsi treatment pada form reservasi dan live chat kosong. Di-refresh tidak menyelesaikan masalah karena backend menolak dengan `403 Forbidden: [RBAC SCOPE GUARD] Blocked 'ADMIN_CS' on GET /api/admin/services`.
+- **Akar Masalah:** Penegakan izin data-driven *fail-closed* via tabel `role_api_scopes` (migrasi `20261108000000_seed_system_role_scopes`) belum mendaftarkan izin baca katalog layanan (`/api/admin/services`), staf, ongkir, dan wilayah untuk peran non-Super Admin.
+- **Penyelesaian & Ketetapan Bisnis Mengikat:**
+  1. Dieksekusi langsung di live database: menambahkan baris izin baca (`GET`) untuk `admin_cs` dan `spv_cs` pada `/api/admin/services`, `/api/admin/delivery-tiers`, `/api/admin/staff`, `/api/admin/geo/areas`, `/api/admin/health`, `/api/admin/gateway-capability`, `/api/admin/capi-queue`, `/api/admin/knowledge`, serta hak transaksi penuh (`*`) untuk `reservation-series`, `labels`, dan `quick-replies`.
+  2. Dibuatkan migrasi resmi Prisma `20261114000000_add_admin_cs_spv_cs_operational_scopes` dan unit test regresi di `tests/unit/rbac-scope-fail-closed.test.ts`.
+  3. Ditetapkan sebagai **Keputusan Bisnis Resmi & Mengikat (KB-RBAC-01)** di `docs/BUSINESS_DECISION_RBAC_ADMIN_CS_SPV_CS_SCOPES_2026-11-14.md`: DILARANG KERAS mencabut atau membatasi izin baca operasional ini di masa depan.
+
+## 322. [Meta CAPI / Data Source] Data Source `kalababyspa.com` Dicap "Health & wellness condition" — Core Setup Aktif & Standard Events Berisiko Diblokir 14 Hari (2026-11-09, OPEN — PENDING USER DECISION)
+
+- **Status:** OPEN — belum ada perubahan kode. User meminta temuan dicatat dulu dan akan mempertimbangkan tindakan lanjutan.
+- **Gejala / Bukti Events Manager (2026-11-09):**
+  - Data source: `kalababyspa.com`
+  - Dataset ID: `1465457801784141`
+  - Channel: `Website`
+  - Category: `Health & wellness condition`
+  - Status: `Pending review` (diajukan 9 Nov 2026, 14:10)
+  - `Restrictions applied now`: data source berada dalam **core setup**.
+  - `Restrictions starting in 14 days`: data sharing **may be blocked** untuk pengunjung European Region; di wilayah lain **certain standard events may be blocked** dan data source dapat berada dalam core setup.
+  - Jika review ditolak, additional data sharing restrictions dapat diterapkan; review berikutnya dapat diajukan setelah 30 hari.
+- **Dampak teknis:**
+  - Core setup membatasi custom parameters dan bagian URL setelah domain. `event_source_url` yang mengandung query (`fbclid`, `utm_*`) dan `custom_data` non-standar berisiko dipangkas/dibatasi.
+  - Event mid/lower funnel (`Purchase`, `Lead`, `InitiateCheckout`) adalah event yang paling berisiko terkena "certain standard events may be blocked".
+  - Menambahkan `event_source_url` saja **tidak menghapus kategori** atau membuka blokir standard events; itu hanya satu parameter yang diminta Meta.
+- **Temuan kode/data yang relevan:**
+  - `src/services/capi/capi-sender.service.ts:395-403`: `event_source_url` hanya diisi dari `adClick.landingUrl` atau fallback khusus `PageView`; event chat/organik tanpa `adClick` mengirim `undefined`.
+  - `src/services/capi/capi-sender.service.ts:405-414`: `business_messaging` hanya aktif jika `tenant.waba_business_account_id` terisi; saat ini kosong, sehingga CTWA dikirim sebagai `action_source: chat`.
+  - Live DB: `tenants.landing_domain = kalababyspa.com`, `meta_pixel_id = 1465457801784141`, `waba_business_account_id = kosong`.
+  - Live DB 72 jam: 13 event Purchase terkirim; 9 tanpa `ad_clicks`.
+  - Live DB 120 hari: 312 klik `kalababyspa.online`, 54 klik `kalababyspa.com`, 37 tanpa URL, 24 `fb.me`, 23 `instagram.com`.
+  - Live DB 90 hari: 47 klik CTWA; 7 event Purchase memakai `landingUrl` `fb.me`/`instagram.com`.
+  - Log container 72 jam: seluruh event CAPI `[CAPI SUCCESS]` (HTTP 200); pemblokiran belum terjadi, tetapi hitungan 14 hari berjalan.
+  - `kalababyspa.online` belum terlihat sebagai data source di panel Events Manager; perlu dicek apakah domain itu terdaftar terpisah atau selama ini event-nya masuk ke dataset `.com`.
+- **Kenapa ini bukan sekadar bug `event_source_url`:**
+  - Data source `.com` adalah yang dicap; event `.online` yang dikirim ke dataset `.com` mencampur data source/domain.
+  - CTWA belum memakai envelope `business_messaging` karena WABA ID kosong.
+  - Core setup + kemungkinan standard event block adalah pembatasan kategori, bukan parameter yang bisa ditambal dengan satu baris.
+- **Opsi yang belum diputuskan:**
+  1. **Cepat (workaround):** semua event ke dataset `1465457801784141` memakai `event_source_url` domain `.com` (origin-only) dan tidak mengirim `.online`/`instagram.com`/`fb.me`; verifikasi via Test Events. Ini bukan solusi blueprint murni.
+  2. **Sesuai blueprint:** pisahkan dataset/data source `.com` vs `.online`; aktifkan WABA + `business_messaging` untuk CTWA; event website memakai URL asli; event chat/offline tidak dipalsukan.
+  3. **Review kategori:** lengkapi bukti untuk review; jika ditolak, siapkan rencana dataset/domain bersih atau terima pembatasan.
+- **Catatan:** Jangan hanya menghapus `isWebsiteEvent`; itu memasang URL website ke event chat/business_messaging dan tidak menyelesaikan kategori/standard-event block.
+- **Referensi:**
+  - Meta Help "Understand data sharing restrictions based on data source categories": `https://www.facebook.com/business/help/511197658391698`
+  - Meta Server Event Parameters: `https://developers.facebook.com/documentation/ads-commerce/conversions-api/parameters/server-event`
+  - Meta Business Messaging CAPI: `https://developers.facebook.com/documentation/ads-commerce/conversions-api/business-messaging`
+  - `docs/KNOWN_ISSUES.md` #278 (B3/B4), #159d; `docs/changelog/archive-2026-08.md:2289`.
+
+## 321. [Database Schema] Kolom Tenant.auto_send_purchase_capi Dipertahankan Pasca-Deprecate Purchase Moderation (2026-11-08, TECH DEBT / BY DESIGN)
 ## 335. [Paket Berseri] Port Billing Series & Unit Komersial Tunggal — Migrasi Belum Diterapkan ke Produksi (2026-11-14, OPEN — DEPLOY PENDING)
 
 - **Status:** Kode sudah masuk `master` (commit `1eae114c`). Kedua migrasi **sudah terverifikasi di Postgres ephemeral** (drift *empty*, uji constraint & backfill PASS — lihat `docs/audit/2026-11-14/MIGRATION_VERIFY_SERIES.md`), tetapi **belum diterapkan ke DB produksi**.
