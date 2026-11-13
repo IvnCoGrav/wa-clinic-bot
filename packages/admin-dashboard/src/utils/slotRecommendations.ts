@@ -51,7 +51,7 @@ export interface RecommendSlotsParams {
 export const DEFAULT_CLINIC_COORDS = {
   lat: -7.34886,
   lng: 112.751677,
-  name: 'Kala Moms and Baby Spa (Klinik)',
+  name: 'Klinik',
 };
 
 export const DEFAULT_CANDIDATE_SLOTS = [

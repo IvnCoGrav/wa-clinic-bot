@@ -418,7 +418,7 @@ export const PaymentInfoPanel: React.FC = () => {
                   <label className="text-[10px] uppercase font-bold text-ink-3">Atas Nama (Pemilik)</label>
                   <input
                     type="text"
-                    placeholder="Contoh: PT Klinik Kala Sejahtera"
+                    placeholder="Contoh: PT Klinik Sejahtera"
                     value={acc.accountName}
                     onChange={(e) => handleUpdateBankAccount(idx, 'accountName', e.target.value)}
                     className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent shadow-xs"

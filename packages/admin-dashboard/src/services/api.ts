@@ -293,6 +293,19 @@ export function extractApiErrorPayload(errorData: any): { message?: string; code
   };
 }
 
+// Cfg-015: tenant dashboard diambil dari user terautentikasi, bukan hardcode.
+function resolveTenantHeader(): string | null {
+  try {
+    const raw = localStorage.getItem('last_auth_user');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const id = parsed?.tenantId;
+    return typeof id === 'string' && id.trim() ? id.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function apiRequest<T = any>(
   endpoint: string,
   options: RequestInit & { timeoutMs?: number; useCache?: boolean; ttlMs?: number; forceFresh?: boolean; retryCount?: number; keepalive?: boolean } = {}
@@ -340,9 +353,11 @@ export async function apiRequest<T = any>(
     headers['X-Requested-With'] = 'XMLHttpRequest';
   }
 
-  // Tenant-aware header untuk admin requests (fail-closed guard)
+  // Tenant-aware header untuk admin requests (Cfg-015): pakai tenant user
+  // terautentikasi; bila belum login, biarkan server memakai default/resolusi sesi.
   if (!headers['x-tenant-id'] && !headers['X-Tenant-Id']) {
-    headers['x-tenant-id'] = 'default-tenant';
+    const tenantId = resolveTenantHeader();
+    if (tenantId) headers['x-tenant-id'] = tenantId;
   }
 
   let body = options.body;

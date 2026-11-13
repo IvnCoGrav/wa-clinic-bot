@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useBrandIdentity } from '../../contexts/BrandContext';
 import { apiRequest } from '../../services/api';
 import { BRAND } from '../../config/brand';
 import { 
@@ -57,6 +58,9 @@ import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 import { useCopilot } from '../../contexts/CopilotContext';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { businessName } = useBrandIdentity();
+  // Cfg-015: brand tampil dari tenant (API), bukan hardcode "Kala Spa".
+  const brandLabel = (businessName || BRAND.businessName).trim().toUpperCase();
   const { user, logout } = useAuth();
   const { toast } = useUiFeedback();
   const { open: copilotOpen, setOpen: setCopilotOpen, mobileMenuOpen, setMobileMenuOpen, openMobileMenu, dismissMobileMenu } = useCopilot();
@@ -581,11 +585,11 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           <div className="flex items-center space-x-2.5">
             <img
               src="/admin/apple-touch-icon.png"
-              alt="Kala Logo"
+              alt={`${brandLabel} logo`}
               className="h-8 w-8 rounded-lg object-contain shadow-2xs border border-divider shrink-0"
             />
             <div className={`flex flex-col ${desktopCollapsed ? 'md:hidden' : ''}`}>
-              <span className="font-extrabold text-sm tracking-wider text-ink uppercase">KALA SPA</span>
+              <span className="font-extrabold text-sm tracking-wider text-ink uppercase">{brandLabel}</span>
               <span className="text-[10px] text-ink-3 font-medium leading-none">Management Bot</span>
             </div>
           </div>
@@ -795,11 +799,11 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             <div className="flex md:hidden items-center space-x-2">
               <img
                 src="/admin/apple-touch-icon.png"
-                alt="Kala Logo"
+                alt={`${brandLabel} logo`}
                 className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg object-contain shadow-2xs border border-divider shrink-0"
               />
               <span className="font-extrabold text-xs sm:text-sm tracking-wide text-ink">
-                KALA SPA
+                {brandLabel}
               </span>
             </div>
 

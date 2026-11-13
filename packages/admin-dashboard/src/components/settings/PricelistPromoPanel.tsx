@@ -197,11 +197,11 @@ export const PricelistPromoPanel: React.FC = () => {
               type="text"
               value={brandLogoUrl}
               onChange={(e) => setBrandLogoUrl(e.target.value)}
-              placeholder="Contoh: /assets/kala-logo.svg atau https://..."
+              placeholder="Contoh: https://cdn.klinik.com/logo.png"
               className="w-full min-h-[44px] px-3.5 py-2 text-sm bg-fill-1 border border-divider rounded-xl text-ink focus:outline-hidden focus:ring-2 focus:ring-accent transition"
             />
             <p className="text-xs text-ink-3 mt-1.5 leading-relaxed">
-              Path aset lokal (misal: <code className="bg-fill-1 px-1 py-0.5 rounded text-ink">/assets/kala-logo.svg</code>) atau URL gambar publik. Kosongkan untuk menggunakan inisial monogram otomatis dari nama bisnis.
+              Path aset lokal atau URL gambar publik (mis. <code className="bg-fill-1 px-1 py-0.5 rounded text-ink">https://cdn.klinik.com/logo.png</code>). Kosongkan untuk menggunakan inisial monogram otomatis dari nama bisnis.
             </p>
           </div>
 
@@ -221,13 +221,6 @@ export const PricelistPromoPanel: React.FC = () => {
                 <ImageIcon className="text-ink-2" size={20} />
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => setBrandLogoUrl('/assets/kala-logo.svg')}
-              className="text-xs text-accent hover:underline px-2 py-1 min-h-[44px] flex items-center"
-            >
-              Gunakan Logo Kala
-            </button>
           </div>
         </div>
       </div>

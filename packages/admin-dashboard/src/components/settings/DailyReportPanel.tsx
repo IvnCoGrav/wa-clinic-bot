@@ -41,7 +41,7 @@ export const DailyReportPanel: React.FC = () => {
   const [telegramPairingToken, setTelegramPairingToken] = useState('');
   const [telegramDirectLink, setTelegramDirectLink] = useState('');
   const [telegramGroupLink, setTelegramGroupLink] = useState('');
-  const [telegramBotUsername, setTelegramBotUsername] = useState('KalaReport_bot');
+  const [telegramBotUsername, setTelegramBotUsername] = useState('');
   const [telegramTopicDailyReport, setTelegramTopicDailyReport] = useState('');
   const [telegramTopicSystemErrors, setTelegramTopicSystemErrors] = useState('');
   const [telegramTopicMedicalAlerts, setTelegramTopicMedicalAlerts] = useState('');
@@ -224,7 +224,7 @@ export const DailyReportPanel: React.FC = () => {
         setTelegramPairingToken(res.data.telegramPairingToken || '');
         setTelegramDirectLink(res.data.telegramDirectLink || '');
         setTelegramGroupLink(res.data.telegramGroupLink || '');
-        setTelegramBotUsername(res.data.telegramBotUsername || 'KalaReport_bot');
+        setTelegramBotUsername(res.data.telegramBotUsername || '');
         setTelegramTopicDailyReport(res.data.telegramTopicDailyReport || '');
         setTelegramTopicSystemErrors(res.data.telegramTopicSystemErrors || '');
         setTelegramTopicMedicalAlerts(res.data.telegramTopicMedicalAlerts || '');

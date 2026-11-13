@@ -1,6 +1,7 @@
 import React, { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { BrandProvider } from './contexts/BrandContext';
 import { fireAndForget } from './services/errorPolicy';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { CopilotProvider } from './contexts/CopilotContext';
@@ -113,6 +114,7 @@ export const App: React.FC = () => {
       <ScrollToTop />
       <ThemeProvider>
       <AuthProvider>
+        <BrandProvider>
         <UiFeedbackProvider>
         <CopilotProvider>
         <BootProgress />
@@ -366,6 +368,7 @@ export const App: React.FC = () => {
         </AppErrorBoundary>
         </CopilotProvider>
         </UiFeedbackProvider>
+        </BrandProvider>
       </AuthProvider>
       </ThemeProvider>
     </BrowserRouter>

@@ -8,6 +8,7 @@ import { Camera, Send, X } from 'lucide-react';
 import { Modal } from '../../components/ui/Modal';
 import { TreatmentTask } from './todayTreatmentsTypes';
 import { formatTime } from './todayTreatmentsLogic';
+import { useBrandIdentity } from '../../contexts/BrandContext';
 
 interface TodayQuickChatModalProps {
   task: TreatmentTask;
@@ -40,6 +41,7 @@ export const TodayQuickChatModal: React.FC<TodayQuickChatModalProps> = ({
   onImageChange,
   onSend,
 }) => {
+  const { businessName } = useBrandIdentity();
   return (
   <Modal
     open
@@ -72,7 +74,7 @@ export const TodayQuickChatModal: React.FC<TodayQuickChatModalProps> = ({
         <div className="p-2 border-b border-divider bg-fill-1 dark:bg-surface flex items-center gap-1.5 overflow-x-auto shrink-0">
           <button
             type="button"
-            onClick={() => onReplyChange(`Halo Bunda ${task.customerName || ''}, saya dari Kala Moms & Baby Spa. Mau konfirmasi jadwal treatment ya Bun 🙏`)}
+            onClick={() => onReplyChange(`Halo Bunda ${task.customerName || ''}, saya dari ${businessName}. Mau konfirmasi jadwal treatment ya Bun 🙏`)}
             className="px-2.5 py-1 rounded-lg bg-surface border border-divider text-[11px] font-bold text-ink-2 hover:text-accent hover:border-accent transition shrink-0 cursor-pointer"
           >
             Sapa Pasien

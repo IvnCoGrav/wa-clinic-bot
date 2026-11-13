@@ -54,12 +54,12 @@ import { resolveStaffName } from '../../utils/resolveStaffName';
 import { AddressBookDrawer } from '../customer/AddressBookDrawer';
 import { recommendSlots } from '../../utils/slotRecommendations';
 
-// Koordinat klinik fallback — tech-debt tercatat (tenant-aware penuh butuh
-// endpoint settings baru; lihat KNOWN_ISSUES). Rumus jarak terpusat di geoUtils.
-const CLINIC_COORDS = {
+// Koordinat klinik fallback (netral). Nilai sebenarnya diambil per tenant dari
+// `GET /api/admin/tenant-settings` saat modal dibuka (Cfg-015).
+const FALLBACK_CLINIC_COORDS = {
   lat: -7.34886,
   lng: 112.751677,
-  name: 'Kala Moms and Baby Spa (Klinik)',
+  name: 'Klinik',
 };
 
 function formatMinutesToTime(totalMinutes: number): string {
@@ -191,6 +191,28 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   const { toast, confirm } = useUiFeedback();
   const [submitting, setSubmitting] = useState(false);
   const [issues, setIssues] = useState<FieldIssue[]>([]);
+  // Cfg-015: titik klinik per tenant (fallback netral sampai respons tiba).
+  const [clinicCoords, setClinicCoords] = useState(FALLBACK_CLINIC_COORDS);
+  useEffect(() => {
+    let cancelled = false;
+    apiRequest<any>('/api/admin/tenant-settings')
+      .then((res) => {
+        if (cancelled) return;
+        const cl = res?.data?.clinicLocation;
+        if (!cl || !Number.isFinite(cl.lat) || !Number.isFinite(cl.lng)) return;
+        setClinicCoords({
+          lat: Number(cl.lat),
+          lng: Number(cl.lng),
+          name: typeof cl.name === 'string' && cl.name.trim() ? cl.name.trim() : 'Klinik',
+        });
+      })
+      .catch(() => {
+        /* DB offline → fallback netral */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const submitRequestIdRef = useRef<string>('');
 
   // Form State
@@ -1473,8 +1495,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     }
 
     // Customer Location (Micro-Task 4.3: rantai D-4)
-    const custLat = selectedCard?.lat ?? selectedCustomerInfo?.lat ?? CLINIC_COORDS.lat;
-    const custLng = selectedCard?.lng ?? selectedCustomerInfo?.lng ?? CLINIC_COORDS.lng;
+    const custLat = selectedCard?.lat ?? selectedCustomerInfo?.lat ?? clinicCoords.lat;
+    const custLng = selectedCard?.lng ?? selectedCustomerInfo?.lng ?? clinicCoords.lng;
 
     // Ekstraksi murni recommendSlots (Micro-Task 4.4)
     const topRecs = recommendSlots({
@@ -1486,7 +1508,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       totalDurationMinutes: totalScheduledDurationMinutes,
       mode,
       currentReservationId: (initialReservation as any)?.id,
-      clinicCoords: CLINIC_COORDS,
+      clinicCoords,
     });
 
     setRecommendations(topRecs);

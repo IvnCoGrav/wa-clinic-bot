@@ -279,7 +279,7 @@ export const buildCapiJsonPayload = (item: QueueItem, wabaConfigured: boolean = 
     } else if (landingUrl.startsWith('/cta')) {
       const qIdx = landingUrl.indexOf('?');
       const q = qIdx !== -1 ? landingUrl.slice(qIdx) : '';
-      landingUrl = `https://kalababyspa.online/reservasionline${q}`;
+      landingUrl = `${window.location.origin}/reservasionline${q}`;
     }
   }
 
