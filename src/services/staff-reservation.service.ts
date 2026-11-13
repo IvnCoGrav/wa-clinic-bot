@@ -22,7 +22,7 @@ import { sanitizeCustomerNameForGreeting } from '../utils/name-sanitizer';
 import { ensureStaffSignature } from '../utils/staff-signature';
 import { computeCurrentAge } from '../utils/age-calculator';
 import { getBrandIdentityAsync } from '../config/brand';
-import { addressesMatch } from '../domain/customer-address';
+import { addressesMatch, isRegionCompatible } from '../domain/customer-address';
 
 export interface StaffTaskChild {
   name: string;
@@ -270,7 +270,14 @@ export function buildEffectiveTaskAddress(addr: any, cust: any): any {
   // yang disepakati booking). Tanpa timestamp → perilaku lama byte-identik.
   let useProfile = false;
   try {
-    const sameHouse = addressesMatch(
+    // Profil hanya boleh menimpa kartu bila rumahnya SAMA *dan* wilayahnya
+    // kompatibel. Koordinat identik saja TIDAK cukup: root bisa tercemar teks
+    // wilayah lain (insiden "koordinat Karangpilang + teks Buduran").
+    const regionsCompatible = isRegionCompatible(
+      { kelurahan: addr?.kelurahan, kecamatan: addr?.kecamatan },
+      { kelurahan: cust?.kelurahan, kecamatan: cust?.kecamatan }
+    );
+    const sameHouse = regionsCompatible && addressesMatch(
       { address: addr?.address, kelurahan: addr?.kelurahan, kecamatan: addr?.kecamatan, kota: addr?.kota, lat: addr?.lat, lng: addr?.lng },
       { address: prefs.address, kelurahan: cust?.kelurahan, kecamatan: cust?.kecamatan, kota: cust?.kota, lat: cust?.lat, lng: cust?.lng }
     );
