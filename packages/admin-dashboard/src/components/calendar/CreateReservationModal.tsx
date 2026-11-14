@@ -62,6 +62,10 @@ import {
   buildBabiesContentKey,
   shouldRunGuard,
 } from '../../utils/reservationFormGuards';
+import {
+  isActiveBookingStatus,
+  isCustomerConflictCandidate,
+} from '../../utils/reservationConflicts';
 import { resolveStaffName } from '../../utils/resolveStaffName';
 import { AddressBookDrawer } from '../customer/AddressBookDrawer';
 import { recommendSlots } from '../../utils/slotRecommendations';
@@ -566,6 +570,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
   // Children / Babies (Multi-Anak Support)
   const [babies, setBabies] = useState<Array<{ name: string; ageText: string }>>([]);
+  // Indeks anak yang sedang dibuka form edit/tambah (anak tersimpan cukup tampil sebagai kartu).
+  const [editingChildIndexes, setEditingChildIndexes] = useState<number[]>([]);
 
   // (Fase 3: toggle Ringkas/Lengkap dihapus — anti-bloat, tombol kustom selalu terlihat)
 
@@ -732,6 +738,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     setMultiSessionTotal(0);
     setMultiSessionSchedule([]);
     setBabies([]);
+    setEditingChildIndexes([]);
     setRecommendations([]);
     setHasCalculatedRecommendations(false);
     setIsFormDirty(false);
@@ -1473,7 +1480,9 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
   // Babies Handlers
   const handleAddBaby = () => {
+    const nextIndex = babies.length;
     setBabies((prev) => [...prev, { name: '', ageText: '' }]);
+    setEditingChildIndexes((prev) => [...prev, nextIndex]);
   };
 
   const handleUpdateBaby = (idx: number, field: 'name' | 'ageText', val: string) => {
@@ -1486,6 +1495,33 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
   const handleRemoveBaby = (idx: number) => {
     setBabies((prev) => prev.filter((_, i) => i !== idx));
+    setEditingChildIndexes([]);
+  };
+
+  // Anak dari profil tampil sebagai kartu pilih; form input hanya muncul saat
+  // "Tambah Anak" atau "Ubah" pada anak tersimpan.
+  const normalizeChildName = (v?: string | null) => String(v ?? '').trim().toLowerCase();
+  const isSavedChildName = (name?: string | null) => {
+    const target = normalizeChildName(name);
+    if (!target) return false;
+    return savedChildren.some((c: any) => normalizeChildName(c?.name) === target);
+  };
+  const shouldShowBabyForm = (idx: number) =>
+    editingChildIndexes.includes(idx) || savedChildren.length === 0 || !isSavedChildName(babies[idx]?.name);
+
+  const handleEditSavedChild = (child: any) => {
+    if (!child?.name) return;
+    const target = normalizeChildName(child.name);
+    let idx = babies.findIndex((b) => normalizeChildName(b?.name) === target);
+    if (idx < 0) {
+      const mapped = mapChildrenToBabyInputs([child])[0];
+      if (!mapped) return;
+      idx = babies.length;
+      setBabies((prev) => [...prev, mapped]);
+      setEditingChildIndexes((prev) => [...prev, idx]);
+      return;
+    }
+    setEditingChildIndexes((prev) => (prev.includes(idx) ? prev : [...prev, idx]));
   };
 
   // Filter existing reservations for selected date — fondasional: WIB Date Key (R2), anti split-brain
@@ -1500,13 +1536,19 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     });
   }, [loadedReservations, existingReservations, bookingDate]);
 
-  // Pre-flight warning: reservasi aktif milik customer yang sama pada tanggal ini — kecualikan diri sendiri saat edit.
+  // Pre-flight warning: reservasi AKTIF milik customer yang sama pada tanggal ini.
+  // KNOWN #342: `completed` adalah riwayat — jangan pernah dihitung "jadwal aktif"
+  // (kasus Bunda Ivan: visit 10 Agu 05:27 completed memicu peringatan palsu).
   const customerConflictsForDate = useMemo(() => {
     if (!customerId || bookedReservationsForDate.length === 0) return [];
     return bookedReservationsForDate.filter((r: any) => {
-      if (mode === 'edit' && (initialReservation as any)?.id && r.id === (initialReservation as any).id) return false;
       const rid = r.customer_id || (r.customer as any)?.id;
-      return rid === customerId;
+      if (rid !== customerId) return false;
+      return isCustomerConflictCandidate({
+        status: r.status,
+        reservationId: r.id,
+        excludeReservationId: mode === 'edit' ? (initialReservation as any)?.id : null,
+      });
     });
   }, [bookedReservationsForDate, customerId, mode, (initialReservation as any)?.id]);
 
@@ -1541,7 +1583,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       if (mode === 'edit' && (initialReservation as any)?.id && r.id === (initialReservation as any).id) {
         continue;
       }
-      if (r.status === 'cancelled') continue;
+      // KNOWN #342: hanya status aktif yang boleh memicu guard bentrok.
+      if (!isActiveBookingStatus(r.status)) continue;
 
       const rDate = new Date(r.booking_date!);
       if (isNaN(rDate.getTime())) continue;
@@ -2473,19 +2516,34 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                       const selected = isChildSelected(babies, child);
                       const ageLabel = child.current_age || child.raw_age_text || '';
                       return (
-                        <button
+                        <div
                           key={child.id || child.name}
-                          type="button"
-                          onClick={() => setBabies((prev) => toggleChildSelection(prev, child))}
-                          className={`min-h-[38px] px-2.5 py-1 rounded-lg border text-[11px] transition cursor-pointer active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none ${
+                          className={`inline-flex items-stretch rounded-lg border overflow-hidden transition ${
                             selected
-                              ? 'bg-accent-soft border-accent text-accent font-bold'
-                              : 'bg-surface border-divider text-ink-2 hover:bg-fill-1'
+                              ? 'bg-accent-soft border-accent text-accent'
+                              : 'bg-surface border-divider text-ink-2'
                           }`}
                         >
-                          <span>{child.name}</span>
-                          {ageLabel && <span className="ml-1 text-[10px] font-normal text-ink-3">{ageLabel}</span>}
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => setBabies((prev) => toggleChildSelection(prev, child))}
+                            className="min-h-[38px] px-2.5 py-1 text-[11px] cursor-pointer active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+                            title={selected ? 'Lepas anak ini dari reservasi' : 'Pakai anak ini untuk reservasi'}
+                          >
+                            <span className={selected ? 'font-bold' : ''}>{child.name}</span>
+                            {ageLabel && <span className="ml-1 text-[10px] font-normal text-ink-3">{ageLabel}</span>}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleEditSavedChild(child)}
+                            className={`px-2 border-l cursor-pointer transition ${
+                              selected ? 'border-accent/40 hover:bg-accent/10' : 'border-divider hover:bg-fill-1'
+                            }`}
+                            title="Ubah data anak"
+                          >
+                            <Pencil size={11} />
+                          </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -2500,18 +2558,30 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 </p>
               ) : (
                 <div className="space-y-2">
-                  {babies.map((b, idx) => (
+                  {babies.map((b, idx) => shouldShowBabyForm(idx) ? (
                     <div key={idx} className="p-2.5 bg-surface border border-divider rounded-xl space-y-2 shadow-2xs">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-ink">Anak #{idx + 1}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveBaby(idx)}
-                          className="text-ink-3 hover:text-danger p-1 cursor-pointer transition"
-                          title="Hapus anak ini"
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          {editingChildIndexes.includes(idx) && (
+                            <button
+                              type="button"
+                              onClick={() => setEditingChildIndexes((prev) => prev.filter((i) => i !== idx))}
+                              className="px-2 py-0.5 text-[10px] font-bold text-accent bg-accent/10 hover:bg-accent/20 rounded cursor-pointer"
+                              title="Tutup form (data tetap dipakai)"
+                            >
+                              Selesai
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveBaby(idx)}
+                            className="text-ink-3 hover:text-danger p-1 cursor-pointer transition"
+                            title="Hapus anak ini"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -2549,7 +2619,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                         ))}
                       </div>
                     </div>
-                  ))}
+                  ) : null)}
 
                   {babies.length > 1 && selectedTreatments.length === 1 && (
                     <div className="p-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-lg text-[11px] text-amber-800 dark:text-amber-200 flex items-center justify-between">

@@ -3,6 +3,16 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 342. [Reservasi] Peringatan “Customer sudah punya reservasi aktif” Muncul untuk Reservasi `completed` (2026-11-14, RESOLVED)
+
+- **Status:** RESOLVED (2026-11-14) — filter status diperbaiki; peringatan & guard bentrok hanya memakai status aktif.
+- **Gejala (Bunda Ivan Noor, 6288235780925):** form menampilkan *“sudah memiliki 1 reservasi aktif pada tanggal ini — Pukul 05:27 WIB: Pijat Bayi Ceria + -”*, padahal riwayat hanya berisi 2 reservasi `completed` dan tidak ada jadwal aktif di DB.
+- **Bukti DB (read-only):** customer `a4deafa7…` hanya punya 2 reservasi, keduanya `completed`; `booking_date` `2026-08-09 22:27 UTC` = **10 Agu 2026 05:27 WIB** → baris yang sama dengan kartu riwayat “10 Agu 2026 • 05:27”. Query endpoint aktif (`status IN ('confirmed','en_route','hold') AND booking_date >= hari ini`) mengembalikan **0 baris**.
+- **Akar masalah:** `bookedReservationsForDate` (`CreateReservationModal.tsx:1525-1533`) memuat SEMUA reservasi pada tanggal itu kecuali `cancelled`/`rejected`; `customerConflictsForDate` (`:1536-1543`) tidak memfilter status → `completed` dihitung sebagai “aktif”. Karena tanggal form di-set ke 10 Agu 2026 (tanggal lampau), riwayat `completed` memicu peringatan palsu. Guard bentrok real-time juga hanya mengecualikan `cancelled`.
+- **Perbaikan:** util `reservationConflicts.ts` (`ACTIVE_BOOKING_STATUSES = confirmed|en_route|hold|pending`, `isActiveBookingStatus`, `isCustomerConflictCandidate`); peringatan customer memakai kandidat status aktif; loop guard bentrok melewati status non-aktif. `bookedReservationsForDate` tetap memuat semua status untuk tampilan “jadwal terisi”.
+- **Test:** `tests/unit/reservation-conflicts.test.ts` (4 kasus).
+- **Catatan data:** `treatment_detail` baris lama mengandung `“Pijat Bayi Ceria + -”` (artefak historis) — bukan sumber peringatan, hanya tampilan.
+
 ## 341. [Reservasi/Dashboard] Form “Buat Jadwal” Berkedip & Tombol/Field Kadang Tidak Bisa Diklik (2026-11-14, RESOLVED)
 
 - **Status:** RESOLVED (2026-11-14) — pemicu effect diganti kunci stabil (ID/konten) + ref guard; prop objek/array baru dari parent tidak lagi me-reset form.

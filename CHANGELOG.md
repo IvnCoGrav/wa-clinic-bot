@@ -4,6 +4,13 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-14 - Fix: Peringatan Reservasi Aktif Palsu dari Riwayat `completed` (#342)
+
+- **Masalah**: form reservasi memperingatkan “customer sudah punya reservasi aktif pada tanggal ini” padahal yang terdeteksi adalah kunjungan lama berstatus `completed` (tidak ada di daftar jadwal aktif).
+- **Akar masalah**: `customerConflictsForDate` & guard bentrok memakai `bookedReservationsForDate` yang hanya mengecualikan `cancelled`/`rejected`; `completed` ikut dihitung.
+- **Perubahan**: util `reservationConflicts` (`confirmed|en_route|hold|pending`); peringatan & guard hanya memakai status aktif; tampilan jadwal terisi tetap memuat semua status.
+- **Verifikasi**: `tests/unit/reservation-conflicts.test.ts` (4) hijau; dashboard `tsc`/build/`check:design` hijau.
+
 #### 2026-11-14 - Fix: Form Reservasi Berkedip & Tombol Tidak Bisa Diklik (#341)
 
 - **Masalah**: saat modal “Buat Jadwal Reservasi Baru” dibuka dari Live Chat, tombol/select/date field kadang tidak merespons dan UI berkedip; pilihan tanggal bisa ter-reset.
