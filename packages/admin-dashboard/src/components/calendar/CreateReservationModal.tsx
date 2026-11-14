@@ -2103,6 +2103,12 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     handleSafeCloseRef.current = handleSafeClose;
   }, [handleSafeClose]);
 
+  // Identitas stabil untuk Modal: mencegah effect fokus Modal terpicu ulang
+  // setiap keystroke (penyebab fokus lompat ke tombol X).
+  const handleModalClose = useCallback(() => {
+    void handleSafeCloseRef.current();
+  }, []);
+
   // Push entri history SEKALI saat modal dibuka (bukan tiap render/ketikan).
   useEffect(() => {
     if (!isOpen) return;
@@ -2161,7 +2167,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   return (
     <Modal
       open
-      onClose={() => void handleSafeClose()}
+      onClose={handleModalClose}
       size="full"
       fullScreen
       chrome="bare"
