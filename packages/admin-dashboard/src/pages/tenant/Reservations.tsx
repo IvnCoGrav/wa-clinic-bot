@@ -160,41 +160,73 @@ export const Reservations: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const defaultFilterStatus: CalendarFilterState['status'] = deepLinkDate ? 'all' : 'upcoming';
 
+  // Sumber kebenaran saat mengetik = state lokal. URL disinkronkan setelah
+  // jeda (debounce) agar history TIDAK berubah per huruf — perubahan history
+  // saat keyboard mobile terbuka dapat menutup keyboard/fokus.
+  const filterStateRef = useRef(filterState);
   useEffect(() => {
-    setFilterStateRaw({
+    filterStateRef.current = filterState;
+  }, [filterState]);
+
+  useEffect(() => {
+    const next: CalendarFilterState = {
       searchQuery: searchParams.get('q') ?? '',
       category: readFilterCategory(searchParams.get('category')),
       staffId: searchParams.get('staff') ?? 'all',
       status: readFilterStatus(searchParams.get('status'), defaultFilterStatus),
-    });
+    };
+    const current = filterStateRef.current;
+    // Jangan menimpa ketikan yang lebih baru saat URL baru saja kita tulis sendiri.
+    if (
+      current.searchQuery === next.searchQuery &&
+      current.category === next.category &&
+      current.staffId === next.staffId &&
+      current.status === next.status
+    ) {
+      return;
+    }
+    setFilterStateRaw(next);
   }, [searchParams, defaultFilterStatus]);
 
+  const urlSyncTimerRef = useRef<number | null>(null);
   const setFilterState = useCallback(
     (updater: React.SetStateAction<CalendarFilterState>) => {
-      setSearchParams(
-        (prev) => {
-          const current: CalendarFilterState = {
-            searchQuery: prev.get('q') ?? '',
-            category: readFilterCategory(prev.get('category')),
-            staffId: prev.get('staff') ?? 'all',
-            status: readFilterStatus(prev.get('status'), defaultFilterStatus),
-          };
-          const next = typeof updater === 'function' ? updater(current) : updater;
-          const params = new URLSearchParams(prev);
-          const write = (key: string, value: string, fallback: string) => {
-            if (!value || value === fallback) params.delete(key);
-            else params.set(key, value);
-          };
-          write('q', next.searchQuery, '');
-          write('category', next.category, 'all');
-          write('staff', next.staffId, 'all');
-          write('status', next.status, defaultFilterStatus);
-          return params;
-        },
-        { replace: true }
-      );
+      // 1) Update UI seketika (input tetap responsif).
+      setFilterStateRaw(updater);
+      // 2) Tulis URL setelah berhenti mengetik (anti history-per-huruf).
+      if (urlSyncTimerRef.current !== null) {
+        window.clearTimeout(urlSyncTimerRef.current);
+      }
+      urlSyncTimerRef.current = window.setTimeout(() => {
+        urlSyncTimerRef.current = null;
+        const next = filterStateRef.current;
+        setSearchParams(
+          (prev) => {
+            const params = new URLSearchParams(prev);
+            const write = (key: string, value: string, fallback: string) => {
+              if (!value || value === fallback) params.delete(key);
+              else params.set(key, value);
+            };
+            write('q', next.searchQuery, '');
+            write('category', next.category, 'all');
+            write('staff', next.staffId, 'all');
+            write('status', next.status, defaultFilterStatus);
+            return params;
+          },
+          { replace: true }
+        );
+      }, 400);
     },
     [setSearchParams, defaultFilterStatus]
+  );
+
+  useEffect(
+    () => () => {
+      if (urlSyncTimerRef.current !== null) {
+        window.clearTimeout(urlSyncTimerRef.current);
+      }
+    },
+    []
   );
 
   const handleViewModeChange = useCallback((newMode: CalendarViewMode) => {
