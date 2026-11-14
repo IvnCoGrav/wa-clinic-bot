@@ -366,4 +366,126 @@ describe('Admin RBAC Guard & Security Isolation (SEC-01 Fix)', () => {
       expect(res.statusCode).toBe(403);
     });
   });
+
+  // KNOWN #324/#325: staf operasional perlu MEMBACA daftar role (AuthContext)
+  // dan setelan tenant (titik klinik di form reservasi). Baca = scope data-driven,
+  // tulis tetap Super Admin. Kontrak baru: tenant-settings KELUAR dari blanket
+  // super-admin-only, masuk guard tulis (non-GET) + scope GET.
+  describe('4. Read-only operasional: roles & tenant-settings (ADMIN_CS/SPV_CS/THERAPIST)', () => {
+    const staffSession = (role: string, token: string) => ({
+      staff: {
+        id: `staff-${role.toLowerCase()}`,
+        tenant_id: 'default-tenant',
+        name: `Staf ${role}`,
+        phone: '628123456781',
+        role,
+        active: true,
+        created_at: new Date(),
+        updated_at: new Date(),
+        telegram_chat_id: null,
+      },
+      session: {
+        id: `sess-${role.toLowerCase()}`,
+        staff_id: `staff-${role.toLowerCase()}`,
+        token,
+        expires_at: new Date(Date.now() + 86400000),
+        created_at: new Date(),
+      },
+    });
+
+    const mockScopes = (rows: Array<{ api_prefix: string; methods: string }>) => {
+      (prisma as any).roleApiScope = { findMany: vi.fn().mockResolvedValue(rows) };
+      clearScopeCache();
+    };
+
+    const csScopes = [
+      { api_prefix: '/api/admin/roles', methods: 'GET' },
+      { api_prefix: '/api/admin/tenant-settings', methods: 'GET' },
+    ];
+
+    it('ADMIN_CS boleh GET /api/admin/roles dan GET /api/admin/tenant-settings', async () => {
+      mockScopes(csScopes);
+      vi.spyOn(StaffAuthService, 'validateSession').mockResolvedValue(
+        staffSession('ADMIN_CS', 'valid_cs_token') as any
+      );
+
+      for (const url of ['/api/admin/roles', '/api/admin/tenant-settings']) {
+        const res = await app.inject({
+          method: 'GET',
+          url,
+          headers: { cookie: 'staff_session=valid_cs_token', 'x-requested-with': 'XMLHttpRequest' },
+        });
+        expect(res.statusCode, `GET ${url}`).not.toBe(403);
+      }
+    });
+
+    it('SPV_CS boleh GET /api/admin/roles dan GET /api/admin/tenant-settings', async () => {
+      mockScopes(csScopes);
+      vi.spyOn(StaffAuthService, 'validateSession').mockResolvedValue(
+        staffSession('SPV_CS', 'valid_spv_token') as any
+      );
+
+      for (const url of ['/api/admin/roles', '/api/admin/tenant-settings']) {
+        const res = await app.inject({
+          method: 'GET',
+          url,
+          headers: { cookie: 'staff_session=valid_spv_token', 'x-requested-with': 'XMLHttpRequest' },
+        });
+        expect(res.statusCode, `GET ${url}`).not.toBe(403);
+      }
+    });
+
+    it('THERAPIST hanya boleh GET /api/admin/roles (tenant-settings tetap 403)', async () => {
+      mockScopes([{ api_prefix: '/api/admin/roles', methods: 'GET' }]);
+      vi.spyOn(StaffAuthService, 'validateSession').mockResolvedValue(
+        staffSession('THERAPIST', 'valid_therapist_token') as any
+      );
+
+      const rolesRes = await app.inject({
+        method: 'GET',
+        url: '/api/admin/roles',
+        headers: { cookie: 'staff_session=valid_therapist_token', 'x-requested-with': 'XMLHttpRequest' },
+      });
+      expect(rolesRes.statusCode).not.toBe(403);
+
+      const tenantRes = await app.inject({
+        method: 'GET',
+        url: '/api/admin/tenant-settings',
+        headers: { cookie: 'staff_session=valid_therapist_token', 'x-requested-with': 'XMLHttpRequest' },
+      });
+      expect(tenantRes.statusCode).toBe(403);
+      expect(tenantRes.json().code).toBe('FORBIDDEN_ROLE_SCOPE');
+    });
+
+    it('ADMIN_CS TETAP diblokir PATCH /api/admin/tenant-settings (tulis = Super Admin)', async () => {
+      mockScopes(csScopes);
+      vi.spyOn(StaffAuthService, 'validateSession').mockResolvedValue(
+        staffSession('ADMIN_CS', 'valid_cs_token') as any
+      );
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/tenant-settings',
+        headers: { cookie: 'staff_session=valid_cs_token', 'x-requested-with': 'XMLHttpRequest' },
+        payload: { brand: { businessName: 'Diubah CS' } },
+      });
+      expect(res.statusCode).toBe(403);
+      expect(res.json().code).toBe('FORBIDDEN_SUPER_ADMIN_ONLY_WRITE');
+    });
+
+    it('role tanpa baris scope tetap fail-closed untuk tenant-settings', async () => {
+      mockScopes([]);
+      vi.spyOn(StaffAuthService, 'validateSession').mockResolvedValue(
+        staffSession('ADMIN_CS', 'valid_cs_token') as any
+      );
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/admin/tenant-settings',
+        headers: { cookie: 'staff_session=valid_cs_token', 'x-requested-with': 'XMLHttpRequest' },
+      });
+      expect(res.statusCode).toBe(403);
+      expect(res.json().code).toBe('FORBIDDEN_ROLE_SCOPE');
+    });
+  });
 });

@@ -17,9 +17,11 @@ import { clearBrandCache } from '../../config/brand';
  * jalur baca (clinicLocation, operationalHours, staffNotification,
  * deliverySettings.estimateTtlDays, copilot.styleTone, brand lengkap).
  *
- * Keamanan: prefix `/api/admin/tenant-settings` terdaftar sebagai Super Admin
- * only di `admin.route.ts` (RBAC guard) — staf operasional tidak boleh membaca
- * maupun menulis lewat jalur ini.
+ * Keamanan:
+ * - GET: dibaca staf operasional (ADMIN_CS/SPV_CS) untuk kebutuhan form
+ *   reservasi (titik klinik) — dijaga scope data-driven `role_api_scopes`.
+ *   Respons TIDAK memuat rahasia (staffNotification hanya `telegramEnabled`).
+ * - PATCH: tetap Super Admin only (guard tulis `/api/admin/tenant-settings`).
  *
  * UI (sub-tab) sengaja belum dibuat di fase ini; kontrak backend disiapkan
  * lebih dulu agar dashboard dapat memakainya tanpa perubahan API lagi.

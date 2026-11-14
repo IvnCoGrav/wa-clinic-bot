@@ -208,9 +208,10 @@ export async function adminRoutes(fastify: FastifyInstance) {
       const superAdminOnlyPrefixes = [
         '/api/admin/backup',
         '/api/admin/settings',
-        // Cfg-011: setelan tenant (clinicLocation, jam operasional, brand,
-        // notifikasi staf) hanya Super Admin — baca & tulis.
-        '/api/admin/tenant-settings',
+        // Cfg-011: `/api/admin/tenant-settings` TIDAK lagi di sini — baca (GET)
+        // dibutuhkan staf operasional (titik klinik di form reservasi, KNOWN #324)
+        // dan dijaga scope data-driven. TULIS tetap Super Admin via
+        // `superAdminWritePrefixes` di bawah.
         '/api/admin/ai-models',
         '/api/admin/evaluations',
         '/api/admin/ai-evaluations',
@@ -263,10 +264,13 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
       // Cfg-013 (Opsi A): endpoint tulis katalog/tier/marketing-spend wajib
       // Super Admin. GET tetap boleh untuk staf (monitoring), write ditolak.
+      // Cfg-011 (KNOWN #324): setelan tenant hanya boleh DIBACA staf operasional
+      // (GET via `role_api_scopes`); PATCH/POST/PUT tetap Super Admin.
       const superAdminWritePrefixes = [
         '/api/admin/services',
         '/api/admin/delivery-tiers',
         '/api/admin/meta-performance',
+        '/api/admin/tenant-settings',
       ];
       if (
         request.method.toUpperCase() !== 'GET' &&

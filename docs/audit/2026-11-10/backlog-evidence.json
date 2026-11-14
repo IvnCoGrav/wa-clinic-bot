@@ -983,7 +983,7 @@
         {
           "type": "file",
           "path": "src/routes/admin.route.ts",
-          "line": 248,
+          "line": 249,
           "contains": "Cfg-004"
         },
         {
@@ -1295,7 +1295,7 @@
         {
           "type": "file",
           "path": "src/routes/admin.route.ts",
-          "line": 266,
+          "line": 269,
           "contains": "superAdminWritePrefixes"
         },
         {
@@ -1730,7 +1730,7 @@
         {
           "type": "file",
           "path": "src/routes/admin/settings-tenant.subroute.ts",
-          "line": 56,
+          "line": 58,
           "contains": "parseTenantSettingsPatch(request.body)"
         },
         {
@@ -1752,7 +1752,7 @@
         {
           "type": "file",
           "path": "src/routes/admin.route.ts",
-          "line": 213,
+          "line": 273,
           "contains": "      '/api/admin/tenant-settings',"
         }
       ],

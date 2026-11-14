@@ -328,7 +328,9 @@ describe('RBAC — hanya Super Admin', () => {
 
     const read = await app.inject({ method: 'GET', url: '/api/admin/tenant-settings', headers });
     expect(read.statusCode).toBe(403);
-    expect(read.json().code).toBe('FORBIDDEN_STAFF_ROLE');
+    // Kontrak baru (KNOWN #324): baca dijaga scope data-driven, bukan blanket prefix.
+    // THERAPIST tidak menerima baris scope tenant-settings → fail-closed di scope guard.
+    expect(read.json().code).toBe('FORBIDDEN_ROLE_SCOPE');
 
     const write = await app.inject({
       method: 'PATCH',
@@ -337,7 +339,8 @@ describe('RBAC — hanya Super Admin', () => {
       payload: { brand: { businessName: 'Nope' } },
     });
     expect(write.statusCode).toBe(403);
-    expect(write.json().code).toBe('FORBIDDEN_STAFF_ROLE');
+    // Tulis tetap Super Admin only (guard superAdminWritePrefixes).
+    expect(write.json().code).toBe('FORBIDDEN_SUPER_ADMIN_ONLY_WRITE');
   });
 
   it('sesi staf SUPER_ADMIN diizinkan membaca', async () => {

@@ -19,19 +19,20 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Dampak:** Bot AI secara sengaja tidak membalas chat masuk dari nomor pasien lama agar penanganan dilakukan secara personal oleh tim Bidan/CS. Jika tim CS tidak aktif membuka tab Live Chat, pesan pasien lama bisa tampak "tidak direspon bot".
 - **Rencana Tindak Lanjut:** SOP operasional memastikan tim CS rutin memantau tab Live Chat, serta verifikasi Web Push / notifikasi Telegram untuk pesan pasien lama tetap berjalan normal.
 
-## 325. [RBAC / Staf Dashboard] Pemanggilan `GET /api/admin/roles` Memicu 403 di Log Saat Staf Login atau Refresh Dashboard (2026-11-14, OPEN)
+## 325. [RBAC / Staf Dashboard] Pemanggilan `GET /api/admin/roles` Memicu 403 di Log Saat Staf Login atau Refresh Dashboard (2026-11-14, RESOLVED)
 
-- **Status:** OPEN (belum didaftarkan di `role_api_scopes` untuk `admin_cs` dan `therapist`).
+- **Status:** RESOLVED (2026-11-14) — migrasi `20261114160000_seed_staff_operational_read_scopes` menambahkan baris `GET /api/admin/roles` untuk `admin_cs`, `spv_cs`, dan `therapist`; guard scope otomatis mengizinkan, tulis role tetap Super Admin.
 - **Gejala:** Setiap kali staf/terapis membuka atau me-refresh dashboard, `AuthContext.tsx` mengeksekusi `fetchRolesFromApi()`. Karena endpoint belum terdaftar di `role_api_scopes` untuk peran non-Super Admin, server mencatat penolakan di log: `[RBAC SCOPE GUARD] Blocked 'ADMIN_CS' on GET /api/admin/roles` dan `[RBAC SCOPE GUARD] Blocked 'THERAPIST' on GET /api/admin/roles`.
 - **Dampak:** Di frontend error ditangkap `.catch(() => {})` dan aplikasi menggunakan fallback lokal (`DEFAULT_ROLE_CONFIGS`). Namun staf tidak dapat menerima pembaruan jika ada perubahan hak akses/role custom baru, serta mengotori log produksi.
-- **Rencana Tindak Lanjut:** Daftarkan izin baca (`GET /api/admin/roles`) ke `role_api_scopes` untuk peran `admin_cs`, `spv_cs`, dan `therapist`.
+- **Verifikasi:** SQL migrasi diuji 2x di dalam transaksi `ROLLBACK` pada DB produksi (idempoten, 5 baris, tanpa efek permanen); regresi dikunci di `tests/unit/admin-rbac-guard.test.ts` ("THERAPIST hanya boleh GET /roles", "tanpa baris scope tetap fail-closed").
 
-## 324. [RBAC / Reservasi] Titik Lokasi Klinik di Form Reservasi Terblokir 403 untuk ADMIN_CS/SPV_CS (`GET /api/admin/tenant-settings`) & Fallback Darurat Aktif (2026-11-14, OPEN)
+## 324. [RBAC / Reservasi] Titik Lokasi Klinik di Form Reservasi Terblokir 403 untuk ADMIN_CS/SPV_CS (`GET /api/admin/tenant-settings`) & Fallback Darurat Aktif (2026-11-14, RESOLVED)
 
-- **Status:** OPEN (belum dibuka izin bacanya untuk peran staf non-Super Admin).
-- **Gejala:** Saat `CreateReservationModal` dibuka oleh staf CS/Bidan (`ADMIN_CS`), frontend memanggil `GET /api/admin/tenant-settings` untuk menarik `clinicLocation` (`lat`, `lng`, `name`). Server merespons `403 Forbidden: [RBAC GUARD] Blocked unauthorized access attempt by staff role 'ADMIN_CS' on GET /api/admin/tenant-settings` karena prefix `/api/admin/tenant-settings` dikunci di `admin.route.ts:213` untuk Super Admin saja.
-- **Dampak:** Form reservasi jatuh ke koordinat darurat `FALLBACK_CLINIC_COORDS` (`{ lat: -7.3787, lng: 112.7538 }`). Jika tenant memiliki titik markas/klinik yang berbeda, kalkulasi jarak dan ongkir otomatis di modal bisa menggunakan titik fallback bukan titik aktual klinik.
-- **Rencana Tindak Lanjut:** Masukkan `GET /api/admin/tenant-settings` ke dalam `settingsReadAllowlist` di `src/routes/admin.route.ts` atau buatkan DTO pembacaan publik/staf aman (lokasi & jam operasional tanpa rahasia) dan daftarkan ke `role_api_scopes`.
+- **Status:** RESOLVED (2026-11-14) — prefix `/api/admin/tenant-settings` **dikeluarkan** dari `superAdminOnlyPrefixes` dan masuk `superAdminWritePrefixes`; READ dijaga scope data-driven (`GET` untuk `admin_cs`/`spv_cs`), WRITE tetap Super Admin. Migrasi: `20261114160000_seed_staff_operational_read_scopes`.
+- **Gejala:** Saat `CreateReservationModal` dibuka oleh staf CS/Bidan (`ADMIN_CS`), frontend memanggil `GET /api/admin/tenant-settings` untuk menarik `clinicLocation` (`lat`, `lng`, `name`). Server merespons `403 Forbidden: [RBAC GUARD] Blocked unauthorized access attempt by staff role 'ADMIN_CS' on GET /api/admin/tenant-settings` karena prefix dikunci untuk Super Admin saja.
+- **Dampak:** Form reservasi jatuh ke koordinat darurat `FALLBACK_CLINIC_COORDS` (`{ lat: -7.3787, lng: 112.7538 }`). Jika tenant memiliki titik markas/klinik berbeda, kalkulasi jarak & ongkir otomatis memakai titik fallback.
+- **Keamanan respons:** `getTenantSettingsView` tidak memuat rahasia — `staffNotification` hanya `telegramEnabled` (token Telegram tidak pernah dikirim). Tulis (`PATCH`) tetap diblokir `FORBIDDEN_SUPER_ADMIN_ONLY_WRITE`.
+- **Verifikasi:** `tests/unit/admin-rbac-guard.test.ts` (ADMIN_CS/SPV_CS boleh GET roles & tenant-settings; PATCH 403; tanpa scope row 403) + `tests/unit/tenant-settings-endpoint.test.ts` diperbarui ke kontrak baru.
 
 ## 323. [RBAC / Operasional] Peran ADMIN_CS & SPV_CS Terblokir 403 Saat Mengambil Katalog Treatment (`GET /api/admin/services`) & Form Reservasi (2026-11-14, RESOLVED — KEPUTUSAN BISNIS KB-RBAC-01)
 

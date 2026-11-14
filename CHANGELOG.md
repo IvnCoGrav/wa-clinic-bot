@@ -4,6 +4,17 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-14 - Fix: Izin Baca Operasional Staf — Daftar Role & Setelan Tenant (RBAC #324/#325)
+
+- **Masalah**: (1) Setiap login/refresh dashboard, `AuthContext` memanggil `GET /api/admin/roles` dan ditolak `403 [RBAC SCOPE GUARD] Blocked 'ADMIN_CS'/'THERAPIST'`; (2) form reservasi staf CS memanggil `GET /api/admin/tenant-settings` untuk titik klinik dan ditolak `403 [RBAC GUARD]` karena prefix dikunci Super Admin, sehingga modal memakai koordinat darurat.
+- **Akar Masalah**: Dua endpoint read-only belum masuk allowlist data-driven `role_api_scopes`, dan `/api/admin/tenant-settings` masih berada di blanket `superAdminOnlyPrefixes` (semua metode).
+- **Perubahan Utama**:
+  1. **Guard (`src/routes/admin.route.ts`)**: `/api/admin/tenant-settings` dikeluarkan dari blanket Super Admin dan dipindah ke `superAdminWritePrefixes` — READ dijaga scope per peran, WRITE (PATCH/POST/PUT) tetap Super Admin.
+  2. **Migrasi `20261114160000_seed_staff_operational_read_scopes`**: seed `GET /api/admin/roles` untuk `admin_cs`, `spv_cs`, `therapist`, dan `GET /api/admin/tenant-settings` untuk `admin_cs` & `spv_cs` (tenant-aware, idempoten `ON CONFLICT DO NOTHING`).
+  3. **Dokumentasi kontrak**: subroute tenant-settings menegaskan respons GET tanpa rahasia (`staffNotification` hanya `telegramEnabled`).
+- **Verifikasi**: `tests/unit/admin-rbac-guard.test.ts` +5 kasus (CS/SPV boleh baca, PATCH 403, therapist hanya roles, tanpa scope row fail-closed); suite RBAC terkait 98 test hijau; SQL migrasi diuji 2× dalam transaksi `ROLLBACK` di DB produksi (5 baris, idempoten, tanpa efek permanen).
+- **Catatan deploy**: migrasi harus dijalankan **sebelum** kode baru agar izin baca sudah tersedia saat guard baru aktif.
+
 #### 2026-11-14 - Fitur: Paket Berseri — Billing Komersial & Unit Komersial Tunggal
 
 - **Latar Belakang**: Paket berseri (mis. 4x/6x kunjungan) sebelumnya tidak menyimpan komponen komersial (ongkir, diskon, metode bayar, durasi, kartu alamat) dan setiap sesi dihitung sebagai transaksi terpisah — membuat repeat order dan omzet di Meta Performance/Sheets menggelembung palsu.
