@@ -3,6 +3,15 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 336. [Web App Staf / Plan-002] Hook Outbox Versi Branch Ditolak — PII di `localStorage` + Base64 (2026-11-14, BY-DESIGN)
+
+- **Konteks:** port plan-002 hanya mengambil `useStaffChatSend` (commit `a7ed6e70`). Commit `78ba75e3` (hook outbox pesan gagal) **sengaja tidak di-merge**.
+- **Alasan penolakan:** versi branch menyimpan antrean pesan gagal (teks chat pasien + gambar base64) di `localStorage`, tanpa TTL dan tanpa scope per staf. Bidan bergantian memakai HP klinik → PII tertinggal lintas pengguna; base64 gambar juga membengkakkan kuota (pernah >4 MB).
+- **Kontrak yang dipakai (W16):** outbox memakai `sessionStorage`, TTL 2 jam, **tanpa gambar**, dibersihkan saat logout (`useStaffOutbox`).
+- **Trade-off yang diterima:** `sessionStorage` hilang saat tab ditutup, jadi pesan yang gagal terkirim tidak di-retry setelah reload penuh. Ini disengaja agar tidak ada PII persisten di perangkat bersama.
+- **Arsip branch:** tag `archive/plan-002-staff-hooks-20261114` (53acfe36) dan `archive/plan002-chat-send-20261114` (a7ed6e70). Branch `feat/series-billing-port`, `deploy/2026-11-13-merged`, dan `deploy/reconcile-20261113` juga diarsipkan (`archive/*-20261114`) lalu dihapus dari lokal & remote karena sudah menjadi bagian `master`.
+- **Bila kelak butuh retry lintas reload:** desain fondasionalnya harus outbox **per-staf di server** (terenkripsi, TTL, tenant-aware) — bukan `localStorage` polos.
+
 ## 326. [AI Bot / Operasional CS] Pasien Lama (Legacy/Existing) Terkunci Permanen ke CS Tanpa Auto-Release AI Bot (2026-11-14, OPEN — MONITORING OPERASIONAL)
 
 - **Status:** OPEN — BY DESIGN / MONITORING OPERASIONAL.
