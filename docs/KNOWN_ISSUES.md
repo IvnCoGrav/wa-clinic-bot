@@ -3,6 +3,26 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 341. [Reservasi/Dashboard] Form “Buat Jadwal” Berkedip & Tombol/Field Kadang Tidak Bisa Diklik (2026-11-14, OPEN — RENDER CHURN)
+
+- **Status:** OPEN — akar masalah teridentifikasi dari audit statis 20 `useEffect`; perbaikan belum dieksekusi.
+- **Gejala:** Saat modal reservasi dibuka dari Live Chat, tombol/select/date field kadang tidak merespons klik dan tampak “berkedip”; teks pada input tanggal bisa tiba-tiba terseleksi. Tidak selalu terjadi (tergantung aktivitas chat).
+- **Akar masalah utama — objek prop tidak stabil di dependency array:**
+  1. `LiveChatModals.tsx:312-327` membuat **object literal baru** untuk `initialCustomer` pada setiap render parent (ketika `customerDetailData` tidak cocok).
+  2. `CreateReservationModal.tsx:980-994` menjalankan `handleSelectCustomer(initialCustomer)` dengan dependency `[isOpen, initialCustomer, …]` — identitas objek berubah → effect jalan lagi pada **setiap render parent**.
+  3. `handleSelectCustomer` (`:1142-1161`) melakukan 5 `setState` termasuk `setSelectedCustomerInfo` (objek baru) dan `setBabies` (array baru). Rantai ini memicu prefill alamat, re-render, dan mengulang lagi saat SSE Live Chat mengirim update → UI berkedip; elemen DOM diganti di tengah `mousedown`→`mouseup` sehingga klik hilang.
+  4. `LiveChatModals.tsx:332` juga membuat **array literal** `initialBabies`; effect `CreateReservationModal.tsx:1298-1341` memakai `initialBabies` sebagai dependency → ikut memicu siklus.
+- **Kontributor sekunder (jank, bukan loop):** `CreateReservationModal.tsx:946` me-refetch `/api/admin/reservations?pageSize=300` setiap `bookingDate` berubah (setiap ketikan tanggal) → UI tersendat saat fetch berulang.
+- **Temuan audit otomatis:** 20 `useEffect` diperiksa; **tidak ada** effect tanpa dependency array. Dua effect terindikasi menulis state yang ada di deps (`:1298`, `:1976`) tetapi dijaga kondisi sehingga bukan loop murni. Pemicu utama adalah identitas prop dari parent.
+- **Dampak:** interaksi form tidak andal (klik hilang, fokus/selection ter-reset), risiko data form ter-reset (customer/anak/alamat) saat SSE masuk, dan beban fetch berlebih.
+- **Rencana perbaikan (belum dieksekusi):**
+  1. Ganti dependency effect auto-populate menjadi **ID stabil** (`initialCustomer?.id || initialCustomerId`) + ref guard sekali per pembukaan; jangan memakai objek prop.
+  2. Bungkus `initialCustomer`/`initialBabies` di `LiveChatModals` dengan `useMemo` (key: id/versi data) agar identitas stabil.
+  3. Effect prefill chat (`:1298`) memakai kunci konten (nama+usia) alih-alih identitas array.
+  4. Fetch daftar reservasi dipicu per **hari**, bukan per ketikan; atau debounce 400 ms.
+  5. Regression test: util murni `shouldAutoPopulateCustomer(prevKey, nextKey)` + uji bahwa render berulang dengan prop id sama tidak memanggil ulang handler.
+- **Bukti kode:** `LiveChatModals.tsx:296-335`; `CreateReservationModal.tsx:946, 949-975, 980-994, 1142-1161, 1298-1341`.
+
 ## 340. [Reservasi] Data Anak Diminta Ulang di Setiap Booking — Prefill Anak Tidak Jalan (2026-11-14, RESOLVED)
 
 - **Status:** RESOLVED (2026-11-14) — form menghidrasi detail customer sekali per customer dan menampilkan anak tersimpan sebagai kartu pilih; tombol “+ Tambah Alamat” yang duplikat dihapus.
