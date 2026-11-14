@@ -71,7 +71,7 @@ antrean: shard_0..4 wait=0
 
 ## 5. Perbedaan konfigurasi server (lokal server, tidak di repo)
 
-- `docker-compose.yml` server menghapus `hermes-net` dari app/worker (kustomisasi server).
+- `docker-compose.yml` lokal sempat menghapus `hermes-net` dari app/worker **dan caddy**; **direvert 2026-11-14** karena Caddy membutuhkan `hermes-net` untuk Hermes (lihat Known Issue #333).
 - Fix `SEPARATE_WORKER` di server disamakan dengan repo: app `true` (skip cron), worker `true` + `CHAT_CONSUMER_ENABLED=false`.
 - `.env` server ditambah `APP_DOMAIN=app.kalababyspa.online` (diambil dari `ADMIN_DOMAIN`).
 
@@ -91,3 +91,13 @@ antrean: shard_0..4 wait=0
 - **Verifikasi live:** `/health` OK; `/ready` DB `CONNECTED`, WAHA `WORKING`, queue `CONNECTED`; restart app/worker 0; tidak ada error kritis 10 menit; marker `preservePreciseCoords`, `regionOk`, `freezePreservedRegion`, `regionsCompatible` ada di `dist`.
 - **Data pasca-deploy:** 5 customer multi-kartu (Babyspanisa tanpa reservasi + 4 rumah berbeda), 214 baris alamat, 0 FK orphan, 0 anomali primary.
 - **Catatan:** trade-off merge teks lintas kecamatan didokumentasikan sebagai Known Issue **#332** (BY-DESIGN).
+
+## 8. Perapian server & repo — 2026-11-14
+
+- **Revert `docker-compose.yml` server:** kustomisasi lokal yang mencabut `hermes-net` dari app/worker/caddy dibatalkan karena Caddy membutuhkan network itu untuk Hermes (Known Issue #333). File kini identik dengan repo.
+- **Commit repo:** `4a987ba7` — `.gitignore` menambahkan `backups/`, `.watchdog.env`, `Caddyfile.bak*`, `docker-compose.yml.bak*`, `backup_pre_v3_*.sql`. Server `git pull --ff-only` → `4a987ba7`, `git status` **0 baris**.
+- **Arsip di server:** 5 `Caddyfile.bak*`, 2 `docker-compose.yml.bak*`, dan dump `backup_pre_v3_20260920_183008.sql` dipindah ke `backups/legacy-config/` + `backups/` (chmod 600); `storage/vapid_keys.json` plaintext dipindah ke `backups/secrets/` (chmod 600) karena kunci sudah ada di `.env`.
+- **Dibersihkan:** file sampah `" metaPurchasePolicy "` (sisa output psql 12 byte).
+- **Branch diarsipkan (tag, bukan dihapus permanen):** `archive/fix-address-relink-fill-only-20261113` (48ce9dcc), `archive/fix-fase0-stabilisasi` (5a77eed0); branch remote-nya dihapus. Worktree `chatbot-address-relink` dilepas.
+- **Stash diarsipkan:** `archive/stash-audit-suko-wip` (6a707c44) dan `archive/stash-wip-unrelated-2026-10-05` (e871e743) — isinya sudah tercakup di master; 2 entri stash di-drop.
+- **Verifikasi:** `docker compose config --quiet` OK; 6 container `wa-clinic-bot-*` tetap Up (app/worker 22 menit, sisanya 20 jam); Caddy `hermes-net wa-clinic-bot_default`; `/ready` DB `CONNECTED`, WAHA `WORKING`, queue `CONNECTED`; tidak ada restart container saat perapian.

@@ -3,6 +3,13 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 333. [Deploy] `hermes-net` Wajib untuk Caddy — Jangan Dicabut (2026-11-14, TRAP)
+
+- **Status:** TRAP / BY-DESIGN. `docker-compose.yml` memakai network eksternal `hermes-net`; **Caddy wajib ikut** karena `Caddyfile` mem-proxy `hermes-agent:8621`, `hermes-agent:9119`, dan `hermes-9router:20128` (domain `hermes.kalababyspa.online`).
+- **Jebakan:** perubahan lokal server 2026-11-13 mencabut `hermes-net` dari `app`, `worker`, **dan `caddy`**. app/worker aman karena `COPILOT_ENGINE=internal`, tetapi Caddy hanya selamat karena belum di-recreate. Bila Caddy di-recreate dengan compose tersebut, DNS `hermes-agent` hilang dan domain Hermes mati.
+- **Resolusi (2026-11-14):** perubahan lokal direvert — `docker-compose.yml` kembali sama dengan repo; `docker compose config --quiet` OK; Caddy terverifikasi tetap di `hermes-net` + `wa-clinic-bot_default`; container tidak disentuh.
+- **Fresh host:** tetap perlu `docker network create hermes-net` sebelum `up` (lihat #196a). Jangan menghapus deklarasi network dari compose tanpa memindahkan Caddy/Hermes ke network lain.
+
 ## 329. [Buku Alamat] Kartu Reservasi Tanpa Koordinat Tidak Di-enrich Otomatis oleh Lifecycle (2026-11-13, OPEN — BY DESIGN)
 
 - **Status:** OPEN — konsekuensi sadar Tahap 4. Reservasi yang sudah punya kartu **tidak** boleh menulis profil root, sehingga auto-distance lifecycle dihentikan total untuk reservasi ber-kartu.
