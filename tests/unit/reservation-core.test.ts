@@ -44,6 +44,20 @@ describe('reservation-core.service (kanonis)', () => {
     expect(prisma.reservation.update).not.toHaveBeenCalled();
   });
 
+  it('clamp diskon create ke nilai layanan (tidak boleh melebihi gross)', async () => {
+    vi.mocked(prisma.reservation.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.reservation.create).mockResolvedValue({ id: 'new-disc' } as any);
+    await reservationCoreService.saveReservation({
+      ...base,
+      bookingDate: slot,
+      purchaseValue: 100_000,
+      discountAmount: 250_000,
+    });
+    const createArg = vi.mocked(prisma.reservation.create).mock.calls[0][0] as any;
+    expect(createArg.data.purchase_value).toBe(100_000);
+    expect(createArg.data.discount_amount).toBe(100_000);
+  });
+
   it('menolak STAFF_COLLISION pada jalur ADMIN_PANEL', async () => {
     vi.mocked(prisma.reservation.findMany)
       .mockResolvedValueOnce([]) // tidak ada konflik customer

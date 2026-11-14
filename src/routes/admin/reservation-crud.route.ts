@@ -928,6 +928,16 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
       if (!['BABY', 'MOMS', 'BOTH', 'KIDS', 'BUNDLE'].includes(treatmentCategory)) {
         return reply.status(400).send({ error: 'treatmentCategory tidak valid.' });
       }
+
+      // Status create hanya boleh confirmed/hold. Sebelumnya nilai lain
+      // (pending/completed/cancelled) diam-diam dipaksa confirmed oleh UI/route.
+      const rawStatus = status as string | undefined;
+      if (rawStatus !== undefined && rawStatus !== null && rawStatus !== 'confirmed' && rawStatus !== 'hold') {
+        return reply.status(400).send({
+          success: false,
+          error: 'Status tidak valid untuk reservasi baru. Gunakan confirmed atau hold.',
+        });
+      }
  
       const customer = await customerService.getCustomerById(customerId, tenantId);
       if (!customer) {

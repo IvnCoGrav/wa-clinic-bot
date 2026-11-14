@@ -1078,7 +1078,21 @@ export class ReservationCoreService {
                 gestational_weeks: maternal.gestationalWeeks ?? (primary as any).gestational_weeks ?? null,
                 mom_stage: maternal.momStage ?? (primary as any).mom_stage ?? null,
                 hpl_date: maternal.hplDate ?? (primary as any).hpl_date ?? null,
-                ...(discountAmount !== undefined && discountAmount !== null ? { discount_amount: Math.round(discountAmount) } : {}),
+                ...(discountAmount !== undefined && discountAmount !== null
+                  ? {
+                      discount_amount: Math.min(
+                        Math.round(discountAmount),
+                        Math.max(
+                          0,
+                          Math.round(
+                            typeof purchaseValue === 'number' && Number.isFinite(purchaseValue)
+                              ? purchaseValue
+                              : Number(primary.purchase_value) || 0
+                          )
+                        )
+                      ),
+                    }
+                  : {}),
                 is_repeat_order: isRepeatOrder,
                 // KB-6: snapshot ongkir bila diberikan eksplisit.
                 ...(deliveryFee !== undefined && deliveryFee !== null ? { delivery_fee: deliveryFee } : {}),
@@ -1164,7 +1178,14 @@ export class ReservationCoreService {
       hpl_date: maternal.hplDate,
       status: bookingStatus,
       purchase_value: purchaseValue ?? null,
-      discount_amount: typeof discountAmount === 'number' && Number.isFinite(discountAmount) && discountAmount >= 0 ? Math.round(discountAmount) : null,
+      discount_amount: (() => {
+        if (typeof discountAmount !== 'number' || !Number.isFinite(discountAmount) || discountAmount < 0) return null;
+        const gross =
+          typeof purchaseValue === 'number' && Number.isFinite(purchaseValue) && purchaseValue > 0
+            ? Math.round(purchaseValue)
+            : Math.round(discountAmount);
+        return Math.min(Math.round(discountAmount), gross);
+      })(),
       // Queue-First: confirmed masuk antrean CAPI. Non-purchase (hold/intake) memakai
       // sentinel eksplisit agar kolom NOT NULL tidak pernah menerima null.
       purchase_review_status: bookingStatus === 'confirmed'

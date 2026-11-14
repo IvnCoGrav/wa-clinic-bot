@@ -4,6 +4,27 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-14 - Fix: Form Reservasi — Alamat Display-Only, Bidan/Status Jujur, Validasi & Anti-Friksi
+
+- **Permintaan admin**:
+  1. Alamat/Patokan **tidak lagi berupa textfield** saat kartu alamat sudah dipilih — hanya display + tombol **Ubah Alamat Kartu** / **+ Tambah Alamat**. Input manual hanya muncul bila customer belum punya kartu, atau admin sudah mengetik sebelum kartu selesai dimuat (mode satu-kali dengan konfirmasi, fokus tidak hilang).
+  2. **“Acak Bidan” dihapus** → `-- Pilih Bidan --` + badge “Belum ditugaskan”; tidak ada auto-acak.
+  3. Label dipersingkat: **Bidan / Tanggal / Status**.
+- **Perbaikan audit UX**:
+  1. **Status create** hanya `Confirmed`/`Hold`; backend menolak status lain (400) — tidak lagi diam-diam menjadi `confirmed`. Mode edit tetap 5 status.
+  2. **Tanggal lampau** dicegah (`min` hari ini) + konfirmasi backdate; teks tanggal WIB ditampilkan.
+  3. **Error validasi** auto-scroll & fokus ke ringkasan; tidak lagi “tidak terjadi apa-apa”.
+  4. **Pencarian customer** debounce 300 ms + AbortController; empty state jelas.
+  5. **Ongkir** tidak tertimpa hidrasi kartu (`ongkirTouchedRef`).
+  6. **Diskon** di-clamp ke subtotal di UI + backend create/merge.
+  7. **Katalog**: pesan “tidak ada layanan cocok” vs katalog kosong; dropdown tutup saat klik luar/Escape.
+  8. **Paket multi-sesi**: wajib centang “sudah memeriksa jadwal sesi”; centang batal otomatis jika jadwal diubah.
+  9. **Multi-anak**: warning jika semua treatment ditujukan ke anak yang sama.
+  10. **Duplikat same-day**: pilihan eksplisit **Tambah ke Jadwal Existing** / **Buat Jadwal Terpisah** (force), bukan 409 membingungkan.
+  11. **A11y**: aria-label pada field utama & tombol tutup; label lebih pendek.
+- **Catatan**: “Tambah Customer Baru” dari modal **belum diimplementasikan** karena belum ada endpoint create customer di backend (didokumentasikan di KNOWN #347).
+- **Verifikasi**: `npm run build` backend & dashboard hijau; full suite **7559 lulus / 4 pre-existing / 28 skipped**; test baru status guard + clamp diskon hijau.
+
 #### 2026-11-14 - Fix: Pembayaran Berdiskon Tidak Lagi Diblokir, Bukti Bayar Permanen, Form Reservasi Tidak “Mati 1 Huruf”
 
 - **Masalah**:
