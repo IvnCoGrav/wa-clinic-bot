@@ -43,6 +43,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   4. `handleUpdateBaby` menambahkan indeks ke `editingChildIndexes` pada ketikan pertama → form anak tidak unmount.
   5. Effect history: `handleSafeClose` disimpan di ref; `pushState` hanya sekali saat modal dibuka (bukan per keystroke).
   6. **Kolom pencarian halaman Reservations**: URL (`setSearchParams`) tidak lagi ditulis per huruf; sinkronisasi URL di-debounce 400 ms dan state lokal menjadi sumber saat mengetik. Ini mencegah history berubah tiap karakter (yang di mobile dapat menutup keyboard) dan tombol X mencuri fokus.
+  7. **Akar utama “1 huruf lalu fokus ke tombol X”**: komponen `Modal` menjalankan effect fokus awal dengan dependency `onClose`. `CreateReservationModal` mengirim arrow `onClose` **baru setiap render/keystroke**, sehingga effect berjalan ulang dan memfokuskan elemen pertama di panel — tombol X. Perbaikan: effect fokus dipisah (`[open, initialFocusRef]`), listener Escape/Tab memakai `onCloseRef`, dan `CreateReservationModal` memakai `handleModalClose` yang stabil.
 - **Verifikasi:** dashboard `tsc` + `vite build` hijau; belum ada unit test DOM (perlu perangkat/Playwright).
 - **Sisa:** uji ketik-cepat di HP (Android Chrome + iOS Safari) dan uji back-button setelah modal ditutup.
 
