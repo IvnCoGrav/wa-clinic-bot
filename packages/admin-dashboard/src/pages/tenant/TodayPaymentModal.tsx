@@ -4,10 +4,12 @@
  * Form memegang sendiri pembacaan file bukti; metode dan hasil unggahan
  * dikirim ke halaman induk lewat callback.
  */
-import React from 'react';
+import React, { useState } from 'react';
 import { CreditCard, Maximize2 } from 'lucide-react';
 import { Modal } from '../../components/ui/Modal';
 import { formatRupiah } from '../../utils/money';
+import { useUiFeedback } from '../../components/common/UiFeedback';
+import { prepareChatImage } from '../../utils/imageCompressor';
 import { TreatmentTask } from './todayTreatmentsTypes';
 
 export type TodayPaymentMethod = 'CASH' | 'TRANSFER' | 'QRIS';
@@ -34,7 +36,10 @@ export const TodayPaymentModal: React.FC<TodayPaymentModalProps> = ({
   onProofChange,
   onSave,
   onShowImage,
-}) => (
+}) => {
+  const { toast } = useUiFeedback();
+  const [proofError, setProofError] = useState<string | null>(null);
+  return (
   <Modal
     open
     onClose={onClose}
@@ -54,6 +59,12 @@ export const TodayPaymentModal: React.FC<TodayPaymentModalProps> = ({
           <span>Biaya Layanan:</span>
           <span>{formatRupiah(task.pricing.treatmentFee)}</span>
         </div>
+        {Number(task.pricing.discountAmount || 0) > 0 && (
+          <div className="flex justify-between text-rose-600 dark:text-danger">
+            <span>Diskon:</span>
+            <span>-{formatRupiah(Number(task.pricing.discountAmount))}</span>
+          </div>
+        )}
         <div className="flex justify-between text-ink-2">
           <span>Ongkos Kirim:</span>
           <span>{formatRupiah(task.pricing.deliveryFee)}</span>
@@ -90,15 +101,24 @@ export const TodayPaymentModal: React.FC<TodayPaymentModalProps> = ({
           <input
             type="file"
             accept="image/*"
-            onChange={(e) => {
+            onChange={async (e) => {
               const file = e.target.files?.[0];
               if (!file) return;
-              const reader = new FileReader();
-              reader.onloadend = () => onProofChange(reader.result as string);
-              reader.readAsDataURL(file);
+              try {
+                setProofError(null);
+                const prepared = await prepareChatImage(file, 'field');
+                onProofChange(prepared.dataUrl);
+              } catch (err: any) {
+                const message = err?.message || 'Foto gagal diproses. Coba ambil ulang dari kamera.';
+                setProofError(message);
+                toast(message, 'error');
+              }
             }}
             className="w-full text-xs text-ink-2 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-accent-soft file:text-accent hover:file:bg-accent-soft/80 cursor-pointer"
           />
+          {proofError && (
+            <p className="text-[11px] text-danger font-semibold">{proofError}</p>
+          )}
           {proofImageB64 && (
             <div className="relative mt-2 rounded-xl overflow-hidden border">
               <img src={proofImageB64} alt="Bukti" className="h-28 w-auto object-contain" />
@@ -133,4 +153,5 @@ export const TodayPaymentModal: React.FC<TodayPaymentModalProps> = ({
       </div>
     </form>
   </Modal>
-);
+  );
+};

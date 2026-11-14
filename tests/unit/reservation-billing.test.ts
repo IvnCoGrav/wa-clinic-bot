@@ -110,6 +110,44 @@ describe('resolveReservationBilling — ongkir & item count', () => {
   });
 });
 
+describe('resolveReservationBilling — diskon (tagihan kanonis)', () => {
+  beforeEach(() => {
+    mockedResolve.mockReset();
+    mockedResolve.mockResolvedValue(undefined);
+  });
+
+  it('mengurangkan diskon dari layanan, bukan dari ongkir', async () => {
+    const billing = await resolveReservationBilling(
+      { purchase_value: 100_000, discount_amount: 10_000, delivery_fee: 20_000 },
+      'tenant-a'
+    );
+    expect(billing.treatmentFee).toBe(100_000);
+    expect(billing.discount).toBe(10_000);
+    expect(billing.netFee).toBe(90_000);
+    expect(billing.deliveryFee).toBe(20_000);
+    expect(billing.totalFee).toBe(110_000);
+  });
+
+  it('diskon tidak boleh melebihi nilai layanan (clamp)', async () => {
+    const billing = await resolveReservationBilling(
+      { purchase_value: 50_000, discount_amount: 80_000, delivery_fee: 0 },
+      'tenant-a'
+    );
+    expect(billing.discount).toBe(50_000);
+    expect(billing.netFee).toBe(0);
+    expect(billing.totalFee).toBe(0);
+  });
+
+  it('diskon negatif/NaN diabaikan', async () => {
+    const billing = await resolveReservationBilling(
+      { purchase_value: 50_000, discount_amount: -10_000, delivery_fee: 0 },
+      'tenant-a'
+    );
+    expect(billing.discount).toBe(0);
+    expect(billing.totalFee).toBe(50_000);
+  });
+});
+
 describe('resolveReservationBilling — cache batch', () => {
   beforeEach(() => {
     mockedResolve.mockReset();
@@ -140,3 +178,4 @@ describe('resolveReservationBilling — cache batch', () => {
     expect(mockedResolve).toHaveBeenCalledTimes(2);
   });
 });
+

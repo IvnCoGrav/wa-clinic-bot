@@ -16,8 +16,14 @@ import { resolveTreatmentValue } from './capi.service';
  * `Customer.ongkir` untuk baris pra-migrasi).
  */
 export interface ReservationBilling {
+  /** Nilai layanan kotor (sebelum diskon). */
   treatmentFee: number;
+  /** Diskon layanan yang tercatat pada reservasi. */
+  discount: number;
+  /** Nilai layanan bersih setelah diskon. */
+  netFee: number;
   deliveryFee: number;
+  /** Tagihan final = netFee + deliveryFee (satu-satunya angka yang boleh dipakai UI/laporan). */
   totalFee: number;
   /** Jumlah item layanan pada reservasi (0 bila tidak ada data). */
   itemCount: number;
@@ -75,8 +81,13 @@ export async function resolveReservationBilling(
   }
 
   const deliveryFee = toNonNegativeNumber(resolveDeliveryFeeSnapshot(reservation));
-  const totalFee = treatmentFee + deliveryFee;
+  // Diskon adalah bagian dari tagihan resmi: seluruh layar/laporan WAJIB memakai
+  // angka yang sama. Sebelumnya diskon diabaikan di seam ini sehingga tagihan
+  // UI (gross) berbeda dari validasi pembayaran (net).
+  const discount = Math.min(treatmentFee, toNonNegativeNumber(reservation?.discount_amount));
+  const netFee = Math.max(0, treatmentFee - discount);
+  const totalFee = netFee + deliveryFee;
   const itemCount = countItems(reservation?.items) || (treatmentDetail ? 1 : 0);
 
-  return { treatmentFee, deliveryFee, totalFee, itemCount };
+  return { treatmentFee, discount, netFee, deliveryFee, totalFee, itemCount };
 }
