@@ -2288,6 +2288,9 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                   {customerId && (
                     <button
                       type="button"
+                      tabIndex={-1}
+                      onMouseDown={(e) => e.preventDefault()}
+                      aria-label="Hapus pilihan customer"
                       onClick={() => {
                         setCustomerId('');
                         setCustomerSearch('');
