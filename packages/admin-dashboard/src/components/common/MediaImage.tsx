@@ -253,6 +253,7 @@ export const MediaImage: React.FC<{
       {/* Full-Screen Lightbox Modal with Mobile Header & HD On-Demand rendered via React Portal directly to document.body */}
       {isViewerOpen && typeof document !== 'undefined' && createPortal(
         <div
+          data-ptr-ignore="true"
           className="modal-backdrop fixed inset-0 z-[999999] bg-black/95 sm:bg-black/90 backdrop-blur-md flex flex-col justify-between select-none animate-in fade-in duration-150"
           style={{
             paddingTop: 'env(safe-area-inset-top, 0px)',

@@ -32,6 +32,8 @@ import { useLiveChatThreads } from '../../hooks/useLiveChatThreads';
 import { useLiveChatActiveThread } from '../../hooks/useLiveChatActiveThread';
 import { useLiveChatReservations } from '../../hooks/useLiveChatReservations';
 import { useLiveChatBotAndLabels } from '../../hooks/useLiveChatBotAndLabels';
+import { usePullToRefresh } from '../../hooks/usePullToRefresh';
+import { PullToRefreshIndicator } from '../../components/common/PullToRefreshIndicator';
 import { LiveChatThreadList } from '../../components/livechat/LiveChatThreadList';
 import { LiveChatMessagePane } from '../../components/livechat/LiveChatMessagePane';
 import { LiveChatModals } from '../../components/livechat/LiveChatModals';
@@ -139,6 +141,14 @@ export const LiveChatMonitor: React.FC = () => {
     if (!selectedId) return null;
     return chats.find((c) => c.conversationId === selectedId) || null;
   }, [chats, selectedId]);
+
+  // Pull-to-refresh (swipe-down) HANYA di halaman ini: muat ulang daftar chat + unread.
+  const pullToRefresh = usePullToRefresh({
+    onRefresh: async () => {
+      await loadChats(true);
+      refreshTotalUnread?.();
+    },
+  });
 
   const replyTextRef = useRef('');
   const [hasReplyText, setHasReplyText] = useState(false);
@@ -775,6 +785,7 @@ export const LiveChatMonitor: React.FC = () => {
 
   return (
     <div data-no-swipe-menu="true" className="h-full flex flex-col min-h-0 space-y-0 lg:space-y-1.5 p-0 lg:p-1.5 lg:pb-0 pt-[env(safe-area-inset-top,0px)]">
+      <PullToRefreshIndicator distance={pullToRefresh.distance} isRefreshing={pullToRefresh.isRefreshing} />
       {/* Top Header (Desktop only) */}
       <div className="hidden lg:flex justify-between items-center bg-surface border border-divider rounded-xl px-2.5 sm:px-3 py-1 sm:py-1.5 shadow-xs shrink-0">
         <div className="flex items-center space-x-2">

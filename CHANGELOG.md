@@ -4,6 +4,15 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-14 - Feat: Pull-to-Refresh Terkontrol di LiveChat Monitor & Halaman Staf
+
+- **Konteks**: browser native “tarik ke bawah = reload” dimatikan global (`overscroll-behavior: none`), tetapi beberapa perangkat masih bisa memicu reload sporadis di grid kalender. Daripada mengandalkan gestur native, disediakan pull-to-refresh eksplisit di halaman yang membutuhkan data segar.
+- **Perubahan**:
+  1. Hook `usePullToRefresh` + `PullToRefreshIndicator`: swipe-down dengan ambang 72 px, hambatan 0.5, hanya aktif bila kontainer scroll terdekat di paling atas, mengabaikan gestur horizontal, tidak aktif saat modal/body scroll terkunci, dan menghormati `data-ptr-ignore` (lightbox gambar).
+  2. Dipasang **hanya** di `LiveChatMonitor` (muat ulang daftar chat + unread tanpa reload) dan `StaffToday` (juga dipakai `StaffSchedule`): `fetchTasks` ulang tanpa reload.
+  3. Logika murni `pullToRefresh.ts` (resistensi, ambang, label) dikunci `tests/unit/pull-to-refresh.test.ts` (4 kasus).
+- **Catatan**: halaman lain tetap tanpa pull-to-refresh; tombol refresh manual yang sudah ada tidak berubah.
+
 #### 2026-11-14 - Fix: Peringatan Reservasi Aktif Palsu dari Riwayat `completed` (#342)
 
 - **Masalah**: form reservasi memperingatkan “customer sudah punya reservasi aktif pada tanggal ini” padahal yang terdeteksi adalah kunjungan lama berstatus `completed` (tidak ada di daftar jadwal aktif).

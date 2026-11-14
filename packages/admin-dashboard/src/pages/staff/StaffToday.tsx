@@ -43,6 +43,8 @@ import { compressImageFile, compressDataUrl, resolveCompressProfile } from '../.
 import { stampGpsWatermark } from '../../utils/imageWatermark';
 import { ThemeToggle } from '../../components/common/ThemeToggle';
 import { useTripTelemetry } from '../../hooks/useTripTelemetry';
+import { usePullToRefresh } from '../../hooks/usePullToRefresh';
+import { PullToRefreshIndicator } from '../../components/common/PullToRefreshIndicator';
 import {
   calculateHaversineKm,
   estimateTravelMinutesKm,
@@ -2136,8 +2138,14 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   // Group completed tasks by date
   const groupedCompleted = groupTasksByDate(activeTab === 'completed' ? filteredTasks : completedTasks);
 
+  // Pull-to-refresh (swipe-down) khusus halaman staf: muat ulang tugas tanpa reload.
+  const pullToRefresh = usePullToRefresh({
+    onRefresh: () => fetchTasks(true, scopeFilter),
+  });
+
   return (
     <div className="h-[100dvh] max-h-[100dvh] w-full max-w-full overflow-hidden bg-app text-ink flex flex-col font-sans select-none antialiased">
+      <PullToRefreshIndicator distance={pullToRefresh.distance} isRefreshing={pullToRefresh.isRefreshing} />
       {/* S-06: consent eksplisit sebelum warm-up GPS latar berjalan. */}
       {hasDepartWindowTask && gpsWarmupConsent === null && (
         <div
