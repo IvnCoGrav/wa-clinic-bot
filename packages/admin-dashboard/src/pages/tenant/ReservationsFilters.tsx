@@ -148,6 +148,8 @@ export const ReservationsFilters: React.FC<ReservationsFiltersProps> = ({
           {searchQuery && (
             <button
               type="button"
+              tabIndex={-1}
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => onSearchChange('')}
               className="absolute right-3 top-3 text-ink-3 hover:text-ink"
               aria-label="Hapus pencarian"
