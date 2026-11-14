@@ -476,6 +476,25 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
         }
       >
 
+        {/* Series Banner (Paket Berseri) */}
+        {Boolean(displayReservation.series_id || (displayReservation as any).session_number) && (
+          <div className="p-3 bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/30 rounded-xl flex items-center justify-between shadow-2xs">
+            <div className="flex items-center space-x-2">
+              <span className="px-2 py-0.5 text-[10px] font-bold uppercase rounded bg-accent text-on-solid tracking-wider">
+                Paket Berseri
+              </span>
+              <span className="text-xs font-bold text-blue-900 dark:text-blue-200">
+                Sesi {(displayReservation as any).session_number ?? '?'} dari {(displayReservation as any).total_sessions ?? '?'}
+              </span>
+            </div>
+            {displayReservation.series_id && (
+              <span className="text-[10px] text-blue-700 dark:text-blue-300 font-mono">
+                ID: {displayReservation.series_id.slice(0, 8)}...
+              </span>
+            )}
+          </div>
+        )}
+
         {/* ========================================================= */}
         {/* STANDARD DETAIL VIEW */}
         {/* ========================================================= */}

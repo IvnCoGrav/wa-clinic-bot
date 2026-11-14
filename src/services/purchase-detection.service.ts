@@ -205,6 +205,12 @@ export async function maybeFirePurchaseEvent(params: {
       finalValue = Number((reservation as any).purchase_value) || value;
     }
 
+    // FASE F: Sesi 2..N dari paket berseri tidak masuk CAPI Queue
+    if ((reservation as any).series_id && ((reservation as any).session_number ?? 1) > 1) {
+      console.log(`[CAPI HELD] Reservation ${reservation.id} adalah sesi ${(reservation as any).session_number} dari paket berseri. Tidak dimasukkan ke CAPI Purchase Queue.`);
+      return false;
+    }
+
     // Queue-First: SELALU tahan ke moderasi. Flag tenant auto_send_purchase_capi diabaikan (deprecated).
     // Uang dicatat (purchase_occurred_at) tapi event TIDAK dikirim — menunggu approve-purchase.
     const updateData: any = {

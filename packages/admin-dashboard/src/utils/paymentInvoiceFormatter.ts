@@ -335,7 +335,10 @@ export function generateReservationInvoiceText(params: GenerateInvoiceParams): s
     }
   }
 
-  lines.push(`Treatment : ${treatment}`);
+  const seriesBadge = (reservation as any).series_id
+    ? ` [Paket Berseri Sesi ${(reservation as any).session_number || 1}/${(reservation as any).total_sessions || '?'}]`
+    : '';
+  lines.push(`Treatment : ${treatment}${seriesBadge}`);
   lines.push('');
   lines.push('Payment : ');
   lines.push(`Treatment = ${formatThousand(treatmentPrice)}`);
@@ -347,6 +350,160 @@ export function generateReservationInvoiceText(params: GenerateInvoiceParams): s
   lines.push('');
   lines.push('H-1 sebelum treatment akan kami reminder kembali bunda 🥰');
   lines.push('Terimakasih.  ☺️');
+
+  return lines.join('\n');
+}
+export interface GenerateSeriesInvoiceParams {
+  series: {
+    id?: string;
+    treatment_name?: string;
+    treatmentName?: string;
+    total_sessions?: number;
+    totalSessions?: number;
+    purchase_value?: number | null;
+    purchaseValue?: number | null;
+    delivery_fee?: number | null;
+    deliveryFee?: number | null;
+    discount_amount?: number | null;
+    discountAmount?: number | null;
+    payment_method?: string | null;
+    paymentMethod?: string | null;
+    reservations?: Array<{
+      session_number?: number;
+      sessionNumber?: number;
+      booking_date?: string | Date;
+      bookingDate?: string | Date;
+    }>;
+  };
+  customer?: InvoiceCustomerData | null;
+  discount?: number;
+}
+
+/**
+ * Adapter helper untuk mengonversi response API / DB model ke GenerateSeriesInvoiceParams
+ */
+export function seriesInvoiceParamsFromApi(
+  apiSeries: any,
+  customer?: InvoiceCustomerData | null,
+  discount?: number
+): GenerateSeriesInvoiceParams {
+  if (!apiSeries) {
+    return {
+      series: {
+        treatmentName: '',
+        totalSessions: 1,
+      },
+      customer: customer || null,
+      discount: discount || 0,
+    };
+  }
+
+  const rawReservations = apiSeries.reservations || apiSeries.sessions || [];
+  const normalizedReservations = rawReservations.map((r: any, idx: number) => ({
+    session_number: Number(r.session_number ?? r.sessionNumber ?? idx + 1),
+    sessionNumber: Number(r.session_number ?? r.sessionNumber ?? idx + 1),
+    booking_date: r.booking_date ?? r.bookingDate ?? r.date,
+    bookingDate: r.booking_date ?? r.bookingDate ?? r.date,
+  }));
+
+  const treatmentName = apiSeries.treatment_name || apiSeries.treatmentName || '';
+  const totalSessions = Number(
+    apiSeries.total_sessions ?? apiSeries.totalSessions ?? normalizedReservations.length ?? 1
+  );
+  const purchaseValue = Number(apiSeries.purchase_value ?? apiSeries.purchaseValue ?? 0);
+  const deliveryFee = Number(apiSeries.delivery_fee ?? apiSeries.deliveryFee ?? 0);
+  const discountAmount = Number(discount ?? apiSeries.discount_amount ?? apiSeries.discountAmount ?? 0);
+
+  return {
+    series: {
+      id: apiSeries.id,
+      treatment_name: treatmentName,
+      treatmentName: treatmentName,
+      total_sessions: totalSessions,
+      totalSessions: totalSessions,
+      purchase_value: purchaseValue,
+      purchaseValue: purchaseValue,
+      delivery_fee: deliveryFee,
+      deliveryFee: deliveryFee,
+      discount_amount: discountAmount,
+      discountAmount: discountAmount,
+      payment_method: apiSeries.payment_method || apiSeries.paymentMethod,
+      paymentMethod: apiSeries.payment_method || apiSeries.paymentMethod,
+      reservations: normalizedReservations,
+    },
+    customer: customer || null,
+    discount: discountAmount,
+  };
+}
+
+/**
+ * Mengenerate teks rincian booking & invoice WhatsApp untuk satu PAKET BERSERI utuh (unit komersial tunggal)
+ */
+export function generateSeriesInvoiceText(params: GenerateSeriesInvoiceParams): string {
+  const { series, customer, discount = 0 } = params;
+  const kec = customer?.kecamatan || '';
+  const kota = customer?.kota || '';
+  const phone = customer?.phone || '';
+  const bundaName = cleanBundaName(customer?.name || '', kec, kota);
+  const address = customer?.address || customer?.preferences?.address || '';
+  const treatmentName = series.treatment_name || series.treatmentName || 'Treatment Paket';
+  const totalSessions = Number(series.total_sessions ?? series.totalSessions ?? series.reservations?.length ?? 1);
+  const packagePrice = Number(series.purchase_value ?? series.purchaseValue ?? 0);
+  const perVisitOngkir = Number(series.delivery_fee ?? series.deliveryFee ?? 0);
+  const totalOngkir = perVisitOngkir * totalSessions;
+  const effectiveDiscount = Number(discount) || Number(series.discount_amount ?? series.discountAmount ?? 0);
+  const total = Math.max(0, packagePrice + totalOngkir - effectiveDiscount);
+
+  const lines: string[] = [
+    'Berikut reservasi Paket Berseri 🐣',
+    '',
+    `Paket : ${treatmentName} (${totalSessions} Sesi)`,
+    `Nama Bunda : ${bundaName ? bundaName : '-'}`,
+    `Alamat & Shareloc : ${address || '-'}`,
+    `Kec : ${kec || '-'}`,
+    `Kota : ${kota || '-'}`,
+    `No. Hp : ${phone || '-'}`,
+    '',
+  ];
+
+  const babyDetails = (customer?.children || [])
+    .map((c) => ({ name: (c.name || '').trim(), age: (c.current_age || c.raw_age_text || '').trim() }))
+    .filter((b) => b.name && b.name !== '-');
+
+  if (babyDetails.length > 0) {
+    babyDetails.forEach((b, idx) => {
+      const suffix = babyDetails.length > 1 ? ` ${idx + 1}` : '';
+      lines.push(`Nama Bayi${suffix} : ${b.name}`);
+      lines.push(`Usia Bayi/Anak${suffix} : ${b.age || '-'}`);
+    });
+    lines.push('');
+  }
+
+  if (series.reservations && series.reservations.length > 0) {
+    lines.push('Rincian Jadwal Sesi :');
+    series.reservations.forEach((r) => {
+      const sessionNum = r.session_number ?? r.sessionNumber ?? 1;
+      const bDate = r.booking_date ?? r.bookingDate;
+      const dateFormatted = formatIndonesianDateTime(bDate ? String(bDate) : null);
+      lines.push(`• Sesi ${sessionNum}: ${dateFormatted}`);
+    });
+    lines.push('');
+  }
+
+  lines.push('Payment :');
+  lines.push(`Paket (${totalSessions} Sesi) = ${formatThousand(packagePrice)}`);
+  if (perVisitOngkir > 0) {
+    lines.push(`Ongkir (${totalSessions} kunjungan @ ${formatThousand(perVisitOngkir)}) = ${formatThousand(totalOngkir)}`);
+  } else {
+    lines.push('Ongkir = free');
+  }
+  if (effectiveDiscount > 0) {
+    lines.push(`Diskon = - ${formatThousand(effectiveDiscount)}`);
+  }
+  lines.push(`Total = ${formatThousand(total)}`);
+  lines.push('');
+  lines.push('H-1 sebelum setiap sesi treatment akan kami reminder kembali bunda 🥰');
+  lines.push('Terimakasih. ☺️');
 
   return lines.join('\n');
 }

@@ -215,7 +215,7 @@ async function notifySameDayRequest(params: {
  * Return true bila MASIH ada kapasitas; false bila penuh.
  * DB error → true (fail-open + alert) agar operasional tidak berhenti.
  */
-async function hasCapacityForUnassignedBooking(tenantId: string, bookingDate: Date, db: any = prisma): Promise<boolean> {
+export async function hasCapacityForUnassignedBooking(tenantId: string, bookingDate: Date, db: any = prisma): Promise<boolean> {
   const capacity = await countActiveTherapists(tenantId);
   if (capacity === null) {
     reportConflictCheckDegraded('customer', tenantId, 'staff.count gagal (kuota KB-3 dilewati)');
@@ -273,7 +273,7 @@ function reportConflictCheckDegraded(scope: 'customer' | 'staff', tenantId: stri
  * diakuisisi, `work()` dijalankan sekali di luar transaksi; bila `work()` sendiri
  * yang gagal, error diteruskan TANPA diulang (cegah efek samping ganda).
  */
-async function runWithAdvisoryLock<T>(key: number, work: (tx: any) => Promise<T>): Promise<T> {
+export async function runWithAdvisoryLock<T>(key: number, work: (tx: any) => Promise<T>): Promise<T> {
   const prismaAny = prisma as any;
   if (typeof prismaAny.$transaction !== 'function' || typeof prismaAny.$executeRawUnsafe !== 'function') {
     return work(prisma);

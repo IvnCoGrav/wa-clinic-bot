@@ -263,6 +263,7 @@ export class FollowUpEngineService {
               booking_date: true,
               treatment_category: true,
               treatment_detail: true,
+              status: true,
             },
           },
           customer: {
@@ -303,6 +304,24 @@ export class FollowUpEngineService {
       const cooldownMs = cooldownHours * 60 * 60 * 1000;
 
       for (const fu of dueFollowUps) {
+        // Gerbang deterministik paket berseri dijeda: follow-up milik reservasi
+        // berstatus 'paused' ditunda 3 hari, bukan dikirim (cegah false retention).
+        if (fu.reservation?.status === 'paused') {
+          console.log(
+            `[FollowUp Worker] FollowUp #${fu.id} ditunda karena reservasi #${fu.reservation.id} sedang dijeda (status: paused).`,
+          );
+          await prisma.followUp
+            .update({
+              where: { id: fu.id },
+              data: {
+                processing_claimed_at: null,
+                scheduled_at: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+              },
+            })
+            .catch(() => {});
+          continue;
+        }
+
         if (fu.scheduled_at && (now.getTime() - new Date(fu.scheduled_at).getTime() > 48 * 60 * 60 * 1000)) {
           console.log(`[FollowUp Worker] FollowUp #${fu.id} is SKIPPED (Overdue > 48h).`);
           await prisma.followUp.update({

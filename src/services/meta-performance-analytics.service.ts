@@ -926,6 +926,7 @@ export async function getMetaPerformanceReport(
           select: {
             id: true, customer_id: true, created_at: true, booking_date: true, status: true, purchase_value: true,
             treatment_detail: true, treatment_category: true, delivery_fee: true, assigned_staff_id: true,
+            series_id: true, session_number: true,
             customer: { select: { id: true, phone: true, created_at: true, ongkir: true, is_mql: true, mql_triggered_at: true, is_sandbox_test: true, is_internal_staff: true, kecamatan: true, kota: true, is_out_of_coverage: true } },
           },
           orderBy: { created_at: 'asc' },
@@ -939,6 +940,7 @@ export async function getMetaPerformanceReport(
           select: {
             id: true, customer_id: true, created_at: true, booking_date: true, status: true, purchase_value: true, treatment_detail: true,
             treatment_category: true, delivery_fee: true,
+            series_id: true, session_number: true,
             customer: { select: { id: true, phone: true, created_at: true, ongkir: true, is_sandbox_test: true, is_internal_staff: true } },
           },
           orderBy: { created_at: 'asc' },
@@ -1039,11 +1041,26 @@ export async function getMetaPerformanceReport(
 
   const isQualifying = (r: any): boolean => isQualifyingStatus(r?.status) && !isSandboxed(r?.customer);
 
-  // First-ever qualifying reservation per cohort customer.
+  // Unit komersial kanonis: paket berseri = 1 transaksi (unit ordinal 1 = sesi 1 paket).
+  // Tanpa ini, sesi 2..N akan dihitung sebagai repeat order palsu.
+  const { assignUnitOrdinals, unitKeyOf } = await import('./reservation-unit');
+  const allTrackedRows = [...historyReservations, ...rangeReservations]
+    .filter((r) => isQualifying(r))
+    .map((r) => ({
+      id: r.id,
+      customer_id: r.customer_id,
+      created_at: r.created_at,
+      series_id: r.series_id,
+      session_number: r.session_number,
+    }));
+  const unitOrdinals = assignUnitOrdinals(allTrackedRows as any);
+
+  // First-ever qualifying reservation per cohort customer (sesi paling awal di unit ordinal 1).
   const firstEverByCustomer = new Map<string, any>();
   for (const r of historyReservations) {
     if (!r.customer_id || !cohortCustomerIds.has(r.customer_id)) continue;
     if (!isQualifying(r)) continue;
+    if (unitOrdinals.get(unitKeyOf(r)) !== 1) continue;
     if (!firstEverByCustomer.has(r.customer_id)) firstEverByCustomer.set(r.customer_id, r);
   }
 
@@ -1137,13 +1154,24 @@ export async function getMetaPerformanceReport(
       const createdAt = new Date(firstEver.created_at).getTime();
       if (createdAt >= start.getTime() && createdAt <= end.getTime()) {
         newCustomers += 1;
-        const fee = await treatmentFeeOf(firstEver);
-        const total = totalFeeOf(firstEver, fee);
-        initialRevenue += total;
+        // Nilai unit ordinal 1 = seluruh sesi paket pertama (bila berseri), fallback ke reservasi pertama.
+        const unit1Reservations = historyReservations.filter(
+          (hr) => hr.customer_id === customerId && isQualifying(hr) && unitOrdinals.get(unitKeyOf(hr)) === 1
+        );
+        let customerInitialTotal = 0;
+        for (const hr of unit1Reservations) {
+          const hrFee = await treatmentFeeOf(hr);
+          customerInitialTotal += totalFeeOf(hr, hrFee);
+        }
+        if (customerInitialTotal === 0) {
+          const fee = await treatmentFeeOf(firstEver);
+          customerInitialTotal = totalFeeOf(firstEver, fee);
+        }
+        initialRevenue += customerInitialTotal;
         ce.buyers += 1;
-        ce.initialRevenue += total;
+        ce.initialRevenue += customerInitialTotal;
         cd.buyers += 1;
-        cd.initialRevenue += total;
+        cd.initialRevenue += customerInitialTotal;
         const touch = firstTouchByCustomer.get(customerId);
         if (touch !== undefined) {
           const jd = Math.max(0, Math.floor((createdAt - touch) / MS_PER_DAY));
@@ -1172,11 +1200,12 @@ export async function getMetaPerformanceReport(
     const total = qualifies ? totalFeeOf(r, fee) : 0;
     if (qualifies) totalClinicRevenue += total;
 
-    const firstEver = firstEverByCustomer.get(r.customer_id);
-    const isFirstEverRow = firstEver && firstEver.id === r.id;
+    const uKey = unitKeyOf(r);
+    const ord = unitOrdinals.get(uKey) ?? 1;
+    const isRepeatUnit = ord > 1;
 
     if (qualifies && cohortCustomerIds.has(r.customer_id)) {
-      if (!isFirstEverRow) {
+      if (isRepeatUnit) {
         repeatRevenue += total;
         repeatCustomerSet.add(r.customer_id);
       }

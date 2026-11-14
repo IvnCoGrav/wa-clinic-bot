@@ -355,9 +355,30 @@ export class ReservationLifecycleService {
     }
 
     // 2. NEXT_TREATMENT (per-stage guard + WIB + SENT-aware ada di follow-up.service)
+    // Anti-False Retention: jangan kirim repeat reminder jika reservasi ini bagian dari
+    // paket berseri yang masih berjalan (sesi lain belum selesai).
     try {
-      const { followUpService } = await import('./follow-up.service');
-      await followUpService.createNextTreatmentFollowUps(customerId, bookingDate, tenantId, reservationId, treatmentCategory);
+      let isPartOfActiveSeries = false;
+      const resData = await prisma.reservation
+        .findUnique({ where: { id: reservationId }, select: { series_id: true } })
+        .catch(() => null);
+
+      if (resData?.series_id) {
+        const remaining = await prisma.reservation
+          .count({
+            where: {
+              series_id: resData.series_id,
+              status: { in: ['pending', 'confirmed', 'en_route', 'paused'] },
+            },
+          })
+          .catch(() => 0);
+        if (remaining > 0) isPartOfActiveSeries = true;
+      }
+
+      if (!isPartOfActiveSeries) {
+        const { followUpService } = await import('./follow-up.service');
+        await followUpService.createNextTreatmentFollowUps(customerId, bookingDate, tenantId, reservationId, treatmentCategory);
+      }
     } catch (err: any) {
       console.warn('[RESERVATION LIFECYCLE] onReservationCompleted createNextTreatmentFollowUps failed:', err?.message || err);
     }

@@ -22,31 +22,71 @@ export async function reservationSeriesRoutes(fastify: FastifyInstance) {
           treatmentCategory?: string;
           totalSessions: number;
           purchaseValue?: number;
+          deliveryFee?: number;
+          customerAddressId?: string;
+          paymentMethod?: string;
+          discountAmount?: number;
+          durationMinutes?: number;
+          requestId?: string;
           assignedStaffId?: string;
           notes?: string;
-          customerAddressId?: string;
           sessions: Array<{
             sessionNumber: number;
             bookingDate: string;
             assignedStaffId?: string;
           }>;
           babies?: Array<{ name: string; ageText?: string }>;
+          force?: boolean;
         };
       }>,
       reply: FastifyReply
     ) => {
       const tenantId = tenantOf(request);
-      const { customerId, treatmentName, treatmentCategory, totalSessions, purchaseValue, assignedStaffId, notes, customerAddressId, sessions, babies } =
-        request.body || {};
+      const {
+        customerId,
+        treatmentName,
+        treatmentCategory,
+        totalSessions,
+        purchaseValue,
+        deliveryFee,
+        customerAddressId,
+        paymentMethod,
+        discountAmount,
+        durationMinutes,
+        requestId,
+        assignedStaffId,
+        notes,
+        sessions,
+        babies,
+        force,
+      } = request.body || {};
 
-      if (!customerId || !treatmentName || !totalSessions || !sessions?.length) {
-        return reply.status(400).send({ success: false, error: 'customerId, treatmentName, totalSessions, dan sessions wajib diisi.' });
+      const total = Number(totalSessions);
+      if (!customerId || !treatmentName || !Number.isInteger(total) || total < 2 || !sessions?.length) {
+        return reply.status(400).send({ success: false, error: 'customerId, treatmentName, totalSessions (min 2), dan sessions wajib diisi.' });
       }
 
       try {
         const { reservationSeriesService } = await import('../../services/reservation-series.service');
         const series = await reservationSeriesService.createSeries(
-          { customerId, treatmentName, treatmentCategory, totalSessions, purchaseValue, assignedStaffId, notes, customerAddressId, sessions, babies },
+          {
+            customerId,
+            treatmentName,
+            treatmentCategory,
+            totalSessions,
+            purchaseValue,
+            deliveryFee,
+            customerAddressId,
+            paymentMethod,
+            discountAmount,
+            durationMinutes,
+            requestId,
+            assignedStaffId,
+            notes,
+            sessions,
+            babies,
+            force,
+          },
           tenantId
         );
 
@@ -55,7 +95,7 @@ export async function reservationSeriesRoutes(fastify: FastifyInstance) {
           adminIdentity: (request as any).adminIdentity,
           action: 'CREATE_RESERVATION_SERIES',
           targetId: series.id,
-          payload: { customerId, treatmentName, treatmentCategory, totalSessions, purchaseValue, customerAddressId: customerAddressId || null, sessionCount: sessions.length },
+          payload: { customerId, treatmentName, treatmentCategory, totalSessions, purchaseValue, deliveryFee, customerAddressId: customerAddressId || null, sessionCount: sessions.length },
           ipAddress: request.ip,
         });
 
@@ -82,6 +122,40 @@ export async function reservationSeriesRoutes(fastify: FastifyInstance) {
             code: 'STAFF_COLLISION',
             error: `Jadwal terapis bentrok pada sesi ${err.sessionNumber ?? '?'}.`,
             conflict: err.conflict,
+            sessionNumber: err.sessionNumber,
+          });
+        }
+        if (err?.code === 'CUSTOMER_COLLISION') {
+          return reply.status(409).send({
+            success: false,
+            code: 'CUSTOMER_COLLISION',
+            error: `Customer sudah memiliki reservasi aktif di jam yang sama pada sesi ${err.sessionNumber ?? '?'}.`,
+            conflict: err.conflict,
+            sessionNumber: err.sessionNumber,
+          });
+        }
+        if (err?.code === 'CAPACITY_EXCEEDED') {
+          return reply.status(409).send({
+            success: false,
+            code: 'CAPACITY_EXCEEDED',
+            error: `Kapasitas klinik penuh pada tanggal sesi ${err.sessionNumber ?? '?'}.`,
+            sessionNumber: err.sessionNumber,
+          });
+        }
+        if (err?.code === 'PAST_SESSION_DATE') {
+          return reply.status(400).send({
+            success: false,
+            code: 'PAST_SESSION_DATE',
+            error: `Jadwal sesi ${err.sessionNumber ?? '?'} berada di masa lalu.`,
+            sessionNumber: err.sessionNumber,
+          });
+        }
+        if (err?.code === 'INVALID_SESSION_DATE') {
+          return reply.status(400).send({
+            success: false,
+            code: 'INVALID_SESSION_DATE',
+            error: `Format tanggal sesi ${err.sessionNumber ?? '?'} tidak valid.`,
+            sessionNumber: err.sessionNumber,
           });
         }
         return reply.status(500).send({ success: false, error: err.message });

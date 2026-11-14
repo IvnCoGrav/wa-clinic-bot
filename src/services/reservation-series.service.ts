@@ -5,6 +5,7 @@ import { customerService } from './customer.service';
 import { isValidChildName } from '../utils/name-sanitizer';
 import { classifyPatientEntity } from '../utils/reservation-text-parser';
 import { ConflictCheckUnavailableError } from './reservation-core.service';
+import { PURCHASE_REVIEW_NOT_APPLICABLE } from './capi-review-status';
 
 export interface CreateSeriesParams {
   customerId: string;
@@ -12,8 +13,13 @@ export interface CreateSeriesParams {
   treatmentCategory?: string;
   totalSessions: number;
   purchaseValue?: number;
+  deliveryFee?: number;
   assignedStaffId?: string;
   notes?: string;
+  paymentMethod?: string;
+  discountAmount?: number;
+  durationMinutes?: number;
+  requestId?: string;
   /** Kartu alamat level series (satu rumah untuk semua sesi). */
   customerAddressId?: string;
   sessions: Array<{
@@ -24,6 +30,7 @@ export interface CreateSeriesParams {
     customerAddressId?: string | null;
   }>;
   babies?: Array<{ name: string; ageText?: string }>;
+  force?: boolean;
 }
 
 export interface SeriesWithReservations {
@@ -34,6 +41,12 @@ export interface SeriesWithReservations {
   completedSessions: number;
   pendingSessions: number;
   purchaseValue: number | null;
+  deliveryFee?: number | null;
+  discountAmount?: number | null;
+  paymentMethod?: string | null;
+  durationMinutes?: number | null;
+  customerAddressId?: string | null;
+  requestId?: string | null;
   status: string;
   assignedStaffId: string | null;
   notes: string | null;
@@ -82,6 +95,44 @@ class ReservationSeriesService {
   }
 
   /**
+   * Bentuk respons kanonis series (dipakai createSeries & jalur idempoten).
+   */
+  private mapSeriesToResult(series: any, reservations?: any[]): SeriesWithReservations {
+    const resList = reservations || series.reservations || [];
+    const completedSessions = resList.filter((r: any) => r.status === 'completed').length;
+    const pendingSessions = resList.filter(
+      (r: any) => r.status === 'pending' || r.status === 'confirmed'
+    ).length;
+
+    return {
+      id: series.id,
+      customerId: series.customer_id,
+      treatmentName: series.treatment_name,
+      totalSessions: series.total_sessions,
+      completedSessions,
+      pendingSessions,
+      purchaseValue: series.purchase_value,
+      deliveryFee: series.delivery_fee,
+      discountAmount: series.discount_amount,
+      paymentMethod: series.payment_method,
+      durationMinutes: series.duration_minutes,
+      customerAddressId: series.customer_address_id,
+      requestId: series.request_id,
+      status: series.status,
+      assignedStaffId: series.assigned_staff_id,
+      notes: series.notes,
+      createdAt: series.created_at,
+      reservations: resList.map((r: any) => ({
+        id: r.id,
+        sessionNumber: r.session_number!,
+        bookingDate: r.booking_date!,
+        status: r.status,
+        assignedStaffId: r.assigned_staff_id,
+      })),
+    };
+  }
+
+  /**
    * Create a reservation series with N auto-generated reservations.
    */
   async createSeries(params: CreateSeriesParams, tenantId: string = DEFAULT_TENANT_ID): Promise<SeriesWithReservations> {
@@ -91,23 +142,73 @@ class ReservationSeriesService {
       treatmentCategory,
       totalSessions,
       purchaseValue,
+      deliveryFee,
       assignedStaffId,
       notes,
+      paymentMethod,
+      discountAmount,
+      durationMinutes,
+      requestId,
       customerAddressId,
       sessions,
+      force,
     } = params;
 
     if (sessions.length !== totalSessions) {
       throw new Error(`sessions array length (${sessions.length}) tidak sama dengan totalSessions (${totalSessions})`);
     }
 
+    // Idempotensi (anti klik-ganda): request_id sama => kembalikan series yang sudah ada.
+    if (requestId && requestId.trim()) {
+      const existing = await prisma.reservationSeries.findFirst({
+        where: { tenant_id: tenantId, request_id: requestId.trim() },
+        include: { reservations: { orderBy: { session_number: 'asc' } } },
+      });
+      if (existing) return this.mapSeriesToResult(existing);
+    }
+
     const resolvedCategory = await this.resolveCategory(treatmentName, treatmentCategory);
     const sanitizedStaffId = assignedStaffId?.trim() ? assignedStaffId.trim() : null;
+    const seriesDuration = durationMinutes && durationMinutes > 0 ? durationMinutes : 60;
+    const sessionDurationOf = (s: { durationMinutes?: number }) => s.durationMinutes ?? seriesDuration;
+
+    // Validasi deterministik tanggal sesi (format & masa lalu).
+    for (const s of sessions) {
+      const bookingDate = typeof s.bookingDate === 'string' ? new Date(s.bookingDate) : s.bookingDate;
+      if (!bookingDate || isNaN(bookingDate.getTime())) {
+        const err: any = new Error('INVALID_SESSION_DATE');
+        err.code = 'INVALID_SESSION_DATE';
+        err.sessionNumber = s.sessionNumber;
+        throw err;
+      }
+      if (!force && bookingDate.getTime() < Date.now() - 5 * 60 * 1000) {
+        const err: any = new Error('PAST_SESSION_DATE');
+        err.code = 'PAST_SESSION_DATE';
+        err.sessionNumber = s.sessionNumber;
+        throw err;
+      }
+    }
+
+    // Sesi dalam paket yang sama tidak boleh saling tumpang tindih.
+    for (let i = 0; i < sessions.length; i++) {
+      for (let j = i + 1; j < sessions.length; j++) {
+        const d1 = new Date(sessions[i].bookingDate).getTime();
+        const d2 = new Date(sessions[j].bookingDate).getTime();
+        if (Math.abs(d1 - d2) < sessionDurationOf(sessions[j]) * 60000) {
+          const err: any = new Error('CUSTOMER_COLLISION');
+          err.code = 'CUSTOMER_COLLISION';
+          err.sessionNumber = sessions[j].sessionNumber;
+          err.conflict = { reason: 'Sesi dalam paket saling tumpang tindih' };
+          throw err;
+        }
+      }
+    }
 
     const {
       computeAdvisoryLockKey,
       findOverlappingStaffReservations,
       findOverlappingCustomerReservations,
+      hasCapacityForUnassignedBooking,
       resolveCustomerAddressId,
     } = await import('./reservation-core.service');
 
@@ -148,6 +249,8 @@ class ReservationSeriesService {
 
     const resolvedDeliveryFee =
       typeof resolvedAddressCard?.ongkir === 'number' ? resolvedAddressCard.ongkir : null;
+    // Ongkir eksplisit menang; jika tidak dikirim, pakai snapshot kartu alamat level series.
+    const effectiveDeliveryFee = deliveryFee != null ? deliveryFee : resolvedDeliveryFee;
 
     const result = await prisma.$transaction(async (tx: any) => {
       if (typeof tx.$executeRawUnsafe === 'function') {
@@ -173,7 +276,7 @@ class ReservationSeriesService {
       for (const s of sessions) {
         const sessionStaffId = s.assignedStaffId?.trim() ? s.assignedStaffId.trim() : sanitizedStaffId;
         const bookingDate = typeof s.bookingDate === 'string' ? new Date(s.bookingDate) : s.bookingDate;
-        const duration = s.durationMinutes ?? 60;
+        const duration = s.durationMinutes ?? seriesDuration;
 
         if (sessionStaffId) {
           const staffConflicts = await findOverlappingStaffReservations({
@@ -198,6 +301,17 @@ class ReservationSeriesService {
           err.sessionNumber = s.sessionNumber;
           throw err;
         }
+
+        // Sesi tanpa terapis: pastikan masih ada kapasitas terapis pada tanggal tersebut.
+        if (!sessionStaffId) {
+          const hasCapacity = await hasCapacityForUnassignedBooking(tenantId, bookingDate, tx);
+          if (!hasCapacity) {
+            const err: any = new Error('CAPACITY_EXCEEDED');
+            err.code = 'CAPACITY_EXCEEDED';
+            err.sessionNumber = s.sessionNumber;
+            throw err;
+          }
+        }
       }
 
       const series = await tx.reservationSeries.create({
@@ -207,6 +321,12 @@ class ReservationSeriesService {
           treatment_name: treatmentName,
           total_sessions: totalSessions,
           purchase_value: purchaseValue ?? null,
+          delivery_fee: effectiveDeliveryFee,
+          discount_amount: discountAmount ?? null,
+          payment_method: paymentMethod ?? null,
+          duration_minutes: seriesDuration,
+          customer_address_id: resolvedAddressId,
+          request_id: requestId?.trim() || null,
           assigned_staff_id: sanitizedStaffId,
           notes: notes ?? null,
           status: 'active',
@@ -217,7 +337,7 @@ class ReservationSeriesService {
         sessions.map(async (s) => {
           const bookingDate = typeof s.bookingDate === 'string' ? new Date(s.bookingDate) : s.bookingDate;
           const sessionStaffId = s.assignedStaffId?.trim() ? s.assignedStaffId.trim() : sanitizedStaffId;
-          const duration = s.durationMinutes ?? 60;
+          const duration = s.durationMinutes ?? seriesDuration;
           const perSessionPrice = purchaseValue ? Math.round(purchaseValue / totalSessions) : null;
           const created = await tx.reservation.create({
             data: {
@@ -228,6 +348,8 @@ class ReservationSeriesService {
               booking_date: bookingDate,
               duration_minutes: duration,
               status: 'confirmed',
+              // CAPI single-anchor: hanya sesi 1 paket yang boleh membawa event komersial.
+              purchase_review_status: s.sessionNumber === 1 ? 'pending' : PURCHASE_REVIEW_NOT_APPLICABLE,
               assigned_staff_id: sessionStaffId,
               purchase_value: perSessionPrice,
               series_id: series.id,
@@ -235,7 +357,9 @@ class ReservationSeriesService {
               total_sessions: totalSessions,
               customer_address_id: resolvedAddressId,
               // KB-6: snapshot ongkir dari kartu level series (bukan root).
-              delivery_fee: resolvedDeliveryFee,
+              delivery_fee: effectiveDeliveryFee,
+              discount_amount: discountAmount ? Math.round(discountAmount / totalSessions) : null,
+              payment_method: paymentMethod ?? null,
               raw_text: `[Admin Series] ${treatmentName} - Sesi ${s.sessionNumber}/${totalSessions}`,
             },
           });
@@ -254,26 +378,7 @@ class ReservationSeriesService {
         })
       );
 
-      return {
-        id: series.id,
-        customerId: series.customer_id,
-        treatmentName: series.treatment_name,
-        totalSessions: series.total_sessions,
-        completedSessions: 0,
-        pendingSessions: reservations.length,
-        purchaseValue: series.purchase_value,
-        status: series.status,
-        assignedStaffId: series.assigned_staff_id,
-        notes: series.notes,
-        createdAt: series.created_at,
-        reservations: reservations.map((r: any) => ({
-          id: r.id,
-          sessionNumber: r.session_number!,
-          bookingDate: r.booking_date!,
-          status: r.status,
-          assignedStaffId: r.assigned_staff_id,
-        })),
-      };
+      return this.mapSeriesToResult(series, reservations);
     });
 
     // Sync babies if provided (same upsert logic as single reservation edit)
@@ -493,6 +598,18 @@ class ReservationSeriesService {
       }
     }
 
+    // Sinkronkan jadwal ulang ke follow-up (reminder) dan Google Calendar.
+    if (data.bookingDate !== undefined && updated.booking_date) {
+      try {
+        const { followUpService } = await import('./follow-up.service');
+        const { googleCalendarService } = await import('./google-calendar.service');
+        await followUpService.onReservationRescheduled(updated.id, updated.booking_date, tenantId);
+        await (googleCalendarService as any).updateEvent?.(updated)?.catch?.(() => {});
+      } catch (e: any) {
+        console.warn('[RESERVATION SERIES] error rescheduling follow-up/gcal on updateSession:', e?.message);
+      }
+    }
+
     return updated;
   }
 
@@ -586,6 +703,21 @@ class ReservationSeriesService {
       await customerService.recalculateCustomerLtv(series.customer_id, tenantId);
     } catch (err: any) {
       console.warn('[RESERVATION SERIES] recalculateCustomerLtv on cancel failed:', err.message);
+    }
+
+    // Sinkronkan pembatalan ke follow-up dan Google Calendar untuk setiap sesi
+    // yang dibatalkan (cegah reminder "kaset rusak" untuk sesi yang sudah batal).
+    try {
+      const { followUpService } = await import('./follow-up.service');
+      const { googleCalendarService } = await import('./google-calendar.service');
+      for (const r of cancellable) {
+        await followUpService.onReservationCancelled(r.id, tenantId).catch(() => {});
+        if (r.google_calendar_event_id) {
+          await googleCalendarService.deleteEvent(r.google_calendar_event_id).catch(() => {});
+        }
+      }
+    } catch (e: any) {
+      console.warn('[RESERVATION SERIES] error cancelling follow-ups/gcal on cancelSeries:', e?.message);
     }
 
     return { cancelledCount: cancellable.length };
