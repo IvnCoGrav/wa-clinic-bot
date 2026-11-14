@@ -300,7 +300,7 @@ export class HumanBackgroundEnrichmentService {
       // 2. DETEKSI LINK GOOGLE MAPS DI DALAM CHAT ATAU ALAMAT (maps.app.goo.gl / goo.gl/maps)
       if (incomingText && incomingText.trim()) {
         try {
-          const { resolveFirstMapsUrlInText } = await import('./location-resolver.service');
+          const { resolveFirstMapsUrlInText, extractGoogleMapsUrls } = await import('./location-resolver.service');
           const { customerService } = await import('./customer.service');
           // Ekstrak URL Maps dari teks bebas (kata pengantar/emoji/tanda baca)
           // dan coba semua kandidat — bukan melempar teks utuh ke new URL().
@@ -329,7 +329,17 @@ export class HumanBackgroundEnrichmentService {
             console.log(`[HUMAN ENRICH] Google Maps link resolved for ${customer.phone}: ${res.distanceKm}km ongkir ${res.ongkir} (source: ${res.source})`);
             return { enriched: true, reason: 'google_maps_url' };
           }
-        } catch {}
+          // Observability: link ada tetapi tidak bisa dijadikan koordinat.
+          // DILARANG senyap — kegagalan ini dulu menelan error dan lanjut menulis
+          // teks mentah (termasuk URL) sebagai kartu alamat baru.
+          if (extractGoogleMapsUrls(incomingText).length > 0) {
+            console.warn(
+              `[HUMAN ENRICH] Google Maps URL tidak ter-resolve untuk ${customer.phone}: ${res?.error || 'tanpa koordinat/teks tempat presisi'} — lanjut fallback teks alamat`
+            );
+          }
+        } catch (e: any) {
+          console.warn('[HUMAN ENRICH] resolve Google Maps URL gagal:', e?.message || e);
+        }
       }
 
       // 3. DETEKSI FORMULIR RESERVASI WHATSAPP
@@ -455,6 +465,9 @@ export class HumanBackgroundEnrichmentService {
         // koordinat presisi (anti data hibrida). Bukan teks spesifik → perilaku lama.
         const attach = await this.attachSpecificAddressText(customer, tid, textForEnrich);
         if (attach.attached) return { enriched: true, reason: attach.reason };
+        if (attach.reason === 'url_only_no_address') {
+          return { enriched: false, reason: 'url_only_no_address' };
+        }
         return { enriched: false, reason: 'already_has_location' };
       }
 
@@ -554,11 +567,14 @@ export class HumanBackgroundEnrichmentService {
   }
 
   /**
-   * RC-4 (Fase 3): tempelkan teks alamat jalan SPESIFIK ke kartu rumah yang benar
-   * via seam kanonis `upsertSavedAddress`, TANPA menyentuh koordinat presisi.
-   *  - rumah SAMA (`addressesMatch`) → perbarui TEKS kartu (koordinat dipertahankan domain).
+   * RC-4 (Fase 3) / fix insiden 2026-11-14: tempelkan teks alamat jalan SPESIFIK
+   * ke kartu rumah yang benar via seam kanonis `upsertSavedAddress`, TANPA
+   * menyentuh koordinat presisi.
+   *  - Teks dibersihkan dari URL/link Google Maps sebelum disimpan (URL bukan alamat).
+   *  - rumah SAMA dengan kartu MANA PUN (`addressesMatch` + identitas jalan/nomor)
+   *    → perbarui kartu itu (teks lama yang lebih kaya dipertahankan), BUKAN kartu baru.
    *  - rumah BEDA → kartu sekunder (isPrimary:false) TANPA relink reservasi aktif.
-   * Bukan teks jalan spesifik → tidak ada aksi (perilaku lama dipertahankan).
+   *  - tautan saja (tanpa teks alamat) → tidak menulis apa pun.
    */
   private async attachSpecificAddressText(
     customer: any,
@@ -567,35 +583,85 @@ export class HumanBackgroundEnrichmentService {
   ): Promise<{ attached: boolean; reason: string }> {
     try {
       const { isSpecificStreetAddress } = await import('./staff-reservation.service');
-      if (!isSpecificStreetAddress(incomingText)) return { attached: false, reason: 'not_specific' };
-
       const { customerService } = await import('./customer.service');
-      const { addressesMatch } = await import('../domain/customer-address');
+      const { addressesMatch, stripUrlsFromAddress, hasHouseEvidence } = await import('../domain/customer-address');
 
-      const card: any = await customerService.resolveActiveSavedAddress(customer.id, tid);
-      const sameHouse = card
-        ? addressesMatch(
-            { address: card.address, kelurahan: card.kelurahan, kecamatan: card.kecamatan, kota: card.kota, lat: card.lat, lng: card.lng },
-            { address: incomingText },
+      // URL/link adalah metadata teknis — DILARANG masuk ke kolom alamat.
+      const addressText = stripUrlsFromAddress(incomingText);
+      if (!addressText) return { attached: false, reason: 'url_only_no_address' };
+      if (!isSpecificStreetAddress(addressText)) return { attached: false, reason: 'not_specific' };
+
+      const cards: any[] = await customerService.getSavedAddresses(customer.id, tid);
+      const matched =
+        cards.find((card) =>
+          addressesMatch(
+            {
+              address: card.address,
+              kelurahan: card.kelurahan,
+              kecamatan: card.kecamatan,
+              kota: card.kota,
+              lat: card.lat,
+              lng: card.lng,
+            },
+            {
+              address: addressText,
+              kelurahan: customer.kelurahan ?? null,
+              kecamatan: customer.kecamatan ?? null,
+              kota: customer.kota ?? null,
+            }
           )
-        : false;
+        ) ?? null;
 
+      if (matched) {
+        // Rumah SUDAH ada: cukup sentuh kartu itu. Teks kartu lama dipertahankan
+        // karena biasanya lebih lengkap (mis. "rumah pertama abu putih").
+        const entry = await customerService.upsertSavedAddress(customer.id, {
+          id: matched.id,
+          address: matched.address,
+          kelurahan: matched.kelurahan ?? customer.kelurahan ?? null,
+          kecamatan: matched.kecamatan ?? customer.kecamatan ?? null,
+          kota: matched.kota ?? customer.kota ?? null,
+          lat: matched.lat ?? customer.lat ?? null,
+          lng: matched.lng ?? customer.lng ?? null,
+          distanceKm: matched.distanceKm ?? customer.distance_km ?? null,
+          ongkir: matched.ongkir ?? customer.ongkir ?? null,
+          locationSource: matched.locationSource ?? customer.location_source ?? null,
+          isPrimary: matched.isPrimary,
+        }, tid);
+
+        if (!entry) return { attached: false, reason: 'address_upsert_failed' };
+        console.log(
+          `[HUMAN ENRICH] specific address text matched existing card for ${customer.phone}: card=${matched.id} text="${addressText.slice(0, 50)}"`
+        );
+        return { attached: true, reason: 'address_text_existing_house' };
+      }
+
+      // Rumah benar-benar BARU: kartu sekunder tanpa koordinat (diverifikasi staf).
+      // Gerbang bukti: DILARANG membuat kartu dari obrolan biasa. Harus ada nomor
+      // rumah/angka atau penanda blok/perumahan (bukan sekadar kata "gg/jalan").
+      if (!hasHouseEvidence(addressText)) {
+        return { attached: false, reason: 'no_house_evidence' };
+      }
+      // Wilayah diwarisi dari kartu primary/profil hanya sebagai konteks, bukan bukti GPS.
+      const primary = cards.find((card) => card?.isPrimary) || cards[0] || null;
       const entry = await customerService.upsertSavedAddress(customer.id, {
-        address: incomingText.trim(),
-        kelurahan: customer.kelurahan ?? card?.kelurahan ?? null,
-        kecamatan: customer.kecamatan ?? card?.kecamatan ?? null,
-        kota: customer.kota ?? card?.kota ?? null,
-        lat: sameHouse ? (card?.lat ?? customer.lat ?? null) : null,
-        lng: sameHouse ? (card?.lng ?? customer.lng ?? null) : null,
-        distanceKm: sameHouse ? (card?.distanceKm ?? customer.distance_km ?? null) : null,
-        ongkir: sameHouse ? (card?.ongkir ?? customer.ongkir ?? null) : null,
-        locationSource: sameHouse ? (card?.locationSource ?? customer.location_source ?? null) : null,
-        isPrimary: card ? (sameHouse ? (card?.isPrimary ?? true) : false) : false,
+        address: addressText,
+        kelurahan: primary?.kelurahan ?? customer.kelurahan ?? null,
+        kecamatan: primary?.kecamatan ?? customer.kecamatan ?? null,
+        kota: primary?.kota ?? customer.kota ?? null,
+        lat: null,
+        lng: null,
+        distanceKm: null,
+        ongkir: null,
+        locationSource: null,
+        isPrimary: false,
       }, tid);
 
       if (!entry) return { attached: false, reason: 'address_upsert_failed' };
-      console.log(`[HUMAN ENRICH] specific address text attached (${sameHouse ? 'same' : 'new'} house) for ${customer.phone}: ${incomingText.slice(0, 50)}`);
-      return { attached: true, reason: sameHouse ? 'address_text_same_house' : 'address_text_new_house' };
+      console.warn(
+        `[HUMAN ENRICH] new address card (needs staff verification, no coordinates) for ${customer.phone}: ${addressText.slice(0, 50)}`
+      );
+      return { attached: true, reason: 'address_text_new_house' };
     } catch (e: any) {
       console.warn('[HUMAN ENRICH] attach specific address failed:', e?.message);
       return { attached: false, reason: 'attach_error' };

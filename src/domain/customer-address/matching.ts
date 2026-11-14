@@ -16,7 +16,7 @@ import {
   norm,
   normCity,
 } from './internal';
-
+import { houseIdentityMatch } from './identity';
 /**
  * Pencocokan wilayah berbasis token: memecah string pada delimitasi `, / ;`.
  * Mencegah false positive substring (misal "sukomanunggal" !== "manunggal"),
@@ -139,6 +139,20 @@ export function addressesMatch(
   if (aAddr !== bAddr && (sameKec || wilayahTokenMatch(a.kecamatan, b.kecamatan))) {
     const kelOk = sameKel || !hasText(a.kelurahan) || !hasText(b.kelurahan);
     if (kelOk && kotaKompatibel) return true;
+  }
+
+  // Identitas rumah berbasis teks (anti kartu ganda "hantu"): alamat yang sama
+  // dengan variasi penulisan — URL Maps menempel, prefix "jl/gg", atau keterangan
+  // dalam kurung — WAJIB dianggap rumah yang sama, bukan rumah kedua.
+  // Gerbang aman: nomor rumah eksplisit harus sama (lihat houseIdentityMatch).
+  if (houseIdentityMatch(a.address, b.address)) {
+    const kecOk =
+      !hasText(a.kecamatan) ||
+      !hasText(b.kecamatan) ||
+      sameKec ||
+      wilayahTokenMatch(a.kecamatan, b.kecamatan);
+    const kelOk = !hasText(a.kelurahan) || !hasText(b.kelurahan) || sameKel;
+    return kecOk && kelOk && kotaKompatibel;
   }
   return false;
 }
