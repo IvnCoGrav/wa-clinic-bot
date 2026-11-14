@@ -3,6 +3,12 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 334. [Audit] Gerbang Bukti Backlog Bergantung Nomor Baris Absolut (2026-11-14, OPEN — LIMITATION)
+
+- **Gejala:** `npm run verify:backlog` gagal setelah refactor murni tanpa perubahan perilaku. `backlog-evidence.json` menyimpan `line` absolut, sehingga `S-06` (baris 599) dan `S-09` (baris 1618) dianggap hilang saat kode bergeser.
+- **Resolusi sementara:** nomor baris diperbarui ke posisi baru (S-06 → 613, S-09 → 1494) pada commit `a7ed6e70`; gerbang kembali PASS (261 FIXED / 2 KNOWN).
+- **Utang fondasional:** validasi sebaiknya mencari `contains` di seluruh file (atau memakai hash snippet), bukan mewajibkan nomor baris; `line` dipertahankan hanya sebagai petunjuk. Setiap refactor besar saat ini memaksa update manual yang rawan lupa.
+
 ## 333. [Deploy] `hermes-net` Wajib untuk Caddy — Jangan Dicabut (2026-11-14, TRAP)
 
 - **Status:** TRAP / BY-DESIGN. `docker-compose.yml` memakai network eksternal `hermes-net`; **Caddy wajib ikut** karena `Caddyfile` mem-proxy `hermes-agent:8621`, `hermes-agent:9119`, dan `hermes-9router:20128` (domain `hermes.kalababyspa.online`).
