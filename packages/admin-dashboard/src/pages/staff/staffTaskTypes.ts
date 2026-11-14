@@ -32,9 +32,10 @@ export interface StaffTaskAddress {
 
 export interface StaffTaskPricing {
   treatmentFee: number;
+  discountAmount?: number;
   deliveryFee: number;
   totalFee: number;
-  paymentStatus: 'LUNAS' | 'TAGIH_DI_TEMPAT';
+  paymentStatus: 'LUNAS' | 'TAGIH_DI_TEMPAT' | 'PERLU_VERIFIKASI';
   paymentStatusLabel: string;
   paymentMethod?: string | null;
   proofUrl?: string | null;

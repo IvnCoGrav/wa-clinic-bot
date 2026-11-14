@@ -271,8 +271,15 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   const [customerAddressId, setCustomerAddressId] = useState<string | null>(initialReservation?.customer_address_id || null);
   // Kartu alamat = sumber kebenaran. Drawer dipakai untuk tambah/ubah kartu (seketika).
   const [addressDrawerMode, setAddressDrawerMode] = useState<'add' | 'edit' | null>(null);
+  // User memilih "alamat hanya untuk reservasi ini" → jangan tautkan kartu.
+  const [addressDetached, setAddressDetached] = useState(false);
   const customerAddressIdRef = useRef<string | null>(initialReservation?.customer_address_id || null);
   useEffect(() => { customerAddressIdRef.current = customerAddressId; }, [customerAddressId]);
+  // Anti "data async menimpa ketikan": begitu user mengedit, hidrasi berhenti
+  // menulis field tersebut untuk sesi/customer ini.
+  const addressTouchedRef = useRef(false);
+  const landmarkTouchedRef = useRef(false);
+  const notesTouchedRef = useRef(false);
 
   // Kanonik fallback: sebagian payload reservasi (list/LiveChat) hanya membawa
   // customer ramping TANPA `preferences.saved_addresses`. Tanpa hidrasi eksplisit,
@@ -314,6 +321,10 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   useEffect(() => {
     setAuthoritativeAddresses(null);
     addressFetchRef.current = null;
+    addressTouchedRef.current = false;
+    landmarkTouchedRef.current = false;
+    notesTouchedRef.current = false;
+    setAddressDetached(false);
   }, [customerId]);
 
   // Reset hidrasi saat modal ditutup agar buka-ulang tetap menyegarkan kartu.
@@ -321,6 +332,10 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     if (!isOpen) {
       addressFetchRef.current = null;
       customerDetailFetchRef.current = null;
+      addressTouchedRef.current = false;
+      landmarkTouchedRef.current = false;
+      notesTouchedRef.current = false;
+      setAddressDetached(false);
       setAuthoritativeAddresses(null);
     }
   }, [isOpen]);
@@ -410,8 +425,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     });
 
     setCustomerAddressId(resolved.card?.id ?? (initialCardMissing ? initialCardId : null));
-    setAddress(resolved.address);
-    setLandmark(resolved.landmark);
+    if (!addressTouchedRef.current) setAddress(resolved.address);
+    if (!landmarkTouchedRef.current) setLandmark(resolved.landmark);
     if (resolved.card && resolved.ongkir != null) {
       setOngkir(resolved.ongkir);
     }
@@ -642,6 +657,10 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
   const handleRestoreDraft = (restored: any) => {
     if (!restored) return;
+    // Draf yang dipulihkan adalah keputusan user — jangan ditimpa hidrasi async.
+    if (restored.address !== undefined) addressTouchedRef.current = true;
+    if (restored.landmark !== undefined) landmarkTouchedRef.current = true;
+    if (restored.notes !== undefined) notesTouchedRef.current = true;
     // 4.4 Sanitasi tanggal & re-validasi harga saat restore
     let sanitizedDate = restored.bookingDate;
     if (sanitizedDate) {
@@ -711,6 +730,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   };
 
   const resetModalState = useCallback(() => {
+    submitRequestIdRef.current = '';
     setCustomerId('');
     setCustomerSearch('');
     setSelectedCustomerInfo(null);
@@ -1354,8 +1374,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     }
     if (mode === 'edit') return;
 
-    // 2. Catatan awal dari chat
-    if (initialNotes && !notes.trim()) {
+    // 2. Catatan awal dari chat — HANYA bila user belum menyentuh field.
+    if (initialNotes && !notesTouchedRef.current && !notes.trim()) {
       setNotes(initialNotes);
     }
 
@@ -1486,6 +1506,9 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   };
 
   const handleUpdateBaby = (idx: number, field: 'name' | 'ageText', val: string) => {
+    // Begitu user mengetik, form anak WAJIB tetap terbuka (jangan unmount
+    // karena nama kebetulan sama dengan anak tersimpan).
+    setEditingChildIndexes((prev) => (prev.includes(idx) ? prev : [...prev, idx]));
     setBabies((prev) => {
       const next = [...prev];
       next[idx] = { ...next[idx], [field]: val };
@@ -1893,9 +1916,26 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     setIssues([]);
 
     // Guard defensif: kartu tersedia tetapi belum terpilih → arahkan pilih/tambah.
-    if (addressFormLocked && !customerAddressId) {
+    // Kecuali admin sengaja memilih "alamat hanya untuk reservasi ini".
+    if (addressFormLocked && !customerAddressId && !addressDetached) {
       toast('Pilih alamat rumah dulu (atau tambahkan alamat baru).', 'error');
       setAddressDrawerMode(selectedCard ? null : 'add');
+      return;
+    }
+
+    // Anti data hibrida: alamat manual berbeda dari kartu terpilih HARUS dipilih
+    // eksplisit (lepas kartu = khusus reservasi ini, atau perbarui kartu).
+    const selectedCardStreet = String(selectedCard?.address || '').trim();
+    if (
+      customerAddressId &&
+      selectedCardStreet &&
+      address.trim() &&
+      buildAddressKey({ address }) !== buildAddressKey({ address: selectedCardStreet })
+    ) {
+      toast(
+        'Alamat berbeda dari kartu terpilih. Klik "Pakai hanya untuk reservasi ini" di bawah kolom alamat, atau "Ubah Alamat Kartu".',
+        'error'
+      );
       return;
     }
 
@@ -2056,21 +2096,34 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   };
 
   // Keyboard Escape, app-swipe-back & popstate listener for mobile back gestures
+  // handleSafeClose bergantung pada payload form (berubah tiap keystroke). Simpan
+  // di ref agar listener TIDAK di-rebind dan history TIDAK di-push per huruf.
+  const handleSafeCloseRef = useRef(handleSafeClose);
+  useEffect(() => {
+    handleSafeCloseRef.current = handleSafeClose;
+  }, [handleSafeClose]);
+
+  // Push entri history SEKALI saat modal dibuka (bukan tiap render/ketikan).
   useEffect(() => {
     if (!isOpen) return;
-
     try {
-      window.history.pushState({ modal: 'create-reservation' }, '');
+      if (window.history.state?.modal !== 'create-reservation') {
+        window.history.pushState({ modal: 'create-reservation' }, '');
+      }
     } catch (_) {
       // Riwayat browser bisa dibatasi; modal tetap terbuka.
     }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (showBookedSlotsModal) {
           setShowBookedSlotsModal(false);
         } else {
-          void handleSafeClose();
+          void handleSafeCloseRef.current();
         }
       }
     };
@@ -2080,7 +2133,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       if (showBookedSlotsModal) {
         setShowBookedSlotsModal(false);
       } else {
-        void handleSafeClose();
+        void handleSafeCloseRef.current();
       }
     };
 
@@ -2088,7 +2141,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       if (showBookedSlotsModal) {
         setShowBookedSlotsModal(false);
       } else {
-        void handleSafeClose();
+        void handleSafeCloseRef.current();
       }
     };
 
@@ -2101,7 +2154,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       window.removeEventListener('app-swipe-back', handleSwipeBack);
       window.removeEventListener('popstate', handlePopState);
     };
-  }, [isOpen, showBookedSlotsModal, handleSafeClose]);
+  }, [isOpen, showBookedSlotsModal]);
 
   if (!isOpen) return null;
 
@@ -2326,6 +2379,9 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                         type="button"
                         onClick={() => {
                           setCustomerAddressId(addrItem.id);
+                          setAddressDetached(false);
+                          addressTouchedRef.current = false;
+                          landmarkTouchedRef.current = false;
                           if (addrItem.address) setAddress(addrItem.address);
                           if (addrItem.landmark) setLandmark(addrItem.landmark);
                           if (addrItem.ongkir != null) {
@@ -2371,26 +2427,43 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                   <label className="text-[10px] font-bold text-ink-3 uppercase tracking-wider block">
                     Alamat Lengkap (Jalan, RT/RW, No. Rumah)
                   </label>
-                  {addressFormLocked ? (
+                  {/* Selalu input (tidak pernah di-unmount) — anti "hanya bisa ketik 1 huruf".
+                      Kartu alamat tetap otoritas default; ketikan manual hanya untuk reservasi ini
+                      dan tetap melewati gerbang mismatch saat submit. */}
+                  <input
+                    type="text"
+                    value={address}
+                    onChange={(e) => {
+                      addressTouchedRef.current = true;
+                      setAddress(e.target.value);
+                    }}
+                    placeholder="cth: Jl. Kedungklinter 1 No. 80"
+                    autoComplete="off"
+                    spellCheck="false"
+                    className="w-full px-3 py-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs font-medium"
+                  />
+                  {selectedCard && (
+                    <p className="text-[10px] text-ink-3 mt-0.5">
+                      Mengikuti kartu <strong>{selectedCard.label}</strong>. Ketik untuk mengubah khusus reservasi ini.
+                    </p>
+                  )}
+                  {customerAddressId && (
                     <button
                       type="button"
-                      onClick={() => setAddressDrawerMode(selectedCard ? 'edit' : 'add')}
-                      title="Alamat mengikuti kartu. Klik untuk mengubah kartu."
-                      className="w-full text-left px-3 py-2 bg-surface-2 border border-divider rounded-xl text-xs text-ink-2 hover:border-accent/50 transition cursor-pointer focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+                      onClick={() => {
+                        setCustomerAddressId(null);
+                        setAddressDetached(true);
+                        addressTouchedRef.current = true;
+                      }}
+                      className="mt-1 text-[10px] font-bold text-warning hover:underline cursor-pointer"
                     >
-                      <span className="block truncate">{address || 'Belum ada alamat pada kartu'}</span>
-                      <span className="block text-[10px] text-ink-3 mt-0.5">Mengikuti kartu alamat — klik untuk ubah</span>
+                      Pakai hanya untuk reservasi ini
                     </button>
-                  ) : (
-                    <input
-                      type="text"
-                      value={address}
-                      onChange={(e) => setAddress(e.target.value)}
-                      placeholder="cth: Jl. Kedungklinter 1 No. 80"
-                      autoComplete="off"
-                      spellCheck="false"
-                      className="w-full px-3 py-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs font-medium"
-                    />
+                  )}
+                  {addressDetached && (
+                    <p className="text-[10px] text-warning mt-0.5">
+                      Alamat khusus reservasi ini — kartu rumah tidak diubah.
+                    </p>
                   )}
                   <div className="mt-1 flex flex-wrap items-center gap-2">
                     <button
@@ -2416,25 +2489,23 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                   <label className="text-[10px] font-bold text-ink-3 uppercase tracking-wider block">
                     Patokan / Landmark
                   </label>
-                  {addressFormLocked ? (
-                    <div
-                      className="w-full px-3 py-2 bg-surface-2 border border-divider rounded-xl text-xs min-h-[38px]"
-                      title="Patokan mengikuti kartu alamat"
-                    >
-                      <span className={`block truncate ${landmark ? 'text-ink-2' : 'text-ink-3 italic'}`}>
-                        {landmark || 'Belum ada patokan pada kartu'}
-                      </span>
-                    </div>
-                  ) : (
-                    <input
-                      type="text"
-                      value={landmark}
-                      onChange={(e) => setLandmark(e.target.value)}
-                      placeholder="cth: Rolling door putih, yg jual kusen"
-                      autoComplete="off"
-                      spellCheck="false"
-                      className="w-full px-3 py-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs font-medium"
-                    />
+                  {/* Patokan juga selalu editable (bukan display-only). */}
+                  <input
+                    type="text"
+                    value={landmark}
+                    onChange={(e) => {
+                      landmarkTouchedRef.current = true;
+                      setLandmark(e.target.value);
+                    }}
+                    placeholder="cth: Rolling door putih, yg jual kusen"
+                    autoComplete="off"
+                    spellCheck="false"
+                    className="w-full px-3 py-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs font-medium"
+                  />
+                  {selectedCard && (
+                    <p className="text-[10px] text-ink-3 mt-0.5">
+                      Patokan kartu <strong>{selectedCard.label}</strong> — perubahan hanya untuk reservasi ini.
+                    </p>
                   )}
                 </div>
               </div>
@@ -3516,7 +3587,10 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
             </label>
             <textarea
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={(e) => {
+                notesTouchedRef.current = true;
+                setNotes(e.target.value);
+              }}
               placeholder="Contoh: Pasien minta terapis senior, anak sedang pilek ringan..."
               rows={2}
               className="w-full p-2.5 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent resize-none shadow-xs"

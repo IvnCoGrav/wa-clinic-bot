@@ -307,4 +307,49 @@ describe('StaffReservationService.sendPaymentInfo', () => {
     expect(spy.mock.calls[0][0].text).toContain('Rp 135.000');
     expect(spy.mock.calls[0][0].text).toContain('555666');
   });
+
+  it('should apply discount to the WhatsApp bill (tidak menagih gross)', async () => {
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+      id: 'res-401',
+      tenant_id: DEFAULT_TENANT_ID,
+      assigned_staff_id: 'staff-1',
+      treatment_detail: 'Pijat Bayi Ceria',
+      purchase_value: 150000,
+      discount_amount: 10000,
+      delivery_fee: 20000,
+      customer: {
+        name: 'Bunda Diskon',
+        ongkir: 25000,
+        conversations: [{ id: 'conv-401', tenant_id: DEFAULT_TENANT_ID }],
+      },
+      assigned_staff: { id: 'staff-1', name: 'Bidan Rina' },
+    } as any);
+
+    vi.mocked(prisma.tenant.findUnique).mockResolvedValueOnce({
+      id: DEFAULT_TENANT_ID,
+      name: 'Kala Spa',
+      settings: {
+        paymentInfo: {
+          qrisImageUrl: null,
+          bankAccounts: [{ bank: 'BCA', accountNumber: '777888', accountName: 'PT Kala' }],
+        },
+      },
+    } as any);
+
+    const spy = vi.spyOn(liveChatService, 'sendAdminReply').mockResolvedValueOnce({ success: true } as any);
+    const result = await StaffReservationService.sendPaymentInfo({
+      reservationId: 'res-401',
+      staffId: 'staff-1',
+      tenantId: DEFAULT_TENANT_ID,
+      staffName: 'Bidan Rina',
+      isSupervisor: false,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data?.totalFee).toBe(160000); // 150.000 - 10.000 + 20.000
+    const text = spy.mock.calls[0][0].text as string;
+    expect(text).toContain('Rp 160.000');
+    expect(text).toContain('Diskon');
+    expect(text).not.toContain('Rp 170.000');
+  });
 });

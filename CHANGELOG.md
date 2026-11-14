@@ -4,6 +4,23 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-14 - Fix: Pembayaran Berdiskon Tidak Lagi Diblokir, Bukti Bayar Permanen, Form Reservasi Tidak “Mati 1 Huruf”
+
+- **Masalah**:
+  1. Bidan gagal menyimpan pembayaran reservasi berdiskon: layar mengirim Rp95.000, server menuntut Rp85.000 (selisih = diskon Rp10.000). Bukti transfer ikut hilang karena validasi berjalan sebelum penyimpanan.
+  2. `83/88` tautan `reservation.proof_url` tidak punya file fisik: bukti disimpan di folder media chat yang ikut prune kuota/retensi 30 hari.
+  3. Kolom Alamat/Patokan di modal reservasi berubah dari `<input>` menjadi tombol saat kartu alamat selesai dimuat → terasa “hanya bisa ketik 1 huruf”.
+- **Perbaikan**:
+  1. **Satu tagihan kanonis**: `resolveReservationBilling` kini mengurangkan `discount_amount` (`purchase_value - diskon + ongkir`); dipakai `getTodayTasks`, `getUpcomingSchedule`, `getCompletedTasks`, `sendPaymentInfo`, dan analitik. Select tugas staf menambah `delivery_fee`, `discount_amount`, dan `items.price` (KNOWN #328).
+  2. **Bukti tidak boleh hilang**: `recordPayment` menyimpan bukti lebih dulu via `mediaService.savePaymentProof` ke folder permanen `storage/media/payment-proofs/<tenant>/` (di luar scope prune/retensi, route privat ber-UUID). Nominal tidak cocok → `AWAITING_VERIFICATION` (bukti + metode tersimpan, `purchase_occurred_at` tidak diisi, audit `STAFF_PAYMENT_MISMATCH`), bukan `400`.
+  3. **`purchase_value` tetap GROSS** saat pembayaran (tidak lagi ditimpa net) sehingga diskon tidak terhitung dua kali.
+  4. **S-07 tidak memakai `reservation_items`** sebagai otoritas (item bisa basi karena PATCH tidak menyinkronkan item); otoritas = snapshot `purchase_value` + diskon + ongkir.
+  5. **Form**: Alamat/Patokan selalu `<input>` (tidak pernah di-unmount); `touchedRef` menghentikan hidrasi async menimpa ketikan; catatan tidak diisi ulang setelah diedit; form anak tetap terbuka saat diketik; `pushState` hanya sekali per buka modal (bukan per huruf). Gate eksplisit “Pakai hanya untuk reservasi ini” mencegah alamat hibrida.
+  6. **Idempotensi**: `POST /api/admin/reservation` meneruskan `requestId`; ref direset saat modal ditutup.
+  7. **Upload HEIC**: `StaffPaymentModal` & `TodayPaymentModal` memakai `prepareChatImage` (pesan actionable, bukan gagal senyap).
+- **Verifikasi**: `tests/unit/staff-payment-validation.test.ts` (4), `reservation-billing.test.ts` (+3 diskon), `staff-send-payment-info.test.ts` (+1 diskon), `payment-proof-storage.test.ts` (4) hijau; `npm run build` backend & dashboard hijau; full suite 7556 lulus / 4 gagal pre-existing (2 artefak audit path mesin lain, 2 hybrid parser #287) — gate bukti backlog diperbarui dan hijau.
+- **Belum**: rekonsiliasi historis 57 reservasi berdiskon / 39 event Meta / 46 baris Sheets (keputusan: jangan rewrite), kolom `amount_collected` (ditunda), uji perangkat fisik.
+
 #### 2026-11-14 - Fix: Peta Pelanggan Kembali Tampil — Leaflet Di-vendor Lokal (#344)
 
 - **Masalah**: tab Sebaran Peta menampilkan “Peta gagal dimuat — Pustaka peta (CDN) tidak dapat diakses” karena CSP `script-src 'self'` memblokir Leaflet dari `unpkg.com`.

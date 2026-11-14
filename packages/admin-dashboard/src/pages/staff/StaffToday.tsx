@@ -1778,19 +1778,28 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       });
 
       if (res.success) {
-        toast(`Pembayaran Rp ${paymentModalTask.pricing.totalFee.toLocaleString('id-ID')} berhasil dicatat!`, 'success');
-
+        const awaiting = res.data?.status === 'AWAITING_VERIFICATION';
         const targetId = paymentModalTask.reservationId;
         const newProofUrl: string | null = res.data?.proofUrl ?? proofImageB64 ?? null;
         const newMethod: string | null = res.data?.paymentMethod ?? method;
-        const applyLunas = (t: StaffTask): StaffTask =>
+
+        if (awaiting) {
+          toast(
+            `Bukti tersimpan. Nominal Rp ${Number(res.data?.receivedAmount || 0).toLocaleString('id-ID')} belum cocok dengan tagihan Rp ${Number(res.data?.expectedTotal || 0).toLocaleString('id-ID')} — menunggu verifikasi admin.`,
+            'info'
+          );
+        } else {
+          toast(`Pembayaran Rp ${paymentModalTask.pricing.totalFee.toLocaleString('id-ID')} berhasil dicatat!`, 'success');
+        }
+
+        const applyPaymentState = (t: StaffTask): StaffTask =>
           t.reservationId === targetId
             ? {
                 ...t,
                 pricing: {
                   ...t.pricing,
-                  paymentStatus: 'LUNAS',
-                  paymentStatusLabel: 'Lunas',
+                  paymentStatus: awaiting ? 'PERLU_VERIFIKASI' : 'LUNAS',
+                  paymentStatusLabel: awaiting ? 'Perlu Verifikasi' : 'Lunas',
                   paymentMethod: newMethod,
                   proofUrl: newProofUrl ?? t.pricing.proofUrl ?? null,
                 },
@@ -1799,11 +1808,11 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
         // Sinkronisasi reaktif menyeluruh: kartu Hari Ini, Riwayat Selesai,
         // Jadwal Mendatang, drawer chat terpilih, dan modal detail pasien.
-        setTasks((prev) => prev.map(applyLunas));
-        setCompletedTasks((prev) => prev.map(applyLunas));
-        setUpcomingTasks((prev) => prev.map(applyLunas));
-        setSelectedTask((prev) => (prev ? applyLunas(prev) : null));
-        setDetailModalTask((prev) => (prev ? applyLunas(prev) : null));
+        setTasks((prev) => prev.map(applyPaymentState));
+        setCompletedTasks((prev) => prev.map(applyPaymentState));
+        setUpcomingTasks((prev) => prev.map(applyPaymentState));
+        setSelectedTask((prev) => (prev ? applyPaymentState(prev) : null));
+        setDetailModalTask((prev) => (prev ? applyPaymentState(prev) : null));
 
         setPaymentModalTask(null);
         setPaymentInitialMethod('CASH');

@@ -3,6 +3,48 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 346. [SISTEMIK] Fragmentasi Otoritas Tagihan, Bukti Bayar, dan Hidrasi Form — Satu Akar: Tidak Ada "Kepemilikan Kebenaran" (2026-11-14, PARTIALLY RESOLVED)
+
+- **Status:** PARTIALLY RESOLVED (2026-11-14) — MVP tanpa migrasi dieksekusi. Sisa pekerjaan dicatat di bagian akhir.
+- **Gejala gabungan (sebelum fix):**
+  1. Bidan tidak bisa menyimpan pembayaran berdiskon: UI mengirim 95.000, server menuntut 85.000 (selisih = diskon 10.000). Bukti transfer ikut hilang karena validasi berjalan sebelum penyimpanan.
+  2. 83 dari 88 tautan `reservation.proof_url` tidak punya file fisik; prune kuota/retensi menghapus bukti karena disimpan di folder media chat.
+  3. `purchase_value` ditimpa net saat pembayaran, sementara `discount_amount` tetap ada → double-subtraction potensial.
+  4. S-07 memakai `reservation_items` yang tidak disinkronkan saat edit.
+  5. Diskon diabaikan di banyak jalur baca (staff pricing, WhatsApp bill, analitik).
+  6. Jalur admin mencatat pembayaran tanpa `amount` (bypass S-07) dan gagal senyap.
+  7. `requestId` tidak diteruskan di `POST /api/admin/reservation`.
+- **Perbaikan MVP (2026-11-14):**
+  1. **Billing kanonis**: `resolveReservationBilling` = `purchase_value − discount_amount + delivery_fee`; dipakai staff task pricing (3 reader), `sendPaymentInfo`, dan analitik. `getTodayTasks` dkk. men-select `discount_amount`, `delivery_fee`, `items.price` (KNOWN #328 resolved).
+  2. **Evidence-first**: `recordPayment` menyimpan bukti via `mediaService.savePaymentProof` ke `storage/media/payment-proofs/<tenant>/` (permanen, privat, di luar prune/retensi). Mismatch → `AWAITING_VERIFICATION` (bukti+metode tersimpan, `purchase_occurred_at` kosong, audit `STAFF_PAYMENT_MISMATCH`), bukan 400.
+  3. **`purchase_value` tetap GROSS** saat pembayaran (untuk pembayaran cocok nilainya tidak berubah).
+  4. **Otoritas tagihan = snapshot reservasi**, bukan `reservation_items`.
+  5. **Admin & staf satu kontrak**: keduanya mengirim `amount`; admin menampilkan error (tidak lagi senyap). Bukti wajib untuk non-cash di kedua jalur.
+  6. **Form**: lihat #345.
+  7. **Idempotensi**: POST create meneruskan `requestId`; ref direset saat modal ditutup.
+  8. **Upload**: `prepareChatImage` di modal pembayaran staf & admin (pesan HEIC actionable).
+- **Verifikasi:** `staff-payment-validation` (4), `reservation-billing` (+3 diskon), `staff-send-payment-info` (+1 diskon), `payment-proof-storage` (4), `staff-auth-and-reservation`, `admin-create-reservation`, `backlog-evidence-gate` hijau; build backend & dashboard hijau; full suite 7556 lulus / 4 gagal pre-existing (2 artefak audit path mesin lain, 2 hybrid parser #287).
+- **Sisa (OPEN):**
+  - Rekonsiliasi historis: 57 reservasi berdiskon, 39 event Meta sudah terkirim, 46 baris Sheets `done` — keputusan: **jangan rewrite**; perlu laporan read-only + anotasi.
+  - `amount_collected` / state pembayaran eksplisit (migrasi) ditunda; nominal mismatch saat ini tersimpan di audit log.
+  - Sinkronisasi `reservation_items` pada PATCH (saat ini item bisa basi; sengaja tidak dipakai sebagai otoritas).
+  - Verifikasi 83 bukti hilang: tandai `evidence_missing` (file tidak dapat dipulihkan).
+  - Uji perangkat fisik untuk #345.
+
+## 345. [Reservasi / Form] Input Alamat & Patokan Terkunci/Mengunci Diri Saat Kartu Alamat Selesai Dimuat — Terasa "Hanya Bisa Ketik 1 Huruf" (2026-11-14, RESOLVED — UJI PERANGKAT PENDING)
+
+- **Status:** RESOLVED di kode (2026-11-14); uji perangkat fisik Android/iPhone belum dilakukan.
+- **Gejala:** Di modal *Buat Jadwal Reservasi Baru*, admin/bidan mulai mengetik di kolom **Alamat Lengkap** atau **Patokan/Landmark**, lalu setelah 1 karakter kolom tidak bisa diketik lagi.
+- **Akar masalah:** `addressFormLocked = savedAddresses.length > 0` berubah menjadi true saat fetch kartu alamat selesai; render kondisional mengganti `<input>` menjadi `<button>`/`<div>` sehingga elemen di-unmount dan fokus hilang. Effect hidrasi juga menimpa `setAddress/setLandmark` saat data async datang.
+- **Perbaikan:**
+  1. Alamat & Patokan **selalu `<input>`** — tidak pernah di-unmount; hint “mengikuti kartu” ditampilkan.
+  2. `addressTouchedRef`/`landmarkTouchedRef`/`notesTouchedRef`: hidrasi async berhenti menimpa field yang sudah diedit.
+  3. Gate eksplisit saat alamat berbeda dari kartu: tombol **“Pakai hanya untuk reservasi ini”** (detach kartu, tidak mengubah buku alamat) atau “Ubah Alamat Kartu”.
+  4. `handleUpdateBaby` menambahkan indeks ke `editingChildIndexes` pada ketikan pertama → form anak tidak unmount.
+  5. Effect history: `handleSafeClose` disimpan di ref; `pushState` hanya sekali saat modal dibuka (bukan per keystroke).
+- **Verifikasi:** dashboard `tsc` + `vite build` hijau; belum ada unit test DOM (perlu perangkat/Playwright).
+- **Sisa:** uji ketik-cepat di HP (Android Chrome + iOS Safari) dan uji back-button setelah modal ditutup.
+
 ## 344. [Peta Pelanggan] Tab Sebaran Peta Gagal Dimuat — CSP Memblokir Leaflet dari unpkg (2026-11-14, RESOLVED)
 
 - **Status:** RESOLVED (2026-11-14) — pustaka Leaflet + MarkerCluster di-vendor lokal (`public/vendor/leaflet/`), loader memakai URL same-origin, CSP tetap ketat. Tombol **“Coba Lagi”** ditambahkan.
@@ -227,13 +269,13 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Rencana fondasional (belum dieksekusi):** buat seam pengayaan **kartu-only** — hitung `deliveryService.calculateDelivery` dari koordinat kartu (atau geocode teks kartu), lalu update `customer_addresses` + cache JSON kartu; DILARANG menyentuh `customers.*`. Kunci dengan test “kartu ber-kartu tanpa koordinat tidak menulis root”.
 - **Bukti:** `tests/unit/reservation-lifecycle-address-guard.test.ts` (3 test) membuktikan reservasi ber-kartu — termasuk kartu tanpa koordinat — tidak memanggil `updateCustomerLocation`/`upsertSavedAddress` dan tidak menjalankan auto-distance root.
 
-## 328. [Buku Alamat/Staf] Kartu Tugas PWA Tidak Membaca Snapshot `delivery_fee` Reservasi (2026-11-13, OPEN)
+## 328. [Buku Alamat/Staf] Kartu Tugas PWA Tidak Membaca Snapshot `delivery_fee` Reservasi (2026-11-13, RESOLVED 2026-11-14)
 
-- **Status:** OPEN — ditemukan saat verifikasi hotfix Bunda Intan; bukan akibat hotfix.
+- **Status:** RESOLVED (2026-11-14) — `delivery_fee`, `discount_amount`, dan `items.price` ditambahkan ke `select` ketiga pembaca tugas; pricing memakai seam kanonis `resolveReservationBilling`.
 - **Gejala:** Reservasi `3c12b852-a06a-424a-8421-d5a92c3cb531` memiliki `delivery_fee = 15.000`, tetapi kartu tugas PWA menampilkan `deliveryFee = 10.000` (nilai `Customer.ongkir`). Ini menjelaskan disparitas tampilan biaya antara reservasi, PWA, dan rekap.
 - **Akar masalah:** `StaffReservationService.getTodayTasks` (`src/services/staff-reservation.service.ts:558-621`) tidak men-select kolom `delivery_fee`/`discount_amount`; akibatnya `resolveDeliveryFeeSnapshot()` (`src/services/reservation-core.service.ts:448-454`) jatuh ke fallback `customer.ongkir`. Jalur pembaca tugas lain perlu diaudit dengan pola yang sama.
 - **Dampak:** Terapis melihat biaya kunjungan yang berbeda dari snapshot kesepakatan reservasi; berpotensi salah tagih dan memperbesar drift PWA vs Google Sheets.
-- **Rencana fondasional (belum dieksekusi):** tambahkan `delivery_fee` dan `discount_amount` ke `select` semua pembaca tugas staf (`getTodayTasks`, `getUpcomingSchedule`, `getCompletedTasks`, detail/briefing terkait), lalu tambahkan test yang mengunci “snapshot reservasi menang atas `Customer.ongkir`”. Jangan menambal di formatter.
+- **Resolusi:** `delivery_fee`, `discount_amount`, dan `items: { price }` ditambahkan ke `select` `getTodayTasks`, `getUpcomingSchedule`, dan `getCompletedTasks`; pricing memakai `buildStaffTaskPricing` → `resolveReservationBilling` (diskon ikut dikurangkan). Test `reservation-billing.test.ts` mengunci “snapshot delivery_fee menang atas Customer.ongkir” (5 kasus ongkir + 3 kasus diskon).
 - **Bukti:** query produksi `delivery_fee=15000`; payload `getTodayTasks` menunjukkan `pricing.deliveryFee=10000`; `customer.ongkir=10000`; `customer_address.ongkir=10000`.
 
 ## 330. [Queue] `SEPARATE_WORKER=true` Mematikan Konsumen Chat → Antrean Menumpuk (2026-11-13, RESOLVED)
