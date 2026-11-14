@@ -56,6 +56,12 @@ import {
   isChildSelected,
   toggleChildSelection,
 } from '../../utils/reservationChildPrefill';
+import {
+  buildAutoPopulateKey,
+  buildSlotTargetKey,
+  buildBabiesContentKey,
+  shouldRunGuard,
+} from '../../utils/reservationFormGuards';
 import { resolveStaffName } from '../../utils/resolveStaffName';
 import { AddressBookDrawer } from '../customer/AddressBookDrawer';
 import { recommendSlots } from '../../utils/slotRecommendations';
@@ -913,8 +919,17 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   }, [isOpen]);
 
   // FASE 3.1: reaktif per-tanggal — selaras WIB backend, fallback prop existingReservations (R5)
+  const reservationsFetchKeyRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      reservationsFetchKeyRef.current = null;
+      return;
+    }
+    // KNOWN #341: kunci per hari + jumlah prop, bukan identitas objek/array dari parent.
+    const fetchKey = `${bookingDate || 'no-date'}|${Array.isArray(existingReservations) ? existingReservations.length : 0}`;
+    if (!shouldRunGuard(reservationsFetchKeyRef.current, fetchKey)) return;
+    reservationsFetchKeyRef.current = fetchKey;
+
     if (bookingDate) {
       setLoadingReservations(true);
       apiRequest(`/api/admin/reservations?startDate=${bookingDate}&endDate=${bookingDate}&status=all&pageSize=100`)
@@ -946,8 +961,17 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   }, [isOpen, bookingDate, existingReservations]);
 
   // Sync initial target slot if opened via calendar slot click
+  const slotTargetKeyRef = useRef<string | null>(null);
   useEffect(() => {
-    if (isOpen && initialSlotTarget) {
+    if (!isOpen) {
+      slotTargetKeyRef.current = null;
+      return;
+    }
+    if (initialSlotTarget) {
+      // KNOWN #341: objek baru dengan isi sama tidak boleh me-reset tanggal/jam.
+      const slotKey = buildSlotTargetKey(initialSlotTarget);
+      if (!shouldRunGuard(slotTargetKeyRef.current, slotKey)) return;
+      slotTargetKeyRef.current = slotKey;
       // Dukung dua bentuk date: Date object (kalender) & string YYYY-MM-DD (LiveChat)
       const rawDate: any = (initialSlotTarget as any).date;
       if (typeof rawDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
@@ -966,9 +990,10 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       if ((initialSlotTarget as any).staffId) {
         setAssignedStaffId((initialSlotTarget as any).staffId);
       }
-    } else if (isOpen && !bookingDate && mode !== 'edit') {
+    } else if (isOpen && !bookingDate && mode !== 'edit' && slotTargetKeyRef.current === null) {
       // Fallback hari ini HANYA untuk mode pembuatan baru, JANGAN untuk mode edit.
       // Fase 2R: jam dibiarkan kosong (required) — anti silent 09:00.
+      slotTargetKeyRef.current = '__today__';
       setBookingDate(getTodayWibDateKey());
       setBookingTime('');
     }
@@ -977,11 +1002,21 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   // Auto-populate customer if initialCustomer is provided
   // F-B2: mode edit TIDAK memakai auto-populate dari prop (bisa ramping/sintetik);
   // sumber kebenaran edit = efek hidrasi edit + fetch detail. auto-populate hanya create.
+  // KNOWN #341: pemicu memakai ID stabil + ref guard, bukan identitas objek prop.
+  const autoPopulateKeyRef = useRef<string | null>(null);
   useEffect(() => {
+    if (!isOpen) {
+      autoPopulateKeyRef.current = null;
+      return;
+    }
     if (mode === 'edit') return;
-    if (isOpen && initialCustomer) {
+    const autoKey = buildAutoPopulateKey(initialCustomer?.id, initialCustomerId);
+    if (!shouldRunGuard(autoPopulateKeyRef.current, autoKey)) return;
+    autoPopulateKeyRef.current = autoKey;
+
+    if (initialCustomer) {
       handleSelectCustomer(initialCustomer);
-    } else if (isOpen && initialCustomerId && !customerId) {
+    } else if (initialCustomerId && !customerId) {
       apiRequest(`/api/admin/customers/${initialCustomerId}`)
         .then((res) => {
           const c = res?.customer || res?.data || res;
@@ -991,7 +1026,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           // Pra-isi pelanggan opsional; staf tetap bisa mencari manual.
         });
     }
-  }, [isOpen, initialCustomer, initialCustomerId, mode]);
+  }, [isOpen, initialCustomer?.id, initialCustomerId, mode]);
 
   // Pre-fill state when opened in edit mode — Fase 3R anti-race hidrasi katalog
   useEffect(() => {
@@ -1295,6 +1330,11 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
   // Smart Pre-Fill Pipeline (Live Chat / Quick Booking handoff)
   const prefillTreatmentMatchedRef = useRef(false);
+  // KNOWN #341: parent membuat array `initialBabies` baru tiap render → pakai kunci konten.
+  const initialBabiesContentKey = useMemo(
+    () => buildBabiesContentKey(initialBabies as any),
+    [initialBabies]
+  );
   useEffect(() => {
     if (!isOpen) {
       prefillTreatmentMatchedRef.current = false;
@@ -1330,7 +1370,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     }
   }, [
     isOpen,
-    initialBabies,
+    initialBabiesContentKey,
     initialNotes,
     initialTreatmentCategory,
     initialTreatmentName,

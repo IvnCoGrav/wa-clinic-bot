@@ -4,6 +4,13 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-14 - Fix: Form Reservasi Berkedip & Tombol Tidak Bisa Diklik (#341)
+
+- **Masalah**: saat modal “Buat Jadwal Reservasi Baru” dibuka dari Live Chat, tombol/select/date field kadang tidak merespons dan UI berkedip; pilihan tanggal bisa ter-reset.
+- **Akar masalah**: parent mengirim prop objek/array baru setiap render (SSE), sedangkan effect form memakai identitas objek (`initialCustomer`, `initialSlotTarget`, `existingReservations`, `initialBabies`) sebagai dependency → effect auto-populate/prefill berjalan berulang dan me-reset state.
+- **Perubahan**: util `reservationFormGuards` (kunci stabil ID/konten + `shouldRunGuard`); effect auto-populate memakai `initialCustomer?.id`; slot target memakai kunci `tanggal|jam|staf`; fetch reservasi memakai kunci `bookingDate|jumlahProp`; prefill anak memakai kunci konten nama+usia.
+- **Verifikasi**: `tests/unit/reservation-form-guards.test.ts` (5) + suite reservasi terkait hijau; dashboard `tsc`/build/`check:design` hijau.
+
 #### 2026-11-14 - Fix: Prefill Data Anak dari Profil Customer & Dedupe Tombol Alamat (#340)
 
 - **Masalah**: form reservasi selalu meminta isi ulang nama/usia anak setiap booking; tombol “+ Tambah Alamat” muncul dua kali (header kartu + bawah kolom alamat).

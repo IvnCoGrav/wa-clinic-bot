@@ -3,9 +3,15 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
-## 341. [Reservasi/Dashboard] Form “Buat Jadwal” Berkedip & Tombol/Field Kadang Tidak Bisa Diklik (2026-11-14, OPEN — RENDER CHURN)
+## 341. [Reservasi/Dashboard] Form “Buat Jadwal” Berkedip & Tombol/Field Kadang Tidak Bisa Diklik (2026-11-14, RESOLVED)
 
-- **Status:** OPEN — akar masalah teridentifikasi dari audit statis 20 `useEffect`; perbaikan belum dieksekusi.
+- **Status:** RESOLVED (2026-11-14) — pemicu effect diganti kunci stabil (ID/konten) + ref guard; prop objek/array baru dari parent tidak lagi me-reset form.
+- **Perbaikan yang diterapkan:**
+  1. `CreateReservationModal`: auto-populate customer memakai `buildAutoPopulateKey(initialCustomer?.id, initialCustomerId)` + `shouldRunGuard`; dependency effect menjadi `initialCustomer?.id` (bukan objek).
+  2. Slot target memakai `buildSlotTargetKey` (tanggal|jam|staf) + ref, sehingga objek baru berisi sama tidak me-reset tanggal/jam.
+  3. Fetch daftar reservasi memakai kunci `bookingDate|jumlahProp` + ref (tidak lagi per identitas array parent).
+  4. Prefill chat memakai `buildBabiesContentKey` (nama+usia), bukan identitas array `initialBabies`.
+  5. Test: `tests/unit/reservation-form-guards.test.ts` (5 kasus).
 - **Gejala:** Saat modal reservasi dibuka dari Live Chat, tombol/select/date field kadang tidak merespons klik dan tampak “berkedip”; teks pada input tanggal bisa tiba-tiba terseleksi. Tidak selalu terjadi (tergantung aktivitas chat).
 - **Akar masalah utama — objek prop tidak stabil di dependency array:**
   1. `LiveChatModals.tsx:312-327` membuat **object literal baru** untuk `initialCustomer` pada setiap render parent (ketika `customerDetailData` tidak cocok).
@@ -15,12 +21,6 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Kontributor sekunder (jank, bukan loop):** `CreateReservationModal.tsx:946` me-refetch `/api/admin/reservations?pageSize=300` setiap `bookingDate` berubah (setiap ketikan tanggal) → UI tersendat saat fetch berulang.
 - **Temuan audit otomatis:** 20 `useEffect` diperiksa; **tidak ada** effect tanpa dependency array. Dua effect terindikasi menulis state yang ada di deps (`:1298`, `:1976`) tetapi dijaga kondisi sehingga bukan loop murni. Pemicu utama adalah identitas prop dari parent.
 - **Dampak:** interaksi form tidak andal (klik hilang, fokus/selection ter-reset), risiko data form ter-reset (customer/anak/alamat) saat SSE masuk, dan beban fetch berlebih.
-- **Rencana perbaikan (belum dieksekusi):**
-  1. Ganti dependency effect auto-populate menjadi **ID stabil** (`initialCustomer?.id || initialCustomerId`) + ref guard sekali per pembukaan; jangan memakai objek prop.
-  2. Bungkus `initialCustomer`/`initialBabies` di `LiveChatModals` dengan `useMemo` (key: id/versi data) agar identitas stabil.
-  3. Effect prefill chat (`:1298`) memakai kunci konten (nama+usia) alih-alih identitas array.
-  4. Fetch daftar reservasi dipicu per **hari**, bukan per ketikan; atau debounce 400 ms.
-  5. Regression test: util murni `shouldAutoPopulateCustomer(prevKey, nextKey)` + uji bahwa render berulang dengan prop id sama tidak memanggil ulang handler.
 - **Bukti kode:** `LiveChatModals.tsx:296-335`; `CreateReservationModal.tsx:946, 949-975, 980-994, 1142-1161, 1298-1341`.
 
 ## 340. [Reservasi] Data Anak Diminta Ulang di Setiap Booking — Prefill Anak Tidak Jalan (2026-11-14, RESOLVED)
@@ -30,11 +30,6 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Akar masalah:** `handleSelectCustomer` (`CreateReservationModal.tsx:1148-1157`) hanya mengisi `babies` bila objek hasil pencarian membawa `c.children`. Endpoint daftar `GET /api/admin/customers` → `customerService.listCustomersWithLtvAndAdClick` (`src/services/customer.service.ts:2424-2435`) hanya meng-include `adClick` + `reservations`, **tidak** `children`. Akibatnya prefill tidak pernah berjalan di mode buat baru; hanya mode edit/detail yang memuat `children`.
 - **Catatan skema:** data anak **sudah** per-customer dan reusable (`children` + `upsertChildrenFromBabies` dengan kunci `customer_id + name_norm`, `src/services/child.service.ts:45-71`). Jadi masalahnya bukan skema, melainkan payload pencarian + UI yang tidak menampilkan anak tersimpan.
 - **Dampak:** entri ulang memakan waktu; typo nama membuat `name_norm` berbeda → anak baru tercipta dan riwayat anak terpecah. Validasi form sendiri tidak mewajibkan anak (opsional, dan section disembunyikan untuk kategori MOMS), tetapi data anak yang kosong berarti reservasi tidak tertaut ke entitas anak.
-- **Usulan perbaikan (belum dieksekusi):**
-  1. Saat customer dipilih (mode create), ambil `GET /api/admin/customers/:id` (detail sudah menghidrasi `children` + `current_age`) dan isi daftar anak.
-  2. Tampilkan anak tersimpan sebagai **kartu pilih** (mirip kartu alamat): klik untuk memakai, “+ Tambah Anak” untuk anak baru. Usia dihitung real-time dari `birth_date`.
-  3. Sembunyikan section untuk kategori MOMS (sudah) dan jangan wajibkan anak bila layanan bukan BABY/KIDS.
-  4. Bila multi-anak: pertahankan pemetaan treatment → anak.
 - **Perbaikan yang diterapkan (2026-11-14):**
   1. Effect hidrasi detail (`GET /api/admin/customers/:id`) sekali per customer → merge `selectedCustomerInfo` + isi `babies` dari `children` (`current_age`).
   2. Chip **“Anak tersimpan (klik untuk pakai)”** di section data anak; klik menambah/melepas anak (util `reservationChildPrefill.ts`).
