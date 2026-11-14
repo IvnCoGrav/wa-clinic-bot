@@ -3,6 +3,26 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 344. [Peta Pelanggan] Tab Sebaran Peta Gagal Dimuat — CSP Memblokir Leaflet dari unpkg (2026-11-14, OPEN)
+
+- **Status:** OPEN — akar masalah terverifikasi (kode + header CSP live); menunggu keputusan Opsi A/B.
+- **Gejala:** Tab **Sebaran Peta** (`packages/admin-dashboard/src/components/customer/CustomerMapTab.tsx`) menampilkan “Peta gagal dimuat — Pustaka peta (CDN) tidak dapat diakses”, peta & titik pelanggan tidak dirender.
+- **Bukti CSP live:** `curl -I https://app.kalababyspa.online/admin/` → `script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'` (tanpa `unpkg.com`) — sama dengan `src/app.ts:144-156` dan `Caddyfile` (blok header S-011).
+- **Bukti kode:** `packages/admin-dashboard/src/utils/leafletLoader.ts:10-19,73-74` memuat `leaflet.js`, `leaflet.css`, dan `leaflet.markercluster` dari `https://unpkg.com/...`; CSP menolak script/style eksternal → `injectScript`/`waitForCss` gagal → `CustomerMapTab.tsx:184-200` men-set `leafletFailed`.
+- **Masalah sekunder:** kegagalan CDN/AdBlock/ISP juga menyebabkan error yang sama; UI error (`CustomerMapTab.tsx:840-846`) **tidak punya tombol “Coba Lagi”**.
+- **Opsi perbaikan (belum dieksekusi):**
+  - **A. Vendor lokal (disarankan):** simpan `leaflet.js`, `leaflet.css`, `leaflet.markercluster` + LICENSE di `packages/admin-dashboard/public/vendor/leaflet/`, ubah loader ke URL same-origin, hapus ketergantungan unpkg. Tidak menambah dependency npm dan CSP tetap ketat.
+  - **B. Whitelist CSP:** tambah `https://unpkg.com` (dan fallback CDN) ke `script-src`/`style-src` di `src/app.ts` + `Caddyfile`, tambah tombol retry. Tetap bergantung koneksi/CDN luar.
+- **Catatan:** keputusan menyentuh keamanan CSP / aset pihak ketiga sehingga butuh persetujuan eksplisit pengguna.
+
+## 343. [UI/UX] Pull-to-Refresh Masih Terasa “Clunky” & Belum Sesuai Ekspektasi (2026-11-14, OPEN)
+
+- **Status:** OPEN — implementasi sudah live (`9019815a`), tetapi pengguna menilai animasi masih kaku/tidak sesuai; perlu iterasi desain.
+- **Implementasi saat ini:** indikator ikon-only (reload berputar → spinner → centang hijau 1,1 dtk), cooldown 2 dtk, ambang 64 px, hambatan 0.55, transisi `240ms cubic-bezier(0.22,1,0.36,1)`, tanpa transisi saat jari menempel.
+- **Keluhan:** gerakan belum halus/sesuai; perlu disetel lagi (durasi, jarak, ukuran pill, posisi, atau mekanisme tarik).
+- **Area terdampak:** `LiveChatMonitor`, `StaffToday`/`StaffSchedule` (hook `usePullToRefresh`, `PullToRefreshIndicator`).
+- **Rencana iterasi (belum dieksekusi):** sesuaikan kurva/durasi (mis. spring 320 ms), perkecil ambang/resistensi, tambah haptic/opacity, atau ganti model indikator (mis. ikon menempel di bawah header). Perlu contoh referensi dari pengguna.
+
 ## 342. [Reservasi] Peringatan “Customer sudah punya reservasi aktif” Muncul untuk Reservasi `completed` (2026-11-14, RESOLVED)
 
 - **Status:** RESOLVED (2026-11-14) — filter status diperbaiki; peringatan & guard bentrok hanya memakai status aktif.
