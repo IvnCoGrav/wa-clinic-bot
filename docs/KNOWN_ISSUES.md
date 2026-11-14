@@ -3,6 +3,15 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 335. [Paket Berseri] Port Billing Series & Unit Komersial Tunggal — Migrasi Belum Diterapkan (2026-11-14, OPEN — DEPLOY PENDING)
+
+- **Status:** Kode sudah masuk `master` (commit `1eae114c`), **migrasi belum dijalankan** di DB mana pun (lokal maupun produksi).
+- **Migrasi baru:** `20261114120000_add_reservation_series_billing` (kolom komersial `reservation_series`) dan `20261114130000_backfill_series_session_capi_status` (mengisi `purchase_review_status = 'not_applicable'` untuk sesi > 1 yang masih `pending`). Folder sengaja memakai tanggal 2026-11-14 (bukan 2026-10-27 seperti branch asal) supaya urutan `migrate deploy` tetap monoton terhadap migrasi `20261106`–`20261113` yang sudah ada.
+- **Wajib saat deploy:** backup DB → `prisma migrate deploy` → cek drift (`npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script` harus `-- This is an empty migration.`) → baru recreate app/worker. Tanpa migrasi, `POST /api/admin/reservation-series` gagal karena kolom `request_id`/`delivery_fee` belum ada.
+- **Batasan single-anchor CAPI (by design):** sesi 2..N paket tidak pernah masuk antrean Purchase (`maybeFirePurchaseEvent` early-return + `resolvePurchaseReviewOnConfirm` → `not_applicable`). Konsekuensi: nilai komersial paket dihitung sekali (unit ordinal 1) di Meta Performance & Google Sheets; backfill hanya menyentuh baris `pending`, sehingga sesi lama yang sudah `approved`/terkirim tidak diubah (aman, tetapi event ganda historis tidak dibatalkan).
+- **Batasan advisory lock series:** lock diambil per (tenant, terapis, tanggal sesi) di dalam transaksi; sesi tanpa terapis memakai kunci staff `null` + cek `hasCapacityForUnassignedBooking`. Bila `pg_advisory_xact_lock` gagal di produksi, series ditolak (fail-closed `ConflictCheckUnavailableError`), bukan diloloskan.
+- **Belum tercakup:** preset interval di dashboard hanya membantu UI (tanggal/jam sesi tetap dikirim eksplisit); belum ada endpoint untuk mengubah `delivery_fee`/`discount_amount` level series setelah dibuat (per sesi hanya lewat `PATCH /api/admin/reservation-series/:id/session/:reservationId`).
+
 ## 334. [Audit] Gerbang Bukti Backlog Bergantung Nomor Baris Absolut (2026-11-14, OPEN — LIMITATION)
 
 - **Gejala:** `npm run verify:backlog` gagal setelah refactor murni tanpa perubahan perilaku. `backlog-evidence.json` menyimpan `line` absolut, sehingga `S-06` (baris 599) dan `S-09` (baris 1618) dianggap hilang saat kode bergeser.

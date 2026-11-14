@@ -857,7 +857,7 @@
         {
           "type": "file",
           "path": "src/services/sheets/sheets-sync.service.ts",
-          "line": 550,
+          "line": 575,
           "contains": "Atomic claim"
         },
         {
@@ -2135,7 +2135,7 @@
         {
           "type": "file",
           "path": "prisma/schema.prisma",
-          "line": 826,
+          "line": 838,
           "contains": "@@unique([tenant_id, slug])"
         },
         {
