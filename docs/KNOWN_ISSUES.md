@@ -3,6 +3,31 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 338. [Reservasi] Badge “Teks alamat berbeda dengan kartu terpilih” Muncul Setiap Modal Dibuka (2026-11-14, OPEN)
+
+- **Status:** OPEN — akar masalah teridentifikasi, perbaikan belum dieksekusi (menunggu keputusan desain).
+- **Gejala:** Setiap membuka “Buat Jadwal Reservasi Baru”, kolom **Alamat Lengkap** terisi alamat profil root (mis. `Jalan Giriłaya 3/26a, Surabaya`) sementara kartu yang otomatis terpilih adalah kartu primary (`Rumah Taman — Jl. Puyuh no. 24, Sepanjang`). Akibatnya badge kuning “Teks alamat berbeda dengan kartu terpilih” **selalu** tampil, dan tombol simpan diblokir sampai admin memilih “Simpan Sebagai Rumah Baru”/“Perbarui Kartu Ini”.
+- **Akar masalah (dua sumber kebenaran):**
+  1. Prefill alamat (`CreateReservationModal.tsx:348-371`) memprioritaskan `initialAddress` (ekstraksi chat) → `preferences.address` (profil root) → `raw_text`, **tidak pernah** memakai alamat kartu pada mode create.
+  2. Pemilihan kartu otomatis (`:374-384`) memilih kartu `isPrimary` (atau kartu pertama) **tanpa** menyelaraskan teks alamat.
+  3. Kartu alamat memang **tidak menulis profil root** (by design, KNOWN #329) → root “Jalan Giriłaya” tetap lama sementara kartu berisi “Jl. Puyuh”, sehingga selisihnya permanen.
+  4. Effect prefill tidak bergantung pada `customerAddressId`/`savedAddresses`, jadi saat `GET /customers/:id/addresses` selesai dimuat, alamat tidak di-re-sync ke kartu.
+- **Temuan tambahan:** `customerAddressId` tidak di-reset ketika admin mengganti customer di modal yang sama (`:374-384` hanya mengisi bila kosong) → kartu milik customer lama bisa tertinggal sebagai state (tidak ter-highlight, tetapi tetap terkirim bila tidak diubah).
+- **Usulan perbaikan (belum dieksekusi):**
+  1. Jadikan kartu sebagai **single source of truth** saat kartu terpilih: setelah kartu ditentukan (primary/eksplisit), prefill alamat/landmark/ongkir dari kartu tersebut.
+  2. `initialAddress` dari chat hanya dipakai bila **tidak ada kartu** atau berbeda → tampilkan sebagai **saran** (“pakai alamat dari chat”) yang harus diklik, bukan menimpa otomatis.
+  3. Reset `customerAddressId` + `savedAsNewHouse` + `correctingCardId` saat `customerId` berubah.
+  4. Badge mismatch hanya muncul setelah **admin mengedit** teks alamat (bukan saat prefill otomatis).
+- **Bukti kode:** `packages/admin-dashboard/src/components/calendar/CreateReservationModal.tsx:287-300, 348-384, 2213-2224, 1772-1775`.
+
+## 337. [Live Chat] Riwayat Reservasi Menampilkan “Layanan” Generik & Jam Kosong (2026-11-14, OPEN)
+
+- **Status:** OPEN — akar masalah teridentifikasi, perbaikan belum dieksekusi.
+- **Gejala:** Di modal customer Live Chat, daftar “Riwayat Reservasi” hanya menampilkan teks **“Layanan”**, tanggal tanpa jam, dan tombol bukti bayar. Nama treatment, terapis, dan nominal tidak muncul walau datanya ada.
+- **Akar masalah:** Komponen membaca field yang **tidak pernah dikirim** API: `r.treatment_name` dan `r.services` (`LiveChatCustomerModal.tsx:263`) serta `r.booking_time` (`:271`). `GET /api/admin/customers/:id` (`customers.subroute.ts:93`) mengirim baris `reservation` apa adanya — field yang tersedia `treatment_detail`, `booking_date`, `assigned_staff`, `purchase_value`, `status`. Fallback kode menghasilkan `'Layanan'` dan jam kosong.
+- **Bukti paritas:** Halaman Customer Database sudah benar karena memakai formatter kanonis `getCleanTreatmentName(res.treatment_detail || res.raw_text)` (`CustomerDatabase.tsx:1216`).
+- **Usulan perbaikan (belum dieksekusi):** pakai `getCleanTreatmentName` + `formatWibClock`, tambahkan terapis/nominal dari payload yang sudah ada, dan kunci dengan unit test label riwayat.
+
 ## 336. [Web App Staf / Plan-002] Hook Outbox Versi Branch Ditolak — PII di `localStorage` + Base64 (2026-11-14, BY-DESIGN)
 
 - **Konteks:** port plan-002 hanya mengambil `useStaffChatSend` (commit `a7ed6e70`). Commit `78ba75e3` (hook outbox pesan gagal) **sengaja tidak di-merge**.
