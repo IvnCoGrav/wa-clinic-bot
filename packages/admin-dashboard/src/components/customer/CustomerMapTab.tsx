@@ -97,6 +97,8 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
   const [showRadius, setShowRadius] = useState(true);
   const [mapMode, setMapMode] = useState<'streets' | 'area'>('streets');
   const [leafletFailed, setLeafletFailed] = useState(false);
+  // Tombol "Coba Lagi" memicu ulang effect inisialisasi peta (KNOWN #344).
+  const [leafletRetryKey, setLeafletRetryKey] = useState(0);
   const [hiddenStatuses, setHiddenStatuses] = useState<Set<SpatialStatus>>(new Set());
   const [onlyStaffFilter, setOnlyStaffFilter] = useState(false);
 
@@ -180,6 +182,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
     let createdMap: any = null;
 
     const initMap = async () => {
+      setLeafletFailed(false);
       try {
         await loadLeaflet();
       } catch {
@@ -280,7 +283,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
         delete (mapContainerRef.current as any)._leaflet_id;
       }
     };
-  }, []);
+  }, [leafletRetryKey]);
 
   // Responsivitas kontainer: invalidateSize saat tab/resize berubah (cegah ubin abu-abu)
   useEffect(() => {
@@ -842,8 +845,19 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
           <AlertTriangle className="mx-auto text-warning mb-2" size={28} />
           <p className="text-sm font-semibold text-ink">Peta gagal dimuat</p>
           <p className="text-xs text-ink-2 mt-1">
-            Pustaka peta (CDN) tidak dapat diakses. Periksa koneksi internet lalu coba lagi.
+            Pustaka peta lokal tidak dapat dimuat. Klik “Coba Lagi”; bila tetap gagal, muat ulang halaman.
           </p>
+          <button
+            type="button"
+            onClick={() => {
+              setLeafletFailed(false);
+              setLeafletRetryKey((k) => k + 1);
+            }}
+            className="mt-3 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-accent hover:bg-accent-hover text-on-solid text-xs font-bold cursor-pointer active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+          >
+            <RefreshCw size={13} />
+            <span>Coba Lagi</span>
+          </button>
         </div>
       ) : (
         <div className="bg-surface border border-divider rounded-2xl overflow-hidden shadow-xs relative">

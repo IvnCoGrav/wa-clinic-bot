@@ -3,17 +3,18 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
-## 344. [Peta Pelanggan] Tab Sebaran Peta Gagal Dimuat — CSP Memblokir Leaflet dari unpkg (2026-11-14, OPEN)
+## 344. [Peta Pelanggan] Tab Sebaran Peta Gagal Dimuat — CSP Memblokir Leaflet dari unpkg (2026-11-14, RESOLVED)
 
-- **Status:** OPEN — akar masalah terverifikasi (kode + header CSP live); menunggu keputusan Opsi A/B.
-- **Gejala:** Tab **Sebaran Peta** (`packages/admin-dashboard/src/components/customer/CustomerMapTab.tsx`) menampilkan “Peta gagal dimuat — Pustaka peta (CDN) tidak dapat diakses”, peta & titik pelanggan tidak dirender.
-- **Bukti CSP live:** `curl -I https://app.kalababyspa.online/admin/` → `script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'` (tanpa `unpkg.com`) — sama dengan `src/app.ts:144-156` dan `Caddyfile` (blok header S-011).
-- **Bukti kode:** `packages/admin-dashboard/src/utils/leafletLoader.ts:10-19,73-74` memuat `leaflet.js`, `leaflet.css`, dan `leaflet.markercluster` dari `https://unpkg.com/...`; CSP menolak script/style eksternal → `injectScript`/`waitForCss` gagal → `CustomerMapTab.tsx:184-200` men-set `leafletFailed`.
-- **Masalah sekunder:** kegagalan CDN/AdBlock/ISP juga menyebabkan error yang sama; UI error (`CustomerMapTab.tsx:840-846`) **tidak punya tombol “Coba Lagi”**.
-- **Opsi perbaikan (belum dieksekusi):**
-  - **A. Vendor lokal (disarankan):** simpan `leaflet.js`, `leaflet.css`, `leaflet.markercluster` + LICENSE di `packages/admin-dashboard/public/vendor/leaflet/`, ubah loader ke URL same-origin, hapus ketergantungan unpkg. Tidak menambah dependency npm dan CSP tetap ketat.
-  - **B. Whitelist CSP:** tambah `https://unpkg.com` (dan fallback CDN) ke `script-src`/`style-src` di `src/app.ts` + `Caddyfile`, tambah tombol retry. Tetap bergantung koneksi/CDN luar.
-- **Catatan:** keputusan menyentuh keamanan CSP / aset pihak ketiga sehingga butuh persetujuan eksplisit pengguna.
+- **Status:** RESOLVED (2026-11-14) — pustaka Leaflet + MarkerCluster di-vendor lokal (`public/vendor/leaflet/`), loader memakai URL same-origin, CSP tetap ketat. Tombol **“Coba Lagi”** ditambahkan.
+- **Bukti CSP live sebelum fix:** `curl -I https://app.kalababyspa.online/admin/` → `script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'` (tanpa `unpkg.com`) — sama dengan `src/app.ts:144-156` dan `Caddyfile`.
+- **Akar masalah (terverifikasi):** `packages/admin-dashboard/src/utils/leafletLoader.ts` memuat `leaflet.js`, `leaflet.css`, dan `leaflet.markercluster` dari `https://unpkg.com/...`; CSP menolak script/style eksternal → `injectScript`/`waitForCss` gagal → `CustomerMapTab.tsx` men-set `leafletFailed`.
+- **Perbaikan:**
+  1. Vendor aset di `packages/admin-dashboard/public/vendor/leaflet/`: `leaflet.js` (147 KB), `leaflet.css` (15 KB), `leaflet.markercluster.js` (34 KB), CSS MarkerCluster, gambar marker/layer, serta `LEAFLET-LICENSE.txt` & `MARKERCLUSTER-LICENSE.txt`. Disalin ke `dist/` oleh Vite dan diserve di `/admin/vendor/leaflet/`.
+  2. `leafletLoader.ts`: `resolveLeafletAssetBase()` + `getLeafletAssetUrls()` memakai `import.meta.env.BASE_URL` (same-origin), hapus seluruh URL unpkg; promise di-reset saat gagal agar retry berfungsi.
+  3. `CustomerMapTab.tsx`: state `leafletRetryKey`, effect init memakai dependency itu, dan tombol **“Coba Lagi”** pada panel error (tanpa reload halaman).
+  4. Test: `tests/unit/leaflet-assets.test.ts` (3 kasus — base normalisasi, tidak ada CDN, daftar aset wajib).
+- **Catatan:** tile peta (gambar OSM) tetap memerlukan internet; yang kini mandiri dari CDN hanyalah pustaka petanya.
+- **Tidak menambah dependency npm** (`package.json` tidak berubah).
 
 ## 343. [UI/UX] Pull-to-Refresh Masih Terasa “Clunky” & Belum Sesuai Ekspektasi (2026-11-14, OPEN)
 

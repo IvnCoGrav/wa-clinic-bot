@@ -1,27 +1,53 @@
 /**
  * leafletLoader.ts
- * Lazy-loader CDN untuk Leaflet + MarkerCluster. Dipakai HANYA saat tab peta dibuka,
- * sehingga bundle admin tidak membengkak dan dependency runtime npm tetap nol.
+ * Lazy-loader **lokal** untuk Leaflet + MarkerCluster (vendor di
+ * `public/vendor/leaflet/`, same-origin). Dipakai HANYA saat tab peta dibuka,
+ * sehingga bundle admin tidak membengkak.
  *
- * Catatan: script & css dimuat dari CDN (unpkg). Butuh koneksi internet selain tile peta.
- * Lihat docs/KNOWN_ISSUES.md untuk limitasi & opsi migrasi ke npm.
+ * KNOWN #344: sebelumnya memuat dari unpkg.com dan diblokir CSP
+ * (`script-src 'self'`). Sekarang seluruh aset berasal dari server sendiri agar
+ * kebal CDN down/AdBlock dan CSP tetap ketat.
+ *
+ * Lisensi: Leaflet (BSD-2-Clause) & Leaflet.markercluster (MIT) — file lisensi
+ * disertakan di folder vendor.
  */
 
-const LEAFLET_VER = '1.9.4';
-const MARKERCLUSTER_VER = '1.5.3';
+export interface LeafletAssetUrls {
+  base: string;
+  css: string[];
+  js: string;
+  markerClusterJs: string;
+}
 
-const CDN_ASSETS = {
-  css: [
-    `https://unpkg.com/leaflet@${LEAFLET_VER}/dist/leaflet.css`,
-    `https://unpkg.com/leaflet.markercluster@${MARKERCLUSTER_VER}/dist/MarkerCluster.css`,
-    `https://unpkg.com/leaflet.markercluster@${MARKERCLUSTER_VER}/dist/MarkerCluster.Default.css`,
-  ],
-};
+/** Normalisasi base URL aset (selalu berakhir dengan '/'). */
+export function resolveLeafletAssetBase(baseUrl?: string): string {
+  const raw = String(baseUrl || '/').trim() || '/';
+  const withSlash = raw.endsWith('/') ? raw : `${raw}/`;
+  return `${withSlash}vendor/leaflet/`;
+}
+
+/**
+ * URL aset same-origin. `baseUrl` default mengikuti `import.meta.env.BASE_URL`
+ * (Vite: '/admin/') agar tetap benar saat dashboard diserve di sub-path.
+ */
+export function getLeafletAssetUrls(baseUrl?: string): LeafletAssetUrls {
+  const base = resolveLeafletAssetBase(baseUrl);
+  return {
+    base,
+    css: [
+      `${base}leaflet.css`,
+      `${base}MarkerCluster.css`,
+      `${base}MarkerCluster.Default.css`,
+    ],
+    js: `${base}leaflet.js`,
+    markerClusterJs: `${base}leaflet.markercluster.js`,
+  };
+}
 
 let loadPromise: Promise<void> | null = null;
 
 function waitForCss(href: string): Promise<void> {
-  const id = `leaflet-cdn-css-${href}`;
+  const id = `leaflet-local-css-${href}`;
   const existing = document.getElementById(id) as HTMLLinkElement | null;
   if (existing) {
     if (existing.dataset.loaded === 'true') return Promise.resolve();
@@ -45,7 +71,7 @@ function waitForCss(href: string): Promise<void> {
 }
 
 function injectScript(src: string): Promise<void> {
-  const id = `leaflet-cdn-js-${src}`;
+  const id = `leaflet-local-js-${src}`;
   const existing = document.getElementById(id) as HTMLScriptElement | null;
   if (existing) {
     if (existing.dataset.loaded === 'true') return Promise.resolve();
@@ -70,27 +96,29 @@ function injectScript(src: string): Promise<void> {
   });
 }
 
-const LEAFLET_URL = `https://unpkg.com/leaflet@${LEAFLET_VER}/dist/leaflet.js`;
-const MARKERCLUSTER_URL = `https://unpkg.com/leaflet.markercluster@${MARKERCLUSTER_VER}/dist/leaflet.markercluster.js`;
-
 /**
- * Memuat Leaflet + MarkerCluster dari CDN. Idempotent: pemanggilan berulang
- * mengembalikan promise yang sama sehingga tidak dobel-load.
+ * Memuat Leaflet + MarkerCluster dari aset lokal. Idempotent: pemanggilan
+ * berulang mengembalikan promise yang sama sehingga tidak dobel-load; bila
+ * gagal, promise di-reset agar tombol "Coba Lagi" bisa memuat ulang.
  *
  * MarkerCluster bersifat OPSIONAL: bila plugin gagal dimuat, peta tetap berfungsi
  * dengan fallback LayerGroup (tanpa clustering) alih-alih gagal total.
  */
 export function loadLeaflet(): Promise<void> {
   if (loadPromise) return loadPromise;
+  const assets = getLeafletAssetUrls(
+    typeof import.meta !== 'undefined' ? (import.meta as any)?.env?.BASE_URL : undefined
+  );
+
   loadPromise = (async () => {
-    await Promise.all(CDN_ASSETS.css.map(waitForCss));
-    await injectScript(LEAFLET_URL);
+    await Promise.all(assets.css.map(waitForCss));
+    await injectScript(assets.js);
     const w = window as unknown as { L?: unknown };
     if (!w.L) {
-      throw new Error('Leaflet gagal diinisialisasi dari CDN.');
+      throw new Error('Leaflet gagal diinisialisasi dari aset lokal.');
     }
     try {
-      await injectScript(MARKERCLUSTER_URL);
+      await injectScript(assets.markerClusterJs);
     } catch {
       // Plugin clustering tidak wajib; peta tetap tampil dengan LayerGroup biasa.
       console.warn('[leafletLoader] MarkerCluster gagal dimuat, lanjut tanpa clustering.');

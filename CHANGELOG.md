@@ -4,6 +4,13 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-14 - Fix: Peta Pelanggan Kembali Tampil — Leaflet Di-vendor Lokal (#344)
+
+- **Masalah**: tab Sebaran Peta menampilkan “Peta gagal dimuat — Pustaka peta (CDN) tidak dapat diakses” karena CSP `script-src 'self'` memblokir Leaflet dari `unpkg.com`.
+- **Perbaikan**: aset Leaflet 1.9.4 + MarkerCluster 1.5.3 (JS/CSS/gambar + lisensi) di-vendor di `public/vendor/leaflet/`, loader memakai URL same-origin (`import.meta.env.BASE_URL`), dan panel error mendapat tombol **“Coba Lagi”** yang memuat ulang tanpa refresh halaman.
+- **Verifikasi**: `tests/unit/leaflet-assets.test.ts` (3) hijau; dashboard build menyalin aset ke `dist/vendor/leaflet/`; CSP tidak diubah; `package.json` tidak berubah.
+- **Catatan**: tile peta tetap butuh internet; hanya pustaka peta yang kini mandiri.
+
 #### 2026-11-14 - Feat: Pull-to-Refresh Terkontrol di LiveChat Monitor & Halaman Staf
 
 - **Konteks**: browser native “tarik ke bawah = reload” dimatikan global (`overscroll-behavior: none`), tetapi beberapa perangkat masih bisa memicu reload sporadis di grid kalender. Daripada mengandalkan gestur native, disediakan pull-to-refresh eksplisit di halaman yang membutuhkan data segar.
