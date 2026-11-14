@@ -3,6 +3,18 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 347. [Reservasi / Customer] “Tambah Customer Baru” dari Form Reservasi Belum Tersedia — Tidak Ada Endpoint Create Customer (2026-11-14, OPEN)
+
+- **Status:** OPEN — didefer karena butuh endpoint & form baru, bukan sekadar UI.
+- **Gejala:** Admin yang melayani pasien baru tidak bisa mendaftarkan customer langsung dari modal **Buat Jadwal Reservasi Baru**; harus keluar form, mendaftarkan customer lewat jalur lain (chat WhatsApp), lalu membuka form lagi.
+- **Bukti:** Tidak ada `POST /api/admin/customers` di route admin (hanya `GET` + endpoint operasional per-customer); `CustomerEditForm` membutuhkan `customer.id` yang sudah ada.
+- **Dampak:** Alur pasien baru terputus; risiko draft/form tertinggal; admin harus mengingat data secara manual.
+- **Rekomendasi fondasional:**
+  1. Endpoint `POST /api/admin/customers` tenant-aware dengan validasi unik `(tenant_id, phone)`, audit log, dan normalisasi nomor.
+  2. Form create customer reusable (nama, phone, alamat, anak) dalam drawer/modal; setelah simpan otomatis `handleSelectCustomer`.
+  3. Jangan membuat customer duplikat: cek phone + tampilkan kandidat existing.
+- **Sementara (sudah dieksekusi):** modal menampilkan empty state “Customer tidak ditemukan. Customer baru harus didaftarkan lewat chat WhatsApp terlebih dahulu…” agar admin tidak menebak.
+
 ## 346. [SISTEMIK] Fragmentasi Otoritas Tagihan, Bukti Bayar, dan Hidrasi Form — Satu Akar: Tidak Ada "Kepemilikan Kebenaran" (2026-11-14, PARTIALLY RESOLVED)
 
 - **Status:** PARTIALLY RESOLVED (2026-11-14) — MVP tanpa migrasi dieksekusi. Sisa pekerjaan dicatat di bagian akhir.
