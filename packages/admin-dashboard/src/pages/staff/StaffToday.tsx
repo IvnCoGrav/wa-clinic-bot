@@ -39,7 +39,7 @@ import {
 import { emitBootPhase } from '../../lib/bootProgress';
 import { fireAndForget, mustSucceed } from '../../services/errorPolicy';
 import { APP_VERSION, BUILD_TIME } from '../../config/version';
-import { compressImageFile, compressDataUrl, prepareChatImage, resolveCompressProfile } from '../../utils/imageCompressor';
+import { compressImageFile, compressDataUrl, resolveCompressProfile } from '../../utils/imageCompressor';
 import { stampGpsWatermark } from '../../utils/imageWatermark';
 import { ThemeToggle } from '../../components/common/ThemeToggle';
 import { useTripTelemetry } from '../../hooks/useTripTelemetry';
@@ -79,6 +79,7 @@ import { StaffChatThread } from './StaffChatThread';
 import { useStaffChatScroll } from './useStaffChatScroll';
 import { useStaffMessages } from './useStaffMessages';
 import { useStaffFailedOutbox } from './useStaffFailedOutbox';
+import { useStaffChatSend } from './useStaffChatSend';
 import { filterTasksByQuery, groupTasksByDate } from './staffTaskGrouping';
 import { StaffUpcomingCard } from './StaffUpcomingCard';
 import { StaffCompletedCard } from './StaffCompletedCard';
@@ -137,9 +138,6 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   const [showMenuDrawer, setShowMenuDrawer] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTask, setSelectedTask] = useState<StaffTask | null>(null);
-  const [replyText, setReplyText] = useState('');
-  const [selectedImage, setSelectedImage] = useState<{ file: File; preview: string; dataUrl: string; mimeType: string; fileName: string } | null>(null);
-  const [sending, setSending] = useState(false);
   const [sseConnected, setSseConnected] = useState(false);
   const [isOnline, setIsOnline] = useState<boolean>(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
   const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
@@ -258,17 +256,33 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   } = useStaffMessages({ isSupervisorRef, isNearBottomRef, scrollToBottom });
   const { failedMessages, setFailedMessages, retryingTempId, retryFailedMessage, persistFailedMessages } =
     useStaffFailedOutbox({ setMessages, toast });
+  const {
+    replyText,
+    setReplyText,
+    selectedImage,
+    setSelectedImage,
+    sending,
+    handleReplyTextChange,
+    handlePickImage,
+    handleSendReply,
+  } = useStaffChatSend({
+    selectedTask,
+    staffName: staff?.name,
+    isOnline,
+    setMessages,
+    setErrorMessage,
+    setFailedMessages,
+    persistFailedMessages,
+    replyTextareaRef,
+    chatFileInputRef,
+    chatGalleryInputRef,
+    isNearBottomRef,
+    scrollToBottom,
+    toast,
+  });
 
   selectedTaskRef.current = selectedTask;
   allTasksRef.current = [...tasks, ...upcomingTasks, ...completedTasks];
-
-  const handleReplyTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setReplyText(e.target.value);
-    if (replyTextareaRef.current) {
-      replyTextareaRef.current.style.height = 'auto';
-      replyTextareaRef.current.style.height = `${Math.min(replyTextareaRef.current.scrollHeight, 130)}px`;
-    }
-  };
 
   // Tandai boot progress: halaman portal staff sudah tampil
   useEffect(() => {
@@ -1212,144 +1226,6 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
   // Send reply message
   // Foto kamera dikompres instan saat dipilih (JPEG ~1280px) → tidak pernah kirim Base64 mentah.
-  const handlePickImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      // Fase 2.2: profil 'field' (960px/q0.65) — foto lapangan sinyal 1-bar.
-      const prepared = await prepareChatImage(file, 'field');
-      if (selectedImage?.preview && selectedImage.preview.startsWith('blob:')) {
-        // Pembebasan memori pratinjau; tidak memengaruhi unggahan foto.
-        try { URL.revokeObjectURL(selectedImage.preview); } catch {}
-      }
-      setSelectedImage({
-        file,
-        preview: prepared.preview,
-        dataUrl: prepared.dataUrl,
-        mimeType: prepared.mimeType,
-        fileName: prepared.fileName,
-      });
-      setErrorMessage(null);
-    } catch (err: any) {
-      setErrorMessage(err?.message || 'Gagal memproses foto.');
-    } finally {
-      if (chatFileInputRef.current) chatFileInputRef.current.value = '';
-      if (chatGalleryInputRef.current) chatGalleryInputRef.current.value = '';
-      e.target.value = '';
-    }
-  };
-
-  const handleSendReply = async (e?: React.FormEvent | React.KeyboardEvent | React.SyntheticEvent) => {
-    if (e && typeof e.preventDefault === 'function') {
-      e.preventDefault();
-    }
-    const image = selectedImage;
-    const textToSend = replyText.trim();
-    if ((!textToSend && !image) || !selectedTask?.conversationId || sending) return;
-
-    if (!isOnline) {
-      setErrorMessage('Koneksi internet terputus. Pesan tidak terkirim, coba lagi setelah sinyal kembali.');
-      return;
-    }
-
-    const signature = `~ ${staff?.name || 'Bidan Terapis'}`;
-    const hasText = !!textToSend;
-    const optimisticContent = hasText
-      ? textToSend.endsWith(signature) ? textToSend : `${textToSend}\n\n${signature}`
-      : '[IMAGE]';
-
-    setSending(true);
-    setErrorMessage(null);
-
-    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const conversationId = selectedTask.conversationId;
-    const optimisticMsg: ChatMessage = {
-      id: tempId,
-      direction: 'OUTBOUND',
-      content: optimisticContent,
-      media: image ? { url: image.preview, hdUrl: image.preview } : undefined,
-      sender_type: 'STAFF',
-      sender_name: staff?.name || 'Staff',
-      created_at: new Date().toISOString(),
-      delivery_status: 'sent',
-    };
-
-    setMessages((prev) => [...prev, optimisticMsg].slice(-30));
-    setReplyText('');
-    setSelectedImage(null);
-    if (replyTextareaRef.current) {
-      replyTextareaRef.current.style.height = 'auto';
-    }
-    isNearBottomRef.current = true;
-    scrollToBottom(true);
-
-    try {
-      const body: Record<string, any> = { text: hasText ? textToSend : '', clientTempId: tempId };
-      if (image) {
-        // Fase 2.1: JANGAN kirim thumbB64 == imageB64 (dobel payload ~50%).
-        // Backend membuat blur thumbnail server-side via sharp (media.service.ts).
-        body.imageB64 = image.dataUrl;
-        body.mimeType = image.mimeType;
-        body.fileName = image.fileName;
-      }
-      const res = await apiRequest(`/api/staff/conversations/${conversationId}/reply`, {
-        method: 'POST',
-        body: JSON.stringify(body),
-        timeoutMs: 45000,
-      });
-
-      if (res.success) {
-        const assignedId = res.data?.messageId || res.data?.id;
-        if (assignedId) {
-          setMessages((prev) =>
-            prev.map((m) => (m.id === tempId ? { ...m, id: assignedId } : m))
-          );
-        }
-        // Berhasil → hapus dari antrean gagal (bila ini hasil retry).
-        setFailedMessages((prev) => prev.filter((f) => f.clientTempId !== tempId));
-      } else {
-        const errorMsg = res.error || 'Gagal mengirim pesan balasan.';
-        queueFailedMessage(tempId, conversationId, textToSend, image, errorMsg);
-      }
-    } catch (err: any) {
-      const errorMsg = err.message || 'Gagal mengirim pesan balasan. Harap periksa koneksi WhatsApp.';
-      queueFailedMessage(tempId, conversationId, textToSend, image, errorMsg);
-    } finally {
-      setSending(false);
-    }
-  };
-
-  // Fase 1.2: simpan pesan gagal (bubble `failed` tetap tampil + tombol Coba Kirim Lagi).
-  const queueFailedMessage = (
-    clientTempId: string,
-    conversationId: string,
-    text: string,
-    image: { preview: string; dataUrl: string; mimeType: string; fileName: string } | null,
-    error: string
-  ) => {
-    setErrorMessage(error);
-    toast(error, 'error');
-    setMessages((prev) =>
-      prev.map((m) => (m.id === clientTempId ? { ...m, delivery_status: 'failed' as const } : m))
-    );
-    setFailedMessages((prev) => {
-      const next = [
-        ...prev.filter((f) => f.clientTempId !== clientTempId),
-        {
-          clientTempId,
-          conversationId,
-          text,
-          image: image
-            ? { preview: image.preview, dataUrl: image.dataUrl, mimeType: image.mimeType, fileName: image.fileName }
-            : null,
-          createdAt: new Date().toISOString(),
-          error,
-        },
-      ];
-      persistFailedMessages(next);
-      return next;
-    });
-  };
 
 
   // Quick Action: Send OTW notification using dynamic Super Admin template
