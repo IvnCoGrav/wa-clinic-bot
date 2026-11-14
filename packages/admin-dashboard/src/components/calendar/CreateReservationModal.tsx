@@ -2574,51 +2574,34 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                     );
                   })}
                 </div>
+
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setAddressDrawerMode('add')}
+                    className="min-h-[44px] inline-flex items-center px-2.5 py-1 text-xs font-bold text-accent bg-accent/10 hover:bg-accent/20 active:scale-[0.98] rounded-lg transition-transform focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none cursor-pointer"
+                  >
+                    + Tambah Alamat
+                  </button>
+                  {selectedCard && (
+                    <button
+                      type="button"
+                      onClick={() => setAddressDrawerMode('edit')}
+                      className="min-h-[44px] inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-info bg-info-soft hover:bg-info-line border border-info-line active:scale-[0.98] rounded-lg transition-transform focus-visible:ring-2 focus-visible:ring-info focus-visible:outline-none cursor-pointer"
+                    >
+                      <Pencil size={12} />
+                      <span>Ubah Alamat Kartu</span>
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
-            {/* Alamat jalan fisik & patokan rumah (auto-prefill dari chat/profil) */}
-            {(mode !== 'edit' ? Boolean(selectedCustomerInfo) : true) && (
+            {/* Alamat manual — HANYA jika belum ada kartu terpilih. Kartu terpilih
+                sudah ditampilkan di "Pilih Alamat Rumah" (tidak diulang). */}
+            {!selectedCard && (mode !== 'edit' ? Boolean(selectedCustomerInfo) : true) && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                {selectedCard ? (
-                  <>
-                    {/* Kartu dipilih = sumber kebenaran. TIDAK ada textfield:
-                        admin tidak perlu menambah/mengedit alamat untuk booking biasa. */}
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-ink-3 uppercase tracking-wider block">
-                        Alamat (dari kartu)
-                      </label>
-                      <div className="rounded-xl border border-divider bg-surface-2 px-3 py-2 text-xs text-ink space-y-0.5">
-                        <p className="font-medium">{address || selectedCard.address || 'Alamat belum diisi pada kartu'}</p>
-                        <p className="text-[10px] text-ink-3">
-                          Patokan: {landmark || selectedCard.landmark || '-'}
-                        </p>
-                        <p className="text-[10px] text-ink-3">
-                          {selectedCard.distanceKm != null ? `${selectedCard.distanceKm} km · ` : ''}
-                          Ongkir Rp {Number(ongkir || selectedCard.ongkir || 0).toLocaleString('id-ID')}
-                        </p>
-                      </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-2">
-                        <button type="button" onClick={() => setAddressDrawerMode('add')} className="min-h-[44px] inline-flex items-center px-2.5 py-1 text-xs font-bold text-accent bg-accent/10 hover:bg-accent/20 active:scale-[0.98] rounded-lg transition-transform focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none cursor-pointer">
-                          + Tambah Alamat
-                        </button>
-                        <button type="button" onClick={() => setAddressDrawerMode('edit')} className="min-h-[44px] inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-info bg-info-soft hover:bg-info-line border border-info-line active:scale-[0.98] rounded-lg transition-transform focus-visible:ring-2 focus-visible:ring-info focus-visible:outline-none cursor-pointer">
-                          <Pencil size={12} />
-                          <span>Ubah Alamat Kartu</span>
-                        </button>
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-ink-3 uppercase tracking-wider block">
-                        Patokan (dari kartu)
-                      </label>
-                      <div className="rounded-xl border border-divider bg-surface-2 px-3 py-2 text-xs text-ink-2 min-h-[38px]">
-                        {landmark || selectedCard.landmark || <span className="italic text-ink-3">Belum ada patokan pada kartu</span>}
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <>
+                <>
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-ink-3 uppercase tracking-wider block">
                         Alamat Lengkap (Jalan, RT/RW, No. Rumah)
@@ -2642,11 +2625,13 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                           Kartu alamat tersedia. Pilih kartu di atas untuk memakai alamat resmi, atau lanjutkan dengan alamat yang Anda ketik (konfirmasi saat simpan).
                         </p>
                       )}
-                      <div className="mt-1 flex flex-wrap items-center gap-2">
-                        <button type="button" onClick={() => setAddressDrawerMode('add')} className="min-h-[44px] inline-flex items-center px-2.5 py-1 text-xs font-bold text-accent bg-accent/10 hover:bg-accent/20 active:scale-[0.98] rounded-lg transition-transform focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none cursor-pointer">
-                          + Tambah Alamat
-                        </button>
-                      </div>
+                      {savedAddresses.length === 0 && (
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                          <button type="button" onClick={() => setAddressDrawerMode('add')} className="min-h-[44px] inline-flex items-center px-2.5 py-1 text-xs font-bold text-accent bg-accent/10 hover:bg-accent/20 active:scale-[0.98] rounded-lg transition-transform focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none cursor-pointer">
+                            + Tambah Alamat
+                          </button>
+                        </div>
+                      )}
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-ink-3 uppercase tracking-wider block">
@@ -2668,7 +2653,6 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                       />
                     </div>
                   </>
-                )}
               </div>
             )}
             {/* Active Schedule Warning — anti split-brain duplicate booking */}
@@ -3249,7 +3233,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           {/* Section 3: Waktu, Bidan & Ketersediaan Jadwal Terpadu */}
           <div className="space-y-3 pt-2 border-t border-divider">
             {/* Row 1: Bidan, Tanggal Kunjungan, Status Booking */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {/* 1. Penugasan Bidan / Terapis */}
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
@@ -3288,21 +3272,11 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
               </div>
 
               {/* 2. Tanggal Kunjungan */}
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] font-bold text-ink-3 uppercase tracking-wider block">
-                    Tanggal *
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setShowBookedSlotsModal(true)}
-                    className="text-[11px] text-accent font-bold hover:underline flex items-center space-x-1 cursor-pointer"
-                  >
-                    <Eye size={12} />
-                    <span>Terisi ({bookedReservationsForDate.length})</span>
-                  </button>
-                </div>
-                <div className="flex items-center space-x-1.5">
+              <div className="space-y-1 min-w-0">
+                <label className="text-[11px] font-bold text-ink-3 uppercase tracking-wider block">
+                  Tanggal *
+                </label>
+                <div className="flex items-center gap-1.5 min-w-0">
                   <input
                     type="date"
                     required
@@ -3313,25 +3287,35 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                       setBookingDate(e.target.value);
                       setHasCalculatedRecommendations(false);
                     }}
-                    className="flex-1 p-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs font-semibold"
+                    className="flex-1 min-w-0 p-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs font-semibold"
                   />
-                  {bookingDate && (
-                    <p className="text-[10px] text-ink-3 mt-0.5">
-                      {formatWib(new Date(`${bookingDate}T00:00:00+07:00`), {
-                        weekday: 'long',
-                        day: 'numeric',
-                        month: 'long',
-                        year: 'numeric',
-                      })}
-                    </p>
-                  )}
                   <button
                     type="button"
                     onClick={() => setShowBookedSlotsModal(true)}
-                    className="p-2 bg-accent-soft hover:bg-accent-soft text-accent rounded-xl border border-divider dark:border-accent/30 shadow-xs transition cursor-pointer active:scale-95"
+                    className="p-2 shrink-0 bg-accent-soft hover:bg-accent-soft text-accent rounded-xl border border-divider dark:border-accent/30 shadow-xs transition cursor-pointer active:scale-95"
                     title="Lihat Jadwal Terisi Hari Ini"
                   >
                     <CalendarDays size={16} />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between gap-2 text-[10px] leading-tight">
+                  <span className="text-ink-3 truncate">
+                    {bookingDate
+                      ? formatWib(new Date(`${bookingDate}T00:00:00+07:00`), {
+                          weekday: 'short',
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                        })
+                      : 'Belum dipilih'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowBookedSlotsModal(true)}
+                    className="shrink-0 text-accent font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Eye size={11} />
+                    <span>Terisi ({bookedReservationsForDate.length})</span>
                   </button>
                 </div>
               </div>

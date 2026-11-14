@@ -22,6 +22,7 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
   9. **Multi-anak**: warning jika semua treatment ditujukan ke anak yang sama.
   10. **Duplikat same-day**: pilihan eksplisit **Tambah ke Jadwal Existing** / **Buat Jadwal Terpisah** (force), bukan 409 membingungkan.
   11. **A11y**: aria-label pada field utama & tombol tutup; label lebih pendek.
+  12. **Rapi UI**: card **Pilih Alamat Rumah** menjadi satu-satunya tampilan alamat saat kartu dipilih (blok “Alamat/Patokan dari kartu” yang redundan dihapus; cukup warna terpilih). Baris **Bidan/Tanggal/Status** kini stack penuh di bawah 768px; teks tanggal & tombol “Terisi” dipindah ke baris ringkas agar tidak bertabrakan.
 - **Catatan**: “Tambah Customer Baru” dari modal **belum diimplementasikan** karena belum ada endpoint create customer di backend (didokumentasikan di KNOWN #347).
 - **Verifikasi**: `npm run build` backend & dashboard hijau; full suite **7559 lulus / 4 pre-existing / 28 skipped**; test baru status guard + clamp diskon hijau.
 
