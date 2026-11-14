@@ -3,6 +3,23 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 339. [Reservasi/Alamat] Tombol “Simpan Sebagai Rumah Baru” Tidak Menyimpan Seketika & Berisiko Membuat Kartu Parsial (2026-11-14, OPEN — DATA INTEGRITY)
+
+- **Status:** OPEN — perilaku terkonfirmasi dari kode + inspeksi DB produksi (read-only); perbaikan belum dieksekusi.
+- **Gejala (uji live Bunda Kharisma Tria, 6285190663780):** kartu primary `Rumah Tegalsari — Jl. Wonorejo II 23C`, tetapi kolom Alamat Lengkap berisi `Jalan Girilaya 3/26a, Surabaya`. Menekan tombol “+ Simpan Sebagai Rumah Baru” hanya memunculkan toast *“Alamat baru akan disimpan sebagai rumah baru saat reservasi disimpan.”* — tidak ada kartu baru, tidak ada perubahan visual, dan badge mismatch hilang seolah sudah beres.
+- **Bukti DB (produksi, read-only):** customer `a3c0917d…`, root address `Jl. Wonorejo II 23C`, hanya **1** kartu (`89b91e3e…` Wonorejo), tidak ada reservasi/kartu baru → klik tombol memang **tidak menulis apa pun** (deferred).
+- **Akar masalah:**
+  1. `savedAsNewHouse` (`CreateReservationModal.tsx:257`) hanya flag UI: dipakai untuk mematikan badge (`:300`), **tidak dikirim** ke backend (`:1649`, `:1674` hanya `customerAddressId`).
+  2. Saat submit tanpa `customerAddressId`, route menganggap “rumah baru tanpa ID” → **wilayah dikosongkan** (`reservation-crud.route.ts:1026-1030`, anti wilayah salah), lalu lifecycle memanggil `upsertSavedAddress` dengan teks jalan saja (`reservation-lifecycle.service.ts:90-111`).
+  3. `upsertAddressIntoList` tidak menemukan kartu yang cocok → **membuat kartu kedua** tanpa kelurahan/kecamatan/kota/koordinat/ongkir dan label otomatis (`src/domain/customer-address/list.ts:114-198`).
+- **Risiko:** kartu duplikat “hantu”, jarak & ongkir 0 (invoice salah), wilayah tidak terverifikasi, dan admin mengira alamat sudah tersimpan padahal belum.
+- **Usulan perbaikan (belum dieksekusi):**
+  1. Tombol “Simpan Sebagai Rumah Baru” membuka **AddressBookDrawer mode alamat baru** (field lengkap: kelurahan/kecamatan/kota/pin/ongkir) dan **menyimpan seketika**, lalu otomatis memilih kartu tersebut.
+  2. Bila tetap deferred: kirim flag eksplisit `createNewAddressCard`, wajibkan wilayah terverifikasi sebelum submit, dan tampilkan kartu draf di daftar.
+  3. Terapkan perbaikan prefill kartu-first (#338) agar teks tidak berasal dari alamat stale.
+  4. Tambahkan opsi ketiga pada badge mismatch: **“Pakai alamat kartu”** (revert teks ke kartu), sehingga admin tidak terpaksa memilih “rumah baru”.
+- **Bukti kode:** `CreateReservationModal.tsx:2183-2199, 2289-2316, 1772-1775`; `reservation-crud.route.ts:1009-1031`; `reservation-lifecycle.service.ts:90-111`; `customer-address/list.ts:114-198`.
+
 ## 338. [Reservasi] Badge “Teks alamat berbeda dengan kartu terpilih” Muncul Setiap Modal Dibuka (2026-11-14, OPEN)
 
 - **Status:** OPEN — akar masalah teridentifikasi, perbaikan belum dieksekusi (menunggu keputusan desain).
