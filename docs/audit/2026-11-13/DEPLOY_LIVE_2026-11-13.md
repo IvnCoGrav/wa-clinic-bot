@@ -79,3 +79,15 @@ antrean: shard_0..4 wait=0
 
 - Saat verifikasi, **belum ada pesan inbound baru** setelah perbaikan (WAHA tetap `WORKING`; event `message.any` terakhir yang terlihat adalah echo/outbound). Antrean 0 dan konsumen aktif, sehingga pesan customer berikutnya akan diproses normal.
 - Pantau 24 jam: `/ready`, `llen bull:message_queue_shard_*:wait`, log `[QUEUE]`, `[TURN RECOVERY]`, dan tabel `messages`/`inbound_turns`.
+
+## 7. Rekonsiliasi branch & deploy Phase 5/6 — 2026-11-14
+
+- **Masalah:** source server (`556f9743`) memuat W10–W19 tetapi belum Phase 5/6; image yang berjalan dibangun dari source modular tanpa guard Phase 5/6.
+- **Solusi:** branch `deploy/reconcile-20261113` dari `556f9743`, port Phase 5/6 ke modul `src/domain/customer-address/{list,matching}.ts`, `customer.service.ts`, `staff-reservation.service.ts`, dan cermin FE `addressMatch.ts`. Commit **`dac51c48`** di-merge fast-forward ke `deploy/2026-11-13-merged`.
+- **Phase 5:** anti-downgrade koordinat kartu `gps_pin`; city gate titik ≤150 m; region guard merge teks lintas kecamatan; root region freeze saat pin presisi dipertahankan.
+- **Phase 6:** `buildEffectiveTaskAddress` memakai `isRegionCompatible` sebelum profil boleh menimpa kartu.
+- **Gerbang regresi:** 52 tes target hijau; `npm run build` + dashboard build hijau; full suite **7470 passed / 18 failed** — 18 kegagalan identik pada 10 file yang sudah gagal di HEAD murni (AI model env, CAPI/pixel env, artefak audit path, Google OAuth env, parser LLM, queue flaky), dibuktikan dengan revert-and-rerun.
+- **Deploy:** `bash scripts/deploy-prod.sh` — image app+worker dibangun ulang; hanya `app`+`worker` direcreate; tanpa migrasi/skema baru; konfigurasi WAHA tidak disentuh.
+- **Verifikasi live:** `/health` OK; `/ready` DB `CONNECTED`, WAHA `WORKING`, queue `CONNECTED`; restart app/worker 0; tidak ada error kritis 10 menit; marker `preservePreciseCoords`, `regionOk`, `freezePreservedRegion`, `regionsCompatible` ada di `dist`.
+- **Data pasca-deploy:** 5 customer multi-kartu (Babyspanisa tanpa reservasi + 4 rumah berbeda), 214 baris alamat, 0 FK orphan, 0 anomali primary.
+- **Catatan:** trade-off merge teks lintas kecamatan didokumentasikan sebagai Known Issue **#332** (BY-DESIGN).
