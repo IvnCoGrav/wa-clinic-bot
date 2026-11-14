@@ -8,10 +8,13 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 - **Konteks**: browser native “tarik ke bawah = reload” dimatikan global (`overscroll-behavior: none`), tetapi beberapa perangkat masih bisa memicu reload sporadis di grid kalender. Daripada mengandalkan gestur native, disediakan pull-to-refresh eksplisit di halaman yang membutuhkan data segar.
 - **Perubahan**:
-  1. Hook `usePullToRefresh` + `PullToRefreshIndicator`: swipe-down dengan ambang 72 px, hambatan 0.5, hanya aktif bila kontainer scroll terdekat di paling atas, mengabaikan gestur horizontal, tidak aktif saat modal/body scroll terkunci, dan menghormati `data-ptr-ignore` (lightbox gambar).
-  2. Dipasang **hanya** di `LiveChatMonitor` (muat ulang daftar chat + unread tanpa reload) dan `StaffToday` (juga dipakai `StaffSchedule`): `fetchTasks` ulang tanpa reload.
-  3. Logika murni `pullToRefresh.ts` (resistensi, ambang, label) dikunci `tests/unit/pull-to-refresh.test.ts` (4 kasus).
-- **Catatan**: halaman lain tetap tanpa pull-to-refresh; tombol refresh manual yang sudah ada tidak berubah.
+  1. Hook `usePullToRefresh` + `PullToRefreshIndicator`: swipe-down dengan ambang 64 px, hambatan 0.55, hanya aktif bila kontainer scroll terdekat di paling atas, mengabaikan gestur horizontal, tidak aktif saat modal/body scroll terkunci, dan menghormati `data-ptr-ignore` (lightbox gambar).
+  2. **Indikator hanya ikon** (tanpa teks): ikon reload berputar mengikuti progress → berputar penuh saat siap → spinner saat memuat → **centang hijau singkat** saat selesai.
+  3. **Anti-refresh berulang**: setelah selesai ada fase `done` (±1,1 dtk) + cooldown 2 dtk sebelum gestur berikutnya diterima.
+  4. Animasi diperhalus: transisi transform `240ms cubic-bezier(0.22,1,0.36,1)`, tanpa transisi saat jari masih menempel (`isDragging`), sehingga gerakan tidak “kaku”.
+  5. Dipasang **hanya** di `LiveChatMonitor` dan `StaffToday` (juga `StaffSchedule`).
+  6. Logika murni `pullToRefresh.ts` (resistensi, ambang, progress, cooldown, label a11y) dikunci `tests/unit/pull-to-refresh.test.ts` (6 kasus).
+- **Catatan**: halaman lain tetap tanpa pull-to-refresh; tombol refresh manual tidak berubah.
 
 #### 2026-11-14 - Fix: Peringatan Reservasi Aktif Palsu dari Riwayat `completed` (#342)
 

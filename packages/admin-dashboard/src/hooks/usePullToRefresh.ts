@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  PULL_COOLDOWN_MS,
+  PULL_DONE_MS,
   PULL_THRESHOLD_PX,
   applyPullResistance,
+  canStartPull,
+  pullProgress,
   shouldTriggerRefresh,
+  type PullPhase,
 } from '../utils/pullToRefresh';
 
 export interface UsePullToRefreshOptions {
@@ -13,6 +18,9 @@ export interface UsePullToRefreshOptions {
 
 export interface PullToRefreshState {
   distance: number;
+  progress: number;
+  phase: PullPhase;
+  isDragging: boolean;
   isRefreshing: boolean;
 }
 
@@ -20,11 +28,8 @@ export interface PullToRefreshState {
  * Pull-to-refresh deterministik untuk halaman yang diizinkan (LiveChat Monitor
  * & halaman staf). Bukan reload halaman: memanggil `onRefresh` milik halaman.
  *
- * Aturan:
- * - Hanya aktif di perangkat sentuh (satu jari).
- * - Hanya memicu bila kontainer scroll terdekat berada di paling atas.
- * - Elemen ber-atribut `data-ptr-ignore` (mis. viewer gambar) tidak memicu.
- * - Tidak aktif saat body scroll dikunci (modal/drawer terbuka).
+ * Fase: idle → pulling → armed → refreshing → done (centang singkat) → cooldown.
+ * Cooldown mencegah refresh berulang tanpa sengaja.
  */
 export function usePullToRefresh({
   onRefresh,
@@ -32,11 +37,14 @@ export function usePullToRefresh({
   threshold = PULL_THRESHOLD_PX,
 }: UsePullToRefreshOptions): PullToRefreshState {
   const [distance, setDistance] = useState(0);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [phase, setPhase] = useState<PullPhase>('idle');
+  const [isDragging, setIsDragging] = useState(false);
 
   const refreshRef = useRef(onRefresh);
   refreshRef.current = onRefresh;
-  const refreshingRef = useRef(false);
+  const busyRef = useRef(false);
+  const cooldownUntilRef = useRef(0);
+  const doneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gestureRef = useRef({ startX: 0, startY: 0, canPull: false, distance: 0 });
 
   useEffect(() => {
@@ -58,7 +66,7 @@ export function usePullToRefresh({
       Boolean(document.querySelector('[data-ptr-ignore-active="true"]'));
 
     const handleStart = (e: TouchEvent) => {
-      if (refreshingRef.current || isBlocked() || e.touches.length !== 1) {
+      if (busyRef.current || isBlocked() || e.touches.length !== 1 || !canStartPull(Date.now(), cooldownUntilRef.current)) {
         gestureRef.current.canPull = false;
         return;
       }
@@ -82,6 +90,7 @@ export function usePullToRefresh({
         canPull: true,
         distance: 0,
       };
+      setIsDragging(true);
     };
 
     const handleMove = (e: TouchEvent) => {
@@ -93,40 +102,56 @@ export function usePullToRefresh({
       if (Math.abs(dx) > Math.abs(dy) * 1.2) {
         g.canPull = false;
         g.distance = 0;
+        setIsDragging(false);
         setDistance(0);
+        setPhase('idle');
         return;
       }
       if (dy <= 0) {
         g.distance = 0;
         setDistance(0);
+        setPhase('idle');
         return;
       }
       if (e.cancelable) e.preventDefault();
       const next = applyPullResistance(dy);
       g.distance = next;
       setDistance(next);
+      setPhase(shouldTriggerRefresh(next, threshold) ? 'armed' : 'pulling');
     };
 
     const finish = async () => {
       const g = gestureRef.current;
-      if (!g.canPull) return;
+      if (!g.canPull) {
+        setIsDragging(false);
+        return;
+      }
       g.canPull = false;
-      if (shouldTriggerRefresh(g.distance, threshold) && !refreshingRef.current) {
-        refreshingRef.current = true;
-        setIsRefreshing(true);
-        setDistance(threshold * 0.6);
+      setIsDragging(false);
+
+      if (shouldTriggerRefresh(g.distance, threshold) && !busyRef.current) {
+        busyRef.current = true;
+        setPhase('refreshing');
+        setDistance(threshold * 0.75);
         try {
           await refreshRef.current();
         } catch {
           // Halaman menangani error refresh-nya sendiri.
         } finally {
-          refreshingRef.current = false;
-          setIsRefreshing(false);
+          setPhase('done');
           setDistance(0);
+          cooldownUntilRef.current = Date.now() + PULL_COOLDOWN_MS;
+          if (doneTimerRef.current) clearTimeout(doneTimerRef.current);
+          doneTimerRef.current = setTimeout(() => {
+            setPhase('idle');
+            busyRef.current = false;
+          }, PULL_DONE_MS);
         }
         return;
       }
+
       g.distance = 0;
+      setPhase('idle');
       setDistance(0);
     };
 
@@ -140,8 +165,15 @@ export function usePullToRefresh({
       document.removeEventListener('touchmove', handleMove);
       document.removeEventListener('touchend', finish);
       document.removeEventListener('touchcancel', finish);
+      if (doneTimerRef.current) clearTimeout(doneTimerRef.current);
     };
   }, [enabled, threshold]);
 
-  return { distance, isRefreshing };
+  return {
+    distance,
+    progress: pullProgress(distance, threshold),
+    phase,
+    isDragging,
+    isRefreshing: phase === 'refreshing',
+  };
 }

@@ -785,7 +785,12 @@ export const LiveChatMonitor: React.FC = () => {
 
   return (
     <div data-no-swipe-menu="true" className="h-full flex flex-col min-h-0 space-y-0 lg:space-y-1.5 p-0 lg:p-1.5 lg:pb-0 pt-[env(safe-area-inset-top,0px)]">
-      <PullToRefreshIndicator distance={pullToRefresh.distance} isRefreshing={pullToRefresh.isRefreshing} />
+      <PullToRefreshIndicator
+        distance={pullToRefresh.distance}
+        progress={pullToRefresh.progress}
+        phase={pullToRefresh.phase}
+        isDragging={pullToRefresh.isDragging}
+      />
       {/* Top Header (Desktop only) */}
       <div className="hidden lg:flex justify-between items-center bg-surface border border-divider rounded-xl px-2.5 sm:px-3 py-1 sm:py-1.5 shadow-xs shrink-0">
         <div className="flex items-center space-x-2">

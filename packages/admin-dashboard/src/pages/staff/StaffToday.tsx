@@ -2145,7 +2145,12 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
   return (
     <div className="h-[100dvh] max-h-[100dvh] w-full max-w-full overflow-hidden bg-app text-ink flex flex-col font-sans select-none antialiased">
-      <PullToRefreshIndicator distance={pullToRefresh.distance} isRefreshing={pullToRefresh.isRefreshing} />
+      <PullToRefreshIndicator
+        distance={pullToRefresh.distance}
+        progress={pullToRefresh.progress}
+        phase={pullToRefresh.phase}
+        isDragging={pullToRefresh.isDragging}
+      />
       {/* S-06: consent eksplisit sebelum warm-up GPS latar berjalan. */}
       {hasDepartWindowTask && gpsWarmupConsent === null && (
         <div
