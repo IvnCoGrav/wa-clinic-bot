@@ -12,7 +12,8 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   1. Vendor aset di `packages/admin-dashboard/public/vendor/leaflet/`: `leaflet.js` (147 KB), `leaflet.css` (15 KB), `leaflet.markercluster.js` (34 KB), CSS MarkerCluster, gambar marker/layer, serta `LEAFLET-LICENSE.txt` & `MARKERCLUSTER-LICENSE.txt`. Disalin ke `dist/` oleh Vite dan diserve di `/admin/vendor/leaflet/`.
   2. `leafletLoader.ts`: `resolveLeafletAssetBase()` + `getLeafletAssetUrls()` memakai `import.meta.env.BASE_URL` (same-origin), hapus seluruh URL unpkg; promise di-reset saat gagal agar retry berfungsi.
   3. `CustomerMapTab.tsx`: state `leafletRetryKey`, effect init memakai dependency itu, dan tombol **“Coba Lagi”** pada panel error (tanpa reload halaman).
-  4. Test: `tests/unit/leaflet-assets.test.ts` (3 kasus — base normalisasi, tidak ada CDN, daftar aset wajib).
+  4. `src/routes/admin.route.ts`: cabang statis **`/admin/vendor/*`** (sebelumnya jatuh ke fallback SPA sehingga `leaflet.js` diserve sebagai `text/html`): MIME per ekstensi, cache 24 jam, guard path traversal; handler gambar root dikecualikan untuk path vendor.
+  5. Test: `tests/unit/leaflet-assets.test.ts` (3 kasus) + `tests/integration/admin-vendor-assets.test.ts` (4 kasus: js/css/png 200 + MIME benar, traversal 404).
 - **Catatan:** tile peta (gambar OSM) tetap memerlukan internet; yang kini mandiri dari CDN hanyalah pustaka petanya.
 - **Tidak menambah dependency npm** (`package.json` tidak berubah).
 
