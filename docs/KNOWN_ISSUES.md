@@ -3,6 +3,14 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 329. [Buku Alamat] Kartu Reservasi Tanpa Koordinat Tidak Di-enrich Otomatis oleh Lifecycle (2026-11-13, OPEN — BY DESIGN)
+
+- **Status:** OPEN — konsekuensi sadar Tahap 4. Reservasi yang sudah punya kartu **tidak** boleh menulis profil root, sehingga auto-distance lifecycle dihentikan total untuk reservasi ber-kartu.
+- **Gejala:** Jika kartu reservasi memiliki `lat/lng` NULL (mis. `manual_staff` tanpa pin), lifecycle tidak menghitung jarak/ongkir dan tidak mengisi kartu. Tugas tetap memakai data kartu apa adanya.
+- **Alasan:** Mencegah ghost card, pencemaran profil root, dan relink A-015. Menulis root untuk melengkapi kartu adalah solusi tambal-sulam yang sudah terbukti menyebabkan insiden Bunda Intan.
+- **Rencana fondasional (belum dieksekusi):** buat seam pengayaan **kartu-only** — hitung `deliveryService.calculateDelivery` dari koordinat kartu (atau geocode teks kartu), lalu update `customer_addresses` + cache JSON kartu; DILARANG menyentuh `customers.*`. Kunci dengan test “kartu ber-kartu tanpa koordinat tidak menulis root”.
+- **Bukti:** `tests/unit/reservation-lifecycle-address-guard.test.ts` (3 test) membuktikan reservasi ber-kartu — termasuk kartu tanpa koordinat — tidak memanggil `updateCustomerLocation`/`upsertSavedAddress` dan tidak menjalankan auto-distance root.
+
 ## 328. [Buku Alamat/Staf] Kartu Tugas PWA Tidak Membaca Snapshot `delivery_fee` Reservasi (2026-11-13, OPEN)
 
 - **Status:** OPEN — ditemukan saat verifikasi hotfix Bunda Intan; bukan akibat hotfix.
