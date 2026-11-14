@@ -51,6 +51,11 @@ import { formatWib, formatWibClock, getWibDateKey, getTodayWibDateKey, getTodayW
 import { resolveStreetAddress } from '../../utils/reservationAddress';
 import { parseSavedAddresses, resolveActiveAddress, buildAddressKey } from '../../utils/addressMatch';
 import { resolveReservationAddress } from '../../utils/reservationAddressSelection';
+import {
+  mapChildrenToBabyInputs,
+  isChildSelected,
+  toggleChildSelection,
+} from '../../utils/reservationChildPrefill';
 import { resolveStaffName } from '../../utils/resolveStaffName';
 import { AddressBookDrawer } from '../customer/AddressBookDrawer';
 import { recommendSlots } from '../../utils/slotRecommendations';
@@ -266,6 +271,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   const [authoritativeAddresses, setAuthoritativeAddresses] = useState<any[] | null>(null);
   // Anti fetch berulang saat `selectedCustomerInfo` berganti identitas objek.
   const addressFetchRef = useRef<string | null>(null);
+  // Hydrasi detail customer (children + current_age) sekali per customer.
+  const customerDetailFetchRef = useRef<string | null>(null);
 
   const savedAddresses: any[] = useMemo(() => {
     const fromProps: any[] = !selectedCustomerInfo
@@ -287,6 +294,12 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
   const addressFormLocked = savedAddresses.length > 0;
 
+  // Data anak tersimpan di profil customer (reusable, KNOWN #340).
+  const savedChildren = useMemo<any[]>(() => {
+    const list = (selectedCustomerInfo as any)?.children;
+    return Array.isArray(list) ? list : [];
+  }, [selectedCustomerInfo]);
+
   // Ganti customer → buang daftar kartu milik customer sebelumnya (anti salah-orang).
   useEffect(() => {
     setAuthoritativeAddresses(null);
@@ -297,9 +310,36 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   useEffect(() => {
     if (!isOpen) {
       addressFetchRef.current = null;
+      customerDetailFetchRef.current = null;
       setAuthoritativeAddresses(null);
     }
   }, [isOpen]);
+
+  // KNOWN #340: daftar customer dari pencarian tidak membawa `children`.
+  // Ambil detail sekali per customer agar data anak tersimpan bisa dipakai ulang.
+  useEffect(() => {
+    if (!isOpen || !customerId) return;
+    if (customerDetailFetchRef.current === customerId) return;
+    customerDetailFetchRef.current = customerId;
+    let cancelled = false;
+    apiRequest<{ success: boolean; data: any }>(`/api/admin/customers/${customerId}`)
+      .then((res: any) => {
+        if (cancelled) return;
+        const data = res?.data || res;
+        if (!data?.id) return;
+        setSelectedCustomerInfo((prev: any) => ({ ...(prev || {}), ...data }));
+        const mapped = mapChildrenToBabyInputs(data.children);
+        if (mapped.length > 0) {
+          setBabies((prev) => (prev.length > 0 ? prev : mapped));
+        }
+      })
+      .catch(() => {
+        // DB/endpoint detail gagal: form tetap jalan dengan input manual.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, customerId]);
 
   // Hidrasi kanonik buku alamat: bila payload customer tidak membawa kartu,
   // ambil langsung dari endpoint buku alamat (single source of truth).
@@ -2268,13 +2308,15 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                     }`}
                   />
                   <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setAddressDrawerMode('add')}
-                      className="min-h-[44px] inline-flex items-center px-2.5 py-1 text-xs font-bold text-accent bg-accent/10 hover:bg-accent/20 active:scale-[0.98] rounded-lg transition-transform focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none cursor-pointer"
-                    >
-                      + Tambah Alamat
-                    </button>
+                    {!addressFormLocked && (
+                      <button
+                        type="button"
+                        onClick={() => setAddressDrawerMode('add')}
+                        className="min-h-[44px] inline-flex items-center px-2.5 py-1 text-xs font-bold text-accent bg-accent/10 hover:bg-accent/20 active:scale-[0.98] rounded-lg transition-transform focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none cursor-pointer"
+                      >
+                        + Tambah Alamat
+                      </button>
+                    )}
                     {selectedCard && (
                       <button
                         type="button"
@@ -2372,9 +2414,41 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 </button>
               </div>
 
+              {/* Anak tersimpan di profil customer — klik untuk pakai/lepas */}
+              {savedChildren.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider">
+                    Anak tersimpan (klik untuk pakai)
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {savedChildren.map((child: any) => {
+                      const selected = isChildSelected(babies, child);
+                      const ageLabel = child.current_age || child.raw_age_text || '';
+                      return (
+                        <button
+                          key={child.id || child.name}
+                          type="button"
+                          onClick={() => setBabies((prev) => toggleChildSelection(prev, child))}
+                          className={`min-h-[38px] px-2.5 py-1 rounded-lg border text-[11px] transition cursor-pointer active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none ${
+                            selected
+                              ? 'bg-accent-soft border-accent text-accent font-bold'
+                              : 'bg-surface border-divider text-ink-2 hover:bg-fill-1'
+                          }`}
+                        >
+                          <span>{child.name}</span>
+                          {ageLabel && <span className="ml-1 text-[10px] font-normal text-ink-3">{ageLabel}</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {babies.length === 0 ? (
                 <p className="text-[11px] text-ink-3 italic">
-                  Belum ada data anak yang diisi (opsional jika perawatan khusus Bunda).
+                  {savedChildren.length > 0
+                    ? 'Pilih anak di atas, atau klik “+ Tambah Anak” untuk anak baru.'
+                    : 'Belum ada data anak yang diisi (opsional jika perawatan khusus Bunda).'}
                 </p>
               ) : (
                 <div className="space-y-2">

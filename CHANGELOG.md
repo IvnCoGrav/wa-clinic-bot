@@ -4,6 +4,16 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-14 - Fix: Prefill Data Anak dari Profil Customer & Dedupe Tombol Alamat (#340)
+
+- **Masalah**: form reservasi selalu meminta isi ulang nama/usia anak setiap booking; tombol “+ Tambah Alamat” muncul dua kali (header kartu + bawah kolom alamat).
+- **Akar masalah**: `handleSelectCustomer` hanya membaca `c.children`, sedangkan endpoint daftar customer tidak meng-include `children` (hanya detail `GET /customers/:id`). Data anak sebenarnya sudah reusable di tabel `children` (`customer_id + name_norm`).
+- **Perubahan**:
+  1. Hidrasi detail customer sekali per customer di modal → merge `selectedCustomerInfo` + isi `babies` dari `children` (`current_age`).
+  2. Chip **“Anak tersimpan (klik untuk pakai)”** — klik menambah/melepas anak (util `reservationChildPrefill`), tetap ada “+ Tambah Anak” untuk anak baru.
+  3. Tombol “+ Tambah Alamat” duplikat dihapus (header saat kartu ada; tombol field saat belum ada kartu).
+- **Verifikasi**: `tests/unit/reservation-child-prefill.test.ts` (5) + suite alamat/riwayat (25) hijau; dashboard `tsc`/build/`check:design` hijau.
+
 #### 2026-11-14 - Fix: Alur Alamat Reservasi Kartu-First & Riwayat Live Chat Informatif (#337/#338/#339)
 
 - **Masalah**: (1) Form reservasi mengisi kolom alamat dari teks chat/profil root sementara kartu primary terpilih otomatis → badge “teks alamat berbeda” selalu muncul; (2) tombol “Simpan Sebagai Rumah Baru” hanya flag tertunda sehingga tidak menyimpan apa pun, dan bila reservasi disimpan bisa membuat kartu alamat parsial (tanpa wilayah/ongkir); (3) riwayat reservasi di modal Live Chat menampilkan “Layanan” generik tanpa jam karena membaca field yang tidak ada (`treatment_name`, `booking_time`).

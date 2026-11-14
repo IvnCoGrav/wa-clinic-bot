@@ -3,9 +3,9 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
-## 340. [Reservasi] Data Anak Diminta Ulang di Setiap Booking — Prefill Anak Tidak Jalan (2026-11-14, OPEN)
+## 340. [Reservasi] Data Anak Diminta Ulang di Setiap Booking — Prefill Anak Tidak Jalan (2026-11-14, RESOLVED)
 
-- **Status:** OPEN — akar masalah teridentifikasi, perbaikan belum dieksekusi.
+- **Status:** RESOLVED (2026-11-14) — form menghidrasi detail customer sekali per customer dan menampilkan anak tersimpan sebagai kartu pilih; tombol “+ Tambah Alamat” yang duplikat dihapus.
 - **Gejala:** Setiap membuka form reservasi untuk layanan bayi/anak, bagian “Data Pasien Anak / Bayi” kosong dan staf harus mengetik ulang nama + usia, padahal data anak sudah tersimpan di profil customer.
 - **Akar masalah:** `handleSelectCustomer` (`CreateReservationModal.tsx:1148-1157`) hanya mengisi `babies` bila objek hasil pencarian membawa `c.children`. Endpoint daftar `GET /api/admin/customers` → `customerService.listCustomersWithLtvAndAdClick` (`src/services/customer.service.ts:2424-2435`) hanya meng-include `adClick` + `reservations`, **tidak** `children`. Akibatnya prefill tidak pernah berjalan di mode buat baru; hanya mode edit/detail yang memuat `children`.
 - **Catatan skema:** data anak **sudah** per-customer dan reusable (`children` + `upsertChildrenFromBabies` dengan kunci `customer_id + name_norm`, `src/services/child.service.ts:45-71`). Jadi masalahnya bukan skema, melainkan payload pencarian + UI yang tidak menampilkan anak tersimpan.
@@ -15,6 +15,11 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   2. Tampilkan anak tersimpan sebagai **kartu pilih** (mirip kartu alamat): klik untuk memakai, “+ Tambah Anak” untuk anak baru. Usia dihitung real-time dari `birth_date`.
   3. Sembunyikan section untuk kategori MOMS (sudah) dan jangan wajibkan anak bila layanan bukan BABY/KIDS.
   4. Bila multi-anak: pertahankan pemetaan treatment → anak.
+- **Perbaikan yang diterapkan (2026-11-14):**
+  1. Effect hidrasi detail (`GET /api/admin/customers/:id`) sekali per customer → merge `selectedCustomerInfo` + isi `babies` dari `children` (`current_age`).
+  2. Chip **“Anak tersimpan (klik untuk pakai)”** di section data anak; klik menambah/melepas anak (util `reservationChildPrefill.ts`).
+  3. Tombol “+ Tambah Alamat” duplikat dihapus: saat kartu ada hanya header yang menampilkan, saat belum ada kartu tombol di bawah field.
+  4. Test: `tests/unit/reservation-child-prefill.test.ts` (5 kasus).
 - **Bukti kode:** `CreateReservationModal.tsx:1142-1161, 2357-2380`; `customer.service.ts:2424-2435`; `customers.subroute.ts:194-201`; `child.service.ts:17-76`.
 
 ## 339. [Reservasi/Alamat] Tombol “Simpan Sebagai Rumah Baru” Tidak Menyimpan Seketika & Berisiko Membuat Kartu Parsial (2026-11-14, RESOLVED)
