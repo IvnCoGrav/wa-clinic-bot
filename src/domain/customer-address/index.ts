@@ -4,5 +4,6 @@
  */
 export * from './types';
 export * from './matching';
+export * from './identity';
 export * from './list';
 export * from './tombstones';

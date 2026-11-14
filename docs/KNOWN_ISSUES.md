@@ -3,6 +3,29 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 348. [Alamat] Kartu Alamat Ganda dari Teks Chat Ber-URL & Identitas Rumah Berbasis Teks (2026-11-14, RESOLVED)
+
+- **Status:** RESOLVED (2026-11-14) — gerbang deterministik di domain + jalur enrichment; data insiden sudah dibersihkan.
+- **Gejala:** Pelanggan `6285852555576` punya 2 kartu alamat untuk rumah yang sama: `Rumah waru` (berkoordinat) dan `Rumah waru 2` (tanpa koordinat, teksnya berisi URL `maps.app.goo.gl`). Reservasi aktif tetap memakai kartu pertama sehingga tidak salah ongkir, tetapi kartu kedua tampil di Buku Alamat dan bisa dipilih admin.
+- **Akar masalah (5 Whys):**
+  1. Link Maps pada pesan 14 Nov 18:42 tidak menghasilkan koordinat (URL mengarah ke halaman *place*, bukan URL berkoordinat; geocode teks tempat tidak presisi) dan kegagalannya **ditelan `catch {}`**.
+  2. Alur fallback menulis **teks pesan mentah** (termasuk URL) sebagai `address` kartu baru (`attachSpecificAddressText`).
+  3. Dedup hanya membandingkan **kartu aktif/primary** dan menuntut teks alamat **identik persis** (`addressesMatch`), sehingga variasi penulisan dianggap rumah kedua.
+  4. Kartu baru dibuat tanpa koordinat/ongkir — tidak bisa dipakai hitung ongkir/invoice.
+- **Perbaikan:**
+  1. `src/domain/customer-address/identity.ts` — `stripUrlsFromAddress`, `streetIdentity`, `houseIdentityMatch`: URL dibuang, token generik (jl/gg/no/rt/rw/perum/…) dinormalisasi, keterangan non-angka dalam kurung diabaikan, dan nomor rumah eksplisit harus sama. **Tidak memakai aturan subset token** agar "Tropodo 1" vs "Tropodo 2" tidak tergabung.
+  2. `matching.ts` — `addressesMatch` memakai identitas jalan/nomor sebagai gerbang terakhir, tetap menghormati pagar kecamatan/kelurahan/kota.
+  3. `human-background-enrichment.service.ts` — `attachSpecificAddressText` membersihkan URL lebih dulu, membandingkan ke **semua kartu**, memperbarui kartu yang cocok (teks lama yang lebih kaya dipertahankan), menolak menulis kartu untuk pesan yang hanya berisi link, dan hanya membuat kartu baru bila ada **bukti rumah** (`hasHouseEvidence`: angka/nomor atau penanda blok/perumahan) sehingga obrolan biasa tidak melahirkan alamat.
+  4. Observability: kegagalan resolve URL Maps sekarang dicatat (`[HUMAN ENRICH] Google Maps URL tidak ter-resolve …`) dan kartu baru tanpa koordinat dicatat sebagai butuh verifikasi staf.
+- **Data cleanup produksi (2026-11-14):** kartu `25ac5f04…` dihapus (0 referensi reservasi/series) dan entri `preferences.saved_addresses` dibersihkan; teks URL pada kartu `9d8fdd84…` (`6281330708293`) dinormalisasi menjadi `Jl. Mbah Oteh 79`. Backup: tabel `_backup_address_cleanup_20261114` (2 customer + 2 kartu).
+- **Verifikasi:** `tests/unit/address-house-identity.test.ts` (10) + `tests/unit/human-background-enrichment-address-identity.test.ts` (5); 21 suite alamat hijau; `npm run build` hijau; full suite 7574 lulus / 4 gagal **pre-existing** (2 artefak audit path mesin lain, 2 hybrid parser #287 — dibuktikan revert-and-rerun).
+- **Sisa (belum dieksekusi, butuh keputusan klinik):**
+  1. `6281216792297` — reservasi `ccd9888c…` (selesai, `delivery_fee=20000`) tertaut ke kartu `f5d558bf…` yang teksnya `Jl. Jojoran…` padahal `raw_text` reservasi berisi `Jl. Perumahan MTB blok C no.13 B`; ada juga kartu terverifikasi `Rumah Gubeng` dengan teks Jojoran. Perlu konfirmasi rumah mana yang benar sebelum merge (jangan rewrite riwayat keuangan).
+  2. `62895339397003` — dua kartu teks sama (`High point Apartemen Siwalankerto`) dengan koordinat berbeda (10000 vs 0 ongkir); perlu verifikasi lapangan.
+  3. 55 kartu lama ber-`address` kosong (label wilayah saja) — data gap lama, bukan duplikat; perlu program pengayaan terpisah.
+  4. `GOOGLE_MAPS_API_KEY` produksi ditolak Google (`REQUEST_DENIED`); geocoding teks kini local-first sehingga tidak memblokir kasus ini, tetapi fallback Distance Matrix tidak berfungsi (jarak jatuh ke Haversine bila ORS down).
+
+
 ## 347. [Reservasi / Customer] “Tambah Customer Baru” dari Form Reservasi Belum Tersedia — Tidak Ada Endpoint Create Customer (2026-11-14, OPEN)
 
 - **Status:** OPEN — didefer karena butuh endpoint & form baru, bukan sekadar UI.

@@ -4,6 +4,18 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-14 - Fix: Kartu Alamat Ganda dari Teks Chat Ber-Link (Regresi 6285852555576)
+
+- **Masalah:** Pelanggan `6285852555576` memiliki 2 kartu alamat untuk rumah yang sama. Kartu kedua lahir otomatis dari pesan berisi `maps.app.goo.gl` + teks alamat, tanpa koordinat/ongkir, dengan URL tersimpan sebagai teks alamat.
+- **Akar masalah:** Link Maps gagal di-resolve menjadi koordinat (URL *place* + geocode teks tidak presisi) dan kegagalannya ditelan `catch {}`; fallback menulis teks mentah; dedup hanya membandingkan kartu primary dengan kesamaan teks **identik persis**.
+- **Perbaikan (fondasional):**
+  1. Domain baru `customer-address/identity.ts`: `stripUrlsFromAddress` (URL tidak pernah masuk kolom alamat), `streetIdentity` + `houseIdentityMatch` (normalisasi prefix `jl/gg/no/…`, buang keterangan non-angka dalam kurung, nomor rumah eksplisit wajib sama; tanpa aturan subset agar rumah beda nomor tidak tergabung).
+  2. `addressesMatch` memakai identitas jalan/nomor sebagai gerbang terakhir, tetap menghormati pagar kecamatan/kelurahan/kota.
+  3. `attachSpecificAddressText` membandingkan ke **seluruh kartu** (bukan primary saja), memperbarui kartu yang cocok tanpa menurunkan detail lama, menolak menulis untuk pesan yang hanya berisi link, dan **hanya melahirkan kartu baru bila ada bukti rumah** (angka/nomor atau penanda blok/perumahan) — obrolan biasa tidak lagi menjadi alamat.
+  4. Observability: kegagalan resolve URL Maps kini di-log (tidak lagi senyap).
+- **Data cleanup produksi:** kartu duplikat `25ac5f04…` dihapus (0 referensi) + entri `preferences.saved_addresses` dibersihkan; URL pada kartu `9d8fdd84…` dinormalisasi. Backup di `_backup_address_cleanup_20261114`.
+- **Verifikasi:** 15 test baru hijau; 21 suite alamat hijau; `npm run build` hijau; full suite **7574 lulus / 4 gagal pre-existing** (2 artefak audit path mesin lain, 2 hybrid parser #287) — dibuktikan dengan revert-and-rerun. Sisa data (6281216792297, 62895339397003, 55 kartu alamat kosong) dicatat di `docs/KNOWN_ISSUES.md #348`.
+
 #### 2026-11-14 - Fix: Form Reservasi — Alamat Display-Only, Bidan/Status Jujur, Validasi & Anti-Friksi
 
 - **Permintaan admin**:
