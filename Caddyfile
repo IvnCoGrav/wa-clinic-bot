@@ -4,7 +4,7 @@
     }
 }
 
-{$APP_DOMAIN} {
+{$APP_DOMAIN:app.kalababyspa.online} {
     encode gzip zstd
 
     header {
@@ -80,4 +80,27 @@
 {$ROUTER_DOMAIN:router.kalababyspa.online} {
     encode gzip zstd
     reverse_proxy hermes-9router:20128
+}
+
+admin.kalababyspa.com {
+    encode gzip zstd
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        X-XSS-Protection "1; mode=block"
+        -Server
+    }
+
+    # CMS Payload (container kala-cms-app) berbagi network wa-clinic-bot_default.
+    reverse_proxy kala-cms-app:3000 {
+        lb_try_duration 30s
+        lb_try_interval 2s
+        transport http {
+            keepalive 60s
+            keepalive_idle_conns 100
+        }
+    }
 }
