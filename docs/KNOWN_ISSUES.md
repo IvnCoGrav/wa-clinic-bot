@@ -57,6 +57,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 ## 338. [Reservasi] Badge “Teks alamat berbeda dengan kartu terpilih” Muncul Setiap Modal Dibuka (2026-11-14, RESOLVED)
 
 - **Status:** RESOLVED (2026-11-14) — alamat kini **kartu-first**: satu effect menyelaraskan kartu terpilih + alamat/landmark/ongkir, badge & gate mismatch dihapus, pilihan kartu di-reset saat customer berganti.
+- **Susulan (2026-11-14):** input alamat/landmark `readOnly` diganti **kotak display** (bukan input) saat kartu tersedia — menghilangkan caret berkedip yang tidak bisa diketik; klik kotak membuka “Ubah Alamat Kartu”. Tombol “+ Tambah Alamat” hanya satu (di bawah field).
 - **Gejala:** Setiap membuka “Buat Jadwal Reservasi Baru”, kolom **Alamat Lengkap** terisi alamat profil root (mis. `Jalan Giriłaya 3/26a, Surabaya`) sementara kartu yang otomatis terpilih adalah kartu primary (`Rumah Taman — Jl. Puyuh no. 24, Sepanjang`). Akibatnya badge kuning “Teks alamat berbeda dengan kartu terpilih” **selalu** tampil, dan tombol simpan diblokir sampai admin memilih “Simpan Sebagai Rumah Baru”/“Perbarui Kartu Ini”.
 - **Akar masalah (dua sumber kebenaran):**
   1. Prefill alamat (`CreateReservationModal.tsx:348-371`) memprioritaskan `initialAddress` (ekstraksi chat) → `preferences.address` (profil root) → `raw_text`, **tidak pernah** memakai alamat kartu pada mode create.

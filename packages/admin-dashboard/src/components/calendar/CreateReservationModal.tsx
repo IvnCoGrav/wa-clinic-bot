@@ -2260,15 +2260,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                   <div className="flex items-center space-x-2">
                     <span className="text-xs font-bold text-ink flex items-center space-x-1">
                       <Home size={13} className="text-accent" />
-                      <span>Pilih Alamat Rumah ({savedAddresses.length}/10 tersimpan):</span>
+                      <span>Pilih Alamat Rumah ({savedAddresses.length}/10 tersimpan)</span>
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => setAddressDrawerMode('add')}
-                      className="text-[11px] font-semibold text-accent hover:underline cursor-pointer"
-                    >
-                      + Tambah Alamat
-                    </button>
                   </div>
                   {savedAddresses.length >= 10 && (
                     <span className="text-[11px] font-semibold text-amber-700 dark:text-warning bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded px-1.5 py-0.5">
@@ -2335,28 +2328,35 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                   <label className="text-[10px] font-bold text-ink-3 uppercase tracking-wider block">
                     Alamat Lengkap (Jalan, RT/RW, No. Rumah)
                   </label>
-                  <input
-                    type="text"
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    readOnly={addressFormLocked}
-                    placeholder="cth: Jl. Kedungklinter 1 No. 80"
-                    autoComplete="off"
-                    spellCheck="false"
-                    className={`w-full px-3 py-2 border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs font-medium ${
-                      addressFormLocked ? 'bg-surface-2 cursor-not-allowed' : 'bg-surface'
-                    }`}
-                  />
+                  {addressFormLocked ? (
+                    <button
+                      type="button"
+                      onClick={() => setAddressDrawerMode(selectedCard ? 'edit' : 'add')}
+                      title="Alamat mengikuti kartu. Klik untuk mengubah kartu."
+                      className="w-full text-left px-3 py-2 bg-surface-2 border border-divider rounded-xl text-xs text-ink-2 hover:border-accent/50 transition cursor-pointer focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+                    >
+                      <span className="block truncate">{address || 'Belum ada alamat pada kartu'}</span>
+                      <span className="block text-[10px] text-ink-3 mt-0.5">Mengikuti kartu alamat — klik untuk ubah</span>
+                    </button>
+                  ) : (
+                    <input
+                      type="text"
+                      value={address}
+                      onChange={(e) => setAddress(e.target.value)}
+                      placeholder="cth: Jl. Kedungklinter 1 No. 80"
+                      autoComplete="off"
+                      spellCheck="false"
+                      className="w-full px-3 py-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs font-medium"
+                    />
+                  )}
                   <div className="mt-1 flex flex-wrap items-center gap-2">
-                    {!addressFormLocked && (
-                      <button
-                        type="button"
-                        onClick={() => setAddressDrawerMode('add')}
-                        className="min-h-[44px] inline-flex items-center px-2.5 py-1 text-xs font-bold text-accent bg-accent/10 hover:bg-accent/20 active:scale-[0.98] rounded-lg transition-transform focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none cursor-pointer"
-                      >
-                        + Tambah Alamat
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => setAddressDrawerMode('add')}
+                      className="min-h-[44px] inline-flex items-center px-2.5 py-1 text-xs font-bold text-accent bg-accent/10 hover:bg-accent/20 active:scale-[0.98] rounded-lg transition-transform focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none cursor-pointer"
+                    >
+                      + Tambah Alamat
+                    </button>
                     {selectedCard && (
                       <button
                         type="button"
@@ -2373,18 +2373,26 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                   <label className="text-[10px] font-bold text-ink-3 uppercase tracking-wider block">
                     Patokan / Landmark
                   </label>
-                  <input
-                    type="text"
-                    value={landmark}
-                    onChange={(e) => setLandmark(e.target.value)}
-                    readOnly={addressFormLocked}
-                    placeholder="cth: Rolling door putih, yg jual kusen"
-                    autoComplete="off"
-                    spellCheck="false"
-                    className={`w-full px-3 py-2 border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs font-medium ${
-                      addressFormLocked ? 'bg-surface-2 cursor-not-allowed' : 'bg-surface'
-                    }`}
-                  />
+                  {addressFormLocked ? (
+                    <div
+                      className="w-full px-3 py-2 bg-surface-2 border border-divider rounded-xl text-xs min-h-[38px]"
+                      title="Patokan mengikuti kartu alamat"
+                    >
+                      <span className={`block truncate ${landmark ? 'text-ink-2' : 'text-ink-3 italic'}`}>
+                        {landmark || 'Belum ada patokan pada kartu'}
+                      </span>
+                    </div>
+                  ) : (
+                    <input
+                      type="text"
+                      value={landmark}
+                      onChange={(e) => setLandmark(e.target.value)}
+                      placeholder="cth: Rolling door putih, yg jual kusen"
+                      autoComplete="off"
+                      spellCheck="false"
+                      className="w-full px-3 py-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs font-medium"
+                    />
+                  )}
                 </div>
               </div>
             )}
