@@ -49,7 +49,8 @@ import { StaffScheduleTimelineStrip } from './StaffScheduleTimelineStrip';
 import { matchCatalogService } from '../../utils/treatmentStringParser';
 import { formatWib, formatWibClock, getWibDateKey, getTodayWibDateKey, getTodayWibDate, getWibHoursAndMinutes, buildWibIso } from '../../utils/dateWib';
 import { resolveStreetAddress } from '../../utils/reservationAddress';
-import { addressesMatch as addressesMatchMirror, parseSavedAddresses, resolveActiveAddress, buildAddressKey } from '../../utils/addressMatch';
+import { parseSavedAddresses, resolveActiveAddress, buildAddressKey } from '../../utils/addressMatch';
+import { resolveReservationAddress } from '../../utils/reservationAddressSelection';
 import { resolveStaffName } from '../../utils/resolveStaffName';
 import { AddressBookDrawer } from '../customer/AddressBookDrawer';
 import { recommendSlots } from '../../utils/slotRecommendations';
@@ -253,10 +254,10 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   const [address, setAddress] = useState(initialAddress || '');
   const [landmark, setLandmark] = useState(initialLandmark || '');
   const [customerAddressId, setCustomerAddressId] = useState<string | null>(initialReservation?.customer_address_id || null);
-  // R3 — Status "akan disimpan sebagai rumah baru" (chip persisten, bukan toast sekali-lewat).
-  const [savedAsNewHouse, setSavedAsNewHouse] = useState(false);
-  const [correctingCardId, setCorrectingCardId] = useState<string | null>(null);
-  const [showAddressDrawer, setShowAddressDrawer] = useState(false);
+  // Kartu alamat = sumber kebenaran. Drawer dipakai untuk tambah/ubah kartu (seketika).
+  const [addressDrawerMode, setAddressDrawerMode] = useState<'add' | 'edit' | null>(null);
+  const customerAddressIdRef = useRef<string | null>(initialReservation?.customer_address_id || null);
+  useEffect(() => { customerAddressIdRef.current = customerAddressId; }, [customerAddressId]);
 
   // Kanonik fallback: sebagian payload reservasi (list/LiveChat) hanya membawa
   // customer ramping TANPA `preferences.saved_addresses`. Tanpa hidrasi eksplisit,
@@ -278,26 +279,13 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     return Array.isArray(authoritativeAddresses) ? authoritativeAddresses : [];
   }, [selectedCustomerInfo, authoritativeAddresses]);
 
-  // Silang-cek mismatch dan selectedCard dipromosikan ke useMemo (Micro-Task 4.2)
+  // Kartu alamat terpilih (sumber kebenaran alamat jadwal)
   const selectedCard = useMemo(
     () => savedAddresses.find((a: any) => a.id === customerAddressId),
     [savedAddresses, customerAddressId]
   );
 
-  const mismatchComputed = useMemo(() => {
-    if (!selectedCard || !address.trim()) return false;
-    const region = {
-      kelurahan: selectedCard.kelurahan,
-      kecamatan: selectedCard.kecamatan,
-      kota: selectedCard.kota,
-    };
-    return !addressesMatchMirror(
-      { ...region, address: selectedCard.address },
-      { ...region, address }
-    );
-  }, [selectedCard, address]);
-
-  const mismatchActive = mismatchComputed && !savedAsNewHouse && !correctingCardId;
+  const addressFormLocked = savedAddresses.length > 0;
 
   // Ganti customer → buang daftar kartu milik customer sebelumnya (anti salah-orang).
   useEffect(() => {
@@ -341,47 +329,43 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     };
   }, [isOpen, customerId, selectedCustomerInfo]);
 
-  // Sinkronisasi alamat/patokan saat modal dibuka / customer berganti (anti-stale props).
-  // Prioritas: bila customer terpilih SAMA dengan konteks chat (initialCustomerId),
-  // hasil ekstraksi chat (initialAddress) diutamakan; bila admin memilih customer LAIN,
-  // alamat profil customer tersebut yang diutamakan.
+  // Sinkronisasi alamat/patokan: KARTU-FIRST (KNOWN #338/#339).
+  // Kartu terpilih = sumber kebenaran. Teks chat/profil root hanya dipakai bila
+  // customer belum punya kartu sama sekali (jalur bootstrap).
   useEffect(() => {
     if (!isOpen) return;
     const prefAddress = selectedCustomerInfo?.preferences?.address || selectedCustomerInfo?.address || '';
     const prefLandmark = selectedCustomerInfo?.preferences?.landmark || selectedCustomerInfo?.preferences?.address_notes || selectedCustomerInfo?.address_notes || '';
-    // W3: fallback alamat jalan dari raw_text reservasi (edit reservasi lama yang
-    // alamatnya hanya hidup di formulir chat) — paritas dengan modal detail.
     const rawAddress = resolveStreetAddress(initialReservation, selectedCustomerInfo) || '';
-    // Kartu alamat tertaut = otoritas per-jadwal. Prefill HARUS dari kartu agar
-    // edit reservasi rumah kedua tidak menampilkan jalan rumah utama.
     const cardAddress = ((initialReservation as any)?.customer_address?.address || '').trim();
     const isInitialCustomer =
       !initialCustomerId || !selectedCustomerInfo?.id || selectedCustomerInfo.id === initialCustomerId;
-    // F-B3: di mode edit, data DB/profil adalah OTORITAS — hasil ekstraksi chat
-    // (initialAddress) hanya fallback terakhir, agar banner ramping tidak menimpa
-    // alamat profil yang lengkap (bug Syarifa). Di create, chat tetap prioritas.
-    const addr = mode === 'edit'
+    // Fallback teks hanya relevan saat belum ada kartu.
+    const fallbackText = mode === 'edit'
       ? (cardAddress || prefAddress || rawAddress || initialAddress || '')
       : (isInitialCustomer ? (initialAddress || prefAddress || rawAddress || '') : (prefAddress || ''));
-    setAddress(addr);
-    const lm = mode === 'edit'
+    const fallbackLandmark = mode === 'edit'
       ? (prefLandmark || initialLandmark || '')
       : (isInitialCustomer ? (initialLandmark || prefLandmark || '') : (prefLandmark || ''));
-    setLandmark(lm);
-  }, [isOpen, mode, initialAddress, initialLandmark, initialCustomerId, selectedCustomerInfo, initialReservation]);
 
-  // Sinkronisasi pilihan alamat saat customer atau reservasi berganti
-  useEffect(() => {
-    if (!isOpen) return;
-    if (initialReservation?.customer_address_id) {
-      setCustomerAddressId(initialReservation.customer_address_id);
-    } else if (savedAddresses.length > 0 && !customerAddressId) {
-      const primary = savedAddresses.find((a: any) => a.isPrimary) || savedAddresses[0];
-      if (primary) {
-        setCustomerAddressId(primary.id);
-      }
+    const initialCardId = initialReservation?.customer_address_id || null;
+    const initialCardMissing = Boolean(initialCardId) && !savedAddresses.some((c: any) => c.id === initialCardId);
+    const resolved = resolveReservationAddress({
+      // Mode edit dengan kartu lama yang tidak ikut di payload: jangan jatuh ke primary
+      // (bisa mengubah alamat rumah yang sudah disepakati). Pakai teks reservasi.
+      cards: initialCardMissing ? [] : savedAddresses,
+      selectedCardId: initialCardMissing ? null : (initialCardId || customerAddressIdRef.current),
+      fallbackText,
+      fallbackLandmark,
+    });
+
+    setCustomerAddressId(resolved.card?.id ?? (initialCardMissing ? initialCardId : null));
+    setAddress(resolved.address);
+    setLandmark(resolved.landmark);
+    if (resolved.card && resolved.ongkir != null) {
+      setOngkir(resolved.ongkir);
     }
-  }, [isOpen, initialReservation, savedAddresses]);
+  }, [isOpen, mode, initialAddress, initialLandmark, initialCustomerId, selectedCustomerInfo, initialReservation, savedAddresses]);
 
   // Self-healing staff list jika props kosong (misal dibuka dari Live Chat sebelum parent selesai fetch)
   const [internalStaffList, setInternalStaffList] = useState<StaffOption[]>(staffList || []);
@@ -656,6 +640,21 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     if (restored.customCategory !== undefined) setCustomCategory(restored.customCategory);
     if (restored.customIsAddon !== undefined) setCustomIsAddon(restored.customIsAddon);
     if (restored.showCustomServiceInput !== undefined) setShowCustomServiceInput(restored.showCustomServiceInput);
+
+    // Kartu tetap sumber kebenaran: bila draft menautkan kartu, alamat mengikuti kartu.
+    const restoredCards: any[] = Array.isArray(restored.selectedCustomerInfo?.saved_addresses)
+      ? restored.selectedCustomerInfo.saved_addresses
+      : Array.isArray(restored.selectedCustomerInfo?.preferences?.saved_addresses)
+        ? restored.selectedCustomerInfo.preferences.saved_addresses
+        : [];
+    const restoredCard = restored.customerAddressId
+      ? restoredCards.find((c: any) => c.id === restored.customerAddressId)
+      : null;
+    if (restoredCard) {
+      if (restoredCard.address) setAddress(restoredCard.address);
+      if (restoredCard.landmark) setLandmark(restoredCard.landmark);
+      if (restoredCard.ongkir != null) setOngkir(restoredCard.ongkir);
+    }
     setIsFormDirty(false);
   };
 
@@ -679,6 +678,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     setNotes('');
     setAddress('');
     setLandmark('');
+    setCustomerAddressId(null);
+    setAddressDrawerMode(null);
     setOngkir(0);
     setDiscount(0);
     setIsMultiSession(false);
@@ -1768,9 +1769,10 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     }
     setIssues([]);
 
-    // 🛑 Gerbang submit deterministik bila teks alamat admin belum dikomit (Micro-Task 4.2)
-    if (selectedCard && address.trim() && mismatchActive) {
-      toast('Teks alamat berbeda dgn kartu: pilih: Simpan sebagai Rumah Baru / Perbarui Kartu Terpilih.', 'error');
+    // Guard defensif: kartu tersedia tetapi belum terpilih → arahkan pilih/tambah.
+    if (addressFormLocked && !customerAddressId) {
+      toast('Pilih alamat rumah dulu (atau tambahkan alamat baru).', 'error');
+      setAddressDrawerMode(selectedCard ? null : 'add');
       return;
     }
 
@@ -2182,14 +2184,10 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                     </span>
                     <button
                       type="button"
-                      onClick={() => {
-                        setCustomerAddressId(null);
-                        setSavedAsNewHouse(true);
-                        toast('Mode alamat baru aktif untuk jadwal ini.', 'info');
-                      }}
+                      onClick={() => setAddressDrawerMode('add')}
                       className="text-[11px] font-semibold text-accent hover:underline cursor-pointer"
                     >
-                      + Alamat Baru Untuk Jadwal Ini
+                      + Tambah Alamat
                     </button>
                   </div>
                   {savedAddresses.length >= 10 && (
@@ -2212,7 +2210,6 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                         type="button"
                         onClick={() => {
                           setCustomerAddressId(addrItem.id);
-                          setSavedAsNewHouse(false);
                           if (addrItem.address) setAddress(addrItem.address);
                           if (addrItem.landmark) setLandmark(addrItem.landmark);
                           if (addrItem.ongkir != null) {
@@ -2262,60 +2259,33 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                     type="text"
                     value={address}
                     onChange={(e) => setAddress(e.target.value)}
+                    readOnly={addressFormLocked}
                     placeholder="cth: Jl. Kedungklinter 1 No. 80"
                     autoComplete="off"
                     spellCheck="false"
-                    className="w-full px-3 py-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs font-medium"
+                    className={`w-full px-3 py-2 border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs font-medium ${
+                      addressFormLocked ? 'bg-surface-2 cursor-not-allowed' : 'bg-surface'
+                    }`}
                   />
-                  {(mismatchComputed || savedAsNewHouse || correctingCardId) && (
-                    <div className="mt-1 flex flex-wrap items-center gap-2">
-                      {mismatchActive && (
-                        <span className="text-[11px] font-semibold text-amber-700 dark:text-warning bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded px-2 py-1">
-                          Teks alamat berbeda dengan kartu terpilih
-                        </span>
-                      )}
-                      {savedAsNewHouse && (
-                        <span className="text-[11px] font-semibold text-accent bg-accent-soft border border-divider rounded px-2 py-1 inline-flex items-center gap-1">
-                          <Home size={11} />
-                          Akan disimpan sebagai rumah baru
-                        </span>
-                      )}
-                      {correctingCardId && (
-                        <span className="text-[11px] font-semibold text-info bg-info-soft border border-info-line rounded px-2 py-1 inline-flex items-center gap-1">
-                          <Pencil size={11} />
-                          Kartu sedang diperbarui
-                        </span>
-                      )}
-                      {!savedAsNewHouse && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCustomerAddressId(null);
-                              setSavedAsNewHouse(true);
-                              toast('Alamat baru akan disimpan sebagai rumah baru saat reservasi disimpan.', 'info');
-                            }}
-                            className="min-h-[44px] inline-flex items-center px-2.5 py-1 text-xs font-bold text-accent bg-accent/10 hover:bg-accent/20 active:scale-[0.98] rounded-lg transition-transform focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none cursor-pointer"
-                          >
-                            + Simpan Sebagai Rumah Baru
-                          </button>
-                          {selectedCard && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setCorrectingCardId(selectedCard.id);
-                                setShowAddressDrawer(true);
-                              }}
-                              className="min-h-[44px] inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-info bg-info-soft hover:bg-info-line border border-info-line active:scale-[0.98] rounded-lg transition-transform focus-visible:ring-2 focus-visible:ring-info focus-visible:outline-none cursor-pointer"
-                            >
-                              <Pencil size={12} />
-                              <span>Perbarui Kartu Ini</span>
-                            </button>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setAddressDrawerMode('add')}
+                      className="min-h-[44px] inline-flex items-center px-2.5 py-1 text-xs font-bold text-accent bg-accent/10 hover:bg-accent/20 active:scale-[0.98] rounded-lg transition-transform focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none cursor-pointer"
+                    >
+                      + Tambah Alamat
+                    </button>
+                    {selectedCard && (
+                      <button
+                        type="button"
+                        onClick={() => setAddressDrawerMode('edit')}
+                        className="min-h-[44px] inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-info bg-info-soft hover:bg-info-line border border-info-line active:scale-[0.98] rounded-lg transition-transform focus-visible:ring-2 focus-visible:ring-info focus-visible:outline-none cursor-pointer"
+                      >
+                        <Pencil size={12} />
+                        <span>Ubah Alamat Kartu</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-ink-3 uppercase tracking-wider block">
@@ -2325,10 +2295,13 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                     type="text"
                     value={landmark}
                     onChange={(e) => setLandmark(e.target.value)}
+                    readOnly={addressFormLocked}
                     placeholder="cth: Rolling door putih, yg jual kusen"
                     autoComplete="off"
                     spellCheck="false"
-                    className="w-full px-3 py-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs font-medium"
+                    className={`w-full px-3 py-2 border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs font-medium ${
+                      addressFormLocked ? 'bg-surface-2 cursor-not-allowed' : 'bg-surface'
+                    }`}
                   />
                 </div>
               </div>
@@ -3621,39 +3594,32 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
             </div>
           </div>
         )}
-      {/* AddressBookDrawer Overlay untuk Perbarui Kartu Terpilih (Micro-Task 4.2) */}
-      {showAddressDrawer && (customerId || selectedCustomerInfo?.id) && (
+      {/* AddressBookDrawer — tambah/ubah kartu alamat (simpan seketika) */}
+      {addressDrawerMode && (customerId || selectedCustomerInfo?.id) && (
         <AddressBookDrawer
           customer={selectedCustomerInfo ? { id: selectedCustomerInfo.id, name: selectedCustomerInfo.name } : { id: customerId }}
-          initialEditingCardId={correctingCardId}
-          onClose={() => {
-            setShowAddressDrawer(false);
-            setCorrectingCardId(null);
+          initialEditingCardId={addressDrawerMode === 'edit' ? customerAddressId : null}
+          initialNewAddress={addressDrawerMode === 'add' ? { address, landmark } : null}
+          onClose={() => setAddressDrawerMode(null)}
+          onSaved={(card) => {
+            if (!card?.id) return;
+            setCustomerAddressId(card.id);
+            if (card.address) setAddress(card.address);
+            if (card.landmark) setLandmark(card.landmark);
+            if (card.ongkir != null) setOngkir(card.ongkir);
+            setAddressDrawerMode(null);
           }}
           onChanged={async () => {
             const cid = selectedCustomerInfo?.id || customerId;
-            if (cid) {
-              try {
-                const res = await apiRequest<{ success: boolean; data: any }>(
-                  `/api/admin/customers/${cid}`
-                );
-                if (res?.success && res.data) {
-                  setSelectedCustomerInfo(res.data);
-                  if (correctingCardId) {
-                    const updatedCard = (res.data.saved_addresses || []).find((a: any) => a.id === correctingCardId);
-                    if (updatedCard) {
-                      if (updatedCard.address) setAddress(updatedCard.address);
-                      if (updatedCard.landmark) setLandmark(updatedCard.landmark);
-                      if (updatedCard.ongkir != null) setOngkir(updatedCard.ongkir);
-                    }
-                  }
-                }
-              } catch {
-                // Koreksi kartu alamat gagal; alamat lama tetap dipakai.
-              }
+            if (!cid) return;
+            try {
+              const res = await apiRequest<{ success: boolean; data: any }>(
+                `/api/admin/customers/${cid}`
+              );
+              if (res?.success && res.data) setSelectedCustomerInfo(res.data);
+            } catch {
+              // Gagal refresh daftar kartu; kartu yang baru disimpan tetap dipakai dari onSaved.
             }
-            setShowAddressDrawer(false);
-            setCorrectingCardId(null);
           }}
         />
       )}

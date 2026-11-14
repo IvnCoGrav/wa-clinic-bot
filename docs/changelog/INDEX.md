@@ -5,8 +5,9 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 683
+Total entri terindeks: 684
 
+- 2026-11-14 | Fix: Alur Alamat Reservasi Kartu-First & Riwayat Live Chat Informatif (#337/#338/#339)
 - 2026-11-14 | Fix: Izin Baca Operasional Staf — Daftar Role & Setelan Tenant (RBAC #324/#325)
 - 2026-11-14 | Fitur: Paket Berseri — Billing Komersial & Unit Komersial Tunggal
 - 2026-11-14 | Fix: Pembukaan Cakupan Izin Operasional ADMIN_CS & SPV_CS (Katalog Treatment & Form Reserv

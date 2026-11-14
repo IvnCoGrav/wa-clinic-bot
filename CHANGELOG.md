@@ -4,6 +4,18 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-14 - Fix: Alur Alamat Reservasi Kartu-First & Riwayat Live Chat Informatif (#337/#338/#339)
+
+- **Masalah**: (1) Form reservasi mengisi kolom alamat dari teks chat/profil root sementara kartu primary terpilih otomatis → badge “teks alamat berbeda” selalu muncul; (2) tombol “Simpan Sebagai Rumah Baru” hanya flag tertunda sehingga tidak menyimpan apa pun, dan bila reservasi disimpan bisa membuat kartu alamat parsial (tanpa wilayah/ongkir); (3) riwayat reservasi di modal Live Chat menampilkan “Layanan” generik tanpa jam karena membaca field yang tidak ada (`treatment_name`, `booking_time`).
+- **Perubahan Utama**:
+  1. **Kartu = sumber kebenaran** (`reservationAddressSelection.ts`): saat kartu tersedia, alamat/landmark/ongkir mengikuti kartu; teks chat/root hanya dipakai bila customer belum punya kartu.
+  2. **“+ Tambah Alamat” / “Ubah Alamat Kartu”** membuka `AddressBookDrawer` (field lengkap) dan menyimpan **seketika**, lalu otomatis terpilih. Flag `savedAsNewHouse`, badge mismatch, dan gate submit dihapus; kolom alamat read-only bila kartu ada.
+  3. **Guard backend** (`reservation-lifecycle.service.ts`): tidak membuat kartu bila teks alamat sama dengan profil root, dan menolak kartu parsial tanpa wilayah.
+  4. **Riwayat Live Chat**: util `buildReservationHistorySummary` (nama treatment bersih, tanggal + jam WIB, terapis · nominal).
+  5. Pilihan kartu di-reset saat customer berganti; draft restore diselaraskan ke kartu.
+- **Verifikasi**: test baru `reservation-address-selection` (7), `reservation-history-label` (7), `reservation-lifecycle-address-guard` (+3); dashboard `tsc`/build/`check:design` hijau; `verify:backlog` PASS.
+- **Deploy**: termasuk migrasi RBAC `20261114160000_seed_staff_operational_read_scopes` (izin baca roles & tenant-settings) yang belum diterapkan.
+
 #### 2026-11-14 - Fix: Izin Baca Operasional Staf — Daftar Role & Setelan Tenant (RBAC #324/#325)
 
 - **Masalah**: (1) Setiap login/refresh dashboard, `AuthContext` memanggil `GET /api/admin/roles` dan ditolak `403 [RBAC SCOPE GUARD] Blocked 'ADMIN_CS'/'THERAPIST'`; (2) form reservasi staf CS memanggil `GET /api/admin/tenant-settings` untuk titik klinik dan ditolak `403 [RBAC GUARD]` karena prefix dikunci Super Admin, sehingga modal memakai koordinat darurat.

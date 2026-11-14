@@ -1,4 +1,5 @@
 import { prisma } from '../db/client';
+import { normalizeAddressText } from '../domain/customer-address/matching';
 import { BabyDetail, classifyPatientEntity } from '../utils/reservation-text-parser';
 import { isGenericCustomerName } from '../utils/name-sanitizer';
 import { extractGestationalWeeksFromRawText } from './maternal-state.service';
@@ -88,6 +89,29 @@ export class ReservationLifecycleService {
         );
 
         if (hasExistingPrimary) {
+          // Guard anti kartu duplikat/parsial (KNOWN #339):
+          // 1) Teks alamat SAMA dengan alamat profil root → root sudah memegang alamat
+          //    itu; membuat kartu baru hanya menghasilkan duplikat.
+          // 2) Teks alamat ada tetapi wilayah kosong → kartu parsial (jarak/ongkir 0).
+          //    Form reservasi wajib memakai kartu (AddressBook) untuk rumah baru.
+          const normalizedAddress = normalizeAddressText(address);
+          const rootAddress = normalizeAddressText((currentCust.preferences as any)?.address);
+          const sameAsRootAddress = Boolean(normalizedAddress) && normalizedAddress === rootAddress;
+          const hasRegionEvidence = Boolean(
+            (kecamatan && kecamatan.trim()) ||
+            (kelurahan && kelurahan.trim()) ||
+            (kota && kota.trim())
+          );
+
+          if (sameAsRootAddress) {
+            console.log(
+              '[RESERVATION LIFECYCLE] alamat teks sama dengan profil root — tidak membuat kartu baru (anti duplikat).'
+            );
+          } else if (!hasRegionEvidence) {
+            console.warn(
+              '[RESERVATION LIFECYCLE] tolak kartu parsial tanpa wilayah — gunakan + Tambah Alamat di form reservasi.'
+            );
+          } else {
           // Bila customer sudah punya primary → panggil customerService.upsertSavedAddress (secondary, root TIDAK disentuh)
           try {
             const upserted = await customerService.upsertSavedAddress(customerId, {
@@ -108,6 +132,7 @@ export class ReservationLifecycleService {
             }
           } catch (e: any) {
             console.warn('[RESERVATION LIFECYCLE] upsertSavedAddress failed:', e?.message);
+          }
           }
         } else {
           // Root hanya ditulis bila customer belum punya alamat sama sekali.

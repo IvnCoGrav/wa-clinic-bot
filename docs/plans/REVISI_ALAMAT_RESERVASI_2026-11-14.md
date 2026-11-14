@@ -8,6 +8,12 @@
 
 Alamat **kartu** adalah satu-satunya sumber kebenaran saat kartu tersedia.
 
+### Keputusan produk (2026-11-14): **Opsi A — multi-alamat dipertahankan**
+
+- Fitur kartu alamat **tidak dihapus**: dibutuhkan untuk pasien dengan lebih dari satu rumah (rumah utama, rumah orang tua/mertua, kantor), ongkir/jarak per rumah, navigasi PWA terapis, dan integritas riwayat/invoice (alamat & ongkir per jadwal dibekukan).
+- Opsi B (satu alamat per customer) ditolak: tetap butuh snapshot alamat per reservasi dan akan menghapus fungsi yang sudah dipakai PWA/invoice/sheets.
+- Yang diperbaiki adalah UX/state, bukan fiturnya.
+
 1. Modal dibuka → kartu default (primary, atau `customer_address_id` reservasi saat edit) otomatis terpilih → kolom alamat/landmark/ongkir **mengikuti kartu**.
 2. Tidak klik apa pun → simpan memakai kartu default. **Tidak ada badge, tidak ada flag tertunda, tidak ada pilihan paksa.**
 3. **“+ Tambah Alamat”** → `AddressBookDrawer` mode tambah (form lengkap) → simpan **seketika** → kartu baru otomatis terpilih.

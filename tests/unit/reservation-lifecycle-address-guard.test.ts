@@ -133,4 +133,65 @@ describe('ReservationLifecycleService — pagar tulis kartu alamat', () => {
       BASE_PARAMS.tenantId
     );
   });
+
+  it('KNOWN #339: teks alamat SAMA dengan profil root → tidak membuat kartu duplikat', async () => {
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
+      customer_address_id: null,
+      customer_address: null,
+      treatment_category: 'BABY',
+    } as any);
+    vi.mocked(customerService.getCustomerById).mockResolvedValue({
+      id: BASE_PARAMS.customerId,
+      kelurahan: 'Buduran',
+      kecamatan: 'Buduran',
+      preferences: { address: BASE_PARAMS.address },
+    } as any);
+
+    await reservationLifecycleService.onReservationCreated(BASE_PARAMS as any);
+
+    expect(customerService.upsertSavedAddress).not.toHaveBeenCalled();
+    expect(customerService.updateCustomerLocation).not.toHaveBeenCalled();
+  });
+
+  it('KNOWN #339: alamat beda tetapi wilayah kosong → tolak kartu parsial', async () => {
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
+      customer_address_id: null,
+      customer_address: null,
+      treatment_category: 'BABY',
+    } as any);
+    vi.mocked(customerService.getCustomerById).mockResolvedValue({
+      id: BASE_PARAMS.customerId,
+      kelurahan: 'Buduran',
+      kecamatan: 'Buduran',
+      preferences: { address: 'Jl. Lama No. 2' },
+    } as any);
+
+    await reservationLifecycleService.onReservationCreated({
+      ...BASE_PARAMS,
+      address: 'Jl. Baru Tanpa Wilayah No. 9',
+      kecamatan: undefined,
+      kelurahan: undefined,
+      kota: undefined,
+    } as any);
+
+    expect(customerService.upsertSavedAddress).not.toHaveBeenCalled();
+  });
+
+  it('regresi: alamat beda + wilayah lengkap → kartu secondary tetap dibuat', async () => {
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
+      customer_address_id: null,
+      customer_address: null,
+      treatment_category: 'BABY',
+    } as any);
+    vi.mocked(customerService.getCustomerById).mockResolvedValue({
+      id: BASE_PARAMS.customerId,
+      kelurahan: 'Grogol',
+      kecamatan: 'Tulangan',
+      preferences: { address: 'Jl. Melati No. 12' },
+    } as any);
+
+    await reservationLifecycleService.onReservationCreated(BASE_PARAMS as any);
+
+    expect(customerService.upsertSavedAddress).toHaveBeenCalledTimes(1);
+  });
 });

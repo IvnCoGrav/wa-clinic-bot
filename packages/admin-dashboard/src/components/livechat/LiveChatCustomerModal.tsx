@@ -20,6 +20,7 @@ import {
 } from '../../utils/geoUtils';
 import { formatRupiahRingkas as formatRpShort } from '../../utils/money';
 import { formatWib } from '../../utils/dateWib';
+import { buildReservationHistorySummary } from '../../utils/reservationHistory';
 
 export interface LiveChatCustomerModalProps {
   isOpen: boolean;
@@ -252,7 +253,9 @@ export const LiveChatCustomerModal: React.FC<LiveChatCustomerModalProps> = ({
                 ) : (
                   <>
                     <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                      {customerDetailData.reservations.map((r: any) => (
+                      {customerDetailData.reservations.map((r: any) => {
+                        const history = buildReservationHistorySummary(r);
+                        return (
                         <div
                           key={r.id}
                           onClick={() => onSelectReservation(r)}
@@ -260,7 +263,7 @@ export const LiveChatCustomerModal: React.FC<LiveChatCustomerModalProps> = ({
                         >
                           <div>
                             <p className="font-bold text-ink flex items-center space-x-1.5">
-                              <span>{r.treatment_name || (r.services ? r.services.map((s: any) => s.name || s).join(', ') : 'Layanan')}</span>
+                              <span>{history.title}</span>
                               <span className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] text-accent font-normal flex items-center gap-0.5">
                                 <Eye size={10} />
                                 <span>Detail</span>
@@ -268,8 +271,11 @@ export const LiveChatCustomerModal: React.FC<LiveChatCustomerModalProps> = ({
                             </p>
                             <p className="text-[10px] text-ink-2 flex items-center space-x-1">
                               <Calendar size={10} />
-                              <span>{formatWib(r.booking_date, { dateStyle: 'medium' })} • {r.booking_time}</span>
+                              <span>{history.schedule}</span>
                             </p>
+                            {history.meta && (
+                              <p className="text-[10px] text-ink-3 mt-0.5">{history.meta}</p>
+                            )}
                           </div>
                           <div className="flex items-center space-x-2">
                             <button
@@ -298,7 +304,8 @@ export const LiveChatCustomerModal: React.FC<LiveChatCustomerModalProps> = ({
                             </span>
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                     <p className="text-[10px] text-ink-3 italic flex items-center space-x-1"><Eye size={10} /><span>Klik card untuk lihat detail lengkap</span></p>
                   </>

@@ -56,6 +56,13 @@ export interface AddressBookDrawerProps {
   onClose: () => void;
   onChanged?: () => void;
   initialEditingCardId?: string | null;
+  /**
+   * Buka langsung mode TAMBAH alamat dengan prefill teks (dipakai form reservasi:
+   * “+ Tambah Alamat”). Kartu tetap disimpan seketika lewat endpoint alamat.
+   */
+  initialNewAddress?: { address?: string; landmark?: string } | null;
+  /** Callback kartu yang baru disimpan/diubah (entry dari API), untuk auto-select. */
+  onSaved?: (card: SavedAddress | null) => void;
 }
 
 function addrLine(a: SavedAddress): string {
@@ -67,6 +74,8 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
   onClose,
   onChanged,
   initialEditingCardId,
+  initialNewAddress,
+  onSaved,
 }) => {
   const { toast, confirm } = useUiFeedback();
   const { resolve: resolveMapsUrl, isResolving: isResolvingMaps } = useMapsShortlinkResolver();
@@ -157,6 +166,17 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
       }
     }
   }, [initialEditingCardId, addresses]);
+
+  // Buka form TAMBAH alamat dengan prefill (dipakai form reservasi).
+  useEffect(() => {
+    if (!initialNewAddress) return;
+    setShowAddForm(true);
+    setEditingAddress(null);
+    if (initialNewAddress.address) setNewAddress(initialNewAddress.address);
+    if (initialNewAddress.landmark) setNewLandmark(initialNewAddress.landmark);
+    // Sekali per pembukaan drawer; perubahan prop berikutnya tidak menimpa ketikan admin.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const close = useCallback(() => {
     setEditingAddress(null);
@@ -318,7 +338,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
 
     setIsAdding(true);
     try {
-      await apiRequest(`/api/admin/customers/${customerId}/addresses`, {
+      const res = await apiRequest(`/api/admin/customers/${customerId}/addresses`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -350,6 +370,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
       setNewIsPrimary(false);
       setShowAddForm(false);
       await load();
+      onSaved?.(((res as any)?.entry as SavedAddress) || null);
       onChanged?.();
     } catch (err: any) {
       toast(err?.message || 'Gagal menambahkan alamat.', 'error');
@@ -389,7 +410,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
 
     setIsUpdating(true);
     try {
-      await apiRequest(`/api/admin/customers/${customerId}/addresses/${editingAddress.id}`, {
+      const res = await apiRequest(`/api/admin/customers/${customerId}/addresses/${editingAddress.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -408,6 +429,7 @@ export const AddressBookDrawer: React.FC<AddressBookDrawerProps> = ({
       toast(`Alamat "${label}" berhasil diperbarui.`, 'success');
       setEditingAddress(null);
       await load();
+      onSaved?.(((res as any)?.entry as SavedAddress) || null);
       onChanged?.();
     } catch (err: any) {
       toast(err?.message || 'Gagal memperbarui alamat.', 'error');
