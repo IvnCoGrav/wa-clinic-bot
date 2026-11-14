@@ -6,10 +6,10 @@ import { getCustomerRepository } from '../../src/repositories/customer.repositor
 /**
  * Component 4 — Invarian Sticky Verified GPS (kasus Bunda Retno).
  * Pin GPS asli (shareloc / link Maps) berstatus VERIFIED_GPS
- * (`share_location_sent = true`): alamat teks belakangan HANYA boleh
- * meng-update nama wilayah, TIDAK BOLEH mendegradasi lat/lng + jarak +
- * ongkir ke centroid teks. Override hanya via shareloc baru
- * (`isNativePin: true`) atau dashboard admin (jalur tulis langsung).
+ * (`share_location_sent = true`): alamat teks belakangan DILARANG mendegradasi
+ * lat/lng + jarak + ongkir ke centroid teks, DAN DILARANG menimpa wilayah root
+ * (anti data hibrida "koordinat A + teks B"). Override hanya via shareloc baru
+ * (`isNativePin: true`), pilih alamat tersimpan, atau dashboard admin.
  */
 const TENANT = 'default-tenant';
 const dbOffline = () => new Error('Database offline');
@@ -60,7 +60,8 @@ describe('Sticky Verified GPS invariant (updateCustomerLocation)', () => {
     expect(data.lng).toBeCloseTo(112.745941, 6);
     expect(data.distance_km).toBe(10.92);
     expect(data.ongkir).toBe(15000);
-    expect(data.kelurahan).toBe('Gedangan');
+    // Wilayah root DI-FREEZE selama pin presisi dipertahankan (anti hibrida).
+    expect(data.kelurahan).toBe('Punggul');
 
     updateSpy.mockRestore();
   });
@@ -131,6 +132,7 @@ describe('Sticky Verified GPS invariant (updateCustomerLocation)', () => {
     expect(after.lng).toBeCloseTo(112.745941, 6);
     expect(after.distance_km).toBe(10.92);
     expect(after.ongkir).toBe(15000);
-    expect(after.kelurahan).toBe('Gedangan');
+    // Tanpa region awal, input wilayah saja tidak boleh mengisi root.
+    expect(after.kelurahan).toBeNull();
   });
 });

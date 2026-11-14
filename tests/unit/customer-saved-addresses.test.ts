@@ -191,7 +191,7 @@ describe('CustomerService — pin presisi tidak jadi data hibrida', () => {
     vi.mocked(prisma.customer.update).mockRejectedValue(new Error('Database offline'));
   });
 
-  it('teks area rumah-2 pada customer pin presisi: koordinat root TETAP, area baru tercatat estimated_area', async () => {
+  it('teks area rumah-2 pada customer pin presisi: root TETAP, TIDAK melahirkan kartu hantu', async () => {
     const c = await seedCustomer({
       lat: -7.32, lng: 112.77, distance_km: 10, ongkir: 15000,
       location_source: 'gps_pin', share_location_sent: true,
@@ -207,15 +207,17 @@ describe('CustomerService — pin presisi tidak jadi data hibrida', () => {
       TENANT,
     );
 
-    // root tetap pin rumah-1 (bukan hibrida)
+    // root tetap pin + wilayah rumah-1 (bukan hibrida koordinat A + teks B)
     expect(out.lat).toBeCloseTo(-7.32, 4);
     expect(out.lng).toBeCloseTo(112.77, 4);
-    expect(out.kelurahan).toBe('Waru');
-    // area baru tercatat sebagai entri baru (non-presisi)
+    // Root tidak diisi teks area baru; kartu tetap memegang alamat rumah-1.
+    expect(out.kelurahan).toBeNull();
+    expect(out.kecamatan).toBeNull();
+    // Area-only tanpa teks jalan DILARANG melahirkan kartu hantu.
     const list = await customerService.getSavedAddresses(c.id, TENANT);
-    const newArea = list.find((a) => a.kecamatan === 'Waru');
-    expect(newArea).toBeTruthy();
-    expect(newArea!.locationSource).toBe('estimated_area');
+    expect(list).toHaveLength(1);
+    expect(list[0].kecamatan).toBe('Rungkut');
+    expect(list[0].locationSource).toBe('gps_pin');
   });
 
   it('pindah rumah eksplisit via savedAddressId: koordinat root BERPINDAH', async () => {

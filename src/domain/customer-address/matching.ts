@@ -63,7 +63,14 @@ export function addressesMatch(
   b: UpsertSavedAddressInput,
   maxMeters = SAME_POINT_MAX_METERS
 ): boolean {
-  if (bothCoords(a, b) && haversineMeters(a as any, b as any) <= maxMeters) return true;
+  if (bothCoords(a, b) && haversineMeters(a as any, b as any) <= maxMeters) {
+    // Titik sangat dekat = bukti fisik, TETAPI lintas kota/kabupaten tidak boleh
+    // disatukan hanya karena sentroid/geocoder meleset. Salah satu sisi kosong
+    // tetap kompatibel (data lama).
+    const aKota = normCity(a.kota);
+    const bKota = normCity(b.kota);
+    return !hasText(a.kota) || !hasText(b.kota) || aKota === bKota;
+  }
 
   const aAddr = hasText(a.address);
   const bAddr = hasText(b.address);
@@ -113,7 +120,12 @@ export function addressesMatch(
       const hasHouseNumber = /\b(?:no|nomor|blok|gang|gg|rt|rw|cluster|perum|perumahan)\b.*?\d+/i.test(
         streetText
       );
-      if (hasHouseNumber && norm(a.address).length >= 8) return true;
+      // Jalan + nomor identik boleh merge lintas kecamatan HANYA bila wilayahnya
+      // masih kompatibel (typo/toponimi). Dua kecamatan berbeda yang jelas
+      // (mis. Karang Pilang vs Buduran) DILARANG dianggap rumah sama.
+      const regionOk =
+        isRegionCompatible(a, b) || !hasText(a.kecamatan) || !hasText(b.kecamatan);
+      if (hasHouseNumber && norm(a.address).length >= 8 && regionOk) return true;
     }
   }
 

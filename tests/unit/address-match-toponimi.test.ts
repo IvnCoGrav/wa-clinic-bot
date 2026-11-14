@@ -144,7 +144,7 @@ describe('Mikro 1.1 — addressesMatch toponimi & anti-over-merge', () => {
     expect(addressesMatch(rumahB, rumahA)).toBe(false);
   });
 
-  it('Kasus 7 (A-005): Jalan dengan nomor eksplisit (No. 12) di kecamatan berbeda, jarak < 3 km -> MATCH', () => {
+  it('Kasus 7 (revisi Phase 5): Jalan + nomor sama, kecamatan jelas berbeda → TIDAK MATCH (anti data hibrida)', () => {
     const rumahA = {
       address: 'Jl. Mutiara Indah No. 12',
       kecamatan: 'Waru',
@@ -156,15 +156,35 @@ describe('Mikro 1.1 — addressesMatch toponimi & anti-over-merge', () => {
       address: 'Jl. Mutiara Indah No. 12',
       kecamatan: 'Gedangan',
       kota: 'Sidoarjo',
-      lat: -7.355000, // jarak ~600 m (pergeseran reverse geocoding batas kec)
+      lat: -7.355000, // jarak ~600 m; teks sama TIDAK cukup bila kecamatan beda
       lng: 112.720000,
+    };
+
+    expect(addressesMatch(rumahA, rumahB)).toBe(false);
+    expect(addressesMatch(rumahB, rumahA)).toBe(false);
+  });
+
+  it('Kasus 7b: Jalan + nomor sama, kecamatan hanya beda typo/spasi → tetap MATCH', () => {
+    const rumahA = {
+      address: 'Jl. Mutiara Indah No. 12',
+      kecamatan: 'Karang Pilang',
+      kota: 'Surabaya',
+      lat: -7.337500,
+      lng: 112.698800,
+    };
+    const rumahB = {
+      address: 'Jl. Mutiara Indah No. 12',
+      kecamatan: 'Karangpilang',
+      kota: 'Surabaya',
+      lat: -7.339500, // ~220 m (>150 m) agar yang diuji cabang teks, bukan titik GPS
+      lng: 112.698800,
     };
 
     expect(addressesMatch(rumahA, rumahB)).toBe(true);
     expect(addressesMatch(rumahB, rumahA)).toBe(true);
   });
 
-  it('Kasus 8 (A-005): Jalan dengan blok/nomor (Blok C7) di kecamatan berbeda, jarak < 3 km -> MATCH', () => {
+  it('Kasus 8 (revisi Phase 5): Jalan + blok/nomor sama, kecamatan jelas berbeda → TIDAK MATCH', () => {
     const rumahA = {
       address: 'Jl. Mutiara Indah Blok C7',
       kecamatan: 'Waru',
@@ -180,8 +200,8 @@ describe('Mikro 1.1 — addressesMatch toponimi & anti-over-merge', () => {
       lng: 112.720000,
     };
 
-    expect(addressesMatch(rumahA, rumahB)).toBe(true);
-    expect(addressesMatch(rumahB, rumahA)).toBe(true);
+    expect(addressesMatch(rumahA, rumahB)).toBe(false);
+    expect(addressesMatch(rumahB, rumahA)).toBe(false);
   });
 
   it('Kasus 9 (A-005): Dua rumah nomor berbeda (No. 12 vs No. 14) di jalan sama, kecamatan beda -> TIDAK MATCH', () => {

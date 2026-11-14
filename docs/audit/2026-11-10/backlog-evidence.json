@@ -533,7 +533,7 @@
         {
           "type": "file",
           "path": "docs/FEATURE_INVENTORY.md",
-          "line": 202,
+          "line": 203,
           "contains": "25 interval cron"
         },
         {
@@ -929,7 +929,7 @@
         {
           "type": "file",
           "path": "src/services/staff-reservation.service.ts",
-          "line": 2847,
+          "line": 2854,
           "contains": "belum diatur di Pengaturan Klinik"
         },
         {
@@ -1169,7 +1169,7 @@
         {
           "type": "file",
           "path": "src/services/staff-reservation.service.ts",
-          "line": 1749,
+          "line": 1756,
           "contains": "Nominal pembayaran tidak sesuai tagihan resmi"
         },
         {
@@ -1853,7 +1853,7 @@
         {
           "type": "file",
           "path": "docs/FEATURE_INVENTORY.md",
-          "line": 268,
+          "line": 269,
           "contains": "superAdminOnlyPrefixes"
         },
         {
@@ -2301,7 +2301,7 @@
         {
           "type": "file",
           "path": "src/services/staff-reservation.service.ts",
-          "line": 2204,
+          "line": 2211,
           "contains": "clinicLoc.maxCoverageKm"
         },
         {

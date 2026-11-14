@@ -63,8 +63,9 @@ describe('Fase 1 — GPS Immutability Guard (updateCustomerLocation)', () => {
     expect(out.lng).toBeCloseTo(112.7, 6);
     expect(out.distance_km).toBe(10);
     expect(out.ongkir).toBe(15000);
-    // teks wilayah tetap boleh diperbarui
-    expect(out.kelurahan).toBe('Buduran');
+    // Wilayah root DI-FREEZE: input wilayah tanpa teks alamat eksplisit tidak
+    // boleh menimpa region pin presisi (anti data hibrida koordinat A + teks B).
+    expect(out.kelurahan).toBeNull();
   });
 
   it('shareloc native (share_location_sent=true) tetap terkunci untuk berbagai parafrase teks', async () => {

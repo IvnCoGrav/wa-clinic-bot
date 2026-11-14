@@ -109,12 +109,41 @@ function isWilayahSimilar(a?: string | null, b?: string | null): boolean {
  *  5. jalan identik + toponimi / typo wajar kecamatan/kelurahan + toleransi sentroid <= 3 km.
  * Beda jalan dalam kecamatan sama (keduanya ber-teks) → TIDAK match.
  */
+/** Kompatibilitas wilayah (cermin backend `isRegionCompatible`). */
+function isRegionCompatible(a: AddressMatchInput, b: AddressMatchInput): boolean {
+  const crossMatch =
+    (hasText(a.kecamatan) &&
+      hasText(b.kelurahan) &&
+      (norm(a.kecamatan) === norm(b.kelurahan) ||
+        isWilayahSimilar(a.kecamatan, b.kelurahan))) ||
+    (hasText(a.kelurahan) &&
+      hasText(b.kecamatan) &&
+      (norm(a.kelurahan) === norm(b.kecamatan) ||
+        isWilayahSimilar(a.kelurahan, b.kecamatan)));
+  if (crossMatch) return true;
+
+  return (
+    !hasText(a.kecamatan) ||
+    !hasText(b.kecamatan) ||
+    norm(a.kecamatan) === norm(b.kecamatan) ||
+    wilayahTokenMatch(a.kecamatan, b.kecamatan) ||
+    isWilayahSimilar(a.kecamatan, b.kecamatan)
+  );
+}
+
 export function addressesMatch(
   a: AddressMatchInput,
   b: AddressMatchInput,
   maxMeters: number = SAME_POINT_MAX_METERS
 ): boolean {
-  if (bothCoords(a, b) && haversineMeters(a as any, b as any) <= maxMeters) return true;
+  if (bothCoords(a, b) && haversineMeters(a as any, b as any) <= maxMeters) {
+    // Titik sangat dekat = bukti fisik, TETAPI lintas kota/kabupaten tidak boleh
+    // disatukan hanya karena sentroid/geocoder meleset. Salah satu sisi kosong
+    // tetap kompatibel (data lama).
+    const aKota = normCity(a.kota);
+    const bKota = normCity(b.kota);
+    return !hasText(a.kota) || !hasText(b.kota) || aKota === bKota;
+  }
 
   const aAddr = hasText(a.address);
   const bAddr = hasText(b.address);
@@ -155,7 +184,12 @@ export function addressesMatch(
       // kecamatan. Nama perumahan tanpa nomor TIDAK cukup (anti-over-merge rumah-2).
       const streetText = `${a.address || ''} ${b.address || ''}`;
       const hasHouseNumber = /\b(?:no|nomor|blok|gang|gg|rt|rw|cluster|perum|perumahan)\b.*?\d+/i.test(streetText);
-      if (hasHouseNumber && norm(a.address).length >= 8) return true;
+      // Jalan + nomor identik boleh merge lintas kecamatan HANYA bila wilayahnya
+      // masih kompatibel (typo/toponimi). Dua kecamatan berbeda yang jelas
+      // (mis. Karang Pilang vs Buduran) DILARANG dianggap rumah sama.
+      const regionOk =
+        isRegionCompatible(a, b) || !hasText(a.kecamatan) || !hasText(b.kecamatan);
+      if (hasHouseNumber && norm(a.address).length >= 8 && regionOk) return true;
     }
   }
 

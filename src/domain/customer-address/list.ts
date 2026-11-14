@@ -123,10 +123,21 @@ export function upsertAddressIntoList(
 
   if (idx >= 0) {
     const prev = list[idx];
-    const nextLat =
-      typeof input.lat === 'number' && Number.isFinite(input.lat) ? input.lat : prev.lat;
-    const nextLng =
-      typeof input.lng === 'number' && Number.isFinite(input.lng) ? input.lng : prev.lng;
+    // ANTI-DOWNGRADE: kartu gps_pin tidak boleh kehilangan koordinat presisi
+    // karena input teks/manual/estimasi. Koordinat hanya boleh berubah bila
+    // input benar-benar pin GPS baru.
+    const preservePreciseCoords =
+      prev.locationSource === 'gps_pin' && input.locationSource !== 'gps_pin';
+    const nextLat = preservePreciseCoords
+      ? prev.lat
+      : typeof input.lat === 'number' && Number.isFinite(input.lat)
+        ? input.lat
+        : prev.lat;
+    const nextLng = preservePreciseCoords
+      ? prev.lng
+      : typeof input.lng === 'number' && Number.isFinite(input.lng)
+        ? input.lng
+        : prev.lng;
     const nextDistanceKm =
       typeof input.distanceKm === 'number' && Number.isFinite(input.distanceKm)
         ? input.distanceKm

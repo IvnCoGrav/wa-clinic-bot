@@ -95,4 +95,63 @@ describe('buildEffectiveTaskAddress — provenance', () => {
     expect(eff.address_source).toBe('card');
     expect(eff.address_updated_at ?? null).toBeNull();
   });
+
+  it('kartu Karang Pilang vs profil Buduran dengan koordinat identik → kartu menang', () => {
+    const addr = {
+      address: 'Kebraon 1/15-A Karangpilang Surabaya',
+      kelurahan: 'Kebraon',
+      kecamatan: 'Karang Pilang',
+      kota: 'Kota Surabaya',
+      lat: -7.337536811828613,
+      lng: 112.6987762451172,
+      location_source: 'gps_pin',
+      last_used_at: '2026-10-16T08:10:33.614Z',
+    };
+    const cust = {
+      kelurahan: 'Gading fajar B1/20 buduran sidoarjo',
+      kecamatan: 'Buduran',
+      kota: 'Kota Surabaya',
+      lat: -7.337536811828613,
+      lng: 112.6987762451172,
+      preferences: {
+        address: 'Kebraon 1/15-A Karangpilang Surabaya',
+        location_updated_at: '2026-11-13T00:06:45.369Z',
+      },
+    };
+
+    const eff = buildEffectiveTaskAddress(addr, cust);
+
+    // Koordinat identik + timestamp profil lebih baru TIDAK boleh menang
+    // bila wilayahnya jelas berbeda.
+    expect(eff.address_source).toBe('card');
+    expect(eff.kelurahan).toBe('Kebraon');
+    expect(eff.kecamatan).toBe('Karang Pilang');
+    expect(eff.kota).toBe('Kota Surabaya');
+  });
+
+  it('kartu dan profil rumah sama (wilayah kompatibel) → koreksi profil tetap menang', () => {
+    const addr = {
+      address: 'Jl. Melati No. 5',
+      kelurahan: 'Waru',
+      kecamatan: 'Waru',
+      kota: 'Sidoarjo',
+      lat: -7.35,
+      lng: 112.72,
+      last_used_at: '2026-10-15T08:00:00.000Z',
+    };
+    const cust = {
+      kelurahan: 'Waru',
+      kecamatan: 'Waru',
+      kota: 'Sidoarjo',
+      lat: -7.35,
+      lng: 112.72,
+      preferences: {
+        address: 'Jl. Melati No. 5',
+        location_updated_at: '2026-10-17T10:00:00.000Z',
+      },
+    };
+
+    const eff = buildEffectiveTaskAddress(addr, cust);
+    expect(eff.address_source).toBe('profile');
+  });
 });

@@ -172,7 +172,7 @@ const VECTORS: { name: string; a: any; b: any; expected: boolean }[] = [
     expected: true,
   },
   {
-    name: 'alamat jalan spesifik sama persis (<3km) di kota sama beda kecamatan karena pergeseran batas peta → match',
+    name: 'alamat jalan spesifik sama persis (<3km) di kota sama beda kecamatan → TIDAK match (anti-over-merge lintas kecamatan)',
     a: {
       address: 'Grand Pakuwon Cluster Adelaide JF9/11',
       kelurahan: 'Banjar Sugihan',
@@ -189,7 +189,7 @@ const VECTORS: { name: string; a: any; b: any; expected: boolean }[] = [
       lat: -7.238602,
       lng: 112.674148,
     },
-    expected: true,
+    expected: false,
   },
 ];
 

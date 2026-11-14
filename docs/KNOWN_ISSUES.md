@@ -30,6 +30,13 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Perbaikan:** kunci dipindah dari `storage/vapid_keys.json` ke `.env` (backup `.env.bak-20261113-vapid`, chmod 600); container app/worker di-recreate. Downtime app ±7 menit.
 - **Pencegahan:** saat deploy baru, pastikan `.env` memuat `VAPID_PUBLIC_KEY` (87 char) & `VAPID_PRIVATE_KEY` (43 char).
 
+## 332. [Buku Alamat] Merge Teks Lintas Kecamatan Dikunci demi Anti Data Hibrida (2026-11-13, BY-DESIGN)
+
+- **Status:** BY-DESIGN — Phase 5/6 (guard GPS & region) sengaja mencabut aturan lama A-005: dua kartu dengan **jalan + nomor sama** tetapi **kecamatan jelas berbeda** TIDAK lagi dianggap rumah sama meski jarak < 3 km.
+- **Alasan:** insiden root `Karang Pilang` + teks `Buduran` membuktikan merge lintas kecamatan dapat menyatukan dua rumah berbeda dan menimpa wilayah root. Titik GPS ≤150 m tetap menjadi bukti fisik (dengan syarat kota sama), dan kecamatan yang hanya beda typo/toponimi tetap lolos via `isRegionCompatible`.
+- **Trade-off:** rumah yang sama namun label kecamatan berbeda karena pergeseran reverse-geocode akan tampil sebagai 2 kartu (tidak merusak data; bisa digabung manual). Ini lebih aman daripada merge salah.
+- **Kontrak tes:** `tests/unit/address-match-toponimi.test.ts` Kasus 7/8 diperbarui ke `false`; Kasus 7b ditambah untuk membuktikan typo kecamatan tetap `true`. `address-domain-guards`, `address-preserve-gps-write-guard`, `staff-task-effective-address` mengunci guard ini.
+
 ## 327. [Data Quality] Booking Tanpa Jam Eksplisit Disimpan sebagai 09:00 WIB (2026-11-13, OPEN)
 
 - **Status:** OPEN — keterbatasan data, bukan bug fitur. Heatmap Treatment menampilkannya sebagai peringatan kualitas data (`quality.defaultedHourCount`) alih-alih menyembunyikannya.
