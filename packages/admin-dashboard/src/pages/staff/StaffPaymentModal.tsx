@@ -10,6 +10,7 @@ import { CheckCircle2, Copy, CreditCard, QrCode, Upload, X } from 'lucide-react'
 import { Modal } from '../../components/ui/Modal';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { formatRupiah } from '../../utils/money';
+import { prepareChatImage } from '../../utils/imageCompressor';
 import { StaffPaymentInfo, StaffTask } from './staffTaskTypes';
 
 export type PaymentMethod = 'CASH' | 'TRANSFER' | 'QRIS';
@@ -25,42 +26,6 @@ interface StaffPaymentModalProps {
   onOpenQris: () => void;
   onCopyAccount: (accountNumber: string, bank: string) => void;
   onSubmit: (method: PaymentMethod, proofImageB64: string | null) => void;
-}
-
-const MAX_PROOF_DIMENSION = 800;
-
-/** Kompres bukti bayar di klien: maks 800px, JPEG 0.65, agar unggahan ringan. */
-function compressProofImage(file: File, onDone: (dataUrl: string) => void) {
-  const reader = new FileReader();
-  reader.onload = (loadEvent) => {
-    const img = new Image();
-    img.onload = () => {
-      let width = img.width;
-      let height = img.height;
-      if (width > height) {
-        if (width > MAX_PROOF_DIMENSION) {
-          height = Math.round((height * MAX_PROOF_DIMENSION) / width);
-          width = MAX_PROOF_DIMENSION;
-        }
-      } else if (height > MAX_PROOF_DIMENSION) {
-        width = Math.round((width * MAX_PROOF_DIMENSION) / height);
-        height = MAX_PROOF_DIMENSION;
-      }
-
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        onDone(loadEvent.target?.result as string);
-        return;
-      }
-      ctx.drawImage(img, 0, 0, width, height);
-      onDone(canvas.toDataURL('image/jpeg', 0.65));
-    };
-    img.src = loadEvent.target?.result as string;
-  };
-  reader.readAsDataURL(file);
 }
 
 export const StaffPaymentModal: React.FC<StaffPaymentModalProps> = ({
@@ -79,14 +44,21 @@ export const StaffPaymentModal: React.FC<StaffPaymentModalProps> = ({
   const [proofImageB64, setProofImageB64] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
       toast('File yang dipilih harus berupa gambar.', 'error');
       return;
     }
-    compressProofImage(file, setProofImageB64);
+    try {
+      // Util kanonis: HEIC/format tak didukung menghasilkan pesan actionable,
+      // bukan gagal senyap seperti canvas manual sebelumnya.
+      const prepared = await prepareChatImage(file, 'field');
+      setProofImageB64(prepared.dataUrl);
+    } catch (err: any) {
+      toast(err?.message || 'Foto gagal diproses. Coba ambil ulang dari kamera.', 'error');
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -118,6 +90,11 @@ export const StaffPaymentModal: React.FC<StaffPaymentModalProps> = ({
         <div>
           <span className="text-xs text-ink-2 block">Total Tagihan:</span>
           <span className="text-base font-bold text-accent">{formatRupiah(task.pricing.totalFee)}</span>
+          {Number(task.pricing.discountAmount || 0) > 0 && (
+            <span className="block text-[10px] text-rose-600 dark:text-danger font-semibold">
+              Termasuk diskon -{formatRupiah(Number(task.pricing.discountAmount))}
+            </span>
+          )}
         </div>
         <span className="text-[11px] font-semibold px-2.5 py-1 bg-surface text-ink-2 rounded-xl border border-divider">
           Ongkir: {formatRupiah(task.pricing.deliveryFee)}

@@ -1059,6 +1059,12 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
             source: 'ADMIN_PANEL',
             force,
             status: reservationStatus as 'hold' | 'confirmed',
+            // A-010 / idempotensi: double-submit & retry tidak boleh membuat
+            // reservasi ganda. Dashboard sudah mengirim requestId per draft.
+            requestId:
+              typeof (request.body as any)?.requestId === 'string'
+                ? (request.body as any).requestId.trim() || undefined
+                : undefined,
           });
         } catch (conflictErr: any) {
           if (conflictErr instanceof ReservationConflictError) {

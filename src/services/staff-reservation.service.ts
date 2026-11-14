@@ -9,9 +9,9 @@ import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { calculateHaversineDistance, Coordinates } from '../utils/haversine';
 import { getClinicLocationAsync } from '../config/clinic-location';
 import { resolveHumanAreaName } from './staff-trip-tracking.service';
-import { resolveTreatmentValue } from './capi.service';
 import { resolveDeliveryFeeSnapshot } from './reservation-core.service';
 import { resolveNextPurchaseReviewStatus } from './capi-review-status';
+import { resolveReservationBilling } from './reservation-billing.service';
 import {
   getStaffChatWindowConfig,
   StaffChatWindowConfig,
@@ -51,9 +51,11 @@ export interface StaffTaskAddress {
 
 export interface StaffTaskPricing {
   treatmentFee: number;
+  /** Diskon layanan yang ikut menentukan totalFee. */
+  discountAmount?: number;
   deliveryFee: number;
   totalFee: number;
-  paymentStatus: 'LUNAS' | 'TAGIH_DI_TEMPAT';
+  paymentStatus: 'LUNAS' | 'TAGIH_DI_TEMPAT' | 'PERLU_VERIFIKASI';
   paymentStatusLabel: string;
   /** Metode pembayaran tercatat (CASH/TRANSFER/QRIS) bila sudah lunas. */
   paymentMethod?: string | null;
@@ -92,6 +94,51 @@ export interface StaffTaskItem {
     reason: ChatWindowReason;
     opensAt?: string | null;
     closesAt?: string | null;
+  };
+}
+
+/**
+ * Pricing kanonis untuk kartu tugas staf.
+ * Satu-satunya tempat menghitung tagihan task: memakai `resolveReservationBilling`
+ * (diskon ikut dikurangkan, ongkir dari snapshot reservasi) agar angka di layar
+ * bidan = angka validasi pembayaran = angka laporan.
+ */
+async function buildStaffTaskPricing(
+  row: any,
+  tenantId: string,
+  context: 'today' | 'upcoming' | 'completed' = 'today'
+): Promise<StaffTaskPricing> {
+  const billing = await resolveReservationBilling(row, tenantId);
+  const isLunas = Boolean(row?.purchase_occurred_at);
+  // Bukti sudah masuk tetapi pembayaran belum diverifikasi = menunggu admin.
+  const awaitingVerification =
+    !isLunas && Boolean(row?.proof_url) && Boolean(row?.payment_method);
+  const paymentStatus: StaffTaskPricing['paymentStatus'] = isLunas
+    ? 'LUNAS'
+    : awaitingVerification
+      ? 'PERLU_VERIFIKASI'
+      : 'TAGIH_DI_TEMPAT';
+  const labels =
+    context === 'completed'
+      ? { lunas: 'Lunas (Selesai)', unpaid: 'Belum Lunas' }
+      : context === 'upcoming'
+        ? { lunas: 'Lunas', unpaid: 'Tagih di Tempat' }
+        : { lunas: 'Lunas (Online/Transfer)', unpaid: 'Tagih di Tempat (Tunai/Transfer)' };
+  const paymentStatusLabel = isLunas
+    ? labels.lunas
+    : awaitingVerification
+      ? 'Perlu Verifikasi'
+      : labels.unpaid;
+
+  return {
+    treatmentFee: billing.treatmentFee,
+    discountAmount: billing.discount,
+    deliveryFee: billing.deliveryFee,
+    totalFee: billing.totalFee,
+    paymentStatus,
+    paymentStatusLabel,
+    paymentMethod: row?.payment_method ?? null,
+    proofUrl: row?.proof_url ?? null,
   };
 }
 
@@ -570,6 +617,8 @@ export class StaffReservationService {
           booking_date: true,
           status: true,
           purchase_value: true,
+          discount_amount: true,
+          delivery_fee: true,
           purchase_occurred_at: true,
           updated_at: true,
           otw_sent_at: true,
@@ -577,6 +626,7 @@ export class StaffReservationService {
           payment_method: true,
           proof_url: true,
           receipt_amount: true,
+          items: { select: { price: true } },
           assigned_staff: {
             select: {
               id: true,
@@ -742,28 +792,12 @@ export class StaffReservationService {
         // Fase 1.1: anak spesifik reservasi (fallback profil customer) — lihat selectTaskChildren.
         const childrenList = selectTaskChildren(r.children, cust?.children);
 
-        // Pricing calculation
-        let treatmentFee = r.purchase_value || 0;
-        if (treatmentFee <= 0 && r.treatment_detail) {
-          const resolved = await resolveTreatmentValue(r.treatment_detail);
-          if (resolved && resolved > 0) treatmentFee = resolved;
-        }
-        // KB-6: utamakan snapshot delivery_fee reservasi, fallback Customer.ongkir.
-        const deliveryFee = resolveDeliveryFeeSnapshot({ ...(r as any), customer: cust ?? (r as any).customer });
-        const totalFee = treatmentFee + deliveryFee;
-        const isLunas = !!r.purchase_occurred_at;
-        const paymentStatus: 'LUNAS' | 'TAGIH_DI_TEMPAT' = isLunas ? 'LUNAS' : 'TAGIH_DI_TEMPAT';
-        const paymentStatusLabel = isLunas ? 'Lunas (Online/Transfer)' : 'Tagih di Tempat (Tunai/Transfer)';
-
-        const pricing: StaffTaskPricing = {
-          treatmentFee,
-          deliveryFee,
-          totalFee,
-          paymentStatus,
-          paymentStatusLabel,
-          paymentMethod: (r as any).payment_method ?? null,
-          proofUrl: (r as any).proof_url ?? null,
-        };
+        // Pricing kanonis: diskon + ongkir snapshot dihitung di satu seam.
+        const pricing = await buildStaffTaskPricing(
+          { ...(r as any), customer: cust ?? (r as any).customer },
+          tenantId,
+          'today'
+        );
 
         return {
           reservationId: r.id,
@@ -897,10 +931,13 @@ export class StaffReservationService {
           booking_date: true,
           status: true,
           purchase_value: true,
+          discount_amount: true,
+          delivery_fee: true,
           purchase_occurred_at: true,
           payment_method: true,
           proof_url: true,
           receipt_amount: true,
+          items: { select: { price: true } },
           customer: {
             select: {
               name: true,
@@ -1052,27 +1089,11 @@ export class StaffReservationService {
         // Fase 1.1: anak spesifik reservasi (fallback profil customer) — lihat selectTaskChildren.
         const childrenList = selectTaskChildren(r.children, cust?.children);
 
-        let treatmentFee = r.purchase_value || 0;
-        if (treatmentFee <= 0 && r.treatment_detail) {
-          const resolved = await resolveTreatmentValue(r.treatment_detail);
-          if (resolved && resolved > 0) treatmentFee = resolved;
-        }
-        // KB-6: utamakan snapshot delivery_fee reservasi, fallback Customer.ongkir.
-        const deliveryFee = resolveDeliveryFeeSnapshot({ ...(r as any), customer: cust ?? (r as any).customer });
-        const totalFee = treatmentFee + deliveryFee;
-        const isLunas = !!r.purchase_occurred_at;
-        const paymentStatus: 'LUNAS' | 'TAGIH_DI_TEMPAT' = isLunas ? 'LUNAS' : 'TAGIH_DI_TEMPAT';
-        const paymentStatusLabel = isLunas ? 'Lunas' : 'Tagih di Tempat';
-
-        const pricing: StaffTaskPricing = {
-          treatmentFee,
-          deliveryFee,
-          totalFee,
-          paymentStatus,
-          paymentStatusLabel,
-          paymentMethod: (r as any).payment_method ?? null,
-          proofUrl: (r as any).proof_url ?? null,
-        };
+        const pricing = await buildStaffTaskPricing(
+          { ...(r as any), customer: cust ?? (r as any).customer },
+          tenantId,
+          'upcoming'
+        );
 
         return {
           reservationId: r.id,
@@ -1156,6 +1177,8 @@ export class StaffReservationService {
           booking_date: true,
           status: true,
           purchase_value: true,
+          discount_amount: true,
+          delivery_fee: true,
           purchase_occurred_at: true,
           updated_at: true,
           otw_sent_at: true,
@@ -1163,6 +1186,7 @@ export class StaffReservationService {
           payment_method: true,
           proof_url: true,
           receipt_amount: true,
+          items: { select: { price: true } },
           customer: {
             select: {
               name: true,
@@ -1230,31 +1254,13 @@ export class StaffReservationService {
         // Fase 1.1: anak spesifik reservasi (fallback profil customer) — lihat selectTaskChildren.
         const childrenList = selectTaskChildren(r.children, cust?.children);
 
-        let treatmentFee = r.purchase_value || 0;
-        if (treatmentFee <= 0 && r.treatment_detail) {
-          const resolved = await resolveTreatmentValue(r.treatment_detail);
-          if (resolved && resolved > 0) treatmentFee = resolved;
-        }
-        // KB-6: utamakan snapshot delivery_fee reservasi, fallback Customer.ongkir.
-        const deliveryFee = resolveDeliveryFeeSnapshot({ ...(r as any), customer: cust ?? (r as any).customer });
-        const totalFee = treatmentFee + deliveryFee;
         // Invariant: LUNAS murni dari catatan pembayaran aktual (purchase_occurred_at).
-        // Status 'completed' TIDAK menyiratkan lunas — kunjungan bisa diselesaikan
-        // via forceUnpaid (tagih di tempat). Tanpa ini, tombol aksi pembayaran hilang
-        // pada riwayat selesai (lihat implementation_plan revisi audit).
-        const isLunas = Boolean(r.purchase_occurred_at);
-        const paymentStatus: 'LUNAS' | 'TAGIH_DI_TEMPAT' = isLunas ? 'LUNAS' : 'TAGIH_DI_TEMPAT';
-        const paymentStatusLabel = isLunas ? 'Lunas (Selesai)' : 'Belum Lunas';
-
-        const pricing: StaffTaskPricing = {
-          treatmentFee,
-          deliveryFee,
-          totalFee,
-          paymentStatus,
-          paymentStatusLabel,
-          paymentMethod: (r as any).payment_method ?? null,
-          proofUrl: (r as any).proof_url ?? null,
-        };
+        // Status 'completed' TIDAK menyiratkan lunas. Pricing kanonis menangani label.
+        const pricing = await buildStaffTaskPricing(
+          { ...(r as any), customer: cust ?? (r as any).customer },
+          tenantId,
+          'completed'
+        );
 
         return {
           reservationId: r.id,
@@ -1716,8 +1722,6 @@ export class StaffReservationService {
               },
             },
           },
-          // S-07: harga item resmi untuk verifikasi nominal dari klien.
-          items: { select: { price: true } },
         },
       });
 
@@ -1734,53 +1738,99 @@ export class StaffReservationService {
         return { success: false, error: 'Anda tidak memiliki hak akses untuk reservasi ini atau belum ada bidan yang ditugaskan.' };
       }
 
-      // Kontrak: amount = total tunai di tangan terapis (treatment + ongkir) dari frontend pricing.totalFee
+      // Kontrak: amount = total tunai di tangan terapis (treatment + ongkir).
       // KB-6: utamakan snapshot delivery_fee reservasi, fallback Customer.ongkir.
       const deliveryFee = resolveDeliveryFeeSnapshot(reservation as any);
-
-      // S-07: server adalah otoritas nominal. Hitung total resmi dari item
-      // reservasi (atau purchase_value lama) + snapshot ongkir, lalu tolak
-      // nominal klien yang tidak cocok. Tanpa ini staf bisa "mengakali" setoran.
-      const items = Array.isArray((reservation as any).items) ? (reservation as any).items : [];
-      const itemsTotal = items.reduce((sum: number, it: any) => sum + (Number(it?.price) || 0), 0);
-      const discount = Number((reservation as any).discount_amount) || 0;
-      let expectedTreatment: number | null = null;
-      if (itemsTotal > 0) expectedTreatment = Math.max(0, itemsTotal - discount);
-      else if (typeof (reservation as any).purchase_value === 'number') {
-        expectedTreatment = Math.max(0, (reservation as any).purchase_value - discount);
-      }
-      const expectedTotal = expectedTreatment != null ? expectedTreatment + deliveryFee : null;
-      if (expectedTotal != null && amount != null && Math.round(Number(amount)) !== Math.round(expectedTotal)) {
-        return {
-          success: false,
-          error: `Nominal pembayaran tidak sesuai tagihan resmi (diterima: ${Math.round(Number(amount))}, seharusnya: ${Math.round(expectedTotal)}). Muat ulang data reservasi lalu coba lagi.`,
-        };
-      }
-
-      const totalCollected = amount != null ? amount : ((reservation as any).purchase_value || 0);
-      // Nilai murni layanan yang disimpan di purchase_value agar tidak double-count saat read: totalFee = purchase_value + ongkir
-      const pureTreatmentValue = amount != null ? Math.max(0, totalCollected - deliveryFee) : ((reservation as any).purchase_value || 0);
-      const totalPaid = totalCollected;
+      const discount = Math.max(0, Number((reservation as any).discount_amount) || 0);
+      const purchaseValue =
+        typeof (reservation as any).purchase_value === 'number'
+          ? (reservation as any).purchase_value
+          : 0;
+      // Otoritas tagihan = purchase_value (GROSS) - diskon + ongkir.
+      // `reservation_items` TIDAK dipakai sebagai otoritas: item tidak disinkronkan
+      // pada jalur edit dan sering tidak lengkap.
+      const netTreatment = Math.max(0, purchaseValue - discount);
+      const expectedTotal = netTreatment + deliveryFee;
+      const receivedAmount =
+        amount != null && Number.isFinite(Number(amount))
+          ? Math.round(Number(amount))
+          : null;
       const now = new Date();
 
-      // Simpan bukti foto transfer/QRIS jika ada (dikompres max 800px agar
-      // ringan & hemat kuota MQL, tetap terbaca jelas).
-      // Revisi audit: PERTAHANKAN bukti lama bila tidak ada gambar baru —
-      // merekam ulang pembayaran tanpa foto TIDAK boleh menghapus bukti bayar.
+      // 1) SIMPAN BUKTI LEBIH DULU. Bukti finansial tidak boleh hilang hanya karena
+      // nominal tidak cocok. Folder payment-proofs permanen (tidak ikut prune/retensi).
       let proofUrl: string | null = (reservation as any).proof_url ?? null;
       if (proofImageB64 && proofImageB64.startsWith('data:image/')) {
         const { mediaService } = await import('./media.service');
         const matches = proofImageB64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
         const rawB64 = matches ? matches[2] : proofImageB64;
         const resized = await mediaService.resizeImageToMax(Buffer.from(rawB64, 'base64'), 800);
-        const saved = await mediaService.saveOutboundMedia({
+        const saved = await mediaService.savePaymentProof({
           tenantId,
-          imageB64: resized.toString('base64'),
+          buffer: resized,
           mimeType: 'image/jpeg',
           fileName: `proof-${reservationId}.jpg`,
         });
         proofUrl = saved.hdUrl;
       }
+
+      // 2) Evaluasi nominal. Mismatch TIDAK memblokir bukti dan TIDAK menandai Lunas:
+      // simpan sebagai "Perlu Verifikasi" agar admin memutuskan.
+      if (receivedAmount != null && receivedAmount !== Math.round(expectedTotal)) {
+        const delta = receivedAmount - Math.round(expectedTotal);
+        await prisma.reservation.update({
+          where: { id: reservationId },
+          data: {
+            proof_url: proofUrl,
+            payment_method: paymentMethod,
+          },
+        });
+
+        const { auditService } = await import('./audit.service');
+        await auditService.logAdminAction({
+          apiKey: 'STAFF_SESSION',
+          adminIdentity: staffName,
+          action: 'STAFF_PAYMENT_MISMATCH',
+          targetId: reservationId,
+          payload: {
+            expectedTotal,
+            receivedAmount,
+            delta,
+            purchaseValue,
+            discount,
+            deliveryFee,
+            proofUrl,
+            paymentMethod,
+            notes,
+          },
+          tenantId,
+        });
+
+        return {
+          success: true,
+          data: {
+            reservationId,
+            status: 'AWAITING_VERIFICATION',
+            expectedTotal,
+            receivedAmount,
+            delta,
+            proofUrl,
+            paymentMethod,
+            message: 'Bukti tersimpan. Nominal belum cocok dan menunggu verifikasi admin.',
+          },
+        };
+      }
+
+      // 3) Cocok (atau nominal tidak dikirim oleh klien lama) → catat lunas.
+      const totalCollected = receivedAmount != null ? receivedAmount : expectedTotal;
+      // purchase_value disimpan sebagai GROSS agar rumus kanonis
+      // (gross - discount + ongkir) tidak mengurangi diskon dua kali.
+      // Untuk pembayaran yang cocok, nilai ini sama dengan purchase_value lama.
+      const grossTreatmentValue =
+        receivedAmount != null
+          ? Math.max(0, totalCollected - deliveryFee + discount)
+          : purchaseValue;
+      const totalPaid = totalCollected;
 
       // Update data Reservasi menjadi Lunas di kasir lapangan.
       // Kebijakan Queue-First: DILARANG kirim CAPI dari lapangan (semua via antrean approve-purchase).
@@ -1796,7 +1846,7 @@ export class StaffReservationService {
           allowUnassignedStaff: isSupervisor,
           extraData: {
             purchase_occurred_at: now,
-            purchase_value: pureTreatmentValue,
+            purchase_value: grossTreatmentValue,
             purchase_review_status: purchaseReviewStatus,
             purchase_event_sent_at: purchaseEventSentAt,
             payment_method: paymentMethod,
@@ -1810,7 +1860,7 @@ export class StaffReservationService {
             where: { id: reservationId },
             data: {
               purchase_occurred_at: now,
-              purchase_value: pureTreatmentValue,
+              purchase_value: grossTreatmentValue,
               purchase_review_status: purchaseReviewStatus,
               purchase_event_sent_at: purchaseEventSentAt,
               payment_method: paymentMethod,
@@ -1825,7 +1875,7 @@ export class StaffReservationService {
           where: { id: reservationId },
           data: {
             purchase_occurred_at: now,
-            purchase_value: pureTreatmentValue,
+            purchase_value: grossTreatmentValue,
             purchase_review_status: purchaseReviewStatus,
             purchase_event_sent_at: purchaseEventSentAt,
             payment_method: paymentMethod,
@@ -1889,7 +1939,7 @@ export class StaffReservationService {
         console.warn('[STAFF RESERVATION] Failed to trigger follow-up on payment:', fuErr.message);
       }
 
-      // Audit log — amount = total riil di tangan, pureTreatmentValue tersimpan di purchase_value
+      // Audit log — amount = total riil di tangan, grossTreatmentValue tersimpan di purchase_value
       const { auditService } = await import('./audit.service');
       await auditService.logAdminAction({
         apiKey: 'STAFF_SESSION',
@@ -1899,7 +1949,10 @@ export class StaffReservationService {
         payload: {
           paymentMethod,
           amount: totalPaid,
-          pureTreatmentValue,
+          expectedTotal,
+          receivedAmount: totalPaid,
+          grossTreatmentValue,
+          discount,
           deliveryFee,
           proofUrl,
           notes,
@@ -1916,6 +1969,9 @@ export class StaffReservationService {
         success: true,
         data: {
           reservationId: updated.id,
+          status: 'PAID',
+          expectedTotal,
+          receivedAmount: totalPaid,
           purchaseValue: updated.purchase_value,
           purchaseOccurredAt: updated.purchase_occurred_at,
           paymentMethod,
@@ -2693,8 +2749,12 @@ export class StaffReservationService {
       }
 
       // Gerbang pelunasan: status 'completed' TIDAK bisa diklaim tanpa catatan pembayaran.
+      // Bukti bayar yang sudah masuk tetapi nominalnya menunggu verifikasi admin
+      // TIDAK boleh menahan penyelesaian kunjungan (operasional lapangan).
       const isPaid = !!reservation.purchase_occurred_at;
-      if (!isPaid && !forceUnpaid) {
+      const pendingVerification =
+        !isPaid && Boolean((reservation as any).proof_url) && Boolean((reservation as any).payment_method);
+      if (!isPaid && !forceUnpaid && !pendingVerification) {
         return {
           success: false,
           requiresPayment: true,
@@ -2748,6 +2808,10 @@ export class StaffReservationService {
       if (!isPaid && forceUnpaid) {
         completionAuditPayload.forcedUnpaid = true;
         completionAuditPayload.paymentStatus = 'TAGIH_DI_TEMPAT';
+      }
+      if (pendingVerification) {
+        completionAuditPayload.paymentStatus = 'PERLU_VERIFIKASI';
+        completionAuditPayload.pendingVerification = true;
       }
       // Gate 6.1: supervisor menyelesaikan kunjungan TANPA bidan.
       // Wajib terrekam agar bisa ditelusuri saat banding payroll / Gate 6.5.
@@ -2858,11 +2922,12 @@ export class StaffReservationService {
       const patientName = reservation.customer?.name || 'Bunda';
       const therapistName = reservation.assigned_staff?.name || staffName;
 
-      // Hitung rincian biaya
-      const treatmentFee = typeof reservation.purchase_value === 'number' ? reservation.purchase_value : 0;
-      // KB-6: utamakan snapshot delivery_fee reservasi, fallback Customer.ongkir.
-      const deliveryFee = resolveDeliveryFeeSnapshot(reservation as any);
-      const totalFee = treatmentFee + deliveryFee;
+      // Hitung rincian biaya dari seam kanonis (diskon + snapshot ongkir).
+      const billing = await resolveReservationBilling(reservation as any, tenantId);
+      const treatmentFee = billing.treatmentFee;
+      const discount = billing.discount;
+      const deliveryFee = billing.deliveryFee;
+      const totalFee = billing.totalFee;
 
       // Susun pesan WhatsApp — data-driven: customTemplate dari DB (Tenant.settings.paymentInfo.customTemplate)
       const rawTemplate = (paymentInfo as any).customTemplate;
@@ -2873,9 +2938,11 @@ export class StaffReservationService {
           ? paymentInfo.bankAccounts.map((a) => `• *${a.bank}*: \`${a.accountNumber}\`\n  a.n. ${a.accountName}`).join('\n')
           : '-';
         const rincianBiaya = totalFee > 0
-          ? (treatmentFee > 0 && deliveryFee > 0
-            ? `Treatment: Rp ${treatmentFee.toLocaleString('id-ID')} + Ongkir: Rp ${deliveryFee.toLocaleString('id-ID')}`
-            : `Total: Rp ${totalFee.toLocaleString('id-ID')}`)
+          ? (discount > 0
+            ? `Treatment: Rp ${treatmentFee.toLocaleString('id-ID')} - Diskon: Rp ${discount.toLocaleString('id-ID')} + Ongkir: Rp ${deliveryFee.toLocaleString('id-ID')}`
+            : treatmentFee > 0 && deliveryFee > 0
+              ? `Treatment: Rp ${treatmentFee.toLocaleString('id-ID')} + Ongkir: Rp ${deliveryFee.toLocaleString('id-ID')}`
+              : `Total: Rp ${totalFee.toLocaleString('id-ID')}`)
           : '-';
         const keteranganQris = hasQris ? 'Barcode QRIS terlampir di atas untuk kemudahan scan pembayaran' : '-';
         const vars: Record<string, string> = {
@@ -2901,7 +2968,9 @@ export class StaffReservationService {
         if (totalFee > 0) {
           lines.push('');
           lines.push(`💰 *Total Tagihan:* Rp ${totalFee.toLocaleString('id-ID')}`);
-          if (treatmentFee > 0 && deliveryFee > 0) {
+          if (discount > 0) {
+            lines.push(`_(Treatment: Rp ${treatmentFee.toLocaleString('id-ID')} - Diskon: Rp ${discount.toLocaleString('id-ID')} + Ongkir: Rp ${deliveryFee.toLocaleString('id-ID')})_`);
+          } else if (treatmentFee > 0 && deliveryFee > 0) {
             lines.push(`_(Treatment: Rp ${treatmentFee.toLocaleString('id-ID')} + Ongkir: Rp ${deliveryFee.toLocaleString('id-ID')})_`);
           }
           if (reservation.treatment_detail) {
