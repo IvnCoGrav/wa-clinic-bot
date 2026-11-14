@@ -75,6 +75,13 @@ temp/
 exports/
 data/
 
+# Artefak lokal server (backup manual, kredensial watchdog)
+backups/
+.watchdog.env
+Caddyfile.bak*
+docker-compose.yml.bak*
+backup_pre_v3_*.sql
+
 # Exception: seed katalog dashboard (di-generate `npm run catalog:seed`, WAJIB di-track
 # karena di-import bundled oleh packages/admin-dashboard/src/utils/treatmentParser.ts)
 !packages/admin-dashboard/src/data/
