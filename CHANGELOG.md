@@ -4,6 +4,16 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-15 - Fix: Salinan Alert Watchdog Iklan via WhatsApp (Solusi Sementara)
+
+- **Latar:** Alert `AD_FUNNEL_ANOMALY` sebenarnya sudah terkirim ke Telegram grup "Report kala" (thread 3) 8x sejak 14 Nov (status `SENT`), tetapi owner tidak melihatnya karena masuk topik laporan harian, `notification_channels` kosong, dan tidak ada kanal WhatsApp.
+- **Perubahan:**
+  1. `AdWatchdogSettingsSchema.whatsappRecipients: string[]` (default `[]`) — dibaca dari `Tenant.settings.adWatchdog`, tenant-aware, tanpa hardcode nomor di kode.
+  2. `ad-watchdog.service.ts` mengirim **salinan** alert via WhatsApp dari nomor yang terkoneksi ke bot setelah Telegram sukses; **fail-soft** (WAHA down tidak menggagalkan alert Telegram).
+  3. Setiap salinan dicatat di `admin_notification_logs` (`channel='WHATSAPP'`, key unik `:WA:<index>`) untuk audit & troubleshooting.
+- **Sifat:** **sementara** (keputusan owner) — didokumentasikan di `docs/KNOWN_ISSUES.md #350` beserta utang teknisnya (UI pengaturan penerima, health-check `/cta` <30 menit, koreksi nomor staf).
+- **Verifikasi:** `tests/unit/ad-watchdog-whatsapp-copy.test.ts` (4 test) + 31 test watchdog lain hijau; `npm run build` hijau.
+
 #### 2026-11-15 - Fix KRITIS: Link CTA Iklan Tanpa Nomor Tujuan + Kode Tracking Kembali 2 Karakter
 
 - **Masalah:** Sejak 13 Nov 2026 15:05 WIB, seluruh klik iklan menghasilkan tautan `https://wa.me/?text=...` **tanpa nomor tujuan**, sehingga calon pasien tidak bisa masuk WhatsApp. Bukti produksi: 29 klik (14 Nov) & 12 klik (15 Nov) menghasilkan **0 chat ber-tag `Promo[...]`**, 0 lead iklan, dan pixel browser memakai `mock_pixel_123`.

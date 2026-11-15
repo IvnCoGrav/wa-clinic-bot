@@ -44,6 +44,7 @@ describe('AdWatchdog Config & Zod Schema', () => {
       lowTrafficRatio: 0.4,
       paidMediums: ['paid', 'google'],
       telegramTopicId: 42,
+      whatsappRecipients: ['6288235780925'],
     };
     const parsed = AdWatchdogSettingsSchema.parse(custom);
     expect(parsed).toEqual(custom);
