@@ -167,8 +167,11 @@ const TRACKING_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
  *   3 karakter → 32³ = 32.768 kombinasi
  *   4 karakter → 32⁴ = 1.048.576 kombinasi (batas maksimal, nyaris tidak pernah dicapai)
  */
-// Task 7.4 & Keputusan D5: Kode tracking >= 12 karakter untuk cegah brute-force/kolisi
-const RETRY_LENGTHS = [12, 14, 16] as const;
+// 2026-11-15 (keputusan owner): kode tracking dikembalikan ke 2 karakter agar pesan
+// WhatsApp tetap pendek & enak dibaca customer (`Promo[kc]`). Kolisi ditangani
+// insert-and-catch-conflict + eskalasi 2 → 3 → 4 karakter. Catatan risiko
+// (brute-force atribusi) didokumentasikan di docs/KNOWN_ISSUES.md.
+const RETRY_LENGTHS = [2, 3, 4] as const;
 const MAX_ATTEMPTS_PER_LENGTH = 5;
 
 /**

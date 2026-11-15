@@ -4,6 +4,20 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-15 - Fix KRITIS: Link CTA Iklan Tanpa Nomor Tujuan + Kode Tracking Kembali 2 Karakter
+
+- **Masalah:** Sejak 13 Nov 2026 15:05 WIB, seluruh klik iklan menghasilkan tautan `https://wa.me/?text=...` **tanpa nomor tujuan**, sehingga calon pasien tidak bisa masuk WhatsApp. Bukti produksi: 29 klik (14 Nov) & 12 klik (15 Nov) menghasilkan **0 chat ber-tag `Promo[...]`**, 0 lead iklan, dan pixel browser memakai `mock_pixel_123`.
+- **Akar masalah (multi-layer):**
+  1. Landing page eksternal menembak `/cta?divisi=...` **tanpa `?slug=`**; `resolveLandingContent('default')` tidak menemukan tenant (slug riil = `default-tenant`) lalu jatuh ke `defaultLandingContent()` (konten contoh/dev) yang nomornya diambil dari env `DEFAULT_WHATSAPP_PHONE` — kosong di server produksi.
+  2. `FB_PIXEL_ID` di server berisi `mock_pixel_123`, bukan pixel tenant `1465457801784141`.
+  3. Greeting tenant tidak terambil karena lookup slug yang sama, sehingga pesan memakai teks cadangan.
+- **Perbaikan (fondasional, tenant-aware):**
+  1. `src/services/landing-content.service.ts` — helper `resolveDefaultTenantContact()`: nomor WA, pixel, dan greeting diambil dari **DB tenant** (single source of truth), bukan env/hardcode.
+  2. `src/routes/landing.route.ts` (`GET /cta`) — resolusi konten fallback ke `DEFAULT_TENANT_ID`; prioritas nomor: konten landing → `?phone=` → DB tenant → env; prioritas pixel: konten → DB tenant → env; greeting: slug → DB tenant → teks cadangan.
+  3. Guard baru: log **ERROR** `[CTA CRITICAL] Nomor WhatsApp tujuan KOSONG` bila nomor tetap kosong, supaya kegagalan ini tidak lagi senyap.
+  4. `src/routes/tracking.route.ts` — kode tracking dikembalikan ke **2 karakter** (`Promo[xx]`) sesuai keputusan owner, dengan eskalasi insert-and-catch-conflict 2 → 3 → 4 karakter. Risiko brute-force atribusi dicatat di `docs/KNOWN_ISSUES.md #349`.
+- **Verifikasi:** test regresi baru `tests/unit/cta-phone-fallback.test.ts` (nomor tujuan, pixel asli, greeting DB, kode 2 karakter) + pembaruan test eskalasi panjang kode; `npm run build` hijau.
+
 #### 2026-11-14 - Fix: Kartu Alamat Ganda dari Teks Chat Ber-Link (Regresi 6285852555576)
 
 - **Masalah:** Pelanggan `6285852555576` memiliki 2 kartu alamat untuk rumah yang sama. Kartu kedua lahir otomatis dari pesan berisi `maps.app.goo.gl` + teks alamat, tanpa koordinat/ongkir, dengan URL tersimpan sebagai teks alamat.
