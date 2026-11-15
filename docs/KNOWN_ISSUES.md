@@ -3,6 +3,15 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 349. [Iklan / Atribusi] Kode Tracking 2 Karakter — Risiko Tabrakan & Atribusi Palsu (2026-11-15, OPEN/ACCEPTED)
+
+- **Status:** OPEN — diterima sebagai trade-off atas keputusan owner (pesan pelanggan harus pendek: `Promo[kc]`).
+- **Gejala:** Ruang kode 2 karakter = 32² = **1.024 kombinasi** dengan masa berlaku 7 hari. Pada volume 12–30 klik/hari (±150 kode aktif), peluang tabrakan per insert naik (ditangani retry 5x lalu eskalasi ke 3 karakter), dan kode bisa ditebak untuk memalsukan atribusi.
+- **Akar masalah:** Sebelumnya kode 12 karakter dipilih (Task 7.4 / D5) untuk mencegah brute-force; panjang dikembalikan ke 2 karakter demi keterbacaan pesan.
+- **Dampak:** (a) insert bisa sesekali eskalasi ke 3–4 karakter (pesan sedikit lebih panjang, tetap valid karena regex menerima 2–32); (b) potensi atribusi palsu bila seseorang sengaja mengirim `Promo[xx]` acak — peluang menebak kode aktif ≈ 150/1024 (~15% per tebakan) sehingga **tidak boleh dianggap aman untuk data keuangan**.
+- **Mitigasi saat ini:** insert-and-catch-conflict + eskalasi panjang, expiry 7 hari, `tenant_id` wajib cocok, dan `matchedAt` hanya diisi sekali (updateMany atomik).
+- **Rekomendasi lanjutan (bila owner berubah pikiran):** naikkan ke 4 karakter (1.048.576 kombinasi, masih pendek) **atau** tambahkan pembatas percobaan kode tidak dikenal per nomor/jam agar tebakan tidak bisa diulang bebas.
+
 ## 348. [Alamat] Kartu Alamat Ganda dari Teks Chat Ber-URL & Identitas Rumah Berbasis Teks (2026-11-14, RESOLVED)
 
 - **Status:** RESOLVED (2026-11-14) — gerbang deterministik di domain + jalur enrichment; data insiden sudah dibersihkan.

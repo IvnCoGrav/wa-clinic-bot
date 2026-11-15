@@ -66,6 +66,38 @@ export function purgeLandingContentCache(_slug?: string): void {
   // no-op
 }
 
+/**
+ * Kontak tenant default — sumber kebenaran terakhir untuk `/cta`.
+ *
+ * RC-CTA-01 (2026-11-15): link CTA iklan pernah kehilangan nomor tujuan
+ * (`https://wa.me/?text=...`) karena `resolveLandingContent('default')` tidak
+ * menemukan tenant (slug riil = `default-tenant`) sehingga jatuh ke konten
+ * contoh/dev yang nomornya diambil dari env `DEFAULT_WHATSAPP_PHONE` (kosong).
+ * Helper ini memastikan nomor & pixel selalu bisa diambil dari DB tenant.
+ */
+export interface TenantContactInfo {
+  whatsapp_number: string;
+  meta_pixel_id: string;
+  greetings_text: string;
+}
+
+export async function resolveDefaultTenantContact(): Promise<TenantContactInfo> {
+  try {
+    const tenant: any = await prisma.tenant.findFirst({
+      where: { OR: [{ id: DEFAULT_TENANT_ID }, { slug: DEFAULT_TENANT_ID }] },
+      select: { whatsapp_number: true, meta_pixel_id: true, greetings_text: true, format_visit: true },
+    });
+    return {
+      whatsapp_number: String(tenant?.whatsapp_number || '').trim(),
+      meta_pixel_id: String(tenant?.meta_pixel_id || '').trim(),
+      greetings_text: String(tenant?.greetings_text || tenant?.format_visit || '').trim(),
+    };
+  } catch {
+    // DB offline / unit test: biarkan kosong, caller punya fallback env.
+    return { whatsapp_number: '', meta_pixel_id: '', greetings_text: '' };
+  }
+}
+
 export async function resolveLandingContent(
   slug: string,
   tenantId?: string | null
