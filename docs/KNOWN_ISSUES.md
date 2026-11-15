@@ -3,6 +3,25 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 350. [Iklan / Notifikasi] Alert Watchdog Iklan Tidak Terlihat Owner — Dikirim Ganda ke WhatsApp (2026-11-15, TEMPORARY)
+
+- **Status:** **TEMPORARY WORKAROUND** (keputusan owner 2026-11-15). Bukan solusi final.
+- **Gejala:** Alert `AD_FUNNEL_ANOMALY` (sinyal `INSTRUMENTATION_SUSPECT`) **sudah terkirim** ke Telegram grup "Report kala" (`chat_id -1003728644119`, thread `3`) sebanyak 8x sejak 14 Nov (status `SENT`, bot `member`, `getChat ok`), tetapi owner menyatakan **tidak menerima/melihat notifikasi** tersebut — termasuk saat insiden link CTA tanpa nomor tujuan (13–15 Nov).
+- **Akar masalah (bukan pada pengiriman, tapi pada keterlihatan):**
+  1. `telegram_topic_system_errors` kosong → seluruh alert iklan masuk ke **topik laporan harian**, bercampur dengan laporan rutin sehingga mudah terlewat.
+  2. `notification_channels = {}` (kosong) — tidak ada kanal cadangan (WA).
+  3. Tidak ada alert yang memeriksa **isi link CTA**; watchdog hanya melihat gejala (klik ada, chat ber-tag nol) sehingga diagnosanya mengarah ke "tracker landing page".
+  4. Ambang minimum watchdog membuat alert pertama baru muncul 14 Nov 08:14, ±17 jam setelah kerusakan 13 Nov 15:08.
+- **Solusi sementara yang dipasang (2026-11-15):**
+  1. Field baru `AdWatchdogSettingsSchema.whatsappRecipients: string[]` (default `[]`) → dibaca dari `Tenant.settings.adWatchdog` (tenant-aware, tanpa hardcode).
+  2. Salinan alert dikirim lewat WhatsApp dari **nomor yang terkoneksi ke bot** ke penerima terkonfigurasi (saat ini `6288235780925`), setelah alert Telegram sukses.
+  3. **Fail-soft:** kegagalan/jeda WAHA tidak menggagalkan alert Telegram; setiap salinan dicatat di `admin_notification_logs` (`channel='WHATSAPP'`, `idempotency_key` unik bersuffix `:WA:<index>`).
+- **Utang teknis & risiko:**
+  1. Pengiriman ganda (Telegram + WA) berpotensi jadi noise; belum ada UI pengaturan penerima (ganti lewat `Tenant.settings` JSON).
+  2. Nomor staf `Bidan Testing Yusi` di tabel `staff` = `088235780920` (kurang 1 digit dari `6288235780925`) — perlu dibetulkan agar konsisten.
+  3. Belum ada health-check aktif `GET /cta` → validasi bentuk `wa.me/<nomor>` (target berikutnya, <30 menit deteksi).
+- **Verifikasi:** `tests/unit/ad-watchdog-whatsapp-copy.test.ts` (4 test: normalisasi nomor, kirim + log WHATSAPP, tanpa penerima, fail-soft saat WA/gateway gagal) + 31 test watchdog lain hijau.
+
 ## 349. [Iklan / Atribusi] Kode Tracking 2 Karakter — Risiko Tabrakan & Atribusi Palsu (2026-11-15, OPEN/ACCEPTED)
 
 - **Status:** OPEN — diterima sebagai trade-off atas keputusan owner (pesan pelanggan harus pendek: `Promo[kc]`).
