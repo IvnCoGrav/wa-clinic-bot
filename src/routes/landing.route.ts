@@ -644,6 +644,11 @@ export async function landingRoutes(fastify: FastifyInstance) {
         finalMsg = finalMsg.replace(/^(?:Promo\s*)?\[\s*[\w\s-]{2,32}?\s*\]\s*/i, '').trim();
         finalMsg = `Promo[${trackingCode}]\n\n${finalMsg}`.trim();
       }
+    } else {
+      // Tanpa kode (crawler/bot/preview): placeholder mentah `[%ID%]` / `%ID%`
+      // tidak boleh ikut terkirim ke siapa pun. Buang beserta kata "Promo" di depannya.
+      const cleaned = finalMsg.replace(/(?:Promo\s*)?\[\s*%ID%\s*\]\s*/gi, '').trim();
+      finalMsg = cleaned || 'Halo Bu Bidan, saya tertarik dengan layanan home-treatment';
     }
 
     const cleanPhone = phone.replace(/\D/g, '');

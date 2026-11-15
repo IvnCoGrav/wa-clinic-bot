@@ -116,4 +116,17 @@ describe('RC-CTA-01 — /cta tanpa ?slug tetap punya nomor tujuan', () => {
     expect(res.body).not.toContain('6285794210526');
     expect(res.body).not.toContain('1465457801784141');
   });
+
+  it('6. crawler/bot (tanpa kode) tidak pernah menerima placeholder [%ID%] literal', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/cta?divisi=iklan-utama',
+      headers: { 'user-agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(decodeURIComponent(res.body)).not.toContain('[%ID%]');
+    expect(decodeURIComponent(res.body)).not.toContain('%ID%');
+    expect(res.body).toContain('https://wa.me/6285794210526?text=');
+  });
 });
