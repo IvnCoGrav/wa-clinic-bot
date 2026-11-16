@@ -69,6 +69,8 @@ const pages = pageFiles.map(f => {
   };
 });
 
+const baselinePages = pageFiles.filter(f => f !== 'src/pages/UiCatalog.tsx');
+
 const registry = {
   version: 1,
   layers: {
@@ -79,6 +81,7 @@ const registry = {
   },
   components,
   pages,
+  baselinePages,
   allow: {
     rawFetch: [
       { file: 'src/components/copilot/AdminCopilotPanel.tsx', reason: 'SSE stream' },

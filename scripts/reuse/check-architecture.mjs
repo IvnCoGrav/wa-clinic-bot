@@ -5,6 +5,7 @@ import { ROOT_DIR, toAbsolute, toRelative, exists, listFiles } from './lib/paths
 import { listTsFiles, parseTsFile } from './lib/ast.mjs';
 import { buildImportGraph, findCircularDependencyCycles } from './lib/import-graph.mjs';
 import { BASELINE_DIR, getCurrentCommit, loadBaseline, saveBaseline } from './lib/baseline.mjs';
+import { loadExceptions, matchException, DEFAULT_EXCEPTIONS_FILE } from './lib/exceptions.mjs';
 
 function parseCliArgs() {
   const args = process.argv.slice(2);
@@ -14,6 +15,7 @@ function parseCliArgs() {
     only: null, // layers | cycles | prisma-budget | admin-integrations
     root: 'src',
     baselineDir: BASELINE_DIR,
+    exceptionsFile: null,
     updateBaseline: false,
     allowUpdate: false
   };
@@ -24,6 +26,7 @@ function parseCliArgs() {
     else if (arg.startsWith('--only=')) options.only = arg.split('=')[1];
     else if (arg.startsWith('--root=')) options.root = arg.split('=')[1];
     else if (arg.startsWith('--baseline-dir=')) options.baselineDir = arg.split('=')[1];
+    else if (arg.startsWith('--exceptions-file=')) options.exceptionsFile = arg.split('=')[1];
     else if (arg === '--update-baseline') options.updateBaseline = true;
     else if (arg === '--allow-update') options.allowUpdate = true;
   }
@@ -309,11 +312,46 @@ async function runCheck() {
     }
   }
 
+  // Muat Exception Registry dan cek tanggal kedaluwarsa (P3)
+  const exceptionsPath = options.exceptionsFile || DEFAULT_EXCEPTIONS_FILE;
+  const { active: activeExceptions, expired: expiredExceptions, errors: excErrors } = loadExceptions(exceptionsPath);
+  for (const err of excErrors) {
+    newViolations.push({
+      type: 'REGISTRY_ERROR',
+      message: `[EXCEPTION_CONFIG_ERROR] ${err}`
+    });
+  }
+  for (const exp of expiredExceptions) {
+    newViolations.push({
+      type: 'REGISTRY_ERROR',
+      message: `[EXPIRED_EXCEPTION] Pengecualian arsitektur "${exp.rule}" (${exp.reason}) telah kedaluwarsa pada ${exp.expiresAt}. Segera selesaikan refaktor.`
+    });
+  }
+
+  // Filter pelanggaran yang memiliki pengecualian aktif berbatas waktu
+  const finalNewViolations = [];
+  const exemptedViolations = [];
+  for (const v of newViolations) {
+    if (v.type === 'REGISTRY_ERROR') {
+      finalNewViolations.push(v);
+      continue;
+    }
+    const matchedExc = matchException(v, activeExceptions);
+    if (matchedExc) {
+      exemptedViolations.push({
+        violation: v,
+        exception: matchedExc
+      });
+    } else {
+      finalNewViolations.push(v);
+    }
+  }
+
   // -------------------------------------------------------------
   // OUTPUT REPORT
   // -------------------------------------------------------------
-  const totalViolations = newViolations.length + baselineViolationsCount;
-  const isPassing = newViolations.length === 0 || options.warn;
+  const totalViolations = finalNewViolations.length + baselineViolationsCount + exemptedViolations.length;
+  const isPassing = finalNewViolations.length === 0 || options.warn;
 
   if (options.json) {
     console.log(JSON.stringify({
@@ -321,10 +359,12 @@ async function runCheck() {
       warnMode: options.warn,
       summary: {
         totalViolations,
-        newViolations: newViolations.length,
+        newViolations: finalNewViolations.length,
+        exemptedViolations: exemptedViolations.length,
         baselineViolations: baselineViolationsCount
       },
-      newViolations,
+      newViolations: finalNewViolations,
+      exemptedViolations,
       currentCyclesCount: currentCycles.length,
       currentPrismaTotal: currentPrismaBudget.totalCalls
     }, null, 2));
@@ -334,13 +374,21 @@ async function runCheck() {
     console.log(`======================================================`);
     console.log(`Mode               : ${options.warn ? 'WARN-ONLY (Peringatan)' : 'FAIL-ON-NEW (Ketat)'}`);
     console.log(`Target Direktori   : ${options.root}`);
-    console.log(`Total Pelanggaran  : ${totalViolations} (Baseline: ${baselineViolationsCount}, Baru: ${newViolations.length})`);
+    console.log(`Total Pelanggaran  : ${totalViolations} (Baseline: ${baselineViolationsCount}, Baru: ${finalNewViolations.length}, Dispensasi: ${exemptedViolations.length})`);
     console.log(`Siklus Terdeteksi  : ${currentCycles.length} siklus circular import`);
     console.log(`Panggilan Prisma   : ${currentPrismaBudget.totalCalls} panggilan di ${Object.keys(currentPrismaBudget.files).length} file routes`);
 
-    if (newViolations.length > 0) {
-      console.log(`\n[PELANGGARAN ARSITEKTUR BARU (${newViolations.length})]:`);
-      for (const [idx, v] of newViolations.entries()) {
+    if (exemptedViolations.length > 0) {
+      console.log(`\n[PELANGGARAN ARSITEKTUR DIKECUALIKAN SEMENTARA (${exemptedViolations.length})]:`);
+      for (const [idx, item] of exemptedViolations.entries()) {
+        console.log(`  ${idx + 1}. [${item.violation.type}] ${item.violation.message}`);
+        console.log(`     Alasan: "${item.exception.reason}" | PIC: ${item.exception.owner} | Berlaku s/d: ${item.exception.expiresAt}`);
+      }
+    }
+
+    if (finalNewViolations.length > 0) {
+      console.log(`\n[PELANGGARAN ARSITEKTUR BARU (${finalNewViolations.length})]:`);
+      for (const [idx, v] of finalNewViolations.entries()) {
         console.log(`  ${idx + 1}. [${v.type}] ${v.message}`);
       }
     }
@@ -349,7 +397,7 @@ async function runCheck() {
   }
 
   if (!isPassing) {
-    console.error(`[ARCHITECTURE GATE FAILED] Terdapat ${newViolations.length} pelanggaran arsitektur baru yang belum ada di baseline.\n`);
+    console.error(`[ARCHITECTURE GATE FAILED] Terdapat ${finalNewViolations.length} pelanggaran arsitektur baru yang belum ada di baseline.\n`);
     process.exit(1);
   }
 

@@ -3,6 +3,40 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 347. [Code Health] Sisa Utang Arsitektur & Burn-Down Baseline (2026-11-16, OPEN)
+
+- **Status:** OPEN — baseline awal terkunci melalui sistem ratchet di `scripts/reuse/baselines/`. Angka metrik hanya boleh turun, tidak boleh naik.
+- **Inventaris Utang Terkunci (Fakta Baseline):**
+  1. **Duplikasi Fungsi (4 grup tersisa):**
+     - `findById` di `src/repositories/conversation.repository.ts:200` vs `src/repositories/customer.repository.ts:128`.
+     - `getLogDateString` di `src/utils/llm-execution-logger.ts:116` vs `src/utils/log-buffer.ts:45`.
+     - `isTypoAtMostOne` di `src/utils/typo-match.ts:7` vs `isNearEqual` di `src/v3/tools/calculate-delivery.tool.ts:162`.
+     - `stripEdge` di `src/config/persona.ts:173` vs `src/utils/pronoun-validator.ts:33`.
+  2. **Deklarasi Simbol Terlarang (15 simbol tersisa):**
+     - Fungsi internal / helper non-kanonis yang masih hidup di luar kapabilitas terdaftar (lihat `scripts/reuse/baselines/forbidden-declarations.json`).
+  3. **Siklus Circular Import (6 siklus):**
+     - Siklus lintas modul di backend runtime yang perlu diputus secara bertahap (lihat `scripts/reuse/baselines/architecture.json`).
+  4. **File Fisik >1.500 Baris (9 file):**
+     - `customer.service.ts` (3.324 baris)
+     - `staff-reservation.service.ts` (3.015 baris)
+     - `treatment-catalog.service.ts` (2.536 baris)
+     - `copilot-tools.ts` (1.795 baris)
+     - `src/integrations/waha/client.ts` (1.767 baris)
+     - `capi.service.ts` (1.646 baris)
+     - `webhook.route.ts` (1.624 baris)
+     - `live-chat.service.ts` (1.570 baris)
+     - `meta-performance-analytics.service.ts` (1.567 baris)
+  5. **Panggilan Prisma di Route (285 panggilan di 35 file):**
+     - Perlu dimigrasikan ke service / repository layer secara modular.
+  6. **Dead Exports Runtime (170 export):**
+     - Ekspor fungsi/konstanta/kelas yang tidak memiliki referensi di luar modulnya sendiri (lihat `scripts/reuse/baselines/dead-exports.json`).
+- **Target Burn-Down Bertahap (Sprint 1–4):**
+  - **Sprint 1 (Target: 2026-11-30):** Duplikasi 4 → 2 grup, File >1500 baris 9 → 8 file, Prisma di route 285 → 270 panggilan.
+  - **Sprint 2 (Target: 2026-12-15):** Duplikasi 2 → 0 grup, File >1500 baris 8 → 6 file, Prisma di route 270 → 240 panggilan.
+  - **Sprint 3 (Target: 2026-12-31):** File >1500 baris 6 → 3 file, Prisma di route 240 → 200 panggilan, Dead export 170 → 100.
+  - **Sprint 4 (Target: 2027-01-15):** File >1500 baris 3 → 0 file, Prisma di route 200 → 150 panggilan, Dead export 100 → ≤30.
+- **Penegakan Gerbang:** Setiap perbaikan ditutup dengan menjalankan `npm run check:reuse:update` (hanya menurunkan baseline) dan verifikasi via `npm run report:reuse`.
+
 ## 346. [MCP] `clinic-ops-mcp` Ditunda — Plan & Audit Disimpan (2026-11-16, DEFERRED)
 
 - **Status:** DEFERRED — belum ada implementasi; `src/mcp/` belum dibuat; tidak ada dependency/migrasi yang ditambahkan.
@@ -11,7 +45,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Risiko yang belum ditutup (wajib dibaca saat resume):** PII/transkrip ke host AI, stdout pollution yang merusak JSON-RPC, duplikasi definisi metrik, write action tanpa auth/konfirmasi, dan endpoint HTTP publik yang harus hidup 24/7 untuk Claude web/mobile.
 - **Catatan:** “standby aktif” untuk Claude web/mobile berarti proses HTTP MCP harus tersedia saat tool dipanggil; soft-off hanya memblokir akses, bukan menghemat RAM. Jangan eksekusi tanpa persetujuan eksplisit user.
 
-## 345. [Code Health] Gerbang Anti-Duplikasi, Reuse Modul & UI Governance (2026-11-16, RESOLVED)
+## 345. [Code Health] Infrastruktur Gerbang Anti-Duplikasi, Reuse Modul & UI Governance (2026-11-16, RESOLVED)
 
 - **Status:** RESOLVED (2026-11-16) — Eksekusi penuh 8 fase `docs/PLAN_REUSE_GATE_2026-11-16.md` (Fase 0 s/d Fase 7). Sistem anti-spaghetti dan reuse modul kanonis aktif lokal & CI.
 - **Hasil Terverifikasi:**

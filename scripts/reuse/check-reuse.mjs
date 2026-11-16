@@ -6,6 +6,7 @@ import { loadRegistry, validateRegistry } from './lib/registry.mjs';
 import { listTsFiles, parseTsFile, collectFunctionLike, collectTopLevelDeclarations, collectExports } from './lib/ast.mjs';
 import { computeFingerprint } from './lib/fingerprint.mjs';
 import { BASELINE_DIR, getCurrentCommit, loadBaseline, saveBaseline } from './lib/baseline.mjs';
+import { loadExceptions, matchException, DEFAULT_EXCEPTIONS_FILE } from './lib/exceptions.mjs';
 
 function parseCliArgs() {
   const args = process.argv.slice(2);
@@ -15,6 +16,7 @@ function parseCliArgs() {
     only: null, // duplication | forbidden | dead-exports | file-size
     root: 'src',
     baselineDir: BASELINE_DIR,
+    exceptionsFile: null,
     maxLines: 1500,
     updateBaseline: false,
     allowUpdate: false
@@ -26,6 +28,7 @@ function parseCliArgs() {
     else if (arg.startsWith('--only=')) options.only = arg.split('=')[1];
     else if (arg.startsWith('--root=')) options.root = arg.split('=')[1];
     else if (arg.startsWith('--baseline-dir=')) options.baselineDir = arg.split('=')[1];
+    else if (arg.startsWith('--exceptions-file=')) options.exceptionsFile = arg.split('=')[1];
     else if (arg.startsWith('--max-lines=')) options.maxLines = parseInt(arg.split('=')[1], 10);
     else if (arg === '--update-baseline') options.updateBaseline = true;
     else if (arg === '--allow-update') options.allowUpdate = true;
@@ -61,20 +64,14 @@ async function runCheck() {
     registryErrors.push(`Gagal memuat registry: ${err.message}`);
   }
 
-  // Muat Exception Registry jika ada dan cek tanggal kedaluwarsa (F7-4)
-  const exceptionsFile = path.join(ROOT_DIR, 'scripts/reuse/exceptions.json');
-  if (fs.existsSync(exceptionsFile)) {
-    try {
-      const excData = JSON.parse(fs.readFileSync(exceptionsFile, 'utf8'));
-      const now = new Date();
-      for (const exc of excData.exceptions || []) {
-        if (exc.expiresAt && new Date(exc.expiresAt) < now) {
-          registryErrors.push(`[EXPIRED_EXCEPTION] Pengecualian "${exc.rule}" (${exc.reason}) telah kedaluwarsa pada ${exc.expiresAt}. Segera selesaikan refaktor.`);
-        }
-      }
-    } catch (e) {
-      registryErrors.push(`Gagal membaca scripts/reuse/exceptions.json: ${e.message}`);
-    }
+  // Muat Exception Registry dan cek tanggal kedaluwarsa (F7-4 / P3)
+  const exceptionsPath = options.exceptionsFile || DEFAULT_EXCEPTIONS_FILE;
+  const { active: activeExceptions, expired: expiredExceptions, errors: excErrors } = loadExceptions(exceptionsPath);
+  for (const err of excErrors) {
+    registryErrors.push(`[EXCEPTION_CONFIG_ERROR] ${err}`);
+  }
+  for (const exp of expiredExceptions) {
+    registryErrors.push(`[EXPIRED_EXCEPTION] Pengecualian "${exp.rule}" (${exp.reason}) telah kedaluwarsa pada ${exp.expiresAt}. Segera selesaikan refaktor.`);
   }
 
   // 2. Kumpulkan file TS target
@@ -457,11 +454,30 @@ async function runCheck() {
     });
   }
 
+  // F. Filter Pelanggaran yang Mendapat Dispensasi Sementara (P3)
+  const finalNewViolations = [];
+  const exemptedViolations = [];
+  for (const v of newViolations) {
+    if (v.type === 'REGISTRY_ERROR') {
+      finalNewViolations.push(v);
+      continue;
+    }
+    const matchedExc = matchException(v, activeExceptions);
+    if (matchedExc) {
+      exemptedViolations.push({
+        violation: v,
+        exception: matchedExc
+      });
+    } else {
+      finalNewViolations.push(v);
+    }
+  }
+
   // -------------------------------------------------------------
   // OUTPUT REPORT
   // -------------------------------------------------------------
-  const totalViolations = newViolations.length + baselineViolationsCount;
-  const isPassing = newViolations.length === 0 || options.warn;
+  const totalViolations = finalNewViolations.length + baselineViolationsCount + exemptedViolations.length;
+  const isPassing = finalNewViolations.length === 0 || options.warn;
 
   if (options.json) {
     console.log(JSON.stringify({
@@ -469,12 +485,14 @@ async function runCheck() {
       warnMode: options.warn,
       summary: {
         totalViolations,
-        newViolations: newViolations.length,
+        newViolations: finalNewViolations.length,
+        exemptedViolations: exemptedViolations.length,
         baselineViolations: baselineViolationsCount,
         fixedViolations: fixedViolationsCount,
         structuralWarnings: structuralWarnings.length
       },
-      newViolations,
+      newViolations: finalNewViolations,
+      exemptedViolations,
       structuralWarnings
     }, null, 2));
   } else {
@@ -483,14 +501,22 @@ async function runCheck() {
     console.log(`======================================================`);
     console.log(`Mode               : ${options.warn ? 'WARN-ONLY (Peringatan)' : 'FAIL-ON-NEW (Ketat)'}`);
     console.log(`Target Direktori   : ${options.root}`);
-    console.log(`Total Pelanggaran  : ${totalViolations} (Baseline: ${baselineViolationsCount}, Baru: ${newViolations.length})`);
+    console.log(`Total Pelanggaran  : ${totalViolations} (Baseline: ${baselineViolationsCount}, Baru: ${finalNewViolations.length}, Dispensasi: ${exemptedViolations.length})`);
     if (fixedViolationsCount > 0) {
       console.log(`Utang Selesai      : ${fixedViolationsCount} temuan baseline berhasil diperbaiki! 🎉`);
     }
 
-    if (newViolations.length > 0) {
-      console.log(`\n[PELANGGARAN BARU (${newViolations.length})]:`);
-      for (const [idx, v] of newViolations.entries()) {
+    if (exemptedViolations.length > 0) {
+      console.log(`\n[PELANGGARAN DIKECUALIKAN SEMENTARA (${exemptedViolations.length}) - Berdasarkan exceptions.json]:`);
+      for (const [idx, item] of exemptedViolations.entries()) {
+        console.log(`  ${idx + 1}. [${item.violation.type}] ${item.violation.message}`);
+        console.log(`     Alasan: "${item.exception.reason}" | PIC: ${item.exception.owner} | Berlaku s/d: ${item.exception.expiresAt}`);
+      }
+    }
+
+    if (finalNewViolations.length > 0) {
+      console.log(`\n[PELANGGARAN BARU (${finalNewViolations.length})]:`);
+      for (const [idx, v] of finalNewViolations.entries()) {
         console.log(`  ${idx + 1}. [${v.type}] ${v.message}`);
       }
     }
@@ -509,7 +535,7 @@ async function runCheck() {
   }
 
   if (!isPassing) {
-    console.error(`[REUSE GATE FAILED] Terdapat ${newViolations.length} pelanggaran baru yang belum terdaftar di baseline.\n`);
+    console.error(`[REUSE GATE FAILED] Terdapat ${finalNewViolations.length} pelanggaran baru yang belum terdaftar di baseline.\n`);
     process.exit(1);
   }
 

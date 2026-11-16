@@ -131,10 +131,10 @@ for (const f of allSrcFiles) {
 }
 
 // 6. Page Baru Tanpa ADR
+const baselinePageSet = new Set(registry.baselinePages || []);
 for (const p of registry.pages) {
-  // Bila ada page baru yang ditambahkan di luar baseline awal, wajib punya ADR
-  // Di baseline awal semua page terdaftar dengan adr: null, tapi page baru di F5-3 (UiCatalog) punya ADR.
-  if (p.isNew && !p.adr) {
+  // Bila ada page baru di luar baseline awal, wajib memiliki nomor ADR yang disetujui
+  if (!baselinePageSet.has(p.path) && !p.adr) {
     violations.push({
       type: 'PAGE_MISSING_ADR',
       file: p.path,
