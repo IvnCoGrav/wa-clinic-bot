@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedFromCommit": "9c47f256",
+  "generatedFromCommit": "3cf00e1d",
   "layerViolations": [
     {
       "rule": "LAYER_SERVICES",
@@ -52,14 +52,54 @@
     }
   ],
   "adminIntegrations": [
-    "src/routes/admin/customers-location.subroute.ts",
-    "src/routes/admin/evaluations.subroute.ts",
-    "src/routes/admin/google-integration.subroute.ts",
-    "src/routes/admin/knowledge.subroute.ts",
-    "src/routes/admin/livechat.subroute.ts",
-    "src/routes/admin/settings-ai.subroute.ts",
-    "src/routes/admin/settings-general.subroute.ts",
-    "src/routes/admin/waba.subroute.ts"
+    {
+      "file": "src/routes/admin/customers-location.subroute.ts",
+      "target": "src/integrations/google-maps/geocoding.ts"
+    },
+    {
+      "file": "src/routes/admin/evaluations.subroute.ts",
+      "target": "src/integrations/llm/context.ts"
+    },
+    {
+      "file": "src/routes/admin/evaluations.subroute.ts",
+      "target": "src/integrations/waha/client.ts"
+    },
+    {
+      "file": "src/routes/admin/google-integration.subroute.ts",
+      "target": "src/integrations/google-contacts/google-oauth.client.ts"
+    },
+    {
+      "file": "src/routes/admin/knowledge.subroute.ts",
+      "target": "src/integrations/whatsapp/factory.ts"
+    },
+    {
+      "file": "src/routes/admin/livechat.subroute.ts",
+      "target": "src/integrations/whatsapp/factory.ts"
+    },
+    {
+      "file": "src/routes/admin/livechat.subroute.ts",
+      "target": "src/integrations/whatsapp/index.ts"
+    },
+    {
+      "file": "src/routes/admin/settings-ai.subroute.ts",
+      "target": "src/integrations/llm/llm-gateway.ts"
+    },
+    {
+      "file": "src/routes/admin/settings-ai.subroute.ts",
+      "target": "src/integrations/llm/model-fallback.ts"
+    },
+    {
+      "file": "src/routes/admin/settings-general.subroute.ts",
+      "target": "src/integrations/waha/client.ts"
+    },
+    {
+      "file": "src/routes/admin/waba.subroute.ts",
+      "target": "src/integrations/waha/client.ts"
+    },
+    {
+      "file": "src/routes/admin/waba.subroute.ts",
+      "target": "src/integrations/whatsapp/factory.ts"
+    }
   ],
   "cycles": [
     [
@@ -113,19 +153,6 @@
     [
       "src/utils/gazetteer-zipcode-resolver.ts",
       "src/utils/gazetteer.ts"
-    ],
-    [
-      "src/v3/agent/agent-runner.ts",
-      "src/v3/agent/pipeline/context-grounder.ts",
-      "src/v3/agent/pipeline/fast-response-gate.ts",
-      "src/v3/agent/pipeline/tool-pipeline.ts",
-      "src/v3/agent/pipeline/delivery-fast-path.ts",
-      "src/v3/agent/pipeline/guardrail-pipeline.ts",
-      "src/v3/agent/pipeline/generation-stage.ts"
-    ],
-    [
-      "src/v3/agent/few-shot-exemplars.ts",
-      "src/v3/agent/gold-few-shot-exemplars.ts"
     ],
     [
       "src/v3/agent/persona.ts",

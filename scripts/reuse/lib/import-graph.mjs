@@ -50,10 +50,33 @@ export function resolveImportPath(fromFileRelOrAbs, specifier) {
  * Mengekstrak seluruh import statis dan dinamis dari sebuah SourceFile.
  * @param {ts.SourceFile} sourceFile
  * @param {string} filePath
- * @returns {Array<{ specifier: string, resolved: string | null, line: number, isDynamic: boolean }>}
+ * @returns {Array<{ specifier: string, resolved: string | null, line: number, isDynamic: boolean, isTypeOnly: boolean }>}
  */
 export function extractImports(sourceFile, filePath) {
   const imports = [];
+
+  function isImportClauseTypeOnly(clause) {
+    if (!clause) return false;
+    if (clause.isTypeOnly) return true;
+    if (clause.namedBindings && ts.isNamedImports(clause.namedBindings)) {
+      const elements = clause.namedBindings.elements;
+      if (elements.length > 0 && elements.every(el => Boolean(el.isTypeOnly))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function isExportDeclTypeOnly(decl) {
+    if (decl.isTypeOnly) return true;
+    if (decl.exportClause && ts.isNamedExports(decl.exportClause)) {
+      const elements = decl.exportClause.elements;
+      if (elements.length > 0 && elements.every(el => Boolean(el.isTypeOnly))) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   function visit(node) {
     const { line: startLine0 } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
@@ -63,11 +86,13 @@ export function extractImports(sourceFile, filePath) {
     if (ts.isImportDeclaration(node)) {
       if (node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
         const specifier = node.moduleSpecifier.text;
+        const isTypeOnly = isImportClauseTypeOnly(node.importClause);
         imports.push({
           specifier,
           resolved: resolveImportPath(filePath, specifier),
           line,
-          isDynamic: false
+          isDynamic: false,
+          isTypeOnly
         });
       }
     }
@@ -75,11 +100,13 @@ export function extractImports(sourceFile, filePath) {
     else if (ts.isExportDeclaration(node)) {
       if (node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
         const specifier = node.moduleSpecifier.text;
+        const isTypeOnly = isExportDeclTypeOnly(node);
         imports.push({
           specifier,
           resolved: resolveImportPath(filePath, specifier),
           line,
-          isDynamic: false
+          isDynamic: false,
+          isTypeOnly
         });
       }
     }
@@ -93,7 +120,8 @@ export function extractImports(sourceFile, filePath) {
             specifier,
             resolved: resolveImportPath(filePath, specifier),
             line,
-            isDynamic: true
+            isDynamic: true,
+            isTypeOnly: false
           });
         }
       }
@@ -106,7 +134,8 @@ export function extractImports(sourceFile, filePath) {
             specifier,
             resolved: resolveImportPath(filePath, specifier),
             line,
-            isDynamic: true
+            isDynamic: true,
+            isTypeOnly: false
           });
         }
       }
@@ -121,11 +150,13 @@ export function extractImports(sourceFile, filePath) {
 
 /**
  * Membangun dependency graph untuk sekumpulan file TS.
+ * graph hanya memuat import runtime (isTypeOnly diabaikan untuk menghindari siklus palsu).
  * @param {string[]} fileList daftar file relatif
- * @returns {{ graph: Map<string, string[]>, fileImports: Map<string, Array<{ specifier: string, resolved: string | null, line: number, isDynamic: boolean }>> }}
+ * @returns {{ graph: Map<string, string[]>, fullGraph: Map<string, string[]>, fileImports: Map<string, Array<{ specifier: string, resolved: string | null, line: number, isDynamic: boolean, isTypeOnly: boolean }>> }}
  */
 export function buildImportGraph(fileList) {
   const graph = new Map();
+  const fullGraph = new Map();
   const fileImports = new Map();
 
   for (const f of fileList) {
@@ -139,18 +170,25 @@ export function buildImportGraph(fileList) {
 
       fileImports.set(f, imps);
 
-      const resolvedTargets = imps
+      const allTargets = imps
         .map(i => i.resolved)
         .filter(r => r !== null && r !== f);
 
-      graph.set(f, Array.from(new Set(resolvedTargets)));
+      const runtimeTargets = imps
+        .filter(i => !i.isTypeOnly)
+        .map(i => i.resolved)
+        .filter(r => r !== null && r !== f);
+
+      graph.set(f, Array.from(new Set(runtimeTargets)));
+      fullGraph.set(f, Array.from(new Set(allTargets)));
     } catch {
       graph.set(f, []);
+      fullGraph.set(f, []);
       fileImports.set(f, []);
     }
   }
 
-  return { graph, fileImports };
+  return { graph, fullGraph, fileImports };
 }
 
 /**

@@ -217,7 +217,7 @@ Tujuh temuan duplikasi berisiko tinggi yang teridentifikasi pada audit awal:
 | Kriteria Penerimaan | Status | Bukti / Catatan |
 |---|---|---|
 | `docs/audit/2026-11-16/reuse-baseline.md` memuat angka + perintah | **TERPENUHI** | Seluruh tabel, nomor baris, dan script reproduksi terdokumentasi lengkap di file ini |
-| Angka cocok dengan #345 (7 file >1.500, 285 Prisma, 9 fetch, 60 page) | **TERPENUHI** | 7 file >1.500, 285 panggilan Prisma / 35 route, 9 file fetch, 60 page, 99 komponen |
+| Angka cocok dengan #345 (9 file >1.500, 285 Prisma, 9 fetch, 60 page) | **TERPENUHI** | 9 file >1.500, 285 panggilan Prisma / 35 route, 9 file fetch, 60 page, 99 komponen |
 | Tidak ada perubahan pada `src/**`, `tests/**`, `packages/**` | **TERPENUHI** | Read-only murni, `git status` hanya memuat dokumen plan & baseline |
 | Regression gate | **TERPENUHI** | Tidak ada kode yang diubah |
 

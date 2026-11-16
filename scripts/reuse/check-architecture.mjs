@@ -129,20 +129,25 @@ async function runCheck() {
   // -------------------------------------------------------------
   const currentAdminIntegrations = [];
   if (!options.only || options.only === 'admin-integrations') {
-    const adminFilesWithIntegration = new Set();
+    const edgeSet = new Set();
     for (const [file, imps] of fileImports.entries()) {
       if (file.startsWith('src/routes/admin/') || file.includes('/routes/admin/')) {
         for (const imp of imps) {
           if (imp.resolved && (imp.resolved.startsWith('src/integrations/') || imp.resolved.includes('/integrations/'))) {
-            adminFilesWithIntegration.add(file);
+            const edgeKey = `${file}::${imp.resolved}`;
+            if (!edgeSet.has(edgeKey)) {
+              edgeSet.add(edgeKey);
+              currentAdminIntegrations.push({
+                file,
+                target: imp.resolved,
+                line: imp.line
+              });
+            }
           }
         }
       }
     }
-    for (const af of adminFilesWithIntegration) {
-      currentAdminIntegrations.push(af);
-    }
-    currentAdminIntegrations.sort();
+    currentAdminIntegrations.sort((a, b) => `${a.file}::${a.target}`.localeCompare(`${b.file}::${b.target}`));
   }
 
   // -------------------------------------------------------------
@@ -184,7 +189,7 @@ async function runCheck() {
       version: 1,
       generatedFromCommit: commit,
       layerViolations: currentLayerViolations,
-      adminIntegrations: currentAdminIntegrations,
+      adminIntegrations: currentAdminIntegrations.map(e => ({ file: e.file, target: e.target })),
       cycles: currentCycles,
       prismaBudget: currentPrismaBudget
     };
@@ -195,10 +200,10 @@ async function runCheck() {
       console.log(JSON.stringify({ updated: true, commit, baseline: baselineData }, null, 2));
     } else {
       console.log(`[ARCHITECTURE GATE] Baseline arsitektur berhasil diperbarui untuk commit: ${commit}`);
-      console.log(`  - Layer violations      : ${currentLayerViolations.length}`);
-      console.log(`  - Admin integration files: ${currentAdminIntegrations.length}`);
-      console.log(`  - Circular import cycles: ${currentCycles.length}`);
-      console.log(`  - Prisma in routes total : ${currentPrismaBudget.totalCalls} (${Object.keys(currentPrismaBudget.files).length} files)`);
+      console.log(`  - Layer violations        : ${currentLayerViolations.length}`);
+      console.log(`  - Admin integration edges : ${baselineData.adminIntegrations.length}`);
+      console.log(`  - Circular import cycles  : ${currentCycles.length}`);
+      console.log(`  - Prisma in routes total  : ${currentPrismaBudget.totalCalls} (${Object.keys(currentPrismaBudget.files).length} files)`);
     }
     process.exit(0);
   }
@@ -230,17 +235,25 @@ async function runCheck() {
     }
   }
 
-  // B. Compare Admin Integrations
+  // B. Compare Admin Integrations (edge-based: { file, target })
   if (!options.only || options.only === 'admin-integrations') {
-    const baseAdminSet = new Set(baseline?.adminIntegrations || []);
-    for (const af of currentAdminIntegrations) {
-      if (baseAdminSet.has(af)) {
+    const baseAdminSet = new Set(
+      (baseline?.adminIntegrations || []).map(edge =>
+        typeof edge === 'string' ? edge : `${edge.file}::${edge.target}`
+      )
+    );
+
+    for (const edge of currentAdminIntegrations) {
+      const edgeKey = `${edge.file}::${edge.target}`;
+      if (baseAdminSet.has(edgeKey)) {
         baselineViolationsCount++;
       } else {
         newViolations.push({
           type: 'ADMIN_NO_NEW_INTEGRATION',
-          message: `File route admin baru "${af}" tidak boleh mengimpor langsung dari integrations/** (gunakan service/gateway)`,
-          file: af
+          message: `Rute admin "${edge.file}:${edge.line}" menambah impor integrasi langsung baru ke "${edge.target}" (dilarang, gunakan service/gateway)`,
+          file: edge.file,
+          target: edge.target,
+          line: edge.line
         });
       }
     }

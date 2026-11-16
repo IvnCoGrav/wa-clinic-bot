@@ -160,12 +160,59 @@ describe('Architecture & Structural Integrity Gate (Fase 3)', () => {
       expect(parsed.warnMode).toBe(true);
       expect(parsed.summary).toBeDefined();
       expect(parsed.summary.newViolations).toBe(0);
-      expect(parsed.currentCyclesCount).toBe(8);
+      expect(parsed.currentCyclesCount).toBe(6);
       expect(parsed.currentPrismaTotal).toBe(285);
     } finally {
       if (fs.existsSync(reportPath)) {
         fs.unlinkSync(reportPath);
       }
+    }
+  });
+
+  it('7. Type-only import cycle TIDAK memicu kegagalan NO_NEW_CYCLE (pass)', () => {
+    const tempDir = path.resolve(process.cwd(), 'tests/fixtures/arch-temp-type-cycle');
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+
+    fs.copyFileSync(path.resolve(FIXTURES_DIR, 'type-only-cycle-a.ts'), path.resolve(tempDir, 'type-only-cycle-a.ts'));
+    fs.copyFileSync(path.resolve(FIXTURES_DIR, 'type-only-cycle-b.ts'), path.resolve(tempDir, 'type-only-cycle-b.ts'));
+
+    try {
+      const res = runArchGate([
+        `--root=${tempDir}`,
+        '--only=cycles',
+        '--json'
+      ]);
+
+      expect(res.status).toBe(0);
+      expect(res.json.passed).toBe(true);
+      expect(res.json.newViolations).toHaveLength(0);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('8. Rute admin yang menambah import integrasi baru memicu kegagalan ADMIN_NO_NEW_INTEGRATION', () => {
+    const tempDir = path.resolve(process.cwd(), 'tests/fixtures/arch-temp-admin/routes/admin');
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+
+    fs.copyFileSync(
+      path.resolve(FIXTURES_DIR, 'routes/admin/admin-new-integration.ts'),
+      path.resolve(tempDir, 'admin-new-integration.ts')
+    );
+
+    try {
+      const res = runArchGate([
+        `--root=${path.resolve(tempDir, '../..')}`,
+        '--only=admin-integrations',
+        '--json'
+      ]);
+
+      expect(res.status).toBe(1);
+      expect(res.json.passed).toBe(false);
+      const adminViolations = res.json.newViolations.filter((v: any) => v.type === 'ADMIN_NO_NEW_INTEGRATION');
+      expect(adminViolations.length).toBeGreaterThan(0);
+    } finally {
+      fs.rmSync(path.resolve(tempDir, '../..'), { recursive: true, force: true });
     }
   });
 });
