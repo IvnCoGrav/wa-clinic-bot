@@ -7,13 +7,14 @@
 
 ## 1. Daftar Kapabilitas Kanonis Aktif
 
-Total kapabilitas terdaftar: **11 modul**.
+Total kapabilitas terdaftar: **12 modul**.
 
 | ID Kapabilitas | Judul & Deskripsi | Modul Kanonis | Ekspor Resmi | Test File |
 |---|---|---|---|---|
 | `date.parse_indonesian` | **Parser tanggal bahasa Indonesia**<br>Parsing ekspresi tanggal bahasa alami Indonesia (hari, nama bulan teks/angka, relatif) menjadi objek Date standar. | [`src/utils/indonesian-date-parser.ts`](../src/utils/indonesian-date-parser.ts) | `parseIndonesianDate`, `parseHistoricalIndonesianDate`, `applyBookingTimeToDate` | [`indonesian-date-parser.test.ts`](../tests/unit/v3/indonesian-date-parser.test.ts) |
 | `json.extract` | **Ekstraksi JSON dari output AI**<br>Mengekstrak blok JSON seimbang dari respons teks LLM yang mengandung markdown atau teks pelengkap. | [`src/utils/json-extract.ts`](../src/utils/json-extract.ts) | `extractBalancedJson`, `extractJsonContent`, `repairTruncatedJson` | [`json-extract.test.ts`](../tests/unit/json-extract.test.ts) |
 | `location.clinic_question` | **Klasifikasi pertanyaan lokasi klinik**<br>Mendeteksi apakah pesan customer menanyakan lokasi atau alamat klinik fisik. | [`src/utils/location-classifier.ts`](../src/utils/location-classifier.ts) | `isClinicLocationQuestion` | [`location-classifier.test.ts`](../tests/unit/location-classifier.test.ts) |
+| `log.date_key` | **Kunci tanggal nama file log harian**<br>Menghasilkan tanggal YYYY-MM-DD dari komponen lokal server untuk penamaan file log harian (llm-*.jsonl, app-*.log). | [`src/utils/log-date.ts`](../src/utils/log-date.ts) | `getLogDateString` | [`log-date.test.ts`](../tests/unit/log-date.test.ts) |
 | `phone.normalize` | **Normalisasi nomor telepon Indonesia**<br>Normalisasi nomor HP format Indonesia (08x, +628x, 628x) ke format 628x standar atau E164. | [`src/utils/phone-normalizer.ts`](../src/utils/phone-normalizer.ts) | `normalizePhoneID`, `normalizePhoneToE164` | [`security-and-parsing-helpers.test.ts`](../tests/unit/security-and-parsing-helpers.test.ts) |
 | `pii.mask_phone` | **Masking nomor telepon (PII)**<br>Menyensor nomor HP untuk log internal, audit trail, dan tampilan staf. | [`src/utils/pii-masker.ts`](../src/utils/pii-masker.ts) | `maskPhoneNumber`, `maskPhoneInText`, `maskPhoneWithTenantSuffix` | [`staff-chat-pii-masker.test.ts`](../tests/unit/staff-chat-pii-masker.test.ts) |
 | `regex.escape` | **Escape string untuk ekspresi reguler**<br>Meng-escape karakter khusus regex (.*+?^${}()|[\]) agar aman digunakan di RegExp dinamis. | [`src/utils/regex-escape.ts`](../src/utils/regex-escape.ts) | `escapeRegex` | [`regex-escape.test.ts`](../tests/unit/regex-escape.test.ts) |
@@ -51,6 +52,15 @@ Total kapabilitas terdaftar: **11 modul**.
 - **Simbol Terlarang di Luar Kanonis:** `isClinicLocationQuestion`
 - **File yang Diizinkan:** `src/utils/location-classifier.ts`
 - **File Test:** [`tests/unit/location-classifier.test.ts`](../tests/unit/location-classifier.test.ts)
+
+### `log.date_key` — Kunci tanggal nama file log harian
+
+- **Deskripsi:** Menghasilkan tanggal YYYY-MM-DD dari komponen lokal server untuk penamaan file log harian (llm-*.jsonl, app-*.log).
+- **File Kanonis:** [`src/utils/log-date.ts`](../src/utils/log-date.ts)
+- **Ekspor Kanonis:** `getLogDateString`
+- **Simbol Terlarang di Luar Kanonis:** `getLogDateString`
+- **File yang Diizinkan:** `src/utils/log-date.ts`
+- **File Test:** [`tests/unit/log-date.test.ts`](../tests/unit/log-date.test.ts)
 
 ### `phone.normalize` — Normalisasi nomor telepon Indonesia
 

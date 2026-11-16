@@ -8,6 +8,7 @@
 import fs from 'fs';
 import path from 'path';
 import { hashPiiPhone } from './logger-sanitizer';
+import { getLogDateString } from './log-date';
 
 export type LogLevel = 'log' | 'info' | 'warn' | 'error';
 
@@ -40,13 +41,6 @@ function ensureLogsDir(): void {
       fs.mkdirSync(LOGS_DIR, { recursive: true });
     }
   } catch {}
-}
-
-function getLogDateString(d = new Date()): string {
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
 }
 
 function getAppLogFilePath(d = new Date()): string {

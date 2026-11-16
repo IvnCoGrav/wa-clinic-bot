@@ -40,6 +40,22 @@
       "test": "tests/unit/json-extract.test.ts"
     },
     {
+      "id": "log.date_key",
+      "title": "Kunci tanggal nama file log harian",
+      "description": "Menghasilkan tanggal YYYY-MM-DD dari komponen lokal server untuk penamaan file log harian (llm-*.jsonl, app-*.log).",
+      "canonical": "src/utils/log-date.ts",
+      "exports": [
+        "getLogDateString"
+      ],
+      "forbiddenDeclarations": [
+        "getLogDateString"
+      ],
+      "allowedFiles": [
+        "src/utils/log-date.ts"
+      ],
+      "test": "tests/unit/log-date.test.ts"
+    },
+    {
       "id": "location.clinic_question",
       "title": "Klasifikasi pertanyaan lokasi klinik",
       "description": "Mendeteksi apakah pesan customer menanyakan lokasi atau alamat klinik fisik.",

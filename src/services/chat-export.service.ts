@@ -76,14 +76,6 @@ export function formatTime(value: Date | string): string {
   return `${hh}:${mm}:${ss}`;
 }
 
-/** Format tanggal lokal YYYY-MM-DD (default: hari ini). */
-export function formatLocalDate(value: Date = new Date()): string {
-  const y = value.getFullYear();
-  const m = String(value.getMonth() + 1).padStart(2, '0');
-  const d = String(value.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
 /**
  * Parse string tanggal YYYY-MM-DD ke rentang hari WIB (UTC+7).
  * K-006: file ekspor diberi nama tanggal WIB, jadi batas query WAJIB WIB juga.
