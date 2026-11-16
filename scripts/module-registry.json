@@ -179,6 +179,22 @@
       "test": null
     },
     {
+      "id": "tenant.scope",
+      "title": "Isolasi tenant pembacaan baris",
+      "description": "Gerbang kanonis yang hanya mengembalikan baris milik tenant pemanggil (atau baris tanpa tenant_id/data lama), dan menolak baris milik tenant lain.",
+      "canonical": "src/utils/tenant-scope.ts",
+      "exports": [
+        "tenantScopedRow"
+      ],
+      "forbiddenDeclarations": [
+        "tenantScopedRow"
+      ],
+      "allowedFiles": [
+        "src/utils/tenant-scope.ts"
+      ],
+      "test": "tests/unit/tenant-scope.test.ts"
+    },
+    {
       "id": "text.strip_edges",
       "title": "Pembersihan tepi token kata utuh",
       "description": "Membuang karakter non-alfanumerik (a-z, 0-9) di awal dan akhir token hasil split spasi sebelum dicocokkan dengan himpunan kata.",

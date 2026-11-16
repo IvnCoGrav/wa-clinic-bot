@@ -1,6 +1,7 @@
 import { prisma } from '../db/client';
 import type { Customer } from '@prisma/client';
 import { normalizePhoneID } from '../utils/phone-normalizer';
+import { tenantScopedRow } from '../utils/tenant-scope';
 
 /**
  * customer.repository.ts — Seam persistensi customer (PLAN 8 FASE 5a).
@@ -65,9 +66,7 @@ export class PostgresCustomerRepository implements CustomerRepository {
   async findById(id: string, tenantId: string): Promise<Customer | null> {
     // D-10: Cek via findUnique primary key + isolasi tenant ketat
     const customer = await prisma.customer.findUnique({ where: { id } });
-    if (!customer) return null;
-    if (tenantId && (customer as any).tenant_id && (customer as any).tenant_id !== tenantId) return null;
-    return customer as Customer;
+    return tenantScopedRow(customer as Customer | null, tenantId);
   }
 
   async create(data: CustomerCreateData): Promise<Customer> {
@@ -126,10 +125,7 @@ export class InMemoryCustomerRepository implements CustomerRepository {
   }
 
   async findById(id: string, tenantId: string): Promise<Customer | null> {
-    const c = this.store.get(id);
-    if (!c) return null;
-    if (tenantId && c.tenant_id && c.tenant_id !== tenantId) return null;
-    return c;
+    return tenantScopedRow(this.store.get(id), tenantId);
   }
 
   async create(data: CustomerCreateData): Promise<Customer> {

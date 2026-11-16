@@ -4,6 +4,7 @@ import { Customer, LocationSource } from '@prisma/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
 import { hasBypassLabel } from '../utils/customer-bypass';
+import { tenantScopedRow } from '../utils/tenant-scope';
 import { responseCacheService } from './response-cache.service';
 import { pickGpsTier, GpsCandidate } from './location-ingest.service';
 import { sanitizeKelurahanInput } from '../utils/kelurahan-guard';
@@ -1630,8 +1631,7 @@ export class CustomerService {
     }
     const memCust = memoryCustomers.get(customerId);
     if (memCust) {
-      if (tenantId && memCust.tenant_id && memCust.tenant_id !== tenantId) return null;
-      return memCust;
+      return tenantScopedRow(memCust, tenantId);
     }
     for (const [, cust] of memoryCustomers.entries()) {
       if (cust && cust.id === customerId && (!tenantId || cust.tenant_id === tenantId)) return cust;
