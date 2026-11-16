@@ -200,7 +200,10 @@ describe('Reuse Gate Self-Test & Adversarial Checks (Fase 2)', () => {
     expect(res.status).toBe(0);
     expect(res.json.passed).toBe(true);
     expect(res.json.summary.newViolations).toBe(0);
-    expect(duration).toBeLessThan(30000); // Harus selesai dalam < 30 detik
+    // Batas waktu harus tahan terhadap suite paralel penuh (CPU contention):
+    // gate di mesin ini 18–45 dtk tergantung beban, jadi 60 dtk tetap menjaga
+    // deteksi "menggantung" tanpa false-failure saat `npm test` penuh.
+    expect(duration).toBeLessThan(60000);
   });
 
   it('11. Interface atau type baru yang tidak dipakai TIDAK dianggap DEAD_EXPORT (pass)', () => {
