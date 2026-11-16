@@ -1764,7 +1764,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   // penyegaran daftar tugas.
   const handleSubmitPayment = async (method: PaymentMethod, proofImageB64: string | null) => {
     if (!paymentModalTask) return;
-    if (method !== 'CASH' && !proofImageB64) return;
+    if (method !== 'CASH' && !proofImageB64 && !paymentModalTask.pricing.proofUrl) return;
 
     setSubmittingPayment(true);
     try {
@@ -1787,6 +1787,11 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           t.reservationId === targetId
             ? {
                 ...t,
+                // Server adalah otoritas status. TANPA fallback 'completed':
+                // bila server tidak mengirim status, kartu tetap di tempatnya
+                // (lebih baik staf melihat kartu daripada kartu hilang padahal
+                // DB belum completed).
+                status: res.data?.status ?? t.status,
                 pricing: {
                   ...t.pricing,
                   paymentStatus: 'LUNAS',

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedFromCommit": "ede933c4",
+  "generatedFromCommit": "dea702fa",
   "deadExports": [
     {
       "type": "DEAD_EXPORT",
@@ -350,21 +350,14 @@
       "name": "resolveTenantCapiCredentials",
       "kind": "function",
       "file": "src/services/capi.service.ts",
-      "line": 372
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "normalizeCapiMatchingGeo",
-      "kind": "function",
-      "file": "src/services/capi.service.ts",
-      "line": 761
+      "line": 298
     },
     {
       "type": "DEAD_EXPORT",
       "name": "getTenantAutoSendPurchaseCapi",
       "kind": "function",
       "file": "src/services/capi.service.ts",
-      "line": 810
+      "line": 543
     },
     {
       "type": "DEAD_EXPORT",
@@ -1127,7 +1120,7 @@
       "name": "initKecamatanGazetteerSync",
       "kind": "function",
       "file": "src/v3/tools/calculate-delivery.tool.ts",
-      "line": 435
+      "line": 417
     },
     {
       "type": "DEAD_EXPORT",

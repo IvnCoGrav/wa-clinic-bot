@@ -87,6 +87,219 @@ export async function reservationDispatchPaymentProofRoutes(fastify: FastifyInst
   );
 
   /**
+   * POST /api/admin/reservation/:id/verify-payment
+   * Seam kanonis: Verifikasi bukti pembayaran transfer/non-tunai oleh CS/Admin.
+   * Mengubah status pembayaran menjadi LUNAS dan mentransisikan status reservasi
+   * menjadi completed bila jadwal kunjungan hari ini atau masa lalu.
+   */
+  fastify.post(
+    '/api/admin/reservation/:id/verify-payment',
+    { bodyLimit: 12 * 1024 * 1024 },
+    async (
+      request: FastifyRequest<{
+        Params: { id: string };
+        Body: {
+          proofImageB64?: string;
+          mimeType?: string;
+          paymentMethod?: string;
+          amount?: number;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const tenantId = tenantOf(request);
+      const { id } = request.params;
+      const { proofImageB64, mimeType, paymentMethod: inputMethod, amount: inputAmount } = request.body || {};
+
+      try {
+        const reservation = await prisma.reservation.findFirst({
+          where: { id, tenant_id: tenantId },
+          include: {
+            customer: true,
+            items: { select: { price: true } },
+          },
+        });
+
+        if (!reservation) {
+          const mock = memoryReservations.get(id);
+          if (mock && mock.tenant_id === tenantId) {
+            return handleMemoryVerifyPayment(mock, {
+              inputMethod,
+              inputAmount,
+              proofImageB64,
+              adminIdentity: (request as any).adminIdentity,
+              reply,
+            });
+          }
+          return reply.status(404).send({ success: false, error: 'Reservasi tidak ditemukan.' });
+        }
+
+        let proofUrl = reservation.proof_url ?? null;
+        if (proofImageB64) {
+          const { mediaService } = await import('../../services/media.service');
+          const rawB64 = proofImageB64.replace(/^data:image\/[^;]+;base64,/, '');
+          const resized = await mediaService.resizeImageToMax(Buffer.from(rawB64, 'base64'), 800);
+          const saved = await mediaService.saveOutboundMedia({
+            tenantId,
+            imageB64: resized.toString('base64'),
+            mimeType: mimeType && mimeType !== 'application/octet-stream' ? mimeType : 'image/jpeg',
+            fileName: `proof-${id}.jpg`,
+          });
+          proofUrl = saved.hdUrl;
+        }
+
+        const paymentMethod = inputMethod || reservation.payment_method || 'TRANSFER';
+
+        // Validasi bukti transfer: anti-bypass, bukti wajib ada kecuali tunai
+        if (paymentMethod !== 'CASH' && !proofUrl) {
+          return reply.status(400).send({
+            success: false,
+            error: 'Bukti transfer wajib ada untuk verifikasi pembayaran transfer.',
+          });
+        }
+
+        // Idempotensi: bila sudah lunas sebelumnya
+        if (reservation.purchase_occurred_at) {
+          return reply.status(200).send({
+            success: true,
+            data: {
+              reservationId: reservation.id,
+              status: reservation.status,
+              completed: reservation.status === 'completed',
+              paymentMethod: reservation.payment_method,
+              proofUrl: reservation.proof_url,
+              purchaseValue: reservation.purchase_value,
+              purchaseOccurredAt: reservation.purchase_occurred_at,
+              alreadyPaid: true,
+              message: 'Pembayaran reservasi ini sudah diverifikasi sebelumnya.',
+            },
+          });
+        }
+
+        const deliveryFee = typeof (reservation as any).delivery_fee === 'number' ? (reservation as any).delivery_fee : 0;
+        const items = Array.isArray((reservation as any).items) ? (reservation as any).items : [];
+        const itemsTotal = items.reduce((sum: number, it: any) => sum + (Number(it?.price) || 0), 0);
+        const discount = Number((reservation as any).discount_amount) || 0;
+        let expectedTreatment: number | null = null;
+        if (itemsTotal > 0) expectedTreatment = Math.max(0, itemsTotal - discount);
+        else if (typeof (reservation as any).purchase_value === 'number') {
+          expectedTreatment = Math.max(0, (reservation as any).purchase_value - discount);
+        }
+        const expectedTotal = expectedTreatment != null ? expectedTreatment + deliveryFee : null;
+        const finalAmount = inputAmount ?? expectedTotal ?? (reservation as any).purchase_value ?? 0;
+        const pureTreatmentValue = Math.max(0, finalAmount - deliveryFee);
+        const now = new Date();
+
+        const { canTransition, isPrematureCompletion } = await import('../../domain/reservation-status');
+        const { reservationStatusService } = await import('../../services/reservation-status.service');
+
+        let updated: any;
+        const canComplete = canTransition(reservation.status, 'completed') && !isPrematureCompletion(reservation.booking_date);
+
+        if (canComplete) {
+          const applied = await reservationStatusService.applyTransition(reservation, {
+            to: 'completed',
+            allowUnassignedStaff: true,
+            extraData: {
+              purchase_occurred_at: now,
+              purchase_value: pureTreatmentValue,
+              payment_method: paymentMethod,
+              proof_url: proofUrl,
+              needs_staff_verification: false,
+            },
+          });
+          if (applied.ok) {
+            updated = applied.reservation;
+          } else {
+            updated = await prisma.reservation.update({
+              where: { id },
+              data: {
+                purchase_occurred_at: now,
+                purchase_value: pureTreatmentValue,
+                payment_method: paymentMethod,
+                proof_url: proofUrl,
+                needs_staff_verification: false,
+              },
+            });
+          }
+        } else {
+          updated = await prisma.reservation.update({
+            where: { id },
+            data: {
+              purchase_occurred_at: now,
+              purchase_value: pureTreatmentValue,
+              payment_method: paymentMethod,
+              proof_url: proofUrl,
+              needs_staff_verification: false,
+            },
+          });
+        }
+
+        try {
+          if (reservation.customer_id) {
+            await customerService.recalculateCustomerLtv(reservation.customer_id, tenantId);
+          }
+        } catch (ltvErr: any) {
+          console.warn('[ADMIN VERIFY PAYMENT] Recalculate customer LTV failed:', ltvErr.message);
+        }
+
+        if (updated.status === 'completed' && reservation.booking_date) {
+          try {
+            const { sheetsSyncService } = await import('../../services/sheets/sheets-sync.service');
+            await sheetsSyncService.enqueue(reservation.id, tenantId).catch((err: any) =>
+              console.warn('[ADMIN VERIFY PAYMENT] sheetsSync enqueue failed:', err?.message)
+            );
+          } catch (sheetsErr: any) {
+            console.warn('[ADMIN VERIFY PAYMENT] sheetsSync enqueue failed:', sheetsErr.message);
+          }
+        }
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'ADMIN_VERIFY_PAYMENT',
+          targetId: id,
+          payload: {
+            paymentMethod,
+            amount: finalAmount,
+            pureTreatmentValue,
+            proofUrl,
+            status: updated.status,
+            completed: updated.status === 'completed',
+          },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({
+          success: true,
+          data: {
+            reservationId: updated.id,
+            status: updated.status,
+            completed: updated.status === 'completed',
+            paymentMethod,
+            proofUrl,
+            purchaseValue: updated.purchase_value,
+            purchaseOccurredAt: updated.purchase_occurred_at,
+            alreadyPaid: false,
+          },
+        });
+      } catch (error: any) {
+        const mock = memoryReservations.get(id);
+        if (mock && mock.tenant_id === tenantId) {
+          return handleMemoryVerifyPayment(mock, {
+            inputMethod,
+            inputAmount,
+            proofImageB64,
+            adminIdentity: (request as any).adminIdentity,
+            reply,
+          });
+        }
+        return reply.status(500).send({ success: false, error: error.message || 'Gagal memverifikasi pembayaran' });
+      }
+    }
+  );
+
+  /**
    * POST /api/admin/reservation/:id/approve-purchase
    */
   fastify.post(
@@ -926,5 +1139,70 @@ export async function reservationDispatchPaymentProofRoutes(fastify: FastifyInst
         note: 'Fallback in-memory mode (DB offline)',
       });
     }
+  });
+}
+
+function handleMemoryVerifyPayment(
+  mock: any,
+  params: {
+    inputMethod?: string;
+    inputAmount?: number;
+    proofImageB64?: string;
+    adminIdentity?: string;
+    reply: FastifyReply;
+  }
+) {
+  const { inputMethod, inputAmount, proofImageB64, reply } = params;
+  const paymentMethod = inputMethod || mock.payment_method || 'TRANSFER';
+  const proofUrl = proofImageB64 ? `/media/outbound/mock-proof-${mock.id}.jpg` : (mock.proof_url ?? null);
+
+  if (paymentMethod !== 'CASH' && !proofUrl) {
+    return reply.status(400).send({
+      success: false,
+      error: 'Bukti transfer wajib ada untuk verifikasi pembayaran transfer.',
+    });
+  }
+
+  if (mock.purchase_occurred_at) {
+    return reply.status(200).send({
+      success: true,
+      data: {
+        reservationId: mock.id,
+        status: mock.status,
+        completed: mock.status === 'completed',
+        paymentMethod: mock.payment_method,
+        proofUrl: mock.proof_url,
+        purchaseValue: mock.purchase_value,
+        purchaseOccurredAt: mock.purchase_occurred_at,
+        alreadyPaid: true,
+        message: 'Pembayaran reservasi ini sudah diverifikasi sebelumnya.',
+      },
+    });
+  }
+
+  mock.purchase_occurred_at = new Date();
+  mock.purchase_value = inputAmount ?? mock.purchase_value ?? 100000;
+  mock.payment_method = paymentMethod;
+  mock.proof_url = proofUrl;
+  mock.needs_staff_verification = false;
+  if (mock.status === 'confirmed') {
+    mock.status = 'completed';
+  }
+  mock.updated_at = new Date();
+  memoryReservations.set(mock.id, mock);
+
+  return reply.status(200).send({
+    success: true,
+    data: {
+      reservationId: mock.id,
+      status: mock.status,
+      completed: mock.status === 'completed',
+      paymentMethod,
+      proofUrl,
+      purchaseValue: mock.purchase_value,
+      purchaseOccurredAt: mock.purchase_occurred_at,
+      alreadyPaid: false,
+    },
+    note: 'Fallback in-memory mode',
   });
 }

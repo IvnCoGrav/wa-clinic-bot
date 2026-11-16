@@ -304,6 +304,22 @@
         "src/services/slot-overlap.service.ts"
       ],
       "test": "tests/unit/slot-overlap-parity.test.ts"
+    },
+    {
+      "id": "log.staff_rejection",
+      "title": "Logging penolakan bisnis rute staf",
+      "description": "Logging terstruktur ke console.warn untuk penolakan bisnis (HTTP 400) rute staf agar otomatis diserap ke logs/app-YYYY-MM-DD.log.",
+      "canonical": "src/utils/staff-rejection-log.ts",
+      "exports": [
+        "logStaffRejection"
+      ],
+      "forbiddenDeclarations": [
+        "logStaffRejection"
+      ],
+      "allowedFiles": [
+        "src/utils/staff-rejection-log.ts"
+      ],
+      "test": "tests/unit/staff-rejection-log.test.ts"
     }
   ]
 }

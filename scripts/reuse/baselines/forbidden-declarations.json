@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedFromCommit": "ede933c4",
+  "generatedFromCommit": "dea702fa",
   "violations": [
     {
       "type": "FORBIDDEN_DECLARATION",
@@ -9,14 +9,6 @@
       "canonical": "src/utils/json-extract.ts",
       "file": "src/v3/agent/pipeline/dsml-tool-salvage.ts",
       "line": 33
-    },
-    {
-      "type": "FORBIDDEN_DECLARATION",
-      "capabilityId": "phone.normalize",
-      "name": "normalizePhoneToE164",
-      "canonical": "src/utils/phone-normalizer.ts",
-      "file": "src/services/capi.service.ts",
-      "line": 43
     },
     {
       "type": "FORBIDDEN_DECLARATION",

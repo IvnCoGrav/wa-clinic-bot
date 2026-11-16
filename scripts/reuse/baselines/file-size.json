@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedFromCommit": "ede933c4",
+  "generatedFromCommit": "dea702fa",
   "maxLines": 1500,
   "files": [
     {
@@ -9,7 +9,7 @@
     },
     {
       "file": "src/services/staff-reservation.service.ts",
-      "lines": 3015
+      "lines": 3049
     },
     {
       "file": "src/services/treatment-catalog.service.ts",
@@ -24,16 +24,8 @@
       "lines": 1767
     },
     {
-      "file": "src/services/capi.service.ts",
-      "lines": 1632
-    },
-    {
       "file": "src/routes/webhook.route.ts",
       "lines": 1624
-    },
-    {
-      "file": "src/services/live-chat.service.ts",
-      "lines": 1570
     }
   ]
 }

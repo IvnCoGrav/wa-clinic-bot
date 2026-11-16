@@ -3,6 +3,51 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 348. [Staff Today] Insiden 16 Nov 2026 — Bukti Forensik & Penyelesaian Kunjungan Transfer (2026-11-16, RESOLVED)
+
+- **Status:** RESOLVED (2026-11-16).
+- **Insiden:** Bidan Thabita melaporkan via WhatsApp ke Admin pada pukul 12:26:59 WIB: *"Oh iya mba yg pertama tf tapi aku gk bisa nyelesain apkny eror biasane kalau tf langsung bisa"*.
+- **Hasil Investigasi Forensik (T0.1 & T0.2):**
+  - **Server:** `klinik-server-baru` (`43.173.11.79`), berkas log `logs/app-2026-11-16.log`, DB `wa_clinic_db`.
+  - **Pemeriksaan DB Offline (T0.1):** Log server bersih dari `Database offline` dan status 500 di jam tersebut. Server dan DB 100% online.
+  - **Data Pasien Pertama ("yg pertama")**: Bunda Dhea (ID `bbd3b28f-8526-4d85-a580-72a65ba96bc2`, booking 09:30 WIB).
+    - `purchase_occurred_at`: `NULL` (Admin belum mencatat lunas saat booking transfer).
+    - `payment_method`: `NULL`.
+    - `proof_url`: `NULL`.
+    - `status`: `completed` (baru berhasil diselesaikan pukul 12:30:37 WIB via bypass `STAFF_COMPLETE_VISIT_UNPAID`).
+  - **Data Pasien Kedua (Pembanding "biasanya tf langsung bisa")**: Bunda Maisya (ID `88e9fdeb-2efd-4e14-a1a9-89fb9c704361`, booking 11:00 WIB).
+    - `purchase_occurred_at`: `2026-11-16 00:00:00` (sudah ditandai Lunas oleh Admin).
+    - `payment_method`: `Transfer BCA`.
+    - `proof_url`: `/media/inbound/default-tenant/dc6e039330f04c73a944315e7294154e.jpg`.
+    - Kunjungan berhasil diselesaikan instan pukul 12:27:24 WIB (`STAFF_COMPLETE_VISIT`).
+  - **Audit Log Terekam:**
+    - `2026-11-16 05:27:24 UTC` (12:27:24 WIB): `STAFF_COMPLETE_VISIT` Bunda Maisya sukses.
+    - `2026-11-16 05:30:37 UTC` (12:30:37 WIB): `STAFF_COMPLETE_VISIT_UNPAID` Bunda Dhea dipaksa dengan payload `{"forcedUnpaid":true,"paymentStatus":"TAGIH_DI_TEMPAT"}`.
+- **Tabel Keputusan Cabang (T0.3):**
+  - `proof_url`: NULL
+  - `purchase_occurred_at`: NULL
+  - `logs`: Bersih (tanpa DB offline / 500)
+  - **Cabang Terpilih:** **Jalur B** → Fase 1, Fase 2, Fase 3, Fase 4, dan Fase 5 dijalankan penuh.
+- **Implementasi Solusi Fondasional (Fase 1–5):**
+  1. **Fase 1 (Kontrak Respons `recordPayment`):** Backend mengembalikan kontrak status eksplisit `{ status, completed, alreadyPaid }`, dan frontend `StaffToday.tsx` mengonsumsi `status: res.data?.status ?? t.status` tanpa fallback optimistis bohong. Kartu langsung berpindah ke tab "Selesai" secara reaktif tanpa refresh.
+  2. **Fase 2 (Pakai Bukti yang Sudah Ada di Sistem):** `StaffPaymentModal.tsx` memeriksa `task.pricing.proofUrl`. Bila bukti transfer sudah diunggah CS/WhatsApp pasien, bidan di lapangan tidak dipaksa mengunggah ulang foto bukti (tetap tersedia opsi ganti bukti opsional).
+  3. **Fase 3 (Seam Verifikasi Pembayaran CS/Admin):** Dibuat endpoint kanonis `POST /api/admin/reservation/:id/verify-payment` dan tombol verifikasi di `ReservationDetailModal.tsx`. CS/Admin dapat memverifikasi status LUNAS reservasi transfer dengan aman berdasarkan bukti yang terlampir.
+  4. **Fase 4 (Idempotensi di Seam Operasi):** `completeTask` dan `recordPayment` menangani pemanggilan ganda secara idempoten (`alreadyCompleted: true`, `alreadyPaid: true`) tanpa memicu error `InvalidTransitionError` dan tanpa efek samping berulang. Primitif status global `applyTransition` tetap strict.
+  5. **Fase 5 (Observabilitas Penolakan Bisnis):** Dibuat modul kanonis `src/utils/staff-rejection-log.ts` (`logStaffRejection`) yang mencatat seluruh penolakan HTTP 400 di rute staf (`/complete`, `/payment`, `/send-payment-info`, `/update-location`) secara terstruktur ke `logs/app-YYYY-MM-DD.log`.
+- **Verifikasi & Bukti Uji:**
+  - `npm run build`: Exit 0 (Backend TypeScript build sukses).
+  - `npm run --prefix packages/admin-dashboard build`: Exit 0 (Vite build sukses).
+  - `npm run --prefix packages/admin-dashboard check:design`: Exit 0 (tokens, dark-parity, a11y, contrast, dates 100% hijau).
+  - `npm run check:reuse`: Exit 0 (0 pelanggaran baru).
+  - 26 tests (7 test suite) hijau:
+    - `tests/unit/staff-payment-contract.test.ts` (3 tests)
+    - `tests/unit/staff-complete-idempotent.test.ts` (3 tests)
+    - `tests/unit/staff-rejection-log.test.ts` (3 tests)
+    - `tests/integration/admin-verify-payment.test.ts` (3 tests)
+    - `tests/unit/staff-payment-validation.test.ts` (3 tests)
+    - `tests/unit/reservation-status-transition.test.ts` (4 tests)
+    - `tests/unit/reservation-status-service.test.ts` (7 tests)
+
 ## 347. [Code Health] Sisa Utang Arsitektur & Burn-Down Baseline (2026-11-16, OPEN)
 
 - **Status:** OPEN — Sprint 1 SELESAI 2026-11-16 (target tercapai lebih awal). Sisa utang di bawah masih terkunci ratchet di `scripts/reuse/baselines/`; angka hanya boleh turun.

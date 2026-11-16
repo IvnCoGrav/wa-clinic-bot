@@ -79,6 +79,13 @@ export const StaffPaymentModal: React.FC<StaffPaymentModalProps> = ({
   const [proofImageB64, setProofImageB64] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // F2: kewajiban bukti ditentukan oleh STATE DATA, bukan checkbox manual.
+  // Bukti yang sudah diunggah CS/WhatsApp pasien (task.pricing.proofUrl) sah
+  // dipakai ulang — backend juga mempertahankan bukti lama
+  // (staff-reservation.service.ts:1766-1770).
+  const existingProofUrl = method === 'CASH' ? null : task.pricing.proofUrl ?? null;
+  const proofSatisfied = method === 'CASH' || Boolean(proofImageB64) || Boolean(existingProofUrl);
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -91,8 +98,11 @@ export const StaffPaymentModal: React.FC<StaffPaymentModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (method !== 'CASH' && !proofImageB64) {
-      toast('Silakan unggah foto bukti transfer / QRIS terlebih dahulu.', 'error');
+    if (!proofSatisfied) {
+      toast(
+        'Belum ada bukti pembayaran. Silakan unggah foto bukti transfer / QRIS terlebih dahulu.',
+        'error'
+      );
       return;
     }
     onSubmit(method, proofImageB64);
@@ -257,7 +267,17 @@ export const StaffPaymentModal: React.FC<StaffPaymentModalProps> = ({
 
         {method !== 'CASH' && (
           <div className="space-y-2">
-            <span className="block text-xs font-semibold text-ink">Foto Bukti Pembayaran (Wajib):</span>
+            <div className="flex items-center justify-between">
+              <span className="block text-xs font-semibold text-ink">
+                Foto Bukti Pembayaran {existingProofUrl ? '(Sudah Ada di Sistem)' : '(Wajib)'}:
+              </span>
+              {existingProofUrl && !proofImageB64 && (
+                <span className="text-[11px] font-semibold text-success flex items-center gap-1">
+                  <CheckCircle2 size={12} />
+                  <span>Bukti CS/Pasien Terdeteksi</span>
+                </span>
+              )}
+            </div>
             <input
               type="file"
               ref={fileInputRef}
@@ -267,7 +287,7 @@ export const StaffPaymentModal: React.FC<StaffPaymentModalProps> = ({
             />
             {proofImageB64 ? (
               <div className="relative rounded-xl overflow-hidden border border-divider bg-black/5 flex items-center justify-center max-h-48">
-                <img src={proofImageB64} alt="Bukti bayar" className="object-contain max-h-48 w-auto" />
+                <img src={proofImageB64} alt="Bukti bayar baru" className="object-contain max-h-48 w-auto" />
                 <button
                   type="button"
                   onClick={() => setProofImageB64(null)}
@@ -275,6 +295,31 @@ export const StaffPaymentModal: React.FC<StaffPaymentModalProps> = ({
                   aria-label="Hapus foto bukti"
                 >
                   <X size={14} />
+                </button>
+              </div>
+            ) : existingProofUrl ? (
+              <div className="p-3 bg-surface-2 rounded-xl border border-divider space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-ink-2">Foto bukti dari pasien/CS:</span>
+                  <a
+                    href={existingProofUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-accent hover:underline font-semibold"
+                  >
+                    Buka Foto Bukti ↗
+                  </a>
+                </div>
+                <div className="relative rounded-lg overflow-hidden border border-divider bg-black/5 flex items-center justify-center max-h-36">
+                  <img src={existingProofUrl} alt="Bukti bayar di sistem" className="object-contain max-h-36 w-auto" />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full py-2 border border-dashed border-divider hover:border-accent rounded-xl text-xs text-ink-2 hover:text-accent transition bg-surface flex items-center justify-center gap-1.5"
+                >
+                  <Upload size={14} />
+                  <span>Ganti dengan foto bukti baru (opsional)</span>
                 </button>
               </div>
             ) : (
@@ -301,7 +346,7 @@ export const StaffPaymentModal: React.FC<StaffPaymentModalProps> = ({
           <button
             aria-label="Tandai selesai"
             type="submit"
-            disabled={submitting || (method !== 'CASH' && !proofImageB64)}
+            disabled={submitting || !proofSatisfied}
             className="px-5 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-on-solid text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
           >
             {submitting ? (

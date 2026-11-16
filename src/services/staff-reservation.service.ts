@@ -1734,6 +1734,24 @@ export class StaffReservationService {
         return { success: false, error: 'Anda tidak memiliki hak akses untuk reservasi ini atau belum ada bidan yang ditugaskan.' };
       }
 
+      // F4: Idempotensi di seam operasi — bila pembayaran sudah tercatat (LUNAS),
+      // kembalikan no-op sukses tanpa menulis ulang purchase_occurred_at / memicu lifecycle berulang.
+      if (reservation.purchase_occurred_at) {
+        return {
+          success: true,
+          data: {
+            reservationId: reservation.id,
+            purchaseValue: reservation.purchase_value,
+            purchaseOccurredAt: reservation.purchase_occurred_at,
+            paymentMethod: reservation.payment_method || paymentMethod,
+            proofUrl: reservation.proof_url || null,
+            status: reservation.status,
+            completed: reservation.status === 'completed',
+            alreadyPaid: true,
+          },
+        };
+      }
+
       // Kontrak: amount = total tunai di tangan terapis (treatment + ongkir) dari frontend pricing.totalFee
       // KB-6: utamakan snapshot delivery_fee reservasi, fallback Customer.ongkir.
       const deliveryFee = resolveDeliveryFeeSnapshot(reservation as any);
@@ -1920,6 +1938,11 @@ export class StaffReservationService {
           purchaseOccurredAt: updated.purchase_occurred_at,
           paymentMethod,
           proofUrl,
+          // F1: kontrak eksplisit. recordPayment boleh sekaligus menyelesaikan
+          // kunjungan; klien DILARANG menebak status sendiri.
+          status: updated.status,
+          completed: updated.status === 'completed',
+          alreadyPaid: false,
         },
       };
     } catch (err: any) {
@@ -2663,6 +2686,7 @@ export class StaffReservationService {
     error?: string;
     requiresPayment?: boolean;
     paymentStatus?: 'LUNAS' | 'TAGIH_DI_TEMPAT';
+    alreadyCompleted?: boolean;
   }> {
     const {
       reservationId,
@@ -2690,6 +2714,16 @@ export class StaffReservationService {
       // yang sudah cancelled/rejected (mencegah resurrect data mati).
       if (reservation.status === 'cancelled' || reservation.status === 'rejected') {
         return { success: false, error: `Reservasi berstatus ${reservation.status} tidak dapat diselesaikan.` };
+      }
+
+      // F4: Idempotensi di seam operasi — bila reservasi sudah completed
+      // (misal telah diselesaikan oleh recordPayment sebelumnya), no-op berhasil.
+      if (reservation.status === 'completed') {
+        return {
+          success: true,
+          data: reservation,
+          alreadyCompleted: true,
+        };
       }
 
       // Gerbang pelunasan: status 'completed' TIDAK bisa diklaim tanpa catatan pembayaran.
