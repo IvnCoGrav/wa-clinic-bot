@@ -53,7 +53,8 @@
     "find:module": "node scripts/reuse/find-module.mjs",
     "docs:modules": "node scripts/reuse/generate-module-index.mjs",
     "check:reuse": "node scripts/reuse/check-reuse.mjs",
-    "check:reuse:update": "node scripts/reuse/check-reuse.mjs --update-baseline --allow-update"
+    "check:reuse:update": "node scripts/reuse/check-reuse.mjs --update-baseline --allow-update",
+    "check:architecture": "node scripts/reuse/check-architecture.mjs"
   },
   "dependencies": {
     "@fastify/compress": "^7.0.3",

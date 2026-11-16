@@ -53,6 +53,15 @@ jobs:
           name: reuse-report
           path: reuse-report.json
 
+      - name: Architecture Gate (warn)
+        run: node scripts/reuse/check-architecture.mjs --warn --json > architecture-report.json || true
+
+      - name: Upload Architecture Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: architecture-report
+          path: architecture-report.json
+
       - name: Build Backend & Admin Dashboard
         run: npm run build:all
 
