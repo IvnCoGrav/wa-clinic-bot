@@ -11,6 +11,8 @@
  * sanitizer; lihat OutputSanitizer.cleanOutboundReply butir 7.)
  */
 
+import { stripNonAlnumEdges } from '../../utils/text-edge';
+
 export interface PronounCheckResult {
   isValid: boolean;
   violations: string[];
@@ -18,23 +20,6 @@ export interface PronounCheckResult {
 
 /** Kata ganti orang-pertama tunggal yang dilarang (token kata utuh). */
 const BANNED_PRONOUNS = new Set(['saya', 'aku', 'gw', 'gue']);
-
-const stripEdge = (t: string): string => {
-  let s = t;
-  while (s.length > 0) {
-    const c = s.charCodeAt(0);
-    const isAlnum = (c >= 48 && c <= 57) || (c >= 97 && c <= 122);
-    if (isAlnum) break;
-    s = s.slice(1);
-  }
-  while (s.length > 0) {
-    const c = s.charCodeAt(s.length - 1);
-    const isAlnum = (c >= 48 && c <= 57) || (c >= 97 && c <= 122);
-    if (isAlnum) break;
-    s = s.slice(0, -1);
-  }
-  return s;
-};
 
 export function detectFirstPersonSlip(
   replyText: string,
@@ -50,7 +35,7 @@ export function detectFirstPersonSlip(
   if (!opts?.isFollowUp && lower.includes('perkenalkan') && lower.includes('saya bidan yusi')) {
     scannable = scannable.replace('saya bidan yusi', 'bidan yusi');
   }
-  const tokens = scannable.split(' ').map(stripEdge).filter((t) => t.length > 0);
+  const tokens = scannable.split(' ').map(stripNonAlnumEdges).filter((t) => t.length > 0);
   const hits = [...new Set(tokens.filter((t) => BANNED_PRONOUNS.has(t)))];
   if (hits.length > 0) {
     violations.push(

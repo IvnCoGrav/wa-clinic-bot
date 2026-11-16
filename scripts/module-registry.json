@@ -179,6 +179,22 @@
       "test": null
     },
     {
+      "id": "text.strip_edges",
+      "title": "Pembersihan tepi token kata utuh",
+      "description": "Membuang karakter non-alfanumerik (a-z, 0-9) di awal dan akhir token hasil split spasi sebelum dicocokkan dengan himpunan kata.",
+      "canonical": "src/utils/text-edge.ts",
+      "exports": [
+        "stripNonAlnumEdges"
+      ],
+      "forbiddenDeclarations": [
+        "stripNonAlnumEdges"
+      ],
+      "allowedFiles": [
+        "src/utils/text-edge.ts"
+      ],
+      "test": "tests/unit/text-edge.test.ts"
+    },
+    {
       "id": "time.wib",
       "title": "Waktu Indonesia Barat (WIB)",
       "description": "Operasi waktu dan tanggal berbasis WIB (UTC+7), offset milidetik, konversi UTC, dan batasan hari WIB.",

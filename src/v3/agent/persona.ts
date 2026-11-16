@@ -1,5 +1,6 @@
 import type { CustomerGoalSession } from '../state/goal-tracker';
 import { getGazetteerAreas } from '../../utils/gazetteer';
+import { stripNonAlnumEdges } from '../../utils/text-edge';
 import {
   composeRouterPrompt,
   composeRouterPromptAsync,
@@ -32,23 +33,7 @@ export function extractFastIntents(text: string): string[] {
   // Catatan mandat regex: 'rp' dicek via token kata utuh (split spasi), bukan /\brp\b/.
   // Kata "cukur" saja BUKAN sinyal harga — lihat cost-words di bawah.
   const asksDuration = hasAnyWord(['menit', 'durasi', 'berapa lama', 'brp lama', 'brp menit', 'lama pijat', 'lama perawatan', 'berapa jam', 'brp jam']);
-  const stripEdge = (t: string): string => {
-    let s = t;
-    while (s.length > 0) {
-      const c = s.charCodeAt(0);
-      const isAlnum = (c >= 48 && c <= 57) || (c >= 97 && c <= 122);
-      if (isAlnum) break;
-      s = s.slice(1);
-    }
-    while (s.length > 0) {
-      const c = s.charCodeAt(s.length - 1);
-      const isAlnum = (c >= 48 && c <= 57) || (c >= 97 && c <= 122);
-      if (isAlnum) break;
-      s = s.slice(0, -1);
-    }
-    return s;
-  };
-  const tokens = lower.split(' ').map(stripEdge).filter((t) => t.length > 0);
+  const tokens = lower.split(' ').map(stripNonAlnumEdges).filter((t) => t.length > 0);
   const hasRpToken = tokens.includes('rp');
   const hasNominalToken = tokens.some((t) => {
     if (t === 'rp' || t === 'ribu' || t === 'rb' || t === 'juta' || t === 'jt') return true;

@@ -7,7 +7,7 @@
 
 ## 1. Daftar Kapabilitas Kanonis Aktif
 
-Total kapabilitas terdaftar: **12 modul**.
+Total kapabilitas terdaftar: **13 modul**.
 
 | ID Kapabilitas | Judul & Deskripsi | Modul Kanonis | Ekspor Resmi | Test File |
 |---|---|---|---|---|
@@ -22,6 +22,7 @@ Total kapabilitas terdaftar: **12 modul**.
 | `reservation.payment_response` | **Response wrapper evaluasi pembayaran reservasi**<br>Menyematkan hasil kalkulasi paymentEvaluation ke dalam payload respons reservasi admin. | [`src/routes/admin/shared/reservation-response.ts`](../src/routes/admin/shared/reservation-response.ts) | `withPaymentEvaluation` | [`reservation-payment-response.test.ts`](../tests/unit/reservation-payment-response.test.ts) |
 | `schedule.overlap` | **Deteksi tumpang tindih slot jadwal**<br>Menghitung durasi efektif dan memeriksa tumpang-tindih interval reservasi atau janji temu. | [`src/services/slot-overlap.service.ts`](../src/services/slot-overlap.service.ts) | `effectiveDuration`, `intervalsOverlap` | [`slot-overlap-parity.test.ts`](../tests/unit/slot-overlap-parity.test.ts) |
 | `tenant.resolve` | **Resolusi ID tenant admin**<br>Mendapatkan tenant_id dari request Fastify admin secara aman dengan fallback DEFAULT_TENANT_ID. | [`src/routes/admin/settings-helpers.ts`](../src/routes/admin/settings-helpers.ts) | `resolveTenantId`, `requireTenantId` | *Belum ada (Fase lanjutan)* |
+| `text.strip_edges` | **Pembersihan tepi token kata utuh**<br>Membuang karakter non-alfanumerik (a-z, 0-9) di awal dan akhir token hasil split spasi sebelum dicocokkan dengan himpunan kata. | [`src/utils/text-edge.ts`](../src/utils/text-edge.ts) | `stripNonAlnumEdges` | [`text-edge.test.ts`](../tests/unit/text-edge.test.ts) |
 | `time.wib` | **Waktu Indonesia Barat (WIB)**<br>Operasi waktu dan tanggal berbasis WIB (UTC+7), offset milidetik, konversi UTC, dan batasan hari WIB. | [`src/utils/wib-time.ts`](../src/utils/wib-time.ts) | `WIB_OFFSET_MS`, `getWibNow`, `wibDayBoundsUtc`, `formatWibTime`, `wibDayRangeToUtc`, `formatWibDateYYYYMMDD`, `getWibDayName` | [`wib-time-consolidation.test.ts`](../tests/unit/wib-time-consolidation.test.ts) |
 
 ## 2. Rincian Modul & Aturan Guardrail
@@ -124,6 +125,15 @@ Total kapabilitas terdaftar: **12 modul**.
 - **Simbol Terlarang di Luar Kanonis:** `resolveTenant`, `resolveTenantId`
 - **File yang Diizinkan:** `src/routes/admin/settings-helpers.ts`
 - **File Test:** *Belum didefinisikan*
+
+### `text.strip_edges` — Pembersihan tepi token kata utuh
+
+- **Deskripsi:** Membuang karakter non-alfanumerik (a-z, 0-9) di awal dan akhir token hasil split spasi sebelum dicocokkan dengan himpunan kata.
+- **File Kanonis:** [`src/utils/text-edge.ts`](../src/utils/text-edge.ts)
+- **Ekspor Kanonis:** `stripNonAlnumEdges`
+- **Simbol Terlarang di Luar Kanonis:** `stripNonAlnumEdges`
+- **File yang Diizinkan:** `src/utils/text-edge.ts`
+- **File Test:** [`tests/unit/text-edge.test.ts`](../tests/unit/text-edge.test.ts)
 
 ### `time.wib` — Waktu Indonesia Barat (WIB)
 

@@ -9,6 +9,7 @@
  */
 
 import { getGazetteerAreas, getGazetteerKecamatanNames } from '../utils/gazetteer';
+import { stripNonAlnumEdges } from './text-edge';
 
 export interface LeadGreetingResult {
   isLeadGreeting: boolean;
@@ -57,25 +58,11 @@ function hasPreciseLocationEntity(text: string): boolean {
     return true;
   }
   // Street markers (token utuh)
-  const stripEdge = (t: string): string => {
-    let s = t;
-    while (s.length > 0) {
-      const c = s.charCodeAt(0);
-      if ((c >= 48 && c <= 57) || (c >= 97 && c <= 122)) break;
-      s = s.slice(1);
-    }
-    while (s.length > 0) {
-      const c = s.charCodeAt(s.length - 1);
-      if ((c >= 48 && c <= 57) || (c >= 97 && c <= 122)) break;
-      s = s.slice(0, -1);
-    }
-    return s;
-  };
   const STREET_MARKERS = new Set([
     'jl', 'jln', 'jalan', 'gang', 'gg', 'perum', 'perumahan',
     'komplek', 'kompleks', 'blok', 'cluster', 'ruko', 'patokan',
   ]);
-  const toks = lower.split(' ').map(stripEdge).filter((t) => t.length > 0);
+  const toks = lower.split(' ').map(stripNonAlnumEdges).filter((t) => t.length > 0);
   if (toks.some((t) => STREET_MARKERS.has(t))) return true;
   // Explicit location phrases
   const LOCATION_PHRASES = [
