@@ -80,7 +80,8 @@
       "canonical": "src/utils/pii-masker.ts",
       "exports": [
         "maskPhoneNumber",
-        "maskPhoneInText"
+        "maskPhoneInText",
+        "maskPhoneWithTenantSuffix"
       ],
       "forbiddenDeclarations": [
         "maskPhone",

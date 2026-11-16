@@ -37,7 +37,11 @@ function wibDayBoundsUtc(offsetDays = 0): { start: Date; end: Date } {
   return { start: new Date(startWibAsUtc - WIB_OFFSET_MS), end: new Date(endWibAsUtc - WIB_OFFSET_MS) };
 }
 
-function maskPhone(phone: string): string {
+/**
+ * Format nomor telepon dengan tanda hubung agar mudah dibaca di pesan WhatsApp owner/manajemen.
+ * SENGAJA TIDAK MENYENSOR nomor (bukan PII masking) karena nomor utuh diperlukan owner untuk follow-up operasional.
+ */
+function formatPhoneForReport(phone: string): string {
   const p = (phone || '').replace(/\D/g, '');
   if (p.length <= 4) return p;
   return `${p.slice(0, 4)}-${p.slice(4, 8)}-${p.slice(-4)}`;
@@ -205,7 +209,7 @@ export class NightlyWatchdogService {
 
     lines.push(`🚨 CHAT BELUM DIBALAS (${data.unreplied.length} Pasien)`);
     data.unreplied.slice(0, 10).forEach((u, i) => {
-      lines.push(`${i + 1}. ${u.name} (${maskPhone(u.phone)}) — menunggu ${u.waitingMinutes} menit`);
+      lines.push(`${i + 1}. ${u.name} (${formatPhoneForReport(u.phone)}) — menunggu ${u.waitingMinutes} menit`);
       lines.push(`   🔗 ${dashboardUrl}/admin/live-chat?conversationId=${u.conversationId}`);
     });
     if (data.unreplied.length === 0) lines.push('• Tidak ada.');
@@ -213,7 +217,7 @@ export class NightlyWatchdogService {
     lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━');
     lines.push(`⚠️ TANYA JADWAL BELUM BOOKING (${data.stalledInquiries.length} Pasien)`);
     data.stalledInquiries.slice(0, 10).forEach((s, i) => {
-      lines.push(`${i + 1}. ${s.name} (${maskPhone(s.phone)})${s.treatment ? ` — ${s.treatment}` : ''}`);
+      lines.push(`${i + 1}. ${s.name} (${formatPhoneForReport(s.phone)})${s.treatment ? ` — ${s.treatment}` : ''}`);
       lines.push(`   🔗 ${dashboardUrl}/admin/live-chat?conversationId=${s.conversationId}`);
     });
     if (data.stalledInquiries.length === 0) lines.push('• Tidak ada.');

@@ -8,6 +8,7 @@ import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
 import { hasBypassLabel, checkCustomerBypass } from '../utils/customer-bypass';
 import { prisma } from '../db/client';
+import { maskPhoneWithTenantSuffix } from '../utils/pii-masker';
 
 // Inisialisasi Circuit Breaker untuk CAPI calls
 export const capiBreaker = new CircuitBreaker(
@@ -53,20 +54,9 @@ export function normalizePhoneToE164(phone: string): string {
  * Mask nomor telepon untuk privasi log (GDPR/UU PDP).
  * Menjaga 4 digit pertama dan 4 digit terakhir, menyamarkan bagian tengah dengan bintang (*).
  * Jika ada suffix :tenantId, bagian tenantId tetap dipertahankan.
+ * Didelegasikan ke modul kanonis src/utils/pii-masker.ts.
  */
-export function maskPhone(phone?: string | null): string {
-  if (!phone || !phone.trim()) return '(no-phone)';
-  const trimmed = phone.trim();
-  if (trimmed.includes(':')) {
-    const [p, ...rest] = trimmed.split(':');
-    return `${maskPhone(p)}:${rest.join(':')}`;
-  }
-  if (trimmed.length <= 4) return '****';
-  if (trimmed.length < 8) {
-    return `${trimmed.slice(0, 2)}****${trimmed.slice(-2)}`;
-  }
-  return `${trimmed.slice(0, 4)}****${trimmed.slice(-4)}`;
-}
+export { maskPhoneWithTenantSuffix as maskPhone };
 
 /**
  * Mask nama untuk privasi log.
@@ -908,7 +898,7 @@ export class CapiService {
       (await checkCustomerBypass({ customerId: customer?.id, phone: customer?.phone, tenantId }))
       )
     ) {
-      console.log(`[CAPI GUARD] Skipped sending ${eventName} to Meta CAPI for sandbox/dummy/bypass/internal-staff contact (skip/admin cs): ${maskPhone(customer?.phone)}`);
+      console.log(`[CAPI GUARD] Skipped sending ${eventName} to Meta CAPI for sandbox/dummy/bypass/internal-staff contact (skip/admin cs): ${maskPhoneWithTenantSuffix(customer?.phone)}`);
       return { success: false, message: 'Skipped: Sandbox, dummy test, or non-customer bypass contact (skip/admin cs)' };
     }
 
@@ -929,14 +919,14 @@ export class CapiService {
         if (isPaidTouch) {
           const lastPaid = this.paidContactCooldown.get(phoneKey);
           if (lastPaid && now - lastPaid.timestamp < 24 * 60 * 60 * 1000 && (!campaignKey || lastPaid.campaignKey === campaignKey)) {
-            console.log(`[CAPI GUARD] Skipped Contact event for ${maskPhone(phoneKey)}: Centralized 24h paid cooldown active.`);
+            console.log(`[CAPI GUARD] Skipped Contact event for ${maskPhoneWithTenantSuffix(phoneKey)}: Centralized 24h paid cooldown active.`);
             return { success: false, message: 'Skipped: Paid Contact event 24h cooldown active' };
           }
           this.paidContactCooldown.set(phoneKey, { timestamp: now, campaignKey });
         } else {
           const lastOrganic = this.organicContactCooldown.get(phoneKey);
           if (lastOrganic && now - lastOrganic < 24 * 60 * 60 * 1000) {
-            console.log(`[CAPI GUARD] Skipped Contact event for ${maskPhone(phoneKey)}: Centralized 24h organic cooldown active.`);
+            console.log(`[CAPI GUARD] Skipped Contact event for ${maskPhoneWithTenantSuffix(phoneKey)}: Centralized 24h organic cooldown active.`);
             return { success: false, message: 'Skipped: Organic Contact event 24h cooldown active' };
           }
           this.organicContactCooldown.set(phoneKey, now);
@@ -944,7 +934,7 @@ export class CapiService {
       } else if (eventName === 'InitiateCheckout') {
         const lastSent = this.checkoutCooldown.get(phoneKey);
         if (lastSent && now - lastSent < 60 * 60 * 1000) {
-          console.log(`[CAPI GUARD] Skipped InitiateCheckout event for ${maskPhone(phoneKey)}: Centralized 1h cooldown active.`);
+          console.log(`[CAPI GUARD] Skipped InitiateCheckout event for ${maskPhoneWithTenantSuffix(phoneKey)}: Centralized 1h cooldown active.`);
           return { success: false, message: 'Skipped: InitiateCheckout event 1h cooldown active' };
         }
         this.checkoutCooldown.set(phoneKey, now);
@@ -1435,7 +1425,7 @@ export class CapiService {
 
         if (dbIsRepeat && !forceSend) {
           if (policy === 'SUPPRESS_REPEAT') {
-            console.log(`[CAPI POLICY GUARD] Purchase event for repeat customer ${maskPhone(customer?.phone)} SUPPRESSED per tenant acquisition policy (${policy}).`);
+            console.log(`[CAPI POLICY GUARD] Purchase event for repeat customer ${maskPhoneWithTenantSuffix(customer?.phone)} SUPPRESSED per tenant acquisition policy (${policy}).`);
             return {
               success: true,
               skipped: true,
@@ -1444,19 +1434,19 @@ export class CapiService {
             };
           }
           if (policy === 'DUAL_EVENT') {
-            console.log(`[CAPI POLICY] Transforming Purchase to ReturningCustomerPurchase for repeat customer ${maskPhone(customer?.phone)}.`);
+            console.log(`[CAPI POLICY] Transforming Purchase to ReturningCustomerPurchase for repeat customer ${maskPhoneWithTenantSuffix(customer?.phone)}.`);
             eventData.event_name = 'ReturningCustomerPurchase';
             if (eventData.event_id && !customEventId) {
               eventData.event_id = `returning_${eventData.event_id}`;
             }
           } else {
             // ALL_WITH_TAG: Resmi Meta opt_out=true (atribusi saja, tidak melatih optimizer)
-            console.log(`[CAPI POLICY] Tagging Purchase with opt_out=true for repeat customer ${maskPhone(customer?.phone)}.`);
+            console.log(`[CAPI POLICY] Tagging Purchase with opt_out=true for repeat customer ${maskPhoneWithTenantSuffix(customer?.phone)}.`);
             eventData.opt_out = true;
           }
         }
         if (forceSend && dbIsRepeat) {
-          console.warn(`[CAPI POLICY] force_send_repeat_purchase override by admin for ${maskPhone(customer?.phone)}`);
+          console.warn(`[CAPI POLICY] force_send_repeat_purchase override by admin for ${maskPhoneWithTenantSuffix(customer?.phone)}`);
         }
       }
 
@@ -1470,7 +1460,7 @@ export class CapiService {
 
       const url = `${GRAPH_API_BASE_URL}/${GRAPH_API_VERSION}/${pixelId}/events?access_token=${accessToken}`;
 
-      console.log(`[CAPI] Sending event ${eventName} to Meta for customer ${maskPhone(customer.phone)}`);
+      console.log(`[CAPI] Sending event ${eventName} to Meta for customer ${maskPhoneWithTenantSuffix(customer.phone)}`);
 
       // 5. EXECUTE VIA CIRCUIT BREAKER
       const response: any = await capiBreaker.execute(url, payload);
@@ -1478,7 +1468,7 @@ export class CapiService {
       // Fallback breaker aktif (error/400/500) → event TIDAK terkirim. Jangan
       // mencatat SUCCESS palsu: fallback mengembalikan fake status 200.
       if (response?.isFallback) {
-        console.error(`[CAPI FALLBACK] Event ${eventName} untuk customer ${maskPhone(customer.phone)} TIDAK terkirim ke Meta (circuit breaker fallback aktif).`);
+        console.error(`[CAPI FALLBACK] Event ${eventName} untuk customer ${maskPhoneWithTenantSuffix(customer.phone)} TIDAK terkirim ke Meta (circuit breaker fallback aktif).`);
         return { success: false, message: 'Circuit breaker fallback: event tidak terkirim' };
       }
 

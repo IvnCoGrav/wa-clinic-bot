@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedFromCommit": "228fe014",
+  "generatedFromCommit": "e7768016",
   "violations": [
     {
       "type": "FORBIDDEN_DECLARATION",
@@ -24,7 +24,7 @@
       "name": "normalizePhoneToE164",
       "canonical": "src/utils/phone-normalizer.ts",
       "file": "src/services/capi.service.ts",
-      "line": 41
+      "line": 42
     },
     {
       "type": "FORBIDDEN_DECLARATION",
@@ -33,30 +33,6 @@
       "canonical": "src/utils/phone-normalizer.ts",
       "file": "src/services/meta-performance-analytics.service.ts",
       "line": 447
-    },
-    {
-      "type": "FORBIDDEN_DECLARATION",
-      "capabilityId": "pii.mask_phone",
-      "name": "maskPhone",
-      "canonical": "src/utils/pii-masker.ts",
-      "file": "src/services/capi.service.ts",
-      "line": 57
-    },
-    {
-      "type": "FORBIDDEN_DECLARATION",
-      "capabilityId": "pii.mask_phone",
-      "name": "maskPhone",
-      "canonical": "src/utils/pii-masker.ts",
-      "file": "src/services/nightly-watchdog.service.ts",
-      "line": 40
-    },
-    {
-      "type": "FORBIDDEN_DECLARATION",
-      "capabilityId": "pii.mask_phone",
-      "name": "maskPhoneNumber",
-      "canonical": "src/utils/pii-masker.ts",
-      "file": "src/services/staff-retention.service.ts",
-      "line": 718
     },
     {
       "type": "FORBIDDEN_DECLARATION",
@@ -128,7 +104,7 @@
       "name": "formatWibTime",
       "canonical": "src/utils/wib-time.ts",
       "file": "src/services/nightly-watchdog.service.ts",
-      "line": 46
+      "line": 50
     },
     {
       "type": "FORBIDDEN_DECLARATION",

@@ -1,5 +1,6 @@
 import { prisma as defaultPrisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { maskPhoneNumber } from '../utils/pii-masker';
 import {
   RetentionVisitRow,
   RetentionPolicyInput,
@@ -713,13 +714,6 @@ export class StaffRetentionService {
       };
     });
   }
-}
-
-function maskPhoneNumber(phone: string): string {
-  if (!phone) return '';
-  const cleaned = phone.replace(/\D/g, '');
-  if (cleaned.length < 8) return '****';
-  return cleaned.slice(0, 4) + '****' + cleaned.slice(-3);
 }
 
 export const staffRetentionService = new StaffRetentionService();

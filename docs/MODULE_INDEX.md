@@ -15,7 +15,7 @@ Total kapabilitas terdaftar: **9 modul**.
 | `json.extract` | **Ekstraksi JSON dari output AI**<br>Mengekstrak blok JSON seimbang dari respons teks LLM yang mengandung markdown atau teks pelengkap. | [`src/utils/json-extract.ts`](../src/utils/json-extract.ts) | `extractBalancedJson`, `extractJsonContent`, `repairTruncatedJson` | [`json-extract.test.ts`](../tests/unit/json-extract.test.ts) |
 | `location.clinic_question` | **Klasifikasi pertanyaan lokasi klinik**<br>Mendeteksi apakah pesan customer menanyakan lokasi atau alamat klinik fisik. | [`src/utils/location-classifier.ts`](../src/utils/location-classifier.ts) | `isClinicLocationQuestion` | [`location-classifier.test.ts`](../tests/unit/location-classifier.test.ts) |
 | `phone.normalize` | **Normalisasi nomor telepon Indonesia**<br>Normalisasi nomor HP format Indonesia (08x, +628x, 628x) ke format 628x standar atau E164. | [`src/utils/phone-normalizer.ts`](../src/utils/phone-normalizer.ts) | `normalizePhoneID`, `normalizePhoneToE164` | [`security-and-parsing-helpers.test.ts`](../tests/unit/security-and-parsing-helpers.test.ts) |
-| `pii.mask_phone` | **Masking nomor telepon (PII)**<br>Menyensor nomor HP untuk log internal, audit trail, dan tampilan staf. | [`src/utils/pii-masker.ts`](../src/utils/pii-masker.ts) | `maskPhoneNumber`, `maskPhoneInText` | [`staff-chat-pii-masker.test.ts`](../tests/unit/staff-chat-pii-masker.test.ts) |
+| `pii.mask_phone` | **Masking nomor telepon (PII)**<br>Menyensor nomor HP untuk log internal, audit trail, dan tampilan staf. | [`src/utils/pii-masker.ts`](../src/utils/pii-masker.ts) | `maskPhoneNumber`, `maskPhoneInText`, `maskPhoneWithTenantSuffix` | [`staff-chat-pii-masker.test.ts`](../tests/unit/staff-chat-pii-masker.test.ts) |
 | `reservation.payment_evaluation` | **Evaluasi status pembayaran reservasi**<br>Menentukan status evaluasi pembayaran reservasi secara kanonis. | [`src/services/reservation-core.service.ts`](../src/services/reservation-core.service.ts) | `resolveReservationPaymentEvaluation` | *Belum ada (Fase lanjutan)* |
 | `schedule.overlap` | **Deteksi tumpang tindih slot jadwal**<br>Menghitung durasi efektif dan memeriksa tumpang-tindih interval reservasi atau janji temu. | [`src/services/slot-overlap.service.ts`](../src/services/slot-overlap.service.ts) | `effectiveDuration`, `intervalsOverlap` | [`slot-overlap-parity.test.ts`](../tests/unit/slot-overlap-parity.test.ts) |
 | `tenant.resolve` | **Resolusi ID tenant admin**<br>Mendapatkan tenant_id dari request Fastify admin secara aman dengan fallback DEFAULT_TENANT_ID. | [`src/routes/admin/settings-helpers.ts`](../src/routes/admin/settings-helpers.ts) | `resolveTenantId`, `requireTenantId` | *Belum ada (Fase lanjutan)* |
@@ -63,7 +63,7 @@ Total kapabilitas terdaftar: **9 modul**.
 
 - **Deskripsi:** Menyensor nomor HP untuk log internal, audit trail, dan tampilan staf.
 - **File Kanonis:** [`src/utils/pii-masker.ts`](../src/utils/pii-masker.ts)
-- **Ekspor Kanonis:** `maskPhoneNumber`, `maskPhoneInText`
+- **Ekspor Kanonis:** `maskPhoneNumber`, `maskPhoneInText`, `maskPhoneWithTenantSuffix`
 - **Simbol Terlarang di Luar Kanonis:** `maskPhone`, `maskPhoneNumber`, `maskPhoneInText`
 - **File yang Diizinkan:** `src/utils/pii-masker.ts`
 - **File Test:** [`tests/unit/staff-chat-pii-masker.test.ts`](../tests/unit/staff-chat-pii-masker.test.ts)
