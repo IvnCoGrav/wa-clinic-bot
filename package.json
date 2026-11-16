@@ -49,7 +49,11 @@
     "security:scan:staged": "tsx scripts/scan-secrets.ts --staged",
     "verify:backlog": "node scripts/verify-backlog-evidence.mjs",
     "audit:verify-claims": "node scripts/verify-audit-claims.mjs --all",
-    "audit:reservation-lock": "tsx scripts/audit/reservation-lock-probe.ts"
+    "audit:reservation-lock": "tsx scripts/audit/reservation-lock-probe.ts",
+    "find:module": "node scripts/reuse/find-module.mjs",
+    "docs:modules": "node scripts/reuse/generate-module-index.mjs",
+    "check:reuse": "node scripts/reuse/check-reuse.mjs",
+    "check:reuse:update": "node scripts/reuse/check-reuse.mjs --update-baseline --allow-update"
   },
   "dependencies": {
     "@fastify/compress": "^7.0.3",

@@ -1,0 +1,157 @@
+{
+  "$schema": "./module-registry.schema.json",
+  "version": 1,
+  "description": "Registry modul kanonis sistem untuk reuse dan pencegahan duplikasi pengetahuan.",
+  "capabilities": [
+    {
+      "id": "date.parse_indonesian",
+      "title": "Parser tanggal bahasa Indonesia",
+      "description": "Parsing ekspresi tanggal bahasa alami Indonesia (hari, nama bulan teks/angka, relatif) menjadi objek Date standar.",
+      "canonical": "src/utils/indonesian-date-parser.ts",
+      "exports": [
+        "parseIndonesianDate",
+        "applyBookingTimeToDate"
+      ],
+      "forbiddenDeclarations": [
+        "parseIndonesianDate"
+      ],
+      "allowedFiles": [
+        "src/utils/indonesian-date-parser.ts"
+      ],
+      "test": "tests/unit/v3/indonesian-date-parser.test.ts"
+    },
+    {
+      "id": "json.extract",
+      "title": "Ekstraksi JSON dari output AI",
+      "description": "Mengekstrak blok JSON seimbang dari respons teks LLM yang mengandung markdown atau teks pelengkap.",
+      "canonical": "src/utils/json-extract.ts",
+      "exports": [
+        "extractBalancedJson",
+        "extractJsonContent",
+        "repairTruncatedJson"
+      ],
+      "forbiddenDeclarations": [
+        "extractBalancedJson"
+      ],
+      "allowedFiles": [
+        "src/utils/json-extract.ts"
+      ],
+      "test": "tests/unit/json-extract.test.ts"
+    },
+    {
+      "id": "location.clinic_question",
+      "title": "Klasifikasi pertanyaan lokasi klinik",
+      "description": "Mendeteksi apakah pesan customer menanyakan lokasi atau alamat klinik fisik.",
+      "canonical": "src/utils/location-classifier.ts",
+      "exports": [
+        "isClinicLocationQuestion"
+      ],
+      "forbiddenDeclarations": [
+        "isClinicLocationQuestion"
+      ],
+      "allowedFiles": [
+        "src/utils/location-classifier.ts"
+      ],
+      "test": null
+    },
+    {
+      "id": "phone.normalize",
+      "title": "Normalisasi nomor telepon Indonesia",
+      "description": "Normalisasi nomor HP format Indonesia (08x, +628x, 628x) ke format 628x standar atau E164.",
+      "canonical": "src/utils/phone-normalizer.ts",
+      "exports": [
+        "normalizePhoneID",
+        "normalizePhoneToE164"
+      ],
+      "forbiddenDeclarations": [
+        "normalizePhone",
+        "normalizePhoneID",
+        "normalizePhoneToE164"
+      ],
+      "allowedFiles": [
+        "src/utils/phone-normalizer.ts"
+      ],
+      "test": "tests/unit/security-and-parsing-helpers.test.ts"
+    },
+    {
+      "id": "pii.mask_phone",
+      "title": "Masking nomor telepon (PII)",
+      "description": "Menyensor nomor HP untuk log internal, audit trail, dan tampilan staf.",
+      "canonical": "src/utils/pii-masker.ts",
+      "exports": [
+        "maskPhoneNumber",
+        "maskPhoneInText"
+      ],
+      "forbiddenDeclarations": [
+        "maskPhone",
+        "maskPhoneNumber",
+        "maskPhoneInText"
+      ],
+      "allowedFiles": [
+        "src/utils/pii-masker.ts"
+      ],
+      "test": "tests/unit/staff-chat-pii-masker.test.ts"
+    },
+    {
+      "id": "reservation.payment_evaluation",
+      "title": "Evaluasi status pembayaran reservasi",
+      "description": "Menentukan status evaluasi pembayaran reservasi secara kanonis.",
+      "canonical": "src/services/reservation-core.service.ts",
+      "exports": [
+        "resolveReservationPaymentEvaluation"
+      ],
+      "forbiddenDeclarations": [
+        "resolveReservationPaymentEvaluation"
+      ],
+      "allowedFiles": [
+        "src/services/reservation-core.service.ts"
+      ],
+      "test": null
+    },
+    {
+      "id": "tenant.resolve",
+      "title": "Resolusi ID tenant admin",
+      "description": "Mendapatkan tenant_id dari request Fastify admin secara aman dengan fallback DEFAULT_TENANT_ID.",
+      "canonical": "src/routes/admin/settings-helpers.ts",
+      "exports": [
+        "resolveTenantId",
+        "requireTenantId"
+      ],
+      "forbiddenDeclarations": [
+        "resolveTenant",
+        "resolveTenantId"
+      ],
+      "allowedFiles": [
+        "src/routes/admin/settings-helpers.ts"
+      ],
+      "test": null
+    },
+    {
+      "id": "time.wib",
+      "title": "Waktu Indonesia Barat (WIB)",
+      "description": "Operasi waktu dan tanggal berbasis WIB (UTC+7), offset milidetik, konversi UTC, dan batasan hari WIB.",
+      "canonical": "src/utils/wib-time.ts",
+      "exports": [
+        "WIB_OFFSET_MS",
+        "getWibNow",
+        "wibDayBoundsUtc",
+        "formatWibTime",
+        "wibDayRangeToUtc",
+        "formatWibDateYYYYMMDD",
+        "getWibDayName"
+      ],
+      "forbiddenDeclarations": [
+        "WIB_OFFSET_MS",
+        "getWibNow",
+        "wibDayBoundsUtc",
+        "formatWibTime",
+        "wibDayRangeToUtc"
+      ],
+      "allowedFiles": [
+        "src/utils/wib-time.ts",
+        "src/utils/time-wib.ts"
+      ],
+      "test": "tests/unit/wib-time-consolidation.test.ts"
+    }
+  ]
+}

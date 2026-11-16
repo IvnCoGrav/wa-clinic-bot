@@ -3,6 +3,39 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 346. [MCP] `clinic-ops-mcp` Ditunda — Plan & Audit Disimpan (2026-11-16, DEFERRED)
+
+- **Status:** DEFERRED — belum ada implementasi; `src/mcp/` belum dibuat; tidak ada dependency/migrasi yang ditambahkan.
+- **Keputusan user:** fitur ditunda sampai prioritas berikutnya. Plan dan audit tetap disimpan di `docs/plans/CLINIC_OPS_MCP_DEFERRED_2026-11-16.md`.
+- **Keputusan beku bila dilanjutkan:** read-only dulu; official MCP SDK; reuse service analitik/Copilot existing (bukan engine metrik baru); payment dipisah (`approve_purchase_event` vs `record_payment`); tenant-scoped sejak awal; tanpa migrasi status history untuk v1; **tanpa tombol on/off**; profil stdio untuk Desktop/OpenCode dan HTTP remote untuk Claude web/mobile.
+- **Risiko yang belum ditutup (wajib dibaca saat resume):** PII/transkrip ke host AI, stdout pollution yang merusak JSON-RPC, duplikasi definisi metrik, write action tanpa auth/konfirmasi, dan endpoint HTTP publik yang harus hidup 24/7 untuk Claude web/mobile.
+- **Catatan:** “standby aktif” untuk Claude web/mobile berarti proses HTTP MCP harus tersedia saat tool dipanggil; soft-off hanya memblokir akses, bukan menghemat RAM. Jangan eksekusi tanpa persetujuan eksplisit user.
+
+## 345. [Code Health] Belum Ada Gerbang Anti-Duplikasi & Reuse Modul — Duplikasi Terbukti + Risiko Spaghetti (2026-11-16, OPEN)
+
+- **Status:** OPEN — hasil audit read-only commit `8e65834d` (working tree bersih). Belum ada kode yang diubah.
+- **Fakta terbukti (file:baris):**
+  - `isClinicLocationQuestion` disalin identik: `src/services/entity-extractor.service.ts:33-54` vs `src/utils/location-classifier.ts:1-26`.
+  - Dua `parseIndonesianDate` dengan signature/perilaku berbeda: `src/utils/indonesian-date-parser.ts:61` vs `src/utils/conversation-transaction-extractor.ts:208` (UTL-02 di `docs/MODULE_AUDIT_03_UTILS.md` masih terbuka).
+  - Rumus overlap jadwal ganda: `src/services/reservation-core.service.ts:316-325` vs `src/services/slot-overlap.service.ts:108-121`.
+  - Masking nomor HP 4 varian: `src/services/capi.service.ts:57`, `src/services/nightly-watchdog.service.ts:40`, `src/services/staff-retention.service.ts:718`, vs kanonis `src/utils/pii-masker.ts:11`.
+  - `withPaymentEvaluation` ganda: `src/routes/admin/reservation-crud.route.ts:23` vs `src/routes/admin/reservation-dispatch-crud.subroute.ts:26`.
+  - `parseArgs` 10x dan `main` 32x di `src/scripts` + `src/cli`; `escapeRegex`/`escapeRegExp` 5 salinan; heartbeat/cleanup SSE ganda (`livechat.subroute.ts` vs `staff/today.subroute.ts`).
+  - Dashboard: `isValidLatLng` 3x (`customerMapUtils.ts`, `dispatchMap.ts`, `geoUtils.ts`), `formatMinutesToTime` 2x (`CreateReservationModal.tsx:81`, `slotRecommendations.ts:63`), `norm` 3x.
+  - Scan blok (normalisasi baris, ≥12 baris, antar-file): 27 blok duplikat di luar `scripts`; 94 grup bila `scripts` ikut dihitung.
+- **Kesenjangan gerbang:** `.github/workflows/ci.yml` belum punya cek duplikasi/reuse/dead export; `tsconfig.json` tanpa `noUnusedLocals`; tidak ada ESLint/Knip/jscpd. Job CI bernama "Lint, Build & Test" tetapi tidak ada langkah lint.
+- **Sinyal tambahan (kandidat, bukan vonis):** 552 export tanpa referensi di luar file (di luar `scripts`/`cli`); 285 panggilan Prisma langsung di 35 file route; **7 file >1.500 baris** saat audit (turun dari 9 pada #326): `customer.service.ts` 3.128, `staff-reservation.service.ts` 2.811, `treatment-catalog.service.ts` 2.378, `copilot-tools.ts` 1.659, `waha/client.ts` 1.601, `capi.service.ts` 1.510, `webhook.route.ts` 1.504.
+- **Dampak:** pengetahuan yang sama tersebar; perubahan aturan (overlap jadwal, masking PII, parser tanggal) bisa tidak konsisten; risiko regresi dan biaya perawatan naik seiring jumlah modul.
+- **Rencana (belum dieksekusi, butuh persetujuan eksplisit):** 5 pilar — (1) registry modul `docs/MODULE_INDEX.md` + `scripts/module-registry.json`; (2) discovery `npm run find:module`; (3) gerbang AST zero-dependency (`check:reuse` dengan baseline ratchet, import boundary, file-size budget, dead export); (4) aturan UI reuse (registry komponen `components/ui`/`common`, galeri hidup, larangan page baru tanpa ADR); (5) burn-down baseline bertahap per sprint.
+- **Amendemen `AGENTS.md` (PERLU, belum dieksekusi — urutannya setelah Fase 1):** jangan menambah mandat panjang baru; cukup 4 edit minimum agar tidak terjadi *sprawl*:
+  1. `## Commands` (baris 7): koreksi klaim "tidak ada script typecheck" — faktanya `npm run typecheck` sudah ada; tambahkan `npm run find:module` dan `npm run check:reuse` **setelah** script-nya dibuat.
+  2. Mandat Anti-Bloat (baris 69): tambahkan 1–2 kalimat positif yang menunjuk `docs/MODULE_INDEX.md` + `ui-registry.json` + kewajiban plan menyebut modul yang dipakai.
+  3. Kontrak Kanonis Tunggal (baris 74): tambahkan konsep "pengetahuan kanonis" — satu modul per kapabilitas, alias lama *deprecated* sampai pemanggil terakhir dimigrasikan.
+  4. Gerbang Regresi Wajib (baris 75): tambahkan `npm run check:reuse` sebagai gerbang penutup fase.
+  Detail desain 5 pilar tetap di dokumen terpisah/registry, **bukan** di `AGENTS.md`; pointer wajib menunjuk path yang sudah ada. Contoh risiko pointer basi: baris 7 dan 70 (`634 file / 5151 test`) sudah tidak akurat — angka volatil sebaiknya tidak ditulis di `AGENTS.md`.
+- **Plan eksekusi:** `docs/PLAN_REUSE_GATE_2026-11-16.md` — 8 fase (0 baseline s/d 7 burn-down), micro-task, acceptance criteria, FMEA, dan rollback. Status plan: DRAFT, belum dieksekusi.
+- **Catatan prinsip:** duplikasi tidak otomatis salah. Yang dilarang adalah **pengetahuan yang sama** disalin (tanggal, PII, overlap jadwal, resolusi tenant). Duplikasi karena **alasan berubah berbeda** (adapter WAHA vs WABA, fixture test) tetap sah.
+
 ## 344. [Peta Pelanggan] Tab Sebaran Peta Gagal Dimuat — CSP Memblokir Leaflet dari unpkg (2026-11-14, RESOLVED)
 
 - **Status:** RESOLVED (2026-11-14) — pustaka Leaflet + MarkerCluster di-vendor lokal (`public/vendor/leaflet/`), loader memakai URL same-origin, CSP tetap ketat. Tombol **“Coba Lagi”** ditambahkan.
