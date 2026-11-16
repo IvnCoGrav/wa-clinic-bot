@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedFromCommit": "ede933c4",
+  "generatedFromCommit": "16293cc4",
   "layerViolations": [
     {
       "rule": "LAYER_SERVICES",
@@ -130,8 +130,8 @@
       "src/utils/customer-bypass.ts",
       "src/services/location-ingest.service.ts",
       "src/services/staff-reservation.service.ts",
-      "src/services/capi.service.ts",
       "src/services/reservation-core.service.ts",
+      "src/services/capi.service.ts",
       "src/services/reservation-lifecycle.service.ts",
       "src/services/follow-up.service.ts",
       "src/services/follow-up-lifecycle.service.ts",
@@ -160,7 +160,7 @@
     ]
   ],
   "prismaBudget": {
-    "totalCalls": 270,
+    "totalCalls": 240,
     "files": {
       "src/routes/admin/auth.subroute.ts": 2,
       "src/routes/admin/ctwa-catchers.subroute.ts": 6,
@@ -173,7 +173,6 @@
       "src/routes/admin/labels.subroute.ts": 24,
       "src/routes/admin/landings.subroute.ts": 13,
       "src/routes/admin/livechat.subroute.ts": 16,
-      "src/routes/admin/migration.subroute.ts": 30,
       "src/routes/admin/push.subroute.ts": 1,
       "src/routes/admin/reservation-crud.route.ts": 21,
       "src/routes/admin/reservation-dispatch-crud.subroute.ts": 16,

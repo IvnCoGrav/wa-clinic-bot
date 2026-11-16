@@ -1,12 +1,13 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { prisma } from '../../db/client';
 import {
   findCustomerByPhoneSuffix,
   getAttributionCounts,
   getManualSendHistory,
+  getMetaPerformanceSettings,
   getPageViewSummary,
   getTenantForCapiHealth,
   listAdClicks,
+  saveMetaPerformanceSettings,
 } from '../../services/meta-attribution.service';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { tenantOf, resolveSessionTenantId } from './route-helpers';
@@ -493,18 +494,7 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
     async (request: FastifyRequest, reply: FastifyReply) => {
       const tenantId = tenantOf(request);
       try {
-        const tenant = await (prisma.tenant as any).findUnique({
-          where: { id: tenantId },
-          select: { settings: true },
-        });
-        const perfSettings = ((tenant?.settings as any)?.metaPerformanceSettings) || {
-          monthlySpends: {},
-          grossMarginPct: 40,
-          minSampleThreshold: 20,
-          cohortStartMonth: null,
-          excludedCohortMonths: [],
-          dailySlotsPerTherapist: null,
-        };
+        const perfSettings = await getMetaPerformanceSettings(tenantId);
         return reply.status(200).send({ success: true, data: perfSettings });
       } catch (err: any) {
         return reply.status(200).send({
@@ -537,52 +527,8 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
     ) => {
       const tenantId = tenantOf(request);
       const body = request.body || {};
-      const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
       try {
-        const tenant = await (prisma.tenant as any).findUnique({
-          where: { id: tenantId },
-          select: { settings: true },
-        });
-        const currentSettings = ((tenant?.settings as Record<string, any>) || {});
-        const currentPerf = (currentSettings.metaPerformanceSettings as Record<string, any>) || {};
-
-        const updatedPerf = {
-          ...currentPerf,
-          monthlySpends: {
-            ...(currentPerf.monthlySpends || {}),
-            ...(body.monthlySpends || {}),
-          },
-          grossMarginPct:
-            typeof body.grossMarginPct === 'number' && body.grossMarginPct >= 0 && body.grossMarginPct <= 100
-              ? body.grossMarginPct
-              : (currentPerf.grossMarginPct ?? 40),
-          minSampleThreshold:
-            typeof body.minSampleThreshold === 'number' && body.minSampleThreshold > 0
-              ? body.minSampleThreshold
-              : (currentPerf.minSampleThreshold ?? 20),
-          cohortStartMonth:
-            body.cohortStartMonth === null ? null
-            : typeof body.cohortStartMonth === 'string' && MONTH_RE.test(body.cohortStartMonth) ? body.cohortStartMonth
-            : (currentPerf.cohortStartMonth ?? null),
-          excludedCohortMonths: Array.isArray(body.excludedCohortMonths)
-            ? Array.from(new Set(body.excludedCohortMonths.filter((m: unknown) => typeof m === 'string' && MONTH_RE.test(m as string))))
-            : (currentPerf.excludedCohortMonths ?? []),
-          dailySlotsPerTherapist:
-            body.dailySlotsPerTherapist === null ? null
-            : typeof body.dailySlotsPerTherapist === 'number' && body.dailySlotsPerTherapist > 0 && body.dailySlotsPerTherapist <= 50
-            ? Math.round(body.dailySlotsPerTherapist)
-            : (currentPerf.dailySlotsPerTherapist ?? null),
-        };
-
-        await (prisma.tenant as any).update({
-          where: { id: tenantId },
-          data: {
-            settings: {
-              ...currentSettings,
-              metaPerformanceSettings: updatedPerf,
-            },
-          },
-        });
+        const updatedPerf = await saveMetaPerformanceSettings(tenantId, body);
 
         responseCacheService.clear();
 

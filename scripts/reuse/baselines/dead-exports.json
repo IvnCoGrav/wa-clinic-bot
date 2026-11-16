@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedFromCommit": "e44d3340",
+  "generatedFromCommit": "16293cc4",
   "deadExports": [
     {
       "type": "DEAD_EXPORT",
@@ -350,14 +350,14 @@
       "name": "resolveTenantCapiCredentials",
       "kind": "function",
       "file": "src/services/capi.service.ts",
-      "line": 298
+      "line": 106
     },
     {
       "type": "DEAD_EXPORT",
       "name": "getTenantAutoSendPurchaseCapi",
       "kind": "function",
       "file": "src/services/capi.service.ts",
-      "line": 543
+      "line": 351
     },
     {
       "type": "DEAD_EXPORT",
@@ -609,28 +609,28 @@
       "name": "CapacityExceededError",
       "kind": "class",
       "file": "src/services/reservation-core.service.ts",
-      "line": 105
+      "line": 104
     },
     {
       "type": "DEAD_EXPORT",
       "name": "MissingBookingDateError",
       "kind": "class",
       "file": "src/services/reservation-core.service.ts",
-      "line": 122
+      "line": 121
     },
     {
       "type": "DEAD_EXPORT",
       "name": "runWithAdvisoryLock",
       "kind": "function",
       "file": "src/services/reservation-core.service.ts",
-      "line": 277
+      "line": 276
     },
     {
       "type": "DEAD_EXPORT",
       "name": "ReservationCoreService",
       "kind": "class",
       "file": "src/services/reservation-core.service.ts",
-      "line": 802
+      "line": 780
     },
     {
       "type": "DEAD_EXPORT",
