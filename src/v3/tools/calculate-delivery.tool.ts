@@ -1,6 +1,7 @@
 import { geocodingService, hasStreetAddressDetail } from '../../integrations/google-maps/geocoding';
 import type { ResolvedLocation } from '../../integrations/google-maps/geocoding';
-import { getGazetteerCoordinates, isCityHomonymKecamatan } from '../../utils/gazetteer';
+import { getGazetteerCoordinates, isCityHomonymKecamatan, getGazetteerKecamatanEntries } from '../../utils/gazetteer';
+import { isTypoAtMostOne, GEO_TOKEN_SKIPLIST as KECAMATAN_TOKEN_SKIPLIST } from '../../utils/typo-match';
 import { deliveryService } from '../../services/delivery.service';
 import { clinicConfig } from '../../config/clinic';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
@@ -158,21 +159,6 @@ export function buildCartTotalRecap(
  * eksplisit, penanda alamat generik (perum/gang/blok/no), ATAU token bermakna
  * (nama perumahan/POI seperti "Persada") — tanpa daftar hafalan bisnis.
  */
-/** Jarak edit ≤1 (typo ringan nama kecamatan, mis. "memganti"≈"menganti"). */
-function isNearEqual(a: string, b: string): boolean {
-  if (a === b) return true;
-  const la = a.length, lb = b.length;
-  if (Math.abs(la - lb) > 1) return false;
-  let i = 0, j = 0, edits = 0;
-  while (i < la && j < lb) {
-    if (a[i] === b[j]) { i++; j++; continue; }
-    edits++;
-    if (edits > 1) return false;
-    if (la === lb) { i++; j++; } else if (la > lb) { i++; } else { j++; }
-  }
-  return edits + (la - i) + (lb - j) <= 1;
-}
-
 export function hasSpecificAddressDetail(query: string | null | undefined, streetDetail?: string): boolean {
   if (streetDetail && streetDetail.trim().length > 0) return true;
   // Bersihkan artefak format mesin (tag XML prompt <customer_message>) agar tak
@@ -197,9 +183,9 @@ export function hasSpecificAddressDetail(query: string | null | undefined, stree
   const tokens = windowTokens.filter((t) => {
     if (t.length < 4 || stop.has(t) || kecTokens.includes(t)) return false;
     // Token yang sejatinya typo nama kecamatan itu sendiri (bukan detail alamat).
-    // Pencocokan KATA UTUH (isNearEqual ≤1 edit) — bukan substring mentah yang
+    // Pencocokan KATA UTUH (isTypoAtMostOne ≤1 edit) — bukan substring mentah yang
     // bisa membuang detail sah / menyedot kata berimbuhan.
-    if (kecTokens.some((k) => isNearEqual(t, k))) return false;
+    if (kecTokens.some((k) => isTypoAtMostOne(t, k))) return false;
     return true;
   });
   return tokens.length > 0;
@@ -423,10 +409,6 @@ function isBroadRegionQuery(text: string): boolean {
 // mengenali nama kecamatan resmi dari database gazetteer di dalam query,
 // termasuk varian salah ketik 1 huruf (misal "memganti" → "Menganti").
 // Delegates to central gazetteer service (Single Source of Truth) — no direct fs I/O.
-import { getGazetteerKecamatanEntries } from '../../utils/gazetteer';
-import { isTypoAtMostOne } from '../../utils/typo-match';
-import { GEO_TOKEN_SKIPLIST as KECAMATAN_TOKEN_SKIPLIST } from '../../utils/typo-match';
-
 function getKecamatanNames(): Array<{ lower: string; orig: string }> {
   // Filter len >=4 to match previous behavior (skip short kecamatan names)
   return getGazetteerKecamatanEntries().filter((e) => e.lower.length >= 4);

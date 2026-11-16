@@ -32,6 +32,15 @@ describe('calculate_delivery — anti-false-positive substring wilayah', () => {
     expect(hasSpecificAddressDetail('Jambangan Persada')).toBe(true);
   });
 
+  it('hasSpecificAddressDetail: typo 1-huruf nama kecamatan bukan detail alamat (paritas isTypoAtMostOne)', () => {
+    // Substitusi, sisipan, dan penghapusan 1 huruf atas nama kecamatan kanonis.
+    expect(hasSpecificAddressDetail('menganti memganti')).toBe(false);
+    expect(hasSpecificAddressDetail('menganti mengantii')).toBe(false);
+    expect(hasSpecificAddressDetail('menganti mengant')).toBe(false);
+    // Detail alamat sah di samping nama kecamatan tetap terdeteksi.
+    expect(hasSpecificAddressDetail('menganti persada')).toBe(true);
+  });
+
   it('"di tenggilis mejoyo" tetap ter-resolve (frasa multi-kata)', async () => {
     const res = await executeCalculateDelivery({ locationText: 'di tenggilis mejoyo' });
     expect(String(res.message || '').toLowerCase()).toMatch(/tenggilis/i);
