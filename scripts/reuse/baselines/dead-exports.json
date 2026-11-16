@@ -1,21 +1,7 @@
 {
   "version": 1,
-  "generatedFromCommit": "2454051c",
+  "generatedFromCommit": "bedd068a",
   "deadExports": [
-    {
-      "type": "DEAD_EXPORT",
-      "name": "AiEligibilityConfig",
-      "kind": "interface",
-      "file": "src/config/ai-eligibility-config.ts",
-      "line": 15
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "AiTaskModelConfig",
-      "kind": "interface",
-      "file": "src/config/ai-models.config.ts",
-      "line": 15
-    },
     {
       "type": "DEAD_EXPORT",
       "name": "SUMOPOD_SECONDARY_MODEL",
@@ -67,13 +53,6 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "AiPresetId",
-      "kind": "type",
-      "file": "src/config/ai-models.config.ts",
-      "line": 312
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "setBrandIdentity",
       "kind": "function",
       "file": "src/config/brand.ts",
@@ -88,45 +67,10 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "ClinicConfig",
-      "kind": "interface",
-      "file": "src/config/clinic.ts",
-      "line": 6
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "FollowUpTemplateParams",
-      "kind": "interface",
-      "file": "src/config/followup-templates.ts",
-      "line": 13
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "GoogleCalendarConfig",
-      "kind": "interface",
-      "file": "src/config/google-calendar.config.ts",
-      "line": 18
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "LandmarkEntry",
-      "kind": "interface",
-      "file": "src/config/landmarks.ts",
-      "line": 13
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "loadLandmarks",
       "kind": "function",
       "file": "src/config/landmarks.ts",
       "line": 43
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ArteryCorridor",
-      "kind": "interface",
-      "file": "src/config/landmarks.ts",
-      "line": 85
     },
     {
       "type": "DEAD_EXPORT",
@@ -151,20 +95,6 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "PricelistPromoRule",
-      "kind": "interface",
-      "file": "src/config/pricelist-promo.ts",
-      "line": 13
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "StaffChatNotificationConfig",
-      "kind": "interface",
-      "file": "src/config/staff-chat-config.ts",
-      "line": 4
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "clearStaffChatConfigCache",
       "kind": "function",
       "file": "src/config/staff-chat-config.ts",
@@ -183,62 +113,6 @@
       "kind": "variable",
       "file": "src/config/tenant-settings.config.ts",
       "line": 28
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "DeliverySettings",
-      "kind": "interface",
-      "file": "src/config/tenant-settings.config.ts",
-      "line": 30
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CopilotSettings",
-      "kind": "interface",
-      "file": "src/config/tenant-settings.config.ts",
-      "line": 34
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "TenantSettingsView",
-      "kind": "interface",
-      "file": "src/config/tenant-settings.config.ts",
-      "line": 38
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ClinicLocationPatch",
-      "kind": "interface",
-      "file": "src/config/tenant-settings.config.ts",
-      "line": 47
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "TenantSettingsPatch",
-      "kind": "interface",
-      "file": "src/config/tenant-settings.config.ts",
-      "line": 54
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "HealingWinner",
-      "kind": "interface",
-      "file": "src/domain/address-healing.ts",
-      "line": 27
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "TableAddressRow",
-      "kind": "interface",
-      "file": "src/domain/address-reconciliation.ts",
-      "line": 14
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ReconciliationPlan",
-      "kind": "interface",
-      "file": "src/domain/address-reconciliation.ts",
-      "line": 32
     },
     {
       "type": "DEAD_EXPORT",
@@ -263,34 +137,6 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "LocationSourceKind",
-      "kind": "type",
-      "file": "src/domain/location-adequacy.ts",
-      "line": 27
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "LocationAdequacyReason",
-      "kind": "type",
-      "file": "src/domain/location-adequacy.ts",
-      "line": 29
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "LocationAdequacyInput",
-      "kind": "interface",
-      "file": "src/domain/location-adequacy.ts",
-      "line": 41
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "LocationAdequacy",
-      "kind": "interface",
-      "file": "src/domain/location-adequacy.ts",
-      "line": 64
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "SAME_PLACE_TOLERANCE_M",
       "kind": "variable",
       "file": "src/domain/location-adequacy.ts",
@@ -298,38 +144,10 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "PaymentStatus",
-      "kind": "type",
-      "file": "src/domain/payment-expected.ts",
-      "line": 11
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ExpectedPayment",
-      "kind": "interface",
-      "file": "src/domain/payment-expected.ts",
-      "line": 13
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ExpectedPaymentInput",
-      "kind": "interface",
-      "file": "src/domain/payment-expected.ts",
-      "line": 28
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "PAUSED_STATUS",
       "kind": "variable",
       "file": "src/domain/reservation-status.ts",
       "line": 1
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ActiveReservationStatus",
-      "kind": "type",
-      "file": "src/domain/reservation-status.ts",
-      "line": 13
     },
     {
       "type": "DEAD_EXPORT",
@@ -354,20 +172,6 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "StaffRetentionResult",
-      "kind": "interface",
-      "file": "src/domain/staff-retention.ts",
-      "line": 50
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "SelectCohortOptions",
-      "kind": "interface",
-      "file": "src/domain/staff-retention.ts",
-      "line": 61
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "dateToEpochDays",
       "kind": "function",
       "file": "src/domain/staff-retention.ts",
@@ -382,94 +186,10 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "HeatmapHours",
-      "kind": "interface",
-      "file": "src/domain/treatment-heatmap.ts",
-      "line": 13
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "HeatmapCellMetrics",
-      "kind": "interface",
-      "file": "src/domain/treatment-heatmap.ts",
-      "line": 26
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "HeatmapHourlyCell",
-      "kind": "interface",
-      "file": "src/domain/treatment-heatmap.ts",
-      "line": 32
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "HeatmapDayCell",
-      "kind": "interface",
-      "file": "src/domain/treatment-heatmap.ts",
-      "line": 39
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "HeatmapWeekRow",
-      "kind": "interface",
-      "file": "src/domain/treatment-heatmap.ts",
-      "line": 49
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "HeatmapMonthSummary",
-      "kind": "interface",
-      "file": "src/domain/treatment-heatmap.ts",
-      "line": 57
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "HeatmapQuality",
-      "kind": "interface",
-      "file": "src/domain/treatment-heatmap.ts",
-      "line": 65
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "TreatmentHeatmapTotals",
-      "kind": "interface",
-      "file": "src/domain/treatment-heatmap.ts",
-      "line": 78
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "BuildTreatmentHeatmapParams",
-      "kind": "interface",
-      "file": "src/domain/treatment-heatmap.ts",
-      "line": 100
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "PersonaDimension",
-      "kind": "interface",
-      "file": "src/evals/persona-rubric.ts",
-      "line": 12
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "GoogleOAuthTokens",
-      "kind": "interface",
-      "file": "src/integrations/google-contacts/google-oauth.client.ts",
-      "line": 22
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "GoogleOAuthClientManager",
       "kind": "class",
       "file": "src/integrations/google-contacts/google-oauth.client.ts",
       "line": 29
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "DistanceResult",
-      "kind": "interface",
-      "file": "src/integrations/google-maps/distance-matrix.client.ts",
-      "line": 7
     },
     {
       "type": "DEAD_EXPORT",
@@ -480,45 +200,10 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "LlmEndpointConfig",
-      "kind": "interface",
-      "file": "src/integrations/llm/llm-gateway.ts",
-      "line": 15
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ProviderTier",
-      "kind": "interface",
-      "file": "src/integrations/llm/model-fallback.ts",
-      "line": 18
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "LlmOutageError",
       "kind": "class",
       "file": "src/integrations/llm/model-fallback.ts",
       "line": 59
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ChatCompletionsWithFallbackResult",
-      "kind": "interface",
-      "file": "src/integrations/llm/model-fallback.ts",
-      "line": 128
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CacheableSystemPrompt",
-      "kind": "interface",
-      "file": "src/integrations/llm/prompt-cache.ts",
-      "line": 19
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "RouteResult",
-      "kind": "interface",
-      "file": "src/integrations/ors/client.ts",
-      "line": 7
     },
     {
       "type": "DEAD_EXPORT",
@@ -529,115 +214,10 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "WahaChat",
-      "kind": "interface",
-      "file": "src/integrations/waha/client.ts",
-      "line": 14
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "WahaMessage",
-      "kind": "interface",
-      "file": "src/integrations/waha/client.ts",
-      "line": 28
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "WahaLocationPayload",
-      "kind": "interface",
-      "file": "src/integrations/waha/types.ts",
-      "line": 1
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "WahaMessagePayload",
-      "kind": "interface",
-      "file": "src/integrations/waha/types.ts",
-      "line": 7
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "WahaLabelChatPayload",
-      "kind": "interface",
-      "file": "src/integrations/waha/types.ts",
-      "line": 48
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "InteractiveButton",
-      "kind": "interface",
-      "file": "src/integrations/whatsapp/gateway.types.ts",
-      "line": 35
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "SendInteractiveButtonsOptions",
-      "kind": "interface",
-      "file": "src/integrations/whatsapp/gateway.types.ts",
-      "line": 40
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "wabaMediaBreaker",
       "kind": "variable",
       "file": "src/integrations/whatsapp/media.ts",
       "line": 7
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "NormalizedWabaStatus",
-      "kind": "interface",
-      "file": "src/integrations/whatsapp/normalizer.ts",
-      "line": 116
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "WebhookVerificationQuery",
-      "kind": "interface",
-      "file": "src/integrations/whatsapp/types.ts",
-      "line": 1
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "WhatsAppLocationPayload",
-      "kind": "interface",
-      "file": "src/integrations/whatsapp/types.ts",
-      "line": 7
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "WhatsAppTextPayload",
-      "kind": "interface",
-      "file": "src/integrations/whatsapp/types.ts",
-      "line": 14
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "WhatsAppWebhookValue",
-      "kind": "interface",
-      "file": "src/integrations/whatsapp/types.ts",
-      "line": 95
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "WhatsAppWebhookChange",
-      "kind": "interface",
-      "file": "src/integrations/whatsapp/types.ts",
-      "line": 109
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "WhatsAppWebhookEntry",
-      "kind": "interface",
-      "file": "src/integrations/whatsapp/types.ts",
-      "line": 114
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "WahaAdReferral",
-      "kind": "interface",
-      "file": "src/integrations/whatsapp/waha-ctwa-referral.ts",
-      "line": 18
     },
     {
       "type": "DEAD_EXPORT",
@@ -655,27 +235,6 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "CronRunStatus",
-      "kind": "type",
-      "file": "src/lifecycle/cron-health.ts",
-      "line": 21
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CronJobHealth",
-      "kind": "interface",
-      "file": "src/lifecycle/cron-health.ts",
-      "line": 23
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CronHealthSnapshot",
-      "kind": "interface",
-      "file": "src/lifecycle/cron-health.ts",
-      "line": 36
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "isCronHealthDegraded",
       "kind": "function",
       "file": "src/lifecycle/cron-health.ts",
@@ -683,108 +242,10 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "IntervalHandle",
-      "kind": "type",
-      "file": "src/lifecycle/interval-registry.ts",
-      "line": 13
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "TimeoutHandle",
-      "kind": "type",
-      "file": "src/lifecycle/interval-registry.ts",
-      "line": 14
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "TenantBootstrapResult",
-      "kind": "interface",
-      "file": "src/lifecycle/tenant-bootstrap.ts",
-      "line": 8
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ConversationStatePatch",
-      "kind": "interface",
-      "file": "src/repositories/conversation.repository.ts",
-      "line": 16
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ConversationRepository",
-      "kind": "interface",
-      "file": "src/repositories/conversation.repository.ts",
-      "line": 27
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CustomerCreateData",
-      "kind": "interface",
-      "file": "src/repositories/customer.repository.ts",
-      "line": 25
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "MessageCreateData",
-      "kind": "interface",
-      "file": "src/repositories/message.repository.ts",
-      "line": 15
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "MessageRepository",
-      "kind": "interface",
-      "file": "src/repositories/message.repository.ts",
-      "line": 31
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "InboundTurnStatus",
-      "kind": "type",
-      "file": "src/repositories/turn.repository.ts",
-      "line": 12
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "PersistInboundParams",
-      "kind": "interface",
-      "file": "src/repositories/turn.repository.ts",
-      "line": 15
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ITurnRepository",
-      "kind": "interface",
-      "file": "src/repositories/turn.repository.ts",
-      "line": 25
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "clearAdminStaticCache",
       "kind": "function",
       "file": "src/routes/admin.route.ts",
       "line": 53
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "MemoryLabel",
-      "kind": "interface",
-      "file": "src/routes/admin/labels.subroute.ts",
-      "line": 7
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "MemoryQuickReply",
-      "kind": "interface",
-      "file": "src/routes/admin/quick-replies.subroute.ts",
-      "line": 17
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CustomRolePayload",
-      "kind": "interface",
-      "file": "src/routes/admin/roles.subroute.ts",
-      "line": 7
     },
     {
       "type": "DEAD_EXPORT",
@@ -865,34 +326,6 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "CustomerIdentity",
-      "kind": "interface",
-      "file": "src/services/ad-attribution.service.ts",
-      "line": 8
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "MatchAdClickResult",
-      "kind": "interface",
-      "file": "src/services/ad-attribution.service.ts",
-      "line": 25
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ClickRecord",
-      "kind": "interface",
-      "file": "src/services/ad-funnel-metrics.service.ts",
-      "line": 20
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ComputeFunnelOptions",
-      "kind": "interface",
-      "file": "src/services/ad-funnel-metrics.service.ts",
-      "line": 37
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "DEFAULT_PAID_MEDIUMS",
       "kind": "variable",
       "file": "src/services/ad-funnel-metrics.service.ts",
@@ -907,27 +340,6 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "AnomalySignal",
-      "kind": "type",
-      "file": "src/services/ad-watchdog.service.ts",
-      "line": 90
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "WatchdogEvaluationResult",
-      "kind": "interface",
-      "file": "src/services/ad-watchdog.service.ts",
-      "line": 97
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CheckAndNotifyResult",
-      "kind": "interface",
-      "file": "src/services/ad-watchdog.service.ts",
-      "line": 267
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "MAX_ADMIN_SESSION_TTL_MS",
       "kind": "variable",
       "file": "src/services/admin-session.service.ts",
@@ -935,129 +347,10 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "ADMIN_SESSION_TTL_MS",
-      "kind": "reexport",
-      "file": "src/services/admin-session.service.ts",
-      "line": 38
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "AiEligibilityEscalationReason",
-      "kind": "type",
-      "file": "src/services/ai-eligibility.service.ts",
-      "line": 31
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "AiEligibilityResolution",
-      "kind": "interface",
-      "file": "src/services/ai-eligibility.service.ts",
-      "line": 38
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "AiEligibilityCustomer",
-      "kind": "interface",
-      "file": "src/services/ai-eligibility.service.ts",
-      "line": 55
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "AiEligibilityTenant",
-      "kind": "interface",
-      "file": "src/services/ai-eligibility.service.ts",
-      "line": 67
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "AiScopeGateResult",
-      "kind": "type",
-      "file": "src/services/ai-scope-gate.service.ts",
-      "line": 35
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "AlertPayload",
-      "kind": "interface",
-      "file": "src/services/alert.service.ts",
-      "line": 43
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "BackupItem",
-      "kind": "interface",
-      "file": "src/services/backup.service.ts",
-      "line": 29
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "BackupResult",
-      "kind": "interface",
-      "file": "src/services/backup.service.ts",
-      "line": 38
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "BroadcastJobData",
-      "kind": "interface",
-      "file": "src/services/broadcast-queue.service.ts",
-      "line": 9
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "BurstCoalesceOptions",
-      "kind": "interface",
-      "file": "src/services/burst-coalesce.service.ts",
-      "line": 41
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "BurstCoalesceResult",
-      "kind": "interface",
-      "file": "src/services/burst-coalesce.service.ts",
-      "line": 49
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "PurchaseReviewStatus",
-      "kind": "type",
-      "file": "src/services/capi-review-status.ts",
-      "line": 13
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "TenantCapiCredentials",
-      "kind": "interface",
-      "file": "src/services/capi.service.ts",
-      "line": 363
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "resolveTenantCapiCredentials",
       "kind": "function",
       "file": "src/services/capi.service.ts",
       "line": 383
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "MetaPurchasePolicy",
-      "kind": "type",
-      "file": "src/services/capi.service.ts",
-      "line": 731
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "MetaRepeatDecision",
-      "kind": "type",
-      "file": "src/services/capi.service.ts",
-      "line": 733
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CapiMatchingGeo",
-      "kind": "interface",
-      "file": "src/services/capi.service.ts",
-      "line": 768
     },
     {
       "type": "DEAD_EXPORT",
@@ -1075,34 +368,6 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "CaptionSplitResult",
-      "kind": "interface",
-      "file": "src/services/caption-splitter.ts",
-      "line": 1
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ExportMessage",
-      "kind": "interface",
-      "file": "src/services/chat-export.service.ts",
-      "line": 13
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ChatExportStats",
-      "kind": "interface",
-      "file": "src/services/chat-export.service.ts",
-      "line": 41
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ChatExportResult",
-      "kind": "interface",
-      "file": "src/services/chat-export.service.ts",
-      "line": 50
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "renderConversationBlocks",
       "kind": "function",
       "file": "src/services/chat-export.service.ts",
@@ -1117,94 +382,10 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "EligibilityStatus",
-      "kind": "type",
-      "file": "src/services/clinical-eligibility.service.ts",
-      "line": 16
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "EligibilityCode",
-      "kind": "type",
-      "file": "src/services/clinical-eligibility.service.ts",
-      "line": 17
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ClinicalContext",
-      "kind": "interface",
-      "file": "src/services/clinical-eligibility.service.ts",
-      "line": 25
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "EligibilityDecision",
-      "kind": "interface",
-      "file": "src/services/clinical-eligibility.service.ts",
-      "line": 34
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ServiceResolver",
-      "kind": "type",
-      "file": "src/services/clinical-eligibility.service.ts",
-      "line": 40
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CommandResult",
-      "kind": "interface",
-      "file": "src/services/command.service.ts",
-      "line": 23
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CopilotTool",
-      "kind": "interface",
-      "file": "src/services/copilot/copilot-tools.ts",
-      "line": 29
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "RESERVATION_STATUS_VALUES",
       "kind": "variable",
       "file": "src/services/copilot/copilot-tools.ts",
       "line": 55
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "MatchQuality",
-      "kind": "type",
-      "file": "src/services/copilot/copilot-tools.ts",
-      "line": 921
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CopilotChatParams",
-      "kind": "interface",
-      "file": "src/services/copilot/copilot.service.ts",
-      "line": 18
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CopilotChatResult",
-      "kind": "interface",
-      "file": "src/services/copilot/copilot.service.ts",
-      "line": 50
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "RouterPriorStep",
-      "kind": "interface",
-      "file": "src/services/copilot/copilot.service.ts",
-      "line": 452
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CopilotStyleConfig",
-      "kind": "interface",
-      "file": "src/services/copilot/copilot.service.ts",
-      "line": 558
     },
     {
       "type": "DEAD_EXPORT",
@@ -1236,108 +417,10 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "CopilotEngine",
-      "kind": "type",
-      "file": "src/services/copilot/hermes-adapter.ts",
-      "line": 31
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "HermesBrainMode",
-      "kind": "type",
-      "file": "src/services/copilot/hermes-adapter.ts",
-      "line": 36
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "HermesBridgeConfig",
-      "kind": "interface",
-      "file": "src/services/copilot/hermes-adapter.ts",
-      "line": 38
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "HermesBridgeCallOpts",
-      "kind": "interface",
-      "file": "src/services/copilot/hermes-adapter.ts",
-      "line": 48
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "HermesRouterDecision",
-      "kind": "interface",
-      "file": "src/services/copilot/hermes-adapter.ts",
-      "line": 59
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CtwaCatcherRow",
-      "kind": "interface",
-      "file": "src/services/ctwa-text-catcher.service.ts",
-      "line": 18
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CtwaCatcherDiagnostic",
-      "kind": "interface",
-      "file": "src/services/ctwa-text-catcher.service.ts",
-      "line": 31
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CtwaCatcherMatchResult",
-      "kind": "interface",
-      "file": "src/services/ctwa-text-catcher.service.ts",
-      "line": 36
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "ANCHOR_MATCH_CREDIT",
       "kind": "variable",
       "file": "src/services/ctwa-text-catcher.service.ts",
       "line": 61
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CustomerNameSource",
-      "kind": "type",
-      "file": "src/services/customer.service.ts",
-      "line": 42
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CustomerGroundTruth",
-      "kind": "interface",
-      "file": "src/services/customer.service.ts",
-      "line": 3266
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "InvariantViolation",
-      "kind": "interface",
-      "file": "src/services/daily-invariant-monitor.service.ts",
-      "line": 9
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "InvariantReport",
-      "kind": "interface",
-      "file": "src/services/daily-invariant-monitor.service.ts",
-      "line": 15
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "AutoRepairLtvResult",
-      "kind": "interface",
-      "file": "src/services/daily-invariant-monitor.service.ts",
-      "line": 100
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "DailyReportData",
-      "kind": "interface",
-      "file": "src/services/daily-report.service.ts",
-      "line": 9
     },
     {
       "type": "DEAD_EXPORT",
@@ -1362,87 +445,10 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "DeliveryCalculationResult",
-      "kind": "interface",
-      "file": "src/services/delivery.service.ts",
-      "line": 214
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "FaqCacheService",
       "kind": "class",
       "file": "src/services/faq-cache.service.ts",
       "line": 11
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "MonthlyKpiSummary",
-      "kind": "interface",
-      "file": "src/services/financial-analytics.service.ts",
-      "line": 22
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "DailyRevenuePoint",
-      "kind": "interface",
-      "file": "src/services/financial-analytics.service.ts",
-      "line": 37
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CategoryRevenueItem",
-      "kind": "interface",
-      "file": "src/services/financial-analytics.service.ts",
-      "line": 48
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "PaymentMethodItem",
-      "kind": "interface",
-      "file": "src/services/financial-analytics.service.ts",
-      "line": 56
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "StaffPerformanceItem",
-      "kind": "interface",
-      "file": "src/services/financial-analytics.service.ts",
-      "line": 64
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "TopServiceItem",
-      "kind": "interface",
-      "file": "src/services/financial-analytics.service.ts",
-      "line": 73
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "TransactionLedgerItem",
-      "kind": "interface",
-      "file": "src/services/financial-analytics.service.ts",
-      "line": 79
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "MonthlyAnalyticsResponse",
-      "kind": "interface",
-      "file": "src/services/financial-analytics.service.ts",
-      "line": 97
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ScheduledAtRange",
-      "kind": "interface",
-      "file": "src/services/follow-up.service.ts",
-      "line": 42
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "FrustrationEvaluationInput",
-      "kind": "interface",
-      "file": "src/services/frustration-signal.service.ts",
-      "line": 35
     },
     {
       "type": "DEAD_EXPORT",
@@ -1460,52 +466,10 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "CalendarReservationInput",
-      "kind": "interface",
-      "file": "src/services/google-calendar.service.ts",
-      "line": 28
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "GoogleCalendarClientDeps",
-      "kind": "interface",
-      "file": "src/services/google-calendar.service.ts",
-      "line": 37
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "GoogleContactsOutboxItem",
-      "kind": "interface",
-      "file": "src/services/google-contacts-outbox.service.ts",
-      "line": 23
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "GoogleContactsOutboxDrainResult",
-      "kind": "interface",
-      "file": "src/services/google-contacts-outbox.service.ts",
-      "line": 32
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "GoogleIntegrationStatus",
-      "kind": "interface",
-      "file": "src/services/google-contacts.service.ts",
-      "line": 53
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "GoogleContactsService",
       "kind": "class",
       "file": "src/services/google-contacts.service.ts",
       "line": 68
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "GreetingRenderVars",
-      "kind": "interface",
-      "file": "src/services/greeting-template.service.ts",
-      "line": 44
     },
     {
       "type": "DEAD_EXPORT",
@@ -1516,101 +480,10 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "InboundMessageNotificationContext",
-      "kind": "interface",
-      "file": "src/services/inbound-notification-router.service.ts",
-      "line": 10
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "StaleInboundReason",
-      "kind": "type",
-      "file": "src/services/ingress/inbound-guard.service.ts",
-      "line": 25
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "StaleInboundDecision",
-      "kind": "interface",
-      "file": "src/services/ingress/inbound-guard.service.ts",
-      "line": 32
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "StaleInboundInput",
-      "kind": "interface",
-      "file": "src/services/ingress/inbound-guard.service.ts",
-      "line": 42
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "LogInboundWithoutReplyInput",
-      "kind": "interface",
-      "file": "src/services/ingress/inbound-guard.service.ts",
-      "line": 132
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "IntegrationServiceName",
-      "kind": "type",
-      "file": "src/services/integration-guard.service.ts",
-      "line": 32
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "IntegrationGuardRule",
-      "kind": "interface",
-      "file": "src/services/integration-guard.service.ts",
-      "line": 34
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "IntegrationGuardConfig",
-      "kind": "interface",
-      "file": "src/services/integration-guard.service.ts",
-      "line": 43
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "QuotaStatus",
-      "kind": "interface",
-      "file": "src/services/integration-guard.service.ts",
-      "line": 47
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "getIntegrationGuardConfig",
       "kind": "function",
       "file": "src/services/integration-guard.service.ts",
       "line": 97
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "KeywordRule",
-      "kind": "interface",
-      "file": "src/services/keyword-enrichment.service.ts",
-      "line": 24
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ExemplarTagRule",
-      "kind": "interface",
-      "file": "src/services/keyword-enrichment.service.ts",
-      "line": 131
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ResolvedExemplarTags",
-      "kind": "interface",
-      "file": "src/services/keyword-enrichment.service.ts",
-      "line": 198
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "EnrichStats",
-      "kind": "interface",
-      "file": "src/services/keyword-enrichment.service.ts",
-      "line": 234
     },
     {
       "type": "DEAD_EXPORT",
@@ -1621,94 +494,10 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "KnowledgeChunkResult",
-      "kind": "interface",
-      "file": "src/services/knowledge.service.ts",
-      "line": 10
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "KnowledgeBaseService",
       "kind": "class",
       "file": "src/services/knowledge.service.ts",
       "line": 92
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "HarvestingProgressStats",
-      "kind": "interface",
-      "file": "src/services/legacy-harvesting.service.ts",
-      "line": 10
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "LiveChatHubEventType",
-      "kind": "type",
-      "file": "src/services/live-chat-hub.service.ts",
-      "line": 7
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "LiveChatHubEvent",
-      "kind": "interface",
-      "file": "src/services/live-chat-hub.service.ts",
-      "line": 28
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "LiveChatConversationItem",
-      "kind": "interface",
-      "file": "src/services/live-chat.service.ts",
-      "line": 21
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "LiveChatReservationItem",
-      "kind": "interface",
-      "file": "src/services/live-chat.service.ts",
-      "line": 87
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "AdminReplyResult",
-      "kind": "interface",
-      "file": "src/services/live-chat.service.ts",
-      "line": 139
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "AwaitingReplyMessage",
-      "kind": "interface",
-      "file": "src/services/livechat-reply-state.ts",
-      "line": 14
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "EvaluatedSample",
-      "kind": "interface",
-      "file": "src/services/llm-evaluator.service.ts",
-      "line": 28
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "EvalResult",
-      "kind": "interface",
-      "file": "src/services/llm-evaluator.service.ts",
-      "line": 37
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "PersonaVerdict",
-      "kind": "interface",
-      "file": "src/services/llm-evaluator.service.ts",
-      "line": 48
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "IngestResult",
-      "kind": "type",
-      "file": "src/services/location-ingest.service.ts",
-      "line": 70
     },
     {
       "type": "DEAD_EXPORT",
@@ -1719,27 +508,6 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "ResolveLocationResult",
-      "kind": "interface",
-      "file": "src/services/location-resolver.service.ts",
-      "line": 10
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CanonicalMomStage",
-      "kind": "type",
-      "file": "src/services/maternal-state.service.ts",
-      "line": 16
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "MaternalState",
-      "kind": "interface",
-      "file": "src/services/maternal-state.service.ts",
-      "line": 55
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "EMPTY_MATERNAL_STATE",
       "kind": "variable",
       "file": "src/services/maternal-state.service.ts",
@@ -1747,38 +515,10 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "SavedMedia",
-      "kind": "interface",
-      "file": "src/services/media.service.ts",
-      "line": 97
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "IMAGE_EXT_RE",
       "kind": "variable",
       "file": "src/services/media.service.ts",
       "line": 124
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "EnsureThumbResult",
-      "kind": "type",
-      "file": "src/services/media.service.ts",
-      "line": 126
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "BlurThumbResult",
-      "kind": "type",
-      "file": "src/services/media.service.ts",
-      "line": 139
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "MedicalDetectionResult",
-      "kind": "interface",
-      "file": "src/services/medical-detection.service.ts",
-      "line": 3
     },
     {
       "type": "DEAD_EXPORT",
@@ -1810,27 +550,6 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "MetaInsightRow",
-      "kind": "interface",
-      "file": "src/services/meta-ads-insights.service.ts",
-      "line": 4
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ReconcileOptions",
-      "kind": "interface",
-      "file": "src/services/meta-ads-insights.service.ts",
-      "line": 10
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ReconcileResult",
-      "kind": "interface",
-      "file": "src/services/meta-ads-insights.service.ts",
-      "line": 15
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "SANDBOX_EXCLUDE",
       "kind": "variable",
       "file": "src/services/meta-performance-analytics.service.ts",
@@ -1842,62 +561,6 @@
       "kind": "variable",
       "file": "src/services/meta-performance-analytics.service.ts",
       "line": 47
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "MetaPerformanceQueryOptions",
-      "kind": "type",
-      "file": "src/services/meta-performance-analytics.service.ts",
-      "line": 82
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "RevenueBasis",
-      "kind": "interface",
-      "file": "src/services/meta-performance-analytics.service.ts",
-      "line": 84
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CohortChannel",
-      "kind": "type",
-      "file": "src/services/meta-performance-analytics.service.ts",
-      "line": 93
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CohortMonthlyPeriodMetric",
-      "kind": "interface",
-      "file": "src/services/meta-performance-analytics.service.ts",
-      "line": 95
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "UnifiedMonthlyCohortRow",
-      "kind": "interface",
-      "file": "src/services/meta-performance-analytics.service.ts",
-      "line": 105
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CohortPlanningMetrics",
-      "kind": "interface",
-      "file": "src/services/meta-performance-analytics.service.ts",
-      "line": 132
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "MetaPerformanceReport",
-      "kind": "interface",
-      "file": "src/services/meta-performance-analytics.service.ts",
-      "line": 142
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "BuildMonthlyCohortsParams",
-      "kind": "interface",
-      "file": "src/services/meta-performance-analytics.service.ts",
-      "line": 455
     },
     {
       "type": "DEAD_EXPORT",
@@ -1922,48 +585,6 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "NightlyWatchdogData",
-      "kind": "interface",
-      "file": "src/services/nightly-watchdog.service.ts",
-      "line": 21
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "NotificationChannel",
-      "kind": "type",
-      "file": "src/services/notification-delivery.service.ts",
-      "line": 4
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "NotificationType",
-      "kind": "type",
-      "file": "src/services/notification-delivery.service.ts",
-      "line": 6
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "SendNotificationParams",
-      "kind": "interface",
-      "file": "src/services/notification-delivery.service.ts",
-      "line": 12
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "SendNotificationResult",
-      "kind": "interface",
-      "file": "src/services/notification-delivery.service.ts",
-      "line": 31
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "MemoryNotificationLog",
-      "kind": "interface",
-      "file": "src/services/notification-delivery.service.ts",
-      "line": 39
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "MAX_MEMORY_NOTIFICATION_LOGS",
       "kind": "variable",
       "file": "src/services/notification-delivery.service.ts",
@@ -1985,27 +606,6 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "ActiveAppointmentResult",
-      "kind": "interface",
-      "file": "src/services/patient-lifecycle.service.ts",
-      "line": 32
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "PatientClinicalProfile",
-      "kind": "interface",
-      "file": "src/services/patient-lifecycle.service.ts",
-      "line": 37
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "PatientSnapshot",
-      "kind": "interface",
-      "file": "src/services/patient-lifecycle.service.ts",
-      "line": 50
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "PerContactLegacyScrapeService",
       "kind": "class",
       "file": "src/services/per-contact-legacy-scrape.service.ts",
@@ -2013,108 +613,10 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "PricelistImageAssets",
-      "kind": "interface",
-      "file": "src/services/pricelist-config.service.ts",
-      "line": 36
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "PricelistVariantTuple",
-      "kind": "type",
-      "file": "src/services/pricelist.service.ts",
-      "line": 23
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "PricelistItem",
-      "kind": "interface",
-      "file": "src/services/pricelist.service.ts",
-      "line": 25
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "PricelistSection",
-      "kind": "interface",
-      "file": "src/services/pricelist.service.ts",
-      "line": 40
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "PricelistPayload",
-      "kind": "interface",
-      "file": "src/services/pricelist.service.ts",
-      "line": 50
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "buildKeywords",
       "kind": "function",
       "file": "src/services/pricelist.service.ts",
       "line": 167
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "RagScoreCandidate",
-      "kind": "interface",
-      "file": "src/services/rag-score.ts",
-      "line": 17
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "RagScoreWeights",
-      "kind": "interface",
-      "file": "src/services/rag-score.ts",
-      "line": 27
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "SyncActiveReservationResult",
-      "kind": "interface",
-      "file": "src/services/reservation-address-sync.service.ts",
-      "line": 29
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ArchiveReservationParams",
-      "kind": "interface",
-      "file": "src/services/reservation-archive.service.ts",
-      "line": 17
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "RestoreReservationParams",
-      "kind": "interface",
-      "file": "src/services/reservation-archive.service.ts",
-      "line": 26
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ListArchivesParams",
-      "kind": "interface",
-      "file": "src/services/reservation-archive.service.ts",
-      "line": 34
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ReservationBilling",
-      "kind": "interface",
-      "file": "src/services/reservation-billing.service.ts",
-      "line": 18
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ReservationSource",
-      "kind": "type",
-      "file": "src/services/reservation-core.service.ts",
-      "line": 22
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ReservationResult",
-      "kind": "interface",
-      "file": "src/services/reservation-core.service.ts",
-      "line": 73
     },
     {
       "type": "DEAD_EXPORT",
@@ -2146,76 +648,6 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "SameDayInput",
-      "kind": "interface",
-      "file": "src/services/reservation-intake.ts",
-      "line": 33
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CustomerReservationIntakeInput",
-      "kind": "interface",
-      "file": "src/services/reservation-intake.ts",
-      "line": 52
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CustomerReservationIntakeMeta",
-      "kind": "interface",
-      "file": "src/services/reservation-intake.ts",
-      "line": 63
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "OnReservationCreatedParams",
-      "kind": "interface",
-      "file": "src/services/reservation-lifecycle.service.ts",
-      "line": 32
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "UpsertReservationFormParams",
-      "kind": "interface",
-      "file": "src/services/reservation-lifecycle.service.ts",
-      "line": 580
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "TryCaptureReservationParams",
-      "kind": "interface",
-      "file": "src/services/reservation-lifecycle.service.ts",
-      "line": 654
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "TryCaptureReservationResult",
-      "kind": "interface",
-      "file": "src/services/reservation-lifecycle.service.ts",
-      "line": 664
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CreateSeriesParams",
-      "kind": "interface",
-      "file": "src/services/reservation-series.service.ts",
-      "line": 10
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "SeriesWithReservations",
-      "kind": "interface",
-      "file": "src/services/reservation-series.service.ts",
-      "line": 36
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "UnitRow",
-      "kind": "type",
-      "file": "src/services/reservation-unit.ts",
-      "line": 8
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "isCommercialAnchor",
       "kind": "function",
       "file": "src/services/reservation-unit.ts",
@@ -2230,27 +662,6 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "ScopeDecision",
-      "kind": "interface",
-      "file": "src/services/role-scope.service.ts",
-      "line": 22
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "SandboxCleanupResult",
-      "kind": "interface",
-      "file": "src/services/sandbox-cleanup.service.ts",
-      "line": 17
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "SharelocSweepResult",
-      "kind": "interface",
-      "file": "src/services/shareloc-reminder.service.ts",
-      "line": 28
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "SharelocReminderService",
       "kind": "class",
       "file": "src/services/shareloc-reminder.service.ts",
@@ -2258,59 +669,10 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "SheetTarget",
-      "kind": "interface",
-      "file": "src/services/sheets/month-resolver.ts",
-      "line": 18
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "SheetRowReservation",
-      "kind": "interface",
-      "file": "src/services/sheets/row-formatter.ts",
-      "line": 21
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "SheetRowCustomer",
-      "kind": "interface",
-      "file": "src/services/sheets/row-formatter.ts",
-      "line": 41
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "SheetRowChild",
-      "kind": "interface",
-      "file": "src/services/sheets/row-formatter.ts",
-      "line": 51
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "SheetRowCustomerAddress",
-      "kind": "interface",
-      "file": "src/services/sheets/row-formatter.ts",
-      "line": 57
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "SheetRowInput",
-      "kind": "interface",
-      "file": "src/services/sheets/row-formatter.ts",
-      "line": 64
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "resolveLocation",
       "kind": "function",
       "file": "src/services/sheets/row-formatter.ts",
       "line": 107
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ReconcileRowParams",
-      "kind": "interface",
-      "file": "src/services/sheets/sheets-client.ts",
-      "line": 56
     },
     {
       "type": "DEAD_EXPORT",
@@ -2328,34 +690,6 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "ProcessOutboxResult",
-      "kind": "interface",
-      "file": "src/services/sheets/sheets-sync.service.ts",
-      "line": 112
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "SlotOverlapType",
-      "kind": "type",
-      "file": "src/services/slot-overlap.service.ts",
-      "line": 29
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "SlotOverlapSeverity",
-      "kind": "type",
-      "file": "src/services/slot-overlap.service.ts",
-      "line": 35
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "SlotOverlap",
-      "kind": "interface",
-      "file": "src/services/slot-overlap.service.ts",
-      "line": 38
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "SLOT_OVERLAP_COOLDOWN_MS",
       "kind": "variable",
       "file": "src/services/slot-overlap.service.ts",
@@ -2367,20 +701,6 @@
       "kind": "function",
       "file": "src/services/slot-overlap.service.ts",
       "line": 100
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "FindOverlappingSlotsOptions",
-      "kind": "interface",
-      "file": "src/services/slot-overlap.service.ts",
-      "line": 204
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "SlotOverlapSweepResult",
-      "kind": "interface",
-      "file": "src/services/slot-overlap.service.ts",
-      "line": 513
     },
     {
       "type": "DEAD_EXPORT",
@@ -2398,34 +718,6 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "AssignmentMessageParams",
-      "kind": "interface",
-      "file": "src/services/staff-notification-formatter.service.ts",
-      "line": 3
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "PreVisitBriefMessageParams",
-      "kind": "interface",
-      "file": "src/services/staff-notification-formatter.service.ts",
-      "line": 20
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CancellationMessageParams",
-      "kind": "interface",
-      "file": "src/services/staff-notification-formatter.service.ts",
-      "line": 32
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "UnassignedMessageParams",
-      "kind": "interface",
-      "file": "src/services/staff-notification-formatter.service.ts",
-      "line": 43
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "StaffNotificationFormatterService",
       "kind": "class",
       "file": "src/services/staff-notification-formatter.service.ts",
@@ -2440,41 +732,6 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "StaffTelegramPairingInfo",
-      "kind": "interface",
-      "file": "src/services/staff-notification.service.ts",
-      "line": 18
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "StaffTaskChild",
-      "kind": "interface",
-      "file": "src/services/staff-reservation.service.ts",
-      "line": 26
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "StaffTaskAddress",
-      "kind": "interface",
-      "file": "src/services/staff-reservation.service.ts",
-      "line": 33
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "StaffTaskPricing",
-      "kind": "interface",
-      "file": "src/services/staff-reservation.service.ts",
-      "line": 52
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "StaffTaskItem",
-      "kind": "interface",
-      "file": "src/services/staff-reservation.service.ts",
-      "line": 64
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "estimateTravelDurationMinutes",
       "kind": "function",
       "file": "src/services/staff-reservation.service.ts",
@@ -2482,52 +739,10 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "ChatWindowReason",
-      "kind": "type",
-      "file": "src/services/staff-reservation.service.ts",
-      "line": 403
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ChatWindowStatus",
-      "kind": "interface",
-      "file": "src/services/staff-reservation.service.ts",
-      "line": 411
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "RetentionPolicyModel",
-      "kind": "interface",
-      "file": "src/services/staff-retention.service.ts",
-      "line": 16
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "DEFAULT_RETENTION_POLICY",
       "kind": "variable",
       "file": "src/services/staff-retention.service.ts",
       "line": 38
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "StaffRetentionReportItem",
-      "kind": "interface",
-      "file": "src/services/staff-retention.service.ts",
-      "line": 57
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "StaffRetentionReport",
-      "kind": "interface",
-      "file": "src/services/staff-retention.service.ts",
-      "line": 73
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "DrilldownCustomerItem",
-      "kind": "interface",
-      "file": "src/services/staff-retention.service.ts",
-      "line": 87
     },
     {
       "type": "DEAD_EXPORT",
@@ -2566,143 +781,10 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "DelayLevel",
-      "kind": "type",
-      "file": "src/services/staff-trip-tracking.service.ts",
-      "line": 88
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ArrivalGeofenceResult",
-      "kind": "interface",
-      "file": "src/services/staff-trip-tracking.service.ts",
-      "line": 90
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "DelayStatusResult",
-      "kind": "interface",
-      "file": "src/services/staff-trip-tracking.service.ts",
-      "line": 104
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "TripPing",
-      "kind": "interface",
-      "file": "src/services/staff-trip-tracking.service.ts",
-      "line": 236
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "TripRecord",
-      "kind": "interface",
-      "file": "src/services/staff-trip-tracking.service.ts",
-      "line": 244
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "TripProgress",
-      "kind": "interface",
-      "file": "src/services/staff-trip-tracking.service.ts",
-      "line": 266
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "GeofenceResult",
-      "kind": "interface",
-      "file": "src/services/staff-trip-tracking.service.ts",
-      "line": 271
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "SystemInfo",
-      "kind": "interface",
-      "file": "src/services/system-debug.service.ts",
-      "line": 43
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "MessageTraceEntry",
-      "kind": "interface",
-      "file": "src/services/system-debug.service.ts",
-      "line": 129
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ConversationTraceEntry",
-      "kind": "interface",
-      "file": "src/services/system-debug.service.ts",
-      "line": 194
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "TelegramLinks",
-      "kind": "interface",
-      "file": "src/services/telegram.service.ts",
-      "line": 6
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "SeedTenantCatalogOptions",
-      "kind": "interface",
-      "file": "src/services/tenant-catalog-seed.service.ts",
-      "line": 5
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "SeedTenantCatalogResult",
-      "kind": "interface",
-      "file": "src/services/tenant-catalog-seed.service.ts",
-      "line": 11
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "PromptConfigSections",
-      "kind": "interface",
-      "file": "src/services/tenant-prompt-config.service.ts",
-      "line": 10
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "PromptConfigSource",
-      "kind": "type",
-      "file": "src/services/tenant-prompt-config.service.ts",
-      "line": 17
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ResolvedPromptConfig",
-      "kind": "interface",
-      "file": "src/services/tenant-prompt-config.service.ts",
-      "line": 19
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ClinicServiceType",
-      "kind": "type",
-      "file": "src/services/treatment-catalog.service.ts",
-      "line": 15
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "AgeTier",
-      "kind": "interface",
-      "file": "src/services/treatment-catalog.service.ts",
-      "line": 60
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "SERVICES_FILE",
       "kind": "variable",
       "file": "src/services/treatment-catalog.service.ts",
       "line": 91
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CatalogSource",
-      "kind": "type",
-      "file": "src/services/treatment-catalog.service.ts",
-      "line": 197
     },
     {
       "type": "DEAD_EXPORT",
@@ -2720,34 +802,6 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "HumanReplyParams",
-      "kind": "interface",
-      "file": "src/services/typing.service.ts",
-      "line": 12
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "HumanReplyResult",
-      "kind": "interface",
-      "file": "src/services/typing.service.ts",
-      "line": 26
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "MarketingOptInSource",
-      "kind": "type",
-      "file": "src/services/waba-consent.service.ts",
-      "line": 3
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ConsentCheckResult",
-      "kind": "interface",
-      "file": "src/services/waba-consent.service.ts",
-      "line": 5
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "WabaConsentService",
       "kind": "class",
       "file": "src/services/waba-consent.service.ts",
@@ -2755,52 +809,10 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "OptOutResult",
-      "kind": "interface",
-      "file": "src/services/waba-optout.service.ts",
-      "line": 3
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "WabaOptOutService",
       "kind": "class",
       "file": "src/services/waba-optout.service.ts",
       "line": 9
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "WabaTemplateCategory",
-      "kind": "type",
-      "file": "src/services/waba-template.service.ts",
-      "line": 4
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "WabaTemplateStatus",
-      "kind": "type",
-      "file": "src/services/waba-template.service.ts",
-      "line": 5
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "WabaTemplateMapping",
-      "kind": "interface",
-      "file": "src/services/waba-template.service.ts",
-      "line": 7
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "WabaTemplateParams",
-      "kind": "interface",
-      "file": "src/services/waba-template.service.ts",
-      "line": 15
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "WabaTemplateMeta",
-      "kind": "interface",
-      "file": "src/services/waba-template.service.ts",
-      "line": 22
     },
     {
       "type": "DEAD_EXPORT",
@@ -2818,220 +830,10 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "WahaHistorySyncResult",
-      "kind": "interface",
-      "file": "src/services/waha-history-sync.service.ts",
-      "line": 12
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "BackgroundSyncProgress",
-      "kind": "interface",
-      "file": "src/services/waha-history-sync.service.ts",
-      "line": 23
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "WebPushPayload",
-      "kind": "interface",
-      "file": "src/services/web-push.service.ts",
-      "line": 7
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "StoredSubscription",
-      "kind": "interface",
-      "file": "src/services/web-push.service.ts",
-      "line": 18
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ProviderQrData",
-      "kind": "interface",
-      "file": "src/services/whatsapp-provider.service.ts",
-      "line": 6
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "WAHA_STATUS_WITHOUT_QR",
       "kind": "variable",
       "file": "src/services/whatsapp-provider.service.ts",
       "line": 19
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "GateAction",
-      "kind": "type",
-      "file": "src/state-machine/conversation-gates.ts",
-      "line": 18
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "GateVerdict",
-      "kind": "interface",
-      "file": "src/state-machine/conversation-gates.ts",
-      "line": 20
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "MedicalGateInput",
-      "kind": "interface",
-      "file": "src/state-machine/conversation-gates.ts",
-      "line": 55
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "HealthStatus",
-      "kind": "type",
-      "file": "src/types/telemetry.ts",
-      "line": 37
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ParsedAdminDistanceInfo",
-      "kind": "interface",
-      "file": "src/utils/admin-chat-distance-parser.ts",
-      "line": 10
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "AgeInput",
-      "kind": "interface",
-      "file": "src/utils/age-calculator.ts",
-      "line": 10
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "AgeEstimate",
-      "kind": "interface",
-      "file": "src/utils/age-calculator.ts",
-      "line": 17
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "GestationalAgeInput",
-      "kind": "interface",
-      "file": "src/utils/age-calculator.ts",
-      "line": 33
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "GestationalAgeResult",
-      "kind": "interface",
-      "file": "src/utils/age-calculator.ts",
-      "line": 39
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "MomGestationalInfo",
-      "kind": "interface",
-      "file": "src/utils/age-calculator.ts",
-      "line": 45
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "AuthAccessLogInput",
-      "kind": "interface",
-      "file": "src/utils/auth-access-log.ts",
-      "line": 15
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "AuthAccessLogEntry",
-      "kind": "interface",
-      "file": "src/utils/auth-access-log.ts",
-      "line": 28
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "NormalizedLocation",
-      "kind": "interface",
-      "file": "src/utils/canonical-message-normalizer.ts",
-      "line": 17
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "NormalizedMedia",
-      "kind": "interface",
-      "file": "src/utils/canonical-message-normalizer.ts",
-      "line": 25
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "NormalizedContact",
-      "kind": "interface",
-      "file": "src/utils/canonical-message-normalizer.ts",
-      "line": 37
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CanonicalMessageType",
-      "kind": "type",
-      "file": "src/utils/canonical-message-normalizer.ts",
-      "line": 43
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CanonicalInboundParseResult",
-      "kind": "interface",
-      "file": "src/utils/canonical-message-normalizer.ts",
-      "line": 56
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CachedReplyResult",
-      "kind": "interface",
-      "file": "src/utils/client-idempotency.ts",
-      "line": 16
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ContextData",
-      "kind": "interface",
-      "file": "src/utils/context.ts",
-      "line": 3
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ExtractedTransaction",
-      "kind": "interface",
-      "file": "src/utils/conversation-transaction-extractor.ts",
-      "line": 4
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "PricingSource",
-      "kind": "type",
-      "file": "src/utils/cost-calculator.ts",
-      "line": 22
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ModelPricing",
-      "kind": "interface",
-      "file": "src/utils/cost-calculator.ts",
-      "line": 24
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ResolvedPricing",
-      "kind": "interface",
-      "file": "src/utils/cost-calculator.ts",
-      "line": 32
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CostOptions",
-      "kind": "interface",
-      "file": "src/utils/cost-calculator.ts",
-      "line": 37
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CsrfGuardResult",
-      "kind": "interface",
-      "file": "src/utils/csrf-guard.ts",
-      "line": 15
     },
     {
       "type": "DEAD_EXPORT",
@@ -3042,34 +844,6 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "DateConfirmationVerdict",
-      "kind": "interface",
-      "file": "src/utils/date-confirmation.ts",
-      "line": 438
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "DestructiveGuardOptions",
-      "kind": "interface",
-      "file": "src/utils/destructive-guard.ts",
-      "line": 9
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "DestructiveGuardResult",
-      "kind": "interface",
-      "file": "src/utils/destructive-guard.ts",
-      "line": 16
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "KvMode",
-      "kind": "type",
-      "file": "src/utils/distributed-kv.ts",
-      "line": 21
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "KvUnavailableError",
       "kind": "class",
       "file": "src/utils/distributed-kv.ts",
@@ -3077,24 +851,10 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "DistributedKvOptions",
-      "kind": "interface",
-      "file": "src/utils/distributed-kv.ts",
-      "line": 181
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "MOMS_FORBIDDEN_PLACEHOLDERS",
       "kind": "variable",
       "file": "src/utils/followup-placeholder.ts",
       "line": 24
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ResolveZipcodeInput",
-      "kind": "interface",
-      "file": "src/utils/gazetteer-zipcode-resolver.ts",
-      "line": 15
     },
     {
       "type": "DEAD_EXPORT",
@@ -3112,24 +872,10 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "GazetteerCoordinateHit",
-      "kind": "interface",
-      "file": "src/utils/gazetteer.ts",
-      "line": 315
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "getGazetteerZipcode",
       "kind": "function",
       "file": "src/utils/gazetteer.ts",
       "line": 390
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "NearestSubdistrictMatch",
-      "kind": "interface",
-      "file": "src/utils/gazetteer.ts",
-      "line": 571
     },
     {
       "type": "DEAD_EXPORT",
@@ -3144,27 +890,6 @@
       "kind": "variable",
       "file": "src/utils/gazetteer.ts",
       "line": 598
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ResolvedCoordinates",
-      "kind": "interface",
-      "file": "src/utils/google-maps-url-resolver.ts",
-      "line": 4
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ParsedIndonesianDate",
-      "kind": "interface",
-      "file": "src/utils/indonesian-date-parser.ts",
-      "line": 55
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "WhatsAppJidType",
-      "kind": "type",
-      "file": "src/utils/jid.ts",
-      "line": 3
     },
     {
       "type": "DEAD_EXPORT",
@@ -3210,41 +935,6 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "LeadGreetingResult",
-      "kind": "interface",
-      "file": "src/utils/lead-greeting-detector.ts",
-      "line": 13
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "LlmAuditLogPayload",
-      "kind": "interface",
-      "file": "src/utils/llm-audit-buffer.ts",
-      "line": 5
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "LlmFlowType",
-      "kind": "type",
-      "file": "src/utils/llm-execution-logger.ts",
-      "line": 6
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "GroupedBubbleChat",
-      "kind": "interface",
-      "file": "src/utils/llm-execution-logger.ts",
-      "line": 55
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "GroupedCustomerLlmLogs",
-      "kind": "interface",
-      "file": "src/utils/llm-execution-logger.ts",
-      "line": 63
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "redactPiiText",
       "kind": "function",
       "file": "src/utils/llm-execution-logger.ts",
@@ -3259,59 +949,10 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "DriftReason",
-      "kind": "type",
-      "file": "src/utils/location-drift.ts",
-      "line": 28
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "DriftDecision",
-      "kind": "interface",
-      "file": "src/utils/location-drift.ts",
-      "line": 35
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "LogEntry",
-      "kind": "interface",
-      "file": "src/utils/log-buffer.ts",
-      "line": 14
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "cleanOldLogFiles",
       "kind": "function",
       "file": "src/utils/log-buffer.ts",
       "line": 268
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "MediaKind",
-      "kind": "type",
-      "file": "src/utils/media-kind.ts",
-      "line": 3
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "MagicDetectionResult",
-      "kind": "interface",
-      "file": "src/utils/media-kind.ts",
-      "line": 5
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "MessageCursor",
-      "kind": "interface",
-      "file": "src/utils/message-cursor.ts",
-      "line": 12
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "MoneyLike",
-      "kind": "interface",
-      "file": "src/utils/money-contract.ts",
-      "line": 7
     },
     {
       "type": "DEAD_EXPORT",
@@ -3329,59 +970,10 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "DecodedPlusCode",
-      "kind": "interface",
-      "file": "src/utils/open-location-code.ts",
-      "line": 18
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "maskAddress",
       "kind": "function",
       "file": "src/utils/pii-masker.ts",
       "line": 432
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "SanitizedCustomerInput",
-      "kind": "interface",
-      "file": "src/utils/prompt-injection-sanitizer.ts",
-      "line": 17
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ChatHistoryMessage",
-      "kind": "interface",
-      "file": "src/utils/prompt-injection-sanitizer.ts",
-      "line": 82
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ReservationAddressSource",
-      "kind": "interface",
-      "file": "src/utils/reservation-address.ts",
-      "line": 18
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "PatientEntityKind",
-      "kind": "type",
-      "file": "src/utils/reservation-text-parser.ts",
-      "line": 14
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ParsedReservation",
-      "kind": "interface",
-      "file": "src/utils/reservation-text-parser.ts",
-      "line": 40
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ReservationFormOptions",
-      "kind": "interface",
-      "file": "src/utils/reservation-text-parser.ts",
-      "line": 83
     },
     {
       "type": "DEAD_EXPORT",
@@ -3413,20 +1005,6 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "MonotonicSseSequencer",
-      "kind": "interface",
-      "file": "src/utils/sse-sequence.ts",
-      "line": 14
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "PasswordPolicyResult",
-      "kind": "interface",
-      "file": "src/utils/staff-policy.ts",
-      "line": 7
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "STAFF_PASSWORD_MIN_LENGTH",
       "kind": "variable",
       "file": "src/utils/staff-policy.ts",
@@ -3441,38 +1019,10 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "StageName",
-      "kind": "type",
-      "file": "src/utils/stage-logger.ts",
-      "line": 3
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "TemporalGrounding",
-      "kind": "interface",
-      "file": "src/utils/temporal-grounding.ts",
-      "line": 10
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "TOWN_ALIASES",
       "kind": "variable",
       "file": "src/utils/toponym-normalizer.ts",
       "line": 12
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CanonicalTreatmentCategory",
-      "kind": "type",
-      "file": "src/utils/treatment-category.ts",
-      "line": 43
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "TtlCacheOptions",
-      "kind": "interface",
-      "file": "src/utils/ttl-cache.ts",
-      "line": 11
     },
     {
       "type": "DEAD_EXPORT",
@@ -3483,206 +1033,10 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "WahaLocationParseResult",
-      "kind": "interface",
-      "file": "src/utils/waha-location-parser.ts",
-      "line": 20
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "WibTimeInfo",
-      "kind": "interface",
-      "file": "src/utils/wib-time.ts",
-      "line": 13
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "SplitWilayahResult",
-      "kind": "interface",
-      "file": "src/utils/wilayah-normalizer.ts",
-      "line": 79
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "AgentRunnerInput",
-      "kind": "interface",
-      "file": "src/v3/agent/agent-runner.ts",
-      "line": 42
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "V3TokenUsage",
-      "kind": "interface",
-      "file": "src/v3/agent/agent-runner.ts",
-      "line": 69
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "GroundingInput",
-      "kind": "interface",
-      "file": "src/v3/agent/pipeline/context-grounder.ts",
-      "line": 78
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "DeliveryFastPathInput",
-      "kind": "interface",
-      "file": "src/v3/agent/pipeline/delivery-fast-path.ts",
-      "line": 8
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "DeliveryFastPathResult",
-      "kind": "interface",
-      "file": "src/v3/agent/pipeline/delivery-fast-path.ts",
-      "line": 15
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "SalvagedToolCall",
-      "kind": "interface",
-      "file": "src/v3/agent/pipeline/dsml-tool-salvage.ts",
-      "line": 18
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "salvagePartialDsmlArgs",
       "kind": "function",
       "file": "src/v3/agent/pipeline/dsml-tool-salvage.ts",
       "line": 70
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "RecordCallParams",
-      "kind": "interface",
-      "file": "src/v3/agent/pipeline/generation-stage.ts",
-      "line": 274
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "TurnTelemetry",
-      "kind": "interface",
-      "file": "src/v3/agent/pipeline/generation-stage.ts",
-      "line": 291
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "RoutingOutput",
-      "kind": "interface",
-      "file": "src/v3/agent/pipeline/generation-stage.ts",
-      "line": 409
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "GenerationOutput",
-      "kind": "interface",
-      "file": "src/v3/agent/pipeline/generation-stage.ts",
-      "line": 525
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "NumericRepromptDeps",
-      "kind": "interface",
-      "file": "src/v3/agent/pipeline/guardrail-pipeline.ts",
-      "line": 17
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CallRecordMeta",
-      "kind": "interface",
-      "file": "src/v3/agent/pipeline/guardrail-pipeline.ts",
-      "line": 49
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "GuardrailInput",
-      "kind": "interface",
-      "file": "src/v3/agent/pipeline/guardrail-pipeline.ts",
-      "line": 61
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "GuardrailOutput",
-      "kind": "interface",
-      "file": "src/v3/agent/pipeline/guardrail-pipeline.ts",
-      "line": 91
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ReplyContractCtx",
-      "kind": "interface",
-      "file": "src/v3/agent/pipeline/guardrail-pipeline.ts",
-      "line": 299
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ReplyContractResult",
-      "kind": "interface",
-      "file": "src/v3/agent/pipeline/guardrail-pipeline.ts",
-      "line": 307
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "TriageAction",
-      "kind": "type",
-      "file": "src/v3/agent/pipeline/medical-signal-detector.ts",
-      "line": 14
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "TriageEvaluationResult",
-      "kind": "interface",
-      "file": "src/v3/agent/pipeline/medical-signal-detector.ts",
-      "line": 16
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "PricelistGateInput",
-      "kind": "interface",
-      "file": "src/v3/agent/pipeline/pricelist-gate.ts",
-      "line": 18
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "PricelistGateReason",
-      "kind": "type",
-      "file": "src/v3/agent/pipeline/pricelist-gate.ts",
-      "line": 33
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "PricelistGateVerdict",
-      "kind": "interface",
-      "file": "src/v3/agent/pipeline/pricelist-gate.ts",
-      "line": 35
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ToolCallPayload",
-      "kind": "interface",
-      "file": "src/v3/agent/pipeline/tool-pipeline.ts",
-      "line": 13
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ExecutedToolResult",
-      "kind": "interface",
-      "file": "src/v3/agent/pipeline/tool-pipeline.ts",
-      "line": 18
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ToolExecutionInput",
-      "kind": "interface",
-      "file": "src/v3/agent/pipeline/tool-pipeline.ts",
-      "line": 24
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ToolExecutionOutput",
-      "kind": "interface",
-      "file": "src/v3/agent/pipeline/tool-pipeline.ts",
-      "line": 44
     },
     {
       "type": "DEAD_EXPORT",
@@ -3714,13 +1068,6 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "ScheduleHierarchySession",
-      "kind": "interface",
-      "file": "src/v3/agent/prompt/phases/router-direct-reply.layer.ts",
-      "line": 40
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "SCHEDULE_NEG_CONSTRAINTS_HEAD",
       "kind": "variable",
       "file": "src/v3/agent/prompt/phases/scheduling.phase.ts",
@@ -3742,41 +1089,6 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "PhaseFocus",
-      "kind": "type",
-      "file": "src/v3/agent/prompt/prompt-composer.ts",
-      "line": 146
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "PhaseInjectionOpts",
-      "kind": "interface",
-      "file": "src/v3/agent/prompt/prompt-composer.ts",
-      "line": 148
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CommitmentLevel",
-      "kind": "type",
-      "file": "src/v3/domain/types.ts",
-      "line": 260
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "TurnInterpretation",
-      "kind": "interface",
-      "file": "src/v3/domain/types.ts",
-      "line": 268
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "FactualValidationResult",
-      "kind": "interface",
-      "file": "src/v3/guardrails/factual-claim-validator.ts",
-      "line": 15
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "ASKING_SYMPTOM_RE",
       "kind": "variable",
       "file": "src/v3/guardrails/factual-claim-validator.ts",
@@ -3784,52 +1096,10 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "NumericValidationResult",
-      "kind": "interface",
-      "file": "src/v3/guardrails/numeric-fact-validator.ts",
-      "line": 14
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "NumericValidationOptions",
-      "kind": "interface",
-      "file": "src/v3/guardrails/numeric-fact-validator.ts",
-      "line": 25
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ExecutedToolCall",
-      "kind": "interface",
-      "file": "src/v3/guardrails/numeric-fact-validator.ts",
-      "line": 39
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "PronounCheckResult",
-      "kind": "interface",
-      "file": "src/v3/guardrails/pronoun-validator.ts",
-      "line": 14
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "SalvageResult",
-      "kind": "interface",
-      "file": "src/v3/guardrails/sentence-salvage.ts",
-      "line": 27
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "rankServiceByRelevance",
       "kind": "function",
       "file": "src/v3/state/cart-manager.ts",
       "line": 54
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "V3SummaryOptions",
-      "kind": "interface",
-      "file": "src/v3/state/conversation-summarizer.ts",
-      "line": 9
     },
     {
       "type": "DEAD_EXPORT",
@@ -3861,80 +1131,10 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "ScheduleCtaOptions",
-      "kind": "interface",
-      "file": "src/v3/tools/calculate-delivery.tool.ts",
-      "line": 87
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "initKecamatanGazetteerSync",
       "kind": "function",
       "file": "src/v3/tools/calculate-delivery.tool.ts",
       "line": 435
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "GetClinicFaqOutput",
-      "kind": "interface",
-      "file": "src/v3/tools/clinic-faq.tool.ts",
-      "line": 22
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "KnownRegion",
-      "kind": "interface",
-      "file": "src/v3/tools/entity-concatenation-guard.ts",
-      "line": 16
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "EscalateHumanOutput",
-      "kind": "interface",
-      "file": "src/v3/tools/escalate-human.tool.ts",
-      "line": 12
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CatalogTreatmentDetail",
-      "kind": "interface",
-      "file": "src/v3/tools/get-catalog.tool.ts",
-      "line": 51
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CatalogPricingBreakdown",
-      "kind": "interface",
-      "file": "src/v3/tools/get-catalog.tool.ts",
-      "line": 88
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "CatalogCartRecapBreakdown",
-      "kind": "interface",
-      "file": "src/v3/tools/get-catalog.tool.ts",
-      "line": 98
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "GetCatalogOutput",
-      "kind": "interface",
-      "file": "src/v3/tools/get-catalog.tool.ts",
-      "line": 105
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "SaveReservationChild",
-      "kind": "interface",
-      "file": "src/v3/tools/save-reservation.tool.ts",
-      "line": 34
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "SaveReservationOutput",
-      "kind": "interface",
-      "file": "src/v3/tools/save-reservation.tool.ts",
-      "line": 119
     },
     {
       "type": "DEAD_EXPORT",
@@ -3945,31 +1145,10 @@
     },
     {
       "type": "DEAD_EXPORT",
-      "name": "KnowledgeFaqChunk",
-      "kind": "interface",
-      "file": "src/v3/tools/search-knowledge-faq.tool.ts",
-      "line": 11
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "SearchKnowledgeFaqOutput",
-      "kind": "interface",
-      "file": "src/v3/tools/search-knowledge-faq.tool.ts",
-      "line": 20
-    },
-    {
-      "type": "DEAD_EXPORT",
       "name": "isLocationFullyResolved",
       "kind": "function",
       "file": "src/v3/tools/tool-masker.ts",
       "line": 44
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "ToolMaskingEvaluation",
-      "kind": "interface",
-      "file": "src/v3/tools/tool-masker.ts",
-      "line": 303
     },
     {
       "type": "DEAD_EXPORT",

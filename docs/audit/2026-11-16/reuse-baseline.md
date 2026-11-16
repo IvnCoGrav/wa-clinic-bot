@@ -15,12 +15,12 @@ Seluruh angka di bawah ini dikunci sebagai batas atas (*ceiling*) pada awal prog
 |---|---|---|---|
 | File `src/**/*.ts` | **424 file** | — | Terkendali |
 | Total baris `src/**/*.ts` | **125.611 baris** | Berkurang via deduplikasi | Netral / efisien |
-| File backend >1.500 baris | **7 file** | 0 file | **0 toleransi** (PR dilarang menambah) |
+| File backend >1.500 baris | **9 file** (sebelumnya tercatat 7 file jika mengabaikan baris kosong; 9 file baris fisik) | 0 file | **0 toleransi** (PR dilarang menambah) |
 | Panggilan Prisma langsung di `src/routes` | **285 panggilan** (35 file) | 0 panggilan (pindah ke service) | **0 toleransi** (PR dilarang menambah) |
 | Panggilan `fetch(` mentah di dashboard | **9 file** (11 lokasi) | 0 file (seluruhnya via `api.ts`) | **0 toleransi** (PR dilarang menambah) |
 | Halaman dashboard (`pages/**/*.tsx`) | **60 page** | Terkendali (hanya 1 page baru: `UiCatalog` dev-only) | Dilarang page baru tanpa ADR |
 | Komponen dashboard (`components/**/*`) | **99 file** (96 `.tsx`, 3 `.ts`) | Reusable & modular | Didorong reuse |
-| Kandidat dead exports (di luar scripts/cli) | **552 export** | Turun bertahap via burn-down | Ratchet |
+| Kandidat dead exports (runtime function/const/class) | **170 export** (sebelumnya tercatat 552–573 jika mencakup 402 type/interface) | Turun bertahap via burn-down | Ratchet |
 | Blok duplikat ≥12 baris (di luar scripts) | **27 blok** (94 jika scripts dihitung) | 0 blok | Dilarang duplikat baru |
 
 ---
@@ -57,19 +57,23 @@ Seluruh angka di bawah ini dikunci sebagai batas atas (*ceiling*) pada awal prog
 
 ---
 
-### F0-3. Daftar File Backend >1.500 Baris (Ceiling: 7 File)
+### F0-3. Daftar File Backend >1.500 Baris (Ceiling: 9 File)
 
-Sesuai aturan arsitektur, batas ukuran modul sehat adalah maksimal 1.500 baris. Saat ini terdapat 7 file raksasa (*god object*) yang menjadi sasaran refaktor modularitas di masa mendatang:
+Sesuai aturan arsitektur, batas ukuran modul sehat adalah maksimal 1.500 baris fisik. Standar perhitungan menghitung seluruh baris fisik (termasuk baris kosong via `split('\n')`). Terdapat 9 file raksasa (*god object*) yang menjadi sasaran refaktor modularitas di masa mendatang:
 
-| No | Path File | Jumlah Baris | Kategori Domain |
+| No | Path File | Baris Fisik | Kategori Domain |
 |---|---|---|---|
-| 1 | `src/services/customer.service.ts` | **3.128 baris** | CRM, Profil, Rekomendasi, LTV |
-| 2 | `src/services/staff-reservation.service.ts` | **2.811 baris** | Operasional Staf, Jadwal, Penugasan |
-| 3 | `src/services/treatment-catalog.service.ts` | **2.378 baris** | Katalog Layanan, RAG Chunks, Harga |
-| 4 | `src/services/copilot/copilot-tools.ts` | **1.659 baris** | Tool Registry Admin Copilot |
-| 5 | `src/integrations/waha/client.ts` | **1.601 baris** | Klien HTTP Driver WAHA |
-| 6 | `src/services/capi.service.ts` | **1.510 baris** | Meta Conversions API & Event Tracking |
-| 7 | `src/routes/webhook.route.ts` | **1.504 baris** | Route Webhook WAHA Inbound |
+| 1 | `src/services/customer.service.ts` | **3.324 baris** | CRM, Profil, Rekomendasi, LTV |
+| 2 | `src/services/staff-reservation.service.ts` | **3.015 baris** | Operasional Staf, Jadwal, Penugasan |
+| 3 | `src/services/treatment-catalog.service.ts` | **2.536 baris** | Katalog Layanan, RAG Chunks, Harga |
+| 4 | `src/services/copilot/copilot-tools.ts` | **1.795 baris** | Tool Registry Admin Copilot |
+| 5 | `src/integrations/waha/client.ts` | **1.767 baris** | Klien HTTP Driver WAHA |
+| 6 | `src/services/capi.service.ts` | **1.646 baris** | Meta Conversions API & Event Tracking |
+| 7 | `src/routes/webhook.route.ts` | **1.624 baris** | Route Webhook WAHA Inbound |
+| 8 | `src/services/live-chat.service.ts` | **1.570 baris** | Live Chat Dispatch & Session State |
+| 9 | `src/services/meta-performance-analytics.service.ts` | **1.567 baris** | Analisis Kinerja Kampanye Iklan Meta |
+
+> *Catatan audit metode hitung:* Pada audit awal tercatat 7 file karena `Get-Content | Measure-Object -Line` di PowerShell mengabaikan baris kosong. Dengan standar baris fisik, `live-chat.service.ts` dan `meta-performance-analytics.service.ts` ikut terhitung di atas 1.500 baris.
 
 - **Perintah Reproduksi:**
   ```powershell

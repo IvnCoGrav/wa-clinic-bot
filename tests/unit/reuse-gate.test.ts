@@ -202,4 +202,96 @@ describe('Reuse Gate Self-Test & Adversarial Checks (Fase 2)', () => {
     expect(res.json.summary.newViolations).toBe(0);
     expect(duration).toBeLessThan(30000); // Harus selesai dalam < 30 detik
   });
+
+  it('11. Interface atau type baru yang tidak dipakai TIDAK dianggap DEAD_EXPORT (pass)', () => {
+    const tempDir = path.resolve(process.cwd(), 'tests/fixtures/reuse-gate-temp-interface');
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+
+    const code = `
+export interface CompletelyUnusedInterfaceContractXYZ {
+  id: string;
+  count: number;
+}
+export type CompletelyUnusedTypeAliasXYZ = 'alpha' | 'beta';
+`;
+    fs.writeFileSync(path.resolve(tempDir, 'types-only.fixture.ts'), code, 'utf8');
+
+    try {
+      const res = runGate([
+        `--root=${tempDir}`,
+        '--only=dead-exports',
+        '--json'
+      ]);
+
+      expect(res.status).toBe(0);
+      expect(res.json.passed).toBe(true);
+      expect(res.json.newViolations).toHaveLength(0);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('12. Function / variable / class baru yang tidak dipakai WAJIB memicu DEAD_EXPORT (fail)', () => {
+    const tempDir = path.resolve(process.cwd(), 'tests/fixtures/reuse-gate-temp-runtime-dead');
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+
+    const code = `
+export function completelyUnusedRuntimeFunctionXYZ() {
+  return 'unused';
+}
+export const completelyUnusedRuntimeConstXYZ = 12345;
+export class CompletelyUnusedRuntimeClassXYZ {}
+`;
+    fs.writeFileSync(path.resolve(tempDir, 'runtime-dead.fixture.ts'), code, 'utf8');
+
+    try {
+      const res = runGate([
+        `--root=${tempDir}`,
+        '--only=dead-exports',
+        '--json'
+      ]);
+
+      expect(res.status).toBe(1);
+      expect(res.json.passed).toBe(false);
+      const deadNames = res.json.newViolations.map((v: any) => v.name);
+      expect(deadNames).toContain('completelyUnusedRuntimeFunctionXYZ');
+      expect(deadNames).toContain('completelyUnusedRuntimeConstXYZ');
+      expect(deadNames).toContain('CompletelyUnusedRuntimeClassXYZ');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('13. Perintah CI "node scripts/reuse/check-reuse.mjs --warn --json > reuse-report.json" menghasilkan JSON yang 100% valid', () => {
+    const reportPath = path.resolve(process.cwd(), 'reuse-report.test.json');
+
+    try {
+      // Jalankan perintah node langsung (seperti di CI)
+      const res = spawnSync(process.execPath, [
+        SCRIPT_PATH,
+        '--warn',
+        '--json'
+      ], { encoding: 'utf8' });
+
+      expect(res.status).toBe(0);
+      fs.writeFileSync(reportPath, res.stdout, 'utf8');
+
+      // Baca kembali dan pastikan parse JSON berhasil tanpa error primitive
+      const fileContent = fs.readFileSync(reportPath, 'utf8');
+      const parsed = JSON.parse(fileContent);
+
+      expect(parsed).toBeDefined();
+      expect(parsed.passed).toBe(true);
+      expect(parsed.warnMode).toBe(true);
+      expect(parsed.summary).toBeDefined();
+      expect(parsed.summary.totalViolations).toBeGreaterThan(0);
+      expect(parsed.summary.newViolations).toBe(0);
+      expect(Array.isArray(parsed.newViolations)).toBe(true);
+      expect(Array.isArray(parsed.structuralWarnings)).toBe(true);
+    } finally {
+      if (fs.existsSync(reportPath)) {
+        fs.unlinkSync(reportPath);
+      }
+    }
+  });
 });

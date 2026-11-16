@@ -45,7 +45,7 @@ jobs:
         run: npm run typecheck
 
       - name: Reuse Gate (warn)
-        run: npm run check:reuse -- --warn --json > reuse-report.json || true
+        run: node scripts/reuse/check-reuse.mjs --warn --json > reuse-report.json || true
 
       - name: Upload Reuse Report
         uses: actions/upload-artifact@v4

@@ -21,8 +21,8 @@ Hasil akhir yang ingin dicapai:
 
 ### Non-goals (sengaja tidak dikerjakan di plan ini)
 
-- Menghapus seluruh 552 kandidat export mati sekaligus.
-- Memecah seluruh 7 file >1.500 baris dalam satu PR.
+- Menghapus seluruh kandidat export mati sekaligus (170 runtime function/const/class).
+- Memecah seluruh 9 file >1.500 baris fisik dalam satu PR.
 - Menambah ESLint/Knip/jscpd (dependency baru; butuh persetujuan terpisah).
 - Redesign visual dashboard.
 - Menyentuh logika RAG/LLM.
@@ -69,7 +69,7 @@ Mengunci angka awal agar setiap klaim "turun" bisa dibuktikan. Tidak ada file so
 |---|---|---|---|
 | F0-1 | Catat commit & status | `git rev-parse --short HEAD`; `git status --porcelain` | Commit + `changed_files=0` |
 | F0-2 | Hitung file & baris | script scan `src/**/*.ts` | 424 file / 125.611 baris |
-| F0-3 | Hitung file >1.500 baris | `Get-ChildItem src -Recurse -Filter *.ts \| ForEach-Object { ... }` | 7 file (daftar di #345) |
+| F0-3 | Hitung file >1.500 baris | `Get-ChildItem src -Recurse -Filter *.ts \| ForEach-Object { ... }` | 9 file baris fisik (7 jika tanpa baris kosong; daftar di #345) |
 | F0-4 | Hitung panggilan Prisma di route | `rg -c "prisma\.[a-zA-Z]+\\." src/routes` | 285 panggilan / 35 file |
 | F0-5 | Hitung `fetch` mentah dashboard | `rg -n "fetch\\(" packages/admin-dashboard/src` | 9 lokasi |
 | F0-6 | Hitung halaman & komponen | `Get-ChildItem packages/admin-dashboard/src/pages -Recurse -Filter *.tsx` | 60 page / 99 komponen |
@@ -78,7 +78,7 @@ Mengunci angka awal agar setiap klaim "turun" bisa dibuktikan. Tidak ada file so
 ### Acceptance criteria
 
 - `docs/audit/2026-11-16/reuse-baseline.md` memuat angka + perintah yang bisa dijalankan ulang.
-- Angka cocok dengan #345 (7 file >1.500, 285 Prisma, 9 fetch, 60 page).
+- Angka cocok dengan #345 (9 file >1.500 baris fisik, 285 Prisma, 9 fetch, 60 page).
 - Tidak ada perubahan pada `src/**`, `tests/**`, `packages/**`.
 
 ### Regression gate
@@ -339,7 +339,7 @@ Generate dengan `npm run check:reuse:update` **sekali**, lalu review manual:
 - `duplication.json`: semua grup duplikat saat ini (exact hash).
 - `forbidden-declarations.json`: semua pelanggaran saat ini per kapabilitas.
 - `dead-exports.json`: semua export tanpa referensi.
-- `file-size.json`: 7 file >1.500 + jumlah barisnya.
+- `file-size.json`: 9 file >1.500 baris fisik + jumlah barisnya.
 
 Baseline **tidak boleh** memuat timestamp yang berubah-ubah; gunakan `generatedFromCommit`.
 
@@ -903,9 +903,9 @@ Output:
 ```
 Kategori                 Baseline   Sekarang   Delta
 Duplikasi (grup)         27         27         0
-File >1500 baris         7          7          0
+File >1500 baris fisik   9          9          0
 Prisma di route          285        285        0
-Dead export (0 ref)      ~500       ~500       0
+Dead export (runtime)    170        170        0
 Raw fetch dashboard      9          9          0
 Page tanpa ADR           0          0          0
 ```
@@ -914,10 +914,10 @@ Page tanpa ADR           0          0          0
 
 | Sprint | Duplikasi | File >1500 | Prisma route | Raw fetch | Page baru |
 |---|---|---|---|---|---|
-| 1 | 27 → 22 | 7 → 6 | 285 → 270 | 9 → 8 | 0 |
-| 2 | 22 → 16 | 6 → 4 | 270 → 250 | 8 → 6 | 0 |
-| 3 | 16 → 10 | 4 → 2 | 250 → 230 | 6 → 4 | 0 |
-| 4 | 10 → ≤5 | 2 → 0 | 230 → 210 | 4 → allowlist | 0 |
+| 1 | 27 → 22 | 9 → 8 | 285 → 270 | 9 → 8 | 0 |
+| 2 | 22 → 16 | 8 → 6 | 270 → 250 | 8 → 6 | 0 |
+| 3 | 16 → 10 | 6 → 3 | 250 → 230 | 6 → 4 | 0 |
+| 4 | 10 → ≤5 | 3 → 0 | 230 → 210 | 4 → allowlist | 0 |
 
 Angka final dapat disesuaikan setelah baseline gate nyata; yang penting arahnya turun.
 

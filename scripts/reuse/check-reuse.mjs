@@ -211,7 +211,8 @@ async function runCheck() {
 
       const exports = collectExports(sf);
       for (const exp of exports) {
-        if (exp.name === 'default' || exp.isReexport) continue;
+        // DEAD_EXPORT hanya memantau kode eksekusi runtime (function, variable/const, class); interface/type dikecualikan
+        if (exp.name === 'default' || exp.isReexport || !['function', 'variable', 'class'].includes(exp.kind)) continue;
 
         // Cari referensi di file lain (src/** dan tests/**)
         const name = exp.name;
