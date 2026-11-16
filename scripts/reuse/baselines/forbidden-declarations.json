@@ -1,15 +1,7 @@
 {
   "version": 1,
-  "generatedFromCommit": "e7768016",
+  "generatedFromCommit": "beb7f703",
   "violations": [
-    {
-      "type": "FORBIDDEN_DECLARATION",
-      "capabilityId": "date.parse_indonesian",
-      "name": "parseIndonesianDate",
-      "canonical": "src/utils/indonesian-date-parser.ts",
-      "file": "src/utils/conversation-transaction-extractor.ts",
-      "line": 208
-    },
     {
       "type": "FORBIDDEN_DECLARATION",
       "capabilityId": "json.extract",

@@ -10,6 +10,7 @@
       "canonical": "src/utils/indonesian-date-parser.ts",
       "exports": [
         "parseIndonesianDate",
+        "parseHistoricalIndonesianDate",
         "applyBookingTimeToDate"
       ],
       "forbiddenDeclarations": [

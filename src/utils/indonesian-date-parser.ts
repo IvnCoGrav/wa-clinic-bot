@@ -242,6 +242,21 @@ export function parseIndonesianDate(
 }
 
 /**
+ * Parser tanggal untuk transkrip / backfill historis:
+ * Mengembalikan objek Date atau null (tanpa menggulir masa lalu ke masa depan, dan tanpa menerima kata relatif fiktif).
+ *
+ * Sesuai mandat UTL-01: jika input tidak mengandung hari dan bulan valid, mengembalikan null.
+ */
+export function parseHistoricalIndonesianDate(input: string, referenceDate: Date = new Date()): Date | null {
+  if (!input || typeof input !== 'string') return null;
+  const parsed = parseIndonesianDate(input, referenceDate, {
+    rollPastToFuture: false,
+    allowRelative: false
+  });
+  return parsed.isRecognized ? parsed.date : null;
+}
+
+/**
  * Fase 2R — Terapkan jam booking eksplisit (WIB) ke tanggal yang sudah ter-parse.
  * Deterministik, tanpa regex hafalan di caller: parsing jam terpusat di sini.
  * - Mendukung "14.00", "14:00", "14.30-15.30", "pukul 10.00 WIB" (ambil jam mulai).

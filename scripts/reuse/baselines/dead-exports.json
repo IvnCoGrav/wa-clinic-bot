@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedFromCommit": "e7768016",
+  "generatedFromCommit": "beb7f703",
   "deadExports": [
     {
       "type": "DEAD_EXPORT",
@@ -350,21 +350,21 @@
       "name": "resolveTenantCapiCredentials",
       "kind": "function",
       "file": "src/services/capi.service.ts",
-      "line": 373
+      "line": 371
     },
     {
       "type": "DEAD_EXPORT",
       "name": "normalizeCapiMatchingGeo",
       "kind": "function",
       "file": "src/services/capi.service.ts",
-      "line": 765
+      "line": 763
     },
     {
       "type": "DEAD_EXPORT",
       "name": "getTenantAutoSendPurchaseCapi",
       "kind": "function",
       "file": "src/services/capi.service.ts",
-      "line": 814
+      "line": 812
     },
     {
       "type": "DEAD_EXPORT",
