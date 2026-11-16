@@ -3,7 +3,7 @@ import {
   isHoldActive,
   isTreatmentWithinActiveWindow,
 } from '../domain/reservation-status';
-import { resolveReservationPaymentEvaluation } from './reservation-core.service';
+import { resolveReservationPaymentEvaluation } from '../domain/payment-expected';
 import { computeIsAwaitingReply } from './livechat-reply-state';
 import { resolveLocationAdequacy, extractStaffVerifiedCoords } from '../domain/location-adequacy';
 import type { StaffOwnershipView } from './staff-ownership.service';

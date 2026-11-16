@@ -1,5 +1,4 @@
 import { ACTIVE_RESERVATION_STATUSES } from '../domain/reservation-status';
-import { resolveExpectedPayment } from '../domain/payment-expected';
 import { prisma } from '../db/client';
 import { TreatmentCategory } from '@prisma/client';
 import type { Prisma } from '@prisma/client';
@@ -431,32 +430,11 @@ export async function findOverlappingStaffReservations(params: {
 }
 
 /**
- * KB-6: resolver ongkir per-reservasi — utamakan snapshot `delivery_fee`,
- * fallback ke `Customer.ongkir` untuk baris lama (pra-migrasi).
+ * KB-6: resolver ongkir per-reservasi + evaluasi tagihan kanonis kini hidup di
+ * `src/domain/payment-expected.ts` (murni, tanpa I/O). Re-export menjaga
+ * kontrak impor lama dari service reservasi.
  */
-export function resolveDeliveryFeeSnapshot(reservation: any): number {
-  const snap = (reservation as any)?.delivery_fee;
-  if (typeof snap === 'number' && snap >= 0) return snap;
-  const legacy = (reservation as any)?.customer?.ongkir ?? (reservation as any)?.ongkir;
-  if (typeof legacy === 'number' && legacy >= 0) return legacy;
-  return 0;
-}
-
-/** Evaluasi tagihan kanonis untuk payload API (dipakai list, detail, livechat). */
-export function resolveReservationPaymentEvaluation(
-  reservation: any,
-  tolerance = 0
-) {
-  return resolveExpectedPayment(
-    {
-      purchaseValue: reservation?.purchase_value,
-      discountAmount: reservation?.discount_amount,
-      deliveryFee: resolveDeliveryFeeSnapshot(reservation),
-      receiptAmount: reservation?.receipt_amount,
-    },
-    { tolerance }
-  );
-}
+export { resolveDeliveryFeeSnapshot, resolveReservationPaymentEvaluation } from '../domain/payment-expected';
 
 /**
  * Fase 3C: Resolusi ID alamat customer_addresses.

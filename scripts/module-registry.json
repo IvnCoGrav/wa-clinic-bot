@@ -181,16 +181,18 @@
     {
       "id": "reservation.payment_evaluation",
       "title": "Evaluasi status pembayaran reservasi",
-      "description": "Menentukan status evaluasi pembayaran reservasi secara kanonis.",
-      "canonical": "src/services/reservation-core.service.ts",
+      "description": "Menentukan status evaluasi pembayaran dan snapshot ongkir reservasi secara kanonis (murni, tanpa I/O).",
+      "canonical": "src/domain/payment-expected.ts",
       "exports": [
-        "resolveReservationPaymentEvaluation"
+        "resolveReservationPaymentEvaluation",
+        "resolveDeliveryFeeSnapshot"
       ],
       "forbiddenDeclarations": [
-        "resolveReservationPaymentEvaluation"
+        "resolveReservationPaymentEvaluation",
+        "resolveDeliveryFeeSnapshot"
       ],
       "allowedFiles": [
-        "src/services/reservation-core.service.ts"
+        "src/domain/payment-expected.ts"
       ],
       "test": null
     },
@@ -320,6 +322,65 @@
         "src/utils/staff-rejection-log.ts"
       ],
       "test": "tests/unit/staff-rejection-log.test.ts"
+    },
+    {
+      "id": "migration.staging",
+      "title": "Akses data staging migrasi & FAQ",
+      "description": "Query tenant-scoped untuk antrean staging migrasi legacy, LTV customer, serta staging FAQ medis/umum (termasuk batch chunk anti N+1).",
+      "canonical": "src/services/migration-staging.service.ts",
+      "exports": [
+        "listLegacyStaging",
+        "listLegacyStagingByStatus",
+        "updateLegacyStagingStatus",
+        "bulkApproveStagingPurchases",
+        "countTenantConversations",
+        "clearPendingFaqStaging",
+        "deleteAllFaqStaging",
+        "listFaqStaging",
+        "reviewMedicalFaqStaging",
+        "reviewGeneralFaqStaging"
+      ],
+      "forbiddenDeclarations": [
+        "bulkApproveStagingPurchases",
+        "listLegacyStaging",
+        "listFaqStaging"
+      ],
+      "allowedFiles": [
+        "src/services/migration-staging.service.ts"
+      ],
+      "test": "tests/unit/migration-staging.test.ts"
+    },
+    {
+      "id": "treatment.catalog_value",
+      "title": "Resolusi nilai treatment dari katalog",
+      "description": "Mencari harga treatment (promo/original) dari katalog tenant dengan pencocokan alias, bundle, multi-item, dan fallback kategori — tanpa DB langsung.",
+      "canonical": "src/services/treatment-value.service.ts",
+      "exports": [
+        "resolveTreatmentValue"
+      ],
+      "forbiddenDeclarations": [
+        "resolveTreatmentValue"
+      ],
+      "allowedFiles": [
+        "src/services/treatment-value.service.ts"
+      ],
+      "test": "tests/unit/capi-value-no-hardcode.test.ts"
+    },
+    {
+      "id": "reservation.payment_verification",
+      "title": "Verifikasi bukti pembayaran reservasi",
+      "description": "Seam kanonis verifikasi pembayaran transfer/non-tunai: simpan bukti permanen, hitung tagihan kanonis (GROSS), catat pembayaran tanpa mengubah status kunjungan, audit tenant-aware — tanpa akses Prisma di route.",
+      "canonical": "src/services/reservation-payment-verification.service.ts",
+      "exports": [
+        "verifyReservationPayment"
+      ],
+      "forbiddenDeclarations": [
+        "verifyReservationPayment"
+      ],
+      "allowedFiles": [
+        "src/services/reservation-payment-verification.service.ts"
+      ],
+      "test": "tests/integration/admin-verify-payment.test.ts"
     }
   ]
 }

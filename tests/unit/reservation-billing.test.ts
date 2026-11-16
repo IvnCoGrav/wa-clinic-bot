@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('../../src/services/capi.service', () => ({
+vi.mock('../../src/services/treatment-value.service', () => ({
   resolveTreatmentValue: vi.fn(),
 }));
 
-import { resolveTreatmentValue } from '../../src/services/capi.service';
+import { resolveTreatmentValue } from '../../src/services/treatment-value.service';
 import { resolveReservationBilling } from '../../src/services/reservation-billing.service';
 
 const mockedResolve = vi.mocked(resolveTreatmentValue);

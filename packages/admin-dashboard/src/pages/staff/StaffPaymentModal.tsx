@@ -6,12 +6,13 @@
  * dan tetap menjadi pemilik pemanggilan API serta pembaruan daftar tugas.
  */
 import React, { useRef, useState } from 'react';
-import { CheckCircle2, Copy, CreditCard, QrCode, Upload, X } from 'lucide-react';
+import { CheckCircle2, Copy, CreditCard, FileText, QrCode, Upload, X } from 'lucide-react';
 import { Modal } from '../../components/ui/Modal';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { formatRupiah } from '../../utils/money';
 import { prepareChatImage } from '../../utils/imageCompressor';
 import { StaffPaymentInfo, StaffTask } from './staffTaskTypes';
+import { isRenderableImageProof } from '../../utils/paymentProof';
 
 export type PaymentMethod = 'CASH' | 'TRANSFER' | 'QRIS';
 
@@ -288,7 +289,17 @@ export const StaffPaymentModal: React.FC<StaffPaymentModalProps> = ({
                   </a>
                 </div>
                 <div className="relative rounded-lg overflow-hidden border border-divider bg-black/5 flex items-center justify-center max-h-36">
-                  <img src={existingProofUrl} alt="Bukti bayar di sistem" className="object-contain max-h-36 w-auto" />
+                  {isRenderableImageProof(existingProofUrl) ? (
+                    <img src={existingProofUrl} alt="Bukti bayar di sistem" className="object-contain max-h-36 w-auto" />
+                  ) : (
+                    <div className="p-4 text-center space-y-1">
+                      <FileText size={22} className="mx-auto text-ink-3" />
+                      <p className="text-xs font-semibold text-ink">Bukti berupa dokumen (PDF)</p>
+                      <p className="text-[11px] text-ink-3">
+                        Pratinjau gambar tidak tersedia. Ketuk "Buka Foto Bukti" di atas untuk membuka dokumen.
+                      </p>
+                    </div>
+                  )}
                 </div>
                 <button
                   type="button"

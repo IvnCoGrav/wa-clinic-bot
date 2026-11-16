@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedFromCommit": "e44d3340",
+  "generatedFromCommit": "16293cc4",
   "violations": [
     {
       "type": "FORBIDDEN_DECLARATION",
@@ -80,7 +80,7 @@
       "name": "WIB_OFFSET_MS",
       "canonical": "src/utils/wib-time.ts",
       "file": "src/services/reservation-core.service.ts",
-      "line": 93
+      "line": 92
     },
     {
       "type": "FORBIDDEN_DECLARATION",

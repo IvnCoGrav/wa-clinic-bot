@@ -39,19 +39,33 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - `npm run --prefix packages/admin-dashboard build`: Exit 0 (Vite build sukses).
   - `npm run --prefix packages/admin-dashboard check:design`: Exit 0 (tokens, dark-parity, a11y, contrast, dates 100% hijau).
   - `npm run check:reuse`: Exit 0 (0 pelanggaran baru).
-  - 26 tests (7 test suite) hijau:
+  - 46 tests (9 test suite) hijau:
     - `tests/unit/staff-payment-contract.test.ts` (3 tests)
     - `tests/unit/staff-complete-idempotent.test.ts` (3 tests)
     - `tests/unit/staff-rejection-log.test.ts` (3 tests)
-    - `tests/integration/admin-verify-payment.test.ts` (3 tests)
-    - `tests/unit/staff-payment-validation.test.ts` (3 tests)
+    - `tests/integration/admin-verify-payment.test.ts` (6 tests — D1/D2/D4/D5 dikunci)
+    - `tests/unit/staff-payment-validation.test.ts` (4 tests)
     - `tests/unit/reservation-status-transition.test.ts` (4 tests)
     - `tests/unit/reservation-status-service.test.ts` (7 tests)
+    - `tests/unit/payment-proof-storage.test.ts` (4 tests)
+    - `tests/unit/reservation-billing.test.ts` (15 tests)
+- **Follow-up audit pasca-merge (2026-11-16, SELESAI):** audit menemukan 7 cacat pada seam `verify-payment` yang belum tertangani. Semua sudah diperbaiki:
+  1. **D1 — Verifikasi ikut menutup kunjungan.** `verify-payment` dulu memanggil `applyTransition(to:'completed', allowUnassignedStaff:true)` sehingga jadwal hari ini yang belum lewat bisa `completed` dari dashboard tanpa bidan (Gate 6.1 bocor; follow-up H+1 terjadwal dini). Kini seam HANYA mencatat pembayaran; status kunjungan tidak diubah.
+  2. **D2 — Diskon terpotong dua kali.** `purchase_value` dulu ditulis NET (setelah diskon) padahal kontrak kanonis `resolveReservationBilling` membaca GROSS. Kini ditulis `billing.treatmentFee` (GROSS). **Data lama perlu rekonsiliasi** (lihat butir 8).
+  3. **D3 — Ongkir non-kanonis.** Dulu membaca `delivery_fee` mentah tanpa fallback `Customer.ongkir`; kini memakai `resolveReservationBilling` (memakai `resolveDeliveryFeeSnapshot`).
+  4. **D4 — Nominal klien dipercaya.** Dulu `amount` dari body menjadi angka final; kini `amount` hanya pembanding — selisih → HTTP 400 dengan `expectedTotal`/`receivedAmount`.
+  5. **D5 — Audit tanpa tenant.** `ADMIN_VERIFY_PAYMENT` dulu tanpa `tenantId` (jatuh ke `default-tenant`); kini tenant-aware + payload `statusChanged: false`.
+  6. **D6 — Bukti di folder prunable.** Unggahan bukti dulu ke `saveOutboundMedia` (ikut retensi); kini `savePaymentProof` (`payment-proofs/`, permanen).
+  7. **D7 — Bukti PDF rusak tampil.** Pratinjau `<img>` diganti kartu dokumen + tautan (`isRenderableImageProof` di `utils/paymentProof.ts`, dipakai modal staf, detail reservasi, dan modal bukti).
+  8. **Sisa data (OPEN, butuh keputusan):** baris yang telanjur ditulis NET sebelum perbaikan ini harus di-backfill ke GROSS: `UPDATE reservations SET purchase_value = purchase_value + discount_amount WHERE discount_amount > 0 AND purchase_occurred_at IS NOT NULL AND id = '<id>'` — verifikasi satu per satu terhadap bukti transfer (jangan massal tanpa sampel).
+  9. **Verifikasi:** `npm run typecheck` bersih; `tests/integration/admin-verify-payment.test.ts` 6/6 hijau; typecheck dashboard bersih; `check:reuse` 0 pelanggaran baru.
+  10. **Batas yang disengaja (belum ada fitur):** pembayaran **kurang/lebih bayar** tidak bisa "diverifikasi apa adanya". Seam menolak nominal yang tidak sama dengan tagihan resmi; koreksi harus lewat data harga (`discount_amount`/`purchase_value`) sehingga tercatat. Alur "pembayaran sebagian / cicilan" adalah fitur terpisah — belum ada, jangan dipaksakan lewat endpoint ini.
 
 ## 353. [Code Health] Sisa Utang Arsitektur & Burn-Down Baseline (2026-11-16, OPEN)
 
-- **Status:** OPEN — Sprint 1 SELESAI 2026-11-16 (target tercapai lebih awal). Sisa utang di bawah masih terkunci ratchet di `scripts/reuse/baselines/`; angka hanya boleh turun.
+- **Status:** OPEN — Sprint 1 & Sprint 2 SELESAI 2026-11-16. Sisa utang di bawah masih terkunci ratchet di `scripts/reuse/baselines/`; angka hanya boleh turun.
 - **Plan Sprint 1:** `docs/PLAN_BURNDOWN_SPRINT1_2026-11-16.md` (SELESAI — S1-1 s/d S1-5).
+- **Plan Sprint 2:** `docs/PLAN_BURNDOWN_SPRINT2_2026-11-16.md` (SELESAI — S2-1 s/d S2-5).
 - **Hasil Sprint 1 (terverifikasi `npm run report:reuse`):**
 
   | Metrik | Awal | Setelah Sprint 1 | Target | Status |
@@ -67,19 +81,34 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   2. Tiga salinan `stripEdge` (persona, pronoun-validator, lead-greeting) → `src/utils/text-edge.ts` (`stripNonAlnumEdges`, kapabilitas `text.strip_edges`).
   3. `meta-performance-analytics.service.ts` 1.567 → 1.465 baris; helper murni pindah ke `src/services/meta-performance.helpers.ts`; `WIB_OFFSET_MS`/`wibDayStart`/`wibDayEnd`/`wibDateKey`/`wibTodayStr` memakai `src/utils/wib-time.ts`; `normalizePhone` lokal diganti `normalizePhoneID` kanonis.
   4. 15 panggilan Prisma `meta-attribution.subroute.ts` → `src/services/meta-attribution.service.ts` (plus `landingPageView` count/groupBy), route turun ke 270 panggilan di 34 file.
-- **Inventaris Utang Tersisa (Fakta Baseline):**
-  1. **Duplikasi Fungsi (2 grup):**
-     - `findById` di `src/repositories/conversation.repository.ts:200` vs `src/repositories/customer.repository.ts:128`.
-     - `isTypoAtMostOne` di `src/utils/typo-match.ts:7` vs `isNearEqual` di `src/v3/tools/calculate-delivery.tool.ts:162` (semantik perlu adjudikasi, bukan disamakan buta).
-  2. **Deklarasi Simbol Terlarang (13 simbol):** lihat `scripts/reuse/baselines/forbidden-declarations.json`.
+- **Hasil Sprint 2 (terverifikasi gate + ratchet 2026-11-16):**
+
+  | Metrik | Setelah Sprint 1 | Setelah Sprint 2 | Target Sprint 2 | Status |
+  |---|---:|---:|---:|---|
+  | Duplikasi fungsi (grup AST) | 2 | **0** | 0 | Tercapai |
+  | Deklarasi simbol terlarang | 13 | **12** | ≤13 | Tercapai |
+  | File fisik >1.500 baris | 8 | **6** | 6 | Tercapai |
+  | Panggilan Prisma di route | 270 | **240** (33 file) | 240 | Tercapai |
+  | Dead export runtime | 169 | **168** | tetap/turun | Turun 1 |
+  | Siklus import | 6 | **6** | 6 | Tetap (node SCC dirapikan) |
+
+- **Bukti perbaikan Sprint 2:**
+  1. Guard isolasi tenant `findById` (2 repository + 2 fallback cache) → `src/utils/tenant-scope.ts` (`tenantScopedRow`, kapabilitas `tenant.scope`).
+  2. `isNearEqual` lokal di `calculate-delivery.tool.ts` dihapus; memakai `isTypoAtMostOne` kanonis + test adversarial substitusi/sisipan/penghapusan.
+  3. `capi.service.ts` 1.632 → 1.093 baris (`capi.helpers.ts`, `normalizePhoneToE164` → normalizer kanonis); `live-chat.service.ts` 1.570 → 1.252 baris (`live-chat.types.ts`, `live-chat.serializer.ts`).
+  4. 30 query `migration.subroute.ts` → `src/services/migration-staging.service.ts`; logika `verify-payment` → `src/services/reservation-payment-verification.service.ts` (per-file Prisma 19 → 16); 3 `(prisma.tenant as any)` `meta-attribution.subroute.ts` → `meta-attribution.service.ts`.
+  5. Siklus import 35 file (diperbesar merge origin/#354) diputus di akar: `resolveDeliveryFeeSnapshot`/`resolveReservationPaymentEvaluation` → `src/domain/payment-expected.ts`; `resolveTreatmentValue` → `src/services/treatment-value.service.ts`.
+  6. Bonus keamanan: LTV customer pada staging migrasi kini tenant-scoped (`tenant_id` ditambahkan), lookup `matched_chunk_id` di-dedupe.
+- **Inventaris Utang Tersisa (Fakta Baseline 2026-11-16):**
+  1. **Duplikasi Fungsi: 0 grup.**
+  2. **Deklarasi Simbol Terlarang (12 simbol):** lihat `scripts/reuse/baselines/forbidden-declarations.json`.
   3. **Siklus Circular Import (6 siklus):** lihat `scripts/reuse/baselines/architecture.json`.
-  4. **File Fisik >1.500 Baris (8 file):** `customer.service.ts` (3.324), `staff-reservation.service.ts` (3.015), `treatment-catalog.service.ts` (2.536), `copilot-tools.ts` (1.795), `waha/client.ts` (1.767), `capi.service.ts` (1.632), `webhook.route.ts` (1.624), `live-chat.service.ts` (1.570).
-  5. **Panggilan Prisma di Route (270 panggilan di 34 file):** termasuk 3 panggilan `(prisma.tenant as any)` sisa di `meta-attribution.subroute.ts` yang tidak terhitung pola gate — kandidat Sprint 2.
-  6. **Dead Exports Runtime (169 export):** lihat `scripts/reuse/baselines/dead-exports.json`.
-- **Target Burn-Down Bertahap (Sprint 2–4):**
-   - **Sprint 2 (Target: 2026-12-15):** Duplikasi 2 → 0 grup, File >1500 baris 8 → 6 file, Prisma di route 270 → 240 panggilan.
-   - **Sprint 3 (Target: 2026-12-31):** File >1500 baris 6 → 3 file, Prisma di route 240 → 200 panggilan, Dead export 169 → 100.
-   - **Sprint 4 (Target: 2027-01-15):** File >1500 baris 3 → 0 file, Prisma di route 200 → 150 panggilan, Dead export 100 → ≤30.
+  4. **File Fisik >1.500 Baris (6 file):** `customer.service.ts` (3.324), `staff-reservation.service.ts` (3.119), `treatment-catalog.service.ts` (2.536), `copilot-tools.ts` (1.795), `waha/client.ts` (1.767), `webhook.route.ts` (1.624).
+  5. **Panggilan Prisma di Route (240 panggilan di 33 file):** lihat `scripts/reuse/baselines/architecture.json`.
+  6. **Dead Exports Runtime (168 export):** lihat `scripts/reuse/baselines/dead-exports.json`.
+- **Target Burn-Down Bertahap (Sprint 3–4):**
+    - **Sprint 3 (Target: 2026-12-31):** File >1500 baris 6 → 3 file, Prisma di route 240 → 200 panggilan, Dead export 168 → 100.
+    - **Sprint 4 (Target: 2027-01-15):** File >1500 baris 3 → 0 file, Prisma di route 200 → 150 panggilan, Dead export 100 → ≤30.
 - **Penegakan Gerbang:** Setiap perbaikan ditutup dengan menjalankan `npm run check:reuse:update` (hanya menurunkan baseline) dan verifikasi via `npm run report:reuse`.
 
 ## 352. [MCP] `clinic-ops-mcp` Ditunda — Plan & Audit Disimpan (2026-11-16, DEFERRED)

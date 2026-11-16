@@ -3,9 +3,9 @@
  * tagihan, status, dan pratinjau gambar bukti.
  */
 import React from 'react';
-import { AlertTriangle, Maximize2, Receipt } from 'lucide-react';
+import { AlertTriangle, FileText, Maximize2, Receipt } from 'lucide-react';
 import { Modal } from '../../components/ui/Modal';
-import { evaluatePaymentProof } from '../../utils/paymentProof';
+import { evaluatePaymentProof, isRenderableImageProof } from '../../utils/paymentProof';
 import { Reservation } from '../../types';
 
 interface PaymentProofModalProps {
@@ -92,7 +92,17 @@ export const PaymentProofModal: React.FC<PaymentProofModalProps> = ({
       </div>
 
       <div className="rounded-2xl overflow-hidden border border-divider bg-surface-2">
-        <img src={proof.proof_url!} alt="Bukti pembayaran" className="w-full max-h-72 object-contain" />
+        {isRenderableImageProof(proof.proof_url) ? (
+          <img src={proof.proof_url!} alt="Bukti pembayaran" className="w-full max-h-72 object-contain" />
+        ) : (
+          <div className="p-6 text-center space-y-1.5">
+            <FileText size={28} className="mx-auto text-ink-3" />
+            <p className="text-xs font-semibold text-ink">Bukti pembayaran berupa dokumen (PDF)</p>
+            <p className="text-[11px] text-ink-3">
+              Pratinjau gambar tidak tersedia. Gunakan tombol "Buka Gambar Penuh" untuk membuka dokumen.
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="flex justify-end space-x-2 pt-2 border-t border-divider">

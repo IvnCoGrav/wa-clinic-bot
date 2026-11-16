@@ -140,6 +140,93 @@ export async function findCustomerByPhoneSuffix(
   });
 }
 
+export interface MetaPerformanceSettings {
+  monthlySpends: Record<string, { lpwa?: number; ctwa?: number }>;
+  grossMarginPct: number;
+  minSampleThreshold: number;
+  cohortStartMonth: string | null;
+  excludedCohortMonths: string[];
+  dailySlotsPerTherapist: number | null;
+}
+
+const DEFAULT_META_PERFORMANCE_SETTINGS: MetaPerformanceSettings = {
+  monthlySpends: {},
+  grossMarginPct: 40,
+  minSampleThreshold: 20,
+  cohortStartMonth: null,
+  excludedCohortMonths: [],
+  dailySlotsPerTherapist: null,
+};
+
+/** Pengaturan performa Meta tersimpan (fallback default bila belum ada). */
+export async function getMetaPerformanceSettings(tenantId: string): Promise<MetaPerformanceSettings> {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { settings: true },
+  });
+  const stored = (tenant?.settings as any)?.metaPerformanceSettings;
+  return stored || { ...DEFAULT_META_PERFORMANCE_SETTINGS };
+}
+
+export type MetaPerformanceSettingsPatch = Partial<MetaPerformanceSettings>;
+
+/**
+ * Simpan pengaturan performa Meta secara parsial (merge dengan nilai tersimpan),
+ * dengan validasi rentang yang sama seperti sebelumnya. Mengembalikan nilai final.
+ */
+export async function saveMetaPerformanceSettings(
+  tenantId: string,
+  body: MetaPerformanceSettingsPatch
+): Promise<MetaPerformanceSettings> {
+  const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { settings: true },
+  });
+  const currentSettings = ((tenant?.settings as Record<string, any>) || {});
+  const currentPerf = (currentSettings.metaPerformanceSettings as Record<string, any>) || {};
+
+  const updatedPerf: MetaPerformanceSettings = {
+    ...currentPerf,
+    monthlySpends: {
+      ...(currentPerf.monthlySpends || {}),
+      ...(body.monthlySpends || {}),
+    },
+    grossMarginPct:
+      typeof body.grossMarginPct === 'number' && body.grossMarginPct >= 0 && body.grossMarginPct <= 100
+        ? body.grossMarginPct
+        : (currentPerf.grossMarginPct ?? 40),
+    minSampleThreshold:
+      typeof body.minSampleThreshold === 'number' && body.minSampleThreshold > 0
+        ? body.minSampleThreshold
+        : (currentPerf.minSampleThreshold ?? 20),
+    cohortStartMonth:
+      body.cohortStartMonth === null ? null
+      : typeof body.cohortStartMonth === 'string' && MONTH_RE.test(body.cohortStartMonth) ? body.cohortStartMonth
+      : (currentPerf.cohortStartMonth ?? null),
+    excludedCohortMonths: Array.isArray(body.excludedCohortMonths)
+      ? Array.from(new Set(body.excludedCohortMonths.filter((m: unknown) => typeof m === 'string' && MONTH_RE.test(m as string))))
+      : (currentPerf.excludedCohortMonths ?? []),
+    dailySlotsPerTherapist:
+      body.dailySlotsPerTherapist === null ? null
+      : typeof body.dailySlotsPerTherapist === 'number' && body.dailySlotsPerTherapist > 0 && body.dailySlotsPerTherapist <= 50
+      ? Math.round(body.dailySlotsPerTherapist)
+      : (currentPerf.dailySlotsPerTherapist ?? null),
+  };
+
+  await prisma.tenant.update({
+    where: { id: tenantId },
+    data: {
+      settings: {
+        ...currentSettings,
+        metaPerformanceSettings: updatedPerf,
+      } as any,
+    },
+  });
+
+  return updatedPerf;
+}
+
 export interface ManualSendHistory {
   logs: any[];
   customers: any[];
