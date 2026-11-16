@@ -68,7 +68,7 @@ import {
 } from '../../utils/reservationConflicts';
 import { resolveStaffName } from '../../utils/resolveStaffName';
 import { AddressBookDrawer } from '../customer/AddressBookDrawer';
-import { recommendSlots } from '../../utils/slotRecommendations';
+import { recommendSlots, formatMinutesToTime } from '../../utils/slotRecommendations';
 
 // Koordinat klinik fallback (netral). Nilai sebenarnya diambil per tenant dari
 // `GET /api/admin/tenant-settings` saat modal dibuka (Cfg-015).
@@ -77,12 +77,6 @@ const FALLBACK_CLINIC_COORDS = {
   lng: 112.751677,
   name: 'Klinik',
 };
-
-function formatMinutesToTime(totalMinutes: number): string {
-const h = Math.floor(totalMinutes / 60) % 24;
-  const m = totalMinutes % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-}
 
 export interface SlotRecommendation {
   startTime: string;

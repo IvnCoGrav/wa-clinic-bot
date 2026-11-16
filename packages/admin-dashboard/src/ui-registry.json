@@ -1,0 +1,789 @@
+{
+  "version": 1,
+  "layers": {
+    "primitive": "src/components/ui",
+    "pattern": "src/components/common",
+    "domain": "src/components",
+    "page": "src/pages"
+  },
+  "components": [
+    {
+      "name": "Button",
+      "layer": "primitive",
+      "path": "src/components/ui/Button.tsx",
+      "whenToUse": "Primitif antarmuka dasar Button. Gunakan prop variant/props yang tersedia.",
+      "states": [
+        "default",
+        "hover",
+        "disabled",
+        "loading"
+      ],
+      "reviewed": false
+    },
+    {
+      "name": "Card",
+      "layer": "primitive",
+      "path": "src/components/ui/Card.tsx",
+      "whenToUse": "Primitif antarmuka dasar Card. Gunakan prop variant/props yang tersedia.",
+      "states": [
+        "default",
+        "hover",
+        "disabled",
+        "loading"
+      ],
+      "reviewed": false
+    },
+    {
+      "name": "Fields",
+      "layer": "primitive",
+      "path": "src/components/ui/Fields.tsx",
+      "whenToUse": "Primitif antarmuka dasar Fields. Gunakan prop variant/props yang tersedia.",
+      "states": [
+        "default",
+        "hover",
+        "disabled",
+        "loading"
+      ],
+      "reviewed": false
+    },
+    {
+      "name": "FormErrorSummary",
+      "layer": "primitive",
+      "path": "src/components/ui/FormErrorSummary.tsx",
+      "whenToUse": "Primitif antarmuka dasar FormErrorSummary. Gunakan prop variant/props yang tersedia.",
+      "states": [
+        "default",
+        "hover",
+        "disabled",
+        "loading"
+      ],
+      "reviewed": false
+    },
+    {
+      "name": "KpiCard",
+      "layer": "primitive",
+      "path": "src/components/ui/KpiCard.tsx",
+      "whenToUse": "Primitif antarmuka dasar KpiCard. Gunakan prop variant/props yang tersedia.",
+      "states": [
+        "default",
+        "hover",
+        "disabled",
+        "loading"
+      ],
+      "reviewed": false
+    },
+    {
+      "name": "Modal",
+      "layer": "primitive",
+      "path": "src/components/ui/Modal.tsx",
+      "whenToUse": "Primitif antarmuka dasar Modal. Gunakan prop variant/props yang tersedia.",
+      "states": [
+        "default",
+        "hover",
+        "disabled",
+        "loading"
+      ],
+      "reviewed": false
+    },
+    {
+      "name": "PageHeader",
+      "layer": "primitive",
+      "path": "src/components/ui/PageHeader.tsx",
+      "whenToUse": "Primitif antarmuka dasar PageHeader. Gunakan prop variant/props yang tersedia.",
+      "states": [
+        "default",
+        "hover",
+        "disabled",
+        "loading"
+      ],
+      "reviewed": false
+    },
+    {
+      "name": "StateViews",
+      "layer": "primitive",
+      "path": "src/components/ui/StateViews.tsx",
+      "whenToUse": "Primitif antarmuka dasar StateViews. Gunakan prop variant/props yang tersedia.",
+      "states": [
+        "default",
+        "hover",
+        "disabled",
+        "loading"
+      ],
+      "reviewed": false
+    },
+    {
+      "name": "StatusChip",
+      "layer": "primitive",
+      "path": "src/components/ui/StatusChip.tsx",
+      "whenToUse": "Primitif antarmuka dasar StatusChip. Gunakan prop variant/props yang tersedia.",
+      "states": [
+        "default",
+        "hover",
+        "disabled",
+        "loading"
+      ],
+      "reviewed": false
+    },
+    {
+      "name": "Table",
+      "layer": "primitive",
+      "path": "src/components/ui/Table.tsx",
+      "whenToUse": "Primitif antarmuka dasar Table. Gunakan prop variant/props yang tersedia.",
+      "states": [
+        "default",
+        "hover",
+        "disabled",
+        "loading"
+      ],
+      "reviewed": false
+    },
+    {
+      "name": "Tag",
+      "layer": "primitive",
+      "path": "src/components/ui/Tag.tsx",
+      "whenToUse": "Primitif antarmuka dasar Tag. Gunakan prop variant/props yang tersedia.",
+      "states": [
+        "default",
+        "hover",
+        "disabled",
+        "loading"
+      ],
+      "reviewed": false
+    },
+    {
+      "name": "AppErrorBoundary",
+      "layer": "pattern",
+      "path": "src/components/common/AppErrorBoundary.tsx",
+      "whenToUse": "Pattern komponen bersama AppErrorBoundary. Gunakan kembali sebelum membuat implementasi baru.",
+      "states": [
+        "default"
+      ],
+      "reviewed": false
+    },
+    {
+      "name": "BootProgress",
+      "layer": "pattern",
+      "path": "src/components/common/BootProgress.tsx",
+      "whenToUse": "Pattern komponen bersama BootProgress. Gunakan kembali sebelum membuat implementasi baru.",
+      "states": [
+        "default"
+      ],
+      "reviewed": false
+    },
+    {
+      "name": "CustomerAvatar",
+      "layer": "pattern",
+      "path": "src/components/common/CustomerAvatar.tsx",
+      "whenToUse": "Pattern komponen bersama CustomerAvatar. Gunakan kembali sebelum membuat implementasi baru.",
+      "states": [
+        "default"
+      ],
+      "reviewed": false
+    },
+    {
+      "name": "CustomerProfilePanel",
+      "layer": "pattern",
+      "path": "src/components/common/CustomerProfilePanel.tsx",
+      "whenToUse": "Pattern komponen bersama CustomerProfilePanel. Gunakan kembali sebelum membuat implementasi baru.",
+      "states": [
+        "default"
+      ],
+      "reviewed": false
+    },
+    {
+      "name": "HighlightMatches",
+      "layer": "pattern",
+      "path": "src/components/common/HighlightMatches.tsx",
+      "whenToUse": "Pattern komponen bersama HighlightMatches. Gunakan kembali sebelum membuat implementasi baru.",
+      "states": [
+        "default"
+      ],
+      "reviewed": false
+    },
+    {
+      "name": "ImageZoomModal",
+      "layer": "pattern",
+      "path": "src/components/common/ImageZoomModal.tsx",
+      "whenToUse": "Pattern komponen bersama ImageZoomModal. Gunakan kembali sebelum membuat implementasi baru.",
+      "states": [
+        "default"
+      ],
+      "reviewed": false
+    },
+    {
+      "name": "Layout",
+      "layer": "pattern",
+      "path": "src/components/common/Layout.tsx",
+      "whenToUse": "Pattern komponen bersama Layout. Gunakan kembali sebelum membuat implementasi baru.",
+      "states": [
+        "default"
+      ],
+      "reviewed": false
+    },
+    {
+      "name": "LocationPickerModal",
+      "layer": "pattern",
+      "path": "src/components/common/LocationPickerModal.tsx",
+      "whenToUse": "Pattern komponen bersama LocationPickerModal. Gunakan kembali sebelum membuat implementasi baru.",
+      "states": [
+        "default"
+      ],
+      "reviewed": false
+    },
+    {
+      "name": "MediaImage",
+      "layer": "pattern",
+      "path": "src/components/common/MediaImage.tsx",
+      "whenToUse": "Pattern komponen bersama MediaImage. Gunakan kembali sebelum membuat implementasi baru.",
+      "states": [
+        "default"
+      ],
+      "reviewed": false
+    },
+    {
+      "name": "Pagination",
+      "layer": "pattern",
+      "path": "src/components/common/Pagination.tsx",
+      "whenToUse": "Pattern komponen bersama Pagination. Gunakan kembali sebelum membuat implementasi baru.",
+      "states": [
+        "default"
+      ],
+      "reviewed": false
+    },
+    {
+      "name": "PullToRefreshIndicator",
+      "layer": "pattern",
+      "path": "src/components/common/PullToRefreshIndicator.tsx",
+      "whenToUse": "Pattern komponen bersama PullToRefreshIndicator. Gunakan kembali sebelum membuat implementasi baru.",
+      "states": [
+        "default"
+      ],
+      "reviewed": false
+    },
+    {
+      "name": "ScrollToTop",
+      "layer": "pattern",
+      "path": "src/components/common/ScrollToTop.tsx",
+      "whenToUse": "Pattern komponen bersama ScrollToTop. Gunakan kembali sebelum membuat implementasi baru.",
+      "states": [
+        "default"
+      ],
+      "reviewed": false
+    },
+    {
+      "name": "StaffOwnershipBadge",
+      "layer": "pattern",
+      "path": "src/components/common/StaffOwnershipBadge.tsx",
+      "whenToUse": "Pattern komponen bersama StaffOwnershipBadge. Gunakan kembali sebelum membuat implementasi baru.",
+      "states": [
+        "default"
+      ],
+      "reviewed": false
+    },
+    {
+      "name": "ThemeToggle",
+      "layer": "pattern",
+      "path": "src/components/common/ThemeToggle.tsx",
+      "whenToUse": "Pattern komponen bersama ThemeToggle. Gunakan kembali sebelum membuat implementasi baru.",
+      "states": [
+        "default"
+      ],
+      "reviewed": false
+    },
+    {
+      "name": "ToggleSwitch",
+      "layer": "pattern",
+      "path": "src/components/common/ToggleSwitch.tsx",
+      "whenToUse": "Pattern komponen bersama ToggleSwitch. Gunakan kembali sebelum membuat implementasi baru.",
+      "states": [
+        "default"
+      ],
+      "reviewed": false
+    },
+    {
+      "name": "UiFeedback",
+      "layer": "pattern",
+      "path": "src/components/common/UiFeedback.tsx",
+      "whenToUse": "Pattern komponen bersama UiFeedback. Gunakan kembali sebelum membuat implementasi baru.",
+      "states": [
+        "default"
+      ],
+      "reviewed": false
+    },
+    {
+      "name": "VoiceNotePlayer",
+      "layer": "pattern",
+      "path": "src/components/common/VoiceNotePlayer.tsx",
+      "whenToUse": "Pattern komponen bersama VoiceNotePlayer. Gunakan kembali sebelum membuat implementasi baru.",
+      "states": [
+        "default"
+      ],
+      "reviewed": false
+    }
+  ],
+  "pages": [
+    {
+      "path": "src/pages/StitchShowcase.tsx",
+      "module": "StitchShowcase.tsx",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/UiCatalog.tsx",
+      "module": "dev-tools",
+      "parent": null,
+      "adr": "ADR-0004",
+      "reviewed": true
+    },
+    {
+      "path": "src/pages/auth/Login.tsx",
+      "module": "auth",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/staff/StaffChatBubble.tsx",
+      "module": "staff",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/staff/StaffChatComposer.tsx",
+      "module": "staff",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/staff/StaffChatHeader.tsx",
+      "module": "staff",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/staff/StaffChatThread.tsx",
+      "module": "staff",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/staff/StaffCompletedCard.tsx",
+      "module": "staff",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/staff/StaffLocationModal.tsx",
+      "module": "staff",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/staff/StaffLogin.tsx",
+      "module": "staff",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/staff/StaffPaymentModal.tsx",
+      "module": "staff",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/staff/StaffSchedule.tsx",
+      "module": "staff",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/staff/StaffTaskDetailModal.tsx",
+      "module": "staff",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/staff/StaffToday.tsx",
+      "module": "staff",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/staff/StaffTodayTaskCard.tsx",
+      "module": "staff",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/staff/StaffUpcomingCard.tsx",
+      "module": "staff",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/staff/staffTaskDisplay.tsx",
+      "module": "staff",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/AiEvaluations.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/AiPersona.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/AiSandbox.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/ChatExport.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/ChatMigration.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/ClinicServices.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/CustomerDatabase.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/CustomerLabels.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/CustomerListViews.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/CustomerService.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/Debug.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/DeliveryTiers.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/FinancialAnalytics.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/FollowUpEditModal.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/FollowUpQueue.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/FollowUpTemplates.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/KnowledgeBase.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/LandingPage.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/LiveChatMonitor.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/MetaCapiQueue.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/MetaClickCatcher.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/Overview.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/PaymentProofModal.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/QuickReplies.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/ReassignStaffModal.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/ReservationLocationModal.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/ReservationMobileList.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/ReservationTable.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/Reservations.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/ReservationsFilters.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/ReservationsHeader.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/Settings.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/StaffManagement.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/StaffRoleModal.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/TelegramIntegration.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/TodayLocationModal.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/TodayMetricsModal.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/TodayPaymentModal.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/TodayQuickChatModal.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/TodayTreatmentCard.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/TodayTreatmentDetailModal.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/TodayTreatments.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/reservationsUi.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
+      "path": "src/pages/tenant/todayTreatmentsLogic.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    }
+  ],
+  "allow": {
+    "rawFetch": [
+      {
+        "file": "src/components/copilot/AdminCopilotPanel.tsx",
+        "reason": "SSE stream"
+      },
+      {
+        "file": "src/components/customer/CustomerMapTab.tsx",
+        "reason": "GeoJSON statis"
+      },
+      {
+        "file": "src/pages/tenant/TodayTreatments.tsx",
+        "reason": "Nominatim eksternal"
+      },
+      {
+        "file": "src/components/common/VoiceNotePlayer.tsx",
+        "reason": "Audio blob fetch"
+      },
+      {
+        "file": "src/pages/tenant/CustomerDatabase.tsx",
+        "reason": "Audience export blob download"
+      },
+      {
+        "file": "src/pages/tenant/FinancialAnalytics.tsx",
+        "reason": "Financial report blob download"
+      },
+      {
+        "file": "src/pages/tenant/KnowledgeBase.tsx",
+        "reason": "Markdown/raw file export blob download"
+      },
+      {
+        "file": "src/utils/geoUtils.ts",
+        "reason": "Nominatim/ORS reverse geocode fetch"
+      }
+    ]
+  }
+}

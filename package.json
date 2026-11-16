@@ -56,7 +56,9 @@
     "check:reuse:warn": "node scripts/reuse/check-reuse.mjs --warn",
     "check:reuse:update": "node scripts/reuse/check-reuse.mjs --update-baseline --allow-update",
     "check:architecture": "node scripts/reuse/check-architecture.mjs",
-    "check:architecture:warn": "node scripts/reuse/check-architecture.mjs --warn"
+    "check:architecture:warn": "node scripts/reuse/check-architecture.mjs --warn",
+    "check:ui-reuse": "node packages/admin-dashboard/scripts/check-ui-reuse.mjs",
+    "check:ui-reuse:warn": "node packages/admin-dashboard/scripts/check-ui-reuse.mjs --warn"
   },
   "dependencies": {
     "@fastify/compress": "^7.0.3",
