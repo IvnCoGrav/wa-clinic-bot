@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedFromCommit": "3cf00e1d",
+  "generatedFromCommit": "ede933c4",
   "layerViolations": [
     {
       "rule": "LAYER_SERVICES",
@@ -160,7 +160,7 @@
     ]
   ],
   "prismaBudget": {
-    "totalCalls": 285,
+    "totalCalls": 270,
     "files": {
       "src/routes/admin/auth.subroute.ts": 2,
       "src/routes/admin/ctwa-catchers.subroute.ts": 6,
@@ -173,7 +173,6 @@
       "src/routes/admin/labels.subroute.ts": 24,
       "src/routes/admin/landings.subroute.ts": 13,
       "src/routes/admin/livechat.subroute.ts": 16,
-      "src/routes/admin/meta-attribution.subroute.ts": 15,
       "src/routes/admin/migration.subroute.ts": 30,
       "src/routes/admin/push.subroute.ts": 1,
       "src/routes/admin/reservation-crud.route.ts": 21,

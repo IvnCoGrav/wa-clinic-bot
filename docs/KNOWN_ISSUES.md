@@ -5,36 +5,36 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ## 347. [Code Health] Sisa Utang Arsitektur & Burn-Down Baseline (2026-11-16, OPEN)
 
-- **Status:** OPEN — baseline awal terkunci melalui sistem ratchet di `scripts/reuse/baselines/`. Angka metrik hanya boleh turun, tidak boleh naik.
-- **Inventaris Utang Terkunci (Fakta Baseline):**
-  1. **Duplikasi Fungsi (4 grup tersisa):**
+- **Status:** OPEN — Sprint 1 SELESAI 2026-11-16 (target tercapai lebih awal). Sisa utang di bawah masih terkunci ratchet di `scripts/reuse/baselines/`; angka hanya boleh turun.
+- **Plan Sprint 1:** `docs/PLAN_BURNDOWN_SPRINT1_2026-11-16.md` (SELESAI — S1-1 s/d S1-5).
+- **Hasil Sprint 1 (terverifikasi `npm run report:reuse`):**
+
+  | Metrik | Awal | Setelah Sprint 1 | Target | Status |
+  |---|---:|---:|---:|---|
+  | Duplikasi fungsi (grup AST) | 4 | **2** | 2 | Tercapai |
+  | Deklarasi simbol terlarang | 15 | **13** | ≤14 | Tercapai |
+  | File fisik >1.500 baris | 9 | **8** | 8 | Tercapai |
+  | Panggilan Prisma di route | 285 | **270** | 270 | Tercapai |
+  | Dead export runtime | 170 | **169** | tetap | Turun 1 |
+
+- **Bukti perbaikan Sprint 1:**
+  1. `getLogDateString` + `formatLocalDate` → `src/utils/log-date.ts` (kanonis, terdaftar sebagai `log.date_key`).
+  2. Tiga salinan `stripEdge` (persona, pronoun-validator, lead-greeting) → `src/utils/text-edge.ts` (`stripNonAlnumEdges`, kapabilitas `text.strip_edges`).
+  3. `meta-performance-analytics.service.ts` 1.567 → 1.465 baris; helper murni pindah ke `src/services/meta-performance.helpers.ts`; `WIB_OFFSET_MS`/`wibDayStart`/`wibDayEnd`/`wibDateKey`/`wibTodayStr` memakai `src/utils/wib-time.ts`; `normalizePhone` lokal diganti `normalizePhoneID` kanonis.
+  4. 15 panggilan Prisma `meta-attribution.subroute.ts` → `src/services/meta-attribution.service.ts` (plus `landingPageView` count/groupBy), route turun ke 270 panggilan di 34 file.
+- **Inventaris Utang Tersisa (Fakta Baseline):**
+  1. **Duplikasi Fungsi (2 grup):**
      - `findById` di `src/repositories/conversation.repository.ts:200` vs `src/repositories/customer.repository.ts:128`.
-     - `getLogDateString` di `src/utils/llm-execution-logger.ts:116` vs `src/utils/log-buffer.ts:45`.
-     - `isTypoAtMostOne` di `src/utils/typo-match.ts:7` vs `isNearEqual` di `src/v3/tools/calculate-delivery.tool.ts:162`.
-     - `stripEdge` di `src/config/persona.ts:173` vs `src/utils/pronoun-validator.ts:33`.
-  2. **Deklarasi Simbol Terlarang (15 simbol tersisa):**
-     - Fungsi internal / helper non-kanonis yang masih hidup di luar kapabilitas terdaftar (lihat `scripts/reuse/baselines/forbidden-declarations.json`).
-  3. **Siklus Circular Import (6 siklus):**
-     - Siklus lintas modul di backend runtime yang perlu diputus secara bertahap (lihat `scripts/reuse/baselines/architecture.json`).
-  4. **File Fisik >1.500 Baris (9 file):**
-     - `customer.service.ts` (3.324 baris)
-     - `staff-reservation.service.ts` (3.015 baris)
-     - `treatment-catalog.service.ts` (2.536 baris)
-     - `copilot-tools.ts` (1.795 baris)
-     - `src/integrations/waha/client.ts` (1.767 baris)
-     - `capi.service.ts` (1.646 baris)
-     - `webhook.route.ts` (1.624 baris)
-     - `live-chat.service.ts` (1.570 baris)
-     - `meta-performance-analytics.service.ts` (1.567 baris)
-  5. **Panggilan Prisma di Route (285 panggilan di 35 file):**
-     - Perlu dimigrasikan ke service / repository layer secara modular.
-  6. **Dead Exports Runtime (170 export):**
-     - Ekspor fungsi/konstanta/kelas yang tidak memiliki referensi di luar modulnya sendiri (lihat `scripts/reuse/baselines/dead-exports.json`).
-- **Target Burn-Down Bertahap (Sprint 1–4):**
-  - **Sprint 1 (Target: 2026-11-30):** Duplikasi 4 → 2 grup, File >1500 baris 9 → 8 file, Prisma di route 285 → 270 panggilan.
-  - **Sprint 2 (Target: 2026-12-15):** Duplikasi 2 → 0 grup, File >1500 baris 8 → 6 file, Prisma di route 270 → 240 panggilan.
-  - **Sprint 3 (Target: 2026-12-31):** File >1500 baris 6 → 3 file, Prisma di route 240 → 200 panggilan, Dead export 170 → 100.
-  - **Sprint 4 (Target: 2027-01-15):** File >1500 baris 3 → 0 file, Prisma di route 200 → 150 panggilan, Dead export 100 → ≤30.
+     - `isTypoAtMostOne` di `src/utils/typo-match.ts:7` vs `isNearEqual` di `src/v3/tools/calculate-delivery.tool.ts:162` (semantik perlu adjudikasi, bukan disamakan buta).
+  2. **Deklarasi Simbol Terlarang (13 simbol):** lihat `scripts/reuse/baselines/forbidden-declarations.json`.
+  3. **Siklus Circular Import (6 siklus):** lihat `scripts/reuse/baselines/architecture.json`.
+  4. **File Fisik >1.500 Baris (8 file):** `customer.service.ts` (3.324), `staff-reservation.service.ts` (3.015), `treatment-catalog.service.ts` (2.536), `copilot-tools.ts` (1.795), `waha/client.ts` (1.767), `capi.service.ts` (1.632), `webhook.route.ts` (1.624), `live-chat.service.ts` (1.570).
+  5. **Panggilan Prisma di Route (270 panggilan di 34 file):** termasuk 3 panggilan `(prisma.tenant as any)` sisa di `meta-attribution.subroute.ts` yang tidak terhitung pola gate — kandidat Sprint 2.
+  6. **Dead Exports Runtime (169 export):** lihat `scripts/reuse/baselines/dead-exports.json`.
+- **Target Burn-Down Bertahap (Sprint 2–4):**
+   - **Sprint 2 (Target: 2026-12-15):** Duplikasi 2 → 0 grup, File >1500 baris 8 → 6 file, Prisma di route 270 → 240 panggilan.
+   - **Sprint 3 (Target: 2026-12-31):** File >1500 baris 6 → 3 file, Prisma di route 240 → 200 panggilan, Dead export 169 → 100.
+   - **Sprint 4 (Target: 2027-01-15):** File >1500 baris 3 → 0 file, Prisma di route 200 → 150 panggilan, Dead export 100 → ≤30.
 - **Penegakan Gerbang:** Setiap perbaikan ditutup dengan menjalankan `npm run check:reuse:update` (hanya menurunkan baseline) dan verifikasi via `npm run report:reuse`.
 
 ## 346. [MCP] `clinic-ops-mcp` Ditunda — Plan & Audit Disimpan (2026-11-16, DEFERRED)

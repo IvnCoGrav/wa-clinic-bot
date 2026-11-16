@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedFromCommit": "fc65859f",
+  "generatedFromCommit": "ede933c4",
   "maxLines": 1500,
   "files": [
     {
@@ -34,10 +34,6 @@
     {
       "file": "src/services/live-chat.service.ts",
       "lines": 1570
-    },
-    {
-      "file": "src/services/meta-performance-analytics.service.ts",
-      "lines": 1567
     }
   ]
 }

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedFromCommit": "fc65859f",
+  "generatedFromCommit": "ede933c4",
   "deadExports": [
     {
       "type": "DEAD_EXPORT",
@@ -371,14 +371,14 @@
       "name": "renderConversationBlocks",
       "kind": "function",
       "file": "src/services/chat-export.service.ts",
-      "line": 104
+      "line": 96
     },
     {
       "type": "DEAD_EXPORT",
       "name": "ChatExportService",
       "kind": "class",
       "file": "src/services/chat-export.service.ts",
-      "line": 192
+      "line": 184
     },
     {
       "type": "DEAD_EXPORT",
@@ -553,21 +553,14 @@
       "name": "SANDBOX_EXCLUDE",
       "kind": "variable",
       "file": "src/services/meta-performance-analytics.service.ts",
-      "line": 46
+      "line": 69
     },
     {
       "type": "DEAD_EXPORT",
       "name": "EXCLUDED_REVENUE_STATUSES",
       "kind": "variable",
       "file": "src/services/meta-performance-analytics.service.ts",
-      "line": 47
-    },
-    {
-      "type": "DEAD_EXPORT",
-      "name": "_internal",
-      "kind": "variable",
-      "file": "src/services/meta-performance-analytics.service.ts",
-      "line": 1566
+      "line": 70
     },
     {
       "type": "DEAD_EXPORT",
@@ -938,21 +931,21 @@
       "name": "redactPiiText",
       "kind": "function",
       "file": "src/utils/llm-execution-logger.ts",
-      "line": 91
+      "line": 92
     },
     {
       "type": "DEAD_EXPORT",
       "name": "normalizeCustomerInput",
       "kind": "function",
       "file": "src/utils/llm-execution-logger.ts",
-      "line": 351
+      "line": 345
     },
     {
       "type": "DEAD_EXPORT",
       "name": "cleanOldLogFiles",
       "kind": "function",
       "file": "src/utils/log-buffer.ts",
-      "line": 268
+      "line": 262
     },
     {
       "type": "DEAD_EXPORT",

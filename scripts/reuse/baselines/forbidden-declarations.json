@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedFromCommit": "fc65859f",
+  "generatedFromCommit": "ede933c4",
   "violations": [
     {
       "type": "FORBIDDEN_DECLARATION",
@@ -17,14 +17,6 @@
       "canonical": "src/utils/phone-normalizer.ts",
       "file": "src/services/capi.service.ts",
       "line": 43
-    },
-    {
-      "type": "FORBIDDEN_DECLARATION",
-      "capabilityId": "phone.normalize",
-      "name": "normalizePhone",
-      "canonical": "src/utils/phone-normalizer.ts",
-      "file": "src/services/meta-performance-analytics.service.ts",
-      "line": 447
     },
     {
       "type": "FORBIDDEN_DECLARATION",
@@ -56,7 +48,7 @@
       "name": "resolveTenant",
       "canonical": "src/routes/admin/settings-helpers.ts",
       "file": "src/routes/admin/meta-attribution.subroute.ts",
-      "line": 35
+      "line": 43
     },
     {
       "type": "FORBIDDEN_DECLARATION",
@@ -65,14 +57,6 @@
       "canonical": "src/utils/wib-time.ts",
       "file": "src/services/integration-guard.service.ts",
       "line": 58
-    },
-    {
-      "type": "FORBIDDEN_DECLARATION",
-      "capabilityId": "time.wib",
-      "name": "WIB_OFFSET_MS",
-      "canonical": "src/utils/wib-time.ts",
-      "file": "src/services/meta-performance-analytics.service.ts",
-      "line": 70
     },
     {
       "type": "FORBIDDEN_DECLARATION",

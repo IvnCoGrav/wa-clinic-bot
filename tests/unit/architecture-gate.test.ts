@@ -160,8 +160,13 @@ describe('Architecture & Structural Integrity Gate (Fase 3)', () => {
       expect(parsed.warnMode).toBe(true);
       expect(parsed.summary).toBeDefined();
       expect(parsed.summary.newViolations).toBe(0);
-      expect(parsed.currentCyclesCount).toBe(6);
-      expect(parsed.currentPrismaTotal).toBe(285);
+      // Nilai "sekarang" WAJIB sama dengan baseline yang di-ratchet. Jangan
+      // hardcode angka: baseline hanya boleh turun (Sprint 1: 285 → 270).
+      const baseline = JSON.parse(
+        fs.readFileSync(path.resolve(process.cwd(), 'scripts/reuse/baselines/architecture.json'), 'utf8')
+      );
+      expect(parsed.currentCyclesCount).toBe(baseline.cycles.length);
+      expect(parsed.currentPrismaTotal).toBe(baseline.prismaBudget.totalCalls);
     } finally {
       if (fs.existsSync(reportPath)) {
         fs.unlinkSync(reportPath);
