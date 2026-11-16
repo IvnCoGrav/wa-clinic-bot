@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedFromCommit": "bedd068a",
+  "generatedFromCommit": "5eeb33c7",
   "violations": [
     {
       "type": "FORBIDDEN_DECLARATION",
@@ -17,14 +17,6 @@
       "canonical": "src/utils/json-extract.ts",
       "file": "src/v3/agent/pipeline/dsml-tool-salvage.ts",
       "line": 33
-    },
-    {
-      "type": "FORBIDDEN_DECLARATION",
-      "capabilityId": "location.clinic_question",
-      "name": "isClinicLocationQuestion",
-      "canonical": "src/utils/location-classifier.ts",
-      "file": "src/services/entity-extractor.service.ts",
-      "line": 45
     },
     {
       "type": "FORBIDDEN_DECLARATION",

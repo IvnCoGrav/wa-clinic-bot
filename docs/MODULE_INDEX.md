@@ -13,7 +13,7 @@ Total kapabilitas terdaftar: **8 modul**.
 |---|---|---|---|---|
 | `date.parse_indonesian` | **Parser tanggal bahasa Indonesia**<br>Parsing ekspresi tanggal bahasa alami Indonesia (hari, nama bulan teks/angka, relatif) menjadi objek Date standar. | [`src/utils/indonesian-date-parser.ts`](../src/utils/indonesian-date-parser.ts) | `parseIndonesianDate`, `applyBookingTimeToDate` | [`indonesian-date-parser.test.ts`](../tests/unit/v3/indonesian-date-parser.test.ts) |
 | `json.extract` | **Ekstraksi JSON dari output AI**<br>Mengekstrak blok JSON seimbang dari respons teks LLM yang mengandung markdown atau teks pelengkap. | [`src/utils/json-extract.ts`](../src/utils/json-extract.ts) | `extractBalancedJson`, `extractJsonContent`, `repairTruncatedJson` | [`json-extract.test.ts`](../tests/unit/json-extract.test.ts) |
-| `location.clinic_question` | **Klasifikasi pertanyaan lokasi klinik**<br>Mendeteksi apakah pesan customer menanyakan lokasi atau alamat klinik fisik. | [`src/utils/location-classifier.ts`](../src/utils/location-classifier.ts) | `isClinicLocationQuestion` | *Belum ada (Fase lanjutan)* |
+| `location.clinic_question` | **Klasifikasi pertanyaan lokasi klinik**<br>Mendeteksi apakah pesan customer menanyakan lokasi atau alamat klinik fisik. | [`src/utils/location-classifier.ts`](../src/utils/location-classifier.ts) | `isClinicLocationQuestion` | [`location-classifier.test.ts`](../tests/unit/location-classifier.test.ts) |
 | `phone.normalize` | **Normalisasi nomor telepon Indonesia**<br>Normalisasi nomor HP format Indonesia (08x, +628x, 628x) ke format 628x standar atau E164. | [`src/utils/phone-normalizer.ts`](../src/utils/phone-normalizer.ts) | `normalizePhoneID`, `normalizePhoneToE164` | [`security-and-parsing-helpers.test.ts`](../tests/unit/security-and-parsing-helpers.test.ts) |
 | `pii.mask_phone` | **Masking nomor telepon (PII)**<br>Menyensor nomor HP untuk log internal, audit trail, dan tampilan staf. | [`src/utils/pii-masker.ts`](../src/utils/pii-masker.ts) | `maskPhoneNumber`, `maskPhoneInText` | [`staff-chat-pii-masker.test.ts`](../tests/unit/staff-chat-pii-masker.test.ts) |
 | `reservation.payment_evaluation` | **Evaluasi status pembayaran reservasi**<br>Menentukan status evaluasi pembayaran reservasi secara kanonis. | [`src/services/reservation-core.service.ts`](../src/services/reservation-core.service.ts) | `resolveReservationPaymentEvaluation` | *Belum ada (Fase lanjutan)* |
@@ -47,7 +47,7 @@ Total kapabilitas terdaftar: **8 modul**.
 - **Ekspor Kanonis:** `isClinicLocationQuestion`
 - **Simbol Terlarang di Luar Kanonis:** `isClinicLocationQuestion`
 - **File yang Diizinkan:** `src/utils/location-classifier.ts`
-- **File Test:** *Belum didefinisikan*
+- **File Test:** [`tests/unit/location-classifier.test.ts`](../tests/unit/location-classifier.test.ts)
 
 ### `phone.normalize` — Normalisasi nomor telepon Indonesia
 

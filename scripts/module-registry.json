@@ -52,7 +52,7 @@
       "allowedFiles": [
         "src/utils/location-classifier.ts"
       ],
-      "test": null
+      "test": "tests/unit/location-classifier.test.ts"
     },
     {
       "id": "phone.normalize",

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedFromCommit": "bedd068a",
+  "generatedFromCommit": "5eeb33c7",
   "groups": [
     {
       "hash": "sha256:a8d5e6301af98235",
@@ -15,22 +15,6 @@
           "file": "src/repositories/customer.repository.ts",
           "line": 128,
           "name": "findById"
-        }
-      ]
-    },
-    {
-      "hash": "sha256:fb888571b0bda634",
-      "tokenCount": 75,
-      "files": [
-        {
-          "file": "src/services/entity-extractor.service.ts",
-          "line": 45,
-          "name": "isClinicLocationQuestion"
-        },
-        {
-          "file": "src/utils/location-classifier.ts",
-          "line": 15,
-          "name": "isClinicLocationQuestion"
         }
       ]
     },
