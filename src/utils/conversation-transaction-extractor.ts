@@ -1,5 +1,6 @@
 
 import { isValidChildName } from './name-sanitizer';
+import { parseHistoricalIndonesianDate } from './indonesian-date-parser';
 
 export interface ExtractedTransaction {
   customerPhone: string;
@@ -202,109 +203,13 @@ export function parsePaymentSection(paymentText: string): {
 }
 
 /**
- * Parser tanggal fleksibel Bahasa Indonesia:
+ * Parser tanggal fleksibel Bahasa Indonesia (Adapter ke parser kanonis):
+ * Menggunakan parser kanonis dengan kebijakan transkrip historis: rollPastToFuture=false, allowRelative=false.
  * Menangani format seperti 'Rabu, 12 agustus 26 jam 12.30', 'Selasa tgl 7 Juli 2026', '26 july 2026', dsb.
+ *
+ * @deprecated Gunakan `parseIndonesianDate` atau `parseHistoricalIndonesianDate` langsung dari `src/utils/indonesian-date-parser`.
  */
-export function parseIndonesianDate(dateStr: string): Date | null {
-  if (!dateStr || typeof dateStr !== 'string') return null;
-
-  const raw = dateStr.toLowerCase().replace(/[*_~`]/g, '').trim();
-
-  // Mapping bulan Indonesia
-  const monthMap: Record<string, number> = {
-    jan: 0, januari: 0, january: 0,
-    feb: 1, februari: 1, february: 1,
-    mar: 2, maret: 2, march: 2,
-    apr: 3, april: 3,
-    mei: 4, may: 4,
-    jun: 5, juni: 5, june: 5,
-    jul: 6, juli: 6, july: 6,
-    agu: 7, agust: 7, agustus: 7, august: 7, agt: 7, ags: 7,
-    sep: 8, sept: 8, september: 8,
-    okt: 9, oktober: 9, october: 9,
-    nov: 10, november: 10,
-    des: 11, desember: 11, december: 11,
-  };
-
-  // 1. Ekstrak Jam & Menit
-  let hour = 9;
-  let minute = 0;
-  const timeMatch = raw.match(/jam\s*(\d{1,2})[.:](\d{2})/i) || raw.match(/(\d{1,2})[.:](\d{2})\s*(?:wib)?/i);
-  if (timeMatch) {
-    hour = parseInt(timeMatch[1], 10);
-    minute = parseInt(timeMatch[2], 10);
-  }
-
-  // 2. Ekstrak Hari, Bulan, Tahun
-  // Format: 12 agustus 26 atau 7 Juli 2026 atau 7-07-2026
-  // UTL-01: DILARANG menggunakan default month = 6 (Juli fiktif). Tanpa bulan dan hari valid -> return null.
-  let day: number | null = null;
-  let month: number | null = null;
-  let year = new Date().getFullYear();
-
-  // Cek format angka DD-MM-YYYY atau DD/MM/YYYY
-  const numericMatch = raw.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})/);
-  if (numericMatch) {
-    const d = parseInt(numericMatch[1], 10);
-    const m = parseInt(numericMatch[2], 10) - 1;
-    let yr = parseInt(numericMatch[3], 10);
-    if (yr < 100) yr += 2000;
-    if (d >= 1 && d <= 31 && m >= 0 && m <= 11) {
-      day = d;
-      month = m;
-      year = yr;
-    }
-  } else {
-    // Format teks bulan: "12 agustus 2026" / "12 agustus 26" / "7 Juli"
-    const textMatch = raw.match(/(\d{1,2})\s+([a-z]+)(?:\s+(\d{2,4}))?/i) ||
-                      raw.match(/([a-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:\s+(\d{2,4}))?/i);
-
-    if (textMatch) {
-      let dStr = textMatch[1];
-      let mStr = textMatch[2];
-      let yStr = textMatch[3];
-
-      // Jika dibalik (Bulan Tanggal)
-      if (isNaN(parseInt(dStr, 10)) && !isNaN(parseInt(mStr, 10))) {
-        const tmp = dStr;
-        dStr = mStr;
-        mStr = tmp;
-      }
-
-      const dParsed = parseInt(dStr, 10);
-      const mLower = (mStr || '').toLowerCase();
-      let matchedMonth: number | null = null;
-      for (const [key, val] of Object.entries(monthMap)) {
-        if (mLower.startsWith(key)) {
-          matchedMonth = val;
-          break;
-        }
-      }
-
-      if (matchedMonth !== null && !isNaN(dParsed) && dParsed >= 1 && dParsed <= 31) {
-        day = dParsed;
-        month = matchedMonth;
-        if (yStr) {
-          let yr = parseInt(yStr, 10);
-          if (yr < 100) yr += 2000;
-          year = yr;
-        }
-      }
-    }
-  }
-
-  // Tanpa hari dan bulan yang valid, jangan buat tanggal fiktif (UTL-01)
-  if (day === null || month === null) {
-    return null;
-  }
-
-  try {
-    const d = new Date(Date.UTC(year, month, day, hour - 7, minute)); // UTC offset WIB (UTC+7)
-    return isNaN(d.getTime()) ? null : d;
-  } catch {
-    return null;
-  }
-}
+export { parseHistoricalIndonesianDate as parseIndonesianDate };
 
 /**
  * Ekstraktor utama seluruh percakapan riwayat transkrip chat:
@@ -415,7 +320,7 @@ export function extractTransactionsFromTranscript(content: string): ExtractedTra
         treatmentCategory,
         treatmentDetail,
         bookingDateStr,
-        bookingDate: parseIndonesianDate(bookingDateStr),
+        bookingDate: parseHistoricalIndonesianDate(bookingDateStr),
         treatmentPrice: financial.treatmentPrice,
         ongkir: financial.ongkir,
         promo: financial.promo,

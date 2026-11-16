@@ -6,6 +6,7 @@ import type { Prisma } from '@prisma/client';
 import type { BabyDetail } from '../utils/reservation-text-parser';
 import { PURCHASE_REVIEW_NOT_APPLICABLE } from './capi-review-status';
 import { resolveMaternalState } from './maternal-state.service';
+import { effectiveDuration, intervalsOverlap } from './slot-overlap.service';
 
 /**
  * Canonical Reservation Domain Service — Single Source of Truth untuk SEMUA
@@ -310,18 +311,6 @@ function getWibCalendarDayBounds(date: Date): { dayStart: Date; dayEnd: Date } {
   const dayStart = new Date(Date.UTC(year, month, day, 0, 0, 0, 0) - WIB_OFFSET_MS);
   const dayEnd = new Date(Date.UTC(year, month, day, 23, 59, 59, 999) - WIB_OFFSET_MS);
   return { dayStart, dayEnd };
-}
-
-function effectiveDuration(v: unknown, fallback = 60): number {
-  const n = Number(v);
-  if (!isFinite(n) || n <= 0) return fallback;
-  return Math.min(480, Math.max(15, Math.round(n)));
-}
-
-function intervalsOverlap(aStart: Date, aMins: number, bStart: Date, bMins: number): boolean {
-  const aEnd = aStart.getTime() + aMins * 60000;
-  const bEnd = bStart.getTime() + bMins * 60000;
-  return aStart.getTime() < bEnd && aStart.getTime() + aMins * 60000 > bStart.getTime() && aEnd > bStart.getTime() && bStart.getTime() < aEnd;
 }
 
 export async function findOverlappingCustomerReservations(params: {

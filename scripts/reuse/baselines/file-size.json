@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "generatedFromCommit": "e44d3340",
+  "maxLines": 1500,
+  "files": [
+    {
+      "file": "src/services/customer.service.ts",
+      "lines": 3324
+    },
+    {
+      "file": "src/services/staff-reservation.service.ts",
+      "lines": 3119
+    },
+    {
+      "file": "src/services/treatment-catalog.service.ts",
+      "lines": 2536
+    },
+    {
+      "file": "src/services/copilot/copilot-tools.ts",
+      "lines": 1795
+    },
+    {
+      "file": "src/integrations/waha/client.ts",
+      "lines": 1767
+    },
+    {
+      "file": "src/routes/webhook.route.ts",
+      "lines": 1624
+    }
+  ]
+}

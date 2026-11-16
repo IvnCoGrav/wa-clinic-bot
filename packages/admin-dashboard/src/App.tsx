@@ -51,6 +51,9 @@ const QuickReplies = lazy(() => import('./pages/tenant/QuickReplies').then(m => 
 const StitchShowcase = import.meta.env.DEV
   ? lazy(() => import('./pages/StitchShowcase').then(m => ({ default: m.StitchShowcase })))
   : null;
+const UiCatalog = import.meta.env.DEV
+  ? lazy(() => import('./pages/UiCatalog').then(m => ({ default: m.UiCatalog })))
+  : null;
 
 /** Redirect awal berbasis role: terapis → portal staff, lainnya → overview admin. Mendukung resolusi URL legacy berbasis hash. */
 const IndexRedirect: React.FC = () => {
@@ -135,6 +138,14 @@ export const App: React.FC = () => {
                 <Route path="/admin/stitch-preview" element={<StitchShowcase />} />
                 <Route path="/stitch" element={<Navigate to="/admin/stitch-preview" replace />} />
                 <Route path="/admin/stitch" element={<Navigate to="/admin/stitch-preview" replace />} />
+              </>
+            )}
+
+            {/* Galeri komponen dev-only (ADR 0004): tree-shaken di build produksi */}
+            {import.meta.env.DEV && UiCatalog && (
+              <>
+                <Route path="/ui-catalog" element={<UiCatalog />} />
+                <Route path="/admin/ui-catalog" element={<UiCatalog />} />
               </>
             )}
             

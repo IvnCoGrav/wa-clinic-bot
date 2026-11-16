@@ -1764,7 +1764,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   // penyegaran daftar tugas.
   const handleSubmitPayment = async (method: PaymentMethod, proofImageB64: string | null) => {
     if (!paymentModalTask) return;
-    if (method !== 'CASH' && !proofImageB64) return;
+    if (method !== 'CASH' && !proofImageB64 && !paymentModalTask.pricing.proofUrl) return;
 
     setSubmittingPayment(true);
     try {
@@ -1796,6 +1796,9 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           t.reservationId === targetId
             ? {
                 ...t,
+                // Server adalah otoritas status penyelesaian kunjungan.
+                // Bila server menyatakan completed, kartu langsung berpindah ke tab Selesai.
+                status: res.data?.completed ? 'completed' : (res.data?.reservationStatus ?? t.status),
                 pricing: {
                   ...t.pricing,
                   paymentStatus: awaiting ? 'PERLU_VERIFIKASI' : 'LUNAS',

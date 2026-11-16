@@ -99,19 +99,8 @@ export function markerColor(point: MapPointLike): string {
   return 'rgb(var(--c-info))';
 }
 
-/** Validasi rentang koordinat (lat -90..90, lng -180..180). */
-export function isValidLatLng(lat: unknown, lng: unknown): boolean {
-  return (
-    typeof lat === 'number' &&
-    typeof lng === 'number' &&
-    Number.isFinite(lat) &&
-    Number.isFinite(lng) &&
-    lat >= -90 &&
-    lat <= 90 &&
-    lng >= -180 &&
-    lng <= 180
-  );
-}
+/** Validasi rentang koordinat (lat -90..90, lng -180..180). Re-export dari geoUtils (kanonis). */
+export { isValidLatLng } from './geoUtils';
 
 /** Kategori status untuk legenda interaktif (hanya MQL & reservasi). */
 export type SpatialStatus = 'reserved' | 'mql' | 'out_of_coverage';

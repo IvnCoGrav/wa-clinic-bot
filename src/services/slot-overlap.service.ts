@@ -105,14 +105,21 @@ export function formatWibHm(date: Date): string {
 }
 
 /** Durasi efektif: default 60 menit, di-clamp ke rentang 15..480 menit. */
-function effectiveDuration(v: unknown, fallback = 60): number {
+export function effectiveDuration(v: unknown, fallback = 60): number {
   const n = Number(v);
   if (!isFinite(n) || n <= 0) return fallback;
   return Math.min(480, Math.max(15, Math.round(n)));
 }
 
 /** Dua interval [start, start+dur) tumpang tindih? (back-to-back TIDAK tumpang). */
-function intervalsOverlap(aStartMs: number, aMins: number, bStartMs: number, bMins: number): boolean {
+export function intervalsOverlap(
+  aStart: number | Date,
+  aMins: number,
+  bStart: number | Date,
+  bMins: number
+): boolean {
+  const aStartMs = typeof aStart === 'number' ? aStart : aStart.getTime();
+  const bStartMs = typeof bStart === 'number' ? bStart : bStart.getTime();
   const aEnd = aStartMs + aMins * 60000;
   const bEnd = bStartMs + bMins * 60000;
   return aStartMs < bEnd && bStartMs < aEnd;

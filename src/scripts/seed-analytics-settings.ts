@@ -10,33 +10,21 @@
  */
 
 import { prisma } from '../db/client';
+import { parseCliArgs, getArgBoolean, getArgNumber, getArgString } from './lib/parse-args';
 
-function parseArgs() {
-  const args = process.argv.slice(2);
-  const options: Record<string, string | boolean> = {};
-
-  for (const arg of args) {
-    if (arg.startsWith('--')) {
-      const [key, val] = arg.slice(2).split('=');
-      if (val !== undefined) {
-        options[key] = val;
-      } else {
-        options[key] = true;
-      }
-    }
-  }
-
+function loadParams() {
+  const options = parseCliArgs();
   return {
-    tenantId: (options.tenant as string) || 'default-tenant',
+    tenantId: getArgString(options, 'tenant', 'default-tenant'),
     cohortStartMonth: (options['cohort-start'] as string) || null,
     excludedMonths: options.excluded ? (options.excluded as string).split(',').map((s) => s.trim()) : [],
-    dailySlots: options.slots ? Number(options.slots) : null,
-    commit: Boolean(options.commit),
+    dailySlots: getArgNumber(options, 'slots') ?? null,
+    commit: getArgBoolean(options, 'commit', false),
   };
 }
 
 async function main() {
-  const params = parseArgs();
+  const params = loadParams();
   console.log(`[SEED ANALYTICS] Target Tenant: ${params.tenantId}`);
   console.log(`[SEED ANALYTICS] Mode: ${params.commit ? 'COMMIT (Write to DB)' : 'DRY RUN (No changes)'}`);
 

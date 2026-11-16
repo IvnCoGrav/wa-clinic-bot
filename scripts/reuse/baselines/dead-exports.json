@@ -1,0 +1,1182 @@
+{
+  "version": 1,
+  "generatedFromCommit": "e44d3340",
+  "deadExports": [
+    {
+      "type": "DEAD_EXPORT",
+      "name": "SUMOPOD_SECONDARY_MODEL",
+      "kind": "variable",
+      "file": "src/config/ai-models.config.ts",
+      "line": 31
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "KENARI_SECONDARY_MODEL",
+      "kind": "variable",
+      "file": "src/config/ai-models.config.ts",
+      "line": 33
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "DISPLAY_MODEL_LABEL",
+      "kind": "variable",
+      "file": "src/config/ai-models.config.ts",
+      "line": 37
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "SUMOPOD_CATALOG",
+      "kind": "variable",
+      "file": "src/config/ai-models.config.ts",
+      "line": 40
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "DEEPSEEK_DIRECT_CATALOG",
+      "kind": "variable",
+      "file": "src/config/ai-models.config.ts",
+      "line": 58
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "SUPPORTED_PROVIDERS",
+      "kind": "variable",
+      "file": "src/config/ai-models.config.ts",
+      "line": 251
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "RUNTIME_LLM_PROVIDERS",
+      "kind": "variable",
+      "file": "src/config/ai-models.config.ts",
+      "line": 257
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "setBrandIdentity",
+      "kind": "function",
+      "file": "src/config/brand.ts",
+      "line": 95
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "resetBrandIdentity",
+      "kind": "function",
+      "file": "src/config/brand.ts",
+      "line": 100
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "loadLandmarks",
+      "kind": "function",
+      "file": "src/config/landmarks.ts",
+      "line": 43
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "HIGH_SEVERITY_MEDICAL_KEYWORDS",
+      "kind": "variable",
+      "file": "src/config/medical-keywords.ts",
+      "line": 7
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "MEDIUM_SEVERITY_MEDICAL_KEYWORDS",
+      "kind": "variable",
+      "file": "src/config/medical-keywords.ts",
+      "line": 72
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "updatePersonaInMemoryAndFile",
+      "kind": "function",
+      "file": "src/config/persona.ts",
+      "line": 178
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "clearStaffChatConfigCache",
+      "kind": "function",
+      "file": "src/config/staff-chat-config.ts",
+      "line": 122
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "MIN_ESTIMATE_TTL_DAYS",
+      "kind": "variable",
+      "file": "src/config/tenant-settings.config.ts",
+      "line": 27
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "MAX_ESTIMATE_TTL_DAYS",
+      "kind": "variable",
+      "file": "src/config/tenant-settings.config.ts",
+      "line": 28
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "MAX_ADDRESS_TOMBSTONES",
+      "kind": "variable",
+      "file": "src/domain/customer-address/tombstones.ts",
+      "line": 20
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "TOMBSTONE_MAX_AGE_DAYS",
+      "kind": "variable",
+      "file": "src/domain/customer-address/tombstones.ts",
+      "line": 21
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "LOCATION_TAG_RE",
+      "kind": "variable",
+      "file": "src/domain/dispatch-visit-context.ts",
+      "line": 26
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "SAME_PLACE_TOLERANCE_M",
+      "kind": "variable",
+      "file": "src/domain/location-adequacy.ts",
+      "line": 72
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "PAUSED_STATUS",
+      "kind": "variable",
+      "file": "src/domain/reservation-status.ts",
+      "line": 1
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "ACTIVE_TREATMENT_WINDOW_MS",
+      "kind": "variable",
+      "file": "src/domain/reservation-status.ts",
+      "line": 40
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "activeHoldCutoff",
+      "kind": "function",
+      "file": "src/domain/reservation-status.ts",
+      "line": 46
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "PREMATURE_COMPLETION_TOLERANCE_MS",
+      "kind": "variable",
+      "file": "src/domain/reservation-status.ts",
+      "line": 155
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "dateToEpochDays",
+      "kind": "function",
+      "file": "src/domain/staff-retention.ts",
+      "line": 74
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "epochDaysToDate",
+      "kind": "function",
+      "file": "src/domain/staff-retention.ts",
+      "line": 79
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "GoogleOAuthClientManager",
+      "kind": "class",
+      "file": "src/integrations/google-contacts/google-oauth.client.ts",
+      "line": 29
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "hasResolvableSpecificity",
+      "kind": "function",
+      "file": "src/integrations/google-maps/geocoding.ts",
+      "line": 44
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "LlmOutageError",
+      "kind": "class",
+      "file": "src/integrations/llm/model-fallback.ts",
+      "line": 59
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "ORS_VALID_PREFERENCES",
+      "kind": "variable",
+      "file": "src/integrations/ors/client.ts",
+      "line": 26
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "wabaMediaBreaker",
+      "kind": "variable",
+      "file": "src/integrations/whatsapp/media.ts",
+      "line": 7
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "decodeCtwaPayload",
+      "kind": "function",
+      "file": "src/integrations/whatsapp/waha-ctwa-referral.ts",
+      "line": 54
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "registerCronWorkers",
+      "kind": "function",
+      "file": "src/lifecycle/background-crons.ts",
+      "line": 101
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "isCronHealthDegraded",
+      "kind": "function",
+      "file": "src/lifecycle/cron-health.ts",
+      "line": 142
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "clearAdminStaticCache",
+      "kind": "function",
+      "file": "src/routes/admin.route.ts",
+      "line": 53
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "buildProvidersStatus",
+      "kind": "function",
+      "file": "src/routes/admin/settings-ai.subroute.ts",
+      "line": 11
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "setMemoryReservation",
+      "kind": "function",
+      "file": "src/routes/admin/stores.ts",
+      "line": 29
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "setMemoryLanding",
+      "kind": "function",
+      "file": "src/routes/admin/stores.ts",
+      "line": 33
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "RESERVED_LANDING_SLUGS",
+      "kind": "variable",
+      "file": "src/routes/admin/stores.ts",
+      "line": 54
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "SLUG_REGEX",
+      "kind": "variable",
+      "file": "src/routes/admin/stores.ts",
+      "line": 66
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "LOGIN_ATTEMPTS_TTL_MS",
+      "kind": "variable",
+      "file": "src/routes/admin/stores.ts",
+      "line": 110
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "LOGIN_ATTEMPTS_CLEANUP_INTERVAL_MS",
+      "kind": "variable",
+      "file": "src/routes/admin/stores.ts",
+      "line": 111
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "stopLoginAttemptsCleanupTimer",
+      "kind": "function",
+      "file": "src/routes/admin/stores.ts",
+      "line": 145
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "isSafeUrlForFetch",
+      "kind": "function",
+      "file": "src/routes/media.route.ts",
+      "line": 165
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "AbuseDetectionService",
+      "kind": "class",
+      "file": "src/services/abuse-detection.service.ts",
+      "line": 6
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "ACCOUNT_LOCKOUT_MAX_ENTRIES",
+      "kind": "variable",
+      "file": "src/services/account-lockout.service.ts",
+      "line": 16
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "DEFAULT_PAID_MEDIUMS",
+      "kind": "variable",
+      "file": "src/services/ad-funnel-metrics.service.ts",
+      "line": 44
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "DEFAULT_GRACE_MINUTES",
+      "kind": "variable",
+      "file": "src/services/ad-funnel-metrics.service.ts",
+      "line": 45
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "MAX_ADMIN_SESSION_TTL_MS",
+      "kind": "variable",
+      "file": "src/services/admin-session.service.ts",
+      "line": 28
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "resolveTenantCapiCredentials",
+      "kind": "function",
+      "file": "src/services/capi.service.ts",
+      "line": 298
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "getTenantAutoSendPurchaseCapi",
+      "kind": "function",
+      "file": "src/services/capi.service.ts",
+      "line": 543
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "renderConversationBlocks",
+      "kind": "function",
+      "file": "src/services/chat-export.service.ts",
+      "line": 96
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "ChatExportService",
+      "kind": "class",
+      "file": "src/services/chat-export.service.ts",
+      "line": 184
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "RESERVATION_STATUS_VALUES",
+      "kind": "variable",
+      "file": "src/services/copilot/copilot-tools.ts",
+      "line": 55
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "loadCopilotStyle",
+      "kind": "function",
+      "file": "src/services/copilot/copilot.service.ts",
+      "line": 619
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "DEFAULT_HERMES_BASE_URL",
+      "kind": "variable",
+      "file": "src/services/copilot/hermes-adapter.ts",
+      "line": 20
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "DEFAULT_HERMES_OPENAI_URL",
+      "kind": "variable",
+      "file": "src/services/copilot/hermes-adapter.ts",
+      "line": 22
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "DEFAULT_HERMES_OPENAI_MODEL",
+      "kind": "variable",
+      "file": "src/services/copilot/hermes-adapter.ts",
+      "line": 28
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "ANCHOR_MATCH_CREDIT",
+      "kind": "variable",
+      "file": "src/services/ctwa-text-catcher.service.ts",
+      "line": 61
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "getAdaptiveBufferFactor",
+      "kind": "function",
+      "file": "src/services/delivery.service.ts",
+      "line": 89
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "loadDeliveryTiers",
+      "kind": "function",
+      "file": "src/services/delivery.service.ts",
+      "line": 96
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "saveDeliveryTiers",
+      "kind": "function",
+      "file": "src/services/delivery.service.ts",
+      "line": 111
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "FaqCacheService",
+      "kind": "class",
+      "file": "src/services/faq-cache.service.ts",
+      "line": 11
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "FrustrationSignalService",
+      "kind": "class",
+      "file": "src/services/frustration-signal.service.ts",
+      "line": 58
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "MAX_EVENT_DURATION_MINUTES",
+      "kind": "variable",
+      "file": "src/services/google-calendar.service.ts",
+      "line": 26
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "GoogleContactsService",
+      "kind": "class",
+      "file": "src/services/google-contacts.service.ts",
+      "line": 68
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "HumanBackgroundEnrichmentService",
+      "kind": "class",
+      "file": "src/services/human-background-enrichment.service.ts",
+      "line": 65
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "getIntegrationGuardConfig",
+      "kind": "function",
+      "file": "src/services/integration-guard.service.ts",
+      "line": 97
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "enrichTenantKeywords",
+      "kind": "function",
+      "file": "src/services/keyword-enrichment.service.ts",
+      "line": 246
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "KnowledgeBaseService",
+      "kind": "class",
+      "file": "src/services/knowledge.service.ts",
+      "line": 92
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "LocationIngestService",
+      "kind": "class",
+      "file": "src/services/location-ingest.service.ts",
+      "line": 87
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "EMPTY_MATERNAL_STATE",
+      "kind": "variable",
+      "file": "src/services/maternal-state.service.ts",
+      "line": 61
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "IMAGE_EXT_RE",
+      "kind": "variable",
+      "file": "src/services/media.service.ts",
+      "line": 137
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "MessagePinService",
+      "kind": "class",
+      "file": "src/services/message-pin.service.ts",
+      "line": 10
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "MessageReactionService",
+      "kind": "class",
+      "file": "src/services/message-reaction.service.ts",
+      "line": 10
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "MessageReadStatusService",
+      "kind": "class",
+      "file": "src/services/message-read-status.service.ts",
+      "line": 11
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "MessageService",
+      "kind": "class",
+      "file": "src/services/message.service.ts",
+      "line": 128
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "SANDBOX_EXCLUDE",
+      "kind": "variable",
+      "file": "src/services/meta-performance-analytics.service.ts",
+      "line": 69
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "EXCLUDED_REVENUE_STATUSES",
+      "kind": "variable",
+      "file": "src/services/meta-performance-analytics.service.ts",
+      "line": 70
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "parseTimestampSafe",
+      "kind": "function",
+      "file": "src/services/migration.service.ts",
+      "line": 11
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "MigrationService",
+      "kind": "class",
+      "file": "src/services/migration.service.ts",
+      "line": 24
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "MAX_MEMORY_NOTIFICATION_LOGS",
+      "kind": "variable",
+      "file": "src/services/notification-delivery.service.ts",
+      "line": 57
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "ACTIVE_APPOINTMENT_WINDOW_BEFORE_HOURS",
+      "kind": "variable",
+      "file": "src/services/patient-lifecycle.service.ts",
+      "line": 29
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "ACTIVE_APPOINTMENT_WINDOW_AFTER_HOURS",
+      "kind": "variable",
+      "file": "src/services/patient-lifecycle.service.ts",
+      "line": 30
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "PerContactLegacyScrapeService",
+      "kind": "class",
+      "file": "src/services/per-contact-legacy-scrape.service.ts",
+      "line": 16
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "buildKeywords",
+      "kind": "function",
+      "file": "src/services/pricelist.service.ts",
+      "line": 164
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "CapacityExceededError",
+      "kind": "class",
+      "file": "src/services/reservation-core.service.ts",
+      "line": 105
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "MissingBookingDateError",
+      "kind": "class",
+      "file": "src/services/reservation-core.service.ts",
+      "line": 122
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "runWithAdvisoryLock",
+      "kind": "function",
+      "file": "src/services/reservation-core.service.ts",
+      "line": 277
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "ReservationCoreService",
+      "kind": "class",
+      "file": "src/services/reservation-core.service.ts",
+      "line": 802
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "isCommercialAnchor",
+      "kind": "function",
+      "file": "src/services/reservation-unit.ts",
+      "line": 22
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "ResponseCacheService",
+      "kind": "class",
+      "file": "src/services/response-cache.service.ts",
+      "line": 13
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "SharelocReminderService",
+      "kind": "class",
+      "file": "src/services/shareloc-reminder.service.ts",
+      "line": 36
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "resolveLocation",
+      "kind": "function",
+      "file": "src/services/sheets/row-formatter.ts",
+      "line": 107
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "parseRowIndexFromRange",
+      "kind": "function",
+      "file": "src/services/sheets/sheets-client.ts",
+      "line": 94
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "columnLetter",
+      "kind": "function",
+      "file": "src/services/sheets/sheets-client.ts",
+      "line": 103
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "SLOT_OVERLAP_COOLDOWN_MS",
+      "kind": "variable",
+      "file": "src/services/slot-overlap.service.ts",
+      "line": 82
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "formatWibHm",
+      "kind": "function",
+      "file": "src/services/slot-overlap.service.ts",
+      "line": 100
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "StaffNotificationBriefingService",
+      "kind": "class",
+      "file": "src/services/staff-notification-briefing.service.ts",
+      "line": 11
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "StaffNotificationEventsService",
+      "kind": "class",
+      "file": "src/services/staff-notification-events.service.ts",
+      "line": 14
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "StaffNotificationFormatterService",
+      "kind": "class",
+      "file": "src/services/staff-notification-formatter.service.ts",
+      "line": 53
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "StaffPreVisitBriefService",
+      "kind": "class",
+      "file": "src/services/staff-notification-previsit.service.ts",
+      "line": 14
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "estimateTravelDurationMinutes",
+      "kind": "function",
+      "file": "src/services/staff-reservation.service.ts",
+      "line": 413
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "DEFAULT_RETENTION_POLICY",
+      "kind": "variable",
+      "file": "src/services/staff-retention.service.ts",
+      "line": 39
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "GEOFENCE_STALLED_SEC",
+      "kind": "variable",
+      "file": "src/services/staff-trip-tracking.service.ts",
+      "line": 62
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "GEOFENCE_MIN_DIST_M",
+      "kind": "variable",
+      "file": "src/services/staff-trip-tracking.service.ts",
+      "line": 63
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "GEOFENCE_MAX_DIST_M",
+      "kind": "variable",
+      "file": "src/services/staff-trip-tracking.service.ts",
+      "line": 64
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "GPS_LOW_ACCURACY_M",
+      "kind": "variable",
+      "file": "src/services/staff-trip-tracking.service.ts",
+      "line": 66
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "GPS_ACCURACY_MAX_M",
+      "kind": "variable",
+      "file": "src/services/staff-trip-tracking.service.ts",
+      "line": 80
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "SERVICES_FILE",
+      "kind": "variable",
+      "file": "src/services/treatment-catalog.service.ts",
+      "line": 91
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "loadServices",
+      "kind": "function",
+      "file": "src/services/treatment-catalog.service.ts",
+      "line": 952
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "saveServices",
+      "kind": "function",
+      "file": "src/services/treatment-catalog.service.ts",
+      "line": 981
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "WabaConsentService",
+      "kind": "class",
+      "file": "src/services/waba-consent.service.ts",
+      "line": 10
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "WabaOptOutService",
+      "kind": "class",
+      "file": "src/services/waba-optout.service.ts",
+      "line": 9
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "WabaTemplateService",
+      "kind": "class",
+      "file": "src/services/waba-template.service.ts",
+      "line": 52
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "WabaTenantService",
+      "kind": "class",
+      "file": "src/services/waba-tenant.service.ts",
+      "line": 16
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "WAHA_STATUS_WITHOUT_QR",
+      "kind": "variable",
+      "file": "src/services/whatsapp-provider.service.ts",
+      "line": 19
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "SYSTEM_LABEL_NAMES",
+      "kind": "variable",
+      "file": "src/utils/customer-bypass.ts",
+      "line": 6
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "KvUnavailableError",
+      "kind": "class",
+      "file": "src/utils/distributed-kv.ts",
+      "line": 155
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "MOMS_FORBIDDEN_PLACEHOLDERS",
+      "kind": "variable",
+      "file": "src/utils/followup-placeholder.ts",
+      "line": 24
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "getKecamatanRepresentativeMap",
+      "kind": "function",
+      "file": "src/utils/gazetteer-zipcode-resolver.ts",
+      "line": 219
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "getGazetteerPrefixIndex",
+      "kind": "function",
+      "file": "src/utils/gazetteer.ts",
+      "line": 265
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "getGazetteerZipcode",
+      "kind": "function",
+      "file": "src/utils/gazetteer.ts",
+      "line": 389
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "GAZETTEER_BORDER_MARGIN_KM",
+      "kind": "variable",
+      "file": "src/utils/gazetteer.ts",
+      "line": 596
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "GAZETTEER_MAX_BORDER_DIST_KM",
+      "kind": "variable",
+      "file": "src/utils/gazetteer.ts",
+      "line": 597
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "stripAiReasoningAndMonologue",
+      "kind": "function",
+      "file": "src/utils/language-sanitizer.ts",
+      "line": 52
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "sanitizeRepetitiveGreetings",
+      "kind": "function",
+      "file": "src/utils/language-sanitizer.ts",
+      "line": 139
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "sanitizePronounsAndSlang",
+      "kind": "function",
+      "file": "src/utils/language-sanitizer.ts",
+      "line": 194
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "stripDuplicateTurn0Greeting",
+      "kind": "function",
+      "file": "src/utils/language-sanitizer.ts",
+      "line": 239
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "formatParagraphsAfterEmoji",
+      "kind": "function",
+      "file": "src/utils/language-sanitizer.ts",
+      "line": 253
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "sanitizeDoubleQuestions",
+      "kind": "function",
+      "file": "src/utils/language-sanitizer.ts",
+      "line": 272
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "redactPiiText",
+      "kind": "function",
+      "file": "src/utils/llm-execution-logger.ts",
+      "line": 92
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "normalizeCustomerInput",
+      "kind": "function",
+      "file": "src/utils/llm-execution-logger.ts",
+      "line": 345
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "cleanOldLogFiles",
+      "kind": "function",
+      "file": "src/utils/log-buffer.ts",
+      "line": 262
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "stripLocationNoise",
+      "kind": "function",
+      "file": "src/utils/name-sanitizer.ts",
+      "line": 217
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "PLUS_CODE_REGEX",
+      "kind": "variable",
+      "file": "src/utils/open-location-code.ts",
+      "line": 16
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "maskAddress",
+      "kind": "function",
+      "file": "src/utils/pii-masker.ts",
+      "line": 450
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "getTenantFormHeadersAsync",
+      "kind": "function",
+      "file": "src/utils/reservation-text-parser.ts",
+      "line": 132
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "preprocessReservationText",
+      "kind": "function",
+      "file": "src/utils/reservation-text-parser.ts",
+      "line": 244
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "COMBINED_DICE_WEIGHT",
+      "kind": "variable",
+      "file": "src/utils/similarity.ts",
+      "line": 74
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "COMBINED_JACCARD_WEIGHT",
+      "kind": "variable",
+      "file": "src/utils/similarity.ts",
+      "line": 75
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "STAFF_PASSWORD_MIN_LENGTH",
+      "kind": "variable",
+      "file": "src/utils/staff-policy.ts",
+      "line": 12
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "STAFF_PASSWORD_MAX_LENGTH",
+      "kind": "variable",
+      "file": "src/utils/staff-policy.ts",
+      "line": 13
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "TOWN_ALIASES",
+      "kind": "variable",
+      "file": "src/utils/toponym-normalizer.ts",
+      "line": 12
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "isSkippedGeoToken",
+      "kind": "function",
+      "file": "src/utils/typo-match.ts",
+      "line": 29
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "salvagePartialDsmlArgs",
+      "kind": "function",
+      "file": "src/v3/agent/pipeline/dsml-tool-salvage.ts",
+      "line": 70
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "TONE_NEG_CONSTRAINTS_BASE",
+      "kind": "variable",
+      "file": "src/v3/agent/prompt/layers/core-persona.layer.ts",
+      "line": 115
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "TONE_NEG_CONSTRAINTS",
+      "kind": "variable",
+      "file": "src/v3/agent/prompt/layers/core-persona.layer.ts",
+      "line": 146
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "FEE_INFORMATION_HIDING_PIN",
+      "kind": "variable",
+      "file": "src/v3/agent/prompt/phases/location-rules.phase.ts",
+      "line": 113
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "locationLabel",
+      "kind": "function",
+      "file": "src/v3/agent/prompt/phases/router-direct-reply.layer.ts",
+      "line": 25
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "SCHEDULE_NEG_CONSTRAINTS_HEAD",
+      "kind": "variable",
+      "file": "src/v3/agent/prompt/phases/scheduling.phase.ts",
+      "line": 33
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "EXAMPLES_START_MARKER",
+      "kind": "variable",
+      "file": "src/v3/agent/prompt/prompt-composer.ts",
+      "line": 66
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "EXAMPLES_END_MARKER",
+      "kind": "variable",
+      "file": "src/v3/agent/prompt/prompt-composer.ts",
+      "line": 67
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "ASKING_SYMPTOM_RE",
+      "kind": "variable",
+      "file": "src/v3/guardrails/factual-claim-validator.ts",
+      "line": 80
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "rankServiceByRelevance",
+      "kind": "function",
+      "file": "src/v3/state/cart-manager.ts",
+      "line": 54
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "NIFAS_MAX_AGE_MONTHS",
+      "kind": "variable",
+      "file": "src/v3/state/goal-tracker.ts",
+      "line": 52
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "TODDLER_MAX_AGE_MONTHS",
+      "kind": "variable",
+      "file": "src/v3/state/goal-tracker.ts",
+      "line": 53
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "__getMemorySessionsMap",
+      "kind": "function",
+      "file": "src/v3/state/goal-tracker.ts",
+      "line": 89
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "__getMemorySessionTimestampsMap",
+      "kind": "function",
+      "file": "src/v3/state/goal-tracker.ts",
+      "line": 92
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "initKecamatanGazetteerSync",
+      "kind": "function",
+      "file": "src/v3/tools/calculate-delivery.tool.ts",
+      "line": 417
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "POSTPARTUM_MAX_CHILD_AGE_MONTHS",
+      "kind": "variable",
+      "file": "src/v3/tools/save-reservation.tool.ts",
+      "line": 174
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "isLocationFullyResolved",
+      "kind": "function",
+      "file": "src/v3/tools/tool-masker.ts",
+      "line": 44
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "CalculateDeliveryArgsSchema",
+      "kind": "variable",
+      "file": "src/v3/tools/tool-schemas.ts",
+      "line": 10
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "GetCatalogArgsSchema",
+      "kind": "variable",
+      "file": "src/v3/tools/tool-schemas.ts",
+      "line": 25
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "SaveReservationArgsSchema",
+      "kind": "variable",
+      "file": "src/v3/tools/tool-schemas.ts",
+      "line": 37
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "EscalateHumanArgsSchema",
+      "kind": "variable",
+      "file": "src/v3/tools/tool-schemas.ts",
+      "line": 53
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "ClinicFaqArgsSchema",
+      "kind": "variable",
+      "file": "src/v3/tools/tool-schemas.ts",
+      "line": 58
+    },
+    {
+      "type": "DEAD_EXPORT",
+      "name": "SearchKnowledgeFaqArgsSchema",
+      "kind": "variable",
+      "file": "src/v3/tools/tool-schemas.ts",
+      "line": 70
+    }
+  ]
+}

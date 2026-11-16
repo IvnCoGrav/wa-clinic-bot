@@ -20,6 +20,7 @@ import { EN_ROUTE_STATUS } from '../../domain/reservation-status';
 import { reservationStatusService } from '../../services/reservation-status.service';
 import { createMonotonicSseSequencer } from '../../utils/sse-sequence';
 import { resolveSessionTenantId } from '../admin/route-helpers';
+import { logStaffRejection } from '../../utils/staff-rejection-log';
 
 /**
  * Penomoran event SSE monotonik proses-wide (Fase 0.4). Menjamin id selalu naik
@@ -943,6 +944,15 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       });
 
       if (!result.success) {
+        logStaffRejection({
+          endpoint: 'POST /api/staff/reservations/:id/complete',
+          staffId,
+          staffName,
+          tenantId,
+          targetId: id,
+          reason: result.error || 'Gagal menyelesaikan kunjungan',
+          payload: { requiresPayment: result.requiresPayment, forceUnpaid },
+        });
         return reply.status(400).send({
           success: false,
           error: result.error,
@@ -953,8 +963,11 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
 
       return reply.status(200).send({
         success: true,
-        message: 'Kunjungan berhasil diselesaikan!',
+        message: result.alreadyCompleted
+          ? 'Kunjungan ini sudah diselesaikan sebelumnya.'
+          : 'Kunjungan berhasil diselesaikan!',
         data: result.data,
+        alreadyCompleted: result.alreadyCompleted === true,
       });
     }
   );
@@ -999,6 +1012,14 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       });
 
       if (!result.success) {
+        logStaffRejection({
+          endpoint: 'POST /api/staff/reservations/:id/send-payment-info',
+          staffId,
+          staffName,
+          tenantId,
+          targetId: id,
+          reason: result.error || 'Gagal mengirim info pembayaran',
+        });
         return reply.status(400).send({ success: false, error: result.error });
       }
 
@@ -1038,6 +1059,14 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       const { paymentMethod, amount, proofImageB64, notes } = request.body || {};
 
       if (!paymentMethod) {
+        logStaffRejection({
+          endpoint: 'POST /api/staff/reservations/:id/payment',
+          staffId,
+          staffName,
+          tenantId,
+          targetId: id,
+          reason: 'Metode pembayaran (paymentMethod) wajib dipilih.',
+        });
         return reply.status(400).send({ success: false, error: 'Metode pembayaran (paymentMethod) wajib dipilih.' });
       }
 
@@ -1054,6 +1083,15 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       });
 
       if (!result.success) {
+        logStaffRejection({
+          endpoint: 'POST /api/staff/reservations/:id/payment',
+          staffId,
+          staffName,
+          tenantId,
+          targetId: id,
+          reason: result.error || 'Gagal mencatat pembayaran',
+          payload: { paymentMethod, amount },
+        });
         return reply.status(400).send({ success: false, error: result.error });
       }
 
@@ -1090,6 +1128,13 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       const { reservationId, lat, lng, accuracyM, housePhotoB64, landmark } = request.body || {};
 
       if (!reservationId) {
+        logStaffRejection({
+          endpoint: 'POST /api/staff/update-location',
+          staffId,
+          staffName,
+          tenantId,
+          reason: 'reservationId wajib disertakan.',
+        });
         return reply.status(400).send({ success: false, error: 'reservationId wajib disertakan.' });
       }
 
@@ -1107,6 +1152,14 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       });
 
       if (!result.success) {
+        logStaffRejection({
+          endpoint: 'POST /api/staff/update-location',
+          staffId,
+          staffName,
+          tenantId,
+          targetId: reservationId,
+          reason: result.error || 'Gagal memperbarui lokasi',
+        });
         return reply.status(400).send({ success: false, error: result.error });
       }
 

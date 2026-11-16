@@ -9,7 +9,8 @@ import { extractNotesFromRawText, extractBabyDetails } from '../../utils/reserva
 import { computeCurrentAge, resolveMomGestationalInfo } from '../../utils/age-calculator';
 import { parseReservationText } from '../../utils/reservation-text-parser';
 import { tenantOf, sanitizeDurationMinutes } from './route-helpers';
-import { reservationCoreService, ReservationConflictError, resolveReservationPaymentEvaluation } from '../../services/reservation-core.service';
+import { reservationCoreService, ReservationConflictError } from '../../services/reservation-core.service';
+import { withPaymentEvaluation } from './shared/reservation-response';
 import { auditService } from '../../services/audit.service';
 import { customerService } from '../../services/customer.service';
 import { staffNotificationService } from '../../services/staff-notification.service';
@@ -20,10 +21,6 @@ import { normalizeAddressText } from '../../domain/customer-address';
  * Dipisah dari reservations.subroute.ts (God Controller) secara bertahap (Fase 2.3 audit arsitektur).
  * Routes: count, daily-slots, list, parse, quick-hold, create, detail, status, set-date, proof, assign-staff, delete, capi-queue
  */
-function withPaymentEvaluation(r: any) {
-  return { ...r, paymentEvaluation: resolveReservationPaymentEvaluation(r) };
-}
-
 export async function reservationCrudRoutes(fastify: FastifyInstance) {
   /**
    * GET /api/admin/reservations/count

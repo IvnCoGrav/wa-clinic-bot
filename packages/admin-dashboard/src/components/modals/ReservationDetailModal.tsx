@@ -206,6 +206,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
   const [editDate, setEditDate] = useState('');
   const [assigningStaff, setAssigningStaff] = useState(false);
   const [proofUploading, setProofUploading] = useState(false);
+  const [verifyingPayment, setVerifyingPayment] = useState(false);
   const [submittingLocation, setSubmittingLocation] = useState(false);
   const proofFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -251,6 +252,48 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
     await onProofRemove?.();
     toast('Bukti bayar dihapus.', 'success');
     onUpdate();
+  };
+
+  const handleVerifyPaymentClick = async () => {
+    if (!displayReservation.proof_url) {
+      toast('Belum ada bukti transfer untuk diverifikasi.', 'error');
+      return;
+    }
+    const ok = await confirm({
+      title: 'Verifikasi Pembayaran Transfer',
+      message: 'Tandai reservasi ini sebagai LUNAS berdasarkan bukti transfer yang telah diunggah?',
+      confirmText: 'Ya, Verifikasi Lunas',
+    });
+    if (!ok) return;
+
+    setVerifyingPayment(true);
+    try {
+      const res = await apiRequest(`/api/admin/reservation/${displayReservation.id}/verify-payment`, {
+        method: 'POST',
+        body: JSON.stringify({
+          paymentMethod: displayReservation.payment_method || 'TRANSFER',
+        }),
+      });
+      if (res?.success) {
+        toast('Pembayaran transfer berhasil diverifikasi lunas!', 'success');
+        if (res.data?.status) {
+          setActiveRes((prev: any) => ({
+            ...prev,
+            status: res.data.status,
+            purchase_occurred_at: res.data.purchaseOccurredAt || new Date().toISOString(),
+            purchase_value: res.data.purchaseValue ?? prev?.purchase_value,
+            payment_method: res.data.paymentMethod || prev?.payment_method,
+          }));
+        }
+        onUpdate();
+      } else {
+        toast(`Gagal memverifikasi: ${res?.error || 'Terjadi kesalahan'}`, 'error');
+      }
+    } catch (err: any) {
+      toast(`Gagal memverifikasi: ${err.message}`, 'error');
+    } finally {
+      setVerifyingPayment(false);
+    }
   };
 
   const handleSetDateClick = async () => {
@@ -735,34 +778,71 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                     );
                   })()}
                   {displayReservation.proof_url ? (
-                    <div className="flex items-center space-x-2.5">
-                      <img
-                        src={displayReservation.proof_url}
-                        alt="Bukti bayar"
-                        className="h-14 w-14 object-cover rounded-lg border border-divider shadow-xs bg-surface"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs text-ink-2 truncate">
-                          Metode: <span className="font-bold text-ink">{getPaymentMethodLabel(displayReservation.payment_method)}</span>
-                        </p>
-                        <p className="text-[10px] text-ink-3">Bukti tersimpan (versi ringan)</p>
+                    <div className="space-y-2">
+                      <div className="flex items-center space-x-2.5">
+                        <img
+                          src={displayReservation.proof_url}
+                          alt="Bukti bayar"
+                          className="h-14 w-14 object-cover rounded-lg border border-divider shadow-xs bg-surface"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-ink-2 truncate">
+                            Metode: <span className="font-bold text-ink">{getPaymentMethodLabel(displayReservation.payment_method)}</span>
+                          </p>
+                          <p className="text-[10px] text-ink-3">Bukti tersimpan (versi ringan)</p>
+                        </div>
+                        <button
+                          onClick={() => onProofView?.(displayReservation)}
+                          className="p-2 rounded-lg bg-accent-soft hover:bg-accent-soft dark:bg-accent-soft dark:hover:bg-accent-hover/30 text-accent border border-divider dark:border-accent/40 transition flex items-center justify-center"
+                          title="Lihat Detail Bukti Bayar"
+                        >
+                          <Eye size={15} />
+                        </button>
+                        <button
+                          aria-label="Hapus Bukti Bayar"
+                          onClick={handleProofRemoveClick}
+                          disabled={proofUploading}
+                          className="p-2 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-950/50 text-rose-600 dark:text-danger border border-rose-200 dark:border-rose-900/40 transition flex items-center justify-center disabled:opacity-50"
+                          title="Hapus Bukti Bayar"
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       </div>
-                      <button
-                        onClick={() => onProofView?.(displayReservation)}
-                        className="p-2 rounded-lg bg-accent-soft hover:bg-accent-soft dark:bg-accent-soft dark:hover:bg-accent-hover/30 text-accent border border-divider dark:border-accent/40 transition flex items-center justify-center"
-                        title="Lihat Detail Bukti Bayar"
-                      >
-                        <Eye size={15} />
-                      </button>
-                      <button
-                        aria-label="Hapus Bukti Bayar"
-                        onClick={handleProofRemoveClick}
-                        disabled={proofUploading}
-                        className="p-2 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-950/50 text-rose-600 dark:text-danger border border-rose-200 dark:border-rose-900/40 transition flex items-center justify-center disabled:opacity-50"
-                        title="Hapus Bukti Bayar"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+
+                      {/* Verifikasi Pembayaran oleh CS/Admin */}
+                      {!displayReservation.purchase_occurred_at ? (
+                        <div className="pt-2 border-t border-divider">
+                          <button
+                            type="button"
+                            aria-label="Verifikasi Pembayaran Lunas (Transfer)"
+                            onClick={handleVerifyPaymentClick}
+                            disabled={verifyingPayment}
+                            className="w-full py-2 px-3 rounded-xl bg-accent hover:bg-accent-hover text-on-solid text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs disabled:opacity-50 cursor-pointer"
+                          >
+                            {verifyingPayment ? (
+                              <>
+                                <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                                <span>Memverifikasi...</span>
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle size={14} />
+                                <span>Verifikasi Pembayaran Lunas (Transfer)</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="pt-2 border-t border-divider flex items-center justify-between text-[11px] text-success font-semibold">
+                          <span className="flex items-center gap-1">
+                            <CheckCircle size={13} />
+                            <span>Pembayaran Telah Diverifikasi Lunas</span>
+                          </span>
+                          <span className="text-ink-3 text-[10px]">
+                            {formatWib(displayReservation.purchase_occurred_at, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <button

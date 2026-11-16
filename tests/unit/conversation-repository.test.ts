@@ -140,6 +140,14 @@ describe('FASE 5b — conversation repository', () => {
     await expect(repo.updateState('nope', {}, 't')).rejects.toThrow();
   });
 
+  it('InMemory: findById terisolasi tenant dan null untuk id tidak dikenal', async () => {
+    const repo = new InMemoryConversationRepository();
+    const conv = await repo.getOrCreate('cust-1', 't');
+    expect(await repo.findById(conv.id, 't')).toBe(conv);
+    expect(await repo.findById(conv.id, 'other')).toBeNull();
+    expect(await repo.findById('tidak-ada', 't')).toBeNull();
+  });
+
   it('set/reset wiring', () => {
     const mem = new InMemoryConversationRepository();
     setConversationRepository(mem);

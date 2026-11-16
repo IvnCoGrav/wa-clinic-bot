@@ -6,6 +6,8 @@
  * secara presisi menggunakan raster tile OpenStreetMap (tanpa API key/Leaflet).
  */
 
+import { isValidLatLngPoint } from './geoUtils';
+
 export interface LatLng {
   lat: number;
   lng: number;
@@ -54,15 +56,7 @@ export const MIN_ZOOM = 3;
 export const MAX_ZOOM = 18;
 
 export function isValidLatLng(p: LatLng | null | undefined): p is LatLng {
-  return (
-    !!p &&
-    Number.isFinite(p.lat) &&
-    Number.isFinite(p.lng) &&
-    p.lat >= -90 &&
-    p.lat <= 90 &&
-    p.lng >= -180 &&
-    p.lng <= 180
-  );
+  return isValidLatLngPoint(p);
 }
 
 export function lngToWorldX(lng: number, zoom: number): number {

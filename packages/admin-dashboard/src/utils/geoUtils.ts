@@ -64,8 +64,28 @@ export function extractLatLngFromMapsUrl(input: string): ParsedCoordinates | nul
   return null;
 }
 
-function isValidLatLng(lat: number, lng: number): boolean {
-  return !isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+/**
+ * Validasi rentang koordinat (lat -90..90, lng -180..180).
+ * Single source of truth untuk seluruh dashboard admin (Anti-Spaghetti).
+ */
+export function isValidLatLng(lat: unknown, lng: unknown): boolean {
+  return (
+    typeof lat === 'number' &&
+    typeof lng === 'number' &&
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    lat >= -90 &&
+    lat <= 90 &&
+    lng >= -180 &&
+    lng <= 180
+  );
+}
+
+/** Type guard untuk objek koordinat { lat, lng }. */
+export function isValidLatLngPoint<T extends { lat?: unknown; lng?: unknown }>(
+  p: T | null | undefined
+): p is T & { lat: number; lng: number } {
+  return !!p && isValidLatLng(p.lat, p.lng);
 }
 
 /**

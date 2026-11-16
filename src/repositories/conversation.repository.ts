@@ -1,5 +1,6 @@
 import { prisma } from '../db/client';
 import { ConversationState } from '@prisma/client';
+import { tenantScopedRow } from '../utils/tenant-scope';
 
 /**
  * conversation.repository.ts — Seam persistensi conversation (PLAN 8 FASE 5b).
@@ -97,9 +98,7 @@ export class PostgresConversationRepository implements ConversationRepository {
 
   async findById(id: string, tenantId: string): Promise<any | null> {
     const conversation = await prisma.conversation.findUnique({ where: { id } });
-    if (!conversation) return null;
-    if (tenantId && (conversation as any).tenant_id && (conversation as any).tenant_id !== tenantId) return null;
-    return conversation;
+    return tenantScopedRow(conversation, tenantId);
   }
 
   async updateState(id: string, patch: ConversationStatePatch, tenantId: string): Promise<any> {
@@ -198,10 +197,7 @@ export class InMemoryConversationRepository implements ConversationRepository {
   }
 
   async findById(id: string, tenantId: string): Promise<any | null> {
-    const c = this.store.get(id);
-    if (!c) return null;
-    if (tenantId && c.tenant_id && c.tenant_id !== tenantId) return null;
-    return c;
+    return tenantScopedRow(this.store.get(id), tenantId);
   }
 
   async updateState(id: string, patch: ConversationStatePatch, tenantId: string): Promise<any> {

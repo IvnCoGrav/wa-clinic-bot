@@ -3,6 +3,124 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 354. [Staff Today] Insiden 16 Nov 2026 — Bukti Forensik & Penyelesaian Kunjungan Transfer (2026-11-16, RESOLVED)
+
+- **Status:** RESOLVED (2026-11-16).
+- **Insiden:** Bidan Thabita melaporkan via WhatsApp ke Admin pada pukul 12:26:59 WIB: *"Oh iya mba yg pertama tf tapi aku gk bisa nyelesain apkny eror biasane kalau tf langsung bisa"*.
+- **Hasil Investigasi Forensik (T0.1 & T0.2):**
+  - **Server:** `klinik-server-baru` (`43.173.11.79`), berkas log `logs/app-2026-11-16.log`, DB `wa_clinic_db`.
+  - **Pemeriksaan DB Offline (T0.1):** Log server bersih dari `Database offline` dan status 500 di jam tersebut. Server dan DB 100% online.
+  - **Data Pasien Pertama ("yg pertama")**: Bunda Dhea (ID `bbd3b28f-8526-4d85-a580-72a65ba96bc2`, booking 09:30 WIB).
+    - `purchase_occurred_at`: `NULL` (Admin belum mencatat lunas saat booking transfer).
+    - `payment_method`: `NULL`.
+    - `proof_url`: `NULL`.
+    - `status`: `completed` (baru berhasil diselesaikan pukul 12:30:37 WIB via bypass `STAFF_COMPLETE_VISIT_UNPAID`).
+  - **Data Pasien Kedua (Pembanding "biasanya tf langsung bisa")**: Bunda Maisya (ID `88e9fdeb-2efd-4e14-a1a9-89fb9c704361`, booking 11:00 WIB).
+    - `purchase_occurred_at`: `2026-11-16 00:00:00` (sudah ditandai Lunas oleh Admin).
+    - `payment_method`: `Transfer BCA`.
+    - `proof_url`: `/media/inbound/default-tenant/dc6e039330f04c73a944315e7294154e.jpg`.
+    - Kunjungan berhasil diselesaikan instan pukul 12:27:24 WIB (`STAFF_COMPLETE_VISIT`).
+  - **Audit Log Terekam:**
+    - `2026-11-16 05:27:24 UTC` (12:27:24 WIB): `STAFF_COMPLETE_VISIT` Bunda Maisya sukses.
+    - `2026-11-16 05:30:37 UTC` (12:30:37 WIB): `STAFF_COMPLETE_VISIT_UNPAID` Bunda Dhea dipaksa dengan payload `{"forcedUnpaid":true,"paymentStatus":"TAGIH_DI_TEMPAT"}`.
+- **Tabel Keputusan Cabang (T0.3):**
+  - `proof_url`: NULL
+  - `purchase_occurred_at`: NULL
+  - `logs`: Bersih (tanpa DB offline / 500)
+  - **Cabang Terpilih:** **Jalur B** → Fase 1, Fase 2, Fase 3, Fase 4, dan Fase 5 dijalankan penuh.
+- **Implementasi Solusi Fondasional (Fase 1–5):**
+  1. **Fase 1 (Kontrak Respons `recordPayment`):** Backend mengembalikan kontrak status eksplisit `{ status, completed, alreadyPaid }`, dan frontend `StaffToday.tsx` mengonsumsi `status: res.data?.status ?? t.status` tanpa fallback optimistis bohong. Kartu langsung berpindah ke tab "Selesai" secara reaktif tanpa refresh.
+  2. **Fase 2 (Pakai Bukti yang Sudah Ada di Sistem):** `StaffPaymentModal.tsx` memeriksa `task.pricing.proofUrl`. Bila bukti transfer sudah diunggah CS/WhatsApp pasien, bidan di lapangan tidak dipaksa mengunggah ulang foto bukti (tetap tersedia opsi ganti bukti opsional).
+  3. **Fase 3 (Seam Verifikasi Pembayaran CS/Admin):** Dibuat endpoint kanonis `POST /api/admin/reservation/:id/verify-payment` dan tombol verifikasi di `ReservationDetailModal.tsx`. CS/Admin dapat memverifikasi status LUNAS reservasi transfer dengan aman berdasarkan bukti yang terlampir.
+  4. **Fase 4 (Idempotensi di Seam Operasi):** `completeTask` dan `recordPayment` menangani pemanggilan ganda secara idempoten (`alreadyCompleted: true`, `alreadyPaid: true`) tanpa memicu error `InvalidTransitionError` dan tanpa efek samping berulang. Primitif status global `applyTransition` tetap strict.
+  5. **Fase 5 (Observabilitas Penolakan Bisnis):** Dibuat modul kanonis `src/utils/staff-rejection-log.ts` (`logStaffRejection`) yang mencatat seluruh penolakan HTTP 400 di rute staf (`/complete`, `/payment`, `/send-payment-info`, `/update-location`) secara terstruktur ke `logs/app-YYYY-MM-DD.log`.
+- **Verifikasi & Bukti Uji:**
+  - `npm run build`: Exit 0 (Backend TypeScript build sukses).
+  - `npm run --prefix packages/admin-dashboard build`: Exit 0 (Vite build sukses).
+  - `npm run --prefix packages/admin-dashboard check:design`: Exit 0 (tokens, dark-parity, a11y, contrast, dates 100% hijau).
+  - `npm run check:reuse`: Exit 0 (0 pelanggaran baru).
+  - 26 tests (7 test suite) hijau:
+    - `tests/unit/staff-payment-contract.test.ts` (3 tests)
+    - `tests/unit/staff-complete-idempotent.test.ts` (3 tests)
+    - `tests/unit/staff-rejection-log.test.ts` (3 tests)
+    - `tests/integration/admin-verify-payment.test.ts` (3 tests)
+    - `tests/unit/staff-payment-validation.test.ts` (3 tests)
+    - `tests/unit/reservation-status-transition.test.ts` (4 tests)
+    - `tests/unit/reservation-status-service.test.ts` (7 tests)
+
+## 353. [Code Health] Sisa Utang Arsitektur & Burn-Down Baseline (2026-11-16, OPEN)
+
+- **Status:** OPEN — Sprint 1 SELESAI 2026-11-16 (target tercapai lebih awal). Sisa utang di bawah masih terkunci ratchet di `scripts/reuse/baselines/`; angka hanya boleh turun.
+- **Plan Sprint 1:** `docs/PLAN_BURNDOWN_SPRINT1_2026-11-16.md` (SELESAI — S1-1 s/d S1-5).
+- **Hasil Sprint 1 (terverifikasi `npm run report:reuse`):**
+
+  | Metrik | Awal | Setelah Sprint 1 | Target | Status |
+  |---|---:|---:|---:|---|
+  | Duplikasi fungsi (grup AST) | 4 | **2** | 2 | Tercapai |
+  | Deklarasi simbol terlarang | 15 | **13** | ≤14 | Tercapai |
+  | File fisik >1.500 baris | 9 | **8** | 8 | Tercapai |
+  | Panggilan Prisma di route | 285 | **270** | 270 | Tercapai |
+  | Dead export runtime | 170 | **169** | tetap | Turun 1 |
+
+- **Bukti perbaikan Sprint 1:**
+  1. `getLogDateString` + `formatLocalDate` → `src/utils/log-date.ts` (kanonis, terdaftar sebagai `log.date_key`).
+  2. Tiga salinan `stripEdge` (persona, pronoun-validator, lead-greeting) → `src/utils/text-edge.ts` (`stripNonAlnumEdges`, kapabilitas `text.strip_edges`).
+  3. `meta-performance-analytics.service.ts` 1.567 → 1.465 baris; helper murni pindah ke `src/services/meta-performance.helpers.ts`; `WIB_OFFSET_MS`/`wibDayStart`/`wibDayEnd`/`wibDateKey`/`wibTodayStr` memakai `src/utils/wib-time.ts`; `normalizePhone` lokal diganti `normalizePhoneID` kanonis.
+  4. 15 panggilan Prisma `meta-attribution.subroute.ts` → `src/services/meta-attribution.service.ts` (plus `landingPageView` count/groupBy), route turun ke 270 panggilan di 34 file.
+- **Inventaris Utang Tersisa (Fakta Baseline):**
+  1. **Duplikasi Fungsi (2 grup):**
+     - `findById` di `src/repositories/conversation.repository.ts:200` vs `src/repositories/customer.repository.ts:128`.
+     - `isTypoAtMostOne` di `src/utils/typo-match.ts:7` vs `isNearEqual` di `src/v3/tools/calculate-delivery.tool.ts:162` (semantik perlu adjudikasi, bukan disamakan buta).
+  2. **Deklarasi Simbol Terlarang (13 simbol):** lihat `scripts/reuse/baselines/forbidden-declarations.json`.
+  3. **Siklus Circular Import (6 siklus):** lihat `scripts/reuse/baselines/architecture.json`.
+  4. **File Fisik >1.500 Baris (8 file):** `customer.service.ts` (3.324), `staff-reservation.service.ts` (3.015), `treatment-catalog.service.ts` (2.536), `copilot-tools.ts` (1.795), `waha/client.ts` (1.767), `capi.service.ts` (1.632), `webhook.route.ts` (1.624), `live-chat.service.ts` (1.570).
+  5. **Panggilan Prisma di Route (270 panggilan di 34 file):** termasuk 3 panggilan `(prisma.tenant as any)` sisa di `meta-attribution.subroute.ts` yang tidak terhitung pola gate — kandidat Sprint 2.
+  6. **Dead Exports Runtime (169 export):** lihat `scripts/reuse/baselines/dead-exports.json`.
+- **Target Burn-Down Bertahap (Sprint 2–4):**
+   - **Sprint 2 (Target: 2026-12-15):** Duplikasi 2 → 0 grup, File >1500 baris 8 → 6 file, Prisma di route 270 → 240 panggilan.
+   - **Sprint 3 (Target: 2026-12-31):** File >1500 baris 6 → 3 file, Prisma di route 240 → 200 panggilan, Dead export 169 → 100.
+   - **Sprint 4 (Target: 2027-01-15):** File >1500 baris 3 → 0 file, Prisma di route 200 → 150 panggilan, Dead export 100 → ≤30.
+- **Penegakan Gerbang:** Setiap perbaikan ditutup dengan menjalankan `npm run check:reuse:update` (hanya menurunkan baseline) dan verifikasi via `npm run report:reuse`.
+
+## 352. [MCP] `clinic-ops-mcp` Ditunda — Plan & Audit Disimpan (2026-11-16, DEFERRED)
+
+- **Status:** DEFERRED — belum ada implementasi; `src/mcp/` belum dibuat; tidak ada dependency/migrasi yang ditambahkan.
+- **Keputusan user:** fitur ditunda sampai prioritas berikutnya. Plan dan audit tetap disimpan di `docs/plans/CLINIC_OPS_MCP_DEFERRED_2026-11-16.md`.
+- **Keputusan beku bila dilanjutkan:** read-only dulu; official MCP SDK; reuse service analitik/Copilot existing (bukan engine metrik baru); payment dipisah (`approve_purchase_event` vs `record_payment`); tenant-scoped sejak awal; tanpa migrasi status history untuk v1; **tanpa tombol on/off**; profil stdio untuk Desktop/OpenCode dan HTTP remote untuk Claude web/mobile.
+- **Risiko yang belum ditutup (wajib dibaca saat resume):** PII/transkrip ke host AI, stdout pollution yang merusak JSON-RPC, duplikasi definisi metrik, write action tanpa auth/konfirmasi, dan endpoint HTTP publik yang harus hidup 24/7 untuk Claude web/mobile.
+- **Catatan:** “standby aktif” untuk Claude web/mobile berarti proses HTTP MCP harus tersedia saat tool dipanggil; soft-off hanya memblokir akses, bukan menghemat RAM. Jangan eksekusi tanpa persetujuan eksplisit user.
+
+## 351. [Code Health] Infrastruktur Gerbang Anti-Duplikasi, Reuse Modul & UI Governance (2026-11-16, RESOLVED)
+
+- **Status:** RESOLVED (2026-11-16) — Eksekusi penuh 8 fase `docs/PLAN_REUSE_GATE_2026-11-16.md` (Fase 0 s/d Fase 7). Sistem anti-spaghetti dan reuse modul kanonis aktif lokal & CI.
+- **Hasil Terverifikasi:**
+  1. **Registry & Discovery (F1):** `scripts/module-registry.json` mencatat 11 kapabilitas kanonis; `docs/MODULE_INDEX.md` digenerate otomatis; pencarian instan via `npm run find:module -- "<kebutuhan>"`.
+  2. **Gate AST Backend Zero-Dependency (F2 & F3):** `npm run check:reuse` dan `npm run check:architecture` dengan sistem baseline ratchet (angka hanya boleh turun).
+  3. **Deduplikasi 7 Masalah Berisiko Tinggi (F4):**
+     - F4-1: `isClinicLocationQuestion` dikonsolidasi ke `src/utils/location-classifier.ts`.
+     - F4-2: `intervalsOverlap` dan `effectiveDuration` di `src/services/slot-overlap.service.ts` diekspor untuk shared use.
+     - F4-3: Masking PII `maskPhoneWithTenantSuffix` di `src/utils/pii-masker.ts` menggantikan 4 varian lokal.
+     - F4-4: Dual `parseIndonesianDate` disatukan ke `src/utils/indonesian-date-parser.ts` dengan policy seam (`rollPastToFuture`, `allowRelative`) + 32 real-world golden oracle test suites (TZ=UTC & TZ=Asia/Jakarta lulus).
+     - F4-5: Response builder `withPaymentEvaluation` dikonsolidasi ke `src/routes/admin/shared/reservation-response.ts`.
+     - F4-6: `escapeRegex` / `escapeRegExp` disatukan ke `src/utils/regex-escape.ts` di 6 konsumen.
+     - F4-7: Parsing argument di 10 file `src/scripts` disatukan ke `src/scripts/lib/parse-args.ts`.
+  4. **UI/UX Governance & Komponen Galeri (F5):**
+     - `packages/admin-dashboard/src/ui-registry.json` mencakup 100% halaman (61) dan komponen bersama (28).
+     - `packages/admin-dashboard/scripts/check-ui-reuse.mjs` (`npm run check:ui-reuse`) memblokir page baru tanpa ADR, duplikasi nama komponen, dialog `window.confirm`/`alert`, dan unauthorized `fetch()`.
+     - Galeri dev-only `UiCatalog.tsx` di `/ui-catalog` (ADR 0004) diisolasi `import.meta.env.DEV` (0 byte di bundle produksi).
+     - Konsolidasi util UI: `formatMinutesToTime` ke `slotRecommendations.ts`, `isValidLatLng` ke `geoUtils.ts`.
+  5. **Amendemen `AGENTS.md` & Pointer Guard (F6):** 4 edit terarah pada `AGENTS.md` dijaga oleh tes integritas fisik `tests/unit/agents-md-pointers.test.ts`.
+  6. **Governance & Burn-down (F7):** PR template di `.github/pull_request_template.md`, registry pengecualian berbatas waktu di `scripts/reuse/exceptions.json` (`docs/REUSE_EXCEPTIONS.md`), dan skrip pelaporan `npm run report:reuse`.
+- **Metrik Burn-down Saat Ini:**
+  - Duplikasi grup AST: 6 → **4 grup** (turun -2 grup).
+  - Deklarasi simbol terlarang: 20 → **15 simbol** (turun -5 simbol).
+  - Siklus arsitektur: 8 → **6 siklus** (turun -2 siklus).
+  - File >1.500 baris: terkunci di 9 file.
+  - Panggilan Prisma di rute: terkunci di 285 panggilan (35 file).
+  - Dead exports: terkunci di 170 export.
+  - Pelanggaran baru: **0 di seluruh gerbang**.
+- **Dokumentasi & Artefak:** `docs/PLAN_REUSE_GATE_2026-11-16.md`, `docs/MODULE_INDEX.md`, `docs/adr/0004-ui-catalog-dev-only.md`, `docs/REUSE_EXCEPTIONS.md`.
+
 ## 350. [Iklan / Notifikasi] Alert Watchdog Iklan Tidak Terlihat Owner — Dikirim Ganda ke WhatsApp (2026-11-15, TEMPORARY)
 
 - **Status:** **TEMPORARY WORKAROUND** (keputusan owner 2026-11-15). Bukan solusi final.

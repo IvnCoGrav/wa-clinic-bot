@@ -3,6 +3,7 @@ import { isGenericCustomerName, sanitizeCustomerNameForStorage } from '../utils/
 import { parseReservationText } from '../utils/reservation-text-parser';
 import { toTitleCasePreservingPrefix } from '../utils/customer-name-healing';
 import { maskPhoneNumber } from '../utils/pii-masker';
+import { parseCliArgs, getArgBoolean, getArgNumber } from './lib/parse-args';
 import * as fs from 'fs';
 
 interface HealAction {
@@ -16,31 +17,18 @@ interface HealAction {
   reason: string;
 }
 
-function parseArgs() {
-  const args = process.argv.slice(2);
-  const options: Record<string, string | boolean> = {};
-
-  for (const arg of args) {
-    if (arg.startsWith('--')) {
-      const [key, val] = arg.slice(2).split('=');
-      if (val !== undefined) {
-        options[key] = val;
-      } else {
-        options[key] = true;
-      }
-    }
-  }
-
+function loadParams() {
+  const options = parseCliArgs();
   return {
     tenantId: (options.tenant as string) || null,
-    limit: options.limit ? Number(options.limit) : null,
+    limit: getArgNumber(options, 'limit') ?? null,
     exportPath: (options.export as string) || null,
-    commit: Boolean(options.commit),
+    commit: getArgBoolean(options, 'commit', false),
   };
 }
 
 async function main() {
-  const params = parseArgs();
+  const params = loadParams();
   console.log('================================================================');
   console.log(`[HEAL CUSTOMER NAMES] Target Tenant: ${params.tenantId || 'SEMUA TENANT'}`);
   console.log(`[HEAL CUSTOMER NAMES] Mode: ${params.commit ? 'COMMIT (MENULIS KE DB)' : 'DRY-RUN (READ-ONLY)'}`);

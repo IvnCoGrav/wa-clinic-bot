@@ -9,6 +9,9 @@ import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { getGazetteerAreas, escapeRegex, resolvePrefixMatches } from '../utils/gazetteer';
 import { telemetryService } from './telemetry.service';
 import { getStringSimilarity } from '../utils/similarity';
+import { isClinicLocationQuestion, QUESTION_LEAD_RE } from '../utils/location-classifier';
+
+export { isClinicLocationQuestion };
 
 const RawLlmExtractionSchema = z.object({
   intents: z.array(z.string()).default([]),
@@ -29,28 +32,6 @@ const RawLlmExtractionSchema = z.object({
 const GENERIC_TREATMENT_RE = /^(?:layanan\s+)?(?:home[-\s]?(?:treatment|care|service|sevice)|homecare|home\s*service|home\s*sevice|layanan\s*home|care|treatment|perawatan|pijat|spa|layanan|paket|promo|info\s+treatment|layanan\s+kami)$/i;
 const GENERIC_LOCATION_RE = /^(?:rumah|ke\s+rumah|di\s+rumah|rumah\s+saya|lokasi|alamat|klinik|tempat|sini|sana|daerah|posisi|surabaya|sidoarjo|surabaya\s*[\/-]\s*sidoarjo|mana|mn|mna|dimana|dmana|mana\s+(?:ya|kak|bund|bunda|min|mba|mbak|kk)|mn\s+(?:ya|kak|bund|bunda|min|mba|mbak|kk)|dimana\s+(?:yg|yang)\b|(?:lokasi|alamat|klinik|tempat)(?:nya)?\s*(?:di\s*)?dimana\b|di\s*mana\s+ya\b|dimana\s+(?:ya|kak|bund|bunda|min|mba|mbak|kk)\b)$/i;
 
-/**
- * Frasa tanya lokasi klinik — BUKAN alamat rumah customer.
- * Dipakai sebagai guard agar pertanyaan seperti "lokasinya dimana yg di sby"
- * tidak diekstrak sebagai locationText / intent provide_location.
- */
-const QUESTION_LEAD_RE = /^(?:dimana|di\s*mana|dmana|mana|mna|mn|apa|apakah|yg\s+mana|yang\s+mana|sebelah\s+mana)\b/i;
-const CLINIC_LOCATION_QUESTION_RE = /\b(?:tanya|mau\s+tanya|pengen\s+tanya|nanya|mau\s+nanya)\b.*?\b(?:lokasi|alamat|klinik|tempat)(?:nya|ku|mu)?\b/i;
-const LOCATION_QUESTION_PHRASE_RE = /\b(?:lokasi|alamat|klinik|tempat)(?:nya)?\s*(?:di\s*)?(?:mana|mn|mna|dmana|dimana)\b/i;
-
-/**
- * True jika teks adalah pertanyaan tentang lokasi klinik (bukan pemberian alamat).
- * Diekspor agar background-enrichment dapat melewati (skip) pesan bertipe tanya.
- */
-export function isClinicLocationQuestion(text: string): boolean {
-  if (!text || typeof text !== 'string') return false;
-  const lower = text.toLowerCase().trim();
-  if (!lower) return false;
-  if (QUESTION_LEAD_RE.test(lower)) return true;
-  if (CLINIC_LOCATION_QUESTION_RE.test(lower)) return true;
-  if (LOCATION_QUESTION_PHRASE_RE.test(lower)) return true;
-  return false;
-}
 const NON_SYMPTOM_TOKENS = new Set([
   'sehat', 'selalu', 'info', 'konsultasi', 'tanya', 'tertarik', 'booking', 'reservasi', 'bisa',
   'jadwal', 'promo', 'biaya', 'harga', 'ongkir', 'homecare', 'hometreatment', 'treatment',

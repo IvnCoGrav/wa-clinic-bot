@@ -5,6 +5,7 @@ import { getLiveChatHub } from './live-chat-hub.service';
 import { AI_ELIGIBILITY_ESCALATION_REASON, ACTIVE_APPOINTMENT_ESCALATION_REASON } from './ai-eligibility.service';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
 import { hasBypassLabel } from '../utils/customer-bypass';
+import { tenantScopedRow } from '../utils/tenant-scope';
 import { activeReservationWhere, isActiveReservation } from '../domain/reservation-status';
 import {
   resolveLocationAdequacy,
@@ -139,9 +140,7 @@ export class ConversationService {
     const fromMemory = () => {
       const mem = memoryConversations.get(id);
       // AUDIT FASE 3 (K-03): fallback memory WAJIB tenant-scoped.
-      if (!mem) return null;
-      if (tenantId && (mem as any).tenant_id && (mem as any).tenant_id !== tenantId) return null;
-      return mem;
+      return tenantScopedRow(mem, tenantId);
     };
     try {
       const conv = await repo.findById(id, tenantId);

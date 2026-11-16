@@ -1,7 +1,8 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { auditService } from '../../services/audit.service';
-import { chatExportService, formatLocalDate } from '../../services/chat-export.service';
+import { chatExportService } from '../../services/chat-export.service';
+import { getLogDateString } from '../../utils/log-date';
 import { resolveSessionTenantId } from './route-helpers';
 
 const chatExportCooldown = new Map<string, number>();
@@ -40,11 +41,11 @@ export async function exportAdminRoutes(fastify: FastifyInstance) {
 
         const { date, startDate, endDate } = request.query || {};
         const hasRange = !!startDate && !!endDate;
-        const label = hasRange ? `${startDate} s/d ${endDate}` : date || formatLocalDate();
+        const label = hasRange ? `${startDate} s/d ${endDate}` : date || getLogDateString();
 
         const result = hasRange
           ? await chatExportService.generateRange(tenantId, startDate!, endDate!)
-          : await chatExportService.generateDay(tenantId, date || formatLocalDate());
+          : await chatExportService.generateDay(tenantId, date || getLogDateString());
 
         if (!result.success) {
           return reply.status(400).send({ success: false, error: result.error || 'Gagal generate ekspor chat.' });

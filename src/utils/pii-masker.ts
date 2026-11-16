@@ -16,6 +16,24 @@ export function maskPhoneNumber(phone?: string | null): string {
 }
 
 /**
+ * Menyensor nomor telepon dengan format 4+4 dan mempertahankan suffix :tenantId (dipakai oleh Meta CAPI & audit log).
+ * Jika nomor kosong, mengembalikan '(no-phone)'.
+ */
+export function maskPhoneWithTenantSuffix(phone?: string | null): string {
+  if (!phone || !phone.trim()) return '(no-phone)';
+  const trimmed = phone.trim();
+  if (trimmed.includes(':')) {
+    const [p, ...rest] = trimmed.split(':');
+    return `${maskPhoneWithTenantSuffix(p)}:${rest.join(':')}`;
+  }
+  if (trimmed.length <= 4) return '****';
+  if (trimmed.length < 8) {
+    return `${trimmed.slice(0, 2)}****${trimmed.slice(-2)}`;
+  }
+  return `${trimmed.slice(0, 4)}****${trimmed.slice(-4)}`;
+}
+
+/**
  * maskPhoneInText — sensor 5 digit terakhir nomor HP Indonesia di teks bebas.
  *
  * - Mendeteksi 08xx, +628xx, 628xx, wa.me/xxx, JID @c.us/@s.whatsapp.net/@lid

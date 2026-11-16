@@ -44,6 +44,26 @@ jobs:
       - name: Typecheck Backend
         run: npm run typecheck
 
+      - name: Reuse Gate
+        run: node scripts/reuse/check-reuse.mjs --json > reuse-report.json
+
+      - name: Upload Reuse Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reuse-report
+          path: reuse-report.json
+
+      - name: Architecture Gate
+        run: node scripts/reuse/check-architecture.mjs --json > architecture-report.json
+
+      - name: Upload Architecture Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: architecture-report
+          path: architecture-report.json
+
       - name: Build Backend & Admin Dashboard
         run: npm run build:all
 
@@ -54,6 +74,9 @@ jobs:
         run: |
           cd packages/admin-dashboard
           npm run check:design
+
+      - name: UI Reuse Gate
+        run: npm run check:ui-reuse
 
       - name: Run Unit Tests (Baseline-Diff Gate)
         run: |

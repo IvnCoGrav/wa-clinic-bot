@@ -68,7 +68,7 @@ import {
 } from '../../utils/reservationConflicts';
 import { resolveStaffName } from '../../utils/resolveStaffName';
 import { AddressBookDrawer } from '../customer/AddressBookDrawer';
-import { recommendSlots } from '../../utils/slotRecommendations';
+import { recommendSlots, formatMinutesToTime } from '../../utils/slotRecommendations';
 
 // Koordinat klinik fallback (netral). Nilai sebenarnya diambil per tenant dari
 // `GET /api/admin/tenant-settings` saat modal dibuka (Cfg-015).
@@ -77,12 +77,6 @@ const FALLBACK_CLINIC_COORDS = {
   lng: 112.751677,
   name: 'Klinik',
 };
-
-function formatMinutesToTime(totalMinutes: number): string {
-const h = Math.floor(totalMinutes / 60) % 24;
-  const m = totalMinutes % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-}
 
 export interface SlotRecommendation {
   startTime: string;
@@ -2363,7 +2357,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         <form ref={formDirtyContainerRef} onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 w-full">
           <div className="space-y-4 overflow-y-auto overflow-x-hidden pr-1 flex-1 min-h-0 w-full max-w-full touch-pan-y overscroll-contain scroll-pb-32 sm:scroll-pb-8" style={{ WebkitOverflowScrolling: 'touch' as any }}>
           {/* Ringkasan validasi: semua kesalahan tampil sekaligus */}
-          <div ref={errorSummaryRef} tabIndex={-1} className="outline-none">
+          <div ref={errorSummaryRef} tabIndex={-1} className="focus:outline-none">
             <FormErrorSummary issues={issues} className="mb-2" />
           </div>
 
@@ -3294,6 +3288,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                     onClick={() => setShowBookedSlotsModal(true)}
                     className="p-2 shrink-0 bg-accent-soft hover:bg-accent-soft text-accent rounded-xl border border-divider dark:border-accent/30 shadow-xs transition cursor-pointer active:scale-95"
                     title="Lihat Jadwal Terisi Hari Ini"
+                    aria-label="Lihat Jadwal Terisi Hari Ini"
                   >
                     <CalendarDays size={16} />
                   </button>
@@ -4045,8 +4040,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
         {/* 409 Conflict resolution dialog */}
         {showConflictModal && conflictInfo && (
-          <div className="modal-backdrop fixed inset-0 bg-black/70 z-dialog-top flex items-center justify-center p-4" onClick={() => setShowConflictModal(false)}>
-            <div className="w-full max-w-md bg-surface rounded-2xl p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div role="presentation" className="modal-backdrop fixed inset-0 bg-black/70 z-dialog-top flex items-center justify-center p-4" onClick={() => setShowConflictModal(false)}>
+            <div role="dialog" aria-modal="true" className="w-full max-w-md bg-surface rounded-2xl p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
               <h4 className="text-sm font-bold text-ink">
                 {conflictInfo.code === 'STAFF_COLLISION' ? '⛔ Jadwal Terapis Bentrok' : '⛔ Duplikat Booking Terdeteksi'}
               </h4>

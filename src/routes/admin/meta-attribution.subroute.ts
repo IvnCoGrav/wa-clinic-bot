@@ -1,5 +1,13 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../../db/client';
+import {
+  findCustomerByPhoneSuffix,
+  getAttributionCounts,
+  getManualSendHistory,
+  getPageViewSummary,
+  getTenantForCapiHealth,
+  listAdClicks,
+} from '../../services/meta-attribution.service';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { tenantOf, resolveSessionTenantId } from './route-helpers';
 import { auditService } from '../../services/audit.service';
@@ -142,16 +150,7 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
         if (filters.status === 'matched') where.matchedAt = { not: null };
         if (filters.status === 'unmatched') where.matchedAt = null;
 
-        const [total, rows] = await Promise.all([
-          prisma.adClick.count({ where }),
-          prisma.adClick.findMany({
-            where,
-            include: { customer: { select: { id: true, name: true, phone: true } } },
-            orderBy: { createdAt: 'desc' },
-            skip: (page - 1) * pageSize,
-            take: pageSize,
-          }),
-        ]);
+        const { total, rows } = await listAdClicks({ where, page, pageSize });
 
         const entries = rows.map((r: any) => ({
           id: r.id,
@@ -275,8 +274,13 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
         const approvedWhere: any = { tenant_id: tenantId, purchase_review_status: 'approved' };
         if (dateRange.createdAt) approvedWhere.purchase_event_sent_at = dateRange.createdAt;
 
-        const [
-          views,
+        const [pageViewSummary, counts] = await Promise.all([
+          getPageViewSummary(pageViewWhere),
+          getAttributionCounts({ tenantId, adClickWhere, mqlWhere, approvedWhere }),
+        ]);
+        const views = pageViewSummary.views;
+        const viewsBySourceRows = pageViewSummary.bySourceRows;
+        const {
           clicks,
           matched,
           mqlCount,
@@ -285,31 +289,7 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
           approvedAllCount,
           pendingCount,
           rejectedCount,
-          viewsBySourceRows,
-        ] = await Promise.all([
-          (prisma as any).landingPageView.count({ where: pageViewWhere }).catch(() => 0),
-          prisma.adClick.count({ where: adClickWhere }),
-          prisma.adClick.count({ where: { ...adClickWhere, matchedAt: { not: null } } }),
-          prisma.customer.count({ where: mqlWhere }),
-          prisma.customer.count({ where: { tenant_id: tenantId, is_mql: true } }),
-          prisma.reservation.count({ where: approvedWhere }),
-          prisma.reservation.count({ where: { tenant_id: tenantId, purchase_review_status: 'approved' } }),
-          // pending & ignored_outlier = antrian point-in-time (by design tanpa dateRange)
-          prisma.reservation.count({ where: { tenant_id: tenantId, purchase_review_status: 'pending' } }),
-          prisma.reservation.count({ where: { tenant_id: tenantId, purchase_review_status: 'ignored_outlier' } }),
-          // Rincian sumber: catch-per-query (bukan Promise.all fatal) agar DB live
-          // yang BELUM menjalankan migrasi kolom `source` tetap mengembalikan
-          // total — UI menyembunyikan rincian bila field absen.
-          // Guard typeof: pemanggilan method yang tidak ada melempar SINKRON
-          // (catch promise tidak terpasang) — harus dicek sebelum dipanggil.
-          (typeof (prisma as any).landingPageView?.groupBy === 'function'
-            ? (prisma as any).landingPageView.groupBy({
-                by: ['source'],
-                where: pageViewWhere,
-                _count: { _all: true },
-              }).catch(() => null)
-            : Promise.resolve(null)),
-        ]);
+        } = counts;
         totalClicks = clicks;
         // Hapus masking kosmetik: views murni (tanpa fallback ke clicks) agar dashboard jujur
         totalPageViews = views;
@@ -393,10 +373,7 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
       };
 
       // Kesehatan CAPI (tenant-aware + env fallback), token TIDAK pernah dibocorkan
-      let tenant: any = null;
-      try {
-        tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
-      } catch {}
+      const tenant: any = await getTenantForCapiHealth(tenantId);
       const envPixel = process.env.FB_PIXEL_ID;
       const envToken = process.env.FB_CAPI_ACCESS_TOKEN;
       const hasDbConfig = Boolean(tenant?.meta_pixel_id || tenant?.meta_capi_access_token);
@@ -711,13 +688,7 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
       try {
         const tenantId = tenantOf(request);
         // Cari customer di DB jika ada untuk ambil PII & adClick
-        let customer = await prisma.customer.findFirst({
-          where: {
-            phone: { contains: cleanPhone.slice(-9) },
-            ...(tenantId ? { tenant_id: tenantId } : {}),
-          },
-          include: { adClick: true },
-        });
+        const customer = await findCustomerByPhoneSuffix(cleanPhone, tenantId);
 
         const effectiveCustomer = customer || ({
           id: `temp_${Date.now()}`,
@@ -832,27 +803,7 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
   fastify.get('/api/admin/debug/meta-manual-history', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const tenantId = tenantOf(request);
-      const logs = await prisma.auditLog.findMany({
-        where: {
-          tenant_id: tenantId,
-          action: { in: ['MANUAL_SEND_META_EVENT', 'TEST_SEND_CAPI_EVENT', 'APPROVE_PURCHASE_EVENT'] },
-        },
-        orderBy: { created_at: 'desc' },
-        take: 30,
-      });
-
-      // Kumpulkan target_id untuk resolusi data customer/reservasi
-      const targetIds = logs.map((l: any) => l.target_id).filter(Boolean);
-      const [customers, reservations] = await Promise.all([
-        prisma.customer.findMany({
-          where: { id: { in: targetIds } },
-          include: { adClick: true },
-        }),
-        prisma.reservation.findMany({
-          where: { id: { in: targetIds } },
-          include: { customer: { include: { adClick: true } } },
-        }),
-      ]);
+      const { logs, customers, reservations } = await getManualSendHistory(tenantId);
 
       const customerMap = new Map(customers.map((c: any) => [c.id, c]));
       const reservationMap = new Map(reservations.map((r: any) => [r.id, r]));

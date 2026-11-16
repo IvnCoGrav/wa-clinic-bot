@@ -12,6 +12,7 @@
     "check:a11y": "node scripts/check-a11y-strings.mjs",
     "check:contrast": "node scripts/check-contrast-pairs.mjs",
     "check:dates": "node scripts/check-date-format.mjs",
+    "check:ui-reuse": "node scripts/check-ui-reuse.mjs",
     "check:design": "npm run check:tokens && npm run check:dark-parity && npm run check:a11y && npm run check:contrast && npm run check:dates"
   },
   "dependencies": {

@@ -22,6 +22,7 @@ import { prisma } from '../db/client';
 import { resolveTenantCapiCredentials } from '../services/capi.service';
 import { reconcileMetaPageViews, MetaInsightRow } from '../services/meta-ads-insights.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { parseCliArgs, getArgBoolean } from './lib/parse-args';
 
 interface CliOptions {
   start?: string;
@@ -32,19 +33,18 @@ interface CliOptions {
   execute: boolean;
 }
 
-function parseArgs(): CliOptions {
-  const args = process.argv.slice(2);
-  const out: CliOptions = { dryRun: true, execute: false };
-  for (let i = 0; i < args.length; i++) {
-    const a = args[i];
-    if (a === '--dry-run') out.dryRun = true;
-    else if (a === '--execute') { out.dryRun = false; out.execute = true; }
-    else if (a === '--start') out.start = args[++i];
-    else if (a === '--end') out.end = args[++i];
-    else if (a === '--tenantId') out.tenantId = args[++i];
-    else if (a === '--file') out.file = args[++i];
-  }
-  return out;
+function loadParams(): CliOptions {
+  const parsed = parseCliArgs();
+  const execute = getArgBoolean(parsed, 'execute', false);
+  const dryRun = execute ? false : getArgBoolean(parsed, 'dry-run', true);
+  return {
+    dryRun,
+    execute,
+    start: parsed.start ? String(parsed.start) : undefined,
+    end: parsed.end ? String(parsed.end) : undefined,
+    tenantId: parsed.tenantId ? String(parsed.tenantId) : undefined,
+    file: parsed.file ? String(parsed.file) : undefined,
+  };
 }
 
 async function fetchMetaInsights(accessToken: string, adAccountId: string, start: string, end: string): Promise<any[]> {
@@ -61,7 +61,7 @@ async function fetchMetaInsights(accessToken: string, adAccountId: string, start
 }
 
 async function main() {
-  const opts = parseArgs();
+  const opts = loadParams();
 
   if (!opts.start || !opts.end) {
     console.error('Wajib --start YYYY-MM-DD dan --end YYYY-MM-DD');

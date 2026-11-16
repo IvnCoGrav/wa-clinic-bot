@@ -11,10 +11,10 @@ import {
   buildDailyChatMarkdown,
   roleLabel,
   formatTime,
-  formatLocalDate,
   parseDateRange,
   type ExportConversation,
 } from '../../src/services/chat-export.service';
+import { getLogDateString } from '../../src/utils/log-date';
 
 const makeConversation = (overrides: Partial<ExportConversation> = {}): ExportConversation => ({
   id: 'conv-1',
@@ -42,7 +42,7 @@ describe('roleLabel — penanda peran untuk pembaca AI', () => {
   it('null -> UNKNOWN', () => expect(roleLabel(null, null)).toBe('UNKNOWN'));
 });
 
-describe('formatTime / formatLocalDate / parseDateRange', () => {
+describe('formatTime / getLogDateString / parseDateRange', () => {
   it('formatTime memformat HH:MM:SS', () => {
     const d = new Date(2026, 7, 13, 10, 5, 7);
     expect(formatTime(d)).toBe('10:05:07');
@@ -52,9 +52,9 @@ describe('formatTime / formatLocalDate / parseDateRange', () => {
     expect(formatTime(new Date('2026-08-13T10:05:07Z'))).toMatch(/^\d{2}:\d{2}:\d{2}$/);
   });
 
-  it('formatLocalDate menghasilkan YYYY-MM-DD', () => {
+  it('getLogDateString menghasilkan YYYY-MM-DD untuk nama file ekspor/log', () => {
     const d = new Date(2026, 7, 13, 15, 30);
-    expect(formatLocalDate(d)).toBe('2026-08-13');
+    expect(getLogDateString(d)).toBe('2026-08-13');
   });
 
   it('parseDateRange memakai batas hari WIB (K-006), bukan UTC', () => {

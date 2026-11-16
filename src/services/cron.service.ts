@@ -229,9 +229,10 @@ export class CronService {
    */
   public async runDailyChatExport(): Promise<void> {
     try {
-      const { chatExportService, formatLocalDate } = await import('./chat-export.service');
+      const { chatExportService } = await import('./chat-export.service');
+      const { getLogDateString } = await import('../utils/log-date');
       const { getAllTenantIds } = await import('./media.service');
-      const today = formatLocalDate();
+      const today = getLogDateString();
       const tenants = await getAllTenantIds();
       let exported = 0;
       let totalConversations = 0;

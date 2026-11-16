@@ -113,6 +113,7 @@ scripts/process-chat-bank.*
 scripts/db_customers.json
 scripts/db_reservations.json
 scripts/*.json
+!scripts/module-registry.json
 scripts/__pycache__/
 # Semua skrip analisis lokal di scripts/ (one-off, memuat query DB/PII) - jangan commit
 scripts/*.py

@@ -11,42 +11,30 @@
 
 import { prisma } from '../db/client';
 import { AdWatchdogSettingsSchema, DEFAULT_AD_WATCHDOG_SETTINGS } from '../services/ad-watchdog.service';
+import { parseCliArgs, getArgBoolean, getArgNumber, getArgString } from './lib/parse-args';
 
-function parseArgs() {
-  const args = process.argv.slice(2);
-  const options: Record<string, string | boolean> = {};
-
-  for (const arg of args) {
-    if (arg.startsWith('--')) {
-      const [key, val] = arg.slice(2).split('=');
-      if (val !== undefined) {
-        options[key] = val;
-      } else {
-        options[key] = true;
-      }
-    }
-  }
-
+function loadParams() {
+  const options = parseCliArgs();
   return {
-    tenantId: (options.tenant as string) || 'default-tenant',
+    tenantId: getArgString(options, 'tenant', 'default-tenant'),
     enabled: options.enabled !== undefined ? options.enabled === 'true' || options.enabled === true : undefined,
-    minViews: options['min-views'] ? Number(options['min-views']) : undefined,
-    minCtr: options['min-ctr'] ? Number(options['min-ctr']) : undefined,
-    minAgedClicks: options['min-aged-clicks'] ? Number(options['min-aged-clicks']) : undefined,
-    graceMinutes: options['grace-minutes'] ? Number(options['grace-minutes']) : undefined,
-    cooldownMinutes: options['cooldown-minutes'] ? Number(options['cooldown-minutes']) : undefined,
-    lowTrafficRatio: options['low-traffic-ratio'] ? Number(options['low-traffic-ratio']) : undefined,
-    startHour: options['start-hour'] ? Number(options['start-hour']) : undefined,
-    endHour: options['end-hour'] ? Number(options['end-hour']) : undefined,
+    minViews: getArgNumber(options, 'min-views'),
+    minCtr: getArgNumber(options, 'min-ctr'),
+    minAgedClicks: getArgNumber(options, 'min-aged-clicks'),
+    graceMinutes: getArgNumber(options, 'grace-minutes'),
+    cooldownMinutes: getArgNumber(options, 'cooldown-minutes'),
+    lowTrafficRatio: getArgNumber(options, 'low-traffic-ratio'),
+    startHour: getArgNumber(options, 'start-hour'),
+    endHour: getArgNumber(options, 'end-hour'),
     telegramTopic: options['telegram-topic'] !== undefined
       ? (options['telegram-topic'] === 'null' ? null : Number(options['telegram-topic']))
       : undefined,
-    commit: Boolean(options.commit),
+    commit: getArgBoolean(options, 'commit', false),
   };
 }
 
 async function main() {
-  const params = parseArgs();
+  const params = loadParams();
   console.log(`[SEED AD WATCHDOG] Target Tenant: ${params.tenantId}`);
   console.log(`[SEED AD WATCHDOG] Mode: ${params.commit ? 'COMMIT (Write to DB)' : 'DRY RUN (No changes)'}`);
 

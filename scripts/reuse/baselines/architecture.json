@@ -1,0 +1,201 @@
+{
+  "version": 1,
+  "generatedFromCommit": "ede933c4",
+  "layerViolations": [
+    {
+      "rule": "LAYER_SERVICES",
+      "file": "src/services/ad-attribution.service.ts",
+      "target": "src/routes/tracking.route.ts",
+      "line": 3
+    },
+    {
+      "rule": "LAYER_SERVICES",
+      "file": "src/services/meta-ads-insights.service.ts",
+      "target": "src/routes/tracking.route.ts",
+      "line": 2
+    },
+    {
+      "rule": "LAYER_UTILS",
+      "file": "src/utils/customer-bypass.ts",
+      "target": "src/db/client.ts",
+      "line": 1
+    },
+    {
+      "rule": "LAYER_UTILS",
+      "file": "src/utils/customer-bypass.ts",
+      "target": "src/services/customer.service.ts",
+      "line": 187
+    },
+    {
+      "rule": "LAYER_UTILS",
+      "file": "src/utils/jid.ts",
+      "target": "src/integrations/waha/label-cache.ts",
+      "line": 1
+    },
+    {
+      "rule": "LAYER_UTILS",
+      "file": "src/utils/llm-audit-buffer.ts",
+      "target": "src/db/client.ts",
+      "line": 141
+    },
+    {
+      "rule": "LAYER_UTILS",
+      "file": "src/utils/reservation-text-parser.ts",
+      "target": "src/services/treatment-catalog.service.ts",
+      "line": 4
+    },
+    {
+      "rule": "LAYER_UTILS",
+      "file": "src/utils/reservation-text-parser.ts",
+      "target": "src/db/client.ts",
+      "line": 141
+    }
+  ],
+  "adminIntegrations": [
+    {
+      "file": "src/routes/admin/customers-location.subroute.ts",
+      "target": "src/integrations/google-maps/geocoding.ts"
+    },
+    {
+      "file": "src/routes/admin/evaluations.subroute.ts",
+      "target": "src/integrations/llm/context.ts"
+    },
+    {
+      "file": "src/routes/admin/evaluations.subroute.ts",
+      "target": "src/integrations/waha/client.ts"
+    },
+    {
+      "file": "src/routes/admin/google-integration.subroute.ts",
+      "target": "src/integrations/google-contacts/google-oauth.client.ts"
+    },
+    {
+      "file": "src/routes/admin/knowledge.subroute.ts",
+      "target": "src/integrations/whatsapp/factory.ts"
+    },
+    {
+      "file": "src/routes/admin/livechat.subroute.ts",
+      "target": "src/integrations/whatsapp/factory.ts"
+    },
+    {
+      "file": "src/routes/admin/livechat.subroute.ts",
+      "target": "src/integrations/whatsapp/index.ts"
+    },
+    {
+      "file": "src/routes/admin/settings-ai.subroute.ts",
+      "target": "src/integrations/llm/llm-gateway.ts"
+    },
+    {
+      "file": "src/routes/admin/settings-ai.subroute.ts",
+      "target": "src/integrations/llm/model-fallback.ts"
+    },
+    {
+      "file": "src/routes/admin/settings-general.subroute.ts",
+      "target": "src/integrations/waha/client.ts"
+    },
+    {
+      "file": "src/routes/admin/waba.subroute.ts",
+      "target": "src/integrations/waha/client.ts"
+    },
+    {
+      "file": "src/routes/admin/waba.subroute.ts",
+      "target": "src/integrations/whatsapp/factory.ts"
+    }
+  ],
+  "cycles": [
+    [
+      "src/integrations/waha/client.ts",
+      "src/integrations/whatsapp/transport.ts",
+      "src/services/whatsapp-provider.service.ts",
+      "src/services/message.service.ts",
+      "src/services/message-pin.service.ts",
+      "src/services/conversation.service.ts",
+      "src/services/ai-eligibility.service.ts",
+      "src/v3/state/goal-tracker.ts",
+      "src/services/reservation-address-sync.service.ts",
+      "src/services/message-reaction.service.ts",
+      "src/services/message-read-status.service.ts",
+      "src/services/inbound-notification-router.service.ts",
+      "src/integrations/whatsapp/factory.ts",
+      "src/integrations/whatsapp/waha.driver.ts",
+      "src/integrations/whatsapp/waba.driver.ts",
+      "src/services/staff-notification.service.ts",
+      "src/services/staff-notification-formatter.service.ts",
+      "src/services/staff-notification-previsit.service.ts",
+      "src/services/staff-notification-events.service.ts",
+      "src/services/staff-notification-briefing.service.ts",
+      "src/services/live-chat.service.ts",
+      "src/services/human-background-enrichment.service.ts",
+      "src/services/location-resolver.service.ts",
+      "src/services/customer.service.ts",
+      "src/utils/customer-bypass.ts",
+      "src/services/location-ingest.service.ts",
+      "src/services/staff-reservation.service.ts",
+      "src/services/capi.service.ts",
+      "src/services/reservation-core.service.ts",
+      "src/services/reservation-lifecycle.service.ts",
+      "src/services/follow-up.service.ts",
+      "src/services/follow-up-lifecycle.service.ts",
+      "src/services/follow-up-engine.service.ts",
+      "src/services/typing.service.ts"
+    ],
+    [
+      "src/routes/staff.route.ts",
+      "src/routes/staff/today.subroute.ts"
+    ],
+    [
+      "src/services/google-contacts-outbox.service.ts",
+      "src/services/google-contacts.service.ts"
+    ],
+    [
+      "src/services/queue.service.ts",
+      "src/state-machine/machine.ts"
+    ],
+    [
+      "src/utils/gazetteer-zipcode-resolver.ts",
+      "src/utils/gazetteer.ts"
+    ],
+    [
+      "src/v3/agent/persona.ts",
+      "src/v3/agent/prompt/prompt-composer.ts"
+    ]
+  ],
+  "prismaBudget": {
+    "totalCalls": 270,
+    "files": {
+      "src/routes/admin/auth.subroute.ts": 2,
+      "src/routes/admin/ctwa-catchers.subroute.ts": 6,
+      "src/routes/admin/customers-address.subroute.ts": 2,
+      "src/routes/admin/customers-export.subroute.ts": 6,
+      "src/routes/admin/customers-location.subroute.ts": 1,
+      "src/routes/admin/customers.subroute.ts": 9,
+      "src/routes/admin/evaluations.subroute.ts": 9,
+      "src/routes/admin/knowledge.subroute.ts": 10,
+      "src/routes/admin/labels.subroute.ts": 24,
+      "src/routes/admin/landings.subroute.ts": 13,
+      "src/routes/admin/livechat.subroute.ts": 16,
+      "src/routes/admin/migration.subroute.ts": 30,
+      "src/routes/admin/push.subroute.ts": 1,
+      "src/routes/admin/reservation-crud.route.ts": 21,
+      "src/routes/admin/reservation-dispatch-crud.subroute.ts": 16,
+      "src/routes/admin/reservation-dispatch-payment-proof.subroute.ts": 16,
+      "src/routes/admin/reservation-dispatch-status.subroute.ts": 12,
+      "src/routes/admin/reservation-dispatch-trip.subroute.ts": 4,
+      "src/routes/admin/roles.subroute.ts": 3,
+      "src/routes/admin/settings-ai.subroute.ts": 10,
+      "src/routes/admin/settings-general.subroute.ts": 9,
+      "src/routes/admin/settings-notifications.subroute.ts": 6,
+      "src/routes/admin/staff-management.subroute.ts": 7,
+      "src/routes/admin/staff-retention.subroute.ts": 1,
+      "src/routes/admin/waba.subroute.ts": 4,
+      "src/routes/health.route.ts": 1,
+      "src/routes/landing.route.ts": 5,
+      "src/routes/media.route.ts": 2,
+      "src/routes/staff/auth.subroute.ts": 1,
+      "src/routes/staff/today.subroute.ts": 5,
+      "src/routes/telegram-webhook.route.ts": 8,
+      "src/routes/tracking.route.ts": 2,
+      "src/routes/waba-webhook.route.ts": 1,
+      "src/routes/webhook.route.ts": 7
+    }
+  }
+}

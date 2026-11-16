@@ -60,6 +60,14 @@ describe('FASE 5a — customer repository', () => {
     expect(updated.kota).toBe('Sidoarjo');
   });
 
+  it('InMemory: findById terisolasi tenant dan null untuk id tidak dikenal', async () => {
+    const repo = new InMemoryCustomerRepository();
+    const created = await repo.create({ tenant_id: 'tenant-a', phone: '6281' });
+    expect(await repo.findById(created.id, 'tenant-a')).toBe(created);
+    expect(await repo.findById(created.id, 'tenant-b')).toBeNull();
+    expect(await repo.findById('cust-tidak-ada', 'tenant-a')).toBeNull();
+  });
+
   it('InMemory: update id tak dikenal → throw (bukan diam)', async () => {
     const repo = new InMemoryCustomerRepository();
     await expect(repo.update('nope', {}, 't')).rejects.toThrow();

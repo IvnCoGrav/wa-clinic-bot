@@ -5,9 +5,9 @@
  * dan Human Background Enrichment Service.
  */
 
-const QUESTION_LEAD_RE = /^(?:dimana|di\s*mana|dmana|mana|mna|mn|apa|apakah|yg\s+mana|yang\s+mana|sebelah\s+mana)\b/i;
+export const QUESTION_LEAD_RE = /^(?:dimana|di\s*mana|dmana|mana|mna|mn|apa|apakah|yg\s+mana|yang\s+mana|sebelah\s+mana)\b/i;
 const CLINIC_LOCATION_QUESTION_RE = /\b(?:tanya|mau\s+tanya|pengen\s+tanya|nanya|mau\s+nanya)\b.*?\b(?:lokasi|alamat|klinik|tempat)(?:nya|ku|mu)?\b/i;
-const LOCATION_QUESTION_PHRASE_RE = /\b(?:lokasi|alamat|klinik|tempat)(?:nya)?\s*(?:di\s*)?(?:mana|mn|mna|dmana|dimana)\b/i;
+const LOCATION_QUESTION_PHRASE_RE = /\b(?:lokasi|alamat|klinik|tempat)(?:\s*nya)?\s*(?:di\s*)?(?:mana|mn|mna|dmana|dimana)\b/i;
 
 /**
  * True jika teks adalah pertanyaan tentang lokasi klinik (bukan pemberian alamat).
