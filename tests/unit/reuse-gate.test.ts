@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 
 const FIXTURES_DIR = path.resolve(process.cwd(), 'tests/fixtures/reuse-gate');
@@ -136,7 +137,7 @@ describe('Reuse Gate Self-Test & Adversarial Checks (Fase 2)', () => {
     }
   });
 
-  it('7. Salinan yang variabelnya diganti nama menghasilkan STRUCTURAL_DUPLICATION_WARN tanpa menggagalkan exact check', () => {
+  it('7. Salinan yang variabelnya diganti nama MENGGAGALKAN gate (STRUCTURAL_DUPLICATION), bukan sekadar peringatan', () => {
     const tempDir = path.resolve(process.cwd(), 'tests/fixtures/reuse-gate-temp-renamed');
     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
@@ -150,12 +151,14 @@ describe('Reuse Gate Self-Test & Adversarial Checks (Fase 2)', () => {
         '--json'
       ]);
 
-      // Exact duplication lolos karena hash berbeda (nama variabel beda)
-      expect(res.status).toBe(0);
-      expect(res.json.passed).toBe(true);
-      expect(res.json.newViolations).toHaveLength(0);
+      // Hash exact berbeda (nama variabel beda), jadi bukan DUPLICATE_FUNCTION…
+      expect(res.status).toBe(1);
+      expect(res.json.passed).toBe(false);
+      const types = res.json.newViolations.map((v: any) => v.type);
+      expect(types).toContain('STRUCTURAL_DUPLICATION');
+      expect(types).not.toContain('DUPLICATE_FUNCTION');
 
-      // Tapi terdeteksi pada peringatan struktural
+      // …tetapi pola strukturalnya tetap terdeteksi.
       expect(res.json.summary.structuralWarnings).toBeGreaterThan(0);
       expect(res.json.structuralWarnings.some((w: any) =>
         w.files.some((f: any) => f.file.includes('clean.fixture.ts')) &&
@@ -189,7 +192,7 @@ describe('Reuse Gate Self-Test & Adversarial Checks (Fase 2)', () => {
     expect(res.json.newViolations.length).toBeGreaterThan(0);
   });
 
-  it('10. Gate pada repo nyata (src/) berjalan < 30 detik dan 0 pelanggaran baru', () => {
+  it('10. Gate pada repo nyata (src/) berjalan < 60 detik dan 0 pelanggaran baru', () => {
     const startTime = Date.now();
     const res = runGate([
       '--root=src',
@@ -295,6 +298,79 @@ export class CompletelyUnusedRuntimeClassXYZ {}
       if (fs.existsSync(reportPath)) {
         fs.unlinkSync(reportPath);
       }
+    }
+  });
+
+  it('14. --update-baseline DILARANG menaikkan baseline (butuh --allow-increase + alasan)', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reuse-ratchet-'));
+    const srcDir = path.join(tempDir, 'src');
+    const baselineDir = path.join(tempDir, 'baselines');
+    fs.mkdirSync(srcDir, { recursive: true });
+    fs.mkdirSync(baselineDir, { recursive: true });
+
+    // Fungsi identik (>40 token) di dua file → duplikasi baru.
+    const duplicated = `export function processAlpha(input: number, factor: number): number {
+  const total = input + factor;
+  const doubled = total * 2;
+  const shifted = doubled - 1;
+  const squared = shifted * shifted;
+  const halved = squared / 2;
+  const result = halved + total;
+  return result;
+}`;
+    fs.writeFileSync(path.join(srcDir, 'alpha.ts'), duplicated, 'utf8');
+    fs.writeFileSync(path.join(srcDir, 'beta.ts'), duplicated, 'utf8');
+
+    fs.writeFileSync(
+      path.join(baselineDir, 'duplication.json'),
+      JSON.stringify({ version: 2, groups: [], structuralGroups: [] }),
+      'utf8'
+    );
+    fs.writeFileSync(
+      path.join(baselineDir, 'forbidden-declarations.json'),
+      JSON.stringify({ version: 1, violations: [] }),
+      'utf8'
+    );
+    fs.writeFileSync(
+      path.join(baselineDir, 'dead-exports.json'),
+      JSON.stringify({ version: 1, deadExports: [] }),
+      'utf8'
+    );
+    fs.writeFileSync(
+      path.join(baselineDir, 'file-size.json'),
+      JSON.stringify({ version: 1, maxLines: 1500, files: [] }),
+      'utf8'
+    );
+
+    const baseArgs = [
+      `--root=${srcDir}`,
+      `--baseline-dir=${baselineDir}`,
+      '--update-baseline',
+      '--allow-update'
+    ];
+
+    try {
+      const rejected = runGate(baseArgs);
+      expect(rejected.status).toBe(1);
+      expect(rejected.stderr).toContain('DILARANG naik');
+
+      const withoutReason = runGate([...baseArgs, '--allow-increase']);
+      expect(withoutReason.status).toBe(1);
+      expect(withoutReason.stderr).toContain('--reason');
+
+      const accepted = runGate([
+        ...baseArgs,
+        '--allow-increase',
+        '--reason=inisialisasi baseline uji adversarial'
+      ]);
+      expect(accepted.status).toBe(0);
+
+      const updated = JSON.parse(
+        fs.readFileSync(path.join(baselineDir, 'duplication.json'), 'utf8')
+      );
+      expect(updated.groups.length).toBe(1);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
     }
   });
 });

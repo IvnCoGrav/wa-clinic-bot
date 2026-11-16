@@ -5,6 +5,7 @@ import { ROOT_DIR, toAbsolute, toRelative, exists, listFiles } from './lib/paths
 import { listTsFiles, parseTsFile } from './lib/ast.mjs';
 import { buildImportGraph, findCircularDependencyCycles } from './lib/import-graph.mjs';
 import { BASELINE_DIR, getCurrentCommit, loadBaseline, saveBaseline } from './lib/baseline.mjs';
+import { findArchitectureBaselineIncreases, formatIncreases } from './lib/baseline-ratchet.mjs';
 import { loadExceptions, matchException, DEFAULT_EXCEPTIONS_FILE } from './lib/exceptions.mjs';
 
 function parseCliArgs() {
@@ -17,7 +18,9 @@ function parseCliArgs() {
     baselineDir: BASELINE_DIR,
     exceptionsFile: null,
     updateBaseline: false,
-    allowUpdate: false
+    allowUpdate: false,
+    allowIncrease: false,
+    reason: null
   };
 
   for (const arg of args) {
@@ -29,6 +32,8 @@ function parseCliArgs() {
     else if (arg.startsWith('--exceptions-file=')) options.exceptionsFile = arg.split('=')[1];
     else if (arg === '--update-baseline') options.updateBaseline = true;
     else if (arg === '--allow-update') options.allowUpdate = true;
+    else if (arg === '--allow-increase') options.allowIncrease = true;
+    else if (arg.startsWith('--reason=')) options.reason = arg.slice('--reason='.length);
   }
 
   return options;
@@ -188,13 +193,42 @@ async function runCheck() {
   // -------------------------------------------------------------
   if (options.updateBaseline && options.allowUpdate) {
     const commit = getCurrentCommit();
+    const previous = loadBaseline('architecture', options.baselineDir);
+    const writeLayers = !options.only || options.only === 'layers';
+    const writeAdmin = !options.only || options.only === 'admin-integrations';
+    const writeCycles = !options.only || options.only === 'cycles';
+    const writePrisma = !options.only || options.only === 'prisma-budget';
+    const increases = findArchitectureBaselineIncreases(previous, {
+      layerViolations: writeLayers ? currentLayerViolations : [],
+      adminIntegrations: writeAdmin ? currentAdminIntegrations : [],
+      cycles: writeCycles ? currentCycles : [],
+      prismaBudget: writePrisma ? currentPrismaBudget : { totalCalls: 0, files: {} }
+    });
+
+    if (increases.length > 0) {
+      if (!options.allowIncrease || !options.reason || options.reason.trim().length < 15) {
+        console.error('[ARCHITECTURE GATE ERROR] Baseline DILARANG naik. Ratchet hanya boleh menurun.');
+        console.error(formatIncreases(increases));
+        console.error(
+          'Bila kenaikan memang disengaja, jalankan ulang dengan ' +
+            '--allow-increase --reason="<alasan minimal 15 karakter>" dan catat di known issues.'
+        );
+        process.exit(1);
+      }
+      console.warn('[ARCHITECTURE GATE WARNING] Baseline dinaikkan secara eksplisit.');
+      console.warn(`  Alasan: ${options.reason.trim()}`);
+      console.warn(formatIncreases(increases));
+    }
+
     const baselineData = {
       version: 1,
       generatedFromCommit: commit,
-      layerViolations: currentLayerViolations,
-      adminIntegrations: currentAdminIntegrations.map(e => ({ file: e.file, target: e.target })),
-      cycles: currentCycles,
-      prismaBudget: currentPrismaBudget
+      layerViolations: writeLayers ? currentLayerViolations : (previous?.layerViolations || []),
+      adminIntegrations: writeAdmin
+        ? currentAdminIntegrations.map(e => ({ file: e.file, target: e.target }))
+        : (previous?.adminIntegrations || []),
+      cycles: writeCycles ? currentCycles : (previous?.cycles || []),
+      prismaBudget: writePrisma ? currentPrismaBudget : (previous?.prismaBudget || { totalCalls: 0, files: {} })
     };
 
     saveBaseline('architecture', baselineData, options.baselineDir);

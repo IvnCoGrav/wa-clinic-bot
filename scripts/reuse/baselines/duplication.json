@@ -1,5 +1,112 @@
 {
-  "version": 1,
-  "generatedFromCommit": "16293cc4",
-  "groups": []
+  "version": 2,
+  "generatedFromCommit": "9b60a1d4",
+  "groups": [],
+  "structuralGroups": [
+    {
+      "hash": "sha256:cbcc5c72a059d96f",
+      "tokenCount": 93,
+      "files": [
+        {
+          "file": "src/config/landmarks.ts",
+          "line": 33,
+          "name": "resolveLandmarksDataPath"
+        },
+        {
+          "file": "src/config/persona.ts",
+          "line": 13,
+          "name": "resolveCustomPersonaPath"
+        }
+      ]
+    },
+    {
+      "hash": "sha256:a9d9f6ad51f6e63e",
+      "tokenCount": 74,
+      "files": [
+        {
+          "file": "src/domain/customer-address/list.ts",
+          "line": 18,
+          "name": "parseSavedAddresses"
+        },
+        {
+          "file": "src/domain/customer-address/tombstones.ts",
+          "line": 24,
+          "name": "parseAddressTombstones"
+        }
+      ]
+    },
+    {
+      "hash": "sha256:00fae6daf70bbd3e",
+      "tokenCount": 46,
+      "files": [
+        {
+          "file": "src/integrations/whatsapp/waba.driver.ts",
+          "line": 51,
+          "name": "sendReactionMessage"
+        },
+        {
+          "file": "src/integrations/whatsapp/waba.driver.ts",
+          "line": 105,
+          "name": "sendTextMessage"
+        },
+        {
+          "file": "src/integrations/whatsapp/waba.driver.ts",
+          "line": 145,
+          "name": "sendTemplateMessage"
+        },
+        {
+          "file": "src/integrations/whatsapp/waba.driver.ts",
+          "line": 196,
+          "name": "sendImageMessage"
+        },
+        {
+          "file": "src/integrations/whatsapp/waha.driver.ts",
+          "line": 87,
+          "name": "sendReactionMessage"
+        },
+        {
+          "file": "src/integrations/whatsapp/waha.driver.ts",
+          "line": 131,
+          "name": "sendImageMessage"
+        }
+      ]
+    },
+    {
+      "hash": "sha256:badee6af77d2d1b3",
+      "tokenCount": 41,
+      "files": [
+        {
+          "file": "src/repositories/conversation.repository.ts",
+          "line": 203,
+          "name": "updateState"
+        },
+        {
+          "file": "src/repositories/conversation.repository.ts",
+          "line": 227,
+          "name": "flagForReview"
+        },
+        {
+          "file": "src/repositories/customer.repository.ts",
+          "line": 153,
+          "name": "update"
+        }
+      ]
+    },
+    {
+      "hash": "sha256:b1f742e058d918a9",
+      "tokenCount": 58,
+      "files": [
+        {
+          "file": "src/utils/llm-execution-logger.ts",
+          "line": 121,
+          "name": "scheduleLlmFlush"
+        },
+        {
+          "file": "src/utils/log-buffer.ts",
+          "line": 50,
+          "name": "scheduleFlush"
+        }
+      ]
+    }
+  ]
 }
