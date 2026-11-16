@@ -86,7 +86,8 @@
       "forbiddenDeclarations": [
         "maskPhone",
         "maskPhoneNumber",
-        "maskPhoneInText"
+        "maskPhoneInText",
+        "maskPhoneWithTenantSuffix"
       ],
       "allowedFiles": [
         "src/utils/pii-masker.ts"

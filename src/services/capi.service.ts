@@ -51,10 +51,8 @@ export function normalizePhoneToE164(phone: string): string {
 }
 
 /**
- * Mask nomor telepon untuk privasi log (GDPR/UU PDP).
- * Menjaga 4 digit pertama dan 4 digit terakhir, menyamarkan bagian tengah dengan bintang (*).
- * Jika ada suffix :tenantId, bagian tenantId tetap dipertahankan.
- * Didelegasikan ke modul kanonis src/utils/pii-masker.ts.
+ * Mask nomor telepon privasi log (4+4, suffix tenantId). Didelegasikan ke src/utils/pii-masker.ts.
+ * @deprecated Gunakan `maskPhoneWithTenantSuffix` langsung dari `src/utils/pii-masker`.
  */
 export { maskPhoneWithTenantSuffix as maskPhone };
 

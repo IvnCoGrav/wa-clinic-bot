@@ -5,6 +5,7 @@ import {
   maskPhoneWithTenantSuffix
 } from '../../src/utils/pii-masker';
 import { maskPhone as capiMaskPhone } from '../../src/services/capi.service';
+import { formatPhoneForReport } from '../../src/services/nightly-watchdog.service';
 
 describe('PII Masker Consolidation (Fase 4-3 - Opsi A)', () => {
   describe('1. maskPhoneWithTenantSuffix (CAPI 4+4 Standard)', () => {
@@ -57,6 +58,10 @@ describe('PII Masker Consolidation (Fase 4-3 - Opsi A)', () => {
       expect(maskPhoneNumber('1234')).toBe('***');
     });
 
+    it('menangani nomor 7 digit dengan pola 4+****+3', () => {
+      expect(maskPhoneNumber('1234567')).toBe('1234****567');
+    });
+
     it('mengembalikan string kosong untuk nilai kosong atau non-string', () => {
       expect(maskPhoneNumber(null)).toBe('');
       expect(maskPhoneNumber(undefined)).toBe('');
@@ -75,17 +80,16 @@ describe('PII Masker Consolidation (Fase 4-3 - Opsi A)', () => {
 
   describe('4. formatPhoneForReport (Watchdog Non-Masking Format)', () => {
     it('memformat nomor dengan tanda hubung dan TIDAK menyensor angka (kebutuhan owner)', () => {
-      // Fungsi helper lokal watchdog mempertahankan seluruh digit
-      const formatPhone = (phone: string): string => {
-        const p = (phone || '').replace(/\D/g, '');
-        if (p.length <= 4) return p;
-        return `${p.slice(0, 4)}-${p.slice(4, 8)}-${p.slice(-4)}`;
-      };
-
-      const out = formatPhone('081234567890');
+      // Menguji fungsi produksi langsung dari src/services/nightly-watchdog.service.ts
+      const out = formatPhoneForReport('081234567890');
       expect(out).toBe('0812-3456-7890');
       // Verifikasi TIDAK ada bintang (*) sensor
       expect(out).not.toContain('*');
+    });
+
+    it('mengembalikan nomor pendek apa adanya jika <= 4 digit', () => {
+      expect(formatPhoneForReport('123')).toBe('123');
+      expect(formatPhoneForReport('1234')).toBe('1234');
     });
   });
 });

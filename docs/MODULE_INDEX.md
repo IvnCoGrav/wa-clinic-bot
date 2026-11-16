@@ -64,7 +64,7 @@ Total kapabilitas terdaftar: **9 modul**.
 - **Deskripsi:** Menyensor nomor HP untuk log internal, audit trail, dan tampilan staf.
 - **File Kanonis:** [`src/utils/pii-masker.ts`](../src/utils/pii-masker.ts)
 - **Ekspor Kanonis:** `maskPhoneNumber`, `maskPhoneInText`, `maskPhoneWithTenantSuffix`
-- **Simbol Terlarang di Luar Kanonis:** `maskPhone`, `maskPhoneNumber`, `maskPhoneInText`
+- **Simbol Terlarang di Luar Kanonis:** `maskPhone`, `maskPhoneNumber`, `maskPhoneInText`, `maskPhoneWithTenantSuffix`
 - **File yang Diizinkan:** `src/utils/pii-masker.ts`
 - **File Test:** [`tests/unit/staff-chat-pii-masker.test.ts`](../tests/unit/staff-chat-pii-masker.test.ts)
 

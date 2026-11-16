@@ -41,7 +41,7 @@ function wibDayBoundsUtc(offsetDays = 0): { start: Date; end: Date } {
  * Format nomor telepon dengan tanda hubung agar mudah dibaca di pesan WhatsApp owner/manajemen.
  * SENGAJA TIDAK MENYENSOR nomor (bukan PII masking) karena nomor utuh diperlukan owner untuk follow-up operasional.
  */
-function formatPhoneForReport(phone: string): string {
+export function formatPhoneForReport(phone: string): string {
   const p = (phone || '').replace(/\D/g, '');
   if (p.length <= 4) return p;
   return `${p.slice(0, 4)}-${p.slice(4, 8)}-${p.slice(-4)}`;
