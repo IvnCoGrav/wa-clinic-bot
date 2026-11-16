@@ -11,30 +11,36 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Risiko yang belum ditutup (wajib dibaca saat resume):** PII/transkrip ke host AI, stdout pollution yang merusak JSON-RPC, duplikasi definisi metrik, write action tanpa auth/konfirmasi, dan endpoint HTTP publik yang harus hidup 24/7 untuk Claude web/mobile.
 - **Catatan:** “standby aktif” untuk Claude web/mobile berarti proses HTTP MCP harus tersedia saat tool dipanggil; soft-off hanya memblokir akses, bukan menghemat RAM. Jangan eksekusi tanpa persetujuan eksplisit user.
 
-## 345. [Code Health] Belum Ada Gerbang Anti-Duplikasi & Reuse Modul — Duplikasi Terbukti + Risiko Spaghetti (2026-11-16, OPEN)
+## 345. [Code Health] Gerbang Anti-Duplikasi, Reuse Modul & UI Governance (2026-11-16, RESOLVED)
 
-- **Status:** OPEN — hasil audit read-only commit `8e65834d` (working tree bersih). Belum ada kode yang diubah.
-- **Fakta terbukti (file:baris):**
-  - `isClinicLocationQuestion` disalin identik: `src/services/entity-extractor.service.ts:33-54` vs `src/utils/location-classifier.ts:1-26`.
-  - Dua `parseIndonesianDate` dengan signature/perilaku berbeda: `src/utils/indonesian-date-parser.ts:61` vs `src/utils/conversation-transaction-extractor.ts:208` (UTL-02 di `docs/MODULE_AUDIT_03_UTILS.md` masih terbuka).
-  - Rumus overlap jadwal ganda: `src/services/reservation-core.service.ts:316-325` vs `src/services/slot-overlap.service.ts:108-121`.
-  - Masking nomor HP 4 varian: `src/services/capi.service.ts:57`, `src/services/nightly-watchdog.service.ts:40`, `src/services/staff-retention.service.ts:718`, vs kanonis `src/utils/pii-masker.ts:11`.
-  - `withPaymentEvaluation` ganda: `src/routes/admin/reservation-crud.route.ts:23` vs `src/routes/admin/reservation-dispatch-crud.subroute.ts:26`.
-  - `parseArgs` 10x dan `main` 32x di `src/scripts` + `src/cli`; `escapeRegex`/`escapeRegExp` 5 salinan; heartbeat/cleanup SSE ganda (`livechat.subroute.ts` vs `staff/today.subroute.ts`).
-  - Dashboard: `isValidLatLng` 3x (`customerMapUtils.ts`, `dispatchMap.ts`, `geoUtils.ts`), `formatMinutesToTime` 2x (`CreateReservationModal.tsx:81`, `slotRecommendations.ts:63`), `norm` 3x.
-  - Scan blok (normalisasi baris, ≥12 baris, antar-file): 27 blok duplikat di luar `scripts`; 94 grup bila `scripts` ikut dihitung.
-- **Kesenjangan gerbang:** `.github/workflows/ci.yml` belum punya cek duplikasi/reuse/dead export; `tsconfig.json` tanpa `noUnusedLocals`; tidak ada ESLint/Knip/jscpd. Job CI bernama "Lint, Build & Test" tetapi tidak ada langkah lint.
-- **Sinyal tambahan (kandidat, bukan vonis):** 170 export function/const/class tanpa referensi di luar file (di luar `scripts`/`cli`; 573 jika mencakup type/interface); 285 panggilan Prisma langsung di 35 file route; **9 file >1.500 baris fisik** saat audit (sebelumnya tercatat 7 file karena `Measure-Object -Line` mengabaikan baris kosong): `customer.service.ts` 3.324, `staff-reservation.service.ts` 3.015, `treatment-catalog.service.ts` 2.536, `copilot-tools.ts` 1.795, `waha/client.ts` 1.767, `capi.service.ts` 1.646, `webhook.route.ts` 1.624, `live-chat.service.ts` 1.570, `meta-performance-analytics.service.ts` 1.567.
-- **Dampak:** pengetahuan yang sama tersebar; perubahan aturan (overlap jadwal, masking PII, parser tanggal) bisa tidak konsisten; risiko regresi dan biaya perawatan naik seiring jumlah modul.
-- **Rencana (belum dieksekusi, butuh persetujuan eksplisit):** 5 pilar — (1) registry modul `docs/MODULE_INDEX.md` + `scripts/module-registry.json`; (2) discovery `npm run find:module`; (3) gerbang AST zero-dependency (`check:reuse` dengan baseline ratchet, import boundary, file-size budget, dead export); (4) aturan UI reuse (registry komponen `components/ui`/`common`, galeri hidup, larangan page baru tanpa ADR); (5) burn-down baseline bertahap per sprint.
-- **Amendemen `AGENTS.md` (PERLU, belum dieksekusi — urutannya setelah Fase 1):** jangan menambah mandat panjang baru; cukup 4 edit minimum agar tidak terjadi *sprawl*:
-  1. `## Commands` (baris 7): koreksi klaim "tidak ada script typecheck" — faktanya `npm run typecheck` sudah ada; tambahkan `npm run find:module` dan `npm run check:reuse` **setelah** script-nya dibuat.
-  2. Mandat Anti-Bloat (baris 69): tambahkan 1–2 kalimat positif yang menunjuk `docs/MODULE_INDEX.md` + `ui-registry.json` + kewajiban plan menyebut modul yang dipakai.
-  3. Kontrak Kanonis Tunggal (baris 74): tambahkan konsep "pengetahuan kanonis" — satu modul per kapabilitas, alias lama *deprecated* sampai pemanggil terakhir dimigrasikan.
-  4. Gerbang Regresi Wajib (baris 75): tambahkan `npm run check:reuse` sebagai gerbang penutup fase.
-  Detail desain 5 pilar tetap di dokumen terpisah/registry, **bukan** di `AGENTS.md`; pointer wajib menunjuk path yang sudah ada. Contoh risiko pointer basi: baris 7 dan 70 (`634 file / 5151 test`) sudah tidak akurat — angka volatil sebaiknya tidak ditulis di `AGENTS.md`.
-- **Plan eksekusi:** `docs/PLAN_REUSE_GATE_2026-11-16.md` — 8 fase (0 baseline s/d 7 burn-down), micro-task, acceptance criteria, FMEA, dan rollback. Status plan: DRAFT, belum dieksekusi.
-- **Catatan prinsip:** duplikasi tidak otomatis salah. Yang dilarang adalah **pengetahuan yang sama** disalin (tanggal, PII, overlap jadwal, resolusi tenant). Duplikasi karena **alasan berubah berbeda** (adapter WAHA vs WABA, fixture test) tetap sah.
+- **Status:** RESOLVED (2026-11-16) — Eksekusi penuh 8 fase `docs/PLAN_REUSE_GATE_2026-11-16.md` (Fase 0 s/d Fase 7). Sistem anti-spaghetti dan reuse modul kanonis aktif lokal & CI.
+- **Hasil Terverifikasi:**
+  1. **Registry & Discovery (F1):** `scripts/module-registry.json` mencatat 11 kapabilitas kanonis; `docs/MODULE_INDEX.md` digenerate otomatis; pencarian instan via `npm run find:module -- "<kebutuhan>"`.
+  2. **Gate AST Backend Zero-Dependency (F2 & F3):** `npm run check:reuse` dan `npm run check:architecture` dengan sistem baseline ratchet (angka hanya boleh turun).
+  3. **Deduplikasi 7 Masalah Berisiko Tinggi (F4):**
+     - F4-1: `isClinicLocationQuestion` dikonsolidasi ke `src/utils/location-classifier.ts`.
+     - F4-2: `intervalsOverlap` dan `effectiveDuration` di `src/services/slot-overlap.service.ts` diekspor untuk shared use.
+     - F4-3: Masking PII `maskPhoneWithTenantSuffix` di `src/utils/pii-masker.ts` menggantikan 4 varian lokal.
+     - F4-4: Dual `parseIndonesianDate` disatukan ke `src/utils/indonesian-date-parser.ts` dengan policy seam (`rollPastToFuture`, `allowRelative`) + 32 real-world golden oracle test suites (TZ=UTC & TZ=Asia/Jakarta lulus).
+     - F4-5: Response builder `withPaymentEvaluation` dikonsolidasi ke `src/routes/admin/shared/reservation-response.ts`.
+     - F4-6: `escapeRegex` / `escapeRegExp` disatukan ke `src/utils/regex-escape.ts` di 6 konsumen.
+     - F4-7: Parsing argument di 10 file `src/scripts` disatukan ke `src/scripts/lib/parse-args.ts`.
+  4. **UI/UX Governance & Komponen Galeri (F5):**
+     - `packages/admin-dashboard/src/ui-registry.json` mencakup 100% halaman (61) dan komponen bersama (28).
+     - `packages/admin-dashboard/scripts/check-ui-reuse.mjs` (`npm run check:ui-reuse`) memblokir page baru tanpa ADR, duplikasi nama komponen, dialog `window.confirm`/`alert`, dan unauthorized `fetch()`.
+     - Galeri dev-only `UiCatalog.tsx` di `/ui-catalog` (ADR 0004) diisolasi `import.meta.env.DEV` (0 byte di bundle produksi).
+     - Konsolidasi util UI: `formatMinutesToTime` ke `slotRecommendations.ts`, `isValidLatLng` ke `geoUtils.ts`.
+  5. **Amendemen `AGENTS.md` & Pointer Guard (F6):** 4 edit terarah pada `AGENTS.md` dijaga oleh tes integritas fisik `tests/unit/agents-md-pointers.test.ts`.
+  6. **Governance & Burn-down (F7):** PR template di `.github/pull_request_template.md`, registry pengecualian berbatas waktu di `scripts/reuse/exceptions.json` (`docs/REUSE_EXCEPTIONS.md`), dan skrip pelaporan `npm run report:reuse`.
+- **Metrik Burn-down Saat Ini:**
+  - Duplikasi grup AST: 6 → **4 grup** (turun -2 grup).
+  - Deklarasi simbol terlarang: 20 → **15 simbol** (turun -5 simbol).
+  - Siklus arsitektur: 8 → **6 siklus** (turun -2 siklus).
+  - File >1.500 baris: terkunci di 9 file.
+  - Panggilan Prisma di rute: terkunci di 285 panggilan (35 file).
+  - Dead exports: terkunci di 170 export.
+  - Pelanggaran baru: **0 di seluruh gerbang**.
+- **Dokumentasi & Artefak:** `docs/PLAN_REUSE_GATE_2026-11-16.md`, `docs/MODULE_INDEX.md`, `docs/adr/0004-ui-catalog-dev-only.md`, `docs/REUSE_EXCEPTIONS.md`.
 
 ## 344. [Peta Pelanggan] Tab Sebaran Peta Gagal Dimuat — CSP Memblokir Leaflet dari unpkg (2026-11-14, RESOLVED)
 

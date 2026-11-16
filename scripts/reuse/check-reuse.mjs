@@ -61,6 +61,22 @@ async function runCheck() {
     registryErrors.push(`Gagal memuat registry: ${err.message}`);
   }
 
+  // Muat Exception Registry jika ada dan cek tanggal kedaluwarsa (F7-4)
+  const exceptionsFile = path.join(ROOT_DIR, 'scripts/reuse/exceptions.json');
+  if (fs.existsSync(exceptionsFile)) {
+    try {
+      const excData = JSON.parse(fs.readFileSync(exceptionsFile, 'utf8'));
+      const now = new Date();
+      for (const exc of excData.exceptions || []) {
+        if (exc.expiresAt && new Date(exc.expiresAt) < now) {
+          registryErrors.push(`[EXPIRED_EXCEPTION] Pengecualian "${exc.rule}" (${exc.reason}) telah kedaluwarsa pada ${exc.expiresAt}. Segera selesaikan refaktor.`);
+        }
+      }
+    } catch (e) {
+      registryErrors.push(`Gagal membaca scripts/reuse/exceptions.json: ${e.message}`);
+    }
+  }
+
   // 2. Kumpulkan file TS target
   const excludePatterns = isCustomRoot ? [] : ['src/scripts', 'src/cli'];
   const tsFiles = listTsFiles(targetRoot, { exclude: excludePatterns });

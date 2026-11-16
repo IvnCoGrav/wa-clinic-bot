@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "description": "Registry pengecualian sementara berbatas waktu (time-bound exceptions) untuk Reuse Gate & Arsitektur. Pengecualian yang melewati expiresAt akan otomatis menyebabkan gate gagal.",
+  "exceptions": []
+}
