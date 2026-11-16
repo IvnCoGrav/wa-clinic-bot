@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedFromCommit": "5eeb33c7",
+  "generatedFromCommit": "228fe014",
   "groups": [
     {
       "hash": "sha256:a8d5e6301af98235",
@@ -15,22 +15,6 @@
           "file": "src/repositories/customer.repository.ts",
           "line": 128,
           "name": "findById"
-        }
-      ]
-    },
-    {
-      "hash": "sha256:768db6ef3b0660f2",
-      "tokenCount": 47,
-      "files": [
-        {
-          "file": "src/services/reservation-core.service.ts",
-          "line": 315,
-          "name": "effectiveDuration"
-        },
-        {
-          "file": "src/services/slot-overlap.service.ts",
-          "line": 108,
-          "name": "effectiveDuration"
         }
       ]
     },

@@ -152,6 +152,24 @@
         "src/utils/time-wib.ts"
       ],
       "test": "tests/unit/wib-time-consolidation.test.ts"
+    },
+    {
+      "id": "schedule.overlap",
+      "title": "Deteksi tumpang tindih slot jadwal",
+      "description": "Menghitung durasi efektif dan memeriksa tumpang-tindih interval reservasi atau janji temu.",
+      "canonical": "src/services/slot-overlap.service.ts",
+      "exports": [
+        "effectiveDuration",
+        "intervalsOverlap"
+      ],
+      "forbiddenDeclarations": [
+        "effectiveDuration",
+        "intervalsOverlap"
+      ],
+      "allowedFiles": [
+        "src/services/slot-overlap.service.ts"
+      ],
+      "test": "tests/unit/slot-overlap-parity.test.ts"
     }
   ]
 }

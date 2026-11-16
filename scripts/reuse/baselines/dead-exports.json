@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedFromCommit": "5eeb33c7",
+  "generatedFromCommit": "228fe014",
   "deadExports": [
     {
       "type": "DEAD_EXPORT",
@@ -623,28 +623,28 @@
       "name": "CapacityExceededError",
       "kind": "class",
       "file": "src/services/reservation-core.service.ts",
-      "line": 104
+      "line": 105
     },
     {
       "type": "DEAD_EXPORT",
       "name": "MissingBookingDateError",
       "kind": "class",
       "file": "src/services/reservation-core.service.ts",
-      "line": 121
+      "line": 122
     },
     {
       "type": "DEAD_EXPORT",
       "name": "runWithAdvisoryLock",
       "kind": "function",
       "file": "src/services/reservation-core.service.ts",
-      "line": 276
+      "line": 277
     },
     {
       "type": "DEAD_EXPORT",
       "name": "ReservationCoreService",
       "kind": "class",
       "file": "src/services/reservation-core.service.ts",
-      "line": 813
+      "line": 802
     },
     {
       "type": "DEAD_EXPORT",
