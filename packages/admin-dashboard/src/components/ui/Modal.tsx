@@ -58,8 +58,16 @@ export const Modal: React.FC<ModalProps> = ({
   const panelRef = useRef<HTMLDivElement>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
   const titleIdRef = useRef(`modal-title-${Math.random().toString(36).slice(2, 9)}`);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
   useBodyScrollLock(open);
 
+  // Fokus awal HANYA saat modal dibuka/ditutup — BUKAN setiap render.
+  // Sebelumnya `onClose` ikut dependency: parent yang mengirim arrow function
+  // baru tiap render (mis. form reservasi saat mengetik) memicu effect ini
+  // berulang → fokus dilempar ke elemen pertama (tombol X).
   useEffect(() => {
     if (!open) return;
     restoreRef.current = document.activeElement as HTMLElement;
@@ -68,10 +76,20 @@ export const Modal: React.FC<ModalProps> = ({
       target?.focus();
     }, 0);
 
+    return () => {
+      window.clearTimeout(timer);
+      restoreRef.current?.focus?.();
+    };
+  }, [open, initialFocusRef]);
+
+  // Listener Escape/Tab terpisah: boleh re-bind saat onClose berubah, tetapi
+  // TIDAK boleh memindahkan fokus.
+  useEffect(() => {
+    if (!open) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== 'Tab' || !panelRef.current) return;
@@ -92,11 +110,9 @@ export const Modal: React.FC<ModalProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => {
-      window.clearTimeout(timer);
       window.removeEventListener('keydown', handleKeyDown);
-      restoreRef.current?.focus?.();
     };
-  }, [open, onClose, initialFocusRef]);
+  }, [open]);
 
   if (!open) return null;
 

@@ -102,6 +102,19 @@ export interface SavedMedia {
   thumbUrl: string | null; // relative URL thumbnail low-res (utk tampilan)
 }
 
+/** Folder khusus bukti pembayaran — TERPISAH dari media chat agar tidak ikut prune/retensi. */
+const PAYMENT_PROOF_FOLDER = 'payment-proofs';
+
+function paymentProofDir(tenantId: string): string {
+  const dir = path.join(MEDIA_ROOT, PAYMENT_PROOF_FOLDER, tenantId);
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+function toPaymentProofUrl(tenantId: string, filename: string): string {
+  return `/media/${PAYMENT_PROOF_FOLDER}/${tenantId}/${filename}`;
+}
+
 function scopeDir(scope: 'outbound' | 'inbound', tenantId: string): string {
   const dir = path.join(MEDIA_ROOT, scope, tenantId);
   fs.mkdirSync(dir, { recursive: true });
@@ -211,6 +224,48 @@ export class MediaService {
       hdUrl: toRelativeUrl('outbound', tenantId, hdFile),
       thumbUrl,
     };
+  }
+
+  /**
+   * Menyimpan BUKTI PEMBAYARAN ke folder permanen terpisah dari media chat.
+   *
+   * Kontrak: bukti finansial TIDAK BOLEH ikut `pruneToLowWatermark` maupun
+   * `deleteExpiredMedia`. Folder `payment-proofs/` sengaja berada di luar
+   * `inbound/` dan `outbound/` sehingga tidak tersentuh kedua pembersih itu
+   * dan tidak dihitung ke kuota media chat.
+   *
+   * `fileName` dipertahankan untuk kompatibilitas pemanggil; nama file aktual
+   * selalu UUID agar tidak menimpa bukti lain.
+   */
+  public async savePaymentProof(params: {
+    tenantId: string;
+    buffer: Buffer;
+    mimeType?: string;
+    fileName?: string;
+  }): Promise<{ hdPath: string; hdUrl: string; sizeBytes: number }> {
+    const { tenantId, buffer } = params;
+    const mime = params.mimeType && ALLOWED_MIME.has(params.mimeType) ? params.mimeType : 'image/jpeg';
+    if (!buffer || buffer.length === 0) {
+      throw new Error('Bukti pembayaran kosong.');
+    }
+    if (buffer.length > MAX_OUTBOUND_BYTES) {
+      throw new Error(`Bukti pembayaran terlalu besar (maks ${MAX_OUTBOUND_BYTES / (1024 * 1024)} MB).`);
+    }
+    const ext = resolveExtForSave(mime, buffer);
+    const dir = paymentProofDir(tenantId);
+    const stem = randomUUID().replace(/-/g, '');
+    const file = `${stem}.${ext}`;
+    const hdPath = path.join(dir, file);
+    await fs.promises.writeFile(hdPath, buffer);
+    return { hdPath, hdUrl: toPaymentProofUrl(tenantId, file), sizeBytes: buffer.length };
+  }
+
+  /** Resolve file bukti bayar dengan proteksi path traversal (untuk route privat). */
+  public resolvePaymentProofFile(tenantId: string, filename: string): string | null {
+    if (!filename || filename !== path.basename(filename)) return null;
+    if (!/^[a-f0-9]{32}\.(jpe?g|png|webp|gif|avif)$/i.test(filename)) return null;
+    const full = path.join(paymentProofDir(tenantId), filename);
+    return fs.existsSync(full) ? full : null;
   }
 
   /**
@@ -476,7 +531,7 @@ export class MediaService {
    * Mengubah relative URL /media/... menjadi absolute path di filesystem.
    */
   public filePathFromRelativeUrl(relativeUrl: string): string | null {
-    const match = relativeUrl.match(/^\/media\/(outbound|inbound)\/([^/]+)\/([^/]+)$/);
+    const match = relativeUrl.match(/^\/media\/(outbound|inbound|payment-proofs)\/([^/]+)\/([^/]+)$/);
     if (!match) return null;
     let tenantSegment = match[2];
     let fileSegment = match[3];

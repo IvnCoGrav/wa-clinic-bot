@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedFromCommit": "dea702fa",
+  "generatedFromCommit": "e44d3340",
   "violations": [
     {
       "type": "FORBIDDEN_DECLARATION",

@@ -82,6 +82,23 @@ describe('Admin Create Reservation (POST /api/admin/reservation)', () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it('status create selain confirmed/hold → 400 (tidak diam-diam jadi confirmed)', async () => {
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/reservation',
+      headers: { 'x-api-key': ADMIN_KEY },
+      payload: {
+        customerId: 'cust-any',
+        treatmentCategory: 'BABY',
+        treatmentDetail: 'Pijat Bayi',
+        status: 'pending',
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Status tidak valid untuk reservasi baru/i);
+  });
+
   it('address diteruskan ke lifecycle (preferences.address) & landmark di-persist ke customer', async () => {
     const customer = {
       id: 'cust-addr', tenant_id: DEFAULT_TENANT_ID, phone: `6289913${Date.now()}`, name: 'Bunda Suciani',

@@ -201,6 +201,15 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   const { toast, confirm } = useUiFeedback();
   const [submitting, setSubmitting] = useState(false);
   const [issues, setIssues] = useState<FieldIssue[]>([]);
+  const errorSummaryRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (issues.length === 0) return;
+    const timer = window.setTimeout(() => {
+      errorSummaryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      errorSummaryRef.current?.focus({ preventScroll: true });
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [issues]);
   // Cfg-015: titik klinik per tenant (fallback netral sampai respons tiba).
   const [clinicCoords, setClinicCoords] = useState(FALLBACK_CLINIC_COORDS);
   useEffect(() => {
@@ -231,6 +240,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   const [selectedCustomerInfo, setSelectedCustomerInfo] = useState<any | null>(null);
   const [customerResults, setCustomerResults] = useState<any[]>([]);
   const [searchingCustomer, setSearchingCustomer] = useState(false);
+  const customerSearchTimerRef = useRef<number | null>(null);
+  const customerSearchAbortRef = useRef<AbortController | null>(null);
 
   // Service Catalog
   const [services, setServices] = useState<ClinicServiceItem[]>([]);
@@ -265,8 +276,37 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   const [customerAddressId, setCustomerAddressId] = useState<string | null>(initialReservation?.customer_address_id || null);
   // Kartu alamat = sumber kebenaran. Drawer dipakai untuk tambah/ubah kartu (seketika).
   const [addressDrawerMode, setAddressDrawerMode] = useState<'add' | 'edit' | null>(null);
+  // Admin mulai mengetik alamat manual SEBELUM kartu selesai dimuat.
+  // Saat true: input dipertahankan (tidak di-swap ke display) agar fokus tidak hilang.
+  const [addressManual, setAddressManual] = useState(false);
   const customerAddressIdRef = useRef<string | null>(initialReservation?.customer_address_id || null);
   useEffect(() => { customerAddressIdRef.current = customerAddressId; }, [customerAddressId]);
+  // Anti "data async menimpa ketikan": begitu user mengedit, hidrasi berhenti
+  // menulis field tersebut untuk sesi/customer ini.
+  const addressTouchedRef = useRef(false);
+  const landmarkTouchedRef = useRef(false);
+  const ongkirTouchedRef = useRef(false);
+  const notesTouchedRef = useRef(false);
+  const serviceDropdownRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!isServiceDropdownOpen) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (serviceDropdownRef.current && !serviceDropdownRef.current.contains(e.target as Node)) {
+        setIsServiceDropdownOpen(false);
+      }
+    };
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopImmediatePropagation();
+      setIsServiceDropdownOpen(false);
+    };
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('keydown', handleEscape, true);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('keydown', handleEscape, true);
+    };
+  }, [isServiceDropdownOpen]);
 
   // Kanonik fallback: sebagian payload reservasi (list/LiveChat) hanya membawa
   // customer ramping TANPA `preferences.saved_addresses`. Tanpa hidrasi eksplisit,
@@ -296,8 +336,6 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     [savedAddresses, customerAddressId]
   );
 
-  const addressFormLocked = savedAddresses.length > 0;
-
   // Data anak tersimpan di profil customer (reusable, KNOWN #340).
   const savedChildren = useMemo<any[]>(() => {
     const list = (selectedCustomerInfo as any)?.children;
@@ -308,6 +346,12 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   useEffect(() => {
     setAuthoritativeAddresses(null);
     addressFetchRef.current = null;
+    addressTouchedRef.current = false;
+    landmarkTouchedRef.current = false;
+    ongkirTouchedRef.current = false;
+    notesTouchedRef.current = false;
+    setAddressManual(false);
+    setForceCustomerDuplicate(false);
   }, [customerId]);
 
   // Reset hidrasi saat modal ditutup agar buka-ulang tetap menyegarkan kartu.
@@ -315,6 +359,12 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     if (!isOpen) {
       addressFetchRef.current = null;
       customerDetailFetchRef.current = null;
+      addressTouchedRef.current = false;
+      landmarkTouchedRef.current = false;
+      ongkirTouchedRef.current = false;
+      notesTouchedRef.current = false;
+      setAddressManual(false);
+      setForceCustomerDuplicate(false);
       setAuthoritativeAddresses(null);
     }
   }, [isOpen]);
@@ -403,10 +453,18 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       fallbackLandmark,
     });
 
+    const manualMode = addressTouchedRef.current || landmarkTouchedRef.current;
+    if (manualMode) {
+      // Admin sudah mengetik sebelum kartu datang: JANGAN tautkan kartu/swap ke
+      // display (fokus & teks harus bertahan). Kartu tetap bisa dipilih manual.
+      setAddressManual(true);
+      return;
+    }
+
     setCustomerAddressId(resolved.card?.id ?? (initialCardMissing ? initialCardId : null));
     setAddress(resolved.address);
     setLandmark(resolved.landmark);
-    if (resolved.card && resolved.ongkir != null) {
+    if (resolved.card && resolved.ongkir != null && !ongkirTouchedRef.current) {
       setOngkir(resolved.ongkir);
     }
   }, [isOpen, mode, initialAddress, initialLandmark, initialCustomerId, selectedCustomerInfo, initialReservation, savedAddresses]);
@@ -438,6 +496,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   // Multi-Session Package State
   type SeriesIntervalPreset = 'DAILY' | 'EVERY_2_DAYS' | 'EVERY_3_DAYS' | 'WEEKLY' | 'TWICE_DAILY';
   const [isMultiSession, setIsMultiSession] = useState(false);
+  const [multiSessionReviewed, setMultiSessionReviewed] = useState(false);
+  const [forceCustomerDuplicate, setForceCustomerDuplicate] = useState(false);
   const [multiSessionTotal, setMultiSessionTotal] = useState(0);
   const [seriesInterval, setSeriesInterval] = useState<SeriesIntervalPreset>('DAILY');
   const [conflictSessionNumber, setConflictSessionNumber] = useState<number | null>(null);
@@ -447,6 +507,12 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     time: string;
     staffId: string;
   }>>([]);
+
+  // Setiap perubahan jadwal sesi membatalkan persetujuan review.
+  useEffect(() => {
+    if (!isMultiSession) return;
+    setMultiSessionReviewed(false);
+  }, [isMultiSession, multiSessionSchedule]);
 
   const buildSeriesSchedule = (
     total: number,
@@ -535,6 +601,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
   const handleEnableCustomMultiSession = (initialCount = 3) => {
     setIsMultiSession(true);
+    setMultiSessionReviewed(false);
     setMultiSessionTotal(initialCount);
     const startD = bookingDate || getWibDateKey(getTodayWibDate());
     const startT = bookingTime || '09:00';
@@ -636,6 +703,14 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
   const handleRestoreDraft = (restored: any) => {
     if (!restored) return;
+    // Draf yang dipulihkan adalah keputusan user — jangan ditimpa hidrasi async.
+    if (restored.address !== undefined) addressTouchedRef.current = true;
+    if (restored.landmark !== undefined) landmarkTouchedRef.current = true;
+    if (restored.notes !== undefined) notesTouchedRef.current = true;
+    if (restored.ongkir !== undefined) ongkirTouchedRef.current = true;
+    if (!restored.customerAddressId && (restored.address !== undefined || restored.landmark !== undefined)) {
+      setAddressManual(true);
+    }
     // 4.4 Sanitasi tanggal & re-validasi harga saat restore
     let sanitizedDate = restored.bookingDate;
     if (sanitizedDate) {
@@ -678,6 +753,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     if (restored.babies !== undefined) setBabies(restored.babies);
     if (sanitizedTreatments !== undefined) setSelectedTreatments(sanitizedTreatments);
     if (restored.isMultiSession !== undefined) setIsMultiSession(restored.isMultiSession);
+    if (restored.isMultiSession) setMultiSessionReviewed(false);
     if (restored.multiSessionTotal !== undefined) setMultiSessionTotal(restored.multiSessionTotal);
     if (restored.multiSessionSchedule !== undefined) setMultiSessionSchedule(restored.multiSessionSchedule);
     if (restored.customServiceName !== undefined) setCustomServiceName(restored.customServiceName);
@@ -705,6 +781,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   };
 
   const resetModalState = useCallback(() => {
+    submitRequestIdRef.current = '';
     setCustomerId('');
     setCustomerSearch('');
     setSelectedCustomerInfo(null);
@@ -729,6 +806,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     setOngkir(0);
     setDiscount(0);
     setIsMultiSession(false);
+    setMultiSessionReviewed(false);
+    setForceCustomerDuplicate(false);
     setMultiSessionTotal(0);
     setMultiSessionSchedule([]);
     setBabies([]);
@@ -1197,23 +1276,50 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   }, [isOpen, mode, initialReservation, services, initialAddress, initialLandmark]);
 
   // Customer search
-  const handleCustomerSearch = async (query: string) => {
+  const handleCustomerSearch = (query: string) => {
     setCustomerSearch(query);
-    if (!query || query.length < 2) {
+    if (customerSearchTimerRef.current !== null) {
+      window.clearTimeout(customerSearchTimerRef.current);
+      customerSearchTimerRef.current = null;
+    }
+    if (customerSearchAbortRef.current) {
+      customerSearchAbortRef.current.abort();
+      customerSearchAbortRef.current = null;
+    }
+    if (!query || query.trim().length < 2) {
       setCustomerResults([]);
+      setSearchingCustomer(false);
       return;
     }
     setSearchingCustomer(true);
-    try {
-      const params = new URLSearchParams({ search: query, pageSize: '8' });
-      const res = await apiRequest(`/api/admin/customers?${params.toString()}`);
-      setCustomerResults(res?.customers || res?.data || []);
-    } catch {
-      setCustomerResults([]);
-    } finally {
-      setSearchingCustomer(false);
-    }
+    customerSearchTimerRef.current = window.setTimeout(async () => {
+      const controller = new AbortController();
+      customerSearchAbortRef.current = controller;
+      try {
+        const params = new URLSearchParams({ search: query.trim(), pageSize: '8' });
+        const res = await apiRequest(`/api/admin/customers?${params.toString()}`, {
+          signal: controller.signal,
+        });
+        if (!controller.signal.aborted) {
+          setCustomerResults(res?.customers || res?.data || []);
+        }
+      } catch {
+        if (!controller.signal.aborted) setCustomerResults([]);
+      } finally {
+        if (!controller.signal.aborted) setSearchingCustomer(false);
+      }
+    }, 300);
   };
+
+  useEffect(
+    () => () => {
+      if (customerSearchTimerRef.current !== null) {
+        window.clearTimeout(customerSearchTimerRef.current);
+      }
+      if (customerSearchAbortRef.current) customerSearchAbortRef.current.abort();
+    },
+    []
+  );
 
   const handleSelectCustomer = (c: any) => {
     setCustomerId(c.id);
@@ -1283,6 +1389,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     // Detect multi-session treatment and generate schedule
     if (srv.totalSessions && srv.totalSessions > 1) {
       setIsMultiSession(true);
+      setMultiSessionReviewed(false);
       setMultiSessionTotal(srv.totalSessions);
       const isNewborn2Days = (srv.name || '').toLowerCase().includes('2 hari') || (srv.name || '').toLowerCase().includes('newborn');
       const defaultInterval: SeriesIntervalPreset = isNewborn2Days ? 'EVERY_2_DAYS' : 'DAILY';
@@ -1348,8 +1455,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     }
     if (mode === 'edit') return;
 
-    // 2. Catatan awal dari chat
-    if (initialNotes && !notes.trim()) {
+    // 2. Catatan awal dari chat — HANYA bila user belum menyentuh field.
+    if (initialNotes && !notesTouchedRef.current && !notes.trim()) {
       setNotes(initialNotes);
     }
 
@@ -1445,6 +1552,12 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     return Math.max(0, sub + ong - disc);
   }, [subtotalTreatments, ongkir, discount]);
 
+  const allTreatmentsSameChild = useMemo(() => {
+    if (babies.length <= 1 || selectedTreatments.length <= 1) return false;
+    const indexes = new Set(selectedTreatments.map((t) => t.assignedChildIndex ?? 0));
+    return indexes.size === 1;
+  }, [babies.length, selectedTreatments]);
+
   const mainTreatmentsCount = useMemo(() => {
     return selectedTreatments.filter((t) => !isAddonService(t)).length;
   }, [selectedTreatments]);
@@ -1480,6 +1593,9 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   };
 
   const handleUpdateBaby = (idx: number, field: 'name' | 'ageText', val: string) => {
+    // Begitu user mengetik, form anak WAJIB tetap terbuka (jangan unmount
+    // karena nama kebetulan sama dengan anak tersimpan).
+    setEditingChildIndexes((prev) => (prev.includes(idx) ? prev : [...prev, idx]));
     setBabies((prev) => {
       const next = [...prev];
       next[idx] = { ...next[idx], [field]: val };
@@ -1769,7 +1885,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         landmark: landmark.trim() || undefined,
         babies: babies.filter((b) => b.name.trim().length > 0),
         purchaseValue: subtotalTreatments,
-        discountAmount: Number(discount) || 0,
+        discountAmount: Math.min(subtotalTreatments, Math.max(0, Number(discount) || 0)),
         ongkir: Number(ongkir) || 0,
         requestId: submitRequestIdRef.current || undefined,
         ...(force ? { force: true } : {}),
@@ -1794,7 +1910,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       landmark: landmark.trim() || undefined,
       babies: babies.filter((b) => b.name.trim().length > 0),
       purchaseValue: subtotalTreatments,
-      discountAmount: Number(discount) || 0,
+      discountAmount: Math.min(subtotalTreatments, Math.max(0, Number(discount) || 0)),
       ongkir: Number(ongkir) || 0,
       ...(force ? { force: true } : {}),
     };
@@ -1887,9 +2003,66 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     setIssues([]);
 
     // Guard defensif: kartu tersedia tetapi belum terpilih → arahkan pilih/tambah.
-    if (addressFormLocked && !customerAddressId) {
-      toast('Pilih alamat rumah dulu (atau tambahkan alamat baru).', 'error');
-      setAddressDrawerMode(selectedCard ? null : 'add');
+    // Kecuali admin sengaja memilih "alamat hanya untuk reservasi ini".
+    // Gate alamat: kartu = default. Alamat manual hanya diizinkan bila admin
+    // sudah mengetik sebelum kartu tersedia (mode satu-kali), dengan konfirmasi.
+    if (savedAddresses.length > 0 && !customerAddressId) {
+      if (addressManual && address.trim()) {
+        const useOneOff = await confirm({
+          title: 'Alamat Tidak Ditautkan ke Kartu',
+          message:
+            'Alamat yang Anda ketik hanya dipakai untuk reservasi ini dan tidak mengubah kartu rumah. Lanjutkan?',
+          confirmText: 'Ya, Lanjutkan',
+          cancelText: 'Pilih Kartu',
+        });
+        if (!useOneOff) return;
+      } else {
+        toast('Pilih alamat rumah dulu (atau tambahkan alamat baru).', 'error');
+        setAddressDrawerMode('add');
+        return;
+      }
+    }
+
+    // Bidan belum dipilih: konfirmasi eksplisit (tidak ada auto-acak).
+    if (mode !== 'edit' && !assignedStaffId) {
+      const proceedWithoutStaff = await confirm({
+        title: 'Bidan Belum Ditugaskan',
+        message: 'Reservasi ini belum memiliki bidan. Tetap simpan?',
+        confirmText: 'Ya, Simpan',
+        cancelText: 'Pilih Bidan',
+      });
+      if (!proceedWithoutStaff) return;
+    }
+
+    // Tanggal/jam lampau: create wajib konfirmasi eksplisit (backdate).
+    if (mode !== 'edit' && bookingDate && bookingTime) {
+      try {
+        const selectedAt = new Date(buildWibIso(bookingDate, bookingTime));
+        if (selectedAt.getTime() < Date.now() - 60_000) {
+          const backdate = await confirm({
+            title: 'Tanggal/Jam Sudah Lewat',
+            message:
+              'Jadwal yang Anda pilih sudah lewat. Tetap simpan sebagai reservasi backdate?',
+            confirmText: 'Ya, Backdate',
+            cancelText: 'Ubah Tanggal',
+            danger: true,
+          });
+          if (!backdate) return;
+        }
+      } catch {
+        // Format tanggal/jam tidak terbaca: biarkan validasi backend menangani.
+      }
+    }
+
+    // Paket multi-sesi: jadwal dibuat otomatis, wajib diperiksa admin.
+    if (isMultiSession && !multiSessionReviewed) {
+      setIssues([
+        {
+          field: 'multiSession',
+          message: 'Periksa dan setujui jadwal sesi paket terlebih dahulu.',
+        },
+      ]);
+      toast('Centang "Saya sudah memeriksa jadwal sesi" sebelum menyimpan paket.', 'error');
       return;
     }
 
@@ -1905,7 +2078,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       rawCategory === 'BUNDLE' ? 'BOTH' :
       (rawCategory as any) || 'BABY';
 
-    let forceSubmit = false;
+    let forceSubmit = forceCustomerDuplicate;
     if (realtimeCollisions.staffCollisions.length > 0) {
       const staffName = realtimeCollisions.staffCollisions[0].staffName;
       const details = realtimeCollisions.staffCollisions
@@ -1974,7 +2147,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
             purchaseValue: Math.max(0, subtotalTreatments - (Number(discount) || 0)),
               deliveryFee: Number(ongkir) || 0,
               customerAddressId: customerAddressId || (selectedCustomerInfo?.addresses?.[0]?.id || (selectedCustomerInfo as any)?.customer_address_id) || undefined,
-              discountAmount: Number(discount) || 0,
+              discountAmount: Math.min(subtotalTreatments, Math.max(0, Number(discount) || 0)),
               durationMinutes: Number(totalScheduledDurationMinutes) || Number(pureDurationMinutes) || 60,
               requestId: reqId,
             assignedStaffId: assignedStaffId || undefined,
@@ -2050,21 +2223,40 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   };
 
   // Keyboard Escape, app-swipe-back & popstate listener for mobile back gestures
+  // handleSafeClose bergantung pada payload form (berubah tiap keystroke). Simpan
+  // di ref agar listener TIDAK di-rebind dan history TIDAK di-push per huruf.
+  const handleSafeCloseRef = useRef(handleSafeClose);
+  useEffect(() => {
+    handleSafeCloseRef.current = handleSafeClose;
+  }, [handleSafeClose]);
+
+  // Identitas stabil untuk Modal: mencegah effect fokus Modal terpicu ulang
+  // setiap keystroke (penyebab fokus lompat ke tombol X).
+  const handleModalClose = useCallback(() => {
+    void handleSafeCloseRef.current();
+  }, []);
+
+  // Push entri history SEKALI saat modal dibuka (bukan tiap render/ketikan).
   useEffect(() => {
     if (!isOpen) return;
-
     try {
-      window.history.pushState({ modal: 'create-reservation' }, '');
+      if (window.history.state?.modal !== 'create-reservation') {
+        window.history.pushState({ modal: 'create-reservation' }, '');
+      }
     } catch (_) {
       // Riwayat browser bisa dibatasi; modal tetap terbuka.
     }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (showBookedSlotsModal) {
           setShowBookedSlotsModal(false);
         } else {
-          void handleSafeClose();
+          void handleSafeCloseRef.current();
         }
       }
     };
@@ -2074,7 +2266,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       if (showBookedSlotsModal) {
         setShowBookedSlotsModal(false);
       } else {
-        void handleSafeClose();
+        void handleSafeCloseRef.current();
       }
     };
 
@@ -2082,7 +2274,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       if (showBookedSlotsModal) {
         setShowBookedSlotsModal(false);
       } else {
-        void handleSafeClose();
+        void handleSafeCloseRef.current();
       }
     };
 
@@ -2095,14 +2287,14 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       window.removeEventListener('app-swipe-back', handleSwipeBack);
       window.removeEventListener('popstate', handlePopState);
     };
-  }, [isOpen, showBookedSlotsModal, handleSafeClose]);
+  }, [isOpen, showBookedSlotsModal]);
 
   if (!isOpen) return null;
 
   return (
     <Modal
       open
-      onClose={() => void handleSafeClose()}
+      onClose={handleModalClose}
       size="full"
       fullScreen
       chrome="bare"
@@ -2112,6 +2304,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         {/* Close button */}
         <button
           data-modal-close="true"
+          aria-label="Tutup formulir reservasi"
           onClick={() => void handleSafeClose()}
           className="absolute top-[calc(0.75rem+env(safe-area-inset-top,0px))] sm:top-4 right-3.5 sm:right-4 p-1.5 rounded-full text-ink-3 hover:text-ink hover:bg-fill-1 transition-colors cursor-pointer"
         >
@@ -2164,7 +2357,9 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         <form ref={formDirtyContainerRef} onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 w-full">
           <div className="space-y-4 overflow-y-auto overflow-x-hidden pr-1 flex-1 min-h-0 w-full max-w-full touch-pan-y overscroll-contain scroll-pb-32 sm:scroll-pb-8" style={{ WebkitOverflowScrolling: 'touch' as any }}>
           {/* Ringkasan validasi: semua kesalahan tampil sekaligus */}
-          <FormErrorSummary issues={issues} className="mb-2" />
+          <div ref={errorSummaryRef} tabIndex={-1} className="focus:outline-none">
+            <FormErrorSummary issues={issues} className="mb-2" />
+          </div>
 
           {/* Draft Restore Banner — di dalam scroll agar ikut tergulir (non-sticky), tidak di mode edit */}
           {mode !== 'edit' && hasDraft && (
@@ -2216,6 +2411,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                     value={customerSearch}
                     onChange={(e) => handleCustomerSearch(e.target.value)}
                     placeholder="Cari nama atau nomor WhatsApp customer..."
+                    aria-label="Cari customer"
                     enterKeyHint="search"
                     inputMode="search"
                     autoComplete="off"
@@ -2229,6 +2425,9 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                   {customerId && (
                     <button
                       type="button"
+                      tabIndex={-1}
+                      onMouseDown={(e) => e.preventDefault()}
+                      aria-label="Hapus pilihan customer"
                       onClick={() => {
                         setCustomerId('');
                         setCustomerSearch('');
@@ -2244,6 +2443,16 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 {searchingCustomer && (
                   <p className="text-[11px] text-accent font-semibold animate-pulse">
                     Mencari data customer...
+                  </p>
+                )}
+
+                {!customerId && !searchingCustomer && customerSearch.trim().length > 0 && customerSearch.trim().length < 2 && (
+                  <p className="text-[11px] text-ink-3">Ketik minimal 2 huruf untuk mencari customer.</p>
+                )}
+
+                {!customerId && !searchingCustomer && customerSearch.trim().length >= 2 && customerResults.length === 0 && (
+                  <p className="text-[11px] text-warning">
+                    Customer tidak ditemukan. Customer baru harus didaftarkan lewat chat WhatsApp terlebih dahulu, lalu buka ulang form ini.
                   </p>
                 )}
 
@@ -2320,6 +2529,10 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                         type="button"
                         onClick={() => {
                           setCustomerAddressId(addrItem.id);
+                          setAddressManual(false);
+                          addressTouchedRef.current = false;
+                          landmarkTouchedRef.current = false;
+                          ongkirTouchedRef.current = false;
                           if (addrItem.address) setAddress(addrItem.address);
                           if (addrItem.landmark) setLandmark(addrItem.landmark);
                           if (addrItem.ongkir != null) {
@@ -2355,82 +2568,85 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                     );
                   })}
                 </div>
+
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setAddressDrawerMode('add')}
+                    className="min-h-[44px] inline-flex items-center px-2.5 py-1 text-xs font-bold text-accent bg-accent/10 hover:bg-accent/20 active:scale-[0.98] rounded-lg transition-transform focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none cursor-pointer"
+                  >
+                    + Tambah Alamat
+                  </button>
+                  {selectedCard && (
+                    <button
+                      type="button"
+                      onClick={() => setAddressDrawerMode('edit')}
+                      className="min-h-[44px] inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-info bg-info-soft hover:bg-info-line border border-info-line active:scale-[0.98] rounded-lg transition-transform focus-visible:ring-2 focus-visible:ring-info focus-visible:outline-none cursor-pointer"
+                    >
+                      <Pencil size={12} />
+                      <span>Ubah Alamat Kartu</span>
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
-            {/* Alamat jalan fisik & patokan rumah (auto-prefill dari chat/profil) */}
-            {(mode !== 'edit' ? Boolean(selectedCustomerInfo) : true) && (
+            {/* Alamat manual — HANYA jika belum ada kartu terpilih. Kartu terpilih
+                sudah ditampilkan di "Pilih Alamat Rumah" (tidak diulang). */}
+            {!selectedCard && (mode !== 'edit' ? Boolean(selectedCustomerInfo) : true) && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-ink-3 uppercase tracking-wider block">
-                    Alamat Lengkap (Jalan, RT/RW, No. Rumah)
-                  </label>
-                  {addressFormLocked ? (
-                    <button
-                      type="button"
-                      onClick={() => setAddressDrawerMode(selectedCard ? 'edit' : 'add')}
-                      title="Alamat mengikuti kartu. Klik untuk mengubah kartu."
-                      className="w-full text-left px-3 py-2 bg-surface-2 border border-divider rounded-xl text-xs text-ink-2 hover:border-accent/50 transition cursor-pointer focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
-                    >
-                      <span className="block truncate">{address || 'Belum ada alamat pada kartu'}</span>
-                      <span className="block text-[10px] text-ink-3 mt-0.5">Mengikuti kartu alamat — klik untuk ubah</span>
-                    </button>
-                  ) : (
-                    <input
-                      type="text"
-                      value={address}
-                      onChange={(e) => setAddress(e.target.value)}
-                      placeholder="cth: Jl. Kedungklinter 1 No. 80"
-                      autoComplete="off"
-                      spellCheck="false"
-                      className="w-full px-3 py-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs font-medium"
-                    />
-                  )}
-                  <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setAddressDrawerMode('add')}
-                      className="min-h-[44px] inline-flex items-center px-2.5 py-1 text-xs font-bold text-accent bg-accent/10 hover:bg-accent/20 active:scale-[0.98] rounded-lg transition-transform focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none cursor-pointer"
-                    >
-                      + Tambah Alamat
-                    </button>
-                    {selectedCard && (
-                      <button
-                        type="button"
-                        onClick={() => setAddressDrawerMode('edit')}
-                        className="min-h-[44px] inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-info bg-info-soft hover:bg-info-line border border-info-line active:scale-[0.98] rounded-lg transition-transform focus-visible:ring-2 focus-visible:ring-info focus-visible:outline-none cursor-pointer"
-                      >
-                        <Pencil size={12} />
-                        <span>Ubah Alamat Kartu</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-ink-3 uppercase tracking-wider block">
-                    Patokan / Landmark
-                  </label>
-                  {addressFormLocked ? (
-                    <div
-                      className="w-full px-3 py-2 bg-surface-2 border border-divider rounded-xl text-xs min-h-[38px]"
-                      title="Patokan mengikuti kartu alamat"
-                    >
-                      <span className={`block truncate ${landmark ? 'text-ink-2' : 'text-ink-3 italic'}`}>
-                        {landmark || 'Belum ada patokan pada kartu'}
-                      </span>
+                <>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-ink-3 uppercase tracking-wider block">
+                        Alamat Lengkap (Jalan, RT/RW, No. Rumah)
+                      </label>
+                      <input
+                        type="text"
+                        value={address}
+                        aria-label="Alamat lengkap"
+                        onChange={(e) => {
+                          addressTouchedRef.current = true;
+                          setAddressManual(true);
+                          setAddress(e.target.value);
+                        }}
+                        placeholder="cth: Jl. Kedungklinter 1 No. 80"
+                        autoComplete="off"
+                        spellCheck="false"
+                        className="w-full px-3 py-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs font-medium"
+                      />
+                      {addressManual && savedAddresses.length > 0 && (
+                        <p className="text-[10px] text-warning mt-0.5">
+                          Kartu alamat tersedia. Pilih kartu di atas untuk memakai alamat resmi, atau lanjutkan dengan alamat yang Anda ketik (konfirmasi saat simpan).
+                        </p>
+                      )}
+                      {savedAddresses.length === 0 && (
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                          <button type="button" onClick={() => setAddressDrawerMode('add')} className="min-h-[44px] inline-flex items-center px-2.5 py-1 text-xs font-bold text-accent bg-accent/10 hover:bg-accent/20 active:scale-[0.98] rounded-lg transition-transform focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none cursor-pointer">
+                            + Tambah Alamat
+                          </button>
+                        </div>
+                      )}
                     </div>
-                  ) : (
-                    <input
-                      type="text"
-                      value={landmark}
-                      onChange={(e) => setLandmark(e.target.value)}
-                      placeholder="cth: Rolling door putih, yg jual kusen"
-                      autoComplete="off"
-                      spellCheck="false"
-                      className="w-full px-3 py-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs font-medium"
-                    />
-                  )}
-                </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-ink-3 uppercase tracking-wider block">
+                        Patokan / Landmark
+                      </label>
+                      <input
+                        type="text"
+                        value={landmark}
+                        aria-label="Patokan atau landmark"
+                        onChange={(e) => {
+                          landmarkTouchedRef.current = true;
+                          setAddressManual(true);
+                          setLandmark(e.target.value);
+                        }}
+                        placeholder="cth: Rolling door putih, yg jual kusen"
+                        autoComplete="off"
+                        spellCheck="false"
+                        className="w-full px-3 py-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs font-medium"
+                      />
+                    </div>
+                  </>
               </div>
             )}
             {/* Active Schedule Warning — anti split-brain duplicate booking */}
@@ -2470,12 +2686,26 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                       onClick={() => onEditReservation(activeReservations[0])}
                       className="px-3 py-1.5 bg-warning text-on-solid rounded-lg text-xs font-semibold hover:bg-warning-hover transition-colors cursor-pointer"
                     >
-                      Edit Reservasi Eksisting
+                      Tambah ke Jadwal Existing
                     </button>
                   )}
-                  <span className="text-xs text-amber-700 dark:text-warning">
-                    atau lanjutkan jika customer memesan sesi/anak tambahan.
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForceCustomerDuplicate(true);
+                      toast(
+                        'Jadwal terpisah akan dibuat. Saat simpan, konfirmasi force akan muncul jika bentrok.',
+                        'info'
+                      );
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
+                      forceCustomerDuplicate
+                        ? 'bg-danger text-on-solid border-danger'
+                        : 'bg-surface text-warning border-warning-line hover:bg-warning-soft'
+                    }`}
+                  >
+                    {forceCustomerDuplicate ? 'Jadwal Terpisah Aktif' : 'Buat Jadwal Terpisah'}
+                  </button>
                 </div>
               </div>
             )}
@@ -2712,7 +2942,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
             )}
 
             {/* Catalog Selector Dropdown Button */}
-            <div className="relative">
+            <div className="relative" ref={serviceDropdownRef}>
               <button
                 type="button"
                 onClick={() => setIsServiceDropdownOpen(!isServiceDropdownOpen)}
@@ -2835,7 +3065,9 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                       <div className="p-4 text-center text-xs text-ink-3">
                         {loadingServices
                           ? 'Memuat katalog layanan...'
-                          : 'Katalog layanan belum tersedia. Periksa koneksi DB lalu buka ulang form ini.'}
+                          : services.length === 0
+                            ? 'Katalog layanan belum tersedia. Periksa koneksi DB lalu buka ulang form ini.'
+                            : `Tidak ada layanan yang cocok dengan “${serviceSearch}”.`}
                       </div>
                     )}
                   </div>
@@ -2871,6 +3103,12 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                     </span>
                   )}
                 </div>
+
+                {allTreatmentsSameChild && (
+                  <div className="p-2 rounded-lg bg-warning-soft border border-warning-line text-[11px] text-warning">
+                    Semua treatment ditujukan ke anak yang sama. Periksa pilihan <b>“Ditujukan untuk”</b> di tiap layanan.
+                  </div>
+                )}
 
                 <div className="space-y-1.5">
                   {selectedTreatments.map((t, idx) => {
@@ -2989,13 +3227,13 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           {/* Section 3: Waktu, Bidan & Ketersediaan Jadwal Terpadu */}
           <div className="space-y-3 pt-2 border-t border-divider">
             {/* Row 1: Bidan, Tanggal Kunjungan, Status Booking */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {/* 1. Penugasan Bidan / Terapis */}
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
                   <label className="text-[11px] font-bold text-ink-3 uppercase tracking-wider block flex items-center space-x-1">
                     <UserCheck size={12} className="text-accent" />
-                    <span>Terapis / Bidan</span>
+                    <span>Bidan</span>
                   </label>
                   {user?.id && effectiveStaffList.some((s) => s.id === user.id) && (
                     <button
@@ -3010,9 +3248,10 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 <select
                   value={assignedStaffId}
                   onChange={(e) => setAssignedStaffId(e.target.value)}
+                  aria-label="Bidan"
                   className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs font-semibold"
                 >
-                  <option value="">-- Pilih / Acak Bidan --</option>
+                  <option value="">-- Pilih Bidan --</option>
                   {effectiveStaffList
                     .filter((s) => s.active !== false || s.id === assignedStaffId)
                     .map((s) => (
@@ -3021,41 +3260,57 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                       </option>
                     ))}
                 </select>
+                {!assignedStaffId && (
+                  <p className="text-[10px] text-ink-3">Belum ditugaskan</p>
+                )}
               </div>
 
               {/* 2. Tanggal Kunjungan */}
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] font-bold text-ink-3 uppercase tracking-wider block">
-                    Tanggal Kunjungan *
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setShowBookedSlotsModal(true)}
-                    className="text-[11px] text-accent font-bold hover:underline flex items-center space-x-1 cursor-pointer"
-                  >
-                    <Eye size={12} />
-                    <span>Terisi ({bookedReservationsForDate.length})</span>
-                  </button>
-                </div>
-                <div className="flex items-center space-x-1.5">
+              <div className="space-y-1 min-w-0">
+                <label className="text-[11px] font-bold text-ink-3 uppercase tracking-wider block">
+                  Tanggal *
+                </label>
+                <div className="flex items-center gap-1.5 min-w-0">
                   <input
                     type="date"
                     required
+                    aria-label="Tanggal kunjungan"
+                    min={mode === 'edit' ? undefined : getTodayWibDateKey()}
                     value={bookingDate}
                     onChange={(e) => {
                       setBookingDate(e.target.value);
                       setHasCalculatedRecommendations(false);
                     }}
-                    className="flex-1 p-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs font-semibold"
+                    className="flex-1 min-w-0 p-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs font-semibold"
                   />
                   <button
                     type="button"
                     onClick={() => setShowBookedSlotsModal(true)}
-                    className="p-2 bg-accent-soft hover:bg-accent-soft text-accent rounded-xl border border-divider dark:border-accent/30 shadow-xs transition cursor-pointer active:scale-95"
+                    className="p-2 shrink-0 bg-accent-soft hover:bg-accent-soft text-accent rounded-xl border border-divider dark:border-accent/30 shadow-xs transition cursor-pointer active:scale-95"
                     title="Lihat Jadwal Terisi Hari Ini"
+                    aria-label="Lihat Jadwal Terisi Hari Ini"
                   >
                     <CalendarDays size={16} />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between gap-2 text-[10px] leading-tight">
+                  <span className="text-ink-3 truncate">
+                    {bookingDate
+                      ? formatWib(new Date(`${bookingDate}T00:00:00+07:00`), {
+                          weekday: 'short',
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                        })
+                      : 'Belum dipilih'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowBookedSlotsModal(true)}
+                    className="shrink-0 text-accent font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Eye size={11} />
+                    <span>Terisi ({bookedReservationsForDate.length})</span>
                   </button>
                 </div>
               </div>
@@ -3063,18 +3318,28 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
               {/* 3. Status Booking */}
               <div className="space-y-1">
                 <label className="text-[11px] font-bold text-ink-3 uppercase tracking-wider block">
-                  Status Pembayaran
+                  Status
                 </label>
                 <select
                   value={status}
                   onChange={(e) => setStatus(e.target.value as any)}
+                  aria-label="Status jadwal"
                   className="w-full p-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs font-semibold"
                 >
-                  <option value="pending">Menunggu Pembayaran (Pending)</option>
-                  <option value="confirmed">Terjadwal Resmi (Confirmed)</option>
-                  <option value="hold">Hold / Ditawarkan Sementara</option>
-                  <option value="completed">Selesai Treatment (Completed)</option>
-                  <option value="cancelled">Dibatalkan (Cancelled)</option>
+                  {mode === 'edit' ? (
+                    <>
+                      <option value="pending">Menunggu Pembayaran (Pending)</option>
+                      <option value="confirmed">Terjadwal Resmi (Confirmed)</option>
+                      <option value="hold">Hold / Ditawarkan Sementara</option>
+                      <option value="completed">Selesai Treatment (Completed)</option>
+                      <option value="cancelled">Dibatalkan (Cancelled)</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="confirmed">Terjadwal Resmi (Confirmed)</option>
+                      <option value="hold">Hold / Ditawarkan Sementara</option>
+                    </>
+                  )}
                 </select>
               </div>
             </div>
@@ -3103,6 +3368,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 <input
                   type="time"
                   required
+                  aria-label="Jam mulai"
                   value={bookingTime}
                   onChange={(e) => setBookingTime(e.target.value)}
                   className="w-28 p-2 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent shadow-xs font-bold"
@@ -3363,6 +3629,18 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                     * Total {multiSessionSchedule.length} kunjungan terapis.
                   </p>
                 </div>
+
+                <label className="flex items-start gap-2 p-2 rounded-lg bg-warning-soft border border-warning-line text-[11px] text-warning cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={multiSessionReviewed}
+                    onChange={(e) => setMultiSessionReviewed(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 accent-warning shrink-0"
+                  />
+                  <span>
+                    Saya sudah memeriksa tanggal, jam, dan bidan untuk seluruh {multiSessionSchedule.length} sesi.
+                  </span>
+                </label>
               </div>
             )}
           </div>
@@ -3398,7 +3676,11 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 <input
                   type="number"
                   value={ongkir}
-                  onChange={(e) => setOngkir(e.target.value === '' ? '' : Number(e.target.value))}
+                  aria-label="Ongkos kirim"
+                  onChange={(e) => {
+                    ongkirTouchedRef.current = true;
+                    setOngkir(e.target.value === '' ? '' : Number(e.target.value));
+                  }}
                   step={5000}
                   min={0}
                   placeholder="0"
@@ -3416,7 +3698,16 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 <input
                   type="number"
                   value={discount}
-                  onChange={(e) => setDiscount(e.target.value === '' ? '' : Number(e.target.value))}
+                  aria-label="Diskon layanan"
+                  max={subtotalTreatments}
+                  onChange={(e) => {
+                    if (e.target.value === '') {
+                      setDiscount('');
+                      return;
+                    }
+                    const raw = Number(e.target.value);
+                    setDiscount(Math.min(subtotalTreatments, Math.max(0, Number.isFinite(raw) ? raw : 0)));
+                  }}
                   step={5000}
                   min={0}
                   placeholder="0"
@@ -3431,7 +3722,10 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 <span className="text-ink-3 font-semibold">Ongkir:</span>
                 <button
                   type="button"
-                  onClick={() => setOngkir(0)}
+                  onClick={() => {
+                    ongkirTouchedRef.current = true;
+                    setOngkir(0);
+                  }}
                   className={`px-2 py-0.5 rounded-md font-bold border transition cursor-pointer ${
                     Number(ongkir) === 0 ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white dark:bg-transparent text-emerald-800 dark:text-accent border-emerald-200 dark:border-emerald-800/40 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
                   }`}
@@ -3444,7 +3738,10 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                     <button
                       key={String(t.id || t.maxDist)}
                       type="button"
-                      onClick={() => setOngkir(net)}
+                      onClick={() => {
+                        ongkirTouchedRef.current = true;
+                        setOngkir(net);
+                      }}
                       className={`px-2 py-0.5 rounded-md font-semibold border transition cursor-pointer ${
                         Number(ongkir) === net ? 'bg-accent text-accent-ink border-accent' : 'bg-white dark:bg-transparent text-ink-2 border-divider hover:bg-fill-1 dark:hover:bg-fill-2'
                       }`}
@@ -3469,7 +3766,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setDiscount(5000)}
+                  onClick={() => setDiscount(Math.min(subtotalTreatments, 5000))}
                   className={`px-2 py-0.5 rounded-md font-bold border transition cursor-pointer ${
                     Number(discount) === 5000 ? 'bg-rose-600 text-white border-rose-600' : 'bg-white dark:bg-transparent text-rose-700 dark:text-danger border-rose-200 dark:border-rose-800/40 hover:bg-rose-50 dark:hover:bg-rose-950/40'
                   }`}
@@ -3478,7 +3775,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setDiscount(10000)}
+                  onClick={() => setDiscount(Math.min(subtotalTreatments, 10000))}
                   className={`px-2 py-0.5 rounded-md font-bold border transition cursor-pointer ${
                     Number(discount) === 10000 ? 'bg-rose-600 text-white border-rose-600' : 'bg-white dark:bg-transparent text-rose-700 dark:text-danger border-rose-200 dark:border-rose-800/40 hover:bg-rose-50 dark:hover:bg-rose-950/40'
                   }`}
@@ -3510,7 +3807,10 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
             </label>
             <textarea
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={(e) => {
+                notesTouchedRef.current = true;
+                setNotes(e.target.value);
+              }}
               placeholder="Contoh: Pasien minta terapis senior, anak sedang pilek ringan..."
               rows={2}
               className="w-full p-2.5 bg-surface border border-divider rounded-xl text-xs text-ink focus:outline-none focus:border-accent resize-none shadow-xs"
@@ -3740,8 +4040,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
         {/* 409 Conflict resolution dialog */}
         {showConflictModal && conflictInfo && (
-          <div className="modal-backdrop fixed inset-0 bg-black/70 z-dialog-top flex items-center justify-center p-4" onClick={() => setShowConflictModal(false)}>
-            <div className="w-full max-w-md bg-surface rounded-2xl p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div role="presentation" className="modal-backdrop fixed inset-0 bg-black/70 z-dialog-top flex items-center justify-center p-4" onClick={() => setShowConflictModal(false)}>
+            <div role="dialog" aria-modal="true" className="w-full max-w-md bg-surface rounded-2xl p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
               <h4 className="text-sm font-bold text-ink">
                 {conflictInfo.code === 'STAFF_COLLISION' ? '⛔ Jadwal Terapis Bentrok' : '⛔ Duplikat Booking Terdeteksi'}
               </h4>
@@ -3790,6 +4090,10 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           onSaved={(card) => {
             if (!card?.id) return;
             setCustomerAddressId(card.id);
+            setAddressManual(false);
+            addressTouchedRef.current = false;
+            landmarkTouchedRef.current = false;
+            ongkirTouchedRef.current = false;
             if (card.address) setAddress(card.address);
             if (card.landmark) setLandmark(card.landmark);
             if (card.ongkir != null) setOngkir(card.ongkir);

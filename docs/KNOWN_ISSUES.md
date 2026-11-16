@@ -3,7 +3,7 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
-## 348. [Staff Today] Insiden 16 Nov 2026 — Bukti Forensik & Penyelesaian Kunjungan Transfer (2026-11-16, RESOLVED)
+## 354. [Staff Today] Insiden 16 Nov 2026 — Bukti Forensik & Penyelesaian Kunjungan Transfer (2026-11-16, RESOLVED)
 
 - **Status:** RESOLVED (2026-11-16).
 - **Insiden:** Bidan Thabita melaporkan via WhatsApp ke Admin pada pukul 12:26:59 WIB: *"Oh iya mba yg pertama tf tapi aku gk bisa nyelesain apkny eror biasane kalau tf langsung bisa"*.
@@ -48,7 +48,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
     - `tests/unit/reservation-status-transition.test.ts` (4 tests)
     - `tests/unit/reservation-status-service.test.ts` (7 tests)
 
-## 347. [Code Health] Sisa Utang Arsitektur & Burn-Down Baseline (2026-11-16, OPEN)
+## 353. [Code Health] Sisa Utang Arsitektur & Burn-Down Baseline (2026-11-16, OPEN)
 
 - **Status:** OPEN — Sprint 1 SELESAI 2026-11-16 (target tercapai lebih awal). Sisa utang di bawah masih terkunci ratchet di `scripts/reuse/baselines/`; angka hanya boleh turun.
 - **Plan Sprint 1:** `docs/PLAN_BURNDOWN_SPRINT1_2026-11-16.md` (SELESAI — S1-1 s/d S1-5).
@@ -82,7 +82,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
    - **Sprint 4 (Target: 2027-01-15):** File >1500 baris 3 → 0 file, Prisma di route 200 → 150 panggilan, Dead export 100 → ≤30.
 - **Penegakan Gerbang:** Setiap perbaikan ditutup dengan menjalankan `npm run check:reuse:update` (hanya menurunkan baseline) dan verifikasi via `npm run report:reuse`.
 
-## 346. [MCP] `clinic-ops-mcp` Ditunda — Plan & Audit Disimpan (2026-11-16, DEFERRED)
+## 352. [MCP] `clinic-ops-mcp` Ditunda — Plan & Audit Disimpan (2026-11-16, DEFERRED)
 
 - **Status:** DEFERRED — belum ada implementasi; `src/mcp/` belum dibuat; tidak ada dependency/migrasi yang ditambahkan.
 - **Keputusan user:** fitur ditunda sampai prioritas berikutnya. Plan dan audit tetap disimpan di `docs/plans/CLINIC_OPS_MCP_DEFERRED_2026-11-16.md`.
@@ -90,7 +90,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Risiko yang belum ditutup (wajib dibaca saat resume):** PII/transkrip ke host AI, stdout pollution yang merusak JSON-RPC, duplikasi definisi metrik, write action tanpa auth/konfirmasi, dan endpoint HTTP publik yang harus hidup 24/7 untuk Claude web/mobile.
 - **Catatan:** “standby aktif” untuk Claude web/mobile berarti proses HTTP MCP harus tersedia saat tool dipanggil; soft-off hanya memblokir akses, bukan menghemat RAM. Jangan eksekusi tanpa persetujuan eksplisit user.
 
-## 345. [Code Health] Infrastruktur Gerbang Anti-Duplikasi, Reuse Modul & UI Governance (2026-11-16, RESOLVED)
+## 351. [Code Health] Infrastruktur Gerbang Anti-Duplikasi, Reuse Modul & UI Governance (2026-11-16, RESOLVED)
 
 - **Status:** RESOLVED (2026-11-16) — Eksekusi penuh 8 fase `docs/PLAN_REUSE_GATE_2026-11-16.md` (Fase 0 s/d Fase 7). Sistem anti-spaghetti dan reuse modul kanonis aktif lokal & CI.
 - **Hasil Terverifikasi:**
@@ -120,6 +120,113 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - Dead exports: terkunci di 170 export.
   - Pelanggaran baru: **0 di seluruh gerbang**.
 - **Dokumentasi & Artefak:** `docs/PLAN_REUSE_GATE_2026-11-16.md`, `docs/MODULE_INDEX.md`, `docs/adr/0004-ui-catalog-dev-only.md`, `docs/REUSE_EXCEPTIONS.md`.
+
+## 350. [Iklan / Notifikasi] Alert Watchdog Iklan Tidak Terlihat Owner — Dikirim Ganda ke WhatsApp (2026-11-15, TEMPORARY)
+
+- **Status:** **TEMPORARY WORKAROUND** (keputusan owner 2026-11-15). Bukan solusi final.
+- **Gejala:** Alert `AD_FUNNEL_ANOMALY` (sinyal `INSTRUMENTATION_SUSPECT`) **sudah terkirim** ke Telegram grup "Report kala" (`chat_id -1003728644119`, thread `3`) sebanyak 8x sejak 14 Nov (status `SENT`, bot `member`, `getChat ok`), tetapi owner menyatakan **tidak menerima/melihat notifikasi** tersebut — termasuk saat insiden link CTA tanpa nomor tujuan (13–15 Nov).
+- **Akar masalah (bukan pada pengiriman, tapi pada keterlihatan):**
+  1. `telegram_topic_system_errors` kosong → seluruh alert iklan masuk ke **topik laporan harian**, bercampur dengan laporan rutin sehingga mudah terlewat.
+  2. `notification_channels = {}` (kosong) — tidak ada kanal cadangan (WA).
+  3. Tidak ada alert yang memeriksa **isi link CTA**; watchdog hanya melihat gejala (klik ada, chat ber-tag nol) sehingga diagnosanya mengarah ke "tracker landing page".
+  4. Ambang minimum watchdog membuat alert pertama baru muncul 14 Nov 08:14, ±17 jam setelah kerusakan 13 Nov 15:08.
+- **Solusi sementara yang dipasang (2026-11-15):**
+  1. Field baru `AdWatchdogSettingsSchema.whatsappRecipients: string[]` (default `[]`) → dibaca dari `Tenant.settings.adWatchdog` (tenant-aware, tanpa hardcode).
+  2. Salinan alert dikirim lewat WhatsApp dari **nomor yang terkoneksi ke bot** ke penerima terkonfigurasi (saat ini `6288235780925`), setelah alert Telegram sukses.
+  3. **Fail-soft:** kegagalan/jeda WAHA tidak menggagalkan alert Telegram; setiap salinan dicatat di `admin_notification_logs` (`channel='WHATSAPP'`, `idempotency_key` unik bersuffix `:WA:<index>`).
+- **Utang teknis & risiko:**
+  1. Pengiriman ganda (Telegram + WA) berpotensi jadi noise; belum ada UI pengaturan penerima (ganti lewat `Tenant.settings` JSON).
+  2. Nomor staf `Bidan Testing Yusi` di tabel `staff` = `088235780920` (kurang 1 digit dari `6288235780925`) — perlu dibetulkan agar konsisten.
+  3. Belum ada health-check aktif `GET /cta` → validasi bentuk `wa.me/<nomor>` (target berikutnya, <30 menit deteksi).
+- **Verifikasi:** `tests/unit/ad-watchdog-whatsapp-copy.test.ts` (4 test: normalisasi nomor, kirim + log WHATSAPP, tanpa penerima, fail-soft saat WA/gateway gagal) + 31 test watchdog lain hijau.
+
+## 349. [Iklan / Atribusi] Kode Tracking 2 Karakter — Risiko Tabrakan & Atribusi Palsu (2026-11-15, OPEN/ACCEPTED)
+
+- **Status:** OPEN — diterima sebagai trade-off atas keputusan owner (pesan pelanggan harus pendek: `Promo[kc]`).
+- **Gejala:** Ruang kode 2 karakter = 32² = **1.024 kombinasi** dengan masa berlaku 7 hari. Pada volume 12–30 klik/hari (±150 kode aktif), peluang tabrakan per insert naik (ditangani retry 5x lalu eskalasi ke 3 karakter), dan kode bisa ditebak untuk memalsukan atribusi.
+- **Akar masalah:** Sebelumnya kode 12 karakter dipilih (Task 7.4 / D5) untuk mencegah brute-force; panjang dikembalikan ke 2 karakter demi keterbacaan pesan.
+- **Dampak:** (a) insert bisa sesekali eskalasi ke 3–4 karakter (pesan sedikit lebih panjang, tetap valid karena regex menerima 2–32); (b) potensi atribusi palsu bila seseorang sengaja mengirim `Promo[xx]` acak — peluang menebak kode aktif ≈ 150/1024 (~15% per tebakan) sehingga **tidak boleh dianggap aman untuk data keuangan**.
+- **Mitigasi saat ini:** insert-and-catch-conflict + eskalasi panjang, expiry 7 hari, `tenant_id` wajib cocok, dan `matchedAt` hanya diisi sekali (updateMany atomik).
+- **Rekomendasi lanjutan (bila owner berubah pikiran):** naikkan ke 4 karakter (1.048.576 kombinasi, masih pendek) **atau** tambahkan pembatas percobaan kode tidak dikenal per nomor/jam agar tebakan tidak bisa diulang bebas.
+
+## 348. [Alamat] Kartu Alamat Ganda dari Teks Chat Ber-URL & Identitas Rumah Berbasis Teks (2026-11-14, RESOLVED)
+
+- **Status:** RESOLVED (2026-11-14) — gerbang deterministik di domain + jalur enrichment; data insiden sudah dibersihkan.
+- **Gejala:** Pelanggan `6285852555576` punya 2 kartu alamat untuk rumah yang sama: `Rumah waru` (berkoordinat) dan `Rumah waru 2` (tanpa koordinat, teksnya berisi URL `maps.app.goo.gl`). Reservasi aktif tetap memakai kartu pertama sehingga tidak salah ongkir, tetapi kartu kedua tampil di Buku Alamat dan bisa dipilih admin.
+- **Akar masalah (5 Whys):**
+  1. Link Maps pada pesan 14 Nov 18:42 tidak menghasilkan koordinat (URL mengarah ke halaman *place*, bukan URL berkoordinat; geocode teks tempat tidak presisi) dan kegagalannya **ditelan `catch {}`**.
+  2. Alur fallback menulis **teks pesan mentah** (termasuk URL) sebagai `address` kartu baru (`attachSpecificAddressText`).
+  3. Dedup hanya membandingkan **kartu aktif/primary** dan menuntut teks alamat **identik persis** (`addressesMatch`), sehingga variasi penulisan dianggap rumah kedua.
+  4. Kartu baru dibuat tanpa koordinat/ongkir — tidak bisa dipakai hitung ongkir/invoice.
+- **Perbaikan:**
+  1. `src/domain/customer-address/identity.ts` — `stripUrlsFromAddress`, `streetIdentity`, `houseIdentityMatch`: URL dibuang, token generik (jl/gg/no/rt/rw/perum/…) dinormalisasi, keterangan non-angka dalam kurung diabaikan, dan nomor rumah eksplisit harus sama. **Tidak memakai aturan subset token** agar "Tropodo 1" vs "Tropodo 2" tidak tergabung.
+  2. `matching.ts` — `addressesMatch` memakai identitas jalan/nomor sebagai gerbang terakhir, tetap menghormati pagar kecamatan/kelurahan/kota.
+  3. `human-background-enrichment.service.ts` — `attachSpecificAddressText` membersihkan URL lebih dulu, membandingkan ke **semua kartu**, memperbarui kartu yang cocok (teks lama yang lebih kaya dipertahankan), menolak menulis kartu untuk pesan yang hanya berisi link, dan hanya membuat kartu baru bila ada **bukti rumah** (`hasHouseEvidence`: angka/nomor atau penanda blok/perumahan) sehingga obrolan biasa tidak melahirkan alamat.
+  4. Observability: kegagalan resolve URL Maps sekarang dicatat (`[HUMAN ENRICH] Google Maps URL tidak ter-resolve …`) dan kartu baru tanpa koordinat dicatat sebagai butuh verifikasi staf.
+- **Data cleanup produksi (2026-11-14):** kartu `25ac5f04…` dihapus (0 referensi reservasi/series) dan entri `preferences.saved_addresses` dibersihkan; teks URL pada kartu `9d8fdd84…` (`6281330708293`) dinormalisasi menjadi `Jl. Mbah Oteh 79`. Backup: tabel `_backup_address_cleanup_20261114` (2 customer + 2 kartu).
+- **Verifikasi:** `tests/unit/address-house-identity.test.ts` (10) + `tests/unit/human-background-enrichment-address-identity.test.ts` (5); 21 suite alamat hijau; `npm run build` hijau; full suite 7574 lulus / 4 gagal **pre-existing** (2 artefak audit path mesin lain, 2 hybrid parser #287 — dibuktikan revert-and-rerun).
+- **Sisa (belum dieksekusi, butuh keputusan klinik):**
+  1. `6281216792297` — reservasi `ccd9888c…` (selesai, `delivery_fee=20000`) tertaut ke kartu `f5d558bf…` yang teksnya `Jl. Jojoran…` padahal `raw_text` reservasi berisi `Jl. Perumahan MTB blok C no.13 B`; ada juga kartu terverifikasi `Rumah Gubeng` dengan teks Jojoran. Perlu konfirmasi rumah mana yang benar sebelum merge (jangan rewrite riwayat keuangan).
+  2. `62895339397003` — dua kartu teks sama (`High point Apartemen Siwalankerto`) dengan koordinat berbeda (10000 vs 0 ongkir); perlu verifikasi lapangan.
+  3. 55 kartu lama ber-`address` kosong (label wilayah saja) — data gap lama, bukan duplikat; perlu program pengayaan terpisah.
+  4. `GOOGLE_MAPS_API_KEY` produksi ditolak Google (`REQUEST_DENIED`); geocoding teks kini local-first sehingga tidak memblokir kasus ini, tetapi fallback Distance Matrix tidak berfungsi (jarak jatuh ke Haversine bila ORS down).
+
+
+## 347. [Reservasi / Customer] “Tambah Customer Baru” dari Form Reservasi Belum Tersedia — Tidak Ada Endpoint Create Customer (2026-11-14, OPEN)
+
+- **Status:** OPEN — didefer karena butuh endpoint & form baru, bukan sekadar UI.
+- **Gejala:** Admin yang melayani pasien baru tidak bisa mendaftarkan customer langsung dari modal **Buat Jadwal Reservasi Baru**; harus keluar form, mendaftarkan customer lewat jalur lain (chat WhatsApp), lalu membuka form lagi.
+- **Bukti:** Tidak ada `POST /api/admin/customers` di route admin (hanya `GET` + endpoint operasional per-customer); `CustomerEditForm` membutuhkan `customer.id` yang sudah ada.
+- **Dampak:** Alur pasien baru terputus; risiko draft/form tertinggal; admin harus mengingat data secara manual.
+- **Rekomendasi fondasional:**
+  1. Endpoint `POST /api/admin/customers` tenant-aware dengan validasi unik `(tenant_id, phone)`, audit log, dan normalisasi nomor.
+  2. Form create customer reusable (nama, phone, alamat, anak) dalam drawer/modal; setelah simpan otomatis `handleSelectCustomer`.
+  3. Jangan membuat customer duplikat: cek phone + tampilkan kandidat existing.
+- **Sementara (sudah dieksekusi):** modal menampilkan empty state “Customer tidak ditemukan. Customer baru harus didaftarkan lewat chat WhatsApp terlebih dahulu…” agar admin tidak menebak.
+
+## 346. [SISTEMIK] Fragmentasi Otoritas Tagihan, Bukti Bayar, dan Hidrasi Form — Satu Akar: Tidak Ada "Kepemilikan Kebenaran" (2026-11-14, PARTIALLY RESOLVED)
+
+- **Status:** PARTIALLY RESOLVED (2026-11-14) — MVP tanpa migrasi dieksekusi. Sisa pekerjaan dicatat di bagian akhir.
+- **Gejala gabungan (sebelum fix):**
+  1. Bidan tidak bisa menyimpan pembayaran berdiskon: UI mengirim 95.000, server menuntut 85.000 (selisih = diskon 10.000). Bukti transfer ikut hilang karena validasi berjalan sebelum penyimpanan.
+  2. 83 dari 88 tautan `reservation.proof_url` tidak punya file fisik; prune kuota/retensi menghapus bukti karena disimpan di folder media chat.
+  3. `purchase_value` ditimpa net saat pembayaran, sementara `discount_amount` tetap ada → double-subtraction potensial.
+  4. S-07 memakai `reservation_items` yang tidak disinkronkan saat edit.
+  5. Diskon diabaikan di banyak jalur baca (staff pricing, WhatsApp bill, analitik).
+  6. Jalur admin mencatat pembayaran tanpa `amount` (bypass S-07) dan gagal senyap.
+  7. `requestId` tidak diteruskan di `POST /api/admin/reservation`.
+- **Perbaikan MVP (2026-11-14):**
+  1. **Billing kanonis**: `resolveReservationBilling` = `purchase_value − discount_amount + delivery_fee`; dipakai staff task pricing (3 reader), `sendPaymentInfo`, dan analitik. `getTodayTasks` dkk. men-select `discount_amount`, `delivery_fee`, `items.price` (KNOWN #328 resolved).
+  2. **Evidence-first**: `recordPayment` menyimpan bukti via `mediaService.savePaymentProof` ke `storage/media/payment-proofs/<tenant>/` (permanen, privat, di luar prune/retensi). Mismatch → `AWAITING_VERIFICATION` (bukti+metode tersimpan, `purchase_occurred_at` kosong, audit `STAFF_PAYMENT_MISMATCH`), bukan 400.
+  3. **`purchase_value` tetap GROSS** saat pembayaran (untuk pembayaran cocok nilainya tidak berubah).
+  4. **Otoritas tagihan = snapshot reservasi**, bukan `reservation_items`.
+  5. **Admin & staf satu kontrak**: keduanya mengirim `amount`; admin menampilkan error (tidak lagi senyap). Bukti wajib untuk non-cash di kedua jalur.
+  6. **Form**: lihat #345.
+  7. **Idempotensi**: POST create meneruskan `requestId`; ref direset saat modal ditutup.
+  8. **Upload**: `prepareChatImage` di modal pembayaran staf & admin (pesan HEIC actionable).
+- **Verifikasi:** `staff-payment-validation` (4), `reservation-billing` (+3 diskon), `staff-send-payment-info` (+1 diskon), `payment-proof-storage` (4), `staff-auth-and-reservation`, `admin-create-reservation`, `backlog-evidence-gate` hijau; build backend & dashboard hijau; full suite 7556 lulus / 4 gagal pre-existing (2 artefak audit path mesin lain, 2 hybrid parser #287).
+- **Sisa (OPEN):**
+  - Rekonsiliasi historis: 57 reservasi berdiskon, 39 event Meta sudah terkirim, 46 baris Sheets `done` — keputusan: **jangan rewrite**; perlu laporan read-only + anotasi.
+  - `amount_collected` / state pembayaran eksplisit (migrasi) ditunda; nominal mismatch saat ini tersimpan di audit log.
+  - Sinkronisasi `reservation_items` pada PATCH (saat ini item bisa basi; sengaja tidak dipakai sebagai otoritas).
+  - Verifikasi 83 bukti hilang: tandai `evidence_missing` (file tidak dapat dipulihkan).
+  - Uji perangkat fisik untuk #345.
+
+## 345. [Reservasi / Form] Input Alamat & Patokan Terkunci/Mengunci Diri Saat Kartu Alamat Selesai Dimuat — Terasa "Hanya Bisa Ketik 1 Huruf" (2026-11-14, RESOLVED — UJI PERANGKAT PENDING)
+
+- **Status:** RESOLVED di kode (2026-11-14); uji perangkat fisik Android/iPhone belum dilakukan.
+- **Gejala:** Di modal *Buat Jadwal Reservasi Baru*, admin/bidan mulai mengetik di kolom **Alamat Lengkap** atau **Patokan/Landmark**, lalu setelah 1 karakter kolom tidak bisa diketik lagi.
+- **Akar masalah:** `addressFormLocked = savedAddresses.length > 0` berubah menjadi true saat fetch kartu alamat selesai; render kondisional mengganti `<input>` menjadi `<button>`/`<div>` sehingga elemen di-unmount dan fokus hilang. Effect hidrasi juga menimpa `setAddress/setLandmark` saat data async datang.
+- **Perbaikan:**
+  1. Alamat & Patokan **selalu `<input>`** — tidak pernah di-unmount; hint “mengikuti kartu” ditampilkan.
+  2. `addressTouchedRef`/`landmarkTouchedRef`/`notesTouchedRef`: hidrasi async berhenti menimpa field yang sudah diedit.
+  3. Gate eksplisit saat alamat berbeda dari kartu: tombol **“Pakai hanya untuk reservasi ini”** (detach kartu, tidak mengubah buku alamat) atau “Ubah Alamat Kartu”.
+  4. `handleUpdateBaby` menambahkan indeks ke `editingChildIndexes` pada ketikan pertama → form anak tidak unmount.
+  5. Effect history: `handleSafeClose` disimpan di ref; `pushState` hanya sekali saat modal dibuka (bukan per keystroke).
+  6. **Kolom pencarian halaman Reservations**: URL (`setSearchParams`) tidak lagi ditulis per huruf; sinkronisasi URL di-debounce 400 ms dan state lokal menjadi sumber saat mengetik. Ini mencegah history berubah tiap karakter (yang di mobile dapat menutup keyboard) dan tombol X mencuri fokus.
+  7. **Akar utama “1 huruf lalu fokus ke tombol X”**: komponen `Modal` menjalankan effect fokus awal dengan dependency `onClose`. `CreateReservationModal` mengirim arrow `onClose` **baru setiap render/keystroke**, sehingga effect berjalan ulang dan memfokuskan elemen pertama di panel — tombol X. Perbaikan: effect fokus dipisah (`[open, initialFocusRef]`), listener Escape/Tab memakai `onCloseRef`, dan `CreateReservationModal` memakai `handleModalClose` yang stabil.
+- **Verifikasi:** dashboard `tsc` + `vite build` hijau; belum ada unit test DOM (perlu perangkat/Playwright).
+- **Sisa:** uji ketik-cepat di HP (Android Chrome + iOS Safari) dan uji back-button setelah modal ditutup.
 
 ## 344. [Peta Pelanggan] Tab Sebaran Peta Gagal Dimuat — CSP Memblokir Leaflet dari unpkg (2026-11-14, RESOLVED)
 
@@ -345,13 +452,13 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Rencana fondasional (belum dieksekusi):** buat seam pengayaan **kartu-only** — hitung `deliveryService.calculateDelivery` dari koordinat kartu (atau geocode teks kartu), lalu update `customer_addresses` + cache JSON kartu; DILARANG menyentuh `customers.*`. Kunci dengan test “kartu ber-kartu tanpa koordinat tidak menulis root”.
 - **Bukti:** `tests/unit/reservation-lifecycle-address-guard.test.ts` (3 test) membuktikan reservasi ber-kartu — termasuk kartu tanpa koordinat — tidak memanggil `updateCustomerLocation`/`upsertSavedAddress` dan tidak menjalankan auto-distance root.
 
-## 328. [Buku Alamat/Staf] Kartu Tugas PWA Tidak Membaca Snapshot `delivery_fee` Reservasi (2026-11-13, OPEN)
+## 328. [Buku Alamat/Staf] Kartu Tugas PWA Tidak Membaca Snapshot `delivery_fee` Reservasi (2026-11-13, RESOLVED 2026-11-14)
 
-- **Status:** OPEN — ditemukan saat verifikasi hotfix Bunda Intan; bukan akibat hotfix.
+- **Status:** RESOLVED (2026-11-14) — `delivery_fee`, `discount_amount`, dan `items.price` ditambahkan ke `select` ketiga pembaca tugas; pricing memakai seam kanonis `resolveReservationBilling`.
 - **Gejala:** Reservasi `3c12b852-a06a-424a-8421-d5a92c3cb531` memiliki `delivery_fee = 15.000`, tetapi kartu tugas PWA menampilkan `deliveryFee = 10.000` (nilai `Customer.ongkir`). Ini menjelaskan disparitas tampilan biaya antara reservasi, PWA, dan rekap.
 - **Akar masalah:** `StaffReservationService.getTodayTasks` (`src/services/staff-reservation.service.ts:558-621`) tidak men-select kolom `delivery_fee`/`discount_amount`; akibatnya `resolveDeliveryFeeSnapshot()` (`src/services/reservation-core.service.ts:448-454`) jatuh ke fallback `customer.ongkir`. Jalur pembaca tugas lain perlu diaudit dengan pola yang sama.
 - **Dampak:** Terapis melihat biaya kunjungan yang berbeda dari snapshot kesepakatan reservasi; berpotensi salah tagih dan memperbesar drift PWA vs Google Sheets.
-- **Rencana fondasional (belum dieksekusi):** tambahkan `delivery_fee` dan `discount_amount` ke `select` semua pembaca tugas staf (`getTodayTasks`, `getUpcomingSchedule`, `getCompletedTasks`, detail/briefing terkait), lalu tambahkan test yang mengunci “snapshot reservasi menang atas `Customer.ongkir`”. Jangan menambal di formatter.
+- **Resolusi:** `delivery_fee`, `discount_amount`, dan `items: { price }` ditambahkan ke `select` `getTodayTasks`, `getUpcomingSchedule`, dan `getCompletedTasks`; pricing memakai `buildStaffTaskPricing` → `resolveReservationBilling` (diskon ikut dikurangkan). Test `reservation-billing.test.ts` mengunci “snapshot delivery_fee menang atas Customer.ongkir” (5 kasus ongkir + 3 kasus diskon).
 - **Bukti:** query produksi `delivery_fee=15000`; payload `getTodayTasks` menunjukkan `pricing.deliveryFee=10000`; `customer.ongkir=10000`; `customer_address.ongkir=10000`.
 
 ## 330. [Queue] `SEPARATE_WORKER=true` Mematikan Konsumen Chat → Antrean Menumpuk (2026-11-13, RESOLVED)

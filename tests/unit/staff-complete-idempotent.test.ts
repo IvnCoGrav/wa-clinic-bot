@@ -87,7 +87,9 @@ describe('Staff Complete & Payment Idempotency Tests (F4)', () => {
 
       expect(res.success).toBe(true);
       expect(res.data.alreadyPaid).toBe(true);
-      expect(res.data.status).toBe('completed');
+      expect(res.data.status).toBe('PAID');
+      expect(res.data.reservationStatus).toBe('completed');
+      expect(res.data.completed).toBe(true);
       expect(res.data.purchaseOccurredAt).toBe(existingDate);
       expect(updateSpy).not.toHaveBeenCalled();
     });

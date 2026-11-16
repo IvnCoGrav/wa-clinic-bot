@@ -25,6 +25,8 @@ const MIME_MAP: Record<string, string> = {
 const SCOPE_IS_PRIVATE: Record<string, boolean> = {
   outbound: false,
   inbound: true,
+  // Bukti pembayaran = dokumen finansial privat (nomor rekening/nominal).
+  'payment-proofs': true,
 };
 
 /**
@@ -237,6 +239,11 @@ export async function mediaRoutes(fastify: FastifyInstance) {
     const { scope, tenant, file } = request.params;
 
     if (!(scope in SCOPE_IS_PRIVATE)) {
+      return reply.status(404).send({ error: 'Not Found' });
+    }
+
+    // Bukti pembayaran hanya boleh file UUID yang dibuat server (anti traversal/tebak nama).
+    if (scope === 'payment-proofs' && !/^[a-f0-9]{32}\.(jpe?g|png|webp|gif|avif)$/i.test(file)) {
       return reply.status(404).send({ error: 'Not Found' });
     }
 

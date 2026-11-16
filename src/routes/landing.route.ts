@@ -2,7 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { resolveLandingContent, defaultLandingContent, LandingContent } from '../services/landing-content.service';
+import { resolveLandingContent, defaultLandingContent, resolveDefaultTenantContact, LandingContent } from '../services/landing-content.service';
 import { getPricelistPayload, serializePayloadForHtml } from '../services/pricelist.service';
 import { isCatalogDegraded, getCatalogSource } from '../services/treatment-catalog.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
@@ -417,20 +417,37 @@ export async function landingRoutes(fastify: FastifyInstance) {
     async (request: FastifyRequest, reply: FastifyReply) => {
     const query = (request.query || {}) as Record<string, string>;
     const tenantSlug = query.slug || 'default';
-    const content = (await resolveLandingContent(tenantSlug)) || defaultLandingContent(tenantSlug);
+
+    // RC-CTA-01 (2026-11-15): resolusi konten WAJIB punya fallback ke DEFAULT_TENANT_ID.
+    // Tanpa `?slug=`, `resolveLandingContent('default')` tidak menemukan apa pun
+    // (tenant.slug riil = 'default-tenant') lalu jatuh ke `defaultLandingContent()`
+    // (konten contoh/dev) yang nomornya dari env kosong → link `wa.me/?text=` tanpa
+    // nomor tujuan. Akibatnya semua klik iklan gagal masuk WhatsApp.
+    const tenantContact = await resolveDefaultTenantContact();
+    const content =
+      (await resolveLandingContent(tenantSlug)) ||
+      (tenantSlug === DEFAULT_TENANT_ID ? null : await resolveLandingContent(DEFAULT_TENANT_ID)) ||
+      defaultLandingContent(tenantSlug);
 
     // Isolasi multi-tenant (Q5): override pixel via query ?p= HANYA untuk default-tenant
     // (anti-spoofing attribution); tenant lain selalu memakai pixel DB-nya sendiri.
-    // Env FB_PIXEL_ID juga HANYA untuk default-tenant.
+    // Env FB_PIXEL_ID dan kontak tenant default juga HANYA untuk default-tenant —
+    // tenant lain tanpa nomor/pixel TIDAK boleh meminjam milik tenant default.
     const isDefaultTenant = content.tenant_id === DEFAULT_TENANT_ID;
     const pixelId =
       (isDefaultTenant ? query.p : undefined) ||
       content.meta_pixel_id ||
+      (isDefaultTenant ? tenantContact.meta_pixel_id : '') ||
       (isDefaultTenant ? process.env.FB_PIXEL_ID || '' : '');
-    
-    // SELALU gunakan nomor WA dari pengaturan Customer Service / Tenant (Single Source of Truth), dengan fallback query.phone & env.
-    const phone = content.whatsapp_number || query.phone || process.env.DEFAULT_WHATSAPP_PHONE || '';
-    
+
+    // SELALU gunakan nomor WA dari pengaturan Customer Service / Tenant (Single Source of Truth),
+    // dengan fallback query.phone & env. DB tenant didahulukan sebelum env.
+    const phone =
+      (content.whatsapp_number || '').trim() ||
+      query.phone ||
+      (isDefaultTenant ? tenantContact.whatsapp_number : '') ||
+      (isDefaultTenant ? process.env.DEFAULT_WHATSAPP_PHONE || '' : '');
+
     let rawMsg = query.msg || query.greetings || '';
     if (!rawMsg) {
       // Fail-open (bug pre-existing #136): query greetings tanpa try/catch membuat
@@ -442,6 +459,10 @@ export async function landingRoutes(fastify: FastifyInstance) {
         rawMsg = (tenantRec as any)?.greetings_text || tenantRec?.format_visit || '';
       } catch (greetErr: any) {
         request.log.warn(`[CTA GREETING LOOKUP] Gagal ambil greeting tenant (fail-open): ${greetErr.message}`);
+      }
+      if (!rawMsg && isDefaultTenant) {
+        // Fallback terakhir: greeting tenant default dari DB (bukan teks hardcode).
+        rawMsg = tenantContact.greetings_text || '';
       }
       if (!rawMsg) {
         rawMsg = 'Halo Bu Bidan, saya tertarik dengan layanan home-treatment';
@@ -623,9 +644,22 @@ export async function landingRoutes(fastify: FastifyInstance) {
         finalMsg = finalMsg.replace(/^(?:Promo\s*)?\[\s*[\w\s-]{2,32}?\s*\]\s*/i, '').trim();
         finalMsg = `Promo[${trackingCode}]\n\n${finalMsg}`.trim();
       }
+    } else {
+      // Tanpa kode (crawler/bot/preview): placeholder mentah `[%ID%]` / `%ID%`
+      // tidak boleh ikut terkirim ke siapa pun. Buang beserta kata "Promo" di depannya.
+      const cleaned = finalMsg.replace(/(?:Promo\s*)?\[\s*%ID%\s*\]\s*/gi, '').trim();
+      finalMsg = cleaned || 'Halo Bu Bidan, saya tertarik dengan layanan home-treatment';
     }
 
     const cleanPhone = phone.replace(/\D/g, '');
+    if (!cleanPhone) {
+      // RC-CTA-01: jangan pernah diam-diam mengirim link tanpa nomor tujuan.
+      // Ini yang membuat seluruh trafik iklan tidak bisa masuk WhatsApp.
+      request.log.error(
+        `[CTA CRITICAL] Nomor WhatsApp tujuan KOSONG (slug=${tenantSlug}, tenant=${content.tenant_id}). ` +
+          'Cek Tenant.whatsapp_number di DB / env DEFAULT_WHATSAPP_PHONE.'
+      );
+    }
     const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(finalMsg)}`;
 
     const nonce = crypto.randomBytes(16).toString('base64');

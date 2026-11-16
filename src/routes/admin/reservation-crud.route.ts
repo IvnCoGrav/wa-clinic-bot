@@ -925,6 +925,16 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
       if (!['BABY', 'MOMS', 'BOTH', 'KIDS', 'BUNDLE'].includes(treatmentCategory)) {
         return reply.status(400).send({ error: 'treatmentCategory tidak valid.' });
       }
+
+      // Status create hanya boleh confirmed/hold. Sebelumnya nilai lain
+      // (pending/completed/cancelled) diam-diam dipaksa confirmed oleh UI/route.
+      const rawStatus = status as string | undefined;
+      if (rawStatus !== undefined && rawStatus !== null && rawStatus !== 'confirmed' && rawStatus !== 'hold') {
+        return reply.status(400).send({
+          success: false,
+          error: 'Status tidak valid untuk reservasi baru. Gunakan confirmed atau hold.',
+        });
+      }
  
       const customer = await customerService.getCustomerById(customerId, tenantId);
       if (!customer) {
@@ -1056,6 +1066,12 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
             source: 'ADMIN_PANEL',
             force,
             status: reservationStatus as 'hold' | 'confirmed',
+            // A-010 / idempotensi: double-submit & retry tidak boleh membuat
+            // reservasi ganda. Dashboard sudah mengirim requestId per draft.
+            requestId:
+              typeof (request.body as any)?.requestId === 'string'
+                ? (request.body as any).requestId.trim() || undefined
+                : undefined,
           });
         } catch (conflictErr: any) {
           if (conflictErr instanceof ReservationConflictError) {

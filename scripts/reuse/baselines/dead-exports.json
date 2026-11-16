@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedFromCommit": "dea702fa",
+  "generatedFromCommit": "e44d3340",
   "deadExports": [
     {
       "type": "DEAD_EXPORT",
@@ -308,7 +308,7 @@
       "name": "isSafeUrlForFetch",
       "kind": "function",
       "file": "src/routes/media.route.ts",
-      "line": 163
+      "line": 165
     },
     {
       "type": "DEAD_EXPORT",
@@ -511,7 +511,7 @@
       "name": "IMAGE_EXT_RE",
       "kind": "variable",
       "file": "src/services/media.service.ts",
-      "line": 124
+      "line": 137
     },
     {
       "type": "DEAD_EXPORT",
@@ -721,7 +721,7 @@
       "name": "estimateTravelDurationMinutes",
       "kind": "function",
       "file": "src/services/staff-reservation.service.ts",
-      "line": 366
+      "line": 413
     },
     {
       "type": "DEAD_EXPORT",

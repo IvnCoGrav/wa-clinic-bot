@@ -354,6 +354,10 @@ export const TodayTreatments: React.FC = () => {
   const handleSavePayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!paymentTask) return;
+    if (paymentMethod !== 'CASH' && !proofImageB64) {
+      toast('Silakan unggah foto bukti transfer / QRIS terlebih dahulu.', 'error');
+      return;
+    }
 
     setSubmittingPayment(true);
     try {
@@ -361,14 +365,24 @@ export const TodayTreatments: React.FC = () => {
         method: 'POST',
         body: JSON.stringify({
           paymentMethod,
+          amount: paymentTask.pricing.totalFee,
           proofImageB64: paymentMethod !== 'CASH' ? proofImageB64 : null,
         }),
       });
       if (res.success) {
-        toast('Status pembayaran berhasil diperbarui menjadi LUNAS.', 'success');
+        if (res.data?.status === 'AWAITING_VERIFICATION') {
+          toast(
+            `Bukti tersimpan. Nominal Rp ${Number(res.data?.receivedAmount || 0).toLocaleString('id-ID')} belum cocok dengan tagihan Rp ${Number(res.data?.expectedTotal || 0).toLocaleString('id-ID')} — menunggu verifikasi.`,
+            'info'
+          );
+        } else {
+          toast('Status pembayaran berhasil diperbarui menjadi LUNAS.', 'success');
+        }
         setPaymentTask(null);
         setProofImageB64(null);
         fetchTasks();
+      } else {
+        toast(`Gagal: ${res.error || 'Terjadi kesalahan saat menyimpan pembayaran'}`, 'error');
       }
     } catch (err: any) {
       toast(err.message || 'Gagal menyimpan status lunas.', 'error');

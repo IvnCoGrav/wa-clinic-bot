@@ -533,7 +533,7 @@
         {
           "type": "file",
           "path": "docs/FEATURE_INVENTORY.md",
-          "line": 203,
+          "line": 205,
           "contains": "25 interval cron"
         },
         {
@@ -875,7 +875,7 @@
         {
           "type": "file",
           "path": "src/services/media.service.ts",
-          "line": 772,
+          "line": 827,
           "contains": "Proteksi pricelist"
         },
         {
@@ -929,7 +929,7 @@
         {
           "type": "file",
           "path": "src/services/staff-reservation.service.ts",
-          "line": 2854,
+          "line": 2918,
           "contains": "belum diatur di Pengaturan Klinik"
         },
         {
@@ -1061,7 +1061,7 @@
         {
           "type": "file",
           "path": "src/services/staff-reservation.service.ts",
-          "line": 84,
+          "line": 86,
           "contains": "S-05: LTV TIDAK dikirim"
         },
         {
@@ -1169,13 +1169,13 @@
         {
           "type": "file",
           "path": "src/services/staff-reservation.service.ts",
-          "line": 1756,
-          "contains": "Nominal pembayaran tidak sesuai tagihan resmi"
+          "line": 1793,
+          "contains": "STAFF_PAYMENT_MISMATCH"
         },
         {
           "type": "test",
           "path": "tests/unit/staff-payment-validation.test.ts",
-          "contains": "nominal kurang dari tagihan"
+          "contains": "AWAITING_VERIFICATION"
         }
       ],
       "verifiedBy": "AI Agent",
@@ -1853,7 +1853,7 @@
         {
           "type": "file",
           "path": "docs/FEATURE_INVENTORY.md",
-          "line": 269,
+          "line": 271,
           "contains": "superAdminOnlyPrefixes"
         },
         {
@@ -2301,7 +2301,7 @@
         {
           "type": "file",
           "path": "src/services/staff-reservation.service.ts",
-          "line": 2211,
+          "line": 2267,
           "contains": "clinicLoc.maxCoverageKm"
         },
         {

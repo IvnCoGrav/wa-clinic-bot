@@ -23,9 +23,10 @@ export interface TaskAddress {
 
 export interface TaskPricing {
   treatmentFee: number;
+  discountAmount?: number;
   deliveryFee: number;
   totalFee: number;
-  paymentStatus: 'LUNAS' | 'TAGIH_DI_TEMPAT';
+  paymentStatus: 'LUNAS' | 'TAGIH_DI_TEMPAT' | 'PERLU_VERIFIKASI';
   paymentStatusLabel: string;
 }
 

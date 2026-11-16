@@ -3,6 +3,91 @@ import { prisma } from '../db/client';
 import { getWibNow, startOfTodayWib, formatWibDateYYYYMMDD, formatWibTime } from '../utils/wib-time';
 import { adFunnelMetricsService, FunnelMetrics } from './ad-funnel-metrics.service';
 import { AlertService, AlertType, AlertSeverity } from './alert.service';
+import { resolveGatewayForTenant } from '../integrations/whatsapp/factory';
+
+/** Normalisasi nomor WA ke format 62xxxx (tanpa + dan spasi). */
+function normalizeWaRecipient(raw: string): string {
+  const digits = String(raw || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('62')) return digits;
+  if (digits.startsWith('0')) return `62${digits.slice(1)}`;
+  if (digits.startsWith('8')) return `62${digits}`;
+  return digits;
+}
+
+/**
+ * TEMPORARY (2026-11-15): salinan alert watchdog via WhatsApp.
+ * Dikirim dari nomor WhatsApp yang terkoneksi ke bot (gateway tenant), ke daftar
+ * penerima di `settings.adWatchdog.whatsappRecipients`. Kegagalan WA TIDAK boleh
+ * menggagalkan alert Telegram yang sudah terkirim (fail-soft).
+ */
+async function sendWatchdogWhatsappCopies(params: {
+  tenantId: string;
+  message: string;
+  recipients: string[];
+  idempotencyKey: string;
+  title: string;
+  reportDate: string;
+}): Promise<{ sent: string[]; failed: string[] }> {
+  const { tenantId, message, recipients, idempotencyKey, title, reportDate } = params;
+  const sent: string[] = [];
+  const failed: string[] = [];
+
+  const targets = Array.from(
+    new Set(recipients.map(normalizeWaRecipient).filter((n) => n.length >= 10))
+  );
+  if (targets.length === 0) return { sent, failed };
+
+  const notifModel = (prisma as any).adminNotificationLog;
+  let gateway: any = null;
+  try {
+    gateway = await resolveGatewayForTenant(tenantId);
+  } catch (gwErr: any) {
+    console.warn('[AdWatchdog] Gateway WA tidak tersedia:', gwErr?.message || gwErr);
+    return { sent, failed: targets };
+  }
+
+  for (let i = 0; i < targets.length; i++) {
+    const to = targets[i];
+    let status: 'SENT' | 'FAILED' = 'FAILED';
+    let errMsg: string | null = null;
+    try {
+      const res = await gateway.sendTextMessage(to, message);
+      if (res?.success === false) errMsg = res?.error || 'send_failed';
+      else status = 'SENT';
+    } catch (sendErr: any) {
+      errMsg = sendErr?.message || 'send_error';
+    }
+
+    if (status === 'SENT') sent.push(to);
+    else failed.push(to);
+
+    if (notifModel && typeof notifModel.create === 'function') {
+      try {
+        await notifModel.create({
+          data: {
+            tenant_id: tenantId,
+            channel: 'WHATSAPP',
+            recipient: to,
+            notification_type: 'AD_FUNNEL_ANOMALY',
+            report_date: reportDate,
+            // idempotency_key unik per (alert, kanal, penerima)
+            idempotency_key: `${idempotencyKey}:WA:${i}`,
+            title,
+            message_content: message,
+            status,
+            error_message: errMsg,
+            metadata: { via: 'ad-watchdog', channel: 'WHATSAPP' },
+          },
+        });
+      } catch {
+        // P2002/DB offline: abaikan, jangan ganggu pengiriman utama
+      }
+    }
+  }
+
+  return { sent, failed };
+}
 
 // ── 1. Skema Konfigurasi Tenant ──────────────────────────────────────────────
 export const AdWatchdogSettingsSchema = z.object({
@@ -18,6 +103,13 @@ export const AdWatchdogSettingsSchema = z.object({
   lowTrafficRatio: z.number().min(0).max(1).default(0.5),
   paidMediums: z.array(z.string()).default(['cpc', 'paid', 'ctwa', 'ctwa_fuzzy']),
   telegramTopicId: z.number().int().nullable().default(null),
+  /**
+   * TEMPORARY (2026-11-15, keputusan owner): salinan alert watchdog juga dikirim
+   * via WhatsApp (nomor yang terkoneksi ke bot) ke daftar penerima ini.
+   * Kosong = hanya Telegram (perilaku lama). Tenant-aware, bukan hardcode.
+   * Catatan: docs/KNOWN_ISSUES.md #350.
+   */
+  whatsappRecipients: z.array(z.string()).default([]),
 });
 
 export type AdWatchdogSettings = z.infer<typeof AdWatchdogSettingsSchema>;
@@ -35,6 +127,7 @@ export const DEFAULT_AD_WATCHDOG_SETTINGS: AdWatchdogSettings = {
   lowTrafficRatio: 0.5,
   paidMediums: ['cpc', 'paid', 'ctwa', 'ctwa_fuzzy'],
   telegramTopicId: null,
+  whatsappRecipients: [],
 };
 
 // In-memory cache untuk settings tenant (TTL 5 menit)
@@ -437,6 +530,25 @@ export async function checkAndNotify(
     }
 
     await updateLogStatus('SENT');
+
+    // TEMPORARY (2026-11-15): salinan ke WhatsApp agar alert tidak tenggelam
+    // di topik Telegram. Fail-soft: Telegram sudah terkirim, WA tidak memblokir.
+    const waRecipients = Array.isArray(cfg.whatsappRecipients) ? cfg.whatsappRecipients : [];
+    if (waRecipients.length > 0) {
+      try {
+        await sendWatchdogWhatsappCopies({
+          tenantId,
+          message: finalMessage,
+          recipients: waRecipients,
+          idempotencyKey,
+          title: `[WATCHDOG] ${evalResult.primarySignal}`,
+          reportDate: wibDateStr,
+        });
+      } catch (waErr: any) {
+        console.warn('[AdWatchdog] Gagal kirim salinan WA:', waErr?.message || waErr);
+      }
+    }
+
     return { sent: true, signal: evalResult.primarySignal };
   } catch (alertErr: any) {
     console.error('[AdWatchdog] Failed to dispatch alert:', alertErr?.message || alertErr);

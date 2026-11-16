@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedFromCommit": "dea702fa",
+  "generatedFromCommit": "e44d3340",
   "maxLines": 1500,
   "files": [
     {
@@ -9,7 +9,7 @@
     },
     {
       "file": "src/services/staff-reservation.service.ts",
-      "lines": 3049
+      "lines": 3119
     },
     {
       "file": "src/services/treatment-catalog.service.ts",

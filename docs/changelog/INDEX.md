@@ -5,8 +5,11 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 689
+Total entri terindeks: 692
 
+- 2026-11-14 | Fix: Kartu Alamat Ganda dari Teks Chat Ber-Link (Regresi 6285852555576)
+- 2026-11-14 | Fix: Form Reservasi — Alamat Display-Only, Bidan/Status Jujur, Validasi & Anti-Friksi
+- 2026-11-14 | Fix: Pembayaran Berdiskon Tidak Lagi Diblokir, Bukti Bayar Permanen, Form Reservasi Tidak
 - 2026-11-14 | Fix: Peta Pelanggan Kembali Tampil — Leaflet Di-vendor Lokal (#344)
 - 2026-11-14 | Feat: Pull-to-Refresh Terkontrol di LiveChat Monitor & Halaman Staf
 - 2026-11-14 | Fix: Peringatan Reservasi Aktif Palsu dari Riwayat `completed` (#342)
