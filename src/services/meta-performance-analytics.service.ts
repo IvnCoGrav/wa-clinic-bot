@@ -4,6 +4,29 @@ import { responseCacheService } from './response-cache.service';
 import { resolveTreatmentValue } from './capi.service';
 import { resolveDeliveryFeeSnapshot } from './reservation-core.service';
 import { computeFunnelMetrics } from './ad-funnel-metrics.service';
+import { normalizePhoneID } from '../utils/phone-normalizer';
+import { WIB_OFFSET_MS } from '../utils/wib-time';
+import {
+  MS_PER_DAY,
+  NO_DATE_KEY,
+  JOURNEY_BRACKETS,
+  LEADTIME_BRACKETS,
+  addMonths,
+  capacityBandFor,
+  isQualifyingStatus,
+  isSandboxed,
+  mean,
+  median,
+  monthDiff,
+  round2,
+  sanitizeUtmCampaign,
+  sanitizeUtmSource,
+  wibDateKey,
+  wibDayEnd,
+  wibDayStart,
+  wibMonthKey,
+  wibTodayStr,
+} from './meta-performance.helpers';
 
 /**
  * META ADS PERFORMANCE & SALES ANALYTICS — kontrak kanonis (Fase 0).
@@ -67,8 +90,6 @@ export const META_BOT_EXCLUDE_CLAUSE: any = {
   ],
 };
 
-const WIB_OFFSET_MS = 7 * 3600 * 1000;
-const MS_PER_DAY = 86_400_000;
 const MAX_ROWS = 5000;
 const CACHE_TTL_SECONDS = 30;
 
@@ -248,99 +269,6 @@ export interface MetaPerformanceReport {
   } | null;
 }
 
-// ── Helper teknis ───────────────────────────────────────────────────────────
-function wibTodayStr(): string {
-  return new Date(Date.now() + WIB_OFFSET_MS).toISOString().slice(0, 10);
-}
-function wibDayStart(dateStr: string): Date {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0) - WIB_OFFSET_MS);
-}
-function wibDayEnd(dateStr: string): Date {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999) - WIB_OFFSET_MS);
-}
-function median(sorted: number[]): number | null {
-  if (sorted.length === 0) return null;
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
-}
-function mean(nums: number[]): number | null {
-  if (nums.length === 0) return null;
-  return nums.reduce((a, b) => a + b, 0) / nums.length;
-}
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}
-function safeDiv(numerator: number, denominator: number): number {
-  return denominator > 0 ? round2(numerator / denominator) : 0;
-}
-function safeDivOrUndef(numerator: number, denominator: number): number | undefined {
-  return denominator > 0 ? Math.round(numerator / denominator) : undefined;
-}
-function isSandboxed(customer: any): boolean {
-  return Boolean(customer?.is_sandbox_test) || Boolean(customer?.is_internal_staff);
-}
-function isQualifyingStatus(status: string | null | undefined): boolean {
-  const s = (status || '').toLowerCase();
-  return s !== 'cancelled' && s !== 'rejected';
-}
-
-// ── Sanitasi teknis label UTM ───────────────────────────────────────────────
-// Murni pembersihan mesin (bukan pemetaan alias merek — itu wewenang DB/config
-// per-tenant). Cegah makro Meta yang belum ter-render (`{{ad.id}}`) bocor mentah
-// ke dashboard dan pecah menjadi banyak baris.
-const UTM_MACRO_RE = /\{\{[^}]*\}\}/;
-function isUnrenderedUtmMacro(raw: string | null | undefined): boolean {
-  return typeof raw === 'string' && UTM_MACRO_RE.test(raw);
-}
-function sanitizeUtmCampaign(raw: string | null | undefined): string {
-  const t = (raw ?? '').trim();
-  if (!t) return '(tanpa campaign)';
-  return isUnrenderedUtmMacro(t) ? '(macro UTM belum dirender)' : t;
-}
-function sanitizeUtmSource(raw: string | null | undefined): string | null {
-  const t = (raw ?? '').trim();
-  if (!t || isUnrenderedUtmMacro(t)) return null;
-  return t;
-}
-
-// ── Kohort retensi & kapasitas ──────────────────────────────────────────────
-const RETENTION_WINDOWS_DAYS = [30, 60, 90] as const;
-
-/** Kunci tanggal kalender WIB (YYYY-MM-DD) untuk Date apa pun. */
-function wibDateKey(date: Date): string {
-  return new Date(date.getTime() + WIB_OFFSET_MS).toISOString().slice(0, 10);
-}
-
-/**
- * Pita utilisasi terapis. Ambang 65/85 adalah konvensi kapasitas industri
- * (headroom aman untuk scale iklan) — BUKAN data bisnis hardcode yang
- * disembunyikan; ditandai provisional untuk kalibrasi ADR.
- */
-function capacityBandFor(utilizationPct: number | null): 'AMAN' | 'OPTIMAL' | 'PENUH' | 'UNKNOWN' {
-  if (utilizationPct === null || !Number.isFinite(utilizationPct)) return 'UNKNOWN';
-  if (utilizationPct < 65) return 'AMAN';
-  if (utilizationPct <= 85) return 'OPTIMAL';
-  return 'PENUH';
-}
-
-const JOURNEY_BRACKETS: Array<{ key: string; label: string; test: (d: number) => boolean }> = [
-  { key: 'lt1', label: '< 24 Jam', test: (d) => d < 1 },
-  { key: 'd1_3', label: '1 - 3 Hari', test: (d) => d >= 1 && d < 3 },
-  { key: 'd3_7', label: '3 - 7 Hari', test: (d) => d >= 3 && d < 7 },
-  { key: 'd7_14', label: '7 - 14 Hari', test: (d) => d >= 7 && d < 14 },
-  { key: 'gt14', label: '> 14 Hari', test: (d) => d >= 14 },
-];
-const LEADTIME_BRACKETS: Array<{ key: string; label: string; test: (d: number) => boolean }> = [
-  { key: 'same_day', label: 'Same-Day (H-0)', test: (d) => d <= 0 },
-  { key: 'h1', label: 'H-1 (Besok)', test: (d) => d === 1 },
-  { key: 'h2_3', label: 'H-2 s/d H-3', test: (d) => d >= 2 && d <= 3 },
-  { key: 'h4_7', label: 'H-4 s/d H-7', test: (d) => d >= 4 && d <= 7 },
-  { key: 'gt7', label: '> H-7', test: (d) => d > 7 },
-];
-const NO_DATE_KEY = { key: 'no_date', label: 'Tanpa Tanggal' };
-
 // ── ZERO report (offline-safe) ──────────────────────────────────────────────
 export function buildZeroMetaPerformanceReport(
   tenantId: string,
@@ -421,37 +349,6 @@ export function buildZeroMetaPerformanceReport(
   };
 }
 
-/**
- * Laporan performa Meta Ads to Sales (tenant-scoped, read-only).
- * Offline-safe: setiap query gagal → fallback aman, tidak melempar unhandled rejection.
- */
-
-function wibMonthKey(d: Date): string {
-  return new Date(d.getTime() + WIB_OFFSET_MS).toISOString().slice(0, 7);
-}
-
-function monthDiff(fromMonth: string, toMonth: string): number {
-  const [y1, m1] = fromMonth.split('-').map(Number);
-  const [y2, m2] = toMonth.split('-').map(Number);
-  return (y2 - y1) * 12 + (m2 - m1);
-}
-
-function addMonths(monthStr: string, n: number): string {
-  const [y, m] = monthStr.split('-').map(Number);
-  const totalMonths = y * 12 + (m - 1) + n;
-  const newY = Math.floor(totalMonths / 12);
-  const newM = (totalMonths % 12) + 1;
-  return `${newY}-${String(newM).padStart(2, '0')}`;
-}
-
-function normalizePhone(p?: string | null): string {
-  if (!p) return '';
-  const digits = p.replace(/\D/g, '');
-  if (digits.startsWith('0')) return '62' + digits.slice(1);
-  if (digits.startsWith('62')) return digits;
-  return digits;
-}
-
 export interface BuildMonthlyCohortsParams {
   tenantId: string;
   historyReservations: any[];
@@ -509,7 +406,7 @@ export async function buildMonthlyCohorts(params: BuildMonthlyCohortsParams): Pr
   const allReservations = Array.from(allResMap.values());
 
   const patientKeyOf = (r: any): string => {
-    const phone = normalizePhone(r.customer?.phone);
+    const phone = normalizePhoneID(r.customer?.phone);
     if (phone) return `phone:${phone}`;
     return `id:${r.customer_id || r.customer?.id || r.id}`;
   };
@@ -865,6 +762,10 @@ export async function buildMonthlyCohorts(params: BuildMonthlyCohortsParams): Pr
   return { monthlyCohorts, rolling3MonthCohorts, planning };
 }
 
+/**
+ * Laporan performa Meta Ads to Sales (tenant-scoped, read-only).
+ * Offline-safe: setiap query gagal → fallback aman, tidak melempar unhandled rejection.
+ */
 export async function getMetaPerformanceReport(
   options: MetaPerformanceQueryOptions,
 ): Promise<MetaPerformanceReport> {
@@ -1561,6 +1462,3 @@ export async function getMetaPerformanceReport(
   }
   return report;
 }
-
-/** Ekspor helper murni untuk pengujian unit (tanpa DB). */
-export const _internal = { wibDayStart, wibDayEnd, median, mean, safeDiv, safeDivOrUndef, sanitizeUtmCampaign, sanitizeUtmSource, JOURNEY_BRACKETS, LEADTIME_BRACKETS, wibMonthKey, monthDiff, addMonths, normalizePhone };
