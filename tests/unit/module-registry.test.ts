@@ -88,4 +88,52 @@ describe('Module Registry & Discovery Gate (Fase 1)', () => {
     // Normalisasi CRLF ke LF untuk perbandingan lintas OS
     expect(diskContent.replace(/\r\n/g, '\n')).toBe(md1.replace(/\r\n/g, '\n'));
   });
+
+  it('7. Seluruh link markdown di docs/MODULE_INDEX.md merujuk file yang benar-benar ada di disk', () => {
+    const diskPath = path.resolve(process.cwd(), 'docs/MODULE_INDEX.md');
+    const content = fs.readFileSync(diskPath, 'utf8');
+
+    // Cari seluruh link [text](target)
+    const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+    let match;
+    const linksFound: string[] = [];
+
+    while ((match = linkRegex.exec(content)) !== null) {
+      const linkTarget = match[2];
+      // Abaikan anchor internal (#) atau external url (http)
+      if (linkTarget.startsWith('#') || linkTarget.startsWith('http')) continue;
+
+      linksFound.push(linkTarget);
+      const resolved = path.resolve(path.dirname(diskPath), linkTarget);
+      expect(fs.existsSync(resolved), `Link target tidak ada: ${linkTarget} (resolved: ${resolved})`).toBe(true);
+    }
+
+    expect(linksFound.length).toBeGreaterThan(10);
+  });
+
+  it('8. $schema di module-registry.json menunjuk file skema yang ada di disk', () => {
+    const regRaw = JSON.parse(fs.readFileSync('scripts/module-registry.json', 'utf8'));
+    expect(regRaw.$schema).toBeDefined();
+
+    const schemaPath = path.resolve('scripts', regRaw.$schema);
+    expect(fs.existsSync(schemaPath), `Schema file tidak ditemukan: ${schemaPath}`).toBe(true);
+  });
+
+  it('9. Seluruh script perintah di package.json yang merujuk node/tsx memiliki file target yang ada di disk (Anti-Dangling)', () => {
+    const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+    const scripts = pkg.scripts || {};
+
+    for (const [name, cmd] of Object.entries(scripts) as [string, string][]) {
+      // Cari perintah yang mengeksekusi file lokal di scripts/ atau src/
+      const match = cmd.match(/(?:node|tsx)\s+([^\s]+\.(?:mjs|js|ts))/);
+      if (match) {
+        const targetFile = match[1];
+        // Jangan cek dist/ jika belum dibuild
+        if (targetFile.startsWith('dist/')) continue;
+
+        const resolved = path.resolve(process.cwd(), targetFile);
+        expect(fs.existsSync(resolved), `Script "npm run ${name}" menunjuk file yang tidak ada: ${targetFile}`).toBe(true);
+      }
+    }
+  });
 });

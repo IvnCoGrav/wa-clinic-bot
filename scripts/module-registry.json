@@ -1,5 +1,5 @@
 {
-  "$schema": "./module-registry.schema.json",
+  "$schema": "./reuse/module-registry.schema.json",
   "version": 1,
   "description": "Registry modul kanonis sistem untuk reuse dan pencegahan duplikasi pengetahuan.",
   "capabilities": [

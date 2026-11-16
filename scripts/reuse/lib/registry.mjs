@@ -328,8 +328,8 @@ export function generateModuleIndexMarkdown(registry) {
 
   for (const cap of sorted) {
     const exportsList = cap.exports.map(e => `\`${e}\``).join(', ');
-    const testDisplay = cap.test ? `[\`${path.basename(cap.test)}\`](${cap.test})` : '*Belum ada (Fase lanjutan)*';
-    md += `| \`${cap.id}\` | **${cap.title}**<br>${cap.description} | [\`${cap.canonical}\`](${cap.canonical}) | ${exportsList} | ${testDisplay} |\n`;
+    const testDisplay = cap.test ? `[\`${path.basename(cap.test)}\`](../${cap.test})` : '*Belum ada (Fase lanjutan)*';
+    md += `| \`${cap.id}\` | **${cap.title}**<br>${cap.description} | [\`${cap.canonical}\`](../${cap.canonical}) | ${exportsList} | ${testDisplay} |\n`;
   }
 
   md += `\n## 2. Rincian Modul & Aturan Guardrail\n\n`;
@@ -337,11 +337,11 @@ export function generateModuleIndexMarkdown(registry) {
   for (const cap of sorted) {
     md += `### \`${cap.id}\` — ${cap.title}\n\n`;
     md += `- **Deskripsi:** ${cap.description}\n`;
-    md += `- **File Kanonis:** [\`${cap.canonical}\`](${cap.canonical})\n`;
+    md += `- **File Kanonis:** [\`${cap.canonical}\`](../${cap.canonical})\n`;
     md += `- **Ekspor Kanonis:** ${cap.exports.map(e => `\`${e}\``).join(', ')}\n`;
     md += `- **Simbol Terlarang di Luar Kanonis:** ${cap.forbiddenDeclarations.map(s => `\`${s}\``).join(', ')}\n`;
     md += `- **File yang Diizinkan:** ${cap.allowedFiles.map(f => `\`${f}\``).join(', ')}\n`;
-    md += `- **File Test:** ${cap.test ? `[\`${cap.test}\`](${cap.test})` : '*Belum didefinisikan*'}\n\n`;
+    md += `- **File Test:** ${cap.test ? `[\`${cap.test}\`](../${cap.test})` : '*Belum didefinisikan*'}\n\n`;
   }
 
   md += `---\n\n`;
