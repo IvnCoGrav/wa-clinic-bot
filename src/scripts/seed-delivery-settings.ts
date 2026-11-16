@@ -10,31 +10,19 @@
  */
 
 import { prisma } from '../db/client';
+import { parseCliArgs, getArgBoolean, getArgNumber, getArgString } from './lib/parse-args';
 
-function parseArgs() {
-  const args = process.argv.slice(2);
-  const options: Record<string, string | boolean> = {};
-
-  for (const arg of args) {
-    if (arg.startsWith('--')) {
-      const [key, val] = arg.slice(2).split('=');
-      if (val !== undefined) {
-        options[key] = val;
-      } else {
-        options[key] = true;
-      }
-    }
-  }
-
+function loadParams() {
+  const options = parseCliArgs();
   return {
-    tenantId: (options.tenant as string) || 'default-tenant',
-    ttlDays: options['ttl-days'] !== undefined ? Number(options['ttl-days']) : 14,
-    commit: Boolean(options.commit),
+    tenantId: getArgString(options, 'tenant', 'default-tenant'),
+    ttlDays: getArgNumber(options, 'ttl-days', 14)!,
+    commit: getArgBoolean(options, 'commit', false),
   };
 }
 
 async function main() {
-  const params = parseArgs();
+  const params = loadParams();
   console.log(`[SEED DELIVERY] Target Tenant: ${params.tenantId}`);
   console.log(`[SEED DELIVERY] Mode: ${params.commit ? 'COMMIT (Write to DB)' : 'DRY RUN (No changes)'}`);
 

@@ -13,26 +13,31 @@
  */
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { parseCliArgs, getArgNumber, getArgString, getArgBoolean } from './lib/parse-args';
 
-function parseArgs() {
-  const args = process.argv.slice(2);
-  const out: any = { dryRun: true, tenantId: DEFAULT_TENANT_ID };
-  for (let i = 0; i < args.length; i++) {
-    const a = args[i];
-    if (a === '--dry-run') out.dryRun = true;
-    else if (a === '--execute') { console.error('[DEPRECATED] --execute DITOLAK. Gunakan script baru: reconcile-meta-pageviews.ts'); process.exit(1); }
-    else if (a === '--count') out.count = parseInt(args[++i], 10);
-    else if (a === '--start') out.start = args[++i];
-    else if (a === '--end') out.end = args[++i];
-    else if (a === '--landingUrl') out.landingUrl = args[++i];
-    else if (a === '--utmCampaign') out.utmCampaign = args[++i];
-    else if (a === '--utmSource') out.utmSource = args[++i];
-    else if (a === '--utmMedium') out.utmMedium = args[++i];
-    else if (a === '--tenantId') out.tenantId = args[++i];
-    else if (a === '--file') out.file = args[++i];
-    else if (a === '--allow-synthetic') { console.error('[DEPRECATED] --allow-synthetic DITOLAK. Data synthetic tidak valid untuk produksi.'); process.exit(1); }
+function loadParams() {
+  const parsed = parseCliArgs();
+  if (parsed.execute) {
+    console.error('[DEPRECATED] --execute DITOLAK. Gunakan script baru: reconcile-meta-pageviews.ts');
+    process.exit(1);
   }
-  return out;
+  if (parsed['allow-synthetic']) {
+    console.error('[DEPRECATED] --allow-synthetic DITOLAK. Data synthetic tidak valid untuk produksi.');
+    process.exit(1);
+  }
+  return {
+    dryRun: getArgBoolean(parsed, 'dry-run', true),
+    tenantId: getArgString(parsed, 'tenantId', DEFAULT_TENANT_ID),
+    count: getArgNumber(parsed, 'count'),
+    start: parsed.start ? String(parsed.start) : undefined,
+    end: parsed.end ? String(parsed.end) : undefined,
+    landingUrl: parsed.landingUrl ? String(parsed.landingUrl) : undefined,
+    utmCampaign: parsed.utmCampaign ? String(parsed.utmCampaign) : undefined,
+    utmSource: parsed.utmSource ? String(parsed.utmSource) : undefined,
+    utmMedium: parsed.utmMedium ? String(parsed.utmMedium) : undefined,
+    file: parsed.file ? String(parsed.file) : undefined,
+    allowSynthetic: getArgBoolean(parsed, 'allow-synthetic', false),
+  };
 }
 
 function randomHour() {
@@ -42,7 +47,7 @@ function randomHour() {
 function randomMinute() { return Math.floor(Math.random() * 60); }
 
 async function main() {
-  const opts = parseArgs();
+  const opts = loadParams();
   const tenantId = opts.tenantId || DEFAULT_TENANT_ID;
   const landingUrl = opts.landingUrl || 'https://kalababyspa.online/reservasionline';
   const utmSource = opts.utmSource || 'meta';

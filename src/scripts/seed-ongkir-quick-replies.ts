@@ -13,26 +13,18 @@
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { ONGKIR_QUICK_REPLIES } from '../routes/admin/quick-replies.subroute';
+import { parseCliArgs, getArgBoolean, getArgString } from './lib/parse-args';
 
-function parseArgs() {
-  const args = process.argv.slice(2);
-  const options: Record<string, string | boolean> = {};
-
-  for (const arg of args) {
-    if (arg.startsWith('--')) {
-      const [key, val] = arg.slice(2).split('=');
-      options[key] = val !== undefined ? val : true;
-    }
-  }
-
+function loadParams() {
+  const options = parseCliArgs();
   return {
-    tenantId: (options.tenant as string) || DEFAULT_TENANT_ID,
-    commit: Boolean(options.commit),
+    tenantId: getArgString(options, 'tenant', DEFAULT_TENANT_ID),
+    commit: getArgBoolean(options, 'commit', false),
   };
 }
 
 async function main() {
-  const params = parseArgs();
+  const params = loadParams();
   console.log(`[SEED ONGKIR QR] Target Tenant: ${params.tenantId}`);
   console.log(`[SEED ONGKIR QR] Mode: ${params.commit ? 'COMMIT (Write to DB)' : 'DRY RUN (No changes)'}`);
   console.log(`[SEED ONGKIR QR] Total Quick Replies: ${ONGKIR_QUICK_REPLIES.length} template (/ongkir1 s/d /ongkir25)`);

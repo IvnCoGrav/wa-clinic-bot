@@ -19,29 +19,19 @@ import {
   wibDayBoundsUtc,
   formatWibDateYYYYMMDD,
 } from '../utils/wib-time';
+import { parseCliArgs, getArgString, getArgNumber } from './lib/parse-args';
 
-function parseArgs() {
-  const args = process.argv.slice(2);
-  const options: Record<string, string> = {};
-
-  for (const arg of args) {
-    if (arg.startsWith('--')) {
-      const [key, val] = arg.slice(2).split('=');
-      if (val !== undefined) {
-        options[key] = val;
-      }
-    }
-  }
-
+function loadParams() {
+  const options = parseCliArgs();
   return {
-    tenantId: options.tenant || 'default-tenant',
-    days: options.days ? Math.max(1, parseInt(options.days, 10)) : 14,
-    endDateStr: options['end-date'] || null,
+    tenantId: getArgString(options, 'tenant', 'default-tenant'),
+    days: Math.max(1, getArgNumber(options, 'days', 14)!),
+    endDateStr: (options['end-date'] as string) || null,
   };
 }
 
 async function runBacktest() {
-  const params = parseArgs();
+  const params = loadParams();
   console.log('='.repeat(80));
   console.log(`[AD WATCHDOG BACKTEST] Tenant: ${params.tenantId} | Horizon: ${params.days} hari`);
   console.log('='.repeat(80));
