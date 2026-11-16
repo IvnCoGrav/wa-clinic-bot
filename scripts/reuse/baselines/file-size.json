@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "generatedFromCommit": "2454051c",
+  "maxLines": 1500,
+  "files": [
+    {
+      "file": "src/services/customer.service.ts",
+      "lines": 3324
+    },
+    {
+      "file": "src/services/staff-reservation.service.ts",
+      "lines": 3015
+    },
+    {
+      "file": "src/services/treatment-catalog.service.ts",
+      "lines": 2536
+    },
+    {
+      "file": "src/services/copilot/copilot-tools.ts",
+      "lines": 1795
+    },
+    {
+      "file": "src/integrations/waha/client.ts",
+      "lines": 1767
+    },
+    {
+      "file": "src/services/capi.service.ts",
+      "lines": 1646
+    },
+    {
+      "file": "src/routes/webhook.route.ts",
+      "lines": 1624
+    },
+    {
+      "file": "src/services/live-chat.service.ts",
+      "lines": 1570
+    },
+    {
+      "file": "src/services/meta-performance-analytics.service.ts",
+      "lines": 1567
+    }
+  ]
+}

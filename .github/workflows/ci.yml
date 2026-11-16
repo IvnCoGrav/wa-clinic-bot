@@ -44,6 +44,15 @@ jobs:
       - name: Typecheck Backend
         run: npm run typecheck
 
+      - name: Reuse Gate (warn)
+        run: npm run check:reuse -- --warn --json > reuse-report.json || true
+
+      - name: Upload Reuse Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: reuse-report
+          path: reuse-report.json
+
       - name: Build Backend & Admin Dashboard
         run: npm run build:all
 

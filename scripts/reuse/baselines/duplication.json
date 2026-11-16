@@ -1,0 +1,102 @@
+{
+  "version": 1,
+  "generatedFromCommit": "2454051c",
+  "groups": [
+    {
+      "hash": "sha256:a8d5e6301af98235",
+      "tokenCount": 42,
+      "files": [
+        {
+          "file": "src/repositories/conversation.repository.ts",
+          "line": 200,
+          "name": "findById"
+        },
+        {
+          "file": "src/repositories/customer.repository.ts",
+          "line": 128,
+          "name": "findById"
+        }
+      ]
+    },
+    {
+      "hash": "sha256:fb888571b0bda634",
+      "tokenCount": 75,
+      "files": [
+        {
+          "file": "src/services/entity-extractor.service.ts",
+          "line": 45,
+          "name": "isClinicLocationQuestion"
+        },
+        {
+          "file": "src/utils/location-classifier.ts",
+          "line": 15,
+          "name": "isClinicLocationQuestion"
+        }
+      ]
+    },
+    {
+      "hash": "sha256:768db6ef3b0660f2",
+      "tokenCount": 47,
+      "files": [
+        {
+          "file": "src/services/reservation-core.service.ts",
+          "line": 315,
+          "name": "effectiveDuration"
+        },
+        {
+          "file": "src/services/slot-overlap.service.ts",
+          "line": 108,
+          "name": "effectiveDuration"
+        }
+      ]
+    },
+    {
+      "hash": "sha256:519d772a490e54bb",
+      "tokenCount": 65,
+      "files": [
+        {
+          "file": "src/utils/llm-execution-logger.ts",
+          "line": 116,
+          "name": "getLogDateString"
+        },
+        {
+          "file": "src/utils/log-buffer.ts",
+          "line": 45,
+          "name": "getLogDateString"
+        }
+      ]
+    },
+    {
+      "hash": "sha256:4f4950eef9a2f3e8",
+      "tokenCount": 148,
+      "files": [
+        {
+          "file": "src/utils/typo-match.ts",
+          "line": 7,
+          "name": "isTypoAtMostOne"
+        },
+        {
+          "file": "src/v3/tools/calculate-delivery.tool.ts",
+          "line": 162,
+          "name": "isNearEqual"
+        }
+      ]
+    },
+    {
+      "hash": "sha256:86dbaf27d6ccaecc",
+      "tokenCount": 137,
+      "files": [
+        {
+          "file": "src/v3/agent/persona.ts",
+          "line": 35,
+          "name": "stripEdge"
+        },
+        {
+          "file": "src/v3/guardrails/pronoun-validator.ts",
+          "line": 22,
+          "name": "stripEdge"
+        }
+      ]
+    }
+  ]
+}

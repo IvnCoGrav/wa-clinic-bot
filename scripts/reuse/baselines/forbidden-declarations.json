@@ -1,0 +1,166 @@
+{
+  "version": 1,
+  "generatedFromCommit": "2454051c",
+  "violations": [
+    {
+      "type": "FORBIDDEN_DECLARATION",
+      "capabilityId": "date.parse_indonesian",
+      "name": "parseIndonesianDate",
+      "canonical": "src/utils/indonesian-date-parser.ts",
+      "file": "src/utils/conversation-transaction-extractor.ts",
+      "line": 208
+    },
+    {
+      "type": "FORBIDDEN_DECLARATION",
+      "capabilityId": "json.extract",
+      "name": "extractBalancedJson",
+      "canonical": "src/utils/json-extract.ts",
+      "file": "src/v3/agent/pipeline/dsml-tool-salvage.ts",
+      "line": 33
+    },
+    {
+      "type": "FORBIDDEN_DECLARATION",
+      "capabilityId": "location.clinic_question",
+      "name": "isClinicLocationQuestion",
+      "canonical": "src/utils/location-classifier.ts",
+      "file": "src/services/entity-extractor.service.ts",
+      "line": 45
+    },
+    {
+      "type": "FORBIDDEN_DECLARATION",
+      "capabilityId": "phone.normalize",
+      "name": "normalizePhoneToE164",
+      "canonical": "src/utils/phone-normalizer.ts",
+      "file": "src/services/capi.service.ts",
+      "line": 41
+    },
+    {
+      "type": "FORBIDDEN_DECLARATION",
+      "capabilityId": "phone.normalize",
+      "name": "normalizePhone",
+      "canonical": "src/utils/phone-normalizer.ts",
+      "file": "src/services/meta-performance-analytics.service.ts",
+      "line": 447
+    },
+    {
+      "type": "FORBIDDEN_DECLARATION",
+      "capabilityId": "pii.mask_phone",
+      "name": "maskPhone",
+      "canonical": "src/utils/pii-masker.ts",
+      "file": "src/services/capi.service.ts",
+      "line": 57
+    },
+    {
+      "type": "FORBIDDEN_DECLARATION",
+      "capabilityId": "pii.mask_phone",
+      "name": "maskPhone",
+      "canonical": "src/utils/pii-masker.ts",
+      "file": "src/services/nightly-watchdog.service.ts",
+      "line": 40
+    },
+    {
+      "type": "FORBIDDEN_DECLARATION",
+      "capabilityId": "pii.mask_phone",
+      "name": "maskPhoneNumber",
+      "canonical": "src/utils/pii-masker.ts",
+      "file": "src/services/staff-retention.service.ts",
+      "line": 718
+    },
+    {
+      "type": "FORBIDDEN_DECLARATION",
+      "capabilityId": "tenant.resolve",
+      "name": "resolveTenant",
+      "canonical": "src/routes/admin/settings-helpers.ts",
+      "file": "src/routes/admin/ctwa-catchers.subroute.ts",
+      "line": 36
+    },
+    {
+      "type": "FORBIDDEN_DECLARATION",
+      "capabilityId": "tenant.resolve",
+      "name": "resolveTenant",
+      "canonical": "src/routes/admin/settings-helpers.ts",
+      "file": "src/routes/admin/google-integration.subroute.ts",
+      "line": 9
+    },
+    {
+      "type": "FORBIDDEN_DECLARATION",
+      "capabilityId": "tenant.resolve",
+      "name": "resolveTenant",
+      "canonical": "src/routes/admin/settings-helpers.ts",
+      "file": "src/routes/admin/labels.subroute.ts",
+      "line": 23
+    },
+    {
+      "type": "FORBIDDEN_DECLARATION",
+      "capabilityId": "tenant.resolve",
+      "name": "resolveTenant",
+      "canonical": "src/routes/admin/settings-helpers.ts",
+      "file": "src/routes/admin/meta-attribution.subroute.ts",
+      "line": 35
+    },
+    {
+      "type": "FORBIDDEN_DECLARATION",
+      "capabilityId": "time.wib",
+      "name": "WIB_OFFSET_MS",
+      "canonical": "src/utils/wib-time.ts",
+      "file": "src/services/integration-guard.service.ts",
+      "line": 58
+    },
+    {
+      "type": "FORBIDDEN_DECLARATION",
+      "capabilityId": "time.wib",
+      "name": "WIB_OFFSET_MS",
+      "canonical": "src/utils/wib-time.ts",
+      "file": "src/services/meta-performance-analytics.service.ts",
+      "line": 70
+    },
+    {
+      "type": "FORBIDDEN_DECLARATION",
+      "capabilityId": "time.wib",
+      "name": "WIB_OFFSET_MS",
+      "canonical": "src/utils/wib-time.ts",
+      "file": "src/services/nightly-watchdog.service.ts",
+      "line": 19
+    },
+    {
+      "type": "FORBIDDEN_DECLARATION",
+      "capabilityId": "time.wib",
+      "name": "wibDayBoundsUtc",
+      "canonical": "src/utils/wib-time.ts",
+      "file": "src/services/nightly-watchdog.service.ts",
+      "line": 30
+    },
+    {
+      "type": "FORBIDDEN_DECLARATION",
+      "capabilityId": "time.wib",
+      "name": "formatWibTime",
+      "canonical": "src/utils/wib-time.ts",
+      "file": "src/services/nightly-watchdog.service.ts",
+      "line": 46
+    },
+    {
+      "type": "FORBIDDEN_DECLARATION",
+      "capabilityId": "time.wib",
+      "name": "WIB_OFFSET_MS",
+      "canonical": "src/utils/wib-time.ts",
+      "file": "src/services/reservation-core.service.ts",
+      "line": 92
+    },
+    {
+      "type": "FORBIDDEN_DECLARATION",
+      "capabilityId": "time.wib",
+      "name": "WIB_OFFSET_MS",
+      "canonical": "src/utils/wib-time.ts",
+      "file": "src/services/slot-overlap.service.ts",
+      "line": 19
+    },
+    {
+      "type": "FORBIDDEN_DECLARATION",
+      "capabilityId": "time.wib",
+      "name": "WIB_OFFSET_MS",
+      "canonical": "src/utils/wib-time.ts",
+      "file": "src/utils/indonesian-date-parser.ts",
+      "line": 36
+    }
+  ]
+}
