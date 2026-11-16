@@ -7,7 +7,7 @@
 
 ## 1. Daftar Kapabilitas Kanonis Aktif
 
-Total kapabilitas terdaftar: **9 modul**.
+Total kapabilitas terdaftar: **10 modul**.
 
 | ID Kapabilitas | Judul & Deskripsi | Modul Kanonis | Ekspor Resmi | Test File |
 |---|---|---|---|---|
@@ -17,6 +17,7 @@ Total kapabilitas terdaftar: **9 modul**.
 | `phone.normalize` | **Normalisasi nomor telepon Indonesia**<br>Normalisasi nomor HP format Indonesia (08x, +628x, 628x) ke format 628x standar atau E164. | [`src/utils/phone-normalizer.ts`](../src/utils/phone-normalizer.ts) | `normalizePhoneID`, `normalizePhoneToE164` | [`security-and-parsing-helpers.test.ts`](../tests/unit/security-and-parsing-helpers.test.ts) |
 | `pii.mask_phone` | **Masking nomor telepon (PII)**<br>Menyensor nomor HP untuk log internal, audit trail, dan tampilan staf. | [`src/utils/pii-masker.ts`](../src/utils/pii-masker.ts) | `maskPhoneNumber`, `maskPhoneInText`, `maskPhoneWithTenantSuffix` | [`staff-chat-pii-masker.test.ts`](../tests/unit/staff-chat-pii-masker.test.ts) |
 | `reservation.payment_evaluation` | **Evaluasi status pembayaran reservasi**<br>Menentukan status evaluasi pembayaran reservasi secara kanonis. | [`src/services/reservation-core.service.ts`](../src/services/reservation-core.service.ts) | `resolveReservationPaymentEvaluation` | *Belum ada (Fase lanjutan)* |
+| `reservation.payment_response` | **Response wrapper evaluasi pembayaran reservasi**<br>Menyematkan hasil kalkulasi paymentEvaluation ke dalam payload respons reservasi admin. | [`src/routes/admin/shared/reservation-response.ts`](../src/routes/admin/shared/reservation-response.ts) | `withPaymentEvaluation` | [`reservation-payment-response.test.ts`](../tests/unit/reservation-payment-response.test.ts) |
 | `schedule.overlap` | **Deteksi tumpang tindih slot jadwal**<br>Menghitung durasi efektif dan memeriksa tumpang-tindih interval reservasi atau janji temu. | [`src/services/slot-overlap.service.ts`](../src/services/slot-overlap.service.ts) | `effectiveDuration`, `intervalsOverlap` | [`slot-overlap-parity.test.ts`](../tests/unit/slot-overlap-parity.test.ts) |
 | `tenant.resolve` | **Resolusi ID tenant admin**<br>Mendapatkan tenant_id dari request Fastify admin secara aman dengan fallback DEFAULT_TENANT_ID. | [`src/routes/admin/settings-helpers.ts`](../src/routes/admin/settings-helpers.ts) | `resolveTenantId`, `requireTenantId` | *Belum ada (Fase lanjutan)* |
 | `time.wib` | **Waktu Indonesia Barat (WIB)**<br>Operasi waktu dan tanggal berbasis WIB (UTC+7), offset milidetik, konversi UTC, dan batasan hari WIB. | [`src/utils/wib-time.ts`](../src/utils/wib-time.ts) | `WIB_OFFSET_MS`, `getWibNow`, `wibDayBoundsUtc`, `formatWibTime`, `wibDayRangeToUtc`, `formatWibDateYYYYMMDD`, `getWibDayName` | [`wib-time-consolidation.test.ts`](../tests/unit/wib-time-consolidation.test.ts) |
@@ -76,6 +77,15 @@ Total kapabilitas terdaftar: **9 modul**.
 - **Simbol Terlarang di Luar Kanonis:** `resolveReservationPaymentEvaluation`
 - **File yang Diizinkan:** `src/services/reservation-core.service.ts`
 - **File Test:** *Belum didefinisikan*
+
+### `reservation.payment_response` — Response wrapper evaluasi pembayaran reservasi
+
+- **Deskripsi:** Menyematkan hasil kalkulasi paymentEvaluation ke dalam payload respons reservasi admin.
+- **File Kanonis:** [`src/routes/admin/shared/reservation-response.ts`](../src/routes/admin/shared/reservation-response.ts)
+- **Ekspor Kanonis:** `withPaymentEvaluation`
+- **Simbol Terlarang di Luar Kanonis:** `withPaymentEvaluation`
+- **File yang Diizinkan:** `src/routes/admin/shared/reservation-response.ts`
+- **File Test:** [`tests/unit/reservation-payment-response.test.ts`](../tests/unit/reservation-payment-response.test.ts)
 
 ### `schedule.overlap` — Deteksi tumpang tindih slot jadwal
 

@@ -112,6 +112,22 @@
       "test": null
     },
     {
+      "id": "reservation.payment_response",
+      "title": "Response wrapper evaluasi pembayaran reservasi",
+      "description": "Menyematkan hasil kalkulasi paymentEvaluation ke dalam payload respons reservasi admin.",
+      "canonical": "src/routes/admin/shared/reservation-response.ts",
+      "exports": [
+        "withPaymentEvaluation"
+      ],
+      "forbiddenDeclarations": [
+        "withPaymentEvaluation"
+      ],
+      "allowedFiles": [
+        "src/routes/admin/shared/reservation-response.ts"
+      ],
+      "test": "tests/unit/reservation-payment-response.test.ts"
+    },
+    {
       "id": "tenant.resolve",
       "title": "Resolusi ID tenant admin",
       "description": "Mendapatkan tenant_id dari request Fastify admin secara aman dengan fallback DEFAULT_TENANT_ID.",

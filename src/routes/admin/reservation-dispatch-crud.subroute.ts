@@ -15,18 +15,13 @@ import {
 import { isValidChildName } from '../../utils/name-sanitizer';
 import { isPrematureCompletion } from '../../domain/reservation-status';
 import { memoryReservations } from './stores';
-import { resolveReservationPaymentEvaluation } from '../../services/reservation-core.service';
+import { withPaymentEvaluation } from './shared/reservation-response';
 import { reservationArchiveService } from '../../services/reservation-archive.service';
 import {
   reservationStatusService,
   InvalidTransitionError,
   PrematureCompletionError,
 } from '../../services/reservation-status.service';
-
-function withPaymentEvaluation(r: any) {
-  if (!r) return r;
-  return { ...r, paymentEvaluation: resolveReservationPaymentEvaluation(r) };
-}
 
 export async function reservationDispatchCrudRoutes(fastify: FastifyInstance) {
   /**
